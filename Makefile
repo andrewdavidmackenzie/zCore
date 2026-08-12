@@ -25,6 +25,7 @@ config-macos:
 	riscv64-linux-musl-gcc --version
 	@echo "==> Installing Linux kernel headers into musl-cross sysroots..."
 	@MUSL_PREFIX=$$(brew --prefix musl-cross)/libexec; \
+	KERNEL_SHA256=c1923b6bd166e6dd07be860c15f59e8273aaa8692bc2a1fce1d31b826b9b3fbe; \
 	for arch_pair in "aarch64:arm64" "riscv64:riscv"; do \
 		MUSL_ARCH=$${arch_pair%%:*}; \
 		KERN_ARCH=$${arch_pair##*:}; \
@@ -33,9 +34,13 @@ config-macos:
 			echo "  Installing kernel headers for $$MUSL_ARCH..."; \
 			cd /tmp && \
 			if [ ! -d linux-4.19.88 ]; then \
-				curl -sL https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.88.tar.xz | \
-					tar xJ linux-4.19.88/include linux-4.19.88/arch \
-					       linux-4.19.88/scripts linux-4.19.88/Makefile 2>/dev/null; \
+				curl -sL -o linux-4.19.88.tar.xz \
+					https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.88.tar.xz; \
+				echo "$$KERNEL_SHA256  linux-4.19.88.tar.xz" | shasum -a 256 -c - || \
+					{ echo "ERROR: kernel tarball checksum mismatch"; rm -f linux-4.19.88.tar.xz; exit 1; }; \
+				tar xJf linux-4.19.88.tar.xz linux-4.19.88/include linux-4.19.88/arch \
+					linux-4.19.88/scripts linux-4.19.88/Makefile 2>/dev/null; \
+				rm -f linux-4.19.88.tar.xz; \
 			fi; \
 			cd linux-4.19.88 && \
 			PATH="/opt/homebrew/opt/gnu-sed/libexec/gnubin:$$PATH" \
