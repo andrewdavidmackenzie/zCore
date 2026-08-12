@@ -209,7 +209,8 @@ impl TaskCollection {
     }
 
     pub fn generator(self: Arc<Self>) -> impl Coroutine<Yield = Option<Key>, Return = ()> {
-        #[coroutine] static move || {
+        #[coroutine]
+        static move || {
             loop {
                 let priority = DEFAULT_PRIORITY;
                 loop {
