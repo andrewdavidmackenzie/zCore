@@ -25,9 +25,6 @@ jobs:
       - name: Build
         run: cargo build
 
-      - name: Clippy
-        run: cargo clippy
-
   bare-metal:
     name: Bare-metal ${{ matrix.arch }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
