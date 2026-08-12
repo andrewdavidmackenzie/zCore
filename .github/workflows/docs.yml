@@ -13,7 +13,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
 
       - name: Build docs
-        run: cargo doc --no-deps --workspace
+        run: cargo doc --no-deps --workspace --exclude zcore --exclude zcore-loader --exclude kernel-hal
 
       - name: Deploy to Github Pages
         if: ${{ github.ref == 'refs/heads/master' }}
