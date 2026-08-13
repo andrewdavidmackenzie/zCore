@@ -25,7 +25,7 @@ test: boot-test
 
 # Boot smoke test: start QEMU, wait for the "/ # " shell prompt, exit.
 # Proves: boot assembly, MMU, HAL, VirtIO, filesystem, ELF loader, and
-# busybox shell all work end-to-end. Timeout is 30 seconds.
+# busybox shell all work end-to-end. Timeout is 60 seconds.
 boot-test: build
 	@echo "==> Boot smoke test ($(ARCH))..."
 	@scripts/boot-test.sh $(ARCH)
