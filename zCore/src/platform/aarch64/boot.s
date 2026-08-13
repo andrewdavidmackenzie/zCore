@@ -9,8 +9,8 @@
  *
  * This code:
  *   1. Sets up initial page tables with:
- *      - Identity mapping of 0x00000000..0x80000000 (first 2 GiB, covers device + RAM)
- *      - High mapping of 0xffff000000000000..0xffff000080000000 -> 0x00000000..0x80000000
+ *      - Identity mapping of 0x00000000..0xC0000000 (first 3 GiB, covers device + 2 GiB RAM)
+ *      - High mapping of 0xffff000000000000..0xffff0000C0000000 -> 0x00000000..0xC0000000
  *   2. Configures and enables the MMU
  *   3. Jumps to rust_main at its virtual (high) address
  *
@@ -22,9 +22,11 @@
  *   BOOT_PT_L1_ID:  512 entries, each covers 1 GiB
  *     [0]   -> 0x00000000..0x40000000  (1 GiB block, device memory)
  *     [1]   -> 0x40000000..0x80000000  (1 GiB block, normal memory)
+ *     [2]   -> 0x80000000..0xC0000000  (1 GiB block, normal memory)
  *   BOOT_PT_L1_HI:  512 entries, each covers 1 GiB
  *     [0]   -> 0x00000000..0x40000000  (1 GiB block, device memory)
  *     [1]   -> 0x40000000..0x80000000  (1 GiB block, normal memory)
+ *     [2]   -> 0x80000000..0xC0000000  (1 GiB block, normal memory)
  */
 
 .section .text.boot, "ax"
@@ -101,17 +103,23 @@ _boot:
     mov     x3, #0x705             /* Valid | Block | Normal(AttrIndx=1) | ISH | AF */
     orr     x3, x3, #0x40000000   /* output address = 0x40000000 */
 
+    /* Block descriptor for normal memory at 0x80000000 */
+    mov     x4, #0x705             /* Valid | Block | Normal(AttrIndx=1) | ISH | AF */
+    orr     x4, x4, #0x80000000   /* output address = 0x80000000 */
+
     /* ---- Fill identity mapping L1 (BOOT_PT_L1_ID) ---- */
     adrp    x0, BOOT_PT_L1_ID
     add     x0, x0, :lo12:BOOT_PT_L1_ID
     str     x2, [x0, #0]          /* L1[0] = 0x00000000 | Device | Block (first 1 GiB) */
     str     x3, [x0, #8]          /* L1[1] = 0x40000000 | Normal | Block (second 1 GiB) */
+    str     x4, [x0, #16]         /* L1[2] = 0x80000000 | Normal | Block (third 1 GiB) */
 
     /* ---- Fill high mapping L1 (BOOT_PT_L1_HI) ---- */
     adrp    x0, BOOT_PT_L1_HI
     add     x0, x0, :lo12:BOOT_PT_L1_HI
     str     x2, [x0, #0]          /* L1[0] = 0x00000000 | Device | Block */
     str     x3, [x0, #8]          /* L1[1] = 0x40000000 | Normal | Block */
+    str     x4, [x0, #16]         /* L1[2] = 0x80000000 | Normal | Block */
 
     /* ====== Enable FP/SIMD ====== */
     /* Set CPACR_EL1.FPEN = 0b11 to enable FP/SIMD at EL0 and EL1 */

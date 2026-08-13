@@ -101,6 +101,16 @@ impl LinuxRootfs {
         dircpy::copy_dir(source, &target).unwrap();
         // 配置
         Make::new().current_dir(&target).arg("defconfig").invoke();
+        // Enable static linking to avoid dynamic linker dependencies.
+        // This is essential for bare-metal OS kernels that may not fully
+        // implement the mmap semantics required by musl's dynamic linker.
+        let config_path = target.join(".config");
+        let config = fs::read_to_string(&config_path).expect("failed to read .config");
+        let config = config.replace(
+            "# CONFIG_STATIC is not set",
+            "CONFIG_STATIC=y",
+        );
+        fs::write(&config_path, config).expect("failed to write .config");
         // 编译
         let musl = musl.as_ref();
         Make::new()
