@@ -92,8 +92,9 @@ page-table = "0.0.6"
 sbi-rt = { version = "0.0.2", features = ["legacy"] }
 
 # Bare-metal mode on aarch64
+# rayboot dependency removed — using direct kernel boot with QEMU -kernel
+# See issue #2 for details on the migration from UEFI/rayboot to direct boot
 [target.'cfg(all(target_os = "none", target_arch = "aarch64"))'.dependencies]
-rayboot = { git = "https://github.com/Luchangcheng2333/rayboot", rev = "b19c6c3" }
 
 # Bare-metal mode on x86_64
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]

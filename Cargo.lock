@@ -729,12 +729,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "font8x8"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e63201c624b8c8883921b1a1accc8916c4fa9dbfb15d122b26e4dde945b86bbf"
-
-[[package]]
 name = "form_urlencoded"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1501,19 +1495,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rayboot"
-version = "2.0.0"
-source = "git+https://github.com/Luchangcheng2333/rayboot?rev=b19c6c3#b19c6c3c8c43bf3a10bdefbe9c4a211f558d5555"
-dependencies = [
- "bit_field",
- "bitflags",
- "font8x8",
- "log",
- "serde",
- "spinning_top",
-]
-
-[[package]]
 name = "rayon"
 version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1815,9 +1796,6 @@ name = "serde"
 version = "1.0.145"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "728eb6351430bccb993660dfffc5a72f91ccc1295abaa8ce19b27ebe4f75568b"
-dependencies = [
- "serde_derive",
-]
 
 [[package]]
 name = "serde_derive"
@@ -1908,15 +1886,6 @@ name = "spin"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f6002a767bff9e83f8eeecf883ecb8011875a21ae8da43bffb817a57e78cc09"
-dependencies = [
- "lock_api",
-]
-
-[[package]]
-name = "spinning_top"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75adad84ee84b521fb2cca2d4fd0f1dab1d8d026bda3c5bea4ca63b5f9f9293c"
 dependencies = [
  "lock_api",
 ]
@@ -2572,7 +2541,6 @@ dependencies = [
  "log",
  "page-table",
  "r0",
- "rayboot",
  "rboot",
  "rcore-fs",
  "rcore-fs-hostfs",
