@@ -1,6 +1,6 @@
 # Makefile for top level of zCore
 
-ARCH ?= x86_64
+ARCH ?= aarch64
 XTASK ?= 1
 
 STRIP := $(ARCH)-linux-musl-strip
