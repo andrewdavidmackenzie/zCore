@@ -236,7 +236,6 @@ impl UserContext {
 
     /// Returns the `error_code` field of the context.
     #[cfg(any(target_arch = "x86_64", doc))]
-    #[doc(cfg(target_arch = "x86_64"))]
     pub fn error_code(&self) -> usize {
         self.0.error_code
     }
