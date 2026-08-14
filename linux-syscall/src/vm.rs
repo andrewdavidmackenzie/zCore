@@ -142,14 +142,19 @@ impl Syscall<'_> {
             "mprotect: addr={:#x}, size={:#x}, prot={:?}",
             addr, len, prot
         );
+        // addr must be page-aligned
+        if addr % PAGE_SIZE != 0 {
+            return Err(LxError::EINVAL);
+        }
         if len == 0 {
             return Ok(0);
         }
+        // Check addr+len doesn't overflow before rounding
+        if addr.checked_add(len).is_none() {
+            return Err(LxError::ENOMEM);
+        }
         // Round len up to page boundary (Linux behavior)
         let len = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-        if addr.checked_add(len).is_none() {
-            return Err(LxError::EINVAL);
-        }
         let proc = self.zircon_process();
         let vmar = proc.vmar();
         let flags = prot.to_flags();
