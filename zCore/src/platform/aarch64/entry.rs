@@ -18,10 +18,7 @@ const GIC_BASE: usize = 0x0800_0000;
 #[no_mangle]
 extern "C" fn rust_main(_dtb_ptr: usize) -> ! {
     let config = KernelConfig {
-        cmdline: "LOG=info:ROOTPROC=/bin/busybox?sh",
-        // Note: LOG=warn causes a kernel panic due to a layout-dependent
-        // bug (likely uninitialised memory). Using LOG=info as workaround.
-        // See issue #2 discussion for details.
+        cmdline: "LOG=warn:ROOTPROC=/bin/busybox?sh",
         firmware_type: "QEMU",
         uart_base: UART_BASE,
         gic_base: GIC_BASE,
