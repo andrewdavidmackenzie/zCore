@@ -10,18 +10,51 @@ impl super::LinuxRootfs {
         // 镜像路径
         let inner = PROJECT_DIR.join("zCore");
         let image = inner.join(format!("{arch}.img", arch = self.0.name()));
-        // Note: rayboot UEFI firmware download removed — no longer needed
-        // for direct kernel boot. See issue #2.
+        // Skip image creation if it already exists and is newer than the
+        // rootfs directory. Recreating the image on every run triggers a
+        // full kernel recompile because the image lives inside the zCore
+        // package directory and cargo watches it for changes.
+        if image.is_file() && !is_stale(&image, &self.path()) {
+            return;
+        }
         // 生成镜像
         fuse(self.path(), &image);
         // 扩充一些额外空间，供某些测试使用
         Qemu::img()
             .arg("resize")
             .args(&["-f", "raw"])
-            .arg(image)
+            .arg(&image)
             .arg("+5M")
             .invoke();
     }
+}
+
+/// Check if `output` is older than any file in `input_dir`.
+fn is_stale(output: &std::path::Path, input_dir: &std::path::Path) -> bool {
+    let output_mtime = match output.metadata().and_then(|m| m.modified()) {
+        Ok(t) => t,
+        Err(_) => return true,
+    };
+    fn any_newer(dir: &std::path::Path, than: std::time::SystemTime) -> bool {
+        let entries = match dir.read_dir() {
+            Ok(e) => e,
+            Err(_) => return true,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if any_newer(&path, than) {
+                    return true;
+                }
+            } else if let Ok(m) = path.metadata().and_then(|m| m.modified()) {
+                if m > than {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    any_newer(input_dir, output_mtime)
 }
 
 /// 制作镜像。
