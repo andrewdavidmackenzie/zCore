@@ -167,6 +167,53 @@ impl Syscall<'_> {
         }
     }
 
+    /// Reboot the system.
+    ///
+    /// The `magic1` and `magic2` arguments must match the Linux-defined values,
+    /// otherwise `EINVAL` is returned. The `cmd` argument selects the action:
+    /// power off, restart, or halt.
+    pub fn sys_reboot(&self, magic1: u32, magic2: u32, cmd: u32) -> SysResult {
+        info!(
+            "reboot: magic1={:#x}, magic2={:#x}, cmd={:#x}",
+            magic1, magic2, cmd
+        );
+
+        // Linux requires these magic values to prevent accidental reboots
+        const LINUX_REBOOT_MAGIC1: u32 = 0xfee1dead;
+        const LINUX_REBOOT_MAGIC2: u32 = 672274793; // 0x28121969
+        const LINUX_REBOOT_MAGIC2A: u32 = 85072278; // 0x05121996
+        const LINUX_REBOOT_MAGIC2B: u32 = 369367448; // 0x16041998
+        const LINUX_REBOOT_MAGIC2C: u32 = 537993216; // 0x20112000
+
+        if magic1 != LINUX_REBOOT_MAGIC1 {
+            return Err(LxError::EINVAL);
+        }
+        match magic2 {
+            LINUX_REBOOT_MAGIC2 | LINUX_REBOOT_MAGIC2A | LINUX_REBOOT_MAGIC2B
+            | LINUX_REBOOT_MAGIC2C => {}
+            _ => return Err(LxError::EINVAL),
+        }
+
+        const LINUX_REBOOT_CMD_POWER_OFF: u32 = 0x4321FEDC;
+        const LINUX_REBOOT_CMD_RESTART: u32 = 0x01234567;
+        const LINUX_REBOOT_CMD_HALT: u32 = 0xCDEF0123;
+
+        match cmd {
+            LINUX_REBOOT_CMD_POWER_OFF | LINUX_REBOOT_CMD_HALT => {
+                warn!("system power off");
+                kernel_hal::cpu::reset(); // PSCI SYSTEM_OFF
+            }
+            LINUX_REBOOT_CMD_RESTART => {
+                warn!("system restart");
+                kernel_hal::cpu::reset(); // TODO: use PSCI SYSTEM_RESET
+            }
+            _ => {
+                warn!("reboot: unsupported cmd {:#x}", cmd);
+                Err(LxError::EINVAL)
+            }
+        }
+    }
+
     #[allow(unsafe_code)]
     /// fills the buffer pointed to by `buf` with up to `buflen` random bytes.
     /// - `buf` - buffer that needed to fill

@@ -22,6 +22,8 @@ emulation layer and a BusyBox shell. Simple commands like `echo` and
 implementations are incomplete. See the warnings printed at boot for
 examples of unimplemented syscalls.
 
+Type `poweroff -f` at the `/ #` prompt (or press `Ctrl-A X`) to exit.
+
 Prerequisites: Rust nightly, QEMU, and `aarch64-linux-musl-gcc`
 (on macOS: `make config` installs the cross-compiler via Homebrew).
 
