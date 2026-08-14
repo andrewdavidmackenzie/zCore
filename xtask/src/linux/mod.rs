@@ -67,7 +67,8 @@ impl LinuxRootfs {
         const SH: &[&str] = &[
             "cat", "cp", "echo", "false", "grep", "gzip", "halt", "kill", "ln", "ls", "mkdir",
             "mv", "pidof", "ping", "ping6", "poweroff", "printenv", "ps", "pwd", "reboot", "rm",
-            "rmdir", "sh", "sleep", "stat", "tar", "touch", "true", "uname", "usleep", "watch",
+            "rmdir", "sh", "sleep", "stat", "tar", "timeout", "touch", "true", "uname", "usleep",
+            "watch",
         ];
         let bin = dir.join("bin");
         for sh in SH {

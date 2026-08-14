@@ -20,8 +20,8 @@ build:
 run:
 	cargo qemu --arch $(ARCH)
 
-# Run the boot smoke test: verify the kernel boots to a shell prompt.
-test: boot-test
+# Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
+test: boot-test libc-test
 
 # Boot smoke test: start QEMU, wait for the "/ # " shell prompt, exit.
 # Proves: boot assembly, MMU, HAL, VirtIO, filesystem, ELF loader, and
@@ -29,6 +29,13 @@ test: boot-test
 boot-test: build
 	@echo "==> Boot smoke test ($(ARCH))..."
 	@scripts/boot-test.sh $(ARCH)
+
+# Run musl libc-test functional tests. Reports pass/fail counts but does
+# not fail the build — the pass rate is expected to improve over time as
+# more syscalls are implemented (see issue #16).
+# Depends on boot-test to ensure serialization under parallel make.
+libc-test: boot-test
+	@scripts/libc-test.sh $(ARCH)
 
 # configure build environment (platform toolchain)
 config:
@@ -171,12 +178,6 @@ else ifeq ($(ARCH), riscv64)
 	@wget https://github.com/rcore-os/busybox-prebuilts/raw/master/busybox-1.30.1-riscv64/busybox -O rootfs/riscv/bin/busybox
 	@ln -s busybox rootfs/riscv/bin/ls
 endif
-
-# put libc tests into rootfs
-libc-test:
-	cargo libc-test --arch $(ARCH)
-	find rootfs/$(ARCH)/libc-test -type f \
-	       -name "*so" -o -name "*exe" -exec $(STRIP) {} \; 
 
 # put other tests into rootfs
 other-test:
