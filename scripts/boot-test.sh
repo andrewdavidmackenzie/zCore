@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 #
-# Boot smoke test: start zCore in QEMU, wait for the shell prompt, exit.
+# Boot smoke test: start zCore in QEMU, wait for the shell prompt,
+# run "poweroff -f" to verify clean shutdown, then exit.
 #
 # Usage: scripts/boot-test.sh <arch>
 #   arch: aarch64 (others may be added later)
 #
-# Exit code 0 = shell prompt reached (boot success)
+# Exit code 0 = shell prompt reached and clean shutdown (boot success)
 # Exit code 1 = timeout or error (boot failure)
 
 set -euo pipefail
@@ -44,21 +45,45 @@ done
 
 echo "Starting QEMU (timeout=${TIMEOUT}s)..."
 
-# Create a temp file for QEMU output
+# Create a temp file for QEMU output and a FIFO for QEMU stdin
 OUTPUT=$(mktemp)
-trap 'rm -f "$OUTPUT"; kill "$QEMU_PID" 2>/dev/null || true' EXIT
+QEMU_IN=$(mktemp -u)
+mkfifo "$QEMU_IN"
+trap 'rm -f "$OUTPUT" "$QEMU_IN"; kill "$QEMU_PID" 2>/dev/null || true' EXIT
 
-# Start QEMU in the background
-"${QEMU_CMD[@]}" > "$OUTPUT" 2>&1 &
+# Start QEMU with stdin from the FIFO
+"${QEMU_CMD[@]}" < "$QEMU_IN" > "$OUTPUT" 2>&1 &
 QEMU_PID=$!
+
+# Keep the FIFO open for writing (background cat holds it open)
+exec 3>"$QEMU_IN"
 
 # Poll for the shell prompt
 ELAPSED=0
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   if grep -q "$PROMPT_PATTERN" "$OUTPUT" 2>/dev/null; then
-    echo "PASS: shell prompt reached in ${ELAPSED}s"
+    echo "Shell prompt reached in ${ELAPSED}s"
+
+    # Send poweroff command and wait for QEMU to exit cleanly
+    echo "Sending 'poweroff -f'..."
+    echo "poweroff -f" >&3
+    exec 3>&-  # close the FIFO write end
+
+    # Wait up to 10s for QEMU to exit
+    for i in $(seq 1 10); do
+      if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+        wait "$QEMU_PID" || true
+        echo "PASS: boot + poweroff completed successfully"
+        exit 0
+      fi
+      sleep 1
+    done
+
+    echo "FAIL: QEMU did not exit after poweroff"
+    echo "--- QEMU output ---"
+    cat "$OUTPUT"
     kill "$QEMU_PID" 2>/dev/null || true
-    exit 0
+    exit 1
   fi
 
   # Check if QEMU exited early (crash / panic)
@@ -66,6 +91,7 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     echo "FAIL: QEMU exited before shell prompt was reached"
     echo "--- QEMU output ---"
     cat "$OUTPUT"
+    exec 3>&- 2>/dev/null || true
     exit 1
   fi
 
@@ -77,5 +103,6 @@ done
 echo "FAIL: shell prompt not reached within ${TIMEOUT}s"
 echo "--- QEMU output ---"
 cat "$OUTPUT"
+exec 3>&- 2>/dev/null || true
 kill "$QEMU_PID" 2>/dev/null || true
 exit 1
