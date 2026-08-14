@@ -191,7 +191,7 @@ impl Syscall<'_> {
             }
             _ => {
                 warn!("kill: sending to {:?} not yet implemented", target);
-                Err(LxError::ESRCH)
+                Err(LxError::ENOSYS)
             }
         }
     }

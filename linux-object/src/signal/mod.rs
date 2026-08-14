@@ -169,19 +169,26 @@ cfg_if::cfg_if! {
         }
 
         impl MachineContext {
+            // AArch64 sigcontext layout (usize indices):
+            //   [0]      fault_address
+            //   [1..32]  regs x0-x30
+            //   [32]     sp
+            //   [33]     pc
+            //   [34]     pstate
+            const PC_INDEX: usize = 33;
+
             pub fn new(pc: usize) -> Self {
                 let mut ctx = Self::default();
-                // PC is the first field in the aarch64 mcontext
-                ctx.reserved_[0] = pc;
+                ctx.reserved_[Self::PC_INDEX] = pc;
                 ctx
             }
 
             pub fn get_pc(&self) -> usize {
-                self.reserved_[0]
+                self.reserved_[Self::PC_INDEX]
             }
 
             pub fn set_pc(&mut self, pc: usize) {
-                self.reserved_[0] = pc;
+                self.reserved_[Self::PC_INDEX] = pc;
             }
         }
     }

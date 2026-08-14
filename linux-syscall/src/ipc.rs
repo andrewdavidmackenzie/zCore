@@ -101,6 +101,9 @@ impl Syscall<'_> {
             .linux_process()
             .semaphores_get(id)
             .ok_or(LxError::EINVAL)?;
+        // TODO: Linux semop is atomic — the entire operation array should be
+        // validated before any changes are committed. Currently operations are
+        // applied one at a time, which can leave partial state on failure.
         sem_array.otime();
         for &SemBuf { num, op, flags } in ops {
             let flags = SemFlags::from_bits_truncate(flags);

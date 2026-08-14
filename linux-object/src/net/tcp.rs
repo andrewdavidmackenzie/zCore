@@ -373,9 +373,9 @@ impl FileLike for TcpSocketState {
         Ok(())
     }
 
-    fn dup(&self) -> Arc<dyn FileLike> {
+    fn dup(&self) -> LxResult<Arc<dyn FileLike>> {
         warn!("dup not implemented for tcp socket");
-        panic!("dup not implemented for tcp socket")
+        Err(LxError::ENOSYS)
         /*
         let sockets = get_sockets();
         let mut set = sockets.lock();
