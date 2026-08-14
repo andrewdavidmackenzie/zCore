@@ -14,7 +14,6 @@ pub mod vdso;
 pub mod vm;
 
 #[path = "special.rs"]
-#[doc(cfg(feature = "libos"))]
 pub mod libos;
 
 pub use super::hal_fn::rand;

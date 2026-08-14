@@ -2,7 +2,6 @@
 
 #![cfg_attr(not(feature = "mock"), no_std)]
 #![deny(warnings)]
-#![feature(doc_cfg)]
 
 extern crate alloc;
 
@@ -13,11 +12,9 @@ use alloc::sync::Arc;
 use core::fmt;
 
 #[cfg(any(feature = "mock", doc))]
-#[doc(cfg(feature = "mock"))]
 pub mod mock;
 
 #[cfg(any(feature = "virtio", doc))]
-#[doc(cfg(feature = "virtio"))]
 pub mod virtio;
 
 pub mod builder;

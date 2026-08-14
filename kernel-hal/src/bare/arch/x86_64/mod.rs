@@ -8,7 +8,6 @@ pub mod mem;
 pub mod timer;
 pub mod vm;
 
-#[doc(cfg(target_arch = "x86_64"))]
 pub mod special;
 
 hal_fn_impl_default!(crate::hal_fn::console);
