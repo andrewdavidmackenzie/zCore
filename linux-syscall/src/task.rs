@@ -211,7 +211,10 @@ impl Syscall<'_> {
             -1 => WaitTarget::AnyChild,
             0 => WaitTarget::AnyChildInGroup,
             p if p > 0 => WaitTarget::Pid(p as KoID),
-            _ => unimplemented!(),
+            _ => {
+                warn!("wait4: process group wait (pid={}) not implemented", pid);
+                return Err(LxError::ECHILD);
+            }
         };
         let flags = WaitFlags::from_bits_truncate(options);
         let nohang = flags.contains(WaitFlags::NOHANG);

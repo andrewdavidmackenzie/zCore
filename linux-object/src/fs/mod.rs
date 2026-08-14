@@ -62,8 +62,8 @@ pub trait FileLike: KernelObject {
     /// Set open flags.
     fn set_flags(&self, f: OpenFlags) -> LxResult;
     /// Duplicate the file.
-    fn dup(&self) -> Arc<dyn FileLike> {
-        unimplemented!()
+    fn dup(&self) -> LxResult<Arc<dyn FileLike>> {
+        Err(LxError::ENOSYS)
     }
     /// read to buffer
     async fn read(&self, buf: &mut [u8]) -> LxResult<usize>;

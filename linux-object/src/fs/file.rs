@@ -257,12 +257,12 @@ impl FileLike for File {
         Ok(())
     }
 
-    fn dup(&self) -> Arc<dyn FileLike> {
-        Arc::new(Self {
+    fn dup(&self) -> LxResult<Arc<dyn FileLike>> {
+        Ok(Arc::new(Self {
             base: KObjectBase::new(),
             path: self.path.clone(),
             inner: RwLock::new(self.inner.read().clone()),
-        })
+        }))
     }
 
     async fn read(&self, buf: &mut [u8]) -> LxResult<usize> {

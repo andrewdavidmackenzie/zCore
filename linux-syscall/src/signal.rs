@@ -138,6 +138,7 @@ impl Syscall<'_> {
             in the target process that is not blocking the signal."
         );
         #[allow(dead_code)]
+        #[derive(Debug)]
         enum SendTarget {
             EveryProcessInGroup,
             EveryProcess,
@@ -149,7 +150,7 @@ impl Syscall<'_> {
             0 => SendTarget::EveryProcessInGroup,
             -1 => SendTarget::EveryProcess,
             p if p < -1 => SendTarget::EveryProcessInGroupByPID((-p) as KoID),
-            _ => unimplemented!(),
+            _ => return Err(LxError::ESRCH),
         };
         let parent = self.zircon_process().clone();
         match target {
@@ -188,7 +189,10 @@ impl Syscall<'_> {
                     Err(_) => Err(LxError::EINVAL),
                 }
             }
-            _ => unimplemented!(),
+            _ => {
+                warn!("kill: sending to {:?} not yet implemented", target);
+                Err(LxError::ENOSYS)
+            }
         }
     }
 

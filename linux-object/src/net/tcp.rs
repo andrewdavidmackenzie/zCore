@@ -373,8 +373,9 @@ impl FileLike for TcpSocketState {
         Ok(())
     }
 
-    fn dup(&self) -> Arc<dyn FileLike> {
-        unimplemented!()
+    fn dup(&self) -> LxResult<Arc<dyn FileLike>> {
+        warn!("dup not implemented for tcp socket");
+        Err(LxError::ENOSYS)
         /*
         let sockets = get_sockets();
         let mut set = sockets.lock();
@@ -395,7 +396,8 @@ impl FileLike for TcpSocketState {
     }
 
     async fn read_at(&self, _offset: u64, _buf: &mut [u8]) -> LxResult<usize> {
-        unimplemented!()
+        warn!("read_at not implemented for tcp socket");
+        Err(LxError::ENOSYS)
     }
 
     fn write(&self, buf: &[u8]) -> LxResult<usize> {

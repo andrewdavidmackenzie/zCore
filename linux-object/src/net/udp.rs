@@ -311,7 +311,8 @@ impl FileLike for UdpSocketState {
     }
 
     async fn read_at(&self, _offset: u64, _buf: &mut [u8]) -> LxResult<usize> {
-        unimplemented!()
+        warn!("read_at not implemented for udp socket");
+        Err(LxError::ENOSYS)
     }
 
     fn write(&self, buf: &[u8]) -> LxResult<usize> {

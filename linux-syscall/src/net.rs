@@ -182,7 +182,10 @@ impl Syscall<'_> {
                     }
                 };
                 match optname {
-                    IpOptname::HDRINCL => unimplemented!(),
+                    IpOptname::HDRINCL => {
+                        warn!("getsockopt: IP_HDRINCL not implemented");
+                        return Err(LxError::ENOPROTOOPT);
+                    }
                 }
             }
         }
