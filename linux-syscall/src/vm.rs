@@ -113,8 +113,6 @@ impl Syscall<'_> {
     /// Set protection on a region of memory
     /// (see [linux man mprotect(2)](https://www.man7.org/linux/man-pages/man2/mprotect.2.html)).
     ///
-    /// **NOTE!** This syscall is now unimplemented. Calling it always return `Ok(0)`.
-    ///
     /// `sys_mprotect` changes the access protections for the calling process's memory pages
     /// containing any part of the address range in the interval `[addr, addr+len-1]`.
     /// `addr` must be aligned to a page boundary.
@@ -144,7 +142,10 @@ impl Syscall<'_> {
             "mprotect: addr={:#x}, size={:#x}, prot={:?}",
             addr, len, prot
         );
-        warn!("mprotect: unimplemented");
+        let proc = self.zircon_process();
+        let vmar = proc.vmar();
+        let flags = prot.to_flags();
+        vmar.protect(addr, len, flags)?;
         Ok(0)
     }
 
@@ -216,10 +217,6 @@ impl MmapProt {
         }
         if self.contains(MmapProt::EXEC) {
             flags |= MMUFlags::EXECUTE;
-        }
-        // FIXME: hack for unimplemented mprotect
-        if self.is_empty() {
-            flags |= MMUFlags::READ | MMUFlags::WRITE;
         }
         flags
     }
