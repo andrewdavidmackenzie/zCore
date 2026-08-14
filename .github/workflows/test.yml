@@ -81,24 +81,61 @@ jobs:
       - name: Boot smoke test
         run: make boot-test ARCH=aarch64
 
-  # TODO: re-enable once more syscalls are implemented
-  # linux-libc-test-baremetal:
-  #   name: Linux Libc Test Baremetal
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       arch: [riscv64, aarch64]
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: dtolnay/rust-toolchain@nightly
-  #       with:
-  #         components: rust-src, llvm-tools-preview
-  #     - name: Install QEMU
-  #       run: sudo apt-get update && sudo apt-get install -y qemu-system-misc qemu-utils
-  #     - name: Prepare rootfs
-  #       run: cargo rootfs --arch ${{ matrix.arch }} && cargo image --arch ${{ matrix.arch }}
-  #     - name: Install python dependencies
-  #       run: pip3 install -r tests/requirements.txt
-  #     - name: Run tests
-  #       run: cd tests && python3 linux_libc_test-qemu.py --arch ${{ matrix.arch }} --fast
+  libc-test:
+    name: Libc Test (aarch64)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, llvm-tools-preview
+
+      - name: Cache musl-cross toolchain (macOS)
+        if: runner.os == 'macOS'
+        id: cache-musl
+        uses: actions/cache@v4
+        with:
+          path: /opt/homebrew/Cellar/musl-cross
+          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11
+
+      - name: Install cross-compilation toolchain (macOS)
+        if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit != 'true'
+        run: make config
+
+      - name: Restore musl-cross symlinks (macOS)
+        if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit == 'true'
+        run: brew link musl-cross 2>/dev/null || brew tap FiloSottile/musl-cross && brew link filosottile/musl-cross/musl-cross 2>/dev/null || true
+
+      - name: Install kernel headers (macOS, cached)
+        if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit == 'true'
+        run: |
+          MUSL_PREFIX=$(brew --prefix musl-cross)/libexec
+          for MUSL_ARCH in aarch64 riscv64; do
+            SYSROOT="$MUSL_PREFIX/$MUSL_ARCH-linux-musl"
+            if [ ! -f "$SYSROOT/include/linux/compiler.h" ]; then
+              make config
+              break
+            fi
+          done
+
+      - name: Install cross-compilation toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-misc qemu-utils wget
+
+      - name: Install QEMU (macOS)
+        if: runner.os == 'macOS'
+        run: brew install qemu
+
+      - name: Build kernel and rootfs
+        run: make build ARCH=aarch64
+
+      - name: Run libc-test
+        run: make libc-test ARCH=aarch64
