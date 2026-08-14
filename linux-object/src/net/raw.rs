@@ -120,7 +120,8 @@ impl Socket for RawSocketState {
     }
 
     async fn connect(&self, _endpoint: Endpoint) -> SysResult {
-        unimplemented!()
+        warn!("connect not implemented for raw socket");
+        Err(LxError::ENOSYS)
     }
 
     fn setsockopt(&self, _level: usize, _opt: usize, _data: &[u8]) -> SysResult {

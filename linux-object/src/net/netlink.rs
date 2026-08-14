@@ -195,7 +195,8 @@ impl Socket for NetlinkSocketState {
 
     /// connect
     async fn connect(&self, _endpoint: Endpoint) -> SysResult {
-        unimplemented!()
+        warn!("connect not implemented for netlink socket");
+        Err(LxError::ENOSYS)
     }
 
     fn bind(&self, _endpoint: Endpoint) -> SysResult {
@@ -214,15 +215,18 @@ impl Socket for NetlinkSocketState {
     }
 
     fn listen(&self) -> SysResult {
-        unimplemented!()
+        warn!("listen not implemented for netlink socket");
+        Err(LxError::ENOSYS)
     }
 
     fn shutdown(&self) -> SysResult {
-        unimplemented!()
+        warn!("shutdown not implemented for netlink socket");
+        Err(LxError::ENOSYS)
     }
 
     async fn accept(&self) -> LxResult<(Arc<dyn FileLike>, Endpoint)> {
-        unimplemented!()
+        warn!("accept not implemented for netlink socket");
+        Err(LxError::ENOSYS)
     }
 
     fn endpoint(&self) -> Option<Endpoint> {
@@ -230,7 +234,8 @@ impl Socket for NetlinkSocketState {
     }
 
     fn remote_endpoint(&self) -> Option<Endpoint> {
-        unimplemented!()
+        warn!("remote_endpoint not implemented for netlink socket");
+        None
     }
 
     fn setsockopt(&self, _level: usize, _opt: usize, _data: &[u8]) -> SysResult {

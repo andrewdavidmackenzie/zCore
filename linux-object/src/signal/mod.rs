@@ -169,16 +169,19 @@ cfg_if::cfg_if! {
         }
 
         impl MachineContext {
-            pub fn new(_pc : usize) -> Self {
-                unimplemented!();
+            pub fn new(pc: usize) -> Self {
+                let mut ctx = Self::default();
+                // PC is the first field in the aarch64 mcontext
+                ctx.reserved_[0] = pc;
+                ctx
             }
 
             pub fn get_pc(&self) -> usize {
-                unimplemented!();
+                self.reserved_[0]
             }
 
-            pub fn set_pc(&mut self, _pc: usize) -> usize {
-                unimplemented!();
+            pub fn set_pc(&mut self, pc: usize) {
+                self.reserved_[0] = pc;
             }
         }
     }

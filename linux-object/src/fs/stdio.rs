@@ -77,7 +77,7 @@ impl INode for Stdin {
         }
     }
     fn write_at(&self, _offset: usize, _buf: &[u8]) -> Result<usize> {
-        unimplemented!()
+        Err(FsError::NotSupported)
     }
     fn poll(&self) -> Result<PollStatus> {
         Ok(PollStatus {
@@ -146,7 +146,7 @@ impl INode for Stdin {
 
 impl INode for Stdout {
     fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize> {
-        unimplemented!()
+        Err(FsError::NotSupported)
     }
     fn write_at(&self, _offset: usize, buf: &[u8]) -> Result<usize> {
         // we do not care the utf-8 things, we just want to print it!

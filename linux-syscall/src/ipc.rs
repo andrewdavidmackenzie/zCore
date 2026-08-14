@@ -105,14 +105,18 @@ impl Syscall<'_> {
         for &SemBuf { num, op, flags } in ops {
             let flags = SemFlags::from_bits_truncate(flags);
             if flags.contains(SemFlags::IPC_NOWAIT) {
-                unimplemented!("Semaphore: semop.IPC_NOWAIT");
+                warn!("semop: IPC_NOWAIT not implemented, returning EAGAIN");
+                return Err(LxError::EAGAIN);
             }
             let sem = &sem_array[num as usize];
 
             match op {
                 1 => sem.release(),
                 -1 => sem.acquire().await?,
-                _ => unimplemented!("Semaphore: semop.(Not 1/-1)"),
+                _ => {
+                    warn!("semop: unsupported op value {}", op);
+                    return Err(LxError::EINVAL);
+                }
             }
             sem.set_pid(self.zircon_process().id() as usize);
             if flags.contains(SemFlags::SEM_UNDO) {
@@ -182,7 +186,10 @@ impl Syscall<'_> {
                         sem_array.ctime();
                         Ok(0)
                     }
-                    _ => unimplemented!("Semaphore Semctl cmd: {:?}", cmd),
+                    _ => {
+                        warn!("semctl: unhandled cmd {:?}", cmd);
+                        Err(LxError::EINVAL)
+                    }
                 }
             }
         }
@@ -315,7 +322,10 @@ impl Syscall<'_> {
                 buffer.write(ShmInfo::default())?;
                 Ok(0)
             }
-            _ => unimplemented!("Semaphore Semctl cmd: {:?}", cmd),
+            _ => {
+                warn!("shmctl: unhandled cmd {:?}", cmd);
+                Err(LxError::EINVAL)
+            }
         }
     }
 }
