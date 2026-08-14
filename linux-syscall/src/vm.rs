@@ -1,6 +1,6 @@
 use super::*;
 use bitflags::bitflags;
-use zircon_object::vm::{pages, MMUFlags, VmObject};
+use zircon_object::vm::{pages, MMUFlags, VmObject, PAGE_SIZE};
 
 /// Syscalls for virtual memory.
 ///
@@ -142,6 +142,14 @@ impl Syscall<'_> {
             "mprotect: addr={:#x}, size={:#x}, prot={:?}",
             addr, len, prot
         );
+        if len == 0 {
+            return Ok(0);
+        }
+        // Round len up to page boundary (Linux behavior)
+        let len = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        if addr.checked_add(len).is_none() {
+            return Err(LxError::EINVAL);
+        }
         let proc = self.zircon_process();
         let vmar = proc.vmar();
         let flags = prot.to_flags();
@@ -206,7 +214,9 @@ bitflags! {
 }
 
 impl MmapProt {
-    /// convert MmapProt to MMUFlags
+    /// Convert MmapProt to MMUFlags.
+    /// When prot is empty (PROT_NONE), returns USER-only flags with no R/W/X.
+    /// On aarch64, a USER-only PTE without the VALID bit is inaccessible.
     fn to_flags(self) -> MMUFlags {
         let mut flags = MMUFlags::USER;
         if self.contains(MmapProt::READ) {
