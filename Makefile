@@ -33,7 +33,8 @@ boot-test: build
 # Run musl libc-test functional tests. Reports pass/fail counts but does
 # not fail the build — the pass rate is expected to improve over time as
 # more syscalls are implemented (see issue #16).
-libc-test: build
+# Depends on boot-test to ensure serialization under parallel make.
+libc-test: boot-test
 	@scripts/libc-test.sh $(ARCH)
 
 # configure build environment (platform toolchain)
