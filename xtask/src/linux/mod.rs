@@ -25,10 +25,24 @@ impl LinuxRootfs {
     /// 对于 x86_64，这个文件系统可用于 libos 启动。
     /// 若设置 `clear`，将清除已存在的目录。
     pub fn make(&self, clear: bool) {
-        // 若已存在且不需要清空，可以直接退出
         let dir = self.path();
         if dir.is_dir() && !clear {
-            return;
+            // Verify the cached rootfs has a statically linked busybox.
+            // If not, clear it and rebuild to pick up CONFIG_STATIC=y.
+            let bb = dir.join("bin").join("busybox");
+            if bb.is_file() {
+                let output = std::process::Command::new("file")
+                    .arg(&bb)
+                    .output()
+                    .expect("failed to run `file`");
+                let desc = String::from_utf8_lossy(&output.stdout);
+                if desc.contains("statically linked") {
+                    return;
+                }
+                println!("cached rootfs busybox is dynamically linked, rebuilding...");
+            } else {
+                println!("cached rootfs is missing busybox, rebuilding...");
+            }
         }
         // 准备最小系统需要的资源
         let musl = self.0.linux_musl_cross();
@@ -80,10 +94,22 @@ impl LinuxRootfs {
     fn busybox(&self, musl: impl AsRef<Path>) -> PathBuf {
         // 最终文件路径
         let target = self.0.target().join("busybox");
-        // 如果文件存在，直接退出
         let executable = target.join("busybox");
+        // If a cached binary exists, verify it is statically linked.
+        // A stale dynamically-linked build (from before the CONFIG_STATIC
+        // change) would crash at runtime because zCore's mmap doesn't
+        // support the MAP_FIXED semantics musl's dynamic linker requires.
         if executable.is_file() {
-            return executable;
+            let output = std::process::Command::new("file")
+                .arg(&executable)
+                .output()
+                .expect("failed to run `file`");
+            let desc = String::from_utf8_lossy(&output.stdout);
+            if desc.contains("statically linked") {
+                return executable;
+            }
+            println!("cached busybox is dynamically linked, rebuilding...");
+            dir::rm(&target).unwrap();
         }
         // 获得源码
         let source = REPOS.join("busybox");
@@ -101,6 +127,13 @@ impl LinuxRootfs {
         dircpy::copy_dir(source, &target).unwrap();
         // 配置
         Make::new().current_dir(&target).arg("defconfig").invoke();
+        // Enable static linking to avoid dynamic linker dependencies.
+        // This is essential for bare-metal OS kernels that may not fully
+        // implement the mmap semantics required by musl's dynamic linker.
+        let config_path = target.join(".config");
+        let config = fs::read_to_string(&config_path).expect("failed to read .config");
+        let config = config.replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y");
+        fs::write(&config_path, config).expect("failed to write .config");
         // 编译
         let musl = musl.as_ref();
         Make::new()

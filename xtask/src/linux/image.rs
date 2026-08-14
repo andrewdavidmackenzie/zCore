@@ -1,5 +1,5 @@
-﻿use crate::{commands::wget, Arch, PROJECT_DIR};
-use os_xtask_utils::{dir, CommandExt, Qemu, Tar};
+﻿use crate::PROJECT_DIR;
+use os_xtask_utils::{CommandExt, Qemu};
 use std::{fs, path::Path};
 
 impl super::LinuxRootfs {
@@ -10,24 +10,12 @@ impl super::LinuxRootfs {
         // 镜像路径
         let inner = PROJECT_DIR.join("zCore");
         let image = inner.join(format!("{arch}.img", arch = self.0.name()));
-        // aarch64 还需要下载 firmware
-        if let Arch::Aarch64 = self.0 {
-            const URL:&str = "https://github.com/Luchangcheng2333/rayboot/releases/download/2.0.0/aarch64_firmware.tar.gz";
-            let aarch64_tar = self.0.origin().join("Aarch64_firmware.zip");
-            wget(URL, &aarch64_tar);
-
-            let fw_dir = self.0.target().join("firmware");
-            dir::clear(&fw_dir).unwrap();
-            Tar::xf(&aarch64_tar, Some(&fw_dir)).invoke();
-
-            let boot_dir = inner.join("disk").join("EFI").join("Boot");
-            dir::clear(&boot_dir).unwrap();
-            fs::copy(
-                fw_dir.join("aarch64_uefi.efi"),
-                boot_dir.join("bootaa64.efi"),
-            )
-            .unwrap();
-            fs::copy(fw_dir.join("Boot.json"), boot_dir.join("Boot.json")).unwrap();
+        // Skip image creation if it already exists and is newer than the
+        // rootfs directory. Recreating the image on every run triggers a
+        // full kernel recompile because the image lives inside the zCore
+        // package directory and cargo watches it for changes.
+        if image.is_file() && !is_stale(&image, &self.path()) {
+            return;
         }
         // 生成镜像
         fuse(self.path(), &image);
@@ -35,10 +23,38 @@ impl super::LinuxRootfs {
         Qemu::img()
             .arg("resize")
             .args(&["-f", "raw"])
-            .arg(image)
+            .arg(&image)
             .arg("+5M")
             .invoke();
     }
+}
+
+/// Check if `output` is older than any file in `input_dir`.
+fn is_stale(output: &std::path::Path, input_dir: &std::path::Path) -> bool {
+    let output_mtime = match output.metadata().and_then(|m| m.modified()) {
+        Ok(t) => t,
+        Err(_) => return true,
+    };
+    fn any_newer(dir: &std::path::Path, than: std::time::SystemTime) -> bool {
+        let entries = match dir.read_dir() {
+            Ok(e) => e,
+            Err(_) => return true,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if any_newer(&path, than) {
+                    return true;
+                }
+            } else if let Ok(m) = path.metadata().and_then(|m| m.modified()) {
+                if m > than {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    any_newer(input_dir, output_mtime)
 }
 
 /// 制作镜像。

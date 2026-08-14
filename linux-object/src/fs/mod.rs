@@ -295,7 +295,10 @@ impl LinuxProcess {
 /// Split a `path` str to `(base_path, file_name)`
 pub fn split_path(path: &str) -> (&str, &str) {
     let mut split = path.trim_end_matches('/').rsplitn(2, '/');
-    let file_name = split.next().unwrap();
+    let file_name = match split.next() {
+        Some(s) => s,
+        None => "",
+    };
     let mut dir_path = split.next().unwrap_or(".");
     if dir_path.is_empty() {
         dir_path = "/";

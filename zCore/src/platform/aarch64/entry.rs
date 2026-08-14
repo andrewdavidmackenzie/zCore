@@ -1,31 +1,30 @@
 use super::consts::save_offset;
 use kernel_hal::KernelConfig;
-use rayboot::Aarch64BootInfo;
-core::arch::global_asm!(include_str!("space.s"));
 
-#[unsafe(naked)]
-#[no_mangle]
-#[link_section = ".text.entry"]
-unsafe extern "C" fn _start() -> ! {
-    core::arch::naked_asm!(
-        "
-        adrp    x19, boot_stack_top
-        add     x19, x19, :lo12:boot_stack_top
-        mov     sp, x19
-        b rust_main",
-    )
-}
+// Include the boot assembly (page table setup + MMU enable + stack setup)
+core::arch::global_asm!(include_str!("boot.s"));
 
+// QEMU virt machine constants
+const PHYS_TO_VIRT_OFFSET: usize = 0xffff_0000_0000_0000;
+const UART_BASE: usize = 0x0900_0000;
+const GIC_BASE: usize = 0x0800_0000;
+
+/// Rust entry point, called from boot.s after MMU is enabled.
+///
+/// At this point:
+/// - We are running at virtual addresses (0xffff0000_4008xxxx)
+/// - The MMU is ON with identity + high mappings
+/// - x0 contains the DTB pointer from QEMU (currently unused)
 #[no_mangle]
-extern "C" fn rust_main(boot_info: &'static Aarch64BootInfo) -> ! {
+extern "C" fn rust_main(_dtb_ptr: usize) -> ! {
     let config = KernelConfig {
-        cmdline: boot_info.cmdline,
-        firmware_type: boot_info.firmware_type,
-        uart_base: boot_info.uart_base,
-        gic_base: boot_info.gic_base,
-        phys_to_virt_offset: boot_info.offset,
+        cmdline: "LOG=warn:ROOTPROC=/bin/busybox?sh",
+        firmware_type: "QEMU",
+        uart_base: UART_BASE,
+        gic_base: GIC_BASE,
+        phys_to_virt_offset: PHYS_TO_VIRT_OFFSET,
     };
-    save_offset(boot_info.offset);
+    save_offset(PHYS_TO_VIRT_OFFSET);
     crate::primary_main(config);
     unreachable!()
 }

@@ -1,12 +1,34 @@
 # Makefile for top level of zCore
 
-ARCH ?= x86_64
+ARCH ?= aarch64
 XTASK ?= 1
 
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
-.PHONY: help config config-macos zircon-init update rootfs libc-test other-test image check doc clean
+.PHONY: help build run test boot-test config config-macos zircon-init update rootfs libc-test other-test image check doc clean
+
+# Build the rootfs image and kernel for the target architecture.
+# cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
+# cargo bin:   compiles the kernel ELF (for riscv64, also objcopy to .bin)
+build:
+	cargo image --arch $(ARCH)
+	cargo bin -m virt-$(ARCH)
+
+# Build (if needed) and run zCore interactively in QEMU.
+# cargo qemu does: build rootfs image, build kernel, launch QEMU.
+run:
+	cargo qemu --arch $(ARCH)
+
+# Run the boot smoke test: verify the kernel boots to a shell prompt.
+test: boot-test
+
+# Boot smoke test: start QEMU, wait for the "/ # " shell prompt, exit.
+# Proves: boot assembly, MMU, HAL, VirtIO, filesystem, ELF loader, and
+# busybox shell all work end-to-end. Timeout is 60 seconds.
+boot-test: build
+	@echo "==> Boot smoke test ($(ARCH))..."
+	@scripts/boot-test.sh $(ARCH)
 
 # configure build environment (platform toolchain)
 config:

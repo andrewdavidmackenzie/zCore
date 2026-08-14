@@ -8,9 +8,24 @@
 ![stars](https://img.shields.io/github/stars/rcore-os/zCore)
 ![license](https://img.shields.io/github/license/rcore-os/zCore)
 
-基于 zircon 并提供 Linux 兼容性的操作系统内核。
+An OS kernel based on Zircon with Linux compatibility.
 
-## 原版README
+## Quick start
+
+```bash
+make run
+```
+
+This builds and boots zCore on QEMU (aarch64) with a minimal Linux
+emulation layer and a BusyBox shell. Simple commands like `echo` and
+`uname` work. Many others will fail because the underlying Linux syscall
+implementations are incomplete. See the warnings printed at boot for
+examples of unimplemented syscalls.
+
+Prerequisites: Rust nightly, QEMU, and `aarch64-linux-musl-gcc`
+(on macOS: `make config` installs the cross-compiler via Homebrew).
+
+## Original README
 
   Reimplement `Zircon` microkernel in safe Rust as a userspace program!
 

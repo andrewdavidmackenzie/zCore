@@ -180,20 +180,22 @@ impl QemuArgs {
             .join(self.arch.arch.name())
             .join(if self.debug { "debug" } else { "release" })
             .join("zcore");
-        // 递归生成内核二进制
-        let bin = BuildConfig::from_args(BuildArgs {
+        // Build the kernel
+        let build_config = BuildConfig::from_args(BuildArgs {
             machine: format!("virt-{}", self.arch.arch.name()),
             debug: self.debug,
-        })
-        .bin(None);
+        });
+        // For riscv64 we need a raw binary; for aarch64 we use the ELF directly
+        let bin = match arch {
+            Arch::Aarch64 => {
+                build_config.invoke(Cargo::build);
+                obj.clone()
+            }
+            _ => build_config.bin(None),
+        };
         // 设置 Qemu 参数
         let mut qemu = Qemu::system(arch_str);
         qemu.args(&["-m", "2G"])
-            .arg("-kernel")
-            .arg(&bin)
-            .arg("-initrd")
-            .arg(INNER.join(format!("{arch_str}.img")))
-            .args(&["-append", "\"LOG=warn\""])
             .args(&["-display", "none"])
             .arg("-no-reboot")
             .arg("-nographic")
@@ -203,17 +205,24 @@ impl QemuArgs {
         match arch {
             Arch::Riscv64 => {
                 qemu.args(&["-machine", "virt"])
+                    .arg("-kernel")
+                    .arg(&bin)
+                    .arg("-initrd")
+                    .arg(INNER.join(format!("{arch_str}.img")))
+                    .args(&["-append", "\"LOG=warn\""])
                     .args(&["-bios", "default"])
                     .args(&["-serial", "mon:stdio"]);
             }
             Arch::X86_64 => todo!(),
             Arch::Aarch64 => {
-                fs::copy(obj, INNER.join("disk").join("os")).unwrap();
+                // Direct kernel boot: QEMU loads the ELF directly, no UEFI
+                // bootloader needed. The kernel's _boot assembly sets up MMU
+                // and page tables before jumping to rust_main.
                 qemu.args(&["-machine", "virt"])
                     .args(&["-cpu", "cortex-a72"])
-                    .arg("-bios")
-                    .arg(arch.target().join("firmware").join("QEMU_EFI.fd"))
-                    .args(&["-hda", &format!("fat:rw:{}/disk", INNER.display())])
+                    .arg("-kernel")
+                    .arg(&obj)
+                    .args(&["-serial", "mon:stdio"])
                     .args(&[
                         "-drive",
                         &format!(
