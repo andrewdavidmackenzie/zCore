@@ -41,7 +41,7 @@ impl LinuxRootfs {
                 }
                 println!("cached rootfs busybox is dynamically linked, rebuilding...");
             } else {
-                return;
+                println!("cached rootfs is missing busybox, rebuilding...");
             }
         }
         // 准备最小系统需要的资源

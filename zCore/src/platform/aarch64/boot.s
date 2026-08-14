@@ -214,9 +214,11 @@ _zero_mem:
 _start_virtual:
     /* Now executing at virtual addresses (0xffff0000_4008xxxx) */
 
-    /* Zero the .bss section (required — NOLOAD means no file content) */
-    adrp    x0, sbss
-    add     x0, x0, :lo12:sbss
+    /* Zero the entire .bss section including the boot stack.
+       The linker places .bss.stack before sbss, so we start from
+       boot_stack to cover everything through ebss. */
+    adrp    x0, boot_stack
+    add     x0, x0, :lo12:boot_stack
     adrp    x1, ebss
     add     x1, x1, :lo12:ebss
 1:  cmp     x0, x1
@@ -225,7 +227,7 @@ _start_virtual:
     b       1b
 2:
 
-    /* Set up the boot stack (inside .bss, now zeroed) */
+    /* Set up the boot stack */
     adrp    x19, boot_stack_top
     add     x19, x19, :lo12:boot_stack_top
     mov     sp, x19
