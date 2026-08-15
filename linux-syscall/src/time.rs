@@ -118,9 +118,11 @@ impl Syscall<'_> {
         let tick = (tv.sec * 1_000_000 + tv.usec) / USEC_PER_TICK;
 
         if !buf.is_null() {
-            // Approximate: attribute all elapsed time as user time
+            // Per-process CPU time accounting is not implemented.
+            // Return zeros rather than wall-clock time, which would
+            // be incorrect (includes sleep time and other processes).
             let new_buf = Tms {
-                tms_utime: tick as u64,
+                tms_utime: 0,
                 tms_stime: 0,
                 tms_cutime: 0,
                 tms_cstime: 0,
@@ -161,9 +163,14 @@ impl Syscall<'_> {
                     thread::sleep_until(timer::deadline_after(duration)).await;
                 }
                 ClockFlags::TimerAbsTime => {
-                    // duration is an absolute time point; sleep_until expects
-                    // an absolute deadline, so pass it directly.
-                    thread::sleep_until(duration).await;
+                    // Convert absolute deadline to relative duration in the
+                    // timer domain, avoiding clock-domain mismatches between
+                    // bare-metal (boot-relative) and libos (Unix epoch) modes.
+                    let now = timer::timer_now();
+                    let remaining = duration.saturating_sub(now);
+                    if !remaining.is_zero() {
+                        thread::sleep_until(timer::deadline_after(remaining)).await;
+                    }
                 }
             },
             ClockId::ClockProcessCpuTimeId => {}

@@ -80,7 +80,9 @@ pub struct Stack {
 }
 
 impl Stack {
-    /// create a stack
+    /// Create a stack buffer with a fixed 16 KiB capacity for argv,
+    /// envp, auxv, and AT_RANDOM data. The assertion in `push_slice`
+    /// fires if this limit is exceeded.
     fn new(sp: usize) -> Self {
         let data = vec![0u8; 0x4000];
         Stack {

@@ -159,8 +159,9 @@ impl Syscall<'_> {
     /// The value of `pid` can be:
     ///
     /// - **-1**: meaning wait for any child process.
-    /// - **0**: meaning wait for any child process whose process group ID is equal to
-    ///          that of the calling process at the time of the call to `sys_wait4`.
+    /// - **0**: meaning wait for any child in the calling process's group.
+    ///          **Note:** zCore does not implement process groups, so this
+    ///          is treated the same as `-1` (wait for any child).
     /// - **>0**: meaning wait for the child whose process ID is equal to the value of `pid`.
     ///
     /// The value of options is an OR of zero or more of the following constants:

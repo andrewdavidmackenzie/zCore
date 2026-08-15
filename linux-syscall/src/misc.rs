@@ -82,7 +82,11 @@ impl Syscall<'_> {
     /// provides a simple way of getting overall system statistics
     pub fn sys_sysinfo(&mut self, mut sys_info: UserOutPtr<SysInfo>) -> SysResult {
         use kernel_hal::timer;
+        // Note: timer_now() is boot-relative in bare-metal mode (correct
+        // for uptime) but Unix-epoch-based in libos mode.
         let uptime = timer::timer_now().as_secs();
+        // Approximate fixed values; live memory/process accounting
+        // is not yet implemented.
         let sysinfo = SysInfo {
             uptime,
             totalram: 128 * 1024 * 1024, // 128 MiB
