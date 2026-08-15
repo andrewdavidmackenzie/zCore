@@ -126,9 +126,9 @@ impl Drop for SemProc {
                         sem.release();
                     }
                 } else if op < 0 {
-                    // Apply negative adjustment: reduce the count
+                    // Apply negative adjustment: reduce the count, clamping at zero
                     let current = sem.get();
-                    sem.set(current + op as isize);
+                    sem.set((current + op as isize).max(0));
                 }
                 // op == 0: nothing to undo
             }

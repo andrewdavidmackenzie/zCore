@@ -324,6 +324,11 @@ impl Syscall<'_> {
             "sys_accept4: sockfd:{}, addr:{:?}, addrlen={:?}, flags={:#x}",
             sockfd, addr, addrlen, flags
         );
+        // Only SOCK_CLOEXEC and SOCK_NONBLOCK are valid for accept4
+        let valid_flags = OpenFlags::CLOEXEC.bits() | OpenFlags::NON_BLOCK.bits();
+        if flags & !valid_flags != 0 {
+            return Err(LxError::EINVAL);
+        }
         let file_like = self.linux_process().get_file_like(sockfd.into())?;
         let (new_socket, remote_endpoint) = file_like.clone().as_socket()?.accept().await?;
         // Apply accept4-specific flags (SOCK_CLOEXEC, SOCK_NONBLOCK)
@@ -332,7 +337,11 @@ impl Syscall<'_> {
         let new_fd = self.linux_process().add_socket(new_socket)?;
         if !addr.is_null() {
             let sockaddr_in = SockAddr::from(remote_endpoint);
-            sockaddr_in.write_to(addr, addrlen)?;
+            if let Err(e) = sockaddr_in.write_to(addr, addrlen) {
+                // Clean up the accepted fd to avoid leaking it
+                let _ = self.linux_process().close_file(new_fd);
+                return Err(e);
+            }
         }
         Ok(new_fd.into())
     }
