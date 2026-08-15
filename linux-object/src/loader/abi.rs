@@ -71,10 +71,8 @@ pub struct Stack {
 
 impl Stack {
     /// create a stack
-    #[allow(clippy::uninit_vec, unsafe_code)] // FIXME: 这是什么东西？！为什么要这么做？！实在难以理解！！
     fn new(sp: usize) -> Self {
-        let mut data = Vec::with_capacity(0x4000);
-        unsafe { data.set_len(0x4000) };
+        let data = vec![0u8; 0x4000];
         Stack {
             sp,
             stack_top: sp,

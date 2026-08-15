@@ -90,7 +90,6 @@ impl Syscall<'_> {
     }
 
     /// get directory entries
-    /// TODO: get ino from dirent
     /// - fd – file describe
     pub fn sys_getdents64(
         &self,
@@ -108,6 +107,7 @@ impl Syscall<'_> {
         if info.type_ != FileType::Dir {
             return Err(LxError::ENOTDIR);
         }
+        let dir_inode = file.inode();
         let mut kbuf = vec![0; buf_size];
         let mut writer = DirentBufWriter::new(&mut kbuf);
         loop {
@@ -115,8 +115,13 @@ impl Syscall<'_> {
                 Err(LxError::ENOENT) => break,
                 r => r,
             }?;
-            // TODO: get ino from dirent
-            let ok = writer.try_write(0, DirentType::from(info.type_).bits(), &name);
+            // Try to get the child's inode number and type from the directory
+            let (ino, dtype) = dir_inode
+                .find(&name)
+                .and_then(|child| child.metadata())
+                .map(|meta| (meta.inode as u64, DirentType::from(meta.type_).bits()))
+                .unwrap_or((0, DirentType::UNKNOWN.bits()));
+            let ok = writer.try_write(ino, dtype, &name);
             if !ok {
                 break;
             }

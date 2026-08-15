@@ -487,9 +487,8 @@ static_assertions::const_assert_eq!(120, core::mem::size_of::<StatFs>());
 impl From<FsInfo> for StatFs {
     fn from(info: FsInfo) -> Self {
         StatFs {
-            // TODO 文件系统的魔数，需要 rcore-fs 提供一个渠道获取
-            // 但是这个似乎并没有什么用处，新的 vfs 相关函数都去掉了，也许永远填个常数就好了
-            f_type: 0,
+            // SFS (Simple File System) magic number
+            f_type: 0x5346_5346,
             f_bsize: info.bsize as _,
             f_blocks: info.blocks as _,
             f_bfree: info.bfree as _,
@@ -500,8 +499,8 @@ impl From<FsInfo> for StatFs {
             f_fsid: (0, 0),
             f_namelen: info.namemax as _,
             f_frsize: info.frsize as _,
-            // TODO 需要先实现挂载
-            f_flags: 0,
+            // ST_NOSUID (2) — no set-uid/set-gid support
+            f_flags: 2,
             f_spare: [0; 4],
         }
     }

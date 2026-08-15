@@ -167,23 +167,23 @@ impl Syscall<'_> {
     ///
     /// - **NOHANG**    = 0x000_0001;
     ///
-    ///   TODO
+    ///   Return immediately if no child has exited.
     ///
     /// - **STOPPED**   = 0x000_0002;
     ///
-    ///   TODO
+    ///   Also report children stopped by a signal (not yet implemented).
     ///
     /// - **EXITED**    = 0x000_0004;
     ///
-    ///   TODO
+    ///   Wait for children that have terminated.
     ///
     /// - **CONTINUED** = 0x000_0008;
     ///
-    ///   TODO
+    ///   Also report stopped children that have been resumed by `SIGCONT` (not yet implemented).
     ///
     /// - **NOWAIT**    = 0x100_0000;
     ///
-    ///   TODO
+    ///   Leave the child in a waitable state; a later wait call can be used to again retrieve the status (not yet implemented).
     ///
     /// On success, returns the process ID of the child whose state has changed;
     /// if `NOHANG` flag was specified and one or more child(ren) specified by pid exist,
@@ -225,14 +225,28 @@ impl Syscall<'_> {
             "wait4: target={:?}, wstatus={:?}, options={:?}",
             target, wstatus, flags,
         );
-        let (pid, code) = match target {
-            WaitTarget::AnyChild | WaitTarget::AnyChildInGroup => {
-                wait_child_any(self.zircon_process(), nohang).await?
+        let result = match target {
+            WaitTarget::AnyChild => wait_child_any(self.zircon_process(), nohang).await,
+            WaitTarget::AnyChildInGroup => {
+                warn!("wait4: process group wait (pid=0) not implemented");
+                return Err(LxError::ENOSYS);
             }
-            WaitTarget::Pid(pid) => (pid, wait_child(self.zircon_process(), pid, nohang).await?),
+            WaitTarget::Pid(pid) => wait_child(self.zircon_process(), pid, nohang)
+                .await
+                .map(|code| (pid, code)),
         };
-        wstatus.write_if_not_null(code)?;
-        Ok(pid as usize)
+        match result {
+            Ok((pid, code)) => {
+                // Encode as Linux wait status: exited = (code & 0xff) << 8
+                // so WIFEXITED(status) and WEXITSTATUS(status) work correctly.
+                let status = (code & 0xff) << 8;
+                wstatus.write_if_not_null(status)?;
+                Ok(pid as usize)
+            }
+            // WNOHANG: children exist but none have changed state — return 0
+            Err(LxError::EAGAIN) if nohang => Ok(0),
+            Err(e) => Err(e),
+        }
     }
 
     /// `sys_execve` executes the program referred to by `path`

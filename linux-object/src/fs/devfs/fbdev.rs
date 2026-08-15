@@ -322,9 +322,8 @@ impl INode for FbDev {
 
     fn poll(&self) -> Result<PollStatus> {
         Ok(PollStatus {
-            // TOKNOW and TODO
-            read: true,
-            write: false,
+            read: false,
+            write: true,
             error: false,
         })
     }

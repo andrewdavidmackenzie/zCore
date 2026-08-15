@@ -10,6 +10,24 @@ use linux_object::time::*;
 const USEC_PER_TICK: usize = 10000;
 
 impl Syscall<'_> {
+    /// Returns the resolution (precision) of the specified clock.
+    ///
+    /// If `buf` is non-NULL, stores the resolution in the struct timespec
+    /// pointed to by `buf`. The resolution is 1 nanosecond for all supported clocks.
+    /// Returns `EINVAL` for unknown clock IDs.
+    pub fn sys_clock_getres(&self, clock: usize, mut buf: UserOutPtr<TimeSpec>) -> SysResult {
+        info!("clock_getres: id={}, buf={:?}", clock, buf);
+        // Validate clock ID (0..=9 are the supported ClockId variants)
+        if clock > 9 {
+            return Err(LxError::EINVAL);
+        }
+        // All supported clocks report 1ns resolution
+        if !buf.is_null() {
+            buf.write(TimeSpec { sec: 0, nsec: 1 })?;
+        }
+        Ok(0)
+    }
+
     /// finds the resolution (precision) of the specified clock clockid, and,
     /// if buffer is non-NULL, stores it in the struct timespec pointed to by buffer
     pub fn sys_clock_gettime(&self, clock: usize, mut buf: UserOutPtr<TimeSpec>) -> SysResult {
