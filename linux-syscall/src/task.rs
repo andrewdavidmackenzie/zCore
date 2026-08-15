@@ -226,8 +226,10 @@ impl Syscall<'_> {
             target, wstatus, flags,
         );
         let result = match target {
-            WaitTarget::AnyChild | WaitTarget::AnyChildInGroup => {
-                wait_child_any(self.zircon_process(), nohang).await
+            WaitTarget::AnyChild => wait_child_any(self.zircon_process(), nohang).await,
+            WaitTarget::AnyChildInGroup => {
+                warn!("wait4: process group wait (pid=0) not implemented");
+                return Err(LxError::ENOSYS);
             }
             WaitTarget::Pid(pid) => wait_child(self.zircon_process(), pid, nohang)
                 .await
@@ -235,7 +237,10 @@ impl Syscall<'_> {
         };
         match result {
             Ok((pid, code)) => {
-                wstatus.write_if_not_null(code)?;
+                // Encode as Linux wait status: exited = (code & 0xff) << 8
+                // so WIFEXITED(status) and WEXITSTATUS(status) work correctly.
+                let status = (code & 0xff) << 8;
+                wstatus.write_if_not_null(status)?;
                 Ok(pid as usize)
             }
             // WNOHANG: children exist but none have changed state — return 0
