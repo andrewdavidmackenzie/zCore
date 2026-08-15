@@ -131,7 +131,7 @@ impl LinuxElfLoader {
                 map
             },
         };
-        let init_stack = info.push_at(sp);
+        let init_stack = info.push_at(sp)?;
         stack_vmo.write(self.stack_pages * PAGE_SIZE - init_stack.len(), &init_stack)?;
         sp -= init_stack.len();
 
