@@ -133,9 +133,9 @@ impl Syscall<'_> {
                 self.sys_epoll_pwait(a0, a1.into(), a2, a3 as isize, a4)
                     .await
             }
-            //            Sys::EVENTFD2 => self.unimplemented("eventfd2", Err(LxError::EACCES)),
+            Sys::EVENTFD2 => self.sys_eventfd2(a0, a1),
 
-            //            Sys::SOCKETPAIR => self.unimplemented("socketpair", Err(LxError::EACCES)),
+            Sys::SOCKETPAIR => self.sys_socketpair(a0, a1, a2, a3.into()),
             // file system
             Sys::STATFS => self.sys_statfs(a0.into(), a1.into()),
             Sys::FSTATFS => self.sys_fstatfs(a0.into(), a1.into()),
