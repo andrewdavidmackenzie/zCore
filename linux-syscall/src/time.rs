@@ -118,8 +118,9 @@ impl Syscall<'_> {
         let tick = (tv.sec * 1_000_000 + tv.usec) / USEC_PER_TICK;
 
         if !buf.is_null() {
+            // Approximate: attribute all elapsed time as user time
             let new_buf = Tms {
-                tms_utime: 0,
+                tms_utime: tick as u64,
                 tms_stime: 0,
                 tms_cutime: 0,
                 tms_cstime: 0,
@@ -155,23 +156,14 @@ impl Syscall<'_> {
         let flags = ClockFlags::from(flags);
         info!("clockid={:?}, flags={:?}", clockid, flags,);
         match clockid {
-            ClockId::ClockRealTime => {
-                match flags {
-                    ClockFlags::ZeroFlag => {
-                        thread::sleep_until(timer::deadline_after(duration)).await;
-                    }
-                    ClockFlags::TimerAbsTime => {
-                        // 目前统一由nanosleep代替了、之后再修改
-                        thread::sleep_until(timer::deadline_after(duration)).await;
-                    }
-                }
-            }
-            ClockId::ClockMonotonic => match flags {
+            ClockId::ClockRealTime | ClockId::ClockMonotonic => match flags {
                 ClockFlags::ZeroFlag => {
                     thread::sleep_until(timer::deadline_after(duration)).await;
                 }
                 ClockFlags::TimerAbsTime => {
-                    thread::sleep_until(timer::deadline_after(duration)).await;
+                    // duration is an absolute time point; sleep_until expects
+                    // an absolute deadline, so pass it directly.
+                    thread::sleep_until(duration).await;
                 }
             },
             ClockId::ClockProcessCpuTimeId => {}

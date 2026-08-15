@@ -114,6 +114,20 @@ impl LinuxElfLoader {
                 map.insert(abi::AT_PHENT, elf.header.pt2.ph_entry_size() as usize);
                 map.insert(abi::AT_PHNUM, elf.header.pt2.ph_count() as usize);
                 map.insert(abi::AT_PAGESZ, PAGE_SIZE);
+                // AT_RANDOM: value is a placeholder; push_at() replaces it
+                // with the actual stack address of the 16 random bytes.
+                map.insert(abi::AT_RANDOM, 0);
+                // User/group identity — always root (uid=0, gid=0)
+                map.insert(abi::AT_UID, 0);
+                map.insert(abi::AT_EUID, 0);
+                map.insert(abi::AT_GID, 0);
+                map.insert(abi::AT_EGID, 0);
+                // Clock ticks per second (matches Linux default of 100 Hz)
+                map.insert(abi::AT_CLKTCK, 100);
+                // Not running in secure mode (no setuid/setgid)
+                map.insert(abi::AT_SECURE, 0);
+                // Hardware capabilities (0 = no special capabilities)
+                map.insert(abi::AT_HWCAP, 0);
                 map
             },
         };

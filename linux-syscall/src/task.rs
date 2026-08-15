@@ -198,7 +198,6 @@ impl Syscall<'_> {
         #[derive(Debug)]
         enum WaitTarget {
             AnyChild,
-            AnyChildInGroup,
             Pid(KoID),
         }
         bitflags! {
@@ -212,7 +211,9 @@ impl Syscall<'_> {
         }
         let target = match pid {
             -1 => WaitTarget::AnyChild,
-            0 => WaitTarget::AnyChildInGroup,
+            // pid=0: wait for any child in process group. Since zCore has
+            // no process groups, treat the same as pid=-1 (any child).
+            0 => WaitTarget::AnyChild,
             p if p > 0 => WaitTarget::Pid(p as KoID),
             _ => {
                 warn!("wait4: process group wait (pid={}) not implemented", pid);
@@ -221,16 +222,12 @@ impl Syscall<'_> {
         };
         let flags = WaitFlags::from_bits_truncate(options);
         let nohang = flags.contains(WaitFlags::NOHANG);
-        warn!(
+        info!(
             "wait4: target={:?}, wstatus={:?}, options={:?}",
             target, wstatus, flags,
         );
         let result = match target {
             WaitTarget::AnyChild => wait_child_any(self.zircon_process(), nohang).await,
-            WaitTarget::AnyChildInGroup => {
-                warn!("wait4: process group wait (pid=0) not implemented");
-                return Err(LxError::ENOSYS);
-            }
             WaitTarget::Pid(pid) => wait_child(self.zircon_process(), pid, nohang)
                 .await
                 .map(|code| (pid, code)),

@@ -81,7 +81,16 @@ impl Syscall<'_> {
 
     /// provides a simple way of getting overall system statistics
     pub fn sys_sysinfo(&mut self, mut sys_info: UserOutPtr<SysInfo>) -> SysResult {
-        let sysinfo = SysInfo::default();
+        use kernel_hal::timer;
+        let uptime = timer::timer_now().as_secs();
+        let sysinfo = SysInfo {
+            uptime,
+            totalram: 128 * 1024 * 1024, // 128 MiB
+            freeram: 64 * 1024 * 1024,   // 64 MiB
+            mem_unit: 1,
+            procs: 1,
+            ..SysInfo::default()
+        };
         sys_info.write(sysinfo)?;
         Ok(0)
     }
