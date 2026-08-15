@@ -6,10 +6,52 @@ use zircon_object::vm::{pages, MMUFlags, VmObject, PAGE_SIZE};
 ///
 /// # Menu
 ///
+/// - [`brk`](Self::sys_brk)
 /// - [`mmap`](Self::sys_mmap)
 /// - [`mprotect`](Self::sys_mprotect)
 /// - [`munmap`](Self::sys_munmap)
 impl Syscall<'_> {
+    /// Set the program break (end of data segment / heap).
+    ///
+    /// If `addr` is 0, returns the current break without changing it.
+    /// If `addr` is greater than the current break, grows the heap.
+    /// If `addr` is less than the current break, shrinks the heap.
+    /// Returns the new program break on success.
+    pub fn sys_brk(&self, addr: usize) -> SysResult {
+        let proc = self.linux_process();
+        let current_brk = proc.get_brk();
+        info!("brk: addr={:#x}, current={:#x}", addr, current_brk);
+
+        if addr == 0 {
+            return Ok(current_brk);
+        }
+
+        // Page-align the requested address upward
+        let new_brk = (addr + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let old_brk = (current_brk + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+
+        let vmar = self.zircon_process().vmar();
+
+        if new_brk > old_brk {
+            // Grow: map anonymous pages for the new region
+            let len = new_brk - old_brk;
+            let flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER;
+            let vmo = VmObject::new_paged(pages(len));
+            let offset = old_brk - vmar.addr();
+            if vmar.map(Some(offset), vmo, 0, len, flags).is_err() {
+                // Cannot grow — return the current break unchanged
+                return Ok(current_brk);
+            }
+        } else if new_brk < old_brk {
+            // Shrink: unmap pages from the end
+            let len = old_brk - new_brk;
+            let _ = vmar.unmap(new_brk, len);
+        }
+
+        proc.set_brk(addr);
+        Ok(addr)
+    }
+
     /// Map files or devices into memory
     /// (see [linux man mmap(2)](https://www.man7.org/linux/man-pages/man2/mmap.2.html)).
     ///
