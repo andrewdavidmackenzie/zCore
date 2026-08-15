@@ -58,9 +58,8 @@ impl INode for UartDev {
 
     fn poll(&self) -> Result<PollStatus> {
         Ok(PollStatus {
-            // TOKNOW and TODO
             read: true,
-            write: false,
+            write: true,
             error: false,
         })
     }

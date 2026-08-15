@@ -129,9 +129,10 @@ impl INode for Stdin {
                 Ok(0)
             }
             TIOCGPGRP => {
-                warn!("stdin TIOCGPGRP, pretend to be have a tty process group.");
-                // pretend to be have a tty process group
-                // TODO: verify pointer
+                // pretend to have a tty process group
+                if data == 0 {
+                    return Err(FsError::InvalidParam);
+                }
                 unsafe { *(data as *mut u32) = 0 };
                 Ok(0)
             }
@@ -174,8 +175,10 @@ impl INode for Stdout {
                 Ok(0)
             }
             TIOCGPGRP => {
-                // pretend to be have a tty process group
-                // TODO: verify pointer
+                // pretend to have a tty process group
+                if data == 0 {
+                    return Err(FsError::InvalidParam);
+                }
                 unsafe { *(data as *mut u32) = 0 };
                 Ok(0)
             }

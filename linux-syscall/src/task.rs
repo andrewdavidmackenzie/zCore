@@ -167,23 +167,23 @@ impl Syscall<'_> {
     ///
     /// - **NOHANG**    = 0x000_0001;
     ///
-    ///   TODO
+    ///   Return immediately if no child has exited.
     ///
     /// - **STOPPED**   = 0x000_0002;
     ///
-    ///   TODO
+    ///   Also report children stopped by a signal (not yet implemented).
     ///
     /// - **EXITED**    = 0x000_0004;
     ///
-    ///   TODO
+    ///   Wait for children that have terminated.
     ///
     /// - **CONTINUED** = 0x000_0008;
     ///
-    ///   TODO
+    ///   Also report stopped children that have been resumed by `SIGCONT` (not yet implemented).
     ///
     /// - **NOWAIT**    = 0x100_0000;
     ///
-    ///   TODO
+    ///   Leave the child in a waitable state; a later wait call can be used to again retrieve the status (not yet implemented).
     ///
     /// On success, returns the process ID of the child whose state has changed;
     /// if `NOHANG` flag was specified and one or more child(ren) specified by pid exist,

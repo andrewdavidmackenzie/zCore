@@ -205,7 +205,7 @@ impl Syscall<'_> {
             Sys::SETITIMER => Ok(0), // interval timer — stub
             Sys::GETTIMEOFDAY => self.sys_gettimeofday(a0.into(), a1.into()),
             Sys::CLOCK_GETTIME => self.sys_clock_gettime(a0, a1.into()),
-            Sys::CLOCK_GETRES => Ok(0), // clock resolution — stub
+            Sys::CLOCK_GETRES => self.sys_clock_getres(a0, a1.into()),
 
             // sem
             #[cfg(not(target_arch = "mips"))]
