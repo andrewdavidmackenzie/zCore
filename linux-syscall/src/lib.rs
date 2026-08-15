@@ -158,9 +158,9 @@ impl Syscall<'_> {
             Sys::KILL => self.sys_kill(a0 as isize, a1),
 
             // schedule
-            Sys::SCHED_YIELD => self.unimplemented("yield", Ok(0)),
-            Sys::SCHED_GETAFFINITY => self.unimplemented("sched_getaffinity", Ok(0)),
-            Sys::SCHED_SETAFFINITY => self.unimplemented("sched_setaffinity", Ok(0)),
+            Sys::SCHED_YIELD => Ok(0),
+            Sys::SCHED_GETAFFINITY => self.sys_sched_getaffinity(a0, a1, a2.into()),
+            Sys::SCHED_SETAFFINITY => Ok(0),
 
             // socket
             Sys::SOCKET => self.sys_socket(a0, a1, a2),
@@ -226,8 +226,8 @@ impl Syscall<'_> {
             Sys::GETTID => self.sys_gettid(),
             Sys::UNAME => self.sys_uname(a0.into()),
             Sys::UMASK => self.unimplemented("umask", Ok(0o777)),
-            //            Sys::GETRLIMIT => self.sys_getrlimit(),
-            //            Sys::SETRLIMIT => self.sys_setrlimit(),
+            Sys::GETRLIMIT => self.sys_prlimit64(0, a0, 0.into(), a1.into()),
+            Sys::SETRLIMIT => self.sys_prlimit64(0, a0, a1.into(), 0.into()),
             Sys::GETRUSAGE => self.sys_getrusage(a0, a1.into()),
             Sys::SYSINFO => self.sys_sysinfo(a0.into()),
             Sys::TIMES => self.sys_times(a0.into()),
