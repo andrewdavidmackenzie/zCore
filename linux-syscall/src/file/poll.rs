@@ -2,6 +2,7 @@
 //!
 //! - select, pselect
 //! - poll, ppoll
+//! - epoll_create1, epoll_ctl, epoll_pwait
 
 use super::*;
 use alloc::boxed::Box;
@@ -12,7 +13,9 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 use core::time::Duration;
 use kernel_hal::timer;
-use linux_object::fs::{FileDesc, PollEvents};
+use linux_object::fs::{
+    EpollEvent, EpollFile, FileDesc, PollEvents, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD,
+};
 use linux_object::time::*;
 
 impl Syscall<'_> {
@@ -287,6 +290,99 @@ impl Syscall<'_> {
             syscall: self,
         };
         future.await
+    }
+
+    /// Create an epoll instance. `flags` can include `EPOLL_CLOEXEC`.
+    pub fn sys_epoll_create1(&self, flags: usize) -> SysResult {
+        info!("epoll_create1: flags={:#x}", flags);
+        let open_flags = OpenFlags::from_bits_truncate(flags);
+        let epoll = EpollFile::new(open_flags);
+        let fd = self.linux_process().add_file(epoll)?;
+        info!("epoll_create1: fd={:?}", fd);
+        Ok(fd.into())
+    }
+
+    /// Create an epoll instance (legacy interface, `size` is ignored but must be > 0).
+    pub fn sys_epoll_create(&self, size: usize) -> SysResult {
+        info!("epoll_create: size={}", size);
+        if size == 0 {
+            return Err(LxError::EINVAL);
+        }
+        self.sys_epoll_create1(0)
+    }
+
+    /// Control an epoll instance: add, modify, or delete entries.
+    pub fn sys_epoll_ctl(
+        &self,
+        epfd: usize,
+        op: usize,
+        fd: usize,
+        event: UserInPtr<EpollEvent>,
+    ) -> SysResult {
+        info!("epoll_ctl: epfd={}, op={}, fd={}", epfd, op, fd);
+        let proc = self.linux_process();
+        let epoll_like = proc.get_file_like(epfd.into())?;
+        let epoll = epoll_like
+            .downcast_ref::<EpollFile>()
+            .ok_or(LxError::EINVAL)?;
+        let target_fd: i32 = fd as i32;
+        match op {
+            EPOLL_CTL_ADD => {
+                let ev = event.read()?;
+                let file = proc.get_file_like(fd.into())?;
+                epoll.ctl_add(target_fd, ev, file)?;
+            }
+            EPOLL_CTL_MOD => {
+                let ev = event.read()?;
+                epoll.ctl_mod(target_fd, ev)?;
+            }
+            EPOLL_CTL_DEL => {
+                epoll.ctl_del(target_fd)?;
+            }
+            _ => return Err(LxError::EINVAL),
+        }
+        Ok(0)
+    }
+
+    /// Wait for events on an epoll instance, with an optional signal mask.
+    pub async fn sys_epoll_pwait(
+        &self,
+        epfd: usize,
+        events: UserOutPtr<EpollEvent>,
+        maxevents: usize,
+        timeout: isize,
+        _sigmask: usize,
+    ) -> SysResult {
+        // sigmask is ignored (same approach as ppoll)
+        self.sys_epoll_wait(epfd, events, maxevents, timeout).await
+    }
+
+    /// Wait for events on an epoll instance.
+    pub async fn sys_epoll_wait(
+        &self,
+        epfd: usize,
+        mut events: UserOutPtr<EpollEvent>,
+        maxevents: usize,
+        timeout: isize,
+    ) -> SysResult {
+        info!(
+            "epoll_wait: epfd={}, maxevents={}, timeout={}",
+            epfd, maxevents, timeout
+        );
+        if maxevents == 0 {
+            return Err(LxError::EINVAL);
+        }
+        let proc = self.linux_process();
+        let epoll_like = proc.get_file_like(epfd.into())?;
+        let epoll = epoll_like
+            .downcast_ref::<EpollFile>()
+            .ok_or(LxError::EINVAL)?;
+        let ready = epoll.wait(maxevents, timeout).await?;
+        let count = ready.len();
+        if count > 0 {
+            events.write_array(&ready)?;
+        }
+        Ok(count)
     }
 }
 
