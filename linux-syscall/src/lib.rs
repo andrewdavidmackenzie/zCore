@@ -106,10 +106,11 @@ impl Syscall<'_> {
             Sys::UNLINKAT => self.sys_unlinkat(a0.into(), a1.into(), a2),
             Sys::SYMLINKAT => self.unimplemented("symlinkat", Err(LxError::EACCES)),
             Sys::READLINKAT => self.sys_readlinkat(a0.into(), a1.into(), a2.into(), a3),
-            Sys::FCHMOD => self.unimplemented("fchmod", Ok(0)),
-            Sys::FCHMODAT => self.unimplemented("fchmodat", Ok(0)),
-            Sys::FCHOWN => self.unimplemented("fchown", Ok(0)),
-            Sys::FCHOWNAT => self.unimplemented("fchownat", Ok(0)),
+            // File permission stubs — no-op since we run as root
+            Sys::FCHMOD => Ok(0),
+            Sys::FCHMODAT => Ok(0),
+            Sys::FCHOWN => Ok(0),
+            Sys::FCHOWNAT => Ok(0),
             Sys::FACCESSAT => self.sys_faccessat(a0.into(), a1.into(), a2, a3),
             Sys::DUP => self.sys_dup(a0.into()),
             Sys::DUP3 => self.sys_dup2(a0.into(), a1.into()), // TODO: handle `flags`
@@ -198,10 +199,10 @@ impl Syscall<'_> {
             // time
             Sys::NANOSLEEP => self.sys_nanosleep(a0.into()).await,
             Sys::CLOCK_NANOSLEEP => self.sys_clock_nanosleep(a0, a1, a2.into(), a3.into()).await,
-            Sys::SETITIMER => self.unimplemented("setitimer", Ok(0)),
+            Sys::SETITIMER => Ok(0), // interval timer — stub
             Sys::GETTIMEOFDAY => self.sys_gettimeofday(a0.into(), a1.into()),
             Sys::CLOCK_GETTIME => self.sys_clock_gettime(a0, a1.into()),
-            Sys::CLOCK_GETRES => self.unimplemented("clock_getres", Ok(0)),
+            Sys::CLOCK_GETRES => Ok(0), // clock resolution — stub
 
             // sem
             #[cfg(not(target_arch = "mips"))]
@@ -225,30 +226,32 @@ impl Syscall<'_> {
             Sys::GETPID => self.sys_getpid(),
             Sys::GETTID => self.sys_gettid(),
             Sys::UNAME => self.sys_uname(a0.into()),
-            Sys::UMASK => self.unimplemented("umask", Ok(0o777)),
+            Sys::UMASK => Ok(0o022), // return previous umask
             Sys::GETRLIMIT => self.sys_prlimit64(0, a0, 0.into(), a1.into()),
             Sys::SETRLIMIT => self.sys_prlimit64(0, a0, a1.into(), 0.into()),
             Sys::GETRUSAGE => self.sys_getrusage(a0, a1.into()),
             Sys::SYSINFO => self.sys_sysinfo(a0.into()),
             Sys::TIMES => self.sys_times(a0.into()),
-            Sys::GETUID => self.unimplemented("getuid", Ok(0)),
-            Sys::GETGID => self.unimplemented("getgid", Ok(0)),
-            Sys::SETUID => self.unimplemented("setuid", Ok(0)),
-            Sys::GETEUID => self.unimplemented("geteuid", Ok(0)),
-            Sys::GETEGID => self.unimplemented("getegid", Ok(0)),
-            Sys::SETPGID => self.unimplemented("setpgid", Ok(0)),
+            // User/group identity — always root (uid=0, gid=0) for now.
+            // TODO: per-process uid/gid tracking (#16)
+            Sys::GETUID => Ok(0),
+            Sys::GETGID => Ok(0),
+            Sys::SETUID => Ok(0),
+            Sys::GETEUID => Ok(0),
+            Sys::GETEGID => Ok(0),
+            Sys::SETPGID => Ok(0),
             Sys::GETPPID => self.sys_getppid(),
-            Sys::SETSID => self.unimplemented("setsid", Ok(0)),
-            Sys::GETPGID => self.unimplemented("getpgid", Ok(0)),
-            Sys::GETGROUPS => self.unimplemented("getgroups", Ok(0)),
-            Sys::SETGROUPS => self.unimplemented("setgroups", Ok(0)),
+            Sys::SETSID => Ok(0),
+            Sys::GETPGID => Ok(0),
+            Sys::GETGROUPS => Ok(0),
+            Sys::SETGROUPS => Ok(0),
             //            Sys::SETPRIORITY => self.sys_set_priority(a0),
-            Sys::PRCTL => self.unimplemented("prctl", Ok(0)),
-            Sys::MEMBARRIER => self.unimplemented("membarrier", Ok(0)),
+            Sys::PRCTL => Ok(0),      // process control — stub
+            Sys::MEMBARRIER => Ok(0), // memory barrier — no-op on single CPU
             Sys::PRLIMIT64 => self.sys_prlimit64(a0, a1, a2.into(), a3.into()),
             Sys::REBOOT => self.sys_reboot(a0 as u32, a1 as u32, a2 as u32),
             Sys::GETRANDOM => self.sys_getrandom(a0.into(), a1 as usize, a2 as u32),
-            Sys::RT_SIGQUEUEINFO => self.unimplemented("rt_sigqueueinfo", Ok(0)),
+            Sys::RT_SIGQUEUEINFO => Ok(0),
 
             // kernel module
             //            Sys::INIT_MODULE => self.sys_init_module(a0.into(), a1 as usize, a2.into()),
@@ -307,8 +310,8 @@ impl Syscall<'_> {
             Sys::LINK => self.sys_link(a0.into(), a1.into()),
             Sys::UNLINK => self.sys_unlink(a0.into()),
             Sys::READLINK => self.sys_readlink(a0.into(), a1.into(), a2),
-            Sys::CHMOD => self.unimplemented("chmod", Ok(0)),
-            Sys::CHOWN => self.unimplemented("chown", Ok(0)),
+            Sys::CHMOD => Ok(0),
+            Sys::CHOWN => Ok(0),
             Sys::ARCH_PRCTL => self.sys_arch_prctl(a0 as _, a1),
             Sys::TIME => self.sys_time(a0.into()),
             Sys::CLONE => self.sys_clone(a0, a1, a2.into(), a4, a3.into()),
