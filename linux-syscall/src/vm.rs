@@ -1,6 +1,6 @@
 use super::*;
 use bitflags::bitflags;
-use zircon_object::vm::{pages, MMUFlags, VmObject};
+use zircon_object::vm::{pages, MMUFlags, VmObject, PAGE_SIZE};
 
 /// Syscalls for virtual memory.
 ///
@@ -113,8 +113,6 @@ impl Syscall<'_> {
     /// Set protection on a region of memory
     /// (see [linux man mprotect(2)](https://www.man7.org/linux/man-pages/man2/mprotect.2.html)).
     ///
-    /// **NOTE!** This syscall is now unimplemented. Calling it always return `Ok(0)`.
-    ///
     /// `sys_mprotect` changes the access protections for the calling process's memory pages
     /// containing any part of the address range in the interval `[addr, addr+len-1]`.
     /// `addr` must be aligned to a page boundary.
@@ -144,7 +142,23 @@ impl Syscall<'_> {
             "mprotect: addr={:#x}, size={:#x}, prot={:?}",
             addr, len, prot
         );
-        warn!("mprotect: unimplemented");
+        // addr must be page-aligned
+        if addr % PAGE_SIZE != 0 {
+            return Err(LxError::EINVAL);
+        }
+        if len == 0 {
+            return Ok(0);
+        }
+        // Check addr+len doesn't overflow before rounding
+        if addr.checked_add(len).is_none() {
+            return Err(LxError::ENOMEM);
+        }
+        // Round len up to page boundary (Linux behavior)
+        let len = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let proc = self.zircon_process();
+        let vmar = proc.vmar();
+        let flags = prot.to_flags();
+        vmar.protect(addr, len, flags)?;
         Ok(0)
     }
 
@@ -205,7 +219,9 @@ bitflags! {
 }
 
 impl MmapProt {
-    /// convert MmapProt to MMUFlags
+    /// Convert MmapProt to MMUFlags.
+    /// When prot is empty (PROT_NONE), returns USER-only flags with no R/W/X.
+    /// On aarch64, a USER-only PTE without the VALID bit is inaccessible.
     fn to_flags(self) -> MMUFlags {
         let mut flags = MMUFlags::USER;
         if self.contains(MmapProt::READ) {
@@ -216,10 +232,6 @@ impl MmapProt {
         }
         if self.contains(MmapProt::EXEC) {
             flags |= MMUFlags::EXECUTE;
-        }
-        // FIXME: hack for unimplemented mprotect
-        if self.is_empty() {
-            flags |= MMUFlags::READ | MMUFlags::WRITE;
         }
         flags
     }
