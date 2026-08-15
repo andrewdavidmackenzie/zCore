@@ -62,6 +62,7 @@ impl ProcessExt for Process {
                 current_working_directory: linux_parent_inner.current_working_directory.clone(),
                 files: linux_parent_inner.files.clone(),
                 signal_actions: linux_parent_inner.signal_actions.clone(),
+                brk_addr: linux_parent_inner.brk_addr,
                 ..Default::default()
             }),
         };
@@ -169,6 +170,8 @@ struct LinuxProcessInner {
     children: HashMap<KoID, Arc<Process>>,
     /// Signal actions
     signal_actions: SignalActions,
+    /// Program break (end of heap)
+    brk_addr: VirtAddr,
 }
 
 #[derive(Clone)]
@@ -350,6 +353,16 @@ impl LinuxProcess {
     /// Get root INode of the process.
     pub fn root_inode(&self) -> &Arc<dyn INode> {
         &self.root_inode
+    }
+
+    /// Get the current program break address.
+    pub fn get_brk(&self) -> VirtAddr {
+        self.inner.lock().brk_addr
+    }
+
+    /// Set the program break address.
+    pub fn set_brk(&self, addr: VirtAddr) {
+        self.inner.lock().brk_addr = addr;
     }
 
     /// Get parent process.

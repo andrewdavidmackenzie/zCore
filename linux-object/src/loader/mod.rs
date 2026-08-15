@@ -23,7 +23,7 @@ pub struct LinuxElfLoader {
 }
 
 impl LinuxElfLoader {
-    /// load a Linux ElfFile and return a tuple of (entry,sp)
+    /// Load a Linux ELF and return (entry, sp, initial_brk).
     pub fn load(
         &self,
         vmar: &Arc<VmAddressRegion>,
@@ -31,7 +31,7 @@ impl LinuxElfLoader {
         args: Vec<String>,
         envs: Vec<String>,
         path: String,
-    ) -> LxResult<(VirtAddr, VirtAddr)> {
+    ) -> LxResult<(VirtAddr, VirtAddr, VirtAddr)> {
         debug!(
             "load: vmar.addr & size: {:#x?}, data {:#x?}, args: {:?}, envs: {:?}",
             vmar.get_info(),
@@ -126,6 +126,9 @@ impl LinuxElfLoader {
             info.auxv, entry, sp
         );
 
-        Ok((entry, sp))
+        // Initial brk = end of loaded image (page-aligned)
+        let initial_brk = base + size;
+
+        Ok((entry, sp, initial_brk))
     }
 }
