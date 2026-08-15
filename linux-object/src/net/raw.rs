@@ -86,7 +86,14 @@ impl Socket for RawSocketState {
                 Ok(()) => Ok(data.len()),
                 Err(_) => Err(LxError::ENOBUFS),
             }
-        } else if let Some(Endpoint::Ip(endpoint)) = sendto_endpoint {
+        } else if let Some(endpoint) = sendto_endpoint {
+            let endpoint = match endpoint {
+                Endpoint::Ip(ep) => ep,
+                Endpoint::LinkLevel(_) | Endpoint::Netlink(_) => {
+                    warn!("raw socket write: unsupported endpoint type");
+                    return Err(LxError::EAFNOSUPPORT);
+                }
+            };
             // todo: this is a temporary solution
             let v4_src = Ipv4Address::new(192, 168, 0, 123);
 
@@ -112,7 +119,8 @@ impl Socket for RawSocketState {
                 drop(sockets);
                 Ok(len)
             } else {
-                unimplemented!("ip type")
+                warn!("raw socket write: non-IPv4 destination address not supported");
+                Err(LxError::EAFNOSUPPORT)
             }
         } else {
             Err(LxError::ENOTCONN)

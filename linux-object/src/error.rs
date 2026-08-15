@@ -189,7 +189,25 @@ impl From<ZxError> for LxError {
             ZxError::TIMED_OUT => LxError::ETIMEDOUT,
             ZxError::STOP => LxError::ESRCH,
             ZxError::BAD_STATE => LxError::EAGAIN,
-            _ => unimplemented!("unknown error type: {:?}", e),
+            ZxError::NO_MEMORY | ZxError::NO_RESOURCES => LxError::ENOMEM,
+            ZxError::OUT_OF_RANGE => LxError::ERANGE,
+            ZxError::BUFFER_TOO_SMALL => LxError::ENOBUFS,
+            ZxError::ACCESS_DENIED => LxError::EACCES,
+            ZxError::NOT_FOUND => LxError::ENOENT,
+            ZxError::IO => LxError::EIO,
+            ZxError::BAD_PATH => LxError::ENAMETOOLONG,
+            ZxError::NOT_DIR => LxError::ENOTDIR,
+            ZxError::NOT_FILE => LxError::EISDIR,
+            ZxError::NO_SPACE => LxError::ENOSPC,
+            ZxError::NOT_EMPTY => LxError::ENOTEMPTY,
+            ZxError::NOT_CONNECTED => LxError::ENOTCONN,
+            ZxError::CONNECTION_REFUSED => LxError::ECONNREFUSED,
+            ZxError::ALREADY_BOUND => LxError::EBUSY,
+            ZxError::CANCELED => LxError::EINTR,
+            _ => {
+                warn!("unmapped ZxError: {:?}, defaulting to EIO", e);
+                LxError::EIO
+            }
         }
     }
 }

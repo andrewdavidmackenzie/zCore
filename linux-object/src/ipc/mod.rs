@@ -118,12 +118,19 @@ impl Drop for SemProc {
     fn drop(&mut self) {
         for (&(id, num), &op) in self.undos.iter() {
             debug!("semundo: id: {}, num: {}, op: {}", id, num, op);
-            let sem_array = self.arrays[&id].clone();
-            let sem = &sem_array[num as usize];
-            match op {
-                1 => sem.release(),
-                0 => {}
-                _ => unimplemented!("Semaphore: semundo.(Not 1)"),
+            if let Some(sem_array) = self.arrays.get(&id) {
+                let sem = &sem_array[num as usize];
+                if op > 0 {
+                    // Apply positive adjustment: release `op` times
+                    for _ in 0..op {
+                        sem.release();
+                    }
+                } else if op < 0 {
+                    // Apply negative adjustment: reduce the count, clamping at zero
+                    let current = sem.get();
+                    sem.set((current + op as isize).max(0));
+                }
+                // op == 0: nothing to undo
             }
         }
     }

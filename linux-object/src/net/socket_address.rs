@@ -149,9 +149,8 @@ impl NetlinkEndpoint {
 
 impl From<Endpoint> for SockAddr {
     fn from(endpoint: Endpoint) -> Self {
-        #[allow(warnings)]
-        if let Endpoint::Ip(ip) = endpoint {
-            match ip.addr {
+        match endpoint {
+            Endpoint::Ip(ip) => match ip.addr {
                 IpAddress::Ipv4(ipv4) => SockAddr {
                     addr_in: SockAddrIn {
                         sin_family: AddressFamily::Internet.into(),
@@ -166,10 +165,19 @@ impl From<Endpoint> for SockAddr {
                         data: [0; 14],
                     },
                 },
-                _ => unimplemented!("only ipv4"),
-            }
-        } else if let Endpoint::LinkLevel(link_level) = endpoint {
-            SockAddr {
+                _ => {
+                    // Non-IPv4 addresses (e.g. IPv6) are not yet supported;
+                    // return unspecified address family rather than panicking.
+                    warn!("non-IPv4 address in Endpoint::Ip, returning unspecified");
+                    SockAddr {
+                        addr_ph: SockAddrPlaceholder {
+                            family: AddressFamily::Unspecified.into(),
+                            data: [0; 14],
+                        },
+                    }
+                }
+            },
+            Endpoint::LinkLevel(link_level) => SockAddr {
                 addr_ll: SockAddrLl {
                     sll_family: AddressFamily::Packet.into(),
                     sll_protocol: 0,
@@ -179,18 +187,15 @@ impl From<Endpoint> for SockAddr {
                     sll_halen: 0,
                     sll_addr: [0; 8],
                 },
-            }
-        } else if let Endpoint::Netlink(netlink) = endpoint {
-            SockAddr {
+            },
+            Endpoint::Netlink(netlink) => SockAddr {
                 addr_nl: SockAddrNl {
                     nl_family: AddressFamily::Netlink.into(),
                     nl_pad: 0,
                     nl_pid: netlink.port_id,
                     nl_groups: netlink.multicast_groups_mask,
                 },
-            }
-        } else {
-            unimplemented!("not match");
+            },
         }
     }
 }

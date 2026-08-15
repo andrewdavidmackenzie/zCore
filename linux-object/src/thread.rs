@@ -189,9 +189,11 @@ impl LinuxThread {
         let user_ctx = unsafe { &*(uctx_ptr as *const SignalUserContext) };
         let check = unmodified_check(siginfo, user_ctx);
         if check != 0 {
-            error!("unsupported signal fields : {:b}", check);
+            warn!(
+                "signal handler modified context fields (mask={:#b}), restoring saved context",
+                check
+            );
             trace!("uctx = {:x?}", *user_ctx);
-            panic!("unsupported signal fields");
         }
         *ctx = *old_ctx;
         ctx.set_field(UserContextField::InstrPointer, user_ctx.context.get_pc());
