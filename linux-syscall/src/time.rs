@@ -118,6 +118,9 @@ impl Syscall<'_> {
         let tick = (tv.sec * 1_000_000 + tv.usec) / USEC_PER_TICK;
 
         if !buf.is_null() {
+            // Per-process CPU time accounting is not implemented.
+            // Return zeros rather than wall-clock time, which would
+            // be incorrect (includes sleep time and other processes).
             let new_buf = Tms {
                 tms_utime: 0,
                 tms_stime: 0,
@@ -155,23 +158,26 @@ impl Syscall<'_> {
         let flags = ClockFlags::from(flags);
         info!("clockid={:?}, flags={:?}", clockid, flags,);
         match clockid {
-            ClockId::ClockRealTime => {
-                match flags {
-                    ClockFlags::ZeroFlag => {
-                        thread::sleep_until(timer::deadline_after(duration)).await;
-                    }
-                    ClockFlags::TimerAbsTime => {
-                        // 目前统一由nanosleep代替了、之后再修改
-                        thread::sleep_until(timer::deadline_after(duration)).await;
-                    }
-                }
-            }
-            ClockId::ClockMonotonic => match flags {
+            ClockId::ClockRealTime | ClockId::ClockMonotonic => match flags {
                 ClockFlags::ZeroFlag => {
                     thread::sleep_until(timer::deadline_after(duration)).await;
                 }
                 ClockFlags::TimerAbsTime => {
-                    thread::sleep_until(timer::deadline_after(duration)).await;
+                    // Convert absolute deadline to relative duration, then
+                    // re-add to the timer domain via deadline_after.
+                    //
+                    // Note: timer_now() supplies the same time source for all
+                    // clock IDs (boot-relative on bare metal, Unix epoch in
+                    // libos). Proper CLOCK_REALTIME vs CLOCK_MONOTONIC
+                    // separation would require clock-specific time sources in
+                    // the HAL. This is a pre-existing limitation shared with
+                    // sys_clock_gettime, which also uses timer_now() for all
+                    // clocks via TimeSpec::now().
+                    let now = timer::timer_now();
+                    let remaining = duration.saturating_sub(now);
+                    if !remaining.is_zero() {
+                        thread::sleep_until(timer::deadline_after(remaining)).await;
+                    }
                 }
             },
             ClockId::ClockProcessCpuTimeId => {}

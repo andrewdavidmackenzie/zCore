@@ -24,6 +24,11 @@ impl ProcInitInfo {
         // from stack_top:
         // program name
         writer.push_str(&self.args[0]);
+        // 16 random bytes for AT_RANDOM (musl uses this for stack canary / TLS)
+        let mut random_bytes = [0u8; 16];
+        kernel_hal::rand::fill_random(&mut random_bytes);
+        writer.push_slice(&random_bytes);
+        let random_ptr = writer.sp;
         // environment strings
         let envs: Vec<_> = self
             .envs
@@ -45,7 +50,12 @@ impl ProcInitInfo {
         // auxiliary vector entries
         writer.push_slice(&[null::<u8>(), null::<u8>()]);
         for (&type_, &value) in self.auxv.iter() {
-            writer.push_slice(&[type_ as usize, value]);
+            // AT_RANDOM is handled specially with the stack pointer
+            if type_ == AT_RANDOM {
+                writer.push_slice(&[type_ as usize, random_ptr]);
+            } else {
+                writer.push_slice(&[type_ as usize, value]);
+            }
         }
         // envionment pointers
         writer.push_slice(&[null::<u8>()]);
@@ -70,7 +80,9 @@ pub struct Stack {
 }
 
 impl Stack {
-    /// create a stack
+    /// Create a stack buffer with a fixed 16 KiB capacity for argv,
+    /// envp, auxv, and AT_RANDOM data. The assertion in `push_slice`
+    /// fires if this limit is exceeded.
     fn new(sp: usize) -> Self {
         let data = vec![0u8; 0x4000];
         Stack {
@@ -115,3 +127,20 @@ pub const AT_PAGESZ: u8 = 6;
 pub const AT_BASE: u8 = 7;
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 pub const AT_ENTRY: u8 = 9;
+/// Real user ID of the process.
+pub const AT_UID: u8 = 11;
+/// Effective user ID of the process.
+pub const AT_EUID: u8 = 12;
+/// Real group ID of the process.
+pub const AT_GID: u8 = 13;
+/// Effective group ID of the process.
+pub const AT_EGID: u8 = 14;
+/// Frequency at which times() counts (typically 100 on Linux).
+pub const AT_CLKTCK: u8 = 17;
+/// Boolean: true if running in secure mode (setuid/setgid).
+pub const AT_SECURE: u8 = 23;
+/// Pointer to 16 random bytes provided by the kernel.
+/// Used by musl for stack canaries and TLS initialization.
+pub const AT_RANDOM: u8 = 25;
+/// CPU hardware capabilities bitmask.
+pub const AT_HWCAP: u8 = 16;
