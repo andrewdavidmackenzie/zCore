@@ -163,9 +163,16 @@ impl Syscall<'_> {
                     thread::sleep_until(timer::deadline_after(duration)).await;
                 }
                 ClockFlags::TimerAbsTime => {
-                    // Convert absolute deadline to relative duration in the
-                    // timer domain, avoiding clock-domain mismatches between
-                    // bare-metal (boot-relative) and libos (Unix epoch) modes.
+                    // Convert absolute deadline to relative duration, then
+                    // re-add to the timer domain via deadline_after.
+                    //
+                    // Note: timer_now() supplies the same time source for all
+                    // clock IDs (boot-relative on bare metal, Unix epoch in
+                    // libos). Proper CLOCK_REALTIME vs CLOCK_MONOTONIC
+                    // separation would require clock-specific time sources in
+                    // the HAL. This is a pre-existing limitation shared with
+                    // sys_clock_gettime, which also uses timer_now() for all
+                    // clocks via TimeSpec::now().
                     let now = timer::timer_now();
                     let remaining = duration.saturating_sub(now);
                     if !remaining.is_zero() {
