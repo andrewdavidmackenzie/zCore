@@ -113,8 +113,8 @@ impl Syscall<'_> {
             Sys::FCHOWNAT => Ok(0),
             Sys::FACCESSAT => self.sys_faccessat(a0.into(), a1.into(), a2, a3),
             Sys::DUP => self.sys_dup(a0.into()),
-            Sys::DUP3 => self.sys_dup2(a0.into(), a1.into()), // TODO: handle `flags`
-            Sys::PIPE2 => self.sys_pipe2(a0.into(), a1),      // TODO: handle `flags`
+            Sys::DUP3 => self.sys_dup3(a0.into(), a1.into(), a2),
+            Sys::PIPE2 => self.sys_pipe2(a0.into(), a1),
             Sys::UTIMENSAT => self.sys_utimensat(a0.into(), a1.into(), a2.into(), a3),
             Sys::COPY_FILE_RANGE => {
                 self.sys_copy_file_range(a0.into(), a1.into(), a2.into(), a3.into(), a4, a5)
@@ -167,7 +167,7 @@ impl Syscall<'_> {
             Sys::SOCKET => self.sys_socket(a0, a1, a2),
             Sys::CONNECT => self.sys_connect(a0, a1.into(), a2).await,
             Sys::ACCEPT => self.sys_accept(a0, a1.into(), a2.into()).await,
-            //            Sys::ACCEPT4 => self.sys_accept(a0, a1.into(), a2.into()), // use accept for accept4
+            Sys::ACCEPT4 => self.sys_accept4(a0, a1.into(), a2.into(), a3).await,
             Sys::SENDTO => self.sys_sendto(a0, a1.into(), a2, a3, a4.into(), a5),
             Sys::RECVFROM => {
                 self.sys_recvfrom(a0, a1.into(), a2, a3, a4.into(), a5.into())
@@ -245,18 +245,18 @@ impl Syscall<'_> {
             Sys::GETPGID => Ok(0),
             Sys::GETGROUPS => Ok(0),
             Sys::SETGROUPS => Ok(0),
-            //            Sys::SETPRIORITY => self.sys_set_priority(a0),
-            Sys::PRCTL => Ok(0),      // process control — stub
-            Sys::MEMBARRIER => Ok(0), // memory barrier — no-op on single CPU
+            Sys::SETPRIORITY => Ok(0), // scheduling priority — stub
+            Sys::PRCTL => Ok(0),       // process control — stub
+            Sys::MEMBARRIER => Ok(0),  // memory barrier — no-op on single CPU
             Sys::PRLIMIT64 => self.sys_prlimit64(a0, a1, a2.into(), a3.into()),
             Sys::REBOOT => self.sys_reboot(a0 as u32, a1 as u32, a2 as u32),
             Sys::GETRANDOM => self.sys_getrandom(a0.into(), a1 as usize, a2 as u32),
             Sys::RT_SIGQUEUEINFO => Ok(0),
 
-            // kernel module
-            //            Sys::INIT_MODULE => self.sys_init_module(a0.into(), a1 as usize, a2.into()),
-            Sys::FINIT_MODULE => self.unimplemented("finit_module", Err(LxError::ENOSYS)),
-            //            Sys::DELETE_MODULE => self.sys_delete_module(a0.into(), a1 as u32),
+            // kernel module — not applicable for zCore
+            Sys::INIT_MODULE => Err(LxError::ENOSYS),
+            Sys::FINIT_MODULE => Err(LxError::ENOSYS),
+            Sys::DELETE_MODULE => Err(LxError::ENOSYS),
             #[cfg(not(target_arch = "aarch64"))]
             Sys::BLOCK_IN_KERNEL => self.sys_block_in_kernel(),
 

@@ -79,6 +79,29 @@ impl Syscall<'_> {
         Ok(fd2.into())
     }
 
+    /// `dup3` creates a copy of the file descriptor `oldfd`, using the
+    /// specified file descriptor number `newfd`. Unlike `dup2`, `dup3`
+    /// supports a `flags` argument: currently only `O_CLOEXEC` is defined.
+    pub fn sys_dup3(&self, fd1: FileDesc, fd2: FileDesc, flags: usize) -> SysResult {
+        info!("dup3: from {:?} to {:?}, flags={:#x}", fd1, fd2, flags);
+        if fd1 == fd2 {
+            return Err(LxError::EINVAL);
+        }
+        let proc = self.linux_process();
+        // close fd2 first if it is opened
+        let _ = proc.close_file(fd2);
+        let file_like = proc.get_file_like(fd1)?.dup()?;
+        // Apply O_CLOEXEC flag if requested
+        let open_flags = OpenFlags::from_bits_truncate(flags);
+        if open_flags.contains(OpenFlags::CLOEXEC) {
+            let mut current_flags = file_like.flags();
+            current_flags.insert(OpenFlags::CLOEXEC);
+            file_like.set_flags(current_flags)?;
+        }
+        let fd2 = proc.add_file_at(fd2, file_like)?;
+        Ok(fd2.into())
+    }
+
     /// create a copy of the file descriptor fd, and uses the lowest-numbered unused descriptor for the new descriptor.
     pub fn sys_dup(&self, fd1: FileDesc) -> SysResult {
         info!("dup: from {:?}", fd1);

@@ -128,8 +128,11 @@ impl Syscall<'_> {
         if flags != 0x7d_0f00 && flags != 0x5d_0f00 {
             // 0x5d0f00: gcc of alpine linux
             // 0x7d0f00: pthread_create of alpine linux
-            // warn!("sys_clone only support musl pthread_create");
-            panic!("unsupported sys_clone flags: {:#x}", flags);
+            warn!(
+                "sys_clone: unsupported flags {:#x}, only musl pthread_create flags are supported",
+                flags
+            );
+            return Err(LxError::EINVAL);
         }
         let new_thread = Thread::create_linux(self.zircon_process())?;
         let mut new_ctx = self.thread.context_cloned()?;
@@ -385,12 +388,6 @@ impl Syscall<'_> {
         thread::sleep_until(timer::deadline_after(duration)).await;
         Ok(0)
     }
-
-    //    pub fn sys_set_priority(&self, priority: usize) -> SysResult {
-    //        let pid = thread::current().id();
-    //        thread_manager().set_priority(pid, priority as u8);
-    //        Ok(0)
-    //    }
 
     /// `set_tid_address` sets the clear_child_tid value for the calling thread to `tidptr`,
     /// and return the caller's thread ID

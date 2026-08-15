@@ -112,7 +112,8 @@ impl Socket for RawSocketState {
                 drop(sockets);
                 Ok(len)
             } else {
-                unimplemented!("ip type")
+                warn!("raw socket write: non-IPv4 destination address not supported");
+                Err(LxError::EAFNOSUPPORT)
             }
         } else {
             Err(LxError::ENOTCONN)

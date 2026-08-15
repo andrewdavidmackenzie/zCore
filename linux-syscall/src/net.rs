@@ -311,6 +311,32 @@ impl Syscall<'_> {
         file_like.clone().as_socket()?.shutdown()
     }
 
+    /// `accept4` is like [`sys_accept`](Self::sys_accept) but with an additional
+    /// `flags` argument (SOCK_CLOEXEC, SOCK_NONBLOCK).
+    pub async fn sys_accept4(
+        &mut self,
+        sockfd: usize,
+        addr: UserOutPtr<SockAddr>,
+        addrlen: UserInOutPtr<u32>,
+        flags: usize,
+    ) -> SysResult {
+        info!(
+            "sys_accept4: sockfd:{}, addr:{:?}, addrlen={:?}, flags={:#x}",
+            sockfd, addr, addrlen, flags
+        );
+        let file_like = self.linux_process().get_file_like(sockfd.into())?;
+        let (new_socket, remote_endpoint) = file_like.clone().as_socket()?.accept().await?;
+        // Apply accept4-specific flags (SOCK_CLOEXEC, SOCK_NONBLOCK)
+        let accept_flags = OpenFlags::from_bits_truncate(flags);
+        new_socket.set_flags(accept_flags)?;
+        let new_fd = self.linux_process().add_socket(new_socket)?;
+        if !addr.is_null() {
+            let sockaddr_in = SockAddr::from(remote_endpoint);
+            sockaddr_in.write_to(addr, addrlen)?;
+        }
+        Ok(new_fd.into())
+    }
+
     /// accept() is used with connection-based socket types (SOCK_STREAM, SOCK_SEQPACKET).
     /// It extracts the first connection request on the queue of pending connections
     /// for the listening socket, sockfd, creates a new connected socket, and returns
