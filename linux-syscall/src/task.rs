@@ -225,14 +225,23 @@ impl Syscall<'_> {
             "wait4: target={:?}, wstatus={:?}, options={:?}",
             target, wstatus, flags,
         );
-        let (pid, code) = match target {
+        let result = match target {
             WaitTarget::AnyChild | WaitTarget::AnyChildInGroup => {
-                wait_child_any(self.zircon_process(), nohang).await?
+                wait_child_any(self.zircon_process(), nohang).await
             }
-            WaitTarget::Pid(pid) => (pid, wait_child(self.zircon_process(), pid, nohang).await?),
+            WaitTarget::Pid(pid) => wait_child(self.zircon_process(), pid, nohang)
+                .await
+                .map(|code| (pid, code)),
         };
-        wstatus.write_if_not_null(code)?;
-        Ok(pid as usize)
+        match result {
+            Ok((pid, code)) => {
+                wstatus.write_if_not_null(code)?;
+                Ok(pid as usize)
+            }
+            // WNOHANG: children exist but none have changed state — return 0
+            Err(LxError::EAGAIN) if nohang => Ok(0),
+            Err(e) => Err(e),
+        }
     }
 
     /// `sys_execve` executes the program referred to by `path`

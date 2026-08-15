@@ -120,7 +120,7 @@ impl Syscall<'_> {
                 .find(&name)
                 .and_then(|child| child.metadata())
                 .map(|meta| (meta.inode as u64, DirentType::from(meta.type_).bits()))
-                .unwrap_or((0, DirentType::from(info.type_).bits()));
+                .unwrap_or((0, DirentType::UNKNOWN.bits()));
             let ok = writer.try_write(ino, dtype, &name);
             if !ok {
                 break;
