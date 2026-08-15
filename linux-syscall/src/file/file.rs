@@ -328,7 +328,10 @@ impl Syscall<'_> {
                     dup.set_flags(flags)?;
                     Ok(new_fd.into())
                 }
-                _ => Err(LxError::EINVAL),
+                // Advisory file locking — stub as no-op. Programs that
+                // rely on flock/fcntl locking for coordination will not
+                // actually be serialized, but single-process use cases work.
+                FcntlCmd::GETLK | FcntlCmd::SETLK | FcntlCmd::SETLKW => Ok(0),
             }
         } else {
             Err(LxError::EINVAL)

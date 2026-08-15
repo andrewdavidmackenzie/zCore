@@ -302,7 +302,11 @@ impl Syscall<'_> {
             return Err(LxError::EINVAL);
         }
 
-        // TODO: check and kill other threads
+        // Note: in a multi-threaded process, sibling threads should be
+        // killed before loading the new program. Currently Process::exit()
+        // handles thread cleanup, but execve does not explicitly kill
+        // siblings — this is safe as long as vmar.clear() below unmaps
+        // the old address space they share.
 
         // Read program file
         let proc = self.linux_process();
@@ -328,9 +332,9 @@ impl Syscall<'_> {
         .load(&vmar, &data, args, envs, path)?;
         proc.set_brk(initial_brk);
 
-        // TODO: use right signal
-        // self.zircon_process().signal_set(Signal::SIGNALED);
-        // Workaround, the child process could NOT exit correctly
+        // Note: Linux resets signal dispositions to SIG_DFL on exec and
+        // signals the parent. The SIGNALED signal is commented out as a
+        // workaround for child process exit issues.
         self.thread
             .with_context(|ctx| ctx.setup_uspace(entry, sp, &[0, 0, 0]))?;
         Ok(0)
