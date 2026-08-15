@@ -22,10 +22,11 @@ pub struct ProcInitInfo {
 impl ProcInitInfo {
     /// Push process init information into stack.
     ///
-    /// Returns `Err(E2BIG)` if argv + envp + auxv exceeds the
-    /// stack buffer capacity (128 KiB, similar to Linux `ARG_MAX`).
-    pub fn push_at(&self, stack_top: usize) -> LxResult<Stack> {
-        let mut writer = Stack::new(stack_top);
+    /// `capacity` is the maximum number of bytes available for argv,
+    /// envp, auxv, and AT_RANDOM data (typically `stack_pages * PAGE_SIZE`).
+    /// Returns `Err(E2BIG)` if the data exceeds this capacity.
+    pub fn push_at(&self, stack_top: usize, capacity: usize) -> LxResult<Stack> {
+        let mut writer = Stack::new(stack_top, capacity);
         // from stack_top:
         // program name
         writer.push_str(&self.args[0])?;
@@ -68,10 +69,6 @@ impl ProcInitInfo {
     }
 }
 
-/// Stack buffer capacity for argv + envp + auxv data.
-/// 128 KiB matches a common Linux `ARG_MAX` configuration.
-const STACK_BUF_SIZE: usize = 128 * 1024;
-
 /// program stack
 pub struct Stack {
     /// stack pointer
@@ -83,11 +80,11 @@ pub struct Stack {
 }
 
 impl Stack {
-    /// Create a stack buffer with a fixed 128 KiB capacity for argv,
-    /// envp, auxv, and AT_RANDOM data. Returns `E2BIG` via `push_slice`
-    /// if this limit is exceeded.
-    fn new(sp: usize) -> Self {
-        let data = vec![0u8; STACK_BUF_SIZE];
+    /// Create a stack buffer with the given `capacity` (in bytes) for
+    /// argv, envp, auxv, and AT_RANDOM data. Returns `E2BIG` via
+    /// `push_slice` if this capacity is exceeded.
+    fn new(sp: usize, capacity: usize) -> Self {
+        let data = vec![0u8; capacity];
         Stack {
             sp,
             stack_top: sp,
