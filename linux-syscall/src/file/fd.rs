@@ -150,6 +150,19 @@ impl Syscall<'_> {
         Ok(0)
     }
 
+    /// Create an eventfd file descriptor for event notification.
+    ///
+    /// `initval` is the initial counter value. `flags` can include
+    /// `EFD_CLOEXEC` (0x80000), `EFD_NONBLOCK` (0x800), and
+    /// `EFD_SEMAPHORE` (0x1).
+    pub fn sys_eventfd2(&self, initval: usize, flags: usize) -> SysResult {
+        info!("eventfd2: initval={}, flags={:#x}", initval, flags);
+        let eventfd = EventFd::new(initval as u64, flags);
+        let fd = self.linux_process().add_file(Arc::new(eventfd))?;
+        info!("eventfd2: fd={:?}", fd);
+        Ok(fd.into())
+    }
+
     /// apply or remove an advisory lock on an open file
     /// TODO: handle operation
     pub fn sys_flock(&mut self, fd: FileDesc, operation: usize) -> SysResult {

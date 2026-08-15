@@ -2,6 +2,7 @@
 
 mod devfs;
 mod epoll;
+mod eventfd;
 mod file;
 mod ioctl;
 mod pipe;
@@ -47,6 +48,7 @@ use devfs::RandomINode;
 use pseudo::Pseudo;
 
 pub use epoll::{EpollEvent, EpollFile, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
+pub use eventfd::EventFd;
 pub use file::{File, OpenFlags, PollEvents, SeekFrom};
 pub use pipe::Pipe;
 pub use rcore_fs::vfs::{self, PollStatus};
