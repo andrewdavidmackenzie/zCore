@@ -6,6 +6,26 @@ use linux_object::time::*;
 use zircon_object::task::ThreadState;
 
 impl Syscall<'_> {
+    /// Get the CPU affinity mask of a process.
+    /// For single-CPU zCore, returns a mask with only CPU 0 set.
+    pub fn sys_sched_getaffinity(
+        &self,
+        _pid: usize,
+        cpusetsize: usize,
+        mut mask: UserOutPtr<u8>,
+    ) -> SysResult {
+        info!("sched_getaffinity: pid={}, cpusetsize={}", _pid, cpusetsize);
+        if cpusetsize == 0 {
+            return Err(LxError::EINVAL);
+        }
+        // Write a bitmask with only CPU 0 set
+        let mut buf = alloc::vec![0u8; cpusetsize];
+        buf[0] = 1; // CPU 0
+        mask.write_array(&buf)?;
+        // Return the number of bytes written (Linux returns the size of cpumask_t)
+        Ok(cpusetsize.min(core::mem::size_of::<usize>()))
+    }
+
     #[cfg(target_arch = "x86_64")]
     /// set architecture-specific thread state
     /// for x86_64 currently
