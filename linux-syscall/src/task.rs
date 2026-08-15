@@ -115,38 +115,51 @@ impl Syscall<'_> {
         newtls: usize,
         mut child_tid: UserOutPtr<i32>,
     ) -> SysResult {
-        let _flags = CloneFlags::from_bits_truncate(flags);
+        let clone_flags = CloneFlags::from_bits_truncate(flags);
         info!(
             "clone: flags={:#x}, newsp={:#x}, parent_tid={:?}, child_tid={:?}, newtls={:#x}",
             flags, newsp, parent_tid, child_tid, newtls
         );
-        if flags == 0x4111 || flags == 0x11 {
-            // VFORK | VM | SIGCHILD
-            warn!("sys_clone is calling sys_fork instead, ignoring other args");
-            return self.sys_fork();
-        }
-        if flags != 0x7d_0f00 && flags != 0x5d_0f00 {
-            // 0x5d0f00: gcc of alpine linux
-            // 0x7d0f00: pthread_create of alpine linux
-            warn!(
-                "sys_clone: unsupported flags {:#x}, only musl pthread_create flags are supported",
+
+        // Fork-like clone: no CLONE_VM, or CLONE_VFORK (which needs fork
+        // semantics even though it sets CLONE_VM on Linux for COW sharing).
+        if !clone_flags.contains(CloneFlags::VM)
+            || clone_flags.contains(CloneFlags::VFORK)
+            || !clone_flags.contains(CloneFlags::THREAD)
+        {
+            info!(
+                "sys_clone: fork-like flags {:#x}, falling back to fork",
                 flags
             );
-            return Err(LxError::EINVAL);
+            return self.sys_fork();
         }
+
+        // Thread creation: requires CLONE_VM at minimum.
+        // Accept any flag combination that includes CLONE_VM and create
+        // a new thread in the current process.
         let new_thread = Thread::create_linux(self.zircon_process())?;
         let mut new_ctx = self.thread.context_cloned()?;
-        new_ctx.set_field(UserContextField::StackPointer, newsp);
-        new_ctx.set_field(UserContextField::ThreadPointer, newtls);
+        if newsp != 0 {
+            new_ctx.set_field(UserContextField::StackPointer, newsp);
+        }
+        if clone_flags.contains(CloneFlags::SETTLS) {
+            new_ctx.set_field(UserContextField::ThreadPointer, newtls);
+        }
         new_ctx.set_field(UserContextField::ReturnValue, 0);
         new_thread.with_context(|ctx| *ctx = new_ctx)?;
         new_thread.start(self.thread_fn)?;
 
         let tid = new_thread.id();
         info!("clone: {} -> {}", self.thread.id(), tid);
-        parent_tid.write(tid as i32)?;
-        child_tid.write(tid as i32)?;
-        new_thread.set_tid_address(child_tid);
+        if clone_flags.contains(CloneFlags::PARENT_SETTID) {
+            parent_tid.write(tid as i32)?;
+        }
+        if clone_flags.contains(CloneFlags::CHILD_SETTID)
+            || clone_flags.contains(CloneFlags::CHILD_CLEARTID)
+        {
+            child_tid.write(tid as i32)?;
+            new_thread.set_tid_address(child_tid);
+        }
         Ok(tid as usize)
     }
 

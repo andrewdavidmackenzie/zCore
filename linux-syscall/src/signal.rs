@@ -121,8 +121,14 @@ impl Syscall<'_> {
         Ok(0)
     }
 
-    /// Send a signal to a process specified by pid
-    /// TODO: support all the arguments
+    /// Send a signal to a process specified by pid.
+    ///
+    /// - `pid > 0`: send to specific process
+    /// - `pid == 0`: send to every process in the caller's process group
+    ///   (zCore has no process groups, so this sends to the caller itself)
+    /// - `pid == -1`: send to every process (zCore: sends to the caller itself)
+    /// - `pid < -1`: send to every process in process group `-pid`
+    ///   (zCore: not implemented, returns ESRCH)
     pub fn sys_kill(&self, pid: isize, signum: usize) -> SysResult {
         let signal = Signal::try_from(signum as u8).map_err(|_| LxError::EINVAL)?;
         info!(
@@ -131,68 +137,49 @@ impl Syscall<'_> {
             pid,
             signal
         );
-        warn!(
-            "The sys_kill only supports killing a process (SIGKILL) or sending a signal to
-            an arbitrary thread of a process within the same job as the calling thread. 
-            As for the latter, the signal will be delivered to an arbitrarily selected thread 
-            in the target process that is not blocking the signal."
-        );
-        #[allow(dead_code)]
-        #[derive(Debug)]
-        enum SendTarget {
-            EveryProcessInGroup,
-            EveryProcess,
-            EveryProcessInGroupByPID(KoID),
-            Pid(KoID),
-        }
-        let target = match pid {
-            p if p > 0 => SendTarget::Pid(p as KoID),
-            0 => SendTarget::EveryProcessInGroup,
-            -1 => SendTarget::EveryProcess,
-            p if p < -1 => SendTarget::EveryProcessInGroupByPID((-p) as KoID),
-            _ => return Err(LxError::ESRCH),
-        };
-        let parent = self.zircon_process().clone();
-        match target {
-            SendTarget::Pid(pid) => {
-                match parent.job().get_child(pid as u64) {
-                    Ok(obj) => {
-                        match signal {
-                            Signal::SIGKILL => {
-                                let current_pid = parent.id();
-                                if current_pid == (pid as u64) {
-                                    // killing myself
-                                    parent.exit((128 + Signal::SIGKILL as i32) as i64);
-                                } else {
-                                    let process: Arc<Process> = obj.downcast_arc().unwrap();
-                                    process.exit((128 + Signal::SIGKILL as i32) as i64);
-                                }
-                            }
-                            sig => {
-                                let process: Arc<Process> = obj.downcast_arc().unwrap();
-                                let tids = process.thread_ids();
-                                for tid in tids {
-                                    let thread = process.get_child(tid).unwrap();
-                                    let thread: Arc<Thread> = thread.downcast_arc().unwrap();
-                                    let mut thread_linux = thread.lock_linux();
-                                    if thread_linux.signal_mask.contains(sig) {
-                                        continue;
-                                    } else {
-                                        thread_linux.signals.insert(signal);
-                                        break;
-                                    }
-                                }
-                            }
-                        };
-                        Ok(0)
-                    }
-                    Err(_) => Err(LxError::EINVAL),
-                }
-            }
+        // Resolve the target PID.
+        // pid=0 (own process group) and pid=-1 (all processes) are mapped
+        // to the caller's own PID since zCore has no process groups.
+        let target_pid: KoID = match pid {
+            p if p > 0 => p as KoID,
+            0 | -1 => self.zircon_process().id(),
             _ => {
-                warn!("kill: sending to {:?} not yet implemented", target);
-                Err(LxError::ENOSYS)
+                warn!("kill: process group kill (pid={}) not implemented", pid);
+                return Err(LxError::ESRCH);
             }
+        };
+
+        let parent = self.zircon_process().clone();
+        match parent.job().get_child(target_pid as u64) {
+            Ok(obj) => {
+                match signal {
+                    Signal::SIGKILL => {
+                        if parent.id() == (target_pid as u64) {
+                            parent.exit((128 + Signal::SIGKILL as i32) as i64);
+                        } else {
+                            let process: Arc<Process> = obj.downcast_arc().unwrap();
+                            process.exit((128 + Signal::SIGKILL as i32) as i64);
+                        }
+                    }
+                    sig => {
+                        let process: Arc<Process> = obj.downcast_arc().unwrap();
+                        let tids = process.thread_ids();
+                        for tid in tids {
+                            let thread = process.get_child(tid).unwrap();
+                            let thread: Arc<Thread> = thread.downcast_arc().unwrap();
+                            let mut thread_linux = thread.lock_linux();
+                            if thread_linux.signal_mask.contains(sig) {
+                                continue;
+                            } else {
+                                thread_linux.signals.insert(signal);
+                                break;
+                            }
+                        }
+                    }
+                };
+                Ok(0)
+            }
+            Err(_) => Err(LxError::ESRCH),
         }
     }
 
