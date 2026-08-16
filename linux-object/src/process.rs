@@ -6,6 +6,8 @@ use crate::{
     ipc::*,
     net::SOCKET_FD,
     signal::{Signal as LinuxSignal, SignalAction},
+    thread::ThreadExt,
+    time::ITimerVal,
 };
 use alloc::{
     boxed::Box,
@@ -14,6 +16,7 @@ use alloc::{
     vec::Vec,
 };
 use core::sync::atomic::AtomicI32;
+use core::time::Duration;
 use hashbrown::HashMap;
 use kernel_hal::VirtAddr;
 use lock::{Mutex, MutexGuard};
@@ -171,6 +174,12 @@ struct LinuxProcessInner {
     signal_actions: SignalActions,
     /// Program break (end of heap)
     brk_addr: VirtAddr,
+    /// ITIMER_REAL: repeat interval (zero = one-shot)
+    itimer_real_interval: Duration,
+    /// ITIMER_REAL: absolute deadline (None = disarmed)
+    itimer_real_deadline: Option<Duration>,
+    /// ITIMER_REAL: generation counter for cancelling stale callbacks
+    itimer_real_generation: u64,
 }
 
 #[derive(Clone)]
@@ -483,6 +492,111 @@ impl LinuxProcess {
     /// Set Virtual Addr for shared memory
     pub fn shm_set(&self, id: usize, shm_id: ShmIdentifier) {
         self.inner.lock().shm_identifiers.set(id, shm_id)
+    }
+
+    /// Get the current ITIMER_REAL value (remaining time + interval).
+    pub fn get_itimer_real(&self) -> ITimerVal {
+        let inner = self.inner.lock();
+        let it_value = match inner.itimer_real_deadline {
+            Some(deadline) => {
+                let now = kernel_hal::timer::timer_now();
+                let remaining = deadline.saturating_sub(now);
+                crate::time::TimeVal::from_duration(remaining)
+            }
+            None => crate::time::TimeVal::default(),
+        };
+        ITimerVal {
+            it_interval: crate::time::TimeVal::from_duration(inner.itimer_real_interval),
+            it_value,
+        }
+    }
+
+    /// Set the ITIMER_REAL timer. Returns the previous value.
+    /// If `it_value` is non-zero, arms the timer to deliver SIGALRM.
+    /// If `it_value` is zero, disarms the timer.
+    pub fn set_itimer_real(&self, new: ITimerVal, proc: &Arc<Process>) -> ITimerVal {
+        let old = self.get_itimer_real();
+        let mut inner = self.inner.lock();
+
+        // Increment generation to invalidate any pending callback
+        inner.itimer_real_generation += 1;
+        let generation = inner.itimer_real_generation;
+
+        let value_dur = new.it_value.to_duration();
+        let interval_dur = new.it_interval.to_duration();
+        inner.itimer_real_interval = interval_dur;
+
+        if value_dur.is_zero() {
+            // Disarm
+            inner.itimer_real_deadline = None;
+        } else {
+            // Arm
+            let deadline = kernel_hal::timer::deadline_after(value_dur);
+            inner.itimer_real_deadline = Some(deadline);
+            let weak_proc = Arc::downgrade(proc);
+            drop(inner); // release lock before scheduling
+            Self::schedule_itimer_real(weak_proc, deadline, interval_dur, generation);
+        }
+
+        old
+    }
+
+    /// Schedule the ITIMER_REAL callback via the kernel timer.
+    fn schedule_itimer_real(
+        proc: Weak<Process>,
+        deadline: Duration,
+        interval: Duration,
+        generation: u64,
+    ) {
+        use kernel_hal::timer;
+
+        let callback: Box<dyn FnOnce(Duration) + Send + Sync> = Box::new(move |_now| {
+            let proc = match proc.upgrade() {
+                Some(p) => p,
+                None => return, // process already exited
+            };
+            let linux = proc.linux();
+
+            // Check generation — if mismatched, this callback is stale
+            {
+                let inner = linux.inner.lock();
+                if inner.itimer_real_generation != generation {
+                    return;
+                }
+            }
+
+            // Deliver SIGALRM to first eligible thread
+            let tids = proc.thread_ids();
+            for tid in tids {
+                if let Ok(thread_obj) = proc.get_child(tid) {
+                    if let Ok(thread) = thread_obj.downcast_arc::<zircon_object::task::Thread>() {
+                        let mut thread_linux = thread.lock_linux();
+                        if !thread_linux.signal_mask.contains(LinuxSignal::SIGALRM) {
+                            thread_linux.signals.insert(LinuxSignal::SIGALRM);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Re-arm if interval is non-zero
+            if !interval.is_zero() {
+                let mut inner = linux.inner.lock();
+                if inner.itimer_real_generation == generation {
+                    let new_deadline = timer::deadline_after(interval);
+                    inner.itimer_real_deadline = Some(new_deadline);
+                    let weak = Arc::downgrade(&proc);
+                    drop(inner);
+                    Self::schedule_itimer_real(weak, new_deadline, interval, generation);
+                }
+            } else {
+                let mut inner = linux.inner.lock();
+                if inner.itimer_real_generation == generation {
+                    inner.itimer_real_deadline = None;
+                }
+            }
+        });
+        timer::timer_set(deadline, callback);
     }
 }
 

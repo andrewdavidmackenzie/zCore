@@ -202,7 +202,8 @@ impl Syscall<'_> {
             // time
             Sys::NANOSLEEP => self.sys_nanosleep(a0.into()).await,
             Sys::CLOCK_NANOSLEEP => self.sys_clock_nanosleep(a0, a1, a2.into(), a3.into()).await,
-            Sys::SETITIMER => Ok(0), // interval timer — stub
+            Sys::SETITIMER => self.sys_setitimer(a0, a1.into(), a2.into()),
+            Sys::GETITIMER => self.sys_getitimer(a0, a1.into()),
             Sys::GETTIMEOFDAY => self.sys_gettimeofday(a0.into(), a1.into()),
             Sys::CLOCK_GETTIME => self.sys_clock_gettime(a0, a1.into()),
             Sys::CLOCK_GETRES => self.sys_clock_getres(a0, a1.into()),
