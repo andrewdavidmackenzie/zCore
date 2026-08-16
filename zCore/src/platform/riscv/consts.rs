@@ -1,9 +1,9 @@
 // RISCV
 
-/// 内核每个硬件线程的栈页数。
+/// Number of stack pages per hardware thread for the kernel.
 pub const STACK_PAGES_PER_HART: usize = 32;
 
-/// 最大的对称多核硬件线程数量。
+/// Maximum number of SMP hardware threads.
 pub const MAX_HART_NUM: usize = 5;
 
 #[inline]
@@ -13,29 +13,29 @@ pub fn phys_to_virt_offset() -> usize {
 
 use spin::Once;
 
-/// 内核位置信息
+/// Kernel memory layout information.
 pub struct KernelMemInfo {
-    /// 内核在物理地址空间的起始地址。
+    /// Base address of the kernel in the physical address space.
     pub paddr_base: usize,
 
-    /// 内核所在虚拟地址空间的起始地址。
+    /// Base address of the kernel in the virtual address space.
     ///
-    /// 实际上是虚地址空间的最后一个 GiB 页的起始地址，
-    /// 并与物理内存保持 2 MiB 页内偏移对齐。
-    /// 与链接时设定的地址保持一致。
+    /// This is actually the start address of the last 1 GiB page in the virtual address space,
+    /// aligned with the physical memory at a 2 MiB page offset.
+    /// Consistent with the address set at link time.
     pub vaddr_base: usize,
 
-    /// 内核链接区域长度。
+    /// Length of the kernel linked region.
     pub size: usize,
 }
 
 impl KernelMemInfo {
-    /// 初始化物理内存信息。
+    /// Initialize the physical memory information.
     ///
     /// # Safety
     ///
-    /// 为了获取内核的物理地址，
-    /// 这个函数必须在 `pc` 仍在物理地址空间时调用！
+    /// To obtain the kernel's physical address,
+    /// this function must be called while `pc` is still in the physical address space!
     unsafe fn new() -> Self {
         extern "C" {
             fn start();
@@ -50,7 +50,7 @@ impl KernelMemInfo {
         }
     }
 
-    /// 计算内核虚存空间到物理地址空间的偏移。
+    /// Calculate the offset from the kernel virtual address space to the physical address space.
     #[inline]
     pub fn offset(&self) -> usize {
         self.vaddr_base - self.paddr_base

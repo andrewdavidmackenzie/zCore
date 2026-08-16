@@ -19,7 +19,7 @@ fn main() {
         .unwrap();
     }
 
-    // 如果需要链接 rootfs 镜像，将镜像路径设置到环境变量
+    // If linking a rootfs image, set the image path in an environment variable
     #[cfg(feature = "link-user-img")]
     println!(
         "cargo:rustc-env=USER_IMG=zCore/{}.img",

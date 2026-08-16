@@ -64,7 +64,7 @@ impl From<MMUFlags> for PTF {
         if f.contains(MMUFlags::USER) {
             flags |= PTF::USER_ACCESSIBLE;
         }
-        let cache_policy = (f.bits() & 3) as u32; // 最低三位用于储存缓存策略
+        let cache_policy = (f.bits() & 3) as u32; // lowest bits store the cache policy
         match CachePolicy::try_from(cache_policy) {
             Ok(CachePolicy::Cached) => {
                 flags.remove(PTF::WRITE_THROUGH);
@@ -74,8 +74,8 @@ impl From<MMUFlags> for PTF {
             }
             Ok(CachePolicy::WriteCombining) => {
                 flags |= PTF::NO_CACHE | PTF::WRITE_THROUGH;
-                // 当位于level=1时，页面更大，在1<<12位上（0x100）为1
-                // 但是bitflags里面没有这一位。由页表自行管理标记位去吧
+                // At level 1 (large pages), bit 12 (0x100) is set for PAT,
+                // but bitflags does not include this bit. Let the page table manage it directly.
             }
             Err(_) => unreachable!("invalid cache policy"),
         }

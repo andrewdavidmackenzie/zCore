@@ -238,15 +238,15 @@ where
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
         );
 
-        // DMA使用的dma_desc内存，有一致性要求，一般非cache的
-        // 而这里到时会flush_cache()来同步cache
-        // dma_desc记得内存清零
+        // DMA descriptor memory used by DMA has coherency requirements, typically non-cacheable.
+        // Here we use flush_cache() to synchronize the cache instead.
+        // Remember to zero out the dma_desc memory.
         let (send_ring_va, send_ring_pa) = P::alloc_dma(P::PAGE_SIZE);
         let (recv_ring_va, recv_ring_pa) = P::alloc_dma(P::PAGE_SIZE);
         let send_ring = unsafe {
             slice::from_raw_parts_mut(
                 send_ring_va as *mut DmaDesc,
-                P::PAGE_SIZE / size_of::<DmaDesc>(), // 4096/16 = 256 个 dma_desc
+                P::PAGE_SIZE / size_of::<DmaDesc>(), // 4096/16 = 256 dma_desc entries
             )
         };
 
@@ -276,7 +276,7 @@ where
         info!("Set a ring desc buffer for TX");
         // Set a ring desc buffer for TX
         for i in 0..send_ring.len() {
-            let (buffer_page_va, buffer_page_pa) = P::alloc_dma(P::PAGE_SIZE); // 其实buffer申请2K左右就可以
+            let (buffer_page_va, buffer_page_pa) = P::alloc_dma(P::PAGE_SIZE); // Actually ~2K would suffice for the buffer
 
             // desc1.all |= (1 << 24) Chain mode
             send_ring[i].desc1 |= 1 << 24;
@@ -309,13 +309,13 @@ where
 
             recv_buffers.push(buffer_page_va);
 
-            // geth_rx_refill, 实际运行refill时却是：priv->rx_clean: 0 ~ 254 ?
+            // geth_rx_refill, at runtime the actual refill is: priv->rx_clean: 0 ~ 254 ?
             // desc_buf_set(&mut recv_ring[i], buffer_page_pa as u32, MAX_BUF_SZ);
             recv_ring[i].desc1 &= !((1 << 11) - 1);
             recv_ring[i].desc1 |= MAX_BUF_SZ & ((1 << 11) - 1);
             recv_ring[i].desc2 = buffer_page_pa as u32;
 
-            // sync memery, fence指令？
+            // sync memory, fence instruction?
 
             desc_set_own(&mut recv_ring[i]);
         }
@@ -356,7 +356,7 @@ where
     }
 
     pub fn open(&mut self) -> Result<i32, &str> {
-        // 初始化驱动之前设置 pinctrl
+        // Set pinctrl before initializing the driver
         self.pinctrl_gpio_set_gmac();
 
         // gmacirq 62 --> geth_interrupt()
@@ -378,7 +378,7 @@ where
 
         self.mdio_reset();
 
-        // PHY_POLL = -1, linux驱动，如果不支持中断
+        // PHY_POLL = -1, Linux driver, if interrupts are not supported
 
         // #define PHY_MAX_ADDR 32
         let phyaddr = 0;
@@ -413,7 +413,7 @@ where
         );
 
         // phy_start
-        // 注意地址32位对齐
+        // Note: address must be 32-bit aligned
         self.start_rx(virt_to_phys(&self.recv_ring[0] as *const DmaDesc as usize) as u32);
         self.start_tx(virt_to_phys(&self.send_ring[0] as *const DmaDesc as usize) as u32);
 
@@ -459,7 +459,7 @@ where
 
         // PE Data Register
         // index 16
-        self.pinctrl_gpio_set(0xd0, 0x10000); //第16位？
+        self.pinctrl_gpio_set(0xd0, 0x10000); // Bit 16?
 
         // PE_CFG2, PE16 select Output
         self.pinctrl_gpio_set(0xc8, 0xf1);
@@ -474,7 +474,7 @@ where
         self.hash_filter(0x0, 0x1);
         self.set_filter(0x4);
 
-        //self.adjust_link(); // 顺序不必需放这步
+        //self.adjust_link(); // This step doesn't need to be in this order
 
         // Pass all multicast
         self.hash_filter(0xffffffff, 0xffffffff);
@@ -497,7 +497,7 @@ where
         if self.autoneg == AUTONEG_ENABLE {
             // Auto negotiation
 
-            // 在哪设置这__phy_modify_changed ?
+            // Where is __phy_modify_changed set?
             /*
             let setup = self.mdio_read(phyaddr, MII_BMCR);
             setup |= BMCR_SPEED1000;
@@ -512,7 +512,7 @@ where
                 adv,
             );
 
-            // 1000M PHY BMSR_ESTATEN = 1
+            // 1000M PHY: BMSR_ESTATEN = 1
             let bmcr = self.mdio_read(phyaddr, MII_BMSR);
             if (bmcr & BMSR_ESTATEN) != 0 {
                 let adv = ADVERTISE_1000FULL;
@@ -521,12 +521,12 @@ where
 
             self.phy_restart_aneg();
 
-            // 在AUTONEG，autoneg_complete完成时，就开始解析设置自协商的单双工或速率等信息
+            // When AUTONEG autoneg_complete is done, start parsing and setting the auto-negotiated duplex/speed info
             // read LPA todo
-            // phy_resolve_aneg_linkmode() TODO 接着解析自协商的匹配速率
+            // phy_resolve_aneg_linkmode() TODO continue parsing the auto-negotiated matching speed
 
             let is_gigabit_capable = 1;
-            // 有Gigabit连接能力时
+            // When Gigabit link capability is available
             if is_gigabit_capable != 0 {
                 let lpagb = self.mdio_read(phyaddr, MII_STAT1000);
                 info!("MII_STAT1000    : {:#x}", lpagb);
@@ -543,10 +543,10 @@ where
                     return Err("Master/Slave resolution failed ! NOLINK");
                 }
 
-                // 这里更新1000M的信息, 等下接着更新100M/10M的信息
+                // Update 1000M info here, then update 100M/10M info below
                 //
-                // MII_STAT1000寄存器获取对端的能力： LPA_1000FULL, LPA_1000HALF
-                // 没有包括 Pause
+                // MII_STAT1000 register gets the link partner's capabilities: LPA_1000FULL, LPA_1000HALF
+                // Does not include Pause
                 if ((lpagb & LPA_1000FULL) != 0) && ((advgb & ADVERTISE_1000FULL) != 0) {
                     speed = SPEED_1000;
                     duplex = DUPLEX_FULL;
@@ -556,19 +556,19 @@ where
                 }
             }
             /////////
-            //百兆以下
+            // 100M and below
 
             let adv = self.mdio_read(phyaddr, MII_ADVERTISE);
             info!("MII_ADVERTISE   : {:#x}", adv);
 
-            // MII_LPA寄存器获取对端的能力： 100/10M, Full/Half, Pause, Asym_Pause
+            // MII_LPA register gets the link partner's capabilities: 100/10M, Full/Half, Pause, Asym_Pause
             let mut lpa = self.mdio_read(phyaddr, MII_LPA);
             info!("MII_LPA         : {:#x}", lpa);
 
-            lpa &= adv; // LINK能力，取你我交集
+            lpa &= adv; // Link capabilities: take the intersection of both sides
             info!("LPA & ADVERTISE : {:#x}", lpa);
 
-            //speed按从高到低的优先顺序匹配
+            // Match speed in descending priority order
             if speed == SPEED_1000 {
             } else if (lpa & LPA_100FULL) != 0 {
                 speed = SPEED_100;
@@ -589,16 +589,16 @@ where
                 asym_pause = if (lpa & LPA_PAUSE_ASYM) != 0 { 1 } else { 0 };
             }
 
-            // 解析到speed duplex并设置后,判断网线Link
+            // After parsing and setting speed/duplex, check Ethernet cable link status
         } else {
             // AUTONEG_DISABLE
 
             // Configures MII_BMCR to force speed/duplex
             //let ctl = BMCR_SPEED1000 | BMCR_FULLDPLX;
-            // 默认设成 100/FULL
+            // Default to 100/FULL
             let ctl = BMCR_SPEED100 | BMCR_FULLDPLX;
             let _ = self.phy_modify(MII_BMCR, !(BMCR_LOOPBACK | BMCR_ISOLATE | BMCR_PDOWN), ctl);
-            // 开始check网卡link状态, 然后设置speed/duplex
+            // Start checking NIC link status, then set speed/duplex
 
             // genphy_read_status()
             let bmcr: u32 = self.mdio_read(phyaddr, MII_BMCR);
@@ -632,7 +632,7 @@ where
             }
         }
 
-        // 而没网线Link时, 不进行下列设置: PHY state change UP -> NOLINK
+        // When Ethernet cable is not linked, skip the following settings: PHY state change UP -> NOLINK
         if link != 0 {
             if pause != 0 {
                 self.flow_ctrl(duplex, FLOW_CTRL, PAUSE);
@@ -643,7 +643,7 @@ where
         }
 
         Ok(0)
-        // 开始接收数据吧
+        // Start receiving data
     }
 
     pub fn can_recv(&mut self) -> bool {
@@ -722,7 +722,7 @@ where
             }
 
             if status != RxFrameStatus::LlcSnap as i32 {
-                frame_len -= 4; // ETH_FCS_LEN, 帧出错检验
+                frame_len -= 4; // ETH_FCS_LEN, frame check sequence
             }
 
             flush_cache(
@@ -730,7 +730,7 @@ where
                 frame_len as u64,
             );
 
-            //注意只接收一个网络帧, limit=1
+            // Note: only receive one network frame, limit=1
             buffer = unsafe {
                 slice::from_raw_parts(self.recv_buffers[entry] as *const u8, frame_len as usize)
                     .to_vec()
@@ -756,7 +756,7 @@ where
             desc_set_own(desc);
             */
 
-            // eth_type_trans 包的协议分析
+            // eth_type_trans: packet protocol analysis
 
             rx_packets += 1;
             rx_bytes += frame_len as u64;
@@ -820,7 +820,7 @@ where
     }
 
     pub fn geth_send(&mut self, send_buff: &[u8]) -> Result<i32, &str> {
-        // Tx Ring full 判断一下？
+        // Check if Tx Ring is full?
 
         let mut entry = self.tx_dirty;
         //let mut first = &mut self.send_ring[entry];
@@ -828,12 +828,12 @@ where
         let mut desc = &mut self.send_ring[entry];
         let mut desc_count = entry;
 
-        let csum_insert = 0; // 是否CHECKSUM_PARTIAL
+        let csum_insert = 0; // Whether CHECKSUM_PARTIAL
 
-        // linux驱动中的skb_headlen是什么?
+        // What is skb_headlen in the Linux driver?
         let mut len = send_buff.len() as u32;
 
-        // send buffer长度需要注意下, 应该2k左右
+        // Note the send buffer length, should be around 2K
         let target = unsafe {
             slice::from_raw_parts_mut(self.send_buffers[entry] as *mut u8, send_buff.len())
         };
@@ -847,13 +847,13 @@ where
         print_hex_dump(target, 64);
 
         while len != 0 {
-            // 注意结构体所有权的问题
+            // Note the struct ownership issue
             desc = &mut self.send_ring[entry];
             desc_count = entry;
 
             let tmp_len = if len > MAX_BUF_SZ { MAX_BUF_SZ } else { len };
             // dma_map_single()
-            // 当要发送的包 > MAX_BUF_SZ时，循环可能会出问题？
+            // When the packet to send is > MAX_BUF_SZ, the loop may have issues?
 
             let paddr = desc.desc2 as u32;
             desc_buf_set(desc, paddr, tmp_len);
@@ -869,7 +869,7 @@ where
             len -= tmp_len;
         }
 
-        // 例外情况处理nfrags. 多数情况等于0？
+        // Handle edge case for nfrags. In most cases it equals 0?
 
         self.tx_dirty = entry;
         // desc_tx_close(first, desc, csum_insert);
@@ -877,7 +877,7 @@ where
 
         desc_set_own(&mut self.send_ring[first]);
 
-        // 再判断下环形缓冲区的空间
+        // Check ring buffer space again
 
         flush_cache(
             virt_to_phys(&self.send_ring[desc_count] as *const DmaDesc as usize) as u64,
@@ -908,7 +908,7 @@ where
 
         self.tx_poll();
 
-        // 环形缓冲区的内存unmap之类的
+        // Ring buffer memory unmap, etc.
         self.tx_complete();
 
         Ok(0)
@@ -932,7 +932,7 @@ where
 
             /* From Linux driver
             if self.recv_buffers[entry] == 0 {
-                //申请socket buffer空间, 大小MAX_BUF_SZ, 2K左右
+                // Allocate socket buffer space, size MAX_BUF_SZ, around 2K
                 // netdev_alloc_skb_ip_align
                 // dma_map_single
 
@@ -948,7 +948,7 @@ where
                 size_of::<DmaDesc>() as u64,
             );
 
-            // sync memery
+            // sync memory
             fence_w();
 
             self.rx_clean = (self.rx_clean + 1) % DMA_DESC_RX;
@@ -1006,7 +1006,7 @@ where
             }
             flush_cache(virt_to_phys(self.send_buffers[entry]) as u64, 2048);
 
-            // 注意不要把desc2的Buffer Addr清零了
+            // Be careful not to zero out desc2's Buffer Addr
             desc_init(desc);
             self.tx_clean = (entry + 1) % DMA_DESC_TX;
         }
@@ -1069,7 +1069,7 @@ where
 
     pub fn clk_enable(&mut self) {
         // reset_control_deassert()
-        // 注, clock未初始化好的话，mdio read phy无法读到有效数据
+        // Note: if the clock is not properly initialized, MDIO read from PHY will not return valid data
         self.deassert_emac_reset();
 
         // enable ephy clk
@@ -1081,7 +1081,7 @@ where
 
         let mut clk_value: u32 = read_volatile((self.base_phy + EMAC_EPHY_CLK_REG0) as *mut u32);
         info!("clk enable, Read PHY CLK: {:#x}", clk_value);
-        // RGMII接口，支持10/100/1000 Mbps速率
+        // RGMII interface, supports 10/100/1000 Mbps speeds
         if self.phy_mode == RGMII {
             clk_value |= 0x00000004; // set RGMII
         } else {
@@ -1093,7 +1093,7 @@ where
         if (self.phy_mode == RGMII) || (self.phy_mode == GMII) {
             clk_value |= 0x00000002; // set ETCS=2
 
-        // RMII接口，支持10/100 Mbps速率
+        // RMII interface, supports 10/100 Mbps speeds
         } else if self.phy_mode == RMII {
             clk_value |= 0x00002001;
         }
@@ -1129,7 +1129,7 @@ where
         info!("interrupt_handle, GETH_INT_STA: {:#x}", intr_status);
 
         let mut status = 0;
-        // 不正常的中断
+        // Abnormal interrupts
         if (intr_status & TX_UNF_INT) != 0 {
             status = TxDmaIrqStatus::TxHardErrorBumpTc as i32;
         }
@@ -1137,7 +1137,7 @@ where
             status = TxDmaIrqStatus::TxHardError as i32;
         }
 
-        /* 正常的 TX/RX NORMAL interrupts */
+        /* Normal TX/RX interrupts */
         // (intr_status & (TX_INT | RX_INT | RX_EARLY_INT | TX_UA_INT)) != 0
         if (intr_status & (TX_INT | RX_INT)) != 0 {
             status = TxDmaIrqStatus::HandleTxRx as i32;
@@ -1151,7 +1151,7 @@ where
     pub fn interrupt_handle(&mut self, irq: u32, dev_id: &u32) -> Result<i32, &str> {
         let status = self.interrupt_status();
 
-        // 处理
+        // Handle
         if status == TxDmaIrqStatus::HandleTxRx as i32 {
             self.int_disable();
             // geth_poll()
@@ -1216,7 +1216,7 @@ where
 
     pub fn dma_init(&mut self) {
         write_volatile((self.base + GETH_BASIC_CTL1) as *mut u32, 8 << 24); // burst
-                                                                            // 打开网卡中断
+                                                                            // Enable NIC interrupts
         self.int_enable();
     }
 
@@ -1225,7 +1225,7 @@ where
         mac_reset_value |= SOFT_RST;
         write_volatile((self.base + GETH_BASIC_CTL1) as *mut u32, mac_reset_value);
 
-        // 原子上下文的等待
+        // Busy-wait in atomic context
         //udelay(10000);
         while (SOFT_RST & read_volatile((self.base + GETH_BASIC_CTL1) as *mut u32)) != 0 {}
 
@@ -1348,7 +1348,7 @@ where
     }
 
     pub fn start_rx(&mut self, rxbase: u32) {
-        //rxbase需要32位对齐
+        // rxbase must be 32-bit aligned
         write_volatile((self.base + GETH_RX_DESC_LIST) as *mut u32, rxbase);
 
         let mut value: u32 = read_volatile((self.base + GETH_RX_CTL1) as *mut u32);
@@ -1363,7 +1363,7 @@ where
     }
 
     pub fn start_tx(&mut self, txbase: u32) {
-        //txbase需要32位对齐
+        // txbase must be 32-bit aligned
         write_volatile((self.base + GETH_TX_DESC_LIST) as *mut u32, txbase);
 
         let mut value: u32 = read_volatile((self.base + GETH_TX_CTL1) as *mut u32);
@@ -1495,7 +1495,7 @@ where
 
         while (read_volatile((self.base + GETH_MDIO_ADDR) as *mut u32) & MII_BUSY) == 1 {}
 
-        //16位有效
+        // 16 bits valid
         let ret = read_volatile((self.base + GETH_MDIO_DATA) as *mut u32);
         // info!("mdio_read MDIO DATA: {:#x}", ret);
 
@@ -1545,7 +1545,7 @@ pub fn desc_init(desc: &mut DmaDesc) {
     desc.desc1 = 0;
     desc.desc1 |= 1 << 24;
 
-    // 这里用的Buffer Addr不发生改变
+    // The Buffer Addr used here does not change
     //desc.desc2 = 0;
 }
 

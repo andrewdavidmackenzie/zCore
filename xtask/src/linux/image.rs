@@ -3,11 +3,11 @@ use os_xtask_utils::{CommandExt, Qemu};
 use std::{fs, path::Path};
 
 impl super::LinuxRootfs {
-    /// 生成镜像。
+    /// Generates the rootfs image.
     pub fn image(&self) {
-        // 递归 rootfs
+        // Recursively build rootfs
         self.make(false);
-        // 镜像路径
+        // Image path
         let inner = PROJECT_DIR.join("zCore");
         let image = inner.join(format!("{arch}.img", arch = self.0.name()));
         // Skip image creation if it already exists and is newer than the
@@ -17,9 +17,9 @@ impl super::LinuxRootfs {
         if image.is_file() && !is_stale(&image, &self.path()) {
             return;
         }
-        // 生成镜像
+        // Generate image
         fuse(self.path(), &image);
-        // 扩充一些额外空间，供某些测试使用
+        // Add extra space for certain tests
         Qemu::img()
             .arg("resize")
             .args(&["-f", "raw"])
@@ -57,7 +57,7 @@ fn is_stale(output: &std::path::Path, input_dir: &std::path::Path) -> bool {
     any_newer(input_dir, output_mtime)
 }
 
-/// 制作镜像。
+/// Creates a filesystem image.
 fn fuse(dir: impl AsRef<Path>, image: impl AsRef<Path>) {
     use rcore_fs::vfs::FileSystem;
     use rcore_fs_fuse::zip::zip_dir;

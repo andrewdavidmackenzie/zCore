@@ -94,7 +94,7 @@ pub struct PacketGuestMem {
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct PacketGuestMem {
     pub addr: u64,
-    //保持32字节的空间
+    // Maintain 32 bytes of space
     pub _reserved: u64,
     pub _reserved1: u64,
     pub _reserved2: u64,

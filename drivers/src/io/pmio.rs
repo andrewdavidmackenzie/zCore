@@ -1,10 +1,10 @@
-// 端口映射 I/O。
+// Port-mapped I/O (PMIO).
 //! Port-mapped I/O.
 
 use super::Io;
 use core::{arch::asm, marker::PhantomData};
 
-// 端口映射 I/O。
+// Port-mapped I/O (PMIO).
 /// Port-mapped I/O.
 #[derive(Copy, Clone)]
 pub struct Pmio<T> {
@@ -13,7 +13,7 @@ pub struct Pmio<T> {
 }
 
 impl<T> Pmio<T> {
-    // 映射指定端口进行外设访问。
+    // Maps a given port for peripheral access.
     /// Maps a given port to assess device.
     pub const fn new(port: u16) -> Self {
         Self {
@@ -23,12 +23,12 @@ impl<T> Pmio<T> {
     }
 }
 
-// 逐字节端口映射读写。
+// Byte-wise PMIO read/write.
 /// Read/Write for byte PMIO.
 impl Io for Pmio<u8> {
     type Value = u8;
 
-    // 读。
+    // Read.
     /// Read.
     #[inline(always)]
     fn read(&self) -> u8 {
@@ -39,7 +39,7 @@ impl Io for Pmio<u8> {
         value
     }
 
-    // 写。
+    // Write.
     /// Write.
     #[inline(always)]
     fn write(&mut self, value: u8) {
@@ -49,12 +49,12 @@ impl Io for Pmio<u8> {
     }
 }
 
-// 逐字端口映射读写。
+// Word-wise PMIO read/write.
 /// Read/Write for word PMIO.
 impl Io for Pmio<u16> {
     type Value = u16;
 
-    // 读。
+    // Read.
     /// Read.
     #[inline(always)]
     fn read(&self) -> u16 {
@@ -65,7 +65,7 @@ impl Io for Pmio<u16> {
         value
     }
 
-    // 写。
+    // Write.
     /// Write.
     #[inline(always)]
     fn write(&mut self, value: u16) {
@@ -75,12 +75,12 @@ impl Io for Pmio<u16> {
     }
 }
 
-// 逐双字端口映射读写。
+// Double-word PMIO read/write.
 /// Read/Write for double-word PMIO.
 impl Io for Pmio<u32> {
     type Value = u32;
 
-    // 读。
+    // Read.
     /// Read.
     #[inline(always)]
     fn read(&self) -> u32 {
@@ -91,7 +91,7 @@ impl Io for Pmio<u32> {
         value
     }
 
-    // 写。
+    // Write.
     /// Write.
     #[inline(always)]
     fn write(&mut self, value: u32) {

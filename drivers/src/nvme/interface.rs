@@ -71,18 +71,18 @@ impl NvmeInterface {
         let aqa = (aqa_high_16 as u32) << 16 | aqa_low_16 as u32;
         let aqa_address = bar + NVME_REG_AQA;
 
-        // 将admin queue配置信息写入nvme设备寄存器AQA (admin_queue_attributes)
+        // Write admin queue configuration to NVMe device register AQA (admin_queue_attributes)
         unsafe {
             write_volatile(aqa_address as *mut u32, aqa);
         }
 
-        // 将admin queue的sq dma物理地址写入nvme设备上的寄存器ASQ
+        // Write the admin queue's SQ DMA physical address to the NVMe device register ASQ
         let asq_address = bar + NVME_REG_ASQ;
         unsafe {
             write_volatile(asq_address as *mut u32, sq_dma_pa);
         }
 
-        // 将admin queue的cq dma物理地址写入nvme设备上的寄存器ACQ
+        // Write the admin queue's CQ DMA physical address to the NVMe device register ACQ
         let acq_address = bar + NVME_REG_ACQ;
         unsafe {
             write_volatile(acq_address as *mut u32, cq_dma_pa);
@@ -228,16 +228,16 @@ impl NvmeInterface {
 }
 
 impl BlockScheme for NvmeInterface {
-    // 每个NVMe命令中有两个域：PRP1和PRP2，Host就是通过这两个域告诉SSD数据在内存中的位置或者数据需要写入的地址
-    // 首先对prp1进行读写，如果数据还没完，就看数据量是不是在一个page内，在的话，只需要读写prp2内存地址就可以了，数据量大于1个page，就需要读出prp list
+    // Each NVMe command has two fields: PRP1 and PRP2. The host uses these two fields to tell the SSD the data location in memory or the address to write data to.
+    // First read/write via PRP1. If there is more data, check if it fits within one page — if so, just read/write the PRP2 memory address. If the data is larger than one page, a PRP list must be read.
 
-    // 由于只读一块, 小于一页, 所以只需要prp1
+    // Since we only read one block, which is less than one page, only PRP1 is needed
     // prp1 = dma_addr
     // prp2 = 0
 
-    // prp设置
-    // uboot中对应实现 nvme_setup_prps
-    // linux中对应实现 nvme_pci_setup_prps
+    // PRP setup
+    // Corresponding implementation in u-boot: nvme_setup_prps
+    // Corresponding implementation in Linux: nvme_pci_setup_prps
 
     // SLBA = start logical block address
     // length = 1 = 512B
@@ -252,7 +252,7 @@ impl BlockScheme for NvmeInterface {
         let dbs = bar + NVME_REG_DBS;
         // let db_offset = io_queue.db_offset;
 
-        // 这里dma addr 就是buffer的地址
+        // Here the DMA address is the buffer's address
         let ptr = read_buf.as_mut_ptr();
         let addr = virt_to_phys(ptr as usize);
 

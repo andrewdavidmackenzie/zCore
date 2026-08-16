@@ -82,7 +82,7 @@ lazy_static::lazy_static! {
     Arc::new(Mutex::new(SocketSet::new(vec![])));
 }
 
-// 注意！这个容易出现死锁
+// Warning! This is prone to deadlocks
 pub fn get_sockets() -> Arc<Mutex<SocketSet<'static>>> {
     SOCKETS.clone()
 }

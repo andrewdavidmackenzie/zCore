@@ -6,61 +6,61 @@ use core::arch::naked_asm;
 use dtb_walker::{Dtb, DtbObj, HeaderError::*, Property, Str, WalkOperation::*};
 use kernel_hal::KernelConfig;
 
-/// 内核入口。
+/// Kernel entry point.
 ///
 /// # Safety
 ///
-/// 裸函数。
+/// Naked function.
 #[unsafe(naked)]
 #[no_mangle]
 #[link_section = ".text.entry"]
 unsafe extern "C" fn _start(hartid: usize, device_tree_paddr: usize) -> ! {
     naked_asm!(
-        "call {select_stack}", // 设置启动栈
-        "j    {main}",         // 进入 rust
+        "call {select_stack}", // set up boot stack
+        "j    {main}",         // enter Rust
         select_stack = sym select_stack,
         main         = sym primary_rust_main)
 }
 
-/// 副核入口。此前副核被 bootloader/see 阻塞。
+/// Secondary hart entry point. Previously the secondary hart was blocked by the bootloader/SEE.
 ///
 /// # Safety
 ///
-/// 裸函数。
+/// Naked function.
 #[unsafe(naked)]
 unsafe extern "C" fn secondary_hart_start(hartid: usize) -> ! {
     naked_asm!(
-        "call {select_stack}", // 设置启动栈
-        "j    {main}",         // 进入 rust
+        "call {select_stack}", // set up boot stack
+        "j    {main}",         // enter Rust
         select_stack = sym select_stack,
         main         = sym secondary_rust_main)
 }
 
-/// 启动页表
+/// Boot page table
 static mut BOOT_PAGE_TABLE: BootPageTable = BootPageTable::ZERO;
 
-/// 主核启动。
+/// Primary hart boot.
 extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> ! {
-    // 清零 bss 段
+    // Zero the BSS segment
     extern "C" {
         static mut sbss: u64;
         static mut ebss: u64;
     }
     unsafe { r0::zero_bss(&mut sbss, &mut ebss) };
-    // 使能启动页表
+    // Enable the boot page table
     let sstatus = unsafe {
         BOOT_PAGE_TABLE.init();
         BOOT_PAGE_TABLE.launch()
     };
     let mem_info = kernel_mem_info();
-    // 检查设备树
+    // Verify the device tree
     let dtb = unsafe {
         Dtb::from_raw_parts_filtered((device_tree_paddr + mem_info.offset()) as _, |e| {
             matches!(e, Misaligned(4) | LastCompVersion(_))
         })
     }
     .unwrap();
-    // 打印启动信息
+    // Print boot information
     println!(
         "
 boot page table launched, sstatus = {sstatus:#x}
@@ -74,13 +74,13 @@ device tree:       {device_tree_paddr:016x}..{:016x}
         mem_info.vaddr_base + mem_info.size,
         device_tree_paddr + dtb.total_size(),
     );
-    // 启动副核
+    // Boot secondary harts
     boot_secondary_harts(
         hartid,
         &dtb,
         secondary_hart_start as *const () as usize - mem_info.offset(),
     );
-    // 转交控制权
+    // Transfer control
     crate::primary_main(KernelConfig {
         phys_to_virt_offset: mem_info.offset(),
         dtb_paddr: device_tree_paddr,
@@ -90,17 +90,17 @@ device tree:       {device_tree_paddr:016x}..{:016x}
     unreachable!()
 }
 
-/// 副核启动。
+/// Secondary hart boot.
 extern "C" fn secondary_rust_main() -> ! {
     let _ = unsafe { BOOT_PAGE_TABLE.launch() };
     crate::secondary_main()
 }
 
-/// 根据硬件线程号设置启动栈。
+/// Set up the boot stack based on the hardware thread ID.
 ///
 /// # Safety
 ///
-/// 裸函数。
+/// Naked function.
 #[unsafe(naked)]
 unsafe extern "C" fn select_stack(hartid: usize) {
     const STACK_LEN_PER_HART: usize = 4096 * STACK_PAGES_PER_HART;
@@ -122,7 +122,7 @@ unsafe extern "C" fn select_stack(hartid: usize) {
         len_per_hart = const STACK_LEN_PER_HART)
 }
 
-// 启动副核
+// Boot secondary harts
 fn boot_secondary_harts(boot_hartid: usize, dtb: &Dtb, start_addr: usize) {
     if sbi_rt::probe_extension(sbi_rt::Hsm).is_unavailable() {
         println!("HSM SBI extension is not supported for current SEE.");
@@ -135,21 +135,21 @@ fn boot_secondary_harts(boot_hartid: usize, dtb: &Dtb, start_addr: usize) {
         DtbObj::SubNode { name } => {
             if path.is_root() {
                 if name == Str::from("cpus") {
-                    // 进入 cpus 节点
+                    // Enter the cpus node
                     cpus = true;
                     StepInto
                 } else if cpus {
-                    // 已离开 cpus 节点
+                    // Already left the cpus node
                     if let Some(hartid) = cpu.take() {
                         hart_start(boot_hartid, hartid, start_addr);
                     }
                     Terminate
                 } else {
-                    // 其他节点
+                    // Other nodes
                     StepOver
                 }
             } else if path.name() == Str::from("cpus") {
-                // 如果没有 cpu 序号，肯定是单核的
+                // If there is no cpu index, it must be single-core
                 if name == Str::from("cpu") {
                     return Terminate;
                 }
@@ -170,7 +170,7 @@ fn boot_secondary_harts(boot_hartid: usize, dtb: &Dtb, start_addr: usize) {
                 StepOver
             }
         }
-        // 状态不是 "okay" 的 cpu 不能启动
+        // CPUs whose status is not "okay" cannot be started
         DtbObj::Property(Property::Status(status))
             if path.name().starts_with("cpu@") && status != Str::from("okay") =>
         {

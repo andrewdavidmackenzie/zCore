@@ -184,9 +184,9 @@ numeric_enum! {
     /// Generic musl socket optname.
     pub enum SolOptname {
         /// sndbuf
-        SNDBUF = 7,  // 获取发送缓冲区长度
+        SNDBUF = 7, // get send buffer size
         /// rcvbuf
-        RCVBUF = 8,  // 获取接收缓冲区长度
+        RCVBUF = 8, // get receive buffer size
         /// linger
         LINGER = 13,
     }

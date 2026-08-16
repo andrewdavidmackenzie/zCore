@@ -2,7 +2,7 @@
 
 #![no_std]
 #![deny(warnings)]
-// #![deny(missing_docs)] 形同虚设了
+// #![deny(missing_docs)] // effectively unenforced
 #![allow(clippy::upper_case_acronyms)]
 #![allow(clippy::uninit_vec)]
 

@@ -68,7 +68,7 @@ impl BuildConfig {
         let mut env = HashMap::new();
         let arch = Arch::from_str(&machine.arch)
             .unwrap_or_else(|_| panic!("Unknown arch {} for machine", machine.arch));
-        // 递归 image
+        // Recursively build image
         if let Some(path) = &machine.user_img {
             features.insert("link-user-img".into());
             env.insert(
@@ -81,7 +81,7 @@ impl BuildConfig {
             );
             LinuxRootfs::new(arch).image();
         }
-        // 不支持 pci
+        // PCI not supported
         if !machine.pci_support {
             features.insert("no-pci".into());
         }
@@ -125,12 +125,12 @@ impl BuildConfig {
     }
 
     pub fn bin(&self, output: Option<PathBuf>) -> PathBuf {
-        // 递归 build
+        // Recursively build
         self.invoke(Cargo::build);
-        // 确定目录
+        // Determine output path
         let obj = self.target_file_path();
         let out = output.unwrap_or_else(|| obj.with_extension("bin"));
-        // 生成
+        // Generate
         println!("strip zcore to {}", out.display());
         dir::create_parent(&out).unwrap();
         BinUtil::objcopy()
@@ -144,22 +144,22 @@ impl BuildConfig {
 }
 
 impl OutArgs {
-    /// 打印 asm。
+    /// Dumps disassembly.
     pub fn asm(self) {
         let Self { build, output } = self;
         let build = BuildConfig::from_args(build);
-        // 递归 build
+        // Recursively build
         build.invoke(Cargo::build);
-        // 确定目录
+        // Determine output path
         let obj = build.target_file_path();
         let out = output.unwrap_or_else(|| PROJECT_DIR.join("target/zcore.asm"));
-        // 生成
+        // Generate
         println!("Asm file dumps to '{}'.", out.display());
         dir::create_parent(&out).unwrap();
         fs::write(out, BinUtil::objdump().arg(obj).arg("-d").output().stdout).unwrap();
     }
 
-    /// 生成 bin 文件。
+    /// Generates bin file.
     #[inline]
     pub fn bin(self) -> PathBuf {
         let Self { build, output } = self;
@@ -168,11 +168,11 @@ impl OutArgs {
 }
 
 impl QemuArgs {
-    /// 在 qemu 中启动。
+    /// Launches in qemu.
     pub fn qemu(self) {
-        // 递归 image
+        // Recursively build image
         self.arch.linux_rootfs().image();
-        // 构造各种字符串
+        // Build various strings
         let arch = self.arch.arch;
         let arch_str = arch.name();
         let obj = PROJECT_DIR
@@ -193,7 +193,7 @@ impl QemuArgs {
             }
             _ => build_config.bin(None),
         };
-        // 设置 Qemu 参数
+        // Set qemu arguments
         let mut qemu = Qemu::system(arch_str);
         qemu.args(&["-m", "2G"])
             .args(&["-display", "none"])

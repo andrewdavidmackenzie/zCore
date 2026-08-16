@@ -1,9 +1,9 @@
-# executor的入口函数
+# Executor entry function
 #
 #   void executor_entry()
 #
-# 该函数只是简单的获取栈底 executor 实例地址
-# 然后再跳转到 runtime.rs::run_executor 函数。
+# Simply obtains the executor instance address from the bottom of the stack,
+# then jumps to runtime.rs::run_executor.
 #
 	.text
 	.globl executor_entry

@@ -144,7 +144,7 @@ mod rvm_extern_fn {
 
     #[rvm::extern_fn(phys_to_virt)]
     fn rvm_phys_to_virt(paddr: usize) -> usize {
-        // 示意，这个常量已经没了
+        // Note: this constant no longer exists
         // pub const PHYSICAL_MEMORY_OFFSET: usize = KERNEL_OFFSET - PHYS_MEMORY_BASE;
         paddr + PHYSICAL_MEMORY_OFFSET
     }

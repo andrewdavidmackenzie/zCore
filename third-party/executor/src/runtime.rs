@@ -18,16 +18,16 @@ pub struct ExecutorRuntime {
     // runtime only run on this cpu
     cpu_id: u8,
 
-    // 只会在一个 core 上运行，不需要考虑同步问题
+    // Runs on a single core only; no synchronization needed.
     task_collection: Arc<TaskCollection>,
 
-    // 通过 force_switch_future 会将 strong_executor 降级为 weak_executor
+    // force_switch_future demotes the strong_executor to a weak_executor.
     strong_executor: Arc<Pin<Box<Executor>>>,
 
-    // 该 executor 在执行完一次后就会被 drop
+    // Dropped after executing one future.
     weak_executors: Vec<Option<Arc<Pin<Box<Executor>>>>>,
 
-    // 当前正在执行的 executor
+    // The currently running executor.
     current_executor: Option<Arc<Pin<Box<Executor>>>>,
 
     // runtime context, WARN: riscv and x86_64 use different struct
@@ -66,7 +66,7 @@ impl ExecutorRuntime {
     }
 
     fn downgrade_strong_executor(&mut self) {
-        // SAFETY: 只会在一个 core 上运行，不需要考虑同步问题
+        // SAFETY: runs on a single core only; no synchronization needed
         let mut old = self.strong_executor.clone();
         unsafe {
             Arc::get_mut_unchecked(&mut old).mark_weak();
@@ -75,7 +75,7 @@ impl ExecutorRuntime {
         self.strong_executor = Arc::new(Executor::new(self.task_collection.clone()));
     }
 
-    // 添加一个task，它的初始状态是 notified，也就是说它可以被执行.
+    // Add a task. Its initial state is notified, meaning it is ready to execute.
     fn add_task<F: Future<Output = ()> + 'static + Send>(&self, priority: usize, future: F) -> Key {
         debug_assert!(priority < MAX_PRIORITY);
         self.task_collection.add_task(future)
@@ -107,7 +107,7 @@ impl Drop for ExecutorRuntime {
     }
 }
 
-// SAFETY: 只会在一个 core 上运行，不需要考虑同步问题
+// SAFETY: runs on a single core only; no synchronization needed
 unsafe impl Send for ExecutorRuntime {}
 unsafe impl Sync for ExecutorRuntime {}
 
@@ -145,25 +145,25 @@ pub fn run_until_idle() -> bool {
         let executor_cx = runtime.strong_executor.context.get_context();
         debug!("switch idle -> {}", runtime.strong_executor.id());
         runtime.current_executor = Some(runtime.strong_executor.clone());
-        // 释放保护 global_runtime 的锁
+        // Release the global_runtime lock before switching
         drop(runtime);
         debug!("run strong executor");
         switch(runtime_cx, executor_cx);
-        // 该函数返回说明当前 strong_executor 执行的 future 超时或者主动 yield 了,
-        // 需要重新创建一个 executor 执行后续的 future, 并且将
-        // 新的 executor 作为 strong_executor，旧的 executor 添
-        // 加到 weak_exector 中。
+        // If this function returns, the strong_executor's future has
+        // timed out or voluntarily yielded. Create a new executor for
+        // subsequent futures, promote it to strong_executor, and demote
+        // the old one to a weak_executor.
         runtime = get_current_runtime();
         runtime.current_executor = None;
         if cfg!(feature = "baremetal-test") && runtime.task_num() == 0 {
             return false;
         }
-        // 只有 strong_executor 主动 yield 时, 才会执行运行 weak_executor;
+        // Only run weak_executors when the strong_executor voluntarily yields.
         if runtime.strong_executor.is_running_future() {
             runtime.downgrade_strong_executor();
             continue;
         }
-        // 遍历全部的 weak_executor
+        // Iterate through all weak_executors
         if runtime.weak_executors.is_empty() {
             drop(runtime);
             continue;
@@ -227,7 +227,7 @@ pub fn handle_timeout() {
     }
 }
 
-/// 运行executor.run()
+/// Run executor.run()
 #[no_mangle]
 pub(crate) fn run_executor(executor_addr: usize) {
     let mut p = unsafe { Box::from_raw(executor_addr as *mut Executor) };

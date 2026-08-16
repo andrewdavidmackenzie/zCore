@@ -551,7 +551,7 @@ impl VMObjectPagedInner {
                     return Ok(CommitResult::Ref(kernel_hal::mem::ZERO_FRAME.paddr()));
                 }
                 // lazy allocate zero frame
-                // 这里会调用HAL层的hal_frame_alloc, 请注意实现该函数时参数要一样
+                // This calls the HAL layer's hal_frame_alloc; ensure parameter signatures match when implementing
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if out_of_range {
                     // can never be a hidden vmo

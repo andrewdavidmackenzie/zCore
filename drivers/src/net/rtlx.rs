@@ -129,7 +129,7 @@ impl<'a> Device<'a> for RTLxDriver {
 
     fn receive(&mut self) -> Option<(Self::RxToken, Self::TxToken)> {
         if self.0.lock().can_recv() {
-            //这里每次只接收一个网络包
+            // Only receive one network packet at a time here
             let (vec_recv, _rxcount) = self.0.lock().geth_recv(1);
             Some((RTLxRxToken(vec_recv), RTLxTxToken(self.clone())))
         } else {
@@ -178,7 +178,7 @@ pub fn rtlx_init<F: Fn(usize, usize) -> Option<usize>>(
 
     let mut rtl8211f = RTL8211F::<ProviderImpl>::new(&[0u8; 6]);
     let mac = rtl8211f.get_umac();
-    //启动前请为D1插上网线
+    // Please plug in the Ethernet cable before starting the D1
     warn!("Please plug in the Ethernet cable");
 
     rtl8211f.open().unwrap();

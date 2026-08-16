@@ -14,7 +14,7 @@ use crate::task_collection::TaskCollection;
 #[derive(Debug, PartialEq, Eq)]
 enum ExecutorState {
     STRONG,
-    WEAK, // 执行完一次future后就需要被drop
+    WEAK, // dropped after executing one future
     KILLED,
     UNUSED,
 }
@@ -145,9 +145,10 @@ impl Executor {
         }
     }
 
-    // 当前是否在运行future
-    // 发生supervisor时钟中断时, 若executor在运行future, 则
-    // 说明该future超时, 需要切换到另一个executor来执行其他future.
+    // Whether a future is currently running.
+    // When a supervisor timer interrupt occurs while the executor is
+    // running a future, the future has timed out and we need to switch
+    // to another executor to run other futures.
     pub fn is_running_future(&self) -> bool {
         self.task_id != 0
     }
