@@ -231,9 +231,13 @@ impl Syscall<'_> {
         self.sys_readlinkat(FileDesc::CWD, path, base, len)
     }
 
-    /// read value of symbolic link relative to directory file descriptor
-    /// readlink() places the contents of the symbolic link path in the buffer base, which has size len
-    /// TODO: recursive link resolution and loop detection
+    /// Read value of a symbolic link relative to a directory file descriptor.
+    ///
+    /// `readlink` places the contents of the symbolic link at `path`
+    /// into `base`, which has size `len`. Note that `readlink` does NOT
+    /// follow symlink chains — it returns the immediate target of the
+    /// link. Chain resolution is handled by `lookup_inode_at` with
+    /// `follow=true` (used by open, stat, etc.).
     pub fn sys_readlinkat(
         &self,
         dirfd: FileDesc,
@@ -252,7 +256,6 @@ impl Syscall<'_> {
         if inode.metadata()?.type_ != FileType::SymLink {
             return Err(LxError::EINVAL);
         }
-        // TODO: recursive link resolution and loop detection
         let mut buf = vec![0; len];
         let len = inode.read_at(0, &mut buf)?;
         base.write_array(&buf[..len])?;
