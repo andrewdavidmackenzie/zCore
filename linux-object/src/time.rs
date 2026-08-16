@@ -33,6 +33,27 @@ impl TimeVal {
     pub fn to_msec(&self) -> usize {
         self.sec * 1_000 + self.usec / 1_000
     }
+    /// Convert to Duration
+    pub fn to_duration(&self) -> Duration {
+        Duration::new(self.sec as u64, (self.usec * 1000) as u32)
+    }
+    /// Create from Duration
+    pub fn from_duration(d: Duration) -> Self {
+        TimeVal {
+            sec: d.as_secs() as usize,
+            usec: d.subsec_micros() as usize,
+        }
+    }
+}
+
+/// Interval timer value for setitimer/getitimer.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct ITimerVal {
+    /// Timer interval (for periodic timers). Zero = one-shot.
+    pub it_interval: TimeVal,
+    /// Time until next expiration. Zero = disarm.
+    pub it_value: TimeVal,
 }
 
 impl TimeSpec {

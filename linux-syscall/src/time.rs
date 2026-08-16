@@ -109,6 +109,52 @@ impl Syscall<'_> {
         Ok(0)
     }
 
+    /// Set an interval timer that delivers signals on expiration.
+    ///
+    /// Only `ITIMER_REAL` (which=0) is supported. It counts wall-clock
+    /// time and delivers `SIGALRM` when the timer expires.
+    pub fn sys_setitimer(
+        &self,
+        which: usize,
+        new_value: UserInPtr<ITimerVal>,
+        mut old_value: UserOutPtr<ITimerVal>,
+    ) -> SysResult {
+        info!(
+            "setitimer: which={}, new={:?}, old={:?}",
+            which, new_value, old_value
+        );
+        if which != 0 {
+            // ITIMER_VIRTUAL (1) and ITIMER_PROF (2) need per-process
+            // CPU time accounting which is not implemented.
+            warn!(
+                "setitimer: which={} not supported, only ITIMER_REAL (0)",
+                which
+            );
+            return Err(LxError::EINVAL);
+        }
+        let new = if new_value.is_null() {
+            ITimerVal::default()
+        } else {
+            new_value.read()?
+        };
+        let proc = self.zircon_process();
+        let old = self.linux_process().set_itimer_real(new, proc);
+        old_value.write_if_not_null(old)?;
+        Ok(0)
+    }
+
+    /// Get the current value of an interval timer.
+    pub fn sys_getitimer(&self, which: usize, mut curr_value: UserOutPtr<ITimerVal>) -> SysResult {
+        info!("getitimer: which={}, curr={:?}", which, curr_value);
+        if which != 0 {
+            warn!("getitimer: which={} not supported", which);
+            return Err(LxError::EINVAL);
+        }
+        let val = self.linux_process().get_itimer_real();
+        curr_value.write(val)?;
+        Ok(0)
+    }
+
     /// stores the current process times in the struct tms that buf points to
     pub fn sys_times(&mut self, mut buf: UserOutPtr<Tms>) -> SysResult {
         info!("times: buf: {:?}", buf);
