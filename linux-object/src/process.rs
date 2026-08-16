@@ -689,9 +689,24 @@ impl LinuxProcess {
         new_value: crate::time::ITimerSpec,
         proc: &Arc<Process>,
     ) -> LxResult<crate::time::ITimerSpec> {
-        let old = self.get_posix_timer(id)?;
         let mut inner = self.inner.lock();
         let timer = inner.posix_timers.get_mut(&id).ok_or(LxError::EINVAL)?;
+        // Read old value while lock is held to avoid TOCTOU race
+        let old = {
+            let it_value = match timer.deadline {
+                Some(deadline) => {
+                    let now = kernel_hal::timer::timer_now();
+                    crate::time::TimeSpec::from_duration(deadline.saturating_sub(now))
+                }
+                None => crate::time::TimeSpec::default(),
+            };
+            crate::time::ITimerSpec {
+                it_interval: crate::time::TimeSpec::from_duration(timer.interval),
+                it_value,
+            }
+        };
+        // Re-borrow mutably after computing old value
+        let timer = inner.posix_timers.get_mut(&id).unwrap();
 
         // Bump generation to cancel any pending callback
         timer.generation += 1;
@@ -795,7 +810,7 @@ impl LinuxProcess {
                         {
                             let mut thread_linux = thread.lock_linux();
                             if !thread_linux.signal_mask.contains(signal) {
-                                thread_linux.signals.insert(signal);
+                                thread_linux.insert_signal(signal);
                                 break;
                             }
                         }
@@ -807,6 +822,8 @@ impl LinuxProcess {
 
             // Re-arm if interval is non-zero
             if !interval.is_zero() {
+                // Clamp interval to at least 1ms to prevent tight loops
+                let interval = interval.max(Duration::from_millis(1));
                 let mut inner = linux.inner.lock();
                 if let Some(t) = inner.posix_timers.get_mut(&timer_id) {
                     if t.generation == generation {

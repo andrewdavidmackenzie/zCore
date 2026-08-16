@@ -33,9 +33,15 @@ impl TimeVal {
     pub fn to_msec(&self) -> usize {
         self.sec * 1_000 + self.usec / 1_000
     }
-    /// Convert to Duration
+    /// Convert to Duration.
+    /// Clamps usec to valid range to avoid panic in Duration::new.
     pub fn to_duration(&self) -> Duration {
-        Duration::new(self.sec as u64, (self.usec * 1000) as u32)
+        let usec = if self.usec >= 1_000_000 {
+            999_999
+        } else {
+            self.usec
+        };
+        Duration::new(self.sec as u64, (usec * 1000) as u32)
     }
     /// Create from Duration
     pub fn from_duration(d: Duration) -> Self {
@@ -124,9 +130,15 @@ impl TimeSpec {
         self.sec * 1_000 + self.nsec / 1_000_000
     }
 
-    /// Convert to Duration
+    /// Convert to Duration.
+    /// Clamps nsec to valid range to avoid panic in Duration::new.
     pub fn to_duration(&self) -> Duration {
-        Duration::new(self.sec as u64, self.nsec as u32)
+        let nsec = if self.nsec >= 1_000_000_000 {
+            999_999_999
+        } else {
+            self.nsec as u32
+        };
+        Duration::new(self.sec as u64, nsec)
     }
 
     /// Create from Duration

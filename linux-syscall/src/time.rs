@@ -168,6 +168,9 @@ impl Syscall<'_> {
             "timer_create: clock_id={}, sevp={:?}, timerid={:?}",
             clock_id, sevp, timerid
         );
+        if timerid.is_null() {
+            return Err(LxError::EINVAL);
+        }
         // Only CLOCK_REALTIME (0) and CLOCK_MONOTONIC (1) supported
         if clock_id > 1 {
             return Err(LxError::EINVAL);
@@ -177,7 +180,20 @@ impl Syscall<'_> {
         } else {
             sevp.read()?
         };
-        let signal = LinuxSignal::try_from(sev.sigev_signo as u8).map_err(|_| LxError::EINVAL)?;
+        // Validate sigev_notify
+        if sev.sigev_notify != SIGEV_SIGNAL && sev.sigev_notify != SIGEV_NONE {
+            warn!(
+                "timer_create: unsupported sigev_notify={}",
+                sev.sigev_notify
+            );
+            return Err(LxError::EINVAL);
+        }
+        // Validate signal number for SIGEV_SIGNAL
+        let signal = if sev.sigev_notify == SIGEV_SIGNAL {
+            LinuxSignal::try_from(sev.sigev_signo as u8).map_err(|_| LxError::EINVAL)?
+        } else {
+            LinuxSignal::SIGALRM // unused for SIGEV_NONE, but need a value
+        };
         let id = self
             .linux_process()
             .create_posix_timer(signal, sev.sigev_notify);
