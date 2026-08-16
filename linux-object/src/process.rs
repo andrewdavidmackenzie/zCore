@@ -97,7 +97,15 @@ impl ProcessExt for Process {
 /// - the child terminated.
 /// - the child was stopped by a signal. TODO
 /// - the child was resumed by a signal. TODO
-pub async fn wait_child(proc: &Arc<Process>, pid: KoID, nonblock: bool) -> LxResult<ExitCode> {
+///
+/// Returns `Err(EINTR)` if a signal is delivered to the calling thread
+/// while waiting.
+pub async fn wait_child(
+    proc: &Arc<Process>,
+    pid: KoID,
+    nonblock: bool,
+    thread: &zircon_object::task::Thread,
+) -> LxResult<ExitCode> {
     loop {
         let mut inner = proc.linux().inner.lock();
         let child = inner.children.get(&pid).ok_or(LxError::ECHILD)?;
@@ -112,11 +120,22 @@ pub async fn wait_child(proc: &Arc<Process>, pid: KoID, nonblock: bool) -> LxRes
         drop(inner);
         child.signal_clear(Signal::PROCESS_TERMINATED);
         child.wait_signal(Signal::PROCESS_TERMINATED).await;
+        // Check for pending signals after wakeup
+        if thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
+        }
     }
 }
 
 /// Wait for state changes in a child of the calling process.
-pub async fn wait_child_any(proc: &Arc<Process>, nonblock: bool) -> LxResult<(KoID, ExitCode)> {
+///
+/// Returns `Err(EINTR)` if a signal is delivered to the calling thread
+/// while waiting.
+pub async fn wait_child_any(
+    proc: &Arc<Process>,
+    nonblock: bool,
+    thread: &zircon_object::task::Thread,
+) -> LxResult<(KoID, ExitCode)> {
     loop {
         let mut inner = proc.linux().inner.lock();
         if inner.children.is_empty() {
@@ -134,8 +153,11 @@ pub async fn wait_child_any(proc: &Arc<Process>, nonblock: bool) -> LxResult<(Ko
         }
         let proc: Arc<dyn KernelObject> = proc.clone();
         proc.signal_clear(Signal::SIGCHLD);
-        //等待进程结束信号
         proc.wait_signal(Signal::SIGCHLD).await;
+        // Check for pending signals after wakeup
+        if thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
+        }
     }
 }
 
@@ -566,18 +588,28 @@ impl LinuxProcess {
             }
 
             // Deliver SIGALRM to first eligible thread
+            info!(
+                "ITIMER_REAL fired: delivering SIGALRM to process {}",
+                proc.id()
+            );
             let tids = proc.thread_ids();
             for tid in tids {
                 if let Ok(thread_obj) = proc.get_child(tid) {
                     if let Ok(thread) = thread_obj.downcast_arc::<zircon_object::task::Thread>() {
                         let mut thread_linux = thread.lock_linux();
                         if !thread_linux.signal_mask.contains(LinuxSignal::SIGALRM) {
-                            thread_linux.signals.insert(LinuxSignal::SIGALRM);
+                            thread_linux.insert_signal(LinuxSignal::SIGALRM);
                             break;
                         }
                     }
                 }
             }
+
+            // Wake any wait_signal futures on this process (e.g. wait4
+            // blocked on SIGCHLD). Setting SIGCHLD will cause the
+            // wait_signal future to wake up and re-check, enabling
+            // EINTR return from blocking waits.
+            proc.signal_set(Signal::SIGCHLD);
 
             // Re-arm if interval is non-zero
             if !interval.is_zero() {

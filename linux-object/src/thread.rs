@@ -4,6 +4,7 @@ use crate::error::SysResult;
 use crate::process::ProcessExt;
 use crate::signal::{SigInfo, Signal, SignalStack, SignalUserContext, Sigset};
 use alloc::sync::Arc;
+use core::task::Waker;
 use kernel_hal::context::{UserContext, UserContextField};
 use kernel_hal::user::{Out, UserInPtr, UserOutPtr, UserPtr};
 use lock::{Mutex, MutexGuard};
@@ -44,6 +45,7 @@ impl ThreadExt for Thread {
             robust_list: 0.into(),
             robust_list_len: 0,
             handling_signal: None,
+            signal_waker: None,
         });
         Thread::create_with_ext(proc, "", linux_thread)
     }
@@ -155,6 +157,10 @@ pub struct LinuxThread {
     robust_list_len: usize,
     /// handling signals
     pub handling_signal: Option<u32>,
+    /// Waker for the currently-blocked Future (if any).
+    /// Used to wake a thread when a signal is delivered, enabling
+    /// EINTR returns from blocking syscalls.
+    signal_waker: Option<Waker>,
 }
 
 fn unmodified_check(siginfo: &SigInfo, user_ctx: &SignalUserContext) -> usize {
@@ -220,5 +226,39 @@ impl LinuxThread {
             }
         }
         None
+    }
+
+    /// Insert a signal into the pending set and wake any blocked Future.
+    ///
+    /// This replaces direct `signals.insert()` calls. When an unmasked
+    /// signal is inserted, it wakes the thread's signal_waker (if any),
+    /// causing blocking syscalls to return EINTR.
+    ///
+    /// Callers should also call `proc.signal_set(Signal::SIGCHLD)` on
+    /// the target process to wake any `wait_signal` futures (e.g. in
+    /// wait4/waitpid).
+    pub fn insert_signal(&mut self, sig: Signal) {
+        self.signals.insert(sig);
+        if !self.signal_mask.contains(sig) {
+            if let Some(waker) = self.signal_waker.as_ref() {
+                waker.wake_by_ref();
+            }
+        }
+    }
+
+    /// Register a waker that will be called when a signal is delivered.
+    /// Used by interruptible blocking syscalls.
+    pub fn set_signal_waker(&mut self, waker: Waker) {
+        self.signal_waker = Some(waker);
+    }
+
+    /// Clear the signal waker (called when a blocking syscall returns).
+    pub fn clear_signal_waker(&mut self) {
+        self.signal_waker = None;
+    }
+
+    /// Check if any unmasked signal is pending.
+    pub fn has_pending_signal(&self) -> bool {
+        self.signals.mask_with(&self.signal_mask).is_not_empty()
     }
 }

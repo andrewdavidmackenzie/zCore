@@ -241,8 +241,10 @@ impl Syscall<'_> {
             target, wstatus, flags,
         );
         let result = match target {
-            WaitTarget::AnyChild => wait_child_any(self.zircon_process(), nohang).await,
-            WaitTarget::Pid(pid) => wait_child(self.zircon_process(), pid, nohang)
+            WaitTarget::AnyChild => {
+                wait_child_any(self.zircon_process(), nohang, self.thread).await
+            }
+            WaitTarget::Pid(pid) => wait_child(self.zircon_process(), pid, nohang, self.thread)
                 .await
                 .map(|code| (pid, code)),
         };

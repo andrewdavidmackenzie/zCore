@@ -171,7 +171,7 @@ impl Syscall<'_> {
                             if thread_linux.signal_mask.contains(sig) {
                                 continue;
                             } else {
-                                thread_linux.signals.insert(signal);
+                                thread_linux.insert_signal(signal);
                                 break;
                             }
                         }
@@ -197,7 +197,7 @@ impl Syscall<'_> {
             Ok(obj) => {
                 let thread: Arc<Thread> = obj.downcast_arc().unwrap();
                 let mut thread_linux = thread.lock_linux();
-                thread_linux.signals.insert(signal);
+                thread_linux.insert_signal(signal);
                 drop(thread_linux);
                 Ok(0)
             }
@@ -229,7 +229,7 @@ impl Syscall<'_> {
             Ok(Ok(obj)) => {
                 let thread: Arc<Thread> = obj.downcast_arc().unwrap();
                 let mut thread_linux = thread.lock_linux();
-                thread_linux.signals.insert(signal);
+                thread_linux.insert_signal(signal);
                 drop(thread_linux);
                 Ok(0)
             }
