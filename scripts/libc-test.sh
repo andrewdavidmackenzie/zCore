@@ -136,7 +136,13 @@ run_test() {
     sleep 1
     W=$((W + 1))
   done
-  kill "$PID" 2>/dev/null || true
+
+  # Check if QEMU is still running (test hung or poweroff failed)
+  local timed_out=false
+  if kill -0 "$PID" 2>/dev/null; then
+    timed_out=true
+    kill "$PID" 2>/dev/null || true
+  fi
   wait "$PID" 2>/dev/null || true
 
   # Parse result
@@ -144,7 +150,9 @@ run_test() {
   result=$(sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT" | grep -oE "(PASS|FAIL):$name" | head -1)
   rm -f "$OUTPUT" "$QEMU_IN"
 
-  if [ -z "$result" ]; then
+  if $timed_out; then
+    echo "HANG"
+  elif [ -z "$result" ]; then
     echo "HANG"
   elif echo "$result" | grep -q "^PASS:"; then
     echo "PASS"
