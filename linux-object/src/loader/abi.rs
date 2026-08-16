@@ -7,6 +7,8 @@ use core::mem::{align_of, size_of};
 use core::ops::Deref;
 use core::ptr::null;
 
+use crate::error::{LxError, LxResult};
+
 /// process init information
 pub struct ProcInitInfo {
     /// args strings
@@ -18,54 +20,52 @@ pub struct ProcInitInfo {
 }
 
 impl ProcInitInfo {
-    /// push process init information into stack
-    pub fn push_at(&self, stack_top: usize) -> Stack {
-        let mut writer = Stack::new(stack_top);
+    /// Push process init information into stack.
+    ///
+    /// `capacity` is the maximum number of bytes available for argv,
+    /// envp, auxv, and AT_RANDOM data (typically `stack_pages * PAGE_SIZE`).
+    /// Returns `Err(E2BIG)` if the data exceeds this capacity.
+    pub fn push_at(&self, stack_top: usize, capacity: usize) -> LxResult<Stack> {
+        let mut writer = Stack::new(stack_top, capacity);
         // from stack_top:
         // program name
-        writer.push_str(&self.args[0]);
+        writer.push_str(&self.args[0])?;
         // 16 random bytes for AT_RANDOM (musl uses this for stack canary / TLS)
         let mut random_bytes = [0u8; 16];
         kernel_hal::rand::fill_random(&mut random_bytes);
-        writer.push_slice(&random_bytes);
+        writer.push_slice(&random_bytes)?;
         let random_ptr = writer.sp;
         // environment strings
-        let envs: Vec<_> = self
-            .envs
-            .iter()
-            .map(|arg| {
-                writer.push_str(arg.as_str());
-                writer.sp
-            })
-            .collect();
+        let mut envs = Vec::with_capacity(self.envs.len());
+        for arg in &self.envs {
+            writer.push_str(arg.as_str())?;
+            envs.push(writer.sp);
+        }
         // argv strings
-        let argv: Vec<_> = self
-            .args
-            .iter()
-            .map(|arg| {
-                writer.push_str(arg.as_str());
-                writer.sp
-            })
-            .collect();
+        let mut argv = Vec::with_capacity(self.args.len());
+        for arg in &self.args {
+            writer.push_str(arg.as_str())?;
+            argv.push(writer.sp);
+        }
         // auxiliary vector entries
-        writer.push_slice(&[null::<u8>(), null::<u8>()]);
+        writer.push_slice(&[null::<u8>(), null::<u8>()])?;
         for (&type_, &value) in self.auxv.iter() {
             // AT_RANDOM is handled specially with the stack pointer
             if type_ == AT_RANDOM {
-                writer.push_slice(&[type_ as usize, random_ptr]);
+                writer.push_slice(&[type_ as usize, random_ptr])?;
             } else {
-                writer.push_slice(&[type_ as usize, value]);
+                writer.push_slice(&[type_ as usize, value])?;
             }
         }
-        // envionment pointers
-        writer.push_slice(&[null::<u8>()]);
-        writer.push_slice(envs.as_slice());
+        // environment pointers
+        writer.push_slice(&[null::<u8>()])?;
+        writer.push_slice(envs.as_slice())?;
         // argv pointers
-        writer.push_slice(&[null::<u8>()]);
-        writer.push_slice(argv.as_slice());
+        writer.push_slice(&[null::<u8>()])?;
+        writer.push_slice(argv.as_slice())?;
         // argc
-        writer.push_slice(&[argv.len()]);
-        writer
+        writer.push_slice(&[argv.len()])?;
+        Ok(writer)
     }
 }
 
@@ -80,33 +80,40 @@ pub struct Stack {
 }
 
 impl Stack {
-    /// Create a stack buffer with a fixed 16 KiB capacity for argv,
-    /// envp, auxv, and AT_RANDOM data. The assertion in `push_slice`
-    /// fires if this limit is exceeded.
-    fn new(sp: usize) -> Self {
-        let data = vec![0u8; 0x4000];
+    /// Create a stack buffer with the given `capacity` (in bytes) for
+    /// argv, envp, auxv, and AT_RANDOM data. Returns `E2BIG` via
+    /// `push_slice` if this capacity is exceeded.
+    fn new(sp: usize, capacity: usize) -> Self {
+        let data = vec![0u8; capacity];
         Stack {
             sp,
             stack_top: sp,
             data,
         }
     }
-    /// push slice into stack
+    /// Push a typed slice onto the stack.
+    ///
+    /// Returns `Err(E2BIG)` if the data would exceed the stack buffer.
     #[allow(unsafe_code)]
-    fn push_slice<T: Copy>(&mut self, vs: &[T]) {
+    fn push_slice<T: Copy>(&mut self, vs: &[T]) -> LxResult {
         self.sp -= vs.len() * size_of::<T>();
         self.sp -= self.sp % align_of::<T>();
-        assert!(self.stack_top - self.sp <= self.data.len());
+        if self.stack_top - self.sp > self.data.len() {
+            return Err(LxError::E2BIG);
+        }
         let offset = self.data.len() - (self.stack_top - self.sp);
         unsafe {
             core::slice::from_raw_parts_mut(self.data.as_mut_ptr().add(offset) as *mut T, vs.len())
         }
         .copy_from_slice(vs);
+        Ok(())
     }
-    /// push str into stack
-    fn push_str(&mut self, s: &str) {
-        self.push_slice(&[b'\0']);
-        self.push_slice(s.as_bytes());
+    /// Push a string (with NUL terminator) onto the stack.
+    ///
+    /// Returns `Err(E2BIG)` if the data would exceed the stack buffer.
+    fn push_str(&mut self, s: &str) -> LxResult {
+        self.push_slice(&[b'\0'])?;
+        self.push_slice(s.as_bytes())
     }
 }
 
