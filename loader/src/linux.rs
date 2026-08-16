@@ -191,9 +191,11 @@ async fn handle_user_trap(thread: &CurrentThread, mut ctx: Box<UserContext>) -> 
             Ok(())
         }
         TrapReason::PageFault(vaddr, flags) => {
-            warn!(
+            trace!(
                 "page fault from user mode @ {:#x}({:?}), pid={}",
-                vaddr, flags, pid
+                vaddr,
+                flags,
+                pid
             );
             let vmar = thread.proc().vmar();
             vmar.handle_page_fault(vaddr, flags).map_err(|err| {
