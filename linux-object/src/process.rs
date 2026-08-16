@@ -206,6 +206,36 @@ struct LinuxProcessInner {
     itimer_real_deadline: Option<Duration>,
     /// ITIMER_REAL: generation counter for cancelling stale callbacks
     itimer_real_generation: u64,
+    /// POSIX timers created by timer_create
+    posix_timers: HashMap<usize, PosixTimer>,
+    /// Next POSIX timer ID to allocate
+    next_timer_id: usize,
+}
+
+/// Per-process POSIX timer state.
+struct PosixTimer {
+    /// Signal to deliver on expiry (e.g. SIGALRM)
+    signal: LinuxSignal,
+    /// Notification type (SIGEV_SIGNAL, SIGEV_NONE)
+    notify: i32,
+    /// Repeat interval (zero = one-shot)
+    interval: Duration,
+    /// Absolute deadline (None = disarmed)
+    deadline: Option<Duration>,
+    /// Generation counter for stale callback cancellation
+    generation: u64,
+}
+
+impl Default for PosixTimer {
+    fn default() -> Self {
+        PosixTimer {
+            signal: LinuxSignal::SIGALRM,
+            notify: 0, // SIGEV_SIGNAL
+            interval: Duration::default(),
+            deadline: None,
+            generation: 0,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -629,6 +659,178 @@ impl LinuxProcess {
                 let mut inner = linux.inner.lock();
                 if inner.itimer_real_generation == generation {
                     inner.itimer_real_deadline = None;
+                }
+            }
+        });
+        timer::timer_set(deadline, callback);
+    }
+
+    /// Create a POSIX timer. Returns the timer ID.
+    pub fn create_posix_timer(&self, signal: LinuxSignal, notify: i32) -> usize {
+        let mut inner = self.inner.lock();
+        let id = inner.next_timer_id;
+        inner.next_timer_id += 1;
+        inner.posix_timers.insert(
+            id,
+            PosixTimer {
+                signal,
+                notify,
+                ..PosixTimer::default()
+            },
+        );
+        id
+    }
+
+    /// Set a POSIX timer. Returns the old timer spec.
+    pub fn set_posix_timer(
+        &self,
+        id: usize,
+        flags: usize,
+        new_value: crate::time::ITimerSpec,
+        proc: &Arc<Process>,
+    ) -> LxResult<crate::time::ITimerSpec> {
+        let old = self.get_posix_timer(id)?;
+        let mut inner = self.inner.lock();
+        let timer = inner.posix_timers.get_mut(&id).ok_or(LxError::EINVAL)?;
+
+        // Bump generation to cancel any pending callback
+        timer.generation += 1;
+        let generation = timer.generation;
+
+        let value_dur = new_value.it_value.to_duration();
+        let interval_dur = new_value.it_interval.to_duration();
+        timer.interval = interval_dur;
+
+        if value_dur.is_zero() {
+            timer.deadline = None;
+        } else {
+            let deadline = if flags & 1 != 0 {
+                // TIMER_ABSTIME: convert to relative then to timer domain
+                let now = kernel_hal::timer::timer_now();
+                kernel_hal::timer::deadline_after(value_dur.saturating_sub(now))
+            } else {
+                kernel_hal::timer::deadline_after(value_dur)
+            };
+            timer.deadline = Some(deadline);
+            let signal = timer.signal;
+            let notify = timer.notify;
+            let weak_proc = Arc::downgrade(proc);
+            drop(inner);
+            Self::schedule_posix_timer(
+                weak_proc,
+                id,
+                deadline,
+                interval_dur,
+                signal,
+                notify,
+                generation,
+            );
+        }
+
+        Ok(old)
+    }
+
+    /// Get the current POSIX timer spec.
+    pub fn get_posix_timer(&self, id: usize) -> LxResult<crate::time::ITimerSpec> {
+        let inner = self.inner.lock();
+        let timer = inner.posix_timers.get(&id).ok_or(LxError::EINVAL)?;
+        let it_value = match timer.deadline {
+            Some(deadline) => {
+                let now = kernel_hal::timer::timer_now();
+                crate::time::TimeSpec::from_duration(deadline.saturating_sub(now))
+            }
+            None => crate::time::TimeSpec::default(),
+        };
+        Ok(crate::time::ITimerSpec {
+            it_interval: crate::time::TimeSpec::from_duration(timer.interval),
+            it_value,
+        })
+    }
+
+    /// Delete a POSIX timer.
+    pub fn delete_posix_timer(&self, id: usize) -> LxResult {
+        let mut inner = self.inner.lock();
+        let timer = inner.posix_timers.get_mut(&id).ok_or(LxError::EINVAL)?;
+        // Bump generation to cancel any pending callback
+        timer.generation += 1;
+        timer.deadline = None;
+        inner.posix_timers.remove(&id);
+        Ok(())
+    }
+
+    /// Schedule a POSIX timer callback.
+    fn schedule_posix_timer(
+        proc: Weak<Process>,
+        timer_id: usize,
+        deadline: Duration,
+        interval: Duration,
+        signal: LinuxSignal,
+        notify: i32,
+        generation: u64,
+    ) {
+        use kernel_hal::timer;
+
+        let callback: Box<dyn FnOnce(Duration) + Send + Sync> = Box::new(move |_now| {
+            let proc = match proc.upgrade() {
+                Some(p) => p,
+                None => return,
+            };
+            let linux = proc.linux();
+
+            // Check generation
+            {
+                let inner = linux.inner.lock();
+                match inner.posix_timers.get(&timer_id) {
+                    Some(t) if t.generation == generation => {}
+                    _ => return, // stale or deleted
+                }
+            }
+
+            // Deliver signal if SIGEV_SIGNAL
+            if notify == crate::time::SIGEV_SIGNAL {
+                let tids = proc.thread_ids();
+                for tid in tids {
+                    if let Ok(thread_obj) = proc.get_child(tid) {
+                        if let Ok(thread) = thread_obj.downcast_arc::<zircon_object::task::Thread>()
+                        {
+                            let mut thread_linux = thread.lock_linux();
+                            if !thread_linux.signal_mask.contains(signal) {
+                                thread_linux.signals.insert(signal);
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Wake any wait_signal futures
+                proc.signal_set(Signal::SIGCHLD);
+            }
+
+            // Re-arm if interval is non-zero
+            if !interval.is_zero() {
+                let mut inner = linux.inner.lock();
+                if let Some(t) = inner.posix_timers.get_mut(&timer_id) {
+                    if t.generation == generation {
+                        let new_deadline = timer::deadline_after(interval);
+                        t.deadline = Some(new_deadline);
+                        let weak = Arc::downgrade(&proc);
+                        drop(inner);
+                        Self::schedule_posix_timer(
+                            weak,
+                            timer_id,
+                            new_deadline,
+                            interval,
+                            signal,
+                            notify,
+                            generation,
+                        );
+                    }
+                }
+            } else {
+                let mut inner = linux.inner.lock();
+                if let Some(t) = inner.posix_timers.get_mut(&timer_id) {
+                    if t.generation == generation {
+                        t.deadline = None;
+                    }
                 }
             }
         });
