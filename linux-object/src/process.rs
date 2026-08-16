@@ -97,8 +97,20 @@ impl ProcessExt for Process {
 /// - the child terminated.
 /// - the child was stopped by a signal. TODO
 /// - the child was resumed by a signal. TODO
-pub async fn wait_child(proc: &Arc<Process>, pid: KoID, nonblock: bool) -> LxResult<ExitCode> {
+///
+/// Returns `Err(EINTR)` if a signal is delivered to the calling thread
+/// while waiting.
+pub async fn wait_child(
+    proc: &Arc<Process>,
+    pid: KoID,
+    nonblock: bool,
+    thread: &zircon_object::task::Thread,
+) -> LxResult<ExitCode> {
     loop {
+        // Check for pending signals before blocking
+        if thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
+        }
         let mut inner = proc.linux().inner.lock();
         let child = inner.children.get(&pid).ok_or(LxError::ECHILD)?;
         if let Status::Exited(code) = child.status() {
@@ -108,16 +120,31 @@ pub async fn wait_child(proc: &Arc<Process>, pid: KoID, nonblock: bool) -> LxRes
         if nonblock {
             return Err(LxError::EAGAIN);
         }
-        let child: Arc<dyn KernelObject> = child.clone();
         drop(inner);
-        child.signal_clear(Signal::PROCESS_TERMINATED);
-        child.wait_signal(Signal::PROCESS_TERMINATED).await;
+        // Wait for SIGCHLD on the parent process. This is woken by:
+        // - child exit (Process::exit sets SIGCHLD on parent)
+        // - SIGALRM timer callback (sets SIGCHLD to wake wait)
+        // - any signal delivery via insert_signal()
+        let proc_obj: Arc<dyn KernelObject> = proc.clone();
+        proc_obj.signal_clear(Signal::SIGCHLD);
+        proc_obj.wait_signal(Signal::SIGCHLD).await;
     }
 }
 
 /// Wait for state changes in a child of the calling process.
-pub async fn wait_child_any(proc: &Arc<Process>, nonblock: bool) -> LxResult<(KoID, ExitCode)> {
+///
+/// Returns `Err(EINTR)` if a signal is delivered to the calling thread
+/// while waiting.
+pub async fn wait_child_any(
+    proc: &Arc<Process>,
+    nonblock: bool,
+    thread: &zircon_object::task::Thread,
+) -> LxResult<(KoID, ExitCode)> {
     loop {
+        // Check for pending signals before blocking
+        if thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
+        }
         let mut inner = proc.linux().inner.lock();
         if inner.children.is_empty() {
             return Err(LxError::ECHILD);
@@ -132,10 +159,9 @@ pub async fn wait_child_any(proc: &Arc<Process>, nonblock: bool) -> LxResult<(Ko
         if nonblock {
             return Err(LxError::EAGAIN);
         }
-        let proc: Arc<dyn KernelObject> = proc.clone();
-        proc.signal_clear(Signal::SIGCHLD);
-        //等待进程结束信号
-        proc.wait_signal(Signal::SIGCHLD).await;
+        let proc_obj: Arc<dyn KernelObject> = proc.clone();
+        proc_obj.signal_clear(Signal::SIGCHLD);
+        proc_obj.wait_signal(Signal::SIGCHLD).await;
     }
 }
 
@@ -566,18 +592,28 @@ impl LinuxProcess {
             }
 
             // Deliver SIGALRM to first eligible thread
+            info!(
+                "ITIMER_REAL fired: delivering SIGALRM to process {}",
+                proc.id()
+            );
             let tids = proc.thread_ids();
             for tid in tids {
                 if let Ok(thread_obj) = proc.get_child(tid) {
                     if let Ok(thread) = thread_obj.downcast_arc::<zircon_object::task::Thread>() {
                         let mut thread_linux = thread.lock_linux();
                         if !thread_linux.signal_mask.contains(LinuxSignal::SIGALRM) {
-                            thread_linux.signals.insert(LinuxSignal::SIGALRM);
+                            thread_linux.insert_signal(LinuxSignal::SIGALRM);
                             break;
                         }
                     }
                 }
             }
+
+            // Wake any wait_signal futures on this process (e.g. wait4
+            // blocked on SIGCHLD). Setting SIGCHLD will cause the
+            // wait_signal future to wake up and re-check, enabling
+            // EINTR return from blocking waits.
+            proc.signal_set(Signal::SIGCHLD);
 
             // Re-arm if interval is non-zero
             if !interval.is_zero() {

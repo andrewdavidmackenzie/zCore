@@ -171,10 +171,13 @@ impl Syscall<'_> {
                             if thread_linux.signal_mask.contains(sig) {
                                 continue;
                             } else {
-                                thread_linux.signals.insert(signal);
+                                thread_linux.insert_signal(signal);
                                 break;
                             }
                         }
+                        // Wake any wait_signal futures on the target process
+                        // so blocked waits (wait4, etc.) can check for EINTR.
+                        process.signal_set(zircon_object::object::Signal::SIGCHLD);
                     }
                 };
                 Ok(0)
@@ -197,8 +200,10 @@ impl Syscall<'_> {
             Ok(obj) => {
                 let thread: Arc<Thread> = obj.downcast_arc().unwrap();
                 let mut thread_linux = thread.lock_linux();
-                thread_linux.signals.insert(signal);
+                thread_linux.insert_signal(signal);
                 drop(thread_linux);
+                // Wake any blocked wait_signal futures on this process
+                parent.signal_set(zircon_object::object::Signal::SIGCHLD);
                 Ok(0)
             }
             Err(_) => Err(LxError::EINVAL),
@@ -210,15 +215,11 @@ impl Syscall<'_> {
     pub fn sys_tgkill(&mut self, tgid: usize, tid: usize, signum: usize) -> SysResult {
         let signal = Signal::try_from(signum as u8).map_err(|_| LxError::EINVAL)?;
         info!(
-            "tkill: thread {} kill thread {} in process {} with signal {:?}",
+            "tgkill: thread {} kill thread {} in process {} with signal {:?}",
             self.thread.id(),
             tid,
             tgid,
             signum
-        );
-        warn!(
-            "The signal will be delivered to the target process that 
-            belongs to the same job as the calling thread."
         );
         let parent = self.zircon_process().clone();
         match parent
@@ -229,8 +230,10 @@ impl Syscall<'_> {
             Ok(Ok(obj)) => {
                 let thread: Arc<Thread> = obj.downcast_arc().unwrap();
                 let mut thread_linux = thread.lock_linux();
-                thread_linux.signals.insert(signal);
+                thread_linux.insert_signal(signal);
                 drop(thread_linux);
+                // Wake any blocked wait_signal futures on the calling process
+                parent.signal_set(zircon_object::object::Signal::SIGCHLD);
                 Ok(0)
             }
             _ => Err(LxError::EINVAL),
