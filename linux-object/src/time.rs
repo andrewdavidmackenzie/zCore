@@ -33,9 +33,15 @@ impl TimeVal {
     pub fn to_msec(&self) -> usize {
         self.sec * 1_000 + self.usec / 1_000
     }
-    /// Convert to Duration
+    /// Convert to Duration.
+    /// Clamps usec to valid range to avoid panic in Duration::new.
     pub fn to_duration(&self) -> Duration {
-        Duration::new(self.sec as u64, (self.usec * 1000) as u32)
+        let usec = if self.usec >= 1_000_000 {
+            999_999
+        } else {
+            self.usec
+        };
+        Duration::new(self.sec as u64, (usec * 1000) as u32)
     }
     /// Create from Duration
     pub fn from_duration(d: Duration) -> Self {
@@ -46,7 +52,7 @@ impl TimeVal {
     }
 }
 
-/// Interval timer value for setitimer/getitimer.
+/// Interval timer value for setitimer/getitimer (timeval-based, microseconds).
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct ITimerVal {
@@ -55,6 +61,46 @@ pub struct ITimerVal {
     /// Time until next expiration. Zero = disarm.
     pub it_value: TimeVal,
 }
+
+/// Interval timer specification for timer_settime/timer_gettime (timespec-based, nanoseconds).
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct ITimerSpec {
+    /// Timer interval (for periodic timers). Zero = one-shot.
+    pub it_interval: TimeSpec,
+    /// Time until next expiration. Zero = disarm.
+    pub it_value: TimeSpec,
+}
+
+/// Signal event notification structure for timer_create.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct SigEvent {
+    /// Data passed with notification
+    pub sigev_value: usize,
+    /// Signal number for SIGEV_SIGNAL
+    pub sigev_signo: i32,
+    /// Notification method (SIGEV_SIGNAL, SIGEV_NONE, etc.)
+    pub sigev_notify: i32,
+    /// Padding to 64 bytes total
+    pub _pad: [i32; 12],
+}
+
+impl Default for SigEvent {
+    fn default() -> Self {
+        SigEvent {
+            sigev_value: 0,
+            sigev_signo: 14, // SIGALRM
+            sigev_notify: SIGEV_SIGNAL,
+            _pad: [0; 12],
+        }
+    }
+}
+
+/// SIGEV_SIGNAL: notify via signal delivery.
+pub const SIGEV_SIGNAL: i32 = 0;
+/// SIGEV_NONE: no notification.
+pub const SIGEV_NONE: i32 = 1;
 
 impl TimeSpec {
     /// create TimeSpec
@@ -82,6 +128,25 @@ impl TimeSpec {
     /// to msec
     pub fn to_msec(&self) -> usize {
         self.sec * 1_000 + self.nsec / 1_000_000
+    }
+
+    /// Convert to Duration.
+    /// Clamps nsec to valid range to avoid panic in Duration::new.
+    pub fn to_duration(&self) -> Duration {
+        let nsec = if self.nsec >= 1_000_000_000 {
+            999_999_999
+        } else {
+            self.nsec as u32
+        };
+        Duration::new(self.sec as u64, nsec)
+    }
+
+    /// Create from Duration
+    pub fn from_duration(d: Duration) -> Self {
+        TimeSpec {
+            sec: d.as_secs() as usize,
+            nsec: d.subsec_nanos() as usize,
+        }
     }
 }
 

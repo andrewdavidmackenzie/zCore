@@ -2,9 +2,11 @@
 //! - clock_gettime
 //!
 use crate::Syscall;
+use core::convert::TryFrom;
 use kernel_hal::{user::UserInPtr, user::UserOutPtr};
 use linux_object::error::LxError;
 use linux_object::error::SysResult;
+use linux_object::signal::Signal as LinuxSignal;
 use linux_object::time::*;
 
 const USEC_PER_TICK: usize = 10000;
@@ -152,6 +154,98 @@ impl Syscall<'_> {
         }
         let val = self.linux_process().get_itimer_real();
         curr_value.write(val)?;
+        Ok(0)
+    }
+
+    /// Create a POSIX per-process timer.
+    pub fn sys_timer_create(
+        &self,
+        clock_id: usize,
+        sevp: UserInPtr<SigEvent>,
+        mut timerid: UserOutPtr<usize>,
+    ) -> SysResult {
+        info!(
+            "timer_create: clock_id={}, sevp={:?}, timerid={:?}",
+            clock_id, sevp, timerid
+        );
+        if timerid.is_null() {
+            return Err(LxError::EINVAL);
+        }
+        // Only CLOCK_REALTIME (0) and CLOCK_MONOTONIC (1) supported
+        if clock_id > 1 {
+            return Err(LxError::EINVAL);
+        }
+        let sev = if sevp.is_null() {
+            SigEvent::default() // SIGEV_SIGNAL + SIGALRM
+        } else {
+            sevp.read()?
+        };
+        // Validate sigev_notify
+        if sev.sigev_notify != SIGEV_SIGNAL && sev.sigev_notify != SIGEV_NONE {
+            warn!(
+                "timer_create: unsupported sigev_notify={}",
+                sev.sigev_notify
+            );
+            return Err(LxError::EINVAL);
+        }
+        // Validate signal number for SIGEV_SIGNAL
+        let signal = if sev.sigev_notify == SIGEV_SIGNAL {
+            LinuxSignal::try_from(sev.sigev_signo as u8).map_err(|_| LxError::EINVAL)?
+        } else {
+            LinuxSignal::SIGALRM // unused for SIGEV_NONE, but need a value
+        };
+        let id = self
+            .linux_process()
+            .create_posix_timer(signal, sev.sigev_notify);
+        timerid.write(id)?;
+        Ok(0)
+    }
+
+    /// Arm or disarm a POSIX per-process timer.
+    pub fn sys_timer_settime(
+        &self,
+        timer_id: usize,
+        flags: usize,
+        new_value: UserInPtr<ITimerSpec>,
+        mut old_value: UserOutPtr<ITimerSpec>,
+    ) -> SysResult {
+        info!(
+            "timer_settime: id={}, flags={}, new={:?}, old={:?}",
+            timer_id, flags, new_value, old_value
+        );
+        let new = new_value.read()?;
+        let proc = self.zircon_process();
+        let old = self
+            .linux_process()
+            .set_posix_timer(timer_id, flags, new, proc)?;
+        old_value.write_if_not_null(old)?;
+        Ok(0)
+    }
+
+    /// Get the current value of a POSIX per-process timer.
+    pub fn sys_timer_gettime(
+        &self,
+        timer_id: usize,
+        mut curr_value: UserOutPtr<ITimerSpec>,
+    ) -> SysResult {
+        info!("timer_gettime: id={}, curr={:?}", timer_id, curr_value);
+        let val = self.linux_process().get_posix_timer(timer_id)?;
+        curr_value.write(val)?;
+        Ok(0)
+    }
+
+    /// Delete a POSIX per-process timer.
+    pub fn sys_timer_delete(&self, timer_id: usize) -> SysResult {
+        info!("timer_delete: id={}", timer_id);
+        self.linux_process().delete_posix_timer(timer_id)?;
+        Ok(0)
+    }
+
+    /// Get the overrun count of a POSIX timer.
+    pub fn sys_timer_getoverrun(&self, timer_id: usize) -> SysResult {
+        info!("timer_getoverrun: id={}", timer_id);
+        // Overrun tracking is not implemented; verify timer exists then return 0.
+        self.linux_process().get_posix_timer(timer_id)?;
         Ok(0)
     }
 
