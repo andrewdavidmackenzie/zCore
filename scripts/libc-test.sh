@@ -170,7 +170,7 @@ FAIL_LIST=""
 
 for exe in "${TESTS[@]}"; do
   name=$(basename "$exe" -static.exe)
-  result=$(run_test "$name")
+  result=$(run_test "$name" || echo "HANG")
   case "$result" in
     PASS)
       PASSED=$((PASSED + 1))
