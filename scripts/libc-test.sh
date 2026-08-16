@@ -110,14 +110,16 @@ run_test() {
 
   # Wait for shell prompt
   local ELAPSED=0
+  local prompt_found=false
   while [ "$ELAPSED" -lt "$BOOT_TIMEOUT" ]; do
-    if grep -q '/ # ' "$OUTPUT" 2>/dev/null; then break; fi
+    if grep -q '/ # ' "$OUTPUT" 2>/dev/null; then prompt_found=true; break; fi
     if ! kill -0 "$PID" 2>/dev/null; then break; fi
     sleep 1
     ELAPSED=$((ELAPSED + 1))
   done
 
-  if [ "$ELAPSED" -ge "$BOOT_TIMEOUT" ]; then
+  if ! $prompt_found; then
+    exec 3>&- 2>/dev/null || true
     kill "$PID" 2>/dev/null || true
     wait "$PID" 2>/dev/null || true
     rm -f "$OUTPUT" "$QEMU_IN"
@@ -126,8 +128,8 @@ run_test() {
   fi
 
   # Send test command + poweroff
-  echo "/bin/libc-test/$name && echo PASS:$name || echo FAIL:$name; poweroff -f" >&3
-  exec 3>&-
+  echo "/bin/libc-test/$name && echo PASS:$name || echo FAIL:$name; poweroff -f" >&3 2>/dev/null || true
+  exec 3>&- 2>/dev/null || true
 
   # Wait for QEMU to exit (poweroff terminates it)
   local W=0
@@ -147,7 +149,7 @@ run_test() {
 
   # Parse result
   local result
-  result=$(sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT" | grep -oE "(PASS|FAIL):$name" | head -1)
+  result=$(sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT" | grep -oE "(PASS|FAIL):$name" | head -1 || true)
   rm -f "$OUTPUT" "$QEMU_IN"
 
   if $timed_out; then
@@ -199,7 +201,7 @@ echo "========================================"
 if [ -n "$FAIL_LIST" ]; then
   echo ""
   echo "Failed/hung tests:"
-  printf "$FAIL_LIST"
+  printf '%b' "$FAIL_LIST"
 fi
 
 # Always exit 0 — this test reports progress, not pass/fail.
