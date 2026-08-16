@@ -107,6 +107,10 @@ pub async fn wait_child(
     thread: &zircon_object::task::Thread,
 ) -> LxResult<ExitCode> {
     loop {
+        // Check for pending signals before blocking
+        if thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
+        }
         let mut inner = proc.linux().inner.lock();
         let child = inner.children.get(&pid).ok_or(LxError::ECHILD)?;
         if let Status::Exited(code) = child.status() {
@@ -116,14 +120,14 @@ pub async fn wait_child(
         if nonblock {
             return Err(LxError::EAGAIN);
         }
-        let child: Arc<dyn KernelObject> = child.clone();
         drop(inner);
-        child.signal_clear(Signal::PROCESS_TERMINATED);
-        child.wait_signal(Signal::PROCESS_TERMINATED).await;
-        // Check for pending signals after wakeup
-        if thread.lock_linux().has_pending_signal() {
-            return Err(LxError::EINTR);
-        }
+        // Wait for SIGCHLD on the parent process. This is woken by:
+        // - child exit (Process::exit sets SIGCHLD on parent)
+        // - SIGALRM timer callback (sets SIGCHLD to wake wait)
+        // - any signal delivery via insert_signal()
+        let proc_obj: Arc<dyn KernelObject> = proc.clone();
+        proc_obj.signal_clear(Signal::SIGCHLD);
+        proc_obj.wait_signal(Signal::SIGCHLD).await;
     }
 }
 
@@ -137,6 +141,10 @@ pub async fn wait_child_any(
     thread: &zircon_object::task::Thread,
 ) -> LxResult<(KoID, ExitCode)> {
     loop {
+        // Check for pending signals before blocking
+        if thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
+        }
         let mut inner = proc.linux().inner.lock();
         if inner.children.is_empty() {
             return Err(LxError::ECHILD);
@@ -151,13 +159,9 @@ pub async fn wait_child_any(
         if nonblock {
             return Err(LxError::EAGAIN);
         }
-        let proc: Arc<dyn KernelObject> = proc.clone();
-        proc.signal_clear(Signal::SIGCHLD);
-        proc.wait_signal(Signal::SIGCHLD).await;
-        // Check for pending signals after wakeup
-        if thread.lock_linux().has_pending_signal() {
-            return Err(LxError::EINTR);
-        }
+        let proc_obj: Arc<dyn KernelObject> = proc.clone();
+        proc_obj.signal_clear(Signal::SIGCHLD);
+        proc_obj.wait_signal(Signal::SIGCHLD).await;
     }
 }
 
