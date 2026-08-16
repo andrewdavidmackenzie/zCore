@@ -642,8 +642,8 @@ where
             // Link is Up
         }
 
+        // Receive path is now active
         Ok(0)
-        // Start receiving data
     }
 
     pub fn can_recv(&mut self) -> bool {

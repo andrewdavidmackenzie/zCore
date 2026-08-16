@@ -20,7 +20,7 @@ struct LockedHeap(Mutex<BuddyAllocator<27, UsizeBuddy, LinkedListBuddy>>);
 #[global_allocator]
 static HEAP: LockedHeap = LockedHeap(Mutex::new(BuddyAllocator::new()));
 
-/// Number of address bits per page.
+/// Number of page-offset bits (log2 of page size).
 const PAGE_BITS: usize = 12;
 
 /// Initial memory reserved for boot.

@@ -41,8 +41,8 @@ impl BootPageTable {
         }
     }
 
-    /// Enable address translation, jump to the high address space, and set the thread pointer
-    /// and kernel access permissions for user pages.
+    /// Enable address translation, jump to the high address space, and set
+    /// kernel access permissions for user pages.
     ///
     /// # Safety
     ///

@@ -17,7 +17,7 @@ fn breakpoint(sepc: &mut usize) {
 pub(super) fn super_timer() {
     super::timer::timer_set_next();
     crate::timer::timer_tick();
-    // On an external interrupt, the instruction at epc has not yet executed, so no epc adjustment is needed.
+    // On a supervisor timer interrupt, the instruction at sepc has not yet executed, so no sepc adjustment is needed.
 }
 
 pub(super) fn super_soft() {

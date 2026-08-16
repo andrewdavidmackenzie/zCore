@@ -440,11 +440,11 @@ impl Syscall<'_> {
         info!("statfs: path={:?}, buf={:?}", path, buf);
 
         // TODO
-        // Currently `path` is unused because real mounting is not implemented,
-        // so it's impossible to have a path for a non-primary filesystem.
-        // After implementing mounting, use `path` to determine which filesystem
-        // the path belongs to and return stats accordingly.
-        // (Also fill in `StatFs::f_flags` based on mount options!)
+        // Currently `path` is not used to select a filesystem because real
+        // mounting is not implemented. After mounting support is added, use
+        // `path` to determine which filesystem the path belongs to, return
+        // stats for that filesystem, and fill in `StatFs::f_flags` from
+        // mount options.
 
         let info = self.linux_process().root_inode().fs().info();
         buf.write(info.into())?;

@@ -8,7 +8,7 @@ _start:
 	csrw sie, zero
 	csrw sip, zero
 
-	#Disable MMU
+	# MMU disable (currently commented out)
 	#csrw satp, zero
 
 	#Zero the BSS segment
@@ -51,7 +51,7 @@ init_vm:
 	#Set satp MODE to Sv39
 	li t1, 8 << 60
 
-	#Write satp
+	# Combine PPN and mode bits, then write satp to enable paging
 	or t0, t0, t1
 
 	#Flush TLB

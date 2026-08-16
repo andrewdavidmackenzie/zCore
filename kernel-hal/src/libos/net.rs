@@ -23,8 +23,7 @@ use zcore_drivers::Device;
 pub fn init() {
     let name = String::from("loopback");
     warn!("name : {}", name);
-    // Initialize a network stack.
-    // Accept configuration parameters from the caller; use defaults if none are provided.
+    // Initialize a network stack with default configuration.
 
     // Network device.
     // Default: loopback.

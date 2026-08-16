@@ -74,7 +74,7 @@ impl From<MMUFlags> for PTF {
             }
             Ok(CachePolicy::WriteCombining) => {
                 flags |= PTF::NO_CACHE | PTF::WRITE_THROUGH;
-                // At level 1 (large pages), bit 12 (0x100) is set for PAT,
+                // At level 1 (large pages), bit 12 (0x1000) is set for PAT,
                 // but bitflags does not include this bit. Let the page table manage it directly.
             }
             Err(_) => unreachable!("invalid cache policy"),

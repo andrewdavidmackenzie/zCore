@@ -15,8 +15,7 @@ pub use mmio::Mmio;
 #[cfg(target_arch = "x86_64")]
 pub use pmio::Pmio;
 
-// An interface for handling peripheral address space access.
-/// An interface for dealing with device address space access.
+/// Interface for accessing device address space (MMIO or PMIO).
 pub trait Io {
     // The type of the accessible object.
     /// The type of object to access.

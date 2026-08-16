@@ -33,7 +33,7 @@ pub fn run(args: Vec<String>, envs: Vec<String>, rootfs: Arc<dyn FileSystem>) ->
 
     let pg_token = kernel_hal::vm::current_vmtoken();
     debug!("current pgt = {:#x}", pg_token);
-    // Call zircon-object/src/task/thread.start to set up the thread to execute
+    // Load the ELF and configure the thread's entry point and stack
     let (entry, sp, initial_brk) = loader.load(&proc.vmar(), &data, args, envs, path).unwrap();
     proc.linux().set_brk(initial_brk);
 

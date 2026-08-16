@@ -964,10 +964,11 @@ impl VmMapping {
         if !flags.contains(access_flags) {
             return Err(ZxError::ACCESS_DENIED);
         }
-        // When a page fault occurs, only grant read permission even if the
-        // mapping is writable, when only read access was requested. This is
-        // because COW removes write permission to trigger a page fault on
-        // write; passing the full flags would bypass the COW mechanism.
+        // When a page fault occurs and only read access was requested,
+        // grant only read permission even if the mapping is writable.
+        // COW (copy-on-write) clears the write flag so that a subsequent
+        // write triggers a new page fault; granting write here would
+        // bypass that mechanism.
         if !access_flags.contains(MMUFlags::WRITE) {
             flags.remove(MMUFlags::WRITE);
         }

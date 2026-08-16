@@ -106,7 +106,7 @@ enum Commands {
     /// ```
     CheckStyle,
 
-    /// Dumps the asm of kernel.
+    /// Dumps the kernel disassembly.
     ///
     /// The default output is `target/zcore.asm`.
     ///

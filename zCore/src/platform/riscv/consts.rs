@@ -50,7 +50,7 @@ impl KernelMemInfo {
         }
     }
 
-    /// Calculate the offset from the kernel virtual address space to the physical address space.
+    /// Calculate the offset to add to a physical address to get the corresponding virtual address.
     #[inline]
     pub fn offset(&self) -> usize {
         self.vaddr_base - self.paddr_base
