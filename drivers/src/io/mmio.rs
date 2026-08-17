@@ -1,7 +1,7 @@
 use super::Io;
 use core::ops::{BitAnd, BitOr, Not};
 
-// 主存映射 I/O。
+// Memory-mapped I/O (MMIO).
 /// Memory-mapped I/O.
 #[repr(transparent)]
 pub struct Mmio<T>(T);

@@ -1,10 +1,10 @@
-﻿//! 支持架构的定义。
+﻿//! Supported architecture definitions.
 
 use crate::{commands::wget, LinuxRootfs, XError, ARCHS, TARGET};
 use os_xtask_utils::{dir, CommandExt, Tar};
 use std::{path::PathBuf, str::FromStr};
 
-/// 支持的 CPU 架构。
+/// Supported CPU architectures.
 #[derive(Clone, Copy)]
 pub(crate) enum Arch {
     Riscv64,

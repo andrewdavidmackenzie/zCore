@@ -157,7 +157,7 @@ impl TaskCollection {
         task_collection
     }
 
-    /// 插入一个Future, 其优先级为 DEFAULT_PRIORITY
+    /// Insert a Future with DEFAULT_PRIORITY.
     pub fn add_task<F: Future<Output = ()> + 'static + Send>(&self, future: F) -> usize {
         self.priority_add_task(DEFAULT_PRIORITY, future)
     }

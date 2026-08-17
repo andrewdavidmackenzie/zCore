@@ -28,7 +28,7 @@ impl VmarExt for VmAddressRegion {
             let offset = ph.virtual_addr() as usize / PAGE_SIZE * PAGE_SIZE;
             let flags = ph.flags().to_mmu_flags();
             trace!("ph:{:#x?}, offset:{:#x?}, flags:{:#x?}", ph, offset, flags);
-            //映射vmo物理内存块到 VMAR
+            // Map VMO into VMAR at the computed offset
             self.map_at(offset, vmo.clone(), 0, vmo.len(), flags)?;
             debug!("Map [{:x}, {:x})", offset, offset + vmo.len());
             first_vmo.get_or_insert(vmo);
@@ -73,7 +73,7 @@ impl FlagsExt for Flags {
 fn make_vmo(elf: &ElfFile, ph: ProgramHeader) -> ZxResult<Arc<VmObject>> {
     assert_eq!(ph.get_type().unwrap(), Type::Load);
     let page_offset = ph.virtual_addr() as usize % PAGE_SIZE;
-    // (VirtAddr余数 + MemSiz)的pages
+    // Pages needed for (VirtAddr remainder + MemSiz)
     let pages = pages(ph.mem_size() as usize + page_offset);
     trace!(
         "VmObject new pages: {:#x}, virtual_addr: {:#x}",
@@ -85,7 +85,7 @@ fn make_vmo(elf: &ElfFile, ph: ProgramHeader) -> ZxResult<Arc<VmObject>> {
         SegmentData::Undefined(data) => data,
         _ => return Err(ZxError::INVALID_ARGS),
     };
-    //调用 VMObjectTrait.write, 分配物理内存，后写入程序数据
+    // Call VMObjectTrait.write to allocate physical memory and write program data
     vmo.write(page_offset, data)?;
     Ok(vmo)
 }

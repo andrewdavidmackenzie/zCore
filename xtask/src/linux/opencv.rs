@@ -5,9 +5,9 @@ use std::{fs, path::Path};
 
 impl super::LinuxRootfs {
     pub fn put_ffmpeg(&self) {
-        // 递归 rootfs
+        // Recursively build rootfs
         let musl = self.put_musl_libs();
-        // 拉 ffmpeg
+        // Clone ffmpeg
         let ffmpeg = REPOS.join("ffmpeg");
         if !ffmpeg.is_dir() {
             fetch_online!(ffmpeg, |tmp| {
@@ -19,10 +19,10 @@ impl super::LinuxRootfs {
                     .done()
             });
         }
-        // 拷贝到目标路径
+        // Copy to target path
         let build = self.0.target().join("ffmpeg");
         dircpy::copy_dir(ffmpeg, &build).unwrap();
-        // 构建
+        // Build
         match self.0 {
             Arch::Riscv64 => {
                 let path_with_musl_gcc = join_path_env(&[musl.join("bin")]);
@@ -44,20 +44,20 @@ impl super::LinuxRootfs {
                     .invoke();
                 Make::install()
                     .current_dir(&build)
-                    .j(num_cpus::get().min(8)) // 不能用太多线程，以免爆内存
+                    .j(num_cpus::get().min(8)) // Limit threads to avoid running out of memory
                     .env("PATH", path_with_musl_gcc)
                     .invoke();
             }
             Arch::X86_64 | Arch::Aarch64 => todo!(),
         }
-        // 拷贝
+        // Copy libraries
         self.put_libs(musl, build.join("install"));
     }
 
     pub fn put_opencv(&self) {
-        // 递归 rootfs
+        // Recursively build rootfs
         let musl = self.put_musl_libs();
-        // 拉 opencv
+        // Clone opencv
         let opencv = REPOS.join("opencv");
         if !opencv.is_dir() {
             fetch_online!(opencv, |tmp| {
@@ -70,21 +70,21 @@ impl super::LinuxRootfs {
         }
         let source = opencv.canonicalize().unwrap();
         let target = self.0.target().join("opencv");
-        // 如果 Makefile 未生成，重新执行 cmake
+        // Re-run cmake if no Makefile was generated
         let cmake_needed = !target.join("Makefile").is_file();
-        // 如果执行了 cmake 或安装目录不存在，需要 make
+        // Run make if cmake was executed or the install directory does not exist
         let install_needed = cmake_needed || !target.join("install").is_dir();
-        // 工具链
+        // Toolchain
         let path_with_musl_gcc = join_path_env(&[musl.join("bin")]);
         //
         if cmake_needed {
             dir::clear(&target).unwrap();
-            // ffmpeg 路径
+            // ffmpeg path
             let ffmpeg = self.0.target().join("ffmpeg").join("install").join("lib");
-            // 创建平台相关 cmake
+            // Create platform-specific cmake toolchain file
             let platform_cmake = self.0.target().join("musl-gcc.toolchain.cmake");
             fs::write(&platform_cmake, self.opencv_cmake(&ffmpeg)).unwrap();
-            // 执行
+            // Execute
             let mut cmake = Ext::new("cmake");
             if ffmpeg.is_dir() {
                 cmake.env(
@@ -112,17 +112,17 @@ impl super::LinuxRootfs {
         if install_needed {
             Make::install()
                 .current_dir(&target)
-                .j(num_cpus::get().min(8)) // 不能用太多线程，以免爆内存
+                .j(num_cpus::get().min(8)) // Limit threads to avoid running out of memory
                 .env("PATH", path_with_musl_gcc)
                 .invoke();
         }
-        // 拷贝
+        // Copy libraries
         self.put_libs(musl, target.join("install"));
     }
 
-    /// 构造一个用于 opencv 构建的 cmake 文件。
+    /// Generates a cmake toolchain file for the opencv build.
     fn opencv_cmake(&self, ffmpeg: impl AsRef<Path>) -> String {
-        // 不会写 cmake
+        // cmake is tricky
         if !matches!(self.0, Arch::Riscv64) {
             todo!();
         }

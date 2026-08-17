@@ -440,9 +440,11 @@ impl Syscall<'_> {
         info!("statfs: path={:?}, buf={:?}", path, buf);
 
         // TODO
-        // 现在 `path` 没用到，因为没实现真正的挂载，不可能搞一个非主要文件系统的路径。
-        // 实现挂载之后，要用 `path` 分辨路径在哪个文件系统里，根据对应文件系统的特性返回统计信息。
-        // （以及根据挂载选项填写 `StatFs::f_flags`！）
+        // Currently `path` is not used to select a filesystem because real
+        // mounting is not implemented. After mounting support is added, use
+        // `path` to determine which filesystem the path belongs to, return
+        // stats for that filesystem, and fill in `StatFs::f_flags` from
+        // mount options.
 
         let info = self.linux_process().root_inode().fs().info();
         buf.write(info.into())?;
@@ -484,7 +486,7 @@ pub struct StatFs {
     f_spare: [isize; 4],
 }
 
-// 保证 `StatFs` 的定义和常见的 linux 一致
+// Ensure `StatFs` layout is consistent with standard Linux
 static_assertions::const_assert_eq!(120, core::mem::size_of::<StatFs>());
 
 impl From<FsInfo> for StatFs {
@@ -498,7 +500,7 @@ impl From<FsInfo> for StatFs {
             f_bavail: info.bavail as _,
             f_files: info.files as _,
             f_ffree: info.ffree as _,
-            // 一个由 OS 决定的号码，用于区分文件系统
+            // OS-assigned identifier used to distinguish filesystems
             f_fsid: (0, 0),
             f_namelen: info.namemax as _,
             f_frsize: info.frsize as _,

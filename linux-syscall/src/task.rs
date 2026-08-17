@@ -317,8 +317,8 @@ impl Syscall<'_> {
 
         proc.remove_cloexec_files();
 
-        // 注意！即将销毁旧应用程序的用户空间，现在将必要的信息拷贝到内核！
-        // Notice! About to destroy the user space of the old application, now copy the necessary information into kernel!
+        // WARNING: About to destroy the old application's user space.
+        // Copy all necessary information into kernel space now!
         let path = path.to_string();
         let vmar = self.zircon_process().vmar();
         vmar.clear()?;

@@ -49,14 +49,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// 设置 git 代理。Sets git proxy.
-    ///
-    /// 通过 `--port` 传入代理端口，或者不传入端口以清除代理设置。
+    /// Sets git proxy.
     ///
     /// Input your proxy port through `--port`,
     /// or leave blank to unset it.
-    ///
-    /// 设置 `--global` 修改全局设置。
     ///
     /// Set `--global` for global configuration.
     ///
@@ -71,7 +67,7 @@ enum Commands {
     /// ```
     GitProxy(ProxyPort),
 
-    /// 打印构建信息。Dumps build config.
+    /// Dumps build config.
     ///
     /// ## Example
     ///
@@ -81,7 +77,7 @@ enum Commands {
     #[cfg(not(target_arch = "riscv64"))]
     Dump,
 
-    /// 下载 zircon 模式需要的二进制文件。Download zircon binaries.
+    /// Download zircon binaries.
     ///
     /// ## Example
     ///
@@ -90,7 +86,7 @@ enum Commands {
     /// ```
     ZirconInit,
 
-    /// 更新工具链、依赖和子项目。Updates toolchain, dependencies and submodules.
+    /// Updates toolchain, dependencies and submodules.
     ///
     /// # Example
     ///
@@ -99,9 +95,7 @@ enum Commands {
     /// ```
     UpdateAll,
 
-    /// 静态检查。Checks code without running.
-    ///
-    /// 设置多种编译选项，检查代码能否编译。
+    /// Checks code without running.
     ///
     /// Try to compile the project with various different features.
     ///
@@ -112,9 +106,7 @@ enum Commands {
     /// ```
     CheckStyle,
 
-    /// 生成内核反汇编文件。Dumps the asm of kernel.
-    ///
-    /// 默认保存到 `target/zcore.asm`。
+    /// Dumps the kernel disassembly.
     ///
     /// The default output is `target/zcore.asm`.
     ///
@@ -125,9 +117,7 @@ enum Commands {
     /// ```
     Asm(OutArgs),
 
-    /// 生成内核 raw 镜像到指定位置。Strips kernel binary for specific architecture.
-    ///
-    /// 默认输出到 `target/{arch}/release/zcore.bin`。
+    /// Strips kernel binary for specific architecture.
     ///
     /// The default output is `target/{arch}/release/zcore.bin`.
     ///
@@ -138,7 +128,7 @@ enum Commands {
     /// ```
     Bin(OutArgs),
 
-    /// 在 qemu 中启动 zCore。Runs zCore in qemu.
+    /// Runs zCore in qemu.
     ///
     /// # Example
     ///
@@ -147,7 +137,7 @@ enum Commands {
     /// ```
     Qemu(QemuArgs),
 
-    /// 启动 gdb 并连接到指定端口。Launches gdb and connects to a port.
+    /// Launches gdb and connects to a port.
     ///
     /// # Example
     ///
@@ -156,9 +146,7 @@ enum Commands {
     /// ```
     Gdb(GdbArgs),
 
-    /// 重建 Linux rootfs。Rebuilds the linux rootfs.
-    ///
-    /// 这个命令会清除已有的为此架构构造的 rootfs 目录，重建最小的 rootfs。
+    /// Rebuilds the linux rootfs.
     ///
     /// This command will remove the existing rootfs directory for this architecture,
     /// and rebuild the minimum rootfs.
@@ -170,7 +158,7 @@ enum Commands {
     /// ```
     Rootfs(ArchArg),
 
-    /// 将 musl 动态库拷贝到 rootfs 目录对应位置。Copies musl so files to rootfs directory.
+    /// Copies musl so files to rootfs directory.
     ///
     /// # Example
     ///
@@ -179,7 +167,7 @@ enum Commands {
     /// ```
     MuslLibs(ArchArg),
 
-    /// 将 ffmpeg 动态库拷贝到 rootfs 目录对应位置。Copies ffmpeg so files to rootfs directory.
+    /// Copies ffmpeg so files to rootfs directory.
     ///
     /// # Example
     ///
@@ -188,9 +176,7 @@ enum Commands {
     /// ```
     Ffmpeg(ArchArg),
 
-    /// 将 opencv 动态库拷贝到 rootfs 目录对应位置。Copies opencv so files to rootfs directory.
-    ///
-    /// 如果 ffmpeg 已经放好了，opencv 将会编译出包含 ffmepg 支持的版本。
+    /// Copies opencv so files to rootfs directory.
     ///
     /// If ffmpeg is already there, this opencv will build with ffmpeg support.
     ///
@@ -201,7 +187,7 @@ enum Commands {
     /// ```
     Opencv(ArchArg),
 
-    /// 将 libc 测试集拷贝到 rootfs 目录对应位置。Copies libc test files to rootfs directory.
+    /// Copies libc test files to rootfs directory.
     ///
     /// # Example
     ///
@@ -210,7 +196,7 @@ enum Commands {
     /// ```
     LibcTest(ArchArg),
 
-    /// 将其他测试集拷贝到 rootfs 目录对应位置。Copies other test files to rootfs directory.
+    /// Copies other test files to rootfs directory.
     ///
     /// # Example
     ///
@@ -219,7 +205,7 @@ enum Commands {
     /// ```
     OtherTest(ArchArg),
 
-    /// 构造 Linux rootfs 镜像文件。Builds the linux rootfs image file.
+    /// Builds the linux rootfs image file.
     ///
     /// # Example
     ///
@@ -228,10 +214,8 @@ enum Commands {
     /// ```
     Image(ArchArg),
 
-    /// 构造 libos 需要的 rootfs 并放入 libc test。Builds the libos rootfs and puts it into libc test.
+    /// Builds the libos rootfs and puts it into libc test.
     ///
-    /// > **注意** 这可能不是这个命令的最终形态，因此这个命令没有别名。
-    /// >
     /// > **NOTICE** This may not be the final form of this command, so this command has no alias.
     ///
     /// # Example
@@ -241,10 +225,8 @@ enum Commands {
     /// ```
     LibosLibcTest,
 
-    /// 在 linux libos 模式下启动 zCore 并执行位于指定路径的应用程序。Runs zCore in linux libos mode and runs the executable at the specified path.
+    /// Runs zCore in linux libos mode and runs the executable at the specified path.
     ///
-    /// > **注意** libos 模式只能执行单个应用程序，完成就会退出。
-    /// >
     /// > **NOTICE** zCore can only run a single executable in libos mode, and it will exit after finishing.
     ///
     /// # Example
@@ -290,7 +272,7 @@ fn main() {
 
         Rootfs(arg) => arg.linux_rootfs().make(true),
         MuslLibs(arg) => {
-            // 丢弃返回值
+            // Discard return value
             arg.linux_rootfs().put_musl_libs();
         }
         Opencv(arg) => arg.linux_rootfs().put_opencv(),
@@ -301,7 +283,7 @@ fn main() {
 
         Asm(args) => args.asm(),
         Bin(args) => {
-            // 丢弃返回值
+            // Discard return value
             args.bin();
         }
         Qemu(args) => args.qemu(),
@@ -315,13 +297,13 @@ fn main() {
     }
 }
 
-/// 更新子项目。
+/// Updates submodules.
 fn git_submodule_update(init: bool) {
     use os_xtask_utils::{CommandExt, Git};
     Git::submodule_update(init).invoke();
 }
 
-/// 下载 zircon 模式所需的测例和库
+/// Downloads test cases and libraries required for zircon mode.
 fn install_zircon_prebuilt() {
     use commands::wget;
     use os_xtask_utils::{dir, CommandExt, Tar};
@@ -329,7 +311,7 @@ fn install_zircon_prebuilt() {
         "https://github.com/rcore-os/zCore/releases/download/prebuilt-2208/prebuilt.tar.xz";
     let tar = Arch::X86_64.origin().join("prebuilt.tar.xz");
     wget(URL, &tar);
-    // 解压到目标路径
+    // Extract to target path
     let dir = PROJECT_DIR.join("prebuilt");
     let target = TARGET.join("zircon");
     dir::rm(&dir).unwrap();
@@ -339,7 +321,7 @@ fn install_zircon_prebuilt() {
     dircpy::copy_dir(target.join("prebuilt"), dir).unwrap();
 }
 
-/// 更新工具链和依赖。
+/// Updates toolchain and dependencies.
 fn update_all() {
     use os_xtask_utils::{Cargo, CommandExt, Ext};
     git_submodule_update(false);
@@ -347,7 +329,7 @@ fn update_all() {
     Cargo::update().invoke();
 }
 
-/// 设置 git 代理。
+/// Sets git proxy.
 fn set_git_proxy(global: bool, port: u16) {
     use os_xtask_utils::{CommandExt, Git};
     let dns = fs::read_to_string("/etc/resolv.conf")
@@ -364,7 +346,7 @@ fn set_git_proxy(global: bool, port: u16) {
     println!("git proxy = {proxy}");
 }
 
-/// 移除 git 代理。
+/// Unsets git proxy.
 fn unset_git_proxy(global: bool) {
     use os_xtask_utils::{CommandExt, Git};
     Git::config(global)
@@ -376,7 +358,7 @@ fn unset_git_proxy(global: bool) {
     println!("git proxy =");
 }
 
-/// 风格检查。
+/// Checks code style.
 fn check_style() {
     use os_xtask_utils::{Cargo, CommandExt};
     println!("Check workspace");
@@ -412,19 +394,19 @@ mod libos {
     use os_xtask_utils::{dir, Cargo, CommandExt, Tar};
     use std::fs;
 
-    /// 部署 libos 使用的 rootfs。
+    /// Deploys the rootfs used by libos.
     pub(super) fn rootfs(clear: bool) {
-        // 下载
+        // Download
         const URL: &str =
             "https://github.com/YdrMaster/zCore/releases/download/musl-cache/rootfs-libos.tar.gz";
         let origin = ARCHS.join("libos").join("rootfs-libos.tar.gz");
         dir::create_parent(&origin).unwrap();
         wget(URL, &origin);
-        // 解压
+        // Extract
         let target = TARGET.join("libos");
         fs::create_dir_all(&target).unwrap();
         Tar::xf(origin.as_os_str(), Some(&target)).invoke();
-        // 拷贝
+        // Copy
         const ROOTFS: &str = "rootfs/libos";
         if clear {
             dir::clear(ROOTFS).unwrap();
@@ -432,7 +414,7 @@ mod libos {
         dircpy::copy_dir(target.join("rootfs"), ROOTFS).unwrap();
     }
 
-    /// 将 x86_64 的 libc-test 复制到 libos。
+    /// Copies the x86_64 libc-test into libos.
     pub(super) fn put_libc_test() {
         const TARGET: &str = "rootfs/libos/libc-test";
         let x86_64 = LinuxRootfs::new(Arch::X86_64);
@@ -441,11 +423,11 @@ mod libos {
         dircpy::copy_dir(x86_64.path().join("libc-test"), TARGET).unwrap();
     }
 
-    /// libos 模式执行应用程序。
+    /// Runs an application in libos mode.
     pub(super) fn linux_run(args: String) {
         println!("{}", std::env!("OUT_DIR"));
         rootfs(false);
-        // 启动！
+        // Launch!
         Cargo::run()
             .package("zcore")
             .release()

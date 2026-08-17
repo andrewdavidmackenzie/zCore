@@ -9,15 +9,15 @@ pub(super) const SUPERVISOR_TIMER_INT_VEC: usize = 5; // scause::Interrupt::Supe
 fn breakpoint(sepc: &mut usize) {
     info!("Exception::Breakpoint: A breakpoint set @0x{:x} ", sepc);
 
-    //sepc为触发中断指令ebreak的地址
-    //防止无限循环中断，让sret返回时跳转到sepc的下一条指令地址
+    // sepc holds the address of the ebreak instruction that triggered the exception.
+    // Advance past it to prevent an infinite breakpoint loop when sret returns.
     *sepc += 2
 }
 
 pub(super) fn super_timer() {
     super::timer::timer_set_next();
     crate::timer::timer_tick();
-    //发生外界中断时，epc的指令还没有执行，故无需修改epc到下一条
+    // On a supervisor timer interrupt, the instruction at sepc has not yet executed, so no sepc adjustment is needed.
 }
 
 pub(super) fn super_soft() {

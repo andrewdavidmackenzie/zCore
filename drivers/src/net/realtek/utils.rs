@@ -16,21 +16,21 @@ pub fn invalidate_dcache(addr: u64, size: u64) {
     invalidate_dcache_range(addr, addr + size);
 }
 
-// 注意start输入物理地址
+// Note: start takes a physical address
 pub fn flush_dcache_range(start: u64, end: u64) {
-    // CACHE_LINE 64对齐
+    // Align to 64-byte cache line
     let end = (end + (CACHE_LINE_SIZE - 1)) & !(CACHE_LINE_SIZE - 1);
 
-    // 地址对齐到L1 Cache的节
+    // Align address to L1 cache line boundary
     let mut i: u64 = start & !(L1_CACHE_BYTES - 1);
     while i < end {
         unsafe {
-            // 老风格的llvm asm
-            // DCACHE 指定物理地址清脏表项
+            // Old-style llvm asm
+            // DCACHE clean dirty entry at specified physical address
             // llvm_asm!("dcache.cpa $0"::"r"(i));
 
-            // 新asm
-            asm!(".long 0x0295000b", in("a0") i); // dcache.cpa a0, 因编译器无法识别该指令
+            // New asm
+            asm!(".long 0x0295000b", in("a0") i); // dcache.cpa a0, because the compiler cannot recognize this instruction
         }
 
         i += L1_CACHE_BYTES;
@@ -43,13 +43,13 @@ pub fn flush_dcache_range(start: u64, end: u64) {
     }
 }
 
-// start 物理地址
+// start: physical address
 pub fn invalidate_dcache_range(start: u64, end: u64) {
     let end = (end + (CACHE_LINE_SIZE - 1)) & !(CACHE_LINE_SIZE - 1);
     let mut i: u64 = start & !(L1_CACHE_BYTES - 1);
     while i < end {
         unsafe {
-            //llvm_asm!("dcache.ipa $0"::"r"(i)); // DCACHE 指定物理地址无效表项
+            //llvm_asm!("dcache.ipa $0"::"r"(i)); // DCACHE invalidate entry at specified physical address
             asm!(".long 0x02a5000b", in("a0") i); // dcache.ipa a0
         }
 
@@ -75,7 +75,7 @@ pub fn get_cycle() -> u64 {
 
 // Timer, Freq = 24000000Hz
 // TIMER_CLOCK = (24 * 1000 * 1000)
-// 微秒(us)
+// Microseconds (us)
 pub fn usdelay(us: u64) {
     let mut t1: u64 = get_cycle();
     let t2 = t1 + us * 24;
@@ -85,7 +85,7 @@ pub fn usdelay(us: u64) {
     }
 }
 
-// 毫秒(ms)
+// Milliseconds (ms)
 #[allow(unused)]
 pub fn msdelay(ms: u64) {
     usdelay(ms * 1000);

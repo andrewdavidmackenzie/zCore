@@ -1,18 +1,18 @@
-// 解析设备树，创建已知的设备并为它们注册中断。
+// Parse the device tree, create known devices, and register interrupts for them.
 //
-// 涉及到中断的设备包括：
+// Devices involving interrupts include:
 //
-// - 接收中断的中断控制器
-// - 发出中断的设备
+// - Interrupt controllers that receive interrupts
+// - Devices that raise interrupts
 //
-// 有效的中断控制器应该具有下列三个属性：
+// A valid interrupt controller should have the following three properties:
 //
-// - `interrupt-controller`: 指示这是一个中断控制器
-// - `interrupt-cells`: 只是要向此控制器注册中断需要几个参数
-// - `phandle`: 向此控制器注册中断时使用的一个号码，如果没有设备需要向它注册，可能不存在
+// - `interrupt-controller`: indicates this is an interrupt controller
+// - `#interrupt-cells`: specifies how many parameters are needed to register an interrupt with this controller
+// - `phandle`: a number used when registering interrupts with this controller; may not exist if no device needs to register with it
 //
-// 设备注册中断需要 `interrupts_extended` 属性，这是一个 `Vec<u32>`，形式为 `[{phandle, ...,}*]`，
-// 即控制器引用和控制器指定数量的参数。
+// Registering interrupts for a device requires the `interrupts_extended` property, which is a `Vec<u32>` in the form `[{phandle, ...,}*]`,
+// i.e., a controller reference followed by the number of parameters specified by that controller.
 //! Probe devices and create drivers from device tree.
 //!
 //! Specification: <https://github.com/devicetree-org/devicetree-specification/releases/download/v0.3/devicetree-specification-v0.3.pdf>.
@@ -30,13 +30,13 @@ const MODULE: &str = "device-tree";
 
 type DevWithInterrupt = (Device, InterruptsProp);
 
-/// 设备树中中断控制器特有的属性
+/// Interrupt controller-specific properties from the device tree
 struct IntcProps {
     phandle: u32,
     interrupt_cells: u32,
 }
 
-/// 查找表保存的中断控制器信息
+/// Interrupt controller info stored in the lookup table
 struct Intc {
     index: usize,
     cells: usize,
@@ -62,8 +62,8 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
         let mut intc_map = BTreeMap::new(); // phandle -> intc
         let mut dev_list = Vec::new(); // devices
 
-        // 为 d1 启动 uart5
-        // 硬编码只是一个临时的方案
+        // Enable uart5 for D1
+        // Hard-coding is just a temporary solution
         #[cfg(feature = "allwinner")]
         {
             use d1_pac::{ccu::RegisterBlock as Ccu, gpio::RegisterBlock as Gpio, CCU, GPIO};
@@ -104,7 +104,7 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
             );
         }
 
-        // 解析设备树
+        // Parse the device tree
         self.dt.walk(&mut |node, comp, props| {
             debug!(
                 "{MODULE}: parsing node {:?} with compatible {comp:?}",
@@ -144,10 +144,10 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
             }
         });
 
-        // 注册中断
+        // Register interrupts
         for (device, interrupts_extended) in &dev_list {
             let mut extended = interrupts_extended.as_slice();
-            // 分解 interrupts_extended
+            // Decompose interrupts_extended
             while let [phandle, irq_num, ..] = extended {
                 if let Some(Intc { index, cells }) = intc_map.get(phandle) {
                     let (intc, _) = &dev_list[*index];
@@ -172,7 +172,7 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
             }
         }
 
-        // 丢弃中断信息
+        // Discard interrupt info
         Ok(dev_list.into_iter().map(|(dev, _)| dev).collect())
     }
 

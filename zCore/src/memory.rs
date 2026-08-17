@@ -12,7 +12,7 @@ use customizable_buddy::{BuddyAllocator, LinkedListBuddy, UsizeBuddy};
 use kernel_hal::PhysAddr;
 use lock::Mutex;
 
-/// 堆分配器。
+/// Heap allocator.
 ///
 /// 27 + 6 + 3 = 36 -> 64 GiB
 struct LockedHeap(Mutex<BuddyAllocator<27, UsizeBuddy, LinkedListBuddy>>);
@@ -20,12 +20,12 @@ struct LockedHeap(Mutex<BuddyAllocator<27, UsizeBuddy, LinkedListBuddy>>);
 #[global_allocator]
 static HEAP: LockedHeap = LockedHeap(Mutex::new(BuddyAllocator::new()));
 
-/// 单页地址位数。
+/// Number of page-offset bits (log2 of page size).
 const PAGE_BITS: usize = 12;
 
-/// 为启动准备的初始内存。
+/// Initial memory reserved for boot.
 ///
-/// 经测试，不同硬件的需求：
+/// Tested memory requirements for different hardware:
 ///
 /// | machine         | memory
 /// | --------------- | -
@@ -52,7 +52,7 @@ unsafe impl GlobalAlloc for LockedHeap {
     }
 }
 
-/// 初始化分配器，并将一个小的内存块注册到分配器中，用于启动需要的动态内存。
+/// Initialize the allocator and register a small memory block for dynamic memory needed during boot.
 pub fn init() {
     unsafe {
         log::info!("MEMORY = {:#?}", MEMORY.as_ptr_range());
@@ -63,7 +63,7 @@ pub fn init() {
     }
 }
 
-/// 将一些内存区域注册到分配器。
+/// Register memory regions with the allocator.
 pub fn insert_regions(regions: &[Range<PhysAddr>]) {
     let mut heap = HEAP.0.lock();
     let offset = phys_to_virt_offset();

@@ -56,7 +56,7 @@ impl UartScheme for UartAllwinner {
 struct Inner(VirtAddr);
 
 impl Inner {
-    /// 初始化串口控制器
+    /// Initialize the UART controller
     /// BAUD 115200
     /// FIFO ON
     fn init(&self) {
@@ -91,7 +91,7 @@ impl Inner {
         block.ier().write(|w| w.erbfi().set_bit());
     }
 
-    /// 接收
+    /// Receive
     fn try_recv(&self) -> DeviceResult<Option<u8>> {
         let block = self.block();
         if block.lsr.read().dr().bit_is_set() {
@@ -101,10 +101,10 @@ impl Inner {
         }
     }
 
-    /// 发送
+    /// Send
     fn send(&self, ch: u8) -> DeviceResult {
         let block = self.block();
-        // 等待 FIFO 空位
+        // Wait for FIFO space
         while block.usr.read().tfnf().is_full() {
             core::hint::spin_loop();
         }

@@ -764,7 +764,7 @@ impl VmMapping {
             let vmo_offset = inner.vmo_offset / PAGE_SIZE;
             for i in 0..page_num {
                 let paddr = commit(vmo_offset + i, inner.flags[i])?;
-                //通过GenericPageTable的hal_pt_map进行页表映射
+                // Perform page table mapping via GenericPageTable's hal_pt_map
                 page_table
                     .map(
                         Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::Size4K),
@@ -964,8 +964,11 @@ impl VmMapping {
         if !flags.contains(access_flags) {
             return Err(ZxError::ACCESS_DENIED);
         }
-        // 当 PF 发生的时候，如果只要求读权限，则即便可写也现只给读权限。
-        // 这是由于 COW 会去掉写权限来在写的时候触发 PF，如果直接把 flags 放进去，会导致 COW 的这个操作失效。
+        // When a page fault occurs and only read access was requested,
+        // grant only read permission even if the mapping is writable.
+        // COW (copy-on-write) clears the write flag so that a subsequent
+        // write triggers a new page fault; granting write here would
+        // bypass that mechanism.
         if !access_flags.contains(MMUFlags::WRITE) {
             flags.remove(MMUFlags::WRITE);
         }
@@ -982,7 +985,7 @@ impl VmMapping {
 
     /// Clone VMO and map it to a new page table. (For Linux)
     fn clone_map(&self, page_table: Arc<Mutex<dyn GenericPageTable>>) -> ZxResult<Arc<Self>> {
-        //这里调用 hal protect 后, protect() 好像会破坏页表
+        // After calling hal protect here, protect() appears to corrupt the page table
         let new_vmo = self.vmo.create_child(false, 0, self.vmo.len())?;
         let mapping = Arc::new(VmMapping {
             inner: Mutex::new(self.inner.lock().clone()),

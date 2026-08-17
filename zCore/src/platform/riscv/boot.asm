@@ -4,14 +4,14 @@
 	.section .text.entry
 	.globl _start
 _start:
-	#关中断
+	#Disable interrupts
 	csrw sie, zero
 	csrw sip, zero
 
-	#关闭mmu
+	# MMU disable (currently commented out)
 	#csrw satp, zero
 
-	#BSS节清零
+	#Zero the BSS segment
 	la t0, sbss
 	la t1, ebss
 	bgeu t0, t1, primary_hart
@@ -42,24 +42,24 @@ secondary_hart_start:
 	jr t0
 
 init_vm:
-	#获取页表的物理地址
+	#Get the physical address of the page table
 	la t0, boot_page_table_sv39
 
-	#右移12位，变为satp的PPN
+	#Right shift by 12 bits to get the satp PPN
 	srli t0, t0, 12
 
-	#satp的MODE设为Sv39
+	#Set satp MODE to Sv39
 	li t1, 8 << 60
 
-	#写satp
+	# Combine PPN and mode bits, then write satp to enable paging
 	or t0, t0, t1
 
-	#刷新TLB
+	#Flush TLB
 	sfence.vma
 
 	csrw satp, t0
 
-	#此时在虚拟内存空间，设置sp为虚拟地址
+	#Now in virtual memory space, set sp to a virtual address
 	li t0, STACK_MAX
 	mul t0, t0, a0
 
@@ -68,17 +68,17 @@ init_vm:
 	ld t2, (t2)
 	add sp, t1, t2
 
-	#计算多个核的sp偏移
+	#Calculate the sp offset for multiple harts
 	sub sp, sp, t0
 	ret
 
 	.section .data
-	.align 12 #12位对齐
+	.align 12 #12-bit alignment
 boot_page_table_sv39:
-	#1G的一个大页: 0x00000000_00000000 --> 0x00000000
-	#1G的一个大页: 0x00000000_80000000 --> 0x80000000
-	#1G的一个大页: 0xffffffe0_00000000 --> 0x00000000
-	#1G的一个大页: 0xffffffe0_80000000 --> 0x80000000
+	#1G huge page: 0x00000000_00000000 --> 0x00000000
+	#1G huge page: 0x00000000_80000000 --> 0x80000000
+	#1G huge page: 0xffffffe0_00000000 --> 0x00000000
+	#1G huge page: 0xffffffe0_80000000 --> 0x80000000
 
 	.quad (0 << 10) | 0xef
 	.zero 8

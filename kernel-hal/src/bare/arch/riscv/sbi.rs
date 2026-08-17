@@ -103,14 +103,14 @@ pub fn uart_put(c: u8) {
         //LSR bit:THRE
         while ptr.add(5).read_volatile() & (1 << 5) == 0 {}
 
-        //此时transmitter empty, THR有效位是8
+        // Transmitter is empty; THR (Transmit Holding Register) uses the lower 8 bits.
         ptr.add(0).write_volatile(c as u32);
     }
 }
 pub fn uart_get() -> Option<u8> {
     let ptr = BADDR as *mut u32;
     unsafe {
-        //查看LSR的DR位为1则有数据
+        // Check LSR DR (Data Ready) bit; if set, data is available.
         if ptr.add(5).read_volatile() & 0b1 == 0 {
             None
         } else {
