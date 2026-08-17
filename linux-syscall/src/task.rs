@@ -91,11 +91,15 @@ impl Syscall<'_> {
 
         let new_proc: Arc<dyn KernelObject> = new_proc;
         info!(
-            "vfork: {} -> {}. Waiting for execve SIGNALED",
+            "vfork: {} -> {}. Waiting for execve or exit",
             self.zircon_process().id(),
             new_proc.id()
         );
-        new_proc.wait_signal(Signal::SIGNALED).await; // wait for execve
+        // Wait for either: child calls execve (sets SIGNALED) or
+        // child exits (sets PROCESS_TERMINATED). Both resume the parent.
+        new_proc
+            .wait_signal(Signal::SIGNALED | Signal::PROCESS_TERMINATED)
+            .await;
         Ok(new_proc.id() as usize)
     }
 
@@ -107,6 +111,7 @@ impl Syscall<'_> {
     /// > **NOTE!** This system call is not exactly the same as `clone` in Linux.
     ///
     /// > **NOTE!** This is partially implemented for `musl` only.
+    /// `sys_clone` create a new thread or process.
     pub fn sys_clone(
         &self,
         flags: usize,
@@ -121,8 +126,7 @@ impl Syscall<'_> {
             flags, newsp, parent_tid, child_tid, newtls
         );
 
-        // Fork-like clone: no CLONE_VM, or CLONE_VFORK (which needs fork
-        // semantics even though it sets CLONE_VM on Linux for COW sharing).
+        // Fork-like clone: no CLONE_VM, or CLONE_VFORK, or no CLONE_THREAD.
         if !clone_flags.contains(CloneFlags::VM)
             || clone_flags.contains(CloneFlags::VFORK)
             || !clone_flags.contains(CloneFlags::THREAD)
@@ -334,9 +338,11 @@ impl Syscall<'_> {
         .load(&vmar, &data, args, envs, path)?;
         proc.set_brk(initial_brk);
 
-        // Note: Linux resets signal dispositions to SIG_DFL on exec and
-        // signals the parent. The SIGNALED signal is commented out as a
-        // workaround for child process exit issues.
+        // Signal the parent process that exec has completed.
+        // This is needed for vfork: the parent waits for SIGNALED
+        // before resuming execution.
+        self.zircon_process().signal_set(Signal::SIGNALED);
+
         self.thread
             .with_context(|ctx| ctx.setup_uspace(entry, sp, &[0, 0, 0]))?;
         Ok(0)
