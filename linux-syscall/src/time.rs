@@ -7,6 +7,7 @@ use kernel_hal::{user::UserInPtr, user::UserOutPtr};
 use linux_object::error::LxError;
 use linux_object::error::SysResult;
 use linux_object::signal::Signal as LinuxSignal;
+use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 
 const USEC_PER_TICK: usize = 10000;
@@ -293,6 +294,10 @@ impl Syscall<'_> {
         );
         use core::time::Duration;
         use kernel_hal::{thread, timer};
+        // Check for pending signals before sleeping
+        if self.thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
+        }
         let duration: Duration = req.read()?.into();
         let clockid = ClockId::from(clockid);
         let flags = ClockFlags::from(flags);
@@ -328,6 +333,10 @@ impl Syscall<'_> {
             ClockId::ClockBootTime => {}
             ClockId::ClockRealTimeAlarm => {}
             ClockId::ClockBootTimeAlarm => {}
+        }
+        // Check for pending signals after wakeup
+        if self.thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
         }
         Ok(0)
     }

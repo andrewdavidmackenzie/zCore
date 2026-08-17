@@ -2,6 +2,7 @@ use super::*;
 use bitflags::bitflags;
 use core::time::Duration;
 use kernel_hal::timer::timer_now;
+use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 use zircon_object::task::ThreadState;
 
@@ -128,6 +129,10 @@ impl Syscall<'_> {
         let futex = self.linux_process().get_futex(uaddr);
         match op {
             FutexFlags::WAIT => {
+                // Check for pending signals before blocking
+                if self.thread.lock_linux().has_pending_signal() {
+                    return Err(LxError::EINTR);
+                }
                 let future = futex.wait(val as _);
                 let timeout_addr: UserInPtr<TimeSpec> = val2.into();
                 let res = if let Some(timeout) = timeout_addr.read_if_not_null().unwrap() {
@@ -142,6 +147,10 @@ impl Syscall<'_> {
                 } else {
                     future.await
                 };
+                // Check for pending signals after wakeup
+                if self.thread.lock_linux().has_pending_signal() {
+                    return Err(LxError::EINTR);
+                }
                 match res {
                     Ok(_) => Ok(0),
                     Err(e) => Err(e.into()),
