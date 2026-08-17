@@ -365,6 +365,80 @@ impl Syscall<'_> {
         Ok(0)
     }
 
+    /// Change file mode bits by file descriptor.
+    pub fn sys_fchmod(&self, fd: FileDesc, mode: u32) -> SysResult {
+        info!("fchmod: fd={:?}, mode={:#o}", fd, mode);
+        let proc = self.linux_process();
+        let file = proc.get_file(fd)?;
+        let inode = file.inode();
+        let mut metadata = inode.metadata()?;
+        // Only update permission bits (low 12 bits: rwx + setuid/setgid/sticky)
+        metadata.mode = (mode & 0o7777) as u16;
+        inode.set_metadata(&metadata)?;
+        Ok(0)
+    }
+
+    /// Change file mode bits relative to a directory fd.
+    pub fn sys_fchmodat(&self, dirfd: FileDesc, path: UserInPtr<u8>, mode: u32) -> SysResult {
+        let path = path.as_c_str()?;
+        info!(
+            "fchmodat: dirfd={:?}, path={:?}, mode={:#o}",
+            dirfd, path, mode
+        );
+        let proc = self.linux_process();
+        let inode = proc.lookup_inode_at(dirfd, path, true)?;
+        let mut metadata = inode.metadata()?;
+        metadata.mode = (mode & 0o7777) as u16;
+        inode.set_metadata(&metadata)?;
+        Ok(0)
+    }
+
+    /// Change file owner by file descriptor.
+    pub fn sys_fchown(&self, fd: FileDesc, owner: u32, group: u32) -> SysResult {
+        info!("fchown: fd={:?}, owner={}, group={}", fd, owner, group);
+        let proc = self.linux_process();
+        let file = proc.get_file(fd)?;
+        let inode = file.inode();
+        let mut metadata = inode.metadata()?;
+        if owner != u32::MAX {
+            metadata.uid = owner as usize;
+        }
+        if group != u32::MAX {
+            metadata.gid = group as usize;
+        }
+        inode.set_metadata(&metadata)?;
+        Ok(0)
+    }
+
+    /// Change file owner relative to a directory fd.
+    pub fn sys_fchownat(
+        &self,
+        dirfd: FileDesc,
+        path: UserInPtr<u8>,
+        owner: u32,
+        group: u32,
+        flags: usize,
+    ) -> SysResult {
+        let path = path.as_c_str()?;
+        let at_flags = AtFlags::from_bits_truncate(flags);
+        let follow = !at_flags.contains(AtFlags::SYMLINK_NOFOLLOW);
+        info!(
+            "fchownat: dirfd={:?}, path={:?}, owner={}, group={}, flags={:?}",
+            dirfd, path, owner, group, at_flags
+        );
+        let proc = self.linux_process();
+        let inode = proc.lookup_inode_at(dirfd, path, follow)?;
+        let mut metadata = inode.metadata()?;
+        if owner != u32::MAX {
+            metadata.uid = owner as usize;
+        }
+        if group != u32::MAX {
+            metadata.gid = group as usize;
+        }
+        inode.set_metadata(&metadata)?;
+        Ok(0)
+    }
+
     /// change file timestamps with nanosecond precision
     pub fn sys_utimensat(
         &mut self,

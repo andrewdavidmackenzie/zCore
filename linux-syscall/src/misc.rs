@@ -6,7 +6,42 @@ use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 use zircon_object::task::ThreadState;
 
+/// PR_SET_NAME: set the name of the calling thread.
+const PR_SET_NAME: usize = 15;
+/// PR_GET_NAME: get the name of the calling thread.
+const PR_GET_NAME: usize = 16;
+
 impl Syscall<'_> {
+    /// Process control operations.
+    pub fn sys_prctl(&self, option: usize, arg: usize) -> SysResult {
+        info!("prctl: option={}, arg={:#x}", option, arg);
+        match option {
+            PR_SET_NAME => {
+                let name_ptr: UserInPtr<u8> = arg.into();
+                // PR_SET_NAME: read at most 16 bytes (including NUL)
+                let buf = name_ptr.as_slice(16)?;
+                let len = buf.iter().position(|&b| b == 0).unwrap_or(15).min(15);
+                let name = core::str::from_utf8(&buf[..len]).unwrap_or("?");
+                self.thread.set_name(name);
+                Ok(0)
+            }
+            PR_GET_NAME => {
+                let mut name_ptr: UserOutPtr<u8> = arg.into();
+                let name = self.thread.name();
+                let bytes = name.as_bytes();
+                let len = bytes.len().min(15);
+                name_ptr.write_array(&bytes[..len])?;
+                // Write NUL terminator
+                name_ptr.add(len).write(0u8)?;
+                Ok(0)
+            }
+            _ => {
+                warn!("prctl: unsupported option {}", option);
+                Err(LxError::EINVAL)
+            }
+        }
+    }
+
     /// Get the CPU affinity mask of a process.
     /// For single-CPU zCore, returns a mask with only CPU 0 set.
     pub fn sys_sched_getaffinity(

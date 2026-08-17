@@ -106,11 +106,11 @@ impl Syscall<'_> {
             Sys::UNLINKAT => self.sys_unlinkat(a0.into(), a1.into(), a2),
             Sys::SYMLINKAT => self.unimplemented("symlinkat", Err(LxError::EACCES)),
             Sys::READLINKAT => self.sys_readlinkat(a0.into(), a1.into(), a2.into(), a3),
-            // File permission stubs — no-op since we run as root
-            Sys::FCHMOD => Ok(0),
-            Sys::FCHMODAT => Ok(0),
-            Sys::FCHOWN => Ok(0),
-            Sys::FCHOWNAT => Ok(0),
+            // File permission operations
+            Sys::FCHMOD => self.sys_fchmod(a0.into(), a1 as u32),
+            Sys::FCHMODAT => self.sys_fchmodat(a0.into(), a1.into(), a2 as u32),
+            Sys::FCHOWN => self.sys_fchown(a0.into(), a1 as u32, a2 as u32),
+            Sys::FCHOWNAT => self.sys_fchownat(a0.into(), a1.into(), a2 as u32, a3 as u32, a4),
             Sys::FACCESSAT => self.sys_faccessat(a0.into(), a1.into(), a2, a3),
             Sys::DUP => self.sys_dup(a0.into()),
             Sys::DUP3 => self.sys_dup3(a0.into(), a1.into(), a2),
@@ -256,12 +256,12 @@ impl Syscall<'_> {
             Sys::GETGROUPS => Ok(0),
             Sys::SETGROUPS => Ok(0),
             Sys::SETPRIORITY => Ok(0), // scheduling priority — stub
-            Sys::PRCTL => Ok(0),       // process control — stub
-            Sys::MEMBARRIER => Ok(0),  // memory barrier — no-op on single CPU
+            Sys::PRCTL => self.sys_prctl(a0, a1),
+            Sys::MEMBARRIER => Ok(0), // memory barrier — no-op on single CPU
             Sys::PRLIMIT64 => self.sys_prlimit64(a0, a1, a2.into(), a3.into()),
             Sys::REBOOT => self.sys_reboot(a0 as u32, a1 as u32, a2 as u32),
             Sys::GETRANDOM => self.sys_getrandom(a0.into(), a1 as usize, a2 as u32),
-            Sys::RT_SIGQUEUEINFO => Ok(0),
+            Sys::RT_SIGQUEUEINFO => self.sys_rt_sigqueueinfo(a0 as _, a1, a2.into()),
 
             // kernel module — not applicable for zCore
             Sys::INIT_MODULE => Err(LxError::ENOSYS),
