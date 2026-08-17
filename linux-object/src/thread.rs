@@ -284,16 +284,15 @@ impl<'a, F: Future + Unpin> Future for InterruptibleFuture<'a, F> {
     type Output = Result<F::Output, LxError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // Check for pending signals
-        {
-            let linux = self.thread.lock_linux();
-            if linux.has_pending_signal() {
-                return Poll::Ready(Err(LxError::EINTR));
-            }
-        }
-        // Register signal waker so insert_signal() can wake us
+        // Atomically check for pending signals and register the waker.
+        // Both must happen under one lock to prevent a race where a
+        // signal arrives between the check and the waker registration.
         {
             let mut linux = self.thread.lock_linux();
+            if linux.has_pending_signal() {
+                linux.clear_signal_waker();
+                return Poll::Ready(Err(LxError::EINTR));
+            }
             linux.set_signal_waker(cx.waker().clone());
         }
         // Poll the inner future
