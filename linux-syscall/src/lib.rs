@@ -211,6 +211,7 @@ impl Syscall<'_> {
             Sys::TIMER_DELETE => self.sys_timer_delete(a0),
             Sys::GETTIMEOFDAY => self.sys_gettimeofday(a0.into(), a1.into()),
             Sys::CLOCK_GETTIME => self.sys_clock_gettime(a0, a1.into()),
+            Sys::CLOCK_SETTIME => self.sys_clock_settime(a0, a1.into()),
             Sys::CLOCK_GETRES => self.sys_clock_getres(a0, a1.into()),
 
             // sem

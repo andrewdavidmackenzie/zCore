@@ -1,4 +1,5 @@
 use super::*;
+use alloc::vec::Vec;
 use bitflags::*;
 use numeric_enum_macro::numeric_enum;
 use zircon_object::vm::*;
@@ -186,6 +187,26 @@ impl Syscall<'_> {
                     SemctlCmds::SETVAL => {
                         sem.set(arg as isize);
                         sem.set_pid(self.zircon_process().id() as usize);
+                        sem_array.ctime();
+                        Ok(0)
+                    }
+                    SemctlCmds::GETALL => {
+                        // Write all semaphore values to the user-provided array
+                        let nsems = sem_array.semid_ds.lock().nsems;
+                        let mut ptr: UserOutPtr<u16> = UserOutPtr::from(arg);
+                        let values: Vec<u16> =
+                            (0..nsems).map(|i| sem_array[i].get() as u16).collect();
+                        ptr.write_array(&values)?;
+                        Ok(0)
+                    }
+                    SemctlCmds::SETALL => {
+                        // Read all semaphore values from the user-provided array
+                        let nsems = sem_array.semid_ds.lock().nsems;
+                        let ptr: UserInPtr<u16> = UserInPtr::from(arg);
+                        let values = ptr.as_slice(nsems)?;
+                        for (i, &val) in values.iter().enumerate() {
+                            sem_array[i].set(val as isize);
+                        }
                         sem_array.ctime();
                         Ok(0)
                     }

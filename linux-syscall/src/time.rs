@@ -38,13 +38,22 @@ impl Syscall<'_> {
         if buf.is_null() {
             return Err(LxError::EINVAL);
         }
-        // TODO: handle clock_settime
         let ts = TimeSpec::now();
         buf.write(ts)?;
 
         info!("TimeSpec: {:?}", ts);
 
         Ok(0)
+    }
+
+    /// Set the time of the specified clock.
+    ///
+    /// Setting the system clock requires `CAP_SYS_TIME` (root).
+    /// Since zCore always runs as root but does not support clock
+    /// modification, this always returns `EPERM`.
+    pub fn sys_clock_settime(&self, clock: usize, buf: UserInPtr<TimeSpec>) -> SysResult {
+        info!("clock_settime: id={}, buf={:?}", clock, buf);
+        Err(LxError::EPERM)
     }
 
     /// get the time with second and microseconds
