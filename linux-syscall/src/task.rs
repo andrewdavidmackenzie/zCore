@@ -417,6 +417,12 @@ impl Syscall<'_> {
         let duration = req.read()?.into();
         use kernel_hal::{thread, timer};
         thread::sleep_until(timer::deadline_after(duration)).await;
+        // Check for pending signals after wakeup.
+        // Note: the Linux nanosleep rem pointer (a1) is not yet
+        // plumbed through; on EINTR the remaining time is not written.
+        if self.thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
+        }
         Ok(0)
     }
 

@@ -7,6 +7,7 @@ use kernel_hal::{user::UserInPtr, user::UserOutPtr};
 use linux_object::error::LxError;
 use linux_object::error::SysResult;
 use linux_object::signal::Signal as LinuxSignal;
+use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 
 const USEC_PER_TICK: usize = 10000;
@@ -328,6 +329,12 @@ impl Syscall<'_> {
             ClockId::ClockBootTime => {}
             ClockId::ClockRealTimeAlarm => {}
             ClockId::ClockBootTimeAlarm => {}
+        }
+        // Check for pending signals after wakeup.
+        // Note: on EINTR, Linux writes remaining time to `rem` for
+        // relative sleeps. This is not yet implemented; `rem` is ignored.
+        if self.thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
         }
         Ok(0)
     }

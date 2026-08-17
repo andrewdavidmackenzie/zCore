@@ -2,6 +2,7 @@ use super::*;
 use bitflags::bitflags;
 use core::time::Duration;
 use kernel_hal::timer::timer_now;
+use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 use zircon_object::task::ThreadState;
 
@@ -143,7 +144,14 @@ impl Syscall<'_> {
                     future.await
                 };
                 match res {
-                    Ok(_) => Ok(0),
+                    Ok(_) => {
+                        // Check for pending signals after a successful wait;
+                        // preserve EAGAIN (value mismatch) and ETIMEDOUT as-is.
+                        if self.thread.lock_linux().has_pending_signal() {
+                            return Err(LxError::EINTR);
+                        }
+                        Ok(0)
+                    }
                     Err(e) => Err(e.into()),
                 }
             }
