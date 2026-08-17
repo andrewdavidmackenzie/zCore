@@ -177,7 +177,39 @@ impl Syscall<'_> {
                 ptr.write(*sem_array.semid_ds.lock())?;
                 Ok(0)
             }
+            // Bulk commands that operate on the entire set (don't need num)
+            SemctlCmds::GETALL => {
+                let nsems = sem_array.semid_ds.lock().nsems;
+                let mut ptr: UserOutPtr<u16> = UserOutPtr::from(arg);
+                let values: Vec<u16> = (0..nsems).map(|i| sem_array[i].get() as u16).collect();
+                ptr.write_array(&values)?;
+                Ok(0)
+            }
+            SemctlCmds::SETALL => {
+                const SEMVMX: u16 = 32767;
+                let nsems = sem_array.semid_ds.lock().nsems;
+                let ptr: UserInPtr<u16> = UserInPtr::from(arg);
+                let values = ptr.as_slice(nsems)?;
+                // Validate all values are within SEMVMX before modifying
+                for &val in values {
+                    if val > SEMVMX {
+                        return Err(LxError::ERANGE);
+                    }
+                }
+                let pid = self.zircon_process().id() as usize;
+                for (i, &val) in values.iter().enumerate() {
+                    sem_array[i].set(val as isize);
+                    sem_array[i].set_pid(pid);
+                }
+                sem_array.ctime();
+                Ok(0)
+            }
+            // Per-semaphore commands that use num
             _ => {
+                let nsems = sem_array.semid_ds.lock().nsems;
+                if num >= nsems {
+                    return Err(LxError::EINVAL);
+                }
                 let sem = &sem_array[num as usize];
                 match cmd {
                     SemctlCmds::GETPID => Ok(sem.get_pid()),
@@ -187,26 +219,6 @@ impl Syscall<'_> {
                     SemctlCmds::SETVAL => {
                         sem.set(arg as isize);
                         sem.set_pid(self.zircon_process().id() as usize);
-                        sem_array.ctime();
-                        Ok(0)
-                    }
-                    SemctlCmds::GETALL => {
-                        // Write all semaphore values to the user-provided array
-                        let nsems = sem_array.semid_ds.lock().nsems;
-                        let mut ptr: UserOutPtr<u16> = UserOutPtr::from(arg);
-                        let values: Vec<u16> =
-                            (0..nsems).map(|i| sem_array[i].get() as u16).collect();
-                        ptr.write_array(&values)?;
-                        Ok(0)
-                    }
-                    SemctlCmds::SETALL => {
-                        // Read all semaphore values from the user-provided array
-                        let nsems = sem_array.semid_ds.lock().nsems;
-                        let ptr: UserInPtr<u16> = UserInPtr::from(arg);
-                        let values = ptr.as_slice(nsems)?;
-                        for (i, &val) in values.iter().enumerate() {
-                            sem_array[i].set(val as isize);
-                        }
                         sem_array.ctime();
                         Ok(0)
                     }
