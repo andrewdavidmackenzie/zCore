@@ -1,10 +1,12 @@
 //! Linux Thread
 
-use crate::error::SysResult;
+use crate::error::{LxError, SysResult};
 use crate::process::ProcessExt;
 use crate::signal::{SigInfo, Signal, SignalStack, SignalUserContext, Sigset};
 use alloc::sync::Arc;
-use core::task::Waker;
+use core::future::Future;
+use core::pin::Pin;
+use core::task::{Context, Poll, Waker};
 use kernel_hal::context::{UserContext, UserContextField};
 use kernel_hal::user::{Out, UserInPtr, UserOutPtr, UserPtr};
 use lock::{Mutex, MutexGuard};
@@ -260,5 +262,69 @@ impl LinuxThread {
     /// Check if any unmasked signal is pending.
     pub fn has_pending_signal(&self) -> bool {
         self.signals.mask_with(&self.signal_mask).is_not_empty()
+    }
+}
+
+/// A future wrapper that makes any inner future interruptible by signals.
+///
+/// When polled, it:
+/// 1. Checks for pending unmasked signals → returns `Err(EINTR)` immediately
+/// 2. Registers the thread's `signal_waker` so `insert_signal()` can wake us
+/// 3. Polls the inner future
+/// 4. Clears the signal waker on completion
+///
+/// This enables blocking syscalls to return `EINTR` when a signal is
+/// delivered to the thread.
+pub struct InterruptibleFuture<'a, F> {
+    inner: F,
+    thread: &'a Thread,
+}
+
+impl<'a, F: Future + Unpin> Future for InterruptibleFuture<'a, F> {
+    type Output = Result<F::Output, LxError>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // Atomically check for pending signals and register the waker.
+        // Both must happen under one lock to prevent a race where a
+        // signal arrives between the check and the waker registration.
+        {
+            let mut linux = self.thread.lock_linux();
+            if linux.has_pending_signal() {
+                linux.clear_signal_waker();
+                return Poll::Ready(Err(LxError::EINTR));
+            }
+            linux.set_signal_waker(cx.waker().clone());
+        }
+        // Poll the inner future
+        match Pin::new(&mut self.inner).poll(cx) {
+            Poll::Ready(val) => {
+                let mut linux = self.thread.lock_linux();
+                linux.clear_signal_waker();
+                Poll::Ready(Ok(val))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl<F> Drop for InterruptibleFuture<'_, F> {
+    fn drop(&mut self) {
+        let mut linux = self.thread.lock_linux();
+        linux.clear_signal_waker();
+    }
+}
+
+/// Extension trait to make any future interruptible by signals.
+pub trait Interruptible: Sized {
+    /// Wrap this future to return `Err(EINTR)` when a signal is delivered.
+    fn interruptible(self, thread: &Thread) -> InterruptibleFuture<'_, Self>;
+}
+
+impl<F: Future + Unpin> Interruptible for F {
+    fn interruptible(self, thread: &Thread) -> InterruptibleFuture<'_, Self> {
+        InterruptibleFuture {
+            inner: self,
+            thread,
+        }
     }
 }

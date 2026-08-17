@@ -6,7 +6,7 @@ use crate::{
     ipc::*,
     net::SOCKET_FD,
     signal::{Signal as LinuxSignal, SignalAction},
-    thread::ThreadExt,
+    thread::{Interruptible, ThreadExt},
     time::ITimerVal,
 };
 use alloc::{
@@ -121,13 +121,16 @@ pub async fn wait_child(
             return Err(LxError::EAGAIN);
         }
         drop(inner);
-        // Wait for SIGCHLD on the parent process. This is woken by:
-        // - child exit (Process::exit sets SIGCHLD on parent)
-        // - SIGALRM timer callback (sets SIGCHLD to wake wait)
-        // - any signal delivery via insert_signal()
+        // Wait for SIGCHLD on the parent process, interruptible by signals.
+        // Woken by: child exit, SIGALRM timer, or any signal via insert_signal().
         let proc_obj: Arc<dyn KernelObject> = proc.clone();
         proc_obj.signal_clear(Signal::SIGCHLD);
-        proc_obj.wait_signal(Signal::SIGCHLD).await;
+        let wait_fut = Box::pin(proc_obj.wait_signal(Signal::SIGCHLD));
+        match wait_fut.interruptible(thread).await {
+            Ok(_) => {} // woken by SIGCHLD, re-check child status
+            Err(LxError::EINTR) => return Err(LxError::EINTR),
+            Err(e) => return Err(e),
+        }
     }
 }
 
@@ -161,7 +164,12 @@ pub async fn wait_child_any(
         }
         let proc_obj: Arc<dyn KernelObject> = proc.clone();
         proc_obj.signal_clear(Signal::SIGCHLD);
-        proc_obj.wait_signal(Signal::SIGCHLD).await;
+        let wait_fut = Box::pin(proc_obj.wait_signal(Signal::SIGCHLD));
+        match wait_fut.interruptible(thread).await {
+            Ok(_) => {} // woken by SIGCHLD, re-check child status
+            Err(LxError::EINTR) => return Err(LxError::EINTR),
+            Err(e) => return Err(e),
+        }
     }
 }
 
