@@ -6,7 +6,7 @@ use crate::{
     ipc::*,
     net::SOCKET_FD,
     signal::{Signal as LinuxSignal, SignalAction},
-    thread::{Interruptible, ThreadExt},
+    thread::ThreadExt,
     time::ITimerVal,
 };
 use alloc::{
@@ -121,15 +121,13 @@ pub async fn wait_child(
             return Err(LxError::EAGAIN);
         }
         drop(inner);
-        // Wait for SIGCHLD on the parent process, interruptible by signals.
-        // Woken by: child exit, SIGALRM timer, or any signal via insert_signal().
+        // Wait for SIGCHLD on the parent process.
         let proc_obj: Arc<dyn KernelObject> = proc.clone();
         proc_obj.signal_clear(Signal::SIGCHLD);
-        let wait_fut = Box::pin(proc_obj.wait_signal(Signal::SIGCHLD));
-        match wait_fut.interruptible(thread).await {
-            Ok(_) => {} // woken by SIGCHLD, re-check child status
-            Err(LxError::EINTR) => return Err(LxError::EINTR),
-            Err(e) => return Err(e),
+        proc_obj.wait_signal(Signal::SIGCHLD).await;
+        // Check for pending signals after wakeup
+        if thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
         }
     }
 }
@@ -144,10 +142,6 @@ pub async fn wait_child_any(
     thread: &zircon_object::task::Thread,
 ) -> LxResult<(KoID, ExitCode)> {
     loop {
-        // Check for pending signals before blocking
-        if thread.lock_linux().has_pending_signal() {
-            return Err(LxError::EINTR);
-        }
         let mut inner = proc.linux().inner.lock();
         if inner.children.is_empty() {
             return Err(LxError::ECHILD);
@@ -164,11 +158,10 @@ pub async fn wait_child_any(
         }
         let proc_obj: Arc<dyn KernelObject> = proc.clone();
         proc_obj.signal_clear(Signal::SIGCHLD);
-        let wait_fut = Box::pin(proc_obj.wait_signal(Signal::SIGCHLD));
-        match wait_fut.interruptible(thread).await {
-            Ok(_) => {} // woken by SIGCHLD, re-check child status
-            Err(LxError::EINTR) => return Err(LxError::EINTR),
-            Err(e) => return Err(e),
+        proc_obj.wait_signal(Signal::SIGCHLD).await;
+        // Check for pending signals after wakeup
+        if thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
         }
     }
 }
@@ -488,6 +481,21 @@ impl LinuxProcess {
     /// Set signal action.
     pub fn set_signal_action(&self, signal: LinuxSignal, action: SignalAction) {
         self.inner.lock().signal_actions.table[signal as u8 as usize] = action;
+    }
+
+    /// Reset signal dispositions on exec.
+    /// Per POSIX: signals with disposition SIG_IGN remain ignored;
+    /// all others are reset to SIG_DFL.
+    pub fn reset_signal_actions_on_exec(&self) {
+        use crate::signal::{SIG_DFL, SIG_IGN};
+        let mut inner = self.inner.lock();
+        for action in inner.signal_actions.table.iter_mut() {
+            if action.handler != SIG_IGN {
+                action.handler = SIG_DFL;
+                action.flags = Default::default();
+                action.mask = crate::signal::Sigset::default();
+            }
+        }
     }
 
     /// Close file that FD_CLOEXEC is set

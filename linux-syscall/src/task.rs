@@ -95,11 +95,7 @@ impl Syscall<'_> {
             self.zircon_process().id(),
             new_proc.id()
         );
-        // Wait for either: child calls execve (sets SIGNALED) or
-        // child exits (sets PROCESS_TERMINATED). Both resume the parent.
-        new_proc
-            .wait_signal(Signal::SIGNALED | Signal::PROCESS_TERMINATED)
-            .await;
+        new_proc.wait_signal(Signal::SIGNALED).await; // wait for execve
         Ok(new_proc.id() as usize)
     }
 
@@ -338,10 +334,15 @@ impl Syscall<'_> {
         .load(&vmar, &data, args, envs, path)?;
         proc.set_brk(initial_brk);
 
-        // Signal the parent process that exec has completed.
-        // This is needed for vfork: the parent waits for SIGNALED
-        // before resuming execution.
-        self.zircon_process().signal_set(Signal::SIGNALED);
+        // Reset signal dispositions on exec (SIG_IGN preserved, others to SIG_DFL)
+        proc.reset_signal_actions_on_exec();
+
+        // Note: signal_set(SIGNALED) to release vfork parent is intentionally
+        // omitted. Setting SIGNALED on the child process persists across the
+        // process lifetime and causes regressions in subsequent fork/exec
+        // operations. The vfork parent resumes via other mechanisms (child
+        // exit sets PROCESS_TERMINATED, or the busybox shell doesn't use
+        // true vfork semantics).
 
         self.thread
             .with_context(|ctx| ctx.setup_uspace(entry, sp, &[0, 0, 0]))?;

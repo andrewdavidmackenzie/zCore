@@ -102,9 +102,15 @@ impl Syscall<'_> {
             return Ok(0);
         }
         let ss = ss.read()?;
-        // check stack size when not disable
+        // Check stack size when not disabling.
+        // MINSIGSTKSZ varies by architecture.
+        #[cfg(target_arch = "aarch64")]
+        const MIN_SIGSTACK_SIZE: usize = 5120; // 5 KiB on aarch64
+        #[cfg(target_arch = "x86_64")]
         const MIN_SIGSTACK_SIZE: usize = 2048;
-        if ss.flags.contains(SignalStackFlags::DISABLE) && ss.size < MIN_SIGSTACK_SIZE {
+        #[cfg(target_arch = "riscv64")]
+        const MIN_SIGSTACK_SIZE: usize = 2048;
+        if !ss.flags.contains(SignalStackFlags::DISABLE) && ss.size < MIN_SIGSTACK_SIZE {
             return Err(LxError::ENOMEM);
         }
         // only allow SS_AUTODISARM and SS_DISABLE
@@ -258,5 +264,61 @@ impl Syscall<'_> {
             })
             .unwrap();
         Ok(0)
+    }
+
+    /// Queue a signal with data to a process.
+    ///
+    /// Delivers the signal specified by `sig` to the process identified
+    /// by `pid`. The `uinfo` argument carries a `siginfo_t` payload.
+    /// Note: the siginfo payload is not currently queued — only the
+    /// signal number is delivered via `insert_signal`.
+    pub fn sys_rt_sigqueueinfo(&self, pid: isize, sig: usize, _uinfo: UserInPtr<u8>) -> SysResult {
+        // sig == 0 is a null-signal operation (check permissions only)
+        if sig == 0 {
+            // Validate target exists
+            if pid <= 0 {
+                return Err(LxError::ESRCH);
+            }
+            let parent = self.zircon_process().clone();
+            return parent
+                .job()
+                .get_child(pid as u64)
+                .map(|_| 0)
+                .map_err(|_| LxError::ESRCH);
+        }
+        let sig_u8 = u8::try_from(sig).map_err(|_| LxError::EINVAL)?;
+        let signal = Signal::try_from(sig_u8).map_err(|_| LxError::EINVAL)?;
+        info!(
+            "rt_sigqueueinfo: pid={}, sig={:?}, uinfo={:?}",
+            pid, signal, _uinfo
+        );
+        if pid <= 0 {
+            return Err(LxError::ESRCH);
+        }
+        let parent = self.zircon_process().clone();
+        match parent.job().get_child(pid as u64) {
+            Ok(obj) => {
+                let process: Arc<Process> = obj.downcast_arc().unwrap();
+                // SIGKILL always terminates the target
+                if signal == Signal::SIGKILL {
+                    process.exit((128 + Signal::SIGKILL as i32) as i64);
+                    return Ok(0);
+                }
+                let tids = process.thread_ids();
+                for tid in tids {
+                    if let Ok(thread_obj) = process.get_child(tid) {
+                        let thread: Arc<Thread> = thread_obj.downcast_arc().unwrap();
+                        let mut thread_linux = thread.lock_linux();
+                        if !thread_linux.signal_mask.contains(signal) {
+                            thread_linux.insert_signal(signal);
+                            break;
+                        }
+                    }
+                }
+                process.signal_set(zircon_object::object::Signal::SIGCHLD);
+                Ok(0)
+            }
+            Err(_) => Err(LxError::ESRCH),
+        }
     }
 }

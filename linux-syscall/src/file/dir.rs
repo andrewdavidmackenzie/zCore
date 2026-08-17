@@ -57,7 +57,9 @@ impl Syscall<'_> {
     /// create directory relative to directory file descriptor
     pub fn sys_mkdirat(&self, dirfd: FileDesc, path: UserInPtr<u8>, mode: usize) -> SysResult {
         let path = path.as_c_str()?;
-        // TODO: check pathname
+        if path.len() >= 4096 {
+            return Err(LxError::ENAMETOOLONG);
+        }
         info!(
             "mkdirat: dirfd={:?}, path={:?}, mode={:#o}",
             dirfd, path, mode
