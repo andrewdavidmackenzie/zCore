@@ -294,10 +294,6 @@ impl Syscall<'_> {
         );
         use core::time::Duration;
         use kernel_hal::{thread, timer};
-        // Check for pending signals before sleeping
-        if self.thread.lock_linux().has_pending_signal() {
-            return Err(LxError::EINTR);
-        }
         let duration: Duration = req.read()?.into();
         let clockid = ClockId::from(clockid);
         let flags = ClockFlags::from(flags);
@@ -334,7 +330,9 @@ impl Syscall<'_> {
             ClockId::ClockRealTimeAlarm => {}
             ClockId::ClockBootTimeAlarm => {}
         }
-        // Check for pending signals after wakeup
+        // Check for pending signals after wakeup.
+        // Note: on EINTR, Linux writes remaining time to `rem` for
+        // relative sleeps. This is not yet implemented; `rem` is ignored.
         if self.thread.lock_linux().has_pending_signal() {
             return Err(LxError::EINTR);
         }

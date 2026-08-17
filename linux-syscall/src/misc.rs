@@ -129,10 +129,6 @@ impl Syscall<'_> {
         let futex = self.linux_process().get_futex(uaddr);
         match op {
             FutexFlags::WAIT => {
-                // Check for pending signals before blocking
-                if self.thread.lock_linux().has_pending_signal() {
-                    return Err(LxError::EINTR);
-                }
                 let future = futex.wait(val as _);
                 let timeout_addr: UserInPtr<TimeSpec> = val2.into();
                 let res = if let Some(timeout) = timeout_addr.read_if_not_null().unwrap() {
@@ -147,12 +143,15 @@ impl Syscall<'_> {
                 } else {
                     future.await
                 };
-                // Check for pending signals after wakeup
-                if self.thread.lock_linux().has_pending_signal() {
-                    return Err(LxError::EINTR);
-                }
                 match res {
-                    Ok(_) => Ok(0),
+                    Ok(_) => {
+                        // Check for pending signals after a successful wait;
+                        // preserve EAGAIN (value mismatch) and ETIMEDOUT as-is.
+                        if self.thread.lock_linux().has_pending_signal() {
+                            return Err(LxError::EINTR);
+                        }
+                        Ok(0)
+                    }
                     Err(e) => Err(e.into()),
                 }
             }
