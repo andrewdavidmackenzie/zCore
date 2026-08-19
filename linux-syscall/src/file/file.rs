@@ -611,3 +611,42 @@ numeric_enum_macro::numeric_enum! {
         DUPFD_CLOEXEC = F_LINUX_SPECIFIC_BASE + 6,
     }
 }
+
+impl Syscall<'_> {
+    /// Mount a filesystem at a target path.
+    ///
+    /// Not yet fully implemented: the rcore-fs INode trait does not
+    /// expose a mount() method, so runtime mounting requires either
+    /// upstream rcore-fs changes or storing the root as MNode.
+    /// Returns ENOSYS. Initial mounts (devfs at /dev, ramfs at /tmp)
+    /// are set up at boot time in create_root_fs().
+    pub fn sys_mount(
+        &self,
+        _source: UserInPtr<u8>,
+        target: UserInPtr<u8>,
+        fstype: UserInPtr<u8>,
+        _flags: usize,
+        _data: UserInPtr<u8>,
+    ) -> SysResult {
+        let target = target.as_c_str()?;
+        let fstype = fstype.as_c_str()?;
+        warn!(
+            "mount: target={:?}, fstype={:?} — not implemented (see issue #36)",
+            target, fstype
+        );
+        Err(LxError::ENOSYS)
+    }
+
+    /// Unmount a filesystem.
+    ///
+    /// Not yet implemented — the rcore-fs MountFS crate does not
+    /// expose an unmount API. Returns ENOSYS.
+    pub fn sys_umount2(&self, target: UserInPtr<u8>, _flags: usize) -> SysResult {
+        let target = target.as_c_str()?;
+        warn!(
+            "umount2: target={:?} — not implemented (see issue #36)",
+            target
+        );
+        Err(LxError::ENOSYS)
+    }
+}
