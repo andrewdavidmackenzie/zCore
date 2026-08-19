@@ -870,6 +870,15 @@ that also implements code, and then have others augment it by implementing those
 in separate crates that can then be bundled with the first crate. Analyze if this could
 not be done here, and kernel-hal and zircon-object combined to be the zircon kernal, that 
 declares traits in it's crate, that other crates withing to implement them could use.
+
+TODO: In theory a "HAL" is an interface definition, that an implementation on a specific 
+architecture and target board must implement and be supplied to the kernel, which is arch and
+target board indpenedent. Contrast that with what we have here and describe the major
+divergencies.
+- drivers eeem to be platform indpenedent. Is that enabled by code from HAL that is platform
+  dependent?
+- There seems to be a mix of interface definition and implementation in kernel-hal
+- Does zircon-object only implement zircon object, or does it also have core kernel functionality?
  
 
 BUILD TOOL (not linked into the kernel)
@@ -1056,20 +1065,26 @@ crate in the project.
 
 ### Feature-Gated Dependencies
 
-| From     | To              | Feature Gate       |
-|----------|-----------------|--------------------|
-| `loader` | `linux-object`  | `linux` feature    |
-| `loader` | `linux-syscall` | `linux` feature    |
-| `loader` | `zircon-syscall` | `zircon` feature  |
-| `zCore`  | `linux-object`  | `linux` feature    |
-| `kernel` | `executor`      | bare-metal only    |
-| `-hal`   |                 | (target_os="none") |
-| `zircon` | `xmas-elf`      | `elf` feature      |
-| `-object`|                 |                    |
-| `zircon` | hypervisor mod  | `hypervisor`       |
-| `-object`|                 | (currently off)    |
-| `zircon` | hypervisor mod  | `hypervisor`       |
-| `-syscall`|                | (currently off)    |
+| From         | To              | Feature Gate       |
+|--------------|-----------------|--------------------|
+| `loader`     | `linux-object`  | `linux` feature    |
+| `loader`     | `linux-syscall` | `linux` feature    |
+| `loader`     | `zircon-syscall` | `zircon` feature  |
+| `zCore`      | `linux-object`  | `linux` feature    |
+| `kernel-hal` | `executor`      | bare-metal only    |
+|              |                 | (target_os="none") |
+| `zircon`     | `xmas-elf`      | `elf` feature      |
+| `-object`    |                 |                    |
+| `zircon`     | hypervisor mod  | `hypervisor`       |
+| `-object`    |                 | (currently off)    |
+| `zircon`     | hypervisor mod  | `hypervisor`       |
+| `-syscall`   |                | (currently off)    |
+
+TODO: Confirm that loader doesn't depend on zircon-object, but it does
+depend on linux-object. What's the difference?
+
+TODO: Use cargo all-features to test all these feature combinations (the
+permissible ones) compile.
 
 ---
 
@@ -1092,6 +1107,8 @@ these would have broad impact.
   `proto-ipv6`, `proto-igmp`, `socket-raw`, `socket-udp`,
   `socket-tcp`, `socket-icmp`, `async`.
 
+TODO: Explore tracking most recent release rather than a revision.
+
 **`rcore-fs` family** (git, rev `1a3246b`)
   Virtual filesystem framework from the rCore project.
   Seven crates from one repo:
@@ -1109,6 +1126,9 @@ these would have broad impact.
     (libos mode). Used by `loader` (dev), `zCore`.
   - `rcore-fs-fuse` -- FUSE adapter for image creation.
     Used by `xtask`.
+
+TODO: Understand the API between the OS and the filesystem and see 
+what other filesystems could be options for running on zircon or linux
 
 **`trapframe`** (0.9.0, crates.io)
   User/kernel context save/restore and trap frame
@@ -1220,6 +1240,9 @@ architectures.
   `kernel-hal`, `zircon-object`, `linux-object`,
   `linux-syscall`, `executor`.
 
+TODO: See if can be replaced by rust provided types, not 
+sure if possible in no_std
+
 ### Utility and Glue Crates
 
 **`log`** (0.4)
@@ -1284,6 +1307,8 @@ mode on a host system.
 **`nix`** (0.23)
   Unix API bindings (mmap, mprotect, signal). Used by
   `kernel-hal` for the mock memory subsystem.
+
+TODO: Understand the "mock" case more.
 
 **`tempfile`** (3)
   Temporary file creation. Used by `kernel-hal` for the
@@ -1352,6 +1377,8 @@ the kernel.
 | Git (other)| 5     | smoltcp, lock, pci,     |
 |            |       | unicycle, x86-smpboot   |
 
+TODO: Work to reduce git dependencies and move to released versions on crates.io
+
 ### Most Widely Used (by consumer count)
 
 | Dependency    | Crates |
@@ -1368,6 +1395,9 @@ the kernel.
 
 ---
 
+TODO: Move this entire libos section to a libos.md file in the root, link to it from 
+README.md with a short description.
+
 ## LibOS Mode
 
 LibOS (Library OS) mode allows zCore to run as a
@@ -1376,6 +1406,9 @@ macOS) rather than on bare metal. It is used for rapid
 development, testing, and debugging -- the kernel
 compiles and starts in seconds, with full access to
 host debugging tools (gdb, lldb, valgrind, strace).
+
+TODO: Get this running and checked in ci, and connect debugger
+to it, from gdb and IDE for rapid IDE based development
 
 ### How It Works
 
@@ -1417,10 +1450,15 @@ zCore [libos]
  |    +-- zircon-object [aspace-separate]
  +-- async-std, chrono, rcore-fs-hostfs
 ```
+TODO: "cargo build --features libos" doesn't work because of xtask. See if we can make it
+easy to build and run the libos version.
 
 The `libos` feature enables `std`, swaps in mock
 drivers, activates the mmap-based memory backend, and
 selects the HostFS filesystem.
+
+TODO: Could some of this be done by defining "host" (libos) as a target platform, some of the
+rootfs and boot stuff maybe need to be done as it is now though?
 
 ### Entry Point and Startup
 
@@ -1472,6 +1510,8 @@ This gives the kernel a contiguous region of memory
 that behaves like physical RAM. The `phys_to_virt()`
 function is simple pointer arithmetic:
 `PMEM_MAP_VADDR + paddr`.
+
+TODO: Understand why it is nmap-ed and not just a big malloc?
 
 Frame allocation uses a `BitAlloc1M` bitmap allocator
 managing page-sized (4 KiB) chunks within this region.
@@ -1525,6 +1565,8 @@ Thread-local storage uses `async_std::task_local!`.
 There is no multi-core support -- only one logical
 core exists.
 
+TODO: Why not use host OS native threads?
+
 **Timers:** The current time comes from
 `std::time::SystemTime`. Timer deadlines are
 implemented by spawning an async task that calls
@@ -1568,6 +1610,10 @@ both the guest and the host side.
 In libos Zircon mode, the ZBI boot image is read from
 a file path passed as a command-line argument.
 
+TODO: Add description of how to use this mode, Makefile targets or similar
+that can be used to start and connect to libos mode via debugger, both gdb
+and llvm-db and those used in rustrover
+
 ### macOS-Specific Handling
 
 On macOS x86_64, a `SIGSEGV` signal handler is
@@ -1592,11 +1638,20 @@ full register dump.
 ```
 cargo linux-libos /bin/busybox ls -la
 ```
+TODO: That comment fails thus:
+"
+error: Found argument '/bin/busybox' which wasn't expected, or isn't valid in this context
+
+Usage: xtask linux-libos --args <ARGS>
+"
+
 This runs:
 ```
 cargo run -p zcore --release \
   --features linux,libos -- /bin/busybox ls -la
 ```
+
+TODO: That tries to build and run but fails. we need to debug it
 
 **Via loader examples:**
 ```
@@ -1610,6 +1665,8 @@ cargo run --example zircon-libos -- \
 
 The integration tests in `loader/tests/linux.rs` use
 libos mode with `#[async_std::test]`:
+
+TODO: Confirm this works
 
 ```rust
 async fn test(cmdline: &str) -> i64 {
@@ -1633,6 +1690,8 @@ Run all libos tests with:
 ```
 cargo test -p zcore-loader
 ```
+
+TODO: That fails to build. Are we using that in CI? Why failing locally?
 
 ### Architectural Limitations
 
@@ -1686,6 +1745,9 @@ The standard Cargo output directory. Gitignored.
 
 ### Filesystem Images: `zCore/*.img`
 
+TODO: Explore if they can be generated (then used from) the
+target directory to keep everything clean.
+
 | Path                  | Generator          |
 |-----------------------|--------------------|
 | `zCore/aarch64.img`   | `cargo image`      |
@@ -1698,7 +1760,13 @@ The standard Cargo output directory. Gitignored.
 |   `rootfs/riscv64/`.  |                    |
 |   Used as initrd.     |                    |
 
+NOTE: Explain SFS briefly or add a link to read more 
+about it.
+
 ### Rootfs Directories: `rootfs/{arch}/`
+
+TODO: Explore if these could be moved under target 
+also.
 
 Gitignored. Built by `cargo rootfs`.
 
@@ -1740,7 +1808,13 @@ Gitignored. Built by `cargo rootfs`.
 |   (in target build dir)        | `build.rs`    |
 |   Build metadata for `dump`.   | (shadow-rs)   |
 
+TODO: Describe more what shadow.rs is for and what it contains
+and what dump is and why it needs it.
+
 ### xtask Cache: `ignored/`
+
+TODO: Not a great name, something better? Source cache
+or something descriptive?
 
 Gitignored. Auto-populated by the build system.
 Total size ~600 MB when fully populated.
@@ -1766,7 +1840,12 @@ Total size ~600 MB when fully populated.
 | `origin/repos/opencv/`         | Cloned OpenCV |
 |                                 | (optional)    |
 
+TODO: Describe each one a bit more.
+
 **Built/extracted outputs (`ignored/target/`):**
+
+TODO: Analyze if these could be built under target
+also?
 
 | Path                            | Contents      |
 |---------------------------------|---------------|
@@ -1862,7 +1941,7 @@ Total size ~600 MB when fully populated.
 | `scripts/`              | **Active**   |
 |   CI test scripts       |              |
 | `.cargo/`               | **Active**   |
-|   Cargo aliases          |              |
+|   Cargo aliases         |              |
 | `.github/`              | **Active**   |
 |   CI workflows          |              |
 | `prebuilt/`             | **Active**   |
@@ -1881,3 +1960,11 @@ Total size ~600 MB when fully populated.
 |   x86_64 only           |              |
 | `zircon-user/`          | **Legacy**   |
 |   Single hello.rs       |              |
+
+TODO: So let's review resurecting x86_64, which might bring
+rboot back into active use. Goal is to create a bootable image
+with linux subsystem for x86_64, which we can try on real hardware.
+
+TODO: Zircon-user is commented above. It would be great to know it works
+and it, or similar could form part of a minimal test that zircon user 
+programs can be built and ran.
