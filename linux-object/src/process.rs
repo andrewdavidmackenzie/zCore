@@ -199,6 +199,9 @@ struct LinuxProcessInner {
     children: HashMap<KoID, Arc<Process>>,
     /// Signal actions
     signal_actions: SignalActions,
+    /// Process-level pending signals: signals delivered when all threads
+    /// had them masked. Delivered when a thread unmasks them.
+    pending_signals: crate::signal::Sigset,
     /// Program break (end of heap)
     brk_addr: VirtAddr,
     /// ITIMER_REAL: repeat interval (zero = one-shot)
@@ -496,6 +499,24 @@ impl LinuxProcess {
                 action.mask = crate::signal::Sigset::default();
             }
         }
+    }
+
+    /// Add a signal to the process-level pending set.
+    /// Called when a signal is delivered but all threads have it masked.
+    pub fn add_pending_signal(&self, sig: LinuxSignal) {
+        self.inner.lock().pending_signals.insert(sig);
+    }
+
+    /// Check process-level pending signals against a thread's mask.
+    /// Returns and removes any signals that are now unmasked.
+    pub fn take_pending_signals(&self, mask: &crate::signal::Sigset) -> crate::signal::Sigset {
+        let mut inner = self.inner.lock();
+        let deliverable = inner.pending_signals.mask_with(mask);
+        if !deliverable.is_empty() {
+            // Remove delivered signals from pending
+            inner.pending_signals.remove_set(&deliverable);
+        }
+        deliverable
     }
 
     /// Close file that FD_CLOEXEC is set
