@@ -127,12 +127,13 @@ impl Syscall<'_> {
             .iter()
             .map(|r| (r.end - r.start) as u64)
             .sum();
-        // Approximate free RAM as half of total (live tracking would
-        // require per-platform frame allocator changes — see issue #46)
-        let freeram = totalram / 2;
+        // freeram: live free-frame tracking requires per-platform allocator
+        // changes (see issue #46). Use totalram * 3/4 as a rough estimate
+        // that is better than 0 (which programs interpret as "no memory").
+        let freeram = totalram * 3 / 4;
 
-        // Count live processes by walking the job tree
-        let procs = self.count_processes();
+        // Count live processes by walking the job tree (usize to avoid u16 overflow)
+        let procs = self.count_processes().min(u16::MAX as usize) as u16;
 
         let sysinfo = SysInfo {
             uptime,
@@ -147,7 +148,7 @@ impl Syscall<'_> {
     }
 
     /// Count all live processes by walking the job tree from the root.
-    fn count_processes(&self) -> u16 {
+    fn count_processes(&self) -> usize {
         let mut job = self.zircon_process().job();
         // Walk up to the root job
         while let Some(parent) = job.parent() {
@@ -157,9 +158,9 @@ impl Syscall<'_> {
     }
 
     /// Recursively count processes in a job and its child jobs.
-    fn count_processes_in_job(job: &zircon_object::task::Job) -> u16 {
-        let direct = job.process_ids().len() as u16;
-        let from_children: u16 = job
+    fn count_processes_in_job(job: &zircon_object::task::Job) -> usize {
+        let direct = job.process_ids().len();
+        let from_children: usize = job
             .children_ids()
             .iter()
             .filter_map(|&id| job.get_child(id).ok())
