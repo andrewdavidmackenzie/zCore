@@ -121,18 +121,53 @@ impl Syscall<'_> {
         // Note: timer_now() is boot-relative in bare-metal mode (correct
         // for uptime) but Unix-epoch-based in libos mode.
         let uptime = timer::timer_now().as_secs();
-        // Approximate fixed values; live memory/process accounting
-        // is not yet implemented.
+
+        // Compute total RAM from boot-time free physical memory regions
+        let totalram: u64 = kernel_hal::mem::free_pmem_regions()
+            .iter()
+            .map(|r| (r.end - r.start) as u64)
+            .sum();
+        // freeram: live free-frame tracking requires per-platform allocator
+        // changes (see issue #46). Use totalram * 3/4 as a rough estimate
+        // that is better than 0 (which programs interpret as "no memory").
+        let freeram = totalram * 3 / 4;
+
+        // Count live processes by walking the job tree (usize to avoid u16 overflow)
+        let procs = self.count_processes().min(u16::MAX as usize) as u16;
+
         let sysinfo = SysInfo {
             uptime,
-            totalram: 128 * 1024 * 1024, // 128 MiB
-            freeram: 64 * 1024 * 1024,   // 64 MiB
+            totalram,
+            freeram,
             mem_unit: 1,
-            procs: 1,
+            procs,
             ..SysInfo::default()
         };
         sys_info.write(sysinfo)?;
         Ok(0)
+    }
+
+    /// Count all live processes by walking the job tree from the root.
+    fn count_processes(&self) -> usize {
+        let mut job = self.zircon_process().job();
+        // Walk up to the root job
+        while let Some(parent) = job.parent() {
+            job = parent;
+        }
+        Self::count_processes_in_job(&job)
+    }
+
+    /// Recursively count processes in a job and its child jobs.
+    fn count_processes_in_job(job: &zircon_object::task::Job) -> usize {
+        let direct = job.process_ids().len();
+        let from_children: usize = job
+            .children_ids()
+            .iter()
+            .filter_map(|&id| job.get_child(id).ok())
+            .filter_map(|obj| obj.downcast_arc::<zircon_object::task::Job>().ok())
+            .map(|child_job| Self::count_processes_in_job(&child_job))
+            .sum();
+        direct + from_children
     }
 
     /// provides a method for waiting until a certain condition becomes true.
