@@ -85,6 +85,25 @@ impl Syscall<'_> {
             How::Unblock => thread.signal_mask.remove_set(&set),
             How::SetMask => thread.signal_mask = set,
         }
+        // After changing the mask, deliver any process-level pending
+        // signals that are now unmasked for this thread.
+        let pending = self
+            .linux_process()
+            .take_pending_signals(&thread.signal_mask);
+        if !pending.is_empty() {
+            // Find and deliver each pending signal
+            let mut sig_val = pending.val();
+            let mut bit = 0u8;
+            while sig_val != 0 {
+                if sig_val & 1 != 0 {
+                    if let Ok(sig) = Signal::try_from(bit + 1) {
+                        thread.insert_signal(sig);
+                    }
+                }
+                sig_val >>= 1;
+                bit += 1;
+            }
+        }
         Ok(0)
     }
 
@@ -170,6 +189,7 @@ impl Syscall<'_> {
                     sig => {
                         let process: Arc<Process> = obj.downcast_arc().unwrap();
                         let tids = process.thread_ids();
+                        let mut delivered = false;
                         for tid in tids {
                             let thread = process.get_child(tid).unwrap();
                             let thread: Arc<Thread> = thread.downcast_arc().unwrap();
@@ -178,8 +198,14 @@ impl Syscall<'_> {
                                 continue;
                             } else {
                                 thread_linux.insert_signal(signal);
+                                delivered = true;
                                 break;
                             }
+                        }
+                        if !delivered {
+                            // All threads have this signal masked — store as
+                            // process-level pending until a thread unmasks it.
+                            process.linux().add_pending_signal(signal);
                         }
                         // Wake any wait_signal futures on the target process
                         // so blocked waits (wait4, etc.) can check for EINTR.
@@ -305,15 +331,20 @@ impl Syscall<'_> {
                     return Ok(0);
                 }
                 let tids = process.thread_ids();
+                let mut delivered = false;
                 for tid in tids {
                     if let Ok(thread_obj) = process.get_child(tid) {
                         let thread: Arc<Thread> = thread_obj.downcast_arc().unwrap();
                         let mut thread_linux = thread.lock_linux();
                         if !thread_linux.signal_mask.contains(signal) {
                             thread_linux.insert_signal(signal);
+                            delivered = true;
                             break;
                         }
                     }
+                }
+                if !delivered {
+                    process.linux().add_pending_signal(signal);
                 }
                 process.signal_set(zircon_object::object::Signal::SIGCHLD);
                 Ok(0)
