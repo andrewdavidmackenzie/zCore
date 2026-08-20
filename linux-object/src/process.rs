@@ -66,6 +66,14 @@ impl ProcessExt for Process {
                 files: linux_parent_inner.files.clone(),
                 signal_actions: linux_parent_inner.signal_actions.clone(),
                 brk_addr: linux_parent_inner.brk_addr,
+                uid: linux_parent_inner.uid,
+                gid: linux_parent_inner.gid,
+                euid: linux_parent_inner.euid,
+                egid: linux_parent_inner.egid,
+                pgid: linux_parent_inner.pgid,
+                session_id: linux_parent_inner.session_id,
+                umask: linux_parent_inner.umask,
+                groups: linux_parent_inner.groups.clone(),
                 ..Default::default()
             }),
         };
@@ -214,6 +222,22 @@ struct LinuxProcessInner {
     posix_timers: HashMap<usize, PosixTimer>,
     /// Next POSIX timer ID to allocate
     next_timer_id: usize,
+    /// Real user ID
+    uid: u32,
+    /// Real group ID
+    gid: u32,
+    /// Effective user ID
+    euid: u32,
+    /// Effective group ID
+    egid: u32,
+    /// Process group ID (0 = same as own PID)
+    pgid: u64,
+    /// Session ID (0 = same as own PID)
+    session_id: u64,
+    /// File mode creation mask
+    umask: u32,
+    /// Supplementary group IDs
+    groups: Vec<u32>,
 }
 
 /// Per-process POSIX timer state.
@@ -305,9 +329,104 @@ impl LinuxProcess {
             parent: Weak::default(),
             inner: Mutex::new(LinuxProcessInner {
                 files,
+                umask: 0o022,
                 ..Default::default()
             }),
         }
+    }
+
+    // --- User/group identity ---
+
+    /// Get the real user ID.
+    pub fn uid(&self) -> u32 {
+        self.inner.lock().uid
+    }
+
+    /// Get the real group ID.
+    pub fn gid(&self) -> u32 {
+        self.inner.lock().gid
+    }
+
+    /// Get the effective user ID.
+    pub fn euid(&self) -> u32 {
+        self.inner.lock().euid
+    }
+
+    /// Get the effective group ID.
+    pub fn egid(&self) -> u32 {
+        self.inner.lock().egid
+    }
+
+    /// Set all user IDs (real, effective, saved).
+    /// If the caller is privileged (euid == 0), sets all three.
+    /// Otherwise, only sets the effective UID if `uid` matches
+    /// the real or saved UID.
+    /// Returns the previous effective UID on success.
+    pub fn set_uid(&self, uid: u32) -> Result<u32, ()> {
+        let mut inner = self.inner.lock();
+        let old_euid = inner.euid;
+        if inner.euid == 0 {
+            // Privileged: set all
+            inner.uid = uid;
+            inner.euid = uid;
+        } else if uid == inner.uid {
+            // Unprivileged: can only set euid to real uid
+            inner.euid = uid;
+        } else {
+            return Err(());
+        }
+        Ok(old_euid)
+    }
+
+    /// Get the process group ID. Returns 0 if no explicit
+    /// PGID has been set via setpgid().
+    pub fn pgid(&self) -> u64 {
+        self.inner.lock().pgid
+    }
+
+    /// Set the process group ID.
+    pub fn set_pgid(&self, pgid: u64) {
+        self.inner.lock().pgid = pgid;
+    }
+
+    /// Get the session ID. Returns 0 if no explicit session
+    /// has been created via setsid().
+    pub fn session_id(&self) -> u64 {
+        self.inner.lock().session_id
+    }
+
+    /// Create a new session. Sets both session_id and pgid
+    /// to `own_pid`. Always succeeds (simplified: real Linux
+    /// would fail with EPERM if already a group leader, but
+    /// our process group tracking is basic).
+    pub fn setsid(&self, own_pid: u64) {
+        let mut inner = self.inner.lock();
+        inner.session_id = own_pid;
+        inner.pgid = own_pid;
+    }
+
+    /// Get and set the file mode creation mask.
+    /// Returns the previous umask.
+    pub fn set_umask(&self, new_mask: u32) -> u32 {
+        let mut inner = self.inner.lock();
+        let old = inner.umask;
+        inner.umask = new_mask & 0o777;
+        old
+    }
+
+    /// Get the current umask.
+    pub fn umask(&self) -> u32 {
+        self.inner.lock().umask
+    }
+
+    /// Get supplementary group IDs.
+    pub fn groups(&self) -> Vec<u32> {
+        self.inner.lock().groups.clone()
+    }
+
+    /// Set supplementary group IDs.
+    pub fn set_groups(&self, groups: Vec<u32>) {
+        self.inner.lock().groups = groups;
     }
 
     /// Get futex object.
