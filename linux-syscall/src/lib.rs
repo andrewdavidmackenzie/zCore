@@ -251,6 +251,7 @@ impl Syscall<'_> {
             Sys::SETPGID => self.sys_setpgid(a0, a1 as u64),
             Sys::GETPPID => self.sys_getppid(),
             Sys::SETSID => self.sys_setsid(),
+            Sys::GETSID => self.sys_getsid(a0),
             Sys::GETPGID => self.sys_getpgid(a0),
             Sys::GETGROUPS => self.sys_getgroups(a0 as i32, a1.into()),
             Sys::SETGROUPS => self.sys_setgroups(a0 as usize, a1.into()),

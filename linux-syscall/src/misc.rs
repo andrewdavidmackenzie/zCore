@@ -434,6 +434,20 @@ impl Syscall<'_> {
         Ok(pid as usize)
     }
 
+    /// Get the session ID. If pid==0, returns the session ID
+    /// of the calling process. For other pids, returns 0
+    /// (cross-process session lookup not yet supported).
+    pub fn sys_getsid(&self, pid: usize) -> SysResult {
+        let sid = if pid == 0 || pid as u64 == self.zircon_process().id() {
+            self.linux_process().session_id()
+        } else {
+            // Cross-process: return 0 (no tracking)
+            0
+        };
+        info!("getsid: pid={} => {}", pid, sid);
+        Ok(sid as usize)
+    }
+
     /// Get the supplementary group IDs. If size==0, returns
     /// the number of groups. Otherwise copies up to `size`
     /// group IDs to the user buffer.
@@ -442,6 +456,9 @@ impl Syscall<'_> {
         info!("getgroups: size={} ngroups={}", size, groups.len());
         if size == 0 {
             return Ok(groups.len());
+        }
+        if size < 0 {
+            return Err(LxError::EINVAL);
         }
         if (size as usize) < groups.len() {
             return Err(LxError::EINVAL);
@@ -456,6 +473,10 @@ impl Syscall<'_> {
         info!("setgroups: size={}", size);
         if self.linux_process().euid() != 0 {
             return Err(LxError::EPERM);
+        }
+        // Linux NGROUPS_MAX
+        if size > 65_536 {
+            return Err(LxError::EINVAL);
         }
         let groups = if size > 0 {
             list.read_array(size)?

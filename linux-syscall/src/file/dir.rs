@@ -71,7 +71,8 @@ impl Syscall<'_> {
         if inode.find(file_name).is_ok() {
             return Err(LxError::EEXIST);
         }
-        inode.create(file_name, FileType::Dir, mode as u32)?;
+        let effective_mode = mode as u32 & !proc.umask();
+        inode.create(file_name, FileType::Dir, effective_mode)?;
         Ok(0)
     }
     /// Remove a directory.

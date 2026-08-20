@@ -48,7 +48,8 @@ impl Syscall<'_> {
                     file_inode
                 }
                 Err(FsError::EntryNotFound) => {
-                    dir_inode.create(file_name, FileType::File, mode as u32)?
+                    let effective_mode = mode as u32 & !proc.umask();
+                    dir_inode.create(file_name, FileType::File, effective_mode)?
                 }
                 Err(e) => return Err(LxError::from(e)),
             }
