@@ -362,6 +362,7 @@ impl LinuxProcess {
     /// Otherwise, only sets the effective UID if `uid` matches
     /// the real or saved UID.
     /// Returns the previous effective UID on success.
+    #[allow(clippy::result_unit_err)] // Simple success/failure for privilege check
     pub fn set_uid(&self, uid: u32) -> Result<u32, ()> {
         let mut inner = self.inner.lock();
         let old_euid = inner.euid;

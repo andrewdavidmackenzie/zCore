@@ -185,7 +185,7 @@ impl Syscall<'_> {
             addr, len, prot
         );
         // addr must be page-aligned
-        if addr % PAGE_SIZE != 0 {
+        if !addr.is_multiple_of(PAGE_SIZE) {
             return Err(LxError::EINVAL);
         }
         if len == 0 {

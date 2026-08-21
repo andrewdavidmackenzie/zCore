@@ -124,7 +124,7 @@ impl<T, P: Policy> UserPtr<T, P> {
     ///
     /// Returns [`Ok(())`] if it is neither null nor unaligned.
     pub fn check(&self) -> Result<()> {
-        if !self.0.is_null() && (self.0 as usize) % core::mem::align_of::<T>() == 0 {
+        if !self.0.is_null() && (self.0 as usize).is_multiple_of(core::mem::align_of::<T>()) {
             Ok(())
         } else {
             Err(Error::InvalidPointer)
@@ -397,6 +397,7 @@ impl<P: Policy> IoVec<P> {
         self.as_mut_slice().map(|s| &*s)
     }
 
+    #[allow(clippy::mut_from_ref)] // Intentional: user-space pointer, not a Rust reference
     pub fn as_mut_slice(&self) -> Result<&mut [u8]> {
         if !self.ptr.is_null() {
             Ok(unsafe { core::slice::from_raw_parts_mut(self.ptr.0, self.len) })

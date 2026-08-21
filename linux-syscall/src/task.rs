@@ -107,6 +107,7 @@ impl Syscall<'_> {
     /// > **NOTE!** This system call is not exactly the same as `clone` in Linux.
     ///
     /// > **NOTE!** This is partially implemented for `musl` only.
+    ///
     /// `sys_clone` create a new thread or process.
     pub fn sys_clone(
         &self,
@@ -173,8 +174,8 @@ impl Syscall<'_> {
     ///
     /// - **-1**: meaning wait for any child process.
     /// - **0**: meaning wait for any child in the calling process's group.
-    ///          **Note:** zCore does not implement process groups, so this
-    ///          is treated the same as `-1` (wait for any child).
+    ///   **Note:** zCore does not implement process groups, so this
+    ///   is treated the same as `-1` (wait for any child).
     /// - **>0**: meaning wait for the child whose process ID is equal to the value of `pid`.
     ///
     /// The value of options is an OR of zero or more of the following constants:
@@ -280,9 +281,9 @@ impl Syscall<'_> {
     /// > **NOTE!** Differ from linux, `argv` & `envp` can not be NULL.
     ///
     /// > **NOTE!** For multi-thread programs,
-    ///             A call to any exec function from a process with more than one thread
-    ///             shall result in all threads being terminated and the new executable image
-    ///             being loaded and executed.
+    /// > A call to any exec function from a process with more than one thread
+    /// > shall result in all threads being terminated and the new executable image
+    /// > being loaded and executed.
     pub fn sys_execve(
         &mut self,
         path: UserInPtr<u8>,

@@ -194,12 +194,16 @@ else ifeq ($(ARCH), riscv64)
 endif
 
 # Run clippy on all workspace crates.
-# Step 1: kernel + OS crates via the custom bare-metal target (covers drivers,
-#         kernel-hal, zircon-object, linux-object, linux-syscall, loader, zcore).
+# Step 1: kernel + OS crates via the custom bare-metal target.
+#         Each package is listed explicitly so --no-deps can skip
+#         third-party crates (executor, region-alloc) that we don't own.
 # Step 2: host-side tools (xtask, z-config, region-alloc) via native target.
 clippy:
 	@echo "==> Clippy: kernel crates ($(ARCH))..."
-	cargo clippy -p zcore --no-default-features --features linux \
+	cargo clippy \
+		-p zcore -p kernel-hal -p linux-object -p linux-syscall \
+		-p zcore-loader -p zircon-object -p zircon-syscall -p zcore-drivers \
+		--no-default-features --features linux \
 		--target zCore/$(ARCH).json \
 		-Z json-target-spec \
 		-Z build-std=core,alloc \

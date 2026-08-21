@@ -7,6 +7,8 @@
 
 #![no_std]
 #![deny(warnings)]
+// The `impl_downcast!` macro from `downcast-rs` triggers this lint; we cannot fix upstream.
+#![allow(clippy::multiple_bound_locations)]
 // #![deny(missing_docs)] // effectively unenforced
 
 extern crate alloc;

@@ -131,7 +131,7 @@ impl Syscall<'_> {
         Ok(())
     }
 
-    ///
+    /// Get PC firmware tables (ACPI, SMBIOS).
     #[allow(unused_variables, unused_mut)]
     pub fn sys_pc_firmware_tables(
         &self,

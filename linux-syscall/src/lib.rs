@@ -254,13 +254,13 @@ impl Syscall<'_> {
             Sys::GETSID => self.sys_getsid(a0),
             Sys::GETPGID => self.sys_getpgid(a0),
             Sys::GETGROUPS => self.sys_getgroups(a0 as i32, a1.into()),
-            Sys::SETGROUPS => self.sys_setgroups(a0 as usize, a1.into()),
+            Sys::SETGROUPS => self.sys_setgroups(a0, a1.into()),
             Sys::SETPRIORITY => Ok(0), // scheduling priority — stub
             Sys::PRCTL => self.sys_prctl(a0, a1),
             Sys::MEMBARRIER => Ok(0), // memory barrier — no-op on single CPU
             Sys::PRLIMIT64 => self.sys_prlimit64(a0, a1, a2.into(), a3.into()),
             Sys::REBOOT => self.sys_reboot(a0 as u32, a1 as u32, a2 as u32),
-            Sys::GETRANDOM => self.sys_getrandom(a0.into(), a1 as usize, a2 as u32),
+            Sys::GETRANDOM => self.sys_getrandom(a0.into(), a1, a2 as u32),
             Sys::RT_SIGQUEUEINFO => self.sys_rt_sigqueueinfo(a0 as _, a1, a2.into()),
 
             // kernel module — not applicable for zCore
