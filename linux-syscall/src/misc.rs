@@ -415,15 +415,14 @@ impl Syscall<'_> {
     }
 
     /// Get process group ID. If pid==0, returns the PGID of
-    /// the calling process. For other pids, returns 0
-    /// (cross-process PGID lookup not yet supported).
+    /// the calling process. Cross-process lookup is not yet
+    /// supported and returns ENOSYS.
     pub fn sys_getpgid(&self, pid: usize) -> SysResult {
-        let pgid = if pid == 0 || pid as u64 == self.zircon_process().id() {
-            self.linux_process().pgid()
-        } else {
-            // Cross-process: return 0 (no tracking)
-            0
-        };
+        if pid != 0 && pid as u64 != self.zircon_process().id() {
+            warn!("getpgid: cross-process lookup not supported (pid={})", pid);
+            return Err(LxError::ENOSYS);
+        }
+        let pgid = self.linux_process().pgid();
         info!("getpgid: pid={} => {}", pid, pgid);
         Ok(pgid as usize)
     }
@@ -438,15 +437,14 @@ impl Syscall<'_> {
     }
 
     /// Get the session ID. If pid==0, returns the session ID
-    /// of the calling process. For other pids, returns 0
-    /// (cross-process session lookup not yet supported).
+    /// of the calling process. Cross-process lookup is not yet
+    /// supported and returns ENOSYS.
     pub fn sys_getsid(&self, pid: usize) -> SysResult {
-        let sid = if pid == 0 || pid as u64 == self.zircon_process().id() {
-            self.linux_process().session_id()
-        } else {
-            // Cross-process: return 0 (no tracking)
-            0
-        };
+        if pid != 0 && pid as u64 != self.zircon_process().id() {
+            warn!("getsid: cross-process lookup not supported (pid={})", pid);
+            return Err(LxError::ENOSYS);
+        }
+        let sid = self.linux_process().session_id();
         info!("getsid: pid={} => {}", pid, sid);
         Ok(sid as usize)
     }
