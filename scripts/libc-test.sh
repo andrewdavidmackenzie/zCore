@@ -23,10 +23,13 @@ ARCH="${1:?Usage: $0 <arch>}"
 # need a more generous timeout. Detect the platform and adjust.
 if [ "$(uname -s)" = "Darwin" ]; then
   TIMEOUT_PER_TEST=20
+  BOOT_TIMEOUT=10
 else
-  TIMEOUT_PER_TEST=60
+  # Linux x86_64 runners use cross-arch QEMU emulation (~10-12x slower).
+  # Each QEMU session needs substantial time for boot + test + poweroff.
+  TIMEOUT_PER_TEST=120
+  BOOT_TIMEOUT=30
 fi
-BOOT_TIMEOUT=15
 
 case "$ARCH" in
   aarch64)
