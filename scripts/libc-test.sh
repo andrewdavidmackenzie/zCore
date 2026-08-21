@@ -119,6 +119,13 @@ run_test() {
   done
 
   if ! $prompt_found; then
+    # Diagnostic: dump QEMU output for first 3 boot failures
+    if [ "${DIAG_BOOT_COUNT:=0}" -lt 3 ]; then
+      DIAG_BOOT_COUNT=$((DIAG_BOOT_COUNT + 1))
+      echo "DIAG[$name]: prompt NOT found after ${BOOT_TIMEOUT}s. QEMU output:" >&2
+      sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT" | head -30 >&2
+      echo "--- ($(wc -l < "$OUTPUT") total lines) ---" >&2
+    fi
     exec 3>&- 2>/dev/null || true
     kill "$PID" 2>/dev/null || true
     wait "$PID" 2>/dev/null || true
