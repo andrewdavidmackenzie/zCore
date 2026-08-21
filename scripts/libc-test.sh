@@ -119,18 +119,14 @@ run_test() {
   done
 
   if ! $prompt_found; then
-    # Diagnostic: dump QEMU output for first 3 boot failures
-    if [ "${DIAG_BOOT_COUNT:=0}" -lt 3 ]; then
-      DIAG_BOOT_COUNT=$((DIAG_BOOT_COUNT + 1))
-      echo "DIAG[$name]: prompt NOT found after ${BOOT_TIMEOUT}s. QEMU output:" >&2
-      sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT" | head -30 >&2
-      echo "--- ($(wc -l < "$OUTPUT") total lines) ---" >&2
-    fi
+    # Save QEMU output for diagnostic dump (before cleanup)
+    local diag_file="/tmp/libc-test-diag-${name}.log"
+    sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT" > "$diag_file" 2>/dev/null || true
     exec 3>&- 2>/dev/null || true
     kill "$PID" 2>/dev/null || true
     wait "$PID" 2>/dev/null || true
     rm -f "$OUTPUT" "$QEMU_IN"
-    echo "HANG"
+    echo "HANG:boot:$diag_file"
     return
   fi
 
@@ -162,21 +158,16 @@ run_test() {
 
   local verdict
   if $timed_out; then
-    verdict="HANG"
+    # Save QEMU output for diagnostic dump
+    local diag_file="/tmp/libc-test-diag-${name}.log"
+    echo "$cleaned" > "$diag_file" 2>/dev/null || true
+    verdict="HANG:timeout:$diag_file"
   elif [ -z "$result" ]; then
     verdict="HANG"
   elif echo "$result" | grep -q "^PASS:"; then
     verdict="PASS"
   else
     verdict="FAIL"
-  fi
-
-  # Diagnostic: dump QEMU output for the first 3 non-passing tests
-  if [ "$verdict" != "PASS" ] && [ "${DIAG_COUNT:-0}" -lt 3 ]; then
-    DIAG_COUNT=$((${DIAG_COUNT:-0} + 1))
-    echo "--- DIAG[$name]: verdict=$verdict timed_out=$timed_out prompt=$prompt_found ---" >&2
-    echo "$cleaned" | tail -20 >&2
-    echo "--- END DIAG[$name] ---" >&2
   fi
 
   rm -f "$OUTPUT" "$QEMU_IN"
@@ -187,6 +178,7 @@ PASSED=0
 FAILED=0
 HUNG=0
 FAIL_LIST=""
+DIAG_DUMPED=0
 
 for exe in "${TESTS[@]}"; do
   name=$(basename "$exe" -static.exe)
@@ -199,7 +191,32 @@ for exe in "${TESTS[@]}"; do
       FAILED=$((FAILED + 1))
       FAIL_LIST+="  FAIL: $name\n"
       ;;
-    HANG)
+    HANG:boot:*)
+      HUNG=$((HUNG + 1))
+      FAIL_LIST+="  HANG(boot): $name\n"
+      # Print diagnostic from saved file (in parent shell, so it appears in CI)
+      diag_file="${result#HANG:boot:}"
+      if [ "$DIAG_DUMPED" -lt 3 ] && [ -f "$diag_file" ]; then
+        DIAG_DUMPED=$((DIAG_DUMPED + 1))
+        echo "  --- DIAG[$name]: shell prompt NOT found. QEMU output (first 30 lines):"
+        head -30 "$diag_file"
+        echo "  --- ($(wc -l < "$diag_file" | tr -d ' ') total lines)"
+      fi
+      rm -f "$diag_file"
+      ;;
+    HANG:timeout:*)
+      HUNG=$((HUNG + 1))
+      FAIL_LIST+="  HANG(timeout): $name\n"
+      diag_file="${result#HANG:timeout:}"
+      if [ "$DIAG_DUMPED" -lt 3 ] && [ -f "$diag_file" ]; then
+        DIAG_DUMPED=$((DIAG_DUMPED + 1))
+        echo "  --- DIAG[$name]: test timed out. QEMU output (last 30 lines):"
+        tail -30 "$diag_file"
+        echo "  --- ($(wc -l < "$diag_file" | tr -d ' ') total lines)"
+      fi
+      rm -f "$diag_file"
+      ;;
+    *)
       HUNG=$((HUNG + 1))
       FAIL_LIST+="  HANG: $name\n"
       ;;
