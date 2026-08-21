@@ -149,18 +149,31 @@ run_test() {
 
   # Parse result
   local result
-  result=$(sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT" | grep -oE "(PASS|FAIL):$name" | head -1 || true)
-  rm -f "$OUTPUT" "$QEMU_IN"
+  local cleaned
+  cleaned=$(sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT")
+  result=$(echo "$cleaned" | grep -oE "(PASS|FAIL):$name" | head -1 || true)
 
+  local verdict
   if $timed_out; then
-    echo "HANG"
+    verdict="HANG"
   elif [ -z "$result" ]; then
-    echo "HANG"
+    verdict="HANG"
   elif echo "$result" | grep -q "^PASS:"; then
-    echo "PASS"
+    verdict="PASS"
   else
-    echo "FAIL"
+    verdict="FAIL"
   fi
+
+  # Diagnostic: dump QEMU output for the first 3 non-passing tests
+  if [ "$verdict" != "PASS" ] && [ "${DIAG_COUNT:-0}" -lt 3 ]; then
+    DIAG_COUNT=$((${DIAG_COUNT:-0} + 1))
+    echo "--- DIAG[$name]: verdict=$verdict timed_out=$timed_out prompt=$prompt_found ---" >&2
+    echo "$cleaned" | tail -20 >&2
+    echo "--- END DIAG[$name] ---" >&2
+  fi
+
+  rm -f "$OUTPUT" "$QEMU_IN"
+  echo "$verdict"
 }
 
 PASSED=0
