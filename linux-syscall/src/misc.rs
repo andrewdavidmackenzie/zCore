@@ -394,11 +394,14 @@ impl Syscall<'_> {
 
     /// Set process group ID. If pid==0, uses the calling
     /// process. If pgid==0, the target becomes its own
-    /// process group leader.
-    pub fn sys_setpgid(&self, pid: usize, pgid: u64) -> SysResult {
+    /// process group leader. Negative pgid values are rejected.
+    pub fn sys_setpgid(&self, pid: usize, pgid: isize) -> SysResult {
+        if pgid < 0 {
+            return Err(LxError::EINVAL);
+        }
         let proc = self.zircon_process();
         let target_pid = if pid == 0 { proc.id() } else { pid as u64 };
-        let new_pgid = if pgid == 0 { target_pid } else { pgid };
+        let new_pgid = if pgid == 0 { target_pid } else { pgid as u64 };
         info!(
             "setpgid: pid={} pgid={} => target_pid={} new_pgid={}",
             pid, pgid, target_pid, new_pgid

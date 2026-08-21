@@ -6,7 +6,7 @@ XTASK ?= 1
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
-.PHONY: help build run test boot-test config config-macos zircon-init update rootfs libc-test other-test image check doc clean
+.PHONY: help build run test boot-test config config-macos zircon-init update rootfs libc-test other-test image clippy check doc clean
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -192,6 +192,22 @@ else ifeq ($(ARCH), riscv64)
 	@rcore-fs-fuse zCore/riscv64.img rootfs/riscv zip
 	@qemu-img resize -f raw zCore/riscv64.img +5M
 endif
+
+# Run clippy on all workspace crates.
+# Step 1: kernel + OS crates via the custom bare-metal target (covers drivers,
+#         kernel-hal, zircon-object, linux-object, linux-syscall, loader, zcore).
+# Step 2: host-side tools (xtask, z-config, region-alloc) via native target.
+clippy:
+	@echo "==> Clippy: kernel crates ($(ARCH))..."
+	cargo clippy -p zcore --no-default-features --features linux \
+		--target zCore/$(ARCH).json \
+		-Z json-target-spec \
+		-Z build-std=core,alloc \
+		-Z build-std-features=compiler-builtins-mem \
+		--no-deps -- --deny warnings
+	@echo "==> Clippy: host tools..."
+	cargo clippy -p xtask -p z-config -p region-alloc \
+		--no-deps -- --deny warnings
 
 # check code style
 check:

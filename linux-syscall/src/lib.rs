@@ -248,7 +248,7 @@ impl Syscall<'_> {
             Sys::SETUID => self.sys_setuid(a0 as u32),
             Sys::GETEUID => self.sys_geteuid(),
             Sys::GETEGID => self.sys_getegid(),
-            Sys::SETPGID => self.sys_setpgid(a0, a1 as u64),
+            Sys::SETPGID => self.sys_setpgid(a0, a1 as isize),
             Sys::GETPPID => self.sys_getppid(),
             Sys::SETSID => self.sys_setsid(),
             Sys::GETSID => self.sys_getsid(a0),
