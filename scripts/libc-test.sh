@@ -17,10 +17,16 @@
 set -euo pipefail
 
 ARCH="${1:?Usage: $0 <arch>}"
-# Per-test QEMU session timeout (seconds). Includes boot (~2s) + test
-# execution. Most tests complete in <5s; generous limit for slow tests.
-TIMEOUT_PER_TEST=20
-BOOT_TIMEOUT=10
+# Per-test QEMU session timeout (seconds). Includes boot + test execution.
+# On macOS (Apple Silicon, native aarch64 QEMU) most tests finish in <5s.
+# On Linux x86_64 (cross-arch emulation) QEMU is ~4x slower, so tests
+# need a more generous timeout. Detect the platform and adjust.
+if [ "$(uname -s)" = "Darwin" ]; then
+  TIMEOUT_PER_TEST=20
+else
+  TIMEOUT_PER_TEST=60
+fi
+BOOT_TIMEOUT=15
 
 case "$ARCH" in
   aarch64)
