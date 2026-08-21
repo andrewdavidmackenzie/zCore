@@ -267,7 +267,7 @@ impl Syscall<'_> {
 }
 
 #[allow(dead_code)]
-#[repr(Rust, packed)] // Don't use 'C'. Or its size will align up to 8 bytes.
+#[repr(C, packed)] // packed to avoid padding; C to guarantee field order.
 pub struct LinuxDirent64 {
     /// Inode number
     ino: u64,
