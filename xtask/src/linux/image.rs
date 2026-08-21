@@ -22,7 +22,7 @@ impl super::LinuxRootfs {
         // Add extra space for certain tests
         Qemu::img()
             .arg("resize")
-            .args(&["-f", "raw"])
+            .args(["-f", "raw"])
             .arg(&image)
             .arg("+5M")
             .invoke();

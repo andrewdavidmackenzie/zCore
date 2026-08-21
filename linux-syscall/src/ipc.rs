@@ -210,7 +210,7 @@ impl Syscall<'_> {
                 if num >= nsems {
                     return Err(LxError::EINVAL);
                 }
-                let sem = &sem_array[num as usize];
+                let sem = &sem_array[num];
                 match cmd {
                     SemctlCmds::GETPID => Ok(sem.get_pid()),
                     SemctlCmds::GETVAL => Ok(sem.get() as usize),

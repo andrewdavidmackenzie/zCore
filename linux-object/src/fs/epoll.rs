@@ -129,7 +129,7 @@ impl EpollFile {
                 let inner = self.epoll.inner.lock();
                 let mut ready = Vec::new();
 
-                for (_, entry) in inner.interest.iter() {
+                for entry in inner.interest.values() {
                     if ready.len() >= self.max_events {
                         break;
                     }
@@ -304,7 +304,7 @@ impl FileLike for EpollFile {
 pub fn ready_count(epoll: &EpollFile) -> usize {
     let inner = epoll.inner.lock();
     let mut count = 0;
-    for (_, entry) in inner.interest.iter() {
+    for entry in inner.interest.values() {
         let poll_events = epoll_to_poll_events(entry.event.events);
         if let Ok(status) = entry.file.poll(poll_events) {
             let revents = (if status.read { EPOLLIN } else { 0 })

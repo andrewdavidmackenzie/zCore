@@ -71,7 +71,8 @@ impl Syscall<'_> {
         if inode.find(file_name).is_ok() {
             return Err(LxError::EEXIST);
         }
-        inode.create(file_name, FileType::Dir, mode as u32)?;
+        let effective_mode = mode as u32 & !proc.umask();
+        inode.create(file_name, FileType::Dir, effective_mode)?;
         Ok(0)
     }
     /// Remove a directory.
@@ -266,7 +267,7 @@ impl Syscall<'_> {
 }
 
 #[allow(dead_code)]
-#[repr(packed)] // Don't use 'C'. Or its size will align up to 8 bytes.
+#[repr(C, packed)] // packed to avoid padding; C to guarantee field order.
 pub struct LinuxDirent64 {
     /// Inode number
     ino: u64,
@@ -300,7 +301,7 @@ impl<'a> DirentBufWriter<'a> {
     /// write data
     fn try_write(&mut self, inode: u64, type_: u8, name: &str) -> bool {
         let len = core::mem::size_of::<LinuxDirent64>() + name.len() + 1;
-        let len = (len + 7) / 8 * 8; // align up
+        let len = len.div_ceil(8) * 8; // align up
         if self.rest_size < len {
             return false;
         }

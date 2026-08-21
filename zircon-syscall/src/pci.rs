@@ -143,7 +143,7 @@ impl Syscall<'_> {
             })?;
             PCIeBusDriver::set_address_translation_provider(addr_provider)?;
         } else if addr_win.cfg_space_type == PCI_CFG_SPACE_TYPE_PIO {
-            let addr_provider = Arc::new(PmioPcieAddressProvider::default());
+            let addr_provider = Arc::new(PmioPcieAddressProvider);
             PCIeBusDriver::set_address_translation_provider(addr_provider)?;
         } else {
             return Err(ZxError::INVALID_ARGS);

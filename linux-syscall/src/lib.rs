@@ -236,31 +236,31 @@ impl Syscall<'_> {
             Sys::GETPID => self.sys_getpid(),
             Sys::GETTID => self.sys_gettid(),
             Sys::UNAME => self.sys_uname(a0.into()),
-            Sys::UMASK => Ok(0o022), // return previous umask
+            Sys::UMASK => self.sys_umask(a0 as u32),
             Sys::GETRLIMIT => self.sys_prlimit64(0, a0, 0.into(), a1.into()),
             Sys::SETRLIMIT => self.sys_prlimit64(0, a0, a1.into(), 0.into()),
             Sys::GETRUSAGE => self.sys_getrusage(a0, a1.into()),
             Sys::SYSINFO => self.sys_sysinfo(a0.into()),
             Sys::TIMES => self.sys_times(a0.into()),
-            // User/group identity — always root (uid=0, gid=0) for now.
-            // TODO: per-process uid/gid tracking (#16)
-            Sys::GETUID => Ok(0),
-            Sys::GETGID => Ok(0),
-            Sys::SETUID => Ok(0),
-            Sys::GETEUID => Ok(0),
-            Sys::GETEGID => Ok(0),
-            Sys::SETPGID => Ok(0),
+            // User/group identity
+            Sys::GETUID => self.sys_getuid(),
+            Sys::GETGID => self.sys_getgid(),
+            Sys::SETUID => self.sys_setuid(a0 as u32),
+            Sys::GETEUID => self.sys_geteuid(),
+            Sys::GETEGID => self.sys_getegid(),
+            Sys::SETPGID => self.sys_setpgid(a0, a1 as isize),
             Sys::GETPPID => self.sys_getppid(),
-            Sys::SETSID => Ok(0),
-            Sys::GETPGID => Ok(0),
-            Sys::GETGROUPS => Ok(0),
-            Sys::SETGROUPS => Ok(0),
+            Sys::SETSID => self.sys_setsid(),
+            Sys::GETSID => self.sys_getsid(a0),
+            Sys::GETPGID => self.sys_getpgid(a0),
+            Sys::GETGROUPS => self.sys_getgroups(a0 as i32, a1.into()),
+            Sys::SETGROUPS => self.sys_setgroups(a0, a1.into()),
             Sys::SETPRIORITY => Ok(0), // scheduling priority — stub
             Sys::PRCTL => self.sys_prctl(a0, a1),
             Sys::MEMBARRIER => Ok(0), // memory barrier — no-op on single CPU
             Sys::PRLIMIT64 => self.sys_prlimit64(a0, a1, a2.into(), a3.into()),
             Sys::REBOOT => self.sys_reboot(a0 as u32, a1 as u32, a2 as u32),
-            Sys::GETRANDOM => self.sys_getrandom(a0.into(), a1 as usize, a2 as u32),
+            Sys::GETRANDOM => self.sys_getrandom(a0.into(), a1, a2 as u32),
             Sys::RT_SIGQUEUEINFO => self.sys_rt_sigqueueinfo(a0 as _, a1, a2.into()),
 
             // kernel module — not applicable for zCore

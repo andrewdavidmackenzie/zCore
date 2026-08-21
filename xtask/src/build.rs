@@ -111,9 +111,9 @@ impl BuildConfig {
             .package("zcore")
             .features(false, &self.features)
             .target(INNER.join(format!("{}.json", self.arch.name())))
-            .args(&["-Z", "json-target-spec"])
-            .args(&["-Z", "build-std=core,alloc"])
-            .args(&["-Z", "build-std-features=compiler-builtins-mem"])
+            .args(["-Z", "json-target-spec"])
+            .args(["-Z", "build-std=core,alloc"])
+            .args(["-Z", "build-std-features=compiler-builtins-mem"])
             .conditional(!self.debug, |cargo| {
                 cargo.release();
             });
@@ -195,49 +195,49 @@ impl QemuArgs {
         };
         // Set qemu arguments
         let mut qemu = Qemu::system(arch_str);
-        qemu.args(&["-m", "2G"])
-            .args(&["-display", "none"])
+        qemu.args(["-m", "2G"])
+            .args(["-display", "none"])
             .arg("-no-reboot")
             .arg("-nographic")
             .optional(&self.smp, |qemu, smp| {
-                qemu.args(&["-smp", &smp.to_string()]);
+                qemu.args(["-smp", &smp.to_string()]);
             });
         match arch {
             Arch::Riscv64 => {
-                qemu.args(&["-machine", "virt"])
+                qemu.args(["-machine", "virt"])
                     .arg("-kernel")
                     .arg(&bin)
                     .arg("-initrd")
                     .arg(INNER.join(format!("{arch_str}.img")))
-                    .args(&["-append", "\"LOG=warn\""])
-                    .args(&["-bios", "default"])
-                    .args(&["-serial", "mon:stdio"]);
+                    .args(["-append", "\"LOG=warn\""])
+                    .args(["-bios", "default"])
+                    .args(["-serial", "mon:stdio"]);
             }
             Arch::X86_64 => todo!(),
             Arch::Aarch64 => {
                 // Direct kernel boot: QEMU loads the ELF directly, no UEFI
                 // bootloader needed. The kernel's _boot assembly sets up MMU
                 // and page tables before jumping to rust_main.
-                qemu.args(&["-machine", "virt"])
-                    .args(&["-cpu", "cortex-a72"])
+                qemu.args(["-machine", "virt"])
+                    .args(["-cpu", "cortex-a72"])
                     .arg("-kernel")
                     .arg(&obj)
-                    .args(&["-serial", "mon:stdio"])
-                    .args(&[
+                    .args(["-serial", "mon:stdio"])
+                    .args([
                         "-drive",
                         &format!(
                             "file={}/aarch64.img,if=none,format=raw,id=x0",
                             INNER.display()
                         ),
                     ])
-                    .args(&[
+                    .args([
                         "-device",
                         "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0",
                     ]);
             }
         }
         qemu.optional(&self.gdb, |qemu, port| {
-            qemu.args(&["-S", "-gdb", &format!("tcp::{port}")]);
+            qemu.args(["-S", "-gdb", &format!("tcp::{port}")]);
         })
         .invoke();
     }
@@ -248,12 +248,12 @@ impl GdbArgs {
         match self.arch.arch {
             Arch::Riscv64 => {
                 Ext::new("riscv64-unknown-elf-gdb")
-                    .args(&["-ex", &format!("target remote localhost:{}", self.port)])
+                    .args(["-ex", &format!("target remote localhost:{}", self.port)])
                     .invoke();
             }
             Arch::Aarch64 => {
                 Ext::new("aarch64-none-linux-gnu-gdb")
-                    .args(&["-ex", &format!("target remote localhost:{}", self.port)])
+                    .args(["-ex", &format!("target remote localhost:{}", self.port)])
                     .invoke();
             }
             Arch::X86_64 => todo!(),

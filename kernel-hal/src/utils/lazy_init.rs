@@ -72,6 +72,12 @@ impl<T: fmt::Debug> fmt::Debug for LazyInit<T> {
     }
 }
 
+impl<T> Default for LazyInit<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> Deref for LazyInit<T> {
     type Target = T;
     fn deref(&self) -> &T {

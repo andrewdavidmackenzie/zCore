@@ -3,7 +3,7 @@
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::mem::{align_of, size_of};
+use core::mem::align_of;
 use core::ops::Deref;
 use core::ptr::null;
 
@@ -96,7 +96,7 @@ impl Stack {
     /// Returns `Err(E2BIG)` if the data would exceed the stack buffer.
     #[allow(unsafe_code)]
     fn push_slice<T: Copy>(&mut self, vs: &[T]) -> LxResult {
-        self.sp -= vs.len() * size_of::<T>();
+        self.sp -= core::mem::size_of_val(vs);
         self.sp -= self.sp % align_of::<T>();
         if self.stack_top - self.sp > self.data.len() {
             return Err(LxError::E2BIG);
@@ -112,7 +112,7 @@ impl Stack {
     ///
     /// Returns `Err(E2BIG)` if the data would exceed the stack buffer.
     fn push_str(&mut self, s: &str) -> LxResult {
-        self.push_slice(&[b'\0'])?;
+        self.push_slice(b"\0")?;
         self.push_slice(s.as_bytes())
     }
 }

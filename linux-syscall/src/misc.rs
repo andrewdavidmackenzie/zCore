@@ -1,4 +1,5 @@
 use super::*;
+use alloc::vec::Vec;
 use bitflags::bitflags;
 use core::time::Duration;
 use kernel_hal::timer::timer_now;
@@ -339,6 +340,152 @@ impl Syscall<'_> {
         kernel_hal::rand::fill_random(&mut buffer);
         buf.write_array(&buffer[..len])?;
         Ok(len)
+    }
+
+    // --- User/group identity syscalls ---
+
+    /// Get the real user ID of the calling process.
+    pub fn sys_getuid(&self) -> SysResult {
+        let uid = self.linux_process().uid();
+        info!("getuid => {}", uid);
+        Ok(uid as usize)
+    }
+
+    /// Get the real group ID of the calling process.
+    pub fn sys_getgid(&self) -> SysResult {
+        let gid = self.linux_process().gid();
+        info!("getgid => {}", gid);
+        Ok(gid as usize)
+    }
+
+    /// Get the effective user ID of the calling process.
+    pub fn sys_geteuid(&self) -> SysResult {
+        let euid = self.linux_process().euid();
+        info!("geteuid => {}", euid);
+        Ok(euid as usize)
+    }
+
+    /// Get the effective group ID of the calling process.
+    pub fn sys_getegid(&self) -> SysResult {
+        let egid = self.linux_process().egid();
+        info!("getegid => {}", egid);
+        Ok(egid as usize)
+    }
+
+    /// Set the user ID of the calling process.
+    /// If privileged (euid == 0), sets real and effective UID.
+    /// Otherwise, only sets effective UID if it matches the
+    /// real UID.
+    pub fn sys_setuid(&self, uid: u32) -> SysResult {
+        info!("setuid: uid={}", uid);
+        self.linux_process()
+            .set_uid(uid)
+            .map(|_| 0)
+            .map_err(|_| LxError::EPERM)
+    }
+
+    /// Set the file mode creation mask. Returns the
+    /// previous value.
+    pub fn sys_umask(&self, mask: u32) -> SysResult {
+        let old = self.linux_process().set_umask(mask);
+        info!("umask: mask={:#o} => old={:#o}", mask, old);
+        Ok(old as usize)
+    }
+
+    /// Set process group ID. If pid==0, uses the calling
+    /// process. If pgid==0, the target becomes its own
+    /// process group leader. Negative pgid values are rejected.
+    pub fn sys_setpgid(&self, pid: usize, pgid: isize) -> SysResult {
+        if pgid < 0 {
+            return Err(LxError::EINVAL);
+        }
+        let proc = self.zircon_process();
+        let target_pid = if pid == 0 { proc.id() } else { pid as u64 };
+        let new_pgid = if pgid == 0 { target_pid } else { pgid as u64 };
+        info!(
+            "setpgid: pid={} pgid={} => target_pid={} new_pgid={}",
+            pid, pgid, target_pid, new_pgid
+        );
+        // Only allow setting pgid on self (simplification)
+        if target_pid != proc.id() {
+            return Err(LxError::ESRCH);
+        }
+        self.linux_process().set_pgid(new_pgid);
+        Ok(0)
+    }
+
+    /// Get process group ID. If pid==0, returns the PGID of
+    /// the calling process. Cross-process lookup is not yet
+    /// supported and returns ENOSYS.
+    pub fn sys_getpgid(&self, pid: usize) -> SysResult {
+        if pid != 0 && pid as u64 != self.zircon_process().id() {
+            warn!("getpgid: cross-process lookup not supported (pid={})", pid);
+            return Err(LxError::ENOSYS);
+        }
+        let pgid = self.linux_process().pgid();
+        info!("getpgid: pid={} => {}", pid, pgid);
+        Ok(pgid as usize)
+    }
+
+    /// Create a new session. Sets session_id and pgid to the
+    /// calling process's PID. Returns the new session ID.
+    pub fn sys_setsid(&self) -> SysResult {
+        let pid = self.zircon_process().id();
+        self.linux_process().setsid(pid);
+        info!("setsid: pid={} => sid={}", pid, pid);
+        Ok(pid as usize)
+    }
+
+    /// Get the session ID. If pid==0, returns the session ID
+    /// of the calling process. Cross-process lookup is not yet
+    /// supported and returns ENOSYS.
+    pub fn sys_getsid(&self, pid: usize) -> SysResult {
+        if pid != 0 && pid as u64 != self.zircon_process().id() {
+            warn!("getsid: cross-process lookup not supported (pid={})", pid);
+            return Err(LxError::ENOSYS);
+        }
+        let sid = self.linux_process().session_id();
+        info!("getsid: pid={} => {}", pid, sid);
+        Ok(sid as usize)
+    }
+
+    /// Get the supplementary group IDs. If size==0, returns
+    /// the number of groups. Otherwise copies up to `size`
+    /// group IDs to the user buffer.
+    pub fn sys_getgroups(&self, size: i32, mut list: UserOutPtr<u32>) -> SysResult {
+        let groups = self.linux_process().groups();
+        info!("getgroups: size={} ngroups={}", size, groups.len());
+        if size == 0 {
+            return Ok(groups.len());
+        }
+        if size < 0 {
+            return Err(LxError::EINVAL);
+        }
+        if (size as usize) < groups.len() {
+            return Err(LxError::EINVAL);
+        }
+        list.write_array(&groups)?;
+        Ok(groups.len())
+    }
+
+    /// Set the supplementary group IDs. Requires privilege
+    /// (euid == 0).
+    pub fn sys_setgroups(&self, size: usize, list: UserInPtr<u32>) -> SysResult {
+        info!("setgroups: size={}", size);
+        if self.linux_process().euid() != 0 {
+            return Err(LxError::EPERM);
+        }
+        // Linux NGROUPS_MAX
+        if size > 65_536 {
+            return Err(LxError::EINVAL);
+        }
+        let groups = if size > 0 {
+            list.read_array(size)?
+        } else {
+            Vec::new()
+        };
+        self.linux_process().set_groups(groups);
+        Ok(0)
     }
 }
 

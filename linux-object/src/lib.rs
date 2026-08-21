@@ -5,6 +5,8 @@
 // #![deny(missing_docs)] // effectively unenforced
 #![allow(clippy::upper_case_acronyms)]
 #![allow(clippy::uninit_vec)]
+#![allow(clippy::multiple_bound_locations)]
+#![allow(clippy::double_must_use)]
 
 #[macro_use]
 extern crate alloc;

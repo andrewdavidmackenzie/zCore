@@ -341,19 +341,17 @@ fn set_git_proxy(global: bool, port: u16) {
         })
         .expect("FAILED: detect DNS");
     let proxy = format!("socks5://{dns}:{port}");
-    Git::config(global).args(&["http.proxy", &proxy]).invoke();
-    Git::config(global).args(&["https.proxy", &proxy]).invoke();
+    Git::config(global).args(["http.proxy", &proxy]).invoke();
+    Git::config(global).args(["https.proxy", &proxy]).invoke();
     println!("git proxy = {proxy}");
 }
 
 /// Unsets git proxy.
 fn unset_git_proxy(global: bool) {
     use os_xtask_utils::{CommandExt, Git};
+    Git::config(global).args(["--unset", "http.proxy"]).invoke();
     Git::config(global)
-        .args(&["--unset", "http.proxy"])
-        .invoke();
-    Git::config(global)
-        .args(&["--unset", "https.proxy"])
+        .args(["--unset", "https.proxy"])
         .invoke();
     println!("git proxy =");
 }
@@ -375,7 +373,7 @@ fn check_style() {
     println!("    Checks linux libos");
     Cargo::clippy()
         .package("zcore")
-        .features(false, &["linux", "libos"])
+        .features(false, ["linux", "libos"])
         .invoke();
 
     println!("Check bare-metal");
