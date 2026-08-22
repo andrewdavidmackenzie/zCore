@@ -133,7 +133,9 @@ impl LinuxRootfs {
         // implement the mmap semantics required by musl's dynamic linker.
         let config_path = target.join(".config");
         let config = fs::read_to_string(&config_path).expect("failed to read .config");
-        let config = config.replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y");
+        let config = config
+            .replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y")
+            .replace("CONFIG_STATIC=n", "CONFIG_STATIC=y");
         fs::write(&config_path, config).expect("failed to write .config");
         // Compile
         let musl = musl.as_ref();
