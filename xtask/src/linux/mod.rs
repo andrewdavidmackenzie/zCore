@@ -137,6 +137,11 @@ impl LinuxRootfs {
             .replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y")
             .replace("CONFIG_STATIC=n", "CONFIG_STATIC=y");
         fs::write(&config_path, config).expect("failed to write .config");
+        // Resolve modified config without interactive prompts
+        Make::new()
+            .current_dir(&target)
+            .arg("olddefconfig")
+            .invoke();
         // Compile
         let musl = musl.as_ref();
         Make::new()
