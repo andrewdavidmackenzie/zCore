@@ -137,11 +137,15 @@ impl LinuxRootfs {
             .replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y")
             .replace("CONFIG_STATIC=n", "CONFIG_STATIC=y");
         fs::write(&config_path, config).expect("failed to write .config");
-        // Resolve modified config without interactive prompts
-        Make::new()
+        // Resolve modified config without interactive prompts.
+        // Pipe empty input so `oldconfig` accepts all defaults silently.
+        // (`olddefconfig` is not available in all busybox Kconfig versions.)
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg("yes '' | make oldconfig")
             .current_dir(&target)
-            .arg("olddefconfig")
-            .invoke();
+            .status()
+            .expect("failed to run make oldconfig");
         // Compile
         let musl = musl.as_ref();
         Make::new()
