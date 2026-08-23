@@ -185,7 +185,7 @@ impl Syscall<'_> {
         val: u32,
         val2: usize,
         uaddr2: usize,
-        _val3: u32,
+        val3: u32,
     ) -> SysResult {
         debug!(
             "Futex uaddr: {:#x}, op: {:x}, val: {}, val2(timeout_addr): {:x}",
@@ -230,6 +230,14 @@ impl Syscall<'_> {
             FutexFlags::REQUEUE => {
                 let requeue_futex = self.linux_process().get_futex(uaddr2);
                 let res = futex.requeue(0, val as _, val2, &requeue_futex, None, false);
+                match res {
+                    Ok(_) => Ok(0),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            FutexFlags::CMP_REQUEUE => {
+                let requeue_futex = self.linux_process().get_futex(uaddr2);
+                let res = futex.requeue(val3 as _, val as _, val2, &requeue_futex, None, true);
                 match res {
                     Ok(_) => Ok(0),
                     Err(e) => Err(e.into()),
@@ -500,6 +508,8 @@ bitflags! {
         const WAKE      = 1;
         /// wakes up a maximum of val waiters that are waiting on the futex at uaddr.  If there are more than val waiters, then the remaining waiters are removed from the wait queue of the source futex at uaddr and added to the wait queue of the target futex at uaddr2.  The val2 argument specifies an upper limit on the number of waiters that are requeued to the futex at uaddr2.
         const REQUEUE   = 3;
+        /// like REQUEUE, but first checks that the value at uaddr matches val3.
+        const CMP_REQUEUE = 4;
         /// (unsupported) is used after an attempt to acquire the lock via an atomic user-mode instruction failed.
         const LOCK_PI   = 6;
         /// (unsupported) is called when the user-space value at uaddr cannot be changed atomically from a TID (of the owner) to 0.
