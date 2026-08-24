@@ -22,11 +22,8 @@ pub trait ThreadExt {
     /// Set pointer to thread ID.
     fn set_tid_address(&self, tidptr: UserOutPtr<i32>);
     /// Get robust list.
-    fn get_robust_list(
-        &self,
-        _head_ptr: UserOutPtr<UserOutPtr<RobustList>>,
-        _len_ptr: UserOutPtr<usize>,
-    ) -> SysResult;
+    fn get_robust_list(&self, head_ptr: UserOutPtr<usize>, len_ptr: UserOutPtr<usize>)
+        -> SysResult;
     /// Set robust list.
     fn set_robust_list(&self, head: UserInPtr<RobustList>, len: usize);
 }
@@ -66,11 +63,12 @@ impl ThreadExt for Thread {
 
     fn get_robust_list(
         &self,
-        mut _head_ptr: UserOutPtr<UserOutPtr<RobustList>>,
-        mut _len_ptr: UserOutPtr<usize>,
+        mut head_ptr: UserOutPtr<usize>,
+        mut len_ptr: UserOutPtr<usize>,
     ) -> SysResult {
-        _head_ptr = (self.lock_linux().robust_list.as_addr() as *mut RobustList as usize).into();
-        _len_ptr = (&self.lock_linux().robust_list_len as *const usize as usize).into();
+        let linux = self.lock_linux();
+        head_ptr.write(linux.robust_list.as_addr())?;
+        len_ptr.write(linux.robust_list_len)?;
         Ok(0)
     }
 
@@ -80,9 +78,81 @@ impl ThreadExt for Thread {
     }
 }
 
+/// Process a single robust futex entry: if the futex word indicates
+/// this thread owns it (TID matches), set FUTEX_OWNER_DIED and wake one waiter.
+#[allow(unsafe_code)]
+fn handle_robust_entry(futex_addr: usize, tid: u32, proc: &zircon_object::task::Process) {
+    use core::sync::atomic::{AtomicU32, Ordering};
+    let futex_ptr = futex_addr as *const AtomicU32;
+    // Safety: futex_addr is a user-space address that was previously validated
+    // by set_robust_list. We read/write atomically as the kernel does.
+    let futex_word = unsafe { &*futex_ptr };
+    let old = futex_word.load(Ordering::SeqCst);
+    if (old & FUTEX_TID_MASK) == tid {
+        // Set FUTEX_OWNER_DIED, preserve FUTEX_WAITERS bit
+        futex_word.fetch_or(FUTEX_OWNER_DIED, Ordering::SeqCst);
+        // Wake one waiter
+        let linux_proc = proc
+            .ext()
+            .downcast_ref::<crate::process::LinuxProcess>()
+            .unwrap();
+        let futex = linux_proc.get_futex(futex_addr);
+        futex.wake(1);
+    }
+}
+
+/// Walk the robust futex list for a thread and set FUTEX_OWNER_DIED on any
+/// futexes still held by it. Called during thread exit.
+fn walk_robust_list(thread: &CurrentThread) {
+    use zircon_object::object::KernelObject;
+    let linux = thread.lock_linux();
+    let robust_ptr = &linux.robust_list;
+    if robust_ptr.is_null() {
+        return;
+    }
+    let head = match robust_ptr.read() {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+    let head_addr = robust_ptr.as_addr();
+    let tid = thread.id() as u32;
+    let proc = thread.proc();
+    drop(linux); // release lock before touching futexes
+
+    // Process list_op_pending first (in-progress lock/unlock)
+    if head.pending != 0 {
+        let futex_addr = (head.pending as isize + head.off) as usize;
+        handle_robust_entry(futex_addr, tid, proc);
+    }
+
+    // Walk the circular linked list
+    let mut entry = head.head;
+    for _ in 0..ROBUST_LIST_LIMIT {
+        if entry == head_addr {
+            break; // full circle
+        }
+        if entry == 0 {
+            break;
+        }
+        if entry != head.pending {
+            let futex_addr = (entry as isize + head.off) as usize;
+            handle_robust_entry(futex_addr, tid, proc);
+        }
+        let next_ptr: UserInPtr<usize> = entry.into();
+        entry = match next_ptr.read() {
+            Ok(next) => next,
+            Err(_) => break,
+        };
+    }
+}
+
 impl CurrentThreadExt for CurrentThread {
     /// Exit current thread for Linux.
     fn exit_linux(&self, _exit_code: i32) {
+        // Walk the robust futex list and mark any held mutexes as OWNER_DIED.
+        // This must happen before clear_child_tid (matches Linux kernel order).
+        walk_robust_list(self);
+
         let mut linux_thread = self.lock_linux();
         let clear_child_tid = &mut linux_thread.clear_child_tid;
         // perform futex wake 1
@@ -135,13 +205,20 @@ impl CurrentThreadExt for CurrentThread {
 /// robust_list
 #[derive(Default)]
 pub struct RobustList {
-    /// head
+    /// Pointer to the first entry in the circular linked list
     pub head: usize,
-    /// off
+    /// Byte offset from a robust_list entry to the futex word
     pub off: isize,
-    /// pending
+    /// Entry currently being locked/unlocked (in-progress operation)
     pub pending: usize,
 }
+
+/// Bit set in the futex word when the owning thread dies.
+const FUTEX_OWNER_DIED: u32 = 0x40000000;
+/// Mask for the thread ID portion of a futex word.
+const FUTEX_TID_MASK: u32 = 0x3FFFFFFF;
+/// Maximum number of entries to walk (prevents infinite loops).
+const ROBUST_LIST_LIMIT: usize = 2048;
 
 /// Linux specific thread information.
 pub struct LinuxThread {
