@@ -217,7 +217,7 @@ impl Futex {
     /// Wakes up to `wake_count` waiters and moves up to `requeue_count`
     /// remaining waiters to `requeue_futex`. If `check_value` is true,
     /// first verifies that `*uaddr == current_value` (for CMP_REQUEUE).
-    /// Returns the total number of waiters woken on success.
+    /// Returns the total number of waiters woken plus requeued on success.
     ///
     /// Locks are acquired in a consistent order (by pointer identity)
     /// to prevent deadlocks when concurrent requeue calls use swapped
@@ -265,7 +265,7 @@ impl Futex {
         // set owner
         inner.set_owner(None);
         new_inner.set_owner(new_requeue_owner);
-        Ok(woken)
+        Ok(woken + requeue_count)
     }
 }
 
