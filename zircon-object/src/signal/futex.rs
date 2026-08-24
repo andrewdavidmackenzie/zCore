@@ -218,6 +218,10 @@ impl Futex {
     /// remaining waiters to `requeue_futex`. If `check_value` is true,
     /// first verifies that `*uaddr == current_value` (for CMP_REQUEUE).
     /// Returns the total number of waiters woken on success.
+    ///
+    /// Locks are acquired in a consistent order (by pointer identity)
+    /// to prevent deadlocks when concurrent requeue calls use swapped
+    /// source/target addresses.
     pub fn requeue(
         &self,
         current_value: i32,
@@ -227,12 +231,20 @@ impl Futex {
         new_requeue_owner: Option<Arc<Thread>>,
         check_value: bool,
     ) -> Result<usize, ZxError> {
-        let mut inner = self.inner.lock();
-        if check_value {
-            // check value
-            if self.value.load(Ordering::SeqCst) != current_value {
-                return Err(ZxError::BAD_STATE);
-            }
+        // Acquire both locks in a consistent order to avoid ABBA deadlock.
+        let self_addr = &self.inner as *const _ as usize;
+        let other_addr = &requeue_futex.inner as *const _ as usize;
+        let (mut inner, mut new_inner) = if self_addr <= other_addr {
+            let a = self.inner.lock();
+            let b = requeue_futex.inner.lock();
+            (a, b)
+        } else {
+            let b = requeue_futex.inner.lock();
+            let a = self.inner.lock();
+            (a, b)
+        };
+        if check_value && self.value.load(Ordering::SeqCst) != current_value {
+            return Err(ZxError::BAD_STATE);
         }
         // wake
         let mut woken = 0;
@@ -245,7 +257,6 @@ impl Futex {
             }
         }
         // requeue
-        let mut new_inner = requeue_futex.inner.lock();
         let requeue_count = requeue_count.min(inner.waiter_queue.len());
         for waiter in inner.waiter_queue.drain(..requeue_count) {
             waiter.reset_futex(requeue_futex.clone());
