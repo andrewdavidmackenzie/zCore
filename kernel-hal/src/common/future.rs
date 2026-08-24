@@ -27,7 +27,7 @@ impl Future for YieldFuture {
 }
 
 #[must_use = "`sleep_until()` does nothing unless polled/`await`-ed"]
-pub(super) struct SleepFuture {
+pub struct SleepFuture {
     deadline: Duration,
 }
 

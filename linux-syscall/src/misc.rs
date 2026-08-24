@@ -212,7 +212,11 @@ impl Syscall<'_> {
                         )
                         .await
                 } else {
-                    future.await
+                    use linux_object::thread::Interruptible;
+                    match future.interruptible(self.thread).await {
+                        Ok(zx_result) => zx_result,
+                        Err(_) => return Err(LxError::EINTR),
+                    }
                 };
                 match res {
                     Ok(_) => {

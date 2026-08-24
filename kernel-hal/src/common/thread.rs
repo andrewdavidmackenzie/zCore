@@ -1,6 +1,7 @@
 use core::time::Duration;
 
-use super::future::{SleepFuture, YieldFuture};
+pub use super::future::SleepFuture;
+use super::future::YieldFuture;
 
 /// Sleeps until the specified of time.
 pub async fn sleep_until(deadline: Duration) {
