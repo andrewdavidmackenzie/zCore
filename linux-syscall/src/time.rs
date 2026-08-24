@@ -337,8 +337,7 @@ impl Syscall<'_> {
                     }
                 }
             },
-            // CPU time and other clocks: no sleep, just return
-            _ => Ok(()),
+            _ => return Err(LxError::EINVAL),
         };
         match sleep_result {
             Ok(()) => Ok(0),
