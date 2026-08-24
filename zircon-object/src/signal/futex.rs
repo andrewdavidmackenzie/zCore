@@ -219,9 +219,11 @@ impl Futex {
     /// first verifies that `*uaddr == current_value` (for CMP_REQUEUE).
     /// Returns the total number of waiters woken plus requeued on success.
     ///
-    /// Locks are acquired in a consistent order (by pointer identity)
-    /// to prevent deadlocks when concurrent requeue calls use swapped
-    /// source/target addresses.
+    /// The two futex locks are acquired in a consistent order (by pointer
+    /// identity) to prevent deadlocks between concurrent requeue calls
+    /// with swapped source/target addresses. Note: the broader lock
+    /// ordering between `Futex::inner` and `WaiterInner` is a pre-existing
+    /// concern not addressed here (see issue #102).
     pub fn requeue(
         &self,
         current_value: i32,
