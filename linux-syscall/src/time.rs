@@ -7,7 +7,6 @@ use kernel_hal::{user::UserInPtr, user::UserOutPtr};
 use linux_object::error::LxError;
 use linux_object::error::SysResult;
 use linux_object::signal::Signal as LinuxSignal;
-use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 
 const USEC_PER_TICK: usize = 10000;
@@ -302,15 +301,19 @@ impl Syscall<'_> {
             rem
         );
         use core::time::Duration;
-        use kernel_hal::{thread, timer};
+        use kernel_hal::thread::SleepFuture;
+        use kernel_hal::timer;
+        use linux_object::thread::Interruptible;
         let duration: Duration = req.read()?.into();
         let clockid = ClockId::from(clockid);
         let flags = ClockFlags::from(flags);
         info!("clockid={:?}, flags={:?}", clockid, flags,);
-        match clockid {
+        let sleep_result = match clockid {
             ClockId::ClockRealTime | ClockId::ClockMonotonic => match flags {
                 ClockFlags::ZeroFlag => {
-                    thread::sleep_until(timer::deadline_after(duration)).await;
+                    SleepFuture::new(timer::deadline_after(duration))
+                        .interruptible(self.thread)
+                        .await
                 }
                 ClockFlags::TimerAbsTime => {
                     // Convert absolute deadline to relative duration, then
@@ -325,26 +328,21 @@ impl Syscall<'_> {
                     // clocks via TimeSpec::now().
                     let now = timer::timer_now();
                     let remaining = duration.saturating_sub(now);
-                    if !remaining.is_zero() {
-                        thread::sleep_until(timer::deadline_after(remaining)).await;
+                    if remaining.is_zero() {
+                        Ok(())
+                    } else {
+                        SleepFuture::new(timer::deadline_after(remaining))
+                            .interruptible(self.thread)
+                            .await
                     }
                 }
             },
-            ClockId::ClockProcessCpuTimeId => {}
-            ClockId::ClockThreadCpuTimeId => {}
-            ClockId::ClockMonotonicRaw => {}
-            ClockId::ClockRealTimeCoarse => {}
-            ClockId::ClockMonotonicCoarse => {}
-            ClockId::ClockBootTime => {}
-            ClockId::ClockRealTimeAlarm => {}
-            ClockId::ClockBootTimeAlarm => {}
+            // CPU time and other clocks: no sleep, just return
+            _ => Ok(()),
+        };
+        match sleep_result {
+            Ok(()) => Ok(0),
+            Err(e) => Err(e),
         }
-        // Check for pending signals after wakeup.
-        // Note: on EINTR, Linux writes remaining time to `rem` for
-        // relative sleeps. This is not yet implemented; `rem` is ignored.
-        if self.thread.lock_linux().has_pending_signal() {
-            return Err(LxError::EINTR);
-        }
-        Ok(0)
     }
 }

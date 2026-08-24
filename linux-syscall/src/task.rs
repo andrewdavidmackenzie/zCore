@@ -423,15 +423,14 @@ impl Syscall<'_> {
     pub async fn sys_nanosleep(&self, req: UserInPtr<TimeSpec>) -> SysResult {
         info!("nanosleep: deadline={:?}", req);
         let duration = req.read()?.into();
-        use kernel_hal::{thread, timer};
-        thread::sleep_until(timer::deadline_after(duration)).await;
-        // Check for pending signals after wakeup.
-        // Note: the Linux nanosleep rem pointer (a1) is not yet
-        // plumbed through; on EINTR the remaining time is not written.
-        if self.thread.lock_linux().has_pending_signal() {
-            return Err(LxError::EINTR);
+        use kernel_hal::thread::SleepFuture;
+        use kernel_hal::timer;
+        use linux_object::thread::Interruptible;
+        let sleep = SleepFuture::new(timer::deadline_after(duration));
+        match sleep.interruptible(self.thread).await {
+            Ok(()) => Ok(0),
+            Err(e) => Err(e),
         }
-        Ok(0)
     }
 
     /// `set_tid_address` sets the clear_child_tid value for the calling thread to `tidptr`,
