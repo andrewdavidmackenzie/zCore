@@ -175,9 +175,9 @@ impl Syscall<'_> {
     /// - `uaddr` - points to the futex word.
     /// - `op` -  the operation to perform on the futex
     /// - `val` -  a value whose meaning and purpose depends on op
-    /// - `val2` - provides a timeout for the attempt or acts as val2 when op is REQUEUE
-    /// - `uaddr2` - when op is REQUEUE, points to the target futex
-    /// - `_val3` - is not used
+    /// - `val2` - provides a timeout for WAIT, or requeue count for REQUEUE/CMP_REQUEUE
+    /// - `uaddr2` - when op is REQUEUE/CMP_REQUEUE, points to the target futex
+    /// - `val3` - for CMP_REQUEUE, the expected value at `*uaddr`
     pub async fn sys_futex(
         &self,
         uaddr: usize,
@@ -185,7 +185,7 @@ impl Syscall<'_> {
         val: u32,
         val2: usize,
         uaddr2: usize,
-        _val3: u32,
+        val3: u32,
     ) -> SysResult {
         debug!(
             "Futex uaddr: {:#x}, op: {:x}, val: {}, val2(timeout_addr): {:x}",
@@ -228,12 +228,22 @@ impl Syscall<'_> {
             }
             FutexFlags::WAKE => Ok(futex.wake(val as _)),
             FutexFlags::REQUEUE => {
-                let requeue_futex = self.linux_process().get_futex(uaddr2);
-                let res = futex.requeue(0, val as _, val2, &requeue_futex, None, false);
-                match res {
-                    Ok(_) => Ok(0),
-                    Err(e) => Err(e.into()),
+                if uaddr == uaddr2 {
+                    return Err(LxError::EINVAL);
                 }
+                let requeue_futex = self.linux_process().get_futex(uaddr2);
+                futex
+                    .requeue(0, val as _, val2, &requeue_futex, None, false)
+                    .map_err(|e| e.into())
+            }
+            FutexFlags::CMP_REQUEUE => {
+                if uaddr == uaddr2 {
+                    return Err(LxError::EINVAL);
+                }
+                let requeue_futex = self.linux_process().get_futex(uaddr2);
+                futex
+                    .requeue(val3 as _, val as _, val2, &requeue_futex, None, true)
+                    .map_err(|e| e.into())
             }
             _ => {
                 warn!("unsupported futex operation: {:?}", op);
@@ -500,6 +510,8 @@ bitflags! {
         const WAKE      = 1;
         /// wakes up a maximum of val waiters that are waiting on the futex at uaddr.  If there are more than val waiters, then the remaining waiters are removed from the wait queue of the source futex at uaddr and added to the wait queue of the target futex at uaddr2.  The val2 argument specifies an upper limit on the number of waiters that are requeued to the futex at uaddr2.
         const REQUEUE   = 3;
+        /// like REQUEUE, but first checks that the value at uaddr matches val3.
+        const CMP_REQUEUE = 4;
         /// (unsupported) is used after an attempt to acquire the lock via an atomic user-mode instruction failed.
         const LOCK_PI   = 6;
         /// (unsupported) is called when the user-space value at uaddr cannot be changed atomically from a TID (of the owner) to 0.

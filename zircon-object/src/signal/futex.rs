@@ -214,6 +214,16 @@ impl Futex {
     ///
     /// The owner of this futex is set to nothing, regardless of the wake count.
     /// The owner of the `requeue_futex` is set to the thread `new_requeue_owner`.
+    /// Wakes up to `wake_count` waiters and moves up to `requeue_count`
+    /// remaining waiters to `requeue_futex`. If `check_value` is true,
+    /// first verifies that `*uaddr == current_value` (for CMP_REQUEUE).
+    /// Returns the total number of waiters woken plus requeued on success.
+    ///
+    /// The two futex locks are acquired in a consistent order (by pointer
+    /// identity) to prevent deadlocks between concurrent requeue calls
+    /// with swapped source/target addresses. Note: the broader lock
+    /// ordering between `Futex::inner` and `WaiterInner` is a pre-existing
+    /// concern not addressed here (see issue #102).
     pub fn requeue(
         &self,
         current_value: i32,
@@ -222,24 +232,33 @@ impl Futex {
         requeue_futex: &Arc<Futex>,
         new_requeue_owner: Option<Arc<Thread>>,
         check_value: bool,
-    ) -> ZxResult {
-        let mut inner = self.inner.lock();
-        if check_value {
-            // check value
-            if self.value.load(Ordering::SeqCst) != current_value {
-                return Err(ZxError::BAD_STATE);
-            }
+    ) -> Result<usize, ZxError> {
+        // Acquire both locks in a consistent order to avoid ABBA deadlock.
+        let self_addr = &self.inner as *const _ as usize;
+        let other_addr = &requeue_futex.inner as *const _ as usize;
+        let (mut inner, mut new_inner) = if self_addr <= other_addr {
+            let a = self.inner.lock();
+            let b = requeue_futex.inner.lock();
+            (a, b)
+        } else {
+            let b = requeue_futex.inner.lock();
+            let a = self.inner.lock();
+            (a, b)
+        };
+        if check_value && self.value.load(Ordering::SeqCst) != current_value {
+            return Err(ZxError::BAD_STATE);
         }
         // wake
+        let mut woken = 0;
         for _ in 0..wake_count {
             if let Some(waiter) = inner.waiter_queue.pop_front() {
                 waiter.wake();
+                woken += 1;
             } else {
                 break;
             }
         }
         // requeue
-        let mut new_inner = requeue_futex.inner.lock();
         let requeue_count = requeue_count.min(inner.waiter_queue.len());
         for waiter in inner.waiter_queue.drain(..requeue_count) {
             waiter.reset_futex(requeue_futex.clone());
@@ -248,7 +267,7 @@ impl Futex {
         // set owner
         inner.set_owner(None);
         new_inner.set_owner(new_requeue_owner);
-        Ok(())
+        Ok(woken + requeue_count)
     }
 }
 
