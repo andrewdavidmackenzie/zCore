@@ -214,6 +214,10 @@ impl Futex {
     ///
     /// The owner of this futex is set to nothing, regardless of the wake count.
     /// The owner of the `requeue_futex` is set to the thread `new_requeue_owner`.
+    /// Wakes up to `wake_count` waiters and moves up to `requeue_count`
+    /// remaining waiters to `requeue_futex`. If `check_value` is true,
+    /// first verifies that `*uaddr == current_value` (for CMP_REQUEUE).
+    /// Returns the total number of waiters woken on success.
     pub fn requeue(
         &self,
         current_value: i32,
@@ -222,7 +226,7 @@ impl Futex {
         requeue_futex: &Arc<Futex>,
         new_requeue_owner: Option<Arc<Thread>>,
         check_value: bool,
-    ) -> ZxResult {
+    ) -> Result<usize, ZxError> {
         let mut inner = self.inner.lock();
         if check_value {
             // check value
@@ -231,9 +235,11 @@ impl Futex {
             }
         }
         // wake
+        let mut woken = 0;
         for _ in 0..wake_count {
             if let Some(waiter) = inner.waiter_queue.pop_front() {
                 waiter.wake();
+                woken += 1;
             } else {
                 break;
             }
@@ -248,7 +254,7 @@ impl Futex {
         // set owner
         inner.set_owner(None);
         new_inner.set_owner(new_requeue_owner);
-        Ok(())
+        Ok(woken)
     }
 }
 

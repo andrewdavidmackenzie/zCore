@@ -175,9 +175,9 @@ impl Syscall<'_> {
     /// - `uaddr` - points to the futex word.
     /// - `op` -  the operation to perform on the futex
     /// - `val` -  a value whose meaning and purpose depends on op
-    /// - `val2` - provides a timeout for the attempt or acts as val2 when op is REQUEUE
-    /// - `uaddr2` - when op is REQUEUE, points to the target futex
-    /// - `_val3` - is not used
+    /// - `val2` - provides a timeout for WAIT, or requeue count for REQUEUE/CMP_REQUEUE
+    /// - `uaddr2` - when op is REQUEUE/CMP_REQUEUE, points to the target futex
+    /// - `val3` - for CMP_REQUEUE, the expected value at `*uaddr`
     pub async fn sys_futex(
         &self,
         uaddr: usize,
@@ -228,20 +228,22 @@ impl Syscall<'_> {
             }
             FutexFlags::WAKE => Ok(futex.wake(val as _)),
             FutexFlags::REQUEUE => {
-                let requeue_futex = self.linux_process().get_futex(uaddr2);
-                let res = futex.requeue(0, val as _, val2, &requeue_futex, None, false);
-                match res {
-                    Ok(_) => Ok(0),
-                    Err(e) => Err(e.into()),
+                if uaddr == uaddr2 {
+                    return Err(LxError::EINVAL);
                 }
+                let requeue_futex = self.linux_process().get_futex(uaddr2);
+                futex
+                    .requeue(0, val as _, val2, &requeue_futex, None, false)
+                    .map_err(|e| e.into())
             }
             FutexFlags::CMP_REQUEUE => {
-                let requeue_futex = self.linux_process().get_futex(uaddr2);
-                let res = futex.requeue(val3 as _, val as _, val2, &requeue_futex, None, true);
-                match res {
-                    Ok(_) => Ok(0),
-                    Err(e) => Err(e.into()),
+                if uaddr == uaddr2 {
+                    return Err(LxError::EINVAL);
                 }
+                let requeue_futex = self.linux_process().get_futex(uaddr2);
+                futex
+                    .requeue(val3 as _, val as _, val2, &requeue_futex, None, true)
+                    .map_err(|e| e.into())
             }
             _ => {
                 warn!("unsupported futex operation: {:?}", op);
