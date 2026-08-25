@@ -1,13 +1,9 @@
 use super::*;
 use core::fmt::Debug;
-use core::future::Future;
 use core::mem::size_of;
-use core::pin::Pin;
-use core::task::{Context, Poll};
 
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::bitflags;
 
@@ -15,56 +11,7 @@ use kernel_hal::context::UserContextField;
 use linux_object::thread::{CurrentThreadExt, RobustList, ThreadExt};
 use linux_object::time::TimeSpec;
 use linux_object::{fs::INodeExt, loader::LinuxElfLoader};
-use zircon_object::task::Thread;
 use zircon_object::vm::USER_STACK_PAGES;
-
-/// A future that waits until a child thread has been scheduled at least once.
-///
-/// Yields repeatedly until the child thread is no longer in `New` or
-/// `Running` state without having executed (i.e. it has entered userspace
-/// and made at least one syscall, which means it's been polled by the
-/// executor). In practice this ensures the child runs past its startup
-/// sequence before the parent returns to userspace.
-struct ChildStartFuture {
-    _child: Arc<Thread>,
-    yields: usize,
-}
-
-impl ChildStartFuture {
-    fn new(child: &Arc<Thread>) -> Self {
-        Self {
-            _child: child.clone(),
-            yields: 0,
-        }
-    }
-}
-
-impl Future for ChildStartFuture {
-    type Output = ();
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        // The child needs several executor polls to get through musl's
-        // start() function (set_robust_list, rt_sigprocmask, then read
-        // function pointer). Each time we return Pending, the executor
-        // will poll other runnable tasks (including the child) before
-        // returning to us.
-        //
-        // We yield enough times for the child to complete its startup.
-        // On bare-metal single-CPU, each yield gives exactly one other
-        // task a chance to run one poll cycle. The child typically needs
-        // 3 syscalls before reading the function pointer.
-        // The child needs ~3 syscalls (set_robust_list, rt_sigprocmask,
-        // set_tid_address) before reading the function pointer. Each
-        // yield gives one other task one poll cycle.
-        const MIN_YIELDS: usize = 4;
-        self.yields += 1;
-        if self.yields >= MIN_YIELDS {
-            return Poll::Ready(());
-        }
-        cx.waker().wake_by_ref();
-        Poll::Pending
-    }
-}
 
 /// Syscalls for process.
 ///
@@ -162,13 +109,7 @@ impl Syscall<'_> {
     /// > **NOTE!** This is partially implemented for `musl` only.
     ///
     /// `sys_clone` create a new thread or process.
-    ///
-    /// For thread creation (CLONE_VM | CLONE_THREAD), yields after
-    /// starting the child so it can execute its startup sequence
-    /// before the parent returns to userspace. This prevents races
-    /// where the parent's userspace code (e.g. musl's __pthread_create)
-    /// modifies shared data before the child reads it.
-    pub async fn sys_clone(
+    pub fn sys_clone(
         &self,
         flags: usize,
         newsp: usize,
@@ -207,6 +148,7 @@ impl Syscall<'_> {
         }
         new_ctx.set_field(UserContextField::ReturnValue, 0);
         new_thread.with_context(|ctx| *ctx = new_ctx)?;
+        new_thread.start(self.thread_fn)?;
 
         let tid = new_thread.id();
         info!("clone: {} -> {}", self.thread.id(), tid);
@@ -219,16 +161,6 @@ impl Syscall<'_> {
             child_tid.write(tid as i32)?;
             new_thread.set_tid_address(child_tid);
         }
-
-        // Start the child, then wait for it to enter userspace and
-        // execute past its startup sequence. The child makes several
-        // syscalls (set_robust_list, rt_sigprocmask) before reading
-        // the function pointer from the pthread struct. We wait until
-        // the child has made its first syscall, which confirms it has
-        // entered userspace and started executing.
-        new_thread.start(self.thread_fn)?;
-        ChildStartFuture::new(&new_thread).await;
-
         Ok(tid as usize)
     }
 
