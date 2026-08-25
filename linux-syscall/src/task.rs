@@ -447,7 +447,7 @@ impl Syscall<'_> {
     pub fn sys_get_robust_list(
         &self,
         pid: i32,
-        head_ptr: UserOutPtr<UserOutPtr<RobustList>>,
+        head_ptr: UserOutPtr<usize>,
         len_ptr: UserOutPtr<usize>,
     ) -> SysResult {
         if pid == 0 {
