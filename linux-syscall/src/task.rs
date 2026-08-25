@@ -109,7 +109,13 @@ impl Syscall<'_> {
     /// > **NOTE!** This is partially implemented for `musl` only.
     ///
     /// `sys_clone` create a new thread or process.
-    pub fn sys_clone(
+    ///
+    /// After starting the child thread, yields to the executor so the
+    /// child runs first. This matches Linux's behavior where the child
+    /// is scheduled before the parent after clone, preventing races
+    /// where the parent modifies shared memory (e.g. the pthread struct)
+    /// before the child reads it.
+    pub async fn sys_clone(
         &self,
         flags: usize,
         newsp: usize,
@@ -148,7 +154,6 @@ impl Syscall<'_> {
         }
         new_ctx.set_field(UserContextField::ReturnValue, 0);
         new_thread.with_context(|ctx| *ctx = new_ctx)?;
-        new_thread.start(self.thread_fn)?;
 
         let tid = new_thread.id();
         info!("clone: {} -> {}", self.thread.id(), tid);
@@ -161,6 +166,17 @@ impl Syscall<'_> {
             child_tid.write(tid as i32)?;
             new_thread.set_tid_address(child_tid);
         }
+
+        // Start the child and yield multiple times so it runs first.
+        // The child needs several scheduling quanta to get past the
+        // critical section in musl's start() where it reads the
+        // function pointer from the pthread struct. Each yield gives
+        // the child one poll cycle (one syscall's worth of execution).
+        new_thread.start(self.thread_fn)?;
+        for _ in 0..5 {
+            kernel_hal::thread::yield_now().await;
+        }
+
         Ok(tid as usize)
     }
 
