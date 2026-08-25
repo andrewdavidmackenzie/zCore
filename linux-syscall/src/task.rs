@@ -1,9 +1,13 @@
 use super::*;
 use core::fmt::Debug;
+use core::future::Future;
 use core::mem::size_of;
+use core::pin::Pin;
+use core::task::{Context, Poll};
 
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::bitflags;
 
@@ -11,7 +15,59 @@ use kernel_hal::context::UserContextField;
 use linux_object::thread::{CurrentThreadExt, RobustList, ThreadExt};
 use linux_object::time::TimeSpec;
 use linux_object::{fs::INodeExt, loader::LinuxElfLoader};
+use zircon_object::task::{Thread, ThreadState};
 use zircon_object::vm::USER_STACK_PAGES;
+
+/// A future that waits until a child thread has been scheduled at least once.
+///
+/// Yields repeatedly until the child thread is no longer in `New` or
+/// `Running` state without having executed (i.e. it has entered userspace
+/// and made at least one syscall, which means it's been polled by the
+/// executor). In practice this ensures the child runs past its startup
+/// sequence before the parent returns to userspace.
+struct ChildStartFuture {
+    child: Arc<Thread>,
+    yields: usize,
+}
+
+impl ChildStartFuture {
+    fn new(child: &Arc<Thread>) -> Self {
+        Self {
+            child: child.clone(),
+            yields: 0,
+        }
+    }
+}
+
+impl Future for ChildStartFuture {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        // The child needs several executor polls to get through musl's
+        // start() function (set_robust_list, rt_sigprocmask, then read
+        // function pointer). Each time we return Pending, the executor
+        // will poll other runnable tasks (including the child) before
+        // returning to us.
+        //
+        // We yield enough times for the child to complete its startup.
+        // On bare-metal single-CPU, each yield gives exactly one other
+        // task a chance to run one poll cycle. The child typically needs
+        // 3 syscalls before reading the function pointer.
+        const MIN_YIELDS: usize = 8;
+        self.yields += 1;
+        if self.yields > MIN_YIELDS
+            && !matches!(self.child.state(), ThreadState::New | ThreadState::Running)
+        {
+            return Poll::Ready(());
+        }
+        if self.yields > MIN_YIELDS * 4 {
+            // Safety valve: don't spin forever if the child is still running
+            return Poll::Ready(());
+        }
+        cx.waker().wake_by_ref();
+        Poll::Pending
+    }
+}
 
 /// Syscalls for process.
 ///
@@ -110,11 +166,11 @@ impl Syscall<'_> {
     ///
     /// `sys_clone` create a new thread or process.
     ///
-    /// After starting the child thread, yields to the executor so the
-    /// child runs first. This matches Linux's behavior where the child
-    /// is scheduled before the parent after clone, preventing races
-    /// where the parent modifies shared memory (e.g. the pthread struct)
-    /// before the child reads it.
+    /// For thread creation (CLONE_VM | CLONE_THREAD), yields after
+    /// starting the child so it can execute its startup sequence
+    /// before the parent returns to userspace. This prevents races
+    /// where the parent's userspace code (e.g. musl's __pthread_create)
+    /// modifies shared data before the child reads it.
     pub async fn sys_clone(
         &self,
         flags: usize,
@@ -167,15 +223,14 @@ impl Syscall<'_> {
             new_thread.set_tid_address(child_tid);
         }
 
-        // Start the child and yield multiple times so it runs first.
-        // The child needs several scheduling quanta to get past the
-        // critical section in musl's start() where it reads the
-        // function pointer from the pthread struct. Each yield gives
-        // the child one poll cycle (one syscall's worth of execution).
+        // Start the child, then wait for it to enter userspace and
+        // execute past its startup sequence. The child makes several
+        // syscalls (set_robust_list, rt_sigprocmask) before reading
+        // the function pointer from the pthread struct. We wait until
+        // the child has made its first syscall, which confirms it has
+        // entered userspace and started executing.
         new_thread.start(self.thread_fn)?;
-        for _ in 0..5 {
-            kernel_hal::thread::yield_now().await;
-        }
+        ChildStartFuture::new(&new_thread).await;
 
         Ok(tid as usize)
     }
