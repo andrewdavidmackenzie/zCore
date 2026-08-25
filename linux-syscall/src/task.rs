@@ -15,7 +15,7 @@ use kernel_hal::context::UserContextField;
 use linux_object::thread::{CurrentThreadExt, RobustList, ThreadExt};
 use linux_object::time::TimeSpec;
 use linux_object::{fs::INodeExt, loader::LinuxElfLoader};
-use zircon_object::task::{Thread, ThreadState};
+use zircon_object::task::Thread;
 use zircon_object::vm::USER_STACK_PAGES;
 
 /// A future that waits until a child thread has been scheduled at least once.
@@ -26,14 +26,14 @@ use zircon_object::vm::USER_STACK_PAGES;
 /// executor). In practice this ensures the child runs past its startup
 /// sequence before the parent returns to userspace.
 struct ChildStartFuture {
-    child: Arc<Thread>,
+    _child: Arc<Thread>,
     yields: usize,
 }
 
 impl ChildStartFuture {
     fn new(child: &Arc<Thread>) -> Self {
         Self {
-            child: child.clone(),
+            _child: child.clone(),
             yields: 0,
         }
     }
@@ -53,15 +53,12 @@ impl Future for ChildStartFuture {
         // On bare-metal single-CPU, each yield gives exactly one other
         // task a chance to run one poll cycle. The child typically needs
         // 3 syscalls before reading the function pointer.
-        const MIN_YIELDS: usize = 8;
+        // The child needs ~3 syscalls (set_robust_list, rt_sigprocmask,
+        // set_tid_address) before reading the function pointer. Each
+        // yield gives one other task one poll cycle.
+        const MIN_YIELDS: usize = 4;
         self.yields += 1;
-        if self.yields > MIN_YIELDS
-            && !matches!(self.child.state(), ThreadState::New | ThreadState::Running)
-        {
-            return Poll::Ready(());
-        }
-        if self.yields > MIN_YIELDS * 4 {
-            // Safety valve: don't spin forever if the child is still running
+        if self.yields >= MIN_YIELDS {
             return Poll::Ready(());
         }
         cx.waker().wake_by_ref();
