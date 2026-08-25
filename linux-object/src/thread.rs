@@ -80,26 +80,51 @@ impl ThreadExt for Thread {
 
 /// Process a single robust futex entry: if the futex word indicates
 /// this thread owns it (TID matches), set FUTEX_OWNER_DIED and wake one waiter.
+/// Process a single robust futex entry on thread exit.
+///
+/// If the futex word's TID matches `tid` (or `is_pending` and owner is 0),
+/// atomically sets `FUTEX_OWNER_DIED` and clears the TID, preserving the
+/// `FUTEX_WAITERS` bit. Then wakes one waiter.
 #[allow(unsafe_code)]
-fn handle_robust_entry(futex_addr: usize, tid: u32, proc: &zircon_object::task::Process) {
+fn handle_robust_entry(
+    futex_addr: usize,
+    tid: u32,
+    proc: &zircon_object::task::Process,
+    is_pending: bool,
+) {
     use core::sync::atomic::{AtomicU32, Ordering};
+    // Safety: futex_addr points into the calling thread's own address space.
+    // The kernel accesses it atomically, matching Linux kernel behavior.
     let futex_ptr = futex_addr as *const AtomicU32;
-    // Safety: futex_addr is a user-space address that was previously validated
-    // by set_robust_list. We read/write atomically as the kernel does.
     let futex_word = unsafe { &*futex_ptr };
-    let old = futex_word.load(Ordering::SeqCst);
-    if (old & FUTEX_TID_MASK) == tid {
-        // Set FUTEX_OWNER_DIED, preserve FUTEX_WAITERS bit
-        futex_word.fetch_or(FUTEX_OWNER_DIED, Ordering::SeqCst);
-        // Wake one waiter
-        let linux_proc = proc
-            .ext()
-            .downcast_ref::<crate::process::LinuxProcess>()
-            .unwrap();
-        let futex = linux_proc.get_futex(futex_addr);
-        futex.wake(1);
+
+    loop {
+        let old = futex_word.load(Ordering::SeqCst);
+        let owner = old & FUTEX_TID_MASK;
+        // Process if: we own it, OR it's a pending unlock (owner cleared to 0)
+        if owner != tid && !(is_pending && owner == 0) {
+            return;
+        }
+        // New value: OWNER_DIED | preserve WAITERS bit | clear TID
+        let new = (old & FUTEX_WAITERS) | FUTEX_OWNER_DIED;
+        if futex_word
+            .compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            break;
+        }
     }
+    // Wake one waiter
+    let linux_proc = proc
+        .ext()
+        .downcast_ref::<crate::process::LinuxProcess>()
+        .unwrap();
+    let futex = linux_proc.get_futex(futex_addr);
+    futex.wake(1);
 }
+
+/// Bit 0 in robust list pointers indicates a PI futex entry.
+const ROBUST_LIST_PI_BIT: usize = 1;
 
 /// Walk the robust futex list for a thread and set FUTEX_OWNER_DIED on any
 /// futexes still held by it. Called during thread exit.
@@ -119,14 +144,17 @@ fn walk_robust_list(thread: &CurrentThread) {
     let proc = thread.proc();
     drop(linux); // release lock before touching futexes
 
-    // Process list_op_pending first (in-progress lock/unlock)
-    if head.pending != 0 {
-        let futex_addr = (head.pending as isize + head.off) as usize;
-        handle_robust_entry(futex_addr, tid, proc);
+    // Process list_op_pending first (in-progress lock/unlock).
+    // Strip the PI flag (bit 0) from the pending pointer.
+    let pending_addr = head.pending & !ROBUST_LIST_PI_BIT;
+    if pending_addr != 0 {
+        let futex_addr = (pending_addr as isize + head.off) as usize;
+        handle_robust_entry(futex_addr, tid, proc, true);
     }
 
-    // Walk the circular linked list
-    let mut entry = head.head;
+    // Walk the circular linked list.
+    // Strip the PI flag (bit 0) from each link pointer.
+    let mut entry = head.head & !ROBUST_LIST_PI_BIT;
     for _ in 0..ROBUST_LIST_LIMIT {
         if entry == head_addr {
             break; // full circle
@@ -134,13 +162,13 @@ fn walk_robust_list(thread: &CurrentThread) {
         if entry == 0 {
             break;
         }
-        if entry != head.pending {
+        if entry != pending_addr {
             let futex_addr = (entry as isize + head.off) as usize;
-            handle_robust_entry(futex_addr, tid, proc);
+            handle_robust_entry(futex_addr, tid, proc, false);
         }
         let next_ptr: UserInPtr<usize> = entry.into();
         entry = match next_ptr.read() {
-            Ok(next) => next,
+            Ok(next) => next & !ROBUST_LIST_PI_BIT,
             Err(_) => break,
         };
     }
@@ -202,7 +230,8 @@ impl CurrentThreadExt for CurrentThread {
     }
 }
 
-/// robust_list
+/// Robust futex list head, matching Linux's `struct robust_list_head`.
+#[repr(C)]
 #[derive(Default)]
 pub struct RobustList {
     /// Pointer to the first entry in the circular linked list
@@ -215,6 +244,8 @@ pub struct RobustList {
 
 /// Bit set in the futex word when the owning thread dies.
 const FUTEX_OWNER_DIED: u32 = 0x40000000;
+/// Bit set when there are waiters on the futex.
+const FUTEX_WAITERS: u32 = 0x80000000;
 /// Mask for the thread ID portion of a futex word.
 const FUTEX_TID_MASK: u32 = 0x3FFFFFFF;
 /// Maximum number of entries to walk (prevents infinite loops).
