@@ -34,14 +34,6 @@ It creates a `target/doc/index.html` that auto- redirects browsers to
 on kernel_hal docs instead of showing a directory listing. A simple HTML meta-
 refresh.
 
-
-- `scripts/make-qemu.sh` -- Build QEMU from source for CI
-
-CI does NOT use this script. Workflows install QEMU via `apt install qemu-
-system-arm qemu-system-misc` (Linux) or `brew install qemu` (macOS). This
-script is legacy/unused. Could be removed or moved to `tools/` for reference.
-
-
 **Status:** Actively used. Runs on every push and PR.
 
 ---
