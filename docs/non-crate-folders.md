@@ -152,7 +152,7 @@ inside zCore.
 All symlinks point to `busybox`: cat, cp, echo, false, grep, gzip, halt, kill,
 ln, ls, mkdir, mv, pidof, ping, ping6, poweroff, printenv, ps, pwd, reboot, rm,
 rmdir, sh, sleep, stat, tar, timeout, touch, true, uname, usleep, watch. Source
-is cloned from `https://git.busybox.net/busybox.git` (official busybox repo)
+is cloned from `https://github.com/mirror/busybox.git` (GitHub mirror of the official busybox repo)
 into `ignored/origin/repos/ busybox/`. Built binaries cached at
 `ignored/target/{arch}/busybox/busybox`.
 

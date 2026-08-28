@@ -112,11 +112,12 @@ impl LinuxRootfs {
             println!("cached busybox is dynamically linked, rebuilding...");
             dir::rm(&target).unwrap();
         }
-        // Fetch source code
+        // Fetch source code (use GitHub mirror — the official git.busybox.net
+        // server is frequently unreachable from CI runners)
         let source = REPOS.join("busybox");
         if !source.is_dir() {
             fetch_online!(source, |tmp| {
-                Git::clone("https://git.busybox.net/busybox.git")
+                Git::clone("https://github.com/mirror/busybox.git")
                     .dir(tmp)
                     .single_branch()
                     .depth(1)
