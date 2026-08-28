@@ -113,13 +113,16 @@ impl LinuxRootfs {
             dir::rm(&target).unwrap();
         }
         // Fetch source code (use GitHub mirror — the official git.busybox.net
-        // server is frequently unreachable from CI runners)
+        // server is frequently unreachable from CI runners).
+        // Pin to release tag 1_36_1 to avoid build failures from
+        // unstable master (e.g. sha1_process_block64_shaNI).
         let source = REPOS.join("busybox");
         if !source.is_dir() {
             fetch_online!(source, |tmp| {
                 Git::clone("https://github.com/mirror/busybox.git")
                     .dir(tmp)
                     .single_branch()
+                    .branch("1_36_1")
                     .depth(1)
                     .done()
             });

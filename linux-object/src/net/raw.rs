@@ -32,7 +32,7 @@ impl RawSocketState {
             rx_buffer,
             tx_buffer,
         );
-        let handle = GlobalSocketHandle(get_sockets().lock().add(socket));
+        let handle = GlobalSocketHandle::new(get_sockets().lock().add(socket));
 
         RawSocketState {
             handle,
@@ -51,7 +51,7 @@ impl Socket for RawSocketState {
             poll_ifaces();
             let net_sockets = get_sockets();
             let mut sockets = net_sockets.lock();
-            let socket = sockets.get_mut::<RawSocket>(self.handle.0);
+            let socket = sockets.get_mut::<RawSocket>(self.handle.handle());
             if socket.can_recv() {
                 if let Ok(size) = socket.recv_slice(data) {
                     let packet = Ipv4Packet::new_unchecked(data);
@@ -77,7 +77,7 @@ impl Socket for RawSocketState {
         info!("raw write");
         let net_sockets = get_sockets();
         let mut sockets = net_sockets.lock();
-        let socket = sockets.get_mut::<RawSocket>(self.handle.0);
+        let socket = sockets.get_mut::<RawSocket>(self.handle.handle());
         if self.header_included {
             match socket.send_slice(data) {
                 Ok(()) => Ok(data.len()),
@@ -143,7 +143,7 @@ impl Socket for RawSocketState {
     fn get_buffer_capacity(&self) -> Option<(usize, usize)> {
         let sockets = get_sockets();
         let s = sockets.lock();
-        let socket = s.get::<RawSocket>(self.handle.0);
+        let socket = s.get::<RawSocket>(self.handle.handle());
         let (recv_ca, send_ca) = (
             socket.payload_recv_capacity(),
             socket.payload_send_capacity(),

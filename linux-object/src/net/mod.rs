@@ -224,24 +224,18 @@ numeric_enum! {
 
 use smoltcp::iface::SocketHandle;
 
-/// A wrapper for `SocketHandle`.
-/// Removes the socket from the global SocketSet on drop.
-/// Clone is supported by simply copying the handle (the socket
-/// remains alive until the last GlobalSocketHandle is dropped).
+/// RAII guard that removes a socket from the global SocketSet on drop.
 ///
-/// Note: smoltcp 0.9+ removed internal reference counting. This wrapper
-/// now removes the socket on drop of *any* clone, which matches how zCore
-/// uses sockets (one owner, with the handle swapped during accept).
+/// The inner handle is wrapped in `Arc` so that cloning this wrapper
+/// (required by `RawSocketState`'s derived `Clone`) is safe: the socket
+/// is only removed from the set when the **last** clone is dropped.
+#[derive(Debug, Clone)]
+struct GlobalSocketHandle(Arc<SocketHandleInner>);
+
 #[derive(Debug)]
-struct GlobalSocketHandle(SocketHandle);
+struct SocketHandleInner(SocketHandle);
 
-impl Clone for GlobalSocketHandle {
-    fn clone(&self) -> Self {
-        Self(self.0)
-    }
-}
-
-impl Drop for GlobalSocketHandle {
+impl Drop for SocketHandleInner {
     fn drop(&mut self) {
         let net_sockets = get_sockets();
         let mut sockets = net_sockets.lock();
@@ -250,6 +244,16 @@ impl Drop for GlobalSocketHandle {
         // send FIN immediately when applicable
         drop(sockets);
         poll_ifaces();
+    }
+}
+
+impl GlobalSocketHandle {
+    fn new(handle: SocketHandle) -> Self {
+        Self(Arc::new(SocketHandleInner(handle)))
+    }
+
+    fn handle(&self) -> SocketHandle {
+        self.0 .0
     }
 }
 

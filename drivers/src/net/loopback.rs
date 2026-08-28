@@ -1,7 +1,7 @@
 // smoltcp
 use smoltcp::{iface::Interface, phy::Loopback, time::Instant};
 
-use crate::net::get_sockets;
+use crate::net::{get_sockets, timer_now_as_micros};
 use alloc::sync::Arc;
 
 use alloc::string::String;
@@ -42,7 +42,7 @@ impl NetScheme for LoopbackInterface {
     }
 
     fn poll(&self) -> DeviceResult {
-        let timestamp = Instant::from_millis(0);
+        let timestamp = Instant::from_micros(timer_now_as_micros() as i64);
         let sockets = get_sockets();
         let mut sockets = sockets.lock();
         let mut loopback = self.loopback.lock();
