@@ -34,14 +34,6 @@ It creates a `target/doc/index.html` that auto- redirects browsers to
 on kernel_hal docs instead of showing a directory listing. A simple HTML meta-
 refresh.
 
-
-- `scripts/make-qemu.sh` -- Build QEMU from source for CI
-
-CI does NOT use this script. Workflows install QEMU via `apt install qemu-
-system-arm qemu-system-misc` (Linux) or `brew install qemu` (macOS). This
-script is legacy/unused. Could be removed or moved to `tools/` for reference.
-
-
 **Status:** Actively used. Runs on every push and PR.
 
 ---
@@ -160,7 +152,7 @@ inside zCore.
 All symlinks point to `busybox`: cat, cp, echo, false, grep, gzip, halt, kill,
 ln, ls, mkdir, mv, pidof, ping, ping6, poweroff, printenv, ps, pwd, reboot, rm,
 rmdir, sh, sleep, stat, tar, timeout, touch, true, uname, usleep, watch. Source
-is cloned from `https://git.busybox.net/busybox.git` (official busybox repo)
+is cloned from `https://github.com/mirror/busybox.git` (GitHub mirror of the official busybox repo)
 into `ignored/origin/repos/ busybox/`. Built binaries cached at
 `ignored/target/{arch}/busybox/busybox`.
 

@@ -40,6 +40,12 @@ jobs:
         with:
           components: rust-src, llvm-tools-preview
 
+      - name: Cache busybox source
+        uses: actions/cache@v4
+        with:
+          path: ignored/origin/repos/busybox
+          key: busybox-src-v1
+
       - name: Cache musl-cross toolchain (macOS)
         if: runner.os == 'macOS'
         id: cache-musl
@@ -98,6 +104,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rust-src, llvm-tools-preview
+
+      - name: Cache busybox source
+        uses: actions/cache@v4
+        with:
+          path: ignored/origin/repos/busybox
+          key: busybox-src-v1
 
       - name: Cache musl-cross toolchain (macOS)
         if: runner.os == 'macOS'
