@@ -2,7 +2,9 @@ use crate::{error::LxError, net::*};
 use alloc::boxed::Box;
 use async_trait::async_trait;
 use smoltcp::{
-    socket::{RawPacketMetadata, RawSocket, RawSocketBuffer},
+    socket::raw::{
+        PacketBuffer as RawSocketBuffer, PacketMetadata as RawPacketMetadata, Socket as RawSocket,
+    },
     wire::{IpProtocol, IpVersion, Ipv4Address, Ipv4Packet},
 };
 
@@ -49,12 +51,11 @@ impl Socket for RawSocketState {
             poll_ifaces();
             let net_sockets = get_sockets();
             let mut sockets = net_sockets.lock();
-            let mut socket = sockets.get::<RawSocket>(self.handle.0);
+            let socket = sockets.get_mut::<RawSocket>(self.handle.0);
             if socket.can_recv() {
                 if let Ok(size) = socket.recv_slice(data) {
                     let packet = Ipv4Packet::new_unchecked(data);
                     // avoid deadlock
-                    drop(socket);
                     drop(sockets);
                     poll_ifaces();
                     return (
@@ -66,12 +67,8 @@ impl Socket for RawSocketState {
                     );
                 }
             } else {
-                return (
-                    Err(LxError::ENOTCONN),
-                    Endpoint::Ip(IpEndpoint::UNSPECIFIED),
-                );
+                return (Err(LxError::ENOTCONN), Endpoint::Ip(UNSPECIFIED_ENDPOINT));
             }
-            drop(socket);
             drop(sockets);
         }
     }
@@ -80,7 +77,7 @@ impl Socket for RawSocketState {
         info!("raw write");
         let net_sockets = get_sockets();
         let mut sockets = net_sockets.lock();
-        let mut socket = sockets.get::<RawSocket>(self.handle.0);
+        let socket = sockets.get_mut::<RawSocket>(self.handle.0);
         if self.header_included {
             match socket.send_slice(data) {
                 Ok(()) => Ok(data.len()),
@@ -105,7 +102,7 @@ impl Socket for RawSocketState {
                 packet.set_version(4);
                 packet.set_header_len(20);
                 packet.set_total_len((20 + len) as u16);
-                packet.set_protocol(socket.ip_protocol());
+                packet.set_next_header(socket.ip_protocol());
                 packet.set_src_addr(v4_src);
                 packet.set_dst_addr(v4_dst);
                 let payload = packet.payload_mut();
@@ -115,7 +112,6 @@ impl Socket for RawSocketState {
                 socket.send_slice(&buffer).unwrap();
 
                 // avoid deadlock
-                drop(socket);
                 drop(sockets);
                 Ok(len)
             } else {
@@ -146,7 +142,7 @@ impl Socket for RawSocketState {
     }
     fn get_buffer_capacity(&self) -> Option<(usize, usize)> {
         let sockets = get_sockets();
-        let mut s = sockets.lock();
+        let s = sockets.lock();
         let socket = s.get::<RawSocket>(self.handle.0);
         let (recv_ca, send_ca) = (
             socket.payload_recv_capacity(),

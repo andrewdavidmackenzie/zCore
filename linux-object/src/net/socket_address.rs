@@ -159,7 +159,7 @@ impl From<Endpoint> for SockAddr {
                         sin_zero: [0; 8],
                     },
                 },
-                IpAddress::Unspecified => SockAddr {
+                _ if ip.addr.is_unspecified() => SockAddr {
                     addr_ph: SockAddrPlaceholder {
                         family: AddressFamily::Unspecified.into(),
                         data: [0; 14],

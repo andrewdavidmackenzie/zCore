@@ -12,7 +12,9 @@ use alloc::boxed::Box;
 use alloc::vec;
 
 // smoltcp
-use smoltcp::socket::{TcpSocket, TcpSocketBuffer, TcpState};
+use smoltcp::socket::tcp::{
+    self, Socket as TcpSocket, SocketBuffer as TcpSocketBuffer, State as TcpState,
+};
 
 // async
 use async_trait::async_trait;
@@ -78,18 +80,17 @@ impl Socket for TcpSocketState {
 
             let sets = get_sockets();
             let mut sets = sets.lock();
-            let mut socket = sets.get::<TcpSocket>(inner.handle.0);
+            let socket = sets.get_mut::<TcpSocket>(inner.handle.0);
 
             let copied_len = socket.recv_slice(data);
             // avoid deadlock in poll_ifaces()
-            drop(socket);
             drop(sets);
 
             match copied_len {
-                Ok(0) | Err(smoltcp::Error::Exhausted) => {
+                Ok(0) => {
                     poll_ifaces();
                     if inner.flags.contains(OpenFlags::NON_BLOCK) {
-                        return (Err(LxError::EAGAIN), Endpoint::Ip(IpEndpoint::UNSPECIFIED));
+                        return (Err(LxError::EAGAIN), Endpoint::Ip(UNSPECIFIED_ENDPOINT));
                     } else {
                         // Continue reading
                         trace!("Continue reading");
@@ -99,15 +100,21 @@ impl Socket for TcpSocketState {
                     let endpoint = get_sockets()
                         .lock()
                         .get::<TcpSocket>(inner.handle.0)
-                        .remote_endpoint();
+                        .remote_endpoint()
+                        .unwrap_or(UNSPECIFIED_ENDPOINT);
                     return (Ok(size), Endpoint::Ip(endpoint));
+                }
+                Err(tcp::RecvError::InvalidState) => {
+                    poll_ifaces();
+                    if inner.flags.contains(OpenFlags::NON_BLOCK) {
+                        return (Err(LxError::EAGAIN), Endpoint::Ip(UNSPECIFIED_ENDPOINT));
+                    } else {
+                        trace!("Continue reading");
+                    }
                 }
                 Err(err) => {
                     error!("Tcp socket read error: {:?}", err);
-                    return (
-                        Err(LxError::ENOTCONN),
-                        Endpoint::Ip(IpEndpoint::UNSPECIFIED),
-                    );
+                    return (Err(LxError::ENOTCONN), Endpoint::Ip(UNSPECIFIED_ENDPOINT));
                 }
             }
         }
@@ -117,10 +124,9 @@ impl Socket for TcpSocketState {
         //loop {
         let sets = get_sockets();
         let mut sets = sets.lock();
-        let mut socket = sets.get::<TcpSocket>(self.inner.lock().handle.0);
+        let socket = sets.get_mut::<TcpSocket>(self.inner.lock().handle.0);
         let copied_len = socket.send_slice(data);
 
-        drop(socket);
         drop(sets);
         poll_ifaces();
 
@@ -138,11 +144,20 @@ impl Socket for TcpSocketState {
         let inner = self.inner.lock();
         #[allow(warnings)]
         if let Endpoint::Ip(ip) = endpoint {
-            get_sockets()
-                .lock()
-                .get::<TcpSocket>(inner.handle.0)
-                .connect(ip, get_ephemeral_port())
-                .map_err(|_| LxError::ENOBUFS)?;
+            {
+                let net_devs = get_net_device();
+                let iface = net_devs.first().ok_or(LxError::ENODEV)?;
+                let port = get_ephemeral_port();
+                let handle = inner.handle.0;
+                let mut result = Ok(());
+                iface.with_context(&mut |cx| {
+                    let sockets = get_sockets();
+                    let mut sockets = sockets.lock();
+                    let socket = sockets.get_mut::<TcpSocket>(handle);
+                    result = socket.connect(cx, ip, port).map_err(|_| LxError::ENOBUFS);
+                });
+                result?;
+            }
 
             let mut tc = 0;
             // wait for connection result
@@ -152,7 +167,7 @@ impl Socket for TcpSocketState {
 
                 match get_sockets()
                     .lock()
-                    .get::<TcpSocket>(inner.handle.0)
+                    .get_mut::<TcpSocket>(inner.handle.0)
                     .state()
                 {
                     TcpState::SynSent => {
@@ -183,7 +198,7 @@ impl Socket for TcpSocketState {
         let (recv_state, send_state) = {
             let sets = get_sockets();
             let mut sets = sets.lock();
-            let socket = sets.get::<TcpSocket>(inner.handle.0);
+            let socket = sets.get_mut::<TcpSocket>(inner.handle.0);
             debug!(
                 "tcp is_listening: {:?}, now tcp state: {:?}",
                 inner.is_listening,
@@ -202,7 +217,7 @@ impl Socket for TcpSocketState {
 
         let sets = get_sockets();
         let mut sets = sets.lock();
-        let socket = sets.get::<TcpSocket>(inner.handle.0);
+        let socket = sets.get_mut::<TcpSocket>(inner.handle.0);
 
         //Todo, syscall async poll needs to be executed after first Pending
         if inner.is_listening && socket.is_active() {
@@ -249,7 +264,7 @@ impl Socket for TcpSocketState {
 
         let sets = get_sockets();
         let mut sets = sets.lock();
-        let mut socket = sets.get::<TcpSocket>(inner.handle.0);
+        let socket = sets.get_mut::<TcpSocket>(inner.handle.0);
 
         if socket.is_listening() {
             return Ok(0);
@@ -266,7 +281,7 @@ impl Socket for TcpSocketState {
     fn shutdown(&self) -> SysResult {
         let sets = get_sockets();
         let mut sets = sets.lock();
-        let mut socket = sets.get::<TcpSocket>(self.inner.lock().handle.0);
+        let socket = sets.get_mut::<TcpSocket>(self.inner.lock().handle.0);
         socket.close();
         Ok(0)
     }
@@ -278,10 +293,9 @@ impl Socket for TcpSocketState {
             //poll_ifaces();
             let sets = get_sockets();
             let mut sets = sets.lock();
-            let socket = sets.get::<TcpSocket>(inner.handle.0);
+            let socket = sets.get_mut::<TcpSocket>(inner.handle.0);
             if socket.is_active() {
-                let remote_endpoint = socket.remote_endpoint();
-                drop(socket);
+                let remote_endpoint = socket.remote_endpoint().unwrap_or(UNSPECIFIED_ENDPOINT);
                 drop(sets);
 
                 let new_socket = {
@@ -309,7 +323,6 @@ impl Socket for TcpSocketState {
                     Endpoint::Ip(remote_endpoint),
                 ));
             } else {
-                drop(socket);
                 drop(sets);
                 poll_ifaces();
             }
@@ -321,22 +334,17 @@ impl Socket for TcpSocketState {
         inner.local_endpoint.map(Endpoint::Ip).or_else(|| {
             let sets = get_sockets();
             let mut sets = sets.lock();
-            let socket = sets.get::<TcpSocket>(inner.handle.0);
-            let endpoint = socket.local_endpoint();
-            if endpoint.port != 0 {
-                Some(Endpoint::Ip(endpoint))
-            } else {
-                None
-            }
+            let socket = sets.get_mut::<TcpSocket>(inner.handle.0);
+            socket.local_endpoint().map(Endpoint::Ip)
         })
     }
 
     fn remote_endpoint(&self) -> Option<Endpoint> {
         let sets = get_sockets();
         let mut sets = sets.lock();
-        let socket = sets.get::<TcpSocket>(self.inner.lock().handle.0);
+        let socket = sets.get_mut::<TcpSocket>(self.inner.lock().handle.0);
         if socket.is_open() {
-            Some(Endpoint::Ip(socket.remote_endpoint()))
+            socket.remote_endpoint().map(Endpoint::Ip)
         } else {
             None
         }
@@ -345,7 +353,7 @@ impl Socket for TcpSocketState {
     fn get_buffer_capacity(&self) -> Option<(usize, usize)> {
         let sockets = get_sockets();
         let mut set = sockets.lock();
-        let socket = set.get::<TcpSocket>(self.inner.lock().handle.0);
+        let socket = set.get_mut::<TcpSocket>(self.inner.lock().handle.0);
         let (recv_ca, send_ca) = (socket.recv_capacity(), socket.send_capacity());
         Some((recv_ca, send_ca))
     }

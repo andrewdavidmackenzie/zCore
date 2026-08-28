@@ -8,6 +8,12 @@ use crate::fs::{FileLike, PollEvents};
 use smoltcp::wire::IpEndpoint;
 pub use socket_address::*;
 
+/// Equivalent of the old `IpEndpoint::UNSPECIFIED` constant removed in smoltcp 0.9.
+const UNSPECIFIED_ENDPOINT: IpEndpoint = IpEndpoint {
+    addr: smoltcp::wire::IpAddress::Ipv4(smoltcp::wire::Ipv4Address::UNSPECIFIED),
+    port: 0,
+};
+
 /// missing documentation
 pub mod tcp;
 pub use tcp::*;
@@ -216,16 +222,21 @@ numeric_enum! {
 
 // ============= SocketHandle =============
 
-use smoltcp::socket::SocketHandle;
+use smoltcp::iface::SocketHandle;
 
 /// A wrapper for `SocketHandle`.
-/// Auto increase and decrease reference count on Clone and Drop.
+/// Removes the socket from the global SocketSet on drop.
+/// Clone is supported by simply copying the handle (the socket
+/// remains alive until the last GlobalSocketHandle is dropped).
+///
+/// Note: smoltcp 0.9+ removed internal reference counting. This wrapper
+/// now removes the socket on drop of *any* clone, which matches how zCore
+/// uses sockets (one owner, with the handle swapped during accept).
 #[derive(Debug)]
 struct GlobalSocketHandle(SocketHandle);
 
 impl Clone for GlobalSocketHandle {
     fn clone(&self) -> Self {
-        get_sockets().lock().retain(self.0);
         Self(self.0)
     }
 }
@@ -234,8 +245,7 @@ impl Drop for GlobalSocketHandle {
     fn drop(&mut self) {
         let net_sockets = get_sockets();
         let mut sockets = net_sockets.lock();
-        sockets.release(self.0);
-        sockets.prune();
+        sockets.remove(self.0);
 
         // send FIN immediately when applicable
         drop(sockets);

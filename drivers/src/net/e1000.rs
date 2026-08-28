@@ -1,16 +1,14 @@
 //! Intel PRO/1000 Network Adapter i.e. e1000 network driver
 //! Datasheet: <https://www.intel.ca/content/dam/doc/datasheet/82574l-gbe-controller-datasheet.pdf>
 
-use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use smoltcp::iface::*;
-use smoltcp::phy::{self, DeviceCapabilities};
+use smoltcp::phy::{self, DeviceCapabilities, Medium};
 use smoltcp::time::Instant;
 use smoltcp::wire::*;
-use smoltcp::Result;
 
 use super::{timer_now_as_micros, ProviderImpl};
 use crate::net::get_sockets;
@@ -25,7 +23,7 @@ pub struct E1000Driver(Arc<Mutex<E1000<ProviderImpl>>>);
 
 #[derive(Clone)]
 pub struct E1000Interface {
-    iface: Arc<Mutex<Interface<'static, E1000Driver>>>,
+    iface: Arc<Mutex<Interface>>,
     driver: E1000Driver,
     name: String,
     irq: usize,
@@ -48,14 +46,9 @@ impl Scheme for E1000Interface {
             let timestamp = Instant::from_micros(timer_now_as_micros() as i64);
             let sockets = get_sockets();
             let mut sockets = sockets.lock();
-            match self.iface.lock().poll(&mut sockets, timestamp) {
-                Ok(p) => {
-                    //SOCKET_ACTIVITY.notify_all();
-                    info!("e1000 try_handle_interrupt poll: {:?}", p);
-                }
-                Err(err) => {
-                    warn!("poll got err {}", err);
-                }
+            let mut driver = self.driver.clone();
+            if self.iface.lock().poll(timestamp, &mut driver, &mut sockets) {
+                info!("e1000 try_handle_interrupt poll: activity");
             }
         }
     }
@@ -63,7 +56,10 @@ impl Scheme for E1000Interface {
 
 impl NetScheme for E1000Interface {
     fn get_mac(&self) -> EthernetAddress {
-        self.iface.lock().ethernet_addr()
+        match self.iface.lock().hardware_addr() {
+            HardwareAddress::Ethernet(addr) => addr,
+            _ => panic!("expected Ethernet hardware address"),
+        }
     }
 
     fn get_ifname(&self) -> String {
@@ -75,21 +71,18 @@ impl NetScheme for E1000Interface {
         Vec::from(self.iface.lock().ip_addrs())
     }
 
+    fn with_context(&self, f: &mut dyn FnMut(&mut smoltcp::iface::Context)) {
+        f(self.iface.lock().context())
+    }
+
     fn poll(&self) -> DeviceResult {
         let timestamp = Instant::from_micros(timer_now_as_micros() as i64);
         let sockets = get_sockets();
         let mut sockets = sockets.lock();
-        match self.iface.lock().poll(&mut sockets, timestamp) {
-            Ok(p) => {
-                //SOCKET_ACTIVITY.notify_all();
-                trace!("e1000 NetScheme poll: {:?}", p);
-                Ok(())
-            }
-            Err(err) => {
-                warn!("poll got err {}", err);
-                Err(DeviceError::IoError)
-            }
-        }
+        let mut driver = self.driver.clone();
+        let changed = self.iface.lock().poll(timestamp, &mut driver, &mut sockets);
+        trace!("e1000 NetScheme poll: {:?}", changed);
+        Ok(())
     }
 
     fn recv(&self, buf: &mut [u8]) -> DeviceResult<usize> {
@@ -115,18 +108,18 @@ impl NetScheme for E1000Interface {
 pub struct E1000RxToken(Vec<u8>);
 pub struct E1000TxToken(E1000Driver);
 
-impl phy::Device<'_> for E1000Driver {
-    type RxToken = E1000RxToken;
-    type TxToken = E1000TxToken;
+impl phy::Device for E1000Driver {
+    type RxToken<'a> = E1000RxToken;
+    type TxToken<'a> = E1000TxToken;
 
-    fn receive(&mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+    fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         self.0
             .lock()
             .receive()
             .map(|vec_recv| (E1000RxToken(vec_recv), E1000TxToken(self.clone())))
     }
 
-    fn transmit(&mut self) -> Option<Self::TxToken> {
+    fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
         if self.0.lock().can_send() {
             Some(E1000TxToken(self.clone()))
         } else {
@@ -138,23 +131,24 @@ impl phy::Device<'_> for E1000Driver {
         let mut caps = DeviceCapabilities::default();
         caps.max_transmission_unit = 1536;
         caps.max_burst_size = Some(64);
+        caps.medium = Medium::Ethernet;
         caps
     }
 }
 
 impl phy::RxToken for E1000RxToken {
-    fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> Result<R>
+    fn consume<R, F>(mut self, f: F) -> R
     where
-        F: FnOnce(&mut [u8]) -> Result<R>,
+        F: FnOnce(&mut [u8]) -> R,
     {
         f(&mut self.0)
     }
 }
 
 impl phy::TxToken for E1000TxToken {
-    fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> Result<R>
+    fn consume<R, F>(self, len: usize, f: F) -> R
     where
-        F: FnOnce(&mut [u8]) -> Result<R>,
+        F: FnOnce(&mut [u8]) -> R,
     {
         let mut buffer = [0u8; 1536];
         let result = f(&mut buffer[..len]);
@@ -181,22 +175,24 @@ pub fn init(
 
     let e1000 = E1000::new(header, size, DriverEthernetAddress::from_bytes(&mac));
 
-    let net_driver = E1000Driver(Arc::new(Mutex::new(e1000)));
+    let mut net_driver = E1000Driver(Arc::new(Mutex::new(e1000)));
 
     let ethernet_addr = EthernetAddress::from_bytes(&mac);
     let ip_addrs = [IpCidr::new(IpAddress::v4(10, 0, 2, (15 + index) as u8), 24)];
     let default_v4_gw = Ipv4Address::new(10, 0, 2, 2); //Qemu user network gateway: 10.0.2.2
-    static mut ROUTES_STORAGE: [Option<(IpCidr, Route)>; 1] = [None; 1];
-    let mut routes = unsafe { Routes::new(&mut ROUTES_STORAGE[..]) };
-    routes.add_default_ipv4_route(default_v4_gw).unwrap();
-    let neighbor_cache = NeighborCache::new(BTreeMap::new());
 
-    let iface = InterfaceBuilder::new(net_driver.clone())
-        .ethernet_addr(ethernet_addr)
-        .neighbor_cache(neighbor_cache)
-        .ip_addrs(ip_addrs)
-        .routes(routes)
-        .finalize();
+    let mut config = Config::new(HardwareAddress::Ethernet(ethernet_addr));
+    config.random_seed = 0x12345678; // deterministic seed for reproducibility
+
+    let now = Instant::from_micros(timer_now_as_micros() as i64);
+    let mut iface = Interface::new(config, &mut net_driver, now);
+    iface.update_ip_addrs(|addrs| {
+        addrs.push(ip_addrs[0]).unwrap();
+    });
+    iface
+        .routes_mut()
+        .add_default_ipv4_route(default_v4_gw)
+        .unwrap();
 
     info!(
         "e1000 interface {} up with addr 10.0.2.{}/24",

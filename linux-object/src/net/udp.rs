@@ -6,7 +6,9 @@ use crate::net::*;
 use alloc::{boxed::Box, sync::Arc, vec};
 use async_trait::async_trait;
 use lock::Mutex;
-use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer};
+use smoltcp::socket::udp::{
+    self, PacketBuffer as UdpSocketBuffer, PacketMetadata as UdpPacketMetadata, Socket as UdpSocket,
+};
 
 // third part
 #[allow(unused_imports)]
@@ -74,29 +76,25 @@ impl Socket for UdpSocketState {
         loop {
             let sets = get_sockets();
             let mut sets = sets.lock();
-            let mut socket = sets.get::<UdpSocket>(inner.handle.0);
+            let socket = sets.get_mut::<UdpSocket>(inner.handle.0);
             let copied_len = socket.recv_slice(data);
-            drop(socket);
             drop(sets);
 
             match copied_len {
-                Ok((size, endpoint)) => return (Ok(size), Endpoint::Ip(endpoint)),
-                Err(smoltcp::Error::Exhausted) => {
+                Ok((size, meta)) => return (Ok(size), Endpoint::Ip(meta.endpoint)),
+                Err(udp::RecvError::Exhausted) => {
                     poll_ifaces();
                     // The receive buffer is empty. Try again later...
                     if inner.flags.contains(OpenFlags::NON_BLOCK) {
                         debug!("NON_BLOCK: Try again later...");
-                        return (Err(LxError::EAGAIN), Endpoint::Ip(IpEndpoint::UNSPECIFIED));
+                        return (Err(LxError::EAGAIN), Endpoint::Ip(UNSPECIFIED_ENDPOINT));
                     } else {
                         trace!("udp Exhausted. try again")
                     }
                 }
                 Err(err) => {
                     error!("udp socket recv_slice error: {:?}", err);
-                    return (
-                        Err(LxError::ENOTCONN),
-                        Endpoint::Ip(IpEndpoint::UNSPECIFIED),
-                    );
+                    return (Err(LxError::ENOTCONN), Endpoint::Ip(UNSPECIFIED_ENDPOINT));
                 }
             }
         }
@@ -117,19 +115,13 @@ impl Socket for UdpSocketState {
 
         let sets = get_sockets();
         let mut sets = sets.lock();
-        let mut socket = sets.get::<UdpSocket>(inner.handle.0);
+        let socket = sets.get_mut::<UdpSocket>(inner.handle.0);
         if socket.endpoint().port == 0 {
-            socket
-                .bind(IpEndpoint::new(
-                    IpAddress::Unspecified,
-                    get_ephemeral_port(),
-                ))
-                .unwrap();
+            socket.bind(get_ephemeral_port()).unwrap();
         }
 
         let _len = socket.send_slice(data, *remote_endpoint);
 
-        drop(socket);
         drop(sets);
         poll_ifaces();
 
@@ -152,7 +144,7 @@ impl Socket for UdpSocketState {
         let (recv_state, send_state) = {
             let sets = get_sockets();
             let mut sets = sets.lock();
-            let socket = sets.get::<UdpSocket>(inner.handle.0);
+            let socket = sets.get_mut::<UdpSocket>(inner.handle.0);
             (socket.can_recv(), socket.can_send())
         };
         if (events.contains(PollEvents::IN) && !recv_state)
@@ -164,7 +156,7 @@ impl Socket for UdpSocketState {
         let (mut input, mut output, mut err) = (false, false, false);
         let sets = get_sockets();
         let mut sets = sets.lock();
-        let socket = sets.get::<UdpSocket>(inner.handle.0);
+        let socket = sets.get_mut::<UdpSocket>(inner.handle.0);
         if !socket.is_open() {
             err = true;
         } else {
@@ -188,7 +180,7 @@ impl Socket for UdpSocketState {
             }
             let sockets = get_sockets();
             let mut set = sockets.lock();
-            let mut socket = set.get::<UdpSocket>(self.inner.lock().handle.0);
+            let socket = set.get_mut::<UdpSocket>(self.inner.lock().handle.0);
             match socket.bind(ip) {
                 Ok(()) => Ok(0),
                 Err(_) => Err(LxError::EINVAL),
@@ -212,11 +204,15 @@ impl Socket for UdpSocketState {
     fn endpoint(&self) -> Option<Endpoint> {
         let net_sockets = get_sockets();
         let mut sockets = net_sockets.lock();
-        let socket = sockets.get::<UdpSocket>(self.inner.lock().handle.0);
+        let socket = sockets.get_mut::<UdpSocket>(self.inner.lock().handle.0);
 
         let endpoint = socket.endpoint();
         if endpoint.port != 0 {
-            Some(Endpoint::Ip(endpoint))
+            // Convert IpListenEndpoint to IpEndpoint
+            Some(Endpoint::Ip(IpEndpoint {
+                addr: endpoint.addr.unwrap_or(IpAddress::v4(0, 0, 0, 0)),
+                port: endpoint.port,
+            }))
         } else {
             None
         }
@@ -275,7 +271,7 @@ impl Socket for UdpSocketState {
     fn get_buffer_capacity(&self) -> Option<(usize, usize)> {
         let sockets = get_sockets();
         let mut set = sockets.lock();
-        let socket = set.get::<UdpSocket>(self.inner.lock().handle.0);
+        let socket = set.get_mut::<UdpSocket>(self.inner.lock().handle.0);
         let (recv_ca, send_ca) = (
             socket.payload_recv_capacity(),
             socket.payload_send_capacity(),
