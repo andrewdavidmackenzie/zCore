@@ -64,7 +64,7 @@ smoltcp = { version = "0.11.0", default-features = false, features = [
 nix = { version = "0.23", optional = true }
 tempfile = { version = "3", optional = true }
 async-std = { version = "1.10", optional = true }
-bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator.git", rev = "88e871a5", optional = true }
+bitmap-allocator = { version = "0.4", optional = true }
 
 # Bare-metal mode
 [target.'cfg(target_os = "none")'.dependencies]

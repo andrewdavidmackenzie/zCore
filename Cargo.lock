@@ -255,8 +255,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitmap-allocator"
-version = "0.1.0"
-source = "git+https://github.com/rcore-os/bitmap-allocator?rev=88e871a5#88e871a54f28a3d6795478f237466b3332e2fb1d"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d05b6d60a2b76037414ecf147f8ba1dd94aefe099774fff111af62c8c6a549d"
 dependencies = [
  "bit_field",
 ]
