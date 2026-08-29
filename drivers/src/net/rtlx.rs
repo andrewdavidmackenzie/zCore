@@ -1,15 +1,12 @@
-use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use lock::Mutex;
 
 use smoltcp::iface::*;
-use smoltcp::phy::{self, Device, DeviceCapabilities, Medium};
-// use smoltcp::socket::SocketSet;
+use smoltcp::phy::{self, DeviceCapabilities, Medium};
 use smoltcp::time::Instant;
 use smoltcp::wire::*;
-use smoltcp::Result;
 
 use super::realtek::rtl8211f::{self, RTL8211F};
 use super::{timer_now_as_micros, ProviderImpl, PAGE_SIZE};
@@ -23,7 +20,7 @@ pub struct RTLxDriver(Arc<Mutex<RTL8211F<ProviderImpl>>>);
 
 #[derive(Clone)]
 pub struct RTLxInterface {
-    pub iface: Arc<Mutex<Interface<'static, RTLxDriver>>>,
+    pub iface: Arc<Mutex<Interface>>,
     pub driver: RTLxDriver,
     pub name: String,
     pub irq: usize,
@@ -47,25 +44,22 @@ impl Scheme for RTLxInterface {
             let timestamp = Instant::from_micros(timer_now_as_micros() as i64);
             let sockets = get_sockets();
             let mut sockets = sockets.lock();
+            let mut driver = self.driver.clone();
 
             self.driver.0.lock().int_disable();
-            match self.iface.lock().poll(&mut sockets, timestamp) {
-                Ok(b) => {
-                    debug!("nic poll, is changed ?: {}", b);
-                }
-                Err(err) => {
-                    error!("poll got err {}", err);
-                }
-            }
+            let changed = self.iface.lock().poll(timestamp, &mut driver, &mut sockets);
+            debug!("nic poll, is changed ?: {}", changed);
             self.driver.0.lock().int_enable();
-            //return true;
         }
     }
 }
 
 impl NetScheme for RTLxInterface {
     fn get_mac(&self) -> EthernetAddress {
-        self.iface.lock().ethernet_addr()
+        match self.iface.lock().hardware_addr() {
+            HardwareAddress::Ethernet(addr) => addr,
+            _ => panic!("expected Ethernet hardware address"),
+        }
     }
 
     fn get_ifname(&self) -> String {
@@ -76,20 +70,18 @@ impl NetScheme for RTLxInterface {
         Vec::from(self.iface.lock().ip_addrs())
     }
 
+    fn with_context(&self, f: &mut dyn FnMut(&mut smoltcp::iface::Context)) {
+        f(self.iface.lock().context())
+    }
+
     fn poll(&self) -> DeviceResult {
         let timestamp = Instant::from_micros(timer_now_as_micros() as i64);
         let sockets = get_sockets();
         let mut sockets = sockets.lock();
-        match self.iface.lock().poll(&mut sockets, timestamp) {
-            Ok(b) => {
-                debug!("nic poll, is changed ?: {}", b);
-                Ok(())
-            }
-            Err(err) => {
-                error!("poll got err {}", err);
-                Err(DeviceError::IoError)
-            }
-        }
+        let mut driver = self.driver.clone();
+        let changed = self.iface.lock().poll(timestamp, &mut driver, &mut sockets);
+        debug!("nic poll, is changed ?: {}", changed);
+        Ok(())
     }
 
     fn recv(&self, buf: &mut [u8]) -> DeviceResult<usize> {
@@ -115,9 +107,9 @@ impl NetScheme for RTLxInterface {
 pub struct RTLxRxToken(Vec<u8>);
 pub struct RTLxTxToken(RTLxDriver);
 
-impl<'a> Device<'a> for RTLxDriver {
-    type RxToken = RTLxRxToken;
-    type TxToken = RTLxTxToken;
+impl phy::Device for RTLxDriver {
+    type RxToken<'a> = RTLxRxToken;
+    type TxToken<'a> = RTLxTxToken;
 
     fn capabilities(&self) -> DeviceCapabilities {
         let mut caps = DeviceCapabilities::default();
@@ -127,7 +119,7 @@ impl<'a> Device<'a> for RTLxDriver {
         caps
     }
 
-    fn receive(&mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+    fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         if self.0.lock().can_recv() {
             // Only receive one network packet at a time here
             let (vec_recv, _rxcount) = self.0.lock().geth_recv(1);
@@ -137,7 +129,7 @@ impl<'a> Device<'a> for RTLxDriver {
         }
     }
 
-    fn transmit(&mut self) -> Option<Self::TxToken> {
+    fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
         if self.0.lock().can_send() {
             Some(RTLxTxToken(self.clone()))
         } else {
@@ -147,22 +139,23 @@ impl<'a> Device<'a> for RTLxDriver {
 }
 
 impl phy::RxToken for RTLxRxToken {
-    fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> Result<R>
+    fn consume<R, F>(mut self, f: F) -> R
     where
-        F: FnOnce(&mut [u8]) -> Result<R>,
+        F: FnOnce(&mut [u8]) -> R,
     {
         f(&mut self.0)
     }
 }
 
 impl phy::TxToken for RTLxTxToken {
-    fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> Result<R>
+    fn consume<R, F>(self, len: usize, f: F) -> R
     where
-        F: FnOnce(&mut [u8]) -> Result<R>,
+        F: FnOnce(&mut [u8]) -> R,
     {
         let mut buffer = [0u8; 1536];
         let result = f(&mut buffer[..len]);
-        if result.is_ok() {
+        if true {
+            // always send (previously checked result.is_ok() but R is not Result anymore)
             (self.0).0.lock().geth_send(&buffer[..len]).unwrap();
         }
         result
@@ -185,21 +178,24 @@ pub fn rtlx_init<F: Fn(usize, usize) -> Option<usize>>(
     rtl8211f.set_rx_mode();
     rtl8211f.adjust_link().unwrap();
 
-    let net_driver = RTLxDriver(Arc::new(Mutex::new(rtl8211f)));
+    let mut net_driver = RTLxDriver(Arc::new(Mutex::new(rtl8211f)));
 
     let ethernet_addr = EthernetAddress::from_bytes(&mac);
     let ip_addrs = [IpCidr::new(IpAddress::v4(192, 168, 0, 123), 24)];
     let default_gateway = Ipv4Address::new(192, 168, 0, 1);
-    static mut ROUTES_STORAGE: [Option<(IpCidr, Route)>; 1] = [None; 1];
-    let mut routes = unsafe { Routes::new(&mut ROUTES_STORAGE[..]) };
-    routes.add_default_ipv4_route(default_gateway).unwrap();
-    let neighbor_cache = NeighborCache::new(BTreeMap::new());
-    let iface = InterfaceBuilder::new(net_driver.clone())
-        .ethernet_addr(ethernet_addr)
-        .neighbor_cache(neighbor_cache)
-        .ip_addrs(ip_addrs)
-        .routes(routes)
-        .finalize();
+
+    let mut config = Config::new(HardwareAddress::Ethernet(ethernet_addr));
+    config.random_seed = 0x12345678;
+
+    let now = Instant::from_micros(timer_now_as_micros() as i64);
+    let mut iface = Interface::new(config, &mut net_driver, now);
+    iface.update_ip_addrs(|addrs| {
+        addrs.push(ip_addrs[0]).unwrap();
+    });
+    iface
+        .routes_mut()
+        .add_default_ipv4_route(default_gateway)
+        .unwrap();
 
     info!("rtl8211f interface up with addr 192.168.0.123/24");
     info!("rtl8211f interface up with route 192.168.0.1/24");
@@ -212,9 +208,3 @@ pub fn rtlx_init<F: Fn(usize, usize) -> Option<usize>>(
 
     Ok(rtl8211f_iface)
 }
-
-//TODO: Global SocketSet
-// lazy_static::lazy_static! {
-//     pub static ref SOCKETS: Mutex<SocketSet<'static>> =
-//         Mutex::new(SocketSet::new(vec![]));
-// }

@@ -1,7 +1,7 @@
 // smoltcp
 use smoltcp::{iface::Interface, phy::Loopback, time::Instant};
 
-use crate::net::get_sockets;
+use crate::net::{get_sockets, timer_now_as_micros};
 use alloc::sync::Arc;
 
 use alloc::string::String;
@@ -16,7 +16,8 @@ use smoltcp::wire::IpCidr;
 
 #[derive(Clone)]
 pub struct LoopbackInterface {
-    pub iface: Arc<Mutex<Interface<'static, Loopback>>>,
+    pub iface: Arc<Mutex<Interface>>,
+    pub loopback: Arc<Mutex<Loopback>>,
     pub name: String,
 }
 
@@ -35,21 +36,27 @@ impl NetScheme for LoopbackInterface {
     fn send(&self, _buf: &[u8]) -> DeviceResult<usize> {
         unimplemented!()
     }
+
+    fn with_context(&self, f: &mut dyn FnMut(&mut smoltcp::iface::Context)) {
+        f(self.iface.lock().context())
+    }
+
     fn poll(&self) -> DeviceResult {
-        let timestamp = Instant::from_millis(0);
+        let timestamp = Instant::from_micros(timer_now_as_micros() as i64);
         let sockets = get_sockets();
         let mut sockets = sockets.lock();
-        match self.iface.lock().poll(&mut sockets, timestamp) {
-            Ok(_) => Ok(()),
-            Err(err) => {
-                debug!("poll got err {}", err);
-                Err(DeviceError::IoError)
-            }
-        }
+        let mut loopback = self.loopback.lock();
+        self.iface
+            .lock()
+            .poll(timestamp, &mut *loopback, &mut sockets);
+        Ok(())
     }
 
     fn get_mac(&self) -> EthernetAddress {
-        self.iface.lock().ethernet_addr()
+        match self.iface.lock().hardware_addr() {
+            smoltcp::wire::HardwareAddress::Ethernet(addr) => addr,
+            _ => panic!("expected Ethernet hardware address"),
+        }
     }
 
     fn get_ifname(&self) -> String {

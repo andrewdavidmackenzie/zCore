@@ -113,16 +113,33 @@ impl LinuxRootfs {
             dir::rm(&target).unwrap();
         }
         // Fetch source code (use GitHub mirror — the official git.busybox.net
-        // server is frequently unreachable from CI runners)
+        // server is frequently unreachable from CI runners).
+        // Pin to release tag 1_36_1 to avoid build failures from
+        // unstable master (e.g. sha1_process_block64_shaNI).
+        const BUSYBOX_TAG: &str = "1_36_1";
         let source = REPOS.join("busybox");
+        // If an existing checkout is not at the expected tag, remove it
+        // so it gets re-cloned at the pinned version.
+        if source.is_dir() {
+            let tag_file = source.join(".busybox_tag");
+            let current = std::fs::read_to_string(&tag_file).unwrap_or_default();
+            if current.trim() != BUSYBOX_TAG {
+                println!("busybox checkout not at {BUSYBOX_TAG}, re-cloning...");
+                dir::rm(&source).unwrap();
+            }
+        }
         if !source.is_dir() {
             fetch_online!(source, |tmp| {
                 Git::clone("https://github.com/mirror/busybox.git")
                     .dir(tmp)
                     .single_branch()
+                    .branch(BUSYBOX_TAG)
                     .depth(1)
                     .done()
             });
+            // Record the tag so future runs can validate the checkout.
+            std::fs::write(source.join(".busybox_tag"), BUSYBOX_TAG)
+                .expect("failed to write .busybox_tag");
         }
         // Copy
         dir::rm(&target).unwrap();

@@ -8,6 +8,12 @@ use crate::fs::{FileLike, PollEvents};
 use smoltcp::wire::IpEndpoint;
 pub use socket_address::*;
 
+/// Equivalent of the old `IpEndpoint::UNSPECIFIED` constant removed in smoltcp 0.9.
+const UNSPECIFIED_ENDPOINT: IpEndpoint = IpEndpoint {
+    addr: smoltcp::wire::IpAddress::Ipv4(smoltcp::wire::Ipv4Address::UNSPECIFIED),
+    port: 0,
+};
+
 /// missing documentation
 pub mod tcp;
 pub use tcp::*;
@@ -216,30 +222,38 @@ numeric_enum! {
 
 // ============= SocketHandle =============
 
-use smoltcp::socket::SocketHandle;
+use smoltcp::iface::SocketHandle;
 
-/// A wrapper for `SocketHandle`.
-/// Auto increase and decrease reference count on Clone and Drop.
+/// RAII guard that removes a socket from the global SocketSet on drop.
+///
+/// The inner handle is wrapped in `Arc` so that cloning this wrapper
+/// (required by `RawSocketState`'s derived `Clone`) is safe: the socket
+/// is only removed from the set when the **last** clone is dropped.
+#[derive(Debug, Clone)]
+struct GlobalSocketHandle(Arc<SocketHandleInner>);
+
 #[derive(Debug)]
-struct GlobalSocketHandle(SocketHandle);
+struct SocketHandleInner(SocketHandle);
 
-impl Clone for GlobalSocketHandle {
-    fn clone(&self) -> Self {
-        get_sockets().lock().retain(self.0);
-        Self(self.0)
-    }
-}
-
-impl Drop for GlobalSocketHandle {
+impl Drop for SocketHandleInner {
     fn drop(&mut self) {
         let net_sockets = get_sockets();
         let mut sockets = net_sockets.lock();
-        sockets.release(self.0);
-        sockets.prune();
+        sockets.remove(self.0);
 
         // send FIN immediately when applicable
         drop(sockets);
         poll_ifaces();
+    }
+}
+
+impl GlobalSocketHandle {
+    fn new(handle: SocketHandle) -> Self {
+        Self(Arc::new(SocketHandleInner(handle)))
+    }
+
+    fn handle(&self) -> SocketHandle {
+        self.0 .0
     }
 }
 

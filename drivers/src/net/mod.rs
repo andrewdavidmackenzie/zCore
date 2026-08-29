@@ -3,7 +3,7 @@
 
 use alloc::{sync::Arc, vec};
 use lock::Mutex;
-use smoltcp::socket::SocketSet;
+use smoltcp::iface::SocketSet;
 
 pub mod e1000;
 pub mod loopback;

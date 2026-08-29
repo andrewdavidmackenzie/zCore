@@ -150,6 +150,12 @@ impl NetlinkEndpoint {
 impl From<Endpoint> for SockAddr {
     fn from(endpoint: Endpoint) -> Self {
         match endpoint {
+            Endpoint::Ip(ip) if ip.addr.is_unspecified() && ip.port == 0 => SockAddr {
+                addr_ph: SockAddrPlaceholder {
+                    family: AddressFamily::Unspecified.into(),
+                    data: [0; 14],
+                },
+            },
             Endpoint::Ip(ip) => match ip.addr {
                 IpAddress::Ipv4(ipv4) => SockAddr {
                     addr_in: SockAddrIn {
@@ -157,12 +163,6 @@ impl From<Endpoint> for SockAddr {
                         sin_port: u16::to_be(ip.port),
                         sin_addr: u32::to_be(u32::from_be_bytes(ipv4.0)),
                         sin_zero: [0; 8],
-                    },
-                },
-                IpAddress::Unspecified => SockAddr {
-                    addr_ph: SockAddrPlaceholder {
-                        family: AddressFamily::Unspecified.into(),
-                        data: [0; 14],
                     },
                 },
                 _ => {
