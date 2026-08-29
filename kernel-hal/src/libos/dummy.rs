@@ -14,7 +14,7 @@ impl KernelHandler for DummyKernelHandler {
     fn frame_alloc_contiguous(&self, frame_count: usize, align_log2: usize) -> Option<usize> {
         let ret = FRAME_ALLOCATOR
             .lock()
-            .alloc_contiguous(frame_count, align_log2)
+            .alloc_contiguous(None, frame_count, align_log2)
             .map(|id| id * PAGE_SIZE);
         trace!(
             "Allocate contiguous frames: {:x?} ~ {:x?}",

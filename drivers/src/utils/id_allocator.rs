@@ -72,7 +72,7 @@ macro_rules! define_allocator {
 
             fn alloc_contiguous(&mut self, count: usize, align_log2: usize) -> DeviceResult<usize> {
                 self.0
-                    .alloc_contiguous(count, align_log2)
+                    .alloc_contiguous(None, count, align_log2)
                     .ok_or(DeviceError::InvalidParam)
             }
 

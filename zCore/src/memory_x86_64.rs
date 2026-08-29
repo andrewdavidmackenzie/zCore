@@ -42,7 +42,7 @@ pub fn insert_regions(regions: &[Range<PhysAddr>]) {
 pub fn frame_alloc(frame_count: usize, align_log2: usize) -> Option<PhysAddr> {
     let ret = FRAME_ALLOCATOR
         .lock()
-        .alloc_contiguous(frame_count, align_log2)
+        .alloc_contiguous(None, frame_count, align_log2)
         .map(frame_idx_to_phys_addr);
     trace!(
         "frame_alloc_contiguous(): {ret:x?} ~ {end_ret:x?}, align_log2={align_log2}",

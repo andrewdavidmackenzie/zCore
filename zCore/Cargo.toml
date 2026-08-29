@@ -80,7 +80,7 @@ rcore-fs-sfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 async-std = { version = "1.10", optional = true }
 chrono = { version = "0.4", optional = true }
-bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator", rev = "88e871a5" }
+bitmap-allocator = "0.4"
 rcore-fs-hostfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
 
 # RISC-V
@@ -98,7 +98,7 @@ sbi-rt = { version = "0.0.2", features = ["legacy"] }
 
 # Bare-metal mode on x86_64
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
-bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator", rev = "88e871a5" }
+bitmap-allocator = "0.4"
 buddy_system_allocator = "0.8"
 rboot = { git = "https://github.com/rcore-os/rboot.git", rev = "ad21575", default-features = false }
 # rvm = { git = "https://github.com/rcore-os/RVM", rev = "e91d625", optional = true }
