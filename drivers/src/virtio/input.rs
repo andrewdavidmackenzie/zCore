@@ -1,21 +1,21 @@
-use core::convert::TryFrom;
-
 use lock::Mutex;
-use virtio_drivers::{InputConfigSelect, VirtIOHeader, VirtIOInput as InnerDriver};
+use virtio_drivers::device::input::{InputConfigSelect, VirtIOInput as InnerDriver};
+use virtio_drivers::transport::mmio::MmioTransport;
 
+use super::HalImpl;
 use crate::prelude::{CapabilityType, InputCapability, InputEvent, InputEventType};
 use crate::scheme::{impl_event_scheme, InputScheme, Scheme};
 use crate::utils::EventListener;
 use crate::DeviceResult;
 
-pub struct VirtIoInput<'a> {
-    inner: Mutex<InnerDriver<'a>>,
+pub struct VirtIoInput {
+    inner: Mutex<InnerDriver<HalImpl, MmioTransport>>,
     listener: EventListener<InputEvent>,
 }
 
-impl<'a> VirtIoInput<'a> {
-    pub fn new(header: &'static mut VirtIOHeader) -> DeviceResult<Self> {
-        let inner = Mutex::new(InnerDriver::new(header)?);
+impl VirtIoInput {
+    pub fn new(transport: MmioTransport) -> DeviceResult<Self> {
+        let inner = Mutex::new(InnerDriver::new(transport)?);
         Ok(Self {
             inner,
             listener: EventListener::new(),
@@ -23,9 +23,9 @@ impl<'a> VirtIoInput<'a> {
     }
 }
 
-impl_event_scheme!(VirtIoInput<'_>, InputEvent);
+impl_event_scheme!(VirtIoInput, InputEvent);
 
-impl<'a> Scheme for VirtIoInput<'a> {
+impl Scheme for VirtIoInput {
     fn name(&self) -> &str {
         "virtio-input"
     }
@@ -45,7 +45,7 @@ impl<'a> Scheme for VirtIoInput<'a> {
     }
 }
 
-impl<'a> InputScheme for VirtIoInput<'a> {
+impl InputScheme for VirtIoInput {
     fn capability(&self, cap_type: CapabilityType) -> InputCapability {
         let mut inner = self.inner.lock();
         let mut bitmap = [0u8; 128];
