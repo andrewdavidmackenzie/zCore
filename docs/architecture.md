@@ -454,15 +454,15 @@ The `hypervisor` feature enables `Guest` and `Vcpu` kernel objects for running
 virtual machines, plus 7 Zircon syscalls (guest_create, vcpu_create,
 vcpu_resume, etc.). It depends on the `rvm` crate (RISC-V Virtual Machine).
 However, the `rvm` dependency is **commented out** in both `zircon-
-object/Cargo.toml` and `zircon-syscall/Cargo.toml`. The feature flag is defined
+object/Cargo.toml` and `zCore/zircon-syscall/Cargo.toml`. The feature flag is defined
 as empty (`hypervisor = []`). The code exists but **will not compile** without
 uncommenting and updating the rvm dependency. **The feature is currently non-
 functional.**
 
 
-Yes, there is real code: `zircon-object/src/ hypervisor/guest.rs` and `vcpu.rs`
-define `Guest` and `Vcpu` structs with methods. `zircon-syscall/
-src/hypervisor.rs` has 7 syscall handlers. But this code cannot compile because
+Yes, there is real code: `zCore/zircon-object/src/hypervisor/guest.rs` and `vcpu.rs`
+define `Guest` and `Vcpu` structs with methods. `zCore/zircon-syscall/src/hypervisor.rs`
+has 7 syscall handlers. But this code cannot compile because
 the `rvm` crate dependency is commented out. Removing the feature flag and code
 would lose ~200 lines but they're currently dead code. Could be preserved
 behind the feature flag as-is until rvm is restored.
@@ -662,7 +662,7 @@ feature-gated)
 
 **Workspace dependencies:** `zircon-object`, `kernel-hal`
 
-Confirmed: `zircon-syscall/Cargo.toml` depends on `zircon-object` and `kernel-
+Confirmed: `zCore/zircon-syscall/Cargo.toml` depends on `zircon-object` and `kernel-
 hal` only. No dependency on the `zCore` binary crate. The dependency flows one
 way: `zCore` -> `loader` -> `zircon-syscall`. Syscall numbers come from `zx-
 syscall-numbers.h` (compiled at build time via `build.rs`), not from any
@@ -931,7 +931,7 @@ subtract, allocate-by-address, and allocate-by-size with alignment.
 allocation).
 
 `region-alloc` is used ONLY for PCI BAR (Base Address Register) allocation in
-`zircon-object/src/dev/pci/bus.rs` and `nodes.rs`. Methods actually called:
+`zCore/zircon-object/src/dev/pci/bus.rs` and `nodes.rs`. Methods actually called:
 - `add(base, size)` -- add an address region
 - `add_or_subtract(base, size, is_add)` -- add or remove regions
 - `allocate_by_addr(base, size)` -- allocate a specific address range
