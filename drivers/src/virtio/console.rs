@@ -31,8 +31,9 @@ impl Scheme for VirtIoConsole {
     }
 
     fn handle_irq(&self, _irq_num: usize) {
-        // ack_interrupt now returns Result<bool>; discard the value.
-        let _ = self.inner.lock().ack_interrupt();
+        if let Err(e) = self.inner.lock().ack_interrupt() {
+            warn!("virtio-console: ack_interrupt failed: {:?}", e);
+        }
         self.listener.trigger(());
     }
 }
