@@ -1,6 +1,7 @@
 //! Zircon syscall number constants.
 //!
-//! These match the values in `zx-syscall-numbers.h` from the Fuchsia source.
+//! These match the values in `zx-syscall-numbers.h` from the Zircon kernel
+//! source tree (under `zircon/` in the Fuchsia repository).
 
 // Channels
 pub const SYS_CHANNEL_CREATE: u32 = 3;

@@ -1,6 +1,6 @@
 //! Zircon status/error codes.
 //!
-//! These match `zx_status_t` values from the Fuchsia ABI.
+//! These match `zx_status_t` values defined by the Zircon kernel.
 
 /// Zircon status code type (matches `zx_status_t`).
 pub type ZxStatus = i32;
