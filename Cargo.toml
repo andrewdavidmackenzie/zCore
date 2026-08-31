@@ -2,8 +2,8 @@
 members = [
     "drivers",
     "kernel-hal",
-    "zircon-object",
-    "zircon-syscall",
+    "zCore/zircon-object",
+    "zCore/zircon-syscall",
     "linux-object",
     "linux-syscall",
     "loader",
