@@ -1,3 +1,5 @@
+use core::ptr::NonNull;
+
 use crate::arch::timer::set_next_trigger;
 use crate::drivers;
 use crate::hal_fn::mem::phys_to_virt;
@@ -8,7 +10,8 @@ use alloc::sync::Arc;
 use zcore_drivers::irq::gic_400;
 use zcore_drivers::scheme::IrqScheme;
 use zcore_drivers::uart::{BufferedUart, Pl011Uart};
-use zcore_drivers::virtio::{VirtIOHeader, VirtIoBlk};
+use zcore_drivers::virtio::VirtIoBlk;
+use zcore_drivers::virtio::{MmioTransport, VirtIOHeader};
 use zcore_drivers::Device;
 
 pub fn init_early() {
@@ -27,9 +30,11 @@ pub fn init_early() {
 }
 
 pub fn init() {
-    let virtio_blk = Arc::new(
-        VirtIoBlk::new(unsafe { &mut *(phys_to_virt(VIRTIO_BASE) as *mut VirtIOHeader) }).unwrap(),
-    );
+    let header = NonNull::new(phys_to_virt(VIRTIO_BASE) as *mut VirtIOHeader)
+        .expect("VIRTIO_BASE mapped to null");
+    let transport =
+        unsafe { MmioTransport::new(header) }.expect("failed to create VirtIO MMIO transport");
+    let virtio_blk = Arc::new(VirtIoBlk::new(transport).unwrap());
     drivers::add_device(Device::Block(virtio_blk));
 }
 

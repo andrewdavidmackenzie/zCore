@@ -227,27 +227,31 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
     /// Parse nodes for virtio devices over MMIO.
     #[cfg(feature = "virtio")]
     fn parse_virtio(&self, node: &Node, props: &InheritProps) -> DeviceResult<DevWithInterrupt> {
+        use core::ptr::NonNull;
+
         use crate::virtio::*;
-        use virtio_drivers::{DeviceType, VirtIOHeader};
+        use virtio_drivers::transport::{mmio::MmioTransport, DeviceType, Transport};
 
         let interrupts_extended = parse_interrupts(node, props)?;
         let base_vaddr =
             parse_reg(node, props).and_then(|(paddr, size)| self.mmap(paddr as _, size as _))?;
-        let header = unsafe { &mut *(base_vaddr as *mut VirtIOHeader) };
-        if !header.verify() {
-            return Err(DeviceError::NotSupported);
-        }
+
+        let header =
+            NonNull::new(base_vaddr as *mut VirtIOHeader).ok_or(DeviceError::InvalidParam)?;
+        let transport =
+            unsafe { MmioTransport::new(header) }.map_err(|_| DeviceError::NotSupported)?;
+
         info!(
             "{MODULE}: detected virtio device: vendor_id={:#X}, type={:?}",
-            header.vendor_id(),
-            header.device_type()
+            transport.vendor_id(),
+            transport.device_type()
         );
 
-        let dev = match header.device_type() {
-            DeviceType::Block => Device::Block(Arc::new(VirtIoBlk::new(header)?)),
-            DeviceType::GPU => Device::Display(Arc::new(VirtIoGpu::new(header)?)),
-            DeviceType::Input => Device::Input(Arc::new(VirtIoInput::new(header)?)),
-            DeviceType::Console => Device::Uart(Arc::new(VirtIoConsole::new(header)?)),
+        let dev = match transport.device_type() {
+            DeviceType::Block => Device::Block(Arc::new(VirtIoBlk::new(transport)?)),
+            DeviceType::GPU => Device::Display(Arc::new(VirtIoGpu::new(transport)?)),
+            DeviceType::Input => Device::Input(Arc::new(VirtIoInput::new(transport)?)),
+            DeviceType::Console => Device::Uart(Arc::new(VirtIoConsole::new(transport)?)),
             _ => return Err(DeviceError::NotSupported),
         };
 

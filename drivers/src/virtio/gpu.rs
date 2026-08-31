@@ -1,26 +1,28 @@
 use lock::Mutex;
-use virtio_drivers::{VirtIOGpu as InnerDriver, VirtIOHeader};
+use virtio_drivers::device::gpu::VirtIOGpu as InnerDriver;
+use virtio_drivers::transport::mmio::MmioTransport;
 
+use super::HalImpl;
 use crate::prelude::{ColorFormat, DisplayInfo, FrameBuffer};
 use crate::scheme::{DisplayScheme, Scheme};
 use crate::DeviceResult;
 
-pub struct VirtIoGpu<'a> {
+pub struct VirtIoGpu {
     info: DisplayInfo,
-    inner: Mutex<InnerDriver<'a>>,
+    inner: Mutex<InnerDriver<HalImpl, MmioTransport>>,
 }
 
 const CURSOR_HOT_X: u32 = 13;
 const CURSOR_HOT_Y: u32 = 11;
 static CURSOR_IMG: &[u8] = include_bytes!("../display/resource/cursor.bin"); // 64 x 64 x 4
 
-impl<'a> VirtIoGpu<'a> {
-    pub fn new(header: &'static mut VirtIOHeader) -> DeviceResult<Self> {
-        let mut gpu = InnerDriver::new(header)?;
+impl VirtIoGpu {
+    pub fn new(transport: MmioTransport) -> DeviceResult<Self> {
+        let mut gpu = InnerDriver::new(transport)?;
         let fb = gpu.setup_framebuffer()?;
         let fb_base_vaddr = fb.as_ptr() as usize;
         let fb_size = fb.len();
-        let (width, height) = gpu.resolution();
+        let (width, height) = gpu.resolution()?;
         let info = DisplayInfo {
             width,
             height,
@@ -42,7 +44,7 @@ impl<'a> VirtIoGpu<'a> {
     }
 }
 
-impl<'a> Scheme for VirtIoGpu<'a> {
+impl Scheme for VirtIoGpu {
     fn name(&self) -> &str {
         "virtio-gpu"
     }
@@ -52,7 +54,7 @@ impl<'a> Scheme for VirtIoGpu<'a> {
     }
 }
 
-impl<'a> DisplayScheme for VirtIoGpu<'a> {
+impl DisplayScheme for VirtIoGpu {
     #[inline]
     fn info(&self) -> DisplayInfo {
         self.info
