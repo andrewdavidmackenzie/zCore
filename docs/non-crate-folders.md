@@ -81,7 +81,7 @@ Chinese).
 
 ---
 
-### `scripts/` -- Build and Test Scripts
+### `tools/scripts/` -- Build and Test Scripts
 
 **Purpose:** Shell scripts for boot testing, libc testing, and Zircon prebuilt
 generation.
@@ -218,19 +218,16 @@ used by `cargo qemu`.
 
 ---
 
-### `tools/` -- Docker Development Environment
+### `tools/` -- Development Tools
 
-**Purpose:** Dockerfile and scripts for building a containerized zCore
-development environment (Ubuntu 20.04, QEMU, Rust).
+**Purpose:** Development tools organized into subdirectories:
+- `tools/docker/` -- Dockerfile and scripts for building a containerized zCore
+  development environment (Ubuntu 20.04, QEMU, Rust)
+- `tools/scripts/` -- Build and test scripts (boot-test, libc-test, Zircon
+  prebuilt generation)
 
-Agreed. Suggested reorganization: `tools/docker/` (current tools/docker/),
-`tools/scripts/` (current scripts/). Would clean up the root directory. Low
-priority
-but straightforward. See [#95](https://github.com/andrewdavidmackenzie/zCore/issues/95).
-
-
-**Status:** Moderately used. The Dockerfile is somewhat dated but functional.
-CI does not use Docker.
+**Status:** Actively used. The Docker setup is somewhat dated but functional.
+CI does not use Docker. The scripts are used in CI and local development.
 
 ---
 

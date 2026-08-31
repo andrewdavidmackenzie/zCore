@@ -2,7 +2,7 @@
 #
 # Run musl libc-test functional tests inside zCore on QEMU.
 #
-# Usage: scripts/libc-test.sh <arch>
+# Usage: tools/scripts/libc-test.sh <arch>
 #
 # This script:
 #   1. Builds static libc-test binaries (if not already built)

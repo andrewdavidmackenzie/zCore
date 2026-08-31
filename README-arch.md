@@ -131,14 +131,14 @@ Run Zircon official core-tests:
 
 ```sh
 pip3 install pexpect
-cd scripts && python3 unix-core-testone.py 'Channel.*'
+cd tools/scripts && python3 unix-core-testone.py 'Channel.*'
 ```
 
 Run all (non-panicked) core-tests for CI:
 
 ```sh
 pip3 install pexpect
-cd scripts && python3 unix-core-tests.py
+cd tools/scripts && python3 unix-core-tests.py
 # Check `zircon/test-result.txt` for results.
 ```
 
@@ -148,7 +148,7 @@ Run Linux musl libc-tests for CI:
 
 ```sh
 make rootfs && make libc-test
-cd scripts && python3 libos-libc-tests.py
+cd tools/scripts && python3 libos-libc-tests.py
 # Check `linux/test-result.txt` for results.
 ```
 
@@ -166,7 +166,7 @@ Run all (non-panicked) core-tests for CI:
 
 ```sh
 pip3 install pexpect
-cd scripts && python3 core-tests.py
+cd tools/scripts && python3 core-tests.py
 # Check `zircon/test-result.txt` for results.
 ```
 
@@ -180,13 +180,13 @@ make baremetal-test-img
 ## Build zCore kernel
 cd zCore && make build MODE=release LINUX=1 ARCH=x86_64
 ## Testing
-cd scripts && python3 baremetal-libc-test.py
+cd tools/scripts && python3 baremetal-libc-test.py
 ##
 ```
 
-You can use [`scripts/baremetal-libc-test-ones.py`](./scripts/baremetal-libc-test-ones.py) & [`scripts/linux/baremetal-test-ones.txt`](./scripts/linux/baremetal-test-ones.txt) to test specified apps.
+You can use [`tools/scripts/baremetal-libc-test-ones.py`](./tools/scripts/baremetal-libc-test-ones.py) & [`tools/scripts/linux/baremetal-test-ones.txt`](./tools/scripts/linux/baremetal-test-ones.txt) to test specified apps.
 
-[`scripts/linux/baremetal-test-fail.txt`](./scripts/linux/baremetal-test-fail.txt) includes all failed x86-64 apps (We need YOUR HELP to fix bugs!)
+[`tools/scripts/linux/baremetal-test-fail.txt`](./tools/scripts/linux/baremetal-test-fail.txt) includes all failed x86-64 apps (We need YOUR HELP to fix bugs!)
 
 #### riscv-64 Linux related
 
@@ -196,14 +196,14 @@ Run Linux musl libc-tests for CI:
 ##  Prepare rootfs with libc-test & oscomp apps
 make riscv-image
 ## Build zCore kernel & Testing
-cd scripts && python3 baremetal-test-riscv64.py
+cd tools/scripts && python3 baremetal-test-riscv64.py
 ##
 ```
 
-You can use[scripts/baremetal-libc-test-ones-riscv64.py](./scripts/baremetal-libc-test-ones-riscv64.py) & [`scripts/linux/baremetal-test-ones-rv64.txt`](scripts/linux/baremetal-test-ones-rv64.txt)to test
+You can use[tools/scripts/baremetal-libc-test-ones-riscv64.py](./tools/scripts/baremetal-libc-test-ones-riscv64.py) & [`tools/scripts/linux/baremetal-test-ones-rv64.txt`](tools/scripts/linux/baremetal-test-ones-rv64.txt)to test
 specified apps.
 
-[`scripts/linux/baremetal-test-fail-riscv64.txt`](./scripts/linux/baremetal-test-fail-riscv64.txt)includes all failed riscv-64 apps (We need YOUR HELP to fix bugs!)
+[`tools/scripts/linux/baremetal-test-fail-riscv64.txt`](./tools/scripts/linux/baremetal-test-fail-riscv64.txt)includes all failed riscv-64 apps (We need YOUR HELP to fix bugs!)
 
 ## Graph/Game
 

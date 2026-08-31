@@ -3,7 +3,7 @@
 # Boot smoke test: start zCore in QEMU, wait for the shell prompt,
 # run "poweroff -f" to verify clean shutdown, then exit.
 #
-# Usage: scripts/boot-test.sh <arch>
+# Usage: tools/scripts/boot-test.sh <arch>
 #   arch: aarch64 (others may be added later)
 #
 # Exit code 0 = shell prompt reached and clean shutdown (boot success)

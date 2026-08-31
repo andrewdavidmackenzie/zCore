@@ -42,7 +42,7 @@ environment ready for Rust.
 The "Zircon userspace" is the Fuchsia **userboot** program -- the first process
 in Fuchsia's boot sequence. zCore does NOT include Zircon userspace source; it
 uses **prebuilt binaries** generated from the real Fuchsia source tree (via
-`scripts/gen-prebuilt.sh`). The binaries are: `userboot.so` (initial process),
+`tools/scripts/gen-prebuilt.sh`). The binaries are: `userboot.so` (initial process),
 `libzircon.so` (vDSO), and `bringup.zbi` (boot image with bootfs). These are
 expected at `prebuilt/zircon/{arch}/` but are NOT currently present in the
 repo. Without them, Zircon mode cannot boot. The loader code is at
@@ -674,7 +674,7 @@ currently.
 
 **Currently cannot boot Zircon mode.** It requires prebuilt binaries
 (userboot.so, libzircon.so, bringup.zbi) at `prebuilt/zircon/{arch}/` which are
-NOT present in the repo. To generate them: run `scripts/gen-prebuilt.sh` inside
+NOT present in the repo. To generate them: run `tools/scripts/gen-prebuilt.sh` inside
 a Fuchsia source tree. The Zircon integration test (`loader/tests/zircon.rs`)
 is x86_64-only and expects `prebuilt/zircon/x64/bringup.zbi`.
 See [#86](https://github.com/andrewdavidmackenzie/zCore/issues/86).
@@ -1010,7 +1010,7 @@ zCore's Linux syscall compatibility.
 **Points to:** `https://github.com/rcore-os/libc-test`
 
 **Status:** Actively used in CI. The `test.yml` workflow runs libc functional
-tests in QEMU via `scripts/libc-test.sh`.
+tests in QEMU via `tools/scripts/libc-test.sh`.
 
 ---
 

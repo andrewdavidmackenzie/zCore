@@ -28,14 +28,14 @@ test: boot-test libc-test
 # busybox shell all work end-to-end. Timeout is 60 seconds.
 boot-test: build
 	@echo "==> Boot smoke test ($(ARCH))..."
-	@scripts/boot-test.sh $(ARCH)
+	@tools/scripts/boot-test.sh $(ARCH)
 
 # Run musl libc-test functional tests. Reports pass/fail counts but does
 # not fail the build — the pass rate is expected to improve over time as
 # more syscalls are implemented (see issue #16).
 # Depends on boot-test to ensure serialization under parallel make.
 libc-test: boot-test
-	@scripts/libc-test.sh $(ARCH)
+	@tools/scripts/libc-test.sh $(ARCH)
 
 # configure build environment (platform toolchain)
 config:
