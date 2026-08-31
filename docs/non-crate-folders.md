@@ -18,21 +18,13 @@ For build artifacts, see [build-artifacts.md](build-artifacts.md).
 
 ### `.github/` -- CI/CD Configuration
 
-**Purpose:** GitHub Actions workflows and helper scripts.
+**Purpose:** GitHub Actions workflows.
 
 **Workflows:**
 - `build.yml` -- Format check + workspace build + bare-metal builds
   (aarch64/riscv64), runs on Ubuntu and macOS
 - `test.yml` -- Unit tests + boot smoke test + libc conformance tests
   (aarch64), runs on Ubuntu and macOS
-
-**Helper scripts:**
-- `scripts/add-doc-index.sh` -- Documentation redirect page
-
-It creates a `target/doc/index.html` that auto- redirects browsers to
-`kernel_hal/index.html`. Used after `cargo doc` so GitHub Pages doc site lands
-on kernel_hal docs instead of showing a directory listing. A simple HTML meta-
-refresh.
 
 **Status:** Actively used. Runs on every push and PR.
 
