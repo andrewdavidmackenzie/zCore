@@ -1,0 +1,17 @@
+# Note: petal programs cannot currently link because the Fuchsia sysroot
+# libraries are not present. See issue #121 (userstart) and #89 (petal tests).
+# The build target and linker flags below are placeholders for when the
+# sysroot becomes available or petal switches to #![no_std] with raw syscalls.
+
+[build]
+target = "x86_64-unknown-fuchsia"
+
+[target.x86_64-unknown-fuchsia]
+rustflags = [
+    "-L", "../prebuilt/zircon/x64",
+]
+
+[target.aarch64-unknown-fuchsia]
+rustflags = [
+    "-L", "../prebuilt/zircon/arm64",
+]

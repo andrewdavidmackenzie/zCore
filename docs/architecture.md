@@ -952,40 +952,28 @@ PCI machines.
 ## Excluded Standalone Projects
 
 These are in the repository but explicitly excluded from the workspace via
-`exclude = ["zircon-user", "rboot"]`.
+`exclude = ["petal", "rboot"]`.
 
-### `zircon-user/` -- Zircon User-Space Tests
+### `petal/` -- Minimal Zircon Test Userspace
 
-**Purpose:** Standalone Rust project for Zircon user-space test programs.
+**Purpose:** A minimal, controlled userspace for testing the zCore Zircon
+kernel. Named after a small part of the Fuchsia flower, petal is an alternative
+to the full Fuchsia userspace stack -- simple test programs that exercise Zircon
+syscalls directly.
 
 **Contents:** A single `hello.rs` binary. Has its own `Cargo.toml`,
-`Cargo.lock`, and `rust-toolchain.toml`.
+`Cargo.lock`, and `rust-toolchain.toml`. Currently not functional (requires
+userstart and vDSO from #121).
 
-**Status:** Minimal / Legacy. Contains only a trivial hello-world program.
-Likely a placeholder or relic from early Zircon compatibility development.
+**Targets:** `x86_64-unknown-fuchsia` and `aarch64-unknown-fuchsia` (Rust
+tier-3 targets).
 
-It targets `x86_64-fuchsia` and builds a Fuchsia- style userspace binary. Its
-`Makefile` packages the output into a ZBI (Zircon Boot Image) using the `zbi`
-CLI tool, combined with `bringup.zbi`. To use: build with `cargo build --target
-x86_64-fuchsia`, then package into a ZBI, then boot zCore in Zircon mode with
-that ZBI. It's NOT like the loader examples (those are host-side libos
-programs); this would run inside the Zircon kernel as a real Fuchsia process.
-
-
-It's x86_64-only because it targets `x86_64-fuchsia` (a Rust tier-3 target).
-For aarch64, the target would be `aarch64-fuchsia` (also tier-3). The Rust code
-itself is arch- independent; only the target spec and ZBI packaging differ. The
-`zbi` CLI tool and build process are the same. So yes, the same approach works
-for aarch64 with a target change.
-
-
-Next steps for zircon-user
+Next steps for petal
 (see [#89](https://github.com/andrewdavidmackenzie/zCore/issues/89)):
-(1) update to current nightly, (2) add Zircon syscall
-dep so it can call zx_* functions, (3) build and
-package into a ZBI, (4) add CI test that boots in
-Zircon mode and runs hello. Requires fixing Zircon
-prebuilt generation first (see #86).
+(1) add Zircon syscall bindings, (2) create test
+programs, (3) build and package into a ZBI, (4) add
+CI test that boots in Zircon mode. Requires userstart
+and vDSO from #121 first.
 
 ---
 

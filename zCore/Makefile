@@ -38,7 +38,7 @@ endif
 ifeq ($(LINUX), 1)
   user_img := $(ARCH).img
 else ifeq ($(USER), 1)
-  user_img := ../zircon-user/target/zcore-user.zbi
+  user_img := ../petal/target/petal.zbi
 else
   user_img := ../prebuilt/zircon/x64/$(ZBI).zbi
 endif
@@ -333,7 +333,7 @@ endif
 $(kernel_img): kernel bootloader
 ifeq ($(ARCH), x86_64)
   ifeq ($(USER), 1)
-	make -C ../zircon-user
+	make -C ../petal
   endif
 	mkdir -p $(esp)/EFI/zCore $(esp)/EFI/Boot
 	cp ../rboot/target/x86_64-unknown-uefi/release/rboot.efi $(esp)/EFI/Boot/BootX64.efi

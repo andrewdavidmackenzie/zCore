@@ -1,0 +1,8 @@
+[package]
+name = "petal"
+version = "0.1.0"
+authors = ["Runji Wang <wangrunji0408@163.com>"]
+edition = "2021"
+description = "Minimal Fuchsia-themed userspace for testing the zCore Zircon kernel"
+
+[dependencies]
