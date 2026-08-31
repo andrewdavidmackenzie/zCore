@@ -267,26 +267,17 @@ involves several components that bridge the kernel and userspace worlds.
 
 ### Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
-│  Fuchsia userspace                                  │
-│  (drivers, filesystems, component manager,          │
-│   netstack, package manager, etc.)                  │
-│  All Fuchsia functionality above the kernel runs    │
-│  here as userspace services communicating via        │
-│  channels and FIDL.                                 │
+│  petal test programs / Fuchsia userspace             │
+│  Simple test programs using zircon-abi syscall       │
+│  wrappers, or full Fuchsia services (drivers,       │
+│  filesystems, component manager, etc.)              │
 ├─────────────────────────────────────────────────────┤
-│  userboot (first userspace process)                 │
-│  Receives handles from kernel, unpacks the ZBI      │
-│  bootfs, loads the next program (bootsvc or         │
-│  component_manager), passes handles onward, exits.  │
-│  ~500 lines of C in real Fuchsia.                   │
-├─────────────────────────────────────────────────────┤
-│  vDSO (libzircon.so)                                │
-│  Kernel-provided shared library mapped into every   │
-│  userspace process. Contains syscall entry stubs    │
-│  (svc on aarch64, syscall on x86_64) and read-only  │
-│  kernel constants (ticks_per_second, cache sizes).  │
+│  userstart (first userspace process)                │
+│  Kernel-generated code that writes a debug message  │
+│  and exits. Future: loads programs from ZBI bootfs. │
+│  Replaces Fuchsia's userboot (see #121).            │
 ├═════════════════════════════════════════════════════╡
 │  KERNEL  (zCore -- this project)                    │
 │  Zircon kernel objects: Process, Thread, VMO,       │
@@ -305,7 +296,7 @@ same ABI, real Fuchsia userspace programs run on it unchanged.
 
 `run_userstart()` in `loader/src/zircon.rs` implements the kernel side:
 
-```
+```text
 run_userstart(zbi_data, cmdline)
   │
   ├── 1. Generate userstart machine code (arch-specific)

@@ -114,6 +114,11 @@ pub unsafe fn syscall3(num: u32, a0: u64, a1: u64, a2: u64) -> ZxStatus {
 }
 
 /// Raw syscall with 4 arguments.
+///
+/// Note: on x86_64, the 4th argument uses `r10` (not `rcx`) because the
+/// `syscall` instruction clobbers `rcx` (stores RIP). This matches the
+/// real Zircon/Linux syscall ABI. These wrappers are for bare-metal use
+/// only (behind the `userspace` feature), not for libos mode.
 #[inline(always)]
 pub unsafe fn syscall4(num: u32, a0: u64, a1: u64, a2: u64, a3: u64) -> ZxStatus {
     let ret: i64;
