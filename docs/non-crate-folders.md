@@ -18,21 +18,13 @@ For build artifacts, see [build-artifacts.md](build-artifacts.md).
 
 ### `.github/` -- CI/CD Configuration
 
-**Purpose:** GitHub Actions workflows and helper scripts.
+**Purpose:** GitHub Actions workflows.
 
 **Workflows:**
 - `build.yml` -- Format check + workspace build + bare-metal builds
   (aarch64/riscv64), runs on Ubuntu and macOS
 - `test.yml` -- Unit tests + boot smoke test + libc conformance tests
   (aarch64), runs on Ubuntu and macOS
-
-**Helper scripts:**
-- `scripts/add-doc-index.sh` -- Documentation redirect page
-
-It creates a `target/doc/index.html` that auto- redirects browsers to
-`kernel_hal/index.html`. Used after `cargo doc` so GitHub Pages doc site lands
-on kernel_hal docs instead of showing a directory listing. A simple HTML meta-
-refresh.
 
 **Status:** Actively used. Runs on every push and PR.
 
@@ -81,7 +73,7 @@ Chinese).
 
 ---
 
-### `scripts/` -- Build and Test Scripts
+### `tools/scripts/` -- Build and Test Scripts
 
 **Purpose:** Shell scripts for boot testing, libc testing, and Zircon prebuilt
 generation.
@@ -218,19 +210,16 @@ used by `cargo qemu`.
 
 ---
 
-### `tools/` -- Docker Development Environment
+### `tools/` -- Development Tools
 
-**Purpose:** Dockerfile and scripts for building a containerized zCore
-development environment (Ubuntu 20.04, QEMU, Rust).
+**Purpose:** Development tools organized into subdirectories:
+- `tools/docker/` -- Dockerfile and scripts for building a containerized zCore
+  development environment (Ubuntu 20.04, QEMU, Rust)
+- `tools/scripts/` -- Build and test scripts (boot-test, libc-test, Zircon
+  prebuilt generation)
 
-Agreed. Suggested reorganization: `tools/docker/` (current tools/docker/),
-`tools/scripts/` (current scripts/). Would clean up the root directory. Low
-priority
-but straightforward. See [#95](https://github.com/andrewdavidmackenzie/zCore/issues/95).
-
-
-**Status:** Moderately used. The Dockerfile is somewhat dated but functional.
-CI does not use Docker.
+**Status:** Actively used. The Docker setup is somewhat dated but functional.
+CI does not use Docker. The scripts are used in CI and local development.
 
 ---
 
