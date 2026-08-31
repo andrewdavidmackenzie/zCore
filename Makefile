@@ -210,7 +210,7 @@ clippy:
 		-Z build-std-features=compiler-builtins-mem \
 		--no-deps -- --deny warnings
 	@echo "==> Clippy: host tools..."
-	cargo clippy -p xtask -p z-config -p region-alloc \
+	cargo clippy -p xtask -p z-config -p region-alloc -p zircon-abi \
 		--no-deps -- --deny warnings
 
 # check code style

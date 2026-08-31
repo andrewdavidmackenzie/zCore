@@ -2708,7 +2708,6 @@ dependencies = [
  "linux-syscall",
  "log",
  "rcore-fs-hostfs",
- "xmas-elf 0.7.0",
  "zircon-object",
  "zircon-syscall",
 ]
@@ -2739,6 +2738,10 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
+
+[[package]]
+name = "zircon-abi"
+version = "0.1.0"
 
 [[package]]
 name = "zircon-object"

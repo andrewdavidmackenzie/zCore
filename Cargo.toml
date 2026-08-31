@@ -4,6 +4,7 @@ members = [
     "kernel-hal",
     "zCore/zircon-object",
     "zCore/zircon-syscall",
+    "zCore/zircon-abi",
     "linux-object",
     "linux-syscall",
     "loader",
