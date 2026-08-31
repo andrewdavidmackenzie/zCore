@@ -257,3 +257,117 @@ cfg_if! {
 
 Both `linux` and `zircon` features cannot be enabled simultaneously (panics at
 compile time if both set).
+
+---
+
+## Zircon Boot Protocol
+
+When zCore boots in Zircon mode, it must launch the Fuchsia userspace. This
+involves several components that bridge the kernel and userspace worlds.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Fuchsia userspace                                  │
+│  (drivers, filesystems, component manager,          │
+│   netstack, package manager, etc.)                  │
+│  All Fuchsia functionality above the kernel runs    │
+│  here as userspace services communicating via        │
+│  channels and FIDL.                                 │
+├─────────────────────────────────────────────────────┤
+│  userboot (first userspace process)                 │
+│  Receives handles from kernel, unpacks the ZBI      │
+│  bootfs, loads the next program (bootsvc or         │
+│  component_manager), passes handles onward, exits.  │
+│  ~500 lines of C in real Fuchsia.                   │
+├─────────────────────────────────────────────────────┤
+│  vDSO (libzircon.so)                                │
+│  Kernel-provided shared library mapped into every   │
+│  userspace process. Contains syscall entry stubs    │
+│  (svc on aarch64, syscall on x86_64) and read-only  │
+│  kernel constants (ticks_per_second, cache sizes).  │
+├═════════════════════════════════════════════════════╡
+│  KERNEL  (zCore -- this project)                    │
+│  Zircon kernel objects: Process, Thread, VMO,       │
+│  Channel, VMAR, Port, Futex, etc.                   │
+│  Syscall handlers (zircon-syscall/)                 │
+│  HAL, drivers, async executor                       │
+└─────────────────────────────────────────────────────┘
+```
+
+**Key insight:** Fuchsia is a microkernel OS. Everything above the kernel is
+userspace -- device drivers, filesystems, networking, the component framework.
+zCore replaces the Zircon kernel. If it implements the same syscalls with the
+same ABI, real Fuchsia userspace programs run on it unchanged.
+
+### The Bootstrap Sequence
+
+`run_userboot()` in `loader/src/zircon.rs` implements the kernel side:
+
+```
+run_userboot(zbi_data, cmdline)
+  │
+  ├── 1. Parse userboot.so as ELF, map into new process VMAR
+  ├── 2. Parse libzircon.so (vDSO) as ELF, map after userboot
+  ├── 3. [libos mode] Patch vDSO syscall entry to point to
+  │      kernel_hal::context::syscall_entry (function call,
+  │      not hardware trap)
+  ├── 4. Create ZBI VMO from boot image data
+  ├── 5. Set up 32 KiB user stack
+  ├── 6. Create channel pair (user_channel, kernel_channel)
+  ├── 7. Pack 15 handles onto kernel_channel:
+  │        [0]  PROC_SELF          Process handle
+  │        [1]  VMARROOT_SELF      Root VMAR
+  │        [2]  ROOTJOB            Root job
+  │        [3]  ROOTRESOURCE       Root resource
+  │        [4]  ZBI                ZBI VMO
+  │        [5-7] VDSO              vDSO VMOs (3 variants)
+  │        [8]  CRASHLOG           Crash log VMO
+  │        [9]  COUNTER_NAMES      Kernel counter descriptors
+  │        [10] COUNTERS           Kernel counter arena
+  │        [11-14] INSTRUMENTATION Profiling VMOs (stubs)
+  ├── 8. Write VdsoConstants at fixed offset in vDSO VMO
+  └── 9. Start thread at userboot entry point with user_channel
+```
+
+userboot then runs in userspace:
+1. Reads the 15 handles from its channel
+2. Parses the ZBI to find the bootfs
+3. Loads the next program from bootfs (typically `bootsvc`)
+4. Creates a new process, maps ELF segments, passes handles via channel
+5. Exits
+
+### Required Binaries
+
+Zircon mode requires three prebuilt artifacts at `prebuilt/zircon/{arch}/`:
+
+| File | Embedded | Purpose |
+|------|----------|---------|
+| `userboot.so` | Compile-time (`include_bytes!`) | First userspace process |
+| `libzircon.so` | Compile-time (`include_bytes!`) | vDSO with syscall stubs |
+| `bringup.zbi` | Runtime (loaded from disk/initramfs) | Boot image with bootfs |
+
+These are currently **not present** in the repo. See issue #86 for restoration
+plans, #121 for a Rust-native replacement approach, and #122 for updating the
+Fuchsia source patches.
+
+### The vDSO and Syscall ABI
+
+The vDSO (virtual Dynamic Shared Object) is how userspace calls into the
+kernel. It is a small shared library that the kernel maps into every process
+at a random address. Userspace calls functions like `zx_channel_create()`
+which are thin assembly stubs in the vDSO:
+
+**Bare-metal mode:** The stubs use hardware trap instructions (`svc #0` on
+aarch64, `syscall` on x86_64) that transfer control to the kernel's trap
+handler.
+
+**LibOS mode:** The stubs use indirect function calls through a pointer
+(`zcore_syscall_entry`) that zCore patches at load time to point to its own
+syscall handler. This is necessary because in libos mode, the kernel and
+userspace share the same address space.
+
+The vDSO also exports read-only data (`VdsoConstants`) including CPU count,
+ticks-per-second, cache line sizes, and physical memory size. This lets
+userspace read kernel data without a syscall (e.g., `zx_ticks_get()`).
