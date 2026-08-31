@@ -392,7 +392,7 @@ TODO Describe this more, including the "scheme" concept
 
 ---
 
-### `zircon-object/` -- Zircon Kernel Object Library
+### `zCore/zircon-object/` -- Zircon Kernel Object Library
 
 **Purpose:** Implements all Zircon kernel objects -- the fundamental
 abstractions of Google's Fuchsia/Zircon microkernel. This is the core of zCore,
@@ -594,12 +594,12 @@ reaches through to both layers.
 
 ---
 
-### `zircon-syscall/` -- Zircon Syscall Dispatch
+### `zCore/zircon-syscall/` -- Zircon Syscall Dispatch
 
-Same answer as the zircon-object sub-package TODO: No, because `linux-object`,
-`linux-syscall`, and `loader` all depend on `zircon-syscall`. If it were inside
-zCore, those crates would need to depend on zCore (circular). Separate crate is
-the correct Rust architecture.
+Note: `zircon-syscall` is a separate library crate (not merged into the `zcore`
+binary crate) because `linux-object`, `linux-syscall`, and `loader` all depend
+on it. Making it a sub-package of the `zcore` binary would create a circular
+dependency. It is co-located under `zCore/` for organizational clarity.
 
 
 **Purpose:** Implements the Fuchsia Zircon kernel ABI -- translates raw syscall

@@ -48,7 +48,7 @@ DeviceList<T>, and exposes `all_block()`,
 `all_uart()` etc. to the rest of the kernel.
 
 
-zircon-object/
+zCore/zircon-object/
  +-- kernel-hal/
  +-- third-party/region-alloc/
 
@@ -77,8 +77,8 @@ direct driver access for Linux device emulation.
 
  
 
-zircon-syscall/
- +-- zircon-object/
+zCore/zircon-syscall/
+ +-- zCore/zircon-object/
  +-- kernel-hal/       (default-features=false)
 
 

@@ -291,7 +291,7 @@ involves several components that bridge the kernel and userspace worlds.
 │  KERNEL  (zCore -- this project)                    │
 │  Zircon kernel objects: Process, Thread, VMO,       │
 │  Channel, VMAR, Port, Futex, etc.                   │
-│  Syscall handlers (zircon-syscall/)                 │
+│  Syscall handlers (zCore/zircon-syscall/)            │
 │  HAL, drivers, async executor                       │
 └─────────────────────────────────────────────────────┘
 ```
