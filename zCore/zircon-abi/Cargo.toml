@@ -1,0 +1,10 @@
+[package]
+name = "zircon-abi"
+version = "0.1.0"
+edition = "2021"
+description = "Zircon syscall ABI definitions: numbers, error codes, and inline syscall wrappers"
+
+[features]
+default = []
+# Enable userspace syscall wrappers (inline asm). Only for Fuchsia targets.
+userspace = []

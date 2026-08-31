@@ -13,7 +13,6 @@ description = "Linux and Zircon user programs loader and runner."
 [dependencies]
 log = "0.4"
 cfg-if = "1.0"
-xmas-elf = { version = "0.7", optional = true }
 kernel-hal = { path = "../kernel-hal", default-features = false }
 zircon-object = { path = "../zCore/zircon-object", features = ["elf"] }
 linux-object = { path = "../linux-object", optional = true }
@@ -24,7 +23,7 @@ executor = { path = "../third-party/executor" }
 [features]
 default = ["libos", "linux", "zircon"]
 linux = ["linux-object", "linux-syscall"]
-zircon = ["zircon-syscall", "xmas-elf"]
+zircon = ["zircon-syscall"]
 libos = ["kernel-hal/libos", "zircon-object/aspace-separate"]
 
 [dev-dependencies]
