@@ -14,7 +14,7 @@ members = [
     "third-party/region-alloc",
 ]
 default-members = ["xtask"]
-exclude = ["zircon-user", "rboot"]
+exclude = ["petal", "rboot"]
 resolver = "2"
 
 [profile.release]

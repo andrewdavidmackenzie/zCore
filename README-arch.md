@@ -114,8 +114,8 @@ Use docker container as standand develop environment, please refer to [tootls/do
 - step 2: Build and run your own Zircon user programs:
 
   ```sh
-  # See template in zircon-user
-  cd zircon-user && make zbi MODE=release
+   # See template in petal
+   cd petal && make MODE=release
   
   # Run your programs in zCore
   cd zCore && make run MODE=release USER=1 [LOG=warn] [GRAPHIC=on] [ACCEL=1]
