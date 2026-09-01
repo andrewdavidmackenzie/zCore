@@ -27,6 +27,12 @@ LOG ?= warn
 zircon-run:
 	cargo qemu --arch $(ARCH) --zircon --log $(LOG)
 
+# Zircon boot smoke test: build in Zircon mode, start QEMU, wait for
+# userstart hello message, verify clean shutdown.
+zircon-boot-test:
+	@echo "==> Zircon boot smoke test ($(ARCH))..."
+	@tools/scripts/zircon-boot-test.sh $(ARCH)
+
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test
 
