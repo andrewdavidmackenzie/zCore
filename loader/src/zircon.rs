@@ -24,7 +24,7 @@ use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::kcounter;
 use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::task::{CurrentThread, ExceptionType, Job, Process, Thread, ThreadState};
-use zircon_object::vm::{VmObject, VmarFlags};
+use zircon_object::vm::VmObject;
 
 // Handle indices in the bootstrap channel message.
 // These describe userstart itself.
@@ -164,8 +164,9 @@ fn extract_program_from_zbi(zbi_data: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
 
-    // Parse container header
-    let container: &ZbiHeader = unsafe { &*(zbi_data.as_ptr() as *const ZbiHeader) };
+    // Parse container header (use read_unaligned to avoid alignment issues)
+    let container: ZbiHeader =
+        unsafe { core::ptr::read_unaligned(zbi_data.as_ptr() as *const ZbiHeader) };
     if container.item_type != ZBI_TYPE_CONTAINER || container.magic != ZBI_ITEM_MAGIC {
         info!("ZBI: invalid container header");
         return None;
@@ -175,12 +176,13 @@ fn extract_program_from_zbi(zbi_data: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
 
-    // Iterate items inside the container
-    let container_end = ZbiHeader::SIZE + container.length as usize;
+    // Bound container payload to actual data length
+    let container_end = (ZbiHeader::SIZE + container.length as usize).min(zbi_data.len());
     let mut offset = ZbiHeader::SIZE; // skip container header
 
     while offset + ZbiHeader::SIZE <= container_end {
-        let item: &ZbiHeader = unsafe { &*(zbi_data.as_ptr().add(offset) as *const ZbiHeader) };
+        let item: ZbiHeader =
+            unsafe { core::ptr::read_unaligned(zbi_data.as_ptr().add(offset) as *const ZbiHeader) };
         if item.magic != ZBI_ITEM_MAGIC {
             info!("ZBI: invalid item magic at offset {:#x}", offset);
             break;
@@ -189,12 +191,13 @@ fn extract_program_from_zbi(zbi_data: &[u8]) -> Option<Vec<u8>> {
         let payload_start = offset + ZbiHeader::SIZE;
         let payload_end = payload_start + item.length as usize;
 
+        // Ensure item payload doesn't exceed the actual data
+        if payload_end > zbi_data.len() {
+            info!("ZBI: item payload at {:#x} extends beyond data", offset);
+            break;
+        }
+
         if item.item_type == ZBI_TYPE_STORAGE_BOOTFS {
-            // Found bootfs -- parse it
-            if payload_end > zbi_data.len() {
-                info!("ZBI: bootfs payload extends beyond ZBI data");
-                return None;
-            }
             let bootfs_data = &zbi_data[payload_start..payload_end];
             return extract_first_file_from_bootfs(bootfs_data);
         }
@@ -214,26 +217,30 @@ fn extract_first_file_from_bootfs(bootfs: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
 
-    let header: &ZbiBootfsHeader = unsafe { &*(bootfs.as_ptr() as *const ZbiBootfsHeader) };
+    let header: ZbiBootfsHeader =
+        unsafe { core::ptr::read_unaligned(bootfs.as_ptr() as *const ZbiBootfsHeader) };
     if header.magic != ZBI_BOOTFS_MAGIC {
         info!("bootfs: invalid magic");
         return None;
     }
 
-    // Read the first directory entry
+    // Read the first directory entry, validating against dirsize
     let dirent_start = bfs_hdr_size;
-    if dirent_start + ZbiBootfsDirent::FIXED_SIZE > bootfs.len() {
+    let dir_end = bfs_hdr_size + header.dirsize as usize;
+    if dirent_start + ZbiBootfsDirent::FIXED_SIZE > dir_end.min(bootfs.len()) {
         info!("bootfs: directory too small");
         return None;
     }
 
-    let dirent: &ZbiBootfsDirent =
-        unsafe { &*(bootfs.as_ptr().add(dirent_start) as *const ZbiBootfsDirent) };
+    let dirent: ZbiBootfsDirent = unsafe {
+        core::ptr::read_unaligned(bootfs.as_ptr().add(dirent_start) as *const ZbiBootfsDirent)
+    };
 
-    // Extract the filename for logging
+    // Validate name bounds against both dirsize and buffer
     let name_start = dirent_start + ZbiBootfsDirent::FIXED_SIZE;
     let name_end = name_start + dirent.name_len as usize;
-    if name_end > bootfs.len() {
+    if name_end > dir_end.min(bootfs.len()) || dirent.name_len == 0 {
+        info!("bootfs: invalid dirent name_len");
         return None;
     }
     let name_bytes = &bootfs[name_start..name_end - 1]; // exclude NUL
@@ -253,33 +260,17 @@ fn extract_first_file_from_bootfs(bootfs: &[u8]) -> Option<Vec<u8>> {
 }
 
 fn kcounter_vmos() -> (Arc<VmObject>, Arc<VmObject>) {
-    let (desc_vmo, arena_vmo) = if cfg!(feature = "libos") {
-        // dummy VMOs
-        use zircon_object::util::kcounter::DescriptorVmoHeader;
-        const HEADER_SIZE: usize = core::mem::size_of::<DescriptorVmoHeader>();
-        let desc_vmo = VmObject::new_paged(1);
-        let arena_vmo = VmObject::new_paged(1);
+    // Provide dummy kcounter VMOs. Real kcounter data requires linker-
+    // provided symbols that are only available on x86_64. For petal/userstart
+    // testing, dummy VMOs are sufficient.
+    use zircon_object::util::kcounter::DescriptorVmoHeader;
+    const HEADER_SIZE: usize = core::mem::size_of::<DescriptorVmoHeader>();
+    let desc_vmo = VmObject::new_paged(1);
+    let arena_vmo = VmObject::new_paged(1);
 
-        let header = DescriptorVmoHeader::default();
-        let header_buf: [u8; HEADER_SIZE] = unsafe { core::mem::transmute(header) };
-        desc_vmo.write(0, &header_buf).unwrap();
-        (desc_vmo, arena_vmo)
-    } else {
-        use kernel_hal::vm::{GenericPageTable, PageTable};
-        use zircon_object::{util::kcounter::AllCounters, vm::pages};
-        let pgtable = PageTable::from_current();
-
-        // kcounters names table.
-        let desc_vmo_data = AllCounters::raw_desc_vmo_data();
-        let paddr = pgtable.query(desc_vmo_data.as_ptr() as usize).unwrap().0;
-        let desc_vmo = VmObject::new_physical(paddr, pages(desc_vmo_data.len()));
-
-        // kcounters live data.
-        let arena_vmo_data = AllCounters::raw_arena_vmo_data();
-        let paddr = pgtable.query(arena_vmo_data.as_ptr() as usize).unwrap().0;
-        let arena_vmo = VmObject::new_physical(paddr, pages(arena_vmo_data.len()));
-        (desc_vmo, arena_vmo)
-    };
+    let header = DescriptorVmoHeader::default();
+    let header_buf: [u8; HEADER_SIZE] = unsafe { core::mem::transmute(header) };
+    desc_vmo.write(0, &header_buf).unwrap();
     desc_vmo.set_name("counters/desc");
     arena_vmo.set_name("counters/arena");
     (desc_vmo, arena_vmo)

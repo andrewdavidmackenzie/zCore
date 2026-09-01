@@ -2,6 +2,7 @@
 //!
 //! A ZBI is a concatenation of items, each preceded by a 32-byte header.
 //! The first item is a container header wrapping all subsequent items.
+//! The ZBI format is defined by the Zircon kernel.
 //!
 //! Reference: <https://fuchsia.dev/fuchsia-src/reference/kernel/zbi>
 
@@ -57,7 +58,7 @@ pub const ZBI_TYPE_CONTAINER: u32 = 0x544f4f42; // "BOOT"
 /// Bootfs filesystem image.
 pub const ZBI_TYPE_STORAGE_BOOTFS: u32 = 0x42534642; // "BFSB"
 /// Kernel command line (NUL-terminated string).
-pub const ZBI_TYPE_CMDLINE: u32 = 0x434d444c; // "CMDL"
+pub const ZBI_TYPE_CMDLINE: u32 = 0x4c444d43; // "CMDL"
 
 // Magic constants
 /// Container header `extra` field value.
@@ -93,6 +94,11 @@ impl ZbiBootfsDirent {
     }
 }
 
+/// Safely convert a repr(C) struct to its byte representation.
+fn as_bytes<T: Copy>(val: &T) -> &[u8] {
+    unsafe { core::slice::from_raw_parts(val as *const T as *const u8, core::mem::size_of::<T>()) }
+}
+
 /// Build a minimal ZBI containing a single bootfs entry.
 ///
 /// This creates a valid ZBI with:
@@ -122,9 +128,7 @@ pub fn build_test_zbi(filename: &[u8], file_data: &[u8]) -> alloc::vec::Vec<u8> 
         magic: ZBI_BOOTFS_MAGIC,
         dirsize,
     };
-    bootfs.extend_from_slice(unsafe {
-        core::slice::from_raw_parts(&bfs_hdr as *const _ as *const u8, bootfs_header_size)
-    });
+    bootfs.extend_from_slice(as_bytes(&bfs_hdr));
 
     // Directory entry
     let dirent = ZbiBootfsDirent {
@@ -132,12 +136,7 @@ pub fn build_test_zbi(filename: &[u8], file_data: &[u8]) -> alloc::vec::Vec<u8> 
         data_len: file_data.len() as u32,
         data_off,
     };
-    bootfs.extend_from_slice(unsafe {
-        core::slice::from_raw_parts(
-            &dirent as *const _ as *const u8,
-            ZbiBootfsDirent::FIXED_SIZE,
-        )
-    });
+    bootfs.extend_from_slice(as_bytes(&dirent));
     bootfs.extend_from_slice(filename);
     bootfs.push(0); // NUL terminator
                     // Pad dirent to 4-byte alignment
@@ -167,9 +166,7 @@ pub fn build_test_zbi(filename: &[u8], file_data: &[u8]) -> alloc::vec::Vec<u8> 
         magic: ZBI_ITEM_MAGIC,
         crc32: ZBI_ITEM_NO_CRC32,
     };
-    zbi.extend_from_slice(unsafe {
-        core::slice::from_raw_parts(&container as *const _ as *const u8, ZbiHeader::SIZE)
-    });
+    zbi.extend_from_slice(as_bytes(&container));
 
     // Bootfs item header
     let bootfs_item = ZbiHeader {
@@ -182,9 +179,7 @@ pub fn build_test_zbi(filename: &[u8], file_data: &[u8]) -> alloc::vec::Vec<u8> 
         magic: ZBI_ITEM_MAGIC,
         crc32: ZBI_ITEM_NO_CRC32,
     };
-    zbi.extend_from_slice(unsafe {
-        core::slice::from_raw_parts(&bootfs_item as *const _ as *const u8, ZbiHeader::SIZE)
-    });
+    zbi.extend_from_slice(as_bytes(&bootfs_item));
 
     // Bootfs payload
     zbi.extend_from_slice(&bootfs);
