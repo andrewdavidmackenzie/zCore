@@ -2628,6 +2628,7 @@ dependencies = [
  "rcore-fs-sfs",
  "shadow-rs",
  "z-config",
+ "zircon-abi",
 ]
 
 [[package]]
@@ -2665,7 +2666,6 @@ dependencies = [
  "sbi-rt",
  "spin 0.9.4",
  "zcore-loader",
- "zircon-abi",
  "zircon-object",
 ]
 

@@ -15,6 +15,7 @@ other-test = "xtask other-test"
 image = "xtask image"
 
 linux-libos = "xtask linux-libos"
+petal-zbi = "xtask petal-zbi"
 
 asm = "xtask asm"
 bin = "xtask bin"

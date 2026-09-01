@@ -9,6 +9,7 @@ build = "build.rs"
 
 [dependencies]
 z-config = { path = "../z-config" }
+zircon-abi = { path = "../zCore/zircon-abi", features = ["zbi"] }
 clap = { version = "4.0", features = ["derive"] }
 dircpy = "0.3"
 rand = "0.8"

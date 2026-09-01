@@ -8,3 +8,5 @@ description = "Zircon syscall ABI definitions: numbers, error codes, and inline 
 default = []
 # Enable userspace syscall wrappers (inline asm). Only for Fuchsia targets.
 userspace = []
+# Enable ZBI format support (requires alloc). Used by kernel, not userspace.
+zbi = []

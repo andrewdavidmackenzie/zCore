@@ -50,10 +50,10 @@ const K_HANDLECOUNT: usize = 15;
 ///
 /// Returns `(code, msg_offset)` where `msg_offset` is the byte offset
 /// of the message string within the code page.
-/// Generate the userstart hello program machine code.
+/// Generate a fallback hello program as machine code.
 ///
-/// Public so it can be used by `build_test_zbi()` to construct a test ZBI.
-pub fn userstart_code() -> Vec<u8> {
+/// Used when the ZBI contains no bootfs or the bootfs is empty.
+fn userstart_code() -> Vec<u8> {
     let msg = b"userstart: Hello from zCore Zircon mode!\n";
     let msg_len = msg.len();
 
