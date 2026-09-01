@@ -23,21 +23,7 @@ run:
 # Build and run zCore in Zircon mode (userstart hello program).
 # The kernel constructs a test ZBI in-memory -- no external ZBI file needed.
 zircon-run:
-	@echo "==> Building zCore in Zircon mode ($(ARCH))..."
-	cargo build \
-		-p zcore \
-		--no-default-features --features zircon \
-		--target zCore/$(ARCH).json \
-		-Z json-target-spec \
-		-Z build-std=core,alloc \
-		-Z build-std-features=compiler-builtins-mem \
-		--release
-	@echo "==> Launching QEMU in Zircon mode..."
-	qemu-system-aarch64 \
-		-m 2G -display none -no-reboot -nographic \
-		-machine virt -cpu cortex-a72 \
-		-kernel target/aarch64/release/zcore \
-		-serial mon:stdio
+	cargo qemu --arch $(ARCH) --zircon
 
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test

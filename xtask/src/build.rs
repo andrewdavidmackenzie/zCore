@@ -36,6 +36,9 @@ pub(crate) struct QemuArgs {
     /// Build as debug mode.
     #[clap(long)]
     debug: bool,
+    /// Boot in Zircon mode (instead of Linux mode).
+    #[clap(long)]
+    zircon: bool,
     /// Number of hart (SMP for Symmetrical Multiple Processor).
     #[clap(long)]
     smp: Option<u8>,
@@ -58,7 +61,7 @@ pub(crate) struct BuildConfig {
     arch: Arch,
     debug: bool,
     env: HashMap<OsString, OsString>,
-    features: HashSet<String>,
+    pub(crate) features: HashSet<String>,
 }
 
 impl BuildConfig {
@@ -170,8 +173,13 @@ impl OutArgs {
 impl QemuArgs {
     /// Launches in qemu.
     pub fn qemu(self) {
-        // Recursively build image
-        self.arch.linux_rootfs().image();
+        let is_zircon = self.zircon;
+
+        // Build rootfs image (Linux mode only)
+        if !is_zircon {
+            self.arch.linux_rootfs().image();
+        }
+
         // Build various strings
         let arch = self.arch.arch;
         let arch_str = arch.name();
@@ -180,11 +188,18 @@ impl QemuArgs {
             .join(self.arch.arch.name())
             .join(if self.debug { "debug" } else { "release" })
             .join("zcore");
+
         // Build the kernel
-        let build_config = BuildConfig::from_args(BuildArgs {
+        let mut build_config = BuildConfig::from_args(BuildArgs {
             machine: format!("virt-{}", self.arch.arch.name()),
             debug: self.debug,
         });
+        if is_zircon {
+            // Override features: use zircon instead of linux
+            build_config.features.remove("linux");
+            build_config.features.insert("zircon".into());
+        }
+
         // For riscv64 we need a raw binary; for aarch64 we use the ELF directly
         let bin = match arch {
             Arch::Aarch64 => {
@@ -222,8 +237,11 @@ impl QemuArgs {
                     .args(["-cpu", "cortex-a72"])
                     .arg("-kernel")
                     .arg(&obj)
-                    .args(["-serial", "mon:stdio"])
-                    .args([
+                    .args(["-serial", "mon:stdio"]);
+                // Linux mode needs a block device with the rootfs image.
+                // Zircon mode constructs its ZBI in-memory, no disk needed.
+                if !is_zircon {
+                    qemu.args([
                         "-drive",
                         &format!(
                             "file={}/aarch64.img,if=none,format=raw,id=x0",
@@ -234,6 +252,7 @@ impl QemuArgs {
                         "-device",
                         "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0",
                     ]);
+                }
             }
         }
         qemu.optional(&self.gdb, |qemu, port| {
