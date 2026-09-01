@@ -62,13 +62,14 @@ ELAPSED=0
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   # Check if QEMU has exited
   if ! kill -0 "$QEMU_PID" 2>/dev/null; then
-    wait "$QEMU_PID" || true
+    QEMU_EXIT=0
+    wait "$QEMU_PID" || QEMU_EXIT=$?
     # Check for the hello message
     if grep -q "$HELLO_PATTERN" "$OUTPUT" 2>/dev/null; then
-      echo "PASS: Zircon boot + userstart hello + clean shutdown"
+      echo "PASS: Zircon boot + userstart hello + clean shutdown (exit=$QEMU_EXIT)"
       exit 0
     else
-      echo "FAIL: QEMU exited but hello message not found"
+      echo "FAIL: QEMU exited (code=$QEMU_EXIT) but hello message not found"
       echo "--- QEMU output ---"
       cat "$OUTPUT"
       exit 1
