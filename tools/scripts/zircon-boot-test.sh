@@ -13,7 +13,7 @@ set -euo pipefail
 
 ARCH="${1:?Usage: $0 <arch>}"
 TIMEOUT=30
-HELLO_PATTERN='Hello from petal on zCore!'
+HELLO_PATTERN='petal: Hello from petal on zCore!'
 
 case "$ARCH" in
   aarch64)

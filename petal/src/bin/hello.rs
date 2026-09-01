@@ -5,7 +5,7 @@
 //! and `zx_process_exit` (exit cleanly).
 //!
 //! Build: cross-compiled as a freestanding aarch64 binary, then stripped
-//! to a flat binary and packaged into a ZBI for the kernel to load.
+//! to a flat binary, and packaged into a ZBI for the kernel to load.
 
 #![no_std]
 #![no_main]
@@ -16,7 +16,7 @@ use zircon_abi::syscall;
 /// Entry point -- called by the kernel when the process starts.
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    let msg = b"userstart: Hello from petal on zCore!\n";
+    let msg = b"petal: Hello from petal on zCore!\n";
     unsafe {
         syscall::zx_debug_write(msg.as_ptr(), msg.len());
         syscall::zx_process_exit(0);
