@@ -2,27 +2,29 @@
 //!
 //! This module implements the kernel side of the Zircon boot protocol.
 //! `userstart` is zCore's Rust replacement for Fuchsia's `userboot` -- the
-//! first userspace process launched by the kernel. Unlike the original which
-//! required prebuilt Fuchsia binaries, userstart is generated directly by
-//! the kernel as a small machine-code snippet.
+//! first userspace process launched by the kernel.
 //!
-//! The userstart program:
-//! 1. Writes a debug message via `zx_debug_write` syscall
-//! 2. Exits via `zx_process_exit` syscall
+//! The boot sequence:
+//! 1. Parse the ZBI (Zircon Boot Image) to find a bootfs filesystem
+//! 2. Find the first program in the bootfs
+//! 3. Map it into a new process as executable code
+//! 4. Start the process with bootstrap handles
 //!
-//! Future work (#89) will extend this to load programs from a ZBI bootfs.
+//! If no ZBI is provided or it contains no bootfs, a built-in hello
+//! program is used instead (writes a debug message and exits).
 
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{future::Future, pin::Pin};
 
 use kernel_hal::context::{TrapReason, UserContext, UserContextField};
 use kernel_hal::{MMUFlags, PAGE_SIZE};
+use zircon_abi::zbi::*;
 use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
 use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::kcounter;
 use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::task::{CurrentThread, ExceptionType, Job, Process, Thread, ThreadState};
-use zircon_object::vm::{VmObject, VmarFlags};
+use zircon_object::vm::VmObject;
 
 // Handle indices in the bootstrap channel message.
 // These describe userstart itself.
@@ -48,7 +50,10 @@ const K_HANDLECOUNT: usize = 15;
 ///
 /// Returns `(code, msg_offset)` where `msg_offset` is the byte offset
 /// of the message string within the code page.
-fn userstart_code() -> Vec<u8> {
+/// Generate the userstart hello program machine code.
+///
+/// Public so it can be used by `build_test_zbi()` to construct a test ZBI.
+pub fn userstart_code() -> Vec<u8> {
     let msg = b"userstart: Hello from zCore Zircon mode!\n";
     let msg_len = msg.len();
 
@@ -149,34 +154,123 @@ fn userstart_code() -> Vec<u8> {
     }
 }
 
-fn kcounter_vmos() -> (Arc<VmObject>, Arc<VmObject>) {
-    let (desc_vmo, arena_vmo) = if cfg!(feature = "libos") {
-        // dummy VMOs
-        use zircon_object::util::kcounter::DescriptorVmoHeader;
-        const HEADER_SIZE: usize = core::mem::size_of::<DescriptorVmoHeader>();
-        let desc_vmo = VmObject::new_paged(1);
-        let arena_vmo = VmObject::new_paged(1);
+/// Try to extract the first program from a ZBI's bootfs.
+///
+/// Parses the ZBI container, finds the first `ZBI_TYPE_STORAGE_BOOTFS` item,
+/// then finds the first file in the bootfs directory. Returns the file data
+/// as a `Vec<u8>`, or `None` if parsing fails or no bootfs is found.
+fn extract_program_from_zbi(zbi_data: &[u8]) -> Option<Vec<u8>> {
+    if zbi_data.len() < ZbiHeader::SIZE {
+        return None;
+    }
 
-        let header = DescriptorVmoHeader::default();
-        let header_buf: [u8; HEADER_SIZE] = unsafe { core::mem::transmute(header) };
-        desc_vmo.write(0, &header_buf).unwrap();
-        (desc_vmo, arena_vmo)
-    } else {
-        use kernel_hal::vm::{GenericPageTable, PageTable};
-        use zircon_object::{util::kcounter::AllCounters, vm::pages};
-        let pgtable = PageTable::from_current();
+    // Parse container header (use read_unaligned to avoid alignment issues)
+    let container: ZbiHeader =
+        unsafe { core::ptr::read_unaligned(zbi_data.as_ptr() as *const ZbiHeader) };
+    if container.item_type != ZBI_TYPE_CONTAINER || container.magic != ZBI_ITEM_MAGIC {
+        info!("ZBI: invalid container header");
+        return None;
+    }
+    if container.extra != ZBI_CONTAINER_MAGIC {
+        info!("ZBI: invalid container magic");
+        return None;
+    }
 
-        // kcounters names table.
-        let desc_vmo_data = AllCounters::raw_desc_vmo_data();
-        let paddr = pgtable.query(desc_vmo_data.as_ptr() as usize).unwrap().0;
-        let desc_vmo = VmObject::new_physical(paddr, pages(desc_vmo_data.len()));
+    // Bound container payload to actual data length
+    let container_end = (ZbiHeader::SIZE + container.length as usize).min(zbi_data.len());
+    let mut offset = ZbiHeader::SIZE; // skip container header
 
-        // kcounters live data.
-        let arena_vmo_data = AllCounters::raw_arena_vmo_data();
-        let paddr = pgtable.query(arena_vmo_data.as_ptr() as usize).unwrap().0;
-        let arena_vmo = VmObject::new_physical(paddr, pages(arena_vmo_data.len()));
-        (desc_vmo, arena_vmo)
+    while offset + ZbiHeader::SIZE <= container_end {
+        let item: ZbiHeader =
+            unsafe { core::ptr::read_unaligned(zbi_data.as_ptr().add(offset) as *const ZbiHeader) };
+        if item.magic != ZBI_ITEM_MAGIC {
+            info!("ZBI: invalid item magic at offset {:#x}", offset);
+            break;
+        }
+
+        let payload_start = offset + ZbiHeader::SIZE;
+        let payload_end = payload_start + item.length as usize;
+
+        // Ensure item payload doesn't exceed the actual data
+        if payload_end > zbi_data.len() {
+            info!("ZBI: item payload at {:#x} extends beyond data", offset);
+            break;
+        }
+
+        if item.item_type == ZBI_TYPE_STORAGE_BOOTFS {
+            let bootfs_data = &zbi_data[payload_start..payload_end];
+            return extract_first_file_from_bootfs(bootfs_data);
+        }
+
+        // Advance to next item (payload + padding to 8-byte alignment)
+        offset = payload_start + item.padded_length();
+    }
+
+    info!("ZBI: no bootfs item found");
+    None
+}
+
+/// Extract the first file from a bootfs image.
+fn extract_first_file_from_bootfs(bootfs: &[u8]) -> Option<Vec<u8>> {
+    let bfs_hdr_size = core::mem::size_of::<ZbiBootfsHeader>();
+    if bootfs.len() < bfs_hdr_size {
+        return None;
+    }
+
+    let header: ZbiBootfsHeader =
+        unsafe { core::ptr::read_unaligned(bootfs.as_ptr() as *const ZbiBootfsHeader) };
+    if header.magic != ZBI_BOOTFS_MAGIC {
+        info!("bootfs: invalid magic");
+        return None;
+    }
+
+    // Read the first directory entry, validating against dirsize
+    let dirent_start = bfs_hdr_size;
+    let dir_end = bfs_hdr_size + header.dirsize as usize;
+    if dirent_start + ZbiBootfsDirent::FIXED_SIZE > dir_end.min(bootfs.len()) {
+        info!("bootfs: directory too small");
+        return None;
+    }
+
+    let dirent: ZbiBootfsDirent = unsafe {
+        core::ptr::read_unaligned(bootfs.as_ptr().add(dirent_start) as *const ZbiBootfsDirent)
     };
+
+    // Validate name bounds against both dirsize and buffer
+    let name_start = dirent_start + ZbiBootfsDirent::FIXED_SIZE;
+    let name_end = name_start + dirent.name_len as usize;
+    if name_end > dir_end.min(bootfs.len()) || dirent.name_len == 0 {
+        info!("bootfs: invalid dirent name_len");
+        return None;
+    }
+    let name_bytes = &bootfs[name_start..name_end - 1]; // exclude NUL
+    if let Ok(name) = core::str::from_utf8(name_bytes) {
+        info!("bootfs: loading '{}' ({} bytes)", name, dirent.data_len);
+    }
+
+    // Extract the file data
+    let data_start = dirent.data_off as usize;
+    let data_end = data_start + dirent.data_len as usize;
+    if data_end > bootfs.len() {
+        info!("bootfs: file data extends beyond bootfs");
+        return None;
+    }
+
+    Some(bootfs[data_start..data_end].to_vec())
+}
+
+fn kcounter_vmos() -> (Arc<VmObject>, Arc<VmObject>) {
+    // Provide dummy kcounter VMOs. Real kcounter data requires linker-
+    // provided symbols that are only available on x86_64. For petal/userstart
+    // testing, dummy VMOs are sufficient.
+    use zircon_object::util::kcounter::DescriptorVmoHeader;
+    const HEADER_SIZE: usize = core::mem::size_of::<DescriptorVmoHeader>();
+    let desc_vmo = VmObject::new_paged(1);
+    let arena_vmo = VmObject::new_paged(1);
+
+    let header = DescriptorVmoHeader::default();
+    let header_buf: [u8; HEADER_SIZE] = unsafe { core::mem::transmute(header) };
+    desc_vmo.write(0, &header_buf).unwrap();
     desc_vmo.set_name("counters/desc");
     arena_vmo.set_name("counters/arena");
     (desc_vmo, arena_vmo)
@@ -189,8 +283,6 @@ fn kcounter_vmos() -> (Arc<VmObject>, Arc<VmObject>) {
 /// program directly in memory that:
 /// 1. Writes a debug message via `zx_debug_write`
 /// 2. Exits via `zx_process_exit(0)`
-///
-/// Future work (#89) will extend this to load petal test programs from a ZBI.
 ///
 /// This function is also available as `run_userboot()` for backward compatibility.
 pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
@@ -206,8 +298,20 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     );
     let vmar = proc.vmar();
 
-    // Generate userstart code and map it into the process
-    let code = userstart_code();
+    // Try to load a program from the ZBI bootfs; fall back to built-in hello
+    let code = match extract_program_from_zbi(zbi.as_ref()) {
+        Some(program_data) => {
+            info!(
+                "userstart: loaded program from ZBI bootfs ({} bytes)",
+                program_data.len()
+            );
+            program_data
+        }
+        None => {
+            info!("userstart: no bootfs program found, using built-in hello");
+            userstart_code()
+        }
+    };
     let code_pages = code.len() / PAGE_SIZE + 1;
     let code_vmo = VmObject::new_paged(code_pages);
     code_vmo.write(0, &code).unwrap();
@@ -348,6 +452,14 @@ async fn run_user(thread: CurrentThread) {
         }
     }
     thread.handle_exception(ExceptionType::ThreadExiting).await;
+
+    // In Zircon mode, when the root process (userstart) exits, shut down.
+    if thread.is_first_thread() {
+        info!("Zircon root process exited, shutting down");
+        info!("(if QEMU does not exit, press Ctrl-A then X to quit)");
+        #[cfg(not(feature = "libos"))]
+        kernel_hal::cpu::reset();
+    }
 }
 
 async fn handler_user_trap(

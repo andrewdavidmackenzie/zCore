@@ -15,6 +15,7 @@ log = "0.4"
 cfg-if = "1.0"
 kernel-hal = { path = "../kernel-hal", default-features = false }
 zircon-object = { path = "../zCore/zircon-object", features = ["elf"] }
+zircon-abi = { path = "../zCore/zircon-abi", optional = true }
 linux-object = { path = "../linux-object", optional = true }
 zircon-syscall = { path = "../zCore/zircon-syscall", optional = true }
 linux-syscall = { path = "../linux-syscall", optional = true }
@@ -23,7 +24,7 @@ executor = { path = "../third-party/executor" }
 [features]
 default = ["libos", "linux", "zircon"]
 linux = ["linux-object", "linux-syscall"]
-zircon = ["zircon-syscall"]
+zircon = ["zircon-syscall", "zircon-abi"]
 libos = ["kernel-hal/libos", "zircon-object/aspace-separate"]
 
 [dev-dependencies]

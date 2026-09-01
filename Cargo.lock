@@ -2665,6 +2665,7 @@ dependencies = [
  "sbi-rt",
  "spin 0.9.4",
  "zcore-loader",
+ "zircon-abi",
  "zircon-object",
 ]
 
@@ -2708,6 +2709,7 @@ dependencies = [
  "linux-syscall",
  "log",
  "rcore-fs-hostfs",
+ "zircon-abi",
  "zircon-object",
  "zircon-syscall",
 ]

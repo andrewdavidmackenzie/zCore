@@ -17,8 +17,11 @@
 #![no_std]
 #![deny(warnings)]
 
+extern crate alloc;
+
 pub mod consts;
 pub mod errors;
+pub mod zbi;
 
 #[cfg(feature = "userspace")]
 pub mod syscall;

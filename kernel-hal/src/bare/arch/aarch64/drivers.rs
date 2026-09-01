@@ -32,10 +32,25 @@ pub fn init_early() {
 pub fn init() {
     let header = NonNull::new(phys_to_virt(VIRTIO_BASE) as *mut VirtIOHeader)
         .expect("VIRTIO_BASE mapped to null");
-    let transport =
-        unsafe { MmioTransport::new(header) }.expect("failed to create VirtIO MMIO transport");
-    let virtio_blk = Arc::new(VirtIoBlk::new(transport).unwrap());
-    drivers::add_device(Device::Block(virtio_blk));
+    match unsafe { MmioTransport::new(header) } {
+        Ok(transport) => match VirtIoBlk::new(transport) {
+            Ok(blk) => {
+                drivers::add_device(Device::Block(Arc::new(blk)));
+            }
+            Err(e) => {
+                log::warn!(
+                    "VirtIO block device init failed: {:?} (no block device?)",
+                    e
+                );
+            }
+        },
+        Err(e) => {
+            log::warn!(
+                "VirtIO MMIO transport init failed: {:?} (no VirtIO device attached?)",
+                e
+            );
+        }
+    }
 }
 
 fn handle_uart_irq() {
