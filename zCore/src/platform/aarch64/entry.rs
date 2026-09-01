@@ -18,7 +18,7 @@ const GIC_BASE: usize = 0x0800_0000;
 #[no_mangle]
 extern "C" fn rust_main(_dtb_ptr: usize) -> ! {
     let config = KernelConfig {
-        cmdline: "LOG=warn:ROOTPROC=/bin/busybox?sh",
+        cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=warn:ROOTPROC=/bin/busybox?sh"),
         firmware_type: "QEMU",
         uart_base: UART_BASE,
         gic_base: GIC_BASE,

@@ -22,8 +22,10 @@ run:
 
 # Build and run zCore in Zircon mode (userstart hello program).
 # The kernel constructs a test ZBI in-memory -- no external ZBI file needed.
+# Use LOG=info (or debug/trace/warn/error) to control log verbosity.
+LOG ?= warn
 zircon-run:
-	cargo qemu --arch $(ARCH) --zircon
+	cargo qemu --arch $(ARCH) --zircon --log $(LOG)
 
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test

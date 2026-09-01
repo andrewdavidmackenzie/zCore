@@ -39,6 +39,9 @@ pub(crate) struct QemuArgs {
     /// Boot in Zircon mode (instead of Linux mode).
     #[clap(long)]
     zircon: bool,
+    /// Log level (error, warn, info, debug, trace). Default: warn.
+    #[clap(long, default_value = "warn")]
+    log: String,
     /// Number of hart (SMP for Symmetrical Multiple Processor).
     #[clap(long)]
     smp: Option<u8>,
@@ -194,6 +197,16 @@ impl QemuArgs {
             machine: format!("virt-{}", self.arch.arch.name()),
             debug: self.debug,
         });
+        // Set the kernel command line via compile-time env var
+        let cmdline = if is_zircon {
+            format!("LOG={}", self.log)
+        } else {
+            format!("LOG={}:ROOTPROC=/bin/busybox?sh", self.log)
+        };
+        build_config
+            .env
+            .insert("ZCORE_CMDLINE".into(), cmdline.into());
+
         if is_zircon {
             // Override features: use zircon instead of linux
             build_config.features.remove("linux");
