@@ -235,11 +235,13 @@ impl QemuArgs {
                 qemu.args(["-machine", "virt"])
                     .arg("-kernel")
                     .arg(&bin)
-                    .arg("-initrd")
-                    .arg(INNER.join(format!("{arch_str}.img")))
-                    .args(["-append", "\"LOG=warn\""])
                     .args(["-bios", "default"])
                     .args(["-serial", "mon:stdio"]);
+                // Linux mode needs the rootfs image as initrd
+                if !is_zircon {
+                    qemu.arg("-initrd")
+                        .arg(INNER.join(format!("{arch_str}.img")));
+                }
             }
             Arch::X86_64 => todo!(),
             Arch::Aarch64 => {
