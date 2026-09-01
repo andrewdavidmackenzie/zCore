@@ -88,6 +88,33 @@ jobs:
       - name: Boot smoke test
         run: make boot-test ARCH=aarch64
 
+  zircon-boot-test:
+    name: Zircon Boot Test (aarch64)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, llvm-tools-preview
+
+      - name: Install QEMU (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
+
+      - name: Install QEMU (macOS)
+        if: runner.os == 'macOS'
+        run: brew install qemu
+
+      - name: Zircon boot smoke test
+        run: make zircon-boot-test ARCH=aarch64
+
   libc-test:
     name: Libc Test (aarch64)
     runs-on: ${{ matrix.os }}
