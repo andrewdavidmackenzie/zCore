@@ -39,13 +39,29 @@ cfg_if! {
 
         #[cfg(feature = "libos")]
         pub fn zbi() -> impl AsRef<[u8]> {
-            let path = std::env::args().nth(1).unwrap();
-            std::fs::read(path).expect("failed to read zbi file")
+            // Try to read a ZBI file from the command line, or build a test ZBI
+            if let Some(path) = std::env::args().nth(1) {
+                std::fs::read(path).expect("failed to read zbi file")
+            } else {
+                log::info!("No ZBI file specified, building test ZBI with hello program");
+                zircon_abi::zbi::build_test_zbi(
+                    b"bin/hello",
+                    &zcore_loader::zircon::userstart_code(),
+                )
+            }
         }
 
         #[cfg(not(feature = "libos"))]
         pub fn zbi() -> impl AsRef<[u8]> {
-            init_ram_disk().expect("failed to get the init RAM disk")
+            if let Some(initrd) = init_ram_disk() {
+                initrd.to_vec()
+            } else {
+                log::info!("No init RAM disk, building test ZBI with hello program");
+                zircon_abi::zbi::build_test_zbi(
+                    b"bin/hello",
+                    &zcore_loader::zircon::userstart_code(),
+                )
+            }
         }
     }
 }

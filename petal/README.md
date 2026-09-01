@@ -27,12 +27,15 @@ The name comes from the Fuchsia flower -- a petal is a small part of the whole.
 
 ## Current status
 
-petal is not yet functional. The following work is needed:
+The kernel can boot in Zircon mode and run a built-in hello program that
+exercises the `zx_debug_write` and `zx_process_exit` syscalls. The kernel
+constructs a test ZBI containing this program, parses the ZBI bootfs, and
+loads the program into a userspace process.
 
-- [#121](https://github.com/andrewdavidmackenzie/zCore/issues/121) --
-  Implement userstart + vDSO + ZBI construction
-- [#89](https://github.com/andrewdavidmackenzie/zCore/issues/89) --
-  Create test programs and add Zircon boot test to CI
+Future work: cross-compile petal programs as `#![no_std]` Rust binaries
+using `zircon-abi` for syscalls, package them into a real ZBI, and add
+more test programs exercising channels, VMOs, processes, etc. See
+[#89](https://github.com/andrewdavidmackenzie/zCore/issues/89).
 
 ## Not just for petal
 

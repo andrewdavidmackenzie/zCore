@@ -2,21 +2,23 @@
 //!
 //! This module implements the kernel side of the Zircon boot protocol.
 //! `userstart` is zCore's Rust replacement for Fuchsia's `userboot` -- the
-//! first userspace process launched by the kernel. Unlike the original which
-//! required prebuilt Fuchsia binaries, userstart is generated directly by
-//! the kernel as a small machine-code snippet.
+//! first userspace process launched by the kernel.
 //!
-//! The userstart program:
-//! 1. Writes a debug message via `zx_debug_write` syscall
-//! 2. Exits via `zx_process_exit` syscall
+//! The boot sequence:
+//! 1. Parse the ZBI (Zircon Boot Image) to find a bootfs filesystem
+//! 2. Find the first program in the bootfs
+//! 3. Map it into a new process as executable code
+//! 4. Start the process with bootstrap handles
 //!
-//! Future work (#89) will extend this to load programs from a ZBI bootfs.
+//! If no ZBI is provided or it contains no bootfs, a built-in hello
+//! program is used instead (writes a debug message and exits).
 
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{future::Future, pin::Pin};
 
 use kernel_hal::context::{TrapReason, UserContext, UserContextField};
 use kernel_hal::{MMUFlags, PAGE_SIZE};
+use zircon_abi::zbi::*;
 use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
 use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::kcounter;
@@ -48,7 +50,10 @@ const K_HANDLECOUNT: usize = 15;
 ///
 /// Returns `(code, msg_offset)` where `msg_offset` is the byte offset
 /// of the message string within the code page.
-fn userstart_code() -> Vec<u8> {
+/// Generate the userstart hello program machine code.
+///
+/// Public so it can be used by `build_test_zbi()` to construct a test ZBI.
+pub fn userstart_code() -> Vec<u8> {
     let msg = b"userstart: Hello from zCore Zircon mode!\n";
     let msg_len = msg.len();
 
@@ -149,6 +154,104 @@ fn userstart_code() -> Vec<u8> {
     }
 }
 
+/// Try to extract the first program from a ZBI's bootfs.
+///
+/// Parses the ZBI container, finds the first `ZBI_TYPE_STORAGE_BOOTFS` item,
+/// then finds the first file in the bootfs directory. Returns the file data
+/// as a `Vec<u8>`, or `None` if parsing fails or no bootfs is found.
+fn extract_program_from_zbi(zbi_data: &[u8]) -> Option<Vec<u8>> {
+    if zbi_data.len() < ZbiHeader::SIZE {
+        return None;
+    }
+
+    // Parse container header
+    let container: &ZbiHeader = unsafe { &*(zbi_data.as_ptr() as *const ZbiHeader) };
+    if container.item_type != ZBI_TYPE_CONTAINER || container.magic != ZBI_ITEM_MAGIC {
+        info!("ZBI: invalid container header");
+        return None;
+    }
+    if container.extra != ZBI_CONTAINER_MAGIC {
+        info!("ZBI: invalid container magic");
+        return None;
+    }
+
+    // Iterate items inside the container
+    let container_end = ZbiHeader::SIZE + container.length as usize;
+    let mut offset = ZbiHeader::SIZE; // skip container header
+
+    while offset + ZbiHeader::SIZE <= container_end {
+        let item: &ZbiHeader = unsafe { &*(zbi_data.as_ptr().add(offset) as *const ZbiHeader) };
+        if item.magic != ZBI_ITEM_MAGIC {
+            info!("ZBI: invalid item magic at offset {:#x}", offset);
+            break;
+        }
+
+        let payload_start = offset + ZbiHeader::SIZE;
+        let payload_end = payload_start + item.length as usize;
+
+        if item.item_type == ZBI_TYPE_STORAGE_BOOTFS {
+            // Found bootfs -- parse it
+            if payload_end > zbi_data.len() {
+                info!("ZBI: bootfs payload extends beyond ZBI data");
+                return None;
+            }
+            let bootfs_data = &zbi_data[payload_start..payload_end];
+            return extract_first_file_from_bootfs(bootfs_data);
+        }
+
+        // Advance to next item (payload + padding to 8-byte alignment)
+        offset = payload_start + item.padded_length();
+    }
+
+    info!("ZBI: no bootfs item found");
+    None
+}
+
+/// Extract the first file from a bootfs image.
+fn extract_first_file_from_bootfs(bootfs: &[u8]) -> Option<Vec<u8>> {
+    let bfs_hdr_size = core::mem::size_of::<ZbiBootfsHeader>();
+    if bootfs.len() < bfs_hdr_size {
+        return None;
+    }
+
+    let header: &ZbiBootfsHeader = unsafe { &*(bootfs.as_ptr() as *const ZbiBootfsHeader) };
+    if header.magic != ZBI_BOOTFS_MAGIC {
+        info!("bootfs: invalid magic");
+        return None;
+    }
+
+    // Read the first directory entry
+    let dirent_start = bfs_hdr_size;
+    if dirent_start + ZbiBootfsDirent::FIXED_SIZE > bootfs.len() {
+        info!("bootfs: directory too small");
+        return None;
+    }
+
+    let dirent: &ZbiBootfsDirent =
+        unsafe { &*(bootfs.as_ptr().add(dirent_start) as *const ZbiBootfsDirent) };
+
+    // Extract the filename for logging
+    let name_start = dirent_start + ZbiBootfsDirent::FIXED_SIZE;
+    let name_end = name_start + dirent.name_len as usize;
+    if name_end > bootfs.len() {
+        return None;
+    }
+    let name_bytes = &bootfs[name_start..name_end - 1]; // exclude NUL
+    if let Ok(name) = core::str::from_utf8(name_bytes) {
+        info!("bootfs: loading '{}' ({} bytes)", name, dirent.data_len);
+    }
+
+    // Extract the file data
+    let data_start = dirent.data_off as usize;
+    let data_end = data_start + dirent.data_len as usize;
+    if data_end > bootfs.len() {
+        info!("bootfs: file data extends beyond bootfs");
+        return None;
+    }
+
+    Some(bootfs[data_start..data_end].to_vec())
+}
+
 fn kcounter_vmos() -> (Arc<VmObject>, Arc<VmObject>) {
     let (desc_vmo, arena_vmo) = if cfg!(feature = "libos") {
         // dummy VMOs
@@ -190,8 +293,6 @@ fn kcounter_vmos() -> (Arc<VmObject>, Arc<VmObject>) {
 /// 1. Writes a debug message via `zx_debug_write`
 /// 2. Exits via `zx_process_exit(0)`
 ///
-/// Future work (#89) will extend this to load petal test programs from a ZBI.
-///
 /// This function is also available as `run_userboot()` for backward compatibility.
 pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     let job = Job::root();
@@ -206,8 +307,20 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     );
     let vmar = proc.vmar();
 
-    // Generate userstart code and map it into the process
-    let code = userstart_code();
+    // Try to load a program from the ZBI bootfs; fall back to built-in hello
+    let code = match extract_program_from_zbi(zbi.as_ref()) {
+        Some(program_data) => {
+            info!(
+                "userstart: loaded program from ZBI bootfs ({} bytes)",
+                program_data.len()
+            );
+            program_data
+        }
+        None => {
+            info!("userstart: no bootfs program found, using built-in hello");
+            userstart_code()
+        }
+    };
     let code_pages = code.len() / PAGE_SIZE + 1;
     let code_vmo = VmObject::new_paged(code_pages);
     code_vmo.write(0, &code).unwrap();
