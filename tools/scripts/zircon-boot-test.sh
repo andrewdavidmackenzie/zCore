@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Zircon boot smoke test: build petal ZBI, build kernel in Zircon mode
-# with the ZBI linked in, start QEMU, wait for hello message and clean exit.
+# with ZBI embedded, start QEMU, wait for hello message and clean exit.
 #
 # Usage: tools/scripts/zircon-boot-test.sh <arch>
 #   arch: aarch64 (others may be added later)

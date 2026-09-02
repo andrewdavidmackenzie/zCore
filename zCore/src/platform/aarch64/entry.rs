@@ -17,6 +17,8 @@ const GIC_BASE: usize = 0x0800_0000;
 /// - x0 contains the DTB pointer from QEMU (currently unused)
 #[no_mangle]
 extern "C" fn rust_main(_dtb_ptr: usize) -> ! {
+    // Note: _dtb_ptr is the DTB physical address from QEMU (in x0).
+    // Currently 0 on aarch64 -- see issue #136 for DTB parsing work.
     let config = KernelConfig {
         cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=warn:ROOTPROC=/bin/busybox?sh"),
         firmware_type: "QEMU",

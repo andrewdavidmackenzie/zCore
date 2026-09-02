@@ -207,12 +207,12 @@ impl QemuArgs {
             .env
             .insert("ZCORE_CMDLINE".into(), cmdline.into());
 
-        // In Zircon mode: build petal ZBI, link it into the kernel
         if is_zircon {
             build_config.features.remove("linux");
             build_config.features.insert("zircon".into());
             let zbi_path = crate::petal::build_petal_zbi(arch);
             // Embed the ZBI into the kernel binary via include_bytes!
+            // Runtime ZBI loading via DTB initrd is tracked in issue #136.
             build_config
                 .env
                 .insert("PETAL_ZBI".into(), zbi_path.into_os_string());
@@ -247,7 +247,6 @@ impl QemuArgs {
                     qemu.arg("-initrd")
                         .arg(INNER.join(format!("{arch_str}.img")));
                 }
-                // Zircon mode: ZBI is linked into the kernel binary
             }
             Arch::X86_64 => todo!(),
             Arch::Aarch64 => {
