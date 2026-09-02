@@ -53,3 +53,12 @@ pub const SYS_PORT_WAIT: u32 = 98;
 // Timer
 pub const SYS_TIMER_CREATE: u32 = 142;
 pub const SYS_NANOSLEEP: u32 = 62;
+
+// VMAR map option flags (matches zx_vm_option_t)
+pub const ZX_VM_PERM_READ: u32 = 1 << 0;
+pub const ZX_VM_PERM_WRITE: u32 = 1 << 1;
+pub const ZX_VM_PERM_EXECUTE: u32 = 1 << 3;
+pub const ZX_VM_SPECIFIC: u32 = 1 << 4;
+pub const ZX_VM_CAN_MAP_READ: u32 = 1 << 17;
+pub const ZX_VM_CAN_MAP_WRITE: u32 = 1 << 18;
+pub const ZX_VM_CAN_MAP_EXECUTE: u32 = 1 << 19;

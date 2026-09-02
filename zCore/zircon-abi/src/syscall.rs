@@ -397,3 +397,245 @@ pub unsafe fn zx_thread_exit() -> ! {
     syscall0(crate::consts::SYS_THREAD_EXIT);
     core::hint::unreachable_unchecked()
 }
+
+// --- Handle type alias ---
+
+/// Zircon handle value (matches `zx_handle_t`).
+pub type HandleValue = u32;
+
+/// Invalid handle sentinel.
+pub const ZX_HANDLE_INVALID: HandleValue = 0;
+
+// --- Channel syscalls ---
+
+/// Read a message from a channel.
+///
+/// # Safety
+/// All pointers must be valid for the specified sizes.
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn zx_channel_read(
+    handle: HandleValue,
+    options: u32,
+    bytes: *mut u8,
+    handles: *mut HandleValue,
+    num_bytes: u32,
+    num_handles: u32,
+    actual_bytes: *mut u32,
+    actual_handles: *mut u32,
+) -> ZxStatus {
+    syscall8(
+        crate::consts::SYS_CHANNEL_READ,
+        handle as u64,
+        options as u64,
+        bytes as u64,
+        handles as u64,
+        num_bytes as u64,
+        num_handles as u64,
+        actual_bytes as u64,
+        actual_handles as u64,
+    )
+}
+
+/// Create a channel pair.
+///
+/// # Safety
+/// `out0` and `out1` must be valid pointers.
+pub unsafe fn zx_channel_create(
+    options: u32,
+    out0: *mut HandleValue,
+    out1: *mut HandleValue,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_CHANNEL_CREATE,
+        options as u64,
+        out0 as u64,
+        out1 as u64,
+    )
+}
+
+/// Write a message to a channel.
+///
+/// # Safety
+/// All pointers must be valid for the specified sizes.
+pub unsafe fn zx_channel_write(
+    handle: HandleValue,
+    options: u32,
+    bytes: *const u8,
+    num_bytes: u32,
+    handles: *const HandleValue,
+    num_handles: u32,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_CHANNEL_WRITE,
+        handle as u64,
+        options as u64,
+        bytes as u64,
+        num_bytes as u64,
+        handles as u64,
+        num_handles as u64,
+    )
+}
+
+// --- Process/Thread syscalls ---
+
+/// Create a new process.
+///
+/// # Safety
+/// `name` must point to `name_size` valid bytes. Output pointers must be valid.
+pub unsafe fn zx_process_create(
+    job: HandleValue,
+    name: *const u8,
+    name_size: usize,
+    options: u32,
+    proc_handle: *mut HandleValue,
+    vmar_handle: *mut HandleValue,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_PROCESS_CREATE,
+        job as u64,
+        name as u64,
+        name_size as u64,
+        options as u64,
+        proc_handle as u64,
+        vmar_handle as u64,
+    )
+}
+
+/// Create a new thread.
+///
+/// # Safety
+/// `name` must point to `name_size` valid bytes. Output pointer must be valid.
+pub unsafe fn zx_thread_create(
+    proc_handle: HandleValue,
+    name: *const u8,
+    name_size: usize,
+    options: u32,
+    thread_handle: *mut HandleValue,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_THREAD_CREATE,
+        proc_handle as u64,
+        name as u64,
+        name_size as u64,
+        options as u64,
+        thread_handle as u64,
+    )
+}
+
+/// Start a process's first thread.
+///
+/// # Safety
+/// Handles must be valid.
+pub unsafe fn zx_process_start(
+    proc_handle: HandleValue,
+    thread_handle: HandleValue,
+    entry: usize,
+    stack: usize,
+    arg1_handle: HandleValue,
+    arg2: usize,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_PROCESS_START,
+        proc_handle as u64,
+        thread_handle as u64,
+        entry as u64,
+        stack as u64,
+        arg1_handle as u64,
+        arg2 as u64,
+    )
+}
+
+// --- VMO syscalls ---
+
+/// Create a VMO.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_vmo_create(size: u64, options: u32, out: *mut HandleValue) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_VMO_CREATE,
+        size,
+        options as u64,
+        out as u64,
+    )
+}
+
+/// Read from a VMO.
+///
+/// # Safety
+/// `buf` must be valid for `buf_size` bytes.
+pub unsafe fn zx_vmo_read(
+    handle: HandleValue,
+    buf: *mut u8,
+    offset: u64,
+    buf_size: usize,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_VMO_READ,
+        handle as u64,
+        buf as u64,
+        offset,
+        buf_size as u64,
+    )
+}
+
+/// Write to a VMO.
+///
+/// # Safety
+/// `buf` must be valid for `buf_size` bytes.
+pub unsafe fn zx_vmo_write(
+    handle: HandleValue,
+    buf: *const u8,
+    offset: u64,
+    buf_size: usize,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_VMO_WRITE,
+        handle as u64,
+        buf as u64,
+        offset,
+        buf_size as u64,
+    )
+}
+
+/// Get the size of a VMO.
+///
+/// # Safety
+/// `size` must be a valid pointer.
+pub unsafe fn zx_vmo_get_size(handle: HandleValue, size: *mut usize) -> ZxStatus {
+    syscall2(crate::consts::SYS_VMO_GET_SIZE, handle as u64, size as u64)
+}
+
+// --- VMAR syscalls ---
+
+/// Map a VMO into a VMAR.
+///
+/// # Safety
+/// Handles must be valid. `mapped_addr` must be a valid pointer.
+pub unsafe fn zx_vmar_map(
+    vmar_handle: HandleValue,
+    options: u32,
+    vmar_offset: usize,
+    vmo_handle: HandleValue,
+    vmo_offset: usize,
+    len: usize,
+    mapped_addr: *mut usize,
+) -> ZxStatus {
+    syscall7(
+        crate::consts::SYS_VMAR_MAP,
+        vmar_handle as u64,
+        options as u64,
+        vmar_offset as u64,
+        vmo_handle as u64,
+        vmo_offset as u64,
+        len as u64,
+        mapped_addr as u64,
+    )
+}
+
+// --- Handle syscalls ---
+
+/// Close a handle.
+pub unsafe fn zx_handle_close(handle: HandleValue) -> ZxStatus {
+    syscall1(crate::consts::SYS_HANDLE_CLOSE, handle as u64)
+}

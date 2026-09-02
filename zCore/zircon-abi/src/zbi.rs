@@ -94,11 +94,97 @@ impl ZbiBootfsDirent {
     }
 }
 
+/// Find the first bootfs file in a ZBI, returning a reference to its data.
+///
+/// This is a no-alloc version suitable for `#![no_std]` environments.
+/// Returns `(filename, data)` or `None` if no bootfs is found.
+pub fn find_first_bootfs_entry(zbi_data: &[u8]) -> Option<(&[u8], &[u8])> {
+    if zbi_data.len() < ZbiHeader::SIZE {
+        return None;
+    }
+
+    let container: ZbiHeader =
+        unsafe { core::ptr::read_unaligned(zbi_data.as_ptr() as *const ZbiHeader) };
+    if container.item_type != ZBI_TYPE_CONTAINER || container.magic != ZBI_ITEM_MAGIC {
+        return None;
+    }
+    if container.extra != ZBI_CONTAINER_MAGIC {
+        return None;
+    }
+
+    let container_end = (ZbiHeader::SIZE + container.length as usize).min(zbi_data.len());
+    let mut offset = ZbiHeader::SIZE;
+
+    while offset + ZbiHeader::SIZE <= container_end {
+        let item: ZbiHeader =
+            unsafe { core::ptr::read_unaligned(zbi_data.as_ptr().add(offset) as *const ZbiHeader) };
+        if item.magic != ZBI_ITEM_MAGIC {
+            break;
+        }
+
+        let payload_start = offset + ZbiHeader::SIZE;
+        let payload_end = payload_start + item.length as usize;
+        if payload_end > zbi_data.len() {
+            break;
+        }
+
+        if item.item_type == ZBI_TYPE_STORAGE_BOOTFS {
+            let bootfs = &zbi_data[payload_start..payload_end];
+            return find_first_file_in_bootfs(bootfs);
+        }
+
+        offset = payload_start + item.padded_length();
+    }
+
+    None
+}
+
+/// Find the first file in a bootfs image, returning references to name and data.
+fn find_first_file_in_bootfs(bootfs: &[u8]) -> Option<(&[u8], &[u8])> {
+    let bfs_hdr_size = core::mem::size_of::<ZbiBootfsHeader>();
+    if bootfs.len() < bfs_hdr_size {
+        return None;
+    }
+
+    let header: ZbiBootfsHeader =
+        unsafe { core::ptr::read_unaligned(bootfs.as_ptr() as *const ZbiBootfsHeader) };
+    if header.magic != ZBI_BOOTFS_MAGIC {
+        return None;
+    }
+
+    let dirent_start = bfs_hdr_size;
+    let dir_end = bfs_hdr_size + header.dirsize as usize;
+    if dirent_start + ZbiBootfsDirent::FIXED_SIZE > dir_end.min(bootfs.len()) {
+        return None;
+    }
+
+    let dirent: ZbiBootfsDirent = unsafe {
+        core::ptr::read_unaligned(bootfs.as_ptr().add(dirent_start) as *const ZbiBootfsDirent)
+    };
+
+    let name_start = dirent_start + ZbiBootfsDirent::FIXED_SIZE;
+    let name_end = name_start + dirent.name_len as usize;
+    if name_end > dir_end.min(bootfs.len()) || dirent.name_len == 0 {
+        return None;
+    }
+    let name = &bootfs[name_start..name_end - 1]; // exclude NUL
+
+    let data_start = dirent.data_off as usize;
+    let data_end = data_start + dirent.data_len as usize;
+    if data_end > bootfs.len() {
+        return None;
+    }
+
+    Some((name, &bootfs[data_start..data_end]))
+}
+
+#[cfg(feature = "zbi")]
 /// Safely convert a repr(C) struct to its byte representation.
 fn as_bytes<T: Copy>(val: &T) -> &[u8] {
     unsafe { core::slice::from_raw_parts(val as *const T as *const u8, core::mem::size_of::<T>()) }
 }
 
+#[cfg(feature = "zbi")]
 /// Build a minimal ZBI containing a single bootfs entry.
 ///
 /// This creates a valid ZBI with:
