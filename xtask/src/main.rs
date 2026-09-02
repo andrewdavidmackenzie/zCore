@@ -11,6 +11,7 @@ mod build;
 mod commands;
 mod errors;
 mod linux;
+mod petal;
 
 use arch::{Arch, ArchArg};
 use build::{GdbArgs, OutArgs, QemuArgs};
@@ -235,6 +236,18 @@ enum Commands {
     /// cargo linux-libos --args /bin/busybox
     /// ```
     LinuxLibos(LinuxLibosArg),
+
+    /// Builds petal test programs and packages them into a ZBI.
+    ///
+    /// Cross-compiles the petal hello program for the target architecture,
+    /// strips it to a flat binary, and packages it into a ZBI file.
+    ///
+    /// # Example
+    ///
+    /// ```bash
+    /// cargo petal-zbi --arch aarch64
+    /// ```
+    PetalZbi(ArchArg),
 }
 
 #[derive(Args)]
@@ -294,6 +307,9 @@ fn main() {
             libos::put_libc_test();
         }
         LinuxLibos(arg) => libos::linux_run(arg.args),
+        PetalZbi(arg) => {
+            petal::build_petal_zbi(arg.arch);
+        }
     }
 }
 

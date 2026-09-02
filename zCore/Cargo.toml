@@ -39,7 +39,7 @@ link-user-img = []
 baremetal-test = ["executor/baremetal-test"]
 
 # Run as Zircon mode
-zircon = ["zcore-loader/zircon", "zircon-abi"]
+zircon = ["zcore-loader/zircon"]
 # Run as Linux mode
 linux = ["zcore-loader/linux", "linux-object", "rcore-fs", "rcore-fs-sfs"]
 # Run as LibOS mode
@@ -69,7 +69,7 @@ customizable-buddy = "0.0.3"
 kernel-hal = { path = "../kernel-hal", default-features = false }
 zcore-loader = { path = "../loader", default-features = false }
 zircon-object = { path = "zircon-object" }
-zircon-abi = { path = "zircon-abi", optional = true }
+
 lock = { git = "https://github.com/DeathWish5/kernel-sync", rev = "8486b8" }
 executor = { path = "../third-party/executor" }
 

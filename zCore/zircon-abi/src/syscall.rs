@@ -1,7 +1,9 @@
 //! Inline syscall wrappers for Zircon userspace programs.
 //!
-//! These use `svc #0` (aarch64) or `syscall` (x86_64) to trap into the kernel.
-//! The syscall number is passed in x16 (aarch64) or rax (x86_64).
+//! These use hardware trap instructions to enter the kernel:
+//! - `svc #0` on aarch64 (syscall number in x16)
+//! - `syscall` on x86_64 (syscall number in rax)
+//! - `ecall` on riscv64 (syscall number in a7)
 //!
 //! # Safety
 //! All functions are unsafe because they perform raw syscalls with
@@ -29,6 +31,13 @@ pub unsafe fn syscall0(num: u32) -> ZxStatus {
         out("r11") _,
         options(nostack),
     );
+    #[cfg(target_arch = "riscv64")]
+    core::arch::asm!(
+        "ecall",
+        in("a7") num as u64,
+        lateout("a0") ret,
+        options(nostack),
+    );
     ret as ZxStatus
 }
 
@@ -52,6 +61,14 @@ pub unsafe fn syscall1(num: u32, a0: u64) -> ZxStatus {
         lateout("rax") ret,
         out("rcx") _,
         out("r11") _,
+        options(nostack),
+    );
+    #[cfg(target_arch = "riscv64")]
+    core::arch::asm!(
+        "ecall",
+        in("a7") num as u64,
+        in("a0") a0,
+        lateout("a0") ret,
         options(nostack),
     );
     ret as ZxStatus
@@ -81,6 +98,15 @@ pub unsafe fn syscall2(num: u32, a0: u64, a1: u64) -> ZxStatus {
         out("r11") _,
         options(nostack),
     );
+    #[cfg(target_arch = "riscv64")]
+    core::arch::asm!(
+        "ecall",
+        in("a7") num as u64,
+        in("a0") a0,
+        in("a1") a1,
+        lateout("a0") ret,
+        options(nostack),
+    );
     ret as ZxStatus
 }
 
@@ -108,6 +134,16 @@ pub unsafe fn syscall3(num: u32, a0: u64, a1: u64, a2: u64) -> ZxStatus {
         lateout("rax") ret,
         out("rcx") _,
         out("r11") _,
+        options(nostack),
+    );
+    #[cfg(target_arch = "riscv64")]
+    core::arch::asm!(
+        "ecall",
+        in("a7") num as u64,
+        in("a0") a0,
+        in("a1") a1,
+        in("a2") a2,
+        lateout("a0") ret,
         options(nostack),
     );
     ret as ZxStatus
@@ -144,6 +180,17 @@ pub unsafe fn syscall4(num: u32, a0: u64, a1: u64, a2: u64, a3: u64) -> ZxStatus
         lateout("rax") ret,
         out("rcx") _,
         out("r11") _,
+        options(nostack),
+    );
+    #[cfg(target_arch = "riscv64")]
+    core::arch::asm!(
+        "ecall",
+        in("a7") num as u64,
+        in("a0") a0,
+        in("a1") a1,
+        in("a2") a2,
+        in("a3") a3,
+        lateout("a0") ret,
         options(nostack),
     );
     ret as ZxStatus

@@ -103,6 +103,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rust-src, llvm-tools-preview
+          targets: aarch64-unknown-none-softfloat
 
       - name: Install QEMU (Linux)
         if: runner.os == 'Linux'

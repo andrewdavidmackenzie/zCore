@@ -1,8 +1,17 @@
 [package]
 name = "petal"
 version = "0.1.0"
-authors = ["Runji Wang <wangrunji0408@163.com>"]
 edition = "2021"
-description = "Minimal Fuchsia-themed userspace for testing the zCore Zircon kernel"
+description = "Minimal userspace test programs for the zCore Zircon kernel"
+
+[[bin]]
+name = "hello"
+path = "src/bin/hello.rs"
 
 [dependencies]
+zircon-abi = { path = "../zCore/zircon-abi", features = ["userspace"] }
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+lto = true

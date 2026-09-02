@@ -207,10 +207,15 @@ impl QemuArgs {
             .env
             .insert("ZCORE_CMDLINE".into(), cmdline.into());
 
+        // In Zircon mode: build petal ZBI, link it into the kernel
         if is_zircon {
-            // Override features: use zircon instead of linux
             build_config.features.remove("linux");
             build_config.features.insert("zircon".into());
+            let zbi_path = crate::petal::build_petal_zbi(arch);
+            // Embed the ZBI into the kernel binary via include_bytes!
+            build_config
+                .env
+                .insert("PETAL_ZBI".into(), zbi_path.into_os_string());
         }
 
         // For riscv64 we need a raw binary; for aarch64 we use the ELF directly
@@ -237,11 +242,12 @@ impl QemuArgs {
                     .arg(&bin)
                     .args(["-bios", "default"])
                     .args(["-serial", "mon:stdio"]);
-                // Linux mode needs the rootfs image as initrd
                 if !is_zircon {
+                    // Linux mode: pass rootfs image as initrd
                     qemu.arg("-initrd")
                         .arg(INNER.join(format!("{arch_str}.img")));
                 }
+                // Zircon mode: ZBI is linked into the kernel binary
             }
             Arch::X86_64 => todo!(),
             Arch::Aarch64 => {
@@ -253,9 +259,8 @@ impl QemuArgs {
                     .arg("-kernel")
                     .arg(&obj)
                     .args(["-serial", "mon:stdio"]);
-                // Linux mode needs a block device with the rootfs image.
-                // Zircon mode constructs its ZBI in-memory, no disk needed.
                 if !is_zircon {
+                    // Linux mode: pass rootfs image via block device
                     qemu.args([
                         "-drive",
                         &format!(
@@ -268,6 +273,7 @@ impl QemuArgs {
                         "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0",
                     ]);
                 }
+                // Zircon mode: ZBI is linked into the kernel binary
             }
         }
         qemu.optional(&self.gdb, |qemu, port| {

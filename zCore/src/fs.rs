@@ -39,34 +39,24 @@ cfg_if! {
 
         #[cfg(feature = "libos")]
         pub fn zbi() -> impl AsRef<[u8]> {
-            // Try to read a ZBI file from the command line, or build a test ZBI
-            if let Some(path) = std::env::args().nth(1) {
-                std::fs::read(path).expect("failed to read zbi file")
-            } else {
-                log::info!("No ZBI file specified, building test ZBI with hello program");
-                zircon_abi::zbi::build_test_zbi(
-                    b"bin/hello",
-                    &zcore_loader::zircon::userstart_code(),
-                )
-            }
+            let path = std::env::args().nth(1).expect(
+                "Usage: zcore-libos <ZBI_FILE>\n\
+                 Build a petal ZBI with: cargo petal-zbi --arch aarch64"
+            );
+            std::fs::read(path).expect("failed to read ZBI file")
         }
 
         #[cfg(not(feature = "libos"))]
         pub fn zbi() -> impl AsRef<[u8]> {
-            if let Some(initrd) = init_ram_disk() {
-                initrd.to_vec()
-            } else {
-                log::info!("No init RAM disk, building test ZBI with hello program");
-                zircon_abi::zbi::build_test_zbi(
-                    b"bin/hello",
-                    &zcore_loader::zircon::userstart_code(),
-                )
-            }
+            // The petal ZBI is embedded at compile time via the PETAL_ZBI env var.
+            // Set by xtask when building in Zircon mode.
+            const ZBI_DATA: &[u8] = include_bytes!(env!("PETAL_ZBI"));
+            ZBI_DATA
         }
     }
 }
 
-#[cfg(not(feature = "libos"))]
+#[cfg(all(not(feature = "libos"), feature = "linux"))]
 pub(crate) fn init_ram_disk() -> Option<&'static mut [u8]> {
     if cfg!(feature = "link-user-img") {
         extern "C" {
@@ -85,7 +75,7 @@ pub(crate) fn init_ram_disk() -> Option<&'static mut [u8]> {
 }
 
 // Hard link rootfs img
-#[cfg(not(feature = "libos"))]
+#[cfg(all(not(feature = "libos"), feature = "linux"))]
 #[cfg(feature = "link-user-img")]
 core::arch::global_asm!(concat!(
     r#"

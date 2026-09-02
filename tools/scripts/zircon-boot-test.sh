@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Zircon boot smoke test: build zCore in Zircon mode, start QEMU,
-# wait for the userstart hello message and clean shutdown.
+# Zircon boot smoke test: build petal ZBI, build kernel in Zircon mode
+# with the ZBI linked in, start QEMU, wait for hello message and clean exit.
 #
 # Usage: tools/scripts/zircon-boot-test.sh <arch>
 #   arch: aarch64 (others may be added later)
@@ -13,7 +13,7 @@ set -euo pipefail
 
 ARCH="${1:?Usage: $0 <arch>}"
 TIMEOUT=30
-HELLO_PATTERN='userstart: Hello from zCore Zircon mode!'
+HELLO_PATTERN='petal: Hello from petal on zCore!'
 
 case "$ARCH" in
   aarch64)
@@ -32,9 +32,20 @@ case "$ARCH" in
     ;;
 esac
 
-# Build the kernel in Zircon mode
-echo "Building zCore in Zircon mode ($ARCH)..."
-ZCORE_CMDLINE="LOG=warn" cargo build \
+# Build petal ZBI (cross-compile petal, strip, package)
+echo "Building petal ZBI for $ARCH..."
+cargo petal-zbi --arch "$ARCH" 2>&1 | tail -5
+
+ZBI="target/petal/${ARCH}/petal.zbi"
+if [ ! -f "$ZBI" ]; then
+  echo "ERROR: $ZBI not found after petal-zbi build."
+  exit 1
+fi
+
+# Build the kernel in Zircon mode with the ZBI embedded
+echo "Building zCore in Zircon mode ($ARCH) with petal ZBI..."
+PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
+  ZCORE_CMDLINE="LOG=warn" cargo build \
   -p zcore \
   --no-default-features --features zircon \
   --target "zCore/${ARCH}.json" \
@@ -60,13 +71,11 @@ QEMU_PID=$!
 # Wait for QEMU to exit (userstart calls process_exit -> kernel resets)
 ELAPSED=0
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-  # Check if QEMU has exited
   if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     QEMU_EXIT=0
     wait "$QEMU_PID" || QEMU_EXIT=$?
-    # Check for the hello message
     if grep -q "$HELLO_PATTERN" "$OUTPUT" 2>/dev/null; then
-      echo "PASS: Zircon boot + userstart hello + clean shutdown (exit=$QEMU_EXIT)"
+      echo "PASS: Zircon boot + petal hello + clean shutdown (exit=$QEMU_EXIT)"
       exit 0
     else
       echo "FAIL: QEMU exited (code=$QEMU_EXIT) but hello message not found"
