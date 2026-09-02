@@ -215,28 +215,27 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     let stack_top = stack_base + stack_size;
 
-    // Step 8: Start the init process
-    // TODO: forward bootstrap handles to init via a channel (matching
-    // Fuchsia's userboot protocol). For now, init doesn't receive handles.
-    debug_print(b"userstart: entry=");
-    // Print entry_addr as hex (simple hex printer for no_std)
-    let mut hex_buf = [b'0'; 16];
-    let mut val = entry_addr;
-    for i in (0..16).rev() {
-        let nibble = (val & 0xf) as u8;
-        hex_buf[i] = if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 };
-        val >>= 4;
-    }
-    debug_print(&hex_buf);
-    debug_print(b" stack=");
-    val = stack_top;
-    for i in (0..16).rev() {
-        let nibble = (val & 0xf) as u8;
-        hex_buf[i] = if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 };
-        val >>= 4;
-    }
-    debug_print(&hex_buf);
-    debug_print(b"\n");
+    // Step 8: Create a channel to forward bootstrap handles to init
+    let mut init_channel_local: HandleValue = ZX_HANDLE_INVALID;
+    let mut init_channel_remote: HandleValue = ZX_HANDLE_INVALID;
+    check("channel_create", unsafe {
+        zx_channel_create(0, &mut init_channel_local, &mut init_channel_remote)
+    });
+
+    // Forward the remaining bootstrap handles to init via the channel.
+    // We pass: root job, root resource, and the ZBI VMO.
+    let forward_handles = [root_job, zbi_vmo];
+    check("channel_write", unsafe {
+        zx_channel_write(
+            init_channel_local,
+            0,
+            core::ptr::null(), // no data bytes
+            0,
+            forward_handles.as_ptr(),
+            forward_handles.len() as u32,
+        )
+    });
+
     debug_print(b"userstart: starting init process\n");
     check("process_start", unsafe {
         zx_process_start(
@@ -244,8 +243,8 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
             init_thread,
             entry_addr,
             stack_top,
-            ZX_HANDLE_INVALID, // arg1_handle
-            0,                 // arg2
+            init_channel_remote, // pass channel to init
+            0,                   // arg2
         )
     });
 

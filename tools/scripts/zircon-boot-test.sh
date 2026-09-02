@@ -13,7 +13,9 @@ set -euo pipefail
 
 ARCH="${1:?Usage: $0 <arch>}"
 TIMEOUT=30
+# Check for both the hello message and handle forwarding
 HELLO_PATTERN='petal: Hello from petal on zCore!'
+HANDLES_PATTERN='petal: received bootstrap handles from userstart'
 
 case "$ARCH" in
   aarch64)
@@ -93,11 +95,12 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     QEMU_EXIT=0
     wait "$QEMU_PID" || QEMU_EXIT=$?
-    if grep -q "$HELLO_PATTERN" "$OUTPUT" 2>/dev/null; then
-      echo "PASS: Zircon boot + petal hello + clean shutdown (exit=$QEMU_EXIT)"
+    if grep -q "$HELLO_PATTERN" "$OUTPUT" 2>/dev/null && \
+       grep -q "$HANDLES_PATTERN" "$OUTPUT" 2>/dev/null; then
+      echo "PASS: Zircon boot + petal hello + handles + clean shutdown (exit=$QEMU_EXIT)"
       exit 0
     else
-      echo "FAIL: QEMU exited (code=$QEMU_EXIT) but hello message not found"
+      echo "FAIL: QEMU exited (code=$QEMU_EXIT) but expected messages not found"
       echo "--- QEMU output ---"
       cat "$OUTPUT"
       exit 1
