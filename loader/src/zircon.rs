@@ -259,8 +259,9 @@ async fn run_user(thread: CurrentThread) {
     thread.handle_exception(ExceptionType::ThreadExiting).await;
 
     // In Zircon mode, when the root process (userstart) exits, shut down.
-    if thread.is_first_thread() {
-        info!("Zircon root process exited, shutting down");
+    // Only shut down for the "userstart" process, not child processes like "init".
+    if thread.is_first_thread() && thread.proc().name() == "userstart" {
+        info!("Zircon root process (userstart) exited, shutting down");
         info!("(if QEMU does not exit, press Ctrl-A then X to quit)");
         #[cfg(not(feature = "libos"))]
         kernel_hal::cpu::reset();
