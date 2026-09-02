@@ -69,3 +69,4 @@ pub const ZX_VM_SPECIFIC: u32 = 1 << 4;
 pub const ZX_VM_CAN_MAP_READ: u32 = 1 << 7;
 pub const ZX_VM_CAN_MAP_WRITE: u32 = 1 << 8;
 pub const ZX_VM_CAN_MAP_EXECUTE: u32 = 1 << 9;
+pub const ZX_VM_MAP_RANGE: u32 = 1 << 10;

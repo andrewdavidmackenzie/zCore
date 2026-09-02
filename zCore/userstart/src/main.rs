@@ -174,12 +174,15 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     // The original handle is consumed by replace_as_executable
     code_vmo = exec_vmo;
 
+    // Map code at a non-zero address (0x10000) to avoid the null page.
+    // Use ZX_VM_SPECIFIC to place it at a known offset.
+    let code_base: usize = 0x10000;
     let mut entry_addr: usize = 0;
     check("vmar_map(code)", unsafe {
         zx_vmar_map(
             init_vmar,
-            ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE,
-            0,        // vmar_offset (anywhere)
+            ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE | ZX_VM_SPECIFIC | ZX_VM_MAP_RANGE,
+            code_base, // vmar_offset
             code_vmo,
             0,        // vmo_offset
             map_size,
@@ -195,12 +198,14 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         zx_vmo_create(stack_size as u64, 0, &mut stack_vmo)
     });
 
+    // Map stack above the code
+    let stack_offset = code_base + map_size;
     let mut stack_base: usize = 0;
     check("vmar_map(stack)", unsafe {
         zx_vmar_map(
             init_vmar,
-            ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
-            0,
+            ZX_VM_PERM_READ | ZX_VM_PERM_WRITE | ZX_VM_SPECIFIC,
+            stack_offset,
             stack_vmo,
             0,
             stack_size,
