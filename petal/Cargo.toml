@@ -19,7 +19,4 @@ path = "src/bin/vmo_test.rs"
 [dependencies]
 zircon-abi = { path = "../zCore/zircon-abi", features = ["userspace"] }
 
-[profile.release]
-panic = "abort"
-opt-level = "s"
-lto = true
+# Profile settings are in the workspace root Cargo.toml

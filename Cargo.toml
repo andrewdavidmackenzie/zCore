@@ -13,13 +13,24 @@ members = [
     "xtask",
     "third-party/executor",
     "third-party/region-alloc",
+    # Cross-compiled for bare-metal userspace by xtask.
+    # Not in default-members (require explicit --target to build).
+    "petal",
+    "zCore/userstart",
 ]
 default-members = ["xtask"]
-# petal and userstart are cross-compiled for bare-metal targets by xtask,
-# not buildable as workspace members (different target arch).
-exclude = ["petal", "rboot", "zCore/userstart"]
+exclude = ["rboot"]
 resolver = "2"
 
 [profile.release]
 lto = true
 debug = true
+
+# Userspace binaries: optimized for size, no debug info
+[profile.release.package.petal]
+opt-level = "s"
+debug = false
+
+[profile.release.package.userstart]
+opt-level = "s"
+debug = false

@@ -30,14 +30,14 @@ pub fn build_petal(arch: Arch, bin_name: &str) -> PathBuf {
         target
     );
 
+    let target_dir = PROJECT_DIR.join("target/petal");
     let status = Command::new("cargo")
         .args(["build", "--release"])
-        .arg("--manifest-path")
-        .arg(PROJECT_DIR.join("petal/Cargo.toml"))
+        .args(["-p", "petal"])
         .arg("--target")
         .arg(target)
         .arg("--target-dir")
-        .arg(PROJECT_DIR.join("target/petal"))
+        .arg(&target_dir)
         .arg("--bin")
         .arg(bin_name)
         .status()
@@ -47,11 +47,7 @@ pub fn build_petal(arch: Arch, bin_name: &str) -> PathBuf {
         panic!("petal build failed");
     }
 
-    PROJECT_DIR
-        .join("target/petal")
-        .join(target)
-        .join("release")
-        .join(bin_name)
+    target_dir.join(target).join("release").join(bin_name)
 }
 
 /// Strip an ELF binary to a flat binary using objcopy.
@@ -130,14 +126,14 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
         target
     );
 
+    let target_dir = PROJECT_DIR.join("target/userstart");
     let status = Command::new("cargo")
         .args(["build", "--release"])
-        .arg("--manifest-path")
-        .arg(PROJECT_DIR.join("zCore/userstart/Cargo.toml"))
+        .args(["-p", "userstart"])
         .arg("--target")
         .arg(target)
         .arg("--target-dir")
-        .arg(PROJECT_DIR.join("target/userstart"))
+        .arg(&target_dir)
         .status()
         .expect("failed to run cargo build for userstart");
 
@@ -145,11 +141,7 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
         panic!("userstart build failed");
     }
 
-    PROJECT_DIR
-        .join("target/userstart")
-        .join(target)
-        .join("release")
-        .join("userstart")
+    target_dir.join(target).join("release").join("userstart")
 }
 
 /// Build a petal program and package it into a ZBI file.

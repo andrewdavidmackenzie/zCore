@@ -57,21 +57,18 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
 
-    check(
-        "channel_read",
-        unsafe {
-            zx_channel_read(
-                bootstrap_handle,
-                0, // options
-                data_buf.as_mut_ptr(),
-                handles.as_mut_ptr(),
-                data_buf.len() as u32,
-                K_HANDLECOUNT as u32,
-                &mut actual_bytes,
-                &mut actual_handles,
-            )
-        },
-    );
+    check("channel_read", unsafe {
+        zx_channel_read(
+            bootstrap_handle,
+            0, // options
+            data_buf.as_mut_ptr(),
+            handles.as_mut_ptr(),
+            data_buf.len() as u32,
+            K_HANDLECOUNT as u32,
+            &mut actual_bytes,
+            &mut actual_handles,
+        )
+    });
 
     debug_print(b"userstart: received bootstrap handles\n");
 
@@ -100,9 +97,9 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         zx_vmar_map(
             vmar_self,
             ZX_VM_PERM_READ,
-            0,        // vmar_offset (anywhere)
+            0, // vmar_offset (anywhere)
             zbi_vmo,
-            0,        // vmo_offset
+            0, // vmo_offset
             zbi_size,
             &mut zbi_addr,
         )
@@ -153,7 +150,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     // Step 6: Create a VMO with the program code and map it
     let code_size = program_data.len();
-    let code_pages = (code_size + PAGE_SIZE - 1) / PAGE_SIZE;
+    let code_pages = code_size.div_ceil(PAGE_SIZE);
     let map_size = code_pages * PAGE_SIZE;
 
     #[allow(unused_mut)]
@@ -184,7 +181,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
             ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE | ZX_VM_SPECIFIC | ZX_VM_MAP_RANGE,
             code_base, // vmar_offset
             code_vmo,
-            0,        // vmo_offset
+            0, // vmo_offset
             map_size,
             &mut entry_addr,
         )

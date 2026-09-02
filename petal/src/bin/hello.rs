@@ -43,9 +43,9 @@ pub fn main(startup_handle: u32) {
         syscall::debug_print("petal: received bootstrap handles from userstart\n");
 
         // Close the handles we received
-        for i in 0..actual_handles as usize {
-            if handles[i] != 0 {
-                unsafe { syscall::zx_handle_close(handles[i]) };
+        for &h in handles.iter().take(actual_handles as usize) {
+            if h != 0 {
+                unsafe { syscall::zx_handle_close(h) };
             }
         }
     } else {

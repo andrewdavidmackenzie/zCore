@@ -32,7 +32,7 @@ esac
 
 # Build userstart
 echo "Building userstart for $ARCH..."
-if ! cargo build --manifest-path zCore/userstart/Cargo.toml \
+if ! cargo build -p userstart \
   --target "aarch64-unknown-none-softfloat" \
   --release --target-dir target/userstart; then
   echo "ERROR: userstart build failed."
