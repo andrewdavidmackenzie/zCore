@@ -216,7 +216,7 @@ impl QemuArgs {
                 .env
                 .insert("USERSTART_ELF".into(), userstart_path.into_os_string());
             // Build petal ZBI (init program loaded by userstart)
-            let zbi_path = crate::petal::build_petal_zbi(arch);
+            let zbi_path = crate::petal::build_petal_zbi(arch, "hello");
             build_config
                 .env
                 .insert("PETAL_ZBI".into(), zbi_path.into_os_string());
