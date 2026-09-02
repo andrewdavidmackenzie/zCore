@@ -76,8 +76,9 @@ fn strip_to_flat_binary(elf_path: &std::path::Path, arch: Arch) -> PathBuf {
     flat_path
 }
 
-/// Find an objcopy tool.
+/// Find an objcopy tool, checking PATH and the Rust toolchain's llvm-tools.
 fn find_objcopy() -> String {
+    // Try common names in PATH
     for name in ["rust-objcopy", "llvm-objcopy", "objcopy"] {
         if Command::new(name)
             .arg("--version")
@@ -89,7 +90,40 @@ fn find_objcopy() -> String {
             return name.to_string();
         }
     }
-    panic!("No objcopy found. Install cargo-binutils: cargo install cargo-binutils");
+
+    // Try to find llvm-objcopy in the Rust toolchain (installed by llvm-tools-preview)
+    if let Ok(output) = Command::new("rustc").args(["--print", "sysroot"]).output() {
+        let sysroot = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let pattern = format!("{}/lib/rustlib/*/bin/llvm-objcopy", sysroot);
+        if let Ok(paths) = glob_first(&pattern) {
+            return paths;
+        }
+    }
+
+    panic!(
+        "No objcopy found. Install llvm-tools-preview: \
+         rustup component add llvm-tools-preview"
+    );
+}
+
+/// Find the first file matching a glob pattern.
+fn glob_first(pattern: &str) -> Result<String, ()> {
+    // Simple glob: split at '*' and search
+    let parts: Vec<&str> = pattern.split('*').collect();
+    if parts.len() != 2 {
+        return Err(());
+    }
+    let (prefix, suffix) = (parts[0], parts[1]);
+    let parent = std::path::Path::new(prefix).parent().ok_or(())?;
+    if let Ok(entries) = std::fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let path = entry.path().join(suffix.trim_start_matches('/'));
+            if path.exists() {
+                return Ok(path.to_string_lossy().to_string());
+            }
+        }
+    }
+    Err(())
 }
 
 /// Build petal and package it into a ZBI file.
