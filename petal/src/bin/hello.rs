@@ -39,7 +39,7 @@ pub fn main(startup_handle: u32) {
         )
     };
 
-    if status == ZX_OK {
+    if status == ZX_OK && actual_handles > 0 {
         syscall::debug_print("petal: received bootstrap handles from userstart\n");
 
         // Close the handles we received
