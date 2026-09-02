@@ -5,7 +5,7 @@ use crate::PAGE_SIZE;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct KernelConfig {
-    /// boot cmd line
+    /// boot cmd line (set via ZCORE_CMDLINE env var at compile time; DTB override tracked in #136)
     pub cmdline: &'static str,
     /// firmware type
     pub firmware_type: &'static str,

@@ -22,8 +22,6 @@ extern crate alloc;
 
 pub mod consts;
 pub mod errors;
-
-#[cfg(feature = "zbi")]
 pub mod zbi;
 
 #[cfg(feature = "userspace")]

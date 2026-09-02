@@ -113,6 +113,38 @@ fn find_objcopy() -> String {
     );
 }
 
+/// Build the userstart binary for the given architecture.
+/// Returns the path to the compiled ELF binary.
+pub fn build_userstart(arch: Arch) -> PathBuf {
+    let target = petal_target(arch);
+    println!(
+        "Building userstart for {} (target: {})",
+        arch.name(),
+        target
+    );
+
+    let status = Command::new("cargo")
+        .args(["build", "--release"])
+        .arg("--manifest-path")
+        .arg(PROJECT_DIR.join("zCore/userstart/Cargo.toml"))
+        .arg("--target")
+        .arg(target)
+        .arg("--target-dir")
+        .arg(PROJECT_DIR.join("target/userstart"))
+        .status()
+        .expect("failed to run cargo build for userstart");
+
+    if !status.success() {
+        panic!("userstart build failed");
+    }
+
+    PROJECT_DIR
+        .join("target/userstart")
+        .join(target)
+        .join("release")
+        .join("userstart")
+}
+
 /// Build petal and package it into a ZBI file.
 /// Returns the path to the ZBI file.
 pub fn build_petal_zbi(arch: Arch) -> PathBuf {

@@ -50,6 +50,7 @@ cfg_if! {
         pub fn zbi() -> impl AsRef<[u8]> {
             // The petal ZBI is embedded at compile time via the PETAL_ZBI env var.
             // Set by xtask when building in Zircon mode.
+            // Runtime ZBI loading via DTB initrd is tracked in issue #136.
             const ZBI_DATA: &[u8] = include_bytes!(env!("PETAL_ZBI"));
             ZBI_DATA
         }

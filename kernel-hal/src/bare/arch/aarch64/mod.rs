@@ -29,6 +29,7 @@ pub fn init_ram_disk() -> Option<&'static mut [u8]> {
 
 pub fn primary_init_early() {
     CMDLINE.init_once_by(KCONFIG.cmdline.to_string());
+    // DTB parsing for initrd and bootargs is tracked in issue #136
     drivers::init_early();
 }
 

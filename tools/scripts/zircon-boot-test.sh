@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Zircon boot smoke test: build petal ZBI, build kernel in Zircon mode
-# with the ZBI linked in, start QEMU, wait for hello message and clean exit.
+# with ZBI embedded, start QEMU, wait for hello message and clean exit.
 #
 # Usage: tools/scripts/zircon-boot-test.sh <arch>
 #   arch: aarch64 (others may be added later)
@@ -43,8 +43,24 @@ if [ ! -f "$ZBI" ]; then
 fi
 
 # Build the kernel in Zircon mode with the ZBI embedded
-echo "Building zCore in Zircon mode ($ARCH) with petal ZBI..."
-PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
+# Build userstart (first userspace process)
+echo "Building userstart for $ARCH..."
+if ! cargo build --manifest-path zCore/userstart/Cargo.toml \
+  --target "aarch64-unknown-none-softfloat" \
+  --release --target-dir target/userstart; then
+  echo "ERROR: userstart build failed."
+  exit 1
+fi
+
+USERSTART="target/userstart/aarch64-unknown-none-softfloat/release/userstart"
+if [ ! -f "$USERSTART" ]; then
+  echo "ERROR: $USERSTART not found after build."
+  exit 1
+fi
+
+echo "Building zCore in Zircon mode ($ARCH) with userstart + petal ZBI..."
+if ! USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" \
+  PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
   ZCORE_CMDLINE="LOG=warn" cargo build \
   -p zcore \
   --no-default-features --features zircon \
@@ -52,7 +68,10 @@ PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
   -Z json-target-spec \
   -Z build-std=core,alloc \
   -Z build-std-features=compiler-builtins-mem \
-  --release 2>&1 | tail -2
+  --release; then
+  echo "ERROR: kernel build failed."
+  exit 1
+fi
 
 # Verify kernel exists
 if [ ! -f "$KERNEL" ]; then

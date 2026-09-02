@@ -1,0 +1,20 @@
+[package]
+name = "userstart"
+version = "0.1.0"
+edition = "2021"
+description = "First userspace process for zCore Zircon mode"
+
+[[bin]]
+name = "userstart"
+path = "src/main.rs"
+
+[dependencies]
+zircon-abi = { path = "../zircon-abi", features = ["userspace"] }
+
+# Standalone crate -- not part of the workspace (different target arch)
+[workspace]
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+lto = true
