@@ -1175,6 +1175,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "linux-loader"
+version = "0.1.0"
+dependencies = [
+ "cfg-if 1.0.0",
+ "executor",
+ "kernel-hal",
+ "linux-object",
+ "linux-syscall",
+ "log",
+ "zircon-object",
+]
+
+[[package]]
 name = "linux-object"
 version = "0.1.0"
 dependencies = [
@@ -2667,6 +2680,7 @@ dependencies = [
  "dtb-walker",
  "executor",
  "kernel-hal",
+ "linux-loader",
  "linux-object",
  "lock",
  "log",
@@ -2679,7 +2693,7 @@ dependencies = [
  "riscv 0.9.0",
  "sbi-rt",
  "spin 0.9.4",
- "zcore-loader",
+ "zircon-loader",
  "zircon-object",
 ]
 
@@ -2708,25 +2722,6 @@ dependencies = [
  "volatile 0.3.0",
  "x2apic",
  "x86_64",
-]
-
-[[package]]
-name = "zcore-loader"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "cfg-if 1.0.0",
- "env_logger",
- "executor",
- "kernel-hal",
- "linux-object",
- "linux-syscall",
- "log",
- "rcore-fs-hostfs",
- "xmas-elf 0.7.0",
- "zircon-abi",
- "zircon-object",
- "zircon-syscall",
 ]
 
 [[package]]
@@ -2759,6 +2754,19 @@ dependencies = [
 [[package]]
 name = "zircon-abi"
 version = "0.1.0"
+
+[[package]]
+name = "zircon-loader"
+version = "0.1.0"
+dependencies = [
+ "cfg-if 1.0.0",
+ "executor",
+ "kernel-hal",
+ "log",
+ "xmas-elf 0.7.0",
+ "zircon-object",
+ "zircon-syscall",
+]
 
 [[package]]
 name = "zircon-object"

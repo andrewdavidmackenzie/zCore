@@ -215,13 +215,24 @@ clippy:
 	@echo "==> Clippy: kernel crates ($(ARCH))..."
 	cargo clippy \
 		-p zcore -p kernel-hal -p linux-object -p linux-syscall \
-		-p zcore-loader -p zircon-object -p zircon-syscall -p zcore-drivers \
+		-p linux-loader -p zircon-object -p zircon-syscall -p zcore-drivers \
 		--no-default-features --features linux \
 		--target zCore/$(ARCH).json \
 		-Z json-target-spec \
 		-Z build-std=core,alloc \
 		-Z build-std-features=compiler-builtins-mem \
 		--no-deps -- --deny warnings
+	@echo "==> Clippy: zircon-loader (requires USERSTART_ELF)..."
+	@if [ -n "$(USERSTART_ELF)" ]; then \
+		cargo clippy -p zircon-loader \
+			--target zCore/$(ARCH).json \
+			-Z json-target-spec \
+			-Z build-std=core,alloc \
+			-Z build-std-features=compiler-builtins-mem \
+			--no-deps -- --deny warnings; \
+	else \
+		echo "  (skipped -- set USERSTART_ELF to enable)"; \
+	fi
 	@echo "==> Clippy: host tools..."
 	cargo clippy -p xtask -p z-config -p region-alloc -p zircon-abi \
 		--no-deps -- --deny warnings
