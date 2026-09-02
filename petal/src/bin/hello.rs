@@ -14,6 +14,6 @@ extern crate petal; // links the runtime
 use zircon_abi::syscall;
 
 #[no_mangle]
-fn main() {
+pub fn main() {
     syscall::debug_print("petal: Hello from petal on zCore!\n");
 }
