@@ -17,18 +17,13 @@ extern "Rust" {
 /// Sets up the environment, calls main(), then exits.
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    unsafe {
-        main();
-        syscall::zx_process_exit(0);
-    }
+    unsafe { main() };
+    syscall::process_exit(0);
 }
 
 /// Panic handler -- writes a message and exits with code 1.
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
-    let msg = b"petal: PANIC!\n";
-    unsafe {
-        syscall::zx_debug_write(msg.as_ptr(), msg.len());
-        syscall::zx_process_exit(1);
-    }
+    syscall::debug_write(b"petal: PANIC!\n");
+    syscall::process_exit(1);
 }

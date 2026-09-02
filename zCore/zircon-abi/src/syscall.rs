@@ -385,10 +385,27 @@ pub unsafe fn zx_debug_write(buf: *const u8, len: usize) -> ZxStatus {
     syscall2(crate::consts::SYS_DEBUG_WRITE, buf as u64, len as u64)
 }
 
-/// Exit the current process.
+/// Write a debug message to the kernel log (safe wrapper, bytes).
+pub fn debug_write(msg: &[u8]) -> ZxStatus {
+    unsafe { zx_debug_write(msg.as_ptr(), msg.len()) }
+}
+
+/// Write a debug message to the kernel log (safe wrapper, str).
+pub fn debug_print(msg: &str) -> ZxStatus {
+    debug_write(msg.as_bytes())
+}
+
+/// Exit the current process (safe wrapper).
+pub fn process_exit(retcode: i64) -> ! {
+    unsafe {
+        syscall1(crate::consts::SYS_PROCESS_EXIT, retcode as u64);
+        core::hint::unreachable_unchecked()
+    }
+}
+
+/// Exit the current process (raw unsafe version).
 pub unsafe fn zx_process_exit(retcode: i64) -> ! {
     syscall1(crate::consts::SYS_PROCESS_EXIT, retcode as u64);
-    // process_exit never returns, but the compiler needs this
     core::hint::unreachable_unchecked()
 }
 

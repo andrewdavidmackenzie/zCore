@@ -30,9 +30,7 @@ const PAGE_SIZE: usize = 4096;
 
 /// Debug print helper.
 fn debug_print(msg: &[u8]) {
-    unsafe {
-        zx_debug_write(msg.as_ptr(), msg.len());
-    }
+    debug_write(msg);
 }
 
 /// Check a syscall result, panic on error.
@@ -41,7 +39,7 @@ fn check(name: &str, status: ZxStatus) {
         debug_print(b"userstart: syscall failed: ");
         debug_print(name.as_bytes());
         debug_print(b"\n");
-        unsafe { zx_process_exit(1) };
+        process_exit(1);
     }
 }
 
@@ -214,6 +212,25 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     // Step 8: Start the init process
     // Pass ZX_HANDLE_INVALID as arg1 (init doesn't need a channel for now)
+    debug_print(b"userstart: entry=");
+    // Print entry_addr as hex (simple hex printer for no_std)
+    let mut hex_buf = [b'0'; 16];
+    let mut val = entry_addr;
+    for i in (0..16).rev() {
+        let nibble = (val & 0xf) as u8;
+        hex_buf[i] = if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 };
+        val >>= 4;
+    }
+    debug_print(&hex_buf);
+    debug_print(b" stack=");
+    val = stack_top;
+    for i in (0..16).rev() {
+        let nibble = (val & 0xf) as u8;
+        hex_buf[i] = if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 };
+        val >>= 4;
+    }
+    debug_print(&hex_buf);
+    debug_print(b"\n");
     debug_print(b"userstart: starting init process\n");
     check("process_start", unsafe {
         zx_process_start(
@@ -241,6 +258,11 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     debug_print(b"userstart: init process exited, shutting down\n");
 
+    // Small delay to let any pending UART output from init drain
+    for _ in 0..100_000 {
+        core::hint::spin_loop();
+    }
+
     // Close our handles and exit
     unsafe {
         zx_handle_close(init_proc);
@@ -262,6 +284,6 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 /// Panic handler.
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    debug_print(b"userstart: PANIC!\n");
-    unsafe { zx_process_exit(1) }
+    debug_write(b"userstart: PANIC!\n");
+    process_exit(1);
 }
