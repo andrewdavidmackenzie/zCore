@@ -216,7 +216,8 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     let stack_top = stack_base + stack_size;
 
     // Step 8: Start the init process
-    // Pass ZX_HANDLE_INVALID as arg1 (init doesn't need a channel for now)
+    // TODO: forward bootstrap handles to init via a channel (matching
+    // Fuchsia's userboot protocol). For now, init doesn't receive handles.
     debug_print(b"userstart: entry=");
     // Print entry_addr as hex (simple hex printer for no_std)
     let mut hex_buf = [b'0'; 16];

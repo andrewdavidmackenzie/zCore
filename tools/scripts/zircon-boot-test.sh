@@ -45,9 +45,12 @@ fi
 # Build the kernel in Zircon mode with the ZBI embedded
 # Build userstart (first userspace process)
 echo "Building userstart for $ARCH..."
-cargo build --manifest-path zCore/userstart/Cargo.toml \
+if ! cargo build --manifest-path zCore/userstart/Cargo.toml \
   --target "aarch64-unknown-none-softfloat" \
-  --release --target-dir target/userstart 2>&1 | tail -2
+  --release --target-dir target/userstart; then
+  echo "ERROR: userstart build failed."
+  exit 1
+fi
 
 USERSTART="target/userstart/aarch64-unknown-none-softfloat/release/userstart"
 if [ ! -f "$USERSTART" ]; then
@@ -56,7 +59,7 @@ if [ ! -f "$USERSTART" ]; then
 fi
 
 echo "Building zCore in Zircon mode ($ARCH) with userstart + petal ZBI..."
-USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" \
+if ! USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" \
   PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
   ZCORE_CMDLINE="LOG=warn" cargo build \
   -p zcore \
@@ -65,7 +68,10 @@ USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" 
   -Z json-target-spec \
   -Z build-std=core,alloc \
   -Z build-std-features=compiler-builtins-mem \
-  --release 2>&1 | tail -2
+  --release; then
+  echo "ERROR: kernel build failed."
+  exit 1
+fi
 
 # Verify kernel exists
 if [ ! -f "$KERNEL" ]; then

@@ -192,16 +192,12 @@ The current flow in `run_userstart()`:
 1. **Creates kernel objects** (lines 289-298): root `Job`, `Process` named
    "userstart", `Thread` named "userstart", root `Resource`.
 
-2. **Loads program code** (lines 302-314): first tries
-   `extract_program_from_zbi()` to find a program in the ZBI bootfs. If no
-   bootfs is found, falls back to `userstart_code()` which generates
-   architecture-specific machine code inline (a hello program).
+2. **Loads userstart ELF** (embedded at compile time via `include_bytes!`):
+   parses the ELF headers with `xmas-elf`, maps PT_LOAD segments into the
+   process VMAR with correct permissions.
 
-3. **Maps code into the process** (lines 315-321): creates a `VmObject`,
-   writes the code, maps it into the process VMAR with `READ | EXECUTE | USER`.
-
-4. **Creates stub vDSO** (lines 326-328): a placeholder VMO named
-   "vdso/full". Not a real vDSO.
+3. **Creates stub vDSO** : a placeholder VMO named "vdso/full". Not a
+   real vDSO -- userstart uses inline syscall wrappers from `zircon-abi`.
 
 5. **Creates ZBI VMO** (lines 330-335): wraps the raw ZBI bytes in a VMO.
 

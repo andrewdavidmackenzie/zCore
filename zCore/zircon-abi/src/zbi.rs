@@ -124,7 +124,8 @@ pub fn find_first_bootfs_entry(zbi_data: &[u8]) -> Option<(&[u8], &[u8])> {
 
         let payload_start = offset + ZbiHeader::SIZE;
         let payload_end = payload_start + item.length as usize;
-        if payload_end > zbi_data.len() {
+        // Validate against both container end and buffer length
+        if payload_end > container_end || payload_end > zbi_data.len() {
             break;
         }
 
