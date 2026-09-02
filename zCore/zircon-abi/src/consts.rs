@@ -25,17 +25,22 @@ pub const SYS_OBJECT_GET_INFO: u32 = 74;
 // Process/Thread
 pub const SYS_PROCESS_EXIT: u32 = 100;
 pub const SYS_PROCESS_CREATE: u32 = 101;
+pub const SYS_PROCESS_START: u32 = 102;
 pub const SYS_THREAD_EXIT: u32 = 137;
 pub const SYS_THREAD_CREATE: u32 = 138;
+pub const SYS_THREAD_START: u32 = 139;
 
 // VMO
 pub const SYS_VMO_CREATE: u32 = 156;
 pub const SYS_VMO_READ: u32 = 157;
 pub const SYS_VMO_WRITE: u32 = 158;
+pub const SYS_VMO_GET_SIZE: u32 = 159;
 
 // VMAR
+pub const SYS_VMAR_ALLOCATE: u32 = 150;
 pub const SYS_VMAR_MAP: u32 = 152;
 pub const SYS_VMAR_UNMAP: u32 = 153;
+pub const SYS_VMAR_PROTECT: u32 = 154;
 
 // Futex
 pub const SYS_FUTEX_WAIT: u32 = 34;
