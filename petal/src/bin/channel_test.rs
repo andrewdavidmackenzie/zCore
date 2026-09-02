@@ -11,7 +11,7 @@ use zircon_abi::errors::*;
 use zircon_abi::syscall;
 
 #[no_mangle]
-pub fn main(_startup_handle: u32) {
+pub fn main() {
     syscall::debug_print("channel_test: starting\n");
 
     // Create a channel pair

@@ -1,26 +1,32 @@
 //! petal runtime -- provides _start entry point and panic handler.
 //!
-//! Petal programs define `pub fn main(startup_handle: u32)` and this
-//! runtime handles the boilerplate: entry point, calling main with
-//! the startup handle, exiting the process, and panic handling.
-//!
-//! The startup handle is a channel received from userstart containing
-//! the bootstrap handles (root job, ZBI VMO, etc.).
+//! Petal programs define `pub fn main()` and this runtime handles
+//! the boilerplate. The startup handle from userstart is available
+//! via `petal::take_startup_handle()`.
 
 #![no_std]
 
+use core::sync::atomic::{AtomicU32, Ordering};
 use zircon_abi::syscall;
 
 extern "Rust" {
-    /// The user's main function. Receives the startup channel handle.
-    fn main(startup_handle: u32);
+    /// The user's main function.
+    fn main();
+}
+
+static STARTUP_HANDLE: AtomicU32 = AtomicU32::new(0);
+
+/// Take the startup handle passed by userstart.
+/// Returns 0 (ZX_HANDLE_INVALID) if already taken or not set.
+pub fn take_startup_handle() -> u32 {
+    STARTUP_HANDLE.swap(0, Ordering::SeqCst)
 }
 
 /// Entry point -- called by the kernel when the process starts.
-/// The startup handle is passed in the first argument register.
 #[no_mangle]
 pub extern "C" fn _start(startup_handle: u32, _arg2: usize) -> ! {
-    unsafe { main(startup_handle) };
+    STARTUP_HANDLE.store(startup_handle, Ordering::SeqCst);
+    unsafe { main() };
     syscall::process_exit(0);
 }
 

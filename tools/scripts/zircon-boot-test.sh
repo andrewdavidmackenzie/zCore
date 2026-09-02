@@ -109,7 +109,7 @@ run_test() {
 # Run all petal tests
 FAILED=0
 
-run_test "hello" "petal: received bootstrap handles from userstart" || FAILED=$((FAILED + 1))
+run_test "hello" "petal: Hello from petal on zCore!" || FAILED=$((FAILED + 1))
 run_test "channel_test" "channel_test: PASS" || FAILED=$((FAILED + 1))
 run_test "vmo_test" "vmo_test: PASS" || FAILED=$((FAILED + 1))
 
