@@ -19,11 +19,16 @@ fn petal_output_dir(arch: Arch) -> PathBuf {
     PROJECT_DIR.join("target").join("petal").join(arch.name())
 }
 
-/// Build the petal hello program for the given architecture.
+/// Build a petal program for the given architecture.
 /// Returns the path to the compiled ELF binary.
-pub fn build_petal(arch: Arch) -> PathBuf {
+pub fn build_petal(arch: Arch, bin_name: &str) -> PathBuf {
     let target = petal_target(arch);
-    println!("Building petal for {} (target: {})", arch.name(), target);
+    println!(
+        "Building petal '{}' for {} (target: {})",
+        bin_name,
+        arch.name(),
+        target
+    );
 
     let status = Command::new("cargo")
         .args(["build", "--release"])
@@ -33,6 +38,8 @@ pub fn build_petal(arch: Arch) -> PathBuf {
         .arg(target)
         .arg("--target-dir")
         .arg(PROJECT_DIR.join("target/petal"))
+        .arg("--bin")
+        .arg(bin_name)
         .status()
         .expect("failed to run cargo build for petal");
 
@@ -44,15 +51,15 @@ pub fn build_petal(arch: Arch) -> PathBuf {
         .join("target/petal")
         .join(target)
         .join("release")
-        .join("hello")
+        .join(bin_name)
 }
 
 /// Strip an ELF binary to a flat binary using objcopy.
 /// Returns the path to the flat binary.
-fn strip_to_flat_binary(elf_path: &std::path::Path, arch: Arch) -> PathBuf {
+fn strip_to_flat_binary(elf_path: &std::path::Path, arch: Arch, bin_name: &str) -> PathBuf {
     let out_dir = petal_output_dir(arch);
     std::fs::create_dir_all(&out_dir).unwrap();
-    let flat_path = out_dir.join("hello.bin");
+    let flat_path = out_dir.join(format!("{}.bin", bin_name));
 
     println!(
         "Stripping {} -> {}",
@@ -145,18 +152,23 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
         .join("userstart")
 }
 
-/// Build petal and package it into a ZBI file.
+/// Build a petal program and package it into a ZBI file.
 /// Returns the path to the ZBI file.
-pub fn build_petal_zbi(arch: Arch) -> PathBuf {
-    let elf = build_petal(arch);
-    let flat = strip_to_flat_binary(&elf, arch);
+pub fn build_petal_zbi(arch: Arch, bin_name: &str) -> PathBuf {
+    let elf = build_petal(arch, bin_name);
+    let flat = strip_to_flat_binary(&elf, arch, bin_name);
 
     let flat_data =
         std::fs::read(&flat).unwrap_or_else(|e| panic!("Failed to read {}: {}", flat.display(), e));
 
-    println!("Packaging petal ZBI ({} bytes of code)", flat_data.len());
+    println!(
+        "Packaging petal ZBI '{}' ({} bytes of code)",
+        bin_name,
+        flat_data.len()
+    );
 
-    let zbi_data = zircon_abi::zbi::build_test_zbi(b"bin/hello", &flat_data);
+    let bootfs_name = format!("bin/{}", bin_name);
+    let zbi_data = zircon_abi::zbi::build_test_zbi(bootfs_name.as_bytes(), &flat_data);
 
     let zbi_path = petal_output_dir(arch).join("petal.zbi");
     std::fs::write(&zbi_path, &zbi_data)

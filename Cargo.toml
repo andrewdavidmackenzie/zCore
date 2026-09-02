@@ -15,6 +15,8 @@ members = [
     "third-party/region-alloc",
 ]
 default-members = ["xtask"]
+# petal and userstart are cross-compiled for bare-metal targets by xtask,
+# not buildable as workspace members (different target arch).
 exclude = ["petal", "rboot", "zCore/userstart"]
 resolver = "2"
 

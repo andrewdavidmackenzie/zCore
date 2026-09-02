@@ -239,15 +239,25 @@ enum Commands {
 
     /// Builds petal test programs and packages them into a ZBI.
     ///
-    /// Cross-compiles the petal hello program for the target architecture,
+    /// Cross-compiles a petal program for the target architecture,
     /// strips it to a flat binary, and packages it into a ZBI file.
     ///
     /// # Example
     ///
     /// ```bash
     /// cargo petal-zbi --arch aarch64
+    /// cargo petal-zbi --arch aarch64 --bin channel_test
     /// ```
-    PetalZbi(ArchArg),
+    PetalZbi(PetalZbiArgs),
+}
+
+#[derive(Args)]
+struct PetalZbiArgs {
+    #[clap(flatten)]
+    arch: ArchArg,
+    /// Petal binary to package (default: hello).
+    #[clap(long, default_value = "hello")]
+    bin: String,
 }
 
 #[derive(Args)]
@@ -308,7 +318,7 @@ fn main() {
         }
         LinuxLibos(arg) => libos::linux_run(arg.args),
         PetalZbi(arg) => {
-            petal::build_petal_zbi(arg.arch);
+            petal::build_petal_zbi(arg.arch.arch, &arg.bin);
         }
     }
 }
