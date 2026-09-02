@@ -35,6 +35,7 @@ pub const SYS_VMO_CREATE: u32 = 156;
 pub const SYS_VMO_READ: u32 = 157;
 pub const SYS_VMO_WRITE: u32 = 158;
 pub const SYS_VMO_GET_SIZE: u32 = 159;
+pub const SYS_VMO_REPLACE_AS_EXECUTABLE: u32 = 164;
 
 // VMAR
 pub const SYS_VMAR_ALLOCATE: u32 = 150;
@@ -50,15 +51,21 @@ pub const SYS_FUTEX_WAKE: u32 = 35;
 pub const SYS_PORT_CREATE: u32 = 96;
 pub const SYS_PORT_WAIT: u32 = 98;
 
+// Signals
+/// Process terminated signal.
+pub const ZX_PROCESS_TERMINATED: u32 = 1 << 3; // SIGNAL_3
+
 // Timer
 pub const SYS_TIMER_CREATE: u32 = 142;
 pub const SYS_NANOSLEEP: u32 = 62;
 
-// VMAR map option flags (matches zx_vm_option_t)
+// VMAR map option flags (matches zCore's VmOptions in zircon-syscall/src/vmar.rs)
+// Note: these differ from real Fuchsia's zx_vm_option_t bit positions.
+// zCore uses: PERM_EXECUTE = 1<<2, Fuchsia uses 1<<3. See #135.
 pub const ZX_VM_PERM_READ: u32 = 1 << 0;
 pub const ZX_VM_PERM_WRITE: u32 = 1 << 1;
-pub const ZX_VM_PERM_EXECUTE: u32 = 1 << 3;
+pub const ZX_VM_PERM_EXECUTE: u32 = 1 << 2;
 pub const ZX_VM_SPECIFIC: u32 = 1 << 4;
-pub const ZX_VM_CAN_MAP_READ: u32 = 1 << 17;
-pub const ZX_VM_CAN_MAP_WRITE: u32 = 1 << 18;
-pub const ZX_VM_CAN_MAP_EXECUTE: u32 = 1 << 19;
+pub const ZX_VM_CAN_MAP_READ: u32 = 1 << 7;
+pub const ZX_VM_CAN_MAP_WRITE: u32 = 1 << 8;
+pub const ZX_VM_CAN_MAP_EXECUTE: u32 = 1 << 9;

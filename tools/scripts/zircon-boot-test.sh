@@ -43,8 +43,21 @@ if [ ! -f "$ZBI" ]; then
 fi
 
 # Build the kernel in Zircon mode with the ZBI embedded
-echo "Building zCore in Zircon mode ($ARCH) with petal ZBI..."
-PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
+# Build userstart (first userspace process)
+echo "Building userstart for $ARCH..."
+cargo build --manifest-path zCore/userstart/Cargo.toml \
+  --target "aarch64-unknown-none-softfloat" \
+  --release --target-dir target/userstart 2>&1 | tail -2
+
+USERSTART="target/userstart/aarch64-unknown-none-softfloat/release/userstart"
+if [ ! -f "$USERSTART" ]; then
+  echo "ERROR: $USERSTART not found after build."
+  exit 1
+fi
+
+echo "Building zCore in Zircon mode ($ARCH) with userstart + petal ZBI..."
+USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" \
+  PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
   ZCORE_CMDLINE="LOG=warn" cargo build \
   -p zcore \
   --no-default-features --features zircon \

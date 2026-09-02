@@ -158,6 +158,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     let code_pages = (code_size + PAGE_SIZE - 1) / PAGE_SIZE;
     let map_size = code_pages * PAGE_SIZE;
 
+    #[allow(unused_mut)]
     let mut code_vmo: HandleValue = ZX_HANDLE_INVALID;
     check("vmo_create", unsafe {
         zx_vmo_create(map_size as u64, 0, &mut code_vmo)
@@ -166,6 +167,14 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     check("vmo_write", unsafe {
         zx_vmo_write(code_vmo, program_data.as_ptr(), 0, code_size)
     });
+
+    // Make the VMO executable so we can map it with PERM_EXECUTE
+    let mut exec_vmo: HandleValue = ZX_HANDLE_INVALID;
+    check("vmo_replace_as_executable", unsafe {
+        zx_vmo_replace_as_executable(code_vmo, ZX_HANDLE_INVALID, &mut exec_vmo)
+    });
+    // The original handle is consumed by replace_as_executable
+    code_vmo = exec_vmo;
 
     let mut entry_addr: usize = 0;
     check("vmar_map(code)", unsafe {
@@ -217,7 +226,20 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         )
     });
 
-    debug_print(b"userstart: init process started, exiting\n");
+    debug_print(b"userstart: init process started, waiting for it to exit\n");
+
+    // Wait for the init process to terminate
+    let mut observed: u32 = 0;
+    check("object_wait_one", unsafe {
+        zx_object_wait_one(
+            init_proc,
+            ZX_PROCESS_TERMINATED,
+            i64::MAX, // ZX_TIME_INFINITE
+            &mut observed,
+        )
+    });
+
+    debug_print(b"userstart: init process exited, shutting down\n");
 
     // Close our handles and exit
     unsafe {

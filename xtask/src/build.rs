@@ -210,9 +210,13 @@ impl QemuArgs {
         if is_zircon {
             build_config.features.remove("linux");
             build_config.features.insert("zircon".into());
+            // Build userstart (first userspace process)
+            let userstart_path = crate::petal::build_userstart(arch);
+            build_config
+                .env
+                .insert("USERSTART_ELF".into(), userstart_path.into_os_string());
+            // Build petal ZBI (init program loaded by userstart)
             let zbi_path = crate::petal::build_petal_zbi(arch);
-            // Embed the ZBI into the kernel binary via include_bytes!
-            // Runtime ZBI loading via DTB initrd is tracked in issue #136.
             build_config
                 .env
                 .insert("PETAL_ZBI".into(), zbi_path.into_os_string());

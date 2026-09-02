@@ -13,6 +13,7 @@ description = "Linux and Zircon user programs loader and runner."
 [dependencies]
 log = "0.4"
 cfg-if = "1.0"
+xmas-elf = "0.7"
 kernel-hal = { path = "../kernel-hal", default-features = false }
 zircon-object = { path = "../zCore/zircon-object", features = ["elf"] }
 zircon-abi = { path = "../zCore/zircon-abi", optional = true, features = ["zbi"] }

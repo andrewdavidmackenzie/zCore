@@ -606,6 +606,23 @@ pub unsafe fn zx_vmo_get_size(handle: HandleValue, size: *mut usize) -> ZxStatus
     syscall2(crate::consts::SYS_VMO_GET_SIZE, handle as u64, size as u64)
 }
 
+/// Replace a VMO handle with one that has execute rights.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_vmo_replace_as_executable(
+    handle: HandleValue,
+    vmex_resource: HandleValue,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_VMO_REPLACE_AS_EXECUTABLE,
+        handle as u64,
+        vmex_resource as u64,
+        out as u64,
+    )
+}
+
 // --- VMAR syscalls ---
 
 /// Map a VMO into a VMAR.
@@ -630,6 +647,27 @@ pub unsafe fn zx_vmar_map(
         vmo_offset as u64,
         len as u64,
         mapped_addr as u64,
+    )
+}
+
+// --- Object syscalls ---
+
+/// Wait for a signal on an object.
+///
+/// # Safety
+/// `observed` must be a valid pointer if non-null.
+pub unsafe fn zx_object_wait_one(
+    handle: HandleValue,
+    signals: u32,
+    deadline: i64,
+    observed: *mut u32,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_OBJECT_WAIT_ONE,
+        handle as u64,
+        signals as u64,
+        deadline as u64,
+        observed as u64,
     )
 }
 
