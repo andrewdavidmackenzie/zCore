@@ -225,6 +225,20 @@ clippy:
 	@echo "==> Clippy: host tools..."
 	cargo clippy -p xtask -p z-config -p region-alloc -p zircon-abi \
 		--no-deps -- --deny warnings
+	@echo "==> Clippy: userspace programs ($(ARCH))..."
+ifeq ($(ARCH), aarch64)
+	cargo clippy -p petal -p userstart \
+		--target aarch64-unknown-none-softfloat \
+		--no-deps -- --deny warnings
+else ifeq ($(ARCH), riscv64)
+	cargo clippy -p petal -p userstart \
+		--target riscv64gc-unknown-none-elf \
+		--no-deps -- --deny warnings
+else ifeq ($(ARCH), x86_64)
+	cargo clippy -p petal -p userstart \
+		--target x86_64-unknown-none \
+		--no-deps -- --deny warnings
+endif
 
 # check code style
 check:

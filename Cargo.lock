@@ -1415,6 +1415,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
+name = "petal"
+version = "0.1.0"
+dependencies = [
+ "zircon-abi",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2253,6 +2260,13 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+]
+
+[[package]]
+name = "userstart"
+version = "0.1.0"
+dependencies = [
+ "zircon-abi",
 ]
 
 [[package]]

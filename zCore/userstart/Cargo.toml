@@ -11,10 +11,4 @@ path = "src/main.rs"
 [dependencies]
 zircon-abi = { path = "../zircon-abi", features = ["userspace"] }
 
-# Standalone crate -- not part of the workspace (different target arch)
-[workspace]
-
-[profile.release]
-panic = "abort"
-opt-level = "s"
-lto = true
+# Profile settings are in the workspace root Cargo.toml
