@@ -1,7 +1,6 @@
 ﻿[alias]
 xtask = "run --package xtask --release --"
 git-proxy = "xtask git-proxy"
-zircon-init = "xtask zircon-init"
 update-all = "xtask update-all"
 
 check-style = "xtask check-style"

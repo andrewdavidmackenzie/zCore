@@ -135,7 +135,7 @@ gzip -9 -cvf z.bin > z.bin.gz
 # 4. Create ITB file
 mkimage -f zcore-starfive.its z.itb
 # zcore-starfive.its is the same as
-# prebuilt/firmware/riscv/starfive_fdt.its
+# firmware/riscv/starfive_fdt.its
 
 # 5. Copy to TFTP server directory
 cp z.itb /path/to/tftpboot

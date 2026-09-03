@@ -247,7 +247,7 @@ else
 build: $(kernel_img)
 ifeq ($(PLATFORM), fu740)
 	gzip -9 -cvf $(build_path)/zcore.bin > ./zcore.bin.gz
-	mkimage -f ../prebuilt/firmware/riscv/fu740_fdt.its ./zcore-fu740.itb
+	mkimage -f ../firmware/riscv/fu740_fdt.its ./zcore-fu740.itb
 	@echo 'Build zcore-fu740.itb FIT-uImage done'
 else ifeq ($(PLATFORM), c910light)
 	mkimage -A riscv -O linux -C none -T kernel -a 0x200000 -e 0x200000 \
@@ -268,7 +268,7 @@ ifeq ($(ARCH), aarch64)
 	$(sed) 's#\"cmdline\":.*#\"cmdline\": \"$(CMDLINE)\",#' disk/EFI/Boot/Boot.json
 endif
 ifeq ($(PLATFORM), d1)
-	$(OBJCOPY) ../prebuilt/firmware/riscv/d1_fw_payload.elf --strip-all -O binary ./zcore_d1.bin
+	$(OBJCOPY) ../firmware/riscv/d1_fw_payload.elf --strip-all -O binary ./zcore_d1.bin
 	dd if=$(kernel_img) of=zcore_d1.bin bs=512 seek=2048
 	xfel ddr ddr3
 	xfel write 0x40000000 zcore_d1.bin
