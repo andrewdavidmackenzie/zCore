@@ -36,8 +36,9 @@ QEMU loads the kernel directly and starts execution. No user-facing
 firmware interaction is needed.
 
 **aarch64:** QEMU loads the ELF via `-kernel`, sets CPU to EL1 with MMU
-off, places a DTB in memory, and jumps to the ELF entry point. The first
-zCore instruction is in `boot.s` (assembly).
+off, and jumps to the ELF entry point. QEMU places a DTB in memory but
+the DTB pointer in x0 is currently 0 -- DTB parsing is not yet
+implemented (#136). The first zCore instruction is in `boot.s` (assembly).
 
 **riscv64:** QEMU loads a raw binary via `-kernel` with `-bios default`
 (OpenSBI). OpenSBI runs at M-mode, initializes hardware, then jumps to
@@ -96,7 +97,8 @@ no bootloader. `main()` calls `primary_main()` directly.
 ### AArch64 (QEMU)
 
 ```text
-QEMU loads ELF via -kernel, sets EL1, MMU off, x0 = DTB ptr
+QEMU loads ELF via -kernel, sets EL1, MMU off
+  (x0 should be DTB ptr but is currently 0 -- see #136)
   │
   v
 _boot (boot.s) ................ Assembly, physical addresses
@@ -328,18 +330,18 @@ for mock devices.
 
 All platforms converge at `primary_main()` in `zCore/src/main.rs`:
 
-| Step | Function | Description |
-|------|----------|-------------|
-| 1 | `logging::init()` | Init log framework |
-| 2 | `memory::init()` | Seed buddy allocator with 2 MiB static block |
-| 3 | `primary_init_early(config, &handler)` | Store config, arch-specific early init |
-| 4 | `boot_options()` | Parse cmdline (`KEY=value:KEY=value`) |
-| 5 | `set_max_level()` | Set log level from `LOG=` option |
-| 6 | `insert_regions(free_pmem)` | Register physical memory with allocator |
-| 7 | `primary_init()` | Full HAL initialization |
-| 8 | `STARTED.store(true)` | Signal secondary cores to proceed |
-| 9 | Launch userspace | Linux or Zircon (see below) |
-| 10 | `wait_for_exit` | Wait for root process |
+| Step | Function                               | Description                                  |
+|------|----------------------------------------|----------------------------------------------|
+| 1    | `logging::init()`                      | Init log framework                           |
+| 2    | `memory::init()`                       | Seed buddy allocator with 2 MiB static block |
+| 3    | `primary_init_early(config, &handler)` | Store config, arch-specific early init       |
+| 4    | `boot_options()`                       | Parse cmdline (`KEY=value:KEY=value`)        |
+| 5    | `set_max_level()`                      | Set log level from `LOG=` option             |
+| 6    | `insert_regions(free_pmem)`            | Register physical memory with allocator      |
+| 7    | `primary_init()`                       | Full HAL initialization                      |
+| 8    | `STARTED.store(true)`                  | Signal secondary cores to proceed            |
+| 9    | Launch userspace                       | Linux or Zircon (see below)                  |
+| 10   | `wait_for_exit`                        | Wait for root process                        |
 
 ---
 
@@ -367,7 +369,8 @@ handling (VFS, signals, networking, etc.) runs in kernel space.
 
 ```rust
 let zbi = fs::zbi();  // embedded at compile time
-let proc = zircon_loader::zircon::run_userstart(zbi, &cmdline);
+let proc = zircon_loader::zircon::run_userboot(zbi, &options.cmdline);
+// run_userboot is a backward-compatible alias for run_userstart
 ```
 
 The kernel loads the **userstart** ELF (embedded at compile time) as the
@@ -405,13 +408,13 @@ Runtime ZBI loading via DTB initrd is tracked in #136.
 
 ## Pre-primary_main Setup Comparison
 
-| Setup | aarch64 | riscv64 | x86_64 | LibOS |
-|-------|---------|---------|--------|-------|
-| **Page tables** | Assembly (1G blocks) | Rust (Sv39 mega-pages) | rboot (4K pages) | Host OS |
-| **MMU enable** | Assembly | Rust (`satp`) | Already on (UEFI) | Already on |
-| **BSS zeroing** | Assembly | Rust (`r0::zero_bss`) | rboot/loader | Host OS |
-| **Stack setup** | Assembly (32 KiB) | Naked fn (32 pages/hart) | rboot (512 pages) | Host OS |
-| **FP/SIMD** | Assembly | N/A | UEFI enables | Host OS |
-| **SMP boot** | None | SBI HSM | AP fn pointer | None |
-| **DTB parsing** | Not yet (#136) | `dtb-walker` crate | N/A (ACPI) | N/A |
-| **First instruction** | `mov x20, x0` | `call select_stack` | Rust statement | Rust `main()` |
+| Setup                 | aarch64              | riscv64                  | x86_64            | LibOS         |
+|-----------------------|----------------------|--------------------------|-------------------|---------------|
+| **Page tables**       | Assembly (1G blocks) | Rust (Sv39 mega-pages)   | rboot (4K pages)  | Host OS       |
+| **MMU enable**        | Assembly             | Rust (`satp`)            | Already on (UEFI) | Already on    |
+| **BSS zeroing**       | Assembly             | Rust (`r0::zero_bss`)    | rboot/loader      | Host OS       |
+| **Stack setup**       | Assembly (32 KiB)    | Naked fn (32 pages/hart) | rboot (512 pages) | Host OS       |
+| **FP/SIMD**           | Assembly             | N/A                      | UEFI enables      | Host OS       |
+| **SMP boot**          | None                 | SBI HSM                  | AP fn pointer     | None          |
+| **DTB parsing**       | Not yet (#136)       | `dtb-walker` crate       | N/A (ACPI)        | N/A           |
+| **First instruction** | `mov x20, x0`        | `call select_stack`      | Rust statement    | Rust `main()` |
