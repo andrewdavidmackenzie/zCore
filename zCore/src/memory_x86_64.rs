@@ -128,8 +128,9 @@ cfg_if! {
     }
 }
 
-#[allow(unexpected_cfgs)]
-#[cfg(feature = "hypervisor")]
+// Hypervisor support (rvm) is disabled -- the rvm dependency is commented out.
+// This module is kept for reference but will not compile until rvm is restored.
+#[cfg(any())] // never compiles -- placeholder
 mod rvm_extern_fn {
     use super::*;
 

@@ -3,6 +3,8 @@ name = "zcore"
 version = "0.1.0"
 authors = ["PanQL <panqinglin00@163.com>", "Yuekai Jia <equation618@gmail.com>"]
 edition = "2021"
+
+
 default-run = "zcore"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -100,5 +102,5 @@ sbi-rt = { version = "0.0.2", features = ["legacy"] }
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
 bitmap-allocator = "0.4"
 buddy_system_allocator = "0.8"
-# rboot removed -- see #148 for bootloader replacement
+bootloader_api = "0.11"
 # rvm = { git = "https://github.com/rcore-os/RVM", rev = "e91d625", optional = true }

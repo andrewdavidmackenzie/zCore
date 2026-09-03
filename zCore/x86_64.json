@@ -20,8 +20,8 @@
   "rustc-abi": "softfloat",
   "panic-strategy": "abort",
   "max-atomic-width": 64,
-  "position-independent-executables": true,
-  "static-position-independent-executables": true,
+  "position-independent-executables": false,
+  "static-position-independent-executables": false,
   "plt-by-default": false,
   "relro-level": "full"
 }

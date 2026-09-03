@@ -295,6 +295,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bootloader_api"
+version = "0.11.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49f4c2ef60a76c1858ef43c30b6b95c2f5ee4d7c4f9bc47409c3a8dc8910adb9"
+
+[[package]]
 name = "buddy_system_allocator"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2610,6 +2616,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "bitmap-allocator",
+ "bootloader_api",
  "buddy_system_allocator",
  "cfg-if 1.0.0",
  "chrono",
