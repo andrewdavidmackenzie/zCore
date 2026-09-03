@@ -220,8 +220,8 @@ All platforms converge at `primary_main()` in `zCore/src/main.rs:39`:
 | 7    | `primary_init()`     | Full HAL initialization  |
 | 8    | `STARTED.store`      | Signal secondary cores   |
 |      | `(true)`             | to proceed               |
-| 9    | Launch userspace     | Linux: `linux::run()`    |
-|      |                      | Zircon: `run_userboot()` |
+| 9    | Launch userspace     | Linux: `linux::run()`     |
+|      |                      | Zircon: `run_userstart()` |
 | 10   | `wait_for_exit`      | Wait for root process    |
 
 ### Memory Allocator
@@ -244,12 +244,12 @@ The personality is selected at compile time:
 cfg_if! {
     if #[cfg(feature = "linux")] {
         let rootfs = fs::rootfs();
-        let proc = zcore_loader::linux::run(
+        let proc = linux_loader::linux::run(
             args, envs, rootfs
         );
     } else if #[cfg(feature = "zircon")] {
         let zbi = fs::zbi();
-        let proc = zcore_loader::zircon
+        let proc = zircon_loader::zircon
             ::run_userboot(zbi, cmdline);
     }
 }
@@ -294,13 +294,14 @@ same ABI, real Fuchsia userspace programs run on it unchanged.
 
 ### The Bootstrap Sequence
 
-`run_userstart()` in `loader/src/zircon.rs` implements the kernel side:
+`run_userstart()` in `zCore/zircon-loader/src/zircon.rs` implements the
+kernel side. `run_userboot()` is a backward-compatible alias.
 
 ```text
 run_userstart(zbi_data, cmdline)
   │
-  ├── 1. Generate userstart machine code (arch-specific)
-  ├── 2. Map code into new process VMAR as executable
+  ├── 1. Load userstart ELF (embedded at compile time)
+  ├── 2. Parse ELF headers, map segments into process VMAR
   ├── 3. Create stub vDSO VMO (placeholder)
   ├── 4. Create ZBI VMO from boot image data
   ├── 5. Set up 32 KiB user stack
@@ -316,32 +317,37 @@ run_userstart(zbi_data, cmdline)
   │        [9]  COUNTER_NAMES      Kernel counter descriptors
   │        [10] COUNTERS           Kernel counter arena
   │        [11-14] INSTRUMENTATION Profiling VMOs (stubs)
-  └── 8. Start thread at userstart entry point with user_channel
+  └── 8. Start thread at userstart ELF entry point with user_channel
 ```
 
-The current userstart program:
-1. Writes "Hello from zCore Zircon mode!" via `zx_debug_write` syscall
-2. Exits via `zx_process_exit(0)`
+Userstart then runs in userspace (see `zCore/userstart/src/main.rs`):
+1. Reads the 15 bootstrap handles via `zx_channel_read`
+2. Maps the ZBI VMO and parses the bootfs to find the init program
+3. Creates a new process, maps the init code, creates a stack
+4. Forwards selected bootstrap handles to init via a new channel
+5. Starts the init process and waits for it to exit
+6. Shuts down when init terminates
 
-Future work (#89) will extend userstart to load petal test programs from
-the ZBI bootfs.
-
-Note: `run_userboot()` is available as a backward-compatible alias for
-`run_userstart()`.
+The init program (e.g., petal's `hello`) receives a startup handle
+(channel) containing forwarded bootstrap handles. Petal programs
+define `pub fn main()` with the petal runtime providing `_start`.
 
 ### Syscall ABI
 
 The `zircon-abi` crate (`zCore/zircon-abi/`) defines the Zircon syscall ABI
 for userspace programs:
 
-- **Syscall numbers** matching `zx-syscall-numbers.h` from Fuchsia
+- **Syscall numbers** matching `zx-syscall-numbers.h` from Zircon
 - **Error codes** matching `zx_status_t`
-- **Inline syscall wrappers** (behind the `userspace` feature) using
-  `svc #0` (aarch64) or `syscall` (x86_64) instructions
+- **Inline syscall wrappers** using `svc #0` (aarch64), `syscall` (x86_64),
+  or `ecall` (riscv64) instructions
+- **Safe wrappers** like `debug_write(&[u8])`, `debug_print(&str)`,
+  `process_exit(i64)` -- no `unsafe` needed at call site
+- **ZBI format** parsing and construction
 
-Petal test programs use these inline wrappers instead of a vDSO shared
-library. The syscall instruction traps into the kernel, which dispatches
-via the same trap loop used for any Zircon userspace program.
+Userstart and petal programs use these inline wrappers instead of a vDSO
+shared library. The syscall instruction traps into the kernel, which
+dispatches via the trap loop in `zCore/zircon-loader/src/zircon.rs`.
 
 ### Legacy: Fuchsia Prebuilt Binaries
 
