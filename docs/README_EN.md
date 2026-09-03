@@ -1,4 +1,4 @@
-﻿﻿# zCore
+﻿# zCore
 
 [![CI](https://github.com/rcore-os/zCore/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/rcore-os/zCore/actions)
 [![Docs](https://img.shields.io/badge/docs-pages-green)](https://rcore-os.github.io/zCore/)
@@ -61,7 +61,7 @@ The effects of many commands are affected by the repo environment and will also 
 
 ```text
 ┌────────────┐ ┌─────────────┐ ┌─────────────┐
-| update-all | | check-style | | zircon-init |
+| update-all | | check-style | |
 └────────────┘ └─────────────┘ └─────────────┘
 ┌─────┐ ┌──────┐  ┌─────┐  ┌─────────────┐ ┌─────────────────┐
 | asm | | qemu |─→| bin |  | linux-libos | | libos-libc-test |
@@ -109,14 +109,6 @@ Checks code without running. Try to compile the project with various different f
 
 ```bash
 cargo check-style
-```
-
-#### **zircon-init**
-
-Download zircon binaries.
-
-```bash
-cargo zircon-init
 ```
 
 #### **asm**

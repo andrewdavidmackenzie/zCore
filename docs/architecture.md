@@ -830,7 +830,6 @@ init`, `gdb`, `asm`, `libc-test`, and more.
 |------------------|--------------------------|
 | `git-proxy`      | Set/unset git proxy      |
 | `dump`           | Print build/VCS metadata |
-| `zircon-init`    | Download Zircon prebuilts|
 | `update-all`     | Update submodules +      |
 |                  | toolchain + deps         |
 | `check-style`    | fmt + clippy + doc check |

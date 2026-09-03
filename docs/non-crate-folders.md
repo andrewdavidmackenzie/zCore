@@ -118,17 +118,18 @@ Fuchsia userspace would use the wrong syscall mechanism.
 
 ---
 
-### `prebuilt/` -- Prebuilt Firmware
+### `firmware/` -- Platform Firmware
 
 **Purpose:** Pre-built firmware binaries for booting on various platforms.
 
 **Contents:**
-- `firmware/aarch64/` -- UEFI bootloader EFI, Boot.json, QEMU_EFI.fd
-- `firmware/riscv/` -- OpenSBI firmware, DTBs, FIT sources for C910, D1, FU740,
+- `aarch64/` -- UEFI bootloader EFI, Boot.json, QEMU_EFI.fd
+- `riscv/` -- OpenSBI firmware, DTBs, FIT sources for C910, D1, FU740,
   VisionFive
 
-**Status:** Actively used. Required for QEMU boot (QEMU_EFI.fd) and physical
-hardware deployment.
+**Status:** The riscv files are actively used for physical hardware deployment.
+The aarch64 UEFI files are legacy -- the current boot path uses direct kernel
+boot (`-kernel` flag) without UEFI.
 
 ---
 

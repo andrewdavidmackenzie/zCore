@@ -79,15 +79,6 @@ enum Commands {
     #[cfg(not(target_arch = "riscv64"))]
     Dump,
 
-    /// Download zircon binaries.
-    ///
-    /// ## Example
-    ///
-    /// ```bash
-    /// cargo zircon-init
-    /// ```
-    ZirconInit,
-
     /// Updates toolchain, dependencies and submodules.
     ///
     /// # Example
@@ -290,7 +281,7 @@ fn main() {
         }
         #[cfg(not(target_arch = "riscv64"))]
         Dump => dump::dump_config(),
-        ZirconInit => install_zircon_prebuilt(),
+
         UpdateAll => update_all(),
         CheckStyle => check_style(),
 
@@ -328,24 +319,6 @@ fn main() {
 fn git_submodule_update(init: bool) {
     use os_xtask_utils::{CommandExt, Git};
     Git::submodule_update(init).invoke();
-}
-
-/// Downloads test cases and libraries required for zircon mode.
-fn install_zircon_prebuilt() {
-    use commands::wget;
-    use os_xtask_utils::{dir, CommandExt, Tar};
-    const URL: &str =
-        "https://github.com/rcore-os/zCore/releases/download/prebuilt-2208/prebuilt.tar.xz";
-    let tar = Arch::X86_64.origin().join("prebuilt.tar.xz");
-    wget(URL, &tar);
-    // Extract to target path
-    let dir = PROJECT_DIR.join("prebuilt");
-    let target = TARGET.join("zircon");
-    dir::rm(&dir).unwrap();
-    dir::rm(&target).unwrap();
-    fs::create_dir_all(&target).unwrap();
-    Tar::xf(&tar, Some(&target)).invoke();
-    dircpy::copy_dir(target.join("prebuilt"), dir).unwrap();
 }
 
 /// Updates toolchain and dependencies.
