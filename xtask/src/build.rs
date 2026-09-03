@@ -252,7 +252,17 @@ impl QemuArgs {
                         .arg(INNER.join(format!("{arch_str}.img")));
                 }
             }
-            Arch::X86_64 => todo!(),
+            Arch::X86_64 => {
+                // x86_64 uses the bootloader crate to create a bootable image.
+                // The image must be built separately:
+                //   cargo bootimage --target zCore/x86_64.json
+                // For now, just try to launch with -kernel (multiboot).
+                // TODO: proper bootloader image creation (#148)
+                qemu.args(["-machine", "q35"])
+                    .args(["-serial", "mon:stdio"])
+                    .arg("-kernel")
+                    .arg(&obj);
+            }
             Arch::Aarch64 => {
                 // Direct kernel boot: QEMU loads the ELF directly, no UEFI
                 // bootloader needed. The kernel's _boot assembly sets up MMU
@@ -299,7 +309,11 @@ impl GdbArgs {
                     .args(["-ex", &format!("target remote localhost:{}", self.port)])
                     .invoke();
             }
-            Arch::X86_64 => todo!(),
+            Arch::X86_64 => {
+                Ext::new("gdb")
+                    .args(["-ex", &format!("target remote localhost:{}", self.port)])
+                    .invoke();
+            }
         }
     }
 }

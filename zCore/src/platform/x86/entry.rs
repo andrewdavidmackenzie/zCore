@@ -3,6 +3,7 @@
 // The bootloader handles UEFI/BIOS boot, page table setup, and
 // provides boot info to the kernel via bootloader_api::BootInfo.
 
+use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::info::{MemoryRegionKind, Optional};
 use kernel_hal::config::{FramebufferInfo, KernelConfig, MemoryRegion, MemoryType};
 
@@ -18,8 +19,15 @@ static mut MEMORY_REGIONS: [MemoryRegion; MAX_MEMORY_REGIONS] = [MemoryRegion {
 
 static mut MEMORY_REGION_COUNT: usize = 0;
 
-// Define the bootloader entry point
-bootloader_api::entry_point!(kernel_main);
+/// Bootloader configuration: map all physical memory at a fixed offset.
+const BOOTLOADER_CONFIG: BootloaderConfig = {
+    let mut config = BootloaderConfig::new_default();
+    config.mappings.physical_memory = Some(Mapping::FixedAddress(0xFFFF_8000_0000_0000));
+    config
+};
+
+// Define the bootloader entry point with our config
+bootloader_api::entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
 fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
     // Convert bootloader memory regions to our kernel-owned type
