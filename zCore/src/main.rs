@@ -53,11 +53,11 @@ fn primary_main(config: kernel_hal::KernelConfig) {
             let args = options.root_proc.split('?').map(Into::into).collect(); // parse "arg0?arg1?arg2"
             let envs = alloc::vec!["PATH=/usr/sbin:/usr/bin:/sbin:/bin".into()];
             let rootfs = fs::rootfs();
-            let proc = zcore_loader::linux::run(args, envs, rootfs);
+            let proc = linux_loader::linux::run(args, envs, rootfs);
             utils::wait_for_exit(Some(proc))
         } else if #[cfg(feature = "zircon")] {
             let zbi = fs::zbi();
-            let proc = zcore_loader::zircon::run_userboot(zbi, &options.cmdline);
+            let proc = zircon_loader::zircon::run_userboot(zbi, &options.cmdline);
             utils::wait_for_exit(Some(proc))
         } else {
             panic!("One of the features `linux` or `zircon` must be specified!");
