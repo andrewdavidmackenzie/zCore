@@ -12,8 +12,8 @@ members = [
     "zCore",
 
     "xtask",
-    "third-party/executor",
-    "third-party/region-alloc",
+    "zCore/executor",
+    "zCore/region-alloc",
     # Cross-compiled for bare-metal userspace by xtask.
     # Not in default-members (require explicit --target to build).
     "petal",
