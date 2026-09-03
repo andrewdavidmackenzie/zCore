@@ -10,17 +10,17 @@ For the Zircon userspace bootstrap protocol, see [userstart.md](userstart.md).
 
 zCore supports three execution modes and three CPU architectures:
 
-| Mode | Description |
-|------|-------------|
-| **QEMU** | Emulated hardware, the primary development target |
-| **Real hardware** | Physical boards (riscv64 only currently) |
-| **LibOS** | Runs as a host OS process (Linux/macOS) |
+| Mode              | Description                                       |
+|-------------------|---------------------------------------------------|
+| **QEMU**          | Emulated hardware, the primary development target |
+| **Real hardware** | Physical boards (riscv64 only currently)          |
+| **LibOS**         | Runs as a host OS process (Linux/macOS)           |
 
-| Architecture | QEMU | Real hardware | LibOS |
-|-------------|------|---------------|-------|
-| **aarch64** | Active | Planned (#11) | Broken (#80) |
-| **riscv64** | Active | Supported (D1, C910, FU740, StarFive) | Broken (#80) |
-| **x86_64** | Legacy (#94) | Not supported | Broken (#80) |
+| Architecture | QEMU         | Real hardware                         | LibOS        |
+|--------------|--------------|---------------------------------------|--------------|
+| **aarch64**  | Active       | Planned (#11)                         | Broken (#80) |
+| **riscv64**  | Active       | Supported (D1, C910, FU740, StarFive) | Broken (#80) |
+| **x86_64**   | Legacy (#94) | Not supported                         | Broken (#80) |
 
 After platform-specific initialization, all paths converge at
 `primary_main()` in `zCore/src/main.rs`, which branches into either
@@ -48,19 +48,40 @@ the kernel at S-mode. The first zCore instruction is in `entry.rs`
 Rust UEFI bootloader at `rboot/`). rboot loads the kernel ELF, sets up
 page tables, and jumps to the kernel. Not currently active (#94).
 
-### Real Hardware (riscv64 boards)
+### Real Hardware
 
-Physical boards use SBI firmware (OpenSBI or vendor-specific) that runs
-at M-mode and provides the Supervisor Binary Interface. The kernel runs
-at S-mode. Board-specific firmware files are in `firmware/riscv/`.
+Physical boards require platform-specific firmware to initialize hardware
+and load the kernel. The firmware brings the CPU to a known state and
+jumps to the kernel entry point. Board-specific firmware files are in
+`firmware/`.
 
-| Board | Firmware | Feature flag |
-|-------|----------|-------------|
-| QEMU virt | OpenSBI (built into QEMU) | (default) |
-| Allwinner D1 | `firmware/riscv/d1_fw_payload.elf` | `board-d1` |
-| T-HEAD C910 Light | `firmware/riscv/c910_fw_dynamic.bin` | `board-c910light` |
-| SiFive FU740 | OpenSBI + `firmware/riscv/hifive-unmatched-a00.dtb` | `board-fu740` |
-| StarFive | OpenSBI + `firmware/riscv/starfive.dtb` | -- |
+Each architecture has a different firmware convention:
+- **aarch64:** GPU firmware (Raspberry Pi) or UEFI (server boards)
+- **riscv64:** SBI firmware (OpenSBI or vendor-specific) at M-mode
+- **x86_64:** UEFI firmware with a bootloader application
+
+See the platform-specific sections below for details on each board.
+
+#### riscv64 boards
+
+riscv64 boards use SBI firmware that runs at M-mode and provides the
+Supervisor Binary Interface. The kernel runs at S-mode.
+
+| Board             | Firmware                                            | Feature flag      |
+|-------------------|-----------------------------------------------------|-------------------|
+| Allwinner D1      | `firmware/riscv/d1_fw_payload.elf`                  | `board-d1`        |
+| T-HEAD C910 Light | `firmware/riscv/c910_fw_dynamic.bin`                | `board-c910light` |
+| SiFive FU740      | OpenSBI + `firmware/riscv/hifive-unmatched-a00.dtb` | `board-fu740`     |
+| StarFive          | OpenSBI + `firmware/riscv/starfive.dtb`             | --                |
+
+#### aarch64 boards
+
+See the "AArch64 (Raspberry Pi)" section below. Not yet implemented (#11).
+
+#### x86_64 hardware
+
+See the "x86_64 (Real Hardware / UEFI Laptop)" section below.
+Not yet implemented (#94).
 
 ### LibOS (Host OS Process)
 
@@ -174,6 +195,77 @@ primary_main (main.rs)
 ```
 
 **First zCore instruction:** `csrw sie, zero` in `boot.asm`
+
+---
+
+### AArch64 (Raspberry Pi) -- Planned
+
+**Status:** Not yet implemented. See #11, #9, #8.
+
+The Raspberry Pi 4 uses a BCM2711 SoC with a Cortex-A72 (same as QEMU
+virt). However, the boot process and peripherals differ significantly:
+
+- **Boot:** The Pi's GPU firmware loads `kernel8.img` from the SD card's
+  FAT partition, sets up basic hardware, and jumps to the kernel at EL2.
+  zCore would need to drop to EL1 (or run at EL2).
+- **Peripherals:** BCM283x mini-UART (not PL011 by default), VideoCore
+  GPU, BCM interrupt controller (not GIC). New drivers would be needed.
+- **DTB:** The GPU firmware generates a DTB and passes it in x0 (same
+  convention as QEMU). DTB parsing (#136) would enable auto-discovery.
+
+```text
+Pi GPU firmware loads kernel8.img from SD card
+  │  EL2, MMU off, x0 = DTB pointer
+  v
+_boot (boot.s) ................ Same assembly as QEMU path
+  ├── (would need EL2 -> EL1 transition)
+  ├── Page table setup
+  ├── Enable MMU
+  v
+rust_main (entry.rs) .......... Would need Pi-specific KernelConfig
+  v
+primary_main (main.rs)
+```
+
+**Required work:**
+- EL2 to EL1 drop in boot assembly
+- BCM283x UART driver (#87)
+- BCM interrupt controller driver
+- DTB parsing for peripheral discovery (#136)
+- SD card / eMMC block device driver
+
+---
+
+### x86_64 (Real Hardware / UEFI Laptop) -- Planned
+
+**Status:** Not yet implemented. Depends on #94 (resurrect x86_64).
+
+Real hardware requires a UEFI bootloader since PCs boot via UEFI
+firmware. Options being considered (#94):
+- **rboot** (existing Rust UEFI app in `rboot/`)
+- **bootloader** crate (crates.io, widely used in Rust OS projects)
+- **limine** (popular multiplatform bootloader)
+
+```text
+UEFI firmware (laptop/PC)
+  │  Loads bootloader .efi from ESP
+  v
+Bootloader (rboot or alternative)
+  ├── Load kernel ELF from ESP
+  ├── Set up page tables, memory map
+  ├── Exit UEFI boot services
+  v
+_start (entry.rs) ............. Rust code, MMU already on
+  v
+primary_main (main.rs)
+```
+
+**Required work:**
+- Restore x86_64 build path (#94)
+- Decide on bootloader strategy (rboot vs alternatives)
+- ACPI table parsing for device discovery
+- Real hardware drivers (NVMe, USB, framebuffer)
+- Secure Boot support (optional)
 
 ---
 
