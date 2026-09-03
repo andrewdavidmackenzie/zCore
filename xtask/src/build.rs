@@ -1,4 +1,5 @@
-﻿use crate::{linux::LinuxRootfs, Arch, ArchArg, PROJECT_DIR};
+use crate::config::MachineConfig;
+use crate::{linux::LinuxRootfs, Arch, ArchArg, PROJECT_DIR};
 use once_cell::sync::Lazy;
 use os_xtask_utils::{dir, BinUtil, Cargo, CommandExt, Ext, Qemu};
 use std::{
@@ -8,7 +9,6 @@ use std::{
     path::PathBuf,
     str::FromStr,
 };
-use z_config::MachineConfig;
 
 #[derive(Clone, Args)]
 pub(crate) struct BuildArgs {

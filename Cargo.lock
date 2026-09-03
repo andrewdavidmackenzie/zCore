@@ -2653,18 +2653,11 @@ dependencies = [
  "rcore-fs",
  "rcore-fs-fuse",
  "rcore-fs-sfs",
- "shadow-rs",
- "z-config",
- "zircon-abi",
-]
-
-[[package]]
-name = "z-config"
-version = "0.1.0"
-dependencies = [
  "serde",
  "serde_derive",
+ "shadow-rs",
  "toml",
+ "zircon-abi",
 ]
 
 [[package]]

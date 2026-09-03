@@ -210,7 +210,7 @@ endif
 # Step 1: kernel + OS crates via the custom bare-metal target.
 #         Each package is listed explicitly so --no-deps can skip
 #         third-party crates (executor, region-alloc) that we don't own.
-# Step 2: host-side tools (xtask, z-config, region-alloc) via native target.
+# Step 2: host-side tools (xtask, region-alloc) via native target.
 clippy:
 	@echo "==> Clippy: kernel crates ($(ARCH))..."
 	cargo clippy \
@@ -234,7 +234,7 @@ clippy:
 		echo "  (skipped -- set USERSTART_ELF to enable)"; \
 	fi
 	@echo "==> Clippy: host tools..."
-	cargo clippy -p xtask -p z-config -p region-alloc -p zircon-abi \
+	cargo clippy -p xtask -p region-alloc -p zircon-abi \
 		--no-deps -- --deny warnings
 	@echo "==> Clippy: userspace programs ($(ARCH))..."
 ifeq ($(ARCH), aarch64)

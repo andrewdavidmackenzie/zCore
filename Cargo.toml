@@ -10,7 +10,7 @@ members = [
     "zCore/linux-syscall",
     "zCore/linux-loader",
     "zCore",
-    "z-config",
+
     "xtask",
     "third-party/executor",
     "third-party/region-alloc",
