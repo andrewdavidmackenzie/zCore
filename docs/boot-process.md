@@ -1,358 +1,325 @@
 # Boot Process
 
-This document describes the full boot sequence for each platform supported by
-zCore. All platforms converge at `primary_main()` in `zCore/src/main.rs:39`.
-
-For architecture overview, see
-[architecture.md](architecture.md).
+This document describes how zCore boots across all supported platforms and
+modes. For architecture overview, see [architecture.md](architecture.md).
+For the Zircon userspace bootstrap protocol, see [userstart.md](userstart.md).
 
 ---
 
-## AArch64 Boot Sequence
+## Overview
 
-### Prerequisites
+zCore supports three execution modes and three CPU architectures:
 
-QEMU loads the kernel ELF via the `-kernel` flag, sets the CPU to EL1
-(supervisor mode) with MMU off, places a DTB pointer in `x0`, and jumps to
-`_boot`.
+| Mode | Description |
+|------|-------------|
+| **QEMU** | Emulated hardware, the primary development target |
+| **Real hardware** | Physical boards (riscv64 only currently) |
+| **LibOS** | Runs as a host OS process (Linux/macOS) |
 
-### Boot Flow
+| Architecture | QEMU | Real hardware | LibOS |
+|-------------|------|---------------|-------|
+| **aarch64** | Active | Planned (#11) | Broken (#80) |
+| **riscv64** | Active | Supported (D1, C910, FU740, StarFive) | Broken (#80) |
+| **x86_64** | Legacy (#94) | Not supported | Broken (#80) |
 
-```
-_boot (boot.s:34) ............. MMU off, physical addrs
-  |
-  +-- Zero 4 page tables (boot.s:40-59)
-  +-- Populate L0/L1 page table entries (boot.s:61-122)
-  |     L1: 3 x 1 GiB block mappings:
-  |       [0] 0x00..0x40000000 (device, MAIR=0x04)
-  |       [1] 0x40..0x80000000 (normal, MAIR=0xFF)
-  |       [2] 0x80..0xC0000000 (normal, MAIR=0xFF)
-  |     Identity-mapped (TTBR0) AND high-mapped (TTBR1)
-  +-- Enable FP/SIMD (boot.s:126-128)
-  +-- Configure MAIR, TCR, TTBR0/TTBR1 (boot.s:135-183)
-  +-- Flush TLB (boot.s:186-188)
-  +-- Enable MMU + I-cache + D-cache (boot.s:191-196)
-  |
-  v
-_start_virtual (boot.s:214) ... MMU on, virtual addrs
-  |
-  +-- Zero BSS (boot.s:220-228)
-  +-- Set boot stack (32 KiB) (boot.s:231-233)
-  +-- Restore DTB pointer (boot.s:236)
-  |
-  v
-rust_main (entry.rs:19) ........ Rust code begins
-  |
-  +-- Build KernelConfig:
-  |     uart_base: 0x0900_0000
-  |     gic_base:  0x0800_0000
-  |     phys_to_virt_offset: 0xffff_0000_0000_0000
-  +-- Save offset in Once<usize> (consts.rs:8)
-  |
-  v
-primary_main (main.rs:39) ..... Common boot path
-```
-
-### Key Addresses
-
-| Constant            | Value                   |
-|---------------------|-------------------------|
-| Virtual base        | `0xffff_0000_4008_0000` |
-| Physical base       | `0x4008_0000`           |
-| Phys-to-virt offset | `0xffff_0000_0000_0000` |
-| UART (PL011)        | `0x0900_0000`           |
-| GIC (GICv2)         | `0x0800_0000`           |
-| Boot stack          | 32 KiB                  |
-
-### SMP
-
-Not implemented for AArch64. `secondary_main()` is excluded via
-`#[cfg(not(target_arch = "aarch64"))]`.
+After platform-specific initialization, all paths converge at
+`primary_main()` in `zCore/src/main.rs`, which branches into either
+Linux or Zircon personality mode.
 
 ---
 
-## RISC-V 64 Boot Sequence
+## Boot Modes
 
-### Prerequisites
+### QEMU (Emulated Hardware)
 
-OpenSBI or QEMU provides the SBI interface. The bootloader/SBI jumps to
-`_start` with `a0 = hartid`, `a1 = device_tree_paddr`.
+QEMU loads the kernel directly and starts execution. No user-facing
+firmware interaction is needed.
 
-### Boot Flow
+**aarch64:** QEMU loads the ELF via `-kernel`, sets CPU to EL1 with MMU
+off, places a DTB in memory, and jumps to the ELF entry point. The first
+zCore instruction is in `boot.s` (assembly).
 
-```
-_start (entry.rs:17) ........... Naked fn, MMU off
-  |
-  +-- select_stack(hartid) (entry.rs:105)
-  |     tp = hartid
-  |     sp = BOOT_STACK + (hartid+1) * 128 KiB
-  |
-  v
-primary_rust_main (entry.rs:43)  Rust code begins
-  |
-  +-- Zero BSS via r0::zero_bss (entry.rs:44-49)
-  +-- BOOT_PAGE_TABLE.init() (boot_page_table.rs:14)
-  |     Probe kernel physical location
-  |     Build Sv39 page table:
-  |       - Trampoline: identity-map 1 GiB mega-page
-  |         containing paddr_base
-  |       - Kernel: map 128 GiB physical -> virtual
-  |         at offset (0xffff_ffc0_0000_0000 region)
-  +-- BOOT_PAGE_TABLE.launch() (boot_page_table.rs:51)
-  |     Set satp = Sv39 | page_table_ppn
-  |     jump_higher(offset): relocate sp and ra
-  |     Set sstatus.SUM = 1
-  |
-  +-- Print boot info (entry.rs:64-76)
-  +-- boot_secondary_harts() (entry.rs:78)
-  |     Walk DTB /cpus/cpu@N nodes
-  |     For each non-boot hart: sbi_rt::hart_start()
-  +-- Build KernelConfig:
-  |     phys_to_virt_offset, dtb_paddr, dtb_size
-  |
-  v
-primary_main (main.rs:39) ...... Common boot path
-```
+**riscv64:** QEMU loads a raw binary via `-kernel` with `-bios default`
+(OpenSBI). OpenSBI runs at M-mode, initializes hardware, then jumps to
+the kernel at S-mode. The first zCore instruction is in `entry.rs`
+(inline assembly in a naked function).
 
-### Key Addresses
+**x86_64 (legacy):** QEMU boots UEFI firmware, which loads `rboot` (a
+Rust UEFI bootloader at `rboot/`). rboot loads the kernel ELF, sets up
+page tables, and jumps to the kernel. Not currently active (#94).
 
-| Constant            | Value                     |
-|---------------------|---------------------------|
-| Virtual base        | `0xffff_ffc0_8020_0000`   |
-| Physical base       | Runtime (from linker)     |
-| Phys-to-virt offset | `vaddr_base - paddr_base` |
-| Stack per hart      | 128 KiB (32 pages)        |
-| Max harts           | 5                         |
+### Real Hardware (riscv64 boards)
 
-### SMP
+Physical boards use SBI firmware (OpenSBI or vendor-specific) that runs
+at M-mode and provides the Supervisor Binary Interface. The kernel runs
+at S-mode. Board-specific firmware files are in `firmware/riscv/`.
 
-Implemented via SBI HSM extension. `boot_secondary_harts()` walks the DTB,
-finds CPU nodes with `status = "okay"`, and calls `sbi_rt::hart_start(hartid,
-start_addr, 0)`.
+| Board | Firmware | Feature flag |
+|-------|----------|-------------|
+| QEMU virt | OpenSBI (built into QEMU) | (default) |
+| Allwinner D1 | `firmware/riscv/d1_fw_payload.elf` | `board-d1` |
+| T-HEAD C910 Light | `firmware/riscv/c910_fw_dynamic.bin` | `board-c910light` |
+| SiFive FU740 | OpenSBI + `firmware/riscv/hifive-unmatched-a00.dtb` | `board-fu740` |
+| StarFive | OpenSBI + `firmware/riscv/starfive.dtb` | -- |
 
-Secondary harts enter `secondary_hart_start()` -> `select_stack()` ->
-`secondary_rust_main()` -> `BOOT_PAGE_TABLE.launch()` -> `secondary_main()`.
+### LibOS (Host OS Process)
 
-`secondary_main()` spin-waits on the `STARTED` atomic, then calls
-`kernel_hal::secondary_init()` and enters the executor loop.
+zCore is compiled as a regular userspace executable with `std`. The host
+OS loader starts it like any normal program. No assembly, no page tables,
+no bootloader. `main()` calls `primary_main()` directly.
 
 ---
 
-## x86_64 Boot Sequence
+## Platform Boot Sequences
 
-### Prerequisites
+### AArch64 (QEMU)
 
-The `rboot` UEFI bootloader handles all early setup: paging, memory map
-discovery, ACPI RSDP location, framebuffer initialization. It passes all
-information via a `BootInfo` struct.
-
-### Boot Flow
-
-```
-rboot (UEFI bootloader) ....... Sets up paging, etc.
-  |
+```text
+QEMU loads ELF via -kernel, sets EL1, MMU off, x0 = DTB ptr
+  │
   v
-_start(boot_info) (entry.rs:5)  Receives BootInfo
-  |
-  +-- Build KernelConfig from BootInfo:
-  |     cmdline, initramfs, memory_map,
-  |     physical_memory_offset, graphic_info,
-  |     acpi2_rsdp_addr, smbios_addr,
-  |     ap_fn: secondary_main
-  |
+_boot (boot.s) ................ Assembly, physical addresses
+  ├── Save DTB pointer (x0 -> x20)
+  ├── Zero 4 page table pages
+  ├── Build L0/L1 page tables (1 GiB block mappings):
+  │     Identity: 0x00..0xC0000000 (device + 2 GiB RAM)
+  │     High:     0xFFFF_0000_0000_0000..0xFFFF_0000_C000_0000
+  ├── Enable FP/SIMD
+  ├── Configure MAIR, TCR, TTBR0/TTBR1
+  ├── Enable MMU + caches
+  │
   v
-primary_main (main.rs:39) ...... Common boot path
+_start_virtual (boot.s) ....... Virtual addresses
+  ├── Zero BSS
+  ├── Set up 32 KiB boot stack
+  │
+  v
+rust_main (entry.rs) .......... Rust code begins
+  ├── Build KernelConfig (hardcoded QEMU virt constants)
+  │
+  v
+primary_main (main.rs)
 ```
 
-### Key Addresses
+**Key addresses:**
+- Physical base: `0x4008_0000`
+- Virtual base: `0xFFFF_0000_4008_0000`
+- UART (PL011): `0x0900_0000`
+- GIC (GICv2): `0x0800_0000`
 
-All addresses come from `rboot::BootInfo` at runtime. No hardcoded constants
-(consts.rs is empty).
+**First zCore instruction:** `mov x20, x0` (save DTB pointer) in `boot.s`
 
-### SMP
-
-`KernelConfig` includes `ap_fn: crate::secondary_main`. The HAL's x86_64
-implementation uses `x86-smpboot` to start Application Processors, calling this
-function pointer on each AP.
+**No SMP:** Secondary core boot is not implemented for aarch64.
 
 ---
 
-## LibOS Boot Sequence
+### RISC-V 64 (QEMU / Default)
 
-### Prerequisites
-
-None. Runs as a regular userspace process on a host OS (Linux or macOS). No
-bootloader, no assembly, no page tables.
-
-### Boot Flow
-
-```
-main() (entry.rs:2) ............ Normal Rust main()
-  |
+```text
+QEMU + OpenSBI (-bios default), S-mode, MMU off
+  a0 = hart ID, a1 = DTB physical address
+  │
   v
-primary_main(KernelConfig) ..... KernelConfig = ()
+_start (entry.rs) ............. Naked fn, inline asm
+  ├── select_stack(): set tp = hartid, sp = per-hart stack
+  │
+  v
+primary_rust_main (entry.rs) .. Rust code begins
+  ├── Zero BSS
+  ├── Build Sv39 page table:
+  │     Trampoline: identity-map 1 GiB containing kernel
+  │     High: 128 GiB physical -> virtual offset
+  ├── Enable MMU (write satp), jump to virtual addresses
+  ├── Validate DTB with dtb-walker
+  ├── Boot secondary harts via SBI HSM
+  ├── Build KernelConfig (dtb_paddr, phys_to_virt_offset)
+  │
+  v
+primary_main (main.rs)
 ```
 
-`KernelConfig` is an empty unit struct. The `#![no_std]` attribute is
-conditionally removed for libos mode.
+**Key addresses:**
+- Virtual base: `0xFFFF_FFC0_8020_0000` (default, set by `build.rs`)
+- Physical base: detected at runtime from linker symbols
 
-For full LibOS details, see [libos.md](libos.md).
+**First zCore instruction:** `call select_stack` in `_start` naked function
+
+**SMP:** Secondary harts boot via SBI HSM `hart_start()`, entering
+`secondary_hart_start` -> `secondary_rust_main` -> `secondary_main`.
+
+---
+
+### RISC-V 64 (C910 Light Board)
+
+Uses `boot.asm` (pure assembly) instead of the Rust-based boot for the
+default path. Activated by `feature = "board-c910light"`.
+
+```text
+SBI firmware (c910_fw_dynamic.bin), S-mode, MMU off
+  │
+  v
+_start (boot.asm) ............ Assembly
+  ├── Disable interrupts (sie = 0)
+  ├── Zero BSS
+  ├── Build Sv39 page tables (hardcoded 1 GiB mega-pages)
+  ├── Enable MMU (write satp)
+  ├── Set per-hart stack
+  │
+  v
+primary_rust_main (entry64.rs)  Rust code begins
+  ├── Boot secondary harts via SBI
+  │
+  v
+primary_main (main.rs)
+```
+
+**First zCore instruction:** `csrw sie, zero` in `boot.asm`
+
+---
+
+### x86_64 (UEFI via rboot) -- Legacy
+
+```text
+UEFI firmware loads rboot.efi
+  │
+  v
+rboot (Rust UEFI app) ......... Runs in UEFI environment
+  ├── Parse rboot.conf
+  ├── Load kernel ELF from ESP
+  ├── Load initramfs (optional)
+  ├── Set up page tables (4K pages, NX bit)
+  ├── Map all physical memory at 0xFFFF8000_00000000
+  ├── Exit UEFI boot services
+  ├── Set up kernel stack
+  │
+  v
+_start (entry.rs) ............. Rust code, MMU already on
+  ├── Build KernelConfig from BootInfo
+  │     (cmdline, initrd, memory map, ACPI RSDP, graphics)
+  │
+  v
+primary_main (main.rs)
+```
+
+**First zCore instruction:** First Rust statement in `_start` (no assembly
+needed -- rboot set up everything).
+
+**SMP:** AP startup function pointer passed in KernelConfig.
+
+**Status:** Not currently active. See #94 for restoration.
+
+---
+
+### LibOS (Host OS Process)
+
+```text
+Host OS loads zCore as a normal executable
+  │
+  v
+main (entry.rs) ............... Standard Rust main()
+  │
+  v
+primary_main (main.rs) ........ KernelConfig = () (empty)
+```
+
+**First zCore instruction:** `crate::primary_main(kernel_hal::KernelConfig)`
+
+No assembly, no page tables, no bootloader. The host OS provides all
+hardware abstraction. HAL uses `mmap`, `tmpfile`, `async-std`, and SDL
+for mock devices.
+
+**Status:** Currently broken for both Linux and Zircon modes (#80).
 
 ---
 
 ## Common Post-Boot Path
 
-All platforms converge at `primary_main()` in `zCore/src/main.rs:39`:
+All platforms converge at `primary_main()` in `zCore/src/main.rs`:
 
-| Step | Function             | Description              |
-|------|----------------------|--------------------------|
-| 1    | `logging::init()`    | Init log framework       |
-| 2    | `memory::init()`     | Seed buddy allocator     |
-|      |                      | with 2 MiB static block  |
-| 3    | `primary_init_early` | Store config + kernel    |
-|      | `(config, &handler)` | handler in globals       |
-| 4    | `boot_options()`     | Parse cmdline            |
-|      |                      | (`KEY=value:KEY=value`)  |
-| 5    | `set_max_level()`    | Set log level from       |
-|      |                      | `LOG=` option            |
-| 6    | `insert_regions`     | Register physical memory |
-|      | `(free_pmem)`        | with buddy allocator     |
-| 7    | `primary_init()`     | Full HAL initialization  |
-| 8    | `STARTED.store`      | Signal secondary cores   |
-|      | `(true)`             | to proceed               |
-| 9    | Launch userspace     | Linux: `linux::run()`     |
-|      |                      | Zircon: `run_userstart()` |
-| 10   | `wait_for_exit`      | Wait for root process    |
-
-### Memory Allocator
-
-On aarch64/riscv64, `memory.rs` provides a unified `BuddyAllocator` (from
-`customizable-buddy`) that serves as both `#[global_allocator]` (heap) and
-physical frame allocator. Bootstrapped with a 2 MiB static array, then expanded
-with physical memory regions from the HAL.
-
-On x86_64, `memory_x86_64.rs` uses two separate allocators:
-`buddy_system_allocator` for the heap and `bitmap-allocator` for frame
-tracking.
-
-### Personality Launch
-
-The personality is selected at compile time:
-
-```rust
-// main.rs:49-65
-cfg_if! {
-    if #[cfg(feature = "linux")] {
-        let rootfs = fs::rootfs();
-        let proc = linux_loader::linux::run(
-            args, envs, rootfs
-        );
-    } else if #[cfg(feature = "zircon")] {
-        let zbi = fs::zbi();
-        let proc = zircon_loader::zircon
-            ::run_userboot(zbi, cmdline);
-    }
-}
-```
-
-Both `linux` and `zircon` features cannot be enabled simultaneously (panics at
-compile time if both set).
+| Step | Function | Description |
+|------|----------|-------------|
+| 1 | `logging::init()` | Init log framework |
+| 2 | `memory::init()` | Seed buddy allocator with 2 MiB static block |
+| 3 | `primary_init_early(config, &handler)` | Store config, arch-specific early init |
+| 4 | `boot_options()` | Parse cmdline (`KEY=value:KEY=value`) |
+| 5 | `set_max_level()` | Set log level from `LOG=` option |
+| 6 | `insert_regions(free_pmem)` | Register physical memory with allocator |
+| 7 | `primary_init()` | Full HAL initialization |
+| 8 | `STARTED.store(true)` | Signal secondary cores to proceed |
+| 9 | Launch userspace | Linux or Zircon (see below) |
+| 10 | `wait_for_exit` | Wait for root process |
 
 ---
 
-## Zircon Boot Protocol
+## Personality Launch
 
-When zCore boots in Zircon mode, it must launch the Fuchsia userspace. This
-involves several components that bridge the kernel and userspace worlds.
+The personality is selected at compile time via mutually exclusive features:
 
-### Architecture Overview
+### Linux Mode (`--features linux`)
 
-```text
-┌─────────────────────────────────────────────────────┐
-│  petal test programs / Fuchsia userspace             │
-│  Simple test programs using zircon-abi syscall       │
-│  wrappers, or full Fuchsia services (drivers,       │
-│  filesystems, component manager, etc.)              │
-├─────────────────────────────────────────────────────┤
-│  userstart (first userspace process)                │
-│  Kernel-generated code that writes a debug message  │
-│  and exits. Future: loads programs from ZBI bootfs. │
-│  Replaces Fuchsia's userboot (see #121).            │
-├═════════════════════════════════════════════════════╡
-│  KERNEL  (zCore -- this project)                    │
-│  Zircon kernel objects: Process, Thread, VMO,       │
-│  Channel, VMAR, Port, Futex, etc.                   │
-│  Syscall handlers (zCore/zircon-syscall/)            │
-│  HAL, drivers, async executor                       │
-└─────────────────────────────────────────────────────┘
+```rust
+let rootfs = fs::rootfs();  // SFS image, initrd, or host FS
+let proc = linux_loader::linux::run(args, envs, rootfs);
 ```
 
-**Key insight:** Fuchsia is a microkernel OS. Everything above the kernel is
-userspace -- device drivers, filesystems, networking, the component framework.
-zCore replaces the Zircon kernel. If it implements the same syscalls with the
-same ABI, real Fuchsia userspace programs run on it unchanged.
+The kernel directly loads the init program (busybox) from a filesystem,
+parses the ELF, maps it into a process, and starts it. All Linux syscall
+handling (VFS, signals, networking, etc.) runs in kernel space.
 
-### The Bootstrap Sequence
+**Rootfs sources by platform:**
+- aarch64 QEMU: SFS image on VirtIO block device (`-drive`)
+- riscv64 QEMU: SFS image as initrd (`-initrd`)
+- LibOS: Host filesystem passthrough (HostFS)
 
-`run_userstart()` in `zCore/zircon-loader/src/zircon.rs` implements the
-kernel side. `run_userboot()` is a backward-compatible alias.
+### Zircon Mode (`--features zircon`)
+
+```rust
+let zbi = fs::zbi();  // embedded at compile time
+let proc = zircon_loader::zircon::run_userstart(zbi, &cmdline);
+```
+
+The kernel loads the **userstart** ELF (embedded at compile time) as the
+first userspace process. Userstart then runs in userspace making Zircon
+syscalls to bootstrap the system:
 
 ```text
-run_userstart(zbi_data, cmdline)
+Kernel
+  ├── Loads userstart ELF, maps into process
+  ├── Packs 15 bootstrap handles into a channel
+  ├── Starts userstart thread
   │
-  ├── 1. Load userstart ELF (embedded at compile time)
-  ├── 2. Parse ELF headers, map segments into process VMAR
-  ├── 3. Create stub vDSO VMO (placeholder)
-  ├── 4. Create ZBI VMO from boot image data
-  ├── 5. Set up 32 KiB user stack
-  ├── 6. Create channel pair (user_channel, kernel_channel)
-  ├── 7. Pack 15 handles onto kernel_channel:
-  │        [0]  PROC_SELF          Process handle
-  │        [1]  VMARROOT_SELF      Root VMAR
-  │        [2]  ROOTJOB            Root job
-  │        [3]  ROOTRESOURCE       Root resource
-  │        [4]  ZBI                ZBI VMO
-  │        [5-7] VDSO              vDSO VMOs (stubs)
-  │        [8]  CRASHLOG           Crash log VMO
-  │        [9]  COUNTER_NAMES      Kernel counter descriptors
-  │        [10] COUNTERS           Kernel counter arena
-  │        [11-14] INSTRUMENTATION Profiling VMOs (stubs)
-  └── 8. Start thread at userstart ELF entry point with user_channel
+  v
+Userstart (userspace, zCore/userstart/)
+  ├── Reads bootstrap handles via zx_channel_read
+  ├── Maps ZBI VMO, parses bootfs
+  ├── Finds init program (e.g., bin/hello)
+  ├── Creates child process, maps code, creates stack
+  ├── Forwards handles to init via a new channel
+  ├── Starts init and waits for it to exit
+  │
+  v
+Init program (userspace, petal/)
+  ├── main() runs
+  ├── Exits via zx_process_exit
+  │
+  v
+Userstart exits -> kernel shuts down
 ```
 
-Userstart then runs in userspace (see `zCore/userstart/src/main.rs`):
-1. Reads the 15 bootstrap handles via `zx_channel_read`
-2. Maps the ZBI VMO and parses the bootfs to find the init program
-3. Creates a new process, maps the init code, creates a stack
-4. Forwards selected bootstrap handles to init via a new channel
-5. Starts the init process and waits for it to exit
-6. Shuts down when init terminates
+**ZBI source:** Embedded at compile time via `include_bytes!(env!("PETAL_ZBI"))`.
+Runtime ZBI loading via DTB initrd is tracked in #136.
 
-The init program (e.g., petal's `hello`) receives a startup handle
-(channel) containing forwarded bootstrap handles. Petal programs
-define `pub fn main()` with the petal runtime providing `_start`.
+---
 
-### Syscall ABI
+## Pre-primary_main Setup Comparison
 
-The `zircon-abi` crate (`zCore/zircon-abi/`) defines the Zircon syscall ABI
-for userspace programs:
-
-- **Syscall numbers** matching `zx-syscall-numbers.h` from Zircon
-- **Error codes** matching `zx_status_t`
-- **Inline syscall wrappers** using `svc #0` (aarch64), `syscall` (x86_64),
-  or `ecall` (riscv64) instructions
-- **Safe wrappers** like `debug_write(&[u8])`, `debug_print(&str)`,
-  `process_exit(i64)` -- no `unsafe` needed at call site
-- **ZBI format** parsing and construction
-
-Userstart and petal programs use these inline wrappers instead of a vDSO
-shared library. The syscall instruction traps into the kernel, which
-dispatches via the trap loop in `zCore/zircon-loader/src/zircon.rs`.
-
-### Legacy: Fuchsia Prebuilt Binaries
-
-The original approach required prebuilt Fuchsia binaries (`userboot.so`,
-`libzircon.so`, `bringup.zbi`) generated from the Fuchsia source tree.
-This dependency has been replaced by the self-contained userstart approach.
-For running real Fuchsia userspace programs on zCore (ABI compatibility
-testing), see #122.
+| Setup | aarch64 | riscv64 | x86_64 | LibOS |
+|-------|---------|---------|--------|-------|
+| **Page tables** | Assembly (1G blocks) | Rust (Sv39 mega-pages) | rboot (4K pages) | Host OS |
+| **MMU enable** | Assembly | Rust (`satp`) | Already on (UEFI) | Already on |
+| **BSS zeroing** | Assembly | Rust (`r0::zero_bss`) | rboot/loader | Host OS |
+| **Stack setup** | Assembly (32 KiB) | Naked fn (32 pages/hart) | rboot (512 pages) | Host OS |
+| **FP/SIMD** | Assembly | N/A | UEFI enables | Host OS |
+| **SMP boot** | None | SBI HSM | AP fn pointer | None |
+| **DTB parsing** | Not yet (#136) | `dtb-walker` crate | N/A (ACPI) | N/A |
+| **First instruction** | `mov x20, x0` | `call select_stack` | Rust statement | Rust `main()` |
