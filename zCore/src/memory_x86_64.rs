@@ -53,9 +53,9 @@ pub fn frame_alloc(frame_count: usize, align_log2: usize) -> Option<PhysAddr> {
 
 pub fn frame_dealloc(target: PhysAddr) {
     trace!("frame_dealloc(): {target:x}");
-    FRAME_ALLOCATOR
+    let _ = FRAME_ALLOCATOR
         .lock()
-        .dealloc(phys_addr_to_frame_idx(target))
+        .dealloc(phys_addr_to_frame_idx(target));
 }
 
 cfg_if! {
@@ -128,6 +128,7 @@ cfg_if! {
     }
 }
 
+#[allow(unexpected_cfgs)]
 #[cfg(feature = "hypervisor")]
 mod rvm_extern_fn {
     use super::*;

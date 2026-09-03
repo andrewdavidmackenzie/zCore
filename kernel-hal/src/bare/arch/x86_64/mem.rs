@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::arch::x86_64::{__cpuid, _mm_clflush, _mm_mfence};
 use core::ops::Range;
 
-use uefi::table::boot::MemoryType;
+use super::config::MemoryType;
 
 use crate::{mem::phys_to_virt, PhysAddr, KCONFIG, PAGE_SIZE};
 
@@ -11,7 +11,7 @@ pub fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
         .memory_map
         .iter()
         .filter_map(|r| {
-            if r.ty == MemoryType::CONVENTIONAL {
+            if r.memory_type == MemoryType::Conventional {
                 let start = r.phys_start as usize;
                 let end = start + r.page_count as usize * PAGE_SIZE;
                 Some(start..end)
@@ -24,7 +24,7 @@ pub fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
 
 // Get cache line size in bytes.
 fn cacheline_size() -> usize {
-    let leaf = unsafe { __cpuid(1).ebx };
+    let leaf = __cpuid(1).ebx;
     (((leaf >> 8) & 0xff) << 3) as usize
 }
 

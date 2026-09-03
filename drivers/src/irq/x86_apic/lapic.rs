@@ -13,9 +13,11 @@ pub struct LocalApic {
 
 impl LocalApic {
     pub unsafe fn get<'a>() -> &'a mut LocalApic {
-        LOCAL_APIC
-            .as_mut()
-            .expect("Local APIC is not initialized by BSP")
+        unsafe {
+            (*core::ptr::addr_of_mut!(LOCAL_APIC))
+                .as_mut()
+                .expect("Local APIC is not initialized by BSP")
+        }
     }
 
     pub unsafe fn init_bsp(phys_to_virt: Phys2VirtFn) {
@@ -30,8 +32,10 @@ impl LocalApic {
         inner.enable();
 
         assert!(inner.is_bsp());
-        BSP_ID = Some((inner.id() >> 24) as u8);
-        LOCAL_APIC = Some(LocalApic { inner });
+        unsafe {
+            *core::ptr::addr_of_mut!(BSP_ID) = Some((inner.id() >> 24) as u8);
+            *core::ptr::addr_of_mut!(LOCAL_APIC) = Some(LocalApic { inner });
+        }
     }
 
     pub unsafe fn init_ap() {
@@ -39,7 +43,7 @@ impl LocalApic {
     }
 
     pub fn bsp_id() -> u8 {
-        unsafe { BSP_ID.unwrap() }
+        unsafe { (*core::ptr::addr_of!(BSP_ID)).unwrap() }
     }
 
     pub fn id(&mut self) -> u8 {

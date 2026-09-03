@@ -71,7 +71,7 @@ zircon-loader = { path = "zircon-loader", optional = true }
 linux-loader = { path = "linux-loader", optional = true }
 linux-object = { path = "linux-object", optional = true }
 
-lock = { git = "https://github.com/DeathWish5/kernel-sync", rev = "8486b8" }
+lock = { path = "lock" }
 executor = { path = "executor" }
 rcore-fs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
 rcore-fs-sfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
@@ -100,5 +100,5 @@ sbi-rt = { version = "0.0.2", features = ["legacy"] }
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
 bitmap-allocator = "0.4"
 buddy_system_allocator = "0.8"
-rboot = { git = "https://github.com/rcore-os/rboot.git", rev = "ad21575", default-features = false }
+# rboot removed -- see #148 for bootloader replacement
 # rvm = { git = "https://github.com/rcore-os/RVM", rev = "e91d625", optional = true }

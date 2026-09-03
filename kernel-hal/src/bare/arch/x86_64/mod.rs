@@ -36,23 +36,10 @@ pub fn primary_init_early() {
 pub fn primary_init() {
     drivers::init().unwrap();
 
-    let stack_fn = |pid: usize| -> usize {
-        // split and reuse the current stack
-        let mut stack: usize;
-        unsafe { core::arch::asm!("mov {}, rsp", out(reg) stack) };
-        stack -= 0x4000 * pid;
-        stack
-    };
-    unsafe {
-        // enable global page
-        Cr4::update(|f| f.insert(Cr4Flags::PAGE_GLOBAL));
-        // start multi-processors
-        x86_smpboot::start_application_processors(
-            || (crate::KCONFIG.ap_fn)(),
-            stack_fn,
-            phys_to_virt,
-        );
-    }
+    // enable global page
+    unsafe { Cr4::update(|f| f.insert(Cr4Flags::PAGE_GLOBAL)) };
+    // TODO: SMP boot -- x86_smpboot was removed (old dependency).
+    // Need to implement AP startup or find a replacement. See #94.
 }
 
 pub fn timer_init() {

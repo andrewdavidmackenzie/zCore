@@ -1,25 +1,21 @@
-use kernel_hal::KernelConfig;
-use rboot::BootInfo;
+// x86_64 entry point -- placeholder until bootloader integration (#148).
+//
+// The previous entry expected rboot's BootInfo struct. That dependency
+// has been removed. A new bootloader integration is needed.
+
+// TODO: This entry point needs a proper bootloader to call it.
+// Options being evaluated in #148:
+// - bootloader crate (multiboot2 + UEFI)
+// - rboot (updated to current uefi crate)
+// - custom multiboot2 stub
+//
+// For now this is a minimal placeholder that allows the kernel to compile
+// for x86_64 but cannot actually boot.
 
 #[no_mangle]
-pub extern "C" fn _start(boot_info: &'static BootInfo) -> ! {
-    let info = boot_info.graphic_info;
-    let config = KernelConfig {
-        cmdline: boot_info.cmdline,
-        initrd_start: boot_info.initramfs_addr,
-        initrd_size: boot_info.initramfs_size,
-
-        memory_map: boot_info.memory_map.as_slice(),
-        phys_to_virt_offset: boot_info.physical_memory_offset as _,
-
-        fb_mode: info.mode,
-        fb_addr: info.fb_addr,
-        fb_size: info.fb_size,
-
-        acpi_rsdp: boot_info.acpi2_rsdp_addr,
-        smbios: boot_info.smbios_addr,
-        ap_fn: crate::secondary_main,
-    };
-    crate::primary_main(config);
-    unreachable!()
+pub extern "C" fn _start() -> ! {
+    // No bootloader provides BootInfo yet.
+    loop {
+        unsafe { core::arch::asm!("hlt") };
+    }
 }
