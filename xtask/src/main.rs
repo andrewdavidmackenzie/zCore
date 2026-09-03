@@ -9,6 +9,7 @@ mod dump;
 mod arch;
 mod build;
 mod commands;
+mod config;
 mod errors;
 mod linux;
 mod petal;
