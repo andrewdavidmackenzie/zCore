@@ -209,7 +209,7 @@ endif
 # Run clippy on all workspace crates.
 # Step 1: kernel + OS crates via the custom bare-metal target.
 #         Each package is listed explicitly so --no-deps can skip
-#         third-party crates (executor, region-alloc) that we don't own.
+#         shared crates (executor, region-alloc).
 # Step 2: host-side tools (xtask, region-alloc) via native target.
 clippy:
 	@echo "==> Clippy: kernel crates ($(ARCH))..."

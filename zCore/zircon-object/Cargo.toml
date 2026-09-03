@@ -32,7 +32,7 @@ futures = { version = "0.3", default-features = false, features = [
     "async-await",
 ] }
 xmas-elf = { version = "0.7", optional = true }
-region-alloc = { path = "../../third-party/region-alloc" }
+region-alloc = { path = "../region-alloc" }
 lazy_static = { version = "1.4", features = ["spin_no_std"] }
 cfg-if = "1.0"
 #rvm = { git = "https://github.com/rcore-os/RVM", rev = "382fc60", optional = true }
