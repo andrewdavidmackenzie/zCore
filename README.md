@@ -80,7 +80,7 @@ Prerequisites: Rust nightly, QEMU, and `aarch64-linux-musl-gcc`
 
 ```text
 ┌────────────┐ ┌─────────────┐ ┌─────────────┐
-| update-all | | check-style | | zircon-init |
+| update-all | | check-style | |
 └────────────┘ └─────────────┘ └─────────────┘
 ┌─────┐ ┌──────┐  ┌─────┐  ┌─────────────┐ ┌─────────────────┐
 | asm | | qemu |─→| bin |  | linux-libos | | libos-libc-test |
@@ -130,14 +130,6 @@ cargo update-all
 
 ```bash
 cargo check-style
-```
-
-#### **zircon-init**
-
-下载 zircon 模式所需的二进制文件。
-
-```bash
-cargo zircon-init
 ```
 
 #### **asm**

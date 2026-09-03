@@ -67,7 +67,7 @@ make run LINUX=1 ARCH=riscv64 \
     ```sh
     rust-objcopy \
         --binary-architecture=riscv64 \
-        ../firmware/d1/fw_payload.elf \
+        ../firmware/riscv/d1_fw_payload.elf \
         --strip-all -O binary ./zcore_d1.bin
     dd if=../target/riscv64/release/zcore.bin \
         of=zcore_d1.bin bs=512 seek=2048
