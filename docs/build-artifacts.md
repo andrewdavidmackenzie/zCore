@@ -152,7 +152,7 @@ not require UEFI firmware for aarch64.
   for riscv64- linux-musl. ~103 MB compressed, ~357 MB extracted. Linux-host
   only (macOS uses Homebrew).
 - `prebuilt.tar.xz`: Zircon prebuilt binaries (userboot.so, libzircon.so,
-  bringup.zbi) for x86_64. No longer used -- superseded by userstart (#121)
+  bringup.zbi) for x86_64. Legacy x86_64 path only (not active). Superseded by userstart (#121) for aarch64
   since Zircon mode and x86_64 are not active. Would be used if x86_64 is
   resurrected (see
   [#94](https://github.com/andrewdavidmackenzie/zCore/issues/94)).
