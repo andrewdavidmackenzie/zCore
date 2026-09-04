@@ -16,11 +16,11 @@ zCore supports three execution modes and three CPU architectures:
 | **Real hardware** | Physical boards (riscv64 only currently)          |
 | **LibOS**         | Runs as a host OS process (Linux/macOS)           |
 
-| Architecture | QEMU         | Real hardware                         | LibOS        |
-|--------------|--------------|---------------------------------------|--------------|
-| **aarch64**  | Active       | Planned (#11)                         | Broken (#80) |
-| **riscv64**  | Active       | Supported (D1, C910, FU740, StarFive) | Broken (#80) |
-| **x86_64**   | Legacy (#94) | Not supported                         | Broken (#80) |
+| Architecture | QEMU               | Real hardware                         | LibOS        |
+|--------------|--------------------|---------------------------------------|--------------|
+| **aarch64**  | Active             | Planned (#11)                         | Broken (#80) |
+| **riscv64**  | Active             | Supported (D1, C910, FU740, StarFive) | Broken (#80) |
+| **x86_64**   | Active (BIOS boot) | Not yet supported                     | Broken (#80) |
 
 After platform-specific initialization, all paths converge at
 `primary_main()` in `zCore/src/main.rs`, which branches into either
@@ -45,9 +45,11 @@ implemented (#136). The first zCore instruction is in `boot.s` (assembly).
 the kernel at S-mode. The first zCore instruction is in `entry.rs`
 (inline assembly in a naked function).
 
-**x86_64 (legacy):** QEMU boots UEFI firmware, which loads `rboot` (a
-Rust UEFI bootloader at `rboot/`). rboot loads the kernel ELF, sets up
-page tables, and jumps to the kernel. Not currently active (#94).
+**x86_64:** QEMU boots via BIOS using the `bootloader` crate (v0.11).
+The bootloader handles page table setup, physical memory mapping, and
+passes `BootInfo` to the kernel. A boot image is created by the
+`tools/x86-bootimage` helper tool. The kernel boots fully but requires
+a rootfs to run userspace programs.
 
 ### Real Hardware
 
@@ -82,7 +84,7 @@ See the "AArch64 (Raspberry Pi)" section below. Not yet implemented (#11).
 #### x86_64 hardware
 
 See the "x86_64 (Real Hardware / UEFI Laptop)" section below.
-Not yet implemented (#94).
+QEMU works via BIOS boot; real hardware needs UEFI (#148).
 
 ### LibOS (Host OS Process)
 
@@ -240,19 +242,18 @@ primary_main (main.rs)
 
 ### x86_64 (Real Hardware / UEFI Laptop) -- Planned
 
-**Status:** Not yet implemented. Depends on #94 (resurrect x86_64).
+**Status:** QEMU works via BIOS boot. Real hardware needs UEFI support
+which is tracked in #148.
 
-Real hardware requires a UEFI bootloader since PCs boot via UEFI
-firmware. Options being considered (#94):
-- **rboot** (existing Rust UEFI app in `rboot/`)
-- **bootloader** crate (crates.io, widely used in Rust OS projects)
-- **limine** (popular multiplatform bootloader)
+Real hardware requires a UEFI bootloader since modern PCs boot via UEFI.
+The `bootloader` crate supports both BIOS and UEFI; enabling UEFI mode
+requires the `x86_64-unknown-uefi` Rust target.
 
 ```text
 UEFI firmware (laptop/PC)
   │  Loads bootloader .efi from ESP
   v
-Bootloader (rboot or alternative)
+Bootloader (bootloader crate, UEFI mode)
   ├── Load kernel ELF from ESP
   ├── Set up page tables, memory map
   ├── Exit UEFI boot services
@@ -263,44 +264,51 @@ primary_main (main.rs)
 ```
 
 **Required work:**
-- Restore x86_64 build path (#94)
-- Decide on bootloader strategy (rboot vs alternatives)
+- Enable UEFI mode in the `bootloader` crate (#148)
 - ACPI table parsing for device discovery
 - Real hardware drivers (NVMe, USB, framebuffer)
 - Secure Boot support (optional)
 
 ---
 
-### x86_64 (UEFI via rboot) -- Legacy
+### x86_64 (BIOS via bootloader crate)
 
 ```text
-UEFI firmware loads rboot.efi
+SeaBIOS (QEMU built-in BIOS)
   │
   v
-rboot (Rust UEFI app) ......... Runs in UEFI environment
-  ├── Parse rboot.conf
-  ├── Load kernel ELF from ESP
-  ├── Load initramfs (optional)
-  ├── Set up page tables (4K pages, NX bit)
-  ├── Map all physical memory at 0xFFFF8000_00000000
-  ├── Exit UEFI boot services
-  ├── Set up kernel stack
+bootloader crate (v0.11) ...... Multi-stage BIOS bootloader
+  ├── Stage 2: real mode -> protected mode
+  ├── Stage 3: set up page tables (4-level, NX bit)
+  ├── Stage 4: load kernel ELF, map physical memory
+  │     Map all physical memory at 0xFFFF_8000_0000_0000
+  │     Map kernel at 0xFFFF_FFFF_8000_0000
+  ├── Switch to long mode (64-bit)
   │
   v
-_start (entry.rs) ............. Rust code, MMU already on
-  ├── Build KernelConfig from BootInfo
-  │     (cmdline, initrd, memory map, ACPI RSDP, graphics)
+kernel_main (entry.rs) ........ Rust code, MMU already on
+  ├── Translate bootloader_api::BootInfo to KernelConfig
+  │     (memory regions, framebuffer, RSDP, ramdisk)
   │
   v
 primary_main (main.rs)
 ```
 
-**First zCore instruction:** First Rust statement in `_start` (no assembly
-needed -- rboot set up everything).
+**Boot image creation:** The `tools/x86-bootimage` helper tool uses the
+`bootloader` crate to create a BIOS-bootable disk image from the kernel
+ELF. Run via xtask: `cargo qemu --arch x86_64`.
 
-**SMP:** AP startup function pointer passed in KernelConfig.
+**Key addresses:**
+- Kernel base: `0xFFFF_FFFF_8000_0000` (upper 2 GB, kernel code model)
+- Physical memory: `0xFFFF_8000_0000_0000` (direct map)
 
-**Status:** Not currently active. See #94 for restoration.
+**First zCore instruction:** First Rust statement in `kernel_main` (no
+assembly needed -- bootloader set up page tables and long mode).
+
+**SMP:** Not currently implemented (x86-smpboot dependency removed).
+
+**QEMU flags:** `-machine q35 -cpu qemu64,+fsgsbase` (fsgsbase required
+by the trapframe crate).
 
 ---
 
@@ -410,10 +418,10 @@ Runtime ZBI loading via DTB initrd is tracked in #136.
 
 | Setup                 | aarch64              | riscv64                  | x86_64            | LibOS         |
 |-----------------------|----------------------|--------------------------|-------------------|---------------|
-| **Page tables**       | Assembly (1G blocks) | Rust (Sv39 mega-pages)   | rboot (4K pages)  | Host OS       |
+| **Page tables**       | Assembly (1G blocks) | Rust (Sv39 mega-pages)   | bootloader crate  | Host OS       |
 | **MMU enable**        | Assembly             | Rust (`satp`)            | Already on (UEFI) | Already on    |
-| **BSS zeroing**       | Assembly             | Rust (`r0::zero_bss`)    | rboot/loader      | Host OS       |
-| **Stack setup**       | Assembly (32 KiB)    | Naked fn (32 pages/hart) | rboot (512 pages) | Host OS       |
+| **BSS zeroing**       | Assembly             | Rust (`r0::zero_bss`)    | bootloader        | Host OS       |
+| **Stack setup**       | Assembly (32 KiB)    | Naked fn (32 pages/hart) | bootloader        | Host OS       |
 | **FP/SIMD**           | Assembly             | N/A                      | UEFI enables      | Host OS       |
 | **SMP boot**          | None                 | SBI HSM                  | AP fn pointer     | None          |
 | **DTB parsing**       | Not yet (#136)       | `dtb-walker` crate       | N/A (ACPI)        | N/A           |
