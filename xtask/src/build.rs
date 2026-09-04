@@ -253,18 +253,43 @@ impl QemuArgs {
                 }
             }
             Arch::X86_64 => {
-                // TODO(#148): Create a proper bootable disk image using the
-                // bootloader crate. For now, pass the ELF directly with -kernel
-                // which won't actually boot (no multiboot header), but allows
-                // the xtask code path to exist without panicking.
-                eprintln!(
-                    "WARNING: x86_64 QEMU boot is not yet functional.\n\
-                     The kernel ELF needs a bootable disk image (see #148)."
-                );
+                // Create a bootable BIOS disk image using the x86-bootimage tool
+                let disk_image = PROJECT_DIR
+                    .join("target/x86_64")
+                    .join(if self.debug { "debug" } else { "release" })
+                    .join("boot.img");
+
+                let bootimage_tool =
+                    PROJECT_DIR.join("tools/x86-bootimage/target/release/x86-bootimage");
+                if !bootimage_tool.exists() {
+                    println!("Building x86-bootimage tool...");
+                    let status = std::process::Command::new("cargo")
+                        .args(["build", "--release"])
+                        .arg("--manifest-path")
+                        .arg(PROJECT_DIR.join("tools/x86-bootimage/Cargo.toml"))
+                        .status()
+                        .expect("failed to build x86-bootimage tool");
+                    if !status.success() {
+                        panic!("x86-bootimage tool build failed");
+                    }
+                }
+
+                println!("Creating x86_64 boot image...");
+                let status = std::process::Command::new(&bootimage_tool)
+                    .arg(&obj)
+                    .arg(&disk_image)
+                    .status()
+                    .expect("failed to run x86-bootimage");
+                if !status.success() {
+                    panic!("boot image creation failed");
+                }
+
                 qemu.args(["-machine", "q35"])
                     .args(["-serial", "mon:stdio"])
-                    .arg("-kernel")
-                    .arg(&obj);
+                    .args([
+                        "-drive",
+                        &format!("format=raw,file={}", disk_image.display()),
+                    ]);
             }
             Arch::Aarch64 => {
                 // Direct kernel boot: QEMU loads the ELF directly, no UEFI

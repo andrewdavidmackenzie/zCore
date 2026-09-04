@@ -1,0 +1,9 @@
+[package]
+name = "x86-bootimage"
+version = "0.1.0"
+edition = "2021"
+description = "Helper tool to create x86_64 bootable disk images"
+
+[dependencies]
+bootloader = { version = "0.11", default-features = false, features = ["bios"] }
+anyhow = "1"
