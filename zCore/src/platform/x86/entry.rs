@@ -20,9 +20,15 @@ static mut MEMORY_REGIONS: [MemoryRegion; MAX_MEMORY_REGIONS] = [MemoryRegion {
 static mut MEMORY_REGION_COUNT: usize = 0;
 
 /// Bootloader configuration: map all physical memory at a fixed offset.
+/// The kernel stack must be in the upper half so that user page tables
+/// (which only clone PML4 entries 0x100..0x200) can still access it.
 const BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
     config.mappings.physical_memory = Some(Mapping::FixedAddress(0xFFFF_8000_0000_0000));
+    // Place kernel stack in the upper half, just below the kernel image.
+    // The kernel image is at 0xFFFF_FFFF_8000_0000, so we put the stack
+    // at 0xFFFF_FFFF_7FFE_0000 (128KB below the kernel base).
+    config.mappings.kernel_stack = Mapping::FixedAddress(0xFFFF_FFFF_7FFE_0000);
     config
 };
 

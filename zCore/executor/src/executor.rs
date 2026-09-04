@@ -60,7 +60,8 @@ impl Executor {
         pin_executor.init_stack_and_context();
 
         trace!(
-            "stack top 0x{:x} executor addr 0x{:x}, pgbr = 0x{:x}",
+            "Executor::new: stack_base={:#x}, stack_top(ctx)={:#x}, rip={:#x}, cr3={:#x}",
+            pin_executor.stack_base,
             pin_executor.context.get_sp(),
             pin_executor.context.get_pc(),
             pin_executor.context.get_pgbr(),
