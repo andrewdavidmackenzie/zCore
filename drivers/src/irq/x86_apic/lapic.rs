@@ -12,6 +12,9 @@ pub struct LocalApic {
 }
 
 impl LocalApic {
+    /// # Safety
+    /// Caller must ensure no other references to the APIC exist.
+    /// In practice, this is only called from interrupt-disabled contexts.
     pub unsafe fn get<'a>() -> &'a mut LocalApic {
         unsafe {
             (*core::ptr::addr_of_mut!(LOCAL_APIC))

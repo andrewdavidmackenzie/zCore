@@ -253,11 +253,14 @@ impl QemuArgs {
                 }
             }
             Arch::X86_64 => {
-                // x86_64 uses the bootloader crate to create a bootable image.
-                // The image must be built separately:
-                //   cargo bootimage --target zCore/x86_64.json
-                // For now, just try to launch with -kernel (multiboot).
-                // TODO: proper bootloader image creation (#148)
+                // TODO(#148): Create a proper bootable disk image using the
+                // bootloader crate. For now, pass the ELF directly with -kernel
+                // which won't actually boot (no multiboot header), but allows
+                // the xtask code path to exist without panicking.
+                eprintln!(
+                    "WARNING: x86_64 QEMU boot is not yet functional.\n\
+                     The kernel ELF needs a bootable disk image (see #148)."
+                );
                 qemu.args(["-machine", "q35"])
                     .args(["-serial", "mon:stdio"])
                     .arg("-kernel")

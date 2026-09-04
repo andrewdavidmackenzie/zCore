@@ -50,11 +50,20 @@ fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
     let framebuffer = match &boot_info.framebuffer {
         Optional::Some(fb) => {
             let info = fb.info();
+            // The buffer pointer is a virtual address. To get the physical address,
+            // subtract the physical_memory_offset. If offset is not available,
+            // use the virtual address (it will still work for MMIO framebuffers
+            // since the bootloader maps them identity or at the phys offset).
+            let vaddr = fb.buffer().as_ptr() as u64;
+            let phys_addr = match boot_info.physical_memory_offset {
+                Optional::Some(offset) => vaddr - offset,
+                Optional::None => vaddr,
+            };
             Some(FramebufferInfo {
                 width: info.width as u32,
                 height: info.height as u32,
                 stride: info.stride as u32,
-                addr: fb.buffer().as_ptr() as u64,
+                addr: phys_addr,
                 size: fb.buffer().len() as u64,
             })
         }
