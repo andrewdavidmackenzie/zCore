@@ -42,8 +42,16 @@ pub fn primary_init_early() {
 pub fn primary_init() {
     drivers::init().unwrap();
 
-    // enable global page
-    unsafe { Cr4::update(|f| f.insert(Cr4Flags::PAGE_GLOBAL)) };
+    // enable global page and SSE support for user-space programs
+    unsafe {
+        Cr4::update(|f| {
+            f.insert(Cr4Flags::PAGE_GLOBAL);
+            // Enable SSE: user-space programs (e.g. busybox compiled with SSE2)
+            // will #UD on any SSE instruction without these flags.
+            f.insert(Cr4Flags::OSFXSR); // enable FXSAVE/FXRSTOR
+            f.insert(Cr4Flags::OSXMMEXCPT_ENABLE); // enable SSE exceptions
+        });
+    }
     // TODO: SMP boot -- x86_smpboot was removed (old dependency).
     // Need to implement AP startup or find a replacement. See #94.
 }
