@@ -6,6 +6,5 @@ description = "Helper tool to create x86_64 bootable disk images"
 
 [dependencies]
 # Default features include both bios and uefi.
-# UEFI build requires x86_64-unknown-uefi target (may fail on non-x86 hosts).
-bootloader = "0.11"
+bootloader = { version = "0.11", default-features = false, features = ["bios"] }
 anyhow = "1"
