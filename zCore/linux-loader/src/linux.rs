@@ -35,7 +35,10 @@ pub fn run(args: Vec<String>, envs: Vec<String>, rootfs: Arc<dyn FileSystem>) ->
     debug!("current pgt = {:#x}", pg_token);
     // Load the ELF and configure the thread's entry point and stack
     let (entry, sp, initial_brk) = loader.load(&proc.vmar(), &data, args, envs, path).unwrap();
-    debug!("ELF loaded: entry={:#x}, sp={:#x}, brk={:#x}", entry, sp, initial_brk);
+    debug!(
+        "ELF loaded: entry={:#x}, sp={:#x}, brk={:#x}",
+        entry, sp, initial_brk
+    );
     proc.linux().set_brk(initial_brk);
 
     thread
