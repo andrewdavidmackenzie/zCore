@@ -285,6 +285,7 @@ impl QemuArgs {
                 }
 
                 qemu.args(["-machine", "q35"])
+                    .args(["-cpu", "qemu64,+fsgsbase"])
                     .args(["-serial", "mon:stdio"])
                     .args([
                         "-drive",
