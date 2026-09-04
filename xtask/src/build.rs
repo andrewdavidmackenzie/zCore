@@ -284,6 +284,13 @@ impl QemuArgs {
                     panic!("boot image creation failed");
                 }
 
+                if !is_zircon {
+                    eprintln!(
+                        "WARNING: x86_64 Linux rootfs is not yet supported.\n\
+                         The kernel will boot but panic when trying to mount rootfs."
+                    );
+                }
+
                 qemu.args(["-machine", "q35"])
                     .args(["-cpu", "qemu64,+fsgsbase"])
                     .args(["-serial", "mon:stdio"])
