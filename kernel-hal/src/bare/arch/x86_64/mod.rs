@@ -12,7 +12,7 @@ pub mod special;
 
 hal_fn_impl_default!(crate::hal_fn::console);
 
-use crate::{mem::phys_to_virt, KCONFIG};
+use crate::KCONFIG;
 use x86_64::registers::control::{Cr4, Cr4Flags};
 
 pub const fn timer_interrupt_vector() -> usize {
@@ -24,7 +24,13 @@ pub fn cmdline() -> alloc::string::String {
 }
 
 pub fn init_ram_disk() -> Option<&'static mut [u8]> {
-    let start = phys_to_virt(KCONFIG.initrd_start as usize);
+    if KCONFIG.initrd_start == 0 || KCONFIG.initrd_size == 0 {
+        return None;
+    }
+    // The bootloader crate maps the ramdisk into the kernel's virtual address
+    // space and provides the virtual address in BootInfo.ramdisk_addr.
+    // Do NOT apply phys_to_virt -- the address is already virtual.
+    let start = KCONFIG.initrd_start as usize;
     Some(unsafe { core::slice::from_raw_parts_mut(start as *mut u8, KCONFIG.initrd_size as usize) })
 }
 

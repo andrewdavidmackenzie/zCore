@@ -22,6 +22,18 @@ hal_fn_impl! {
         fn primary_init() {
             info!("Primary CPU {} init...", crate::cpu::cpu_id());
             unsafe { trapframe::init() };
+            // Verify GDT selectors were initialized
+            #[cfg(target_arch = "x86_64")]
+            {
+                extern "C" {
+                    static USER_SS: u16;
+                    static USER_CS: u16;
+                }
+                let (ss, cs) = unsafe { (USER_SS, USER_CS) };
+                info!("trapframe::init() done: USER_SS={:#x}, USER_CS={:#x}", ss, cs);
+                assert!(ss != 0, "USER_SS not initialized!");
+                assert!(cs != 0, "USER_CS not initialized!");
+            }
             super::arch::primary_init();
         }
 

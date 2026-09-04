@@ -35,6 +35,7 @@ pub fn run(args: Vec<String>, envs: Vec<String>, rootfs: Arc<dyn FileSystem>) ->
     debug!("current pgt = {:#x}", pg_token);
     // Load the ELF and configure the thread's entry point and stack
     let (entry, sp, initial_brk) = loader.load(&proc.vmar(), &data, args, envs, path).unwrap();
+    debug!("ELF loaded: entry={:#x}, sp={:#x}, brk={:#x}", entry, sp, initial_brk);
     proc.linux().set_brk(initial_brk);
 
     thread
@@ -71,19 +72,19 @@ async fn run_user(thread: CurrentThread) {
 
         // run
         debug!(
-            "go to user: tid = {} pc = {:x}",
-            thread.id(),
-            ctx.get_field(UserContextField::InstrPointer)
-        );
-        trace!("ctx = {:#x?}", ctx);
-        ctx.enter_uspace();
-        debug!(
-            "back from user: tid = {} pc = {:x} trap reason = {:?}",
+            "go to user: tid = {} pc = {:x} sp = {:x}",
             thread.id(),
             ctx.get_field(UserContextField::InstrPointer),
+            ctx.get_field(UserContextField::StackPointer),
+        );
+        ctx.enter_uspace();
+        debug!(
+            "back from user: tid = {} pc = {:x} sp = {:x} trap = {:?}",
+            thread.id(),
+            ctx.get_field(UserContextField::InstrPointer),
+            ctx.get_field(UserContextField::StackPointer),
             ctx.trap_reason(),
         );
-        trace!("ctx = {:#x?}", ctx);
         // handle trap/interrupt/syscall
         if let Err(err) = handle_user_trap(&thread, ctx).await {
             thread.exit_linux(err as i32);

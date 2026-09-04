@@ -277,28 +277,33 @@ impl QemuArgs {
                 println!("Creating x86_64 boot image...");
                 let mut cmd = std::process::Command::new(&bootimage_tool);
                 cmd.arg(&obj).arg(&disk_image);
-                // TODO: Use UEFI by default once the wcslen linker issue is
-                // resolved. For now, use BIOS which works on all host platforms.
-                // UEFI can be requested manually: x86-bootimage kernel out
-                // (without --bios flag). See #148.
-                cmd.arg("--bios");
+
+                // Embed the rootfs SFS image as a ramdisk in the boot image.
+                // The bootloader loads it into physical memory and exposes it
+                // via BootInfo.ramdisk_addr / ramdisk_len.
+                if !is_zircon {
+                    let rootfs_img = INNER.join(format!("{arch_str}.img"));
+                    if rootfs_img.exists() {
+                        cmd.arg("--ramdisk").arg(&rootfs_img);
+                    } else {
+                        eprintln!(
+                            "WARNING: rootfs image not found at {}.\n\
+                             The kernel will boot but panic when trying to mount rootfs.\n\
+                             Build it first with: cargo rootfs --arch x86_64",
+                            rootfs_img.display()
+                        );
+                    }
+                }
+
                 let status = cmd.status().expect("failed to run x86-bootimage");
                 if !status.success() {
                     panic!("boot image creation failed");
                 }
 
-                if !is_zircon {
-                    eprintln!(
-                        "WARNING: x86_64 Linux rootfs is not yet supported.\n\
-                         The kernel will boot but panic when trying to mount rootfs."
-                    );
-                }
-
-                // The bootimage tool creates a UEFI image by default
-                // (matching real hardware). Falls back to BIOS with --bios.
-                // The kernel receives the same BootInfo either way.
+                // The bootimage tool creates a BIOS disk image.
+                // UEFI is blocked by upstream bootloader#579, tracked in #151.
                 qemu.args(["-machine", "q35"])
-                    .args(["-cpu", "qemu64,+fsgsbase"])
+                    .args(["-cpu", "qemu64,+fsgsbase,+rdrand"])
                     .args(["-serial", "mon:stdio"])
                     .args([
                         "-drive",
