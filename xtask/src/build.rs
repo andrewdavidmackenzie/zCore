@@ -275,11 +275,14 @@ impl QemuArgs {
                 }
 
                 println!("Creating x86_64 boot image...");
-                let status = std::process::Command::new(&bootimage_tool)
-                    .arg(&obj)
-                    .arg(&disk_image)
-                    .status()
-                    .expect("failed to run x86-bootimage");
+                let mut cmd = std::process::Command::new(&bootimage_tool);
+                cmd.arg(&obj).arg(&disk_image);
+                // TODO: Use UEFI by default once the wcslen linker issue is
+                // resolved. For now, use BIOS which works on all host platforms.
+                // UEFI can be requested manually: x86-bootimage kernel out
+                // (without --bios flag). See #148.
+                cmd.arg("--bios");
+                let status = cmd.status().expect("failed to run x86-bootimage");
                 if !status.success() {
                     panic!("boot image creation failed");
                 }
@@ -291,6 +294,9 @@ impl QemuArgs {
                     );
                 }
 
+                // The bootimage tool creates a UEFI image by default
+                // (matching real hardware). Falls back to BIOS with --bios.
+                // The kernel receives the same BootInfo either way.
                 qemu.args(["-machine", "q35"])
                     .args(["-cpu", "qemu64,+fsgsbase"])
                     .args(["-serial", "mon:stdio"])
