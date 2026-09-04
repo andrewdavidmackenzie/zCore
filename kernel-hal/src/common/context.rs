@@ -69,7 +69,9 @@ impl TrapReason {
                         const INST =        1 << 4;
                     }
                 }
-                let fault_vaddr = x86_64::registers::control::Cr2::read().as_u64() as _;
+                let fault_vaddr = x86_64::registers::control::Cr2::read()
+                    .expect("invalid CR2")
+                    .as_u64() as _;
                 let code = PageFaultErrorCode::from_bits_truncate(error_code as u32);
                 let mut flags = MMUFlags::empty();
                 if code.contains(PageFaultErrorCode::WRITE) {

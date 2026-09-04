@@ -1,6 +1,6 @@
 ENTRY(_start)
 
-KERNEL_BEGIN = 0xffffff0000000000;
+KERNEL_BEGIN = 0xffffffff80000000;
 
 SECTIONS {
 

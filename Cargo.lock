@@ -295,6 +295,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bootloader_api"
+version = "0.11.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49f4c2ef60a76c1858ef43c30b6b95c2f5ee4d7c4f9bc47409c3a8dc8910adb9"
+
+[[package]]
 name = "buddy_system_allocator"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -427,6 +433,12 @@ checksum = "af4780a44ab5696ea9e28294517f1fffb421a83a25af521333c838635509db9c"
 dependencies = [
  "cache-padded",
 ]
+
+[[package]]
+name = "const_fn"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413d67b29ef1021b4d60f4aa1e925ca031751e213832b4b1d588fae623c05c60"
 
 [[package]]
 name = "const_format"
@@ -1067,10 +1079,11 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.60"
+version = "0.3.95"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49409df3e3bf0856b916e2ceaca09ee28e6871cf7d9ce97a692cacfdb2a25a47"
+checksum = "2964e92d1d9dc3364cae4d718d93f227e3abb088e747d92e0395bfdedf1c12ca"
 dependencies = [
+ "once_cell",
  "wasm-bindgen",
 ]
 
@@ -1101,7 +1114,7 @@ dependencies = [
  "naive-timer",
  "nix",
  "numeric-enum-macro",
- "raw-cpuid 9.1.1",
+ "raw-cpuid 11.6.0",
  "riscv 0.9.0",
  "sbi-rt",
  "smoltcp",
@@ -1109,10 +1122,8 @@ dependencies = [
  "tempfile",
  "tock-registers",
  "trapframe",
- "uefi",
  "x2apic",
  "x86",
- "x86-smpboot",
  "x86_64",
  "zcore-drivers",
 ]
@@ -1137,9 +1148,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.135"
+version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68783febc7782c6c5cb401fbda4de5a9898be1762314da0bb2c10ced61f18b0c"
+checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
 name = "libgit2-sys"
@@ -1207,7 +1218,7 @@ dependencies = [
  "rcore-fs-ramfs",
  "rcore-fs-sfs",
  "smoltcp",
- "xmas-elf 0.7.0",
+ "xmas-elf",
  "zcore-drivers",
  "zircon-object",
 ]
@@ -1234,11 +1245,10 @@ dependencies = [
 [[package]]
 name = "lock"
 version = "0.1.0"
-source = "git+https://github.com/DeathWish5/kernel-sync?rev=8486b8#8486b817a71ec5141836e00c817fefb94c9cfbb7"
 dependencies = [
  "cfg-if 1.0.0",
  "cortex-a",
- "raw-cpuid 10.6.0",
+ "raw-cpuid 11.6.0",
  "riscv 0.7.0",
  "spin 0.9.4",
  "tock-registers",
@@ -1564,20 +1574,20 @@ dependencies = [
 
 [[package]]
 name = "raw-cpuid"
-version = "9.1.1"
+version = "10.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1733f6f80c9c24268736a501cd00d41a9849b4faa7a9f9334c096e5d10553206"
+checksum = "a6823ea29436221176fe662da99998ad3b4db2c7f31e7b6f5fe43adccd6320bb"
 dependencies = [
  "bitflags 1.3.2",
 ]
 
 [[package]]
 name = "raw-cpuid"
-version = "10.6.0"
+version = "11.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6823ea29436221176fe662da99998ad3b4db2c7f31e7b6f5fe43adccd6320bb"
+checksum = "498cd0dc59d73224351ee52a95fee0f1a617a2eae0e7d9d720cc622c73a54186"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.13.1",
 ]
 
 [[package]]
@@ -1602,17 +1612,6 @@ dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
  "num_cpus",
-]
-
-[[package]]
-name = "rboot"
-version = "0.1.6"
-source = "git+https://github.com/rcore-os/rboot.git?rev=ad21575#ad2157580216c0fbda7cf4ebed13fd8882a27973"
-dependencies = [
- "log",
- "uefi",
- "x86_64",
- "xmas-elf 0.8.0",
 ]
 
 [[package]]
@@ -1879,19 +1878,31 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.145"
+version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "728eb6351430bccb993660dfffc5a72f91ccc1295abaa8ce19b27ebe4f75568b"
+checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
+dependencies = [
+ "serde_core",
+]
+
+[[package]]
+name = "serde_core"
+version = "1.0.229"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48"
+dependencies = [
+ "serde_derive",
+]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.145"
+version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81fa1584d3d1bcacd84c277a0dfe21f5b0f6accf4a23d04d4c6d61f1af522b4c"
+checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 3.0.4",
 ]
 
 [[package]]
@@ -2172,44 +2183,12 @@ dependencies = [
 
 [[package]]
 name = "trapframe"
-version = "0.9.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f287ee70169f5bfddba441baf901b620e3655f16fa7815f48a7e100ec6d86a8f"
+checksum = "93950c9f0fb7d6d36ae73ac4326be946b81816f8559bf10a01087064e2dd4509"
 dependencies = [
- "raw-cpuid 10.6.0",
+ "raw-cpuid 11.6.0",
  "x86_64",
-]
-
-[[package]]
-name = "ucs2"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bad643914094137d475641b6bab89462505316ec2ce70907ad20102d28a79ab8"
-dependencies = [
- "bit_field",
-]
-
-[[package]]
-name = "uefi"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e69e94934e3a8fb9d652408385a1ce5199bbe31df2baba1973bcd1ba2c973fd"
-dependencies = [
- "bitflags 1.3.2",
- "log",
- "ucs2",
- "uefi-macros",
-]
-
-[[package]]
-name = "uefi-macros"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f618e22256b6ecc841fe2f24b5978fa47221b5006712da01236b5407c8474866"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -2406,26 +2385,14 @@ checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.83"
+version = "0.2.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaf9f5aceeec8be17c128b2e93e031fb8a4d469bb9c4ae2d7dc1888b26887268"
+checksum = "0bf938a0bacb0469e83c1e148908bd7d5a6010354cf4fb73279b7447422e3a89"
 dependencies = [
  "cfg-if 1.0.0",
- "wasm-bindgen-macro",
-]
-
-[[package]]
-name = "wasm-bindgen-backend"
-version = "0.2.83"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c8ffb332579b0557b52d268b91feab8df3615f265d5270fec2a8c95b17c1142"
-dependencies = [
- "bumpalo",
- "log",
  "once_cell",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
+ "rustversion",
+ "wasm-bindgen-macro",
  "wasm-bindgen-shared",
 ]
 
@@ -2443,9 +2410,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.83"
+version = "0.2.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "052be0f94026e6cbc75cdefc9bae13fd6052cdcaf532fa6c45e7ae33a1e6c810"
+checksum = "eeff24f84126c0ec2db7a449f0c2ec963c6a49efe0698c4242929da037ca28ed"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -2453,22 +2420,25 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.83"
+version = "0.2.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07bc0c051dc5f23e307b13285f9d75df86bfdf816c5721e573dec1f9b8aa193c"
+checksum = "9d08065faf983b2b80a79fd87d8254c409281cf7de75fc4b773019824196c904"
 dependencies = [
+ "bumpalo",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
- "wasm-bindgen-backend",
+ "syn 2.0.119",
  "wasm-bindgen-shared",
 ]
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.83"
+version = "0.2.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c38c045535d93ec4f0b4defec448e4291638ee608530863b1e2ba115d4fff7f"
+checksum = "5fd04d9e306f1907bd13c6361b5c6bfc7b3b3c095ed3f8a9246390f8dbdee129"
+dependencies = [
+ "unicode-ident",
+]
 
 [[package]]
 name = "web-sys"
@@ -2580,9 +2550,9 @@ dependencies = [
 
 [[package]]
 name = "x2apic"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32b6a3e030cfc71d614954e1de6dcb09e40bf1437f620c27b4526f978bee912e"
+checksum = "db5cbcb7faedfa15f90376004ffc0cb42e427623ab56629f0073d275ee8e7043"
 dependencies = [
  "bit",
  "bitflags 1.3.2",
@@ -2593,9 +2563,9 @@ dependencies = [
 
 [[package]]
 name = "x86"
-version = "0.46.0"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6297379090b1be212a2d59dd57708c99b42b4bcbeee2ce6fb80babbe7b63e89a"
+checksum = "2781db97787217ad2a2845c396a5efe286f87467a5810836db6d74926e94a385"
 dependencies = [
  "bit_field",
  "bitflags 1.3.2",
@@ -2603,21 +2573,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "x86-smpboot"
-version = "0.1.0"
-source = "git+https://github.com/rcore-os/x86-smpboot?rev=1069df3#1069df357e1cb212930f02c98b84debb6d17dc80"
-dependencies = [
- "x86",
-]
-
-[[package]]
 name = "x86_64"
-version = "0.14.10"
+version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "100555a863c0092238c2e0e814c1096c1e5cf066a309c696a87e907b5f8c5d69"
+checksum = "be4ec631e1a81d50e46c35a4a00322bd076c47491b64c2fb10a7ffa89002c697"
 dependencies = [
  "bit_field",
- "bitflags 1.3.2",
+ "bitflags 2.13.1",
+ "const_fn",
  "rustversion",
  "volatile 0.4.5",
 ]
@@ -2627,15 +2590,6 @@ name = "xmas-elf"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e74de9a366f6ab8c405fa6b371d9ac24943921fa14b3d64afcb202065c405f11"
-dependencies = [
- "zero",
-]
-
-[[package]]
-name = "xmas-elf"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d29b4d8e7beaceb4e77447ba941a7600d23d0319ab52da0461abea214832d5a"
 dependencies = [
  "zero",
 ]
@@ -2666,6 +2620,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "bitmap-allocator",
+ "bootloader_api",
  "buddy_system_allocator",
  "cfg-if 1.0.0",
  "chrono",
@@ -2679,7 +2634,6 @@ dependencies = [
  "log",
  "page-table",
  "r0",
- "rboot",
  "rcore-fs",
  "rcore-fs-hostfs",
  "rcore-fs-sfs",
@@ -2756,7 +2710,7 @@ dependencies = [
  "executor",
  "kernel-hal",
  "log",
- "xmas-elf 0.7.0",
+ "xmas-elf",
  "zircon-object",
  "zircon-syscall",
 ]
@@ -2777,7 +2731,7 @@ dependencies = [
  "log",
  "numeric-enum-macro",
  "region-alloc",
- "xmas-elf 0.7.0",
+ "xmas-elf",
 ]
 
 [[package]]

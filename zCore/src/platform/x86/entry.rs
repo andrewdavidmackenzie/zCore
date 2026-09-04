@@ -1,25 +1,105 @@
-use kernel_hal::KernelConfig;
-use rboot::BootInfo;
+// x86_64 entry point using the bootloader crate.
+//
+// The bootloader handles UEFI/BIOS boot, page table setup, and
+// provides boot info to the kernel via bootloader_api::BootInfo.
 
-#[no_mangle]
-pub extern "C" fn _start(boot_info: &'static BootInfo) -> ! {
-    let info = boot_info.graphic_info;
+use bootloader_api::config::{BootloaderConfig, Mapping};
+use bootloader_api::info::{MemoryRegionKind, Optional};
+use kernel_hal::config::{FramebufferInfo, KernelConfig, MemoryRegion, MemoryType};
+
+/// Maximum number of memory regions we can store.
+const MAX_MEMORY_REGIONS: usize = 256;
+
+/// Static storage for converted memory regions.
+static mut MEMORY_REGIONS: [MemoryRegion; MAX_MEMORY_REGIONS] = [MemoryRegion {
+    phys_start: 0,
+    page_count: 0,
+    memory_type: MemoryType::Reserved,
+}; MAX_MEMORY_REGIONS];
+
+static mut MEMORY_REGION_COUNT: usize = 0;
+
+/// Bootloader configuration: map all physical memory at a fixed offset.
+const BOOTLOADER_CONFIG: BootloaderConfig = {
+    let mut config = BootloaderConfig::new_default();
+    config.mappings.physical_memory = Some(Mapping::FixedAddress(0xFFFF_8000_0000_0000));
+    config
+};
+
+// Define the bootloader entry point with our config
+bootloader_api::entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
+
+fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
+    // Convert bootloader memory regions to our kernel-owned type
+    let count = boot_info.memory_regions.len().min(MAX_MEMORY_REGIONS);
+    unsafe {
+        for (i, r) in boot_info.memory_regions.iter().take(count).enumerate() {
+            *core::ptr::addr_of_mut!(MEMORY_REGIONS[i]) = MemoryRegion {
+                phys_start: r.start,
+                page_count: (r.end - r.start) / 4096,
+                memory_type: match r.kind {
+                    MemoryRegionKind::Usable => MemoryType::Conventional,
+                    MemoryRegionKind::Bootloader => MemoryType::BootServicesData,
+                    _ => MemoryType::Reserved,
+                },
+            };
+        }
+        *core::ptr::addr_of_mut!(MEMORY_REGION_COUNT) = count;
+    }
+
+    let framebuffer = match &boot_info.framebuffer {
+        Optional::Some(fb) => {
+            let info = fb.info();
+            // The buffer pointer is a virtual address. To get the physical address,
+            // subtract the physical_memory_offset. If offset is not available,
+            // use the virtual address (it will still work for MMIO framebuffers
+            // since the bootloader maps them identity or at the phys offset).
+            let vaddr = fb.buffer().as_ptr() as u64;
+            let phys_addr = match boot_info.physical_memory_offset {
+                Optional::Some(offset) => vaddr - offset,
+                Optional::None => vaddr,
+            };
+            Some(FramebufferInfo {
+                width: info.width as u32,
+                height: info.height as u32,
+                stride: info.stride as u32,
+                addr: phys_addr,
+                size: fb.buffer().len() as u64,
+            })
+        }
+        Optional::None => None,
+    };
+
+    let phys_offset = match boot_info.physical_memory_offset {
+        Optional::Some(offset) => offset as usize,
+        Optional::None => 0,
+    };
+
+    let rsdp = match boot_info.rsdp_addr {
+        Optional::Some(addr) => addr,
+        Optional::None => 0,
+    };
+
     let config = KernelConfig {
-        cmdline: boot_info.cmdline,
-        initrd_start: boot_info.initramfs_addr,
-        initrd_size: boot_info.initramfs_size,
-
-        memory_map: boot_info.memory_map.as_slice(),
-        phys_to_virt_offset: boot_info.physical_memory_offset as _,
-
-        fb_mode: info.mode,
-        fb_addr: info.fb_addr,
-        fb_size: info.fb_size,
-
-        acpi_rsdp: boot_info.acpi2_rsdp_addr,
-        smbios: boot_info.smbios_addr,
+        cmdline: "LOG=info",
+        initrd_start: match boot_info.ramdisk_addr {
+            Optional::Some(addr) => addr,
+            Optional::None => 0,
+        },
+        initrd_size: boot_info.ramdisk_len,
+        memory_map: unsafe {
+            core::slice::from_raw_parts(
+                core::ptr::addr_of!(MEMORY_REGIONS) as *const MemoryRegion,
+                *core::ptr::addr_of!(MEMORY_REGION_COUNT),
+            )
+        },
+        phys_to_virt_offset: phys_offset,
+        framebuffer,
+        acpi_rsdp: rsdp,
+        smbios: 0,
         ap_fn: crate::secondary_main,
     };
+
     crate::primary_main(config);
     unreachable!()
 }

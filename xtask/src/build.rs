@@ -252,7 +252,20 @@ impl QemuArgs {
                         .arg(INNER.join(format!("{arch_str}.img")));
                 }
             }
-            Arch::X86_64 => todo!(),
+            Arch::X86_64 => {
+                // TODO(#148): Create a proper bootable disk image using the
+                // bootloader crate. For now, pass the ELF directly with -kernel
+                // which won't actually boot (no multiboot header), but allows
+                // the xtask code path to exist without panicking.
+                eprintln!(
+                    "WARNING: x86_64 QEMU boot is not yet functional.\n\
+                     The kernel ELF needs a bootable disk image (see #148)."
+                );
+                qemu.args(["-machine", "q35"])
+                    .args(["-serial", "mon:stdio"])
+                    .arg("-kernel")
+                    .arg(&obj);
+            }
             Arch::Aarch64 => {
                 // Direct kernel boot: QEMU loads the ELF directly, no UEFI
                 // bootloader needed. The kernel's _boot assembly sets up MMU
@@ -299,7 +312,11 @@ impl GdbArgs {
                     .args(["-ex", &format!("target remote localhost:{}", self.port)])
                     .invoke();
             }
-            Arch::X86_64 => todo!(),
+            Arch::X86_64 => {
+                Ext::new("gdb")
+                    .args(["-ex", &format!("target remote localhost:{}", self.port)])
+                    .invoke();
+            }
         }
     }
 }
