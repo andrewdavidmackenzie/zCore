@@ -253,18 +253,57 @@ impl QemuArgs {
                 }
             }
             Arch::X86_64 => {
-                // TODO(#148): Create a proper bootable disk image using the
-                // bootloader crate. For now, pass the ELF directly with -kernel
-                // which won't actually boot (no multiboot header), but allows
-                // the xtask code path to exist without panicking.
-                eprintln!(
-                    "WARNING: x86_64 QEMU boot is not yet functional.\n\
-                     The kernel ELF needs a bootable disk image (see #148)."
-                );
+                // Create a bootable BIOS disk image using the x86-bootimage tool
+                let disk_image = PROJECT_DIR
+                    .join("target/x86_64")
+                    .join(if self.debug { "debug" } else { "release" })
+                    .join("boot.img");
+
+                let bootimage_tool =
+                    PROJECT_DIR.join("tools/x86-bootimage/target/release/x86-bootimage");
+                if !bootimage_tool.exists() {
+                    println!("Building x86-bootimage tool...");
+                    let status = std::process::Command::new("cargo")
+                        .args(["build", "--release"])
+                        .arg("--manifest-path")
+                        .arg(PROJECT_DIR.join("tools/x86-bootimage/Cargo.toml"))
+                        .status()
+                        .expect("failed to build x86-bootimage tool");
+                    if !status.success() {
+                        panic!("x86-bootimage tool build failed");
+                    }
+                }
+
+                println!("Creating x86_64 boot image...");
+                let mut cmd = std::process::Command::new(&bootimage_tool);
+                cmd.arg(&obj).arg(&disk_image);
+                // TODO: Use UEFI by default once the wcslen linker issue is
+                // resolved. For now, use BIOS which works on all host platforms.
+                // UEFI can be requested manually: x86-bootimage kernel out
+                // (without --bios flag). See #148.
+                cmd.arg("--bios");
+                let status = cmd.status().expect("failed to run x86-bootimage");
+                if !status.success() {
+                    panic!("boot image creation failed");
+                }
+
+                if !is_zircon {
+                    eprintln!(
+                        "WARNING: x86_64 Linux rootfs is not yet supported.\n\
+                         The kernel will boot but panic when trying to mount rootfs."
+                    );
+                }
+
+                // The bootimage tool creates a UEFI image by default
+                // (matching real hardware). Falls back to BIOS with --bios.
+                // The kernel receives the same BootInfo either way.
                 qemu.args(["-machine", "q35"])
+                    .args(["-cpu", "qemu64,+fsgsbase"])
                     .args(["-serial", "mon:stdio"])
-                    .arg("-kernel")
-                    .arg(&obj);
+                    .args([
+                        "-drive",
+                        &format!("format=raw,file={}", disk_image.display()),
+                    ]);
             }
             Arch::Aarch64 => {
                 // Direct kernel boot: QEMU loads the ELF directly, no UEFI

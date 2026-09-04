@@ -21,7 +21,7 @@ members = [
     "zCore/userstart",
 ]
 default-members = ["xtask"]
-exclude = ["rboot"]
+exclude = ["tools/x86-bootimage"]
 resolver = "2"
 
 [profile.release]

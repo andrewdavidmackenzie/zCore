@@ -179,7 +179,7 @@ See [#78](https://github.com/andrewdavidmackenzie/zCore/issues/78).
 - `src/platform/aarch64/` -- AArch64 boot assembly, page tables, linker script
 - `src/platform/riscv/` -- RISC-V boot (standard + C910 variants), Sv39 page
   tables
-- `src/platform/x86/` -- x86_64 UEFI boot via rboot
+- `src/platform/x86/` -- x86_64 boot via `bootloader` crate (BIOS)
 - `src/platform/libos/` -- Library OS mode (runs as host userspace process)
 - `src/handler.rs` -- Frame alloc/dealloc, page fault handling
 - `src/memory.rs` / `src/memory_x86_64.rs` -- Architecture-specific allocators
@@ -976,14 +976,15 @@ and vDSO from #121 first.
 
 ---
 
-### `rboot/` -- x86_64 UEFI Bootloader (Git Submodule)
+### `rboot/` -- Legacy x86_64 UEFI Bootloader (Git Submodule)
 
-**Purpose:** UEFI bootloader for x86_64. Loads a kernel ELF and boots it.
-Points to `https://github.com/rcore-os/rboot.git`.
+**Purpose:** Former UEFI bootloader for x86_64. Points to
+`https://github.com/rcore-os/rboot.git`.
 
-**Status:** Partial / Legacy. Only relevant for x86_64 UEFI boot, which is not
-the current primary development target. Developer docs note it "is a legacy
-issue, will be resolved in the future."
+**Status:** Superseded by the `bootloader` crate (v0.11). The kernel no
+longer depends on rboot. The submodule remains in the repo but is not
+used. x86_64 now boots via BIOS using `tools/x86-bootimage/`. See #148
+for UEFI support via the `bootloader` crate.
 
 ---
 
