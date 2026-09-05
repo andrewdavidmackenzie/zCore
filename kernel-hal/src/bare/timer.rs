@@ -6,8 +6,10 @@ use core::time::Duration;
 use lock::Mutex;
 use naive_timer::Timer;
 
-#[allow(dead_code)]
-pub(super) const TICKS_PER_SEC: u64 = 1;
+/// Timer tick rate. 100 Hz matches the default Linux HZ on most configs.
+/// Higher values give better interactive responsiveness at the cost of
+/// more timer interrupt overhead.
+pub(super) const TICKS_PER_SEC: u64 = 100;
 
 lazy_static::lazy_static! {
     static ref NAIVE_TIMER:Mutex<Timer> = Mutex::new(Timer::default());
