@@ -11,7 +11,7 @@ written to a USB drive. The tool uses the
 wrap the kernel in a BIOS-compatible boot sector and FAT filesystem.
 
 The resulting image contains:
-- A BIOS bootloader (SeaBIOS -> bootloader stages 1-4)
+- BIOS bootloader stages 1-4, loaded by system firmware such as SeaBIOS
 - The zCore kernel ELF
 - An optional ramdisk (rootfs SFS image), exposed to the kernel via
   `BootInfo.ramdisk_addr` / `BootInfo.ramdisk_len`
