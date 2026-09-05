@@ -52,7 +52,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/homebrew/Cellar/musl-cross
-          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11-x86_64
+          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11
 
       - name: Install cross-compilation toolchain (macOS)
         if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit != 'true'
@@ -90,11 +90,10 @@ jobs:
 
   boot-smoke-test-x86_64:
     name: Boot Smoke Test (x86_64)
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    # Linux only: macOS musl-cross doesn't cache x86_64 yet, and building
+    # it from source takes 30+ minutes. Will add macOS once the musl-cross
+    # cache is updated to include x86_64.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -110,41 +109,8 @@ jobs:
           path: ignored/origin/repos/busybox
           key: busybox-src-v2
 
-      - name: Cache musl-cross toolchain (macOS)
-        if: runner.os == 'macOS'
-        id: cache-musl
-        uses: actions/cache@v4
-        with:
-          path: /opt/homebrew/Cellar/musl-cross
-          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11-x86_64
-
-      - name: Install cross-compilation toolchain (macOS)
-        if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit != 'true'
-        run: make config
-
-      - name: Restore musl-cross symlinks (macOS)
-        if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit == 'true'
-        run: brew link musl-cross 2>/dev/null || brew tap FiloSottile/musl-cross && brew link filosottile/musl-cross/musl-cross 2>/dev/null || true
-
-      - name: Install kernel headers (macOS, cached)
-        if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit == 'true'
-        run: |
-          MUSL_PREFIX=$(brew --prefix musl-cross)/libexec
-          for MUSL_ARCH in aarch64 riscv64 x86_64; do
-            SYSROOT="$MUSL_PREFIX/$MUSL_ARCH-linux-musl"
-            if [ ! -f "$SYSROOT/include/linux/compiler.h" ]; then
-              make config
-              break
-            fi
-          done
-
-      - name: Install QEMU and tools (Linux)
-        if: runner.os == 'Linux'
+      - name: Install QEMU and tools
         run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils wget
-
-      - name: Install QEMU (macOS)
-        if: runner.os == 'macOS'
-        run: brew install qemu
 
       - name: Build kernel and rootfs
         run: make build ARCH=x86_64
@@ -209,7 +175,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/homebrew/Cellar/musl-cross
-          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11-x86_64
+          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11
 
       - name: Install cross-compilation toolchain (macOS)
         if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit != 'true'
