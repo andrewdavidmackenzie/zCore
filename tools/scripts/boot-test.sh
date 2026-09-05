@@ -29,6 +29,19 @@ case "$ARCH" in
       -device "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0"
     )
     ;;
+  x86_64)
+    # x86_64 uses a BIOS bootable disk image that bundles kernel + rootfs.
+    # The image is created by the x86-bootimage tool during `make build`.
+    KERNEL="target/x86_64/release/boot.img"
+    IMAGE="$KERNEL"  # rootfs is embedded as ramdisk in the boot image
+    QEMU_CMD=(
+      qemu-system-x86_64
+      -m 2G -display none -no-reboot -nographic
+      -machine q35 -cpu qemu64,+fsgsbase,+rdrand
+      -serial mon:stdio
+      -drive "format=raw,file=$KERNEL"
+    )
+    ;;
   *)
     echo "ERROR: boot-test.sh does not yet support arch '$ARCH'"
     exit 1
@@ -36,7 +49,7 @@ case "$ARCH" in
 esac
 
 # Verify required files exist
-for f in "$KERNEL" "$IMAGE"; do
+for f in "$KERNEL"; do
   if [ ! -f "$f" ]; then
     echo "ERROR: $f not found. Run 'make build ARCH=$ARCH' first."
     exit 1
