@@ -164,15 +164,25 @@ impl TrapReason {
 }
 
 /// User context saved on trap.
-#[repr(transparent)]
+///
+/// On x86_64, includes FPU/SSE vector registers (saved/restored via
+/// FXSAVE/FXRSTOR around user-mode transitions).
 #[derive(Clone, Copy)]
-pub struct UserContext(UserContextInner);
+#[repr(C)]
+pub struct UserContext {
+    inner: UserContextInner,
+    #[cfg(target_arch = "x86_64")]
+    pub vector_regs: VectorRegs,
+}
 
 impl UserContext {
     /// Create an empty user context.
     pub fn new() -> Self {
-        let context = UserContextInner::default();
-        Self(context)
+        Self {
+            inner: UserContextInner::default(),
+            #[cfg(target_arch = "x86_64")]
+            vector_regs: VectorRegs::default(),
+        }
     }
 
     /// Initialize the context for entry into userspace.
@@ -181,31 +191,31 @@ impl UserContext {
     pub fn setup_uspace(&mut self, pc: usize, sp: usize, args: &[usize; 3]) {
         cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
-                self.0.general.rip = pc;
-                self.0.general.rsp = sp;
-                self.0.general.rdi = args[0];
-                self.0.general.rsi = args[1];
-                self.0.general.rdx = args[2];
+                self.inner.general.rip = pc;
+                self.inner.general.rsp = sp;
+                self.inner.general.rdi = args[0];
+                self.inner.general.rsi = args[1];
+                self.inner.general.rdx = args[2];
                 // IOPL = 3, IF = 1
                 // FIXME: set IOPL = 0 when IO port bitmap is supporte
-                self.0.general.rflags = 0x3000 | 0x200 | 0x2;
+                self.inner.general.rflags = 0x3000 | 0x200 | 0x2;
             } else if #[cfg(target_arch = "aarch64")] {
-                self.0.elr = pc;
-                self.0.sp = sp;
-                self.0.general.x0 = args[0];
-                self.0.general.x1 = args[1];
-                self.0.general.x2 = args[2];
+                self.inner.elr = pc;
+                self.inner.sp = sp;
+                self.inner.general.x0 = args[0];
+                self.inner.general.x1 = args[1];
+                self.inner.general.x2 = args[2];
                 // Mask SError exceptions (currently unhandled).
                 // TODO
-                self.0.spsr = 1 << 8;
+                self.inner.spsr = 1 << 8;
             } else if #[cfg(target_arch = "riscv64")] {
-                self.0.sepc = pc;
-                self.0.general.sp = sp;
-                self.0.general.a0 = args[0];
-                self.0.general.a1 = args[1];
-                self.0.general.a2 = args[2];
+                self.inner.sepc = pc;
+                self.inner.general.sp = sp;
+                self.inner.general.a0 = args[0];
+                self.inner.general.a1 = args[1];
+                self.inner.general.a2 = args[2];
                 // SUM = 1, FS = 0b11, SPIE = 1
-                self.0.sstatus = 1 << 18 | 0b11 << 13 | 1 << 5;
+                self.inner.sstatus = 1 << 18 | 0b11 << 13 | 1 << 5;
             }
         }
     }
@@ -214,11 +224,11 @@ impl UserContext {
     pub fn set_ra(&mut self, _ra: usize) {
         cfg_if! {
             if #[cfg(target_arch = "riscv64")] {
-                self.0.general.ra = _ra;
+                self.inner.general.ra = _ra;
             } else if #[cfg(target_arch = "x86_64")] {
                 error!("Please set return addr via stack!");
             } else if #[cfg(target_arch = "aarch64")] {
-                self.0.general.x30 = _ra;
+                self.inner.general.x30 = _ra;
             } else {
                 unimplemented!("Unsupported arch!");
             }
@@ -226,12 +236,35 @@ impl UserContext {
     }
 
     /// Switch to user mode.
+    ///
+    /// On x86_64 (bare metal), saves/restores FPU/SSE state via
+    /// FXRSTOR/FXSAVE around the user-mode transition. The kernel
+    /// is compiled with SSE disabled, so only user FPU state needs
+    /// to be managed.
     pub fn enter_uspace(&mut self) {
         cfg_if! {
             if #[cfg(feature = "libos")] {
-                self.0.run_fncall()
+                self.inner.run_fncall()
+            } else if #[cfg(target_arch = "x86_64")] {
+                // Restore user FPU/SSE state before entering user mode
+                unsafe {
+                    core::arch::asm!(
+                        "fxrstor [{}]",
+                        in(reg) &self.vector_regs as *const VectorRegs,
+                        options(nostack),
+                    );
+                }
+                self.inner.run();
+                // Save user FPU/SSE state after returning from user mode
+                unsafe {
+                    core::arch::asm!(
+                        "fxsave [{}]",
+                        in(reg) &mut self.vector_regs as *mut VectorRegs,
+                        options(nostack),
+                    );
+                }
             } else {
-                self.0.run()
+                self.inner.run()
             }
         }
     }
@@ -239,16 +272,16 @@ impl UserContext {
     /// Returns the `error_code` field of the context.
     #[cfg(any(target_arch = "x86_64", doc))]
     pub fn error_code(&self) -> usize {
-        self.0.error_code
+        self.inner.error_code
     }
 
     /// Returns [`TrapReason`] according to the context.
     pub fn trap_reason(&self) -> TrapReason {
         cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
-                TrapReason::from(self.0.trap_num, self.0.error_code)
+                TrapReason::from(self.inner.trap_num, self.inner.error_code)
             } else if #[cfg(target_arch = "aarch64")] {
-                TrapReason::from(self.0.trap_num)
+                TrapReason::from(self.inner.trap_num)
             } else if #[cfg(target_arch = "riscv64")] {
                 TrapReason::from(riscv::register::scause::read())
             } else {
@@ -260,7 +293,7 @@ impl UserContext {
     pub fn raw_trap_reason(&self) -> usize {
         cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
-                self.0.trap_num
+                self.inner.trap_num
             } else if #[cfg(target_arch = "aarch64")] {
                 unimplemented!() // ESR_EL1
             } else if #[cfg(target_arch = "riscv64")] {
@@ -273,36 +306,36 @@ impl UserContext {
 
     /// Returns the reference of general registers.
     pub fn general(&self) -> &GeneralRegs {
-        &self.0.general
+        &self.inner.general
     }
 
     /// Returns the mutable reference of general registers.
     pub fn general_mut(&mut self) -> &mut GeneralRegs {
-        &mut self.0.general
+        &mut self.inner.general
     }
 
     fn field_ref(&mut self, which: UserContextField) -> &mut usize {
         cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
                 match which {
-                    UserContextField::InstrPointer => &mut self.0.general.rip,
-                    UserContextField::StackPointer => &mut self.0.general.rsp,
-                    UserContextField::ThreadPointer => &mut self.0.general.fsbase,
-                    UserContextField::ReturnValue => &mut self.0.general.rax,
+                    UserContextField::InstrPointer => &mut self.inner.general.rip,
+                    UserContextField::StackPointer => &mut self.inner.general.rsp,
+                    UserContextField::ThreadPointer => &mut self.inner.general.fsbase,
+                    UserContextField::ReturnValue => &mut self.inner.general.rax,
                 }
             } else if #[cfg(target_arch = "aarch64")] {
                 match which {
-                    UserContextField::InstrPointer => &mut self.0.elr,
-                    UserContextField::StackPointer => &mut self.0.sp,
-                    UserContextField::ThreadPointer => &mut self.0.tpidr,
-                    UserContextField::ReturnValue => &mut self.0.general.x0,
+                    UserContextField::InstrPointer => &mut self.inner.elr,
+                    UserContextField::StackPointer => &mut self.inner.sp,
+                    UserContextField::ThreadPointer => &mut self.inner.tpidr,
+                    UserContextField::ReturnValue => &mut self.inner.general.x0,
                 }
             } else if #[cfg(target_arch = "riscv64")] {
                 match which {
-                    UserContextField::InstrPointer => &mut self.0.sepc,
-                    UserContextField::StackPointer => &mut self.0.general.sp,
-                    UserContextField::ThreadPointer => &mut self.0.general.tp,
-                    UserContextField::ReturnValue => &mut self.0.general.a0,
+                    UserContextField::InstrPointer => &mut self.inner.sepc,
+                    UserContextField::StackPointer => &mut self.inner.general.sp,
+                    UserContextField::ThreadPointer => &mut self.inner.general.tp,
+                    UserContextField::ReturnValue => &mut self.inner.general.a0,
                 }
             } else {
                 unimplemented!()
@@ -324,7 +357,7 @@ impl UserContext {
     pub fn advance_pc(&mut self, reason: TrapReason) {
         cfg_if! {
             if #[cfg(target_arch = "riscv64")] {
-                if let TrapReason::Syscall = reason { self.0.sepc += 4 }
+                if let TrapReason::Syscall = reason { self.inner.sepc += 4 }
             } else {
                 let _ = reason;
             }
@@ -340,7 +373,7 @@ impl Default for UserContext {
 
 impl fmt::Debug for UserContext {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
+        self.inner.fmt(f)
     }
 }
 
