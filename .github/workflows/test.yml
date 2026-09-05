@@ -52,7 +52,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/homebrew/Cellar/musl-cross
-          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11
+          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11-x86_64
 
       - name: Install cross-compilation toolchain (macOS)
         if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit != 'true'
@@ -116,7 +116,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/homebrew/Cellar/musl-cross
-          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11
+          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11-x86_64
 
       - name: Install cross-compilation toolchain (macOS)
         if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit != 'true'
@@ -209,7 +209,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/homebrew/Cellar/musl-cross
-          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11
+          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11-x86_64
 
       - name: Install cross-compilation toolchain (macOS)
         if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit != 'true'
