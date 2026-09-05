@@ -45,6 +45,31 @@ case "$ARCH" in
       -device "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0"
     )
     ;;
+  x86_64)
+    KERNEL_ELF="target/x86_64/release/zcore"
+    BOOT_IMG="target/x86_64/release/boot.img"
+    IMAGE="zCore/x86_64.img"
+    CROSS_COMPILE="x86_64-linux-musl-"
+    # Find musl cross-compiler: macOS uses Homebrew, Linux has it in PATH
+    MUSL_BIN=""
+    if command -v brew >/dev/null 2>&1; then
+      MUSL_PREFIX="$(brew --prefix musl-cross 2>/dev/null || true)"
+      if [ -n "$MUSL_PREFIX" ] && [ -d "$MUSL_PREFIX/libexec/bin" ]; then
+        MUSL_BIN="$MUSL_PREFIX/libexec/bin"
+      fi
+    fi
+    # x86_64 uses a BIOS disk image with embedded ramdisk
+    KERNEL="$BOOT_IMG"
+    QEMU_CMD=(
+      qemu-system-x86_64
+      -m 2G -display none -no-reboot -nographic
+      -machine q35 -cpu qemu64,+fsgsbase,+rdrand
+      -serial mon:stdio
+      -drive "format=raw,file=$BOOT_IMG"
+    )
+    # Flag to rebuild boot image after rootfs changes
+    X86_REBUILD_BOOTIMG=1
+    ;;
   *)
     echo "ERROR: libc-test.sh does not yet support arch '$ARCH'"
     exit 1
@@ -83,6 +108,16 @@ done
 echo "==> Rebuilding rootfs image..."
 rm -f "$IMAGE"
 cargo image --arch "$ARCH" 2>&1 | tail -2
+
+# Step 3b: For x86_64, rebuild the boot image with the updated rootfs
+if [ "${X86_REBUILD_BOOTIMG:-}" = "1" ]; then
+  echo "==> Rebuilding x86_64 boot image with test rootfs..."
+  BOOTIMAGE_TOOL="tools/x86-bootimage/target/release/x86-bootimage"
+  if [ ! -f "$BOOTIMAGE_TOOL" ]; then
+    cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
+  fi
+  "$BOOTIMAGE_TOOL" "$KERNEL_ELF" "$BOOT_IMG" --ramdisk "$IMAGE"
+fi
 
 # Step 4: Verify kernel exists
 if [ ! -f "$KERNEL" ]; then

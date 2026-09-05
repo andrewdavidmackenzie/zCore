@@ -210,3 +210,32 @@ jobs:
 
       - name: Run libc-test
         run: make libc-test ARCH=aarch64
+
+  libc-test-x86_64:
+    name: Libc Test (x86_64)
+    # Linux only: macOS musl-cross cache doesn't include x86_64 yet.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, llvm-tools-preview
+
+      - name: Cache busybox source
+        uses: actions/cache@v4
+        with:
+          path: ignored/origin/repos/busybox
+          key: busybox-src-v2
+
+      - name: Install QEMU and tools
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils wget
+
+      - name: Build kernel and rootfs
+        run: make build ARCH=x86_64
+
+      - name: Run libc-test
+        run: make libc-test ARCH=x86_64
