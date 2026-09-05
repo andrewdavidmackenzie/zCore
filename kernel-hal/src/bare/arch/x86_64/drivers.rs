@@ -17,6 +17,14 @@ pub(super) fn init_early() -> DeviceResult {
 }
 
 pub(super) fn init() -> DeviceResult {
+    // Disable the legacy 8259 PIC by masking all IRQs.
+    // The PIC's default IRQ mapping (vectors 0x08-0x0F for master, 0x70-0x77 for
+    // slave) conflicts with CPU exception vectors. Without masking, IRQ 0 (timer)
+    // fires as vector 8 (Double Fault), causing spurious #DF in user mode.
+    unsafe {
+        x86::io::outb(0xA1, 0xFF); // mask all on slave PIC
+        x86::io::outb(0x21, 0xFF); // mask all on master PIC
+    }
     Apic::init_local_apic_bsp(crate::mem::phys_to_virt);
     let irq = Arc::new(Apic::new(
         super::special::pc_firmware_tables().0 as usize,

@@ -60,15 +60,26 @@ endif
 config-macos:
 	@echo "==> Installing musl cross-compiler toolchains (macOS)..."
 	@brew tap FiloSottile/musl-cross 2>/dev/null || true
-	brew install FiloSottile/musl-cross/musl-cross \
-		--with-riscv64 --without-arm-hf --without-x86_64
+	@# If musl-cross is already installed but missing x86_64 (e.g. from a
+	@# previous install with --without-x86_64), reinstall to pick it up.
+	@# 'brew install' on an already-installed formula does not apply new options.
+	@if brew list musl-cross >/dev/null 2>&1 && \
+	    ! "$$(brew --prefix musl-cross)/libexec/bin/x86_64-linux-musl-gcc" --version >/dev/null 2>&1; then \
+		echo "==> Reinstalling musl-cross to add x86_64 support..."; \
+		brew reinstall FiloSottile/musl-cross/musl-cross \
+			--with-aarch64 --with-riscv64 --without-arm-hf; \
+	else \
+		brew install FiloSottile/musl-cross/musl-cross \
+			--with-riscv64 --without-arm-hf; \
+	fi
 	@echo "==> Verifying cross-compilers..."
 	aarch64-linux-musl-gcc --version
 	riscv64-linux-musl-gcc --version
+	x86_64-linux-musl-gcc --version
 	@echo "==> Installing Linux kernel headers into musl-cross sysroots..."
 	@MUSL_PREFIX=$$(brew --prefix musl-cross)/libexec; \
 	KERNEL_SHA256=c1923b6bd166e6dd07be860c15f59e8273aaa8692bc2a1fce1d31b826b9b3fbe; \
-	for arch_pair in "aarch64:arm64" "riscv64:riscv"; do \
+	for arch_pair in "aarch64:arm64" "riscv64:riscv" "x86_64:x86"; do \
 		MUSL_ARCH=$${arch_pair%%:*}; \
 		KERN_ARCH=$${arch_pair##*:}; \
 		SYSROOT="$$MUSL_PREFIX/$$MUSL_ARCH-linux-musl"; \

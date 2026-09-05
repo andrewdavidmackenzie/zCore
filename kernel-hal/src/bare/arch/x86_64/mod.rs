@@ -12,7 +12,7 @@ pub mod special;
 
 hal_fn_impl_default!(crate::hal_fn::console);
 
-use crate::{mem::phys_to_virt, KCONFIG};
+use crate::KCONFIG;
 use x86_64::registers::control::{Cr4, Cr4Flags};
 
 pub const fn timer_interrupt_vector() -> usize {
@@ -24,7 +24,13 @@ pub fn cmdline() -> alloc::string::String {
 }
 
 pub fn init_ram_disk() -> Option<&'static mut [u8]> {
-    let start = phys_to_virt(KCONFIG.initrd_start as usize);
+    if KCONFIG.initrd_start == 0 || KCONFIG.initrd_size == 0 {
+        return None;
+    }
+    // The bootloader crate maps the ramdisk into the kernel's virtual address
+    // space and provides the virtual address in BootInfo.ramdisk_addr.
+    // Do NOT apply phys_to_virt -- the address is already virtual.
+    let start = KCONFIG.initrd_start as usize;
     Some(unsafe { core::slice::from_raw_parts_mut(start as *mut u8, KCONFIG.initrd_size as usize) })
 }
 
@@ -36,8 +42,23 @@ pub fn primary_init_early() {
 pub fn primary_init() {
     drivers::init().unwrap();
 
-    // enable global page
-    unsafe { Cr4::update(|f| f.insert(Cr4Flags::PAGE_GLOBAL)) };
+    // Enable SSE support for user-space programs.
+    // User-space code (e.g. busybox compiled with SSE2) will #UD on any
+    // SSE instruction without these flags.
+    unsafe {
+        // Clear CR0.EM (x87 emulation) -- must be clear for SSE to work.
+        use x86_64::registers::control::{Cr0, Cr0Flags};
+        Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
+
+        Cr4::update(|f| {
+            f.insert(Cr4Flags::PAGE_GLOBAL);
+            f.insert(Cr4Flags::OSFXSR); // enable FXSAVE/FXRSTOR
+            f.insert(Cr4Flags::OSXMMEXCPT_ENABLE); // enable SSE exceptions
+        });
+    }
+    // TODO: Save/restore FPU/SSE state (FXSAVE/FXRSTOR or XSAVE/XRSTOR)
+    // on context switches. Currently trapframe 0.11 does not preserve
+    // x87/SSE registers, so multi-process SSE will corrupt state.
     // TODO: SMP boot -- x86_smpboot was removed (old dependency).
     // Need to implement AP startup or find a replacement. See #94.
 }
