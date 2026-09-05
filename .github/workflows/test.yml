@@ -88,6 +88,36 @@ jobs:
       - name: Boot smoke test
         run: make boot-test ARCH=aarch64
 
+  boot-smoke-test-x86_64:
+    name: Boot Smoke Test (x86_64)
+    # Linux only: macOS musl-cross doesn't cache x86_64 yet, and building
+    # it from source takes 30+ minutes. Will add macOS once the musl-cross
+    # cache is updated to include x86_64.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, llvm-tools-preview
+
+      - name: Cache busybox source
+        uses: actions/cache@v4
+        with:
+          path: ignored/origin/repos/busybox
+          key: busybox-src-v2
+
+      - name: Install QEMU and tools
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils wget
+
+      - name: Build kernel and rootfs
+        run: make build ARCH=x86_64
+
+      - name: Boot smoke test
+        run: make boot-test ARCH=x86_64
+
   zircon-boot-test:
     name: Zircon Boot Test (aarch64)
     runs-on: ${{ matrix.os }}
