@@ -42,16 +42,23 @@ pub fn primary_init_early() {
 pub fn primary_init() {
     drivers::init().unwrap();
 
-    // enable global page and SSE support for user-space programs
+    // Enable SSE support for user-space programs.
+    // User-space code (e.g. busybox compiled with SSE2) will #UD on any
+    // SSE instruction without these flags.
     unsafe {
+        // Clear CR0.EM (x87 emulation) -- must be clear for SSE to work.
+        use x86_64::registers::control::{Cr0, Cr0Flags};
+        Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
+
         Cr4::update(|f| {
             f.insert(Cr4Flags::PAGE_GLOBAL);
-            // Enable SSE: user-space programs (e.g. busybox compiled with SSE2)
-            // will #UD on any SSE instruction without these flags.
             f.insert(Cr4Flags::OSFXSR); // enable FXSAVE/FXRSTOR
             f.insert(Cr4Flags::OSXMMEXCPT_ENABLE); // enable SSE exceptions
         });
     }
+    // TODO: Save/restore FPU/SSE state (FXSAVE/FXRSTOR or XSAVE/XRSTOR)
+    // on context switches. Currently trapframe 0.11 does not preserve
+    // x87/SSE registers, so multi-process SSE will corrupt state.
     // TODO: SMP boot -- x86_smpboot was removed (old dependency).
     // Need to implement AP startup or find a replacement. See #94.
 }

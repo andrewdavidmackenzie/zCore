@@ -28,14 +28,13 @@ fn main() -> Result<()> {
     let output_path = PathBuf::from(&args[2]);
 
     // Parse optional --ramdisk <path>
-    let ramdisk_path = args
-        .iter()
-        .position(|a| a == "--ramdisk")
-        .map(|i| {
+    let ramdisk_path = match args.iter().position(|a| a == "--ramdisk") {
+        Some(i) => Some(PathBuf::from(
             args.get(i + 1)
-                .expect("--ramdisk requires a path argument")
-        })
-        .map(PathBuf::from);
+                .ok_or_else(|| anyhow::anyhow!("--ramdisk requires a path argument"))?,
+        )),
+        None => None,
+    };
 
     if !kernel_path.exists() {
         anyhow::bail!("Kernel ELF not found: {}", kernel_path.display());
