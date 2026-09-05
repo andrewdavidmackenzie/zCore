@@ -31,15 +31,29 @@ case "$ARCH" in
     ;;
   x86_64)
     # x86_64 uses a BIOS bootable disk image that bundles kernel + rootfs.
-    # The image is created by the x86-bootimage tool during `make build`.
-    KERNEL="target/x86_64/release/boot.img"
-    IMAGE="$KERNEL"  # rootfs is embedded as ramdisk in the boot image
+    # Build the boot image from the kernel ELF + rootfs SFS image.
+    KERNEL_ELF="target/x86_64/release/zcore"
+    BOOT_IMG="target/x86_64/release/boot.img"
+    ROOTFS_IMG="zCore/x86_64.img"
+    BOOTIMAGE_TOOL="tools/x86-bootimage/target/release/x86-bootimage"
+
+    if [ ! -f "$BOOTIMAGE_TOOL" ]; then
+      echo "Building x86-bootimage tool..."
+      cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
+    fi
+    BOOTIMAGE_ARGS=("$KERNEL_ELF" "$BOOT_IMG")
+    if [ -f "$ROOTFS_IMG" ]; then
+      BOOTIMAGE_ARGS+=(--ramdisk "$ROOTFS_IMG")
+    fi
+    "$BOOTIMAGE_TOOL" "${BOOTIMAGE_ARGS[@]}"
+
+    KERNEL="$BOOT_IMG"
     QEMU_CMD=(
       qemu-system-x86_64
       -m 2G -display none -no-reboot -nographic
       -machine q35 -cpu qemu64,+fsgsbase,+rdrand
       -serial mon:stdio
-      -drive "format=raw,file=$KERNEL"
+      -drive "format=raw,file=$BOOT_IMG"
     )
     ;;
   *)
