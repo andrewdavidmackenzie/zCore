@@ -1,21 +1,57 @@
 use kernel_hal::{KernelHandler, MMUFlags};
 use zircon_object::task::Thread;
 
+#[cfg(not(feature = "libos"))]
 use super::memory;
 
 pub struct ZcoreKernelHandler;
 
 impl KernelHandler for ZcoreKernelHandler {
     fn frame_alloc(&self) -> Option<usize> {
-        memory::frame_alloc(1, 0)
+        #[cfg(not(feature = "libos"))]
+        {
+            memory::frame_alloc(1, 0)
+        }
+        #[cfg(feature = "libos")]
+        {
+            // In libos mode, physical frame allocation is handled by the host.
+            // Return a mock address from the host's malloc.
+            let layout = core::alloc::Layout::from_size_align(0x1000, 0x1000).unwrap();
+            let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) };
+            if ptr.is_null() {
+                None
+            } else {
+                Some(ptr as usize)
+            }
+        }
     }
 
     fn frame_alloc_contiguous(&self, frame_count: usize, align_log2: usize) -> Option<usize> {
-        memory::frame_alloc(frame_count, align_log2)
+        #[cfg(not(feature = "libos"))]
+        {
+            memory::frame_alloc(frame_count, align_log2)
+        }
+        #[cfg(feature = "libos")]
+        {
+            let size = frame_count * 0x1000;
+            let align = 1 << align_log2.max(12);
+            let layout = core::alloc::Layout::from_size_align(size, align).unwrap();
+            let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) };
+            if ptr.is_null() {
+                None
+            } else {
+                Some(ptr as usize)
+            }
+        }
     }
 
     fn frame_dealloc(&self, paddr: usize) {
-        memory::frame_dealloc(paddr)
+        #[cfg(not(feature = "libos"))]
+        memory::frame_dealloc(paddr);
+        #[cfg(feature = "libos")]
+        {
+            let _ = paddr; // In libos mode, we don't track individual frame deallocs
+        }
     }
 
     fn handle_page_fault(&self, fault_vaddr: usize, access_flags: MMUFlags) {
