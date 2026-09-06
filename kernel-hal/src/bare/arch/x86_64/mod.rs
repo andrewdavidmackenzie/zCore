@@ -1,4 +1,5 @@
 mod drivers;
+mod smp;
 mod trap;
 
 pub mod config;
@@ -58,8 +59,9 @@ pub fn primary_init() {
     }
     // FPU/SSE state is saved/restored via FXSAVE/FXRSTOR in
     // UserContext::enter_uspace() (kernel-hal/src/common/context.rs).
-    // TODO: SMP boot -- x86_smpboot was removed (old dependency).
-    // Need to implement AP startup or find a replacement. See #94.
+
+    // Boot application processors (SMP)
+    smp::boot_application_processors();
 }
 
 pub fn timer_init() {

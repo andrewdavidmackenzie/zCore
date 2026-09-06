@@ -76,4 +76,20 @@ impl LocalApic {
     pub fn set_timer_initial(&mut self, initial: u32) {
         unsafe { self.inner.set_timer_initial(initial) }
     }
+
+    /// Send an INIT IPI to the specified APIC ID.
+    pub fn send_init_ipi(&mut self, apic_id: u32) {
+        unsafe { self.inner.send_init_ipi(apic_id) }
+    }
+
+    /// Send a Startup IPI (SIPI) to the specified APIC ID.
+    /// `vector` is the page number of the trampoline code (physical address >> 12).
+    pub fn send_sipi(&mut self, vector: u8, apic_id: u32) {
+        unsafe { self.inner.send_sipi(vector, apic_id) }
+    }
+
+    /// Send a fixed IPI with the given vector to the specified APIC ID.
+    pub fn send_ipi(&mut self, vector: u8, apic_id: u32) {
+        unsafe { self.inner.send_ipi(vector, apic_id) }
+    }
 }
