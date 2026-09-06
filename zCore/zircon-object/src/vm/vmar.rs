@@ -1015,9 +1015,17 @@ impl Drop for VmMapping {
 pub const KERNEL_ASPACE_BASE: u64 = 0xffff_ff02_0000_0000;
 /// The size of kernel address space
 pub const KERNEL_ASPACE_SIZE: u64 = 0x0000_0080_0000_0000;
-/// The base of user address space
-pub const USER_ASPACE_BASE: u64 = 0;
-// pub const USER_ASPACE_BASE: u64 = 0x0000_0000_0100_0000;
+// On aarch64 macOS (libos mode), mmap MAP_FIXED fails below 0x400000000
+// due to macOS ARM64 virtual address space restrictions. Use a higher base.
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "aspace-separate", target_arch = "aarch64", target_os = "macos"))] {
+        /// The base of user address space (raised on aarch64 macOS).
+        pub const USER_ASPACE_BASE: u64 = 0x4_0000_0000; // 16 GB
+    } else {
+        /// The base of user address space.
+        pub const USER_ASPACE_BASE: u64 = 0;
+    }
+}
 /// The size of user address space
 pub const USER_ASPACE_SIZE: u64 = (1u64 << 47) - 4096 - USER_ASPACE_BASE;
 /// The default number of user stack pages
