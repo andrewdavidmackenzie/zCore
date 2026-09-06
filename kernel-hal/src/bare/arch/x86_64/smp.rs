@@ -70,175 +70,56 @@ const TRAMPOLINE_DATA_OFFSET: usize = 0x100;
 /// - Jumps to 64-bit code
 /// - Loads stack and entry point from TrampolineData
 /// - Calls the Rust entry point
-const TRAMPOLINE_CODE: &[u8] = &{
-    // We use a const byte array because global_asm! with .code16 is
-    // fragile across toolchains. This is the assembled output of:
-    //
-    // .code16
-    // .org 0x8000
-    // start:
-    //   cli
-    //   xor ax, ax
-    //   mov ds, ax
-    //   ; Load GDT from TrampolineData
-    //   lgdt [0x8000 + TRAMPOLINE_DATA_OFFSET + offset_of(gdt_ptr)]
-    //   ; Enable protected mode
-    //   mov eax, cr0
-    //   or al, 1
-    //   mov cr0, eax
-    //   ; Far jump to 32-bit protected mode
-    //   jmp 0x08:pm_entry   ; (0x08 = first GDT code segment)
-    //
-    // .code32
-    // pm_entry:
-    //   mov ax, 0x10        ; data segment selector
-    //   mov ds, ax
-    //   mov es, ax
-    //   mov ss, ax
-    //   ; Enable PAE
-    //   mov eax, cr4
-    //   or eax, 0x20        ; CR4.PAE
-    //   mov cr4, eax
-    //   ; Load CR3 from TrampolineData
-    //   mov eax, [0x8000 + TRAMPOLINE_DATA_OFFSET + 0]  ; cr3 field
-    //   mov cr3, eax
-    //   ; Enable long mode via EFER MSR
-    //   mov ecx, 0xC0000080 ; IA32_EFER
-    //   rdmsr
-    //   or eax, 0x100       ; EFER.LME
-    //   wrmsr
-    //   ; Enable paging
-    //   mov eax, cr0
-    //   or eax, 0x80000000  ; CR0.PG
-    //   mov cr0, eax
-    //   ; Far jump to 64-bit long mode
-    //   jmp 0x18:lm_entry   ; (0x18 = 64-bit code segment in GDT)
-    //
-    // .code64
-    // lm_entry:
-    //   ; Load stack from TrampolineData
-    //   mov rsp, [0x8000 + TRAMPOLINE_DATA_OFFSET + 16]  ; stack_top
-    //   ; Load entry point
-    //   mov rax, [0x8000 + TRAMPOLINE_DATA_OFFSET + 8]   ; entry
-    //   ; Signal BSP that we're alive (write APIC ID to ap_ready)
-    //   ; APIC ID is in CPUID.01H:EBX[31:24]
-    //   push rax
-    //   mov eax, 1
-    //   cpuid
-    //   shr ebx, 24
-    //   mov [0x8000 + TRAMPOLINE_DATA_OFFSET + 34], ebx  ; ap_ready
-    //   pop rax
-    //   ; Jump to Rust entry point
-    //   jmp rax
-    //
-    // The GDT embedded in TrampolineData has:
-    //   0x00: null descriptor
-    //   0x08: 32-bit code segment (CS for protected mode)
-    //   0x10: 32-bit data segment
-    //   0x18: 64-bit code segment (CS for long mode)
-
-    // NOTE: Rather than embedding raw bytes (fragile), we'll use
-    // global_asm! with proper .code16/.code32/.code64 directives.
-    // This const is a placeholder -- the actual code is in ap_trampoline.S
-    *b""
-};
-
-// Use global_asm! for the trampoline instead of raw bytes.
-// The trampoline is assembled as a separate section that we copy at runtime.
-core::arch::global_asm!(
-    r#"
-.section .rodata
-.global ap_trampoline_start
-.global ap_trampoline_end
-
-ap_trampoline_start:
-
-.code16
-    cli
-    cld
-    xor ax, ax
-    mov ds, ax
-
-    // Load GDT pointer from data area
-    lgdt [{trampoline_phys} + {data_offset} + 26]
-
-    // Enable protected mode
-    mov eax, cr0
-    or al, 1
-    mov cr0, eax
-
-    // Far jump to 32-bit protected mode code
-    .byte 0x66, 0xea             // ljmp (32-bit operand override)
-    .long {trampoline_phys} + (.Lpm32 - ap_trampoline_start)
-    .word 0x08                   // code32 selector
-
-.code32
-.Lpm32:
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
-
-    // Enable PAE (required for long mode)
-    mov eax, cr4
-    or eax, (1 << 5)
-    mov cr4, eax
-
-    // Load CR3 (page table root) from trampoline data
-    mov eax, [{trampoline_phys} + {data_offset}]
-    mov cr3, eax
-
-    // Enable long mode via IA32_EFER MSR
-    mov ecx, 0xC0000080
-    rdmsr
-    or eax, (1 << 8)            // LME (Long Mode Enable)
-    wrmsr
-
-    // Enable paging (activates long mode with PAE+LME)
-    mov eax, cr0
-    or eax, (1 << 31)
-    mov cr0, eax
-
-    // Far jump to 64-bit long mode
-    .byte 0xea                   // ljmp
-    .long {trampoline_phys} + (.Llm64 - ap_trampoline_start)
-    .word 0x18                   // code64 selector
-
-.code64
-.Llm64:
-    // Load kernel stack from trampoline data
-    mov rsp, [{trampoline_phys} + {data_offset} + 16]
-
-    // Load entry point from trampoline data
-    mov rax, [{trampoline_phys} + {data_offset} + 8]
-
-    // Write APIC ID to ap_ready to signal BSP
-    push rax
-    mov eax, 1
-    cpuid
-    shr ebx, 24
-    mov [{trampoline_phys} + {data_offset} + 34], ebx
-    pop rax
-
-    // Jump to Rust entry point (secondary_main via ap_entry)
-    jmp rax
-
-.balign 4
-ap_trampoline_end:
-
-// Restore default code size for the rest of the kernel
-.code64
-"#,
-    trampoline_phys = const TRAMPOLINE_PHYS,
-    data_offset = const TRAMPOLINE_DATA_OFFSET,
-);
-
-extern "C" {
-    static ap_trampoline_start: u8;
-    static ap_trampoline_end: u8;
-}
+/// Pre-assembled AP trampoline binary (NASM output).
+///
+/// Assembled with: nasm -f bin trampoline.asm
+/// Source is in the doc comment of `boot_application_processors()`.
+///
+/// This is a flat binary that runs at physical address 0x8000.
+/// It transitions from 16-bit real mode through 32-bit protected mode
+/// to 64-bit long mode, then jumps to the Rust `ap_entry()` function.
+///
+/// Hard-coded addresses within the binary:
+/// - LGDT loads from 0x811a (TrampolineData.gdt_ptr)
+/// - CR3 loaded from 0x8100 (TrampolineData.cr3)
+/// - Entry point loaded from 0x8108 (TrampolineData.entry)
+/// - Stack loaded from 0x8110 (TrampolineData.stack_top)
+/// - APIC ID written to 0x8122 (TrampolineData.ap_ready)
+#[rustfmt::skip]
+const AP_TRAMPOLINE: [u8; 128] = [
+    // 16-bit real mode: cli, cld, xor ax,ax, mov ds,ax
+    0xfa, 0xfc, 0x31, 0xc0, 0x8e, 0xd8,
+    // o32 lgdt [0x811a]
+    0x66, 0x0f, 0x01, 0x16, 0x1a, 0x81,
+    // mov eax,cr0; or al,1; mov cr0,eax (enable PE)
+    0x0f, 0x20, 0xc0, 0x0c, 0x01, 0x0f, 0x22, 0xc0,
+    // ljmp 0x08:0x801c (far jump to 32-bit protected mode)
+    0x66, 0xea, 0x1c, 0x80, 0x00, 0x00, 0x08, 0x00,
+    // 32-bit protected mode: load data segments
+    0x66, 0xb8, 0x10, 0x00, 0x8e, 0xd8, 0x8e, 0xc0,
+    0x8e, 0xe0, 0x8e, 0xe8, 0x8e, 0xd0,
+    // Enable PAE (cr4 |= 0x20)
+    0x0f, 0x20, 0xe0, 0x83, 0xc8, 0x20, 0x0f, 0x22, 0xe0,
+    // Load CR3 from [0x8100]
+    0xa1, 0x00, 0x81, 0x00, 0x00, 0x0f, 0x22, 0xd8,
+    // Enable LME in EFER MSR
+    0xb9, 0x80, 0x00, 0x00, 0xc0, 0x0f, 0x32,
+    0x0d, 0x00, 0x01, 0x00, 0x00, 0x0f, 0x30,
+    // Enable paging (cr0 |= 0x80000000)
+    0x0f, 0x20, 0xc0, 0x0d, 0x00, 0x00, 0x00, 0x80, 0x0f, 0x22, 0xc0,
+    // ljmp 0x18:0x805b (far jump to 64-bit long mode)
+    0xea, 0x5b, 0x80, 0x00, 0x00, 0x18, 0x00,
+    // 64-bit long mode: load stack and entry, signal BSP, jump
+    0x48, 0x8b, 0x24, 0x25, 0x10, 0x81, 0x00, 0x00, // mov rsp,[0x8110]
+    0x48, 0x8b, 0x04, 0x25, 0x08, 0x81, 0x00, 0x00, // mov rax,[0x8108]
+    0x50,                                             // push rax
+    0xb8, 0x01, 0x00, 0x00, 0x00,                     // mov eax,1
+    0x0f, 0xa2,                                       // cpuid
+    0xc1, 0xeb, 0x18,                                 // shr ebx,24
+    0x89, 0x1c, 0x25, 0x22, 0x81, 0x00, 0x00,         // mov [0x8122],ebx
+    0x58,                                             // pop rax
+    0xff, 0xe0,                                       // jmp rax
+];
 
 /// Temporary GDT for the AP trampoline (null + code32 + data32 + code64).
 static TRAMPOLINE_GDT: [u64; 4] = [
@@ -288,26 +169,25 @@ pub fn boot_application_processors() {
         ap_ids
     );
 
-    // Copy trampoline code to low physical memory
-    let trampoline_size = core::ptr::addr_of!(ap_trampoline_end) as usize
-        - core::ptr::addr_of!(ap_trampoline_start) as usize;
+    // Copy pre-assembled trampoline binary to low physical memory
     assert!(
-        trampoline_size + TRAMPOLINE_DATA_OFFSET <= 0x1000,
+        AP_TRAMPOLINE.len() + TRAMPOLINE_DATA_OFFSET <= 0x1000,
         "trampoline too large for one page"
     );
 
     let trampoline_virt = phys_to_virt(TRAMPOLINE_PHYS);
-    let trampoline_src = core::ptr::addr_of!(ap_trampoline_start) as *const u8;
     info!(
-        "Copying {} bytes of trampoline from {:#x} to virt {:#x} (phys {:#x})",
-        trampoline_size, trampoline_src as usize, trampoline_virt, TRAMPOLINE_PHYS,
+        "Copying {} bytes of trampoline to phys {:#x}",
+        AP_TRAMPOLINE.len(),
+        TRAMPOLINE_PHYS,
     );
     unsafe {
-        core::ptr::copy_nonoverlapping(trampoline_src, trampoline_virt as *mut u8, trampoline_size);
+        core::ptr::copy_nonoverlapping(
+            AP_TRAMPOLINE.as_ptr(),
+            trampoline_virt as *mut u8,
+            AP_TRAMPOLINE.len(),
+        );
     }
-    // Verify the copy worked
-    let first_bytes = unsafe { core::slice::from_raw_parts(trampoline_virt as *const u8, 4) };
-    info!("Trampoline first 4 bytes at dest: {:02x?}", first_bytes);
 
     // Get current CR3 (kernel page table)
     let cr3: u64;
@@ -353,19 +233,24 @@ pub fn boot_application_processors() {
         info!("Starting AP {} ...", apic_id);
         let lapic = zcore_drivers::irq::x86::Apic::local_apic();
 
+        // In xAPIC mode, the destination field is in ICR[56:63], so the
+        // APIC ID must be shifted left by 24. The x2apic crate's
+        // send_init_ipi/send_sipi put the dest in ICR[32:63] raw.
+        let dest = apic_id << 24;
+
         // INIT IPI
-        lapic.send_init_ipi(apic_id);
+        lapic.send_init_ipi(dest);
         // Wait 10ms
         spin_delay_ms(10);
 
         // SIPI (first)
-        lapic.send_sipi(SIPI_VECTOR, apic_id);
+        lapic.send_sipi(SIPI_VECTOR, dest);
         // Wait 200us
         spin_delay_us(200);
 
         // SIPI (second, per Intel MP spec)
         if data.ap_ready.load(Ordering::SeqCst) == 0 {
-            lapic.send_sipi(SIPI_VECTOR, apic_id);
+            lapic.send_sipi(SIPI_VECTOR, dest);
             spin_delay_us(200);
         }
 
