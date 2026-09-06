@@ -18,6 +18,8 @@ hal_fn_impl! {
                 super::macos::register_sigsegv_handler();
             }
 
+            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+            super::aarch64_macos_fncall::install_sigsys_handler();
         }
     }
 }
