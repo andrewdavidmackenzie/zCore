@@ -404,11 +404,10 @@ mod libos {
         let rootfs = LinuxRootfs::new(host);
         rootfs.make(clear);
 
-        // Copy to rootfs/libos/ so HostFS can find it
+        // Always clear rootfs/libos/ before copying to remove stale files
+        // from previous builds (e.g. different architecture).
         const LIBOS_ROOTFS: &str = "rootfs/libos";
-        if clear {
-            dir::clear(LIBOS_ROOTFS).unwrap();
-        }
+        dir::clear(LIBOS_ROOTFS).unwrap();
         // Copy the architecture-specific rootfs to the libos location
         let src = rootfs.path();
         if src.exists() {

@@ -130,8 +130,9 @@ populated.
 |                                | (~103 MB)     |
 | `origin/archs/x86_64/`         | Zircon        |
 | `prebuilt.tar.xz`              | prebuilts     |
-| `origin/archs/libos/`          | LibOS rootfs  |
-| `rootfs-libos.tar.gz`          | archive       |
+| `rootfs/libos/`                | LibOS rootfs  |
+|                                | (built locally|
+|                                | from busybox) |
 | `origin/repos/busybox/`        | Cloned        |
 |                                | busybox       |
 |                                | source repo   |
@@ -156,8 +157,9 @@ not require UEFI firmware for aarch64.
   since Zircon mode and x86_64 are not active. Would be used if x86_64 is
   resurrected (see
   [#94](https://github.com/andrewdavidmackenzie/zCore/issues/94)).
-- `rootfs-libos.tar.gz`: Pre-built x86_64 musl rootfs for libos testing.
-  Downloaded by `cargo libos-libc-test`.
+- `rootfs/libos/`: LibOS rootfs, built locally from busybox source using
+  musl cross-compiler for the host architecture. Created by `cargo xtask
+  libos-libc-test` or `make libos-build`.
   > - `busybox/`: Git clone of official busybox repo,
   >   used as source for cross-compilation.
   > - `ffmpeg/`, `opencv/`: Optional media library
