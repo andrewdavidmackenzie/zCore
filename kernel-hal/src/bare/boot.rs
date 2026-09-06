@@ -42,15 +42,16 @@ hal_fn_impl! {
             // we can't print anything here, see reason: zcore/main.rs::secondary_main()
             #[cfg(target_arch = "x86_64")]
             {
-                // Save BSP's USER_SS/USER_CS before trapframe::init() overwrites them.
-                // On x86_64, trapframe::init() extends the current GDT and recomputes
-                // these globals based on the new entry count. Since the AP starts with
-                // the BSP's GDT (loaded in ap_entry), the AP's init adds duplicate
-                // entries, changing the selectors. We restore the BSP's values after.
+                // Serialize AP trapframe::init() to protect global USER_SS/USER_CS.
+                // trapframe::init() extends the current GDT and recomputes these
+                // globals based on the new entry count. We must save/restore them
+                // atomically so concurrent APs don't corrupt each other's values.
+                static INIT_LOCK: spin::Mutex<()> = spin::Mutex::new(());
                 extern "C" {
                     static mut USER_SS: u16;
                     static mut USER_CS: u16;
                 }
+                let _guard = INIT_LOCK.lock();
                 let saved_ss = unsafe { USER_SS };
                 let saved_cs = unsafe { USER_CS };
                 unsafe { trapframe::init() };
@@ -58,6 +59,7 @@ hal_fn_impl! {
                     USER_SS = saved_ss;
                     USER_CS = saved_cs;
                 }
+                drop(_guard);
             }
             #[cfg(not(target_arch = "x86_64"))]
             unsafe {
