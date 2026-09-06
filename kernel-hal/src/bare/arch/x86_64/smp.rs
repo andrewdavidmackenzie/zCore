@@ -79,12 +79,12 @@ const TRAMPOLINE_DATA_OFFSET: usize = 0x100;
 /// It transitions from 16-bit real mode through 32-bit protected mode
 /// to 64-bit long mode, then jumps to the Rust `ap_entry()` function.
 ///
-/// Hard-coded addresses within the binary:
-/// - LGDT loads from 0x811a (TrampolineData.gdt_ptr)
-/// - CR3 loaded from 0x8100 (TrampolineData.cr3)
-/// - Entry point loaded from 0x8108 (TrampolineData.entry)
-/// - Stack loaded from 0x8110 (TrampolineData.stack_top)
-/// - APIC ID written to 0x8122 (TrampolineData.ap_ready)
+/// Hard-coded addresses within the binary (TrampolineData at 0x8100):
+/// - LGDT loads from 0x8118 (gdt_ptr at +0x18)
+/// - CR3 loaded from 0x8100 (cr3 at +0x00)
+/// - Entry point loaded from 0x8108 (entry at +0x08)
+/// - Stack loaded from 0x8110 (stack_top at +0x10)
+/// - APIC ID written to 0x8124 (ap_ready at +0x24, after 2 bytes padding)
 #[rustfmt::skip]
 const AP_TRAMPOLINE: [u8; 148] = [
     // 16-bit real mode: cli, cld, xor ax,ax, mov ds,ax, serial 'A'
@@ -214,7 +214,10 @@ pub fn boot_application_processors() {
             error!("Failed to allocate stack for AP {}", apic_id);
             continue;
         }
-        let stack_top = stack as u64 + AP_STACK_SIZE as u64;
+        // SysV ABI requires (rsp % 16 == 8) at function entry. Since the
+        // trampoline uses `jmp` (not `call`), no return address is pushed,
+        // so we pre-align the stack to satisfy this invariant.
+        let stack_top = (stack as u64 + AP_STACK_SIZE as u64) - 8;
 
         // Set up trampoline data
         let data_virt = phys_to_virt(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET);
@@ -260,23 +263,19 @@ pub fn boot_application_processors() {
             apic_id, dbg_stack, dbg_entry, verify_entry, dbg_cr3, dbg_gdt
         );
 
-        // Send INIT-SIPI-SIPI without holding any locks.
-        lapic.send_init_ipi_all();
-        // 10ms delay (simple loop -- TSC may not work reliably during AP startup)
-        for _ in 0..10_000_000u64 {
-            core::hint::spin_loop();
-        }
+        // Send directed INIT-SIPI-SIPI to this specific AP.
+        // Broadcast IPIs would reset already-started APs on later iterations.
+        // For xAPIC mode, the APIC ID must be in ICR bits 56-63 (shifted << 24).
+        let dest = apic_id << 24;
+        lapic.send_init_ipi(dest);
+        spin_delay_ms(10);
 
-        lapic.send_sipi_all(SIPI_VECTOR);
-        for _ in 0..200_000u64 {
-            core::hint::spin_loop();
-        }
+        lapic.send_sipi(SIPI_VECTOR, dest);
+        spin_delay_us(200);
 
         if data.ap_ready.load(Ordering::SeqCst) == 0 {
-            lapic.send_sipi_all(SIPI_VECTOR);
-            for _ in 0..200_000u64 {
-                core::hint::spin_loop();
-            }
+            lapic.send_sipi(SIPI_VECTOR, dest);
+            spin_delay_us(200);
         }
 
         // Wait for AP to signal it's alive (up to 100ms)
@@ -294,7 +293,7 @@ pub fn boot_application_processors() {
             let raw_ptr = phys_to_virt(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET + 36) as *const u32;
             let raw_val = unsafe { core::ptr::read_volatile(raw_ptr) };
             warn!(
-                "AP {} did not respond (ap_ready={}, raw@0x8122={:#x})",
+                "AP {} did not respond (ap_ready={}, raw@0x8124={:#x})",
                 apic_id, ready_val, raw_val
             );
         }
@@ -392,6 +391,13 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     if pdpt[pdpt_idx] == 0 {
         let frame = alloc_zeroed_page();
         pdpt[pdpt_idx] = frame as u64 | 0x3;
+    } else if pdpt[pdpt_idx] & 0x80 != 0 {
+        // 1GB huge page already covers this address -- already mapped
+        info!(
+            "Identity map: 1GB huge page at PDPT[{}] already covers {:#x}",
+            pdpt_idx, page
+        );
+        return;
     }
     let pd_phys = (pdpt[pdpt_idx] & !0xFFF) as usize;
 
@@ -400,6 +406,13 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     if pd[pd_idx] == 0 {
         let frame = alloc_zeroed_page();
         pd[pd_idx] = frame as u64 | 0x3;
+    } else if pd[pd_idx] & 0x80 != 0 {
+        // 2MB huge page already covers this address -- already mapped
+        info!(
+            "Identity map: 2MB huge page at PD[{}] already covers {:#x}",
+            pd_idx, page
+        );
+        return;
     }
     let pt_phys = (pd[pd_idx] & !0xFFF) as usize;
 
@@ -424,7 +437,13 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
 /// Simpler approach: allocate pages from the physical memory region
 /// that IS identity-mapped via phys_to_virt. We do this by allocating
 /// from the physical frame allocator via a callback.
-static mut PT_PAGE_POOL: [[u8; 4096]; 3] = [[0u8; 4096]; 3];
+#[repr(align(4096))]
+struct AlignedPage([u8; 4096]);
+static mut PT_PAGE_POOL: [AlignedPage; 3] = [
+    AlignedPage([0u8; 4096]),
+    AlignedPage([0u8; 4096]),
+    AlignedPage([0u8; 4096]),
+];
 static mut PT_PAGE_NEXT: usize = 0;
 
 /// Allocate a zeroed page and return its physical address.
@@ -438,8 +457,11 @@ fn alloc_zeroed_page() -> usize {
     };
     assert!(idx < 3, "SMP page table pool exhausted");
     let virt = unsafe { core::ptr::addr_of_mut!(PT_PAGE_POOL[idx]) as usize };
+    assert!(virt & 0xFFF == 0, "PT_PAGE_POOL entry not page-aligned");
     // Look up the physical address by walking the current page table
-    virt_to_phys(virt)
+    let phys = virt_to_phys(virt);
+    assert!(phys & 0xFFF == 0, "PT page physical address not aligned");
+    phys
 }
 
 /// Translate a virtual address to physical by walking the current page table.

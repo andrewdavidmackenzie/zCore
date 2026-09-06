@@ -1,11 +1,13 @@
-; AP Trampoline - fixed offsets
-; TrampolineData at 0x8100:
+; AP Trampoline
+; TrampolineData at 0x8100 (repr(C) with padding):
 ;   +0x00: cr3 (u64)
 ;   +0x08: entry (u64)
 ;   +0x10: stack_top (u64)
-;   +0x18: gdt_ptr (packed: u16 limit + u64 base)
-;   +0x22: ap_ready (u32)
-; GDT at 0x8126 (0x100 + sizeof(TrampolineData) = 0x100 + 38 = 0x126)
+;   +0x18: gdt_ptr (packed: u16 limit + u64 base = 10 bytes)
+;   +0x22: 2 bytes padding (AtomicU32 alignment)
+;   +0x24: ap_ready (u32)
+;   Total size: 40 bytes (0x28)
+; GDT at 0x8128 (0x100 + 40 = 0x128)
 
 BITS 16
 ORG 0x8000
