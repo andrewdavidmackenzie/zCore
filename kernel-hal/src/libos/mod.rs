@@ -23,6 +23,9 @@ hal_fn_impl_default!(rand, super::hal_fn::console);
 #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
 mod macos;
 
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod aarch64_macos_fncall;
+
 /// Non-SMP initialization.
 pub fn init() {
     drivers::init_early();

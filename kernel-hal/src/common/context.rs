@@ -12,6 +12,8 @@ cfg_if! {
         all(target_arch = "aarch64", target_os = "linux"),
     )))] {
         pub use trapframe::syscall_fn_entry as syscall_entry;
+    } else if #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))] {
+        pub use crate::imp::aarch64_macos_fncall::syscall_fn_entry as syscall_entry;
     } else {
         pub use dummpy_syscall_entry as syscall_entry;
         pub fn dummpy_syscall_entry() {
@@ -251,14 +253,10 @@ impl UserContext {
                 all(target_arch = "aarch64", target_os = "linux"),
             )))] {
                 self.inner.run_fncall()
-            } else if #[cfg(feature = "libos")] {
-                // LibOS mode on unsupported platform (e.g. aarch64 macOS).
-                // The trapframe crate doesn't support fncall on this target.
-                let _ = &self.inner;
-                unimplemented!(
-                    "libos enter_uspace not supported on this platform \
-                     (trapframe fncall requires x86_64 or aarch64-linux)"
-                )
+            } else if #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))] {
+                // Use vendored fncall for aarch64 macOS (trapframe doesn't support it)
+                use crate::imp::aarch64_macos_fncall::UserContextFnCall;
+                self.inner.run_fncall_macos()
             } else if #[cfg(target_arch = "x86_64")] {
                 // Restore user FPU/SSE state before entering user mode
                 unsafe {
