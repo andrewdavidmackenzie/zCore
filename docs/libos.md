@@ -8,11 +8,33 @@ development, testing, and debugging -- the kernel compiles and starts in
 seconds, with full access to host debugging tools (gdb, lldb, valgrind,
 strace).
 
-LibOS build and CI integration was completed in PR #168.
-For debugging, run the libos binary directly under a
-debugger (`lldb -- target/debug/zcore /bin/busybox sh`).
-For RustRover, add a Run Configuration pointing to the
-zCore binary with `--features linux,libos`. No QEMU needed.
+LibOS supports both **Linux** and **Zircon** personalities:
+
+### Linux LibOS
+
+Build and run busybox shell:
+```bash
+cargo xtask libos-libc-test   # build rootfs (first time)
+make libos-run-linux           # or: cargo linux-libos --args "/bin/busybox sh"
+```
+
+### Zircon LibOS
+
+Build and run petal hello program:
+```bash
+make libos-build-zircon        # builds userstart + petal + zcore
+./target/release/zcore path/to/petal.zbi
+```
+
+### Debugging
+
+Run the libos binary directly under a debugger -- no QEMU needed:
+```bash
+lldb -- target/debug/zcore /bin/busybox sh          # Linux mode
+lldb -- target/debug/zcore target/petal/aarch64/hello.zbi  # Zircon mode
+```
+For RustRover/CLion, add a Run Configuration with `--features linux,libos`
+(or `zircon,libos`).
 
 ### How It Works
 

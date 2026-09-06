@@ -229,6 +229,15 @@ enum Commands {
     /// ```
     LinuxLibos(LinuxLibosArg),
 
+    /// Builds zCore in Zircon libos mode (builds userstart + petal first).
+    ///
+    /// # Example
+    ///
+    /// ```bash
+    /// cargo xtask libos-build-zircon
+    /// ```
+    LibosBuildZircon,
+
     /// Builds petal test programs and packages them into a ZBI.
     ///
     /// Cross-compiles a petal program for the target architecture,
@@ -309,6 +318,7 @@ fn main() {
             libos::put_libc_test();
         }
         LinuxLibos(arg) => libos::linux_run(arg.args),
+        LibosBuildZircon => libos::zircon_build(),
         PetalZbi(arg) => {
             petal::build_petal_zbi(arg.arch.arch, &arg.bin);
         }
@@ -365,11 +375,9 @@ fn check_style() {
     Cargo::doc().all_features().arg("--no-deps").invoke();
 
     println!("Check libos");
-    // println!("    Checks zircon libos");
-    // Cargo::clippy()
-    //     .package("zcore")
-    //     .features(false, &["zircon", "libos"])
-    //     .invoke();
+    // Zircon libos clippy requires USERSTART_ELF and PETAL_ZBI env vars
+    // (set by `cargo xtask libos-build-zircon`). Skipped in generic check.
+    // Use `make libos-build-zircon` to verify Zircon libos builds.
     println!("    Checks linux libos");
     Cargo::clippy()
         .package("zcore")
@@ -425,5 +433,38 @@ mod libos {
             .arg("--")
             .args(args.split_whitespace())
             .invoke()
+    }
+
+    /// Builds zCore in Zircon libos mode.
+    ///
+    /// First builds userstart and a petal ZBI for the host architecture,
+    /// then compiles zcore with `--features zircon,libos` and the
+    /// USERSTART_ELF / PETAL_ZBI env vars set.
+    pub(super) fn zircon_build() {
+        let host = Arch::host();
+        println!("Building Zircon libos for host arch: {}", host.name());
+
+        // Build userstart for host architecture
+        let userstart_path = crate::petal::build_userstart(host);
+        // Build petal hello ZBI for host architecture
+        let zbi_path = crate::petal::build_petal_zbi(host, "hello");
+
+        // Build zcore with zircon+libos features
+        let status = std::process::Command::new("cargo")
+            .args([
+                "build",
+                "-p",
+                "zcore",
+                "--features",
+                "zircon,libos",
+                "--release",
+            ])
+            .env("USERSTART_ELF", &userstart_path)
+            .env("PETAL_ZBI", &zbi_path)
+            .status()
+            .expect("failed to run cargo build");
+        if !status.success() {
+            panic!("Zircon libos build failed");
+        }
     }
 }

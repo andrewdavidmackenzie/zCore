@@ -92,3 +92,6 @@ jobs:
 
       - name: Build libos (Linux mode)
         run: cargo build -p zcore --features linux,libos
+
+      - name: Build libos (Zircon mode)
+        run: cargo xtask libos-build-zircon
