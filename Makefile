@@ -6,7 +6,8 @@ XTASK ?= 1
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
-.PHONY: help build run test boot-test config config-macos update rootfs libc-test other-test image clippy check doc clean
+.PHONY: help build run test boot-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
+	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image

@@ -130,9 +130,9 @@ populated.
 |                                | (~103 MB)     |
 | `origin/archs/x86_64/`         | Zircon        |
 | `prebuilt.tar.xz`              | prebuilts     |
-| `rootfs/libos/`                | LibOS rootfs  |
-|                                | (built locally|
-|                                | from busybox) |
+| `rootfs/{arch}/`               | Rootfs (shared|
+|                                | by bare-metal |
+|                                | and LibOS)    |
 | `origin/repos/busybox/`        | Cloned        |
 |                                | busybox       |
 |                                | source repo   |

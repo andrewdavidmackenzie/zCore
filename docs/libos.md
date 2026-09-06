@@ -31,7 +31,7 @@ make libos-build-zircon        # builds userstart + petal + zcore
 Run the libos binary directly under a debugger -- no QEMU needed:
 ```bash
 lldb -- target/debug/zcore /bin/busybox sh          # Linux mode
-lldb -- target/debug/zcore target/petal/aarch64/hello.zbi  # Zircon mode
+lldb -- target/debug/zcore target/petal/{host_arch}/hello.zbi  # Zircon mode
 ```
 For RustRover/CLion, add a Run Configuration with `--features linux,libos`
 (or `zircon,libos`).
@@ -314,13 +314,13 @@ verification confirms file effects are visible on the real filesystem.
 
 Run all libos tests with:
 ```
-cargo test -p zcore-loader
+cargo test -p linux-loader --features linux,libos
 ```
 
 The LibOS build is checked in CI (`build.yml` on ubuntu + macOS).
-Integration tests (`cargo test -p zcore-loader`) require `--features
-linux,libos` and `rootfs/libos/` populated. Feature combination testing
-is tracked in [#169](https://github.com/andrewdavidmackenzie/zCore/issues/169).
+Integration tests require `--features linux,libos` and `rootfs/{arch}/`
+populated. Feature combination testing is tracked in
+[#169](https://github.com/andrewdavidmackenzie/zCore/issues/169).
 
 
 ### Architectural Limitations
