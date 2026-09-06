@@ -123,10 +123,28 @@ static TRAMPOLINE_GDT: [u64; 4] = [
     0x0020_9800_0000_0000, // 0x18: code64 (exec/read, long mode)
 ];
 
+/// BSP's GDT descriptor, saved after trapframe::init() so APs can load it.
+static mut BSP_GDTR: [u8; 10] = [0; 10]; // GDTR is 2-byte limit + 8-byte base
+
+/// Save the BSP's GDTR after trapframe::init(). Called from primary_init().
+pub fn save_bsp_gdt() {
+    unsafe {
+        core::arch::asm!("sgdt [{}]", in(reg) &mut BSP_GDTR, options(nostack));
+    }
+}
+
 /// Rust entry point for APs after the trampoline completes.
-/// Sets up CPU features and calls secondary_main.
+/// Loads the BSP's GDT so USER_SS/USER_CS selectors match, then
+/// calls secondary_main.
 extern "C" fn ap_entry() -> ! {
     unsafe {
+        // Load the BSP's GDT -- critical! The trampoline's minimal GDT has
+        // different entry count than the BSP's. trapframe::init() extends
+        // "the current GDT" and sets global USER_SS/USER_CS based on the
+        // entry count. If the AP starts with a different GDT, the selectors
+        // will be wrong, causing #GP on iret.
+        core::arch::asm!("lgdt [{}]", in(reg) &BSP_GDTR, options(nostack));
+
         // Enable NXE in EFER -- the kernel page table uses NX bits on data
         // pages. Without NXE, bit 63 in PTEs is reserved, causing #PF.
         use x86_64::registers::model_specific::{Efer, EferFlags};

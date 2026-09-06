@@ -40,7 +40,29 @@ hal_fn_impl! {
         fn secondary_init() {
             // info!("Secondary CPU {} init...", crate::cpu::cpu_id());
             // we can't print anything here, see reason: zcore/main.rs::secondary_main()
-            unsafe { trapframe::init() };
+            #[cfg(target_arch = "x86_64")]
+            {
+                // Save BSP's USER_SS/USER_CS before trapframe::init() overwrites them.
+                // On x86_64, trapframe::init() extends the current GDT and recomputes
+                // these globals based on the new entry count. Since the AP starts with
+                // the BSP's GDT (loaded in ap_entry), the AP's init adds duplicate
+                // entries, changing the selectors. We restore the BSP's values after.
+                extern "C" {
+                    static mut USER_SS: u16;
+                    static mut USER_CS: u16;
+                }
+                let saved_ss = unsafe { USER_SS };
+                let saved_cs = unsafe { USER_CS };
+                unsafe { trapframe::init() };
+                unsafe {
+                    USER_SS = saved_ss;
+                    USER_CS = saved_cs;
+                }
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            unsafe {
+                trapframe::init()
+            };
             super::arch::secondary_init();
             // now can print
         }

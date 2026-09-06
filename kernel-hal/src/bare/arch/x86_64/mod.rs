@@ -41,6 +41,11 @@ pub fn primary_init_early() {
 }
 
 pub fn primary_init() {
+    // Save the BSP's GDT descriptor so APs can load the same GDT.
+    // This must happen after trapframe::init() (called in boot.rs)
+    // which sets up the GDT with user-mode segments.
+    smp::save_bsp_gdt();
+
     drivers::init().unwrap();
 
     // Enable SSE support for user-space programs.
