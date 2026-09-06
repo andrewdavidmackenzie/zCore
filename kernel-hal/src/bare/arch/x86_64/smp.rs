@@ -289,22 +289,25 @@ pub fn boot_application_processors() {
     );
 
     // Copy trampoline code to low physical memory
-    let trampoline_size = unsafe {
-        &ap_trampoline_end as *const u8 as usize - &ap_trampoline_start as *const u8 as usize
-    };
+    let trampoline_size = core::ptr::addr_of!(ap_trampoline_end) as usize
+        - core::ptr::addr_of!(ap_trampoline_start) as usize;
     assert!(
         trampoline_size + TRAMPOLINE_DATA_OFFSET <= 0x1000,
         "trampoline too large for one page"
     );
 
     let trampoline_virt = phys_to_virt(TRAMPOLINE_PHYS);
+    let trampoline_src = core::ptr::addr_of!(ap_trampoline_start) as *const u8;
+    info!(
+        "Copying {} bytes of trampoline from {:#x} to virt {:#x} (phys {:#x})",
+        trampoline_size, trampoline_src as usize, trampoline_virt, TRAMPOLINE_PHYS,
+    );
     unsafe {
-        core::ptr::copy_nonoverlapping(
-            &ap_trampoline_start as *const u8,
-            trampoline_virt as *mut u8,
-            trampoline_size,
-        );
+        core::ptr::copy_nonoverlapping(trampoline_src, trampoline_virt as *mut u8, trampoline_size);
     }
+    // Verify the copy worked
+    let first_bytes = unsafe { core::slice::from_raw_parts(trampoline_virt as *const u8, 4) };
+    info!("Trampoline first 4 bytes at dest: {:02x?}", first_bytes);
 
     // Get current CR3 (kernel page table)
     let cr3: u64;
