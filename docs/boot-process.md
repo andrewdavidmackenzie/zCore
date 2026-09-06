@@ -340,6 +340,10 @@ for mock devices.
 
 **Run:** `make libos-run` (requires `rootfs/libos/` populated)
 
+**Debugging:** Since libos runs as a regular host process, you can attach
+any native debugger (lldb, gdb, RustRover) directly -- no QEMU or remote
+debugging needed. Example: `lldb -- target/release/zcore /bin/busybox sh`
+
 ---
 
 ## Common Post-Boot Path

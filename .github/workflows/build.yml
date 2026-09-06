@@ -77,10 +77,12 @@ jobs:
         run: cargo bin -m virt-${{ matrix.arch }}
 
   libos:
-    name: LibOS build
-    # LibOS requires x86_64 host with trapframe fncall support.
-    # aarch64 macOS can compile but cannot run (no fncall runtime).
-    runs-on: ubuntu-latest
+    name: LibOS build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
