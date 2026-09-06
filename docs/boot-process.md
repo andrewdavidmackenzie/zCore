@@ -336,13 +336,25 @@ for mock devices.
 - aarch64 macOS (Apple Silicon): compiles but cannot run (trapframe
   fncall not implemented for this platform)
 
+**Setup rootfs** (required before first run):
+```bash
+cargo xtask libos-libc-test
+```
+This downloads a pre-built x86_64 musl rootfs from the upstream cache
+into `rootfs/libos/`, containing busybox and libc-test binaries.
+Note: this rootfs contains x86_64 binaries only.
+
 **Build:** `cargo build -p zcore --features linux,libos` or `make libos-build`
 
-**Run:** `make libos-run` (requires `rootfs/libos/` populated)
+**Run:**
+```bash
+cargo run -p zcore --features linux,libos -- /bin/busybox sh
+```
+Or via Makefile: `make libos-run`
 
 **Debugging:** Since libos runs as a regular host process, you can attach
 any native debugger (lldb, gdb, RustRover) directly -- no QEMU or remote
-debugging needed. Example: `lldb -- target/release/zcore /bin/busybox sh`
+debugging needed. Example: `lldb -- target/debug/zcore /bin/busybox sh`
 
 ---
 
