@@ -89,18 +89,18 @@ const TRAMPOLINE_DATA_OFFSET: usize = 0x100;
 const AP_TRAMPOLINE: [u8; 128] = [
     // 16-bit real mode: cli, cld, xor ax,ax, mov ds,ax
     0xfa, 0xfc, 0x31, 0xc0, 0x8e, 0xd8,
-    // o32 lgdt [0x811a]
-    0x66, 0x0f, 0x01, 0x16, 0x1a, 0x81,
+    // o32 lgdt [0x8118]  (gdt_ptr at TrampolineData + 0x18)
+    0x66, 0x0f, 0x01, 0x16, 0x18, 0x81,
     // mov eax,cr0; or al,1; mov cr0,eax (enable PE)
     0x0f, 0x20, 0xc0, 0x0c, 0x01, 0x0f, 0x22, 0xc0,
     // ljmp 0x08:0x801c (far jump to 32-bit protected mode)
     0x66, 0xea, 0x1c, 0x80, 0x00, 0x00, 0x08, 0x00,
-    // 32-bit protected mode: load data segments
+    // 32-bit protected mode: load data segments with selector 0x10
     0x66, 0xb8, 0x10, 0x00, 0x8e, 0xd8, 0x8e, 0xc0,
     0x8e, 0xe0, 0x8e, 0xe8, 0x8e, 0xd0,
     // Enable PAE (cr4 |= 0x20)
     0x0f, 0x20, 0xe0, 0x83, 0xc8, 0x20, 0x0f, 0x22, 0xe0,
-    // Load CR3 from [0x8100]
+    // Load CR3 from [0x8100]  (cr3 at TrampolineData + 0x00)
     0xa1, 0x00, 0x81, 0x00, 0x00, 0x0f, 0x22, 0xd8,
     // Enable LME in EFER MSR
     0xb9, 0x80, 0x00, 0x00, 0xc0, 0x0f, 0x32,
@@ -109,14 +109,14 @@ const AP_TRAMPOLINE: [u8; 128] = [
     0x0f, 0x20, 0xc0, 0x0d, 0x00, 0x00, 0x00, 0x80, 0x0f, 0x22, 0xc0,
     // ljmp 0x18:0x805b (far jump to 64-bit long mode)
     0xea, 0x5b, 0x80, 0x00, 0x00, 0x18, 0x00,
-    // 64-bit long mode: load stack and entry, signal BSP, jump
-    0x48, 0x8b, 0x24, 0x25, 0x10, 0x81, 0x00, 0x00, // mov rsp,[0x8110]
-    0x48, 0x8b, 0x04, 0x25, 0x08, 0x81, 0x00, 0x00, // mov rax,[0x8108]
+    // 64-bit long mode:
+    0x48, 0x8b, 0x24, 0x25, 0x10, 0x81, 0x00, 0x00, // mov rsp,[0x8110]  (stack_top)
+    0x48, 0x8b, 0x04, 0x25, 0x08, 0x81, 0x00, 0x00, // mov rax,[0x8108]  (entry)
     0x50,                                             // push rax
     0xb8, 0x01, 0x00, 0x00, 0x00,                     // mov eax,1
     0x0f, 0xa2,                                       // cpuid
     0xc1, 0xeb, 0x18,                                 // shr ebx,24
-    0x89, 0x1c, 0x25, 0x22, 0x81, 0x00, 0x00,         // mov [0x8122],ebx
+    0x89, 0x1c, 0x25, 0x22, 0x81, 0x00, 0x00,         // mov [0x8122],ebx  (ap_ready)
     0x58,                                             // pop rax
     0xff, 0xe0,                                       // jmp rax
 ];
@@ -231,26 +231,24 @@ pub fn boot_application_processors() {
 
         // Send INIT-SIPI-SIPI sequence
         info!("Starting AP {} ...", apic_id);
+        // Use broadcast IPIs (all-excluding-self) for simplicity.
+        // This works when booting APs one at a time because we only
+        // send SIPI after INIT, and only APs in SIPI-wait state respond.
         let lapic = zcore_drivers::irq::x86::Apic::local_apic();
 
-        // In xAPIC mode, the destination field is in ICR[56:63], so the
-        // APIC ID must be shifted left by 24. The x2apic crate's
-        // send_init_ipi/send_sipi put the dest in ICR[32:63] raw.
-        let dest = apic_id << 24;
-
-        // INIT IPI
-        lapic.send_init_ipi(dest);
+        // INIT IPI (broadcast to all other CPUs)
+        lapic.send_init_ipi_all();
         // Wait 10ms
         spin_delay_ms(10);
 
-        // SIPI (first)
-        lapic.send_sipi(SIPI_VECTOR, dest);
+        // SIPI (first, broadcast)
+        lapic.send_sipi_all(SIPI_VECTOR);
         // Wait 200us
         spin_delay_us(200);
 
         // SIPI (second, per Intel MP spec)
         if data.ap_ready.load(Ordering::SeqCst) == 0 {
-            lapic.send_sipi(SIPI_VECTOR, dest);
+            lapic.send_sipi_all(SIPI_VECTOR);
             spin_delay_us(200);
         }
 

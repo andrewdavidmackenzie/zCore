@@ -82,10 +82,20 @@ impl LocalApic {
         unsafe { self.inner.send_init_ipi(apic_id) }
     }
 
+    /// Send an INIT IPI to all other processors.
+    pub fn send_init_ipi_all(&mut self) {
+        unsafe { self.inner.send_init_ipi_all() }
+    }
+
     /// Send a Startup IPI (SIPI) to the specified APIC ID.
     /// `vector` is the page number of the trampoline code (physical address >> 12).
     pub fn send_sipi(&mut self, vector: u8, apic_id: u32) {
         unsafe { self.inner.send_sipi(vector, apic_id) }
+    }
+
+    /// Send a Startup IPI to all other processors.
+    pub fn send_sipi_all(&mut self, vector: u8) {
+        unsafe { self.inner.send_sipi_all(vector) }
     }
 
     /// Send a fixed IPI with the given vector to the specified APIC ID.

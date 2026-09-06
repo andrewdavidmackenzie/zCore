@@ -1,12 +1,11 @@
-; AP Trampoline: 16-bit real mode -> 32-bit protected mode -> 64-bit long mode
-; Assembled at org 0x8000 (copied there at runtime)
-; TrampolineData is at 0x8100 (TRAMPOLINE_DATA_OFFSET = 0x100):
+; AP Trampoline - fixed offsets
+; TrampolineData at 0x8100:
 ;   +0x00: cr3 (u64)
 ;   +0x08: entry (u64)
 ;   +0x10: stack_top (u64)
-;   +0x1a: gdt_ptr (2 bytes limit + 8 bytes base, but lgdt reads 2+3 or 2+4)
+;   +0x18: gdt_ptr (packed: u16 limit + u64 base)
 ;   +0x22: ap_ready (u32)
-; GDT is at 0x8126 (gdt_offset = 0x100 + 38 = 0x126)
+; GDT at 0x8126 (0x100 + sizeof(TrampolineData) = 0x100 + 38 = 0x126)
 
 BITS 16
 ORG 0x8000
@@ -17,8 +16,8 @@ start:
     xor ax, ax
     mov ds, ax
 
-    ; Load GDT (need 32-bit base, use o32 override)
-    o32 lgdt [0x811a]
+    ; Load GDT (o32 for 32-bit base)
+    o32 lgdt [0x8118]       ; gdt_ptr at TrampolineData + 0x18
 
     ; Enable protected mode
     mov eax, cr0
@@ -43,7 +42,7 @@ pm32:
     mov cr4, eax
 
     ; Load CR3 from trampoline data
-    mov eax, [0x8100]
+    mov eax, [0x8100]       ; cr3 at +0x00
     mov cr3, eax
 
     ; Enable long mode via IA32_EFER MSR
@@ -52,7 +51,7 @@ pm32:
     or eax, (1 << 8)
     wrmsr
 
-    ; Enable paging (activates long mode)
+    ; Enable paging
     mov eax, cr0
     or eax, (1 << 31)
     mov cr0, eax
@@ -62,17 +61,17 @@ pm32:
 
 BITS 64
 lm64:
-    ; Load stack from trampoline data
-    mov rsp, [0x8110]
+    ; Load stack
+    mov rsp, [0x8110]       ; stack_top at +0x10
     ; Load entry point
-    mov rax, [0x8108]
+    mov rax, [0x8108]       ; entry at +0x08
 
     ; Signal BSP: write APIC ID to ap_ready
     push rax
     mov eax, 1
     cpuid
     shr ebx, 24
-    mov [0x8122], ebx
+    mov [0x8122], ebx       ; ap_ready at +0x22
     pop rax
 
     ; Jump to Rust entry
