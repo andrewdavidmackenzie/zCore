@@ -229,6 +229,15 @@ enum Commands {
     /// ```
     LinuxLibos(LinuxLibosArg),
 
+    /// Builds zCore in Zircon libos mode (builds userstart + petal first).
+    ///
+    /// # Example
+    ///
+    /// ```bash
+    /// cargo xtask libos-build-zircon
+    /// ```
+    LibosBuildZircon,
+
     /// Builds petal test programs and packages them into a ZBI.
     ///
     /// Cross-compiles a petal program for the target architecture,
@@ -309,6 +318,7 @@ fn main() {
             libos::put_libc_test();
         }
         LinuxLibos(arg) => libos::linux_run(arg.args),
+        LibosBuildZircon => libos::zircon_build(),
         PetalZbi(arg) => {
             petal::build_petal_zbi(arg.arch.arch, &arg.bin);
         }
@@ -365,11 +375,9 @@ fn check_style() {
     Cargo::doc().all_features().arg("--no-deps").invoke();
 
     println!("Check libos");
-    // println!("    Checks zircon libos");
-    // Cargo::clippy()
-    //     .package("zcore")
-    //     .features(false, &["zircon", "libos"])
-    //     .invoke();
+    // Zircon libos clippy requires USERSTART_ELF and PETAL_ZBI env vars
+    // (set by `cargo xtask libos-build-zircon`). Skipped in generic check.
+    // Use `make libos-build-zircon` to verify Zircon libos builds.
     println!("    Checks linux libos");
     Cargo::clippy()
         .package("zcore")
@@ -388,42 +396,34 @@ fn check_style() {
 }
 
 mod libos {
-    use crate::{arch::Arch, commands::wget, linux::LinuxRootfs, ARCHS, TARGET};
-    use os_xtask_utils::{dir, Cargo, CommandExt, Tar};
-    use std::fs;
+    use crate::{arch::Arch, linux::LinuxRootfs};
+    use os_xtask_utils::{Cargo, CommandExt};
 
-    /// Deploys the rootfs used by libos.
+    /// Builds the rootfs used by libos.
+    ///
+    /// Uses the same `LinuxRootfs` infrastructure as bare-metal mode to
+    /// cross-compile busybox with musl for the host architecture. The
+    /// rootfs is stored at `rootfs/{host_arch}/` -- the same directory
+    /// used by bare-metal mode. LibOS's HostFS reads from it directly.
     pub(super) fn rootfs(clear: bool) {
-        // Download
-        const URL: &str =
-            "https://github.com/YdrMaster/zCore/releases/download/musl-cache/rootfs-libos.tar.gz";
-        let origin = ARCHS.join("libos").join("rootfs-libos.tar.gz");
-        dir::create_parent(&origin).unwrap();
-        wget(URL, &origin);
-        // Extract
-        let target = TARGET.join("libos");
-        fs::create_dir_all(&target).unwrap();
-        Tar::xf(origin.as_os_str(), Some(&target)).invoke();
-        // Copy
-        const ROOTFS: &str = "rootfs/libos";
-        if clear {
-            dir::clear(ROOTFS).unwrap();
-        }
-        dircpy::copy_dir(target.join("rootfs"), ROOTFS).unwrap();
+        let host = Arch::host();
+        println!("Building libos rootfs for host arch: {}", host.name());
+        LinuxRootfs::new(host).make(clear);
     }
 
-    /// Copies the x86_64 libc-test into libos.
+    /// Builds the libos rootfs (same as bare-metal rootfs for host arch).
     pub(super) fn put_libc_test() {
-        const TARGET: &str = "rootfs/libos/libc-test";
-        let x86_64 = LinuxRootfs::new(Arch::X86_64);
-        x86_64.put_libc_test();
-        dir::clear(TARGET).unwrap();
-        dircpy::copy_dir(x86_64.path().join("libc-test"), TARGET).unwrap();
+        rootfs(false);
+        println!(
+            "LibOS rootfs built at rootfs/{}. To run libc-test, use: \
+             tools/scripts/libc-test.sh {}",
+            Arch::host().name(),
+            Arch::host().name()
+        );
     }
 
     /// Runs an application in libos mode.
     pub(super) fn linux_run(args: String) {
-        println!("{}", std::env!("OUT_DIR"));
         rootfs(false);
         // Launch!
         Cargo::run()
@@ -433,5 +433,38 @@ mod libos {
             .arg("--")
             .args(args.split_whitespace())
             .invoke()
+    }
+
+    /// Builds zCore in Zircon libos mode.
+    ///
+    /// First builds userstart and a petal ZBI for the host architecture,
+    /// then compiles zcore with `--features zircon,libos` and the
+    /// USERSTART_ELF / PETAL_ZBI env vars set.
+    pub(super) fn zircon_build() {
+        let host = Arch::host();
+        println!("Building Zircon libos for host arch: {}", host.name());
+
+        // Build userstart for host architecture
+        let userstart_path = crate::petal::build_userstart(host);
+        // Build petal hello ZBI for host architecture
+        let zbi_path = crate::petal::build_petal_zbi(host, "hello");
+
+        // Build zcore with zircon+libos features
+        let status = std::process::Command::new("cargo")
+            .args([
+                "build",
+                "-p",
+                "zcore",
+                "--features",
+                "zircon,libos",
+                "--release",
+            ])
+            .env("USERSTART_ELF", &userstart_path)
+            .env("PETAL_ZBI", &zbi_path)
+            .status()
+            .expect("failed to run cargo build");
+        if !status.success() {
+            panic!("Zircon libos build failed");
+        }
     }
 }

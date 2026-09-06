@@ -13,6 +13,19 @@ pub(crate) enum Arch {
 }
 
 impl Arch {
+    /// Returns the `Arch` matching the host machine's architecture.
+    pub fn host() -> Self {
+        if cfg!(target_arch = "x86_64") {
+            Self::X86_64
+        } else if cfg!(target_arch = "aarch64") {
+            Self::Aarch64
+        } else if cfg!(target_arch = "riscv64") {
+            Self::Riscv64
+        } else {
+            panic!("unsupported host architecture for libos")
+        }
+    }
+
     /// Returns the name of Arch.
     #[inline]
     pub const fn name(&self) -> &'static str {

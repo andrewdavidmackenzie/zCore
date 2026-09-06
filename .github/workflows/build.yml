@@ -88,7 +88,10 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@nightly
         with:
-          components: rust-src
+          components: rust-src, llvm-tools-preview
 
       - name: Build libos (Linux mode)
         run: cargo build -p zcore --features linux,libos
+
+      - name: Build libos (Zircon mode)
+        run: cargo xtask libos-build-zircon

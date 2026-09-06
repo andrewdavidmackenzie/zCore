@@ -6,7 +6,8 @@ XTASK ?= 1
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
-.PHONY: help build run test boot-test config config-macos update rootfs libc-test other-test image clippy check doc clean
+.PHONY: help build run test boot-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
+	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -52,13 +53,23 @@ libc-test: boot-test
 
 # LibOS mode: runs zCore as a host process (no QEMU needed).
 # Requires x86_64 host (Linux or macOS) or aarch64 Linux.
-libos-build:
+# Two personalities: Linux (busybox shell) and Zircon (petal programs).
+
+# Build libos in Linux mode
+libos-build-linux:
 	cargo build -p zcore --features linux,libos --release
 
-# Run zCore in libos mode with busybox shell.
-# Requires rootfs/libos/ to be populated (via cargo libos-libc-test or manually).
-libos-run:
+# Build libos in Zircon mode (builds userstart + petal first)
+libos-build-zircon:
+	cargo xtask libos-build-zircon
+
+# Run libos in Linux mode with busybox shell
+libos-run-linux:
 	cargo linux-libos --args "/bin/busybox sh"
+
+# Convenience aliases
+libos-build: libos-build-linux
+libos-run: libos-run-linux
 
 # configure build environment (platform toolchain)
 config:

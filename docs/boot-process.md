@@ -18,9 +18,39 @@ zCore supports three execution modes and three CPU architectures:
 
 | Architecture | QEMU               | Real hardware                         | LibOS        |
 |--------------|--------------------|---------------------------------------|--------------|
-| **aarch64**  | Active             | Planned (#11)                         | Broken (#80) |
-| **riscv64**  | Active             | Supported (D1, C910, FU740, StarFive) | Broken (#80) |
-| **x86_64**   | Active (BIOS boot) | Not yet supported                     | Broken (#80) |
+| **aarch64**  | Active             | Planned (#11)                         | Active       |
+| **riscv64**  | Active             | Supported (D1, C910, FU740, StarFive) | Active       |
+| **x86_64**   | Active (BIOS boot) | Planned (#174, needs UEFI #151)       | Active       |
+
+### Personalities and Userspace
+
+zCore supports two OS personalities: **Linux** and **Zircon**. Each has
+its own syscall layer, userspace format, and boot mechanism. Both can
+run in bare-metal (QEMU and real hardware) and LibOS modes.
+
+| Aspect                 | **Linux**                                                                | **Zircon**                                      | Orthogonality gap                                                  |
+|------------------------|--------------------------------------------------------------------------|-------------------------------------------------|--------------------------------------------------------------------|
+| Aspect                 | **Linux**                                                                | **Zircon**                                           | Orthogonality gap                                                         |
+|------------------------|--------------------------------------------------------------------------|------------------------------------------------------|---------------------------------------------------------------------------|
+| **Userspace language** | C (busybox, musl)                                                        | Rust (`#![no_std]`, petal)                           | Different toolchains (inherent, not a gap)                                |
+| **Userspace location** | `rootfs/{arch}/` (built by xtask from busybox source)                    | `petal/` crate (in-tree Rust, only option currently) | Decouple from kernel build (#175), unified rootfs (#176)                  |
+| **Binary format**      | Standard ELF (static, musl-linked)                                       | Flat binary (objcopy from ELF)                       | Zircon should load ELF directly (#177)                                    |
+| **Rootfs/bootfs**      | SFS image (bare-metal) / HostFS dir (libos)                              | ZBI archive embedded at compile time                 | Both should load at runtime (#175)                                        |
+| **Rootfs delivery**    | Varies by arch: ramdisk (riscv64), VirtIO (aarch64), boot image (x86_64) | Always embedded via `include_bytes!`                 | Should be consistent across archs (#136)                                  |
+| **Init process**       | Single: busybox (configurable via `ROOTPROC`)                            | Two-stage: userstart -> petal program                | By design (reflects real Fuchsia/Linux difference)                        |
+| **Syscall ABI**        | Linux numbers (via `linux-syscall` crate)                                | Zircon numbers (via `zircon-syscall` crate)          | By design -- different OS ABIs                                            |
+| **LibOS rootfs**       | Reads from `rootfs/{host_arch}/` via HostFS                              | ZBI file path passed as CLI argument                 | Should be unified (#178)                                                  |
+| **CI test**            | Boot smoke test + libc-test                                              | Zircon boot test (hello program)                     |                                                                           |
+| **Build env vars**     | `ZCORE_CMDLINE`                                                          | `USERSTART_ELF` + `PETAL_ZBI` + `ZCORE_CMDLINE`     | Zircon should load at runtime like Linux (#175)                           |
+
+**Boot orthogonality tracking: #179**
+
+Sub-issues:
+- #136 -- Consistent rootfs delivery across architectures
+- #175 -- Decouple Zircon userspace from kernel build (runtime ZBI loading)
+- #176 -- Unified rootfs structure with multiple selectable userspaces
+- #177 -- Zircon: load ELF directly instead of flat binary
+- #178 -- LibOS: unify rootfs/ZBI loading between personalities
 
 After platform-specific initialization, all paths converge at
 `primary_main()` in `zCore/src/main.rs`, which branches into either
@@ -340,9 +370,9 @@ for mock devices.
 ```bash
 cargo xtask libos-libc-test
 ```
-This downloads a pre-built x86_64 musl rootfs from the upstream cache
-into `rootfs/libos/`, containing busybox and libc-test binaries.
-Note: this rootfs contains x86_64 binaries only.
+This cross-compiles busybox with musl for the host architecture and
+deploys it to `rootfs/libos/`. The rootfs contains a statically-linked
+busybox with symlinks for standard utilities (sh, ls, cat, etc.).
 
 **Build:** `cargo build -p zcore --features linux,libos` or `make libos-build`
 

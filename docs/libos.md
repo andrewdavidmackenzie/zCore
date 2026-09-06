@@ -8,13 +8,33 @@ development, testing, and debugging -- the kernel compiles and starts in
 seconds, with full access to host debugging tools (gdb, lldb, valgrind,
 strace).
 
-Fixing and integrating libos into CI is tracked in
-[#80](https://github.com/andrewdavidmackenzie/zCore/issues/80).
-For debugging, run the libos binary directly under a
-debugger (`lldb -- target/release/zcore /bin/busybox
-sh`). For RustRover, add a Run Configuration pointing
-to the zCore binary with `--features linux,libos`. No
-QEMU needed.
+LibOS supports both **Linux** and **Zircon** personalities:
+
+### Linux LibOS
+
+Build and run busybox shell:
+```bash
+cargo xtask libos-libc-test   # build rootfs (first time)
+make libos-run-linux           # or: cargo linux-libos --args "/bin/busybox sh"
+```
+
+### Zircon LibOS
+
+Build and run petal hello program:
+```bash
+make libos-build-zircon        # builds userstart + petal + zcore
+./target/release/zcore path/to/petal.zbi
+```
+
+### Debugging
+
+Run the libos binary directly under a debugger -- no QEMU needed:
+```bash
+lldb -- target/debug/zcore /bin/busybox sh          # Linux mode
+lldb -- target/debug/zcore target/petal/{host_arch}/hello.zbi  # Zircon mode
+```
+For RustRover/CLion, add a Run Configuration with `--features linux,libos`
+(or `zircon,libos`).
 
 ### How It Works
 
@@ -58,9 +78,8 @@ zCore [libos]
 ```
 The issue is that `default-members = ["xtask"]` in root Cargo.toml, so `cargo
 build` builds xtask (which doesn't have a `libos` feature). Fix: `cargo build
--p zcore --features linux,libos`. Or use `cargo linux-libos` (the xtask alias).
-The build failure itself needs debugging
-separately. See [#80](https://github.com/andrewdavidmackenzie/zCore/issues/80).
+-p zcore --features linux,libos` or `make libos-build`. Or use
+`cargo linux-libos` (the xtask alias) to build and run.
 
 
 The `libos` feature enables `std`, swaps in mock drivers, activates the mmap-
@@ -222,9 +241,8 @@ Once libos build is fixed, usage would be: **Build**: `cargo build -p zcore
 --features linux,libos` **Run**: `target/release/zcore /bin/busybox sh` **Debug
 with lldb**: `lldb -- target/release/zcore /bin/busybox sh` **Debug with gdb**:
 `gdb --args target/release/zcore /bin/busybox sh` **RustRover**: Add Run
-Configuration with executable=`target/release/zcore`, args= `/bin/busybox sh`,
-env=`RUST_LOG=info`. No QEMU needed -- it's a native process.
-See [#80](https://github.com/andrewdavidmackenzie/zCore/issues/80).
+Configuration with executable=`target/debug/zcore`, args=`/bin/busybox sh`,
+features=`linux,libos`. No QEMU needed -- it's a native process.
 
 
 ### macOS-Specific Handling
@@ -255,12 +273,8 @@ cargo run -p zcore --release \
   --features linux,libos -- /bin/busybox ls -la
 ```
 
-Note: the libos build is currently broken
-(see [#80](https://github.com/andrewdavidmackenzie/zCore/issues/80)).
-Likely causes: (1) nightly-only features that have
-changed API, (2) stale dependency versions,
-(3) missing `rootfs/libos/` directory (needs
-`cargo libos-libc-test` first to download it).
+**Setup:** Run `cargo xtask libos-libc-test` first to build the rootfs
+(cross-compiles busybox with musl for the host architecture).
 
 
 **Via loader examples:**
@@ -300,14 +314,13 @@ verification confirms file effects are visible on the real filesystem.
 
 Run all libos tests with:
 ```
-cargo test -p zcore-loader
+cargo test -p linux-loader --features linux,libos
 ```
 
-Not in CI. The `test.yml` workflow runs `cargo test --no-fail-fast` which
-builds the workspace default (xtask), not zcore-loader specifically. The libos
-tests require `--features linux,libos` and `rootfs/libos/` populated. Failing
-locally is expected until the libos build is fixed. Covered by the libos fix
-issue candidate above.
+The LibOS build is checked in CI (`build.yml` on ubuntu + macOS).
+Integration tests require `--features linux,libos` and `rootfs/{arch}/`
+populated. Feature combination testing is tracked in
+[#169](https://github.com/andrewdavidmackenzie/zCore/issues/169).
 
 
 ### Architectural Limitations

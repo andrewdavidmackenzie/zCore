@@ -40,6 +40,7 @@ pub fn build_petal(arch: Arch, bin_name: &str) -> PathBuf {
         .arg(&target_dir)
         .arg("--bin")
         .arg(bin_name)
+        .args(["-Z", "build-std=core,alloc"])
         .status()
         .expect("failed to run cargo build for petal");
 
@@ -134,6 +135,7 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
         .arg(target)
         .arg("--target-dir")
         .arg(&target_dir)
+        .args(["-Z", "build-std=core,alloc"])
         .status()
         .expect("failed to run cargo build for userstart");
 
