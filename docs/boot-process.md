@@ -30,23 +30,27 @@ run in bare-metal (QEMU and real hardware) and LibOS modes.
 
 | Aspect                 | **Linux**                                                                | **Zircon**                                      | Orthogonality gap                                                  |
 |------------------------|--------------------------------------------------------------------------|-------------------------------------------------|--------------------------------------------------------------------|
-| **Userspace language** | C (busybox, musl)                                                        | Rust (`#![no_std]`, petal)                      | Different toolchains                                               |
-| **Userspace location** | `rootfs/{arch}/` (built by xtask from busybox source)                    | `petal/` crate (in-tree Rust, only option currently) | Zircon userspace should be decoupled from kernel build and loaded from rootfs/ZBI like Linux |
-| **Binary format**      | Standard ELF (static, musl-linked)                                       | Flat binary (objcopy from ELF)                  | Zircon could load ELF directly                                     |
-| **Rootfs/bootfs**      | SFS image (bare-metal) / HostFS dir (libos)                              | ZBI archive embedded at compile time            | Linux embeds at compile time on some configs too (`link-user-img`) |
-| **Rootfs delivery**    | Varies by arch: ramdisk (riscv64), VirtIO (aarch64), boot image (x86_64) | Always embedded via `include_bytes!`            | Should be consistent across archs (#136)                           |
-| **Init process**       | Single: busybox (configurable via `ROOTPROC`)                            | Two-stage: userstart -> petal program           |                                                                    |
-| **Syscall ABI**        | Linux numbers (via `linux-syscall` crate)                                | Zircon numbers (via `zircon-syscall` crate)     | By design -- different OS ABIs                                     |
-| **LibOS rootfs**       | Reads from `rootfs/{host_arch}/` via HostFS                              | ZBI file path passed as CLI argument            | Could be unified: both read from host filesystem                   |
-| **CI test**            | Boot smoke test + libc-test                                              | Zircon boot test (hello program)                |                                                                    |
-| **Build env vars**     | `ZCORE_CMDLINE`                                                          | `USERSTART_ELF` + `PETAL_ZBI` + `ZCORE_CMDLINE` | Zircon embeds userspace at compile time; should load at runtime like Linux |
+| Aspect                 | **Linux**                                                                | **Zircon**                                           | Orthogonality gap                                                         |
+|------------------------|--------------------------------------------------------------------------|------------------------------------------------------|---------------------------------------------------------------------------|
+| **Userspace language** | C (busybox, musl)                                                        | Rust (`#![no_std]`, petal)                           | Different toolchains (inherent, not a gap)                                |
+| **Userspace location** | `rootfs/{arch}/` (built by xtask from busybox source)                    | `petal/` crate (in-tree Rust, only option currently) | Decouple from kernel build (#175), unified rootfs (#176)                  |
+| **Binary format**      | Standard ELF (static, musl-linked)                                       | Flat binary (objcopy from ELF)                       | Zircon should load ELF directly (#177)                                    |
+| **Rootfs/bootfs**      | SFS image (bare-metal) / HostFS dir (libos)                              | ZBI archive embedded at compile time                 | Both should load at runtime (#175)                                        |
+| **Rootfs delivery**    | Varies by arch: ramdisk (riscv64), VirtIO (aarch64), boot image (x86_64) | Always embedded via `include_bytes!`                 | Should be consistent across archs (#136)                                  |
+| **Init process**       | Single: busybox (configurable via `ROOTPROC`)                            | Two-stage: userstart -> petal program                | By design (reflects real Fuchsia/Linux difference)                        |
+| **Syscall ABI**        | Linux numbers (via `linux-syscall` crate)                                | Zircon numbers (via `zircon-syscall` crate)          | By design -- different OS ABIs                                            |
+| **LibOS rootfs**       | Reads from `rootfs/{host_arch}/` via HostFS                              | ZBI file path passed as CLI argument                 | Should be unified (#178)                                                  |
+| **CI test**            | Boot smoke test + libc-test                                              | Zircon boot test (hello program)                     |                                                                           |
+| **Build env vars**     | `ZCORE_CMDLINE`                                                          | `USERSTART_ELF` + `PETAL_ZBI` + `ZCORE_CMDLINE`     | Zircon should load at runtime like Linux (#175)                           |
 
-**Known issues for orthogonality:**
-- Linux rootfs delivery differs per architecture -- tracked in #136
-- Zircon embeds userstart/ZBI at compile time while Linux loads at runtime -- tracked in #175
-- Linux userspace is an external C project; Zircon userspace (petal) is in-tree Rust
-- LibOS rootfs path differs: Linux uses `rootfs/{arch}/`, Zircon uses CLI arg
-- Unified rootfs structure with multiple selectable userspaces -- tracked in #176
+**Boot orthogonality tracking: #179**
+
+Sub-issues:
+- #136 -- Consistent rootfs delivery across architectures
+- #175 -- Decouple Zircon userspace from kernel build (runtime ZBI loading)
+- #176 -- Unified rootfs structure with multiple selectable userspaces
+- #177 -- Zircon: load ELF directly instead of flat binary
+- #178 -- LibOS: unify rootfs/ZBI loading between personalities
 
 After platform-specific initialization, all paths converge at
 `primary_main()` in `zCore/src/main.rs`, which branches into either
