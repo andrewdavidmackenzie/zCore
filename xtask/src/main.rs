@@ -388,42 +388,49 @@ fn check_style() {
 }
 
 mod libos {
-    use crate::{arch::Arch, commands::wget, linux::LinuxRootfs, ARCHS, TARGET};
-    use os_xtask_utils::{dir, Cargo, CommandExt, Tar};
-    use std::fs;
+    use crate::{arch::Arch, linux::LinuxRootfs};
+    use os_xtask_utils::{dir, Cargo, CommandExt};
 
     /// Deploys the rootfs used by libos.
+    ///
+    /// Builds busybox from source for the host architecture using the
+    /// same `LinuxRootfs` infrastructure as bare-metal mode. The result
+    /// is copied to `rootfs/libos/`.
     pub(super) fn rootfs(clear: bool) {
-        // Download
-        const URL: &str =
-            "https://github.com/YdrMaster/zCore/releases/download/musl-cache/rootfs-libos.tar.gz";
-        let origin = ARCHS.join("libos").join("rootfs-libos.tar.gz");
-        dir::create_parent(&origin).unwrap();
-        wget(URL, &origin);
-        // Extract
-        let target = TARGET.join("libos");
-        fs::create_dir_all(&target).unwrap();
-        Tar::xf(origin.as_os_str(), Some(&target)).invoke();
-        // Copy
-        const ROOTFS: &str = "rootfs/libos";
+        let host = Arch::host();
+        println!("Building libos rootfs for host arch: {}", host.name());
+
+        // Build busybox + rootfs for host architecture
+        let rootfs = LinuxRootfs::new(host);
+        rootfs.make(clear);
+
+        // Copy to rootfs/libos/ so HostFS can find it
+        const LIBOS_ROOTFS: &str = "rootfs/libos";
         if clear {
-            dir::clear(ROOTFS).unwrap();
+            dir::clear(LIBOS_ROOTFS).unwrap();
         }
-        dircpy::copy_dir(target.join("rootfs"), ROOTFS).unwrap();
+        // Copy the architecture-specific rootfs to the libos location
+        let src = rootfs.path();
+        if src.exists() {
+            dircpy::copy_dir(&src, LIBOS_ROOTFS).unwrap();
+        }
     }
 
-    /// Copies the x86_64 libc-test into libos.
+    /// Builds the libos rootfs and copies libc-test binaries into it.
     pub(super) fn put_libc_test() {
-        const TARGET: &str = "rootfs/libos/libc-test";
-        let x86_64 = LinuxRootfs::new(Arch::X86_64);
-        x86_64.put_libc_test();
-        dir::clear(TARGET).unwrap();
-        dircpy::copy_dir(x86_64.path().join("libc-test"), TARGET).unwrap();
+        // First ensure the rootfs is built
+        rootfs(false);
+        // libc-test for libos is handled by the libc-test.sh script
+        // when called with the host architecture, not by this function.
+        println!(
+            "LibOS rootfs deployed. To run libc-test, use: \
+             tools/scripts/libc-test.sh {}",
+            Arch::host().name()
+        );
     }
 
     /// Runs an application in libos mode.
     pub(super) fn linux_run(args: String) {
-        println!("{}", std::env!("OUT_DIR"));
         rootfs(false);
         // Launch!
         Cargo::run()

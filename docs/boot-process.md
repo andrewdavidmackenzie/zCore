@@ -340,9 +340,9 @@ for mock devices.
 ```bash
 cargo xtask libos-libc-test
 ```
-This downloads a pre-built x86_64 musl rootfs from the upstream cache
-into `rootfs/libos/`, containing busybox and libc-test binaries.
-Note: this rootfs contains x86_64 binaries only.
+This cross-compiles busybox with musl for the host architecture and
+deploys it to `rootfs/libos/`. The rootfs contains a statically-linked
+busybox with symlinks for standard utilities (sh, ls, cat, etc.).
 
 **Build:** `cargo build -p zcore --features linux,libos` or `make libos-build`
 
