@@ -205,8 +205,8 @@ Arrows point from dependant -> dependency ("A --> B" means A depends on B).
 ```
        BUILD-TIME ONLY
       +------------------------------+
-      |  config/                      |
-      |  machine-features.toml       |
+      |  Cargo.toml                   |
+      |  [workspace.metadata.machines]|
       |         |                     |
       |         v                     |
       |   +-----------+              |

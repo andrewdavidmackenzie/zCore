@@ -36,3 +36,40 @@ debug = false
 [profile.release.package.userstart]
 opt-level = "s"
 debug = false
+
+# Machine configurations for xtask build targets.
+# Previously in config/machine-features.toml.
+# Each [workspace.metadata.machines.<manufacturer>.<name>] section defines
+# a target machine with its architecture, optional linked rootfs image,
+# PCI support flag, and additional Cargo features.
+[workspace.metadata.machines.qemu.virt-riscv64]
+arch = "riscv64"
+
+[workspace.metadata.machines.qemu.virt-aarch64]
+arch = "aarch64"
+
+[workspace.metadata.machines.qemu.virt-x86_64]
+arch = "x86_64"
+
+[workspace.metadata.machines.allwinner.nezha]
+arch = "riscv64"
+link-user-img = "zCore/riscv64.img"
+pci-support = false
+features = ["allwinner-drivers"]
+
+[workspace.metadata.machines.cvitek.cr1825]
+arch = "riscv64"
+link-user-img = "zCore/riscv64.img"
+pci-support = false
+features = ["thead-maee"]
+
+[workspace.metadata.machines.starfive.visionfive]
+arch = "riscv64"
+link-user-img = "zCore/riscv64.img"
+pci-support = false
+
+[workspace.metadata.machines.sifive.fu740]
+arch = "riscv64"
+link-user-img = "zCore/riscv64.img"
+pci-support = true
+features = ["fu740-drivers"]
