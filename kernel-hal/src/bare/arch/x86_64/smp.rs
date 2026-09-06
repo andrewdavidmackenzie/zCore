@@ -86,49 +86,36 @@ const TRAMPOLINE_DATA_OFFSET: usize = 0x100;
 /// - Stack loaded from 0x8110 (TrampolineData.stack_top)
 /// - APIC ID written to 0x8122 (TrampolineData.ap_ready)
 #[rustfmt::skip]
-const AP_TRAMPOLINE: [u8; 157] = [
-    // 16-bit real mode: cli, cld, xor ax,ax, mov ds,ax
+const AP_TRAMPOLINE: [u8; 173] = [
+    // 16-bit real mode
     0xfa, 0xfc, 0x31, 0xc0, 0x8e, 0xd8,
-    // DEBUG: write 'A' to serial 0x3F8
-    0xb0, 0x41, 0xba, 0xf8, 0x03, 0xee,
-    // o32 lgdt [0x8118]
-    0x66, 0x0f, 0x01, 0x16, 0x18, 0x81,
-    // mov eax,cr0; or al,1; mov cr0,eax (enable PE)
-    0x0f, 0x20, 0xc0, 0x0c, 0x01, 0x0f, 0x22, 0xc0,
-    // ljmp 0x08:0x8022 (far jump to 32-bit protected mode)
-    0x66, 0xea, 0x22, 0x80, 0x00, 0x00, 0x08, 0x00,
-    // 32-bit: DEBUG write 'B' to serial
-    0xb0, 0x42, 0x66, 0xba, 0xf8, 0x03, 0xee,
-    // load data segments
+    0xb0, 0x41, 0xba, 0xf8, 0x03, 0xee, // 'A'
+    0x66, 0x0f, 0x01, 0x16, 0x18, 0x81, // lgdt
+    0x0f, 0x20, 0xc0, 0x0c, 0x01, 0x0f, 0x22, 0xc0, // enable PE
+    0x66, 0xea, 0x22, 0x80, 0x00, 0x00, 0x08, 0x00, // ljmp 0x08:0x8022
+    // 32-bit protected mode
+    0xb0, 0x42, 0x66, 0xba, 0xf8, 0x03, 0xee, // 'B'
     0x66, 0xb8, 0x10, 0x00, 0x8e, 0xd8, 0x8e, 0xc0,
     0x8e, 0xe0, 0x8e, 0xe8, 0x8e, 0xd0,
-    // Enable PAE
-    0x0f, 0x20, 0xe0, 0x83, 0xc8, 0x20, 0x0f, 0x22, 0xe0,
-    // Load CR3 from [0x8100]
-    0xa1, 0x00, 0x81, 0x00, 0x00, 0x0f, 0x22, 0xd8,
-    // Enable LME in EFER
+    0x0f, 0x20, 0xe0, 0x83, 0xc8, 0x20, 0x0f, 0x22, 0xe0, // PAE
+    0xa1, 0x00, 0x81, 0x00, 0x00, 0x0f, 0x22, 0xd8, // CR3
     0xb9, 0x80, 0x00, 0x00, 0xc0, 0x0f, 0x32,
-    0x0d, 0x00, 0x01, 0x00, 0x00, 0x0f, 0x30,
-    // Enable paging
-    0x0f, 0x20, 0xc0, 0x0d, 0x00, 0x00, 0x00, 0x80, 0x0f, 0x22, 0xc0,
-    // ljmp 0x18:0x8068 (far jump to 64-bit long mode)
-    0xea, 0x68, 0x80, 0x00, 0x00, 0x18, 0x00,
-    // 64-bit: DEBUG write 'C' to serial
-    0xb0, 0x43, 0x66, 0xba, 0xf8, 0x03, 0xee,
-    // load stack and entry
+    0x0d, 0x00, 0x01, 0x00, 0x00, 0x0f, 0x30, // EFER.LME
+    0x0f, 0x20, 0xc0, 0x0d, 0x00, 0x00, 0x00, 0x80, 0x0f, 0x22, 0xc0, // PG
+    0xea, 0x68, 0x80, 0x00, 0x00, 0x18, 0x00, // ljmp 0x18:0x8068
+    // 64-bit long mode
+    0xb0, 0x43, 0x66, 0xba, 0xf8, 0x03, 0xee, // 'C'
     0x48, 0x8b, 0x24, 0x25, 0x10, 0x81, 0x00, 0x00, // mov rsp,[0x8110]
+    0xb0, 0x44, 0x66, 0xba, 0xf8, 0x03, 0xee, // 'D' (after stack load)
     0x48, 0x8b, 0x04, 0x25, 0x08, 0x81, 0x00, 0x00, // mov rax,[0x8108]
-    // signal BSP
-    0x50,                                             // push rax
-    0xb8, 0x01, 0x00, 0x00, 0x00,                     // mov eax,1
-    0x0f, 0xa2,                                       // cpuid
-    0xc1, 0xeb, 0x18,                                 // shr ebx,24
-    0x89, 0x1c, 0x25, 0x22, 0x81, 0x00, 0x00,         // mov [0x8122],ebx
-    0x58,                                             // pop rax
-    // DEBUG write 'D' to serial
-    0x50, 0xb0, 0x44, 0x66, 0xba, 0xf8, 0x03, 0xee, 0x58,
-    // jmp rax
-    0xff, 0xe0
+    0x50, 0xb0, 0x45, 0x66, 0xba, 0xf8, 0x03, 0xee, 0x58, // 'E' (after entry load)
+    0x50, // push rax
+    0xb8, 0x01, 0x00, 0x00, 0x00, 0x0f, 0xa2, // cpuid
+    0xc1, 0xeb, 0x18, // shr ebx,24
+    0x89, 0x1c, 0x25, 0x22, 0x81, 0x00, 0x00, // mov [0x8122],ebx
+    0x58, // pop rax
+    0x50, 0xb0, 0x46, 0x66, 0xba, 0xf8, 0x03, 0xee, 0x58, // 'F' (after cpuid)
+    0xff, 0xe0 // jmp rax
 ];
 
 /// Temporary GDT for the AP trampoline (null + code32 + data32 + code64).
@@ -205,6 +192,12 @@ pub fn boot_application_processors() {
         core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack));
     }
 
+    // Add a temporary identity mapping for the trampoline page.
+    // When the AP enables paging in protected mode, it's still executing
+    // at physical address 0x8000. Without an identity mapping, the
+    // instruction fetch immediately after CR0.PG=1 will fault.
+    add_identity_mapping(cr3 as usize, TRAMPOLINE_PHYS);
+
     // Boot each AP one at a time
     for &apic_id in &ap_ids {
         // Allocate a stack for this AP
@@ -246,20 +239,22 @@ pub fn boot_application_processors() {
         // send SIPI after INIT, and only APs in SIPI-wait state respond.
         let lapic = zcore_drivers::irq::x86::Apic::local_apic();
 
-        // INIT IPI (broadcast to all other CPUs)
+        info!("Sending INIT IPI...");
         lapic.send_init_ipi_all();
-        // Wait 10ms
         spin_delay_ms(10);
-
-        // SIPI (first, broadcast)
+        info!("Sending first SIPI (vector={:#x})...", SIPI_VECTOR);
         lapic.send_sipi_all(SIPI_VECTOR);
-        // Wait 200us
-        spin_delay_us(200);
+        // Simple busy-wait instead of TSC-based delay (debugging)
+        for _ in 0..1_000_000u64 {
+            core::hint::spin_loop();
+        }
+        info!("First SIPI sent, ap_ready={}", data.ap_ready.load(Ordering::SeqCst));
 
-        // SIPI (second, per Intel MP spec)
         if data.ap_ready.load(Ordering::SeqCst) == 0 {
+            info!("Sending second SIPI...");
             lapic.send_sipi_all(SIPI_VECTOR);
             spin_delay_us(200);
+            info!("Second SIPI sent, ap_ready={}", data.ap_ready.load(Ordering::SeqCst));
         }
 
         // Wait for AP to signal it's alive (up to 100ms)
@@ -350,6 +345,72 @@ fn enumerate_aps(rsdp: usize) -> Vec<u32> {
         .map(|p| p.local_apic_id)
         .take(MAX_APS)
         .collect()
+}
+
+/// Add an identity mapping (virt == phys) for a single 4K page in the
+/// page table rooted at `pml4_phys`. Used to identity-map the trampoline
+/// page so the AP can enable paging without faulting.
+fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
+    use crate::mem::phys_to_virt;
+
+    let page = phys_addr & !0xFFF;
+
+    // Walk PML4 -> PDPT -> PD -> PT, creating entries as needed
+    let pml4 = unsafe {
+        core::slice::from_raw_parts_mut(phys_to_virt(pml4_phys) as *mut u64, 512)
+    };
+
+    let pml4_idx = (page >> 39) & 0x1FF;
+    if pml4[pml4_idx] == 0 {
+        let frame = alloc_zeroed_page();
+        pml4[pml4_idx] = frame as u64 | 0x3; // present + writable
+    }
+    let pdpt_phys = (pml4[pml4_idx] & !0xFFF) as usize;
+
+    let pdpt = unsafe {
+        core::slice::from_raw_parts_mut(phys_to_virt(pdpt_phys) as *mut u64, 512)
+    };
+    let pdpt_idx = (page >> 30) & 0x1FF;
+    if pdpt[pdpt_idx] == 0 {
+        let frame = alloc_zeroed_page();
+        pdpt[pdpt_idx] = frame as u64 | 0x3;
+    }
+    let pd_phys = (pdpt[pdpt_idx] & !0xFFF) as usize;
+
+    let pd = unsafe {
+        core::slice::from_raw_parts_mut(phys_to_virt(pd_phys) as *mut u64, 512)
+    };
+    let pd_idx = (page >> 21) & 0x1FF;
+    if pd[pd_idx] == 0 {
+        let frame = alloc_zeroed_page();
+        pd[pd_idx] = frame as u64 | 0x3;
+    }
+    let pt_phys = (pd[pd_idx] & !0xFFF) as usize;
+
+    let pt = unsafe {
+        core::slice::from_raw_parts_mut(phys_to_virt(pt_phys) as *mut u64, 512)
+    };
+    let pt_idx = (page >> 12) & 0x1FF;
+    pt[pt_idx] = page as u64 | 0x3; // present + writable, identity mapped
+
+    info!(
+        "Identity mapped phys {:#x} -> virt {:#x} (PML4[{}] PDPT[{}] PD[{}] PT[{}])",
+        page, page, pml4_idx, pdpt_idx, pd_idx, pt_idx
+    );
+}
+
+/// Allocate a zeroed 4K-aligned page and return its physical address.
+/// Uses the kernel heap allocator and converts the virtual address back
+/// to physical using the known phys_to_virt_offset.
+fn alloc_zeroed_page() -> usize {
+    let layout = alloc::alloc::Layout::from_size_align(4096, 4096).unwrap();
+    let virt = unsafe { alloc::alloc::alloc_zeroed(layout) };
+    assert!(!virt.is_null(), "failed to allocate page for SMP page table");
+    let virt_addr = virt as usize;
+    // Convert virtual address back to physical
+    // virt = phys + KCONFIG.phys_to_virt_offset
+    // phys = virt - KCONFIG.phys_to_virt_offset
+    virt_addr - KCONFIG.phys_to_virt_offset
 }
 
 /// Spin-wait delay in milliseconds (approximate, uses TSC).
