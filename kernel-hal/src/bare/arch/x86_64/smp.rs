@@ -250,7 +250,11 @@ pub fn boot_application_processors() {
         let dbg_cr3 = data.cr3;
         let dbg_gdt = { data.gdt_ptr.base };
         // Verify via identity-mapped read
-        let verify_entry = unsafe { core::ptr::read_volatile((phys_to_virt(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET + 8)) as *const u64) };
+        let verify_entry = unsafe {
+            core::ptr::read_volatile(
+                (phys_to_virt(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET + 8)) as *const u64,
+            )
+        };
         info!(
             "AP {} config: stack_top={:#x}, entry={:#x} (verify={:#x}), cr3={:#x}, gdt_base={:#x}",
             apic_id, dbg_stack, dbg_entry, verify_entry, dbg_cr3, dbg_gdt
@@ -374,9 +378,7 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     let page = phys_addr & !0xFFF;
 
     // Walk PML4 -> PDPT -> PD -> PT, creating entries as needed
-    let pml4 = unsafe {
-        core::slice::from_raw_parts_mut(phys_to_virt(pml4_phys) as *mut u64, 512)
-    };
+    let pml4 = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pml4_phys) as *mut u64, 512) };
 
     let pml4_idx = (page >> 39) & 0x1FF;
     if pml4[pml4_idx] == 0 {
@@ -385,9 +387,7 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     }
     let pdpt_phys = (pml4[pml4_idx] & !0xFFF) as usize;
 
-    let pdpt = unsafe {
-        core::slice::from_raw_parts_mut(phys_to_virt(pdpt_phys) as *mut u64, 512)
-    };
+    let pdpt = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pdpt_phys) as *mut u64, 512) };
     let pdpt_idx = (page >> 30) & 0x1FF;
     if pdpt[pdpt_idx] == 0 {
         let frame = alloc_zeroed_page();
@@ -395,9 +395,7 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     }
     let pd_phys = (pdpt[pdpt_idx] & !0xFFF) as usize;
 
-    let pd = unsafe {
-        core::slice::from_raw_parts_mut(phys_to_virt(pd_phys) as *mut u64, 512)
-    };
+    let pd = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pd_phys) as *mut u64, 512) };
     let pd_idx = (page >> 21) & 0x1FF;
     if pd[pd_idx] == 0 {
         let frame = alloc_zeroed_page();
@@ -405,9 +403,7 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     }
     let pt_phys = (pd[pd_idx] & !0xFFF) as usize;
 
-    let pt = unsafe {
-        core::slice::from_raw_parts_mut(phys_to_virt(pt_phys) as *mut u64, 512)
-    };
+    let pt = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pt_phys) as *mut u64, 512) };
     let pt_idx = (page >> 12) & 0x1FF;
     pt[pt_idx] = page as u64 | 0x3; // present + writable, identity mapped
 
@@ -452,11 +448,14 @@ fn virt_to_phys(vaddr: usize) -> usize {
     unsafe {
         core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack));
     }
-    let pml4 = unsafe { core::slice::from_raw_parts((phys_to_virt(cr3 & !0xFFF)) as *const u64, 512) };
+    let pml4 =
+        unsafe { core::slice::from_raw_parts((phys_to_virt(cr3 & !0xFFF)) as *const u64, 512) };
     let pml4e = pml4[(vaddr >> 39) & 0x1FF];
     assert!(pml4e & 1 != 0, "PML4 entry not present for {:#x}", vaddr);
 
-    let pdpt = unsafe { core::slice::from_raw_parts(phys_to_virt((pml4e & !0xFFF) as usize) as *const u64, 512) };
+    let pdpt = unsafe {
+        core::slice::from_raw_parts(phys_to_virt((pml4e & !0xFFF) as usize) as *const u64, 512)
+    };
     let pdpte = pdpt[(vaddr >> 30) & 0x1FF];
     assert!(pdpte & 1 != 0, "PDPT entry not present for {:#x}", vaddr);
     // Check for 1GB huge page
@@ -464,7 +463,9 @@ fn virt_to_phys(vaddr: usize) -> usize {
         return ((pdpte & !0x3FFFFFFF) as usize) | (vaddr & 0x3FFFFFFF);
     }
 
-    let pd = unsafe { core::slice::from_raw_parts(phys_to_virt((pdpte & !0xFFF) as usize) as *const u64, 512) };
+    let pd = unsafe {
+        core::slice::from_raw_parts(phys_to_virt((pdpte & !0xFFF) as usize) as *const u64, 512)
+    };
     let pde = pd[(vaddr >> 21) & 0x1FF];
     assert!(pde & 1 != 0, "PD entry not present for {:#x}", vaddr);
     // Check for 2MB huge page
@@ -472,7 +473,9 @@ fn virt_to_phys(vaddr: usize) -> usize {
         return ((pde & !0x1FFFFF) as usize) | (vaddr & 0x1FFFFF);
     }
 
-    let pt = unsafe { core::slice::from_raw_parts(phys_to_virt((pde & !0xFFF) as usize) as *const u64, 512) };
+    let pt = unsafe {
+        core::slice::from_raw_parts(phys_to_virt((pde & !0xFFF) as usize) as *const u64, 512)
+    };
     let pte = pt[(vaddr >> 12) & 0x1FF];
     assert!(pte & 1 != 0, "PT entry not present for {:#x}", vaddr);
     ((pte & !0xFFF) as usize) | (vaddr & 0xFFF)
