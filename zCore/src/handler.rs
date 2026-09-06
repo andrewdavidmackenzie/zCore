@@ -33,9 +33,9 @@ impl KernelHandler for ZcoreKernelHandler {
         }
         #[cfg(feature = "libos")]
         {
-            let size = frame_count * 0x1000;
-            let align = 1 << align_log2.max(12);
-            let layout = core::alloc::Layout::from_size_align(size, align).unwrap();
+            let size = frame_count.checked_mul(0x1000)?;
+            let align = 1usize.checked_shl(align_log2.max(12) as u32)?;
+            let layout = core::alloc::Layout::from_size_align(size, align).ok()?;
             let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) };
             if ptr.is_null() {
                 None
@@ -50,7 +50,14 @@ impl KernelHandler for ZcoreKernelHandler {
         memory::frame_dealloc(paddr);
         #[cfg(feature = "libos")]
         {
-            let _ = paddr; // In libos mode, we don't track individual frame deallocs
+            // In libos mode, frames are host-allocated pages. Deallocate
+            // a single page. Multi-page contiguous allocations are not
+            // individually tracked, so we deallocate one page at a time
+            // (matching the single-page frame_alloc pattern).
+            let layout = core::alloc::Layout::from_size_align(0x1000, 0x1000).unwrap();
+            unsafe {
+                alloc::alloc::dealloc(paddr as *mut u8, layout);
+            }
         }
     }
 
