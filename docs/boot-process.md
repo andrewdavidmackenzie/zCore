@@ -18,9 +18,9 @@ zCore supports three execution modes and three CPU architectures:
 
 | Architecture | QEMU               | Real hardware                         | LibOS        |
 |--------------|--------------------|---------------------------------------|--------------|
-| **aarch64**  | Active             | Planned (#11)                         | Broken (#80) |
-| **riscv64**  | Active             | Supported (D1, C910, FU740, StarFive) | Broken (#80) |
-| **x86_64**   | Active (BIOS boot) | Not yet supported                     | Broken (#80) |
+| **aarch64**  | Active             | Planned (#11)                         | Active       |
+| **riscv64**  | Active             | Supported (D1, C910, FU740, StarFive) | Active       |
+| **x86_64**   | Active (BIOS boot) | Planned (#174, needs UEFI #151)       | Active       |
 
 After platform-specific initialization, all paths converge at
 `primary_main()` in `zCore/src/main.rs`, which branches into either

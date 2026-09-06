@@ -389,41 +389,27 @@ fn check_style() {
 
 mod libos {
     use crate::{arch::Arch, linux::LinuxRootfs};
-    use os_xtask_utils::{dir, Cargo, CommandExt};
+    use os_xtask_utils::{Cargo, CommandExt};
 
-    /// Deploys the rootfs used by libos.
+    /// Builds the rootfs used by libos.
     ///
-    /// Builds busybox from source for the host architecture using the
-    /// same `LinuxRootfs` infrastructure as bare-metal mode. The result
-    /// is copied to `rootfs/libos/`.
+    /// Uses the same `LinuxRootfs` infrastructure as bare-metal mode to
+    /// cross-compile busybox with musl for the host architecture. The
+    /// rootfs is stored at `rootfs/{host_arch}/` -- the same directory
+    /// used by bare-metal mode. LibOS's HostFS reads from it directly.
     pub(super) fn rootfs(clear: bool) {
         let host = Arch::host();
         println!("Building libos rootfs for host arch: {}", host.name());
-
-        // Build busybox + rootfs for host architecture
-        let rootfs = LinuxRootfs::new(host);
-        rootfs.make(clear);
-
-        // Always clear rootfs/libos/ before copying to remove stale files
-        // from previous builds (e.g. different architecture).
-        const LIBOS_ROOTFS: &str = "rootfs/libos";
-        dir::clear(LIBOS_ROOTFS).unwrap();
-        // Copy the architecture-specific rootfs to the libos location
-        let src = rootfs.path();
-        if src.exists() {
-            dircpy::copy_dir(&src, LIBOS_ROOTFS).unwrap();
-        }
+        LinuxRootfs::new(host).make(clear);
     }
 
-    /// Builds the libos rootfs and copies libc-test binaries into it.
+    /// Builds the libos rootfs (same as bare-metal rootfs for host arch).
     pub(super) fn put_libc_test() {
-        // First ensure the rootfs is built
         rootfs(false);
-        // libc-test for libos is handled by the libc-test.sh script
-        // when called with the host architecture, not by this function.
         println!(
-            "LibOS rootfs deployed. To run libc-test, use: \
+            "LibOS rootfs built at rootfs/{}. To run libc-test, use: \
              tools/scripts/libc-test.sh {}",
+            Arch::host().name(),
             Arch::host().name()
         );
     }

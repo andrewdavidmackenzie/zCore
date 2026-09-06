@@ -5,12 +5,26 @@ cfg_if! {
 
         #[cfg(feature = "libos")]
         pub fn rootfs() -> Arc<dyn FileSystem> {
-            let  rootfs = if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
+            let rootfs = if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
                 std::path::Path::new(&dir).parent().unwrap().to_path_buf()
             } else {
                 std::env::current_dir().unwrap()
             };
-            rcore_fs_hostfs::HostFS::new(rootfs.join("rootfs").join("libos"))
+            // Use the host architecture's rootfs directory directly.
+            // This is the same rootfs used by bare-metal mode, built by
+            // LinuxRootfs::new(arch).make() with busybox + musl.
+            let arch = if cfg!(target_arch = "x86_64") {
+                "x86_64"
+            } else if cfg!(target_arch = "aarch64") {
+                "aarch64"
+            } else if cfg!(target_arch = "riscv64") {
+                "riscv64"
+            } else {
+                "libos" // fallback
+            };
+            let path = rootfs.join("rootfs").join(arch);
+            info!("LibOS rootfs: {}", path.display());
+            rcore_fs_hostfs::HostFS::new(path)
         }
 
         #[cfg(not(feature = "libos"))]
