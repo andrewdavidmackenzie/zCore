@@ -26,20 +26,20 @@ zCore supports three execution modes and three CPU architectures:
 
 zCore supports two OS personalities: **Linux** and **Zircon**. Each has
 its own syscall layer, userspace format, and boot mechanism. Both can
-run in bare-metal and LibOS modes.
+run in bare-metal (QEMU and real hardware) and LibOS modes.
 
-| Aspect | **Linux** | **Zircon** | Orthogonality gap |
-|--------|-----------|------------|-------------------|
-| **Userspace language** | C (busybox, musl) | Rust (`#![no_std]`, petal) | Different toolchains |
-| **Userspace location** | `rootfs/{arch}/` (built by xtask from busybox source) | `petal/` crate (in-tree Rust) | Linux could be a top-level project |
-| **Binary format** | Standard ELF (static, musl-linked) | Flat binary (objcopy from ELF) | Zircon could load ELF directly |
-| **Rootfs/bootfs** | SFS image (bare-metal) / HostFS dir (libos) | ZBI archive embedded at compile time | Linux embeds at compile time on some configs too (`link-user-img`) |
-| **Rootfs delivery** | Varies by arch: ramdisk (riscv64), VirtIO (aarch64), boot image (x86_64) | Always embedded via `include_bytes!` | Should be consistent across archs (#136) |
-| **Init process** | Single: busybox (configurable via `ROOTPROC`) | Two-stage: userstart -> petal program | |
-| **Syscall ABI** | Linux numbers (via `linux-syscall` crate) | Zircon numbers (via `zircon-syscall` crate) | By design -- different OS ABIs |
-| **LibOS rootfs** | Reads from `rootfs/{host_arch}/` via HostFS | ZBI file path passed as CLI argument | Could be unified: both read from host filesystem |
-| **CI test** | Boot smoke test + libc-test | Zircon boot test (hello program) | |
-| **Build env vars** | `ZCORE_CMDLINE` | `USERSTART_ELF` + `PETAL_ZBI` + `ZCORE_CMDLINE` | Zircon needs extra compile-time embedding |
+| Aspect                 | **Linux**                                                                | **Zircon**                                      | Orthogonality gap                                                  |
+|------------------------|--------------------------------------------------------------------------|-------------------------------------------------|--------------------------------------------------------------------|
+| **Userspace language** | C (busybox, musl)                                                        | Rust (`#![no_std]`, petal)                      | Different toolchains                                               |
+| **Userspace location** | `rootfs/{arch}/` (built by xtask from busybox source)                    | `petal/` crate (in-tree Rust)                   | Linux could be a top-level project                                 |
+| **Binary format**      | Standard ELF (static, musl-linked)                                       | Flat binary (objcopy from ELF)                  | Zircon could load ELF directly                                     |
+| **Rootfs/bootfs**      | SFS image (bare-metal) / HostFS dir (libos)                              | ZBI archive embedded at compile time            | Linux embeds at compile time on some configs too (`link-user-img`) |
+| **Rootfs delivery**    | Varies by arch: ramdisk (riscv64), VirtIO (aarch64), boot image (x86_64) | Always embedded via `include_bytes!`            | Should be consistent across archs (#136)                           |
+| **Init process**       | Single: busybox (configurable via `ROOTPROC`)                            | Two-stage: userstart -> petal program           |                                                                    |
+| **Syscall ABI**        | Linux numbers (via `linux-syscall` crate)                                | Zircon numbers (via `zircon-syscall` crate)     | By design -- different OS ABIs                                     |
+| **LibOS rootfs**       | Reads from `rootfs/{host_arch}/` via HostFS                              | ZBI file path passed as CLI argument            | Could be unified: both read from host filesystem                   |
+| **CI test**            | Boot smoke test + libc-test                                              | Zircon boot test (hello program)                |                                                                    |
+| **Build env vars**     | `ZCORE_CMDLINE`                                                          | `USERSTART_ELF` + `PETAL_ZBI` + `ZCORE_CMDLINE` | Zircon needs extra compile-time embedding                          |
 
 **Known issues for orthogonality:**
 - Linux rootfs delivery differs per architecture -- tracked in #136
