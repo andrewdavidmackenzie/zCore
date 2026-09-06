@@ -862,7 +862,7 @@ init`, `gdb`, `asm`, `libc-test`, and more.
 
 ### `z-config/` -- Machine Configuration
 
-**Purpose:** Parses `config/machine-features.toml` and provides `MachineConfig`
+**Purpose:** Parses `[workspace.metadata.machines]` from root `Cargo.toml` and provides `MachineConfig`
 structs to xtask for selecting architecture, features, and build options per
 machine target.
 
@@ -875,7 +875,7 @@ machine target.
 
 It's only 55 lines and only used by xtask. It could be inlined. The reason it's
 separate: as a crate it uses `CARGO_MANIFEST_DIR` for path resolution to
-`config/machine-features.toml`, which would break if moved. If only xtask uses
+`[workspace.metadata.machines]` in root `Cargo.toml`. If only xtask uses
 it, inlining with adjusted paths would work fine. Marginal benefit though.
 
 
@@ -941,7 +941,7 @@ allocation).
 
 The PCI code in zircon-object is always compiled (not feature-gated). However,
 it's only exercised at runtime when the machine has PCI support (controlled by
-`pci_support` in `machine-features.toml`). QEMU virt machines have PCI;
+`pci_support` in `[workspace.metadata.machines]`). QEMU virt machines have PCI;
 embedded boards (nezha, cr1825, visionfive) do not. The `no-pci` feature in the
 drivers crate skips PCI bus scanning. The region-alloc code is dormant on non-
 PCI machines.

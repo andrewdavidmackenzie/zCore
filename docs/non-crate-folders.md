@@ -32,7 +32,8 @@ For build artifacts, see [build-artifacts.md](build-artifacts.md).
 
 ### `config/` -- Machine Configuration Files
 
-**Purpose:** Contains `machine-features.toml` which defines all supported
+**Purpose:** Previously contained `machine-features.toml` (now moved to
+`[workspace.metadata.machines]` in root `Cargo.toml`). Defines all supported
 machine targets with their architecture, PCI support, and feature flags.
 
 **Status:** Actively used. Read at build time by `z-config`.
