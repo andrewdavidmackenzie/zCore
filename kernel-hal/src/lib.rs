@@ -49,3 +49,9 @@ pub use imp::{
 };
 pub use kernel_handler::KernelHandler;
 pub use utils::{lazy_init::LazyInit, mpsc_queue::MpscQueue};
+
+/// LibOS-specific frame allocation functions (mock physical memory).
+#[cfg(feature = "libos")]
+pub mod libos_frame {
+    pub use crate::imp::mem::{frame_alloc, frame_alloc_contiguous, frame_dealloc};
+}

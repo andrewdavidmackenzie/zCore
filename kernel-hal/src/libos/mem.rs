@@ -16,6 +16,29 @@ pub(super) const PMEM_MAP_VADDR: VirtAddr = 0x8_0000_0000;
 /// Physical memory size = 1GiB
 pub(super) const PMEM_SIZE: usize = 0x4000_0000;
 
+/// Allocate a single physical frame. Returns the physical address (offset
+/// within mock physical memory), or None if no frames available.
+/// Exposed for use by ZcoreKernelHandler in libos mode.
+pub fn frame_alloc() -> Option<usize> {
+    FRAME_ALLOCATOR
+        .lock()
+        .alloc()
+        .map(|id| id * crate::PAGE_SIZE)
+}
+
+/// Allocate contiguous physical frames.
+pub fn frame_alloc_contiguous(frame_count: usize, align_log2: usize) -> Option<usize> {
+    FRAME_ALLOCATOR
+        .lock()
+        .alloc_contiguous(None, frame_count, align_log2)
+        .map(|id| id * crate::PAGE_SIZE)
+}
+
+/// Deallocate a physical frame by its address.
+pub fn frame_dealloc(paddr: usize) {
+    FRAME_ALLOCATOR.lock().dealloc(paddr / crate::PAGE_SIZE);
+}
+
 lazy_static! {
     pub(super) static ref FRAME_ALLOCATOR: Mutex<FrameAlloc> = {
         let mut allocator = FrameAlloc::DEFAULT;
