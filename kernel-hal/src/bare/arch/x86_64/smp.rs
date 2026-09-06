@@ -86,7 +86,7 @@ const TRAMPOLINE_DATA_OFFSET: usize = 0x100;
 /// - Stack loaded from 0x8110 (TrampolineData.stack_top)
 /// - APIC ID written to 0x8122 (TrampolineData.ap_ready)
 #[rustfmt::skip]
-const AP_TRAMPOLINE: [u8; 173] = [
+const AP_TRAMPOLINE: [u8; 169] = [
     // 16-bit real mode
     0xfa, 0xfc, 0x31, 0xc0, 0x8e, 0xd8,
     0xb0, 0x41, 0xba, 0xf8, 0x03, 0xee, // 'A'
@@ -100,21 +100,21 @@ const AP_TRAMPOLINE: [u8; 173] = [
     0x0f, 0x20, 0xe0, 0x83, 0xc8, 0x20, 0x0f, 0x22, 0xe0, // PAE
     0xa1, 0x00, 0x81, 0x00, 0x00, 0x0f, 0x22, 0xd8, // CR3
     0xb9, 0x80, 0x00, 0x00, 0xc0, 0x0f, 0x32,
-    0x0d, 0x00, 0x01, 0x00, 0x00, 0x0f, 0x30, // EFER.LME
+    0x0d, 0x00, 0x09, 0x00, 0x00, 0x0f, 0x30, // EFER: LME + NXE
     0x0f, 0x20, 0xc0, 0x0d, 0x00, 0x00, 0x00, 0x80, 0x0f, 0x22, 0xc0, // PG
     0xea, 0x68, 0x80, 0x00, 0x00, 0x18, 0x00, // ljmp 0x18:0x8068
     // 64-bit long mode
     0xb0, 0x43, 0x66, 0xba, 0xf8, 0x03, 0xee, // 'C'
     0x48, 0x8b, 0x24, 0x25, 0x10, 0x81, 0x00, 0x00, // mov rsp,[0x8110]
-    0xb0, 0x44, 0x66, 0xba, 0xf8, 0x03, 0xee, // 'D' (after stack load)
+    0xb0, 0x44, 0x66, 0xba, 0xf8, 0x03, 0xee, // 'D'
     0x48, 0x8b, 0x04, 0x25, 0x08, 0x81, 0x00, 0x00, // mov rax,[0x8108]
-    0x50, 0xb0, 0x45, 0x66, 0xba, 0xf8, 0x03, 0xee, 0x58, // 'E' (after entry load)
-    0x50, // push rax
-    0xb8, 0x01, 0x00, 0x00, 0x00, 0x0f, 0xa2, // cpuid
-    0xc1, 0xeb, 0x18, // shr ebx,24
-    0x89, 0x1c, 0x25, 0x22, 0x81, 0x00, 0x00, // mov [0x8122],ebx
+    0x50, 0xb0, 0x45, 0x66, 0xba, 0xf8, 0x03, 0xee, // 'E'
+    // signal BSP (cpuid to get APIC ID, write to ap_ready)
+    0xb8, 0x01, 0x00, 0x00, 0x00, 0x0f, 0xa2,
+    0xc1, 0xeb, 0x18,
+    0x89, 0x1c, 0x25, 0x22, 0x81, 0x00, 0x00,
     0x58, // pop rax
-    0x50, 0xb0, 0x46, 0x66, 0xba, 0xf8, 0x03, 0xee, 0x58, // 'F' (after cpuid)
+    0xb0, 0x46, 0x66, 0xba, 0xf8, 0x03, 0xee, // 'F'
     0xff, 0xe0 // jmp rax
 ];
 
@@ -127,16 +127,25 @@ static TRAMPOLINE_GDT: [u64; 4] = [
 ];
 
 /// Rust entry point for APs after the trampoline completes.
-/// Sets up FSGSBASE, calls trapframe::init(), then jumps to secondary_main.
+/// Sets up CPU features and calls secondary_main.
 extern "C" fn ap_entry() -> ! {
-    // Enable FSGSBASE (required by trapframe)
     unsafe {
+        // Enable NXE in EFER -- the kernel page table uses NX bits on data
+        // pages. Without NXE, bit 63 in PTEs is reserved, causing #PF.
+        use x86_64::registers::model_specific::{Efer, EferFlags};
+        Efer::update(|f| f.insert(EferFlags::NO_EXECUTE_ENABLE));
+
+        // Enable FSGSBASE (required by trapframe) and SSE
         use x86_64::registers::control::{Cr4, Cr4Flags};
         Cr4::update(|f| {
             f.insert(Cr4Flags::FSGSBASE);
             f.insert(Cr4Flags::OSFXSR);
             f.insert(Cr4Flags::OSXMMEXCPT_ENABLE);
         });
+
+        // Clear CR0.EM for SSE
+        use x86_64::registers::control::{Cr0, Cr0Flags};
+        Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
     }
     // Call the kernel's secondary_main (stored in KernelConfig)
     (KCONFIG.ap_fn)()
@@ -239,22 +248,32 @@ pub fn boot_application_processors() {
         // send SIPI after INIT, and only APs in SIPI-wait state respond.
         let lapic = zcore_drivers::irq::x86::Apic::local_apic();
 
-        info!("Sending INIT IPI...");
+        let dbg_stack = data.stack_top;
+        let dbg_entry = data.entry;
+        let dbg_cr3 = data.cr3;
+        let dbg_gdt = { data.gdt_ptr.base };
+        info!(
+            "AP {} config: stack_top={:#x}, entry={:#x}, cr3={:#x}, gdt_base={:#x}",
+            apic_id, dbg_stack, dbg_entry, dbg_cr3, dbg_gdt
+        );
+
+        // Send INIT-SIPI-SIPI without holding any locks.
         lapic.send_init_ipi_all();
-        spin_delay_ms(10);
-        info!("Sending first SIPI (vector={:#x})...", SIPI_VECTOR);
-        lapic.send_sipi_all(SIPI_VECTOR);
-        // Simple busy-wait instead of TSC-based delay (debugging)
-        for _ in 0..1_000_000u64 {
+        // 10ms delay (simple loop -- TSC may not work reliably during AP startup)
+        for _ in 0..10_000_000u64 {
             core::hint::spin_loop();
         }
-        info!("First SIPI sent, ap_ready={}", data.ap_ready.load(Ordering::SeqCst));
+
+        lapic.send_sipi_all(SIPI_VECTOR);
+        for _ in 0..200_000u64 {
+            core::hint::spin_loop();
+        }
 
         if data.ap_ready.load(Ordering::SeqCst) == 0 {
-            info!("Sending second SIPI...");
             lapic.send_sipi_all(SIPI_VECTOR);
-            spin_delay_us(200);
-            info!("Second SIPI sent, ap_ready={}", data.ap_ready.load(Ordering::SeqCst));
+            for _ in 0..200_000u64 {
+                core::hint::spin_loop();
+            }
         }
 
         // Wait for AP to signal it's alive (up to 100ms)
@@ -399,18 +418,65 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
     );
 }
 
-/// Allocate a zeroed 4K-aligned page and return its physical address.
-/// Uses the kernel heap allocator and converts the virtual address back
-/// to physical using the known phys_to_virt_offset.
+/// Static pool of zeroed pages for SMP page table entries.
+/// We need at most 3 pages (PML4 entry -> PDPT -> PD -> PT) for the
+/// identity mapping. These are in BSS, so we need their physical
+/// addresses. We find the physical address via the phys_to_virt mapping:
+/// the BSS virtual addresses are NOT in the phys_to_virt region, but
+/// they ARE backed by physical memory that the bootloader allocated.
+/// We can find the physical address by walking the existing page table.
+///
+/// Simpler approach: allocate pages from the physical memory region
+/// that IS identity-mapped via phys_to_virt. We do this by allocating
+/// from the physical frame allocator via a callback.
+static mut PT_PAGE_POOL: [[u8; 4096]; 3] = [[0u8; 4096]; 3];
+static mut PT_PAGE_NEXT: usize = 0;
+
+/// Allocate a zeroed page and return its physical address.
+/// Uses a static pool and looks up the physical address by walking
+/// the BSP's page table.
 fn alloc_zeroed_page() -> usize {
-    let layout = alloc::alloc::Layout::from_size_align(4096, 4096).unwrap();
-    let virt = unsafe { alloc::alloc::alloc_zeroed(layout) };
-    assert!(!virt.is_null(), "failed to allocate page for SMP page table");
-    let virt_addr = virt as usize;
-    // Convert virtual address back to physical
-    // virt = phys + KCONFIG.phys_to_virt_offset
-    // phys = virt - KCONFIG.phys_to_virt_offset
-    virt_addr - KCONFIG.phys_to_virt_offset
+    let idx = unsafe {
+        let i = PT_PAGE_NEXT;
+        PT_PAGE_NEXT += 1;
+        i
+    };
+    assert!(idx < 3, "SMP page table pool exhausted");
+    let virt = unsafe { core::ptr::addr_of_mut!(PT_PAGE_POOL[idx]) as usize };
+    // Look up the physical address by walking the current page table
+    virt_to_phys(virt)
+}
+
+/// Translate a virtual address to physical by walking the current page table.
+fn virt_to_phys(vaddr: usize) -> usize {
+    let cr3: usize;
+    unsafe {
+        core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack));
+    }
+    let pml4 = unsafe { core::slice::from_raw_parts((phys_to_virt(cr3 & !0xFFF)) as *const u64, 512) };
+    let pml4e = pml4[(vaddr >> 39) & 0x1FF];
+    assert!(pml4e & 1 != 0, "PML4 entry not present for {:#x}", vaddr);
+
+    let pdpt = unsafe { core::slice::from_raw_parts(phys_to_virt((pml4e & !0xFFF) as usize) as *const u64, 512) };
+    let pdpte = pdpt[(vaddr >> 30) & 0x1FF];
+    assert!(pdpte & 1 != 0, "PDPT entry not present for {:#x}", vaddr);
+    // Check for 1GB huge page
+    if pdpte & 0x80 != 0 {
+        return ((pdpte & !0x3FFFFFFF) as usize) | (vaddr & 0x3FFFFFFF);
+    }
+
+    let pd = unsafe { core::slice::from_raw_parts(phys_to_virt((pdpte & !0xFFF) as usize) as *const u64, 512) };
+    let pde = pd[(vaddr >> 21) & 0x1FF];
+    assert!(pde & 1 != 0, "PD entry not present for {:#x}", vaddr);
+    // Check for 2MB huge page
+    if pde & 0x80 != 0 {
+        return ((pde & !0x1FFFFF) as usize) | (vaddr & 0x1FFFFF);
+    }
+
+    let pt = unsafe { core::slice::from_raw_parts(phys_to_virt((pde & !0xFFF) as usize) as *const u64, 512) };
+    let pte = pt[(vaddr >> 12) & 0x1FF];
+    assert!(pte & 1 != 0, "PT entry not present for {:#x}", vaddr);
+    ((pte & !0xFFF) as usize) | (vaddr & 0xFFF)
 }
 
 /// Spin-wait delay in milliseconds (approximate, uses TSC).
