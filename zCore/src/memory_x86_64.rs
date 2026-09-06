@@ -22,6 +22,9 @@ fn frame_idx_to_phys_addr(idx: usize) -> PhysAddr {
     idx << PAGE_BITS
 }
 
+/// Physical page reserved for the SMP AP trampoline (must not be allocated).
+const SMP_TRAMPOLINE_PAGE: usize = 0x8000 >> PAGE_BITS;
+
 pub fn insert_regions(regions: &[Range<PhysAddr>]) {
     debug!("init_frame_allocator regions: {regions:x?}");
     let mut ba = FRAME_ALLOCATOR.lock();
@@ -36,6 +39,9 @@ pub fn insert_regions(regions: &[Range<PhysAddr>]) {
             );
         }
     }
+    // Reserve the SMP trampoline page so it's not allocated for other uses.
+    // The AP trampoline code is copied here during SMP boot.
+    ba.remove(SMP_TRAMPOLINE_PAGE..SMP_TRAMPOLINE_PAGE + 1);
     info!("Frame allocator init end.");
 }
 
