@@ -73,7 +73,13 @@ impl VmAddressRegion {
             use core::sync::atomic::*;
             static VMAR_ID: AtomicUsize = AtomicUsize::new(0);
             let i = VMAR_ID.fetch_add(1, Ordering::SeqCst);
-            (0x2_0000_0000 + 0x100_0000_0000 * i, 0x100_0000_0000)
+            // On aarch64 macOS, mmap MAP_FIXED fails below 0x400000000.
+            // Use a higher base address for separate address spaces.
+            #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+            let base = 0x4_0000_0000usize; // 16 GB
+            #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
+            let base = 0x2_0000_0000usize; // 8 GB
+            (base + 0x100_0000_0000 * i, 0x100_0000_0000)
         };
         #[cfg(not(feature = "aspace-separate"))]
         let (addr, size) = (USER_ASPACE_BASE as usize, USER_ASPACE_SIZE as usize);
