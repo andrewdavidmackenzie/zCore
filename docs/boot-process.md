@@ -46,6 +46,7 @@ run in bare-metal (QEMU and real hardware) and LibOS modes.
 - Zircon embeds userstart/ZBI at compile time while Linux loads at runtime -- tracked in #175
 - Linux userspace is an external C project; Zircon userspace (petal) is in-tree Rust
 - LibOS rootfs path differs: Linux uses `rootfs/{arch}/`, Zircon uses CLI arg
+- Unified rootfs structure with multiple selectable userspaces -- tracked in #176
 
 After platform-specific initialization, all paths converge at
 `primary_main()` in `zCore/src/main.rs`, which branches into either
