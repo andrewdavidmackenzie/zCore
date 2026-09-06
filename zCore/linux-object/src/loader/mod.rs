@@ -6,7 +6,7 @@ use {
     crate::fs::INodeExt,
     alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec},
     rcore_fs::vfs::INode,
-    xmas_elf::{program::ProgramHeader, ElfFile},
+    xmas_elf::ElfFile,
     zircon_object::{util::elf_loader::*, vm::*, ZxError},
 };
 
@@ -55,13 +55,13 @@ impl LinuxElfLoader {
 
         let size = elf.load_segment_size();
         let image_vmar = vmar.allocate(None, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)?;
-        let mut base = image_vmar.addr();
         let vmo = image_vmar.load_from_elf(&elf)?;
-        let entry = base + elf.header.pt2.entry_point() as usize;
 
-        // for static exec program
-        let ph: ProgramHeader = elf.program_iter().next().unwrap();
-        let static_prog_base = ph.virtual_addr() as usize / PAGE_SIZE * PAGE_SIZE;
+        // The VMAR maps ELF segments at image_vmar.addr() + ph.virtual_addr().
+        // The "base" is image_vmar.addr(), used to compute AT_BASE, AT_PHDR,
+        // AT_ENTRY, and initial_brk as offsets from image_vmar.addr().
+        let base = image_vmar.addr();
+        let entry = base + elf.header.pt2.entry_point() as usize;
         debug!(
             "load: vmar.addr & size: {:#x?}, base: {:#x?}, entry: {:#x?}",
             vmar.get_info(),
@@ -77,7 +77,8 @@ impl LinuxElfLoader {
         match elf.relocate(image_vmar) {
             Ok(()) => info!("elf relocate passed !"),
             Err(error) => {
-                base = static_prog_base;
+                // Static executables don't need relocation; base is still
+                // image_vmar.addr() since that's where pages are mapped.
                 warn!("elf relocate Err:{:?}, base {:x?}", error, base);
             }
         }

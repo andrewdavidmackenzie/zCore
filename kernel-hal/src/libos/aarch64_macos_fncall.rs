@@ -1,18 +1,20 @@
 //! aarch64 macOS fncall implementation.
 //!
 //! The trapframe crate's fncall module doesn't support aarch64 macOS.
-//! This module provides equivalent functionality using the same
-//! mechanism as the aarch64 Linux fncall, adapted for Darwin's
-//! pthread TSD layout.
+//! This module provides equivalent functionality adapted for Darwin's
+//! aarch64 thread-local storage layout.
 //!
-//! On Darwin aarch64:
-//! - `tpidr_el0` points to the pthread TSD (Thread Specific Data) array
-//! - TSD slots are 8 bytes each
-//! - We use TSD[6] (offset 48) for kernel stack pointer
-//! - We use TSD[30] (offset 240) for init user TP
-//! - User programs (musl) store context at TP+48 (pthread.canary2)
+//! On Darwin aarch64 (Apple Silicon):
+//! - `tpidrro_el0` (read-only) points to the pthread TSD array
+//! - `tpidr_el0` is a small integer (thread slot index), NOT a pointer
+//! - TSD slots are 8 bytes each, accessed via `[tpidrro_el0 + slot*8]`
+//! - We use TSD[6] (offset 48) to store the UserContext pointer
+//! - We use TSD[7] (offset 56) to store the kernel stack pointer
 //!
-//! This matches the x86_64 macOS fncall's TSD slot usage.
+//! The user thread pointer for musl is allocated from a separate
+//! memory region and stored in context.tpidr. We use `tpidr_el0`
+//! (writable) to pass it to user code, since musl reads `tpidr_el0`
+//! for its thread pointer on aarch64.
 
 use core::arch::global_asm;
 use trapframe::UserContext;
@@ -37,17 +39,25 @@ impl UserContextFnCall for UserContext {
 
 // Darwin aarch64 fncall assembly.
 //
-// User: (musl)
-// - tp:0  (pthread.self)       = user tp
-// - tp:48 (pthread.canary2)    = user context pointer
+// On Darwin arm64:
+// - tpidrro_el0 = TSD base pointer (read-only from EL0, always valid)
+// - tpidr_el0   = small integer, writable, we repurpose for user TP
+// - TSD[6]  (tpidrro_el0 + 48) = context pointer (scratch slot)
+// - TSD[7]  (tpidrro_el0 + 56) = kernel stack pointer (scratch slot)
 //
-// Kernel: (darwin pthread)
-// - tpidr_el0 points to TSD array
-// - TSD[6]  (offset 48)  = kernel stack
-// - TSD[30] (offset 240) = init user tp
+// syscall_fn_return: kernel -> user
+//   Save kernel state, load user registers from UserContext, ret to user.
 //
-// Note: On Darwin, tpidr_el0 points directly to the TSD array,
-// unlike glibc where it points to the pthread struct.
+// syscall_fn_entry: user -> kernel (called via BL from user's SVC handler)
+//   Save user registers into UserContext, restore kernel state, ret to kernel.
+//
+// User code (musl static binary) issues SVC #0, which on bare metal would
+// trap to EL1. In libos mode, we install a Mach exception handler (or
+// signal handler) that vectors to syscall_fn_entry. However, the current
+// design uses a function-call convention where user code BLs to
+// syscall_fn_entry directly (the entry address is patched into the binary
+// via the "rcore_syscall_entry" symbol). For static musl busybox, there's
+// no such symbol, so we need the signal-based approach.
 global_asm!(
     r#"
 .global _syscall_fn_entry
@@ -56,21 +66,25 @@ global_asm!(
 .set syscall_fn_return, _syscall_fn_return
 
 _syscall_fn_entry:
-    // save 2 registers for scratch
-    stp     x0, x30, [sp, #-16]    // save x0, x30 at user stack
+    // Entered from user code. tpidrro_el0 = TSD base.
+    // TSD[6] = context pointer, TSD[7] = kernel sp.
+    // Save x0, x30 on user stack for scratch use.
+    stp     x0, x30, [sp, #-16]
 
-    // switch to kernel sp
-    mrs     x0, tpidr_el0          // x0 = user tp (TSD base)
-    ldr     x0, [x0, #48]         // x0 = user context (TSD[6])
-    mov     x30, sp                // x30 = user stack
-    str     x30, [x0, #4 * 8]     // save user stack to context.sp
-    add     sp, x0, #38 * 8       // sp = top of user context
+    // Load context pointer from TSD[6]
+    mrs     x0, tpidrro_el0        // x0 = TSD base (read-only reg)
+    ldr     x0, [x0, #48]          // x0 = context pointer (TSD[6])
 
-    // recover x0, x30
-    ldp     x0, x30, [x30, #-16]
+    // Save user sp
+    mov     x30, sp
+    str     x30, [x0, #4 * 8]     // context.sp = user sp (before push)
+    add     sp, x0, #38 * 8       // sp = top of UserContext struct
 
-    // save general registers
-    stp     x30, x0, [sp, #-16]!
+    // Recover x0, x30 from user stack
+    ldp     x0, x30, [x30]
+
+    // Save general registers (x30..x0) into UserContext
+    stp     x30, x0, [sp, #-16]!   // x30 (lr), x0
     str     x29, [sp, #-16]!
     stp     x27, x28, [sp, #-16]!
     stp     x25, x26, [sp, #-16]!
@@ -87,24 +101,25 @@ _syscall_fn_entry:
     stp     x3, x4, [sp, #-16]!
     stp     x1, x2, [sp, #-16]!
 
-    // skip sp and save tpidr
+    // Save tpidr_el0 (user thread pointer) into context.tpidr
     mrs     x1, tpidr_el0
     str     x1, [sp, #-8]
     add     sp, sp, #-16
 
-    // skip spsr and save elr(lr)
+    // Save elr (return address = x30 saved above) into context.elr
     ldr     x1, [sp, #32*8]
     str     x1, [sp, #-16]!
 
-    // skip trap num and read kernel sp
-    ldr     x1, [sp, #-8]
+    // Restore kernel sp from TSD[7]
+    mrs     x1, tpidrro_el0
+    ldr     x1, [x1, #56]          // x1 = kernel sp (TSD[7])
     mov     sp, x1
 
-    // load kernel tp (restore original tpidr_el0)
+    // Restore kernel tpidr_el0
     ldr     x1, [sp], #16
     msr     tpidr_el0, x1
 
-    // load callee-saved registers
+    // Restore callee-saved registers
     ldp     x19, x20, [sp], #16
     ldp     x21, x22, [sp], #16
     ldp     x23, x24, [sp], #16
@@ -115,7 +130,8 @@ _syscall_fn_entry:
     ret
 
 _syscall_fn_return:
-    // save callee-saved registers
+    // Entered from kernel. x0 = &mut UserContext.
+    // Save callee-saved registers on kernel stack.
     stp     x29, x30, [sp, #-16]!
     stp     x27, x28, [sp, #-16]!
     stp     x25, x26, [sp, #-16]!
@@ -123,30 +139,35 @@ _syscall_fn_return:
     stp     x21, x22, [sp, #-16]!
     stp     x19, x20, [sp, #-16]!
 
-    // save kernel tp
-    mrs     x8, tpidr_el0          // x8 = kernel tp
+    // Save kernel tpidr_el0 on kernel stack
+    mrs     x8, tpidr_el0
     str     x8, [sp, #-16]!
 
-    // save kernel sp to UserContext
-    mov     x9, sp
-    str     x9, [x0, #8]          // context.kernel_sp = sp
+    // Save kernel sp to TSD[7] (via tpidrro_el0)
+    mrs     x9, tpidrro_el0        // x9 = TSD base
+    mov     x10, sp
+    str     x10, [x9, #56]         // TSD[7] = kernel sp
 
-    // setup user tp
-    ldr     x9, [x0, #5*8]        // x9 = user tp from context
-    cbnz    x9, 1f                 // if not 0, use it
-    // init user tp: use TSD[30] area
-    add     x9, x8, #240          // x9 = kernel_tp + 240 (TSD[30])
-    mov     x10, x9
-    str     x10, [x9]             // user_tp:0 = self
-1:  msr     tpidr_el0, x9          // set user tp
-    str     x0, [x9, #48]         // user_tp:48 = context pointer
+    // Store context pointer in TSD[6]
+    str     x0, [x9, #48]          // TSD[6] = context pointer
 
-    // pop elr, sp
-    ldr     x30, [x0, #2*8]       // x30 = elr (entry point)
+    // Setup user thread pointer
+    ldr     x10, [x0, #5*8]        // x10 = context.tpidr (user tp)
+    cbnz    x10, 1f                 // if set, use it
+    // First entry: allocate user TP area at TSD[30] (offset 240)
+    add     x10, x9, #240          // x10 = TSD base + 240
+    str     x10, [x10]             // user_tp:0 = self (musl convention)
+1:  msr     tpidr_el0, x10          // set user thread pointer
+
+    // Store context pointer at user_tp + 48 (musl canary2 slot)
+    str     x0, [x10, #48]
+
+    // Load elr (entry point) and user sp
+    ldr     x30, [x0, #2*8]       // x30 = elr
     ldr     x8, [x0, #4*8]        // x8 = user sp
     mov     sp, x8
 
-    // pop general registers
+    // Load general registers from UserContext
     add     x0, x0, #6*8
     ldp     x1, x2, [x0], #16
     ldp     x3, x4, [x0], #16
@@ -164,6 +185,6 @@ _syscall_fn_return:
     ldp     x27, x28, [x0], #16
     ldr     x29, [x0], #16
     ldr     x0, [x0, #8]
-    ret
+    ret                             // jump to user entry (x30)
 "#
 );

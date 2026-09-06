@@ -10,6 +10,11 @@ use crate::{MMUFlags, PhysAddr, VirtAddr};
 pub struct MockMemory {
     size: usize,
     fd: RawFd,
+    /// Track which host-page-aligned vaddrs have been MAP_ANON'd for
+    /// executable code on aarch64 macOS (to avoid clobbering previous
+    /// pages when multiple 4K pages share one host page).
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    anon_mapped: std::sync::Mutex<std::collections::HashSet<usize>>,
 }
 
 impl MockMemory {
@@ -25,7 +30,12 @@ impl MockMemory {
         .expect("faild to open");
         unistd::ftruncate(fd, size as _).expect("failed to set size of shared memory!");
 
-        let mem = Self { size, fd };
+        let mem = Self {
+            size,
+            fd,
+            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+            anon_mapped: std::sync::Mutex::new(std::collections::HashSet::new()),
+        };
         mem.mmap(PMEM_MAP_VADDR, size, 0, MMUFlags::READ | MMUFlags::WRITE);
         mem
     }
@@ -58,23 +68,70 @@ impl MockMemory {
         let aligned_len = (len + total_adjust + host_page_size - 1) & !(host_page_size - 1);
 
         let prot_noexec = ProtFlags::from(prot) - ProtFlags::PROT_EXEC;
-        // On macOS, MAP_SHARED + PROT_EXEC is blocked by hardened runtime.
-        // Use MAP_PRIVATE for executable mappings (copy-on-write is fine
-        // since code pages are read-only after loading).
-        #[cfg(target_os = "macos")]
-        let flags = if prot.contains(MMUFlags::EXECUTE) {
-            MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED
-        } else {
-            MapFlags::MAP_SHARED | MapFlags::MAP_FIXED
-        };
-        #[cfg(not(target_os = "macos"))]
-        let flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
         let fd = self.fd;
         trace!(
             "mmap file: fd={}, offset={:#x} (aligned={:#x}), len={:#x} (aligned={:#x}), vaddr={:#x} (aligned={:#x}), prot={:?}",
             fd, paddr, aligned_offset, len, aligned_len, vaddr, aligned_vaddr, prot,
         );
 
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        if prot.contains(MMUFlags::EXECUTE) {
+            // On aarch64 macOS:
+            // - MAP_SHARED + PROT_EXEC is blocked by hardened runtime
+            // - MAP_PRIVATE from file + mprotect(RX) fails with EACCES
+            // - Multiple 4K pages within one 16K host page can't be mapped
+            //   from different file offsets (last one clobbers previous)
+            //
+            // Solution: use MAP_ANON + MAP_PRIVATE for writable anonymous
+            // memory, memcpy the code data from the PMEM backing store,
+            // then defer mprotect to RX until all pages are filled.
+            //
+            // We track which host pages have been mapped to avoid
+            // re-mapping (which would zero out previously copied data).
+            {
+                let mut mapped = self.anon_mapped.lock().unwrap();
+                if !mapped.contains(&aligned_vaddr) {
+                    // First time seeing this host page -- mprotect any
+                    // adjacent already-RX page back to RW so we can
+                    // continue writing.
+                    // Actually, just map fresh anonymous RW memory.
+                    unsafe {
+                        mman::mmap(
+                            aligned_vaddr as _,
+                            aligned_len,
+                            ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                            MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED | MapFlags::MAP_ANON,
+                            -1,
+                            0,
+                        )
+                    }
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "failed to mmap anon: len={:#x}, vaddr={:#x}: {:?}",
+                            aligned_len, aligned_vaddr, err
+                        )
+                    });
+                    mapped.insert(aligned_vaddr);
+                } else {
+                    // Host page already mapped as RW -- make sure it's
+                    // writable (might have been mprotected to RX).
+                    self.mprotect(aligned_vaddr, aligned_len, MMUFlags::READ | MMUFlags::WRITE);
+                }
+            }
+            // Copy code from PMEM backing store
+            let src = (PMEM_MAP_VADDR + paddr) as *const u8;
+            let dst = vaddr as *mut u8;
+            unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
+            // Switch to read+execute
+            self.mprotect(
+                aligned_vaddr,
+                aligned_len,
+                MMUFlags::READ | MMUFlags::EXECUTE,
+            );
+            return;
+        }
+
+        let flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
         unsafe {
             mman::mmap(
                 aligned_vaddr as _,
@@ -92,14 +149,6 @@ impl MockMemory {
             )
         });
         if prot.contains(MMUFlags::EXECUTE) {
-            // On macOS aarch64, W^X is enforced: can't mprotect to RWX.
-            // Use RX only (code pages don't need write after loading).
-            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-            {
-                let rx_prot = (prot | MMUFlags::READ) - MMUFlags::WRITE;
-                self.mprotect(vaddr, len, rx_prot);
-            }
-            #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
             self.mprotect(vaddr, len, prot);
         }
     }
