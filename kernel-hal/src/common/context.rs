@@ -7,8 +7,13 @@ use trapframe::UserContext as UserContextInner;
 pub use trapframe::GeneralRegs;
 
 cfg_if! {
-    if #[cfg(feature = "libos")] {
+    if #[cfg(all(feature = "libos", any(
+        target_arch = "x86_64",
+        all(target_arch = "aarch64", target_os = "linux"),
+    )))] {
         pub use trapframe::syscall_fn_entry as syscall_entry;
+    } else if #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))] {
+        pub use crate::imp::aarch64_macos_fncall::syscall_fn_entry as syscall_entry;
     } else {
         pub use dummpy_syscall_entry as syscall_entry;
         pub fn dummpy_syscall_entry() {
@@ -243,8 +248,15 @@ impl UserContext {
     /// to be managed.
     pub fn enter_uspace(&mut self) {
         cfg_if! {
-            if #[cfg(feature = "libos")] {
+            if #[cfg(all(feature = "libos", any(
+                target_arch = "x86_64",
+                all(target_arch = "aarch64", target_os = "linux"),
+            )))] {
                 self.inner.run_fncall()
+            } else if #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))] {
+                // Use vendored fncall for aarch64 macOS (trapframe doesn't support it)
+                use crate::imp::aarch64_macos_fncall::UserContextFnCall;
+                self.inner.run_fncall_macos()
             } else if #[cfg(target_arch = "x86_64")] {
                 // Restore user FPU/SSE state before entering user mode
                 unsafe {

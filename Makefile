@@ -50,6 +50,16 @@ boot-test: build
 libc-test: boot-test
 	@tools/scripts/libc-test.sh $(ARCH)
 
+# LibOS mode: runs zCore as a host process (no QEMU needed).
+# Requires x86_64 host (Linux or macOS) or aarch64 Linux.
+libos-build:
+	cargo build -p zcore --features linux,libos --release
+
+# Run zCore in libos mode with busybox shell.
+# Requires rootfs/libos/ to be populated (via cargo libos-libc-test or manually).
+libos-run:
+	cargo linux-libos --args "/bin/busybox sh"
+
 # configure build environment (platform toolchain)
 config:
 ifeq ($(shell uname -s),Darwin)

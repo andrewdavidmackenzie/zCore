@@ -47,6 +47,7 @@ linux = ["linux-loader", "linux-object", "rcore-fs", "rcore-fs-sfs"]
 # Run as LibOS mode
 libos = [
   "kernel-hal/libos",
+  "linux-loader?/libos",
   "async-std",
   "chrono",
   "rcore-fs-hostfs",

@@ -307,8 +307,8 @@ assembly needed -- bootloader set up page tables and long mode).
 
 **SMP:** Not currently implemented (x86-smpboot dependency removed).
 
-**QEMU flags:** `-machine q35 -cpu qemu64,+fsgsbase` (fsgsbase required
-by the trapframe crate).
+**QEMU flags:** `-machine q35 -cpu qemu64,+fsgsbase,+rdrand` (fsgsbase
+required by the trapframe crate, rdrand used for kernel RNG).
 
 ---
 
@@ -330,7 +330,31 @@ No assembly, no page tables, no bootloader. The host OS provides all
 hardware abstraction. HAL uses `mmap`, `tmpfile`, `async-std`, and SDL
 for mock devices.
 
-**Status:** Currently broken for both Linux and Zircon modes (#80).
+**Platform requirements:** LibOS mode requires trapframe's fncall support:
+- x86_64 Linux/macOS: fully supported
+- aarch64 Linux: supported
+- aarch64 macOS (Apple Silicon): compiles but cannot run (trapframe
+  fncall not implemented for this platform)
+
+**Setup rootfs** (required before first run):
+```bash
+cargo xtask libos-libc-test
+```
+This downloads a pre-built x86_64 musl rootfs from the upstream cache
+into `rootfs/libos/`, containing busybox and libc-test binaries.
+Note: this rootfs contains x86_64 binaries only.
+
+**Build:** `cargo build -p zcore --features linux,libos` or `make libos-build`
+
+**Run:**
+```bash
+cargo run -p zcore --features linux,libos -- /bin/busybox sh
+```
+Or via Makefile: `make libos-run`
+
+**Debugging:** Since libos runs as a regular host process, you can attach
+any native debugger (lldb, gdb, RustRover) directly -- no QEMU or remote
+debugging needed. Example: `lldb -- target/debug/zcore /bin/busybox sh`
 
 ---
 
@@ -419,10 +443,10 @@ Runtime ZBI loading via DTB initrd is tracked in #136.
 | Setup                 | aarch64              | riscv64                  | x86_64            | LibOS         |
 |-----------------------|----------------------|--------------------------|-------------------|---------------|
 | **Page tables**       | Assembly (1G blocks) | Rust (Sv39 mega-pages)   | bootloader crate  | Host OS       |
-| **MMU enable**        | Assembly             | Rust (`satp`)            | Already on (UEFI) | Already on    |
+| **MMU enable**        | Assembly             | Rust (`satp`)            | bootloader (BIOS) | Already on    |
 | **BSS zeroing**       | Assembly             | Rust (`r0::zero_bss`)    | bootloader        | Host OS       |
-| **Stack setup**       | Assembly (32 KiB)    | Naked fn (32 pages/hart) | bootloader        | Host OS       |
-| **FP/SIMD**           | Assembly             | N/A                      | UEFI enables      | Host OS       |
-| **SMP boot**          | None                 | SBI HSM                  | AP fn pointer     | None          |
-| **DTB parsing**       | Not yet (#136)       | `dtb-walker` crate       | N/A (ACPI)        | N/A           |
+| **Stack setup**       | Assembly (32 KiB)    | Naked fn (32 pages/hart) | bootloader (upper half) | Host OS |
+| **FP/SIMD**           | Assembly             | N/A                      | CR4 OSFXSR+OSXMMEXCPT | Host OS    |
+| **SMP boot**          | None                 | SBI HSM                  | INIT-SIPI-SIPI    | None          |
+| **DTB parsing**       | Not yet (#136)       | `dtb-walker` crate       | N/A (ACPI MADT)   | N/A           |
 | **First instruction** | `mov x20, x0`        | `call select_stack`      | Rust statement    | Rust `main()` |

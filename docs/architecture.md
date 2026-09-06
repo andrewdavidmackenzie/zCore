@@ -332,9 +332,10 @@ module is not compiled. Note: `kernel-hal` defaults to `libos` being ON, but
 `zCore` imports it with `default-features = false`.
 
 
-Correct, libos runs without QEMU -- it's a regular host process. Currently
-broken (see later
-TODOs about build failures). See [#80](https://github.com/andrewdavidmackenzie/zCore/issues/80).
+LibOS runs without QEMU -- it's a regular host process. Build with
+`cargo build -p zcore --features linux,libos` or `make libos-build`.
+Requires x86_64 host (Linux/macOS) or aarch64 Linux for runtime
+(aarch64 macOS compiles but lacks trapframe fncall support).
 
 
 - `src/utils/` -- InitOnce, LazyInit, MpscQueue, generic PageTable

@@ -75,3 +75,20 @@ jobs:
 
       - name: Build ${{ matrix.arch }} bare-metal linux
         run: cargo bin -m virt-${{ matrix.arch }}
+
+  libos:
+    name: LibOS build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Build libos (Linux mode)
+        run: cargo build -p zcore --features linux,libos
