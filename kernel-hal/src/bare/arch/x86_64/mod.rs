@@ -56,9 +56,8 @@ pub fn primary_init() {
             f.insert(Cr4Flags::OSXMMEXCPT_ENABLE); // enable SSE exceptions
         });
     }
-    // TODO: Save/restore FPU/SSE state (FXSAVE/FXRSTOR or XSAVE/XRSTOR)
-    // on context switches. Currently trapframe 0.11 does not preserve
-    // x87/SSE registers, so multi-process SSE will corrupt state.
+    // FPU/SSE state is saved/restored via FXSAVE/FXRSTOR in
+    // UserContext::enter_uspace() (kernel-hal/src/common/context.rs).
     // TODO: SMP boot -- x86_smpboot was removed (old dependency).
     // Need to implement AP startup or find a replacement. See #94.
 }
