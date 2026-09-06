@@ -252,9 +252,11 @@ pub fn boot_application_processors() {
         let dbg_entry = data.entry;
         let dbg_cr3 = data.cr3;
         let dbg_gdt = { data.gdt_ptr.base };
+        // Verify via identity-mapped read
+        let verify_entry = unsafe { core::ptr::read_volatile((phys_to_virt(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET + 8)) as *const u64) };
         info!(
-            "AP {} config: stack_top={:#x}, entry={:#x}, cr3={:#x}, gdt_base={:#x}",
-            apic_id, dbg_stack, dbg_entry, dbg_cr3, dbg_gdt
+            "AP {} config: stack_top={:#x}, entry={:#x} (verify={:#x}), cr3={:#x}, gdt_base={:#x}",
+            apic_id, dbg_stack, dbg_entry, verify_entry, dbg_cr3, dbg_gdt
         );
 
         // Send INIT-SIPI-SIPI without holding any locks.
