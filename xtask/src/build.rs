@@ -48,6 +48,11 @@ pub(crate) struct QemuArgs {
     /// Port for gdb to connect. If set, qemu will block and wait gdb to connect.
     #[clap(long)]
     gdb: Option<u16>,
+    /// Path to a custom rootfs image (SFS format). Overrides the
+    /// default built rootfs. The kernel doesn't care what's in the
+    /// image -- it just mounts it and runs ROOTPROC.
+    #[clap(long)]
+    rootfs_image: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -178,10 +183,21 @@ impl QemuArgs {
     pub fn qemu(self) {
         let is_zircon = self.zircon;
 
-        // Build rootfs image (Linux mode only)
-        if !is_zircon {
+        // Determine the rootfs image path: custom or default.
+        let rootfs_img = if let Some(ref custom) = self.rootfs_image {
+            if !custom.exists() {
+                panic!("Custom rootfs image not found: {}", custom.display());
+            }
+            println!("Using custom rootfs image: {}", custom.display());
+            custom.clone()
+        } else if !is_zircon {
+            // Build default Linux rootfs image
             self.arch.linux_rootfs().image();
-        }
+            INNER.join(format!("{}.img", self.arch.arch.name()))
+        } else {
+            // Zircon mode without custom rootfs: ZBI is embedded in kernel
+            PathBuf::new()
+        };
 
         // Build various strings
         let arch = self.arch.arch;
@@ -246,10 +262,9 @@ impl QemuArgs {
                     .arg(&bin)
                     .args(["-bios", "default"])
                     .args(["-serial", "mon:stdio"]);
-                if !is_zircon {
-                    // Linux mode: pass rootfs image as initrd
-                    qemu.arg("-initrd")
-                        .arg(INNER.join(format!("{arch_str}.img")));
+                if !is_zircon || self.rootfs_image.is_some() {
+                    // Pass rootfs image as initrd
+                    qemu.arg("-initrd").arg(&rootfs_img);
                 }
             }
             Arch::X86_64 => {
@@ -281,8 +296,7 @@ impl QemuArgs {
                 // Embed the rootfs SFS image as a ramdisk in the boot image.
                 // The bootloader loads it into physical memory and exposes it
                 // via BootInfo.ramdisk_addr / ramdisk_len.
-                if !is_zircon {
-                    let rootfs_img = INNER.join(format!("{arch_str}.img"));
+                if !is_zircon || self.rootfs_image.is_some() {
                     if rootfs_img.exists() {
                         cmd.arg("--ramdisk").arg(&rootfs_img);
                     } else {
@@ -319,21 +333,18 @@ impl QemuArgs {
                     .arg("-kernel")
                     .arg(&obj)
                     .args(["-serial", "mon:stdio"]);
-                if !is_zircon {
-                    // Linux mode: pass rootfs image via block device
+                if !is_zircon || self.rootfs_image.is_some() {
+                    // Pass rootfs image via block device
                     qemu.args([
                         "-drive",
-                        &format!(
-                            "file={}/aarch64.img,if=none,format=raw,id=x0",
-                            INNER.display()
-                        ),
+                        &format!("file={},if=none,format=raw,id=x0", rootfs_img.display()),
                     ])
                     .args([
                         "-device",
                         "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0",
                     ]);
                 }
-                // Zircon mode: ZBI is linked into the kernel binary
+                // Zircon mode without rootfs: ZBI is linked into the kernel binary
             }
         }
         qemu.optional(&self.gdb, |qemu, port| {
