@@ -60,9 +60,25 @@ fn primary_main(config: kernel_hal::KernelConfig) {
             let proc = linux_loader::linux::run(args, envs, rootfs);
             utils::wait_for_exit(Some(proc))
         } else if #[cfg(feature = "zircon")] {
-            let zbi = fs::zbi();
-            let proc = zircon_loader::zircon::run_userboot(zbi, &options.cmdline);
-            utils::wait_for_exit(Some(proc))
+            // Try rootfs-based boot first (SFS image with petal programs).
+            // Falls back to embedded ZBI+userstart if no rootfs is available.
+            #[cfg(not(feature = "libos"))]
+            if let Some(rootfs) = fs::try_rootfs() {
+                let init_path = options.root_proc.split('?').next().unwrap_or("/bin/hello");
+                info!("Zircon rootfs boot: loading '{}'", init_path);
+                let proc = zircon_loader::zircon::run_from_rootfs(rootfs, init_path);
+                utils::wait_for_exit(Some(proc))
+            } else {
+                let zbi = fs::zbi();
+                let proc = zircon_loader::zircon::run_userboot(zbi, &options.cmdline);
+                utils::wait_for_exit(Some(proc))
+            }
+            #[cfg(feature = "libos")]
+            {
+                let zbi = fs::zbi();
+                let proc = zircon_loader::zircon::run_userboot(zbi, &options.cmdline);
+                utils::wait_for_exit(Some(proc))
+            }
         } else {
             panic!("One of the features `linux` or `zircon` must be specified!");
         }

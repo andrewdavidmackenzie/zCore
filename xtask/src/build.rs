@@ -216,8 +216,12 @@ impl QemuArgs {
             machine: format!("virt-{}", self.arch.arch.name()),
             debug: self.debug,
         });
-        // Set the kernel command line via compile-time env var
-        let cmdline = if is_zircon {
+        // Set the kernel command line via compile-time env var.
+        // For Zircon with --rootfs-image, include ROOTPROC so the
+        // kernel knows which program to load from the rootfs.
+        let cmdline = if is_zircon && self.rootfs_image.is_some() {
+            format!("LOG={}:ROOTPROC=/bin/hello", self.log)
+        } else if is_zircon {
             format!("LOG={}", self.log)
         } else {
             format!("LOG={}:ROOTPROC=/bin/busybox?sh", self.log)

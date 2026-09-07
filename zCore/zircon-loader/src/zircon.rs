@@ -354,3 +354,89 @@ fn syscall_args(ctx: &UserContext) -> [usize; 8] {
         }
     }
 }
+
+/// Run a petal program directly from an SFS rootfs filesystem.
+///
+/// This is the rootfs-based boot path for Zircon personality, analogous
+/// to how Linux loads busybox from its rootfs. The petal program is a flat
+/// binary (not ELF) loaded at a fixed address.
+///
+/// This path does NOT use userstart or ZBI -- the kernel loads the program
+/// directly, creating a process with the same handle protocol that userstart
+/// would provide.
+pub fn run_from_rootfs(
+    rootfs: Arc<dyn rcore_fs::vfs::FileSystem>,
+    init_path: &str,
+) -> Arc<Process> {
+    info!("Zircon rootfs boot: loading '{}'", init_path);
+
+    // Read the program binary from the filesystem
+    let inode = rootfs
+        .root_inode()
+        .lookup(init_path)
+        .unwrap_or_else(|e| panic!("failed to find '{}' in rootfs: {:?}", init_path, e));
+    let size = inode.metadata().unwrap().size;
+    let mut program_data = alloc::vec![0u8; size];
+    inode
+        .read_at(0, &mut program_data)
+        .unwrap_or_else(|e| panic!("failed to read '{}': {:?}", init_path, e));
+
+    info!(
+        "Loaded '{}' ({} bytes) from rootfs",
+        init_path,
+        program_data.len()
+    );
+
+    // Create a process and load the flat binary (same as userstart does)
+    let job = Job::root();
+    let proc = Process::create(&job, "init").unwrap();
+    let thread = Thread::create(&proc, "init-main").unwrap();
+    let vmar = proc.vmar();
+
+    // Map code at 0x10000 (same as userstart)
+    let code_base: usize = 0x10000;
+    let code_pages = (program_data.len() + PAGE_SIZE - 1) / PAGE_SIZE;
+    let map_size = code_pages * PAGE_SIZE;
+    let code_vmo = VmObject::new_paged(code_pages);
+    code_vmo.write(0, &program_data).unwrap();
+    code_vmo.set_name("init-code");
+
+    let code_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
+    let entry = vmar
+        .map(Some(code_base), code_vmo, 0, map_size, code_flags)
+        .unwrap();
+    info!("Mapped code at {:#x}, entry={:#x}", entry, entry);
+
+    // Create stack above the code
+    let stack_pages = 8;
+    let stack_size = stack_pages * PAGE_SIZE;
+    let stack_vmo = VmObject::new_paged(stack_pages);
+    stack_vmo.set_name("init-stack");
+    let stack_flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER;
+    let stack_offset = code_base + map_size;
+    let stack_base = vmar
+        .map(Some(stack_offset), stack_vmo, 0, stack_size, stack_flags)
+        .unwrap();
+    // sp points to the top of the stack. Petal programs use a custom
+    // _start entry (not C ABI), so no x86_64 red-zone or return address
+    // adjustment is needed.
+    let sp = stack_base + stack_size;
+    info!("Stack at {:#x}-{:#x}, sp={:#x}", stack_base, sp, sp);
+
+    // Create a bootstrap channel (petal programs expect a startup handle).
+    // ch0 is the kernel end, ch1 goes to the process.
+    let (ch0, ch1) = Channel::create();
+
+    // Add ch0 to the process handle table so it stays alive and the
+    // channel doesn't close when ch1 is the only reference.
+    let ch0_handle = Handle::new(ch0, Rights::DEFAULT_CHANNEL);
+    proc.add_handle(ch0_handle);
+
+    // Start the process. The startup handle (ch1) is passed as the
+    // first argument to _start(startup_handle, arg2).
+    let handle = Handle::new(ch1, Rights::DEFAULT_CHANNEL);
+    proc.start(&thread, entry, sp, Some(handle), 0, thread_fn)
+        .expect("failed to start init process");
+
+    proc
+}

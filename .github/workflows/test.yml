@@ -143,8 +143,11 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install qemu
 
-      - name: Zircon boot smoke test
+      - name: Zircon boot smoke test (ZBI mode)
         run: make zircon-boot-test ARCH=aarch64
+
+      - name: Zircon rootfs boot test
+        run: tools/scripts/zircon-rootfs-test.sh aarch64
 
   libc-test:
     name: Libc Test (aarch64)
