@@ -185,8 +185,11 @@ impl QemuArgs {
 
         // Determine the rootfs image path: custom or default.
         let rootfs_img = if let Some(ref custom) = self.rootfs_image {
-            if !custom.exists() {
-                panic!("Custom rootfs image not found: {}", custom.display());
+            if !custom.is_file() {
+                panic!(
+                    "Custom rootfs image is not a regular file: {}",
+                    custom.display()
+                );
             }
             println!("Using custom rootfs image: {}", custom.display());
             custom.clone()
@@ -334,10 +337,13 @@ impl QemuArgs {
                     .arg(&obj)
                     .args(["-serial", "mon:stdio"]);
                 if !is_zircon || self.rootfs_image.is_some() {
-                    // Pass rootfs image via block device
+                    // Pass rootfs image via block device.
+                    // QEMU uses commas as option separators in -drive,
+                    // so escape any commas in the file path.
+                    let img_path = rootfs_img.display().to_string().replace(',', ",,");
                     qemu.args([
                         "-drive",
-                        &format!("file={},if=none,format=raw,id=x0", rootfs_img.display()),
+                        &format!("file={img_path},if=none,format=raw,id=x0"),
                     ])
                     .args([
                         "-device",
