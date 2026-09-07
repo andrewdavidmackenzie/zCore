@@ -1,4 +1,4 @@
-﻿mod image;
+mod image;
 mod opencv;
 mod test;
 
@@ -151,9 +151,18 @@ impl LinuxRootfs {
         // implement the mmap semantics required by musl's dynamic linker.
         let config_path = target.join(".config");
         let config = fs::read_to_string(&config_path).expect("failed to read .config");
-        let config = config.replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y");
+        // Build as static-pie: position-independent static executable.
+        // This is essential for libos on aarch64 macOS where the VMAR
+        // base is above 0x400000000 (the ELF's default load address of
+        // 0x400000 is not mappable due to macOS address space restrictions).
+        //
+        // Use CONFIG_EXTRA_CFLAGS for -fPIE (applied to all compilation
+        // units) and CFLAGS_busybox on the make command line for
+        // -static-pie (applied only to the final busybox link).
+        // Don't use CONFIG_STATIC (which adds -static, conflicting with
+        // -static-pie).
+        let config = config.replace("CONFIG_EXTRA_CFLAGS=\"\"", "CONFIG_EXTRA_CFLAGS=\"-fPIE\"");
         fs::write(&config_path, config).expect("failed to write .config");
-        // Compile
         let musl = musl.as_ref();
         Make::new()
             .current_dir(&target)
@@ -162,6 +171,7 @@ impl LinuxRootfs {
                 musl = musl.canonicalize().unwrap().join("bin").display(),
                 arch = self.0.name(),
             ))
+            .arg("CFLAGS_busybox=-pie -static -Wl,-z,notext")
             .invoke();
         // Strip
         Ext::new(self.strip(musl))

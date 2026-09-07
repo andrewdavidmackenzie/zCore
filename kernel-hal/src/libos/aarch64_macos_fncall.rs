@@ -28,7 +28,8 @@ extern "C" {
     pub fn syscall_fn_entry();
 }
 
-/// Install the SIGSYS signal handler for intercepting `svc #0`.
+/// Install signal handlers for intercepting `svc #0` (SIGSYS) and
+/// catching crashes in user code (SIGSEGV, SIGBUS).
 /// Must be called once during initialization.
 pub fn install_sigsys_handler() {
     unsafe {
@@ -40,8 +41,16 @@ pub fn install_sigsys_handler() {
         if ret != 0 {
             panic!("Failed to install SIGSYS handler");
         }
+
+        // Also intercept SIGSEGV and SIGBUS from user code
+        let mut sa2: nix::libc::sigaction = core::mem::zeroed();
+        sa2.sa_sigaction = user_fault_handler as *const () as usize;
+        sa2.sa_flags = nix::libc::SA_SIGINFO | nix::libc::SA_NODEFER;
+        nix::libc::sigemptyset(&mut sa2.sa_mask);
+        nix::libc::sigaction(nix::libc::SIGSEGV, &sa2, core::ptr::null_mut());
+        nix::libc::sigaction(nix::libc::SIGBUS, &sa2, core::ptr::null_mut());
     }
-    info!("Installed SIGSYS handler for aarch64 macOS libos");
+    info!("Installed SIGSYS/SIGSEGV/SIGBUS handlers for aarch64 macOS libos");
 }
 
 // Per-thread state for the setjmp/longjmp kernel return.
@@ -101,6 +110,39 @@ impl UserContextFnCall for UserContext {
             );
         });
     }
+}
+
+/// Fault handler for SIGSEGV/SIGBUS from user code.
+/// Logs the crash details and aborts (for debugging).
+unsafe extern "C" fn user_fault_handler(
+    sig: i32,
+    info: *mut nix::libc::siginfo_t,
+    ctx: *mut nix::libc::c_void,
+) {
+    let uc = ctx as *const nix::libc::ucontext_t;
+    let mc = (*uc).uc_mcontext as *const u8;
+    const ES_SIZE: usize = 16;
+    let ts = mc.add(ES_SIZE) as *const u64;
+    let pc = *ts.add(32) as usize;
+    let sp = *ts.add(31) as usize;
+    let fault_addr = (*info).si_addr as usize;
+    let sig_name = if sig == nix::libc::SIGSEGV {
+        "SIGSEGV"
+    } else {
+        "SIGBUS"
+    };
+    error!(
+        "User fault: {} at pc={:#x}, sp={:#x}, fault_addr={:#x}",
+        sig_name, pc, sp, fault_addr
+    );
+    error!(
+        "  x0={:#x} x1={:#x} x2={:#x} x8={:#x}",
+        *ts.add(0) as usize,
+        *ts.add(1) as usize,
+        *ts.add(2) as usize,
+        *ts.add(8) as usize,
+    );
+    std::process::abort();
 }
 
 /// SIGSYS signal handler. Called when user code executes `svc #0`.
@@ -191,8 +233,9 @@ unsafe extern "C" fn sigsys_handler(
     // trap_num = 0 for syscall (on aarch64 libos, trap_reason checks this)
     context.trap_num = 0;
 
-    // elr = pc + 4 (advance past the svc instruction)
-    context.elr = user_pc + 4;
+    // On macOS, the mcontext PC for SIGSYS already points past
+    // the svc instruction (pc = svc_addr + 4). No need to advance.
+    context.elr = user_pc;
 
     // sp
     context.sp = user_sp;
