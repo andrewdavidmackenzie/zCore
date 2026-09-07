@@ -75,9 +75,19 @@ fn primary_main(config: kernel_hal::KernelConfig) {
             }
             #[cfg(feature = "libos")]
             {
-                let zbi = fs::zbi();
-                let proc = zircon_loader::zircon::run_userboot(zbi, &options.cmdline);
-                utils::wait_for_exit(Some(proc))
+                // Try rootfs-based boot first (HostFS from rootfs/zircon/{arch}/).
+                // Falls back to ZBI file argument if no rootfs directory exists.
+                if let Some(rootfs) = fs::try_libos_rootfs() {
+                    let args: alloc::vec::Vec<alloc::string::String> = std::env::args().collect();
+                    let init_path = args.get(1).map(|s| s.as_str()).unwrap_or("/bin/hello");
+                    info!("Zircon libos rootfs boot: loading '{}'", init_path);
+                    let proc = zircon_loader::zircon::run_from_rootfs(rootfs, init_path);
+                    utils::wait_for_exit(Some(proc))
+                } else {
+                    let zbi = fs::zbi();
+                    let proc = zircon_loader::zircon::run_userboot(zbi, &options.cmdline);
+                    utils::wait_for_exit(Some(proc))
+                }
             }
         } else {
             panic!("One of the features `linux` or `zircon` must be specified!");

@@ -151,7 +151,7 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
 /// `bin/channel_test`, `bin/vmo_test`.
 /// Returns the path to the rootfs directory.
 pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
-    let rootfs_dir = PROJECT_DIR.join("rootfs").join(arch.name()).join("zircon");
+    let rootfs_dir = PROJECT_DIR.join("rootfs").join("zircon").join(arch.name());
     let bin_dir = rootfs_dir.join("bin");
 
     const PETAL_BINS: &[&str] = &["hello", "channel_test", "vmo_test"];
