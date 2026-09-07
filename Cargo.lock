@@ -2711,6 +2711,7 @@ dependencies = [
  "executor",
  "kernel-hal",
  "log",
+ "rcore-fs",
  "xmas-elf",
  "zircon-object",
  "zircon-syscall",

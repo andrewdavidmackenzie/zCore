@@ -34,6 +34,10 @@ zircon-boot-test:
 	@echo "==> Zircon boot smoke test ($(ARCH))..."
 	@tools/scripts/zircon-boot-test.sh $(ARCH)
 
+zircon-rootfs-test:
+	@echo "==> Zircon rootfs boot test ($(ARCH))..."
+	@tools/scripts/zircon-rootfs-test.sh $(ARCH)
+
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test
 

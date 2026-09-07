@@ -8,6 +8,9 @@ pub struct BootOptions {
     pub log_level: String,
     #[cfg(feature = "linux")]
     pub root_proc: String,
+    /// Root process path for Zircon rootfs-based boot (bare-metal only).
+    #[cfg(all(feature = "zircon", not(feature = "libos")))]
+    pub root_proc: String,
 }
 
 fn parse_cmdline(cmdline: &str) -> BTreeMap<&str, &str> {
@@ -49,6 +52,8 @@ pub fn boot_options() -> BootOptions {
                 log_level,
                 #[cfg(feature = "linux")]
                 root_proc: args[1..].join("?"),
+                #[cfg(all(feature = "zircon", not(feature = "libos")))]
+                root_proc: args[1..].join("?"),
             }
         } else {
             use alloc::string::ToString;
@@ -59,6 +64,8 @@ pub fn boot_options() -> BootOptions {
                 log_level: options.get("LOG").unwrap_or(&"").to_string(),
                 #[cfg(feature = "linux")]
                 root_proc: options.get("ROOTPROC").unwrap_or(&"/bin/busybox?sh").to_string(),
+                #[cfg(all(feature = "zircon", not(feature = "libos")))]
+                root_proc: options.get("ROOTPROC").unwrap_or(&"/bin/hello").to_string(),
             }
         }
     }

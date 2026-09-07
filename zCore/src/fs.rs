@@ -50,6 +50,10 @@ cfg_if! {
             rcore_fs_sfs::SimpleFileSystem::open(device).expect("failed to open device SimpleFS")
         }
     } else if #[cfg(feature = "zircon")] {
+        #[cfg(not(feature = "libos"))]
+        use alloc::sync::Arc;
+        #[cfg(not(feature = "libos"))]
+        use rcore_fs::vfs::FileSystem;
 
         #[cfg(feature = "libos")]
         pub fn zbi() -> impl AsRef<[u8]> {
@@ -67,6 +71,31 @@ cfg_if! {
             // Runtime ZBI loading via DTB initrd is tracked in issue #136.
             const ZBI_DATA: &[u8] = include_bytes!(env!("PETAL_ZBI"));
             ZBI_DATA
+        }
+
+        /// Try to open an SFS rootfs (from VirtIO block device or initrd).
+        /// Returns None if no rootfs device is available.
+        #[cfg(not(feature = "libos"))]
+        pub fn try_rootfs() -> Option<Arc<dyn FileSystem>> {
+            use rcore_fs_sfs::SimpleFileSystem;
+
+            // Try initrd first (riscv64, x86_64)
+            if let Some(initrd) = zircon_init_ram_disk() {
+                info!("Opening Zircon rootfs from initrd...");
+                let dev = Arc::new(MemBufDevice(spin::Mutex::new(initrd)));
+                let fs: Arc<dyn FileSystem> = SimpleFileSystem::open(dev).ok()?;
+                return Some(fs);
+            }
+
+            // Try VirtIO block device (aarch64)
+            if let Some(block) = kernel_hal::drivers::all_block().first() {
+                info!("Opening Zircon rootfs from block device...");
+                let dev: Arc<dyn rcore_fs::dev::Device> = Arc::new(BlockDevice(block));
+                let fs: Arc<dyn FileSystem> = SimpleFileSystem::open(dev).ok()?;
+                return Some(fs);
+            }
+
+            None
         }
     }
 }
@@ -86,6 +115,65 @@ pub(crate) fn init_ram_disk() -> Option<&'static mut [u8]> {
         })
     } else {
         kernel_hal::boot::init_ram_disk()
+    }
+}
+
+/// Try to get an initrd for Zircon mode (same mechanism as Linux).
+#[cfg(all(not(feature = "libos"), feature = "zircon"))]
+fn zircon_init_ram_disk() -> Option<&'static mut [u8]> {
+    kernel_hal::boot::init_ram_disk()
+}
+
+/// Minimal rcore-fs Device wrapper for an in-memory buffer.
+#[cfg(all(not(feature = "libos"), feature = "zircon"))]
+struct MemBufDevice(spin::Mutex<&'static mut [u8]>);
+
+#[cfg(all(not(feature = "libos"), feature = "zircon"))]
+impl rcore_fs::dev::Device for MemBufDevice {
+    fn read_at(&self, offset: usize, buf: &mut [u8]) -> rcore_fs::dev::Result<usize> {
+        let data = self.0.lock();
+        let end = (offset + buf.len()).min(data.len());
+        let len = end.saturating_sub(offset);
+        buf[..len].copy_from_slice(&data[offset..offset + len]);
+        Ok(len)
+    }
+    fn write_at(&self, offset: usize, buf: &[u8]) -> rcore_fs::dev::Result<usize> {
+        let mut data = self.0.lock();
+        let end = (offset + buf.len()).min(data.len());
+        let len = end.saturating_sub(offset);
+        data[offset..offset + len].copy_from_slice(&buf[..len]);
+        Ok(len)
+    }
+    fn sync(&self) -> rcore_fs::dev::Result<()> {
+        Ok(())
+    }
+}
+
+/// Minimal rcore-fs Device wrapper for a VirtIO block device.
+#[cfg(all(not(feature = "libos"), feature = "zircon"))]
+struct BlockDevice(alloc::sync::Arc<dyn kernel_hal::drivers::scheme::BlockScheme>);
+
+#[cfg(all(not(feature = "libos"), feature = "zircon"))]
+impl rcore_fs::dev::Device for BlockDevice {
+    fn read_at(&self, offset: usize, buf: &mut [u8]) -> rcore_fs::dev::Result<usize> {
+        const BLK_SIZE: usize = 512;
+        let start_blk = offset / BLK_SIZE;
+        let end_blk = (offset + buf.len() + BLK_SIZE - 1) / BLK_SIZE;
+        let mut tmp = alloc::vec![0u8; (end_blk - start_blk) * BLK_SIZE];
+        for (i, blk) in (start_blk..end_blk).enumerate() {
+            self.0
+                .read_block(blk, &mut tmp[i * BLK_SIZE..(i + 1) * BLK_SIZE])
+                .map_err(|_| rcore_fs::dev::DevError)?;
+        }
+        let skip = offset % BLK_SIZE;
+        buf.copy_from_slice(&tmp[skip..skip + buf.len()]);
+        Ok(buf.len())
+    }
+    fn write_at(&self, _offset: usize, _buf: &[u8]) -> rcore_fs::dev::Result<usize> {
+        Err(rcore_fs::dev::DevError)
+    }
+    fn sync(&self) -> rcore_fs::dev::Result<()> {
+        Ok(())
     }
 }
 

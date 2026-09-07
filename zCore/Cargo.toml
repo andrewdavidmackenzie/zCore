@@ -40,8 +40,8 @@ link-user-img = []
 # shutdown the machine and exit QEMU.
 baremetal-test = ["executor/baremetal-test"]
 
-# Run as Zircon mode
-zircon = ["zircon-loader"]
+# Run as Zircon mode (rcore-fs and rcore-fs-sfs for rootfs-based boot)
+zircon = ["zircon-loader", "rcore-fs", "rcore-fs-sfs"]
 # Run as Linux mode
 linux = ["linux-loader", "linux-object", "rcore-fs", "rcore-fs-sfs"]
 # Run as LibOS mode
