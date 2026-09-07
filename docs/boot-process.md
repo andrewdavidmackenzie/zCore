@@ -466,6 +466,22 @@ Userstart exits -> kernel shuts down
 **ZBI source:** Embedded at compile time via `include_bytes!(env!("PETAL_ZBI"))`.
 Runtime ZBI loading via DTB initrd is tracked in #136.
 
+### Custom Rootfs Image
+
+Both personalities can use a custom rootfs image via `--rootfs-image`:
+
+```bash
+# Linux with custom rootfs
+cargo qemu --arch aarch64 --rootfs-image path/to/custom.img
+
+# Build Zircon rootfs with petal programs
+cargo xtask zircon-rootfs --arch aarch64
+```
+
+The `cargo xtask zircon-rootfs` command builds an SFS image containing
+petal programs (`bin/hello`, `bin/channel_test`, `bin/vmo_test`), mirroring
+the Linux rootfs directory layout. This is tracked in #164.
+
 ---
 
 ## Pre-primary_main Setup Comparison
