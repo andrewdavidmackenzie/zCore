@@ -136,12 +136,22 @@ unsafe extern "C" fn user_fault_handler(
         sig_name, pc, sp, fault_addr
     );
     error!(
-        "  x0={:#x} x1={:#x} x2={:#x} x8={:#x}",
+        "  x0={:#x} x1={:#x} x2={:#x} x3={:#x} x6={:#x} x7={:#x} x8={:#x}",
         *ts.add(0) as usize,
         *ts.add(1) as usize,
         *ts.add(2) as usize,
+        *ts.add(3) as usize,
+        *ts.add(6) as usize,
+        *ts.add(7) as usize,
         *ts.add(8) as usize,
     );
+    // Dump the PHDR area for debugging
+    let phdr_addr = 0x4000000B0usize; // Expected PT_DYNAMIC PHDR
+    let phdr_data = unsafe { core::slice::from_raw_parts(phdr_addr as *const u32, 2) };
+    error!("  PHDR@{:#x}: type={:#x}", phdr_addr, phdr_data[0]);
+    // Also check stack auxv area
+    let sp_val = *ts.add(31) as usize;
+    error!("  stack sp={:#x}", sp_val);
     std::process::abort();
 }
 

@@ -74,13 +74,20 @@ impl LinuxElfLoader {
             vmo.write(offset as usize, &self.syscall_entry.to_ne_bytes())?;
         }
 
-        match elf.relocate(image_vmar) {
-            Ok(()) => info!("elf relocate passed !"),
-            Err(error) => {
-                // Static executables don't need relocation; base is still
-                // image_vmar.addr() since that's where pages are mapped.
-                warn!("elf relocate Err:{:?}, base {:x?}", error, base);
+        // For PIE (DYN type) binaries, skip our relocator -- the
+        // binary's rcrt1 startup code does its own self-relocation.
+        // Running both would double-apply relocations.
+        use xmas_elf::header::Type;
+        let is_pie = elf.header.pt2.type_().as_type() == Type::SharedObject;
+        if !is_pie {
+            match elf.relocate(image_vmar) {
+                Ok(()) => info!("elf relocate passed !"),
+                Err(error) => {
+                    warn!("elf relocate Err:{:?}, base {:x?}", error, base);
+                }
             }
+        } else {
+            info!("PIE binary: skipping relocator (rcrt1 will self-relocate)");
         }
 
         let stack_vmo = VmObject::new_paged(self.stack_pages);
@@ -96,7 +103,13 @@ impl LinuxElfLoader {
                 let mut map = BTreeMap::new();
                 #[cfg(target_arch = "x86_64")]
                 {
-                    map.insert(abi::AT_BASE, base);
+                    use xmas_elf::header::Type;
+                    let is_pie = elf.header.pt2.type_().as_type() == Type::SharedObject;
+                    if is_pie {
+                        map.insert(abi::AT_BASE, 0);
+                    } else {
+                        map.insert(abi::AT_BASE, base);
+                    }
                     map.insert(abi::AT_PHDR, base + elf.header.pt2.ph_offset() as usize);
                     map.insert(abi::AT_ENTRY, entry);
                 }
@@ -106,10 +119,19 @@ impl LinuxElfLoader {
                 }
                 #[cfg(target_arch = "aarch64")]
                 {
-                    map.insert(abi::AT_BASE, base);
+                    // For static-pie (DYN type), AT_BASE = 0 (no interpreter).
+                    // For non-PIE (EXEC type), AT_BASE = load base.
+                    use xmas_elf::header::Type;
+                    let is_pie = elf.header.pt2.type_().as_type() == Type::SharedObject;
+                    if is_pie {
+                        map.insert(abi::AT_BASE, 0);
+                    } else {
+                        map.insert(abi::AT_BASE, base);
+                    }
                     map.insert(abi::AT_ENTRY, entry);
                     if let Some(phdr_vaddr) = elf.get_phdr_vaddr() {
-                        map.insert(abi::AT_PHDR, phdr_vaddr as usize);
+                        // Relocate PHDR address by the load base
+                        map.insert(abi::AT_PHDR, base + phdr_vaddr as usize);
                     }
                 }
                 map.insert(abi::AT_PHENT, elf.header.pt2.ph_entry_size() as usize);

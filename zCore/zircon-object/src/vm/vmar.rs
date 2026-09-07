@@ -628,6 +628,38 @@ impl VmAddressRegion {
         let size_limit = map_inner.addr + map_inner.size - vaddr;
         let actual_size = buf.len().min(size_limit);
         map.vmo.write(vmo_offset, &buf[0..actual_size])?;
+
+        // In libos mode, also write directly to the user virtual address.
+        // On hosts with page size > 4K (e.g., 16K on aarch64 macOS),
+        // user pages are MAP_ANON and disconnected from the PMEM backing
+        // store. The VMO write above updates PMEM but not user pages.
+        // Even on 4K hosts, this direct write is harmless (the page is
+        // MAP_SHARED from the same backing store).
+        #[cfg(feature = "libos")]
+        {
+            let flags = map_inner.flags;
+            let need_rw =
+                flags.contains(crate::MMUFlags::EXECUTE) && !flags.contains(crate::MMUFlags::WRITE);
+            if need_rw {
+                // Temporarily make writable for patching executable pages
+                kernel_hal::mem::pmem_mprotect(
+                    vaddr & !(0xFFF),
+                    crate::PAGE_SIZE,
+                    crate::MMUFlags::READ | crate::MMUFlags::WRITE,
+                );
+            }
+            unsafe {
+                core::ptr::copy_nonoverlapping(buf.as_ptr(), vaddr as *mut u8, actual_size);
+            }
+            if need_rw {
+                kernel_hal::mem::pmem_mprotect(
+                    vaddr & !(0xFFF),
+                    crate::PAGE_SIZE,
+                    crate::MMUFlags::READ | crate::MMUFlags::EXECUTE,
+                );
+            }
+        }
+
         Ok(actual_size)
     }
 
