@@ -73,7 +73,13 @@ impl VmAddressRegion {
             use core::sync::atomic::*;
             static VMAR_ID: AtomicUsize = AtomicUsize::new(0);
             let i = VMAR_ID.fetch_add(1, Ordering::SeqCst);
-            (0x2_0000_0000 + 0x100_0000_0000 * i, 0x100_0000_0000)
+            // On aarch64 macOS, mmap MAP_FIXED fails below 0x400000000.
+            // Use a higher base address for separate address spaces.
+            #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+            let base = 0x4_0000_0000usize; // 16 GB
+            #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
+            let base = 0x2_0000_0000usize; // 8 GB
+            (base + 0x100_0000_0000 * i, 0x100_0000_0000)
         };
         #[cfg(not(feature = "aspace-separate"))]
         let (addr, size) = (USER_ASPACE_BASE as usize, USER_ASPACE_SIZE as usize);
@@ -622,6 +628,39 @@ impl VmAddressRegion {
         let size_limit = map_inner.addr + map_inner.size - vaddr;
         let actual_size = buf.len().min(size_limit);
         map.vmo.write(vmo_offset, &buf[0..actual_size])?;
+
+        // In libos mode, also write directly to the user virtual address.
+        // On hosts with page size > 4K (e.g., 16K on aarch64 macOS),
+        // user pages are MAP_ANON and disconnected from the PMEM backing
+        // store. The VMO write above updates PMEM but not user pages.
+        // Even on 4K hosts, this direct write is harmless (the page is
+        // MAP_SHARED from the same backing store).
+        #[cfg(feature = "libos")]
+        {
+            let flags = map_inner.flags;
+            let is_exec = flags.contains(crate::MMUFlags::EXECUTE);
+            if is_exec {
+                // Temporarily make writable for patching executable pages.
+                // Use the full write range (host-page alignment is handled
+                // by pmem_mprotect internally).
+                kernel_hal::mem::pmem_mprotect(
+                    vaddr,
+                    actual_size,
+                    crate::MMUFlags::READ | crate::MMUFlags::WRITE,
+                );
+            }
+            unsafe {
+                core::ptr::copy_nonoverlapping(buf.as_ptr(), vaddr as *mut u8, actual_size);
+            }
+            if is_exec {
+                kernel_hal::mem::pmem_mprotect(
+                    vaddr,
+                    actual_size,
+                    crate::MMUFlags::READ | crate::MMUFlags::EXECUTE,
+                );
+            }
+        }
+
         Ok(actual_size)
     }
 

@@ -95,3 +95,14 @@ jobs:
 
       - name: Build libos (Zircon mode)
         run: cargo xtask libos-build-zircon
+
+      # LibOS runtime smoke test on macOS aarch64.
+      # Currently expected to fail: non-PIE busybox can't load at
+      # addresses above macOS's ~9GB minimum (issue #172).
+      # Remove continue-on-error when #172 is fully resolved.
+      - name: Smoke test libos (Linux, macOS only)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          cargo xtask rootfs --arch aarch64
+          timeout 5 cargo run -p zcore --features linux,libos -- /bin/busybox --help || echo "LibOS runtime not yet working on macOS aarch64 (see #172)"

@@ -6,7 +6,7 @@ use {
     crate::fs::INodeExt,
     alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec},
     rcore_fs::vfs::INode,
-    xmas_elf::{program::ProgramHeader, ElfFile},
+    xmas_elf::ElfFile,
     zircon_object::{util::elf_loader::*, vm::*, ZxError},
 };
 
@@ -55,13 +55,13 @@ impl LinuxElfLoader {
 
         let size = elf.load_segment_size();
         let image_vmar = vmar.allocate(None, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)?;
-        let mut base = image_vmar.addr();
         let vmo = image_vmar.load_from_elf(&elf)?;
-        let entry = base + elf.header.pt2.entry_point() as usize;
 
-        // for static exec program
-        let ph: ProgramHeader = elf.program_iter().next().unwrap();
-        let static_prog_base = ph.virtual_addr() as usize / PAGE_SIZE * PAGE_SIZE;
+        // The VMAR maps ELF segments at image_vmar.addr() + ph.virtual_addr().
+        // The "base" is image_vmar.addr(), used to compute AT_BASE, AT_PHDR,
+        // AT_ENTRY, and initial_brk as offsets from image_vmar.addr().
+        let base = image_vmar.addr();
+        let entry = base + elf.header.pt2.entry_point() as usize;
         debug!(
             "load: vmar.addr & size: {:#x?}, base: {:#x?}, entry: {:#x?}",
             vmar.get_info(),
@@ -74,12 +74,20 @@ impl LinuxElfLoader {
             vmo.write(offset as usize, &self.syscall_entry.to_ne_bytes())?;
         }
 
-        match elf.relocate(image_vmar) {
-            Ok(()) => info!("elf relocate passed !"),
-            Err(error) => {
-                base = static_prog_base;
-                warn!("elf relocate Err:{:?}, base {:x?}", error, base);
+        // For PIE (DYN type) binaries, skip our relocator -- the
+        // binary's rcrt1 startup code does its own self-relocation.
+        // Running both would double-apply relocations.
+        use xmas_elf::header::Type;
+        let is_pie = elf.header.pt2.type_().as_type() == Type::SharedObject;
+        if !is_pie {
+            match elf.relocate(image_vmar) {
+                Ok(()) => info!("elf relocate passed !"),
+                Err(error) => {
+                    warn!("elf relocate Err:{:?}, base {:x?}", error, base);
+                }
             }
+        } else {
+            info!("PIE binary: skipping relocator (rcrt1 will self-relocate)");
         }
 
         let stack_vmo = VmObject::new_paged(self.stack_pages);
@@ -95,7 +103,13 @@ impl LinuxElfLoader {
                 let mut map = BTreeMap::new();
                 #[cfg(target_arch = "x86_64")]
                 {
-                    map.insert(abi::AT_BASE, base);
+                    use xmas_elf::header::Type;
+                    let is_pie = elf.header.pt2.type_().as_type() == Type::SharedObject;
+                    if is_pie {
+                        map.insert(abi::AT_BASE, 0);
+                    } else {
+                        map.insert(abi::AT_BASE, base);
+                    }
                     map.insert(abi::AT_PHDR, base + elf.header.pt2.ph_offset() as usize);
                     map.insert(abi::AT_ENTRY, entry);
                 }
@@ -105,10 +119,19 @@ impl LinuxElfLoader {
                 }
                 #[cfg(target_arch = "aarch64")]
                 {
-                    map.insert(abi::AT_BASE, base);
+                    // For static-pie (DYN type), AT_BASE = 0 (no interpreter).
+                    // For non-PIE (EXEC type), AT_BASE = load base.
+                    use xmas_elf::header::Type;
+                    let is_pie = elf.header.pt2.type_().as_type() == Type::SharedObject;
+                    if is_pie {
+                        map.insert(abi::AT_BASE, 0);
+                    } else {
+                        map.insert(abi::AT_BASE, base);
+                    }
                     map.insert(abi::AT_ENTRY, entry);
                     if let Some(phdr_vaddr) = elf.get_phdr_vaddr() {
-                        map.insert(abi::AT_PHDR, phdr_vaddr as usize);
+                        // Relocate PHDR address by the load base
+                        map.insert(abi::AT_PHDR, base + phdr_vaddr as usize);
                     }
                 }
                 map.insert(abi::AT_PHENT, elf.header.pt2.ph_entry_size() as usize);

@@ -292,6 +292,11 @@ impl UserContext {
         cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
                 TrapReason::from(self.inner.trap_num, self.inner.error_code)
+            } else if #[cfg(all(target_arch = "aarch64", feature = "libos"))] {
+                // In libos mode, all traps come from the SIGSYS handler
+                // (intercepted SVC #0). ESR_EL1 is not accessible from EL0.
+                let _ = self.inner.trap_num;
+                TrapReason::Syscall
             } else if #[cfg(target_arch = "aarch64")] {
                 TrapReason::from(self.inner.trap_num)
             } else if #[cfg(target_arch = "riscv64")] {

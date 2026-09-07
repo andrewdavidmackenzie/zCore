@@ -91,3 +91,9 @@ hal_fn_impl! {
         }
     }
 }
+
+/// Change protection of user virtual pages.
+/// Used to temporarily make RX pages writable for relocation patching.
+pub fn pmem_mprotect(vaddr: VirtAddr, len: usize, prot: crate::MMUFlags) {
+    MOCK_PHYS_MEM.mprotect(vaddr, len, prot);
+}
