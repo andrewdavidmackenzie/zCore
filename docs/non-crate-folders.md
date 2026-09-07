@@ -80,8 +80,12 @@ Chinese).
 generation.
 
 **Key files:**
-- `boot-test.sh` -- Boot smoke test (QEMU launch, wait for shell prompt,
+- `boot-test.sh` -- Linux boot smoke test (QEMU launch, wait for shell prompt,
   poweroff)
+- `zircon-boot-test.sh` -- Zircon ZBI boot test (builds petal programs into
+  ZBIs, runs each in QEMU, checks for expected output)
+- `zircon-rootfs-test.sh` -- Zircon rootfs boot test (builds SFS rootfs with
+  petal programs, boots QEMU with it, verifies rootfs-based loading)
 - `libc-test.sh` -- Run musl libc-test suite in QEMU, report pass/fail counts
 - `gen-prebuilt.sh` -- Generate Zircon prebuilts from Fuchsia source
 
@@ -137,11 +141,13 @@ boot (`-kernel` flag) without UEFI.
 ### `rootfs/` -- Root Filesystem
 
 **Purpose:** User-space filesystem trees packed into disk images for running
-inside zCore.
+inside zCore. Used by both Linux and Zircon personalities.
 
 **Contents:**
-- `aarch64/` -- busybox + 34 symlinked utilities + musl dynamic linker + libc-
-  test binaries
+- `{arch}/` -- Linux rootfs: busybox + symlinked utilities + musl dynamic
+  linker + libc-test binaries
+- `{arch}/zircon/` -- Zircon rootfs: petal programs (hello, channel_test,
+  vmo_test) as flat binaries
 
 All symlinks point to `busybox`: cat, cp, echo, false, grep, gzip, halt, kill,
 ln, ls, mkdir, mv, pidof, ping, ping6, poweroff, printenv, ps, pwd, reboot, rm,
@@ -166,11 +172,14 @@ creates symlinks from a hardcoded list of 31 utility names at
 xtask/src/linux/mod.rs:67-72. The utility list is the definition.
 
 
-These are Linux-only (ELF binaries linked against musl libc). Zircon mode does
-NOT use rootfs at all -- it boots from a ZBI containing Fuchsia- format
-binaries. The two formats are incompatible (different ABIs, different syscall
-interfaces). Running both side-by-side would require the dual- personality
-kernel discussed earlier.
+The Linux rootfs contains ELF binaries linked against musl libc. The Zircon
+rootfs contains flat binaries (petal programs) built with `cargo xtask
+zircon-rootfs`. Both are packed into SFS images and delivered to QEMU via
+block device or initrd. The kernel mounts the SFS image and loads the init
+program specified by `ROOTPROC`.
+
+Zircon also supports a fallback ZBI-based boot path (embedded at compile time)
+for Fuchsia compatibility. See [boot-process.md](boot-process.md) for details.
 
 
 Yes, `uutils/coreutils` (Rust reimplementation of GNU coreutils) could be
