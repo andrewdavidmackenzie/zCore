@@ -146,6 +146,77 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
     target_dir.join(target).join("release").join("userstart")
 }
 
+/// Build all petal programs and create a Zircon rootfs directory.
+/// The directory layout mirrors the Linux rootfs: `bin/hello`,
+/// `bin/channel_test`, `bin/vmo_test`.
+/// Returns the path to the rootfs directory.
+pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
+    let rootfs_dir = PROJECT_DIR.join("rootfs").join(arch.name()).join("zircon");
+    let bin_dir = rootfs_dir.join("bin");
+
+    // Check if rootfs is already populated
+    if bin_dir.join("hello").is_file() {
+        return rootfs_dir;
+    }
+
+    std::fs::create_dir_all(&bin_dir)
+        .unwrap_or_else(|e| panic!("failed to create {}: {}", bin_dir.display(), e));
+
+    // Build each petal program and copy the flat binary to rootfs
+    for name in &["hello", "channel_test", "vmo_test"] {
+        let elf = build_petal(arch, name);
+        let flat = strip_to_flat_binary(&elf, arch, name);
+        let dest = bin_dir.join(name);
+        std::fs::copy(&flat, &dest).unwrap_or_else(|e| {
+            panic!(
+                "failed to copy {} to {}: {}",
+                flat.display(),
+                dest.display(),
+                e
+            )
+        });
+        println!("  {} -> {}", name, dest.display());
+    }
+
+    println!("Zircon rootfs built at {}", rootfs_dir.display());
+    rootfs_dir
+}
+
+/// Create an SFS image from the Zircon rootfs directory.
+/// Returns the path to the image file.
+pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
+    let rootfs_dir = build_zircon_rootfs(arch);
+    let image = PROJECT_DIR
+        .join("zCore")
+        .join(format!("{}-zircon.img", arch.name()));
+
+    // Skip if image is up to date
+    if image.is_file() {
+        // Simple check: if it exists, assume it's good (same as Linux rootfs)
+        return image;
+    }
+
+    use rcore_fs::vfs::FileSystem;
+    use rcore_fs_fuse::zip::zip_dir;
+    use rcore_fs_sfs::SimpleFileSystem;
+    use std::sync::{Arc, Mutex};
+
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&image)
+        .expect("failed to open zircon rootfs image");
+    const MAX_SPACE: usize = 16 * 1024 * 1024; // 16 MiB (much smaller than Linux)
+    let fs = SimpleFileSystem::create(Arc::new(Mutex::new(file)), MAX_SPACE)
+        .expect("failed to create sfs");
+    zip_dir(&rootfs_dir, fs.root_inode()).expect("failed to zip zircon rootfs");
+
+    println!("Zircon rootfs image: {} ", image.display());
+    image
+}
+
 /// Build a petal program and package it into a ZBI file.
 /// Returns the path to the ZBI file.
 pub fn build_petal_zbi(arch: Arch, bin_name: &str) -> PathBuf {

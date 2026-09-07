@@ -250,6 +250,19 @@ enum Commands {
     /// cargo petal-zbi --arch aarch64 --bin channel_test
     /// ```
     PetalZbi(PetalZbiArgs),
+
+    /// Builds a Zircon rootfs image (SFS format) containing petal programs.
+    ///
+    /// This creates an SFS image with petal binaries that can be used
+    /// with `cargo qemu --zircon --rootfs-image`. This aligns the
+    /// Zircon boot process with Linux: both use an SFS rootfs image.
+    ///
+    /// # Example
+    ///
+    /// ```bash
+    /// cargo xtask zircon-rootfs --arch aarch64
+    /// ```
+    ZirconRootfs(ArchArg),
 }
 
 #[derive(Args)]
@@ -321,6 +334,9 @@ fn main() {
         LibosBuildZircon => libos::zircon_build(),
         PetalZbi(arg) => {
             petal::build_petal_zbi(arg.arch.arch, &arg.bin);
+        }
+        ZirconRootfs(arg) => {
+            petal::build_zircon_rootfs_image(arg.arch);
         }
     }
 }
