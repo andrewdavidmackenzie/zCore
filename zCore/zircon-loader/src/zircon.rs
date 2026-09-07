@@ -417,20 +417,26 @@ pub fn run_from_rootfs(
     let stack_base = vmar
         .map(Some(stack_offset), stack_vmo, 0, stack_size, stack_flags)
         .unwrap();
+    // sp points to the top of the stack. Petal programs use a custom
+    // _start entry (not C ABI), so no x86_64 red-zone or return address
+    // adjustment is needed.
     let sp = stack_base + stack_size;
     info!("Stack at {:#x}-{:#x}, sp={:#x}", stack_base, sp, sp);
 
-    // Create a bootstrap channel (petal programs expect a startup handle)
+    // Create a bootstrap channel (petal programs expect a startup handle).
+    // ch0 is the kernel end, ch1 goes to the process.
     let (ch0, ch1) = Channel::create();
+
+    // Add ch0 to the process handle table so it stays alive and the
+    // channel doesn't close when ch1 is the only reference.
+    let ch0_handle = Handle::new(ch0, Rights::DEFAULT_CHANNEL);
+    proc.add_handle(ch0_handle);
 
     // Start the process. The startup handle (ch1) is passed as the
     // first argument to _start(startup_handle, arg2).
     let handle = Handle::new(ch1, Rights::DEFAULT_CHANNEL);
     proc.start(&thread, entry, sp, Some(handle), 0, thread_fn)
         .expect("failed to start init process");
-
-    // Keep ch0 alive so the channel doesn't close immediately
-    core::mem::forget(ch0);
 
     proc
 }

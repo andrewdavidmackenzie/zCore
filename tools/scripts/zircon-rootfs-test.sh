@@ -55,7 +55,7 @@ ZBI="target/petal/${ARCH}/petal.zbi"
 # Build the kernel with rootfs ROOTPROC set to /bin/hello
 USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" \
   PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
-  ZCORE_CMDLINE="LOG=warn:ROOTPROC=/bin/hello" cargo build \
+  ZCORE_CMDLINE="LOG=info:ROOTPROC=/bin/hello" cargo build \
   -p zcore \
   --no-default-features --features zircon \
   --target "zCore/${ARCH}.json" \
@@ -77,8 +77,10 @@ QEMU_PID=$!
 
 ELAPSED=0
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-  # Check for expected output while QEMU is running
-  if grep -q "petal: Hello from petal on zCore!" "$OUTPUT" 2>/dev/null; then
+  # Check for BOTH the rootfs mount message AND the petal output.
+  # This ensures we're testing the rootfs path, not the ZBI fallback.
+  if grep -q "Zircon rootfs boot: loading" "$OUTPUT" 2>/dev/null && \
+     grep -q "petal: Hello from petal on zCore!" "$OUTPUT" 2>/dev/null; then
     echo "PASS: Zircon rootfs boot (pattern found after ${ELAPSED}s)"
     kill "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
@@ -89,12 +91,13 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     QEMU_EXIT=0
     wait "$QEMU_PID" || QEMU_EXIT=$?
-    if grep -q "petal: Hello from petal on zCore!" "$OUTPUT" 2>/dev/null; then
+    if grep -q "Zircon rootfs boot: loading" "$OUTPUT" 2>/dev/null && \
+       grep -q "petal: Hello from petal on zCore!" "$OUTPUT" 2>/dev/null; then
       echo "PASS: Zircon rootfs boot (exit=$QEMU_EXIT)"
       rm -f "$OUTPUT"
       exit 0
     else
-      echo "FAIL: expected 'petal: Hello from petal on zCore!' not found"
+      echo "FAIL: expected rootfs boot + petal output not found"
       echo "--- QEMU output ---"
       cat "$OUTPUT"
       rm -f "$OUTPUT"

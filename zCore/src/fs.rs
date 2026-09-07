@@ -81,18 +81,24 @@ cfg_if! {
 
             // Try initrd first (riscv64, x86_64)
             if let Some(initrd) = zircon_init_ram_disk() {
-                info!("Opening Zircon rootfs from initrd...");
+                info!("Trying Zircon rootfs from initrd...");
                 let dev = Arc::new(MemBufDevice(spin::Mutex::new(initrd)));
-                let fs: Arc<dyn FileSystem> = SimpleFileSystem::open(dev).ok()?;
-                return Some(fs);
+                if let Ok(fs) = SimpleFileSystem::open(dev) {
+                    let fs: Arc<dyn FileSystem> = fs;
+                    return Some(fs);
+                }
+                warn!("Initrd is not a valid SFS image, trying block device...");
             }
 
-            // Try VirtIO block device (aarch64)
+            // Try VirtIO block device (aarch64, or fallback from initrd)
             if let Some(block) = kernel_hal::drivers::all_block().first() {
-                info!("Opening Zircon rootfs from block device...");
+                info!("Trying Zircon rootfs from block device...");
                 let dev: Arc<dyn rcore_fs::dev::Device> = Arc::new(BlockDevice(block));
-                let fs: Arc<dyn FileSystem> = SimpleFileSystem::open(dev).ok()?;
-                return Some(fs);
+                if let Ok(fs) = SimpleFileSystem::open(dev) {
+                    let fs: Arc<dyn FileSystem> = fs;
+                    return Some(fs);
+                }
+                warn!("Block device is not a valid SFS image");
             }
 
             None
@@ -132,15 +138,19 @@ struct MemBufDevice(spin::Mutex<&'static mut [u8]>);
 impl rcore_fs::dev::Device for MemBufDevice {
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> rcore_fs::dev::Result<usize> {
         let data = self.0.lock();
-        let end = (offset + buf.len()).min(data.len());
-        let len = end.saturating_sub(offset);
+        if offset >= data.len() {
+            return Ok(0);
+        }
+        let len = buf.len().min(data.len() - offset);
         buf[..len].copy_from_slice(&data[offset..offset + len]);
         Ok(len)
     }
     fn write_at(&self, offset: usize, buf: &[u8]) -> rcore_fs::dev::Result<usize> {
         let mut data = self.0.lock();
-        let end = (offset + buf.len()).min(data.len());
-        let len = end.saturating_sub(offset);
+        if offset >= data.len() {
+            return Ok(0);
+        }
+        let len = buf.len().min(data.len() - offset);
         data[offset..offset + len].copy_from_slice(&buf[..len]);
         Ok(len)
     }

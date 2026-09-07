@@ -6,10 +6,9 @@ pub struct BootOptions {
     #[allow(dead_code)]
     pub cmdline: String,
     pub log_level: String,
-    #[cfg(feature = "linux")]
-    pub root_proc: String,
-    /// Root process path for Zircon rootfs-based boot (bare-metal only).
-    #[cfg(all(feature = "zircon", not(feature = "libos")))]
+    /// Root process path. Used by Linux (always) and Zircon bare-metal
+    /// (rootfs-based boot). Not needed for Zircon libos (uses ZBI).
+    #[cfg(any(feature = "linux", all(feature = "zircon", not(feature = "libos"))))]
     pub root_proc: String,
 }
 
@@ -50,9 +49,7 @@ pub fn boot_options() -> BootOptions {
             BootOptions {
                 cmdline,
                 log_level,
-                #[cfg(feature = "linux")]
-                root_proc: args[1..].join("?"),
-                #[cfg(all(feature = "zircon", not(feature = "libos")))]
+                #[cfg(any(feature = "linux", all(feature = "zircon", not(feature = "libos"))))]
                 root_proc: args[1..].join("?"),
             }
         } else {
@@ -62,10 +59,10 @@ pub fn boot_options() -> BootOptions {
             BootOptions {
                 cmdline: cmdline.clone(),
                 log_level: options.get("LOG").unwrap_or(&"").to_string(),
-                #[cfg(feature = "linux")]
-                root_proc: options.get("ROOTPROC").unwrap_or(&"/bin/busybox?sh").to_string(),
-                #[cfg(all(feature = "zircon", not(feature = "libos")))]
-                root_proc: options.get("ROOTPROC").unwrap_or(&"/bin/hello").to_string(),
+                #[cfg(any(feature = "linux", all(feature = "zircon", not(feature = "libos"))))]
+                root_proc: options.get("ROOTPROC").unwrap_or(
+                    if cfg!(feature = "linux") { &"/bin/busybox?sh" } else { &"/bin/hello" }
+                ).to_string(),
             }
         }
     }
@@ -123,13 +120,20 @@ pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
 
 #[cfg(not(feature = "libos"))]
 pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
+    use zircon_object::object::Signal;
+
     kernel_hal::timer::timer_enable();
     info!("executor run!");
     loop {
         let has_task = executor::run_until_idle();
-        if !has_task && cfg!(feature = "baremetal-test") {
-            proc.map(check_exit_code);
-            kernel_hal::cpu::reset();
+        // If the init process has exited, shut down.
+        if !has_task {
+            if let Some(ref p) = proc {
+                if p.signal().contains(Signal::PROCESS_TERMINATED) {
+                    check_exit_code(p.clone());
+                    kernel_hal::cpu::reset();
+                }
+            }
         }
         kernel_hal::interrupt::wait_for_interrupt();
     }
