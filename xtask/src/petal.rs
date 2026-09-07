@@ -154,8 +154,10 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
     let rootfs_dir = PROJECT_DIR.join("rootfs").join(arch.name()).join("zircon");
     let bin_dir = rootfs_dir.join("bin");
 
-    // Check if rootfs is already populated
-    if bin_dir.join("hello").is_file() {
+    const PETAL_BINS: &[&str] = &["hello", "channel_test", "vmo_test"];
+
+    // Check if rootfs is already populated with all expected binaries
+    if PETAL_BINS.iter().all(|name| bin_dir.join(name).is_file()) {
         return rootfs_dir;
     }
 
@@ -163,7 +165,7 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
         .unwrap_or_else(|e| panic!("failed to create {}: {}", bin_dir.display(), e));
 
     // Build each petal program and copy the flat binary to rootfs
-    for name in &["hello", "channel_test", "vmo_test"] {
+    for name in PETAL_BINS {
         let elf = build_petal(arch, name);
         let flat = strip_to_flat_binary(&elf, arch, name);
         let dest = bin_dir.join(name);
@@ -190,10 +192,20 @@ pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
         .join("zCore")
         .join(format!("{}-zircon.img", arch.name()));
 
-    // Skip if image is up to date
+    // Skip if image exists and is newer than all rootfs binaries
     if image.is_file() {
-        // Simple check: if it exists, assume it's good (same as Linux rootfs)
-        return image;
+        let img_mtime = image.metadata().and_then(|m| m.modified()).ok();
+        let newest_bin = rootfs_dir.join("bin").read_dir().ok().and_then(|entries| {
+            entries
+                .flatten()
+                .filter_map(|e| e.metadata().ok()?.modified().ok())
+                .max()
+        });
+        if let (Some(img_t), Some(bin_t)) = (img_mtime, newest_bin) {
+            if img_t >= bin_t {
+                return image;
+            }
+        }
     }
 
     use rcore_fs::vfs::FileSystem;

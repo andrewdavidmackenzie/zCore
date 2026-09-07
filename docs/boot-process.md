@@ -468,7 +468,7 @@ Runtime ZBI loading via DTB initrd is tracked in #136.
 
 ### Custom Rootfs Image
 
-Both personalities can use a custom rootfs image via `--rootfs-image`:
+The `--rootfs-image` flag passes a custom SFS image to QEMU:
 
 ```bash
 # Linux with custom rootfs
@@ -480,7 +480,12 @@ cargo xtask zircon-rootfs --arch aarch64
 
 The `cargo xtask zircon-rootfs` command builds an SFS image containing
 petal programs (`bin/hello`, `bin/channel_test`, `bin/vmo_test`), mirroring
-the Linux rootfs directory layout. This is tracked in #164.
+the Linux rootfs directory layout.
+
+> **Note:** The Zircon kernel does not yet mount an SFS rootfs at
+> runtime -- it still boots from the embedded ZBI. The `--rootfs-image`
+> flag delivers the image to QEMU, but kernel-side SFS support for
+> Zircon is not yet implemented. This is tracked in #164.
 
 ---
 
