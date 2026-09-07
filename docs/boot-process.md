@@ -429,19 +429,51 @@ handling (VFS, signals, networking, etc.) runs in kernel space.
 
 ### Zircon Mode (`--features zircon`)
 
-```rust
-let zbi = fs::zbi();  // embedded at compile time
-let proc = zircon_loader::zircon::run_userboot(zbi, &options.cmdline);
-// run_userboot is a backward-compatible alias for run_userstart
-```
+Zircon mode has two boot paths, selected automatically at runtime:
 
-The kernel loads the **userstart** ELF (embedded at compile time) as the
-first userspace process. Userstart then runs in userspace making Zircon
-syscalls to bootstrap the system:
+#### Rootfs-based boot (preferred)
+
+When an SFS rootfs image is available (via VirtIO block device, initrd,
+or `--rootfs-image`), the kernel loads the init program directly from
+the filesystem -- the same way Linux loads busybox. The `ROOTPROC` boot
+option specifies which program to run (default: `/bin/hello`).
 
 ```text
 Kernel
-  ├── Loads userstart ELF, maps into process
+  ├── Mounts SFS rootfs (block device or initrd)
+  ├── Reads init program (flat binary, e.g., /bin/hello)
+  ├── Creates process, maps code at 0x10000, creates stack
+  ├── Creates bootstrap channel, passes handle to _start
+  ├── Starts process
+  │
+  v
+Init program (userspace, petal/)
+  ├── _start(startup_handle, 0) runs
+  ├── main() runs
+  ├── Exits via zx_process_exit
+  │
+  v
+Kernel detects PROCESS_TERMINATED -> shuts down
+```
+
+This path aligns Zircon's boot with Linux's: both personalities mount
+an SFS rootfs and load an init program from it.
+
+```bash
+# Build and run with rootfs
+cargo xtask zircon-rootfs --arch aarch64
+cargo qemu --arch aarch64 --zircon --rootfs-image zCore/aarch64-zircon.img
+```
+
+#### ZBI-based boot (fallback, Fuchsia-compatible)
+
+When no rootfs image is available, the kernel falls back to the embedded
+ZBI+userstart protocol. This preserves compatibility with future Fuchsia
+userspace.
+
+```text
+Kernel
+  ├── Loads userstart ELF (embedded at compile time)
   ├── Packs 15 bootstrap handles into a channel
   ├── Starts userstart thread
   │
@@ -464,28 +496,25 @@ Userstart exits -> kernel shuts down
 ```
 
 **ZBI source:** Embedded at compile time via `include_bytes!(env!("PETAL_ZBI"))`.
-Runtime ZBI loading via DTB initrd is tracked in #136.
 
 ### Custom Rootfs Image
 
-The `--rootfs-image` flag passes a custom SFS image to QEMU:
+The `--rootfs-image` flag passes a custom SFS rootfs image to QEMU,
+usable with either personality:
 
 ```bash
 # Linux with custom rootfs
 cargo qemu --arch aarch64 --rootfs-image path/to/custom.img
 
-# Build Zircon rootfs with petal programs
+# Zircon with petal rootfs
 cargo xtask zircon-rootfs --arch aarch64
+cargo qemu --arch aarch64 --zircon --rootfs-image zCore/aarch64-zircon.img
 ```
 
 The `cargo xtask zircon-rootfs` command builds an SFS image containing
 petal programs (`bin/hello`, `bin/channel_test`, `bin/vmo_test`), mirroring
-the Linux rootfs directory layout.
-
-> **Note:** The Zircon kernel does not yet mount an SFS rootfs at
-> runtime -- it still boots from the embedded ZBI. The `--rootfs-image`
-> flag delivers the image to QEMU, but kernel-side SFS support for
-> Zircon is not yet implemented. This is tracked in #164.
+the Linux rootfs directory layout. The kernel doesn't care what's in the
+image -- it just mounts it and runs `ROOTPROC`.
 
 ---
 
