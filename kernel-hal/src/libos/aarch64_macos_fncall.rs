@@ -113,7 +113,7 @@ impl UserContextFnCall for UserContext {
 }
 
 /// Fault handler for SIGSEGV/SIGBUS from user code.
-/// Logs the crash details and aborts (for debugging).
+/// Uses raw write() instead of log macros (async-signal-safe).
 unsafe extern "C" fn user_fault_handler(
     sig: i32,
     info: *mut nix::libc::siginfo_t,
@@ -124,28 +124,58 @@ unsafe extern "C" fn user_fault_handler(
     const ES_SIZE: usize = 16;
     let ts = mc.add(ES_SIZE) as *const u64;
     let pc = *ts.add(32) as usize;
-    let sp = *ts.add(31) as usize;
     let fault_addr = (*info).si_addr as usize;
-    let sig_name = if sig == nix::libc::SIGSEGV {
+
+    // Use raw write() -- signal-safe, no allocations or locks.
+    let mut buf = [0u8; 128];
+    let msg = if sig == nix::libc::SIGSEGV {
         "SIGSEGV"
     } else {
         "SIGBUS"
     };
-    error!(
-        "User fault: {} at pc={:#x}, sp={:#x}, fault_addr={:#x}",
-        sig_name, pc, sp, fault_addr
-    );
-    error!(
-        "  x0={:#x} x1={:#x} x2={:#x} x3={:#x} x6={:#x} x7={:#x} x8={:#x}",
-        *ts.add(0) as usize,
-        *ts.add(1) as usize,
-        *ts.add(2) as usize,
-        *ts.add(3) as usize,
-        *ts.add(6) as usize,
-        *ts.add(7) as usize,
-        *ts.add(8) as usize,
-    );
+    let n = fmt_hex(&mut buf, msg, pc, fault_addr);
+    nix::libc::write(2, buf.as_ptr() as *const _, n);
     std::process::abort();
+}
+
+/// Format a crash message into a fixed buffer (no allocation).
+fn fmt_hex(buf: &mut [u8; 128], sig: &str, pc: usize, addr: usize) -> usize {
+    let mut i = 0;
+    for &b in sig.as_bytes() {
+        buf[i] = b;
+        i += 1;
+    }
+    for &b in b" pc=0x" {
+        buf[i] = b;
+        i += 1;
+    }
+    i += write_hex(&mut buf[i..], pc);
+    for &b in b" addr=0x" {
+        buf[i] = b;
+        i += 1;
+    }
+    i += write_hex(&mut buf[i..], addr);
+    buf[i] = b'\n';
+    i + 1
+}
+
+fn write_hex(buf: &mut [u8], val: usize) -> usize {
+    if val == 0 {
+        buf[0] = b'0';
+        return 1;
+    }
+    let mut tmp = [0u8; 16];
+    let mut n = 0;
+    let mut v = val;
+    while v > 0 {
+        tmp[n] = b"0123456789abcdef"[(v & 0xf) as usize];
+        v >>= 4;
+        n += 1;
+    }
+    for j in 0..n {
+        buf[j] = tmp[n - 1 - j];
+    }
+    n
 }
 
 /// SIGSYS signal handler. Called when user code executes `svc #0`.

@@ -209,24 +209,21 @@ impl MockMemory {
         // sharing, since these are MAP_PRIVATE pages.
     }
 
-    /// Synchronize a guest page back to the PMEM backing store.
-    /// On 16K hosts with MAP_ANON pages, writes to user pages are
-    /// private and must be copied back to PMEM for VMO reads to work.
-    pub fn sync_to_pmem(&self, vaddr: VirtAddr, len: usize, paddr: PhysAddr) {
-        if host_page_size() <= 0x1000 {
-            return; // MAP_SHARED -- already synced.
-        }
-        let src = vaddr as *const u8;
-        let dst = (PMEM_MAP_VADDR + paddr) as *mut u8;
-        unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
-    }
-
     pub fn munmap(&self, vaddr: VirtAddr, len: usize) {
         let hps = host_page_size();
         let aligned_vaddr = vaddr & !(hps - 1);
         let aligned_len = ((vaddr + len + hps - 1) & !(hps - 1)) - aligned_vaddr;
         unsafe { mman::munmap(aligned_vaddr as _, aligned_len) }
             .unwrap_or_else(|err| panic!("munmap failed: vaddr={:#x}: {:?}", aligned_vaddr, err));
+
+        // Remove anon_mapped entries for the unmapped host pages so
+        // future mappings at these addresses get fresh anonymous pages.
+        let mut mapped = self.anon_mapped.lock().unwrap();
+        let mut page = aligned_vaddr;
+        while page < aligned_vaddr + aligned_len {
+            mapped.remove(&page);
+            page += hps;
+        }
     }
 
     pub fn mprotect(&self, vaddr: VirtAddr, len: usize, prot: MMUFlags) {

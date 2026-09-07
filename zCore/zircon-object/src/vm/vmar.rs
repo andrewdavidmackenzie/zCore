@@ -638,23 +638,24 @@ impl VmAddressRegion {
         #[cfg(feature = "libos")]
         {
             let flags = map_inner.flags;
-            let need_rw =
-                flags.contains(crate::MMUFlags::EXECUTE) && !flags.contains(crate::MMUFlags::WRITE);
-            if need_rw {
-                // Temporarily make writable for patching executable pages
+            let is_exec = flags.contains(crate::MMUFlags::EXECUTE);
+            if is_exec {
+                // Temporarily make writable for patching executable pages.
+                // Use the full write range (host-page alignment is handled
+                // by pmem_mprotect internally).
                 kernel_hal::mem::pmem_mprotect(
-                    vaddr & !(0xFFF),
-                    crate::PAGE_SIZE,
+                    vaddr,
+                    actual_size,
                     crate::MMUFlags::READ | crate::MMUFlags::WRITE,
                 );
             }
             unsafe {
                 core::ptr::copy_nonoverlapping(buf.as_ptr(), vaddr as *mut u8, actual_size);
             }
-            if need_rw {
+            if is_exec {
                 kernel_hal::mem::pmem_mprotect(
-                    vaddr & !(0xFFF),
-                    crate::PAGE_SIZE,
+                    vaddr,
+                    actual_size,
                     crate::MMUFlags::READ | crate::MMUFlags::EXECUTE,
                 );
             }
