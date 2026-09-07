@@ -144,9 +144,9 @@ boot (`-kernel` flag) without UEFI.
 inside zCore. Used by both Linux and Zircon personalities.
 
 **Contents:**
-- `{arch}/` -- Linux rootfs: busybox + symlinked utilities + musl dynamic
-  linker + libc-test binaries
-- `{arch}/zircon/` -- Zircon rootfs: petal programs (hello, channel_test,
+- `linux/{arch}/` -- Linux rootfs: busybox + symlinked utilities + musl
+  dynamic linker + libc-test binaries
+- `zircon/{arch}/` -- Zircon rootfs: petal programs (hello, channel_test,
   vmo_test) as flat binaries
 
 All symlinks point to `busybox`: cat, cp, echo, false, grep, gzip, halt, kill,
@@ -167,8 +167,8 @@ Yes, exactly. The SFS image has root `/` with: `/bin/busybox` (the binary),
 which calls `LinuxRootfs::make()` in `xtask/src/linux/mod.rs`: (1) downloads
 musl cross-toolchain, (2) clones busybox, runs `make defconfig`, patches
 .config for CONFIG_STATIC=y, (3) cross-compiles busybox with musl, strips it,
-(4) creates rootfs/{arch}/bin/ and lib/, (5) copies busybox, musl libc, (6)
-creates symlinks from a hardcoded list of 31 utility names at
+(4) creates rootfs/linux/{arch}/bin/ and lib/, (5) copies busybox, musl libc,
+(6) creates symlinks from a hardcoded list of 31 utility names at
 xtask/src/linux/mod.rs:67-72. The utility list is the definition.
 
 
