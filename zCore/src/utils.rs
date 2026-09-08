@@ -120,20 +120,13 @@ pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
 
 #[cfg(not(feature = "libos"))]
 pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
-    use zircon_object::object::Signal;
-
     kernel_hal::timer::timer_enable();
     info!("executor run!");
     loop {
         let has_task = executor::run_until_idle();
-        // If the init process has exited, shut down.
-        if !has_task {
-            if let Some(ref p) = proc {
-                if p.signal().contains(Signal::PROCESS_TERMINATED) {
-                    check_exit_code(p.clone());
-                    kernel_hal::cpu::reset();
-                }
-            }
+        if !has_task && cfg!(feature = "baremetal-test") {
+            proc.map(check_exit_code);
+            kernel_hal::cpu::reset();
         }
         kernel_hal::interrupt::wait_for_interrupt();
     }

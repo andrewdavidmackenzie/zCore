@@ -198,8 +198,9 @@ impl QemuArgs {
             self.arch.linux_rootfs().image();
             INNER.join(format!("{}.img", self.arch.arch.name()))
         } else {
-            // Zircon mode without custom rootfs: ZBI is embedded in kernel
-            PathBuf::new()
+            // Zircon mode: build rootfs image with petal programs.
+            // The kernel prefers rootfs over embedded ZBI.
+            crate::petal::build_zircon_rootfs_image(self.arch.arch)
         };
 
         // Build various strings
@@ -233,12 +234,13 @@ impl QemuArgs {
         if is_zircon {
             build_config.features.remove("linux");
             build_config.features.insert("zircon".into());
-            // Build userstart (first userspace process)
+            // Embed userstart+ZBI as a compile-time fallback.
+            // The kernel prefers rootfs (SFS image) when available,
+            // falling back to embedded ZBI only when no rootfs is found.
             let userstart_path = crate::petal::build_userstart(arch);
             build_config
                 .env
                 .insert("USERSTART_ELF".into(), userstart_path.into_os_string());
-            // Build petal ZBI (init program loaded by userstart)
             let zbi_path = crate::petal::build_petal_zbi(arch, "hello");
             build_config
                 .env
