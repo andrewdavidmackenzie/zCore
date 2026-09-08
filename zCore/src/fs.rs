@@ -185,9 +185,16 @@ struct BlockDevice(alloc::sync::Arc<dyn kernel_hal::drivers::scheme::BlockScheme
 #[cfg(all(not(feature = "libos"), feature = "zircon"))]
 impl rcore_fs::dev::Device for BlockDevice {
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> rcore_fs::dev::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
         const BLK_SIZE: usize = 512;
         let start_blk = offset / BLK_SIZE;
-        let end_blk = (offset + buf.len() + BLK_SIZE - 1) / BLK_SIZE;
+        let end_blk = offset
+            .checked_add(buf.len())
+            .and_then(|end| end.checked_add(BLK_SIZE - 1))
+            .map(|v| v / BLK_SIZE)
+            .ok_or(rcore_fs::dev::DevError)?;
         let mut tmp = alloc::vec![0u8; (end_blk - start_blk) * BLK_SIZE];
         for (i, blk) in (start_blk..end_blk).enumerate() {
             self.0
@@ -198,8 +205,34 @@ impl rcore_fs::dev::Device for BlockDevice {
         buf.copy_from_slice(&tmp[skip..skip + buf.len()]);
         Ok(buf.len())
     }
-    fn write_at(&self, _offset: usize, _buf: &[u8]) -> rcore_fs::dev::Result<usize> {
-        Err(rcore_fs::dev::DevError)
+    fn write_at(&self, offset: usize, buf: &[u8]) -> rcore_fs::dev::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        const BLK_SIZE: usize = 512;
+        let start_blk = offset / BLK_SIZE;
+        let end_blk = offset
+            .checked_add(buf.len())
+            .and_then(|end| end.checked_add(BLK_SIZE - 1))
+            .map(|v| v / BLK_SIZE)
+            .ok_or(rcore_fs::dev::DevError)?;
+        let skip = offset % BLK_SIZE;
+        let mut tmp = alloc::vec![0u8; (end_blk - start_blk) * BLK_SIZE];
+        // Read existing data (propagate errors)
+        for (i, blk) in (start_blk..end_blk).enumerate() {
+            self.0
+                .read_block(blk, &mut tmp[i * BLK_SIZE..(i + 1) * BLK_SIZE])
+                .map_err(|_| rcore_fs::dev::DevError)?;
+        }
+        // Overlay new data
+        tmp[skip..skip + buf.len()].copy_from_slice(buf);
+        // Write back
+        for (i, blk) in (start_blk..end_blk).enumerate() {
+            self.0
+                .write_block(blk, &tmp[i * BLK_SIZE..(i + 1) * BLK_SIZE])
+                .map_err(|_| rcore_fs::dev::DevError)?;
+        }
+        Ok(buf.len())
     }
     fn sync(&self) -> rcore_fs::dev::Result<()> {
         Ok(())
