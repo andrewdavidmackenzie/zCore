@@ -25,4 +25,29 @@ fn main() {
         "cargo:rustc-env=USER_IMG=zCore/{}.img",
         std::env::var("TARGET").unwrap()
     );
+
+    // Provide a default ZCORE_CMDLINE if not set (allows building the
+    // kernel without xtask setting it).
+    if std::env::var("ZCORE_CMDLINE").is_err() {
+        println!("cargo:rustc-env=ZCORE_CMDLINE=LOG=warn");
+    }
+
+    // For Zircon mode: if PETAL_ZBI is not set, generate an empty stub
+    // so include_bytes! doesn't fail. The rootfs-based boot path doesn't
+    // need the embedded ZBI.
+    if std::env::var("PETAL_ZBI").is_err() {
+        let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
+        let stub = out.join("empty.zbi");
+        std::fs::write(stub.as_path(), b"").unwrap();
+        println!("cargo:rustc-env=PETAL_ZBI={}", stub.display());
+        println!("cargo:warning=PETAL_ZBI not set, using empty stub (rootfs-based boot only)");
+    }
+
+    // For Zircon mode: if USERSTART_ELF is not set, generate an empty stub.
+    if std::env::var("USERSTART_ELF").is_err() {
+        let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
+        let stub = out.join("empty.elf");
+        std::fs::write(stub.as_path(), b"").unwrap();
+        println!("cargo:rustc-env=USERSTART_ELF={}", stub.display());
+    }
 }

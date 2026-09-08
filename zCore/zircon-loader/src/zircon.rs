@@ -87,8 +87,13 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     );
     let vmar = proc.vmar();
 
-    // Load the userstart ELF binary (embedded at compile time)
+    // Load the userstart ELF binary (embedded at compile time).
+    // If USERSTART_ELF was not set, build.rs provides an empty stub.
     let userstart_elf_bytes: &[u8] = include_bytes!(env!("USERSTART_ELF"));
+    assert!(
+        !userstart_elf_bytes.is_empty(),
+        "USERSTART_ELF not set at compile time. Use rootfs-based boot instead."
+    );
     let elf = ElfFile::new(userstart_elf_bytes).expect("failed to parse userstart ELF");
     let size = elf.load_segment_size();
     // Map the userstart ELF as a single RWX region.
