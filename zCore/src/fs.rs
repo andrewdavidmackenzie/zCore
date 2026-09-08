@@ -5,24 +5,7 @@ cfg_if! {
 
         #[cfg(feature = "libos")]
         pub fn rootfs() -> Arc<dyn FileSystem> {
-            let rootfs = if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
-                std::path::Path::new(&dir).parent().unwrap().to_path_buf()
-            } else {
-                std::env::current_dir().unwrap()
-            };
-            // Use the host architecture's rootfs directory directly.
-            // This is the same rootfs used by bare-metal mode, built by
-            // LinuxRootfs::new(arch).make() with busybox + musl.
-            let arch = if cfg!(target_arch = "x86_64") {
-                "x86_64"
-            } else if cfg!(target_arch = "aarch64") {
-                "aarch64"
-            } else if cfg!(target_arch = "riscv64") {
-                "riscv64"
-            } else {
-                "libos" // fallback
-            };
-            let path = rootfs.join("rootfs").join(arch);
+            let path = libos_rootfs_path("linux");
             info!("LibOS rootfs: {}", path.display());
             rcore_fs_hostfs::HostFS::new(path)
         }
@@ -54,6 +37,19 @@ cfg_if! {
         use alloc::sync::Arc;
         #[cfg(not(feature = "libos"))]
         use rcore_fs::vfs::FileSystem;
+
+        /// Try to open a Zircon rootfs via HostFS in libos mode.
+        /// Returns a filesystem rooted at `rootfs/zircon/{host_arch}/`.
+        #[cfg(feature = "libos")]
+        pub fn try_libos_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
+            let path = libos_rootfs_path("zircon");
+            if path.is_dir() && path.join("bin").is_dir() {
+                info!("LibOS Zircon rootfs: {}", path.display());
+                Some(rcore_fs_hostfs::HostFS::new(path))
+            } else {
+                None
+            }
+        }
 
         #[cfg(feature = "libos")]
         pub fn zbi() -> impl AsRef<[u8]> {
@@ -104,6 +100,27 @@ cfg_if! {
             None
         }
     }
+}
+
+/// Construct the libos rootfs path: `rootfs/{personality}/{host_arch}/`.
+/// Used by both Linux and Zircon libos modes.
+#[cfg(feature = "libos")]
+fn libos_rootfs_path(personality: &str) -> std::path::PathBuf {
+    let project_dir = if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        std::path::Path::new(&dir).parent().unwrap().to_path_buf()
+    } else {
+        std::env::current_dir().unwrap()
+    };
+    let arch = if cfg!(target_arch = "x86_64") {
+        "x86_64"
+    } else if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else if cfg!(target_arch = "riscv64") {
+        "riscv64"
+    } else {
+        "unknown"
+    };
+    project_dir.join("rootfs").join(personality).join(arch)
 }
 
 #[cfg(all(not(feature = "libos"), feature = "linux"))]

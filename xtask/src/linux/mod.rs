@@ -86,9 +86,10 @@ impl LinuxRootfs {
     }
 
     /// Returns the rootfs path for the specified architecture.
+    /// Layout: `rootfs/linux/{arch}/`
     #[inline]
     pub fn path(&self) -> PathBuf {
-        PROJECT_DIR.join("rootfs").join(self.0.name())
+        PROJECT_DIR.join("rootfs").join("linux").join(self.0.name())
     }
 
     /// Cross-compiles busybox.

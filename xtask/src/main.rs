@@ -419,8 +419,8 @@ mod libos {
     ///
     /// Uses the same `LinuxRootfs` infrastructure as bare-metal mode to
     /// cross-compile busybox with musl for the host architecture. The
-    /// rootfs is stored at `rootfs/{host_arch}/` -- the same directory
-    /// used by bare-metal mode. LibOS's HostFS reads from it directly.
+    /// rootfs is stored at `rootfs/linux/{host_arch}/` -- the same
+    /// directory used by bare-metal mode. LibOS's HostFS reads from it.
     pub(super) fn rootfs(clear: bool) {
         let host = Arch::host();
         println!("Building libos rootfs for host arch: {}", host.name());
@@ -431,7 +431,7 @@ mod libos {
     pub(super) fn put_libc_test() {
         rootfs(false);
         println!(
-            "LibOS rootfs built at rootfs/{}. To run libc-test, use: \
+            "LibOS rootfs built at rootfs/linux/{}. To run libc-test, use: \
              tools/scripts/libc-test.sh {}",
             Arch::host().name(),
             Arch::host().name()

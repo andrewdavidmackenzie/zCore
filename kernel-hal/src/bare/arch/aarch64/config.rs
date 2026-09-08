@@ -8,7 +8,7 @@ pub struct KernelConfig {
     /// boot cmd line (set via ZCORE_CMDLINE env var at compile time; DTB override tracked in #136)
     pub cmdline: &'static str,
     /// firmware type
-    pub firmware_type: &'static str,
+    pub firmware_type: &'static str, // TODO: Only the value QEMU is ever written. Unclear if used.
     /// UART base address
     pub uart_base: usize,
     /// GIC base address
