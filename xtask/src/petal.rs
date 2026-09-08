@@ -164,20 +164,21 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
     std::fs::create_dir_all(&bin_dir)
         .unwrap_or_else(|e| panic!("failed to create {}: {}", bin_dir.display(), e));
 
-    // Build each petal program and copy the flat binary to rootfs
+    // Build each petal program and copy the ELF to rootfs.
+    // The kernel loads ELF directly (proper segment mapping with
+    // permissions), no objcopy stripping needed.
     for name in PETAL_BINS {
         let elf = build_petal(arch, name);
-        let flat = strip_to_flat_binary(&elf, arch, name);
         let dest = bin_dir.join(name);
-        std::fs::copy(&flat, &dest).unwrap_or_else(|e| {
+        std::fs::copy(&elf, &dest).unwrap_or_else(|e| {
             panic!(
                 "failed to copy {} to {}: {}",
-                flat.display(),
+                elf.display(),
                 dest.display(),
                 e
             )
         });
-        println!("  {} -> {}", name, dest.display());
+        println!("  {} (ELF) -> {}", name, dest.display());
     }
 
     println!("Zircon rootfs built at {}", rootfs_dir.display());
