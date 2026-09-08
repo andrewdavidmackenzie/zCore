@@ -52,6 +52,8 @@ Sub-issues:
 - #177 -- Zircon: load ELF directly instead of flat binary
 - #178 -- LibOS: unify rootfs/ZBI loading between personalities
 
+TODO: Update the list of issues above based on recent work.
+
 After platform-specific initialization, all paths converge at
 `primary_main()` in `zCore/src/main.rs`, which branches into either
 Linux or Zircon personality mode.

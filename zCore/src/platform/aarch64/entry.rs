@@ -21,7 +21,7 @@ extern "C" fn rust_main(_dtb_ptr: usize) -> ! {
     // Currently 0 on aarch64 -- see issue #136 for DTB parsing work.
     let config = KernelConfig {
         cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=warn:ROOTPROC=/bin/busybox?sh"),
-        firmware_type: "QEMU",
+        firmware_type: "QEMU", // TODO Is QEMU always the right value? What used for?
         uart_base: UART_BASE,
         gic_base: GIC_BASE,
         phys_to_virt_offset: PHYS_TO_VIRT_OFFSET,
