@@ -25,8 +25,8 @@ use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::kcounter;
 use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::task::{CurrentThread, ExceptionType, Job, Process, Thread, ThreadState};
-use zircon_object::util::elf_loader::ElfExt;
-use zircon_object::vm::VmObject;
+use zircon_object::util::elf_loader::{ElfExt, VmarExt};
+use zircon_object::vm::{VmObject, VmarFlags};
 
 // Handle indices in the bootstrap channel message.
 // These describe userstart itself.
@@ -392,39 +392,39 @@ pub fn run_from_rootfs(
         program_data.len()
     );
 
-    // Create a process and load the flat binary (same as userstart does)
+    // Create a process and load the program
     let job = Job::root();
     let proc = Process::create(&job, "init").unwrap();
     let thread = Thread::create(&proc, "init-main").unwrap();
     let vmar = proc.vmar();
 
-    // Map code at 0x10000 (same as userstart)
-    let code_base: usize = 0x10000;
-    let code_pages = (program_data.len() + PAGE_SIZE - 1) / PAGE_SIZE;
-    let map_size = code_pages * PAGE_SIZE;
-    let code_vmo = VmObject::new_paged(code_pages);
-    code_vmo.write(0, &program_data).unwrap();
-    code_vmo.set_name("init-code");
+    // Load ELF using the same infrastructure as Linux and userstart.
+    // Allocates a sub-VMAR, maps each LOAD segment with proper
+    // permissions (RX for code, RW for data), and returns the entry.
+    let elf = ElfFile::new(&program_data).expect("failed to parse init program as ELF");
+    let size = elf.load_segment_size();
+    let image_vmar = vmar
+        .allocate(None, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+        .expect("failed to allocate image VMAR");
+    let _vmo = image_vmar
+        .load_from_elf(&elf)
+        .expect("failed to load ELF segments");
+    let base = image_vmar.addr();
+    let entry = base + elf.header.pt2.entry_point() as usize;
+    info!(
+        "ELF loaded: base={:#x}, entry={:#x}, size={:#x}",
+        base, entry, size
+    );
 
-    let code_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
-    let entry = vmar
-        .map(Some(code_base), code_vmo, 0, map_size, code_flags)
-        .unwrap();
-    info!("Mapped code at {:#x}, entry={:#x}", entry, entry);
-
-    // Create stack above the code
+    // Create stack above the loaded image
     let stack_pages = 8;
     let stack_size = stack_pages * PAGE_SIZE;
     let stack_vmo = VmObject::new_paged(stack_pages);
     stack_vmo.set_name("init-stack");
     let stack_flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER;
-    let stack_offset = code_base + map_size;
     let stack_base = vmar
-        .map(Some(stack_offset), stack_vmo, 0, stack_size, stack_flags)
+        .map(None, stack_vmo, 0, stack_size, stack_flags)
         .unwrap();
-    // sp points to the top of the stack. Petal programs use a custom
-    // _start entry (not C ABI), so no x86_64 red-zone or return address
-    // adjustment is needed.
     let sp = stack_base + stack_size;
     info!("Stack at {:#x}-{:#x}, sp={:#x}", stack_base, sp, sp);
 
