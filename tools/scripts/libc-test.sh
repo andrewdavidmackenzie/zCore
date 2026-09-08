@@ -24,7 +24,7 @@ BOOT_TIMEOUT=10
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore"
+    KERNEL="target/aarch64/release/zcore.bin"
     IMAGE="zCore/aarch64.img"
     CROSS_COMPILE="aarch64-linux-musl-"
     # Find musl cross-compiler: macOS uses Homebrew, Linux has it in PATH
@@ -41,8 +41,7 @@ case "$ARCH" in
       -machine virt -cpu cortex-a72
       -kernel "$KERNEL"
       -serial mon:stdio
-      -drive "file=$IMAGE,if=none,format=raw,id=x0"
-      -device "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0"
+      -initrd "$IMAGE"
     )
     ;;
   x86_64)

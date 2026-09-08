@@ -32,8 +32,24 @@
 .section .text.boot, "ax"
 .global _boot
 _boot:
-    /* Save DTB pointer for later use */
-    mov     x20, x0
+    /* Save DTB pointer. When QEMU loads an ELF with a high virtual
+       entry, it may not set x0. In that case, scan known QEMU virt
+       DTB locations for a valid FDT magic (0xd00dfeed big-endian). */
+    cbnz    x0, 1f
+    /* x0 is 0 -- try QEMU's default DTB location at 0x48000000 */
+    ldr     x0, =0x48000000
+    ldr     w1, [x0]
+    ldr     w2, =0xedfe0dd0      /* FDT_MAGIC in little-endian */
+    cmp     w1, w2
+    b.eq    1f
+    /* Not found -- try 0x40000000 */
+    ldr     x0, =0x40000000
+    ldr     w1, [x0]
+    cmp     w1, w2
+    b.eq    1f
+    /* No DTB found */
+    mov     x0, #0
+1:  mov     x20, x0
 
     /* ====== Set up boot page tables ====== */
 

@@ -17,7 +17,7 @@ TIMEOUT=30
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore"
+    KERNEL="target/aarch64/release/zcore.bin"
     ROOTFS_IMG="zCore/${ARCH}-zircon.img"
     QEMU_BASE_CMD=(
       qemu-system-aarch64
@@ -64,14 +64,26 @@ USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" 
   -Z build-std-features=compiler-builtins-mem \
   --release
 
+# Strip ELF to raw binary (QEMU needs raw binary for DTB passthrough)
+OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)
+if [ -n "$OBJCOPY" ]; then
+  "$OBJCOPY" --strip-all -O binary "target/aarch64/release/zcore" "$KERNEL"
+elif command -v llvm-objcopy >/dev/null 2>&1; then
+  llvm-objcopy --strip-all -O binary "target/aarch64/release/zcore" "$KERNEL"
+elif command -v rust-objcopy >/dev/null 2>&1; then
+  rust-objcopy --strip-all -O binary "target/aarch64/release/zcore" "$KERNEL"
+else
+  echo "WARNING: no objcopy found, using ELF (DTB may not work)"
+  cp "target/aarch64/release/zcore" "$KERNEL"
+fi
+
 echo "==> Running Zircon rootfs boot test..."
 OUTPUT=$(mktemp)
 
 # Boot with the rootfs image via VirtIO block device
 "${QEMU_BASE_CMD[@]}" \
   -kernel "$KERNEL" \
-  -drive "file=${ROOTFS_IMG},if=none,format=raw,id=x0" \
-  -device "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0" \
+  -initrd "${ROOTFS_IMG}" \
   > "$OUTPUT" 2>&1 &
 QEMU_PID=$!
 

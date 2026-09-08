@@ -16,15 +16,14 @@ const GIC_BASE: usize = 0x0800_0000;
 /// - The MMU is ON with identity + high mappings
 /// - x0 contains the DTB pointer from QEMU (currently unused)
 #[no_mangle]
-extern "C" fn rust_main(_dtb_ptr: usize) -> ! {
-    // Note: _dtb_ptr is the DTB physical address from QEMU (in x0).
-    // Currently 0 on aarch64 -- see issue #136 for DTB parsing work.
+extern "C" fn rust_main(dtb_paddr: usize) -> ! {
     let config = KernelConfig {
         cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=warn:ROOTPROC=/bin/busybox?sh"),
-        firmware_type: "QEMU", // TODO Is QEMU always the right value? What used for?
+        firmware_type: "QEMU",
         uart_base: UART_BASE,
         gic_base: GIC_BASE,
         phys_to_virt_offset: PHYS_TO_VIRT_OFFSET,
+        dtb_paddr,
     };
     save_offset(PHYS_TO_VIRT_OFFSET);
     crate::primary_main(config);

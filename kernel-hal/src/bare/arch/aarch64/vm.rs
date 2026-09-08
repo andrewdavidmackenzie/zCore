@@ -87,6 +87,14 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
         phys_to_virt(VIRTIO_BASE) + VIRTIO_SIZE,
         MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
     )?;
+    // initrd (if DTB provided initrd location)
+    if let Some(initrd) = super::INITRD_REGION.as_ref() {
+        map_range(
+            phys_to_virt(initrd.start),
+            phys_to_virt(initrd.end),
+            MMUFlags::READ | MMUFlags::WRITE,
+        )?;
+    }
     // physical frames
     for r in crate::mem::free_pmem_regions() {
         map_range(

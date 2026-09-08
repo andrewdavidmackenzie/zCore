@@ -17,7 +17,7 @@ PROMPT_PATTERN='/ # '
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore"
+    KERNEL="target/aarch64/release/zcore.bin"
     IMAGE="zCore/aarch64.img"
     QEMU_CMD=(
       qemu-system-aarch64
@@ -25,8 +25,7 @@ case "$ARCH" in
       -machine virt -cpu cortex-a72
       -kernel "$KERNEL"
       -serial mon:stdio
-      -drive "file=$IMAGE,if=none,format=raw,id=x0"
-      -device "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0"
+      -initrd "$IMAGE"
     )
     ;;
   x86_64)

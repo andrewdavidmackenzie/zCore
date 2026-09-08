@@ -144,8 +144,12 @@ impl BuildConfig {
         // Generate
         println!("strip zcore to {}", out.display());
         dir::create_parent(&out).unwrap();
-        BinUtil::objcopy()
-            .arg("--binary-architecture=riscv64")
+        let mut objcopy = BinUtil::objcopy();
+        // riscv64 requires explicit --binary-architecture for objcopy
+        if matches!(self.arch, Arch::Riscv64) {
+            objcopy.arg("--binary-architecture=riscv64");
+        }
+        objcopy
             .arg(obj)
             .args(["--strip-all", "-O", "binary"])
             .arg(&out)
@@ -248,13 +252,10 @@ impl QemuArgs {
         }
 
         // For riscv64 we need a raw binary; for aarch64 we use the ELF directly
-        let bin = match arch {
-            Arch::Aarch64 => {
-                build_config.invoke(Cargo::build);
-                obj.clone()
-            }
-            _ => build_config.bin(None),
-        };
+        // Build the kernel as a stripped raw binary. QEMU -kernel loads
+        // it at the base of RAM. On aarch64, raw binary is required so
+        // QEMU passes the DTB pointer in x0 (needed for -initrd).
+        let bin = build_config.bin(None);
         // Set qemu arguments
         let mut qemu = Qemu::system(arch_str);
         qemu.args(["-m", "2G"])
@@ -334,27 +335,19 @@ impl QemuArgs {
                     ]);
             }
             Arch::Aarch64 => {
-                // Direct kernel boot: QEMU loads the ELF directly, no UEFI
-                // bootloader needed. The kernel's _boot assembly sets up MMU
-                // and page tables before jumping to rust_main.
+                // Direct kernel boot with raw binary. QEMU loads it at
+                // RAM base (0x40000000) and passes DTB pointer in x0.
+                // The kernel's boot.s sets up page tables and MMU.
                 qemu.args(["-machine", "virt"])
                     .args(["-cpu", "cortex-a72"])
                     .arg("-kernel")
-                    .arg(&obj)
+                    .arg(&bin)
                     .args(["-serial", "mon:stdio"]);
                 if !is_zircon || self.rootfs_image.is_some() {
-                    // Pass rootfs image via block device.
-                    // QEMU uses commas as option separators in -drive,
-                    // so escape any commas in the file path.
-                    let img_path = rootfs_img.display().to_string().replace(',', ",,");
-                    qemu.args([
-                        "-drive",
-                        &format!("file={img_path},if=none,format=raw,id=x0"),
-                    ])
-                    .args([
-                        "-device",
-                        "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0",
-                    ]);
+                    // Pass rootfs image via initrd. QEMU sets
+                    // linux,initrd-start/end in the DTB, which the
+                    // kernel reads via parse_dtb().
+                    qemu.arg("-initrd").arg(&rootfs_img);
                 }
                 // Zircon mode without rootfs: ZBI is linked into the kernel binary
             }

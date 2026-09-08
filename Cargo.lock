@@ -1107,6 +1107,7 @@ dependencies = [
  "bitmap-allocator",
  "cfg-if 1.0.0",
  "cortex-a",
+ "dtb-walker",
  "executor",
  "git-version",
  "lazy_static",

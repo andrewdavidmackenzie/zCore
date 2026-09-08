@@ -70,6 +70,8 @@ run_test() {
     return 1
   fi
 
+
+
   # Run in QEMU
   local OUTPUT
   OUTPUT=$(mktemp)

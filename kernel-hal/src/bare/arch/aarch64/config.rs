@@ -15,6 +15,8 @@ pub struct KernelConfig {
     pub gic_base: usize,
     /// phystovirt offset
     pub phys_to_virt_offset: usize,
+    /// DTB physical address (0 if not available)
+    pub dtb_paddr: usize,
 }
 
 pub const PHYS_MEMORY_BASE: usize = 0x4000_0000;
