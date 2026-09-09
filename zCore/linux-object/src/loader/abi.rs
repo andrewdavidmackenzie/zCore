@@ -63,14 +63,19 @@ impl ProcInitInfo {
         // argv pointers
         writer.push_slice(&[null::<u8>()])?;
         writer.push_slice(argv.as_slice())?;
+        // On aarch64, SP must be 16-byte aligned at function entry.
+        // Add padding before argc if needed so that after pushing
+        // argc (8 bytes), the final SP is 16-byte aligned.
+        #[cfg(target_arch = "aarch64")]
+        {
+            // After argc push, sp will decrease by 8 (size of usize).
+            // We want (sp - 8) % 16 == 0, i.e. sp % 16 == 8.
+            if writer.sp.is_multiple_of(16) {
+                writer.push_slice(&[0usize])?; // 8-byte padding
+            }
+        }
         // argc
         writer.push_slice(&[argv.len()])?;
-        // Ensure SP is 16-byte aligned (aarch64 ABI requirement).
-        // push_slice aligns to align_of::<T>() which is 8 for usize,
-        // but aarch64 requires 16-byte SP alignment at function entry.
-        if !writer.sp.is_multiple_of(16) {
-            writer.push_slice(&[0usize])?; // 8-byte padding
-        }
         Ok(writer)
     }
 }
