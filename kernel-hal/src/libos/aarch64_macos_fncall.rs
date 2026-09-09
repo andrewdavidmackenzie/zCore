@@ -75,20 +75,26 @@ std::thread_local! {
         std::cell::UnsafeCell::new([0u64; 32]);
     static CURRENT_CTX: std::cell::Cell<*mut UserContext> =
         std::cell::Cell::new(core::ptr::null_mut());
+    /// Per-thread copy of UserContext for the noreturn jump to user code.
+    /// We copy the context here because the compiler may free the caller's
+    /// stack frame before a noreturn callee reads a pointer argument.
+    /// Thread-local storage is not affected by stack frame deallocation.
+    static JUMP_CTX: std::cell::UnsafeCell<UserContext> =
+        std::cell::UnsafeCell::new(unsafe { core::mem::zeroed() });
 }
 
 extern "C" {
     fn _aarch64_setjmp(buf: *mut u64) -> i32;
     fn _aarch64_longjmp(buf: *mut u64, val: i32) -> !;
     fn _aarch64_jump_to_user(ctx: *const UserContext) -> !;
-    fn _aarch64_simple_jump(pc: usize, sp: usize) -> !;
-    fn _aarch64_jump_to_user_v3(ctx: *const UserContext) -> !;
+    #[allow(dead_code)]
     fn _aarch64_sigsys_trampoline();
 }
 
-/// Trampoline helper (currently unused -- longjmp is now called directly
-/// from the SIGSYS handler instead of via the trampoline approach).
-/// Kept because the assembly label is still present.
+/// Trampoline helper -- called by `__aarch64_sigsys_trampoline` assembly.
+/// The trampoline approach is no longer the primary path (longjmp is called
+/// directly from the SIGSYS handler), but this must exist because the
+/// assembly label references it.
 #[no_mangle]
 unsafe extern "C" fn _aarch64_do_longjmp() {
     KERNEL_JMP_BUF.with(|buf| {
@@ -163,14 +169,23 @@ impl UserContextFnCall for UserContext {
                     self.general.x0
                 );
 
-                // Pass entry point and SP as register arguments to
-                // avoid dangling pointer: the compiler may free the
-                // caller's stack frame before a noreturn callee reads
-                // a pointer argument, since it knows the caller's
-                // frame is no longer needed.
+                // Read elr and sp from the context while the stack
+                // frame is still valid. Then use inline asm to set
+                // sp and branch. The user code's _start will set its
+                // own registers, so we only need elr and sp for the
+                // initial entry. For re-entry after syscall, we'll
+                // need all registers -- that's a TODO.
                 let elr = self.elr;
-                let sp = self.sp;
-                unsafe { _aarch64_simple_jump(elr, sp) };
+                let user_sp = self.sp;
+                unsafe {
+                    core::arch::asm!(
+                        "mov sp, {sp}",
+                        "br {elr}",
+                        sp = in(reg) user_sp,
+                        elr = in(reg) elr,
+                        options(noreturn),
+                    );
+                }
             }
             // ret != 0: returned via longjmp from SIGSYS handler.
             // UserContext has been populated by the handler.
@@ -555,96 +570,11 @@ __aarch64_jump_to_user:
     // startup code and syscall return sites don't depend on x16
     // having a specific value (it's a scratch register).
     ldp     x16, x17, [sp, #16]     // x16 = elr, x17 = original_sp
-    and     x17, x17, #0xfffffffffffffff0  // align SP to 16 bytes (required by aarch64 ABI)
-    mov     sp, x17                  // restore aligned user sp
+    mov     sp, x17                  // restore user sp
     br      x16                      // jump to user code
     // Note: x16 now contains elr instead of the guest's x16.
     // This is acceptable because x16 is a scratch register per
     // the AAPCS64 calling convention.
-
-// simple_jump: minimal entry to user code
-// x0 = pc (entry point), x1 = sp (16-byte aligned)
-.global __aarch64_simple_jump
-__aarch64_simple_jump:
-    mov     sp, x1
-    br      x0
-
-// jump_to_user_v2: like jump_to_user but simpler approach.
-// x0 = pointer to UserContext
-// Strategy: load elr and sp from context, set SP, branch via x16.
-// Load all other registers from context EXCEPT using the stack trick.
-// Instead, use x16 as branch target (accept clobbering guest x16).
-.global __aarch64_jump_to_user_v2
-__aarch64_jump_to_user_v2:
-    // Save entry point and sp from context
-    ldr     x16, [x0, #2*8]          // x16 = elr (entry point)
-    ldr     x1, [x0, #4*8]           // x1 = user sp
-    and     x1, x1, #0xfffffffffffffff0  // align to 16 bytes
-
-    // Load general registers x1-x28, x29 from context
-    // Note: this clobbers x1 which we just loaded, but that's OK
-    // because user _start will set x0 = sp anyway.
-    ldp     x1, x2,   [x0, #6*8]
-    ldp     x3, x4,   [x0, #8*8]
-    ldp     x5, x6,   [x0, #10*8]
-    ldp     x7, x8,   [x0, #12*8]
-    ldp     x9, x10,  [x0, #14*8]
-    ldp     x11, x12, [x0, #16*8]
-    ldp     x13, x14, [x0, #18*8]
-    ldp     x15, xzr, [x0, #20*8]    // skip x16 (used for branch target)
-    ldp     x17, x18, [x0, #22*8]
-    ldp     x19, x20, [x0, #24*8]
-    ldp     x21, x22, [x0, #26*8]
-    ldp     x23, x24, [x0, #28*8]
-    ldp     x25, x26, [x0, #30*8]
-    ldp     x27, x28, [x0, #32*8]
-    ldr     x29, [x0, #34*8]         // x29 = fp
-    ldr     x30, [x0, #36*8]         // x30 = lr
-
-    // Load user sp and x0 last
-    ldr     x0, [x0, #37*8]          // x0 = guest x0 (clobbers context pointer)
-    // Note: we can't load SP from context anymore since x0 is clobbered.
-    // We rely on the SP already being set by the inline code before this call.
-    // Actually, x0 was the context pointer and is now guest x0.
-    // SP was NOT set yet. We need it from somewhere.
-    // Problem: we can't access the context after clobbering x0.
-
-    // Solution: store user SP in a callee-saved location before loading regs.
-    // But we already clobbered all callee-saved regs. Use SP itself:
-    // We're still on the kernel SP at this point. Set SP to user SP
-    // then branch. But we don't have user SP in any register anymore!
-
-    // This approach doesn't work cleanly. Let me use the simple_jump
-    // approach instead: set SP before loading registers.
-    // Rewrite: set SP first, THEN load registers from context.
-
-// Actually, the issue is that after we load all guest registers,
-// we can't access the context pointer anymore. The original code
-// solved this by pushing values to the stack. Let me use a different
-// approach: save elr and user_sp on the KERNEL stack (before changing
-// SP), then change SP and branch.
-
-// Revised approach: use the kernel stack as scratch space.
-// The kernel SP is valid and writable.
-// 1. Push elr and user_sp to kernel stack
-// 2. Load all guest registers from context (including x0)
-// 3. Pop elr -> x16, user_sp -> x17 from kernel stack
-// 4. mov sp, x17; br x16
-
-// But after loading guest registers, SP is still kernel SP,
-// and ldp from [sp] would use kernel SP. That's correct!
-
-// Let me redo this properly:
-.global __aarch64_jump_to_user_v3
-__aarch64_jump_to_user_v3:
-    // x0 = pointer to UserContext
-    // Load elr and sp directly into x16 and x1
-    ldr     x16, [x0, #2*8]          // x16 = elr
-    ldr     x1, [x0, #4*8]           // x1 = user sp
-    and     x1, x1, #0xfffffffffffffff0  // align to 16
-    mov     x0, #0                    // zero guest x0
-    mov     sp, x1                    // set user SP
-    br      x16                       // jump to user code
     // Note: x16 now contains elr instead of the guest's x16.
     // This is acceptable because x16 is a scratch register per
     // the AAPCS64 calling convention.
