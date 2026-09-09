@@ -169,19 +169,33 @@ impl UserContextFnCall for UserContext {
                     self.general.x0
                 );
 
-                // Read elr and sp from the context while the stack
-                // frame is still valid. Then use inline asm to set
-                // sp and branch. The user code's _start will set its
-                // own registers, so we only need elr and sp for the
-                // initial entry. For re-entry after syscall, we'll
-                // need all registers -- that's a TODO.
+                // Read values from self into local variables while
+                // the stack frame is still valid. The inline asm
+                // takes these as register inputs.
+                //
+                // Currently only elr and sp are restored. x0-x8
+                // (syscall args/results) would be needed for full
+                // register restore on re-entry after syscall.
+                // TODO: pass all saved registers to user code.
                 let elr = self.elr;
-                let user_sp = self.sp;
+                let sp = self.sp;
+                let x0 = self.general.x0;
+                let x1 = self.general.x1;
+                let x2 = self.general.x2;
+                let x8 = self.general.x8;
                 unsafe {
                     core::arch::asm!(
+                        "mov x0, {x0}",
+                        "mov x1, {x1}",
+                        "mov x2, {x2}",
+                        "mov x8, {x8}",
                         "mov sp, {sp}",
                         "br {elr}",
-                        sp = in(reg) user_sp,
+                        x0 = in(reg) x0,
+                        x1 = in(reg) x1,
+                        x2 = in(reg) x2,
+                        x8 = in(reg) x8,
+                        sp = in(reg) sp,
                         elr = in(reg) elr,
                         options(noreturn),
                     );
