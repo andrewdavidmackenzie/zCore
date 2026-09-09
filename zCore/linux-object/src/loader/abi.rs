@@ -65,6 +65,12 @@ impl ProcInitInfo {
         writer.push_slice(argv.as_slice())?;
         // argc
         writer.push_slice(&[argv.len()])?;
+        // Ensure SP is 16-byte aligned (aarch64 ABI requirement).
+        // push_slice aligns to align_of::<T>() which is 8 for usize,
+        // but aarch64 requires 16-byte SP alignment at function entry.
+        if !writer.sp.is_multiple_of(16) {
+            writer.push_slice(&[0usize])?; // 8-byte padding
+        }
         Ok(writer)
     }
 }

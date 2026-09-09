@@ -163,15 +163,15 @@ impl UserContextFnCall for UserContext {
                     self.general.x0
                 );
 
-                // Align SP to 16 bytes (aarch64 ABI requirement).
-                self.sp &= !0xF;
                 // Pass entry point and SP as register arguments to
                 // avoid dangling pointer: the compiler may free the
                 // caller's stack frame before a noreturn callee reads
                 // a pointer argument, since it knows the caller's
                 // frame is no longer needed.
+                // SP is 16-byte aligned by push_at() in the loader.
                 let elr = self.elr;
                 let sp = self.sp;
+                debug_assert!(sp % 16 == 0, "user SP not 16-byte aligned: {:#x}", sp);
                 unsafe { _aarch64_simple_jump(elr, sp) };
             }
             // ret != 0: returned via longjmp from SIGSYS handler.
