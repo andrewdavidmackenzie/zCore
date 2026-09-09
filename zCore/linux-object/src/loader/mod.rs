@@ -102,12 +102,11 @@ impl LinuxElfLoader {
                     info!(
                         "PIE binary with TEXTREL: applying relocations in loader (W^X workaround)"
                     );
-                    match elf.relocate(image_vmar) {
-                        Ok(()) => info!("PIE TEXTREL relocations applied"),
-                        Err(error) => {
-                            warn!("PIE TEXTREL relocate Err:{:?}, base {:x?}", error, base);
-                        }
-                    }
+                    elf.relocate(image_vmar).map_err(|e| {
+                        warn!("PIE TEXTREL relocate failed: {:?}, base {:x?}", e, base);
+                        ZxError::INVALID_ARGS
+                    })?;
+                    info!("PIE TEXTREL relocations applied");
                 } else {
                     info!("PIE binary: skipping relocator (rcrt1 will self-relocate)");
                 }

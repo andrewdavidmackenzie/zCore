@@ -27,9 +27,8 @@ impl LinuxRootfs {
     pub fn make(&self, clear: bool) {
         let dir = self.path();
         if dir.is_dir() && !clear {
-            // Verify the cached rootfs has a statically linked busybox.
-            // Accept both "statically linked" and "static-pie linked".
-            // If neither, clear and rebuild to pick up CONFIG_STATIC=y.
+            // Verify the cached rootfs has busybox with the correct link mode.
+            // On aarch64 macOS we need static-pie; everywhere else plain static.
             let bb = dir.join("bin").join("busybox");
             if bb.is_file() {
                 let output = std::process::Command::new("file")
@@ -37,13 +36,22 @@ impl LinuxRootfs {
                     .output()
                     .expect("failed to run `file`");
                 let desc = String::from_utf8_lossy(&output.stdout);
-                if desc.contains("statically linked")
-                    || desc.contains("static-pie linked")
-                    || desc.contains("pie executable")
-                {
+                let ok = if self.needs_static_pie() {
+                    desc.contains("static-pie linked")
+                } else {
+                    desc.contains("statically linked")
+                };
+                if ok {
                     return;
                 }
-                println!("cached rootfs busybox is dynamically linked, rebuilding...");
+                println!(
+                    "cached rootfs busybox has wrong link mode (want {}), rebuilding...",
+                    if self.needs_static_pie() {
+                        "static-pie"
+                    } else {
+                        "static"
+                    }
+                );
             } else {
                 println!("cached rootfs is missing busybox, rebuilding...");
             }
@@ -104,8 +112,15 @@ impl LinuxRootfs {
     /// can't be fixed up without relocation info. A static-PIE binary
     /// includes `.rela.dyn` entries and self-relocates via rcrt1 at
     /// startup, so it works at any load address.
+    ///
+    /// Currently disabled: the rootfs directory is shared between bare-metal
+    /// (QEMU) and libos builds, and the bare-metal kernel needs the non-PIE
+    /// static binary. When libos gets its own rootfs, this can be re-enabled.
     fn needs_static_pie(&self) -> bool {
-        cfg!(all(target_os = "macos", target_arch = "aarch64")) && matches!(self.0, Arch::Aarch64)
+        // TODO(#172): re-enable when libos has a separate rootfs
+        // cfg!(all(target_os = "macos", target_arch = "aarch64"))
+        //     && matches!(self.0, Arch::Aarch64)
+        false
     }
 
     /// Cross-compiles busybox.
@@ -123,7 +138,7 @@ impl LinuxRootfs {
                 .expect("failed to run `file`");
             let desc = String::from_utf8_lossy(&output.stdout);
             let ok = if want_pie {
-                desc.contains("static-pie linked") || desc.contains("pie executable")
+                desc.contains("static-pie linked")
             } else {
                 desc.contains("statically linked")
             };

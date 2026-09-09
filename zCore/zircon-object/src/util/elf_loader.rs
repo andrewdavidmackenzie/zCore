@@ -184,6 +184,7 @@ impl ElfExt for ElfFile<'_> {
         }
     }
 
+    /// Scan PT_DYNAMIC for a DT_TEXTREL entry.
     fn has_textrel(&self) -> bool {
         for ph in self.program_iter() {
             if ph.get_type() != Ok(Type::Dynamic) {
