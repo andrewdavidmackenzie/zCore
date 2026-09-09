@@ -40,6 +40,32 @@ impl LinuxElfLoader {
             envs
         );
 
+        // On macOS aarch64 (libos mode), Linux binaries use `svc #0` for
+        // syscalls, but macOS only delivers SIGSYS for `svc #0x80` (BSD
+        // syscall path). `svc #0` enters the Mach trap path which hangs
+        // instead of delivering a signal. Patch all `svc #0` instructions
+        // to `svc #0x80` in the raw ELF data BEFORE loading so the
+        // patched instructions are present when pages are mapped.
+        #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
+        let data = {
+            const SVC_0: [u8; 4] = 0xd4000001u32.to_le_bytes();
+            const SVC_80: [u8; 4] = 0xd4001001u32.to_le_bytes();
+            let mut patched_data = data.to_vec();
+            let mut count = 0usize;
+            for i in (0..patched_data.len().saturating_sub(3)).step_by(4) {
+                if patched_data[i..i + 4] == SVC_0 {
+                    patched_data[i..i + 4].copy_from_slice(&SVC_80);
+                    count += 1;
+                }
+            }
+            if count > 0 {
+                info!("Patched {} svc #0 -> svc #0x80 in ELF data", count);
+            }
+            patched_data
+        };
+        #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
+        let data: &[u8] = &data;
+
         let elf = ElfFile::new(data).map_err(|_| ZxError::INVALID_ARGS)?;
 
         debug!("elf info:  {:#x?}", elf.header.pt2);
