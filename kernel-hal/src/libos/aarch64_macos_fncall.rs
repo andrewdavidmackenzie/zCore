@@ -32,10 +32,24 @@ extern "C" {
 /// catching crashes in user code (SIGSEGV, SIGBUS).
 /// Must be called once during initialization.
 pub fn install_sigsys_handler() {
+    // Ensure SIGSYS is not blocked on this thread (the async runtime
+    // or another library may have blocked it).
     unsafe {
+        let mut unblock: nix::libc::sigset_t = core::mem::zeroed();
+        nix::libc::sigemptyset(&mut unblock);
+        nix::libc::sigaddset(&mut unblock, nix::libc::SIGSYS);
+        nix::libc::sigaddset(&mut unblock, nix::libc::SIGSEGV);
+        nix::libc::sigaddset(&mut unblock, nix::libc::SIGBUS);
+        nix::libc::pthread_sigmask(nix::libc::SIG_UNBLOCK, &unblock, core::ptr::null_mut());
+    }
+    unsafe {
+        // Use SA_ONSTACK so macOS delivers signals on the alternate signal
+        // stack instead of the current SP. This is critical because when
+        // user code runs, SP points to MAP_ANON user memory that macOS
+        // cannot use for signal frame setup.
         let mut sa: nix::libc::sigaction = core::mem::zeroed();
         sa.sa_sigaction = sigsys_handler as *const () as usize;
-        sa.sa_flags = nix::libc::SA_SIGINFO | nix::libc::SA_NODEFER;
+        sa.sa_flags = nix::libc::SA_SIGINFO | nix::libc::SA_ONSTACK;
         nix::libc::sigemptyset(&mut sa.sa_mask);
         let ret = nix::libc::sigaction(nix::libc::SIGSYS, &sa, core::ptr::null_mut());
         if ret != 0 {
@@ -45,7 +59,7 @@ pub fn install_sigsys_handler() {
         // Also intercept SIGSEGV and SIGBUS from user code
         let mut sa2: nix::libc::sigaction = core::mem::zeroed();
         sa2.sa_sigaction = user_fault_handler as *const () as usize;
-        sa2.sa_flags = nix::libc::SA_SIGINFO | nix::libc::SA_NODEFER;
+        sa2.sa_flags = nix::libc::SA_SIGINFO | nix::libc::SA_ONSTACK;
         nix::libc::sigemptyset(&mut sa2.sa_mask);
         nix::libc::sigaction(nix::libc::SIGSEGV, &sa2, core::ptr::null_mut());
         nix::libc::sigaction(nix::libc::SIGBUS, &sa2, core::ptr::null_mut());
@@ -70,8 +84,9 @@ extern "C" {
     fn _aarch64_sigsys_trampoline();
 }
 
-/// Called by the trampoline after the signal handler has returned.
-/// This runs outside the signal handler context, so longjmp is safe.
+/// Trampoline helper (currently unused -- longjmp is now called directly
+/// from the SIGSYS handler instead of via the trampoline approach).
+/// Kept because the assembly label is still present.
 #[no_mangle]
 unsafe extern "C" fn _aarch64_do_longjmp() {
     KERNEL_JMP_BUF.with(|buf| {
@@ -84,8 +99,55 @@ pub trait UserContextFnCall {
     fn run_fncall_macos(&mut self);
 }
 
+/// Size of the alternate signal stack (per thread).
+const SIGALTSTACK_SIZE: usize = 64 * 1024; // 64 KiB
+
+std::thread_local! {
+    /// Per-thread alternate signal stack memory.
+    /// Allocated once per worker thread, freed when the thread exits.
+    static SIGALT_STACK: std::cell::RefCell<Option<Vec<u8>>> =
+        std::cell::RefCell::new(None);
+}
+
+/// Ensure the current thread has an alternate signal stack configured.
+/// Must be called on each worker thread before entering user code.
+fn ensure_sigaltstack() {
+    SIGALT_STACK.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        if slot.is_some() {
+            return; // Already set up
+        }
+        let stack_mem = vec![0u8; SIGALTSTACK_SIZE];
+        unsafe {
+            let ss = nix::libc::stack_t {
+                ss_sp: stack_mem.as_ptr() as *mut _,
+                ss_flags: 0,
+                ss_size: SIGALTSTACK_SIZE,
+            };
+            let ret = nix::libc::sigaltstack(&ss, core::ptr::null_mut());
+            if ret != 0 {
+                panic!("sigaltstack failed: {}", std::io::Error::last_os_error());
+            }
+        }
+        *slot = Some(stack_mem); // Keep alive
+    });
+}
+
 impl UserContextFnCall for UserContext {
     fn run_fncall_macos(&mut self) {
+        // Ensure SIGSYS is unblocked on this worker thread.
+        // async-std or other libraries may inherit a blocked mask.
+        unsafe {
+            let mut unblock: nix::libc::sigset_t = core::mem::zeroed();
+            nix::libc::sigemptyset(&mut unblock);
+            nix::libc::sigaddset(&mut unblock, nix::libc::SIGSYS);
+            nix::libc::sigaddset(&mut unblock, nix::libc::SIGSEGV);
+            nix::libc::sigaddset(&mut unblock, nix::libc::SIGBUS);
+            nix::libc::pthread_sigmask(nix::libc::SIG_UNBLOCK, &unblock, core::ptr::null_mut());
+        }
+        // Set up alternate signal stack so macOS can deliver signals
+        // even when SP points to user-mapped (MAP_ANON) memory.
+        ensure_sigaltstack();
         CURRENT_CTX.with(|c| c.set(self as *mut _));
         KERNEL_JMP_BUF.with(|buf| {
             let buf_ptr = unsafe { (*buf.get()).as_mut_ptr() };
@@ -98,6 +160,7 @@ impl UserContextFnCall for UserContext {
                     self.sp,
                     self.general.x0
                 );
+
                 unsafe { _aarch64_jump_to_user(self as *const _) };
             }
             // ret != 0: returned via longjmp from SIGSYS handler.
@@ -178,7 +241,7 @@ fn write_hex(buf: &mut [u8], val: usize) -> usize {
     n
 }
 
-/// SIGSYS signal handler. Called when user code executes `svc #0`.
+/// SIGSYS signal handler. Called when user code executes `svc #0x80`.
 /// Reads user registers from the signal mcontext, populates the
 /// UserContext, and longjmps back to the kernel.
 unsafe extern "C" fn sigsys_handler(
@@ -310,17 +373,31 @@ unsafe extern "C" fn sigsys_handler(
     context.general.x29 = user_fp;
     context.general.x30 = user_lr;
 
-    // Instead of longjmp (which corrupts macOS signal state), modify
-    // the signal context to redirect execution to our trampoline.
-    // When the signal handler returns, execution will resume at the
-    // trampoline, which does the longjmp on a clean signal stack.
-    let ts_mut = mc.add(ES_SIZE) as *mut u64;
-    // Set PC to our trampoline
-    *ts_mut.add(32) = _aarch64_sigsys_trampoline as *const () as u64;
-    // Set SP to a valid stack (the kernel sp from setjmp buffer)
-    // Actually, the trampoline will use longjmp which restores sp.
-    // We just need a valid SP for the trampoline to use temporarily.
-    // Use the current sp from the signal frame (which is valid).
+    // Use longjmp directly from the signal handler to return to
+    // the kernel. Testing shows that on macOS aarch64, longjmp from
+    // a SIGSYS handler works correctly and preserves signal delivery
+    // for subsequent syscalls. The previous trampoline approach
+    // (modifying mcontext PC to redirect to a trampoline that does
+    // longjmp) actually breaks signal delivery: macOS's sigreturn
+    // path corrupts internal state, causing subsequent `svc`
+    // instructions to hang instead of delivering SIGSYS.
+    //
+    // Since longjmp bypasses sigreturn, the kernel's SA_ONSTACK
+    // state is not cleared automatically. Reset it so the next
+    // signal delivery can use the alternate stack again.
+    {
+        let mut old_ss: nix::libc::stack_t = core::mem::zeroed();
+        nix::libc::sigaltstack(core::ptr::null(), &mut old_ss);
+        if old_ss.ss_flags & nix::libc::SS_ONSTACK != 0 {
+            // Re-register the same stack without SS_ONSTACK to clear
+            // the "currently executing on altstack" flag.
+            old_ss.ss_flags = 0;
+            nix::libc::sigaltstack(&old_ss, core::ptr::null_mut());
+        }
+    }
+    KERNEL_JMP_BUF.with(|buf| {
+        _aarch64_longjmp((*buf.get()).as_mut_ptr(), 1);
+    });
 }
 
 // Minimal setjmp/longjmp and user jump assembly.

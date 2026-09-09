@@ -658,6 +658,16 @@ impl VmAddressRegion {
                     actual_size,
                     crate::MMUFlags::READ | crate::MMUFlags::EXECUTE,
                 );
+                // On aarch64 macOS, flush the instruction cache after
+                // modifying code pages. Without this, the CPU may
+                // execute stale cached instructions.
+                #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+                unsafe {
+                    extern "C" {
+                        fn sys_icache_invalidate(start: *mut core::ffi::c_void, size: usize);
+                    }
+                    sys_icache_invalidate(vaddr as *mut _, actual_size);
+                }
             }
         }
 
