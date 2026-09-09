@@ -381,6 +381,20 @@ unsafe extern "C" fn sigsys_handler(
     // longjmp) actually breaks signal delivery: macOS's sigreturn
     // path corrupts internal state, causing subsequent `svc`
     // instructions to hang instead of delivering SIGSYS.
+    //
+    // Since longjmp bypasses sigreturn, the kernel's SA_ONSTACK
+    // state is not cleared automatically. Reset it so the next
+    // signal delivery can use the alternate stack again.
+    {
+        let mut old_ss: nix::libc::stack_t = core::mem::zeroed();
+        nix::libc::sigaltstack(core::ptr::null(), &mut old_ss);
+        if old_ss.ss_flags & nix::libc::SS_ONSTACK != 0 {
+            // Re-register the same stack without SS_ONSTACK to clear
+            // the "currently executing on altstack" flag.
+            old_ss.ss_flags = 0;
+            nix::libc::sigaltstack(&old_ss, core::ptr::null_mut());
+        }
+    }
     KERNEL_JMP_BUF.with(|buf| {
         _aarch64_longjmp((*buf.get()).as_mut_ptr(), 1);
     });

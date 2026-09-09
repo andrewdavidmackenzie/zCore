@@ -43,23 +43,45 @@ impl LinuxElfLoader {
         // On macOS aarch64 (libos mode), Linux binaries use `svc #0` for
         // syscalls, but macOS only delivers SIGSYS for `svc #0x80` (BSD
         // syscall path). `svc #0` enters the Mach trap path which hangs
-        // instead of delivering a signal. Patch all `svc #0` instructions
-        // to `svc #0x80` in the raw ELF data BEFORE loading so the
-        // patched instructions are present when pages are mapped.
+        // instead of delivering a signal. Patch `svc #0` -> `svc #0x80`
+        // in executable PT_LOAD segments of the ELF data BEFORE loading,
+        // so the patched instructions are present when pages are mapped.
+        //
+        // We parse the ELF first to find executable segments, patch only
+        // those file ranges (avoiding false matches in data sections),
+        // then re-parse the patched copy for loading.
         #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
         let data = {
+            use xmas_elf::program::Type as PhType;
             const SVC_0: [u8; 4] = 0xd4000001u32.to_le_bytes();
             const SVC_80: [u8; 4] = 0xd4001001u32.to_le_bytes();
+            let pre_elf = ElfFile::new(data).map_err(|_| ZxError::INVALID_ARGS)?;
             let mut patched_data = data.to_vec();
-            let mut count = 0usize;
-            for i in (0..patched_data.len().saturating_sub(3)).step_by(4) {
-                if patched_data[i..i + 4] == SVC_0 {
-                    patched_data[i..i + 4].copy_from_slice(&SVC_80);
-                    count += 1;
+            let mut total = 0usize;
+            for ph in pre_elf.program_iter() {
+                if ph.get_type().unwrap() != PhType::Load || !ph.flags().is_execute() {
+                    continue;
+                }
+                let file_start = ph.offset() as usize;
+                let file_end = file_start + ph.file_size() as usize;
+                // Virtual alignment: aarch64 instructions are 4-byte aligned.
+                // Adjust scan start so file offset aligns with virtual address.
+                let vaddr_mod4 = ph.virtual_addr() as usize % 4;
+                let offset_mod4 = file_start % 4;
+                let align_adj = (4 + vaddr_mod4 - offset_mod4) % 4;
+                let scan_start = file_start + align_adj;
+                for i in (scan_start..file_end.saturating_sub(3)).step_by(4) {
+                    if patched_data[i..i + 4] == SVC_0 {
+                        patched_data[i..i + 4].copy_from_slice(&SVC_80);
+                        total += 1;
+                    }
                 }
             }
-            if count > 0 {
-                info!("Patched {} svc #0 -> svc #0x80 in ELF data", count);
+            if total > 0 {
+                info!(
+                    "Patched {} svc #0 -> svc #0x80 in executable segments",
+                    total
+                );
             }
             patched_data
         };

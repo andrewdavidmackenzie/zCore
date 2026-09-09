@@ -658,13 +658,11 @@ impl VmAddressRegion {
                     actual_size,
                     crate::MMUFlags::READ | crate::MMUFlags::EXECUTE,
                 );
-                // On aarch64, flush the instruction cache after modifying
-                // code pages. Without this, the CPU may execute stale
-                // cached instructions instead of the patched ones.
-                #[cfg(target_arch = "aarch64")]
+                // On aarch64 macOS, flush the instruction cache after
+                // modifying code pages. Without this, the CPU may
+                // execute stale cached instructions.
+                #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
                 unsafe {
-                    // sys_icache_invalidate is the macOS API for flushing
-                    // the instruction cache for a range of addresses.
                     extern "C" {
                         fn sys_icache_invalidate(start: *mut core::ffi::c_void, size: usize);
                     }
