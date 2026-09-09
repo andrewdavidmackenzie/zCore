@@ -546,7 +546,8 @@ __aarch64_jump_to_user:
     // startup code and syscall return sites don't depend on x16
     // having a specific value (it's a scratch register).
     ldp     x16, x17, [sp, #16]     // x16 = elr, x17 = original_sp
-    mov     sp, x17                  // restore original user sp
+    and     x17, x17, #0xfffffffffffffff0  // align SP to 16 bytes (required by aarch64 ABI)
+    mov     sp, x17                  // restore aligned user sp
     br      x16                      // jump to user code
     // Note: x16 now contains elr instead of the guest's x16.
     // This is acceptable because x16 is a scratch register per
