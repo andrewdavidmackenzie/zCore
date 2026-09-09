@@ -63,18 +63,7 @@ impl ProcInitInfo {
         // argv pointers
         writer.push_slice(&[null::<u8>()])?;
         writer.push_slice(argv.as_slice())?;
-        // argc -- on aarch64, push twice so [sp] = argc regardless of
-        // whether the caller rounds sp down for 16-byte alignment.
-        // The second copy becomes dead space if alignment is already correct.
-        #[cfg(target_arch = "aarch64")]
-        {
-            let argc = argv.len();
-            writer.push_slice(&[argc])?;
-            if !writer.sp.is_multiple_of(16) {
-                writer.push_slice(&[argc])?;
-            }
-        }
-        #[cfg(not(target_arch = "aarch64"))]
+        // argc
         writer.push_slice(&[argv.len()])?;
         Ok(writer)
     }
