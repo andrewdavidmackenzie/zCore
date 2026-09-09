@@ -15,4 +15,4 @@ executor = { path = "../executor" }
 
 [features]
 default = []
-libos = ["kernel-hal/libos", "zircon-object/aspace-separate"]
+libos = ["kernel-hal/libos", "zircon-object/aspace-separate", "linux-object/libos"]

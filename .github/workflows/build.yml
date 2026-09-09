@@ -97,8 +97,8 @@ jobs:
         run: cargo xtask libos-build-zircon
 
       # LibOS runtime smoke test on macOS aarch64.
-      # Currently expected to fail: non-PIE busybox can't load at
-      # addresses above macOS's ~9GB minimum (issue #172).
+      # Busybox is now built as static-PIE for libos on aarch64 macOS,
+      # but the fncall user-mode entry mechanism still has issues (#172).
       # Remove continue-on-error when #172 is fully resolved.
       - name: Smoke test libos (Linux, macOS only)
         if: runner.os == 'macOS'

@@ -74,9 +74,15 @@ impl LinuxElfLoader {
             vmo.write(offset as usize, &self.syscall_entry.to_ne_bytes())?;
         }
 
-        // For PIE (DYN type) binaries, skip our relocator -- the
-        // binary's rcrt1 startup code does its own self-relocation.
-        // Running both would double-apply relocations.
+        // For PIE (DYN type) binaries, we normally skip our relocator
+        // because the binary's rcrt1 startup code does self-relocation.
+        //
+        // However, on aarch64 macOS (libos mode), static-PIE binaries
+        // with TEXTREL can't self-relocate because macOS W^X enforcement
+        // prevents text pages from being both writable and executable.
+        // In this case we apply relocations in the loader (which can use
+        // write_memory() to temporarily make RX pages writable) so rcrt1
+        // sees already-relocated values and the writes become idempotent.
         use xmas_elf::header::Type;
         let is_pie = elf.header.pt2.type_().as_type() == Type::SharedObject;
         if !is_pie {
@@ -87,7 +93,28 @@ impl LinuxElfLoader {
                 }
             }
         } else {
-            info!("PIE binary: skipping relocator (rcrt1 will self-relocate)");
+            // On libos with TEXTREL, apply relocations ourselves since
+            // rcrt1 can't write to RX pages on W^X-enforcing hosts.
+            // On other platforms, skip and let rcrt1 handle it.
+            #[cfg(feature = "libos")]
+            {
+                if elf.has_textrel() {
+                    info!(
+                        "PIE binary with TEXTREL: applying relocations in loader (W^X workaround)"
+                    );
+                    elf.relocate(image_vmar).map_err(|e| {
+                        warn!("PIE TEXTREL relocate failed: {:?}, base {:x?}", e, base);
+                        ZxError::INVALID_ARGS
+                    })?;
+                    info!("PIE TEXTREL relocations applied");
+                } else {
+                    info!("PIE binary: skipping relocator (rcrt1 will self-relocate)");
+                }
+            }
+            #[cfg(not(feature = "libos"))]
+            {
+                info!("PIE binary: skipping relocator (rcrt1 will self-relocate)");
+            }
         }
 
         let stack_vmo = VmObject::new_paged(self.stack_pages);
@@ -121,8 +148,6 @@ impl LinuxElfLoader {
                 {
                     // For static-pie (DYN type), AT_BASE = 0 (no interpreter).
                     // For non-PIE (EXEC type), AT_BASE = load base.
-                    use xmas_elf::header::Type;
-                    let is_pie = elf.header.pt2.type_().as_type() == Type::SharedObject;
                     if is_pie {
                         map.insert(abi::AT_BASE, 0);
                     } else {
