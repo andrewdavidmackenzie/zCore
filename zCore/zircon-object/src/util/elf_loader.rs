@@ -104,6 +104,12 @@ pub trait ElfExt {
     fn dynsym(&self) -> Result<&[DynEntry64], &'static str>;
     /// Relocate according to the dynamic relocation section (.rel.dyn section).
     fn relocate(&self, vmar: Arc<VmAddressRegion>) -> Result<(), &'static str>;
+    /// Check if the ELF has DT_TEXTREL in its DYNAMIC section.
+    ///
+    /// DT_TEXTREL indicates that relocations may modify read-only text
+    /// segments, requiring the loader to make them writable before the
+    /// binary's self-relocation code (rcrt1) runs.
+    fn has_textrel(&self) -> bool;
 }
 
 impl ElfExt for ElfFile<'_> {
@@ -176,6 +182,22 @@ impl ElfExt for ElfFile<'_> {
             SectionData::DynSymbolTable64(dsym) => Ok(dsym),
             _ => Err("bad .dynsym"),
         }
+    }
+
+    fn has_textrel(&self) -> bool {
+        for ph in self.program_iter() {
+            if ph.get_type() != Ok(Type::Dynamic) {
+                continue;
+            }
+            if let Ok(SegmentData::Dynamic64(entries)) = ph.get_data(self) {
+                for entry in entries {
+                    if entry.get_tag() == Ok(xmas_elf::dynamic::Tag::TextRel) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     #[allow(unsafe_code)]

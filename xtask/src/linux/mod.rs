@@ -28,7 +28,8 @@ impl LinuxRootfs {
         let dir = self.path();
         if dir.is_dir() && !clear {
             // Verify the cached rootfs has a statically linked busybox.
-            // If not, clear it and rebuild to pick up CONFIG_STATIC=y.
+            // Accept both "statically linked" and "static-pie linked".
+            // If neither, clear and rebuild to pick up CONFIG_STATIC=y.
             let bb = dir.join("bin").join("busybox");
             if bb.is_file() {
                 let output = std::process::Command::new("file")
@@ -36,7 +37,10 @@ impl LinuxRootfs {
                     .output()
                     .expect("failed to run `file`");
                 let desc = String::from_utf8_lossy(&output.stdout);
-                if desc.contains("statically linked") {
+                if desc.contains("statically linked")
+                    || desc.contains("static-pie linked")
+                    || desc.contains("pie executable")
+                {
                     return;
                 }
                 println!("cached rootfs busybox is dynamically linked, rebuilding...");
@@ -92,25 +96,44 @@ impl LinuxRootfs {
         PROJECT_DIR.join("rootfs").join("linux").join(self.0.name())
     }
 
+    /// Returns true if the host platform requires a static-PIE busybox.
+    ///
+    /// On aarch64 macOS, `mmap(MAP_FIXED)` fails for addresses below
+    /// ~0x400000000. The libos loader relocates ELF binaries above this
+    /// threshold, but non-PIE static binaries use absolute addresses that
+    /// can't be fixed up without relocation info. A static-PIE binary
+    /// includes `.rela.dyn` entries and self-relocates via rcrt1 at
+    /// startup, so it works at any load address.
+    fn needs_static_pie(&self) -> bool {
+        cfg!(all(target_os = "macos", target_arch = "aarch64")) && matches!(self.0, Arch::Aarch64)
+    }
+
     /// Cross-compiles busybox.
     fn busybox(&self, musl: impl AsRef<Path>) -> PathBuf {
         // Final file path
         let target = self.0.target().join("busybox");
         let executable = target.join("busybox");
-        // If a cached binary exists, verify it is statically linked.
-        // A stale dynamically-linked build (from before the CONFIG_STATIC
-        // change) would crash at runtime because zCore's mmap doesn't
-        // support the MAP_FIXED semantics musl's dynamic linker requires.
+        let want_pie = self.needs_static_pie();
+        // If a cached binary exists, verify it matches the desired link
+        // mode (static or static-pie). Rebuild if it doesn't match.
         if executable.is_file() {
             let output = std::process::Command::new("file")
                 .arg(&executable)
                 .output()
                 .expect("failed to run `file`");
             let desc = String::from_utf8_lossy(&output.stdout);
-            if desc.contains("statically linked") {
+            let ok = if want_pie {
+                desc.contains("static-pie linked") || desc.contains("pie executable")
+            } else {
+                desc.contains("statically linked")
+            };
+            if ok {
                 return executable;
             }
-            println!("cached busybox is dynamically linked, rebuilding...");
+            println!(
+                "cached busybox has wrong link mode (want {}), rebuilding...",
+                if want_pie { "static-pie" } else { "static" }
+            );
             dir::rm(&target).unwrap();
         }
         // Fetch source code (use GitHub mirror — the official git.busybox.net
@@ -152,18 +175,34 @@ impl LinuxRootfs {
         // implement the mmap semantics required by musl's dynamic linker.
         let config_path = target.join(".config");
         let config = fs::read_to_string(&config_path).expect("failed to read .config");
-        let config = config.replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y");
+        let mut config = config.replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y");
+        // For static-PIE: add -fpie to compilation flags so all object
+        // files are compiled as position-independent code.
+        if want_pie {
+            config = config.replace(
+                r#"CONFIG_EXTRA_CFLAGS="""#,
+                r#"CONFIG_EXTRA_CFLAGS="-fpie""#,
+            );
+        }
         fs::write(&config_path, config).expect("failed to write .config");
         // Compile
         let musl = musl.as_ref();
-        Make::new()
-            .current_dir(&target)
-            .arg(format!(
-                "CROSS_COMPILE={musl}/{arch}-linux-musl-",
-                musl = musl.canonicalize().unwrap().join("bin").display(),
-                arch = self.0.name(),
-            ))
-            .invoke();
+        let mut make = Make::new();
+        make.current_dir(&target).arg(format!(
+            "CROSS_COMPILE={musl}/{arch}-linux-musl-",
+            musl = musl.canonicalize().unwrap().join("bin").display(),
+            arch = self.0.name(),
+        ));
+        // For static-PIE: override CFLAGS_busybox to use -static-pie
+        // instead of the default -static. The -Wl,-z,notext is needed
+        // because musl libc was not compiled with -fPIE, so a few of
+        // its read-only data structures (e.g., atfork_locks) contain
+        // absolute addresses that end up as TEXTREL. musl's rcrt1
+        // handles TEXTREL via mprotect during self-relocation.
+        if want_pie {
+            make.arg("CFLAGS_busybox=-static-pie -Wl,-z,notext");
+        }
+        make.invoke();
         // Strip
         Ext::new(self.strip(musl))
             .arg("-s")

@@ -9,6 +9,7 @@ description = "Linux kernel objects"
 
 [features]
 mock-disk = []
+libos = ["kernel-hal/libos"]
 
 [dependencies]
 async-trait = "0.1"

@@ -95,9 +95,21 @@ mod tests {
     use super::*;
 
     /// A valid virtual address base to mmap.
+    /// On aarch64 macOS, mmap MAP_FIXED fails below ~0x400000000,
+    /// so use a higher base address (16 GB instead of 8 GB).
+    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    const VBASE: VirtAddr = 0x0004_0000_0000;
+    #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
     const VBASE: VirtAddr = 0x0002_0000_0000;
 
+    /// On aarch64 macOS (16K host pages), MAP_ANON pages are
+    /// independent copies and don't share data when two guest pages
+    /// map to the same physical frame. Skip this test there.
     #[test]
+    #[cfg_attr(
+        all(target_arch = "aarch64", target_os = "macos"),
+        ignore = "MAP_ANON pages don't share data on 16K-page hosts"
+    )]
     fn map_unmap() {
         let mut pt = PageTable::new();
         let flags = MMUFlags::READ | MMUFlags::WRITE;
