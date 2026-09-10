@@ -417,14 +417,13 @@ mod libos {
 
     /// Builds the rootfs used by libos.
     ///
-    /// Uses the same `LinuxRootfs` infrastructure as bare-metal mode to
-    /// cross-compile busybox with musl for the host architecture. The
-    /// rootfs is stored at `rootfs/linux/{host_arch}/` -- the same
-    /// directory used by bare-metal mode. LibOS's HostFS reads from it.
+    /// On aarch64 macOS, builds a separate libos rootfs at
+    /// `rootfs/linux-libos/{arch}/` with a static-PIE busybox.
+    /// On other platforms, uses the same rootfs as bare-metal.
     pub(super) fn rootfs(clear: bool) {
         let host = Arch::host();
         println!("Building libos rootfs for host arch: {}", host.name());
-        LinuxRootfs::new(host).make(clear);
+        LinuxRootfs::new(host).make_libos(clear);
     }
 
     /// Builds the libos rootfs (same as bare-metal rootfs for host arch).

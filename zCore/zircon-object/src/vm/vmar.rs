@@ -637,8 +637,9 @@ impl VmAddressRegion {
         // MAP_SHARED from the same backing store).
         #[cfg(feature = "libos")]
         {
-            let flags = map_inner.flags;
-            let is_exec = flags.contains(crate::MMUFlags::EXECUTE);
+            let page_idx = (vaddr - map_inner.addr) / PAGE_SIZE;
+            let is_exec = page_idx < map_inner.flags.len()
+                && map_inner.flags[page_idx].contains(MMUFlags::EXECUTE);
             if is_exec {
                 // Temporarily make writable for patching executable pages.
                 // Use the full write range (host-page alignment is handled
@@ -646,17 +647,23 @@ impl VmAddressRegion {
                 kernel_hal::mem::pmem_mprotect(
                     vaddr,
                     actual_size,
-                    crate::MMUFlags::READ | crate::MMUFlags::WRITE,
+                    MMUFlags::READ | MMUFlags::WRITE,
                 );
             }
-            unsafe {
-                core::ptr::copy_nonoverlapping(buf.as_ptr(), vaddr as *mut u8, actual_size);
+            // Use write_volatile to ensure the write is not optimized
+            // away and actually reaches the memory-mapped page.
+            // On aarch64 macOS, file-backed MAP_SHARED pages may
+            // not be updated by regular copy_nonoverlapping.
+            for i in 0..actual_size {
+                unsafe {
+                    core::ptr::write_volatile((vaddr + i) as *mut u8, buf[i]);
+                }
             }
             if is_exec {
                 kernel_hal::mem::pmem_mprotect(
                     vaddr,
                     actual_size,
-                    crate::MMUFlags::READ | crate::MMUFlags::EXECUTE,
+                    MMUFlags::READ | MMUFlags::EXECUTE,
                 );
                 // On aarch64 macOS, flush the instruction cache after
                 // modifying code pages. Without this, the CPU may
