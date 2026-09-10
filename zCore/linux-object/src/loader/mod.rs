@@ -249,6 +249,17 @@ impl LinuxElfLoader {
         stack_vmo.write(self.stack_pages * PAGE_SIZE - init_stack.len(), &init_stack)?;
         sp -= init_stack.len();
 
+        // On 16K hosts, the stack pages are MAP_ANON copies that were
+        // populated (with zeros) at map time. The VMO write above
+        // updated PMEM but not the anonymous user pages. Copy the
+        // stack data directly to the user-visible pages.
+        #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
+        unsafe {
+            let dst = sp as *mut u8;
+            let src = init_stack.as_ref().as_ptr();
+            core::ptr::copy_nonoverlapping(src, dst, init_stack.len());
+        }
+
         debug!(
             "ProcInitInfo auxv: {:#x?}\nentry:{:#x}, sp:{:#x}",
             info.auxv, entry, sp
