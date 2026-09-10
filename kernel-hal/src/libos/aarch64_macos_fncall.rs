@@ -74,6 +74,12 @@ std::thread_local! {
         std::cell::UnsafeCell::new([0u64; 32]);
     static CURRENT_CTX: std::cell::Cell<*mut UserContext> =
         std::cell::Cell::new(core::ptr::null_mut());
+    /// macOS's tpidr_el0 value for this thread. Saved before entering
+    /// user code and restored in the SIGTRAP handler. On macOS,
+    /// tpidr_el0 is a small integer (thread slot index); musl uses
+    /// it as a TLS pointer. We swap between the two on each
+    /// user/kernel transition.
+    static MACOS_TPIDR: std::cell::Cell<u64> = std::cell::Cell::new(0);
     /// Per-thread copy of UserContext for the noreturn jump to user code.
     /// We copy the context here because the compiler may free the caller's
     /// stack frame before a noreturn callee reads a pointer argument.
@@ -167,6 +173,17 @@ impl UserContextFnCall for UserContext {
                     self.general.x0
                 );
 
+                // Save macOS tpidr_el0 and restore user's value.
+                // musl uses tpidr_el0 as TLS pointer; macOS uses it
+                // as a thread slot index. Swap on every transition.
+                MACOS_TPIDR.with(|c| {
+                    let macos_val: u64;
+                    unsafe { core::arch::asm!("mrs {}, tpidr_el0", out(reg) macos_val) };
+                    c.set(macos_val);
+                });
+                let user_tpidr = self.tpidr as u64;
+                unsafe { core::arch::asm!("msr tpidr_el0, {}", in(reg) user_tpidr) };
+
                 // Copy context to TLS buffer so the pointer survives
                 // the noreturn call. Then load ALL registers from
                 // the TLS copy using inline asm with a single pointer
@@ -192,13 +209,9 @@ impl UserContextFnCall for UserContext {
                 // Skipped:
                 // - x18 = macOS platform reserved register
                 //
-                // Not restored (not saved by sigsys_handler):
+                // Not restored:
                 // - FP/SIMD registers v0-v31 (NEON state)
                 // - spsr/cpsr (processor status flags)
-                // - tpidr_el0 (thread pointer; set to 0 by handler)
-                // These would need additional save/restore in the
-                // handler and here if user code depends on them
-                // across syscalls.
                 //
                 // We save user SP and elr to the kernel stack before
                 // loading user regs, then pop at the end.
@@ -428,8 +441,16 @@ unsafe extern "C" fn sigsys_handler(
     // sp
     context.sp = user_sp;
 
-    // tpidr (not meaningful for the kernel, but save it)
-    context.tpidr = 0;
+    // Save user's tpidr_el0 (musl's TLS pointer) and restore
+    // macOS's value. On macOS, tpidr_el0 is a small thread index;
+    // musl uses it as a full TLS pointer. We swap on every trap.
+    {
+        let user_tpidr: u64;
+        core::arch::asm!("mrs {}, tpidr_el0", out(reg) user_tpidr);
+        context.tpidr = user_tpidr as usize;
+        let macos_tpidr = MACOS_TPIDR.with(|c| c.get());
+        core::arch::asm!("msr tpidr_el0, {}", in(reg) macos_tpidr);
+    }
 
     // General registers -- trapframe layout has named fields, not array.
     // GeneralRegs: x1, x2, ..., x28, x29, __reserved, x30, x0
