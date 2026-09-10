@@ -50,37 +50,103 @@ impl LinuxElfLoader {
         // We parse the ELF first to find executable segments, patch only
         // those file ranges (avoiding false matches in data sections),
         // then re-parse the patched copy for loading.
+        // On macOS aarch64 (libos mode), Linux binaries use `svc #0` for
+        // syscalls, but macOS uses x16 as the BSD syscall number for
+        // `svc #0x80`. If x16 has a valid value, XNU handles the svc
+        // as a real macOS syscall instead of delivering SIGSYS.
+        //
+        // Fix: replace each `svc #0` with `bl <trampoline>` where the
+        // trampoline sets x16=-1 (invalid syscall) then does `svc #0x80`.
+        // The trampoline is appended to the end of the executable data.
+        // After SIGSYS delivery, execution resumes in the trampoline
+        // at `ret`, which returns to the instruction after the original
+        // svc via the LR saved by `bl`.
         #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
         let data = {
             use xmas_elf::program::Type as PhType;
             const SVC_0: [u8; 4] = 0xd4000001u32.to_le_bytes();
-            const SVC_80: [u8; 4] = 0xd4001001u32.to_le_bytes();
             let pre_elf = ElfFile::new(data).map_err(|_| ZxError::INVALID_ARGS)?;
             let mut patched_data = data.to_vec();
-            let mut total = 0usize;
+
+            // Collect svc locations and find where to place the trampoline.
+            let mut svc_file_offsets = Vec::new();
+            let mut exec_file_end = 0usize;
             for ph in pre_elf.program_iter() {
                 if ph.get_type().unwrap() != PhType::Load || !ph.flags().is_execute() {
                     continue;
                 }
                 let file_start = ph.offset() as usize;
                 let file_end = file_start + ph.file_size() as usize;
-                // Virtual alignment: aarch64 instructions are 4-byte aligned.
-                // Adjust scan start so file offset aligns with virtual address.
+                if file_end > exec_file_end {
+                    exec_file_end = file_end;
+                }
                 let vaddr_mod4 = ph.virtual_addr() as usize % 4;
                 let offset_mod4 = file_start % 4;
                 let align_adj = (4 + vaddr_mod4 - offset_mod4) % 4;
                 let scan_start = file_start + align_adj;
                 for i in (scan_start..file_end.saturating_sub(3)).step_by(4) {
                     if patched_data[i..i + 4] == SVC_0 {
-                        patched_data[i..i + 4].copy_from_slice(&SVC_80);
-                        total += 1;
+                        svc_file_offsets.push(i);
                     }
                 }
             }
-            if total > 0 {
+
+            if !svc_file_offsets.is_empty() {
+                // Record svc offsets. The trampoline will be mapped as a
+                // separate page after load_from_elf, and the bl offsets
+                // will be patched at that point.
+                // For now, just collect the virtual addresses of the svc
+                // instructions. We'll patch them AFTER the image is loaded
+                // and the trampoline page is mapped.
+                //
+                // Actually, we're patching the ELF data BEFORE loading.
+                // The trampoline needs a known virtual address. We'll
+                // place it at the page-aligned end of the executable
+                // segment (load_segment_size), which will be within the
+                // image_vmar's allocated range.
+                let exec_seg_end_vaddr = pre_elf
+                    .program_iter()
+                    .filter(|ph| ph.get_type().unwrap() == PhType::Load && ph.flags().is_execute())
+                    .map(|ph| {
+                        let page_end = ((ph.virtual_addr() + ph.mem_size()) as usize + PAGE_SIZE
+                            - 1)
+                            & !(PAGE_SIZE - 1);
+                        page_end
+                    })
+                    .max()
+                    .unwrap_or(0);
+
+                // Place trampoline at the page-aligned end of executable
+                // segments (within the image_vmar allocation which covers
+                // load_segment_size).
+                let trampoline_vaddr = exec_seg_end_vaddr;
+
+                // Replace each svc #0 with bl to the trampoline vaddr.
+                // The bl offset is relative to the svc instruction's vaddr.
+                for &svc_file_offset in &svc_file_offsets {
+                    // Compute the svc's virtual address from its file offset
+                    // within the executable segment.
+                    let mut svc_vaddr = 0usize;
+                    for ph in pre_elf.program_iter() {
+                        if ph.get_type().unwrap() != PhType::Load || !ph.flags().is_execute() {
+                            continue;
+                        }
+                        let fstart = ph.offset() as usize;
+                        let fend = fstart + ph.file_size() as usize;
+                        if svc_file_offset >= fstart && svc_file_offset < fend {
+                            svc_vaddr = ph.virtual_addr() as usize + (svc_file_offset - fstart);
+                            break;
+                        }
+                    }
+                    let rel_offset = (trampoline_vaddr as isize - svc_vaddr as isize) >> 2;
+                    let bl_instr: u32 = 0x94000000 | ((rel_offset as u32) & 0x03ff_ffff);
+                    patched_data[svc_file_offset..svc_file_offset + 4]
+                        .copy_from_slice(&bl_instr.to_le_bytes());
+                }
                 info!(
-                    "Patched {} svc #0 -> svc #0x80 in executable segments",
-                    total
+                    "Patched {} svc #0 -> bl trampoline (vaddr {:#x})",
+                    svc_file_offsets.len(),
+                    trampoline_vaddr
                 );
             }
             patched_data
@@ -102,8 +168,30 @@ impl LinuxElfLoader {
         }
 
         let size = elf.load_segment_size();
+        // Add a page for the svc trampoline on aarch64 macOS.
+        #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
+        let size = size + PAGE_SIZE;
         let image_vmar = vmar.allocate(None, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)?;
         let vmo = image_vmar.load_from_elf(&elf)?;
+
+        // Map the svc trampoline page (movn x16, #0; svc #0x80; ret).
+        #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
+        {
+            let trampoline_vmo = VmObject::new_paged(1);
+            let movn_x16: u32 = 0x92800010; // movn x16, #0 (x16 = -1)
+            let svc_80: u32 = 0xd4001001; // svc #0x80
+            let ret: u32 = 0xd65f03c0; // ret
+            let mut tramp_data = [0u8; 12];
+            tramp_data[0..4].copy_from_slice(&movn_x16.to_le_bytes());
+            tramp_data[4..8].copy_from_slice(&svc_80.to_le_bytes());
+            tramp_data[8..12].copy_from_slice(&ret.to_le_bytes());
+            trampoline_vmo.write(0, &tramp_data)?;
+            // Map at the end of the image (trampoline_vaddr from patching above)
+            let tramp_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
+            let tramp_offset = elf.load_segment_size(); // original size, before +PAGE_SIZE
+            image_vmar.map_at(tramp_offset, trampoline_vmo, 0, PAGE_SIZE, tramp_flags)?;
+            trace!("Mapped svc trampoline at image offset {:#x}", tramp_offset);
+        }
 
         // The VMAR maps ELF segments at image_vmar.addr() + ph.virtual_addr().
         // The "base" is image_vmar.addr(), used to compute AT_BASE, AT_PHDR,
