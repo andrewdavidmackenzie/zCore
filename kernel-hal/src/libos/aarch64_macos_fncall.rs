@@ -32,28 +32,27 @@ extern "C" {
 /// catching crashes in user code (SIGSEGV, SIGBUS).
 /// Must be called once during initialization.
 pub fn install_sigsys_handler() {
-    // Ensure SIGSYS is not blocked on this thread (the async runtime
-    // or another library may have blocked it).
+    // Ensure signals are not blocked on this thread.
     unsafe {
         let mut unblock: nix::libc::sigset_t = core::mem::zeroed();
         nix::libc::sigemptyset(&mut unblock);
-        nix::libc::sigaddset(&mut unblock, nix::libc::SIGSYS);
+        nix::libc::sigaddset(&mut unblock, nix::libc::SIGTRAP);
         nix::libc::sigaddset(&mut unblock, nix::libc::SIGSEGV);
         nix::libc::sigaddset(&mut unblock, nix::libc::SIGBUS);
         nix::libc::pthread_sigmask(nix::libc::SIG_UNBLOCK, &unblock, core::ptr::null_mut());
     }
     unsafe {
-        // Use SA_ONSTACK so macOS delivers signals on the alternate signal
-        // stack instead of the current SP. This is critical because when
-        // user code runs, SP points to MAP_ANON user memory that macOS
-        // cannot use for signal frame setup.
+        // Install SIGTRAP handler for brk #1 (patched from svc #0).
+        // Using brk instead of svc avoids XNU's syscall return path
+        // which corrupts x0 and x1. SA_ONSTACK ensures delivery when
+        // SP is in user-mapped memory.
         let mut sa: nix::libc::sigaction = core::mem::zeroed();
         sa.sa_sigaction = sigsys_handler as *const () as usize;
         sa.sa_flags = nix::libc::SA_SIGINFO | nix::libc::SA_ONSTACK;
         nix::libc::sigemptyset(&mut sa.sa_mask);
-        let ret = nix::libc::sigaction(nix::libc::SIGSYS, &sa, core::ptr::null_mut());
+        let ret = nix::libc::sigaction(nix::libc::SIGTRAP, &sa, core::ptr::null_mut());
         if ret != 0 {
-            panic!("Failed to install SIGSYS handler");
+            panic!("Failed to install SIGTRAP handler");
         }
 
         // Also intercept SIGSEGV and SIGBUS from user code
@@ -64,7 +63,7 @@ pub fn install_sigsys_handler() {
         nix::libc::sigaction(nix::libc::SIGSEGV, &sa2, core::ptr::null_mut());
         nix::libc::sigaction(nix::libc::SIGBUS, &sa2, core::ptr::null_mut());
     }
-    info!("Installed SIGSYS/SIGSEGV/SIGBUS handlers for aarch64 macOS libos");
+    info!("Installed SIGTRAP/SIGSEGV/SIGBUS handlers for aarch64 macOS libos");
 }
 
 // Per-thread state for the setjmp/longjmp kernel return.
@@ -143,12 +142,11 @@ fn ensure_sigaltstack() {
 
 impl UserContextFnCall for UserContext {
     fn run_fncall_macos(&mut self) {
-        // Ensure SIGSYS is unblocked on this worker thread.
-        // async-std or other libraries may inherit a blocked mask.
+        // Ensure SIGTRAP is unblocked on this worker thread.
         unsafe {
             let mut unblock: nix::libc::sigset_t = core::mem::zeroed();
             nix::libc::sigemptyset(&mut unblock);
-            nix::libc::sigaddset(&mut unblock, nix::libc::SIGSYS);
+            nix::libc::sigaddset(&mut unblock, nix::libc::SIGTRAP);
             nix::libc::sigaddset(&mut unblock, nix::libc::SIGSEGV);
             nix::libc::sigaddset(&mut unblock, nix::libc::SIGBUS);
             nix::libc::pthread_sigmask(nix::libc::SIG_UNBLOCK, &unblock, core::ptr::null_mut());
@@ -187,9 +185,9 @@ impl UserContextFnCall for UserContext {
                 //
                 // Restored: x0-x15, x19-x30, sp, elr (via x17)
                 //
-                // Clobbered (unavoidable):
-                // - x16 = set to -1 for SIGSYS delivery
-                // - x17 = used as branch target (holds elr)
+                // Clobbered (used as scratch):
+                // - x16 = scratch for user sp
+                // - x17 = branch target (holds elr)
                 //
                 // Skipped:
                 // - x18 = macOS platform reserved register
@@ -241,19 +239,14 @@ impl UserContextFnCall for UserContext {
                         // Load x9 last (clobbers our pointer)
                         "ldr x9,  [x9, #112]",
 
-                        // Pop elr -> x17, set x16 = -1
+                        // Pop elr -> x17
                         "ldr x17, [sp], #16",      // pop elr
-                        "movn x16, #0",            // x16 = -1 for SIGSYS
 
-                        // Pop user sp, set SP, branch to elr via x17
-                        // x16 is -1 (for SIGSYS), x17 = elr
-                        "ldr x16, [sp], #16",      // pop user_sp -> x16 (temp)
-                        // Now x16 = user_sp, x17 = elr
-                        // We need: sp = user_sp, br x17, x16 = -1
+                        // Pop user sp -> x16 (scratch), set SP, branch
+                        "ldr x16, [sp], #16",      // pop user_sp -> x16
                         "mov sp, x16",             // sp = user_sp
-                        "movn x16, #0",            // x16 = -1 again
                         "br x17",                  // jump to elr
-                        // x17 = elr (clobbered), x16 = -1 (for SIGSYS)
+                        // x16 and x17 are clobbered (scratch registers)
 
                         in("x9") ctx_ptr,
                         options(noreturn),
@@ -338,7 +331,8 @@ fn write_hex(buf: &mut [u8], val: usize) -> usize {
     n
 }
 
-/// SIGSYS signal handler. Called when user code executes `svc #0x80`.
+/// SIGTRAP signal handler. Called when user code executes `brk #1`
+/// (patched from the original `svc #0`).
 /// Reads user registers from the signal mcontext, populates the
 /// UserContext, and longjmps back to the kernel.
 unsafe extern "C" fn sigsys_handler(
@@ -426,9 +420,9 @@ unsafe extern "C" fn sigsys_handler(
     // trap_num = 0 for syscall (on aarch64 libos, trap_reason checks this)
     context.trap_num = 0;
 
-    // On macOS, the mcontext PC for SIGSYS already points past
-    // the svc instruction (pc = svc_addr + 4). No need to advance.
-    context.elr = user_pc;
+    // For SIGTRAP from brk, macOS does NOT advance PC past the
+    // instruction (unlike SIGSYS from svc). Advance by 4 bytes.
+    context.elr = user_pc + 4;
 
     // sp
     context.sp = user_sp;
