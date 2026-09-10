@@ -173,39 +173,49 @@ impl UserContextFnCall for UserContext {
                 // the stack frame is valid, then pass as inline asm
                 // register inputs.
                 //
-                // Restored: elr, sp, x0-x2 (syscall args), x8 (nr).
-                // These cover all Linux aarch64 syscalls (which use
-                // x0-x5 for arguments, x8 for the syscall number,
-                // and return the result in x0).
+                // Restored: elr, sp, x0-x5 (all 6 syscall args),
+                // x8 (syscall number). This covers all Linux aarch64
+                // syscalls which use x0-x5 for arguments, x8 for the
+                // syscall number, and return the result in x0.
                 //
-                // Not restored: x3-x7, x9-x30. After a syscall, user
-                // code typically only inspects x0 (return value). The
-                // callee-saved registers (x19-x28) are preserved by
-                // the C ABI across function calls, so user code that
-                // follows the ABI won't depend on them being restored
-                // by the kernel. Full restore of all 31 registers
-                // would require a different approach (e.g., global_asm
-                // trampoline with a stable context pointer).
+                // We pin elr and sp to specific scratch registers
+                // (x9, x10) to prevent the register allocator from
+                // assigning them to registers that the asm block
+                // writes to (e.g., x8), which would cause conflicts.
                 let elr = self.elr;
                 let user_sp = self.sp;
                 let x0 = self.general.x0;
                 let x1 = self.general.x1;
                 let x2 = self.general.x2;
+                let x3 = self.general.x3;
+                let x4 = self.general.x4;
+                let x5 = self.general.x5;
                 let x8 = self.general.x8;
+                // Pin ALL inputs to explicit registers to prevent
+                // the register allocator from creating conflicts.
+                // Use x9-x15 and x17 as scratch (x16 is set to
+                // 0xffff to force SIGSYS on macOS).
                 unsafe {
                     core::arch::asm!(
-                        "mov x0, {x0}",
-                        "mov x1, {x1}",
-                        "mov x2, {x2}",
-                        "mov x8, {x8}",
-                        "mov sp, {sp}",
-                        "br {elr}",
-                        x0 = in(reg) x0,
-                        x1 = in(reg) x1,
-                        x2 = in(reg) x2,
-                        x8 = in(reg) x8,
-                        sp = in(reg) user_sp,
-                        elr = in(reg) elr,
+                        "mov x0, x11",
+                        "mov x1, x12",
+                        "mov x2, x13",
+                        "mov x3, x14",
+                        "mov x4, x15",
+                        "mov x5, x17",
+                        "mov x8, x20",
+                        "mov x16, #0xffff",
+                        "mov sp, x10",
+                        "br x9",
+                        in("x9") elr,
+                        in("x10") user_sp,
+                        in("x11") x0,
+                        in("x12") x1,
+                        in("x13") x2,
+                        in("x14") x3,
+                        in("x15") x4,
+                        in("x17") x5,
+                        in("x20") x8,
                         options(noreturn),
                     );
                 }
