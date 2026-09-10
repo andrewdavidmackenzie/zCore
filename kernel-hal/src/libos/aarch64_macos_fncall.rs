@@ -193,8 +193,6 @@ impl UserContextFnCall for UserContext {
                 let x8 = self.general.x8;
                 // Pin ALL inputs to explicit registers to prevent
                 // the register allocator from creating conflicts.
-                // Use x9-x15 and x17 as scratch (x16 is set to
-                // 0xffff to force SIGSYS on macOS).
                 unsafe {
                     core::arch::asm!(
                         "mov x0, x11",
@@ -204,7 +202,12 @@ impl UserContextFnCall for UserContext {
                         "mov x4, x15",
                         "mov x5, x17",
                         "mov x8, x20",
-                        "mov x16, #0xffff",
+                        // Set x16 to -1 (all bits set). macOS uses x16 as
+                        // the BSD syscall number. With x16 = 0xffff, XNU
+                        // corrupts x0 (sets ENOSYS) and x1 (sets 0).
+                        // With x16 = -1, XNU delivers SIGSYS without
+                        // corrupting x0 or x1.
+                        "movn x16, #0",
                         "mov sp, x10",
                         "br x9",
                         in("x9") elr,
@@ -398,6 +401,7 @@ unsafe extern "C" fn sigsys_handler(
 
     // General registers -- trapframe layout has named fields, not array.
     // GeneralRegs: x1, x2, ..., x28, x29, __reserved, x30, x0
+    //
     context.general.x0 = user_x(0);
     context.general.x1 = user_x(1);
     context.general.x2 = user_x(2);
