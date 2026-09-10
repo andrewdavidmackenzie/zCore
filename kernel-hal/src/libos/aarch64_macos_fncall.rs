@@ -169,56 +169,93 @@ impl UserContextFnCall for UserContext {
                     self.general.x0
                 );
 
-                // Read register values from self into locals while
-                // the stack frame is valid, then pass as inline asm
-                // register inputs.
+                // Copy context to TLS buffer so the pointer survives
+                // the noreturn call. Then load ALL registers from
+                // the TLS copy using inline asm with a single pointer
+                // input (pinned to x9 to avoid conflicts).
                 //
-                // Restored: elr, sp, x0-x5 (all 6 syscall args),
-                // x8 (syscall number). This covers all Linux aarch64
-                // syscalls which use x0-x5 for arguments, x8 for the
-                // syscall number, and return the result in x0.
+                // UserContext layout offsets (bytes):
+                //   elr=[16], sp=[32], x1=[48], x2=[56], ...
+                //   x9=[112], x10=[120], ..., x28=[264],
+                //   x29=[272], x30=[288], x0=[296]
+                let ctx_ptr: *const UserContext = JUMP_CTX.with(|c| {
+                    let ptr = c.get();
+                    unsafe { core::ptr::write(ptr, *self) };
+                    ptr as *const UserContext
+                });
+                // Strategy for full register restore:
                 //
-                // We pin elr and sp to specific scratch registers
-                // (x9, x10) to prevent the register allocator from
-                // assigning them to registers that the asm block
-                // writes to (e.g., x8), which would cause conflicts.
-                let elr = self.elr;
-                let user_sp = self.sp;
-                let x0 = self.general.x0;
-                let x1 = self.general.x1;
-                let x2 = self.general.x2;
-                let x3 = self.general.x3;
-                let x4 = self.general.x4;
-                let x5 = self.general.x5;
-                let x8 = self.general.x8;
-                // Pin ALL inputs to explicit registers to prevent
-                // the register allocator from creating conflicts.
+                // Restored: x0-x15, x19-x30, sp, elr (via x17)
+                //
+                // Clobbered (unavoidable):
+                // - x16 = set to -1 for SIGSYS delivery
+                // - x17 = used as branch target (holds elr)
+                //
+                // Skipped:
+                // - x18 = macOS platform reserved register
+                //
+                // Not restored (not saved by sigsys_handler):
+                // - FP/SIMD registers v0-v31 (NEON state)
+                // - spsr/cpsr (processor status flags)
+                // - tpidr_el0 (thread pointer; set to 0 by handler)
+                // These would need additional save/restore in the
+                // handler and here if user code depends on them
+                // across syscalls.
+                //
+                // We save user SP and elr to the kernel stack before
+                // loading user regs, then pop at the end.
                 unsafe {
                     core::arch::asm!(
-                        "mov x0, x11",
-                        "mov x1, x12",
-                        "mov x2, x13",
-                        "mov x3, x14",
-                        "mov x4, x15",
-                        "mov x5, x17",
-                        "mov x8, x20",
-                        // Set x16 to -1 (all bits set). macOS uses x16 as
-                        // the BSD syscall number. With x16 = 0xffff, XNU
-                        // corrupts x0 (sets ENOSYS) and x1 (sets 0).
-                        // With x16 = -1, XNU delivers SIGSYS without
-                        // corrupting x0 or x1.
-                        "movn x16, #0",
-                        "mov sp, x10",
-                        "br x9",
-                        in("x9") elr,
-                        in("x10") user_sp,
-                        in("x11") x0,
-                        in("x12") x1,
-                        in("x13") x2,
-                        in("x14") x3,
-                        in("x15") x4,
-                        in("x17") x5,
-                        in("x20") x8,
+                        // Save user sp on kernel stack (before we change SP)
+                        "ldr x17, [x9, #32]",     // x17 = user sp
+                        "str x17, [sp, #-16]!",    // push to kernel stack
+
+                        // Save elr on kernel stack too
+                        "ldr x17, [x9, #16]",      // x17 = elr
+                        "str x17, [sp, #-16]!",    // push to kernel stack
+
+                        // Load x0-x8
+                        "ldr x0,  [x9, #296]",
+                        "ldp x1, x2,   [x9, #48]",
+                        "ldp x3, x4,   [x9, #64]",
+                        "ldp x5, x6,   [x9, #80]",
+                        "ldp x7, x8,   [x9, #96]",
+
+                        // Load x10-x15 (skip x9)
+                        "ldr x10, [x9, #120]",
+                        "ldp x11, x12, [x9, #128]",
+                        "ldp x13, x14, [x9, #144]",
+                        "ldr x15, [x9, #160]",
+
+                        // Load x19-x28 (callee-saved)
+                        "ldp x19, x20, [x9, #192]",
+                        "ldp x21, x22, [x9, #208]",
+                        "ldp x23, x24, [x9, #224]",
+                        "ldp x25, x26, [x9, #240]",
+                        "ldp x27, x28, [x9, #256]",
+
+                        // Load x29 (fp), x30 (lr)
+                        "ldr x29, [x9, #272]",
+                        "ldr x30, [x9, #288]",
+
+                        // Load x9 last (clobbers our pointer)
+                        "ldr x9,  [x9, #112]",
+
+                        // Pop elr -> x17, set x16 = -1
+                        "ldr x17, [sp], #16",      // pop elr
+                        "movn x16, #0",            // x16 = -1 for SIGSYS
+
+                        // Pop user sp, set SP, branch to elr via x17
+                        // x16 is -1 (for SIGSYS), x17 = elr
+                        "ldr x16, [sp], #16",      // pop user_sp -> x16 (temp)
+                        // Now x16 = user_sp, x17 = elr
+                        // We need: sp = user_sp, br x17, x16 = -1
+                        "mov sp, x16",             // sp = user_sp
+                        "movn x16, #0",            // x16 = -1 again
+                        "br x17",                  // jump to elr
+                        // x17 = elr (clobbered), x16 = -1 (for SIGSYS)
+
+                        in("x9") ctx_ptr,
                         options(noreturn),
                     );
                 }
