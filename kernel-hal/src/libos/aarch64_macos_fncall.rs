@@ -75,18 +75,26 @@ std::thread_local! {
         std::cell::UnsafeCell::new([0u64; 32]);
     static CURRENT_CTX: std::cell::Cell<*mut UserContext> =
         std::cell::Cell::new(core::ptr::null_mut());
+    /// Per-thread copy of UserContext for the noreturn jump to user code.
+    /// We copy the context here because the compiler may free the caller's
+    /// stack frame before a noreturn callee reads a pointer argument.
+    /// Thread-local storage is not affected by stack frame deallocation.
+    static JUMP_CTX: std::cell::UnsafeCell<UserContext> =
+        std::cell::UnsafeCell::new(unsafe { core::mem::zeroed() });
 }
 
 extern "C" {
     fn _aarch64_setjmp(buf: *mut u64) -> i32;
     fn _aarch64_longjmp(buf: *mut u64, val: i32) -> !;
     fn _aarch64_jump_to_user(ctx: *const UserContext) -> !;
+    #[allow(dead_code)]
     fn _aarch64_sigsys_trampoline();
 }
 
-/// Trampoline helper (currently unused -- longjmp is now called directly
-/// from the SIGSYS handler instead of via the trampoline approach).
-/// Kept because the assembly label is still present.
+/// Trampoline helper -- called by `__aarch64_sigsys_trampoline` assembly.
+/// The trampoline approach is no longer the primary path (longjmp is called
+/// directly from the SIGSYS handler), but this must exist because the
+/// assembly label references it.
 #[no_mangle]
 unsafe extern "C" fn _aarch64_do_longjmp() {
     KERNEL_JMP_BUF.with(|buf| {
@@ -161,7 +169,56 @@ impl UserContextFnCall for UserContext {
                     self.general.x0
                 );
 
-                unsafe { _aarch64_jump_to_user(self as *const _) };
+                // Read register values from self into locals while
+                // the stack frame is valid, then pass as inline asm
+                // register inputs.
+                //
+                // Restored: elr, sp, x0-x5 (all 6 syscall args),
+                // x8 (syscall number). This covers all Linux aarch64
+                // syscalls which use x0-x5 for arguments, x8 for the
+                // syscall number, and return the result in x0.
+                //
+                // We pin elr and sp to specific scratch registers
+                // (x9, x10) to prevent the register allocator from
+                // assigning them to registers that the asm block
+                // writes to (e.g., x8), which would cause conflicts.
+                let elr = self.elr;
+                let user_sp = self.sp;
+                let x0 = self.general.x0;
+                let x1 = self.general.x1;
+                let x2 = self.general.x2;
+                let x3 = self.general.x3;
+                let x4 = self.general.x4;
+                let x5 = self.general.x5;
+                let x8 = self.general.x8;
+                // Pin ALL inputs to explicit registers to prevent
+                // the register allocator from creating conflicts.
+                // Use x9-x15 and x17 as scratch (x16 is set to
+                // 0xffff to force SIGSYS on macOS).
+                unsafe {
+                    core::arch::asm!(
+                        "mov x0, x11",
+                        "mov x1, x12",
+                        "mov x2, x13",
+                        "mov x3, x14",
+                        "mov x4, x15",
+                        "mov x5, x17",
+                        "mov x8, x20",
+                        "mov x16, #0xffff",
+                        "mov sp, x10",
+                        "br x9",
+                        in("x9") elr,
+                        in("x10") user_sp,
+                        in("x11") x0,
+                        in("x12") x1,
+                        in("x13") x2,
+                        in("x14") x3,
+                        in("x15") x4,
+                        in("x17") x5,
+                        in("x20") x8,
+                        options(noreturn),
+                    );
+                }
             }
             // ret != 0: returned via longjmp from SIGSYS handler.
             // UserContext has been populated by the handler.
@@ -546,8 +603,11 @@ __aarch64_jump_to_user:
     // startup code and syscall return sites don't depend on x16
     // having a specific value (it's a scratch register).
     ldp     x16, x17, [sp, #16]     // x16 = elr, x17 = original_sp
-    mov     sp, x17                  // restore original user sp
+    mov     sp, x17                  // restore user sp
     br      x16                      // jump to user code
+    // Note: x16 now contains elr instead of the guest's x16.
+    // This is acceptable because x16 is a scratch register per
+    // the AAPCS64 calling convention.
     // Note: x16 now contains elr instead of the guest's x16.
     // This is acceptable because x16 is a scratch register per
     // the AAPCS64 calling convention.
