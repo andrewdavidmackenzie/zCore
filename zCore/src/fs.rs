@@ -104,8 +104,13 @@ cfg_if! {
     }
 }
 
-/// Construct the libos rootfs path: `rootfs/{personality}/{host_arch}/`.
-/// Used by both Linux and Zircon libos modes.
+/// Construct the libos rootfs path.
+///
+/// On aarch64 macOS, uses `rootfs/{personality}-libos/{arch}/` which
+/// contains a static-PIE busybox (needed because non-PIE binaries
+/// can't be loaded above macOS's ~0x400000000 address space minimum).
+/// On other platforms, uses `rootfs/{personality}/{arch}/` (same as
+/// bare-metal).
 #[cfg(feature = "libos")]
 fn libos_rootfs_path(personality: &str) -> std::path::PathBuf {
     let project_dir = if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
@@ -122,6 +127,18 @@ fn libos_rootfs_path(personality: &str) -> std::path::PathBuf {
     } else {
         "unknown"
     };
+    // On aarch64 macOS, use the separate libos rootfs with static-PIE binaries.
+    // Fall back to the shared rootfs if the libos one doesn't exist yet.
+    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    {
+        let libos_path = project_dir
+            .join("rootfs")
+            .join(format!("{personality}-libos"))
+            .join(arch);
+        if libos_path.is_dir() {
+            return libos_path;
+        }
+    }
     project_dir.join("rootfs").join(personality).join(arch)
 }
 
