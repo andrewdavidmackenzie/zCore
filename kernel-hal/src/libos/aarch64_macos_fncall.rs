@@ -184,15 +184,26 @@ impl UserContextFnCall for UserContext {
                     ptr as *const UserContext
                 });
                 // Strategy for full register restore:
-                // - x9 = context pointer (our scratch, loaded last)
-                // - x16 = must be set to -1 for SIGSYS (clobbered)
-                // - x17 = used for elr branch target (clobbered)
-                // - x18 = reserved on macOS (skip)
-                // - All other x0-x15, x19-x30 loaded from context
-                // - SP loaded from context
                 //
-                // We save user SP to kernel stack before loading regs,
-                // then pop it at the end.
+                // Restored: x0-x15, x19-x30, sp, elr (via x17)
+                //
+                // Clobbered (unavoidable):
+                // - x16 = set to -1 for SIGSYS delivery
+                // - x17 = used as branch target (holds elr)
+                //
+                // Skipped:
+                // - x18 = macOS platform reserved register
+                //
+                // Not restored (not saved by sigsys_handler):
+                // - FP/SIMD registers v0-v31 (NEON state)
+                // - spsr/cpsr (processor status flags)
+                // - tpidr_el0 (thread pointer; set to 0 by handler)
+                // These would need additional save/restore in the
+                // handler and here if user code depends on them
+                // across syscalls.
+                //
+                // We save user SP and elr to the kernel stack before
+                // loading user regs, then pop at the end.
                 unsafe {
                     core::arch::asm!(
                         // Save user sp on kernel stack (before we change SP)
