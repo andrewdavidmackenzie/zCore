@@ -204,13 +204,11 @@ impl UserContextFnCall for UserContext {
                 // loading user regs, then pop at the end.
                 unsafe {
                     core::arch::asm!(
-                        // Save user sp on kernel stack (before we change SP)
+                        // Save user sp and elr on kernel stack
                         "ldr x17, [x9, #32]",     // x17 = user sp
-                        "str x17, [sp, #-16]!",    // push to kernel stack
-
-                        // Save elr on kernel stack too
-                        "ldr x17, [x9, #16]",      // x17 = elr
-                        "str x17, [sp, #-16]!",    // push to kernel stack
+                        "str x17, [sp, #-16]!",
+                        "ldr x17, [x9, #16]",     // x17 = elr
+                        "str x17, [sp, #-16]!",
 
                         // Load x0-x8
                         "ldr x0,  [x9, #296]",
@@ -219,11 +217,17 @@ impl UserContextFnCall for UserContext {
                         "ldp x5, x6,   [x9, #80]",
                         "ldp x7, x8,   [x9, #96]",
 
-                        // Load x10-x15 (skip x9)
+                        // Load x10-x15 (skip x9, x16, x17)
                         "ldr x10, [x9, #120]",
                         "ldp x11, x12, [x9, #128]",
                         "ldp x13, x14, [x9, #144]",
                         "ldr x15, [x9, #160]",
+
+                        // x16/x17: clobbered (used as scratch for elr
+                        // and sp). Per AAPCS64, x16/x17 are intra-
+                        // procedure-call scratch registers that callers
+                        // must not rely on across function calls.
+                        // x18: reserved on macOS, skip.
 
                         // Load x19-x28 (callee-saved)
                         "ldp x19, x20, [x9, #192]",
@@ -236,17 +240,14 @@ impl UserContextFnCall for UserContext {
                         "ldr x29, [x9, #272]",
                         "ldr x30, [x9, #288]",
 
-                        // Load x9 last (clobbers our pointer)
+                        // Load x9 last (clobbers our context pointer)
                         "ldr x9,  [x9, #112]",
 
-                        // Pop elr -> x17
+                        // Pop elr -> x17, user_sp -> x16
                         "ldr x17, [sp], #16",      // pop elr
-
-                        // Pop user sp -> x16 (scratch), set SP, branch
-                        "ldr x16, [sp], #16",      // pop user_sp -> x16
+                        "ldr x16, [sp], #16",      // pop user_sp
                         "mov sp, x16",             // sp = user_sp
                         "br x17",                  // jump to elr
-                        // x16 and x17 are clobbered (scratch registers)
 
                         in("x9") ctx_ptr,
                         options(noreturn),
