@@ -150,10 +150,34 @@ impl LinuxElfLoader {
                     info!(
                         "PIE binary with TEXTREL: applying relocations in loader (W^X workaround)"
                     );
-                    elf.relocate(image_vmar).map_err(|e| {
+                    elf.relocate(image_vmar.clone()).map_err(|e| {
                         warn!("PIE TEXTREL relocate failed: {:?}, base {:x?}", e, base);
                         ZxError::INVALID_ARGS
                     })?;
+                    // Zero out RELASZ in the DYNAMIC section so rcrt1
+                    // sees no relocations and skips its relocation loop.
+                    // Without this, rcrt1 tries to re-apply the same
+                    // TEXTREL relocations and crashes on macOS W^X.
+                    for ph in elf.program_iter() {
+                        if ph.get_type().unwrap() != xmas_elf::program::Type::Dynamic {
+                            continue;
+                        }
+                        if let Ok(xmas_elf::program::SegmentData::Dynamic64(entries)) =
+                            ph.get_data(&elf)
+                        {
+                            for (i, entry) in entries.iter().enumerate() {
+                                // DT_RELASZ = 8: zero out the size so rcrt1
+                                // thinks there are no RELA entries to process.
+                                if entry.get_tag() == Ok(xmas_elf::dynamic::Tag::RelaSize) {
+                                    let dyn_vaddr = ph.virtual_addr() as usize + i * 16 + 8;
+                                    let addr = base + dyn_vaddr;
+                                    let zero = 0usize.to_ne_bytes();
+                                    let _ = image_vmar.write_memory(addr, &zero);
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     info!("PIE TEXTREL relocations applied");
                 } else {
                     info!("PIE binary: skipping relocator (rcrt1 will self-relocate)");
