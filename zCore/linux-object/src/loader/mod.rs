@@ -172,7 +172,9 @@ impl LinuxElfLoader {
                                     let dyn_vaddr = ph.virtual_addr() as usize + i * 16 + 8;
                                     let addr = base + dyn_vaddr;
                                     let zero = 0usize.to_ne_bytes();
-                                    let _ = image_vmar.write_memory(addr, &zero);
+                                    image_vmar
+                                        .write_memory(addr, &zero)
+                                        .map_err(|_| ZxError::INVALID_ARGS)?;
                                     trace!("Zeroed DT_RELASZ at {:#x}", addr);
                                     break;
                                 }

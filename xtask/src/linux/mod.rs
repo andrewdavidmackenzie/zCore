@@ -176,14 +176,20 @@ impl LinuxRootfs {
             println!("cached static-pie busybox has wrong type, rebuilding...");
             dir::rm(&target).unwrap();
         }
-        // Copy busybox source (already cloned by the regular busybox() build)
+        // Ensure busybox source is available (clone if needed).
+        const BUSYBOX_TAG: &str = "1_36_1";
         let source = REPOS.join("busybox");
         if !source.is_dir() {
-            // The regular busybox() already cloned it; just verify.
-            panic!(
-                "busybox source not found at {:?} -- run regular rootfs build first",
-                source
-            );
+            fetch_online!(source, |tmp| {
+                Git::clone("https://github.com/mirror/busybox.git")
+                    .dir(tmp)
+                    .single_branch()
+                    .branch(BUSYBOX_TAG)
+                    .depth(1)
+                    .done()
+            });
+            std::fs::write(source.join(".busybox_tag"), BUSYBOX_TAG)
+                .expect("failed to write .busybox_tag");
         }
         dir::rm(&target).unwrap();
         dircpy::copy_dir(&source, &target).unwrap();
