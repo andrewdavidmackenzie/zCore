@@ -101,5 +101,5 @@ jobs:
       # then runs busybox --help to verify the full fncall pipeline.
       - name: Smoke test libos (Linux, macOS only)
         if: runner.os == 'macOS'
-        run: |
-          timeout 120 cargo linux-libos --args "/bin/busybox --help"
+        timeout-minutes: 5
+        run: cargo linux-libos --args "/bin/busybox --help"
