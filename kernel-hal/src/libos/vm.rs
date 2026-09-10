@@ -102,33 +102,38 @@ mod tests {
     #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
     const VBASE: VirtAddr = 0x0002_0000_0000;
 
-    /// On aarch64 macOS (16K host pages), MAP_ANON pages are
-    /// independent copies and don't share data when two guest pages
-    /// map to the same physical frame. Skip this test there.
+    /// Test that two guest pages mapped to the same physical frame
+    /// share data (write via one vaddr, read via the other).
+    ///
+    /// On 16K hosts, file-backed aliasing requires vaddr % hps == paddr % hps.
+    /// We map paddr 0x1000 at VBASE+0x1000 and VBASE+0x5000 (both have
+    /// vaddr % 16K == 0x1000 == paddr % 16K) in different host pages.
     #[test]
-    #[cfg_attr(
-        all(target_arch = "aarch64", target_os = "macos"),
-        ignore = "MAP_ANON pages don't share data on 16K-page hosts"
-    )]
     fn map_unmap() {
         let mut pt = PageTable::new();
         let flags = MMUFlags::READ | MMUFlags::WRITE;
-        // map 2 pages to 1 frame
-        pt.map(Page::new_aligned(VBASE, PageSize::Size4K), 0x1000, flags)
+        // Use vaddrs where vaddr % host_page_size == paddr % host_page_size.
+        // For paddr 0x1000, use VBASE+0x1000 and VBASE+0x5000 (16K apart,
+        // both have offset 0x1000 within their host page).
+        let vaddr1 = VBASE + 0x1000;
+        let vaddr2 = VBASE + 0x5000; // 16K apart for different host pages
+        let paddr = 0x1000;
+
+        pt.map(Page::new_aligned(vaddr1, PageSize::Size4K), paddr, flags)
             .unwrap();
-        pt.map(
-            Page::new_aligned(VBASE + 0x1000, PageSize::Size4K),
-            0x1000,
-            flags,
-        )
-        .unwrap();
+        pt.map(Page::new_aligned(vaddr2, PageSize::Size4K), paddr, flags)
+            .unwrap();
 
         unsafe {
             const MAGIC: usize = 0xdead_beaf;
-            (VBASE as *mut usize).write(MAGIC);
-            assert_eq!(((VBASE + 0x1000) as *mut usize).read(), MAGIC);
+            (vaddr1 as *mut usize).write(MAGIC);
+            assert_eq!(
+                (vaddr2 as *mut usize).read(),
+                MAGIC,
+                "shared-frame aliasing: write at vaddr1 should be visible at vaddr2"
+            );
         }
 
-        pt.unmap(VBASE + 0x1000).unwrap();
+        pt.unmap(vaddr2).unwrap();
     }
 }

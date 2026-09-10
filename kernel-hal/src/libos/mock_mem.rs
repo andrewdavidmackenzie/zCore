@@ -10,13 +10,22 @@ use crate::{MMUFlags, PhysAddr, VirtAddr};
 pub struct MockMemory {
     size: usize,
     fd: RawFd,
-    /// On hosts with page size > 4K (e.g., 16K on aarch64 macOS), we use
-    /// anonymous mappings + memcpy instead of file-backed MAP_FIXED to
-    /// prevent host-page clobbering when multiple 4K guest pages share
-    /// one host page. This set tracks which host-page-aligned vaddrs
-    /// already have an anonymous mapping, so we don't re-map (zero out)
-    /// pages that were already populated.
-    anon_mapped: std::sync::Mutex<std::collections::HashSet<usize>>,
+    /// On hosts with page size > 4K (e.g., 16K on aarch64 macOS), tracks
+    /// how each host page is mapped. Maps host-page-aligned vaddr to
+    /// the state of that host page.
+    host_pages: std::sync::Mutex<std::collections::HashMap<usize, HostPageState>>,
+}
+
+/// State of a host page in the large-page mapping path.
+#[derive(Clone, Copy, PartialEq)]
+enum HostPageState {
+    /// Mapped via MAP_SHARED with the PMEM file at this 16K-aligned offset.
+    /// All 4K guest pages within this host page share the same file region,
+    /// so writes via one vaddr are visible through another (aliasing works).
+    FileBacked(usize),
+    /// Mapped via MAP_ANON because the guest pages within this host page
+    /// map to different 16K file regions. Aliasing does NOT work.
+    Anonymous,
 }
 
 /// Return the host OS page size (cached after first call).
@@ -41,7 +50,7 @@ impl MockMemory {
         let mem = Self {
             size,
             fd,
-            anon_mapped: std::sync::Mutex::new(std::collections::HashSet::new()),
+            host_pages: std::sync::Mutex::new(std::collections::HashMap::new()),
         };
         // Map the entire physical memory backing store at PMEM_MAP_VADDR.
         // This is always MAP_SHARED so VMO read/write via phys_to_virt works.
@@ -114,65 +123,137 @@ impl MockMemory {
 
         // Host page size > 4K (e.g., 16K on aarch64 macOS).
         //
-        // We cannot use file-backed MAP_FIXED because multiple 4K guest
-        // pages within one host page would clobber each other (each
-        // MAP_FIXED replaces the entire host page with a different file
-        // region).
+        // Strategy: try file-backed MAP_SHARED first. This preserves
+        // shared-frame aliasing (two vaddrs mapping the same paddr
+        // see the same memory). File offsets must be host-page-aligned,
+        // so we use the 16K-aligned paddr region as the file offset.
         //
-        // Solution: use MAP_ANON for the host page, then memcpy data
-        // from the PMEM backing store. Track which host pages are
-        // already mapped to avoid re-mapping (which zeros them out).
+        // If a host page already has a file-backed mapping to a DIFFERENT
+        // 16K file region (conflicting guest pages within one host page),
+        // fall back to MAP_ANON + memcpy (no aliasing for that page).
 
         let aligned_vaddr = vaddr & !(hps - 1);
-        let aligned_len = ((vaddr + len + hps - 1) & !(hps - 1)) - aligned_vaddr;
+        let aligned_paddr = paddr & !(hps - 1);
 
-        {
-            let mut mapped = self.anon_mapped.lock().unwrap();
-            // Map any host pages in [aligned_vaddr, aligned_vaddr+aligned_len)
-            // that we haven't seen yet.
-            let mut page = aligned_vaddr;
-            while page < aligned_vaddr + aligned_len {
-                if !mapped.contains(&page) {
-                    unsafe {
-                        mman::mmap(
-                            page as _,
-                            hps,
-                            ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                            MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED | MapFlags::MAP_ANON,
-                            -1,
-                            0,
-                        )
-                    }
-                    .unwrap_or_else(|err| {
-                        panic!(
-                            "mmap anon failed: vaddr={:#x}, len={:#x}: {:?}",
-                            page, hps, err
-                        )
-                    });
-                    mapped.insert(page);
+        let needs_memcpy = {
+            let mut pages = self.host_pages.lock().unwrap();
+            let state = pages.get(&aligned_vaddr).copied();
+
+            // File-backed MAP_SHARED requires that the vaddr offset
+            // within the host page matches the paddr offset, so that
+            // accessing *vaddr reads file[paddr]. This means
+            // vaddr % hps == paddr % hps.
+            let vaddr_offset = vaddr & (hps - 1);
+            let paddr_offset = paddr & (hps - 1);
+            let can_file_back = vaddr_offset == paddr_offset;
+
+            // Helper: create anonymous mapping for this host page.
+            let map_anon = || {
+                unsafe {
+                    mman::mmap(
+                        aligned_vaddr as _,
+                        hps,
+                        ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                        MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED | MapFlags::MAP_ANON,
+                        -1,
+                        0,
+                    )
                 }
-                page += hps;
-            }
-        }
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "mmap anon failed: vaddr={:#x}, len={:#x}: {:?}",
+                        aligned_vaddr, hps, err
+                    )
+                });
+            };
 
-        // Ensure pages are writable for the memcpy (may have been
-        // mprotected to RX previously for executable pages).
-        if prot.contains(MMUFlags::EXECUTE) {
-            unsafe {
-                let _ = mman::mprotect(
-                    aligned_vaddr as _,
-                    aligned_len,
-                    ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                );
-            }
-        }
+            // needs_memcpy: false for file-backed (data is in the file),
+            // true for anonymous (must copy from PMEM).
+            let needs_memcpy = match state {
+                None if can_file_back => {
+                    // First mapping: try file-backed MAP_SHARED.
+                    let prot_flags = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
+                    let flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
+                    let result = unsafe {
+                        mman::mmap(
+                            aligned_vaddr as _,
+                            hps,
+                            prot_flags,
+                            flags,
+                            self.fd,
+                            aligned_paddr as _,
+                        )
+                    };
+                    match result {
+                        Ok(_) => {
+                            pages.insert(aligned_vaddr, HostPageState::FileBacked(aligned_paddr));
+                            false // data is in the file
+                        }
+                        Err(_) => {
+                            map_anon();
+                            pages.insert(aligned_vaddr, HostPageState::Anonymous);
+                            true
+                        }
+                    }
+                }
+                None => {
+                    // Offset mismatch: must use MAP_ANON.
+                    map_anon();
+                    pages.insert(aligned_vaddr, HostPageState::Anonymous);
+                    true
+                }
+                Some(HostPageState::FileBacked(existing_paddr))
+                    if existing_paddr == aligned_paddr && can_file_back =>
+                {
+                    // Same file region, compatible offsets. No-op.
+                    false
+                }
+                Some(HostPageState::FileBacked(_)) => {
+                    // Conflict: different file region or offset mismatch.
+                    // Save existing data, convert to anonymous.
+                    let mut saved = vec![0u8; hps];
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            aligned_vaddr as *const u8,
+                            saved.as_mut_ptr(),
+                            hps,
+                        );
+                    }
+                    map_anon();
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            saved.as_ptr(),
+                            aligned_vaddr as *mut u8,
+                            hps,
+                        );
+                    }
+                    pages.insert(aligned_vaddr, HostPageState::Anonymous);
+                    true
+                }
+                Some(HostPageState::Anonymous) => true,
+            };
 
-        // Copy data from PMEM backing store into the anonymous mapping.
-        let src = (PMEM_MAP_VADDR + paddr) as *const u8;
-        let dst = vaddr as *mut u8;
-        unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
+            needs_memcpy
+        };
+
+        if needs_memcpy {
+            // For anonymous mappings: copy data from PMEM backing store.
+            if prot.contains(MMUFlags::EXECUTE) {
+                unsafe {
+                    let _ = mman::mprotect(
+                        aligned_vaddr as _,
+                        hps,
+                        ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                    );
+                }
+            }
+            let src = (PMEM_MAP_VADDR + paddr) as *const u8;
+            let dst = vaddr as *mut u8;
+            unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
+        }
 
         // Set the requested protection on the host page(s).
+        let aligned_len = ((vaddr + len + hps - 1) & !(hps - 1)) - aligned_vaddr;
         if prot.contains(MMUFlags::EXECUTE) {
             // On aarch64 macOS, W^X is enforced -- use RX only.
             #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -216,12 +297,11 @@ impl MockMemory {
         unsafe { mman::munmap(aligned_vaddr as _, aligned_len) }
             .unwrap_or_else(|err| panic!("munmap failed: vaddr={:#x}: {:?}", aligned_vaddr, err));
 
-        // Remove anon_mapped entries for the unmapped host pages so
-        // future mappings at these addresses get fresh anonymous pages.
-        let mut mapped = self.anon_mapped.lock().unwrap();
+        // Remove host page tracking entries for the unmapped pages.
+        let mut pages = self.host_pages.lock().unwrap();
         let mut page = aligned_vaddr;
         while page < aligned_vaddr + aligned_len {
-            mapped.remove(&page);
+            pages.remove(&page);
             page += hps;
         }
     }
