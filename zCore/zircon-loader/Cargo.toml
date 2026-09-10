@@ -16,4 +16,4 @@ rcore-fs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
 
 [features]
 default = []
-libos = ["kernel-hal/libos", "zircon-object/aspace-separate"]
+libos = ["kernel-hal/libos", "zircon-object/aspace-separate", "zircon-object/libos"]

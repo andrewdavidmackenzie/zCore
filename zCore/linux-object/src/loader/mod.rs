@@ -173,11 +173,13 @@ impl LinuxElfLoader {
                                     let addr = base + dyn_vaddr;
                                     let zero = 0usize.to_ne_bytes();
                                     let _ = image_vmar.write_memory(addr, &zero);
+                                    trace!("Zeroed DT_RELASZ at {:#x}", addr);
                                     break;
                                 }
                             }
                         }
                     }
+
                     info!("PIE TEXTREL relocations applied");
                 } else {
                     info!("PIE binary: skipping relocator (rcrt1 will self-relocate)");
