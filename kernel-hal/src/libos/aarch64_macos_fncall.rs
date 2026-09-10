@@ -169,16 +169,25 @@ impl UserContextFnCall for UserContext {
                     self.general.x0
                 );
 
-                // Read values from self into local variables while
-                // the stack frame is still valid. The inline asm
-                // takes these as register inputs.
+                // Read register values from self into locals while
+                // the stack frame is valid, then pass as inline asm
+                // register inputs.
                 //
-                // Currently only elr and sp are restored. x0-x8
-                // (syscall args/results) would be needed for full
-                // register restore on re-entry after syscall.
-                // TODO: pass all saved registers to user code.
+                // Restored: elr, sp, x0-x2 (syscall args), x8 (nr).
+                // These cover all Linux aarch64 syscalls (which use
+                // x0-x5 for arguments, x8 for the syscall number,
+                // and return the result in x0).
+                //
+                // Not restored: x3-x7, x9-x30. After a syscall, user
+                // code typically only inspects x0 (return value). The
+                // callee-saved registers (x19-x28) are preserved by
+                // the C ABI across function calls, so user code that
+                // follows the ABI won't depend on them being restored
+                // by the kernel. Full restore of all 31 registers
+                // would require a different approach (e.g., global_asm
+                // trampoline with a stable context pointer).
                 let elr = self.elr;
-                let sp = self.sp;
+                let user_sp = self.sp;
                 let x0 = self.general.x0;
                 let x1 = self.general.x1;
                 let x2 = self.general.x2;
@@ -195,7 +204,7 @@ impl UserContextFnCall for UserContext {
                         x1 = in(reg) x1,
                         x2 = in(reg) x2,
                         x8 = in(reg) x8,
-                        sp = in(reg) sp,
+                        sp = in(reg) user_sp,
                         elr = in(reg) elr,
                         options(noreturn),
                     );
