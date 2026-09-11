@@ -6,7 +6,7 @@ XTASK ?= 1
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
-.PHONY: help build run test boot-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
+.PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run
 
 # Build the rootfs image and kernel for the target architecture.
@@ -47,6 +47,13 @@ test: boot-test libc-test
 boot-test: build
 	@echo "==> Boot smoke test ($(ARCH))..."
 	@tools/scripts/boot-test.sh $(ARCH)
+
+# Run busybox applet tests: echo, ls, cat, pipes, etc.
+# Verifies that common busybox commands work end-to-end in QEMU.
+# Depends on boot-test to ensure serialization under parallel make.
+busybox-test: boot-test
+	@echo "==> Busybox applet test ($(ARCH))..."
+	@tools/scripts/busybox-test.sh $(ARCH)
 
 # Run musl libc-test functional tests. Reports pass/fail counts but does
 # not fail the build — the pass rate is expected to improve over time as

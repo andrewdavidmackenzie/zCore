@@ -390,6 +390,15 @@ impl LinuxProcess {
         self.inner.lock().pgid = pgid;
     }
 
+    /// Set the process group ID of a child process.
+    /// Returns `ESRCH` if the child is not found.
+    pub fn set_child_pgid(&self, child_pid: u64, pgid: u64) -> Result<(), LxError> {
+        let inner = self.inner.lock();
+        let child = inner.children.get(&child_pid).ok_or(LxError::ESRCH)?;
+        child.linux().set_pgid(pgid);
+        Ok(())
+    }
+
     /// Get the session ID. Returns 0 if no explicit session
     /// has been created via setsid().
     pub fn session_id(&self) -> u64 {
