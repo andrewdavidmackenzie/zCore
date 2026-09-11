@@ -14,4 +14,25 @@ impl Syscall<'_> {
         buf.write_array(&res)?;
         Ok(())
     }
+
+    /// Add entropy to the kernel CPRNG.
+    ///
+    /// The Zircon ABI accepts 0..=256 bytes. Zero-length is a no-op.
+    /// The kernel CPRNG currently uses hardware random (rdrand/…)
+    /// directly, so there is no software entropy pool to mix into.
+    /// The supplied bytes are validated but discarded.
+    // TODO: add a software entropy pool and mix supplied bytes into it
+    pub fn sys_cprng_add_entropy(&self, buf: UserInPtr<u8>, len: usize) -> ZxResult {
+        const ZX_CPRNG_ADD_ENTROPY_MAX_LEN: usize = 256;
+        info!("cprng_add_entropy: buf=({:?}; {:?})", buf, len);
+        if len > ZX_CPRNG_ADD_ENTROPY_MAX_LEN {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if len == 0 {
+            return Ok(());
+        }
+        // Read the buffer to validate the user pointer, then discard.
+        let _data = buf.read_array(len)?;
+        Ok(())
+    }
 }

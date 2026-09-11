@@ -217,6 +217,10 @@ impl Syscall<'_> {
                 self.sys_futex_requeue(a0.into(), a1 as _, a2 as _, a3.into(), a4 as _, a5 as _)
             }
             Sys::FUTEX_WAKE_SINGLE_OWNER => self.sys_futex_wake_single_owner(a0.into()),
+            Sys::FUTEX_REQUEUE_SINGLE_OWNER => {
+                self.sys_futex_requeue_single_owner(a0.into(), a1 as _, a2.into(), a3 as _, a4 as _)
+            }
+            Sys::FUTEX_GET_OWNER => self.sys_futex_get_owner(a0.into(), a1.into()),
             Sys::VMO_CREATE => self.sys_vmo_create(a0 as _, a1 as _, a2.into()),
             Sys::VMO_READ => self.sys_vmo_read(a0 as _, a1.into(), a2 as _, a3 as _),
             Sys::VMO_WRITE => self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _),
@@ -254,12 +258,18 @@ impl Syscall<'_> {
             Sys::VMAR_PROTECT => self.sys_vmar_protect(a0 as _, a1 as _, a2 as _, a3 as _),
             Sys::VMAR_DESTROY => self.sys_vmar_destroy(a0 as _),
             Sys::CPRNG_DRAW_ONCE => self.sys_cprng_draw_once(a0.into(), a1 as _),
+            Sys::CPRNG_ADD_ENTROPY => self.sys_cprng_add_entropy(a0.into(), a1 as _),
             Sys::NANOSLEEP => self.sys_nanosleep(a0.into()).await,
             Sys::CLOCK_CREATE => self.sys_clock_create(a0 as _, a1.into(), a2.into()),
             Sys::CLOCK_GET => self.sys_clock_get(a0 as _, a1.into()),
+            Sys::CLOCK_GET_MONOTONIC_VIA_KERNEL => {
+                self.sys_clock_get_monotonic_via_kernel(a0.into())
+            }
             Sys::CLOCK_READ => self.sys_clock_read(a0 as _, a1.into()),
+            Sys::CLOCK_GET_DETAILS => self.sys_clock_get_details(a0 as _, a1 as _, a2.into()),
             Sys::CLOCK_ADJUST => self.sys_clock_adjust(a0 as _, a1 as _, a2 as _),
             Sys::CLOCK_UPDATE => self.sys_clock_update(a0 as _, a1 as _, a2.into()),
+            Sys::TICKS_GET_VIA_KERNEL => self.sys_ticks_get_via_kernel(a0.into()),
             Sys::TIMER_CREATE => self.sys_timer_create(a0 as _, a1 as _, a2.into()),
             Sys::DEBUG_WRITE => self.sys_debug_write(a0.into(), a1 as _),
             Sys::DEBUGLOG_CREATE => self.sys_debuglog_create(a0 as _, a1 as _, a2.into()),
@@ -358,6 +368,10 @@ impl Syscall<'_> {
                 warn!("ioports.request: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
+            Sys::IOPORTS_RELEASE => {
+                warn!("ioports.release: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
             #[cfg(feature = "hypervisor")]
             Sys::GUEST_CREATE => self.sys_guest_create(a0 as _, a1 as _, a2.into(), a3.into()),
             #[cfg(feature = "hypervisor")]
@@ -374,6 +388,67 @@ impl Syscall<'_> {
             Sys::VCPU_READ_STATE => self.sys_vcpu_read_state(a0 as _, a1 as _, a2.into(), a3 as _),
             #[cfg(feature = "hypervisor")]
             Sys::VCPU_WRITE_STATE => self.sys_vcpu_write_state(a0 as _, a1 as _, a2, a3 as _),
+            // Stubs for known but unimplemented syscalls
+            Sys::OBJECT_SET_PROFILE => {
+                warn!("object.set_profile: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PROFILE_CREATE => {
+                warn!("profile.create: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::VMAR_OP_RANGE => {
+                warn!("vmar.op_range: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PCI_RESET_DEVICE => {
+                warn!("pci.reset_device: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::MSI_ALLOCATE => {
+                warn!("msi.allocate: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::MSI_CREATE => {
+                warn!("msi.create: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::MTRACE_CONTROL => {
+                warn!("mtrace.control: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::SMC_CALL => {
+                warn!("smc.call: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::DEBUG_SEND_COMMAND => {
+                warn!("debug.send_command: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::SYSTEM_MEXEC => {
+                warn!("system.mexec: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::SYSTEM_MEXEC_PAYLOAD_GET => {
+                warn!("system.mexec_payload_get: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::SYSTEM_POWERCTL => {
+                warn!("system.powerctl: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::FRAMEBUFFER_GET_INFO => {
+                warn!("framebuffer.get_info: deprecated and not implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::FRAMEBUFFER_SET_RANGE => {
+                warn!("framebuffer.set_range: deprecated and not implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::INTERRUPT_BIND_VCPU => {
+                warn!("interrupt.bind_vcpu: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
             _ => {
                 error!("syscall unimplemented: {:?}", sys_type);
                 Err(ZxError::NOT_SUPPORTED)
