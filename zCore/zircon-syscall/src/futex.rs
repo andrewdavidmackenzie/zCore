@@ -111,6 +111,9 @@ impl Syscall<'_> {
         if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {
             return Err(ZxError::INVALID_ARGS);
         }
+        if requeue_ptr.is_null() || !requeue_ptr.as_addr().is_multiple_of(4) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let value = value_ptr.as_ref();
         let requeue = requeue_ptr.as_ref();
         if value_ptr.as_addr() == requeue_ptr.as_addr() {
