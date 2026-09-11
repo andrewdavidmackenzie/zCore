@@ -204,6 +204,7 @@ impl Syscall<'_> {
             Sys::PORT_WAIT => self.sys_port_wait(a0 as _, a1.into(), a2.into()).await,
             Sys::PORT_QUEUE => self.sys_port_queue(a0 as _, a1.into()),
             Sys::PORT_CANCEL => {
+                // TODO: implement proper port cancel logic
                 warn!("port.cancel: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
@@ -353,6 +354,7 @@ impl Syscall<'_> {
             Sys::EXCEPTION_GET_THREAD => self.sys_exception_get_thread(a0 as _, a1.into()),
             Sys::EXCEPTION_GET_PROCESS => self.sys_exception_get_process(a0 as _, a1.into()),
             Sys::IOPORTS_REQUEST => {
+                // TODO: implement ioports_request (or return NOT_SUPPORTED on non-x86)
                 warn!("ioports.request: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }

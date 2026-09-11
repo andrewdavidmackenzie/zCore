@@ -246,6 +246,7 @@ impl Process {
         {
             PolicyAction::Allow => Ok(()),
             PolicyAction::Deny => Err(ZxError::ACCESS_DENIED),
+            // TODO: handle other PolicyAction variants (AllowException, DenyException, Kill)
             _ => unimplemented!(),
         }
     }

@@ -47,6 +47,7 @@ impl VMObjectTrait for VMObjectSlice {
     }
 
     fn set_len(&self, _len: usize) -> ZxResult {
+        // TODO: slice VMOs cannot be resized; return NOT_SUPPORTED or INVALID_ARGS
         unimplemented!()
     }
 

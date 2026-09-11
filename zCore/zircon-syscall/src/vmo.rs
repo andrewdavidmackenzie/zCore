@@ -150,8 +150,8 @@ impl Syscall<'_> {
             }
         } else {
             if options.contains(VmoCloneFlags::SNAPSHOT) {
-                // True snapshot semantics (full CoW clone with immutable
-                // parent) are not yet implemented.  Treat SNAPSHOT as
+                // TODO: implement true ZX_VMO_CHILD_SNAPSHOT (full CoW
+                // clone with immutable parent). Currently treated as
                 // SNAPSHOT_AT_LEAST_ON_WRITE, which is a valid superset
                 // behaviour per the Zircon spec.
                 warn!("vmo.create_child: SNAPSHOT treated as SNAPSHOT_AT_LEAST_ON_WRITE");
@@ -299,6 +299,7 @@ impl Syscall<'_> {
                 vmo.zero(offset, len)
             }
             VmoOpType::Lock | VmoOpType::Unlock => {
+                // TODO: implement VMO Lock/Unlock operations
                 warn!("vmo.op_range: Lock/Unlock not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }

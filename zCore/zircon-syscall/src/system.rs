@@ -39,6 +39,7 @@ impl Syscall<'_> {
                 let proc = self.thread.proc();
                 proc.get_object_with_rights::<Job>(root_job, Rights::MANAGE_PROCESS)?
                     .check_root_job()?;
+                // TODO: implement real memory pressure event monitoring
                 // Memory pressure events are not yet monitored; return a
                 // blank Event so callers that only need a valid handle can
                 // proceed.

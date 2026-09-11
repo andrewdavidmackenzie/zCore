@@ -29,6 +29,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         if type_ != IOMMU_TYPE_DUMMY {
+            // TODO: implement non-dummy IOMMU types
             warn!("iommu.create: type {} not supported (only dummy)", type_);
             return Err(ZxError::NOT_SUPPORTED);
         }

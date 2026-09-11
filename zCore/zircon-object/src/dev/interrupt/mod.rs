@@ -72,6 +72,7 @@ impl Interrupt {
     pub fn new_physical(vector: usize, options: InterruptOptions) -> ZxResult<Arc<Self>> {
         let mode = options.to_mode();
         if mode != InterruptOptions::MODE_DEFAULT && mode != InterruptOptions::MODE_EDGE_HIGH {
+            // TODO: support MODE_EDGE_LOW, MODE_LEVEL_LOW, MODE_LEVEL_HIGH interrupt modes
             unimplemented!();
         }
         if options.contains(InterruptOptions::REMAP_IRQ) {

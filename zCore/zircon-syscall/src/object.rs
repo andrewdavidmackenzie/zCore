@@ -401,6 +401,7 @@ impl Syscall<'_> {
             handle_value, port_handle_value, key, signals, options
         );
         if options != 0 {
+            // TODO: handle ZX_WAIT_ASYNC_EDGE and other wait_async options
             warn!("object.wait_async: unsupported options {:#x}", options);
             return Err(ZxError::NOT_SUPPORTED);
         }

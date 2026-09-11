@@ -23,6 +23,7 @@ impl Syscall<'_> {
         _user_args: UserInPtr<u8>,
         _out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
+        // TODO: implement clock object creation
         warn!("clock.create: not yet implemented");
         Err(ZxError::NOT_SUPPORTED)
     }
@@ -61,6 +62,7 @@ impl Syscall<'_> {
         // we don't yet use the clock object's transformation.
         let proc = self.thread.proc();
         let _clock = proc.get_dyn_object_with_rights(handle, Rights::READ)?;
+        // TODO: look up clock object and apply its timeline transformation
         warn!("clock.read: returning monotonic time (clock transform not yet implemented)");
         now.write(timer_now().as_nanos() as u64)?;
         Ok(())
@@ -92,6 +94,7 @@ impl Syscall<'_> {
         _options: u64,
         _user_args: UserInPtr<u8>,
     ) -> ZxResult {
+        // TODO: implement clock object updates
         warn!("clock.update: not yet implemented");
         Err(ZxError::NOT_SUPPORTED)
     }
