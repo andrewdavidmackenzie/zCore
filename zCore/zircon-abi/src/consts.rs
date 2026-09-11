@@ -243,6 +243,44 @@ pub const SYS_VMO_CREATE_PHYSICAL: u32 = 166;
 pub const SYS_FUTEX_WAKE_HANDLE_CLOSE_THREAD_EXIT: u32 = 200;
 pub const SYS_VMAR_UNMAP_HANDLE_CLOSE_THREAD_EXIT: u32 = 201;
 
+// ── New upstream Fuchsia syscalls ────────────────────────────────────
+//
+// These syscalls were added to Fuchsia after zCore's fork point.
+// Syscall numbers are placeholders (167+) and must be verified
+// against upstream Fuchsia's generated syscall table when syncing.
+// They are NOT yet in zCore's SyscallType enum or dispatch table.
+
+// IOBuffer (shared-memory IPC, ObjType 33)
+pub const SYS_IOB_CREATE: u32 = 167;
+pub const SYS_IOB_WRITEV: u32 = 168;
+pub const SYS_IOB_ALLOCATE_ID: u32 = 169;
+pub const SYS_IOB_CREATE_SHARED_REGION: u32 = 170;
+
+// Counter (atomic counter object, ObjType 34)
+pub const SYS_COUNTER_CREATE: u32 = 171;
+pub const SYS_COUNTER_READ: u32 = 172;
+pub const SYS_COUNTER_WRITE: u32 = 173;
+pub const SYS_COUNTER_ADD: u32 = 174;
+
+// Sampler (CPU performance sampling)
+pub const SYS_SAMPLER_CREATE: u32 = 175;
+pub const SYS_SAMPLER_READ: u32 = 176;
+pub const SYS_SAMPLER_START: u32 = 177;
+pub const SYS_SAMPLER_STOP: u32 = 178;
+
+// Membarrier (cross-CPU memory barriers)
+pub const SYS_MEMBARRIER_SYNC_PROCESS_DATA: u32 = 179;
+pub const SYS_MEMBARRIER_SYNC_PROCESS_INSN: u32 = 180;
+
+// Restricted mode (secure execution)
+pub const SYS_RESTRICTED_ENTER: u32 = 181;
+pub const SYS_RESTRICTED_BIND_STATE: u32 = 182;
+pub const SYS_RESTRICTED_KICK: u32 = 183;
+pub const SYS_RESTRICTED_UNBIND_STATE: u32 = 184;
+
+// Cache operations
+pub const SYS_CACHE_FLUSH: u32 = 185;
+
 // ── Type aliases ────────────────────────────────────────────────────
 
 /// Raw handle value (matches `zx_handle_t`).
