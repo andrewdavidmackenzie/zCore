@@ -694,3 +694,458 @@ pub unsafe fn zx_object_wait_one(
 pub unsafe fn zx_handle_close(handle: HandleValue) -> ZxStatus {
     syscall1(crate::consts::SYS_HANDLE_CLOSE, handle as u64)
 }
+
+/// Close multiple handles.
+///
+/// # Safety
+/// `handles` must point to `num_handles` valid `HandleValue`s.
+pub unsafe fn zx_handle_close_many(handles: *const HandleValue, num_handles: usize) -> ZxStatus {
+    syscall2(
+        crate::consts::SYS_HANDLE_CLOSE_MANY,
+        handles as u64,
+        num_handles as u64,
+    )
+}
+
+/// Duplicate a handle with reduced rights.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_handle_duplicate(
+    handle: HandleValue,
+    rights: u32,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_HANDLE_DUPLICATE,
+        handle as u64,
+        rights as u64,
+        out as u64,
+    )
+}
+
+/// Replace a handle with one that has different rights.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_handle_replace(
+    handle: HandleValue,
+    rights: u32,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_HANDLE_REPLACE,
+        handle as u64,
+        rights as u64,
+        out as u64,
+    )
+}
+
+// --- Socket syscalls ---
+
+/// Create a socket pair.
+///
+/// # Safety
+/// `out0` and `out1` must be valid pointers.
+pub unsafe fn zx_socket_create(
+    options: u32,
+    out0: *mut HandleValue,
+    out1: *mut HandleValue,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_SOCKET_CREATE,
+        options as u64,
+        out0 as u64,
+        out1 as u64,
+    )
+}
+
+/// Write data to a socket.
+///
+/// # Safety
+/// `buffer` must point to `buffer_size` valid bytes.
+pub unsafe fn zx_socket_write(
+    handle: HandleValue,
+    options: u32,
+    buffer: *const u8,
+    buffer_size: usize,
+    actual: *mut usize,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_SOCKET_WRITE,
+        handle as u64,
+        options as u64,
+        buffer as u64,
+        buffer_size as u64,
+        actual as u64,
+    )
+}
+
+/// Read data from a socket.
+///
+/// # Safety
+/// `buffer` must point to `buffer_size` valid bytes.
+pub unsafe fn zx_socket_read(
+    handle: HandleValue,
+    options: u32,
+    buffer: *mut u8,
+    buffer_size: usize,
+    actual: *mut usize,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_SOCKET_READ,
+        handle as u64,
+        options as u64,
+        buffer as u64,
+        buffer_size as u64,
+        actual as u64,
+    )
+}
+
+// --- Event syscalls ---
+
+/// Create an event object.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_event_create(options: u32, out: *mut HandleValue) -> ZxStatus {
+    syscall2(crate::consts::SYS_EVENT_CREATE, options as u64, out as u64)
+}
+
+/// Create an event pair.
+///
+/// # Safety
+/// `out0` and `out1` must be valid pointers.
+pub unsafe fn zx_eventpair_create(
+    options: u32,
+    out0: *mut HandleValue,
+    out1: *mut HandleValue,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_EVENTPAIR_CREATE,
+        options as u64,
+        out0 as u64,
+        out1 as u64,
+    )
+}
+
+// --- FIFO syscalls ---
+
+/// Create a FIFO pair.
+///
+/// # Safety
+/// `out0` and `out1` must be valid pointers.
+pub unsafe fn zx_fifo_create(
+    elem_count: usize,
+    elem_size: usize,
+    options: u32,
+    out0: *mut HandleValue,
+    out1: *mut HandleValue,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_FIFO_CREATE,
+        elem_count as u64,
+        elem_size as u64,
+        options as u64,
+        out0 as u64,
+        out1 as u64,
+    )
+}
+
+// --- Timer syscalls ---
+
+/// Create a timer.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_timer_create(options: u32, clock_id: u32, out: *mut HandleValue) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_TIMER_CREATE,
+        options as u64,
+        clock_id as u64,
+        out as u64,
+    )
+}
+
+/// Set a timer deadline.
+pub unsafe fn zx_timer_set(handle: HandleValue, deadline: i64, slack: u64) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_TIMER_SET,
+        handle as u64,
+        deadline as u64,
+        slack,
+    )
+}
+
+/// Cancel a pending timer.
+pub unsafe fn zx_timer_cancel(handle: HandleValue) -> ZxStatus {
+    syscall1(crate::consts::SYS_TIMER_CANCEL, handle as u64)
+}
+
+// --- Object syscalls (additional) ---
+
+/// Signal an object.
+pub unsafe fn zx_object_signal(handle: HandleValue, clear_mask: u32, set_mask: u32) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_OBJECT_SIGNAL,
+        handle as u64,
+        clear_mask as u64,
+        set_mask as u64,
+    )
+}
+
+/// Signal an object's peer.
+pub unsafe fn zx_object_signal_peer(
+    handle: HandleValue,
+    clear_mask: u32,
+    set_mask: u32,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_OBJECT_SIGNAL_PEER,
+        handle as u64,
+        clear_mask as u64,
+        set_mask as u64,
+    )
+}
+
+// --- Thread syscalls (additional) ---
+
+/// Start a thread.
+pub unsafe fn zx_thread_start(
+    handle: HandleValue,
+    entry: usize,
+    stack: usize,
+    arg1: usize,
+    arg2: usize,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_THREAD_START,
+        handle as u64,
+        entry as u64,
+        stack as u64,
+        arg1 as u64,
+        arg2 as u64,
+    )
+}
+
+// --- Nanosleep ---
+
+/// Sleep for a specified duration.
+pub unsafe fn zx_nanosleep(deadline: i64) -> ZxStatus {
+    syscall1(crate::consts::SYS_NANOSLEEP, deadline as u64)
+}
+
+// --- VMAR syscalls (additional) ---
+
+/// Unmap a region from a VMAR.
+pub unsafe fn zx_vmar_unmap(handle: HandleValue, addr: usize, len: usize) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_VMAR_UNMAP,
+        handle as u64,
+        addr as u64,
+        len as u64,
+    )
+}
+
+/// Set protection flags on a VMAR region.
+pub unsafe fn zx_vmar_protect(
+    handle: HandleValue,
+    options: u32,
+    addr: usize,
+    len: usize,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_VMAR_PROTECT,
+        handle as u64,
+        options as u64,
+        addr as u64,
+        len as u64,
+    )
+}
+
+/// Allocate a sub-region in a VMAR.
+///
+/// # Safety
+/// Output pointers must be valid.
+pub unsafe fn zx_vmar_allocate(
+    parent_vmar: HandleValue,
+    options: u32,
+    offset: usize,
+    size: usize,
+    child_vmar: *mut HandleValue,
+    child_addr: *mut usize,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_VMAR_ALLOCATE,
+        parent_vmar as u64,
+        options as u64,
+        offset as u64,
+        size as u64,
+        child_vmar as u64,
+        child_addr as u64,
+    )
+}
+
+// --- Port syscalls ---
+
+/// Create a port.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_port_create(options: u32, out: *mut HandleValue) -> ZxStatus {
+    syscall2(crate::consts::SYS_PORT_CREATE, options as u64, out as u64)
+}
+
+/// Wait for a packet on a port.
+///
+/// # Safety
+/// `packet` must point to a valid `zx_port_packet_t`.
+pub unsafe fn zx_port_wait(handle: HandleValue, deadline: i64, packet: *mut u8) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_PORT_WAIT,
+        handle as u64,
+        deadline as u64,
+        packet as u64,
+    )
+}
+
+/// Queue a packet to a port.
+///
+/// # Safety
+/// `packet` must point to a valid `zx_port_packet_t`.
+pub unsafe fn zx_port_queue(handle: HandleValue, packet: *const u8) -> ZxStatus {
+    syscall2(crate::consts::SYS_PORT_QUEUE, handle as u64, packet as u64)
+}
+
+// --- Futex syscalls ---
+
+/// Wait on a futex.
+pub unsafe fn zx_futex_wait(
+    value_ptr: *const i32,
+    current_value: i32,
+    new_futex_owner: HandleValue,
+    deadline: i64,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_FUTEX_WAIT,
+        value_ptr as u64,
+        current_value as u64,
+        new_futex_owner as u64,
+        deadline as u64,
+    )
+}
+
+/// Wake waiters on a futex.
+pub unsafe fn zx_futex_wake(value_ptr: *const i32, wake_count: u32) -> ZxStatus {
+    syscall2(
+        crate::consts::SYS_FUTEX_WAKE,
+        value_ptr as u64,
+        wake_count as u64,
+    )
+}
+
+// --- CPRNG ---
+
+/// Draw random bytes.
+///
+/// # Safety
+/// `buffer` must point to `buffer_size` valid bytes.
+pub unsafe fn zx_cprng_draw_once(buffer: *mut u8, buffer_size: usize) -> ZxStatus {
+    syscall2(
+        crate::consts::SYS_CPRNG_DRAW_ONCE,
+        buffer as u64,
+        buffer_size as u64,
+    )
+}
+
+// --- Task syscalls ---
+
+/// Kill a task (job, process, or thread).
+pub unsafe fn zx_task_kill(handle: HandleValue) -> ZxStatus {
+    syscall1(crate::consts::SYS_TASK_KILL, handle as u64)
+}
+
+// --- Debuglog syscalls ---
+
+/// Read from the kernel debug log.
+///
+/// # Safety
+/// `buffer` must point to valid memory.
+pub unsafe fn zx_debuglog_read(
+    handle: HandleValue,
+    options: u32,
+    buffer: *mut u8,
+    buffer_size: usize,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_DEBUGLOG_READ,
+        handle as u64,
+        options as u64,
+        buffer as u64,
+        buffer_size as u64,
+    )
+}
+
+/// Create a debuglog handle.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_debuglog_create(
+    resource: HandleValue,
+    options: u32,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_DEBUGLOG_CREATE,
+        resource as u64,
+        options as u64,
+        out as u64,
+    )
+}
+
+/// Write to a debuglog.
+///
+/// # Safety
+/// `buffer` must point to `buffer_size` valid bytes.
+pub unsafe fn zx_debuglog_write(
+    handle: HandleValue,
+    options: u32,
+    buffer: *const u8,
+    buffer_size: usize,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_DEBUGLOG_WRITE,
+        handle as u64,
+        options as u64,
+        buffer as u64,
+        buffer_size as u64,
+    )
+}
+
+// --- VMO syscalls (additional) ---
+
+/// Set the size of a VMO.
+pub unsafe fn zx_vmo_set_size(handle: HandleValue, size: u64) -> ZxStatus {
+    syscall2(crate::consts::SYS_VMO_SET_SIZE, handle as u64, size)
+}
+
+/// Create a child VMO (clone/snapshot).
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_vmo_create_child(
+    handle: HandleValue,
+    options: u32,
+    offset: u64,
+    size: u64,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_VMO_CREATE_CHILD,
+        handle as u64,
+        options as u64,
+        offset,
+        size,
+        out as u64,
+    )
+}
