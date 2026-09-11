@@ -378,6 +378,12 @@ impl Syscall<'_> {
         Ok(0)
     }
 
+    /// Change file mode bits by path (always follows symlinks).
+    /// This is the x86_64-only `chmod` syscall; aarch64/riscv64 use `fchmodat` instead.
+    pub fn sys_chmod(&self, path: UserInPtr<u8>, mode: u32) -> SysResult {
+        self.sys_fchmodat(FileDesc::CWD, path, mode)
+    }
+
     /// Change file mode bits relative to a directory fd.
     pub fn sys_fchmodat(&self, dirfd: FileDesc, path: UserInPtr<u8>, mode: u32) -> SysResult {
         let path = path.as_c_str()?;
@@ -408,6 +414,12 @@ impl Syscall<'_> {
         }
         inode.set_metadata(&metadata)?;
         Ok(0)
+    }
+
+    /// Change file owner by path (always follows symlinks).
+    /// This is the x86_64-only `chown` syscall; aarch64/riscv64 use `fchownat` instead.
+    pub fn sys_chown(&self, path: UserInPtr<u8>, owner: u32, group: u32) -> SysResult {
+        self.sys_fchownat(FileDesc::CWD, path, owner, group, 0)
     }
 
     /// Change file owner relative to a directory fd.

@@ -101,6 +101,7 @@ impl Syscall<'_> {
             Sys::GETCWD => self.sys_getcwd(a0.into(), a1),
             Sys::CHDIR => self.sys_chdir(a0.into()),
             Sys::RENAMEAT => self.sys_renameat(a0.into(), a1.into(), a2.into(), a3.into()),
+            Sys::RENAMEAT2 => self.sys_renameat2(a0.into(), a1.into(), a2.into(), a3.into(), a4),
             Sys::MKDIRAT => self.sys_mkdirat(a0.into(), a1.into(), a2),
             Sys::LINKAT => self.sys_linkat(a0.into(), a1.into(), a2.into(), a3.into(), a4),
             Sys::UNLINKAT => self.sys_unlinkat(a0.into(), a1.into(), a2),
@@ -152,7 +153,7 @@ impl Syscall<'_> {
                 info!("madvise unimplemented");
                 Ok(0)
             }
-            Sys::MREMAP => self.unimplemented("mremap", Err(LxError::ENOMEM)),
+            Sys::MREMAP => self.sys_mremap(a0, a1, a2, a3, a4),
 
             // signal
             Sys::RT_SIGACTION => self.sys_rt_sigaction(a0, a1.into(), a2.into(), a3),
@@ -320,8 +321,8 @@ impl Syscall<'_> {
             Sys::LINK => self.sys_link(a0.into(), a1.into()),
             Sys::UNLINK => self.sys_unlink(a0.into()),
             Sys::READLINK => self.sys_readlink(a0.into(), a1.into(), a2),
-            Sys::CHMOD => Ok(0),
-            Sys::CHOWN => Ok(0),
+            Sys::CHMOD => self.sys_chmod(a0.into(), a1 as u32),
+            Sys::CHOWN => self.sys_chown(a0.into(), a1 as u32, a2 as u32),
             Sys::ARCH_PRCTL => self.sys_arch_prctl(a0 as _, a1),
             Sys::TIME => self.sys_time(a0.into()),
             Sys::CLONE => self.sys_clone(a0, a1, a2.into(), a4, a3.into()),

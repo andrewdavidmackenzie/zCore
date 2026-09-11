@@ -10,6 +10,7 @@ use zircon_object::vm::{pages, MMUFlags, VmObject, PAGE_SIZE};
 /// - [`mmap`](Self::sys_mmap)
 /// - [`mprotect`](Self::sys_mprotect)
 /// - [`munmap`](Self::sys_munmap)
+/// - [`mremap`](Self::sys_mremap)
 impl Syscall<'_> {
     /// Set the program break (end of data segment / heap).
     ///
@@ -50,6 +51,138 @@ impl Syscall<'_> {
 
         proc.set_brk(addr);
         Ok(addr)
+    }
+
+    /// Remap an existing virtual memory mapping
+    /// (see [linux man mremap(2)](https://www.man7.org/linux/man-pages/man2/mremap.2.html)).
+    ///
+    /// `sys_mremap` expands (or shrinks) an existing memory mapping, potentially
+    /// moving it at the same time (if `MREMAP_MAYMOVE` is set and the old location
+    /// cannot accommodate the new size).
+    ///
+    /// # Arguments
+    /// - `old_addr`  – start address of the existing mapping (must be page-aligned)
+    /// - `old_size`  – old size of the mapping
+    /// - `new_size`  – requested new size of the mapping
+    /// - `flags`     – `MREMAP_MAYMOVE` (1) and/or `MREMAP_FIXED` (2)
+    /// - `new_addr`  – new address (only used with `MREMAP_FIXED`)
+    pub fn sys_mremap(
+        &self,
+        old_addr: usize,
+        old_size: usize,
+        new_size: usize,
+        flags: usize,
+        new_addr: usize,
+    ) -> SysResult {
+        const MREMAP_MAYMOVE: usize = 1;
+        const MREMAP_FIXED: usize = 2;
+
+        info!(
+            "mremap: old_addr={:#x}, old_size={:#x}, new_size={:#x}, flags={:#x}, new_addr={:#x}",
+            old_addr, old_size, new_size, flags, new_addr
+        );
+
+        // Validate alignment
+        if !old_addr.is_multiple_of(PAGE_SIZE) {
+            return Err(LxError::EINVAL);
+        }
+        if new_size == 0 || old_size == 0 {
+            return Err(LxError::EINVAL);
+        }
+
+        // Reject unsupported flags
+        if flags & !(MREMAP_MAYMOVE | MREMAP_FIXED) != 0 {
+            return Err(LxError::EINVAL);
+        }
+
+        // MREMAP_FIXED requires MREMAP_MAYMOVE
+        if flags & MREMAP_FIXED != 0 && flags & MREMAP_MAYMOVE == 0 {
+            return Err(LxError::EINVAL);
+        }
+
+        // Round sizes up to page boundaries (checked to prevent overflow)
+        let old_size =
+            old_size.checked_add(PAGE_SIZE - 1).ok_or(LxError::ENOMEM)? & !(PAGE_SIZE - 1);
+        let new_size =
+            new_size.checked_add(PAGE_SIZE - 1).ok_or(LxError::ENOMEM)? & !(PAGE_SIZE - 1);
+
+        let proc = self.zircon_process();
+        let vmar = proc.vmar();
+
+        // Verify the old mapping exists and covers the entire source range
+        let mapping = vmar.find_mapping(old_addr).ok_or(LxError::EFAULT)?;
+        // Check that the last byte of the source range is also in the same mapping
+        if old_size > PAGE_SIZE && vmar.find_mapping(old_addr + old_size - 1).is_none() {
+            return Err(LxError::EFAULT);
+        }
+        drop(mapping);
+
+        if new_size == old_size {
+            // No change in size
+            return Ok(old_addr);
+        }
+
+        if new_size < old_size {
+            // Shrinking: unmap the tail portion
+            let tail_addr = old_addr + new_size;
+            let tail_len = old_size - new_size;
+            vmar.unmap(tail_addr, tail_len)?;
+            return Ok(old_addr);
+        }
+
+        // Growing: try to map additional pages right after the existing mapping
+        let extra_addr = old_addr + old_size;
+        let extra_len = new_size - old_size;
+        let extra_vmo = VmObject::new_paged(pages(extra_len));
+        let mmu_flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER;
+        let offset = extra_addr - vmar.addr();
+
+        if let Ok(_addr) = vmar.map(Some(offset), extra_vmo, 0, extra_len, mmu_flags) {
+            // Successfully extended in place
+            return Ok(old_addr);
+        }
+
+        // In-place growth failed; if MAYMOVE is allowed, allocate a new region
+        if flags & MREMAP_MAYMOVE == 0 {
+            return Err(LxError::ENOMEM);
+        }
+
+        // Allocate a new anonymous mapping
+        let new_vmo = VmObject::new_paged(pages(new_size));
+        let dest_addr = if flags & MREMAP_FIXED != 0 {
+            if !new_addr.is_multiple_of(PAGE_SIZE) {
+                return Err(LxError::EINVAL);
+            }
+            // Reject overlapping old and new ranges
+            let old_end = old_addr + old_size;
+            let new_end = new_addr + new_size;
+            if old_addr < new_end && new_addr < old_end {
+                return Err(LxError::EINVAL);
+            }
+            // Unmap anything at the fixed target first
+            let _ = vmar.unmap(new_addr, new_size);
+            let new_offset = new_addr - vmar.addr();
+            vmar.map(Some(new_offset), new_vmo.clone(), 0, new_size, mmu_flags)?
+        } else {
+            vmar.map(None, new_vmo.clone(), 0, new_size, mmu_flags)?
+        };
+
+        // Copy old data to the new mapping
+        let copy_len = old_size.min(new_size);
+        let mut buf = vec![0u8; PAGE_SIZE];
+        let mut offset = 0;
+        while offset < copy_len {
+            let chunk = PAGE_SIZE.min(copy_len - offset);
+            if let Ok(n) = vmar.read_memory(old_addr + offset, &mut buf[..chunk]) {
+                let _ = vmar.write_memory(dest_addr + offset, &buf[..n]);
+            }
+            offset += chunk;
+        }
+
+        // Unmap the old region
+        let _ = vmar.unmap(old_addr, old_size);
+
+        Ok(dest_addr)
     }
 
     /// Map files or devices into memory
