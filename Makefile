@@ -81,6 +81,11 @@ ifeq ($(shell uname -s),Darwin)
 	$(MAKE) config-macos
 endif
 
+config-linux:
+	sudo apt update
+	sudo apt install qemu-system qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils virt-manager
+	sudo systemctl enable --now libvirtd
+
 # install cross-compilation toolchain on macOS via Homebrew
 config-macos:
 	@echo "==> Installing musl cross-compiler toolchains (macOS)..."
