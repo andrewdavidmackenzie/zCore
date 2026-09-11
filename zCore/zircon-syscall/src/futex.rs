@@ -94,7 +94,59 @@ impl Syscall<'_> {
         Ok(())
     }
 
-    /// Wake some number of threads waiting on a futex, and move more waiters to another wait queue.
+    /// Like `futex_requeue`, but assigns ownership of the requeue futex
+    /// to the thread that was woken.
+    pub fn sys_futex_requeue_single_owner(
+        &self,
+        value_ptr: UserInPtr<AtomicI32>,
+        current_value: i32,
+        requeue_ptr: UserInPtr<AtomicI32>,
+        requeue_count: u32,
+        new_requeue_owner: HandleValue,
+    ) -> ZxResult {
+        info!(
+            "futex.requeue_single_owner: value_ptr={:?}, current_value={:#x}, requeue_ptr={:?}, requeue_count={:#x}, new_requeue_owner={:?}",
+            value_ptr, current_value, requeue_ptr, requeue_count, new_requeue_owner
+        );
+        if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let value = value_ptr.as_ref();
+        let requeue = requeue_ptr.as_ref();
+        if value_ptr.as_addr() == requeue_ptr.as_addr() {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let proc = self.thread.proc();
+        let new_requeue_owner = if new_requeue_owner == INVALID_HANDLE {
+            None
+        } else {
+            Some(proc.get_object::<Thread>(new_requeue_owner)?)
+        };
+        let wake_futex = proc.get_futex(value);
+        let requeue_futex = proc.get_futex(requeue);
+        // Wake exactly 1, then requeue up to requeue_count.
+        wake_futex.requeue(
+            current_value,
+            1, // wake_count: single owner
+            requeue_count as usize,
+            &requeue_futex,
+            new_requeue_owner,
+            true,
+        )?;
+        Ok(())
+    }
+
+    /// Query the owner of a futex.
+    pub fn sys_futex_get_owner(
+        &self,
+        _value_ptr: UserInPtr<AtomicI32>,
+        _koid: UserOutPtr<u64>,
+    ) -> ZxResult {
+        warn!("futex.get_owner: not yet implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Wake one waiter and transfer ownership of the futex to it.
     pub fn sys_futex_wake_single_owner(&self, value_ptr: UserInPtr<AtomicI32>) -> ZxResult {
         info!("futex.wake_single_owner: value_ptr={:?}", value_ptr);
         if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {

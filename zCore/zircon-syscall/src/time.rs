@@ -28,6 +28,27 @@ impl Syscall<'_> {
         Err(ZxError::NOT_SUPPORTED)
     }
 
+    /// Read the monotonic clock (vDSO fallback path).
+    ///
+    /// This is the kernel-side implementation of the vDSO function
+    /// `zx_clock_get_monotonic`. In a full Fuchsia system this is
+    /// served by the vDSO directly; this path is used when the vDSO
+    /// is not available.
+    pub fn sys_clock_get_monotonic_via_kernel(&self, mut out: UserOutPtr<i64>) -> ZxResult {
+        info!("clock.get_monotonic_via_kernel");
+        out.write(timer_now().as_nanos() as i64)?;
+        Ok(())
+    }
+
+    /// Read the hardware tick counter (vDSO fallback path).
+    pub fn sys_ticks_get_via_kernel(&self, mut out: UserOutPtr<i64>) -> ZxResult {
+        info!("ticks.get_via_kernel");
+        // Use monotonic nanoseconds as a proxy for ticks, since we
+        // don't expose a separate tick counter.
+        out.write(timer_now().as_nanos() as i64)?;
+        Ok(())
+    }
+
     /// Acquire the current time.
     ///
     /// + Returns the current time of clock_id via `time`.
@@ -89,6 +110,17 @@ impl Syscall<'_> {
             }
             _ => Err(ZxError::INVALID_ARGS),
         }
+    }
+
+    /// Get detailed information about a clock object.
+    pub fn sys_clock_get_details(
+        &self,
+        _handle: HandleValue,
+        _options: u64,
+        _details: UserOutPtr<u8>,
+    ) -> ZxResult {
+        warn!("clock.get_details: not yet implemented (requires clock objects)");
+        Err(ZxError::NOT_SUPPORTED)
     }
 
     /// Make adjustments to a clock object.

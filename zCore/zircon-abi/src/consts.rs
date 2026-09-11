@@ -11,12 +11,18 @@ pub const SYS_CHANNEL_CREATE: u32 = 3;
 pub const SYS_CHANNEL_READ: u32 = 4;
 pub const SYS_CHANNEL_WRITE: u32 = 6;
 
+// Clock
+pub const SYS_CLOCK_GET_MONOTONIC_VIA_KERNEL: u32 = 12;
+pub const SYS_CLOCK_GET_DETAILS: u32 = 15;
+
 // CPRNG
 pub const SYS_CPRNG_DRAW_ONCE: u32 = 17;
+pub const SYS_CPRNG_ADD_ENTROPY: u32 = 18;
 
 // Debug
 pub const SYS_DEBUG_READ: u32 = 19;
 pub const SYS_DEBUG_WRITE: u32 = 20;
+pub const SYS_DEBUG_SEND_COMMAND: u32 = 21;
 pub const SYS_DEBUGLOG_CREATE: u32 = 22;
 pub const SYS_DEBUGLOG_WRITE: u32 = 23;
 pub const SYS_DEBUGLOG_READ: u32 = 24;
@@ -34,10 +40,17 @@ pub const SYS_FIFO_CREATE: u32 = 29;
 pub const SYS_FIFO_READ: u32 = 30;
 pub const SYS_FIFO_WRITE: u32 = 31;
 
+// Framebuffer (deprecated in Fuchsia)
+pub const SYS_FRAMEBUFFER_GET_INFO: u32 = 32;
+pub const SYS_FRAMEBUFFER_SET_RANGE: u32 = 33;
+
 // Futex
 pub const SYS_FUTEX_WAIT: u32 = 34;
 pub const SYS_FUTEX_WAKE: u32 = 35;
 pub const SYS_FUTEX_REQUEUE: u32 = 36;
+pub const SYS_FUTEX_WAKE_SINGLE_OWNER: u32 = 37;
+pub const SYS_FUTEX_REQUEUE_SINGLE_OWNER: u32 = 38;
+pub const SYS_FUTEX_GET_OWNER: u32 = 39;
 
 // Handles
 pub const SYS_HANDLE_CLOSE: u32 = 42;
@@ -45,12 +58,28 @@ pub const SYS_HANDLE_CLOSE_MANY: u32 = 43;
 pub const SYS_HANDLE_DUPLICATE: u32 = 44;
 pub const SYS_HANDLE_REPLACE: u32 = 45;
 
+// Interrupt
+pub const SYS_INTERRUPT_BIND_VCPU: u32 = 52;
+
+// I/O ports
+pub const SYS_IOPORTS_RELEASE: u32 = 55;
+
 // Job
 pub const SYS_JOB_CREATE: u32 = 56;
 pub const SYS_JOB_SET_POLICY: u32 = 57;
 
 // Nanosleep
 pub const SYS_NANOSLEEP: u32 = 62;
+
+// Ticks
+pub const SYS_TICKS_GET_VIA_KERNEL: u32 = 63;
+
+// MSI
+pub const SYS_MSI_ALLOCATE: u32 = 64;
+pub const SYS_MSI_CREATE: u32 = 65;
+
+// Mtrace
+pub const SYS_MTRACE_CONTROL: u32 = 66;
 
 // Objects
 pub const SYS_OBJECT_WAIT_ONE: u32 = 67;
@@ -62,6 +91,10 @@ pub const SYS_OBJECT_GET_PROPERTY: u32 = 72;
 pub const SYS_OBJECT_SET_PROPERTY: u32 = 73;
 pub const SYS_OBJECT_GET_INFO: u32 = 74;
 pub const SYS_OBJECT_GET_CHILD: u32 = 75;
+pub const SYS_OBJECT_SET_PROFILE: u32 = 76;
+
+// PCI
+pub const SYS_PCI_RESET_DEVICE: u32 = 85;
 
 // Port
 pub const SYS_PORT_CREATE: u32 = 96;
@@ -75,8 +108,14 @@ pub const SYS_PROCESS_START: u32 = 102;
 pub const SYS_PROCESS_READ_MEMORY: u32 = 103;
 pub const SYS_PROCESS_WRITE_MEMORY: u32 = 104;
 
+// Profile
+pub const SYS_PROFILE_CREATE: u32 = 105;
+
 // Resource
 pub const SYS_RESOURCE_CREATE: u32 = 106;
+
+// SMC
+pub const SYS_SMC_CALL: u32 = 107;
 
 // Socket
 pub const SYS_SOCKET_CREATE: u32 = 108;
@@ -94,6 +133,9 @@ pub const SYS_STREAM_SEEK: u32 = 117;
 
 // System
 pub const SYS_SYSTEM_GET_EVENT: u32 = 129;
+pub const SYS_SYSTEM_MEXEC: u32 = 130;
+pub const SYS_SYSTEM_MEXEC_PAYLOAD_GET: u32 = 131;
+pub const SYS_SYSTEM_POWERCTL: u32 = 132;
 
 // Task
 pub const SYS_TASK_SUSPEND_TOKEN: u32 = 134;
@@ -115,6 +157,7 @@ pub const SYS_VMAR_DESTROY: u32 = 151;
 pub const SYS_VMAR_MAP: u32 = 152;
 pub const SYS_VMAR_UNMAP: u32 = 153;
 pub const SYS_VMAR_PROTECT: u32 = 154;
+pub const SYS_VMAR_OP_RANGE: u32 = 155;
 
 // VMO
 pub const SYS_VMO_CREATE: u32 = 156;
