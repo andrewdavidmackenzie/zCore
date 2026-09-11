@@ -303,13 +303,26 @@ impl Syscall<'_> {
                 warn!("vmo.op_range: Lock/Unlock not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
-            VmoOpType::CacheSync
-            | VmoOpType::CacheInvalidate
-            | VmoOpType::CacheClean
-            | VmoOpType::CacheCleanInvalidate => {
+            VmoOpType::CacheSync | VmoOpType::CacheClean | VmoOpType::CacheCleanInvalidate => {
+                // These require READ rights per the Zircon ABI.
+                if !rights.contains(Rights::READ) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                if offset.checked_add(len).is_none() || offset + len > vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
                 // Cache operations are no-ops on most architectures;
                 // return success so callers can proceed.
-                warn!("vmo.op_range: cache op treated as no-op");
+                Ok(())
+            }
+            VmoOpType::CacheInvalidate => {
+                // CACHE_INVALIDATE requires WRITE rights per the Zircon ABI.
+                if !rights.contains(Rights::WRITE) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                if offset.checked_add(len).is_none() || offset + len > vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
                 Ok(())
             }
         }

@@ -58,10 +58,14 @@ impl Syscall<'_> {
     /// its transformed timeline.
     pub fn sys_clock_read(&self, handle: HandleValue, mut now: UserOutPtr<u64>) -> ZxResult {
         info!("clock.read: handle={:#x?}", handle);
-        // Validate that the handle exists and has READ rights, even though
-        // we don't yet use the clock object's transformation.
+        // Validate that the handle exists, has READ rights, and refers to
+        // a Clock object. Since clock objects are not yet implemented, any
+        // valid call will get WRONG_TYPE until they are.
         let proc = self.thread.proc();
-        let _clock = proc.get_dyn_object_with_rights(handle, Rights::READ)?;
+        let clock = proc.get_dyn_object_with_rights(handle, Rights::READ)?;
+        if clock.type_name() != "Clock" {
+            return Err(ZxError::WRONG_TYPE);
+        }
         // TODO: look up clock object and apply its timeline transformation
         warn!("clock.read: returning monotonic time (clock transform not yet implemented)");
         now.write(timer_now().as_nanos() as u64)?;

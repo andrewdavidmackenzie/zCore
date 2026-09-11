@@ -400,9 +400,14 @@ impl Syscall<'_> {
             "object.wait_async: handle={:#x}, port={:#x}, key={:#x}, signal={:?}, options={:#X}",
             handle_value, port_handle_value, key, signals, options
         );
-        if options != 0 {
-            // TODO: handle ZX_WAIT_ASYNC_EDGE and other wait_async options
-            warn!("object.wait_async: unsupported options {:#x}", options);
+        // Zircon only defines ZX_WAIT_ASYNC_EDGE (bit 1); reject anything else.
+        const ZX_WAIT_ASYNC_EDGE: u32 = 1 << 1;
+        if options & !ZX_WAIT_ASYNC_EDGE != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if options & ZX_WAIT_ASYNC_EDGE != 0 {
+            // TODO: implement edge-triggered wait_async
+            warn!("object.wait_async: ZX_WAIT_ASYNC_EDGE not yet implemented");
             return Err(ZxError::NOT_SUPPORTED);
         }
         let proc = self.thread.proc();

@@ -56,9 +56,8 @@ impl Syscall<'_> {
         let offset = if vm_options.contains(VmOptions::SPECIFIC) {
             Some(offset as usize)
         } else if vm_options.contains(VmOptions::SPECIFIC_OVERWRITE) {
-            // TODO: implement SPECIFIC_OVERWRITE semantics for vmar_allocate
-            warn!("vmar.allocate: SPECIFIC_OVERWRITE not yet implemented");
-            return Err(ZxError::NOT_SUPPORTED);
+            // SPECIFIC_OVERWRITE is only valid for vmar_map, not vmar_allocate.
+            return Err(ZxError::INVALID_ARGS);
         } else {
             if offset != 0 {
                 return Err(ZxError::INVALID_ARGS);

@@ -39,18 +39,14 @@ impl Syscall<'_> {
                 let proc = self.thread.proc();
                 proc.get_object_with_rights::<Job>(root_job, Rights::MANAGE_PROCESS)?
                     .check_root_job()?;
-                // TODO: implement real memory pressure event monitoring
-                // Memory pressure events are not yet monitored; return a
-                // blank Event so callers that only need a valid handle can
-                // proceed.
+                // TODO: implement real memory pressure event monitoring.
+                // Returning a stub Event would cause callers to block
+                // indefinitely waiting for a signal that never fires.
                 warn!(
-                    "system.get_event: memory pressure event kind={} not fully implemented",
+                    "system.get_event: memory pressure event kind={} not yet implemented",
                     kind
                 );
-                let event = Event::new();
-                let event_handle = proc.add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
-                out.write(event_handle)?;
-                Ok(())
+                Err(ZxError::NOT_SUPPORTED)
             }
             _ => {
                 warn!("system.get_event: unknown event kind {:#x}", kind);
