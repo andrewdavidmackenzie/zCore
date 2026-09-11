@@ -420,11 +420,13 @@ impl Syscall<'_> {
             "setpgid: pid={} pgid={} => target_pid={} new_pgid={}",
             pid, pgid, target_pid, new_pgid
         );
-        // Only allow setting pgid on self (simplification)
-        if target_pid != proc.id() {
-            return Err(LxError::ESRCH);
+        if target_pid == proc.id() {
+            // Setting own PGID
+            self.linux_process().set_pgid(new_pgid);
+        } else {
+            // Setting a child process's PGID
+            self.linux_process().set_child_pgid(target_pid, new_pgid)?;
         }
-        self.linux_process().set_pgid(new_pgid);
         Ok(0)
     }
 
