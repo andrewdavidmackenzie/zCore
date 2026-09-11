@@ -501,7 +501,7 @@ pub unsafe fn zx_channel_read_etc(
     handle: HandleValue,
     options: u32,
     bytes: *mut u8,
-    handles: *mut u8, // zx_handle_info_t array
+    handles: *mut crate::types::HandleInfo,
     num_bytes: u32,
     num_handles: u32,
     actual_bytes: *mut u32,
@@ -529,7 +529,7 @@ pub unsafe fn zx_channel_write_etc(
     options: u32,
     bytes: *const u8,
     num_bytes: u32,
-    handles: *mut u8, // zx_handle_disposition_t array
+    handles: *mut crate::types::HandleDisposition,
     num_handles: u32,
 ) -> ZxStatus {
     syscall6(
@@ -546,15 +546,22 @@ pub unsafe fn zx_channel_write_etc(
 /// Send a message to a channel and wait for a reply (no-retry step).
 ///
 /// # Safety
-/// `args` must point to a valid `zx_channel_call_args_t`. Output pointers must be valid.
+/// `args` must point to a valid `ChannelCallArgs`. Output pointers must be valid.
+///
+/// Note: the kernel dispatcher currently only passes 6 arguments, so
+/// `read_status` is not yet propagated to the handler.
+// TODO: propagate read_status through the dispatcher and handler
 pub unsafe fn zx_channel_call_noretry(
     handle: HandleValue,
     options: u32,
     deadline: i64,
-    args: *const u8, // zx_channel_call_args_t
+    args: *const crate::types::ChannelCallArgs,
     actual_bytes: *mut u32,
     actual_handles: *mut u32,
+    _read_status: *mut ZxStatus,
 ) -> ZxStatus {
+    // The kernel handler only accepts 6 args; read_status is not yet
+    // forwarded. Pass the first 6 via syscall6.
     syscall6(
         crate::consts::SYS_CHANNEL_CALL_NORETRY,
         handle as u64,
@@ -766,7 +773,7 @@ pub unsafe fn zx_object_wait_one(
 /// # Safety
 /// `items` must point to `num_items` valid `zx_wait_item_t` structs.
 pub unsafe fn zx_object_wait_many(
-    items: *mut u8, // zx_wait_item_t array
+    items: *mut crate::types::WaitItem,
     num_items: usize,
     deadline: i64,
 ) -> ZxStatus {
