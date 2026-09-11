@@ -402,9 +402,9 @@ impl Syscall<'_> {
             handle_value, port_handle_value, key, signals, options
         );
         if options != 0 {
-            unimplemented!()
+            warn!("object.wait_async: unsupported options {:#x}", options);
+            return Err(ZxError::NOT_SUPPORTED);
         }
-        // TODO filter `options`
         let proc = self.thread.proc();
         let object = proc.get_dyn_object_with_rights(handle_value, Rights::WAIT)?;
         let port = proc.get_object_with_rights::<Port>(port_handle_value, Rights::WRITE)?;

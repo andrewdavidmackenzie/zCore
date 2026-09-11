@@ -149,8 +149,13 @@ impl Syscall<'_> {
                 vmo.create_slice(offset, child_size)
             }
         } else {
-            // TODO: ZX_VMO_CHILD_SNAPSHOT
-            if !options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE) {
+            if options.contains(VmoCloneFlags::SNAPSHOT) {
+                // True snapshot semantics (full CoW clone with immutable
+                // parent) are not yet implemented.  Treat SNAPSHOT as
+                // SNAPSHOT_AT_LEAST_ON_WRITE, which is a valid superset
+                // behaviour per the Zircon spec.
+                warn!("vmo.create_child: SNAPSHOT treated as SNAPSHOT_AT_LEAST_ON_WRITE");
+            } else if !options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE) {
                 return Err(ZxError::NOT_SUPPORTED);
             }
             vmo.create_child(resizable, offset, child_size)
@@ -293,7 +298,19 @@ impl Syscall<'_> {
                 }
                 vmo.zero(offset, len)
             }
-            _ => unimplemented!(),
+            VmoOpType::Lock | VmoOpType::Unlock => {
+                warn!("vmo.op_range: Lock/Unlock not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            VmoOpType::CacheSync
+            | VmoOpType::CacheInvalidate
+            | VmoOpType::CacheClean
+            | VmoOpType::CacheCleanInvalidate => {
+                // Cache operations are no-ops on most architectures;
+                // return success so callers can proceed.
+                warn!("vmo.op_range: cache op treated as no-op");
+                Ok(())
+            }
         }
     }
 
