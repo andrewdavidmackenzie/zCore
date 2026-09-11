@@ -9,6 +9,7 @@
 //! This crate defines:
 //! - Syscall numbers matching Zircon's `zx-syscall-numbers.h`
 //! - Error/status codes matching Zircon's `zx_status_t`
+//! - ABI struct definitions matching Zircon's public types
 //! - Userspace syscall wrappers (behind the `userspace` feature)
 //!
 //! Used by `petal` test programs to call Zircon syscalls, and by the
@@ -22,6 +23,7 @@ extern crate alloc;
 
 pub mod consts;
 pub mod errors;
+pub mod types;
 pub mod zbi;
 
 #[cfg(feature = "userspace")]

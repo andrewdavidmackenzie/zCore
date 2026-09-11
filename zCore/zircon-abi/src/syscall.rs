@@ -493,6 +493,79 @@ pub unsafe fn zx_channel_write(
     )
 }
 
+/// Read a message from a channel (extended version with handle info).
+///
+/// # Safety
+/// All pointers must be valid for the specified sizes.
+pub unsafe fn zx_channel_read_etc(
+    handle: HandleValue,
+    options: u32,
+    bytes: *mut u8,
+    handles: *mut u8, // zx_handle_info_t array
+    num_bytes: u32,
+    num_handles: u32,
+    actual_bytes: *mut u32,
+    actual_handles: *mut u32,
+) -> ZxStatus {
+    syscall8(
+        crate::consts::SYS_CHANNEL_READ_ETC,
+        handle as u64,
+        options as u64,
+        bytes as u64,
+        handles as u64,
+        num_bytes as u64,
+        num_handles as u64,
+        actual_bytes as u64,
+        actual_handles as u64,
+    )
+}
+
+/// Write a message to a channel (extended version with handle dispositions).
+///
+/// # Safety
+/// All pointers must be valid for the specified sizes.
+pub unsafe fn zx_channel_write_etc(
+    handle: HandleValue,
+    options: u32,
+    bytes: *const u8,
+    num_bytes: u32,
+    handles: *mut u8, // zx_handle_disposition_t array
+    num_handles: u32,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_CHANNEL_WRITE_ETC,
+        handle as u64,
+        options as u64,
+        bytes as u64,
+        num_bytes as u64,
+        handles as u64,
+        num_handles as u64,
+    )
+}
+
+/// Send a message to a channel and wait for a reply (no-retry step).
+///
+/// # Safety
+/// `args` must point to a valid `zx_channel_call_args_t`. Output pointers must be valid.
+pub unsafe fn zx_channel_call_noretry(
+    handle: HandleValue,
+    options: u32,
+    deadline: i64,
+    args: *const u8, // zx_channel_call_args_t
+    actual_bytes: *mut u32,
+    actual_handles: *mut u32,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_CHANNEL_CALL_NORETRY,
+        handle as u64,
+        options as u64,
+        deadline as u64,
+        args as u64,
+        actual_bytes as u64,
+        actual_handles as u64,
+    )
+}
+
 // --- Process/Thread syscalls ---
 
 /// Create a new process.
@@ -685,6 +758,102 @@ pub unsafe fn zx_object_wait_one(
         signals as u64,
         deadline as u64,
         observed as u64,
+    )
+}
+
+/// Wait for signals on multiple objects.
+///
+/// # Safety
+/// `items` must point to `num_items` valid `zx_wait_item_t` structs.
+pub unsafe fn zx_object_wait_many(
+    items: *mut u8, // zx_wait_item_t array
+    num_items: usize,
+    deadline: i64,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_OBJECT_WAIT_MANY,
+        items as u64,
+        num_items as u64,
+        deadline as u64,
+    )
+}
+
+/// Subscribe for signals on an object, delivering via a port.
+pub unsafe fn zx_object_wait_async(
+    handle: HandleValue,
+    port: HandleValue,
+    key: u64,
+    signals: u32,
+    options: u32,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_OBJECT_WAIT_ASYNC,
+        handle as u64,
+        port as u64,
+        key,
+        signals as u64,
+        options as u64,
+    )
+}
+
+/// Get information about an object.
+///
+/// # Safety
+/// `buffer` must point to `buffer_size` valid bytes. Output pointers must be valid.
+pub unsafe fn zx_object_get_info(
+    handle: HandleValue,
+    topic: u32,
+    buffer: *mut u8,
+    buffer_size: usize,
+    actual: *mut usize,
+    avail: *mut usize,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_OBJECT_GET_INFO,
+        handle as u64,
+        topic as u64,
+        buffer as u64,
+        buffer_size as u64,
+        actual as u64,
+        avail as u64,
+    )
+}
+
+/// Get a property of an object.
+///
+/// # Safety
+/// `value` must point to `value_size` valid bytes.
+pub unsafe fn zx_object_get_property(
+    handle: HandleValue,
+    property: u32,
+    value: *mut u8,
+    value_size: usize,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_OBJECT_GET_PROPERTY,
+        handle as u64,
+        property as u64,
+        value as u64,
+        value_size as u64,
+    )
+}
+
+/// Set a property of an object.
+///
+/// # Safety
+/// `value` must point to `value_size` valid bytes.
+pub unsafe fn zx_object_set_property(
+    handle: HandleValue,
+    property: u32,
+    value: *const u8,
+    value_size: usize,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_OBJECT_SET_PROPERTY,
+        handle as u64,
+        property as u64,
+        value as u64,
+        value_size as u64,
     )
 }
 
@@ -1041,6 +1210,26 @@ pub unsafe fn zx_futex_wake(value_ptr: *const i32, wake_count: u32) -> ZxStatus 
         crate::consts::SYS_FUTEX_WAKE,
         value_ptr as u64,
         wake_count as u64,
+    )
+}
+
+/// Wake some waiters and requeue others to a different futex.
+pub unsafe fn zx_futex_requeue(
+    value_ptr: *const i32,
+    wake_count: u32,
+    current_value: i32,
+    requeue_ptr: *const i32,
+    requeue_count: u32,
+    new_requeue_owner: HandleValue,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_FUTEX_REQUEUE,
+        value_ptr as u64,
+        wake_count as u64,
+        current_value as u64,
+        requeue_ptr as u64,
+        requeue_count as u64,
+        new_requeue_owner as u64,
     )
 }
 
