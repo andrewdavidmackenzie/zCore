@@ -52,7 +52,7 @@ impl<T> TicketMutex<T> {
 
 impl<T: ?Sized> TicketMutex<T> {
     #[inline(always)]
-    pub fn lock(&self) -> TicketMutexGuard<T> {
+    pub fn lock(&self) -> TicketMutexGuard<'_, T> {
         push_off();
         let ticket = self.next_ticket.fetch_add(1, Ordering::Relaxed);
         while self.next_serving.load(Ordering::Acquire) != ticket {
@@ -72,11 +72,11 @@ impl<T: ?Sized> TicketMutex<T> {
     }
 
     #[inline(always)]
-    pub fn try_lock(&self) -> Option<TicketMutexGuard<T>> {
+    pub fn try_lock(&self) -> Option<TicketMutexGuard<'_, T>> {
         push_off();
         let ticket = self
             .next_ticket
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |ticket| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |ticket| {
                 if self.next_serving.load(Ordering::Acquire) == ticket {
                     Some(ticket + 1)
                 } else {
