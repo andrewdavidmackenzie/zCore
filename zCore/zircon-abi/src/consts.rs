@@ -204,13 +204,13 @@ pub const ZX_SIGNAL_HANDLE_CLOSED: ZxSignals = 1 << 23;
 /// Process or thread has terminated.
 pub const ZX_PROCESS_TERMINATED: ZxSignals = 1 << 3;
 pub const ZX_THREAD_TERMINATED: ZxSignals = 1 << 3;
-pub const ZX_THREAD_SUSPENDED: ZxSignals = 1 << 4;
-pub const ZX_THREAD_RUNNING: ZxSignals = 1 << 5;
+pub const ZX_THREAD_RUNNING: ZxSignals = 1 << 4;
+pub const ZX_THREAD_SUSPENDED: ZxSignals = 1 << 5;
 
 // Job signals
 pub const ZX_JOB_TERMINATED: ZxSignals = 1 << 3;
-pub const ZX_JOB_NO_PROCESSES: ZxSignals = 1 << 4;
-pub const ZX_JOB_NO_JOBS: ZxSignals = 1 << 5;
+pub const ZX_JOB_NO_JOBS: ZxSignals = 1 << 4;
+pub const ZX_JOB_NO_PROCESSES: ZxSignals = 1 << 5;
 
 // Task signals (shared by Job, Process, Thread)
 pub const ZX_TASK_TERMINATED: ZxSignals = 1 << 3;
@@ -252,8 +252,8 @@ pub const ZX_FIFO_PEER_CLOSED: ZxSignals = 1 << 2;
 #[allow(clippy::identity_op)]
 pub const ZX_VM_PERM_READ: u32 = 1 << 0;
 pub const ZX_VM_PERM_WRITE: u32 = 1 << 1;
-pub const ZX_VM_COMPACT: u32 = 1 << 2;
-pub const ZX_VM_PERM_EXECUTE: u32 = 1 << 3;
+pub const ZX_VM_PERM_EXECUTE: u32 = 1 << 2;
+pub const ZX_VM_COMPACT: u32 = 1 << 3;
 pub const ZX_VM_SPECIFIC: u32 = 1 << 4;
 pub const ZX_VM_SPECIFIC_OVERWRITE: u32 = 1 << 5;
 pub const ZX_VM_CAN_MAP_SPECIFIC: u32 = 1 << 6;

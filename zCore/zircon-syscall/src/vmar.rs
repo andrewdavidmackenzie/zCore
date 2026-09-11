@@ -228,8 +228,8 @@ bitflags! {
         #[allow(clippy::identity_op)]
         const PERM_READ             = 1 << 0;
         const PERM_WRITE            = 1 << 1;
-        const COMPACT               = 1 << 2;
-        const PERM_EXECUTE          = 1 << 3;
+        const PERM_EXECUTE          = 1 << 2;
+        const COMPACT               = 1 << 3;
         const SPECIFIC              = 1 << 4;
         const SPECIFIC_OVERWRITE    = 1 << 5;
         const CAN_MAP_SPECIFIC      = 1 << 6;
