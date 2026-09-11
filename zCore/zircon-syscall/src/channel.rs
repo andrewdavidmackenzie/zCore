@@ -207,7 +207,9 @@ impl Syscall<'_> {
         );
         let thread_state = self.thread.state();
         if thread_state == ThreadState::BlockedChannel {
-            unimplemented!();
+            // TODO: implement BlockedChannel retry logic for channel_call_finish
+            warn!("channel.call_finish: BlockedChannel retry not yet implemented");
+            Err(ZxError::NOT_SUPPORTED)
         } else {
             Err(ZxError::BAD_STATE)
         }

@@ -204,8 +204,9 @@ impl Syscall<'_> {
             Sys::PORT_WAIT => self.sys_port_wait(a0 as _, a1.into(), a2.into()).await,
             Sys::PORT_QUEUE => self.sys_port_queue(a0 as _, a1.into()),
             Sys::PORT_CANCEL => {
-                error!("Skip PORT_CANCEL");
-                Ok(())
+                // TODO: implement proper port cancel logic
+                warn!("port.cancel: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
             }
             Sys::FUTEX_WAIT => {
                 self.sys_futex_wait(a0.into(), a1 as _, a2 as _, a3.into())
@@ -353,8 +354,9 @@ impl Syscall<'_> {
             Sys::EXCEPTION_GET_THREAD => self.sys_exception_get_thread(a0 as _, a1.into()),
             Sys::EXCEPTION_GET_PROCESS => self.sys_exception_get_process(a0 as _, a1.into()),
             Sys::IOPORTS_REQUEST => {
-                warn!("ioports.request: skip");
-                Ok(())
+                // TODO: implement ioports_request (or return NOT_SUPPORTED on non-x86)
+                warn!("ioports.request: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
             }
             #[cfg(feature = "hypervisor")]
             Sys::GUEST_CREATE => self.sys_guest_create(a0 as _, a1 as _, a2.into(), a3.into()),

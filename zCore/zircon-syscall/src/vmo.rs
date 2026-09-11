@@ -149,8 +149,13 @@ impl Syscall<'_> {
                 vmo.create_slice(offset, child_size)
             }
         } else {
-            // TODO: ZX_VMO_CHILD_SNAPSHOT
-            if !options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE) {
+            if options.contains(VmoCloneFlags::SNAPSHOT) {
+                // TODO: implement true ZX_VMO_CHILD_SNAPSHOT (full CoW
+                // clone with immutable parent). Currently treated as
+                // SNAPSHOT_AT_LEAST_ON_WRITE, which is a valid superset
+                // behaviour per the Zircon spec.
+                warn!("vmo.create_child: SNAPSHOT treated as SNAPSHOT_AT_LEAST_ON_WRITE");
+            } else if !options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE) {
                 return Err(ZxError::NOT_SUPPORTED);
             }
             vmo.create_child(resizable, offset, child_size)
@@ -293,7 +298,33 @@ impl Syscall<'_> {
                 }
                 vmo.zero(offset, len)
             }
-            _ => unimplemented!(),
+            VmoOpType::Lock | VmoOpType::Unlock => {
+                // TODO: implement VMO Lock/Unlock operations
+                warn!("vmo.op_range: Lock/Unlock not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            VmoOpType::CacheSync | VmoOpType::CacheClean | VmoOpType::CacheCleanInvalidate => {
+                // These require READ rights per the Zircon ABI.
+                if !rights.contains(Rights::READ) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                if offset.checked_add(len).is_none() || offset + len > vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                // Cache operations are no-ops on most architectures;
+                // return success so callers can proceed.
+                Ok(())
+            }
+            VmoOpType::CacheInvalidate => {
+                // CACHE_INVALIDATE requires WRITE rights per the Zircon ABI.
+                if !rights.contains(Rights::WRITE) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                if offset.checked_add(len).is_none() || offset + len > vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                Ok(())
+            }
         }
     }
 

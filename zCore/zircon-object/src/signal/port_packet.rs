@@ -215,6 +215,7 @@ impl PayloadRepr {
                 PacketType::GuestIo => PayloadRepr::GuestIo(data.guest_io),
                 PacketType::GuestVcpu => PayloadRepr::GuestVcpu(data.guest_vcpu),
                 PacketType::Interrupt => PayloadRepr::Interrupt(data.interrupt),
+                // TODO: handle remaining PacketType variants (e.g. PageRequest)
                 _ => unimplemented!(),
             }
         }

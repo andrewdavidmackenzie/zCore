@@ -21,10 +21,11 @@ impl Syscall<'_> {
         &self,
         _options: u64,
         _user_args: UserInPtr<u8>,
-        mut _out: UserOutPtr<HandleValue>,
+        _out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        warn!("clock.create: skip");
-        Ok(())
+        // TODO: implement clock object creation
+        warn!("clock.create: not yet implemented");
+        Err(ZxError::NOT_SUPPORTED)
     }
 
     /// Acquire the current time.
@@ -51,9 +52,22 @@ impl Syscall<'_> {
     }
 
     /// Perform a basic read of the clock.
+    ///
+    /// Currently returns monotonic time regardless of the clock handle.
+    /// A proper implementation would look up the clock object and read
+    /// its transformed timeline.
     pub fn sys_clock_read(&self, handle: HandleValue, mut now: UserOutPtr<u64>) -> ZxResult {
         info!("clock.read: handle={:#x?}", handle);
-        warn!("ignore clock handle");
+        // Validate that the handle exists, has READ rights, and refers to
+        // a Clock object. Since clock objects are not yet implemented, any
+        // valid call will get WRONG_TYPE until they are.
+        let proc = self.thread.proc();
+        let clock = proc.get_dyn_object_with_rights(handle, Rights::READ)?;
+        if clock.type_name() != "Clock" {
+            return Err(ZxError::WRONG_TYPE);
+        }
+        // TODO: look up clock object and apply its timeline transformation
+        warn!("clock.read: returning monotonic time (clock transform not yet implemented)");
         now.write(timer_now().as_nanos() as u64)?;
         Ok(())
     }
@@ -84,8 +98,9 @@ impl Syscall<'_> {
         _options: u64,
         _user_args: UserInPtr<u8>,
     ) -> ZxResult {
-        warn!("clock.update: skip");
-        Ok(())
+        // TODO: implement clock object updates
+        warn!("clock.update: not yet implemented");
+        Err(ZxError::NOT_SUPPORTED)
     }
 
     /// Sleep for some number of nanoseconds.

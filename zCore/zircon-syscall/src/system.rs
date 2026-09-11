@@ -33,12 +33,30 @@ impl Syscall<'_> {
                 out.write(event_handle)?;
                 Ok(())
             }
-            _ => unimplemented!(),
+            EVENT_MEMORY_PRESSURE_CRITICAL
+            | EVENT_MEMORY_PRESSURE_WARNING
+            | EVENT_MEMORY_PRESSURE_NORMAL => {
+                let proc = self.thread.proc();
+                proc.get_object_with_rights::<Job>(root_job, Rights::MANAGE_PROCESS)?
+                    .check_root_job()?;
+                // TODO: implement real memory pressure event monitoring.
+                // Returning a stub Event would cause callers to block
+                // indefinitely waiting for a signal that never fires.
+                warn!(
+                    "system.get_event: memory pressure event kind={} not yet implemented",
+                    kind
+                );
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            _ => {
+                warn!("system.get_event: unknown event kind {:#x}", kind);
+                Err(ZxError::INVALID_ARGS)
+            }
         }
     }
 }
 
 const EVENT_OUT_OF_MEMORY: u32 = 1;
-const _EVENT_MEMORY_PRESSURE_CRITICAL: u32 = 2;
-const _EVENT_MEMORY_PRESSURE_WARNING: u32 = 3;
-const _EVENT_MEMORY_PRESSURE_NORMAL: u32 = 4;
+const EVENT_MEMORY_PRESSURE_CRITICAL: u32 = 2;
+const EVENT_MEMORY_PRESSURE_WARNING: u32 = 3;
+const EVENT_MEMORY_PRESSURE_NORMAL: u32 = 4;

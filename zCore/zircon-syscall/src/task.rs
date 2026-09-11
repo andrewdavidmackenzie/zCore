@@ -170,7 +170,7 @@ impl Syscall<'_> {
         } else if options == 0 {
             false
         } else {
-            unimplemented!()
+            return Err(ZxError::INVALID_ARGS);
         };
         let proc = self.thread.proc();
         let job = proc.get_object_with_rights::<Job>(job_handle, Rights::DESTROY)?;

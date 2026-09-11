@@ -281,8 +281,7 @@ impl Syscall<'_> {
             Topic::HandleCount => {
                 let mut info_ptr = UserOutPtr::<u32>::from_addr_size(buffer, buffer_size)?;
                 let object = proc.get_dyn_object_with_rights(handle, Rights::INSPECT)?;
-                // FIXME: count Handle instead of Arc
-                info_ptr.write(Arc::strong_count(&object) as u32 - 1)?;
+                info_ptr.write(object.handle_count())?;
             }
             Topic::Job => {
                 let mut info_ptr = UserOutPtr::<JobInfo>::from_addr_size(buffer, buffer_size)?;
@@ -401,10 +400,16 @@ impl Syscall<'_> {
             "object.wait_async: handle={:#x}, port={:#x}, key={:#x}, signal={:?}, options={:#X}",
             handle_value, port_handle_value, key, signals, options
         );
-        if options != 0 {
-            unimplemented!()
+        // Zircon only defines ZX_WAIT_ASYNC_EDGE (bit 1); reject anything else.
+        const ZX_WAIT_ASYNC_EDGE: u32 = 1 << 1;
+        if options & !ZX_WAIT_ASYNC_EDGE != 0 {
+            return Err(ZxError::INVALID_ARGS);
         }
-        // TODO filter `options`
+        if options & ZX_WAIT_ASYNC_EDGE != 0 {
+            // TODO: implement edge-triggered wait_async
+            warn!("object.wait_async: ZX_WAIT_ASYNC_EDGE not yet implemented");
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         let proc = self.thread.proc();
         let object = proc.get_dyn_object_with_rights(handle_value, Rights::WAIT)?;
         let port = proc.get_object_with_rights::<Port>(port_handle_value, Rights::WRITE)?;

@@ -248,6 +248,7 @@ impl ElfExt for ElfFile<'_> {
                     vmar.write_memory(addr, &value.to_ne_bytes())
                         .map_err(|_| "Invalid Vmar")?;
                 }
+                // TODO: handle additional ELF relocation types as needed
                 t => unimplemented!("unknown type: {}", t),
             }
         }
