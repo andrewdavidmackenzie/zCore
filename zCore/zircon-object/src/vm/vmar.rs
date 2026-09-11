@@ -725,7 +725,7 @@ impl VmarInner {
         }
         for map in src_inner.mappings.iter() {
             let mapping = map.clone_map(page_table.clone())?;
-            mapping.map()?;
+            mapping.map_cow()?;
             self.mappings.push(mapping);
         }
         Ok(())
@@ -1039,9 +1039,14 @@ impl VmMapping {
         Ok(())
     }
 
-    /// Clone VMO and map it to a new page table. (For Linux)
+    /// Clone VMO and map it to a new page table. (For Linux fork)
+    ///
+    /// Creates a COW child VMO and a mapping for it.  The per-page
+    /// `flags` vector retains WRITE so that `handle_page_fault` knows
+    /// the mapping is writable and performs COW.  However the initial
+    /// page-table entries are mapped WITHOUT WRITE (see `map_cow`),
+    /// so that the first write triggers a fault and the COW copy.
     fn clone_map(&self, page_table: Arc<Mutex<dyn GenericPageTable>>) -> ZxResult<Arc<Self>> {
-        // After calling hal protect here, protect() appears to corrupt the page table
         let new_vmo = self.vmo.create_child(false, 0, self.vmo.len())?;
         let mapping = Arc::new(VmMapping {
             inner: Mutex::new(self.inner.lock().clone()),
@@ -1051,6 +1056,35 @@ impl VmMapping {
         });
         new_vmo.append_mapping(Arc::downgrade(&mapping));
         Ok(mapping)
+    }
+
+    /// Map pages with WRITE removed from page-table entries (for COW).
+    ///
+    /// The per-page `flags` vector still contains WRITE so that
+    /// `handle_page_fault` knows write access is permitted and will
+    /// do a COW copy.  Only the hardware PTE entries lack WRITE,
+    /// ensuring the first write triggers a page fault.
+    fn map_cow(self: &Arc<Self>) -> ZxResult {
+        self.vmo.commit_pages_with(&mut |commit| {
+            let inner = self.inner.lock();
+            let mut page_table = self.page_table.lock();
+            let page_num = inner.size / PAGE_SIZE;
+            let vmo_offset = inner.vmo_offset / PAGE_SIZE;
+            for i in 0..page_num {
+                // Remove WRITE from the PTE flags so writes trigger COW faults.
+                let mut pte_flags = inner.flags[i];
+                pte_flags.remove(MMUFlags::WRITE);
+                let paddr = commit(vmo_offset + i, pte_flags)?;
+                page_table
+                    .map(
+                        Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::Size4K),
+                        paddr,
+                        pte_flags,
+                    )
+                    .expect("failed to map");
+            }
+            Ok(())
+        })
     }
 }
 

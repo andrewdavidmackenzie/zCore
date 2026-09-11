@@ -174,7 +174,7 @@ async fn handle_user_trap(thread: &CurrentThread, mut ctx: Box<UserContext>) -> 
             thread_fn,
             syscall_entry: kernel_hal::context::syscall_entry as *const () as usize,
         };
-        trace!("Syscall : {} {:x?}", num as u32, args);
+        warn!("Syscall : {} {:x?}", num as u32, args);
         run_with_irq_enable! {
             let ret = syscall.syscall(num as u32, args).await as usize
         }
