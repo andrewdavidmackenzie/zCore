@@ -449,6 +449,44 @@ impl Syscall<'_> {
                 warn!("interrupt.bind_vcpu: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
+            // Pager subsystem (demand paging)
+            // TODO: implement pager objects with VMO fault-on-access,
+            // port packet delivery, and page supply infrastructure
+            Sys::PAGER_CREATE => {
+                warn!("pager.create: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PAGER_CREATE_VMO => {
+                warn!("pager.create_vmo: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PAGER_DETACH_VMO => {
+                warn!("pager.detach_vmo: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PAGER_SUPPLY_PAGES => {
+                warn!("pager.supply_pages: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PAGER_OP_RANGE => {
+                warn!("pager.op_range: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            // Kernel tracing
+            // TODO: implement kernel trace ring buffer for syscall
+            // entry/exit, context switches, and IRQ events
+            Sys::KTRACE_READ => {
+                warn!("ktrace.read: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::KTRACE_CONTROL => {
+                warn!("ktrace.control: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::KTRACE_WRITE => {
+                warn!("ktrace.write: not yet implemented (removed upstream)");
+                Err(ZxError::NOT_SUPPORTED)
+            }
             _ => {
                 error!("syscall unimplemented: {:?}", sys_type);
                 Err(ZxError::NOT_SUPPORTED)

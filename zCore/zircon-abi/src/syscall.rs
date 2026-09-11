@@ -1345,3 +1345,138 @@ pub unsafe fn zx_vmo_create_child(
         out as u64,
     )
 }
+
+// --- Pager syscalls ---
+
+/// Create a pager object.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_pager_create(options: u32, out: *mut HandleValue) -> ZxStatus {
+    syscall2(crate::consts::SYS_PAGER_CREATE, options as u64, out as u64)
+}
+
+/// Create a VMO backed by a pager.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_pager_create_vmo(
+    pager: HandleValue,
+    options: u32,
+    port: HandleValue,
+    key: u64,
+    size: u64,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_PAGER_CREATE_VMO,
+        pager as u64,
+        options as u64,
+        port as u64,
+        key,
+        size,
+        out as u64,
+    )
+}
+
+/// Detach a VMO from its pager.
+pub unsafe fn zx_pager_detach_vmo(pager: HandleValue, pager_vmo: HandleValue) -> ZxStatus {
+    syscall2(
+        crate::consts::SYS_PAGER_DETACH_VMO,
+        pager as u64,
+        pager_vmo as u64,
+    )
+}
+
+/// Supply pages to a pager-backed VMO.
+pub unsafe fn zx_pager_supply_pages(
+    pager: HandleValue,
+    pager_vmo: HandleValue,
+    offset: u64,
+    length: u64,
+    aux_vmo: HandleValue,
+    aux_offset: u64,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_PAGER_SUPPLY_PAGES,
+        pager as u64,
+        pager_vmo as u64,
+        offset,
+        length,
+        aux_vmo as u64,
+        aux_offset,
+    )
+}
+
+/// Perform an operation on a range of a pager-backed VMO.
+pub unsafe fn zx_pager_op_range(
+    pager: HandleValue,
+    op: u32,
+    pager_vmo: HandleValue,
+    offset: u64,
+    length: u64,
+    data: u64,
+) -> ZxStatus {
+    syscall6(
+        crate::consts::SYS_PAGER_OP_RANGE,
+        pager as u64,
+        op as u64,
+        pager_vmo as u64,
+        offset,
+        length,
+        data,
+    )
+}
+
+// --- Ktrace syscalls ---
+
+/// Read kernel trace data.
+///
+/// # Safety
+/// `data` must point to `data_size` valid bytes. `actual` must be valid.
+pub unsafe fn zx_ktrace_read(
+    handle: HandleValue,
+    data: *mut u8,
+    offset: u32,
+    data_size: usize,
+    actual: *mut usize,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_KTRACE_READ,
+        handle as u64,
+        data as u64,
+        offset as u64,
+        data_size as u64,
+        actual as u64,
+    )
+}
+
+/// Control kernel tracing (start/stop/configure).
+///
+/// # Safety
+/// `ptr` must be a valid pointer if non-null.
+pub unsafe fn zx_ktrace_control(
+    handle: HandleValue,
+    action: u32,
+    options: u32,
+    ptr: *mut u8,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_KTRACE_CONTROL,
+        handle as u64,
+        action as u64,
+        options as u64,
+        ptr as u64,
+    )
+}
+
+/// Write a user trace event (removed upstream in Fuchsia).
+pub unsafe fn zx_ktrace_write(handle: HandleValue, id: u32, arg0: u32, arg1: u32) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_KTRACE_WRITE,
+        handle as u64,
+        id as u64,
+        arg0 as u64,
+        arg1 as u64,
+    )
+}

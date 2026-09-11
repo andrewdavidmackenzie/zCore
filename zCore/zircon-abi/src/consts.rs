@@ -97,6 +97,11 @@ pub const SYS_JOB_CREATE: u32 = 56;
 pub const SYS_JOB_SET_POLICY: u32 = 57;
 pub const SYS_JOB_SET_CRITICAL: u32 = 58;
 
+// Ktrace
+pub const SYS_KTRACE_READ: u32 = 59;
+pub const SYS_KTRACE_CONTROL: u32 = 60;
+pub const SYS_KTRACE_WRITE: u32 = 61;
+
 // Nanosleep
 pub const SYS_NANOSLEEP: u32 = 62;
 
