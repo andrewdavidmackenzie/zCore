@@ -86,7 +86,12 @@ impl Syscall<'_> {
         if !old_addr.is_multiple_of(PAGE_SIZE) {
             return Err(LxError::EINVAL);
         }
-        if new_size == 0 {
+        if new_size == 0 || old_size == 0 {
+            return Err(LxError::EINVAL);
+        }
+
+        // Reject unsupported flags
+        if flags & !(MREMAP_MAYMOVE | MREMAP_FIXED) != 0 {
             return Err(LxError::EINVAL);
         }
 
@@ -95,17 +100,22 @@ impl Syscall<'_> {
             return Err(LxError::EINVAL);
         }
 
-        // Round sizes up to page boundaries
-        let old_size = (old_size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-        let new_size = (new_size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        // Round sizes up to page boundaries (checked to prevent overflow)
+        let old_size =
+            old_size.checked_add(PAGE_SIZE - 1).ok_or(LxError::ENOMEM)? & !(PAGE_SIZE - 1);
+        let new_size =
+            new_size.checked_add(PAGE_SIZE - 1).ok_or(LxError::ENOMEM)? & !(PAGE_SIZE - 1);
 
         let proc = self.zircon_process();
         let vmar = proc.vmar();
 
-        // Verify the old mapping exists
-        if vmar.find_mapping(old_addr).is_none() {
+        // Verify the old mapping exists and covers the entire source range
+        let mapping = vmar.find_mapping(old_addr).ok_or(LxError::EFAULT)?;
+        // Check that the last byte of the source range is also in the same mapping
+        if old_size > PAGE_SIZE && vmar.find_mapping(old_addr + old_size - 1).is_none() {
             return Err(LxError::EFAULT);
         }
+        drop(mapping);
 
         if new_size == old_size {
             // No change in size
@@ -141,6 +151,12 @@ impl Syscall<'_> {
         let new_vmo = VmObject::new_paged(pages(new_size));
         let dest_addr = if flags & MREMAP_FIXED != 0 {
             if !new_addr.is_multiple_of(PAGE_SIZE) {
+                return Err(LxError::EINVAL);
+            }
+            // Reject overlapping old and new ranges
+            let old_end = old_addr + old_size;
+            let new_end = new_addr + new_size;
+            if old_addr < new_end && new_addr < old_end {
                 return Err(LxError::EINVAL);
             }
             // Unmap anything at the fixed target first

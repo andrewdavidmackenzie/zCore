@@ -208,9 +208,9 @@ impl Syscall<'_> {
     /// Rename file relative to directory file descriptors, with flags.
     ///
     /// `renameat2` extends `renameat` with an additional `flags` parameter.
-    /// Currently the flags (RENAME_NOREPLACE, RENAME_EXCHANGE, RENAME_WHITEOUT)
-    /// are not supported and are silently ignored — the call behaves identically
-    /// to `renameat`.
+    /// Currently only `flags == 0` is supported (behaves identically to
+    /// `renameat`). Nonzero flags (`RENAME_NOREPLACE`, `RENAME_EXCHANGE`,
+    /// `RENAME_WHITEOUT`) are rejected with `EINVAL`.
     pub fn sys_renameat2(
         &self,
         olddirfd: FileDesc,
@@ -219,7 +219,10 @@ impl Syscall<'_> {
         newpath: UserInPtr<u8>,
         flags: usize,
     ) -> SysResult {
-        info!("renameat2: flags={:#x} (ignored)", flags);
+        info!("renameat2: flags={:#x}", flags);
+        if flags != 0 {
+            return Err(LxError::EINVAL);
+        }
         self.sys_renameat(olddirfd, oldpath, newdirfd, newpath)
     }
 
