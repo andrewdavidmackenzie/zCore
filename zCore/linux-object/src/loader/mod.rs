@@ -41,20 +41,15 @@ impl LinuxElfLoader {
         );
 
         // On macOS aarch64 (libos mode), Linux binaries use `svc #0` for
-        // syscalls, but macOS only delivers SIGSYS for `svc #0x80` (BSD
-        // syscall path). `svc #0` enters the Mach trap path which hangs
-        // instead of delivering a signal. Patch `svc #0` -> `svc #0x80`
-        // in executable PT_LOAD segments of the ELF data BEFORE loading,
-        // so the patched instructions are present when pages are mapped.
-        //
-        // We parse the ELF first to find executable segments, patch only
-        // those file ranges (avoiding false matches in data sections),
-        // then re-parse the patched copy for loading.
+        // syscalls. Replace with `brk #1` so macOS delivers SIGTRAP
+        // instead of processing it as a Mach trap. Unlike svc, brk
+        // does NOT corrupt any registers (XNU's syscall return path
+        // overwrites x0/x1 for svc, but brk bypasses it entirely).
         #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
         let data = {
             use xmas_elf::program::Type as PhType;
             const SVC_0: [u8; 4] = 0xd4000001u32.to_le_bytes();
-            const SVC_80: [u8; 4] = 0xd4001001u32.to_le_bytes();
+            const BRK_1: [u8; 4] = 0xd4200020u32.to_le_bytes(); // brk #1
             let pre_elf = ElfFile::new(data).map_err(|_| ZxError::INVALID_ARGS)?;
             let mut patched_data = data.to_vec();
             let mut total = 0usize;
@@ -64,24 +59,19 @@ impl LinuxElfLoader {
                 }
                 let file_start = ph.offset() as usize;
                 let file_end = file_start + ph.file_size() as usize;
-                // Virtual alignment: aarch64 instructions are 4-byte aligned.
-                // Adjust scan start so file offset aligns with virtual address.
                 let vaddr_mod4 = ph.virtual_addr() as usize % 4;
                 let offset_mod4 = file_start % 4;
                 let align_adj = (4 + vaddr_mod4 - offset_mod4) % 4;
                 let scan_start = file_start + align_adj;
                 for i in (scan_start..file_end.saturating_sub(3)).step_by(4) {
                     if patched_data[i..i + 4] == SVC_0 {
-                        patched_data[i..i + 4].copy_from_slice(&SVC_80);
+                        patched_data[i..i + 4].copy_from_slice(&BRK_1);
                         total += 1;
                     }
                 }
             }
             if total > 0 {
-                info!(
-                    "Patched {} svc #0 -> svc #0x80 in executable segments",
-                    total
-                );
+                info!("Patched {} svc #0 -> brk #1 in executable segments", total);
             }
             patched_data
         };
@@ -258,6 +248,17 @@ impl LinuxElfLoader {
         let init_stack = info.push_at(sp, self.stack_pages * PAGE_SIZE)?;
         stack_vmo.write(self.stack_pages * PAGE_SIZE - init_stack.len(), &init_stack)?;
         sp -= init_stack.len();
+
+        // On 16K hosts, the stack pages are MAP_ANON copies that were
+        // populated (with zeros) at map time. The VMO write above
+        // updated PMEM but not the anonymous user pages. Copy the
+        // stack data directly to the user-visible pages.
+        #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
+        unsafe {
+            let dst = sp as *mut u8;
+            let src = init_stack.as_ref().as_ptr();
+            core::ptr::copy_nonoverlapping(src, dst, init_stack.len());
+        }
 
         debug!(
             "ProcInitInfo auxv: {:#x?}\nentry:{:#x}, sp:{:#x}",

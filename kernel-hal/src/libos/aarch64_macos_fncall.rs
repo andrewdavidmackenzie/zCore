@@ -32,28 +32,27 @@ extern "C" {
 /// catching crashes in user code (SIGSEGV, SIGBUS).
 /// Must be called once during initialization.
 pub fn install_sigsys_handler() {
-    // Ensure SIGSYS is not blocked on this thread (the async runtime
-    // or another library may have blocked it).
+    // Ensure signals are not blocked on this thread.
     unsafe {
         let mut unblock: nix::libc::sigset_t = core::mem::zeroed();
         nix::libc::sigemptyset(&mut unblock);
-        nix::libc::sigaddset(&mut unblock, nix::libc::SIGSYS);
+        nix::libc::sigaddset(&mut unblock, nix::libc::SIGTRAP);
         nix::libc::sigaddset(&mut unblock, nix::libc::SIGSEGV);
         nix::libc::sigaddset(&mut unblock, nix::libc::SIGBUS);
         nix::libc::pthread_sigmask(nix::libc::SIG_UNBLOCK, &unblock, core::ptr::null_mut());
     }
     unsafe {
-        // Use SA_ONSTACK so macOS delivers signals on the alternate signal
-        // stack instead of the current SP. This is critical because when
-        // user code runs, SP points to MAP_ANON user memory that macOS
-        // cannot use for signal frame setup.
+        // Install SIGTRAP handler for brk #1 (patched from svc #0).
+        // Using brk instead of svc avoids XNU's syscall return path
+        // which corrupts x0 and x1. SA_ONSTACK ensures delivery when
+        // SP is in user-mapped memory.
         let mut sa: nix::libc::sigaction = core::mem::zeroed();
         sa.sa_sigaction = sigsys_handler as *const () as usize;
         sa.sa_flags = nix::libc::SA_SIGINFO | nix::libc::SA_ONSTACK;
         nix::libc::sigemptyset(&mut sa.sa_mask);
-        let ret = nix::libc::sigaction(nix::libc::SIGSYS, &sa, core::ptr::null_mut());
+        let ret = nix::libc::sigaction(nix::libc::SIGTRAP, &sa, core::ptr::null_mut());
         if ret != 0 {
-            panic!("Failed to install SIGSYS handler");
+            panic!("Failed to install SIGTRAP handler");
         }
 
         // Also intercept SIGSEGV and SIGBUS from user code
@@ -64,7 +63,7 @@ pub fn install_sigsys_handler() {
         nix::libc::sigaction(nix::libc::SIGSEGV, &sa2, core::ptr::null_mut());
         nix::libc::sigaction(nix::libc::SIGBUS, &sa2, core::ptr::null_mut());
     }
-    info!("Installed SIGSYS/SIGSEGV/SIGBUS handlers for aarch64 macOS libos");
+    info!("Installed SIGTRAP/SIGSEGV/SIGBUS handlers for aarch64 macOS libos");
 }
 
 // Per-thread state for the setjmp/longjmp kernel return.
@@ -75,6 +74,12 @@ std::thread_local! {
         std::cell::UnsafeCell::new([0u64; 32]);
     static CURRENT_CTX: std::cell::Cell<*mut UserContext> =
         std::cell::Cell::new(core::ptr::null_mut());
+    /// macOS's tpidr_el0 value for this thread. Saved before entering
+    /// user code and restored in the SIGTRAP handler. On macOS,
+    /// tpidr_el0 is a small integer (thread slot index); musl uses
+    /// it as a TLS pointer. We swap between the two on each
+    /// user/kernel transition.
+    static MACOS_TPIDR: std::cell::Cell<u64> = std::cell::Cell::new(0);
     /// Per-thread copy of UserContext for the noreturn jump to user code.
     /// We copy the context here because the compiler may free the caller's
     /// stack frame before a noreturn callee reads a pointer argument.
@@ -143,12 +148,11 @@ fn ensure_sigaltstack() {
 
 impl UserContextFnCall for UserContext {
     fn run_fncall_macos(&mut self) {
-        // Ensure SIGSYS is unblocked on this worker thread.
-        // async-std or other libraries may inherit a blocked mask.
+        // Ensure SIGTRAP is unblocked on this worker thread.
         unsafe {
             let mut unblock: nix::libc::sigset_t = core::mem::zeroed();
             nix::libc::sigemptyset(&mut unblock);
-            nix::libc::sigaddset(&mut unblock, nix::libc::SIGSYS);
+            nix::libc::sigaddset(&mut unblock, nix::libc::SIGTRAP);
             nix::libc::sigaddset(&mut unblock, nix::libc::SIGSEGV);
             nix::libc::sigaddset(&mut unblock, nix::libc::SIGBUS);
             nix::libc::pthread_sigmask(nix::libc::SIG_UNBLOCK, &unblock, core::ptr::null_mut());
@@ -169,6 +173,17 @@ impl UserContextFnCall for UserContext {
                     self.general.x0
                 );
 
+                // Save macOS tpidr_el0 and restore user's value.
+                // musl uses tpidr_el0 as TLS pointer; macOS uses it
+                // as a thread slot index. Swap on every transition.
+                MACOS_TPIDR.with(|c| {
+                    let macos_val: u64;
+                    unsafe { core::arch::asm!("mrs {}, tpidr_el0", out(reg) macos_val) };
+                    c.set(macos_val);
+                });
+                let user_tpidr = self.tpidr as u64;
+                unsafe { core::arch::asm!("msr tpidr_el0, {}", in(reg) user_tpidr) };
+
                 // Copy context to TLS buffer so the pointer survives
                 // the noreturn call. Then load ALL registers from
                 // the TLS copy using inline asm with a single pointer
@@ -187,32 +202,26 @@ impl UserContextFnCall for UserContext {
                 //
                 // Restored: x0-x15, x19-x30, sp, elr (via x17)
                 //
-                // Clobbered (unavoidable):
-                // - x16 = set to -1 for SIGSYS delivery
-                // - x17 = used as branch target (holds elr)
+                // Clobbered (used as scratch):
+                // - x16 = scratch for user sp
+                // - x17 = branch target (holds elr)
                 //
                 // Skipped:
                 // - x18 = macOS platform reserved register
                 //
-                // Not restored (not saved by sigsys_handler):
+                // Not restored:
                 // - FP/SIMD registers v0-v31 (NEON state)
                 // - spsr/cpsr (processor status flags)
-                // - tpidr_el0 (thread pointer; set to 0 by handler)
-                // These would need additional save/restore in the
-                // handler and here if user code depends on them
-                // across syscalls.
                 //
                 // We save user SP and elr to the kernel stack before
                 // loading user regs, then pop at the end.
                 unsafe {
                     core::arch::asm!(
-                        // Save user sp on kernel stack (before we change SP)
+                        // Save user sp and elr on kernel stack
                         "ldr x17, [x9, #32]",     // x17 = user sp
-                        "str x17, [sp, #-16]!",    // push to kernel stack
-
-                        // Save elr on kernel stack too
-                        "ldr x17, [x9, #16]",      // x17 = elr
-                        "str x17, [sp, #-16]!",    // push to kernel stack
+                        "str x17, [sp, #-16]!",
+                        "ldr x17, [x9, #16]",     // x17 = elr
+                        "str x17, [sp, #-16]!",
 
                         // Load x0-x8
                         "ldr x0,  [x9, #296]",
@@ -221,11 +230,17 @@ impl UserContextFnCall for UserContext {
                         "ldp x5, x6,   [x9, #80]",
                         "ldp x7, x8,   [x9, #96]",
 
-                        // Load x10-x15 (skip x9)
+                        // Load x10-x15 (skip x9, x16, x17)
                         "ldr x10, [x9, #120]",
                         "ldp x11, x12, [x9, #128]",
                         "ldp x13, x14, [x9, #144]",
                         "ldr x15, [x9, #160]",
+
+                        // x16/x17: clobbered (used as scratch for elr
+                        // and sp). Per AAPCS64, x16/x17 are intra-
+                        // procedure-call scratch registers that callers
+                        // must not rely on across function calls.
+                        // x18: reserved on macOS, skip.
 
                         // Load x19-x28 (callee-saved)
                         "ldp x19, x20, [x9, #192]",
@@ -238,22 +253,14 @@ impl UserContextFnCall for UserContext {
                         "ldr x29, [x9, #272]",
                         "ldr x30, [x9, #288]",
 
-                        // Load x9 last (clobbers our pointer)
+                        // Load x9 last (clobbers our context pointer)
                         "ldr x9,  [x9, #112]",
 
-                        // Pop elr -> x17, set x16 = -1
+                        // Pop elr -> x17, user_sp -> x16
                         "ldr x17, [sp], #16",      // pop elr
-                        "movn x16, #0",            // x16 = -1 for SIGSYS
-
-                        // Pop user sp, set SP, branch to elr via x17
-                        // x16 is -1 (for SIGSYS), x17 = elr
-                        "ldr x16, [sp], #16",      // pop user_sp -> x16 (temp)
-                        // Now x16 = user_sp, x17 = elr
-                        // We need: sp = user_sp, br x17, x16 = -1
+                        "ldr x16, [sp], #16",      // pop user_sp
                         "mov sp, x16",             // sp = user_sp
-                        "movn x16, #0",            // x16 = -1 again
                         "br x17",                  // jump to elr
-                        // x17 = elr (clobbered), x16 = -1 (for SIGSYS)
 
                         in("x9") ctx_ptr,
                         options(noreturn),
@@ -338,7 +345,8 @@ fn write_hex(buf: &mut [u8], val: usize) -> usize {
     n
 }
 
-/// SIGSYS signal handler. Called when user code executes `svc #0x80`.
+/// SIGTRAP signal handler. Called when user code executes `brk #1`
+/// (patched from the original `svc #0`).
 /// Reads user registers from the signal mcontext, populates the
 /// UserContext, and longjmps back to the kernel.
 unsafe extern "C" fn sigsys_handler(
@@ -426,15 +434,23 @@ unsafe extern "C" fn sigsys_handler(
     // trap_num = 0 for syscall (on aarch64 libos, trap_reason checks this)
     context.trap_num = 0;
 
-    // On macOS, the mcontext PC for SIGSYS already points past
-    // the svc instruction (pc = svc_addr + 4). No need to advance.
-    context.elr = user_pc;
+    // For SIGTRAP from brk, macOS does NOT advance PC past the
+    // instruction (unlike SIGSYS from svc). Advance by 4 bytes.
+    context.elr = user_pc + 4;
 
     // sp
     context.sp = user_sp;
 
-    // tpidr (not meaningful for the kernel, but save it)
-    context.tpidr = 0;
+    // Save user's tpidr_el0 (musl's TLS pointer) and restore
+    // macOS's value. On macOS, tpidr_el0 is a small thread index;
+    // musl uses it as a full TLS pointer. We swap on every trap.
+    {
+        let user_tpidr: u64;
+        core::arch::asm!("mrs {}, tpidr_el0", out(reg) user_tpidr);
+        context.tpidr = user_tpidr as usize;
+        let macos_tpidr = MACOS_TPIDR.with(|c| c.get());
+        core::arch::asm!("msr tpidr_el0, {}", in(reg) macos_tpidr);
+    }
 
     // General registers -- trapframe layout has named fields, not array.
     // GeneralRegs: x1, x2, ..., x28, x29, __reserved, x30, x0
