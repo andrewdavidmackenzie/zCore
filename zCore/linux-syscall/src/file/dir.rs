@@ -205,6 +205,24 @@ impl Syscall<'_> {
         self.sys_renameat(FileDesc::CWD, oldpath, FileDesc::CWD, newpath)
     }
 
+    /// Rename file relative to directory file descriptors, with flags.
+    ///
+    /// `renameat2` extends `renameat` with an additional `flags` parameter.
+    /// Currently the flags (RENAME_NOREPLACE, RENAME_EXCHANGE, RENAME_WHITEOUT)
+    /// are not supported and are silently ignored — the call behaves identically
+    /// to `renameat`.
+    pub fn sys_renameat2(
+        &self,
+        olddirfd: FileDesc,
+        oldpath: UserInPtr<u8>,
+        newdirfd: FileDesc,
+        newpath: UserInPtr<u8>,
+        flags: usize,
+    ) -> SysResult {
+        info!("renameat2: flags={:#x} (ignored)", flags);
+        self.sys_renameat(olddirfd, oldpath, newdirfd, newpath)
+    }
+
     /// rename file relative to directory file descriptors
     pub fn sys_renameat(
         &self,
