@@ -170,6 +170,14 @@ pub trait KernelObject: DowncastSync + Debug {
     fn allowed_signals(&self) -> Signal {
         Signal::USER_ALL
     }
+    /// Get the number of userspace handles referring to this object.
+    fn handle_count(&self) -> u32 {
+        0
+    }
+    /// Increment the handle count (called when a handle is added to a process).
+    fn inc_handle_count(&self) {}
+    /// Decrement the handle count (called when a handle is removed from a process).
+    fn dec_handle_count(&self) {}
 }
 
 impl_downcast!(sync KernelObject);
@@ -178,6 +186,8 @@ impl_downcast!(sync KernelObject);
 pub struct KObjectBase {
     /// The object's KoID.
     pub id: KoID,
+    /// Number of userspace handles referring to this object.
+    handle_count: AtomicU32,
     inner: Mutex<KObjectBaseInner>,
 }
 
@@ -193,6 +203,7 @@ impl Default for KObjectBase {
     fn default() -> Self {
         KObjectBase {
             id: Self::new_koid(),
+            handle_count: AtomicU32::new(0),
             inner: Default::default(),
         }
     }
@@ -218,6 +229,7 @@ impl KObjectBase {
     pub fn with(name: &str, signal: Signal) -> Self {
         KObjectBase {
             id: Self::new_koid(),
+            handle_count: AtomicU32::new(0),
             inner: Mutex::new(KObjectBaseInner {
                 name: String::from(name),
                 signal,
@@ -230,6 +242,21 @@ impl KObjectBase {
     fn new_koid() -> KoID {
         static KOID: AtomicU64 = AtomicU64::new(1024);
         KOID.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// Increment the handle count (called when a handle is added to a process).
+    pub fn inc_handle_count(&self) {
+        self.handle_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Decrement the handle count (called when a handle is removed from a process).
+    pub fn dec_handle_count(&self) {
+        self.handle_count.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    /// Get the number of userspace handles referring to this object.
+    pub fn get_handle_count(&self) -> u32 {
+        self.handle_count.load(Ordering::Relaxed)
     }
 
     /// Get object's name.
@@ -459,6 +486,15 @@ macro_rules! impl_kobject {
             }
             fn add_signal_callback(&self, callback: $crate::object::SignalHandler) {
                 self.base.add_signal_callback(callback);
+            }
+            fn handle_count(&self) -> u32 {
+                self.base.get_handle_count()
+            }
+            fn inc_handle_count(&self) {
+                self.base.inc_handle_count();
+            }
+            fn dec_handle_count(&self) {
+                self.base.dec_handle_count();
             }
             $( $fn )*
         }

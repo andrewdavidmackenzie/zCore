@@ -281,8 +281,7 @@ impl Syscall<'_> {
             Topic::HandleCount => {
                 let mut info_ptr = UserOutPtr::<u32>::from_addr_size(buffer, buffer_size)?;
                 let object = proc.get_dyn_object_with_rights(handle, Rights::INSPECT)?;
-                // FIXME: count Handle instead of Arc
-                info_ptr.write(Arc::strong_count(&object) as u32 - 1)?;
+                info_ptr.write(object.handle_count())?;
             }
             Topic::Job => {
                 let mut info_ptr = UserOutPtr::<JobInfo>::from_addr_size(buffer, buffer_size)?;

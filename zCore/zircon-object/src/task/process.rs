@@ -203,7 +203,7 @@ impl Process {
         }
         inner.status = Status::Exited(retcode);
         if inner.threads.is_empty() {
-            inner.handles.clear();
+            inner.clear_handles();
             drop(inner);
             self.terminate();
             return;
@@ -211,7 +211,7 @@ impl Process {
         for thread in inner.threads.iter() {
             thread.kill();
         }
-        inner.handles.clear();
+        inner.clear_handles();
     }
 
     /// The process finally terminates.
@@ -579,6 +579,7 @@ impl ProcessInner {
         let key = (self.max_handle_id << 2) | 0x3u32;
         info!("add handle: {:#x}, {:?}", key, handle.object);
         self.max_handle_id += 1;
+        handle.object.inc_handle_count();
         self.handles.insert(key, (handle, Vec::new()));
         key
     }
@@ -593,10 +594,19 @@ impl ProcessInner {
             .handles
             .remove(&handle_value)
             .ok_or(ZxError::BAD_HANDLE)?;
+        handle.object.dec_handle_count();
         for sender in queue {
             let _ = sender.send(());
         }
         Ok(handle)
+    }
+
+    /// Clear all handles, decrementing each object's handle count.
+    fn clear_handles(&mut self) {
+        for (handle, _) in self.handles.values() {
+            handle.object.dec_handle_count();
+        }
+        self.handles.clear();
     }
 
     fn get_cancel_token(&mut self, handle_value: HandleValue) -> ZxResult<Receiver<()>> {
