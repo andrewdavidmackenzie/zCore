@@ -25,7 +25,7 @@ pub fn mock_block() -> mock::MockBlock {
     mock::MockBlock::new()
 }
 
-use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::convert::TryFrom;
 
 use async_trait::async_trait;
@@ -42,7 +42,7 @@ use rcore_fs_ramfs::RamFS;
 use zircon_object::{object::KernelObject, vm::VmObject};
 
 use crate::error::{LxError, LxResult};
-use crate::net::Socket;
+// use crate::net::Socket;  // net module gated behind feature (#237)
 use crate::process::LinuxProcess;
 use devfs::RandomINode;
 use pseudo::Pseudo;
@@ -91,8 +91,8 @@ pub trait FileLike: KernelObject {
     fn get_vmo(&self, _offset: usize, _len: usize) -> LxResult<Arc<VmObject>> {
         Err(LxError::ENOSYS)
     }
-    /// Casting between trait objects, or use crate: cast_trait_object
-    fn as_socket(&self) -> LxResult<&dyn Socket> {
+    /// Casting between trait objects. Returns ENOTSOCK (net removed, #237).
+    fn as_socket(&self) -> LxResult<&dyn core::any::Any> {
         Err(LxError::ENOTSOCK)
     }
 }
@@ -163,34 +163,8 @@ pub fn create_root_fs(rootfs: Arc<dyn FileSystem>) -> Arc<dyn INode> {
     devfs_root
         .add("shm", Arc::new(RandomINode::new(true)))
         .expect("failed to mknod /dev/shm");
-    if let Some(display) = drivers::all_display().first() {
-        use devfs::{EventDev, FbDev, MiceDev};
-
-        // Add framebuffer device at `/dev/fb0`
-        if let Err(e) = devfs_root.add("fb0", Arc::new(FbDev::new(display.clone()))) {
-            warn!("failed to mknod /dev/fb0: {:?}", e);
-        }
-
-        let input_dev = devfs_root
-            .add_dir("input")
-            .expect("failed to mkdir /dev/input");
-
-        // Add mouse devices at `/dev/input/mouseX` and `/dev/input/mice`
-        for (id, m) in MiceDev::from_input_devices(&drivers::all_input().as_vec()) {
-            let fname = id.map_or("mice".to_string(), |id| format!("mouse{}", id));
-            if let Err(e) = input_dev.add(&fname, Arc::new(m)) {
-                warn!("failed to mknod /dev/input/{}: {:?}", fname, e);
-            }
-        }
-
-        // Add input event devices at `/dev/input/eventX`
-        for (id, i) in drivers::all_input().as_vec().iter().enumerate() {
-            let fname = format!("event{}", id);
-            if let Err(e) = input_dev.add(&fname, Arc::new(EventDev::new(i.clone(), id))) {
-                warn!("failed to mknod /dev/input/{}: {:?}", fname, e);
-            }
-        }
-    }
+    // Display/input device setup removed (see #237).
+    // EventDev, MiceDev, FbDev required display/input drivers.
 
     // Add uart devices at `/dev/ttyS{i}`
     for (i, uart) in drivers::all_uart().as_vec().iter().enumerate() {

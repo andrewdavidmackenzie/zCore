@@ -1,9 +1,9 @@
 use crate::context::TrapReason;
 use crate::{Info, Kind, Source, KCONFIG};
 use cortex_a::registers::FAR_EL1;
+use kernel_drivers::irq::gic_400::get_irq_num;
 use tock_registers::interfaces::Readable;
 use trapframe::TrapFrame;
-use zcore_drivers::irq::gic_400::get_irq_num;
 
 #[no_mangle]
 pub extern "C" fn trap_handler(tf: &mut TrapFrame) {

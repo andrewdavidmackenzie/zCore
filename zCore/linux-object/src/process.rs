@@ -4,7 +4,7 @@ use crate::{
     error::{LxError, LxResult},
     fs::{File, FileDesc, FileLike, OpenFlags, STDIN, STDOUT},
     ipc::*,
-    net::SOCKET_FD,
+    // net::SOCKET_FD moved inline since net module gated (#237)
     signal::{Signal as LinuxSignal, SignalAction},
     thread::ThreadExt,
     time::ITimerVal,
@@ -473,6 +473,7 @@ impl LinuxProcess {
     /// Add a socket to the fd table.
     pub fn add_socket(&self, file: Arc<dyn FileLike>) -> LxResult<FileDesc> {
         let inner = self.inner.lock();
+        const SOCKET_FD: usize = 1000;
         let fd = inner.get_free_fd_from(SOCKET_FD);
         self.insert_file(inner, fd, file)
     }

@@ -35,6 +35,7 @@ fn main() {
     // For Zircon mode: if PETAL_ZBI is not set, generate an empty stub
     // so include_bytes! doesn't fail. The rootfs-based boot path doesn't
     // need the embedded ZBI.
+    println!("cargo:rerun-if-env-changed=PETAL_ZBI");
     if std::env::var("PETAL_ZBI").is_err() {
         let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
         let stub = out.join("empty.zbi");

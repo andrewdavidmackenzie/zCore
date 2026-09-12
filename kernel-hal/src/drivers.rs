@@ -5,13 +5,13 @@ use core::convert::From;
 
 use lock::{RwLock, RwLockReadGuard};
 
-use zcore_drivers::scheme::{
-    BlockScheme, DisplayScheme, InputScheme, IrqScheme, NetScheme, Scheme, UartScheme,
+use kernel_drivers::scheme::{
+    BlockScheme, DisplayScheme, InputScheme, IrqScheme, Scheme, UartScheme,
 };
-use zcore_drivers::{Device, DeviceError};
+use kernel_drivers::{Device, DeviceError};
 
-/// Re-exported modules from crate [`zcore_drivers`].
-pub use zcore_drivers::{prelude, scheme};
+/// Re-exported modules from crate [`kernel_drivers`].
+pub use kernel_drivers::{prelude, scheme};
 
 /// A wrapper of a device array with the same [`Scheme`].
 pub struct DeviceList<T: Scheme + ?Sized>(RwLock<Vec<Arc<T>>>);
@@ -64,7 +64,6 @@ struct AllDeviceList {
     display: DeviceList<dyn DisplayScheme>,
     input: DeviceList<dyn InputScheme>,
     irq: DeviceList<dyn IrqScheme>,
-    net: DeviceList<dyn NetScheme>,
     uart: DeviceList<dyn UartScheme>,
 }
 
@@ -75,7 +74,6 @@ impl AllDeviceList {
             Device::Display(d) => self.display.add(d),
             Device::Input(d) => self.input.add(d),
             Device::Irq(d) => self.irq.add(d),
-            Device::Net(d) => self.net.add(d),
             Device::Uart(d) => self.uart.add(d),
         }
     }
@@ -105,11 +103,6 @@ pub fn all_input() -> &'static DeviceList<dyn InputScheme> {
 /// Returns all devices which implement the [`IrqScheme`].
 pub fn all_irq() -> &'static DeviceList<dyn IrqScheme> {
     &DEVICES.irq
-}
-
-/// Returns all devices which implement the [`NetScheme`].
-pub fn all_net() -> &'static DeviceList<dyn NetScheme> {
-    &DEVICES.net
 }
 
 /// Returns all devices which implement the [`UartScheme`].

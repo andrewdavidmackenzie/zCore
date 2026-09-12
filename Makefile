@@ -259,7 +259,7 @@ clippy:
 	@echo "==> Clippy: kernel crates ($(ARCH))..."
 	cargo clippy \
 		-p zcore -p kernel-hal -p linux-object -p linux-syscall \
-		-p linux-loader -p zircon-object -p zircon-syscall -p zcore-drivers \
+		-p linux-loader -p zircon-object -p zircon-syscall -p kernel-drivers \
 		--no-default-features --features linux \
 		--target zCore/$(ARCH).json \
 		-Z json-target-spec \

@@ -7,7 +7,7 @@ pub mod config;
 pub mod cpu;
 pub mod interrupt;
 pub mod mem;
-pub mod net;
+// net module removed: loopback/network features moved out of kernel (#237)
 pub mod thread;
 pub mod timer;
 pub mod vdso;

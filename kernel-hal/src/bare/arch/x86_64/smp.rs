@@ -264,7 +264,7 @@ pub fn boot_application_processors() {
         // Use broadcast IPIs (all-excluding-self) for simplicity.
         // This works when booting APs one at a time because we only
         // send SIPI after INIT, and only APs in SIPI-wait state respond.
-        let lapic = zcore_drivers::irq::x86::Apic::local_apic();
+        let lapic = kernel_drivers::irq::x86::Apic::local_apic();
 
         let dbg_stack = data.stack_top;
         let dbg_entry = data.entry;

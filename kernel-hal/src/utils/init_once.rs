@@ -6,7 +6,7 @@ pub struct InitOnce<T> {
 }
 
 impl<T> InitOnce<T> {
-    #[cfg(any(doc, not(feature = "libos"), feature = "graphic"))]
+    #[cfg(any(doc, not(feature = "libos")))]
     pub const fn new() -> Self {
         Self {
             inner: Once::new(),
@@ -38,7 +38,7 @@ impl<T> InitOnce<T> {
         self.default.as_ref()
     }
 
-    #[cfg(any(doc, feature = "graphic"))]
+    #[cfg(doc)]
     pub fn try_get(&self) -> Option<&T> {
         self.inner.get()
     }

@@ -1,10 +1,10 @@
 use alloc::boxed::Box;
 use alloc::format;
 
-use zcore_drivers::builder::{DevicetreeDriverBuilder, IoMapper};
-use zcore_drivers::irq::riscv::ScauseIntCode;
-use zcore_drivers::uart::BufferedUart;
-use zcore_drivers::{Device, DeviceResult};
+use kernel_drivers::builder::{DevicetreeDriverBuilder, IoMapper};
+use kernel_drivers::irq::riscv::ScauseIntCode;
+use kernel_drivers::uart::BufferedUart;
+use kernel_drivers::{Device, DeviceResult};
 
 use crate::common::vm::GenericPageTable;
 use crate::{drivers, mem::phys_to_virt, CachePolicy, MMUFlags, PhysAddr, VirtAddr};
@@ -71,7 +71,7 @@ pub(super) fn init() -> DeviceResult {
     #[cfg(not(feature = "no-pci"))]
     {
         use alloc::sync::Arc;
-        use zcore_drivers::bus::pci;
+        use kernel_drivers::bus::pci;
         let pci_devs = pci::init(Some(Arc::new(IoMapperImpl)))?;
         for d in pci_devs.into_iter() {
             drivers::add_device(d);
@@ -79,21 +79,6 @@ pub(super) fn init() -> DeviceResult {
     }
 
     intc_init()?;
-
-    #[cfg(feature = "graphic")]
-    if let Some(display) = drivers::all_display().first() {
-        crate::console::init_graphic_console(display.clone());
-        if display.need_flush() {
-            // TODO: support nested interrupt to render in time
-            crate::thread::spawn(crate::common::future::DisplayFlushFuture::new(display, 30));
-        }
-    }
-
-    #[cfg(feature = "loopback")]
-    {
-        use crate::net;
-        net::init();
-    }
 
     Ok(())
 }

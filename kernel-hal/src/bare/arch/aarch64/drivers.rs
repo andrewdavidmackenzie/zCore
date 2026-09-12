@@ -7,12 +7,12 @@ use crate::imp::config::VIRTIO_BASE;
 use crate::KCONFIG;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
-use zcore_drivers::irq::gic_400;
-use zcore_drivers::scheme::IrqScheme;
-use zcore_drivers::uart::{BufferedUart, Pl011Uart};
-use zcore_drivers::virtio::VirtIoBlk;
-use zcore_drivers::virtio::{MmioTransport, VirtIOHeader};
-use zcore_drivers::Device;
+use kernel_drivers::irq::gic_400;
+use kernel_drivers::scheme::IrqScheme;
+use kernel_drivers::uart::{BufferedUart, Pl011Uart};
+use kernel_drivers::virtio::VirtIoBlk;
+use kernel_drivers::virtio::{MmioTransport, VirtIOHeader};
+use kernel_drivers::Device;
 
 pub fn init_early() {
     let uart = Pl011Uart::new(phys_to_virt(KCONFIG.uart_base));

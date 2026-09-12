@@ -7,7 +7,7 @@ use smoltcp::{
 
 use alloc::vec::Vec;
 
-// use zcore_drivers::net::get_sockets;
+// use kernel_drivers::net::get_sockets;
 use alloc::sync::Arc;
 
 use alloc::string::String;
@@ -16,9 +16,9 @@ use lock::Mutex;
 use crate::drivers::add_device;
 use crate::drivers::all_net;
 use smoltcp::time::Instant;
-use zcore_drivers::net::LoopbackInterface;
-use zcore_drivers::scheme::NetScheme;
-use zcore_drivers::Device;
+use kernel_drivers::net::LoopbackInterface;
+use kernel_drivers::scheme::NetScheme;
+use kernel_drivers::Device;
 
 pub fn init() {
     let name = String::from("loopback");

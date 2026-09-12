@@ -2,7 +2,7 @@ use alloc::{boxed::Box, sync::Arc};
 use core::task::{Context, Poll};
 use core::time::Duration;
 use core::{future::Future, pin::Pin};
-use zcore_drivers::scheme::DisplayScheme;
+use kernel_drivers::scheme::DisplayScheme;
 
 use crate::timer;
 

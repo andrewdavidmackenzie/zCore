@@ -187,24 +187,7 @@ pub fn init_driver(dev: &PCIDevice, mapper: &Option<Arc<dyn IoMapper>>) -> Devic
             }
         }
 
-        (0x1b36, 0x10) => {
-            if let Some(BAR::Memory(addr, _len, _, _)) = dev.bars[0] {
-                #[cfg(target_arch = "riscv64")]
-                let addr = if addr == 0 { E1000_BASE as u64 } else { addr };
-
-                if let Some(m) = mapper {
-                    m.query_or_map(addr as usize, PAGE_SIZE * 8);
-                }
-
-                let irq = unsafe { enable(dev.loc, addr) };
-                let vaddr = phys_to_virt(addr as usize);
-
-                let blk = Arc::new(crate::nvme::NvmeInterface::new(vaddr, irq.unwrap_or(33))?);
-
-                let dev = Device::Block(blk);
-                return Ok(dev);
-            }
-        }
+        // (0x1b36, 0x10) was NVMe -- removed (dead code, see #237)
         (0x8086, 0x10fb) => {
             // 82599ES 10-Gigabit SFI/SFP+ Network Connection
             if let Some(BAR::Memory(addr, _len, _, _)) = dev.bars[0] {

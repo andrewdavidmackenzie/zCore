@@ -102,13 +102,7 @@ pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
             check_exit_code(proc)
         };
 
-        // If the graphic mode is on, run the process in another thread.
-        #[cfg(feature = "graphic")]
-        let future = {
-            let handle = async_std::task::spawn(future);
-            kernel_hal::libos::run_graphic_service();
-            handle
-        };
+        // graphic mode removed (see #237)
 
         async_std::task::block_on(future)
     } else {

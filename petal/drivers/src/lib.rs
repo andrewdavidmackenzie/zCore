@@ -24,7 +24,7 @@ pub mod input;
 pub mod io;
 pub mod irq;
 pub mod net;
-pub mod nvme;
+// nvme removed: was dead code, never used (see #237)
 pub mod prelude;
 pub mod scheme;
 pub mod uart;
