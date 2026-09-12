@@ -2,7 +2,7 @@ use {
     self::{paged::*, physical::*, slice::*},
     super::*,
     crate::object::*,
-    crate::signal::{Port, PortPacketRepr, PacketSignal, PayloadRepr},
+    crate::signal::{PacketSignal, PayloadRepr, Port, PortPacketRepr},
     alloc::{
         sync::{Arc, Weak},
         vec::Vec,
