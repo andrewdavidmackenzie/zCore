@@ -17,6 +17,7 @@ members = [
     "zCore/lock",
     # Cross-compiled for bare-metal userspace by xtask.
     # Not in default-members (require explicit --target to build).
+    "zCore/zx",
     "petal",
     "zCore/userstart",
 ]
