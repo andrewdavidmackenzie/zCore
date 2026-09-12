@@ -25,6 +25,15 @@ impl Syscall<'_> {
             handle_value, property, buffer, buffer_size
         );
         let proc = self.thread.proc();
+        // ProcessVdsoBaseAddress uses the calling process's VMAR directly,
+        // not the handle's object. Handle it before the rights check so any
+        // valid handle works (matching Fuchsia's behavior).
+        if matches!(property, Property::ProcessVdsoBaseAddress) {
+            let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
+            let vdso_base = proc.vmar().vdso_base_addr().unwrap_or(0);
+            info_ptr.write(vdso_base)?;
+            return Ok(());
+        }
         let object = proc.get_dyn_object_with_rights(handle_value, Rights::GET_PROPERTY)?;
         match property {
             Property::Name => {
@@ -44,12 +53,8 @@ impl Syscall<'_> {
                 info_ptr.write(debug_addr)?;
                 Ok(())
             }
-            Property::ProcessVdsoBaseAddress => {
-                let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
-                let vdso_base = proc.vmar().vdso_base_addr().unwrap_or(0);
-                info_ptr.write(vdso_base)?;
-                Ok(())
-            }
+            // ProcessVdsoBaseAddress is handled above (before rights check)
+            Property::ProcessVdsoBaseAddress => unreachable!(),
             Property::ProcessBreakOnLoad => {
                 let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
                 let break_on_load = proc

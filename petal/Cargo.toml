@@ -16,6 +16,10 @@ path = "src/bin/channel_test.rs"
 name = "vmo_test"
 path = "src/bin/vmo_test.rs"
 
+[[bin]]
+name = "vdso_test"
+path = "src/bin/vdso_test.rs"
+
 [dependencies]
 zx = { path = "../zCore/zx" }
 
