@@ -7,7 +7,6 @@
 #![no_std]
 
 use core::sync::atomic::{AtomicU32, Ordering};
-use zircon_abi::syscall;
 
 extern "Rust" {
     /// The user's main function.
@@ -27,12 +26,12 @@ pub fn take_startup_handle() -> u32 {
 pub extern "C" fn _start(startup_handle: u32, _arg2: usize) -> ! {
     STARTUP_HANDLE.store(startup_handle, Ordering::SeqCst);
     unsafe { main() };
-    syscall::process_exit(0);
+    zx::Process::exit(0);
 }
 
 /// Panic handler -- writes a message and exits with code 1.
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
-    syscall::debug_write(b"petal: PANIC!\n");
-    syscall::process_exit(1);
+    zx::debug_write(b"petal: PANIC!\n");
+    zx::Process::exit(1);
 }

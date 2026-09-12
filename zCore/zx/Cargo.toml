@@ -1,0 +1,9 @@
+[package]
+name = "zx"
+version = "0.1.0"
+edition = "2021"
+description = "Safe Rust bindings for Zircon kernel objects, layered on zircon-abi"
+license = "MIT"
+
+[dependencies]
+zircon-abi = { path = "../zircon-abi", features = ["userspace"] }

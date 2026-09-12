@@ -1,66 +1,68 @@
 //! petal VMO test -- exercises Zircon VMO syscalls.
 //!
-//! Tests: vmo_create, vmo_write, vmo_read, vmo_get_size, handle_close.
+//! Tests: vmo_create, vmo_write, vmo_read, vmo_get_size, handle_close (via drop).
 
 #![no_std]
 #![no_main]
 
 extern crate petal;
 
-use zircon_abi::errors::*;
-use zircon_abi::syscall;
+use zx::{Status, Vmo};
 
 #[no_mangle]
 pub fn main() {
-    syscall::debug_print("vmo_test: starting\n");
+    zx::debug_write(b"vmo_test: starting\n");
 
     // Create a VMO
-    let mut vmo: u32 = 0;
-    let status = unsafe { syscall::zx_vmo_create(4096, 0, &mut vmo) };
-    assert_ok("vmo_create", status);
-    syscall::debug_print("vmo_test: VMO created\n");
+    let vmo = Vmo::create(4096).expect_ok("vmo_create");
+    zx::debug_write(b"vmo_test: VMO created\n");
 
     // Check size
-    let mut size: usize = 0;
-    let status = unsafe { syscall::zx_vmo_get_size(vmo, &mut size) };
-    assert_ok("vmo_get_size", status);
+    let size = vmo.get_size().expect_ok("vmo_get_size");
 
     if size == 4096 {
-        syscall::debug_print("vmo_test: size verified (4096)\n");
+        zx::debug_write(b"vmo_test: size verified (4096)\n");
     } else {
-        syscall::debug_print("vmo_test: FAIL - unexpected size\n");
-        syscall::process_exit(1);
+        zx::debug_write(b"vmo_test: FAIL - unexpected size\n");
+        zx::Process::exit(1);
     }
 
     // Write data
     let data = b"Hello from VMO!";
-    let status = unsafe { syscall::zx_vmo_write(vmo, data.as_ptr(), 0, data.len()) };
-    assert_ok("vmo_write", status);
-    syscall::debug_print("vmo_test: data written\n");
+    vmo.write(data, 0).expect_ok("vmo_write");
+    zx::debug_write(b"vmo_test: data written\n");
 
     // Read it back
     let mut buf = [0u8; 64];
-    let status = unsafe { syscall::zx_vmo_read(vmo, buf.as_mut_ptr(), 0, data.len()) };
-    assert_ok("vmo_read", status);
+    vmo.read(&mut buf[..data.len()], 0).expect_ok("vmo_read");
 
     if &buf[..data.len()] == data {
-        syscall::debug_print("vmo_test: data verified\n");
+        zx::debug_write(b"vmo_test: data verified\n");
     } else {
-        syscall::debug_print("vmo_test: FAIL - data mismatch\n");
-        syscall::process_exit(1);
+        zx::debug_write(b"vmo_test: FAIL - data mismatch\n");
+        zx::Process::exit(1);
     }
 
-    // Clean up
-    unsafe { syscall::zx_handle_close(vmo) };
+    // Handle closed automatically on drop
 
-    syscall::debug_print("vmo_test: PASS\n");
+    zx::debug_write(b"vmo_test: PASS\n");
 }
 
-fn assert_ok(name: &str, status: ZxStatus) {
-    if status != ZX_OK {
-        syscall::debug_print("vmo_test: FAIL - ");
-        syscall::debug_print(name);
-        syscall::debug_print(" failed\n");
-        syscall::process_exit(1);
+/// Extension trait for Result to use in no_std petal programs.
+trait ExpectOk<T> {
+    fn expect_ok(self, name: &str) -> T;
+}
+
+impl<T> ExpectOk<T> for Result<T, Status> {
+    fn expect_ok(self, name: &str) -> T {
+        match self {
+            Ok(v) => v,
+            Err(_) => {
+                zx::debug_write(b"vmo_test: FAIL - ");
+                zx::debug_write(name.as_bytes());
+                zx::debug_write(b" failed\n");
+                zx::Process::exit(1);
+            }
+        }
     }
 }
