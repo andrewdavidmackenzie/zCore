@@ -12,9 +12,14 @@ fn main() {
 
     // If VDSO_BIN is not set, generate an empty stub.
     // The vDSO code pages will be empty (trampolines not embedded).
-    if std::env::var("VDSO_BIN").is_err() {
+    if let Ok(vdso_path) = std::env::var("VDSO_BIN") {
+        // Rebuild if the vDSO binary changes
+        println!("cargo:rerun-if-env-changed=VDSO_BIN");
+        println!("cargo:rerun-if-changed={}", vdso_path);
+    } else {
         let stub = out.join("empty_vdso.bin");
         std::fs::write(stub.as_path(), b"").unwrap();
         println!("cargo:rustc-env=VDSO_BIN={}", stub.display());
+        println!("cargo:rerun-if-env-changed=VDSO_BIN");
     }
 }

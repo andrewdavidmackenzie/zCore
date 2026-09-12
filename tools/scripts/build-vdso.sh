@@ -50,7 +50,12 @@ echo "==> Building vDSO for $ARCH..."
 cargo build -p zcore-vdso --target "$RUST_TARGET" --release 2>&1 | tail -2
 
 # Step 2: Find the generated assembly file
-OUT_DIR=$(find "target/$RUST_TARGET/release/build" -name "vdso_trampolines.S" 2>/dev/null | head -1)
+# Find the most recently modified assembly file to avoid using stale builds
+OUT_DIR=$(find "target/$RUST_TARGET/release/build" -name "vdso_trampolines.S" -newer "target/$RUST_TARGET/release/libzcore_vdso.a" 2>/dev/null | head -1)
+if [ -z "$OUT_DIR" ]; then
+  # Fallback: find any matching file (first build)
+  OUT_DIR=$(find "target/$RUST_TARGET/release/build" -name "vdso_trampolines.S" 2>/dev/null | head -1)
+fi
 if [ -z "$OUT_DIR" ]; then
   echo "ERROR: could not find generated vdso_trampolines.S"
   exit 1
