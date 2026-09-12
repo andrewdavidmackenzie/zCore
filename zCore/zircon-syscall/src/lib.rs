@@ -460,9 +460,7 @@ impl Syscall<'_> {
                 self.sys_pager_supply_pages(a0 as _, a1 as _, a2 as _, a3 as _, a4 as _, a5 as _)
             }
             Sys::PAGER_OP_RANGE => {
-                // TODO: implement pager_op_range operations (dirty, writeback, fail)
-                warn!("pager.op_range: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+                self.sys_pager_op_range(a0 as _, a1 as _, a2 as _, a3 as _, a4 as _, a5 as _)
             }
             // Kernel tracing
             // TODO: implement kernel trace ring buffer for syscall
