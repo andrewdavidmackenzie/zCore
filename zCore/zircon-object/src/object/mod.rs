@@ -358,29 +358,63 @@ impl dyn KernelObject {
         }
     }
 
-    /// Once one of the `signal` asserted, push a packet with `key` into the `port`,
+    /// Once one of the `signal` asserted, push a packet with `key` into the `port`.
     ///
-    /// It's used to implement `sys_object_wait_async`.
+    /// Used to implement `sys_object_wait_async`. Level-triggered (one-shot):
+    /// fires immediately if signal already asserted, otherwise registers a
+    /// callback that fires on the next matching signal change.
     #[allow(unsafe_code)]
     pub fn send_signal_to_port_async(self: &Arc<Self>, signal: Signal, port: &Arc<Port>, key: u64) {
-        let current_signal = self.signal();
-        if !(current_signal & signal).is_empty() {
-            port.push(PortPacketRepr {
-                key,
-                status: ZxError::OK,
-                data: PayloadRepr::Signal(PacketSignal {
-                    trigger: signal,
-                    observed: current_signal,
-                    count: 1,
-                    timestamp: 0,
-                    _reserved1: 0,
-                }),
-            });
-            return;
+        self.send_signal_to_port_async_inner(signal, port, key, false);
+    }
+
+    /// Edge-triggered variant: only fires when signal transitions from
+    /// deasserted to asserted (never fires immediately).
+    #[allow(unsafe_code)]
+    pub fn send_signal_to_port_async_edge(
+        self: &Arc<Self>,
+        signal: Signal,
+        port: &Arc<Port>,
+        key: u64,
+    ) {
+        self.send_signal_to_port_async_inner(signal, port, key, true);
+    }
+
+    #[allow(unsafe_code)]
+    fn send_signal_to_port_async_inner(
+        self: &Arc<Self>,
+        signal: Signal,
+        port: &Arc<Port>,
+        key: u64,
+        edge_triggered: bool,
+    ) {
+        // For level-triggered mode, fire immediately if signal already set.
+        if !edge_triggered {
+            let current_signal = self.signal();
+            if !(current_signal & signal).is_empty() {
+                port.push(PortPacketRepr {
+                    key,
+                    status: ZxError::OK,
+                    data: PayloadRepr::Signal(PacketSignal {
+                        trigger: signal,
+                        observed: current_signal,
+                        count: 1,
+                        timestamp: 0,
+                        _reserved1: 0,
+                    }),
+                });
+                return;
+            }
         }
+        // Register a cancellable callback.
+        let cancelled = port.register_async(self.id(), key);
         self.add_signal_callback(Box::new({
             let port = port.clone();
             move |s| {
+                // Check cancellation before pushing
+                if cancelled.load(core::sync::atomic::Ordering::Relaxed) {
+                    return true; // cancelled, remove callback
+                }
                 if (s & signal).is_empty() {
                     return false;
                 }

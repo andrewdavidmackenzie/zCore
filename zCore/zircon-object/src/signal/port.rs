@@ -1,8 +1,10 @@
 pub use self::port_packet::*;
 use crate::object::*;
-use alloc::collections::{BTreeSet, VecDeque};
+use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use bitflags::bitflags;
+use core::sync::atomic::AtomicBool;
 use lock::Mutex;
 
 #[path = "port_packet.rs"]
@@ -27,12 +29,16 @@ pub struct Port {
 
 impl_kobject!(Port);
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 struct PortInner {
     queue: VecDeque<PortPacket>,
     interrupt_queue: VecDeque<PortInterruptPacket>,
     interrupt_grave: BTreeSet<u64>,
     interrupt_pid: u64,
+    /// Cancellation flags for signal callbacks registered by wait_async.
+    /// Keyed by (source_koid, key). When port_cancel is called, the flag
+    /// is set to true and the callback will remove itself on next invocation.
+    async_subscriptions: BTreeMap<(KoID, u64), Vec<Arc<AtomicBool>>>,
 }
 
 #[derive(Debug)]
@@ -61,6 +67,37 @@ impl Port {
             options: PortOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?,
             inner: Mutex::default(),
         }))
+    }
+
+    /// Register an async signal subscription for cancellation tracking.
+    ///
+    /// Returns a shared cancellation flag. When the flag is set to `true`,
+    /// the signal callback will remove itself on its next invocation.
+    pub fn register_async(&self, source_koid: KoID, key: u64) -> Arc<AtomicBool> {
+        let flag = Arc::new(AtomicBool::new(false));
+        let mut inner = self.inner.lock();
+        inner
+            .async_subscriptions
+            .entry((source_koid, key))
+            .or_default()
+            .push(flag.clone());
+        flag
+    }
+
+    /// Cancel all async signal subscriptions matching the given source and key.
+    ///
+    /// Returns `Ok(())` if any subscriptions were found and cancelled,
+    /// `Err(NOT_FOUND)` if no matching subscriptions exist.
+    pub fn cancel_async(&self, source_koid: KoID, key: u64) -> ZxResult {
+        let mut inner = self.inner.lock();
+        if let Some(flags) = inner.async_subscriptions.remove(&(source_koid, key)) {
+            for flag in flags {
+                flag.store(true, core::sync::atomic::Ordering::Relaxed);
+            }
+            Ok(())
+        } else {
+            Err(ZxError::NOT_FOUND)
+        }
     }
 
     /// Push a `packet` into the port.

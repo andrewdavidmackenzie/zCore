@@ -207,10 +207,16 @@ impl Syscall<'_> {
         );
         let thread_state = self.thread.state();
         if thread_state == ThreadState::BlockedChannel {
-            // TODO: implement BlockedChannel retry logic for channel_call_finish
-            warn!("channel.call_finish: BlockedChannel retry not yet implemented");
-            Err(ZxError::NOT_SUPPORTED)
+            // The thread is still waiting for a channel call reply.
+            // zCore's blocking_run doesn't generate INTR_RETRY errors,
+            // so this path shouldn't normally be reached. Return TIMED_OUT
+            // to let the caller retry the full channel_call if needed.
+            warn!("channel.call_finish: thread still in BlockedChannel, returning TIMED_OUT");
+            Err(ZxError::TIMED_OUT)
         } else {
+            // Thread is not in BlockedChannel state -- the original call
+            // already completed (timed out or succeeded). Return BAD_STATE
+            // per the Zircon spec.
             Err(ZxError::BAD_STATE)
         }
     }
