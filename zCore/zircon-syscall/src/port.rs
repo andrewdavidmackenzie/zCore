@@ -53,4 +53,21 @@ impl Syscall<'_> {
         port.push_user(packet)?;
         Ok(())
     }
+
+    /// Cancel async port notifications on an object.
+    pub fn sys_port_cancel(
+        &self,
+        port_handle: HandleValue,
+        source_handle: HandleValue,
+        key: u64,
+    ) -> ZxResult {
+        info!(
+            "port.cancel: port={:#x}, source={:#x}, key={:#x}",
+            port_handle, source_handle, key
+        );
+        let proc = self.thread.proc();
+        let port = proc.get_object_with_rights::<Port>(port_handle, Rights::WRITE)?;
+        let source = proc.get_dyn_object_with_rights(source_handle, Rights::empty())?;
+        port.cancel_async(source.id(), key)
+    }
 }

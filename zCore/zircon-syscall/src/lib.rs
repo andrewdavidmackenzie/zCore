@@ -204,11 +204,7 @@ impl Syscall<'_> {
             Sys::PORT_CREATE => self.sys_port_create(a0 as _, a1.into()),
             Sys::PORT_WAIT => self.sys_port_wait(a0 as _, a1.into(), a2.into()).await,
             Sys::PORT_QUEUE => self.sys_port_queue(a0 as _, a1.into()),
-            Sys::PORT_CANCEL => {
-                // TODO: implement proper port cancel logic
-                warn!("port.cancel: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::PORT_CANCEL => self.sys_port_cancel(a0 as _, a1 as _, a2 as _),
             Sys::FUTEX_WAIT => {
                 self.sys_futex_wait(a0.into(), a1 as _, a2 as _, a3.into())
                     .await

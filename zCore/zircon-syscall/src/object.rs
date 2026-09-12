@@ -417,15 +417,14 @@ impl Syscall<'_> {
         if options & !ZX_WAIT_ASYNC_EDGE != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        if options & ZX_WAIT_ASYNC_EDGE != 0 {
-            // TODO: implement edge-triggered wait_async
-            warn!("object.wait_async: ZX_WAIT_ASYNC_EDGE not yet implemented");
-            return Err(ZxError::NOT_SUPPORTED);
-        }
         let proc = self.thread.proc();
         let object = proc.get_dyn_object_with_rights(handle_value, Rights::WAIT)?;
         let port = proc.get_object_with_rights::<Port>(port_handle_value, Rights::WRITE)?;
-        object.send_signal_to_port_async(signals, &port, key);
+        if options & ZX_WAIT_ASYNC_EDGE != 0 {
+            object.send_signal_to_port_async_edge(signals, &port, key);
+        } else {
+            object.send_signal_to_port_async(signals, &port, key);
+        }
         Ok(())
     }
 
