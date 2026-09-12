@@ -1,0 +1,12 @@
+[package]
+name = "zcore-vdso"
+version = "0.1.0"
+edition = "2021"
+description = "Zircon vDSO: syscall trampolines and system constant accessors"
+
+[dependencies]
+
+[lib]
+# Built as a static library; the vDSO ELF is assembled by xtask
+# from the generated object code.
+crate-type = ["staticlib"]
