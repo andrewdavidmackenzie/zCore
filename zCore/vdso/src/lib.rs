@@ -121,3 +121,136 @@ pub extern "C" fn zx_system_get_dcache_line_size() -> u32 {
 pub extern "C" fn zx_system_get_version_string() -> *const u8 {
     data().map_or(core::ptr::null(), |d| d.version_string.as_ptr())
 }
+
+/// Get the current monotonic time in nanoseconds.
+///
+/// In Fuchsia's real vDSO this reads shared memory + hardware tick
+/// counter entirely in userspace. For now, falls back to the kernel
+/// syscall.
+// TODO: implement userspace-only time reading using VdsoConstants
+// tick-to-mono conversion ratios + hardware tick counter.
+#[no_mangle]
+pub unsafe extern "C" fn zx_clock_get_monotonic() -> i64 {
+    extern "C" {
+        fn zx_clock_get_monotonic_via_kernel(out: *mut i64) -> i32;
+    }
+    let mut now: i64 = 0;
+    unsafe { zx_clock_get_monotonic_via_kernel(&mut now) };
+    now
+}
+
+/// Read the hardware tick counter.
+///
+/// In Fuchsia's real vDSO this reads the hardware counter directly.
+/// For now, falls back to the kernel syscall.
+// TODO: implement direct hardware counter read per architecture.
+#[no_mangle]
+pub unsafe extern "C" fn zx_ticks_get() -> i64 {
+    extern "C" {
+        fn zx_ticks_get_via_kernel(out: *mut i64) -> i32;
+    }
+    let mut ticks: i64 = 0;
+    unsafe { zx_ticks_get_via_kernel(&mut ticks) };
+    ticks
+}
+
+/// Get CPU feature flags.
+#[no_mangle]
+pub extern "C" fn zx_system_get_features(kind: u32, features: *mut u32) -> i32 {
+    // kind 0 = ZX_FEATURE_KIND_CPU
+    if kind != 0 || features.is_null() {
+        return -10; // ZX_ERR_INVALID_ARGS
+    }
+    match data() {
+        Some(d) => {
+            unsafe { *features = d.features_cpu };
+            0 // ZX_OK
+        }
+        None => -2, // ZX_ERR_NOT_SUPPORTED
+    }
+}
+
+/// Draw random bytes from the kernel CPRNG.
+///
+/// Loops calling `zx_cprng_draw_once` in chunks of 256 bytes
+/// (ZX_CPRNG_DRAW_MAX_LEN). This matches Fuchsia's vDSO behavior.
+#[no_mangle]
+pub unsafe extern "C" fn zx_cprng_draw(buffer: *mut u8, length: usize) {
+    const MAX_CHUNK: usize = 256;
+    extern "C" {
+        fn zx_cprng_draw_once(buffer: *mut u8, length: usize) -> i32;
+    }
+    let mut offset = 0;
+    while offset < length {
+        let chunk = core::cmp::min(MAX_CHUNK, length - offset);
+        let status = unsafe { zx_cprng_draw_once(buffer.add(offset), chunk) };
+        if status != 0 {
+            // Fatal: CPRNG failure is unrecoverable per Fuchsia spec
+            loop {
+                core::hint::spin_loop();
+            }
+        }
+        offset += chunk;
+    }
+}
+
+/// Compute an absolute deadline from a relative duration.
+///
+/// Returns `now + duration` where `now` is the current monotonic time.
+/// Uses `zx_clock_get_monotonic_via_kernel` since we don't yet have
+/// userspace-only time reading.
+#[no_mangle]
+pub unsafe extern "C" fn zx_deadline_after(nanoseconds: i64) -> i64 {
+    extern "C" {
+        fn zx_clock_get_monotonic_via_kernel(out: *mut i64) -> i32;
+    }
+    let mut now: i64 = 0;
+    unsafe { zx_clock_get_monotonic_via_kernel(&mut now) };
+    now.saturating_add(nanoseconds)
+}
+
+/// Send a message to a channel and wait for a reply.
+///
+/// Wraps `zx_channel_call_noretry` with retry logic on interrupt.
+#[no_mangle]
+pub unsafe extern "C" fn zx_channel_call(
+    handle: u32,
+    options: u32,
+    deadline: i64,
+    args: *const u8,
+    actual_bytes: *mut u32,
+    actual_handles: *mut u32,
+) -> i32 {
+    extern "C" {
+        fn zx_channel_call_noretry(
+            handle: u32,
+            options: u32,
+            deadline: i64,
+            args: *const u8,
+            actual_bytes: *mut u32,
+            actual_handles: *mut u32,
+        ) -> i32;
+        fn zx_channel_call_finish(
+            deadline: i64,
+            args: *const u8,
+            actual_bytes: *mut u32,
+            actual_handles: *mut u32,
+        ) -> i32;
+    }
+    let mut status = unsafe {
+        zx_channel_call_noretry(
+            handle,
+            options,
+            deadline,
+            args,
+            actual_bytes,
+            actual_handles,
+        )
+    };
+    // ZX_ERR_INTERNAL_INTR_RETRY (-6) means the call was interrupted
+    // and should be retried via channel_call_finish.
+    while status == -6 {
+        status = unsafe { zx_channel_call_finish(deadline, args, actual_bytes, actual_handles) };
+    }
+    status
+}
