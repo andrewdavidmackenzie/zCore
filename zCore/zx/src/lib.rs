@@ -59,7 +59,7 @@ mod timer;
 pub use timer::Timer;
 
 mod debuglog;
-pub use debuglog::{debug_write, DebugLog};
+pub use debuglog::{debug_print, debug_write, DebugLog};
 
 mod process;
 pub use process::{process_self, Process};

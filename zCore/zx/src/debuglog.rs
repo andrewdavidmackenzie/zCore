@@ -25,7 +25,12 @@ impl DebugLog {
     }
 }
 
-/// Write a string to the kernel debug serial port (no handle needed).
+/// Write bytes to the kernel debug serial port (no handle needed).
 pub fn debug_write(msg: &[u8]) {
     syscall::debug_write(msg);
+}
+
+/// Write a string to the kernel debug serial port (no handle needed).
+pub fn debug_print(msg: &str) {
+    syscall::debug_print(msg);
 }
