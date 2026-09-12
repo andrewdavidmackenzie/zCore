@@ -163,8 +163,8 @@ unsafe fn enable(loc: Location, paddr: u64) -> Option<usize> {
     assigned_irq
 }
 
-pub fn init_driver(dev: &PCIDevice, mapper: &Option<Arc<dyn IoMapper>>) -> DeviceResult<Device> {
-    let name = format!("enp{}s{}f{}", dev.loc.bus, dev.loc.device, dev.loc.function);
+pub fn init_driver(dev: &PCIDevice, _mapper: &Option<Arc<dyn IoMapper>>) -> DeviceResult<Device> {
+    let _name = format!("enp{}s{}f{}", dev.loc.bus, dev.loc.device, dev.loc.function);
     match (dev.id.vendor_id, dev.id.device_id) {
         // e1000 and NVMe drivers removed from kernel-drivers (see #237)
         // Network drivers are in the separate drivers crate.
