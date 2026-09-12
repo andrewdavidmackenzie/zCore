@@ -28,6 +28,10 @@ use zircon_object::task::{CurrentThread, ExceptionType, Job, Process, Thread, Th
 use zircon_object::util::elf_loader::{ElfExt, VmarExt};
 use zircon_object::vm::{VmObject, VmarFlags};
 
+// vDSO VMO layout: pages 0-6 reserved for code, page 7 for VdsoConstants data.
+const VDSO_PAGES: usize = 8;
+const VDSO_DATA_OFFSET: usize = 0x7000;
+
 // Handle indices in the bootstrap channel message.
 // These describe userstart itself.
 const K_PROC_SELF: usize = 0;
@@ -135,8 +139,6 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     //   Page 7 (offset 0x7000): VdsoConstants data page
     // The data page is mapped into the process so that
     // ZX_PROP_PROCESS_VDSO_BASE_ADDRESS returns a valid address.
-    const VDSO_PAGES: usize = 8;
-    const VDSO_DATA_OFFSET: usize = 0x7000; // page 7
     let vdso_vmo = VmObject::new_paged(VDSO_PAGES);
     vdso_vmo.set_name("vdso/full");
     // Write VdsoConstants into the data page
@@ -453,6 +455,23 @@ pub fn run_from_rootfs(
         .unwrap();
     let sp = stack_base + stack_size;
     info!("Stack at {:#x}-{:#x}, sp={:#x}", stack_base, sp, sp);
+
+    // Map vDSO data page into the process so
+    // ZX_PROP_PROCESS_VDSO_BASE_ADDRESS works.
+    let vdso_vmo = VmObject::new_paged(VDSO_PAGES);
+    vdso_vmo.set_name("vdso/full");
+    let vdso_constants = kernel_hal::vdso::vdso_constants();
+    let constants_bytes = unsafe {
+        core::slice::from_raw_parts(
+            &vdso_constants as *const _ as *const u8,
+            core::mem::size_of_val(&vdso_constants),
+        )
+    };
+    vdso_vmo.write(VDSO_DATA_OFFSET, constants_bytes).unwrap();
+    let vdso_flags = MMUFlags::READ | MMUFlags::USER;
+    let _vdso_addr = vmar
+        .map(None, vdso_vmo, VDSO_DATA_OFFSET, PAGE_SIZE, vdso_flags)
+        .unwrap();
 
     // Create a bootstrap channel (petal programs expect a startup handle).
     // ch0 is the kernel end, ch1 goes to the process.

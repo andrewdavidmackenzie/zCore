@@ -34,14 +34,12 @@ struct VdsoConstants {
 pub fn main() {
     zx::debug_write(b"vdso_test: starting\n");
 
-    // The startup handle is a channel endpoint. We can use it
-    // for get_property since the VDSO_BASE property handler uses
-    // the calling process's VMAR, not the handle's object.
+    // Use the startup handle (a channel) for get_property.
+    // Our ProcessVdsoBaseAddress handler falls back to the calling
+    // process's own VMAR when the handle is not a Process.
     let startup = petal::take_startup_handle();
 
-    // Query ZX_PROP_PROCESS_VDSO_BASE_ADDRESS using the startup handle.
-    // The property handler ignores which object the handle refers to --
-    // it always returns the calling process's vDSO base address.
+    // Query ZX_PROP_PROCESS_VDSO_BASE_ADDRESS
     let mut vdso_base: usize = 0;
     let status = unsafe {
         zx::sys::zx_object_get_property(

@@ -219,7 +219,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     {
         let vdso_map_addr = stack_top + 0x10000; // well above the stack
         let mut vdso_addr: usize = 0;
-        let _s = unsafe {
+        let s = unsafe {
             zx_vmar_map(
                 init_vmar,
                 ZX_VM_PERM_READ | ZX_VM_SPECIFIC,
@@ -230,6 +230,9 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
                 &mut vdso_addr,
             )
         };
+        if s != ZX_OK {
+            debug_print(b"userstart: warning: failed to map vDSO into init process\n");
+        }
     }
 
     // Step 8: Create a channel to forward bootstrap handles to init
@@ -240,7 +243,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     });
 
     // Forward the remaining bootstrap handles to init via the channel.
-    // We pass: root job, root resource, and the ZBI VMO.
+    // We pass: root job and the ZBI VMO.
     let forward_handles = [root_job, zbi_vmo];
     check("channel_write", unsafe {
         zx_channel_write(

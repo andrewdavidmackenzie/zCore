@@ -25,12 +25,19 @@ impl Syscall<'_> {
             handle_value, property, buffer, buffer_size
         );
         let proc = self.thread.proc();
-        // ProcessVdsoBaseAddress uses the calling process's VMAR directly,
-        // not the handle's object. Handle it before the rights check so any
-        // valid handle works (matching Fuchsia's behavior).
+        // ProcessVdsoBaseAddress: try the handle as a Process first (Fuchsia
+        // requires a Process handle). If the handle is not a Process, fall
+        // back to the calling process's own VMAR. This allows petal programs
+        // (which don't have a Process self-handle) to query their own vDSO base.
         if matches!(property, Property::ProcessVdsoBaseAddress) {
             let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
-            let vdso_base = proc.vmar().vdso_base_addr().unwrap_or(0);
+            let vdso_base = if let Ok(target) =
+                proc.get_object_with_rights::<Process>(handle_value, Rights::INSPECT)
+            {
+                target.vmar().vdso_base_addr().unwrap_or(0)
+            } else {
+                proc.vmar().vdso_base_addr().unwrap_or(0)
+            };
             info_ptr.write(vdso_base)?;
             return Ok(());
         }
