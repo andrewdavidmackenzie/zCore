@@ -11,9 +11,7 @@ use naive_timer::Timer;
 /// more timer interrupt overhead.
 pub(super) const TICKS_PER_SEC: u64 = 100;
 
-lazy_static::lazy_static! {
-    static ref NAIVE_TIMER:Mutex<Timer> = Mutex::new(Timer::default());
-}
+static NAIVE_TIMER: spin::Lazy<Mutex<Timer>> = spin::Lazy::new(|| Mutex::new(Timer::default()));
 
 hal_fn_impl! {
     impl mod crate::hal_fn::timer {

@@ -10,30 +10,27 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use kernel_hal::console::{self, ConsoleWinSize};
-use lazy_static::lazy_static;
 use lock::Mutex;
 use rcore_fs::vfs::*;
 
-lazy_static! {
-    /// STDIN global reference
-    pub static ref STDIN: Arc<Stdin> = {
-        let stdin = Arc::new(Stdin::default());
-        let cloned = stdin.clone();
-        if let Some(uart) = kernel_hal::drivers::all_uart().first() {
-            uart.clone().subscribe(
-                Box::new(move |_| {
-                    while let Some(c) = uart.try_recv().unwrap_or(None) {
-                        cloned.push(c as char);
-                    }
-                }),
-                false,
-            );
-        }
-        stdin
-    };
-    /// STDOUT global reference
-    pub static ref STDOUT: Arc<Stdout> = Default::default();
-}
+/// STDIN global reference
+pub static STDIN: spin::Lazy<Arc<Stdin>> = spin::Lazy::new(|| {
+    let stdin = Arc::new(Stdin::default());
+    let cloned = stdin.clone();
+    if let Some(uart) = kernel_hal::drivers::all_uart().first() {
+        uart.clone().subscribe(
+            Box::new(move |_| {
+                while let Some(c) = uart.try_recv().unwrap_or(None) {
+                    cloned.push(c as char);
+                }
+            }),
+            false,
+        );
+    }
+    stdin
+});
+/// STDOUT global reference
+pub static STDOUT: spin::Lazy<Arc<Stdout>> = spin::Lazy::new(Default::default);
 
 /// Stdin struct, for Stdin buffer
 #[derive(Default)]

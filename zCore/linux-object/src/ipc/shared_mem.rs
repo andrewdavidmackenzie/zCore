@@ -3,13 +3,11 @@ use super::*;
 use crate::error::LxError;
 use crate::time::TimeSpec;
 use alloc::{collections::BTreeMap, sync::Arc, sync::Weak};
-use lazy_static::lazy_static;
 use lock::{Mutex, RwLock};
 use zircon_object::vm::*;
 
-lazy_static! {
-    static ref KEY2SHM: RwLock<BTreeMap<u32, Weak<Mutex<ShmGuard>>>> = RwLock::new(BTreeMap::new());
-}
+static KEY2SHM: spin::Lazy<RwLock<BTreeMap<u32, Weak<Mutex<ShmGuard>>>>> =
+    spin::Lazy::new(|| RwLock::new(BTreeMap::new()));
 
 /// shmid data structure
 ///

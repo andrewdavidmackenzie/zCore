@@ -9,9 +9,8 @@ use crate::DeviceResult;
 
 const UART_BUF_LEN: usize = 256;
 
-lazy_static::lazy_static! {
-    static ref UART_BUF: Mutex<VecDeque<u8>> = Mutex::new(VecDeque::with_capacity(UART_BUF_LEN));
-}
+static UART_BUF: spin::Lazy<Mutex<VecDeque<u8>>> =
+    spin::Lazy::new(|| Mutex::new(VecDeque::with_capacity(UART_BUF_LEN)));
 
 pub struct MockUart {
     listener: EventListener,

@@ -77,10 +77,8 @@ pub const PAGE_SIZE: usize = 4096;
 type VirtAddr = usize;
 type PhysAddr = usize;
 
-lazy_static::lazy_static! {
-    pub static ref SOCKETS: Arc<Mutex<SocketSet<'static>>> =
-    Arc::new(Mutex::new(SocketSet::new(vec![])));
-}
+pub static SOCKETS: spin::Lazy<Arc<Mutex<SocketSet<'static>>>> =
+    spin::Lazy::new(|| Arc::new(Mutex::new(SocketSet::new(vec![]))));
 
 // Warning! This is prone to deadlocks
 pub fn get_sockets() -> Arc<Mutex<SocketSet<'static>>> {

@@ -39,14 +39,13 @@ pub fn frame_dealloc(paddr: usize) {
     FRAME_ALLOCATOR.lock().dealloc(paddr / crate::PAGE_SIZE);
 }
 
-lazy_static! {
-    pub(super) static ref FRAME_ALLOCATOR: Mutex<FrameAlloc> = {
-        let mut allocator = FrameAlloc::DEFAULT;
-        allocator.insert(1..PMEM_SIZE / PAGE_SIZE);
-        Mutex::new(allocator)
-    };
-    pub(super) static ref MOCK_PHYS_MEM: MockMemory = MockMemory::new(PMEM_SIZE);
-}
+pub(super) static FRAME_ALLOCATOR: spin::Lazy<Mutex<FrameAlloc>> = spin::Lazy::new(|| {
+    let mut allocator = FrameAlloc::DEFAULT;
+    allocator.insert(1..PMEM_SIZE / PAGE_SIZE);
+    Mutex::new(allocator)
+});
+pub(super) static MOCK_PHYS_MEM: spin::Lazy<MockMemory> =
+    spin::Lazy::new(|| MockMemory::new(PMEM_SIZE));
 
 hal_fn_impl! {
     impl mod crate::hal_fn::mem {
@@ -61,28 +60,28 @@ hal_fn_impl! {
         fn pmem_read(paddr: PhysAddr, buf: &mut [u8]) {
             trace!("pmem read: paddr={:#x}, len={:#x}", paddr, buf.len());
             assert!(paddr + buf.len() <= PMEM_SIZE);
-            let src = MOCK_PHYS_MEM.as_ptr(paddr);
+            let src = (*MOCK_PHYS_MEM).as_ptr::<u8>(paddr);
             unsafe { buf.as_mut_ptr().copy_from_nonoverlapping(src, buf.len()) };
         }
 
         fn pmem_write(paddr: PhysAddr, buf: &[u8]) {
             trace!("pmem write: paddr={:#x}, len={:#x}", paddr, buf.len());
             assert!(paddr + buf.len() <= PMEM_SIZE);
-            let dst = MOCK_PHYS_MEM.as_mut_ptr::<u8>(paddr);
+            let dst = (*MOCK_PHYS_MEM).as_mut_ptr::<u8>(paddr);
             unsafe { dst.copy_from_nonoverlapping(buf.as_ptr(), buf.len()) };
         }
 
         fn pmem_zero(paddr: PhysAddr, len: usize) {
             trace!("pmem_zero: addr={:#x}, len={:#x}", paddr, len);
             assert!(paddr + len <= PMEM_SIZE);
-            unsafe { core::ptr::write_bytes(MOCK_PHYS_MEM.as_mut_ptr::<u8>(paddr), 0, len) };
+            unsafe { core::ptr::write_bytes((*MOCK_PHYS_MEM).as_mut_ptr::<u8>(paddr), 0, len) };
         }
 
         fn pmem_copy(dst: PhysAddr, src: PhysAddr, len: usize) {
             trace!("pmem_copy: {:#x} <- {:#x}, len={:#x}", dst, src, len);
             assert!(src + len <= PMEM_SIZE && dst + len <= PMEM_SIZE);
-            let dst = MOCK_PHYS_MEM.as_mut_ptr::<u8>(dst);
-            let src = MOCK_PHYS_MEM.as_ptr::<u8>(src);
+            let dst = (*MOCK_PHYS_MEM).as_mut_ptr::<u8>(dst);
+            let src = (*MOCK_PHYS_MEM).as_ptr::<u8>(src);
             unsafe { dst.copy_from_nonoverlapping(src, len) };
         }
 

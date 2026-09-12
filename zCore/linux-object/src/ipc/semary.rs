@@ -5,7 +5,6 @@ use crate::sync::Semaphore;
 use crate::time::*;
 use alloc::{collections::BTreeMap, sync::Arc, sync::Weak, vec::Vec};
 use core::ops::Index;
-use lazy_static::*;
 use lock::{Mutex, RwLock};
 
 /// semid data structure
@@ -40,9 +39,8 @@ impl Index<usize> for SemArray {
     }
 }
 
-lazy_static! {
-    static ref KEY2SEM: RwLock<BTreeMap<u32, Weak<SemArray>>> = RwLock::new(BTreeMap::new());
-}
+static KEY2SEM: spin::Lazy<RwLock<BTreeMap<u32, Weak<SemArray>>>> =
+    spin::Lazy::new(|| RwLock::new(BTreeMap::new()));
 
 impl SemArray {
     /// remove semaphores
