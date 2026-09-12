@@ -77,4 +77,24 @@ impl Syscall<'_> {
             proc.get_object_with_rights::<VmObject>(aux_vmo_handle, Rights::READ | Rights::WRITE)?;
         pager.supply_pages(&vmo, offset, length, &aux_vmo, aux_offset)
     }
+
+    /// Perform an operation on a range of a pager-backed VMO.
+    pub fn sys_pager_op_range(
+        &self,
+        pager_handle: HandleValue,
+        op: u32,
+        vmo_handle: HandleValue,
+        offset: u64,
+        length: u64,
+        data: u64,
+    ) -> ZxResult {
+        info!(
+            "pager.op_range: pager={:#x}, op={:#x}, vmo={:#x}, offset={:#x}, len={:#x}, data={:#x}",
+            pager_handle, op, vmo_handle, offset, length, data
+        );
+        let proc = self.thread.proc();
+        let pager = proc.get_object::<Pager>(pager_handle)?;
+        let vmo = proc.get_object::<VmObject>(vmo_handle)?;
+        pager.op_range(op, &vmo, offset, length, data)
+    }
 }
