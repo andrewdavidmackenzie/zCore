@@ -20,6 +20,10 @@ path = "src/bin/vmo_test.rs"
 name = "vdso_test"
 path = "src/bin/vdso_test.rs"
 
+[[bin]]
+name = "vdso_call_test"
+path = "src/bin/vdso_call_test.rs"
+
 [dependencies]
 zx = { path = "../zCore/zx" }
 
