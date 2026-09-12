@@ -128,8 +128,10 @@ fi
 # Step 5: Run ALL tests in a single QEMU session
 echo "==> Running ${#TESTS[@]} tests in QEMU (one session)..."
 
-OUTPUT=$(mktemp)
-QEMU_IN=$(mktemp -u)
+TMPDIR_QEMU=$(mktemp -d)
+OUTPUT="$TMPDIR_QEMU/output"
+QEMU_IN="$TMPDIR_QEMU/qemu_in"
+touch "$OUTPUT"
 mkfifo "$QEMU_IN"
 
 "${QEMU_CMD[@]}" < "$QEMU_IN" > "$OUTPUT" 2>&1 &
@@ -151,7 +153,7 @@ if ! $prompt_found; then
   exec 3>&- 2>/dev/null || true
   kill "$PID" 2>/dev/null || true
   wait "$PID" 2>/dev/null || true
-  rm -f "$OUTPUT" "$QEMU_IN"
+  rm -rf "$TMPDIR_QEMU"
   echo "ERROR: QEMU failed to boot (no shell prompt after ${BOOT_TIMEOUT}s)"
   exit 0
 fi
@@ -178,10 +180,13 @@ exec 3>&- 2>/dev/null || true
 
 # Wait for QEMU to exit or session timeout
 W=0
+completed=false
+timed_out=false
 while [ "$W" -lt "$SESSION_TIMEOUT" ]; do
-  if ! kill -0 "$PID" 2>/dev/null; then break; fi
+  if ! kill -0 "$PID" 2>/dev/null; then completed=true; break; fi
   # Check if all tests completed
   if grep -q "ALL_TESTS_DONE" "$OUTPUT" 2>/dev/null; then
+    completed=true
     # Give poweroff a moment to terminate QEMU
     sleep 2
     if kill -0 "$PID" 2>/dev/null; then
@@ -193,9 +198,8 @@ while [ "$W" -lt "$SESSION_TIMEOUT" ]; do
   W=$((W + 1))
 done
 
-# Kill QEMU if still running (session timeout)
-timed_out=false
-if kill -0 "$PID" 2>/dev/null; then
+# Kill QEMU if session timed out without completing
+if ! $completed && kill -0 "$PID" 2>/dev/null; then
   timed_out=true
   kill "$PID" 2>/dev/null || true
 fi
@@ -213,9 +217,9 @@ TOTAL=${#TESTS[@]}
 
 for exe in "${TESTS[@]}"; do
   name=$(basename "$exe" -static.exe)
-  if echo "$CLEAN_OUTPUT" | grep -q "^PASS:$name"; then
+  if echo "$CLEAN_OUTPUT" | grep -Fqx -- "PASS:$name"; then
     PASSED=$((PASSED + 1))
-  elif echo "$CLEAN_OUTPUT" | grep -q "^FAIL:$name"; then
+  elif echo "$CLEAN_OUTPUT" | grep -Fqx -- "FAIL:$name"; then
     FAILED=$((FAILED + 1))
     FAIL_LIST+="  FAIL: $name\n"
   else
@@ -224,7 +228,7 @@ for exe in "${TESTS[@]}"; do
   fi
 done
 
-rm -f "$OUTPUT" "$QEMU_IN"
+rm -rf "$TMPDIR_QEMU"
 
 if [ "$TOTAL" -gt 0 ]; then
   PCT=$(( PASSED * 100 / TOTAL ))
