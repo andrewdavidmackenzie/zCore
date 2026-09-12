@@ -12,6 +12,7 @@ pub type RawHandle = ZxHandle;
 /// Automatically calls `zx_handle_close` on drop. Use
 /// `into_raw()` to take ownership without closing.
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct Handle(RawHandle);
 
 impl Handle {

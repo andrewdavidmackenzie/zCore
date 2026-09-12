@@ -17,15 +17,14 @@ pub fn main() {
     let (ch0, ch1) = Channel::create().expect_ok("channel_create");
     zx::debug_write(b"channel_test: channel created\n");
 
-    // Write a message
+    // Write a message (no handles)
     let msg = b"hello channel!";
-    ch0.write(msg, &[]).expect_ok("channel_write");
+    ch0.write_bytes(msg).expect_ok("channel_write");
     zx::debug_write(b"channel_test: message written\n");
 
-    // Read it back from the other end
+    // Read it back from the other end (no handles)
     let mut buf = [0u8; 64];
-    let mut handles = [0u32; 0];
-    let (actual_bytes, _) = ch1.read(&mut buf, &mut handles).expect_ok("channel_read");
+    let actual_bytes = ch1.read_bytes(&mut buf).expect_ok("channel_read");
 
     if actual_bytes == msg.len() && &buf[..msg.len()] == msg {
         zx::debug_write(b"channel_test: message verified\n");
