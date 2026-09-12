@@ -40,10 +40,28 @@ pub union Payload {
     guest_io: PacketGuestIo,
     guest_vcpu: PacketGuestVcpu,
     interrupt: PacketInterrupt,
-    // TODO: PacketPageRequest
+    page_request: PacketPageRequest,
 }
 
 pub type PacketUser = [u8; 32];
+
+/// Page request packet sent to a pager's port on VMO page fault.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct PacketPageRequest {
+    /// Command: 0 = ZX_PAGER_VMO_READ, 1 = ZX_PAGER_VMO_DIRTY
+    pub command: u16,
+    pub flags: u16,
+    pub _reserved0: u32,
+    /// Offset in the VMO where the fault occurred.
+    pub offset: u64,
+    /// Length of the requested range.
+    pub length: u64,
+    pub _reserved1: u64,
+}
+
+/// Pager VMO read command (page fault notification).
+pub const ZX_PAGER_VMO_READ: u16 = 0;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -178,6 +196,7 @@ pub enum PayloadRepr {
     GuestIo(PacketGuestIo),
     GuestVcpu(PacketGuestVcpu),
     Interrupt(PacketInterrupt),
+    PageRequest(PacketPageRequest),
 }
 
 impl PayloadRepr {
@@ -190,6 +209,7 @@ impl PayloadRepr {
             PayloadRepr::GuestIo(_) => PacketType::GuestIo,
             PayloadRepr::GuestVcpu(_) => PacketType::GuestVcpu,
             PayloadRepr::Interrupt(_) => PacketType::Interrupt,
+            PayloadRepr::PageRequest(_) => PacketType::PageRequest,
         }
     }
     fn encode(&self) -> Payload {
@@ -201,6 +221,7 @@ impl PayloadRepr {
             PayloadRepr::GuestIo(guest_io) => Payload { guest_io },
             PayloadRepr::GuestVcpu(guest_vcpu) => Payload { guest_vcpu },
             PayloadRepr::Interrupt(interrupt) => Payload { interrupt },
+            PayloadRepr::PageRequest(page_request) => Payload { page_request },
         }
     }
     #[allow(unsafe_code)]
@@ -215,8 +236,7 @@ impl PayloadRepr {
                 PacketType::GuestIo => PayloadRepr::GuestIo(data.guest_io),
                 PacketType::GuestVcpu => PayloadRepr::GuestVcpu(data.guest_vcpu),
                 PacketType::Interrupt => PayloadRepr::Interrupt(data.interrupt),
-                // TODO: handle remaining PacketType variants (e.g. PageRequest)
-                _ => unimplemented!(),
+                PacketType::PageRequest => PayloadRepr::PageRequest(data.page_request),
             }
         }
     }

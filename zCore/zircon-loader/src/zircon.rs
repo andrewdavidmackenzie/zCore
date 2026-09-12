@@ -27,6 +27,7 @@ use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::task::{CurrentThread, ExceptionType, Job, Process, Thread, ThreadState};
 use zircon_object::util::elf_loader::{ElfExt, VmarExt};
 use zircon_object::vm::{VmObject, VmarFlags};
+use zircon_object::ZxError;
 
 // vDSO VMO layout: pages 0-6 reserved for code, page 7 for VdsoConstants data.
 const VDSO_PAGES: usize = 8;
@@ -332,16 +333,31 @@ async fn handler_user_trap(
             EXCEPTIONS_PGFAULT.add(1);
             info!("page fault from user mode @ {:#x}({:?})", vaddr, flags);
             let vmar = thread.proc().vmar();
-            vmar.handle_page_fault(vaddr, flags).map_err(|err| {
-                error!(
-                    "failed to handle page fault from user mode @ {:#x}({:?}): {:?}\n{:#x?}",
-                    vaddr,
-                    flags,
-                    err,
-                    thread.context_cloned()
-                );
-                ExceptionType::FatalPageFault
-            })
+            match vmar.handle_page_fault(vaddr, flags) {
+                Ok(()) => Ok(()),
+                Err(ZxError::SHOULD_WAIT) => {
+                    // Pager-backed VMO: the pager has been notified.
+                    // Yield repeatedly to let the pager supply pages.
+                    // The thread will re-fault after this returns Ok(()).
+                    info!("page fault: waiting for pager to supply pages");
+                    // Yield multiple times to give the pager process
+                    // time to run and supply the requested pages.
+                    for _ in 0..100 {
+                        kernel_hal::thread::yield_now().await;
+                    }
+                    Ok(())
+                }
+                Err(err) => {
+                    error!(
+                        "failed to handle page fault from user mode @ {:#x}({:?}): {:?}\n{:#x?}",
+                        vaddr,
+                        flags,
+                        err,
+                        thread.context_cloned()
+                    );
+                    Err(ExceptionType::FatalPageFault)
+                }
+            }
         }
         TrapReason::UndefinedInstruction => Err(ExceptionType::UndefinedInstruction),
         TrapReason::SoftwareBreakpoint => Err(ExceptionType::SoftwareBreakpoint),

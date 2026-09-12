@@ -2,12 +2,14 @@ use {
     self::{paged::*, physical::*, slice::*},
     super::*,
     crate::object::*,
+    crate::signal::{PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_READ},
     alloc::{
         sync::{Arc, Weak},
         vec::Vec,
     },
     bitflags::bitflags,
     core::ops::Deref,
+    core::sync::atomic::{AtomicBool, Ordering},
     kernel_hal::CachePolicy,
     lock::{Mutex, MutexGuard},
 };
@@ -133,6 +135,11 @@ struct VmObjectInner {
     children: Vec<Weak<VmObject>>,
     mapping_count: usize,
     content_size: usize,
+    /// Pager association: port to notify on page fault, and key.
+    pager_port: Option<Arc<Port>>,
+    pager_key: u64,
+    /// Set to true when pages have been supplied (wakes waiting threads).
+    pages_supplied: Arc<AtomicBool>,
 }
 
 impl VmObject {
@@ -174,6 +181,64 @@ impl VmObject {
             inner: Mutex::new(VmObjectInner::default()),
         });
         Ok(vmo)
+    }
+
+    /// Set the pager association for this VMO.
+    ///
+    /// When a page fault occurs on an uncommitted page, a
+    /// `ZX_PAGER_VMO_READ` packet will be sent to the port.
+    pub fn set_pager(&self, port: Arc<Port>, key: u64) {
+        let mut inner = self.inner.lock();
+        inner.pager_port = Some(port);
+        inner.pager_key = key;
+        inner.pages_supplied = Arc::new(AtomicBool::new(false));
+    }
+
+    /// Check if this VMO is pager-backed.
+    pub fn is_pager_backed(&self) -> bool {
+        self.inner.lock().pager_port.is_some()
+    }
+
+    /// Clear the pager association (called on detach).
+    pub fn clear_pager(&self) {
+        let mut inner = self.inner.lock();
+        inner.pager_port = None;
+        inner.pager_key = 0;
+    }
+
+    /// Send a page request to the pager for the given offset/length.
+    pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
+        let inner = self.inner.lock();
+        if let Some(port) = &inner.pager_port {
+            inner.pages_supplied.store(false, Ordering::SeqCst);
+            port.push(PortPacketRepr {
+                key: inner.pager_key,
+                status: ZxError::OK,
+                data: PayloadRepr::PageRequest(PacketPageRequest {
+                    command: ZX_PAGER_VMO_READ,
+                    flags: 0,
+                    _reserved0: 0,
+                    offset: offset as u64,
+                    length: length as u64,
+                    _reserved1: 0,
+                }),
+            });
+            info!(
+                "pager: requested pages at offset={:#x} len={:#x}",
+                offset, length
+            );
+            Err(ZxError::SHOULD_WAIT)
+        } else {
+            Err(ZxError::NOT_FOUND)
+        }
+    }
+
+    /// Notify that pages have been supplied (wakes waiting threads).
+    pub fn notify_pages_supplied(&self) {
+        self.inner
+            .lock()
+            .pages_supplied
+            .store(true, Ordering::SeqCst);
     }
 
     /// Create a child VMO.
