@@ -126,6 +126,15 @@ if [ "$ERRORS" -eq 0 ]; then
   echo "   [OK] All critical symbols present"
 fi
 
+# Check no writable segments (no W flag in LOAD segments)
+RWX_COUNT=$("$READELF" -l "$VDSO_DIR/libzircon.so" 2>/dev/null | grep "LOAD" | grep -c "W" || true)
+if [ "$RWX_COUNT" -eq 0 ]; then
+  echo "   [OK] No writable LOAD segments"
+else
+  echo "   [FAIL] Found $RWX_COUNT writable LOAD segment(s)"
+  ERRORS=$((ERRORS + 1))
+fi
+
 # Check VdsoConstants data page exists at offset 0x7000
 VDSO_SECTION=$("$READELF" -S "$VDSO_DIR/libzircon.so" 2>/dev/null | grep "vdso_constants")
 if [ -n "$VDSO_SECTION" ]; then
