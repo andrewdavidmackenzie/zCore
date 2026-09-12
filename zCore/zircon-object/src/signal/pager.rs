@@ -78,6 +78,7 @@ impl Pager {
         let mut inner = self.inner.lock();
         if let Some(pos) = inner.vmos.iter().position(|pv| Arc::ptr_eq(&pv.vmo, vmo)) {
             inner.vmos.remove(pos);
+            vmo.clear_pager();
             Ok(())
         } else {
             Err(ZxError::NOT_FOUND)

@@ -2,7 +2,7 @@ use {
     self::{paged::*, physical::*, slice::*},
     super::*,
     crate::object::*,
-    crate::signal::{PacketSignal, PayloadRepr, Port, PortPacketRepr},
+    crate::signal::{PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_READ},
     alloc::{
         sync::{Arc, Weak},
         vec::Vec,
@@ -199,6 +199,13 @@ impl VmObject {
         self.inner.lock().pager_port.is_some()
     }
 
+    /// Clear the pager association (called on detach).
+    pub fn clear_pager(&self) {
+        let mut inner = self.inner.lock();
+        inner.pager_port = None;
+        inner.pager_key = 0;
+    }
+
     /// Send a page request to the pager for the given offset/length.
     pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
         let inner = self.inner.lock();
@@ -207,11 +214,12 @@ impl VmObject {
             port.push(PortPacketRepr {
                 key: inner.pager_key,
                 status: ZxError::OK,
-                data: PayloadRepr::Signal(PacketSignal {
-                    trigger: Signal::empty(),
-                    observed: Signal::empty(),
-                    count: 1,
-                    timestamp: 0,
+                data: PayloadRepr::PageRequest(PacketPageRequest {
+                    command: ZX_PAGER_VMO_READ,
+                    flags: 0,
+                    _reserved0: 0,
+                    offset: offset as u64,
+                    length: length as u64,
                     _reserved1: 0,
                 }),
             });

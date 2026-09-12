@@ -337,10 +337,14 @@ async fn handler_user_trap(
                 Ok(()) => Ok(()),
                 Err(ZxError::SHOULD_WAIT) => {
                     // Pager-backed VMO: the pager has been notified.
-                    // Yield and let the pager supply pages, then the
-                    // thread will re-fault and succeed.
+                    // Yield repeatedly to let the pager supply pages.
+                    // The thread will re-fault after this returns Ok(()).
                     info!("page fault: waiting for pager to supply pages");
-                    kernel_hal::thread::yield_now().await;
+                    // Yield multiple times to give the pager process
+                    // time to run and supply the requested pages.
+                    for _ in 0..100 {
+                        kernel_hal::thread::yield_now().await;
+                    }
                     Ok(())
                 }
                 Err(err) => {
