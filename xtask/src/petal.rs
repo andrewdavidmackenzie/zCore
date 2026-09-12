@@ -53,6 +53,9 @@ pub fn build_petal(arch: Arch, bin_name: &str) -> PathBuf {
 
 /// Strip an ELF binary to a flat binary using objcopy.
 /// Returns the path to the flat binary.
+/// NOTE: No longer used for ZBI packaging (full ELF packaged instead, see #241).
+/// Kept for potential future use by other tools.
+#[allow(dead_code)]
 fn strip_to_flat_binary(elf_path: &std::path::Path, arch: Arch, bin_name: &str) -> PathBuf {
     let out_dir = petal_output_dir(arch);
     std::fs::create_dir_all(&out_dir).unwrap();
@@ -81,6 +84,7 @@ fn strip_to_flat_binary(elf_path: &std::path::Path, arch: Arch, bin_name: &str) 
 }
 
 /// Find an objcopy tool, checking PATH and the Rust toolchain's llvm-tools.
+#[allow(dead_code)]
 fn find_objcopy() -> String {
     // Try common names in PATH
     for name in ["rust-objcopy", "llvm-objcopy"] {
@@ -234,19 +238,21 @@ pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
 /// Returns the path to the ZBI file.
 pub fn build_petal_zbi(arch: Arch, bin_name: &str) -> PathBuf {
     let elf = build_petal(arch, bin_name);
-    let flat = strip_to_flat_binary(&elf, arch, bin_name);
 
-    let flat_data =
-        std::fs::read(&flat).unwrap_or_else(|e| panic!("Failed to read {}: {}", flat.display(), e));
+    // Package the full ELF (not a stripped flat binary) so userstart
+    // can parse PT_LOAD segments and map data/bss sections properly.
+    // See #241 for why flat binaries don't work for larger programs.
+    let elf_data =
+        std::fs::read(&elf).unwrap_or_else(|e| panic!("Failed to read {}: {}", elf.display(), e));
 
     println!(
-        "Packaging petal ZBI '{}' ({} bytes of code)",
+        "Packaging petal ZBI '{}' ({} bytes ELF)",
         bin_name,
-        flat_data.len()
+        elf_data.len()
     );
 
     let bootfs_name = format!("bin/{}", bin_name);
-    let zbi_data = zircon_abi::zbi::build_test_zbi(bootfs_name.as_bytes(), &flat_data);
+    let zbi_data = zircon_abi::zbi::build_test_zbi(bootfs_name.as_bytes(), &elf_data);
 
     let zbi_path = petal_output_dir(arch).join("petal.zbi");
     std::fs::write(&zbi_path, &zbi_data)
