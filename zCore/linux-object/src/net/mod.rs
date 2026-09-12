@@ -37,7 +37,7 @@ pub use netlink::*;
 // pub mod stack;
 
 // ============= Socket Set =============
-use zcore_drivers::net::get_sockets;
+use kernel_drivers::net::get_sockets;
 // lazy_static! {
 //     /// Global SocketSet in smoltcp.
 //     ///
@@ -257,19 +257,8 @@ impl GlobalSocketHandle {
     }
 }
 
-use kernel_hal::net::get_net_device;
-
-/// miss doc
-fn poll_ifaces() {
-    for iface in get_net_device().iter() {
-        match iface.poll() {
-            Ok(_) => {}
-            Err(e) => {
-                warn!("error : {:?}", e)
-            }
-        }
-    }
-}
+// Network device polling removed: net drivers moved out of kernel (#237).
+fn poll_ifaces() {}
 
 // ============= SocketHandle =============
 

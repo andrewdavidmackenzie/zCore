@@ -10,6 +10,7 @@ description = "Linux kernel objects"
 [features]
 mock-disk = []
 libos = ["kernel-hal/libos"]
+net = []
 
 [dependencies]
 async-trait = "0.1"
@@ -28,7 +29,7 @@ rcore-fs-ramfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b"
 rcore-fs-mountfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
 rcore-fs-devfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
 cfg-if = "1.0"
-zcore-drivers = { path = "../../drivers", features = ["virtio"] }
+kernel-drivers = { path = "../kernel-drivers", features = ["virtio"] }
 lock = { path = "../lock" }
 smoltcp = { version = "0.11.0", default-features = false, features = [
     "log",

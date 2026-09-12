@@ -23,6 +23,9 @@ pub mod fs;
 // layer 2
 pub mod ipc;
 pub mod loader;
+// net module requires smoltcp and kernel_hal::net which were removed (#237).
+// Gate behind a feature to avoid compilation errors.
+#[cfg(feature = "net")]
 pub mod net;
 pub mod process;
 pub mod signal;

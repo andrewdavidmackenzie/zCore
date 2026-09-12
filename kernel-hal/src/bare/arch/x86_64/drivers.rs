@@ -1,9 +1,9 @@
 use alloc::{boxed::Box, sync::Arc};
 
-use zcore_drivers::irq::x86::Apic;
-use zcore_drivers::scheme::IrqScheme;
-use zcore_drivers::uart::{BufferedUart, Uart16550Pmio};
-use zcore_drivers::{Device, DeviceResult};
+use kernel_drivers::irq::x86::Apic;
+use kernel_drivers::scheme::IrqScheme;
+use kernel_drivers::uart::{BufferedUart, Uart16550Pmio};
+use kernel_drivers::{Device, DeviceResult};
 
 use super::trap;
 use crate::drivers;
@@ -58,36 +58,14 @@ pub(super) fn init() -> DeviceResult {
     #[cfg(not(feature = "no-pci"))]
     {
         // PCI scan
-        use zcore_drivers::bus::pci;
+        use kernel_drivers::bus::pci;
         let pci_devs = pci::init(None)?;
         for d in pci_devs.into_iter() {
             drivers::add_device(d);
         }
     }
 
-    #[cfg(feature = "graphic")]
-    {
-        use crate::KCONFIG;
-        use zcore_drivers::display::UefiDisplay;
-        use zcore_drivers::prelude::{ColorFormat, DisplayInfo};
-
-        let (width, height) = KCONFIG.fb_mode.resolution();
-        let display = Arc::new(UefiDisplay::new(DisplayInfo {
-            width: width as _,
-            height: height as _,
-            format: ColorFormat::ARGB8888, // uefi::proto::console::gop::PixelFormat::Bgr
-            fb_base_vaddr: crate::mem::phys_to_virt(KCONFIG.fb_addr as usize),
-            fb_size: KCONFIG.fb_size as usize,
-        }));
-        crate::drivers::add_device(Device::Display(display.clone()));
-        crate::console::init_graphic_console(display);
-    }
-
-    #[cfg(feature = "loopback")]
-    {
-        use crate::net;
-        net::init();
-    }
+    // graphic and loopback features removed (see #237)
 
     info!("Drivers init end.");
     Ok(())

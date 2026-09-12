@@ -16,7 +16,7 @@ cfg_if! {
 
 pub mod boot;
 pub mod mem;
-pub mod net;
+// net module removed: loopback/network features moved out of kernel (#237)
 pub mod thread;
 pub mod timer;
 

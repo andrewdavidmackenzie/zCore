@@ -251,6 +251,7 @@ pub struct FbDev {
     inode_id: usize,
 }
 
+#[allow(dead_code)]
 impl FbDev {
     pub fn new(display: Arc<dyn DisplayScheme>) -> Self {
         Self {

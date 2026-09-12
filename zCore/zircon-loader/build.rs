@@ -1,6 +1,7 @@
 fn main() {
     let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
+    println!("cargo:rerun-if-env-changed=USERSTART_ELF");
     // If USERSTART_ELF is not set, generate an empty stub so
     // include_bytes! compiles. The rootfs-based boot path doesn't
     // need an embedded userstart.

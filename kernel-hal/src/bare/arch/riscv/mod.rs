@@ -12,7 +12,7 @@ pub mod vm;
 use crate::{mem::phys_to_virt, utils::init_once::InitOnce, PhysAddr};
 use alloc::{string::String, vec::Vec};
 use core::ops::Range;
-use zcore_drivers::utils::devicetree::Devicetree;
+use kernel_drivers::utils::devicetree::Devicetree;
 
 static CMDLINE: InitOnce<String> = InitOnce::new_with_default(String::new());
 static INITRD_REGION: InitOnce<Option<Range<PhysAddr>>> = InitOnce::new_with_default(None);

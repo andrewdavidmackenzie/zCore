@@ -20,8 +20,7 @@ doc = false
 # Print colorless logs
 colorless-log = []
 
-# Enable graphical output
-graphic = ["kernel-hal/graphic"]
+# graphic feature removed (see #237)
 # Enable extra page table falgs for T-Head CPU with MAEE on
 thead-maee = ["kernel-hal/thead-maee"]
 # Disable PCI
@@ -31,7 +30,7 @@ allwinner-drivers = ["kernel-hal/allwinner-drivers"]
 # Enable fu740 drivers
 fu740-drivers = ["kernel-hal/fu740-drivers"]
 # TODO
-loopback = ["kernel-hal/loopback"]
+# loopback feature removed (see #237)
 
 # Directly link the user image to the kernel image
 link-user-img = []

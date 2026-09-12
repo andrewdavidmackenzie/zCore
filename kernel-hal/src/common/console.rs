@@ -30,29 +30,7 @@ impl Write for DebugWriter {
     }
 }
 
-cfg_if! {
-    if #[cfg(feature = "graphic")] {
-        use crate::utils::init_once::InitOnce;
-        use alloc::sync::Arc;
-        use zcore_drivers::{scheme::DisplayScheme, utils::GraphicConsole};
-
-        static GRAPHIC_CONSOLE: InitOnce<Mutex<GraphicConsole>> = InitOnce::new();
-        static CONSOLE_WIN_SIZE: InitOnce<ConsoleWinSize> = InitOnce::new();
-
-        pub(crate) fn init_graphic_console(display: Arc<dyn DisplayScheme>) {
-            let info = display.info();
-            let cons = GraphicConsole::new(display);
-            let winsz = ConsoleWinSize {
-                ws_row: cons.rows() as u16,
-                ws_col: cons.columns() as u16,
-                ws_xpixel: info.width as u16,
-                ws_ypixel: info.height as u16,
-            };
-            CONSOLE_WIN_SIZE.init_once_by(winsz);
-            GRAPHIC_CONSOLE.init_once_by(Mutex::new(cons));
-        }
-    }
-}
+// graphic console removed (see #237)
 
 /// Writes a string slice into the serial.
 pub fn serial_write_str(s: &str) {
@@ -74,23 +52,13 @@ pub fn debug_write_fmt(fmt: Arguments) {
     DEBUG_WRITER.lock().write_fmt(fmt).unwrap();
 }
 
-/// Writes a string slice into the graphic console.
+/// Writes a string slice into the graphic console (no-op, graphic removed).
 #[allow(unused_variables)]
-pub fn graphic_console_write_str(s: &str) {
-    #[cfg(feature = "graphic")]
-    if let Some(cons) = GRAPHIC_CONSOLE.try_get() {
-        cons.lock().write_str(s).unwrap();
-    }
-}
+pub fn graphic_console_write_str(s: &str) {}
 
-/// Writes formatted data into the graphic console.
+/// Writes formatted data into the graphic console (no-op, graphic removed).
 #[allow(unused_variables)]
-pub fn graphic_console_write_fmt(fmt: Arguments) {
-    #[cfg(feature = "graphic")]
-    if let Some(cons) = GRAPHIC_CONSOLE.try_get() {
-        cons.lock().write_fmt(fmt).unwrap();
-    }
-}
+pub fn graphic_console_write_fmt(fmt: Arguments) {}
 
 /// Writes a string slice into the serial, and the graphic console if it exists.
 pub fn console_write_str(s: &str) {
@@ -121,9 +89,5 @@ pub struct ConsoleWinSize {
 
 /// Returns the size information of the console, see [`ConsoleWinSize`].
 pub fn console_win_size() -> ConsoleWinSize {
-    #[cfg(feature = "graphic")]
-    if let Some(&winsz) = CONSOLE_WIN_SIZE.try_get() {
-        return winsz;
-    }
     ConsoleWinSize::default()
 }

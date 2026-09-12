@@ -74,5 +74,5 @@ pub fn timer_init() {
 }
 
 pub fn secondary_init() {
-    zcore_drivers::irq::x86::Apic::init_local_apic_ap();
+    kernel_drivers::irq::x86::Apic::init_local_apic_ap();
 }

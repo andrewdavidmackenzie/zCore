@@ -44,7 +44,7 @@ mod consts {
 mod file;
 mod ipc;
 mod misc;
-mod net;
+// mod net;  // network removed from kernel (#237)
 mod signal;
 mod task;
 mod time;
@@ -136,7 +136,7 @@ impl Syscall<'_> {
             }
             Sys::EVENTFD2 => self.sys_eventfd2(a0, a1),
 
-            Sys::SOCKETPAIR => self.sys_socketpair(a0, a1, a2, a3.into()),
+            Sys::SOCKETPAIR => Err(LxError::ENOSYS), // network removed (#237)
             // file system
             Sys::STATFS => self.sys_statfs(a0.into(), a1.into()),
             Sys::FSTATFS => self.sys_fstatfs(a0.into(), a1.into()),
@@ -167,26 +167,25 @@ impl Syscall<'_> {
             Sys::SCHED_GETAFFINITY => self.sys_sched_getaffinity(a0, a1, a2.into()),
             Sys::SCHED_SETAFFINITY => Ok(0),
 
-            // socket
-            Sys::SOCKET => self.sys_socket(a0, a1, a2),
-            Sys::CONNECT => self.sys_connect(a0, a1.into(), a2).await,
-            Sys::ACCEPT => self.sys_accept(a0, a1.into(), a2.into()).await,
-            Sys::ACCEPT4 => self.sys_accept4(a0, a1.into(), a2.into(), a3).await,
-            Sys::SENDTO => self.sys_sendto(a0, a1.into(), a2, a3, a4.into(), a5),
-            Sys::RECVFROM => {
-                self.sys_recvfrom(a0, a1.into(), a2, a3, a4.into(), a5.into())
-                    .await
+            // socket -- network drivers removed from kernel (#237)
+            Sys::SOCKET
+            | Sys::CONNECT
+            | Sys::ACCEPT
+            | Sys::ACCEPT4
+            | Sys::SENDTO
+            | Sys::RECVFROM
+            | Sys::SENDMSG
+            | Sys::RECVMSG
+            | Sys::SHUTDOWN
+            | Sys::BIND
+            | Sys::LISTEN
+            | Sys::GETSOCKNAME
+            | Sys::GETPEERNAME
+            | Sys::SETSOCKOPT
+            | Sys::GETSOCKOPT => {
+                warn!("socket syscall {:?}: network not available", sys_type);
+                Err(LxError::ENOSYS)
             }
-            Sys::SENDMSG => self.unimplemented("sys_sendmsg(),", Ok(0)),
-            Sys::RECVMSG => self.sys_recvmsg(a0, a1.into(), a2).await,
-            Sys::SHUTDOWN => self.sys_shutdown(a0, a1),
-            Sys::BIND => self.sys_bind(a0, a1.into(), a2),
-            Sys::LISTEN => self.sys_listen(a0, a1),
-
-            Sys::GETSOCKNAME => self.sys_getsockname(a0, a1.into(), a2.into()),
-            Sys::GETPEERNAME => self.sys_getpeername(a0, a1.into(), a2.into()),
-            Sys::SETSOCKOPT => self.sys_setsockopt(a0, a1, a2, a3.into(), a4),
-            Sys::GETSOCKOPT => self.sys_getsockopt(a0, a1, a2, a3.into(), a4.into()),
 
             // process
             Sys::EXECVE => self.sys_execve(a0.into(), a1.into(), a2.into()),
