@@ -57,6 +57,9 @@ impl Pager {
         let pages = (size as usize).div_ceil(PAGE_SIZE);
         let vmo = VmObject::new_paged(pages);
         vmo.set_name("pager-vmo");
+        // Associate the pager's port and key with the VMO for
+        // demand-paging notifications.
+        vmo.set_pager(port.clone(), key);
 
         let mut inner = self.inner.lock();
         inner.vmos.push(PagerVmo {
@@ -105,6 +108,8 @@ impl Pager {
             src_off += chunk;
             dst_off += chunk;
         }
+        // Notify any threads waiting for these pages.
+        vmo.notify_pages_supplied();
         Ok(())
     }
 

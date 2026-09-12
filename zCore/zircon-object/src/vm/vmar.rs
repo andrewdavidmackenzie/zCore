@@ -1028,8 +1028,15 @@ impl VmMapping {
         if !access_flags.contains(MMUFlags::WRITE) {
             flags.remove(MMUFlags::WRITE);
         }
-        let paddr = self.vmo.commit_page(vmo_offset / PAGE_SIZE, access_flags)?;
-        // error!("paddr = {:x}", paddr);
+        let paddr = match self.vmo.commit_page(vmo_offset / PAGE_SIZE, access_flags) {
+            Ok(paddr) => paddr,
+            Err(ZxError::NO_MEMORY) if self.vmo.is_pager_backed() => {
+                // Page not committed and VMO is pager-backed.
+                // Request the page from the pager and return SHOULD_WAIT.
+                return self.vmo.request_pages(vmo_offset, PAGE_SIZE);
+            }
+            Err(e) => return Err(e),
+        };
         let mut pg_table = self.page_table.lock();
         let mut res = pg_table.map(Page::new_aligned(vaddr, PageSize::Size4K), paddr, flags);
         if let Err(PagingError::AlreadyMapped) = res {
