@@ -23,6 +23,7 @@ const K_PROC_SELF: usize = 0;
 const K_VMARROOT_SELF: usize = 1;
 const K_ROOTJOB: usize = 2;
 const K_ZBI: usize = 4;
+const K_FIRSTVDSO: usize = 5;
 const K_HANDLECOUNT: usize = 15;
 
 // Page size (4 KiB)
@@ -79,6 +80,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     let vmar_self = handles[K_VMARROOT_SELF];
     let root_job = handles[K_ROOTJOB];
     let zbi_vmo = handles[K_ZBI];
+    let vdso_vmo = handles[K_FIRSTVDSO];
 
     // Step 2: Read the ZBI VMO to find the init program
     let mut zbi_size: usize = 0;
@@ -212,6 +214,27 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     let stack_top = stack_base + stack_size;
 
+    // Step 7b: Map vDSO data page into init process at a high address
+    // to avoid interfering with code/stack regions.
+    {
+        let vdso_map_addr = stack_top + 0x10000; // well above the stack
+        let mut vdso_addr: usize = 0;
+        let s = unsafe {
+            zx_vmar_map(
+                init_vmar,
+                ZX_VM_PERM_READ | ZX_VM_SPECIFIC,
+                vdso_map_addr,
+                vdso_vmo,
+                0x7000,
+                4096,
+                &mut vdso_addr,
+            )
+        };
+        if s != ZX_OK {
+            debug_print(b"userstart: warning: failed to map vDSO into init process\n");
+        }
+    }
+
     // Step 8: Create a channel to forward bootstrap handles to init
     let mut init_channel_local: HandleValue = ZX_HANDLE_INVALID;
     let mut init_channel_remote: HandleValue = ZX_HANDLE_INVALID;
@@ -220,7 +243,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     });
 
     // Forward the remaining bootstrap handles to init via the channel.
-    // We pass: root job, root resource, and the ZBI VMO.
+    // We pass: root job and the ZBI VMO.
     let forward_handles = [root_job, zbi_vmo];
     check("channel_write", unsafe {
         zx_channel_write(

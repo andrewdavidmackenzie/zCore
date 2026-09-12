@@ -25,6 +25,22 @@ impl Syscall<'_> {
             handle_value, property, buffer, buffer_size
         );
         let proc = self.thread.proc();
+        // ProcessVdsoBaseAddress: try the handle as a Process first (Fuchsia
+        // requires a Process handle). If the handle is not a Process, fall
+        // back to the calling process's own VMAR. This allows petal programs
+        // (which don't have a Process self-handle) to query their own vDSO base.
+        if matches!(property, Property::ProcessVdsoBaseAddress) {
+            let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
+            let vdso_base = if let Ok(target) =
+                proc.get_object_with_rights::<Process>(handle_value, Rights::INSPECT)
+            {
+                target.vmar().vdso_base_addr().unwrap_or(0)
+            } else {
+                proc.vmar().vdso_base_addr().unwrap_or(0)
+            };
+            info_ptr.write(vdso_base)?;
+            return Ok(());
+        }
         let object = proc.get_dyn_object_with_rights(handle_value, Rights::GET_PROPERTY)?;
         match property {
             Property::Name => {
@@ -44,12 +60,8 @@ impl Syscall<'_> {
                 info_ptr.write(debug_addr)?;
                 Ok(())
             }
-            Property::ProcessVdsoBaseAddress => {
-                let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
-                let vdso_base = proc.vmar().vdso_base_addr().unwrap_or(0);
-                info_ptr.write(vdso_base)?;
-                Ok(())
-            }
+            // ProcessVdsoBaseAddress is handled above (before rights check)
+            Property::ProcessVdsoBaseAddress => unreachable!(),
             Property::ProcessBreakOnLoad => {
                 let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
                 let break_on_load = proc

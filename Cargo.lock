@@ -2671,6 +2671,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "zcore-vdso"
+version = "0.1.0"
+
+[[package]]
 name = "zero"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
