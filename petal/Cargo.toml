@@ -20,9 +20,8 @@ path = "src/bin/vmo_test.rs"
 name = "vdso_test"
 path = "src/bin/vdso_test.rs"
 
-[[bin]]
-name = "vdso_call_test"
-path = "src/bin/vdso_call_test.rs"
+## vdso_call_test is blocked on #241 (petal ELF loading with data sections).
+## See #226 Phase G.
 
 [dependencies]
 zx = { path = "../zCore/zx" }
