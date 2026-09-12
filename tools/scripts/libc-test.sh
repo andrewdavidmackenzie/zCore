@@ -8,19 +8,20 @@
 #   1. Builds static libc-test binaries (if not already built)
 #   2. Copies them into the rootfs
 #   3. Rebuilds the rootfs image
-#   4. Runs each test in its own QEMU session (avoids in-guest timeout
-#      issues since setitimer/SIGALRM is not yet implemented)
+#   4. Runs ALL tests in a single QEMU session (batched for speed)
 #   5. Prints a summary
+#
+# All tests run in one QEMU boot, with a host-side timeout on the
+# entire session. This avoids ~70 separate QEMU boots.
 #
 # Always exits 0 — reports pass rate as a progress metric.
 
 set -euo pipefail
 
 ARCH="${1:?Usage: $0 <arch>}"
-# Per-test QEMU session timeout (seconds). Includes boot (~2s) + test
-# execution. Most tests complete in <5s; generous limit for slow tests.
-TIMEOUT_PER_TEST=20
-BOOT_TIMEOUT=10
+# Timeout for the entire QEMU session (all tests combined).
+# Should be generous enough for boot + all tests.
+SESSION_TIMEOUT=300
 
 case "$ARCH" in
   aarch64)
@@ -124,112 +125,123 @@ if [ ! -f "$KERNEL" ]; then
   exit 1
 fi
 
-# Step 5: Run each test in its own QEMU session
-# We cannot use busybox `timeout` inside the guest because it relies on
-# setitimer/SIGALRM which is not yet implemented. Instead, each test
-# gets its own QEMU session with a host-side timeout.
-echo "==> Running ${#TESTS[@]} tests in QEMU (one session per test)..."
+# Step 5: Run ALL tests in a single QEMU session
+echo "==> Running ${#TESTS[@]} tests in QEMU (one session)..."
 
-run_test() {
-  local name=$1
-  local OUTPUT
-  OUTPUT=$(mktemp)
-  local QEMU_IN
-  QEMU_IN=$(mktemp -u)
-  mkfifo "$QEMU_IN"
+OUTPUT=$(mktemp)
+QEMU_IN=$(mktemp -u)
+mkfifo "$QEMU_IN"
 
-  "${QEMU_CMD[@]}" < "$QEMU_IN" > "$OUTPUT" 2>&1 &
-  local PID=$!
-  exec 3>"$QEMU_IN"
+"${QEMU_CMD[@]}" < "$QEMU_IN" > "$OUTPUT" 2>&1 &
+PID=$!
+exec 3>"$QEMU_IN"
 
-  # Wait for shell prompt
-  local ELAPSED=0
-  local prompt_found=false
-  while [ "$ELAPSED" -lt "$BOOT_TIMEOUT" ]; do
-    if grep -q '/ # ' "$OUTPUT" 2>/dev/null; then prompt_found=true; break; fi
-    if ! kill -0 "$PID" 2>/dev/null; then break; fi
-    sleep 1
-    ELAPSED=$((ELAPSED + 1))
-  done
+# Wait for shell prompt
+ELAPSED=0
+BOOT_TIMEOUT=10
+prompt_found=false
+while [ "$ELAPSED" -lt "$BOOT_TIMEOUT" ]; do
+  if grep -q '/ # ' "$OUTPUT" 2>/dev/null; then prompt_found=true; break; fi
+  if ! kill -0 "$PID" 2>/dev/null; then break; fi
+  sleep 1
+  ELAPSED=$((ELAPSED + 1))
+done
 
-  if ! $prompt_found; then
-    exec 3>&- 2>/dev/null || true
-    kill "$PID" 2>/dev/null || true
-    wait "$PID" 2>/dev/null || true
-    rm -f "$OUTPUT" "$QEMU_IN"
-    echo "HANG"
-    return
-  fi
-
-  # Send test command + poweroff
-  echo "/bin/libc-test/$name && echo PASS:$name || echo FAIL:$name; poweroff -f" >&3 2>/dev/null || true
+if ! $prompt_found; then
   exec 3>&- 2>/dev/null || true
-
-  # Wait for QEMU to exit (poweroff terminates it)
-  local W=0
-  while [ "$W" -lt "$TIMEOUT_PER_TEST" ]; do
-    if ! kill -0 "$PID" 2>/dev/null; then break; fi
-    sleep 1
-    W=$((W + 1))
-  done
-
-  # Check if QEMU is still running (test hung or poweroff failed)
-  local timed_out=false
-  if kill -0 "$PID" 2>/dev/null; then
-    timed_out=true
-    kill "$PID" 2>/dev/null || true
-  fi
+  kill "$PID" 2>/dev/null || true
   wait "$PID" 2>/dev/null || true
-
-  # Parse result
-  local result
-  result=$(sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT" | grep -oE "(PASS|FAIL):$name" | head -1 || true)
   rm -f "$OUTPUT" "$QEMU_IN"
+  echo "ERROR: QEMU failed to boot (no shell prompt after ${BOOT_TIMEOUT}s)"
+  exit 0
+fi
 
-  if $timed_out; then
-    echo "HANG"
-  elif [ -z "$result" ]; then
-    echo "HANG"
-  elif echo "$result" | grep -q "^PASS:"; then
-    echo "PASS"
-  else
-    echo "FAIL"
+echo "Shell prompt reached in ${ELAPSED}s"
+
+# Send a single for-loop command that runs all tests sequentially.
+# Each test is run directly -- if it crashes or exits non-zero, we
+# report FAIL. If the whole session times out, remaining tests are
+# reported as HANG.
+#
+# We send the command as a single line to avoid pipe-buffering issues
+# with the busybox shell reading character-by-character.
+
+# Build the test list as a space-separated string
+TEST_NAMES=""
+for exe in "${TESTS[@]}"; do
+  TEST_NAMES+=" $(basename "$exe" -static.exe)"
+done
+
+# Send a compact one-liner for-loop
+echo "for t in$TEST_NAMES; do /bin/libc-test/\$t >/dev/null 2>&1 && echo PASS:\$t || echo FAIL:\$t; done; echo ALL_TESTS_DONE; poweroff -f" >&3 2>/dev/null || true
+exec 3>&- 2>/dev/null || true
+
+# Wait for QEMU to exit or session timeout
+W=0
+while [ "$W" -lt "$SESSION_TIMEOUT" ]; do
+  if ! kill -0 "$PID" 2>/dev/null; then break; fi
+  # Check if all tests completed
+  if grep -q "ALL_TESTS_DONE" "$OUTPUT" 2>/dev/null; then
+    # Give poweroff a moment to terminate QEMU
+    sleep 2
+    if kill -0 "$PID" 2>/dev/null; then
+      kill "$PID" 2>/dev/null || true
+    fi
+    break
   fi
-}
+  sleep 1
+  W=$((W + 1))
+done
+
+# Kill QEMU if still running (session timeout)
+timed_out=false
+if kill -0 "$PID" 2>/dev/null; then
+  timed_out=true
+  kill "$PID" 2>/dev/null || true
+fi
+wait "$PID" 2>/dev/null || true
+
+# Step 6: Parse results from the combined output
+# Strip ANSI escape sequences for reliable parsing
+CLEAN_OUTPUT=$(sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT")
 
 PASSED=0
 FAILED=0
 HUNG=0
 FAIL_LIST=""
+TOTAL=${#TESTS[@]}
 
 for exe in "${TESTS[@]}"; do
   name=$(basename "$exe" -static.exe)
-  result=$(run_test "$name" || echo "HANG")
-  case "$result" in
-    PASS)
-      PASSED=$((PASSED + 1))
-      ;;
-    FAIL)
-      FAILED=$((FAILED + 1))
-      FAIL_LIST+="  FAIL: $name\n"
-      ;;
-    HANG)
-      HUNG=$((HUNG + 1))
-      FAIL_LIST+="  HANG: $name\n"
-      ;;
-  esac
+  if echo "$CLEAN_OUTPUT" | grep -q "^PASS:$name"; then
+    PASSED=$((PASSED + 1))
+  elif echo "$CLEAN_OUTPUT" | grep -q "^FAIL:$name"; then
+    FAILED=$((FAILED + 1))
+    FAIL_LIST+="  FAIL: $name\n"
+  else
+    HUNG=$((HUNG + 1))
+    FAIL_LIST+="  HANG: $name\n"
+  fi
 done
 
-TOTAL=${#TESTS[@]}
+rm -f "$OUTPUT" "$QEMU_IN"
+
 if [ "$TOTAL" -gt 0 ]; then
   PCT=$(( PASSED * 100 / TOTAL ))
 else
   PCT=0
 fi
 
+if $timed_out; then
+  echo ""
+  echo "WARNING: QEMU session timed out after ${SESSION_TIMEOUT}s"
+  echo "Some tests may not have run."
+fi
+
 echo ""
 echo "========================================"
 echo "  libc-test results: $PASSED/$TOTAL passed ($PCT%)"
+echo "  ($FAILED failed, $HUNG hung/not-run)"
 echo "========================================"
 
 if [ -n "$FAIL_LIST" ]; then
