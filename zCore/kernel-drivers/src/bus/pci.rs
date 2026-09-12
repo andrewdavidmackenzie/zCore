@@ -59,9 +59,8 @@ const PCI_BASE: usize = 0xbbe00000;
 #[cfg(target_arch = "riscv64")]
 const PCI_BASE: usize = 0x30000000;
 #[cfg(target_arch = "riscv64")]
-const E1000_BASE: usize = 0x40000000;
+// E1000_BASE removed: e1000 driver moved out of kernel (#237)
 // riscv64 Qemu
-
 #[cfg(target_arch = "x86_64")]
 const PCI_ACCESS: CSpaceAccessMethod = CSpaceAccessMethod::IO;
 #[cfg(not(target_arch = "x86_64"))]

@@ -8,6 +8,8 @@ description = "Boot-essential device drivers for zCore kernel (irq, uart, pci, v
 virtio = ["virtio-drivers"]
 libos = ["async-std"]
 no-pci = []
+# Legacy MIPS board (dead code, kept for cfg compatibility)
+board_malta = []
 
 # Special hardware drivers
 allwinner = ["d1-pac"]
