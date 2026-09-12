@@ -83,7 +83,6 @@ impl Drop for PhysFrame {
     }
 }
 
-lazy_static! {
-    /// The global physical frame contains all zeros.
-    pub static ref ZERO_FRAME: PhysFrame = PhysFrame::new_zero().expect("failed to alloc zero frame");
-}
+/// The global physical frame contains all zeros.
+pub static ZERO_FRAME: spin::Lazy<PhysFrame> =
+    spin::Lazy::new(|| PhysFrame::new_zero().expect("failed to alloc zero frame"));

@@ -11,7 +11,6 @@ use crate::context::ContextData as Context;
 
 use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
 use core::{future::Future, pin::Pin};
-use lazy_static::*;
 use spin::{Mutex, MutexGuard};
 
 pub struct ExecutorRuntime {
@@ -112,15 +111,15 @@ unsafe impl Send for ExecutorRuntime {}
 unsafe impl Sync for ExecutorRuntime {}
 
 // TODO: more elegent?
-lazy_static! {
-    pub static ref GLOBAL_RUNTIME: [Mutex<ExecutorRuntime>; 5] = [
+pub static GLOBAL_RUNTIME: spin::Lazy<[Mutex<ExecutorRuntime>; 5]> = spin::Lazy::new(|| {
+    [
         Mutex::new(ExecutorRuntime::new(0)),
         Mutex::new(ExecutorRuntime::new(1)),
         Mutex::new(ExecutorRuntime::new(2)),
         Mutex::new(ExecutorRuntime::new(3)),
-        Mutex::new(ExecutorRuntime::new(4))
-    ];
-}
+        Mutex::new(ExecutorRuntime::new(4)),
+    ]
+});
 
 // obtain a task from other cpu.
 pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {

@@ -15,18 +15,18 @@ static mut IPI_REASON7: [IpiEntry; REASON_SIZE] = [0; REASON_SIZE];
 pub type IpiEntry = usize;
 type IRQueue = MpscQueue<'static, IpiEntry>;
 
-lazy_static::lazy_static! {
-    static ref IPI_QUEUE: [IRQueue; MAX_CORE_NUM] = [
-        IRQueue::new(unsafe {&mut IPI_REASON0} ),
-        IRQueue::new(unsafe {&mut IPI_REASON1} ),
-        IRQueue::new(unsafe {&mut IPI_REASON2} ),
-        IRQueue::new(unsafe {&mut IPI_REASON3} ),
-        IRQueue::new(unsafe {&mut IPI_REASON4} ),
-        IRQueue::new(unsafe {&mut IPI_REASON5} ),
-        IRQueue::new(unsafe {&mut IPI_REASON6} ),
-        IRQueue::new(unsafe {&mut IPI_REASON7} ),
-    ];
-}
+static IPI_QUEUE: spin::Lazy<[IRQueue; MAX_CORE_NUM]> = spin::Lazy::new(|| {
+    [
+        IRQueue::new(unsafe { &mut IPI_REASON0 }),
+        IRQueue::new(unsafe { &mut IPI_REASON1 }),
+        IRQueue::new(unsafe { &mut IPI_REASON2 }),
+        IRQueue::new(unsafe { &mut IPI_REASON3 }),
+        IRQueue::new(unsafe { &mut IPI_REASON4 }),
+        IRQueue::new(unsafe { &mut IPI_REASON5 }),
+        IRQueue::new(unsafe { &mut IPI_REASON6 }),
+        IRQueue::new(unsafe { &mut IPI_REASON7 }),
+    ]
+});
 
 pub(crate) fn ipi_queue(cpuid: usize) -> &'static IRQueue {
     &IPI_QUEUE[cpuid]

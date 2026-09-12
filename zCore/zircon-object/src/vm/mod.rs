@@ -8,7 +8,6 @@ pub use self::{stream::*, vmar::*, vmo::*};
 use super::{ZxError, ZxResult};
 use alloc::sync::Arc;
 pub use kernel_hal::{CachePolicy, MMUFlags};
-use lazy_static::*;
 
 /// Physical Address
 pub type PhysAddr = usize;
@@ -56,10 +55,9 @@ pub fn round_down_pages(size: usize) -> usize {
     size / PAGE_SIZE * PAGE_SIZE
 }
 
-lazy_static! {
-    /// Kernel address space.
-    pub static ref KERNEL_ASPACE: Arc<VmAddressRegion> = VmAddressRegion::new_kernel();
-}
+/// Kernel address space.
+pub static KERNEL_ASPACE: spin::Lazy<Arc<VmAddressRegion>> =
+    spin::Lazy::new(VmAddressRegion::new_kernel);
 
 /// Allocate memory in kernel address space at given physical address.
 pub fn kernel_allocate_physical(

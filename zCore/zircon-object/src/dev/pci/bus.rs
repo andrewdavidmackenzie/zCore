@@ -15,7 +15,6 @@ use alloc::sync::{Arc, Weak};
 use alloc::{collections::BTreeMap, vec::Vec};
 use core::cmp::min;
 use core::marker::{Send, Sync};
-use lazy_static::*;
 use lock::Mutex;
 use region_alloc::RegionAllocator;
 
@@ -41,9 +40,8 @@ enum PCIeBusDriverState {
     Operational,
 }
 
-lazy_static! {
-    static ref _INSTANCE: Mutex<PCIeBusDriver> = Mutex::new(PCIeBusDriver::new());
-}
+static _INSTANCE: spin::Lazy<Mutex<PCIeBusDriver>> =
+    spin::Lazy::new(|| Mutex::new(PCIeBusDriver::new()));
 
 impl PCIeBusDriver {
     /// Add bus region.

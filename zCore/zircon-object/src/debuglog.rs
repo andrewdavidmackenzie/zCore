@@ -3,15 +3,14 @@ use {
     super::*,
     crate::object::*,
     alloc::{sync::Arc, vec::Vec},
-    lazy_static::lazy_static,
     lock::Mutex,
 };
 
-lazy_static! {
-    static ref DLOG: Mutex<DlogBuffer> = Mutex::new(DlogBuffer {
+static DLOG: spin::Lazy<Mutex<DlogBuffer>> = spin::Lazy::new(|| {
+    Mutex::new(DlogBuffer {
         buf: Vec::with_capacity(0x1000),
-    });
-}
+    })
+});
 
 /// Debuglog - Kernel debuglog
 ///

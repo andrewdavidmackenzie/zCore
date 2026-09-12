@@ -14,13 +14,13 @@ cfg_if! {
         const FB_HEIGHT: u32 = 720;
         const FB_FORMAT: ColorFormat = ColorFormat::ARGB8888;
 
-        lazy_static! {
-            /// Put the framebuffer into the physical frames pool to support mmap.
-            static ref FB_FRAMES: Vec<PhysFrame> = PhysFrame::new_contiguous(
+        /// Put the framebuffer into the physical frames pool to support mmap.
+        static FB_FRAMES: spin::Lazy<Vec<PhysFrame>> = spin::Lazy::new(|| {
+            PhysFrame::new_contiguous(
                 page_count((FB_WIDTH * FB_HEIGHT * FB_FORMAT.bytes() as u32) as usize),
                 0,
-            );
-        }
+            )
+        });
     }
 }
 

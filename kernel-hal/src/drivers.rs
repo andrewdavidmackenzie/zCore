@@ -81,9 +81,7 @@ impl AllDeviceList {
     }
 }
 
-lazy_static! {
-    static ref DEVICES: AllDeviceList = AllDeviceList::default();
-}
+static DEVICES: spin::Lazy<AllDeviceList> = spin::Lazy::new(AllDeviceList::default);
 
 pub(crate) fn add_device(dev: Device) {
     DEVICES.add_device(dev)

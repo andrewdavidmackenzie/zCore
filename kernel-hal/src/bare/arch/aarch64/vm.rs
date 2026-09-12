@@ -9,9 +9,8 @@ use lock::Mutex;
 use tock_registers::interfaces::{Readable, Writeable};
 use zcore_drivers::irq::gic_400::{GICC_SIZE, GICD_SIZE};
 
-lazy_static! {
-    static ref KERNEL_PT: Mutex<PageTable> = Mutex::new(init_kernel_page_table().unwrap());
-}
+static KERNEL_PT: spin::Lazy<Mutex<PageTable>> =
+    spin::Lazy::new(|| Mutex::new(init_kernel_page_table().unwrap()));
 
 /// remap kernel ELF segments with 4K page
 fn init_kernel_page_table() -> PagingResult<PageTable> {
