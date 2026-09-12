@@ -30,20 +30,24 @@ For build artifacts, see [build-artifacts.md](build-artifacts.md).
 
 ---
 
-### `config/` -- Machine Configuration Files
+### `config/` -- Machine Configuration Files (REMOVED)
 
-**Purpose:** Previously contained `machine-features.toml` (now moved to
-`[workspace.metadata.machines]` in root `Cargo.toml`). Defines all supported
-machine targets with their architecture, PCI support, and feature flags.
+**Purpose:** Previously contained `machine-features.toml`. This has been moved
+to `[workspace.metadata.machines]` in root `Cargo.toml`. The `config/`
+directory no longer exists.
 
-**Status:** Actively used. Read at build time by `z-config`.
+---
 
-It's already only 31 lines of TOML defining 7 machines. The two-level
-`[manufacturer.product]` nesting is informational only -- z-config matches on
-product name, ignoring manufacturer. Could flatten to `[machines.virt-aarch64]`
-with optional `manufacturer` field, but gains are marginal. The real
-simplification would be to inline z-config into xtask (see z-config TODO).
+### `.claude/` -- AI Assistant Configuration
 
+**Purpose:** Configuration for the Claude/OpenCode AI coding assistant.
+
+**Contents:**
+- `settings.local.json` -- Local settings
+- `skills/` -- Skill definitions for common workflows (merge-a-pr,
+  start-new-issue)
+
+**Status:** Actively used for AI-assisted development.
 
 ---
 
@@ -82,12 +86,14 @@ generation.
 **Key files:**
 - `boot-test.sh` -- Linux boot smoke test (QEMU launch, wait for shell prompt,
   poweroff)
+- `busybox-test.sh` -- Run busybox applet tests in QEMU
 - `zircon-boot-test.sh` -- Zircon ZBI boot test (builds petal programs into
   ZBIs, runs each in QEMU, checks for expected output)
 - `zircon-rootfs-test.sh` -- Zircon rootfs boot test (builds SFS rootfs with
   petal programs, boots QEMU with it, verifies rootfs-based loading)
 - `libc-test.sh` -- Run musl libc-test suite in QEMU, report pass/fail counts
 - `gen-prebuilt.sh` -- Generate Zircon prebuilts from Fuchsia source
+- `script.sh` -- Utility script
 
 TODO Can you explain that about Zircon prebuilts more, 
 and what Fuschia source is used from where?
