@@ -23,7 +23,7 @@ pub fn take_startup_handle() -> u32 {
 
 /// Entry point -- called by the kernel when the process starts.
 #[no_mangle]
-pub extern "C" fn _start(startup_handle: u32, _arg2: usize) -> ! {
+pub extern "C" fn _start(startup_handle: u32, _vdso_base: usize) -> ! {
     STARTUP_HANDLE.store(startup_handle, Ordering::SeqCst);
     unsafe { main() };
     zx::Process::exit(0);

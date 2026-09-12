@@ -181,6 +181,7 @@ fn main() {
         _ => String::from("// No trampolines for this architecture\n"),
     };
 
+    // Write Rust global_asm! wrapper for the static library
     let trampolines_path = out_dir.join("trampolines.rs");
     fs::write(
         &trampolines_path,
@@ -193,6 +194,16 @@ fn main() {
         ),
     )
     .unwrap();
+
+    // Also write a standalone assembly file for external assembly/linking.
+    // This can be assembled with `as` and linked with `ld` to produce
+    // the vDSO flat binary without Rust runtime dependencies.
+    let standalone_asm_path = out_dir.join("vdso_trampolines.S");
+    fs::write(&standalone_asm_path, &asm).unwrap();
+    println!(
+        "cargo:warning=vDSO assembly written to {}",
+        standalone_asm_path.display()
+    );
 }
 
 fn generate_aarch64() -> String {

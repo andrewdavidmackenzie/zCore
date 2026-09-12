@@ -134,22 +134,8 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
         entry
     );
 
-    // Create a vDSO VMO matching Fuchsia's expected layout:
-    //   Pages 0-6: code (currently empty, would contain syscall trampolines)
-    //   Page 7 (offset 0x7000): VdsoConstants data page
-    // The data page is mapped into the process so that
-    // ZX_PROP_PROCESS_VDSO_BASE_ADDRESS returns a valid address.
-    let vdso_vmo = VmObject::new_paged(VDSO_PAGES);
-    vdso_vmo.set_name("vdso/full");
-    // Write VdsoConstants into the data page
-    let vdso_constants = kernel_hal::vdso::vdso_constants();
-    let constants_bytes = unsafe {
-        core::slice::from_raw_parts(
-            &vdso_constants as *const _ as *const u8,
-            core::mem::size_of_val(&vdso_constants),
-        )
-    };
-    vdso_vmo.write(VDSO_DATA_OFFSET, constants_bytes).unwrap();
+    // Create the vDSO VMO with syscall trampolines and constants.
+    let vdso_vmo = create_vdso_vmo();
 
     // zbi
     let zbi_vmo = {
@@ -173,16 +159,28 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
         stack_bottom + stack_vmo.len()
     };
 
-    // Map the vDSO data page into the process address space.
+    // Map the vDSO into the process address space:
+    // - Code pages (0-6): READ | EXECUTE | USER
+    // - Data page (7, offset 0x7000): READ | USER
     // The vdso_base_addr() search looks for a mapping with vmo_offset == 0x7000.
-    let vdso_flags = MMUFlags::READ | MMUFlags::USER;
+    let vdso_code_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
+    let _vdso_code_addr = vmar
+        .map(
+            None,
+            vdso_vmo.clone(),
+            0,
+            VDSO_DATA_OFFSET, // pages 0-6
+            vdso_code_flags,
+        )
+        .unwrap();
+    let vdso_data_flags = MMUFlags::READ | MMUFlags::USER;
     let _vdso_data_addr = vmar
         .map(
             None,
             vdso_vmo.clone(),
             VDSO_DATA_OFFSET,
-            PAGE_SIZE,
-            vdso_flags,
+            PAGE_SIZE, // page 7
+            vdso_data_flags,
         )
         .unwrap();
 
@@ -230,7 +228,9 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     let msg = MessagePacket { data, handles };
     kernel_channel.write(msg).unwrap();
 
-    proc.start(&thread, entry, sp, Some(handle), 0, thread_fn)
+    // Pass the vDSO code base address as arg2 to _start(handle, vdso_base).
+    // This matches Fuchsia's convention.
+    proc.start(&thread, entry, sp, Some(handle), _vdso_code_addr, thread_fn)
         .expect("failed to start main thread");
     proc
 }
@@ -456,21 +456,15 @@ pub fn run_from_rootfs(
     let sp = stack_base + stack_size;
     info!("Stack at {:#x}-{:#x}, sp={:#x}", stack_base, sp, sp);
 
-    // Map vDSO data page into the process so
-    // ZX_PROP_PROCESS_VDSO_BASE_ADDRESS works.
-    let vdso_vmo = VmObject::new_paged(VDSO_PAGES);
-    vdso_vmo.set_name("vdso/full");
-    let vdso_constants = kernel_hal::vdso::vdso_constants();
-    let constants_bytes = unsafe {
-        core::slice::from_raw_parts(
-            &vdso_constants as *const _ as *const u8,
-            core::mem::size_of_val(&vdso_constants),
-        )
-    };
-    vdso_vmo.write(VDSO_DATA_OFFSET, constants_bytes).unwrap();
-    let vdso_flags = MMUFlags::READ | MMUFlags::USER;
-    let _vdso_addr = vmar
-        .map(None, vdso_vmo, VDSO_DATA_OFFSET, PAGE_SIZE, vdso_flags)
+    // Map vDSO into the process (code + data pages).
+    let vdso_vmo = create_vdso_vmo();
+    let vdso_code_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
+    let vdso_code_addr = vmar
+        .map(None, vdso_vmo.clone(), 0, VDSO_DATA_OFFSET, vdso_code_flags)
+        .unwrap();
+    let vdso_data_flags = MMUFlags::READ | MMUFlags::USER;
+    let _vdso_data_addr = vmar
+        .map(None, vdso_vmo, VDSO_DATA_OFFSET, PAGE_SIZE, vdso_data_flags)
         .unwrap();
 
     // Create a bootstrap channel (petal programs expect a startup handle).
@@ -482,11 +476,42 @@ pub fn run_from_rootfs(
     let ch0_handle = Handle::new(ch0, Rights::DEFAULT_CHANNEL);
     proc.add_handle(ch0_handle);
 
-    // Start the process. The startup handle (ch1) is passed as the
-    // first argument to _start(startup_handle, arg2).
+    // Start the process. _start(startup_handle, vdso_base).
     let handle = Handle::new(ch1, Rights::DEFAULT_CHANNEL);
-    proc.start(&thread, entry, sp, Some(handle), 0, thread_fn)
+    proc.start(&thread, entry, sp, Some(handle), vdso_code_addr, thread_fn)
         .expect("failed to start init process");
 
     proc
+}
+
+/// Create a vDSO VMO with syscall trampolines and VdsoConstants.
+///
+/// Layout:
+///   Pages 0-6 (0x0000-0x6FFF): Syscall trampoline code
+///   Page 7 (0x7000):            VdsoConstants data
+fn create_vdso_vmo() -> Arc<VmObject> {
+    let vdso_vmo = VmObject::new_paged(VDSO_PAGES);
+    vdso_vmo.set_name("vdso/full");
+
+    // Write syscall trampoline code into pages 0-6.
+    // The vDSO binary is embedded at compile time via VDSO_BIN env var.
+    // If VDSO_BIN was not set, this is an empty stub (no code pages).
+    let vdso_code: &[u8] = include_bytes!(env!("VDSO_BIN"));
+    if !vdso_code.is_empty() {
+        let code_limit = VDSO_DATA_OFFSET.min(vdso_code.len());
+        vdso_vmo.write(0, &vdso_code[..code_limit]).unwrap();
+        info!("vDSO: loaded {} bytes of trampoline code", code_limit);
+    }
+
+    // Write VdsoConstants into the data page at offset 0x7000.
+    let vdso_constants = kernel_hal::vdso::vdso_constants();
+    let constants_bytes = unsafe {
+        core::slice::from_raw_parts(
+            &vdso_constants as *const _ as *const u8,
+            core::mem::size_of_val(&vdso_constants),
+        )
+    };
+    vdso_vmo.write(VDSO_DATA_OFFSET, constants_bytes).unwrap();
+
+    vdso_vmo
 }
