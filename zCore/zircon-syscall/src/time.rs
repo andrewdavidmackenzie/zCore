@@ -1,12 +1,13 @@
 use {
     super::*,
+    alloc::sync::Arc,
     core::{
         fmt::{Debug, Formatter, Result},
         sync::atomic::{AtomicU64, Ordering},
         time::Duration,
     },
     kernel_hal::timer::timer_now,
-    zircon_object::{dev::*, task::*},
+    zircon_object::{dev::*, signal::Clock, task::*},
 };
 
 static UTC_OFFSET: AtomicU64 = AtomicU64::new(0);
@@ -19,13 +20,19 @@ impl Syscall<'_> {
     /// Create a new clock object.
     pub fn sys_clock_create(
         &self,
-        _options: u64,
+        options: u64,
         _user_args: UserInPtr<u8>,
-        _out: UserOutPtr<HandleValue>,
+        mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        // TODO: implement clock object creation
-        warn!("clock.create: not yet implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        info!("clock.create: options={:#x}", options);
+        let clock = Clock::new(options)?;
+        let proc = self.thread.proc();
+        let handle = proc.add_handle(Handle::new(
+            Arc::new(clock),
+            Rights::READ | Rights::WRITE | Rights::DUPLICATE | Rights::TRANSFER | Rights::INSPECT,
+        ));
+        out.write(handle)?;
+        Ok(())
     }
 
     /// Read the monotonic clock (vDSO fallback path).
@@ -80,17 +87,10 @@ impl Syscall<'_> {
     /// its transformed timeline.
     pub fn sys_clock_read(&self, handle: HandleValue, mut now: UserOutPtr<u64>) -> ZxResult {
         info!("clock.read: handle={:#x?}", handle);
-        // Validate that the handle exists, has READ rights, and refers to
-        // a Clock object. Since clock objects are not yet implemented, any
-        // valid call will get WRONG_TYPE until they are.
         let proc = self.thread.proc();
-        let clock = proc.get_dyn_object_with_rights(handle, Rights::READ)?;
-        if clock.type_name() != "Clock" {
-            return Err(ZxError::WRONG_TYPE);
-        }
-        // TODO: look up clock object and apply its timeline transformation
-        warn!("clock.read: returning monotonic time (clock transform not yet implemented)");
-        now.write(timer_now().as_nanos() as u64)?;
+        let clock = proc.get_object_with_rights::<Clock>(handle, Rights::READ)?;
+        let value = clock.read()?;
+        now.write(value as u64)?;
         Ok(())
     }
 
@@ -116,24 +116,30 @@ impl Syscall<'_> {
     /// Get detailed information about a clock object.
     pub fn sys_clock_get_details(
         &self,
-        _handle: HandleValue,
+        handle: HandleValue,
         _options: u64,
-        _details: UserOutPtr<u8>,
+        mut details: UserOutPtr<u8>,
     ) -> ZxResult {
-        warn!("clock.get_details: not yet implemented (requires clock objects)");
-        Err(ZxError::NOT_SUPPORTED)
+        info!("clock.get_details: handle={:#x}", handle);
+        let proc = self.thread.proc();
+        let clock = proc.get_object_with_rights::<Clock>(handle, Rights::READ)?;
+        let data = clock.get_details()?;
+        details.write_array(&data)?;
+        Ok(())
     }
 
     /// Make adjustments to a clock object.
     pub fn sys_clock_update(
         &self,
-        _handle: HandleValue,
-        _options: u64,
-        _user_args: UserInPtr<u8>,
+        handle: HandleValue,
+        options: u64,
+        user_args: UserInPtr<u8>,
     ) -> ZxResult {
-        // TODO: implement clock object updates
-        warn!("clock.update: not yet implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        info!("clock.update: handle={:#x}, options={:#x}", handle, options);
+        let proc = self.thread.proc();
+        let clock = proc.get_object_with_rights::<Clock>(handle, Rights::WRITE)?;
+        let args = user_args.read_array(32)?;
+        clock.update(options, &args)
     }
 
     /// Sleep for some number of nanoseconds.
