@@ -144,6 +144,10 @@ pub trait KernelObject: DowncastSync + Debug {
     /// It returns a bool indicating whether the handle process is over.
     /// If true, the function will never be called again.
     fn add_signal_callback(&self, callback: SignalHandler);
+    /// Add a signal callback without immediate invocation (for edge-triggered).
+    fn add_signal_callback_deferred(&self, callback: SignalHandler) {
+        self.add_signal_callback(callback);
+    }
     /// Attempt to find a child of the object with given KoID.
     ///
     /// If the object is a *Process*, the *Threads* it contains may be obtained.
@@ -313,6 +317,15 @@ impl KObjectBase {
             inner.signal_callbacks.push(callback);
         }
     }
+
+    /// Add a signal callback without immediate invocation.
+    ///
+    /// Unlike `add_signal_callback`, this does NOT check the current signal
+    /// state. The callback will only fire on future signal changes.
+    /// Used for edge-triggered wait_async.
+    pub fn add_signal_callback_deferred(&self, callback: SignalHandler) {
+        self.inner.lock().signal_callbacks.push(callback);
+    }
 }
 
 impl dyn KernelObject {
@@ -388,6 +401,11 @@ impl dyn KernelObject {
         key: u64,
         edge_triggered: bool,
     ) {
+        // Register cancellation tracking BEFORE the immediate check,
+        // so cancel_async can find it even for level-triggered waits
+        // that fire immediately.
+        let cancelled = port.register_async(self.id(), key);
+
         // For level-triggered mode, fire immediately if signal already set.
         if !edge_triggered {
             let current_signal = self.signal();
@@ -403,13 +421,17 @@ impl dyn KernelObject {
                         _reserved1: 0,
                     }),
                 });
+                // Remove the subscription since we already fired.
+                port.cancel_async(self.id(), key).ok();
                 return;
             }
         }
-        // Register a cancellable callback.
-        let cancelled = port.register_async(self.id(), key);
-        self.add_signal_callback(Box::new({
+        // Register the callback. For edge mode, use deferred registration
+        // (skip immediate signal check) so the callback only fires on
+        // future signal transitions.
+        let callback: SignalHandler = Box::new({
             let port = port.clone();
+            let source_koid = self.id();
             move |s| {
                 // Check cancellation before pushing
                 if cancelled.load(core::sync::atomic::Ordering::Relaxed) {
@@ -429,9 +451,16 @@ impl dyn KernelObject {
                         _reserved1: 0,
                     }),
                 });
+                // Clean up subscription after one-shot delivery.
+                port.cancel_async(source_koid, key).ok();
                 true
             }
-        }));
+        });
+        if edge_triggered {
+            self.add_signal_callback_deferred(callback);
+        } else {
+            self.add_signal_callback(callback);
+        }
     }
 }
 
@@ -520,6 +549,9 @@ macro_rules! impl_kobject {
             }
             fn add_signal_callback(&self, callback: $crate::object::SignalHandler) {
                 self.base.add_signal_callback(callback);
+            }
+            fn add_signal_callback_deferred(&self, callback: $crate::object::SignalHandler) {
+                self.base.add_signal_callback_deferred(callback);
             }
             fn handle_count(&self) -> u32 {
                 self.base.get_handle_count()
