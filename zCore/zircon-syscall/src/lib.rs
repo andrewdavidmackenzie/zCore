@@ -37,6 +37,7 @@ mod handle;
 #[cfg(feature = "hypervisor")]
 mod hypervisor;
 mod object;
+mod pager;
 mod pci;
 mod port;
 mod resource;
@@ -450,25 +451,16 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             // Pager subsystem (demand paging)
-            // TODO: implement pager objects with VMO fault-on-access,
-            // port packet delivery, and page supply infrastructure
-            Sys::PAGER_CREATE => {
-                warn!("pager.create: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::PAGER_CREATE => self.sys_pager_create(a0 as _, a1.into()),
             Sys::PAGER_CREATE_VMO => {
-                warn!("pager.create_vmo: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+                self.sys_pager_create_vmo(a0 as _, a1 as _, a2 as _, a3 as _, a4 as _, a5.into())
             }
-            Sys::PAGER_DETACH_VMO => {
-                warn!("pager.detach_vmo: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::PAGER_DETACH_VMO => self.sys_pager_detach_vmo(a0 as _, a1 as _),
             Sys::PAGER_SUPPLY_PAGES => {
-                warn!("pager.supply_pages: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+                self.sys_pager_supply_pages(a0 as _, a1 as _, a2 as _, a3 as _, a4 as _, a5 as _)
             }
             Sys::PAGER_OP_RANGE => {
+                // TODO: implement pager_op_range operations (dirty, writeback, fail)
                 warn!("pager.op_range: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
