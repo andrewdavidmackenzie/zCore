@@ -77,12 +77,9 @@ jobs:
         run: cargo bin -m virt-${{ matrix.arch }}
 
   libos:
-    name: LibOS build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    name: LibOS build
+    # macOS removed: 3x slower than ubuntu, redundant. See #248.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -95,38 +92,3 @@ jobs:
 
       - name: Build libos (Zircon mode)
         run: cargo xtask libos-build-zircon
-
-      # LibOS runtime smoke test on macOS aarch64.
-      # Needs musl-cross to build static-PIE busybox for the libos rootfs.
-      - name: Cache musl-cross toolchain (macOS)
-        if: runner.os == 'macOS'
-        id: cache-musl-libos
-        uses: actions/cache@v4
-        with:
-          path: /opt/homebrew/Cellar/musl-cross
-          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11
-
-      - name: Install cross-compilation toolchain (macOS)
-        if: runner.os == 'macOS' && steps.cache-musl-libos.outputs.cache-hit != 'true'
-        run: make config
-
-      - name: Restore musl-cross symlinks (macOS)
-        if: runner.os == 'macOS' && steps.cache-musl-libos.outputs.cache-hit == 'true'
-        run: brew link musl-cross 2>/dev/null || brew tap FiloSottile/musl-cross && brew link filosottile/musl-cross/musl-cross 2>/dev/null || true
-
-      - name: Install kernel headers (macOS, cached)
-        if: runner.os == 'macOS' && steps.cache-musl-libos.outputs.cache-hit == 'true'
-        run: |
-          MUSL_PREFIX=$(brew --prefix musl-cross)/libexec
-          for MUSL_ARCH in aarch64 riscv64; do
-            SYSROOT="$MUSL_PREFIX/$MUSL_ARCH-linux-musl"
-            if [ ! -f "$SYSROOT/include/linux/compiler.h" ]; then
-              make config
-              break
-            fi
-          done
-
-      - name: Smoke test libos (Linux, macOS only)
-        if: runner.os == 'macOS'
-        timeout-minutes: 5
-        run: cargo linux-libos --args "/bin/busybox --help"
