@@ -348,7 +348,7 @@ build-fuschia:
 		mkdir -p "$(FUSCHIA_DIR)"; \
 		cd "$(FUSCHIA_DIR)" && \
 		curl -s "https://fuchsia.googlesource.com/fuchsia/+/HEAD/scripts/bootstrap?format=TEXT" \
-			| base64 --decode > bootstrap.sh && \
+			| base64 -d > bootstrap.sh && \
 		bash bootstrap.sh; \
 	else \
 		echo "==> Fuchsia source already exists at $(FUSCHIA_DIR)/fuchsia, skipping clone."; \
