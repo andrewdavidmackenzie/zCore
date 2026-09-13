@@ -343,21 +343,13 @@ build-fuschia:
 		echo "ERROR: Fuchsia build requires x86_64 host (detected: $$(uname -m))"; \
 		exit 1; \
 	fi
-	@if [ ! -d "$(FUSCHIA_DIR)/fuchsia" ]; then \
+	@if [ ! -d "$(FUSCHIA_DIR)/fuchsia/.jiri_root" ]; then \
 		echo "==> Cloning Fuchsia source into $(FUSCHIA_DIR)..."; \
 		mkdir -p "$(FUSCHIA_DIR)"; \
 		cd "$(FUSCHIA_DIR)" && \
-		curl -sS "https://fuchsia.googlesource.com/fuchsia/+/HEAD/scripts/bootstrap?format=TEXT" \
-			-o bootstrap.b64 && \
-		if file bootstrap.b64 | grep -q "HTML\|ASCII text"; then \
-			echo "ERROR: Failed to download bootstrap script (got HTML instead of base64)."; \
-			echo "       The Gitiles server may be temporarily unavailable. Try again later."; \
-			rm -f bootstrap.b64; \
-			exit 1; \
-		fi && \
-		base64 -d bootstrap.b64 > bootstrap.sh && \
-		rm -f bootstrap.b64 && \
-		bash bootstrap.sh; \
+		test -d fuchsia || git clone https://fuchsia.googlesource.com/fuchsia && \
+		cd fuchsia && \
+		bash scripts/bootstrap; \
 	else \
 		echo "==> Fuchsia source already exists at $(FUSCHIA_DIR)/fuchsia, skipping clone."; \
 	fi
