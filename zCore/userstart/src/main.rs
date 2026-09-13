@@ -22,6 +22,7 @@ use zircon_abi::zbi;
 const K_PROC_SELF: usize = 0;
 const K_VMARROOT_SELF: usize = 1;
 const K_ROOTJOB: usize = 2;
+const K_ROOTRESOURCE: usize = 3;
 const K_ZBI: usize = 4;
 const K_FIRSTVDSO: usize = 5;
 const K_HANDLECOUNT: usize = 15;
@@ -82,6 +83,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     let _proc_self = handles[K_PROC_SELF];
     let vmar_self = handles[K_VMARROOT_SELF];
     let root_job = handles[K_ROOTJOB];
+    let root_resource = handles[K_ROOTRESOURCE];
     let zbi_vmo = handles[K_ZBI];
     let vdso_vmo = handles[K_FIRSTVDSO];
 
@@ -230,8 +232,8 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     });
 
     // Forward the remaining bootstrap handles to init via the channel.
-    // We pass: root job and the ZBI VMO.
-    let forward_handles = [root_job, zbi_vmo];
+    // We pass: root job, root resource, and the ZBI VMO.
+    let forward_handles = [root_job, root_resource, zbi_vmo];
     check("channel_write", unsafe {
         zx_channel_write(
             init_channel_local,

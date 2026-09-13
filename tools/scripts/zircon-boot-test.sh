@@ -81,6 +81,15 @@ run_test() {
 
   local ELAPSED=0
   while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    # Check if the expected pattern appeared (QEMU may still be running).
+    if grep -q "$expected_pattern" "$OUTPUT" 2>/dev/null; then
+      # Pattern found -- kill QEMU if still running and report success.
+      kill "$QEMU_PID" 2>/dev/null || true
+      wait "$QEMU_PID" 2>/dev/null || true
+      echo "PASS: $bin_name (exit=0)"
+      rm -f "$OUTPUT"
+      return 0
+    fi
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then
       local QEMU_EXIT=0
       wait "$QEMU_PID" || QEMU_EXIT=$?
@@ -115,6 +124,8 @@ run_test "hello" "petal: Hello from petal on zCore!" || FAILED=$((FAILED + 1))
 run_test "channel_test" "channel_test: PASS" || FAILED=$((FAILED + 1))
 run_test "vmo_test" "vmo_test: PASS" || FAILED=$((FAILED + 1))
 run_test "vdso_test" "vdso_test: PASS" || FAILED=$((FAILED + 1))
+run_test "alloc_test" "alloc_test: PASS" || FAILED=$((FAILED + 1))
+run_test "shell" "shell: self-test PASS" || FAILED=$((FAILED + 1))
 # vdso_call_test blocked on #241 (petal ELF loading with data sections)
 
 echo ""

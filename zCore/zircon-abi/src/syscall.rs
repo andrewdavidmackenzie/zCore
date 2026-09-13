@@ -395,6 +395,37 @@ pub fn debug_print(msg: &str) -> ZxStatus {
     debug_write(msg.as_bytes())
 }
 
+/// Read from the debug serial port (safe wrapper).
+///
+/// Requires a resource handle with root access. Blocks until data
+/// is available. Returns the number of bytes read.
+pub fn debug_read(resource: HandleValue, buf: &mut [u8]) -> Result<usize, ZxStatus> {
+    let mut actual: u32 = 0;
+    let status =
+        unsafe { zx_debug_read(resource, buf.as_mut_ptr(), buf.len() as u32, &mut actual) };
+    if status == 0 {
+        Ok(actual as usize)
+    } else {
+        Err(status)
+    }
+}
+
+/// Raw debug read syscall.
+pub unsafe fn zx_debug_read(
+    resource: HandleValue,
+    buf: *mut u8,
+    buf_size: u32,
+    actual: *mut u32,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_DEBUG_READ,
+        resource as u64,
+        buf as u64,
+        buf_size as u64,
+        actual as u64,
+    )
+}
+
 /// Exit the current process (safe wrapper).
 pub fn process_exit(retcode: i64) -> ! {
     unsafe {
@@ -826,6 +857,25 @@ pub unsafe fn zx_object_get_info(
     )
 }
 
+/// Get a child object by KOID.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_object_get_child(
+    handle: HandleValue,
+    koid: u64,
+    rights: u32,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_OBJECT_GET_CHILD,
+        handle as u64,
+        koid,
+        rights as u64,
+        out as u64,
+    )
+}
+
 /// Get a property of an object.
 ///
 /// # Safety
@@ -1026,6 +1076,18 @@ pub unsafe fn zx_fifo_create(
         out0 as u64,
         out1 as u64,
     )
+}
+
+// --- Clock syscalls ---
+
+/// Get the current time for a clock.
+///
+/// `clock_id`: 0 = monotonic, 1 = UTC, 2 = thread.
+///
+/// # Safety
+/// `time` must be a valid pointer.
+pub unsafe fn zx_clock_get(clock_id: u32, time: *mut i64) -> ZxStatus {
+    syscall2(crate::consts::SYS_CLOCK_GET, clock_id as u64, time as u64)
 }
 
 // --- Timer syscalls ---

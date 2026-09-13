@@ -7,7 +7,8 @@ STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
 .PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
-	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run
+	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
+	petal-shell
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -27,6 +28,26 @@ run:
 LOG ?= warn
 zircon-run:
 	cargo qemu --arch $(ARCH) --zircon --log $(LOG)
+
+# Run the petal shell interactively in QEMU.
+# Boots zCore in Zircon mode with the shell as the init program.
+# Type 'help', 'echo hello', 'version', 'exit'. Ctrl-A X to kill QEMU.
+petal-shell:
+	@echo "==> Building petal shell for $(ARCH)..."
+	@cargo build -p userstart --target aarch64-unknown-none-softfloat \
+		--release --target-dir target/userstart 2>&1 | tail -1
+	@cargo petal-zbi --arch $(ARCH) --bin shell 2>&1 | tail -1
+	@USERSTART_ELF="$$(pwd)/target/userstart/aarch64-unknown-none-softfloat/release/userstart" \
+		PETAL_ZBI="$$(pwd)/target/petal/$(ARCH)/petal.zbi" \
+		ZCORE_CMDLINE="LOG=warn" \
+		cargo build -p zcore --no-default-features --features zircon \
+		--target zCore/$(ARCH).json -Z json-target-spec \
+		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
+		--release 2>&1 | tail -1
+	@echo "==> Starting petal shell (Ctrl-A X to exit QEMU)..."
+	@qemu-system-aarch64 -m 2G -display none -no-reboot -nographic \
+		-machine virt -cpu cortex-a72 -serial mon:stdio \
+		-kernel target/$(ARCH)/release/zcore
 
 # Zircon boot smoke test: build in Zircon mode, start QEMU, wait for
 # userstart hello message, verify clean shutdown.
