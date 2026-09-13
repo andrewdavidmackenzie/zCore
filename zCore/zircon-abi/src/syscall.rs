@@ -1059,6 +1059,18 @@ pub unsafe fn zx_fifo_create(
     )
 }
 
+// --- Clock syscalls ---
+
+/// Get the current time for a clock.
+///
+/// `clock_id`: 0 = monotonic, 1 = UTC, 2 = thread.
+///
+/// # Safety
+/// `time` must be a valid pointer.
+pub unsafe fn zx_clock_get(clock_id: u32, time: *mut i64) -> ZxStatus {
+    syscall2(crate::consts::SYS_CLOCK_GET, clock_id as u64, time as u64)
+}
+
 // --- Timer syscalls ---
 
 /// Create a timer.
