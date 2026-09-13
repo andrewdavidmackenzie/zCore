@@ -8,7 +8,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 
 .PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
-	petal-shell
+	petal-shell raspi4b-build raspi4b-run
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -48,6 +48,29 @@ petal-shell:
 	@qemu-system-aarch64 -m 2G -display none -no-reboot -nographic \
 		-machine virt -cpu cortex-a72 -serial mon:stdio \
 		-kernel target/$(ARCH)/release/zcore
+
+# Build the kernel for Raspberry Pi 4B (QEMU raspi4b).
+# Uses Zircon mode (no block device needed).
+raspi4b-build:
+	@echo "==> Building zCore for Raspberry Pi 4B..."
+	@cargo build -p zcore --no-default-features --features "linux,board-raspi4b" \
+		--target zCore/aarch64-raspi4b.json \
+		-Z json-target-spec \
+		-Z build-std=core,alloc \
+		-Z build-std-features=compiler-builtins-mem \
+		--release
+	@rust-objcopy --strip-all -O binary \
+		target/aarch64-raspi4b/release/zcore \
+		target/aarch64-raspi4b/release/zcore.bin
+
+# Build and run zCore on QEMU raspi4b interactively.
+# Ctrl-A X to exit QEMU.
+raspi4b-run: raspi4b-build
+	@echo "==> Starting zCore on QEMU raspi4b (Ctrl-A X to exit)..."
+	@qemu-system-aarch64 -machine raspi4b -m 2G \
+		-display none -no-reboot -nographic \
+		-serial mon:stdio \
+		-kernel target/aarch64-raspi4b/release/zcore.bin
 
 # Zircon boot smoke test: build in Zircon mode, start QEMU, wait for
 # userstart hello message, verify clean shutdown.
