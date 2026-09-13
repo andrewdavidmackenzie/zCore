@@ -254,7 +254,9 @@ pub fn build_petal_zbi(arch: Arch, bin_name: &str) -> PathBuf {
     let bootfs_name = format!("bin/{}", bin_name);
     let zbi_data = zircon_abi::zbi::build_test_zbi(bootfs_name.as_bytes(), &elf_data);
 
-    let zbi_path = petal_output_dir(arch).join("petal.zbi");
+    let out_dir = petal_output_dir(arch);
+    std::fs::create_dir_all(&out_dir).unwrap();
+    let zbi_path = out_dir.join("petal.zbi");
     std::fs::write(&zbi_path, &zbi_data)
         .unwrap_or_else(|e| panic!("Failed to write {}: {}", zbi_path.display(), e));
 
