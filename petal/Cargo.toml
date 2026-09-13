@@ -24,6 +24,10 @@ path = "src/bin/vdso_test.rs"
 name = "alloc_test"
 path = "src/bin/alloc_test.rs"
 
+[[bin]]
+name = "shell"
+path = "src/bin/shell.rs"
+
 [dependencies]
 zx = { path = "../zCore/zx" }
 

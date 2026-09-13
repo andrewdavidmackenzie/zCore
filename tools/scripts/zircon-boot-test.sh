@@ -116,6 +116,7 @@ run_test "channel_test" "channel_test: PASS" || FAILED=$((FAILED + 1))
 run_test "vmo_test" "vmo_test: PASS" || FAILED=$((FAILED + 1))
 run_test "vdso_test" "vdso_test: PASS" || FAILED=$((FAILED + 1))
 run_test "alloc_test" "alloc_test: PASS" || FAILED=$((FAILED + 1))
+run_test "shell" "shell: self-test PASS" || FAILED=$((FAILED + 1))
 # vdso_call_test blocked on #241 (petal ELF loading with data sections)
 
 echo ""
