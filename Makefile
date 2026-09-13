@@ -7,7 +7,8 @@ STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
 .PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
-	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run
+	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
+	build-fuschia
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -324,3 +325,40 @@ clean-everything: clean
 # 	cd rootfs/x86_64 && git clone https://kernel.googlesource.com/pub/scm/linux/kernel/git/clrkwllms/rt-tests --depth 1
 # 	cd rootfs/x86_64/rt-tests && make
 # 	echo x86 gcc build rt-test,now need manual modificy.
+
+# Clone and build the Fuchsia project in ../fuschia for testing alongside zCore.
+# Requires: x86-64 Linux host with curl, git, unzip installed.
+# Cross-compiles Fuchsia for aarch64 (qemu-arm64 board).
+FUSCHIA_DIR := $(CURDIR)/../fuschia
+build-fuschia:
+	@echo "==> Checking prerequisites..."
+	@which curl >/dev/null 2>&1 || { echo "ERROR: curl not found"; exit 1; }
+	@which git >/dev/null 2>&1 || { echo "ERROR: git not found"; exit 1; }
+	@which unzip >/dev/null 2>&1 || { echo "ERROR: unzip not found"; exit 1; }
+	@if [ "$$(uname -s)" != "Linux" ]; then \
+		echo "ERROR: Fuchsia can only be built on Linux (detected: $$(uname -s))"; \
+		exit 1; \
+	fi
+	@if [ "$$(uname -m)" != "x86_64" ]; then \
+		echo "ERROR: Fuchsia build requires x86_64 host (detected: $$(uname -m))"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(FUSCHIA_DIR)/fuchsia/.jiri_root" ]; then \
+		echo "==> Cloning Fuchsia source into $(FUSCHIA_DIR)..."; \
+		mkdir -p "$(FUSCHIA_DIR)"; \
+		cd "$(FUSCHIA_DIR)" && \
+		test -d fuchsia || git clone https://fuchsia.googlesource.com/fuchsia && \
+		cd fuchsia && \
+		bash scripts/bootstrap; \
+	else \
+		echo "==> Fuchsia source already exists at $(FUSCHIA_DIR)/fuchsia, skipping clone."; \
+	fi
+	@echo "==> Configuring Fuchsia build (terminal.qemu-arm64)..."
+	@cd "$(FUSCHIA_DIR)/fuchsia" && \
+		source scripts/fx-env.sh && \
+		fx set terminal.qemu-arm64
+	@echo "==> Building Fuchsia..."
+	@cd "$(FUSCHIA_DIR)/fuchsia" && \
+		source scripts/fx-env.sh && \
+		fx build
+	@echo "==> Fuchsia build complete at $(FUSCHIA_DIR)/fuchsia"
