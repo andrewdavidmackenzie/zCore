@@ -361,33 +361,64 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
         }
     }
 
-    // Make executable
+    // Make executable so code segments can be mapped with PERM_EXECUTE.
     let mut exec_vmo: HandleValue = ZX_HANDLE_INVALID;
     check("vmo_replace_as_executable", unsafe {
         zx_vmo_replace_as_executable(code_vmo, ZX_HANDLE_INVALID, &mut exec_vmo)
     });
     code_vmo = exec_vmo;
 
-    // Map the whole VMO with RWX (segments share the VMO).
-    // The kernel will enforce per-page permissions via page faults.
-    let mut mapped_addr: usize = 0;
-    check("vmar_map(elf)", unsafe {
-        zx_vmar_map(
-            vmar,
-            ZX_VM_PERM_READ
-                | ZX_VM_PERM_WRITE
-                | ZX_VM_PERM_EXECUTE
-                | ZX_VM_SPECIFIC
-                | ZX_VM_MAP_RANGE,
-            base,
-            code_vmo,
-            0,
-            vmo_size,
-            &mut mapped_addr,
-        )
-    });
+    // Map each PT_LOAD segment with its declared permissions.
+    const PF_X: u32 = 1;
+    const PF_W: u32 = 2;
+    const PF_R: u32 = 4;
+    let mut map_end: usize = 0;
 
-    let map_end = base + vmo_size;
+    for i in 0..e_phnum {
+        let ph = &data[e_phoff + i * e_phentsize..];
+        let p_type = u32::from_le_bytes(ph[0..4].try_into().unwrap());
+        if p_type != PT_LOAD {
+            continue;
+        }
+        let p_flags = u32::from_le_bytes(ph[4..8].try_into().unwrap());
+        let p_vaddr = u64::from_le_bytes(ph[16..24].try_into().unwrap()) as usize;
+        let p_memsz = u64::from_le_bytes(ph[40..48].try_into().unwrap()) as usize;
+
+        // Page-align the segment range
+        let seg_start = p_vaddr & !(PAGE_SIZE - 1);
+        let seg_end = (p_vaddr + p_memsz + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let seg_size = seg_end - seg_start;
+
+        // Convert ELF p_flags to VM permissions
+        let mut vm_flags = ZX_VM_SPECIFIC | ZX_VM_MAP_RANGE;
+        if p_flags & PF_R != 0 {
+            vm_flags |= ZX_VM_PERM_READ;
+        }
+        if p_flags & PF_W != 0 {
+            vm_flags |= ZX_VM_PERM_WRITE;
+        }
+        if p_flags & PF_X != 0 {
+            vm_flags |= ZX_VM_PERM_EXECUTE;
+        }
+
+        let mut seg_addr: usize = 0;
+        check("vmar_map(seg)", unsafe {
+            zx_vmar_map(
+                vmar,
+                vm_flags,
+                base + seg_start,
+                code_vmo,
+                seg_start,
+                seg_size,
+                &mut seg_addr,
+            )
+        });
+
+        let end = base + seg_end;
+        if end > map_end {
+            map_end = end;
+        }
+    }
     let entry = base + e_entry;
     debug_print(b"userstart: ELF loaded\n");
     (entry, map_end)
