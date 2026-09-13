@@ -2,30 +2,51 @@ use super::consts::save_offset;
 use kernel_hal::KernelConfig;
 
 // Include the boot assembly (page table setup + MMU enable + stack setup)
+#[cfg(not(feature = "board-raspi4b"))]
 core::arch::global_asm!(include_str!("boot.s"));
+#[cfg(feature = "board-raspi4b")]
+core::arch::global_asm!(include_str!("boot_raspi4b.s"));
 
-// QEMU virt machine constants
-const PHYS_TO_VIRT_OFFSET: usize = 0xffff_0000_0000_0000;
-const UART_BASE: usize = 0x0900_0000;
-const GIC_BASE: usize = 0x0800_0000;
+// --- Board constants ---
 
-/// Rust entry point, called from boot.s after MMU is enabled.
+#[cfg(not(feature = "board-raspi4b"))]
+mod board {
+    // QEMU virt machine
+    pub const PHYS_TO_VIRT_OFFSET: usize = 0xffff_0000_0000_0000;
+    pub const UART_BASE: usize = 0x0900_0000;
+    pub const GIC_BASE: usize = 0x0800_0000;
+    pub const FIRMWARE_TYPE: &str = "QEMU";
+}
+
+#[cfg(feature = "board-raspi4b")]
+mod board {
+    // Raspberry Pi 4B (BCM2711)
+    //   RAM at 0x0, kernel loaded at 0x80000
+    //   Peripherals at 0xFE000000 (BCM2835-compatible)
+    //   GIC-400 at ctrl_base(0xFF800000) + 0x40000 + offset
+    pub const PHYS_TO_VIRT_OFFSET: usize = 0xffff_0000_0000_0000;
+    pub const UART_BASE: usize = 0xFE20_1000; // PL011 UART0
+    pub const GIC_BASE: usize = 0xFF84_0000; // GIC base (GICD at +0x1000, GICC at +0x2000)
+    pub const FIRMWARE_TYPE: &str = "RPi4";
+}
+
+/// Rust entry point, called from boot assembly after MMU is enabled.
 ///
 /// At this point:
-/// - We are running at virtual addresses (0xffff0000_4008xxxx)
+/// - We are running at virtual addresses
 /// - The MMU is ON with identity + high mappings
-/// - x0 contains the DTB pointer from QEMU (currently unused)
+/// - x0 contains the DTB pointer (from QEMU or Pi firmware)
 #[no_mangle]
 extern "C" fn rust_main(dtb_paddr: usize) -> ! {
     let config = KernelConfig {
         cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=warn:ROOTPROC=/bin/busybox?sh"),
-        firmware_type: "QEMU",
-        uart_base: UART_BASE,
-        gic_base: GIC_BASE,
-        phys_to_virt_offset: PHYS_TO_VIRT_OFFSET,
+        firmware_type: board::FIRMWARE_TYPE,
+        uart_base: board::UART_BASE,
+        gic_base: board::GIC_BASE,
+        phys_to_virt_offset: board::PHYS_TO_VIRT_OFFSET,
         dtb_paddr,
     };
-    save_offset(PHYS_TO_VIRT_OFFSET);
+    save_offset(board::PHYS_TO_VIRT_OFFSET);
     crate::primary_main(config);
     unreachable!()
 }

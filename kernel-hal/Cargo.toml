@@ -20,6 +20,7 @@ libos = [
   "kernel-drivers/libos",
 ]
 board-c910light = []
+board-raspi4b = []
 link-user-img = []
 # Enable extra page table falgs for T-Head CPU with MAEE on
 thead-maee = []
