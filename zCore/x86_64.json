@@ -12,7 +12,7 @@
   "linker": "rust-lld",
   "pre-link-args": {
     "ld.lld": [
-      "-TzCore/src/platform/x86/linker.ld"
+      "-TzCore/kernel/src/platform/x86/linker.ld"
     ]
   },
   "disable-redzone": true,

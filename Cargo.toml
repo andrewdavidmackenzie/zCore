@@ -9,7 +9,7 @@ members = [
     "zCore/linux-object",
     "zCore/linux-syscall",
     "zCore/linux-loader",
-    "zCore",
+    "zCore/kernel",
 
     "xtask",
     "zCore/executor",
