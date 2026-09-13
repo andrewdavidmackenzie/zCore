@@ -153,44 +153,9 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         )
     });
 
-    // Step 6: Create a VMO with the program code and map it
-    let code_size = program_data.len();
-    let code_pages = code_size.div_ceil(PAGE_SIZE);
-    let map_size = code_pages * PAGE_SIZE;
-
-    #[allow(unused_mut)]
-    let mut code_vmo: HandleValue = ZX_HANDLE_INVALID;
-    check("vmo_create", unsafe {
-        zx_vmo_create(map_size as u64, 0, &mut code_vmo)
-    });
-
-    check("vmo_write", unsafe {
-        zx_vmo_write(code_vmo, program_data.as_ptr(), 0, code_size)
-    });
-
-    // Make the VMO executable so we can map it with PERM_EXECUTE
-    let mut exec_vmo: HandleValue = ZX_HANDLE_INVALID;
-    check("vmo_replace_as_executable", unsafe {
-        zx_vmo_replace_as_executable(code_vmo, ZX_HANDLE_INVALID, &mut exec_vmo)
-    });
-    // The original handle is consumed by replace_as_executable
-    code_vmo = exec_vmo;
-
-    // Map code at a non-zero address (0x10000) to avoid the null page.
-    // Use ZX_VM_SPECIFIC to place it at a known offset.
-    let code_base: usize = 0x10000;
-    let mut entry_addr: usize = 0;
-    check("vmar_map(code)", unsafe {
-        zx_vmar_map(
-            init_vmar,
-            ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE | ZX_VM_SPECIFIC | ZX_VM_MAP_RANGE,
-            code_base, // vmar_offset
-            code_vmo,
-            0, // vmo_offset
-            map_size,
-            &mut entry_addr,
-        )
-    });
+    // Step 6: Load program as ELF, mapping each PT_LOAD segment
+    // with correct permissions (RX for code, RW for data).
+    let (entry_addr, map_end) = load_elf(program_data, init_vmar);
 
     // Step 7: Create a stack for the init program
     let stack_pages = 8;
@@ -200,8 +165,8 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         zx_vmo_create(stack_size as u64, 0, &mut stack_vmo)
     });
 
-    // Map stack above the code
-    let stack_offset = code_base + map_size;
+    // Map stack above the loaded segments
+    let stack_offset = map_end + PAGE_SIZE;
     let mut stack_base: usize = 0;
     check("vmar_map(stack)", unsafe {
         zx_vmar_map(
@@ -315,7 +280,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         zx_handle_close(init_proc);
         zx_handle_close(init_thread);
         zx_handle_close(init_vmar);
-        zx_handle_close(code_vmo);
+        // code_vmo is local to load_elf/load_flat and already consumed
         zx_handle_close(stack_vmo);
         zx_handle_close(zbi_vmo);
         // Close remaining bootstrap handles
@@ -326,6 +291,172 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         }
         zx_process_exit(0);
     }
+}
+
+/// Load an ELF binary into a process, mapping each PT_LOAD segment.
+/// Returns (entry_addr, map_end) where map_end is the highest mapped address.
+fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
+    // Minimal ELF64 header parsing (no external crate).
+    // Check magic
+    if data.len() < 64 || &data[0..4] != b"\x7fELF" {
+        // Not an ELF -- fall back to flat binary loading
+        debug_print(b"userstart: not ELF, loading as flat binary\n");
+        return load_flat(data, vmar);
+    }
+
+    let e_entry = u64::from_le_bytes(data[24..32].try_into().unwrap()) as usize;
+    let e_phoff = u64::from_le_bytes(data[32..40].try_into().unwrap()) as usize;
+    let e_phentsize = u16::from_le_bytes(data[54..56].try_into().unwrap()) as usize;
+    let e_phnum = u16::from_le_bytes(data[56..58].try_into().unwrap()) as usize;
+
+    const PT_LOAD: u32 = 1;
+
+    let base: usize = 0x10000; // load base to avoid null page
+
+    // Create a single VMO large enough for all segments.
+    // Find the total size first.
+    let mut total_size: usize = 0;
+    for i in 0..e_phnum {
+        let ph = &data[e_phoff + i * e_phentsize..];
+        let p_type = u32::from_le_bytes(ph[0..4].try_into().unwrap());
+        if p_type != PT_LOAD {
+            continue;
+        }
+        let p_vaddr = u64::from_le_bytes(ph[16..24].try_into().unwrap()) as usize;
+        let p_memsz = u64::from_le_bytes(ph[40..48].try_into().unwrap()) as usize;
+        let seg_end = p_vaddr + p_memsz;
+        if seg_end > total_size {
+            total_size = seg_end;
+        }
+    }
+
+    let total_pages = total_size.div_ceil(PAGE_SIZE);
+    let vmo_size = total_pages * PAGE_SIZE;
+
+    let mut code_vmo: HandleValue = ZX_HANDLE_INVALID;
+    check("vmo_create(elf)", unsafe {
+        zx_vmo_create(vmo_size as u64, 0, &mut code_vmo)
+    });
+
+    // Write each PT_LOAD segment into the VMO at its virtual address offset.
+    for i in 0..e_phnum {
+        let ph = &data[e_phoff + i * e_phentsize..];
+        let p_type = u32::from_le_bytes(ph[0..4].try_into().unwrap());
+        if p_type != PT_LOAD {
+            continue;
+        }
+        let p_offset = u64::from_le_bytes(ph[8..16].try_into().unwrap()) as usize;
+        let p_vaddr = u64::from_le_bytes(ph[16..24].try_into().unwrap()) as usize;
+        let p_filesz = u64::from_le_bytes(ph[32..40].try_into().unwrap()) as usize;
+
+        if p_filesz > 0 && p_offset + p_filesz <= data.len() {
+            check("vmo_write(seg)", unsafe {
+                zx_vmo_write(
+                    code_vmo,
+                    data[p_offset..].as_ptr(),
+                    p_vaddr as u64,
+                    p_filesz,
+                )
+            });
+        }
+    }
+
+    // Make executable so code segments can be mapped with PERM_EXECUTE.
+    let mut exec_vmo: HandleValue = ZX_HANDLE_INVALID;
+    check("vmo_replace_as_executable", unsafe {
+        zx_vmo_replace_as_executable(code_vmo, ZX_HANDLE_INVALID, &mut exec_vmo)
+    });
+    code_vmo = exec_vmo;
+
+    // Map each PT_LOAD segment with its declared permissions.
+    const PF_X: u32 = 1;
+    const PF_W: u32 = 2;
+    const PF_R: u32 = 4;
+    let mut map_end: usize = 0;
+
+    for i in 0..e_phnum {
+        let ph = &data[e_phoff + i * e_phentsize..];
+        let p_type = u32::from_le_bytes(ph[0..4].try_into().unwrap());
+        if p_type != PT_LOAD {
+            continue;
+        }
+        let p_flags = u32::from_le_bytes(ph[4..8].try_into().unwrap());
+        let p_vaddr = u64::from_le_bytes(ph[16..24].try_into().unwrap()) as usize;
+        let p_memsz = u64::from_le_bytes(ph[40..48].try_into().unwrap()) as usize;
+
+        // Page-align the segment range
+        let seg_start = p_vaddr & !(PAGE_SIZE - 1);
+        let seg_end = (p_vaddr + p_memsz + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let seg_size = seg_end - seg_start;
+
+        // Convert ELF p_flags to VM permissions
+        let mut vm_flags = ZX_VM_SPECIFIC | ZX_VM_MAP_RANGE;
+        if p_flags & PF_R != 0 {
+            vm_flags |= ZX_VM_PERM_READ;
+        }
+        if p_flags & PF_W != 0 {
+            vm_flags |= ZX_VM_PERM_WRITE;
+        }
+        if p_flags & PF_X != 0 {
+            vm_flags |= ZX_VM_PERM_EXECUTE;
+        }
+
+        let mut seg_addr: usize = 0;
+        check("vmar_map(seg)", unsafe {
+            zx_vmar_map(
+                vmar,
+                vm_flags,
+                base + seg_start,
+                code_vmo,
+                seg_start,
+                seg_size,
+                &mut seg_addr,
+            )
+        });
+
+        let end = base + seg_end;
+        if end > map_end {
+            map_end = end;
+        }
+    }
+    let entry = base + e_entry;
+    debug_print(b"userstart: ELF loaded\n");
+    (entry, map_end)
+}
+
+/// Fallback: load flat binary (no ELF headers).
+fn load_flat(data: &[u8], vmar: HandleValue) -> (usize, usize) {
+    let code_size = data.len();
+    let code_pages = code_size.div_ceil(PAGE_SIZE);
+    let map_size = code_pages * PAGE_SIZE;
+
+    let mut code_vmo: HandleValue = ZX_HANDLE_INVALID;
+    check("vmo_create", unsafe {
+        zx_vmo_create(map_size as u64, 0, &mut code_vmo)
+    });
+    check("vmo_write", unsafe {
+        zx_vmo_write(code_vmo, data.as_ptr(), 0, code_size)
+    });
+    let mut exec_vmo: HandleValue = ZX_HANDLE_INVALID;
+    check("vmo_replace_as_executable", unsafe {
+        zx_vmo_replace_as_executable(code_vmo, ZX_HANDLE_INVALID, &mut exec_vmo)
+    });
+    code_vmo = exec_vmo;
+
+    let code_base: usize = 0x10000;
+    let mut entry_addr: usize = 0;
+    check("vmar_map(flat)", unsafe {
+        zx_vmar_map(
+            vmar,
+            ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE | ZX_VM_SPECIFIC | ZX_VM_MAP_RANGE,
+            code_base,
+            code_vmo,
+            0,
+            map_size,
+            &mut entry_addr,
+        )
+    });
+    (code_base, code_base + map_size)
 }
 
 /// Panic handler.
