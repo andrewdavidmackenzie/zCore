@@ -1,10 +1,15 @@
-//! petal runtime -- provides _start entry point and panic handler.
+//! petal runtime -- provides _start entry point, panic handler,
+//! and global allocator for `alloc` support.
 //!
 //! Petal programs define `pub fn main()` and this runtime handles
 //! the boilerplate. The startup handle from userstart is available
 //! via `petal::take_startup_handle()`.
 
 #![no_std]
+
+extern crate alloc;
+
+mod alloc_impl;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -24,6 +29,8 @@ pub fn take_startup_handle() -> u32 {
 /// Entry point -- called by the kernel when the process starts.
 #[no_mangle]
 pub extern "C" fn _start(startup_handle: u32, _vdso_base: usize) -> ! {
+    // Initialize the heap allocator before calling main.
+    alloc_impl::init_heap();
     STARTUP_HANDLE.store(startup_handle, Ordering::SeqCst);
     unsafe { main() };
     zx::Process::exit(0);

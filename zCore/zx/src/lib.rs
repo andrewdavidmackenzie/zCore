@@ -58,6 +58,9 @@ pub use port::Port;
 mod timer;
 pub use timer::Timer;
 
+mod console;
+pub use console::{print as console_print, read as console_read, write as console_write};
+
 mod debuglog;
 pub use debuglog::{debug_print, debug_write, DebugLog};
 

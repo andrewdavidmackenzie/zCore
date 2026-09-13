@@ -395,6 +395,37 @@ pub fn debug_print(msg: &str) -> ZxStatus {
     debug_write(msg.as_bytes())
 }
 
+/// Read from the debug serial port (safe wrapper).
+///
+/// Requires a resource handle with root access. Blocks until data
+/// is available. Returns the number of bytes read.
+pub fn debug_read(resource: HandleValue, buf: &mut [u8]) -> Result<usize, ZxStatus> {
+    let mut actual: u32 = 0;
+    let status =
+        unsafe { zx_debug_read(resource, buf.as_mut_ptr(), buf.len() as u32, &mut actual) };
+    if status == 0 {
+        Ok(actual as usize)
+    } else {
+        Err(status)
+    }
+}
+
+/// Raw debug read syscall.
+pub unsafe fn zx_debug_read(
+    resource: HandleValue,
+    buf: *mut u8,
+    buf_size: u32,
+    actual: *mut u32,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_DEBUG_READ,
+        resource as u64,
+        buf as u64,
+        buf_size as u64,
+        actual as u64,
+    )
+}
+
 /// Exit the current process (safe wrapper).
 pub fn process_exit(retcode: i64) -> ! {
     unsafe {
