@@ -16,14 +16,18 @@ use alloc::vec::Vec;
 use noline::builder::EditorBuilder;
 
 /// Bootstrap handle indices (must match userstart's forward order).
-#[allow(dead_code)]
 const H_ROOT_JOB: usize = 0;
 const H_ROOT_RESOURCE: usize = 1;
 #[allow(dead_code)]
 const H_ZBI_VMO: usize = 2;
 
+/// Shell context: holds handles needed by builtins.
+struct Ctx {
+    root_job: u32,
+    root_resource: u32,
+}
+
 /// Console I/O adapter implementing embedded_io Read + Write traits.
-/// Wraps debug_write (output) and debug_read (input via root resource).
 struct Console {
     resource: u32,
 }
@@ -54,13 +58,17 @@ pub fn main() {
     zx::debug_write(b"petal shell v0.1\n");
 
     // --- Self-test (always runs, for CI) ---
+    let dummy = Ctx {
+        root_job: 0,
+        root_resource: 0,
+    };
     zx::debug_write(b"shell: running self-test\n");
     let commands = ["help", "echo hello world", "version"];
     for cmd in &commands {
         zx::debug_write(b"petal> ");
         zx::debug_write(cmd.as_bytes());
         zx::debug_write(b"\n");
-        run_command(cmd);
+        run_command(cmd, &dummy);
     }
     zx::debug_write(b"shell: self-test PASS\n");
 
@@ -87,21 +95,20 @@ pub fn main() {
         )
     };
 
-    let root_resource = if status == 0 && actual_handles >= 2 {
-        handles[H_ROOT_RESOURCE]
-    } else {
-        0
-    };
-
-    if root_resource == 0 {
+    if status != 0 || actual_handles < 2 {
         return;
     }
+
+    let ctx = Ctx {
+        root_job: handles[H_ROOT_JOB],
+        root_resource: handles[H_ROOT_RESOURCE],
+    };
 
     // Interactive mode with noline editor
     zx::debug_write(b"\nType 'help' for commands, 'exit' to quit.\n\n");
 
     let mut io = Console {
-        resource: root_resource,
+        resource: ctx.root_resource,
     };
 
     let Ok(mut editor) = EditorBuilder::new_unbounded()
@@ -116,7 +123,7 @@ pub fn main() {
         match editor.readline("petal> ", &mut io) {
             Ok(line) => {
                 let trimmed = line.trim();
-                if !trimmed.is_empty() && run_command(trimmed) {
+                if !trimmed.is_empty() && run_command(trimmed, &ctx) {
                     break;
                 }
             }
@@ -128,10 +135,10 @@ pub fn main() {
     }
 }
 
-// --- Builtins ---
+// --- Command dispatch ---
 
 /// Execute a command. Returns true if the shell should exit.
-fn run_command(line: &str) -> bool {
+fn run_command(line: &str, ctx: &Ctx) -> bool {
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.is_empty() {
         return false;
@@ -142,6 +149,9 @@ fn run_command(line: &str) -> bool {
         "version" => cmd_version(),
         "uptime" => cmd_uptime(),
         "sysinfo" => cmd_sysinfo(),
+        "dmesg" => cmd_dmesg(ctx),
+        "ps" => cmd_ps(ctx),
+        "mem" => cmd_mem(ctx),
         "exit" | "quit" => {
             zx::debug_write(b"goodbye\n");
             return true;
@@ -155,13 +165,18 @@ fn run_command(line: &str) -> bool {
     false
 }
 
+// --- Builtins ---
+
 fn cmd_help() {
     zx::debug_write(b"Available commands:\n");
     zx::debug_write(b"  help     - show this message\n");
     zx::debug_write(b"  echo     - print arguments\n");
     zx::debug_write(b"  version  - show shell version\n");
     zx::debug_write(b"  uptime   - show system uptime\n");
-    zx::debug_write(b"  sysinfo  - show system information\n");
+    zx::debug_write(b"  sysinfo  - CPU count, memory, version\n");
+    zx::debug_write(b"  dmesg    - show kernel log\n");
+    zx::debug_write(b"  ps       - list processes\n");
+    zx::debug_write(b"  mem      - show memory stats\n");
     zx::debug_write(b"  exit     - exit the shell\n");
 }
 
@@ -180,7 +195,6 @@ fn cmd_version() {
 }
 
 fn cmd_uptime() {
-    // Use clock_get with ZX_CLOCK_MONOTONIC (0) to get nanoseconds since boot.
     let mut nanos: i64 = 0;
     let status = unsafe { zx::sys::zx_clock_get(0, &mut nanos) };
     if status != 0 {
@@ -207,12 +221,11 @@ fn cmd_uptime() {
 }
 
 fn cmd_sysinfo() {
-    // Read vDSO constants from the mapped data page.
     let mut vdso_base: usize = 0;
     let status = unsafe {
         zx::sys::zx_object_get_property(
-            0x1, // any valid handle (kernel falls back to calling process)
-            6,   // ZX_PROP_PROCESS_VDSO_BASE_ADDRESS
+            0x1,
+            6, // ZX_PROP_PROCESS_VDSO_BASE_ADDRESS
             &mut vdso_base as *mut usize as *mut u8,
             core::mem::size_of::<usize>(),
         )
@@ -221,22 +234,6 @@ fn cmd_sysinfo() {
     if status != 0 || vdso_base == 0 {
         zx::debug_write(b"sysinfo: cannot read vDSO constants\n");
         return;
-    }
-
-    #[repr(C)]
-    struct VdsoConstants {
-        max_num_cpus: u32,
-        features_cpu: u32,
-        hw_breakpoint_count: u32,
-        hw_watchpoint_count: u32,
-        dcache_line_size: u32,
-        icache_line_size: u32,
-        ticks_per_second: u64,
-        ticks_to_mono_numerator: u32,
-        ticks_to_mono_denominator: u32,
-        physmem: u64,
-        version_string_len: u64,
-        version_string: [u8; 64],
     }
 
     let constants = unsafe { &*(vdso_base as *const VdsoConstants) };
@@ -251,11 +248,245 @@ fn cmd_sysinfo() {
     zx::debug_write(b" MiB\n");
 
     if constants.version_string_len > 0 {
-        let len = constants.version_string_len as usize;
-        let len = if len > 64 { 64 } else { len };
+        let len = (constants.version_string_len as usize).min(64);
         zx::debug_write(b"Version: ");
         zx::debug_write(&constants.version_string[..len]);
         zx::debug_write(b"\n");
+    }
+}
+
+fn cmd_dmesg(ctx: &Ctx) {
+    if ctx.root_resource == 0 {
+        zx::debug_write(b"dmesg: no root resource\n");
+        return;
+    }
+
+    // Create a readable debuglog handle.
+    const FLAG_READABLE: u32 = 0x4000_0000;
+    let mut dlog_handle: u32 = 0;
+    let status =
+        unsafe { zx::sys::zx_debuglog_create(ctx.root_resource, FLAG_READABLE, &mut dlog_handle) };
+    if status != 0 {
+        zx::debug_write(b"dmesg: debuglog_create failed\n");
+        return;
+    }
+
+    // Read and display log records.
+    let mut buf = [0u8; 256];
+    loop {
+        let result = unsafe { zx::sys::zx_debuglog_read(dlog_handle, 0, buf.as_mut_ptr(), 256) };
+        if result <= 0 {
+            break; // ZX_ERR_SHOULD_WAIT (-22) means no more records
+        }
+        let len = result as usize;
+        if len < 32 {
+            break; // record too short for header
+        }
+        // DlogHeader is 32 bytes, data follows.
+        // datalen is at offset 4 (u16).
+        let datalen = u16::from_le_bytes([buf[4], buf[5]]) as usize;
+        let data_start = 32; // sizeof(DlogHeader)
+        let data_end = (data_start + datalen).min(len);
+        if data_end > data_start {
+            zx::debug_write(&buf[data_start..data_end]);
+            // Add newline if not present
+            if buf[data_end - 1] != b'\n' {
+                zx::debug_write(b"\n");
+            }
+        }
+    }
+
+    unsafe {
+        zx::sys::zx_handle_close(dlog_handle);
+    }
+}
+
+fn cmd_ps(ctx: &Ctx) {
+    if ctx.root_job == 0 {
+        zx::debug_write(b"ps: no root job handle\n");
+        return;
+    }
+
+    // ZX_INFO_JOB_PROCESSES = 9
+    const INFO_JOB_PROCESSES: u32 = 9;
+    // ZX_INFO_PROCESS = 3
+    const INFO_PROCESS: u32 = 3;
+    // ZX_PROP_NAME = 3
+    const PROP_NAME: u32 = 3;
+
+    // Get the list of process KOIDs in the root job.
+    let mut koids = [0u64; 32];
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let status = unsafe {
+        zx::sys::zx_object_get_info(
+            ctx.root_job,
+            INFO_JOB_PROCESSES,
+            koids.as_mut_ptr() as *mut u8,
+            koids.len() * 8,
+            &mut actual,
+            &mut avail,
+        )
+    };
+    if status != 0 {
+        zx::debug_write(b"ps: get_info(JOB_PROCESSES) failed\n");
+        return;
+    }
+
+    zx::debug_write(b"  PID  STATE        NAME\n");
+
+    for &koid in &koids[..actual] {
+        // Get a handle to the process via object_get_child.
+        let mut proc_handle: u32 = 0;
+        let s = unsafe {
+            zx::sys::zx_object_get_child(
+                ctx.root_job,
+                koid,
+                0x2, // ZX_RIGHT_ENUMERATE
+                &mut proc_handle,
+            )
+        };
+        if s != 0 {
+            zx::debug_write(b"  ");
+            write_decimal_padded(koid as usize, 5);
+            zx::debug_write(b"  (inaccessible)\n");
+            continue;
+        }
+
+        // Get process info.
+        #[repr(C)]
+        #[derive(Default)]
+        struct ProcessInfo {
+            return_code: i64,
+            start_time: i64,
+            flags: u32,
+        }
+        let mut pinfo = ProcessInfo::default();
+        let s = unsafe {
+            zx::sys::zx_object_get_info(
+                proc_handle,
+                INFO_PROCESS,
+                &mut pinfo as *mut ProcessInfo as *mut u8,
+                core::mem::size_of::<ProcessInfo>(),
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+            )
+        };
+
+        // Get process name.
+        let mut name_buf = [0u8; 32];
+        let _ = unsafe {
+            zx::sys::zx_object_get_property(
+                proc_handle,
+                PROP_NAME,
+                name_buf.as_mut_ptr(),
+                name_buf.len(),
+            )
+        };
+
+        // Format output.
+        zx::debug_write(b"  ");
+        write_decimal_padded(koid as usize, 5);
+        zx::debug_write(b"  ");
+
+        if s == 0 {
+            let state = if pinfo.flags & 4 != 0 {
+                // STARTED | EXITED
+                b"exited      " as &[u8]
+            } else if pinfo.flags & 1 != 0 {
+                b"running     "
+            } else {
+                b"created     "
+            };
+            zx::debug_write(state);
+        } else {
+            zx::debug_write(b"unknown     ");
+        }
+
+        // Print name (null-terminated).
+        let name_len = name_buf.iter().position(|&b| b == 0).unwrap_or(32);
+        if name_len > 0 {
+            zx::debug_write(&name_buf[..name_len]);
+        } else {
+            zx::debug_write(b"<unnamed>");
+        }
+        zx::debug_write(b"\n");
+
+        unsafe {
+            zx::sys::zx_handle_close(proc_handle);
+        }
+    }
+
+    if avail > actual {
+        zx::debug_write(b"  ... and ");
+        write_decimal(avail - actual);
+        zx::debug_write(b" more\n");
+    }
+}
+
+fn cmd_mem(ctx: &Ctx) {
+    if ctx.root_resource == 0 {
+        zx::debug_write(b"mem: no root resource\n");
+        return;
+    }
+
+    // ZX_INFO_KMEM_STATS = 17
+    const INFO_KMEM_STATS: u32 = 17;
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct KmemInfo {
+        total_bytes: u64,
+        free_bytes: u64,
+        wired_bytes: u64,
+        total_heap_bytes: u64,
+        free_heap_bytes: u64,
+        vmo_bytes: u64,
+        mmu_overhead_bytes: u64,
+        ipc_bytes: u64,
+        other_bytes: u64,
+    }
+
+    let mut info = KmemInfo::default();
+    let status = unsafe {
+        zx::sys::zx_object_get_info(
+            ctx.root_resource,
+            INFO_KMEM_STATS,
+            &mut info as *mut KmemInfo as *mut u8,
+            core::mem::size_of::<KmemInfo>(),
+            core::ptr::null_mut(),
+            core::ptr::null_mut(),
+        )
+    };
+
+    if status != 0 {
+        zx::debug_write(b"mem: get_info(KMEM_STATS) failed\n");
+        return;
+    }
+
+    let print_mb = |label: &[u8], bytes: u64| {
+        zx::debug_write(label);
+        let mb = bytes / (1024 * 1024);
+        let kb_frac = (bytes % (1024 * 1024)) / 1024;
+        write_decimal(mb as usize);
+        zx::debug_write(b".");
+        // One decimal place of fractional MiB
+        write_decimal((kb_frac * 10 / 1024) as usize);
+        zx::debug_write(b" MiB\n");
+    };
+
+    print_mb(b"Total:   ", info.total_bytes);
+    print_mb(b"Free:    ", info.free_bytes);
+    print_mb(b"Wired:   ", info.wired_bytes);
+    print_mb(b"VMO:     ", info.vmo_bytes);
+    if info.total_heap_bytes > 0 {
+        print_mb(b"Heap:    ", info.total_heap_bytes);
+    }
+    if info.mmu_overhead_bytes > 0 {
+        print_mb(b"MMU:     ", info.mmu_overhead_bytes);
+    }
+    if info.ipc_bytes > 0 {
+        print_mb(b"IPC:     ", info.ipc_bytes);
     }
 }
 
@@ -278,4 +509,42 @@ fn write_decimal(mut n: usize) {
         i -= 1;
         zx::debug_write(&[digits[i]]);
     }
+}
+
+/// Write a right-justified decimal number with padding.
+fn write_decimal_padded(n: usize, width: usize) {
+    // Count digits
+    let digit_count = if n == 0 {
+        1
+    } else {
+        let mut count = 0;
+        let mut v = n;
+        while v > 0 {
+            count += 1;
+            v /= 10;
+        }
+        count
+    };
+    for _ in 0..width.saturating_sub(digit_count) {
+        zx::debug_write(b" ");
+    }
+    write_decimal(n);
+}
+
+// --- Shared types ---
+
+#[repr(C)]
+struct VdsoConstants {
+    max_num_cpus: u32,
+    features_cpu: u32,
+    hw_breakpoint_count: u32,
+    hw_watchpoint_count: u32,
+    dcache_line_size: u32,
+    icache_line_size: u32,
+    ticks_per_second: u64,
+    ticks_to_mono_numerator: u32,
+    ticks_to_mono_denominator: u32,
+    physmem: u64,
+    version_string_len: u64,
+    version_string: [u8; 64],
 }

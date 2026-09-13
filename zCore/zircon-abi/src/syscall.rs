@@ -857,6 +857,25 @@ pub unsafe fn zx_object_get_info(
     )
 }
 
+/// Get a child object by KOID.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_object_get_child(
+    handle: HandleValue,
+    koid: u64,
+    rights: u32,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_OBJECT_GET_CHILD,
+        handle as u64,
+        koid,
+        rights as u64,
+        out as u64,
+    )
+}
+
 /// Get a property of an object.
 ///
 /// # Safety
