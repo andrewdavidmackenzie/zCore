@@ -347,8 +347,16 @@ build-fuschia:
 		echo "==> Cloning Fuchsia source into $(FUSCHIA_DIR)..."; \
 		mkdir -p "$(FUSCHIA_DIR)"; \
 		cd "$(FUSCHIA_DIR)" && \
-		curl -s "https://fuchsia.googlesource.com/fuchsia/+/HEAD/scripts/bootstrap?format=TEXT" \
-			| base64 -d > bootstrap.sh && \
+		curl -sS "https://fuchsia.googlesource.com/fuchsia/+/HEAD/scripts/bootstrap?format=TEXT" \
+			-o bootstrap.b64 && \
+		if file bootstrap.b64 | grep -q "HTML\|ASCII text"; then \
+			echo "ERROR: Failed to download bootstrap script (got HTML instead of base64)."; \
+			echo "       The Gitiles server may be temporarily unavailable. Try again later."; \
+			rm -f bootstrap.b64; \
+			exit 1; \
+		fi && \
+		base64 -d bootstrap.b64 > bootstrap.sh && \
+		rm -f bootstrap.b64 && \
 		bash bootstrap.sh; \
 	else \
 		echo "==> Fuchsia source already exists at $(FUSCHIA_DIR)/fuchsia, skipping clone."; \
