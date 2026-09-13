@@ -1,3 +1,10 @@
+# NOTE: This Makefile is legacy and NOT used by the CI or root Makefile.
+# The primary build uses xtask (cargo qemu, cargo bin, etc.).
+#
+# If using this Makefile directly, run from the REPOSITORY ROOT:
+#   make -C zCore/kernel ARCH=aarch64 build
+# The linker script paths in zCore/*.json are relative to the repo root.
+
 ################ Arguments ################
 
 ARCH ?= x86_64
@@ -141,7 +148,7 @@ endif
 build_args := --features "$(features)"
 
 ifneq ($(LIBOS), 1) # no_std
-  build_args += --no-default-features --target $(ARCH).json -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
+  build_args += --no-default-features --target ../$(ARCH).json -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem -Z json-target-spec
 endif
 
 ifeq ($(MODE), release)
