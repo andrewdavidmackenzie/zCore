@@ -38,7 +38,16 @@ pub fn primary_init_early() {
     drivers::init_early();
 }
 
-/// Parse the DTB to extract bootargs and initrd location.
+/// Information discovered from the DTB.
+pub struct DtbInfo {
+    pub bootargs: Option<String>,
+    pub initrd_start: Option<usize>,
+    pub initrd_end: Option<usize>,
+    pub memory_base: Option<usize>,
+    pub memory_size: Option<usize>,
+}
+
+/// Parse the DTB to extract bootargs, initrd, and hardware info.
 fn parse_dtb(dtb_paddr: usize) {
     use dtb_walker::{Dtb, DtbObj, Property, Str, WalkOperation::*};
 
@@ -61,31 +70,80 @@ fn parse_dtb(dtb_paddr: usize) {
 
     log::info!("DTB at {:#x}, size={}", dtb_paddr, dtb.total_size());
 
-    let mut initrd_start: Option<usize> = None;
-    let mut initrd_end: Option<usize> = None;
-    let mut bootargs: Option<String> = None;
+    let mut info = DtbInfo {
+        bootargs: None,
+        initrd_start: None,
+        initrd_end: None,
+        memory_base: None,
+        memory_size: None,
+    };
+
+    // Track which top-level node we're inside.
+    let mut in_chosen = false;
+    let mut in_memory = false;
 
     dtb.walk(|path, obj| match obj {
         DtbObj::SubNode { name } => {
-            if path.is_root() && name == Str::from("chosen") {
-                StepInto
-            } else {
-                StepOver
+            if path.is_root() {
+                let name_str = name.as_bytes();
+                if name == Str::from("chosen") {
+                    in_chosen = true;
+                    in_memory = false;
+                    return StepInto;
+                } else if name_str.starts_with(b"memory") {
+                    in_chosen = false;
+                    in_memory = true;
+                    return StepInto;
+                }
+                in_chosen = false;
+                in_memory = false;
             }
+            StepOver
         }
         DtbObj::Property(Property::General { name, value }) => {
-            if name == Str::from("bootargs") {
-                if let Ok(s) = core::str::from_utf8(value) {
-                    let s = s.trim_end_matches('\0');
-                    log::info!("DTB bootargs: {:?}", s);
-                    bootargs = Some(s.to_string());
+            if in_chosen {
+                if name == Str::from("bootargs") {
+                    if let Ok(s) = core::str::from_utf8(value) {
+                        let s = s.trim_end_matches('\0');
+                        log::info!("DTB bootargs: {:?}", s);
+                        info.bootargs = Some(s.to_string());
+                    }
+                } else if name == Str::from("linux,initrd-start") {
+                    info.initrd_start = parse_dtb_u64(value);
+                    log::info!("DTB initrd-start: {:#x?}", info.initrd_start);
+                } else if name == Str::from("linux,initrd-end") {
+                    info.initrd_end = parse_dtb_u64(value);
+                    log::info!("DTB initrd-end: {:#x?}", info.initrd_end);
                 }
-            } else if name == Str::from("linux,initrd-start") {
-                initrd_start = parse_dtb_u64(value);
-                log::info!("DTB initrd-start: {:#x?}", initrd_start);
-            } else if name == Str::from("linux,initrd-end") {
-                initrd_end = parse_dtb_u64(value);
-                log::info!("DTB initrd-end: {:#x?}", initrd_end);
+            } else if in_memory && name == Str::from("reg") {
+                // Memory reg property: base + size (each 4 or 8 bytes,
+                // depending on #address-cells and #size-cells).
+                // Common layouts: 8+8 (QEMU virt) or 4+4.
+                if value.len() >= 16 {
+                    // 64-bit cells
+                    let base = u64::from_be_bytes(value[0..8].try_into().unwrap()) as usize;
+                    let size = u64::from_be_bytes(value[8..16].try_into().unwrap()) as usize;
+                    log::info!(
+                        "DTB memory: base={:#x}, size={:#x} ({} MiB)",
+                        base,
+                        size,
+                        size >> 20
+                    );
+                    info.memory_base = Some(base);
+                    info.memory_size = Some(size);
+                } else if value.len() >= 8 {
+                    // 32-bit cells
+                    let base = u32::from_be_bytes(value[0..4].try_into().unwrap()) as usize;
+                    let size = u32::from_be_bytes(value[4..8].try_into().unwrap()) as usize;
+                    log::info!(
+                        "DTB memory: base={:#x}, size={:#x} ({} MiB)",
+                        base,
+                        size,
+                        size >> 20
+                    );
+                    info.memory_base = Some(base);
+                    info.memory_size = Some(size);
+                }
             }
             StepOver
         }
@@ -93,11 +151,11 @@ fn parse_dtb(dtb_paddr: usize) {
     });
 
     // Use DTB bootargs if available, otherwise fall back to compile-time
-    let cmdline = bootargs.unwrap_or_else(|| KCONFIG.cmdline.to_string());
+    let cmdline = info.bootargs.unwrap_or_else(|| KCONFIG.cmdline.to_string());
     CMDLINE.init_once_by(cmdline);
 
     // Set initrd region if both start and end are provided
-    if let (Some(start), Some(end)) = (initrd_start, initrd_end) {
+    if let (Some(start), Some(end)) = (info.initrd_start, info.initrd_end) {
         if end > start {
             log::info!(
                 "DTB initrd: {:#x}..{:#x} ({} bytes)",
@@ -107,6 +165,11 @@ fn parse_dtb(dtb_paddr: usize) {
             );
             INITRD_REGION.init_once_by(Some(start..end));
         }
+    }
+
+    // Log discovered memory (used for future dynamic memory configuration)
+    if let (Some(base), Some(size)) = (info.memory_base, info.memory_size) {
+        log::info!("DTB memory region: {:#x}..{:#x}", base, base + size);
     }
 }
 
