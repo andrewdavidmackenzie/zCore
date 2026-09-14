@@ -1,7 +1,6 @@
 use crate::arch::timer::set_next_trigger;
 use crate::drivers;
 use crate::hal_fn::mem::phys_to_virt;
-use crate::KCONFIG;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use kernel_drivers::irq::gic_400;
@@ -34,11 +33,14 @@ const UART_IRQ: u32 = 89;
 const TIMER_IRQ: u32 = 30;
 
 pub fn init_early() {
-    let uart = Pl011Uart::new(phys_to_virt(KCONFIG.uart_base));
+    let uart_base = super::uart_base();
+    let gic_base = super::gic_base();
+    log::info!("Drivers: UART={:#x}, GIC={:#x}", uart_base, gic_base);
+    let uart = Pl011Uart::new(phys_to_virt(uart_base));
     let uart = Arc::new(uart);
     let gic = gic_400::init(
-        phys_to_virt(KCONFIG.gic_base + GIC_GICC_OFFSET),
-        phys_to_virt(KCONFIG.gic_base + GIC_GICD_OFFSET),
+        phys_to_virt(gic_base + GIC_GICC_OFFSET),
+        phys_to_virt(gic_base + GIC_GICD_OFFSET),
     );
     gic.irq_enable(TIMER_IRQ);
     gic.irq_enable(UART_IRQ);

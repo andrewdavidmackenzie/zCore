@@ -19,6 +19,10 @@ static CMDLINE: InitOnce<String> = InitOnce::new_with_default(String::new());
 /// DTB-discovered memory end address. If set, overrides the compile-time
 /// PHYS_MEMORY_END constant in free_pmem_regions().
 static DTB_MEMORY_END: InitOnce<Option<usize>> = InitOnce::new_with_default(None);
+/// DTB-discovered UART base address.
+static DTB_UART_BASE: InitOnce<Option<usize>> = InitOnce::new_with_default(None);
+/// DTB-discovered GIC base address (distributor).
+static DTB_GIC_BASE: InitOnce<Option<usize>> = InitOnce::new_with_default(None);
 
 /// Get the physical memory end address, preferring DTB-discovered value.
 pub fn phys_memory_end() -> usize {
@@ -49,13 +53,31 @@ pub fn primary_init_early() {
     drivers::init_early();
 }
 
+/// Get the UART base address, preferring DTB-discovered value.
+pub fn uart_base() -> usize {
+    match *DTB_UART_BASE {
+        Some(base) => base,
+        None => KCONFIG.uart_base,
+    }
+}
+
+/// Get the GIC base address, preferring DTB-discovered value.
+pub fn gic_base() -> usize {
+    match *DTB_GIC_BASE {
+        Some(base) => base,
+        None => KCONFIG.gic_base,
+    }
+}
+
 /// Information discovered from the DTB.
-pub struct DtbInfo {
-    pub bootargs: Option<String>,
-    pub initrd_start: Option<usize>,
-    pub initrd_end: Option<usize>,
-    pub memory_base: Option<usize>,
-    pub memory_size: Option<usize>,
+struct DtbInfo {
+    bootargs: Option<String>,
+    initrd_start: Option<usize>,
+    initrd_end: Option<usize>,
+    memory_base: Option<usize>,
+    memory_size: Option<usize>,
+    uart_base: Option<usize>,
+    gic_base: Option<usize>,
 }
 
 /// Parse the DTB to extract bootargs, initrd, and hardware info.
@@ -87,32 +109,60 @@ fn parse_dtb(dtb_paddr: usize) {
         initrd_end: None,
         memory_base: None,
         memory_size: None,
+        uart_base: None,
+        gic_base: None,
     };
 
-    // Track which top-level node we're inside.
-    let mut in_chosen = false;
-    let mut in_memory = false;
+    // Track which top-level node we're inside for property context.
+    // The dtb_walker doesn't provide node-property association, so
+    // we track it manually via the node name.
+    let mut current_node: [u8; 64] = [0; 64];
+    let mut current_node_len: usize = 0;
+    let mut node_depth: usize = 0;
 
     dtb.walk(|path, obj| match obj {
         DtbObj::SubNode { name } => {
+            let name_bytes = name.as_bytes();
             if path.is_root() {
-                let name_str = name.as_bytes();
-                if name == Str::from("chosen") {
-                    in_chosen = true;
-                    in_memory = false;
-                    return StepInto;
-                } else if name_str.starts_with(b"memory") {
-                    in_chosen = false;
-                    in_memory = true;
+                // Save top-level node name for property context
+                current_node_len = name_bytes.len().min(64);
+                current_node[..current_node_len].copy_from_slice(&name_bytes[..current_node_len]);
+                node_depth = 1;
+                // Step into nodes we care about
+                if name_bytes.starts_with(b"chosen")
+                    || name_bytes.starts_with(b"memory")
+                    || name_bytes.starts_with(b"pl011")
+                    || name_bytes.starts_with(b"uart")
+                    || name_bytes.starts_with(b"serial")
+                    || name_bytes.starts_with(b"intc")
+                    || name_bytes.starts_with(b"interrupt-controller")
+                {
                     return StepInto;
                 }
-                in_chosen = false;
-                in_memory = false;
+                // Also step into soc/ to find nested devices
+                if name_bytes == b"soc" {
+                    return StepInto;
+                }
+            } else if node_depth == 1 {
+                // Inside /soc -- look for UART and interrupt controller
+                current_node_len = name_bytes.len().min(64);
+                current_node[..current_node_len].copy_from_slice(&name_bytes[..current_node_len]);
+                node_depth = 2;
+                if name_bytes.starts_with(b"pl011")
+                    || name_bytes.starts_with(b"uart")
+                    || name_bytes.starts_with(b"serial")
+                    || name_bytes.starts_with(b"intc")
+                    || name_bytes.starts_with(b"interrupt-controller")
+                {
+                    return StepInto;
+                }
             }
             StepOver
         }
         DtbObj::Property(Property::General { name, value }) => {
-            if in_chosen {
+            let ctx = &current_node[..current_node_len];
+
+            if ctx.starts_with(b"chosen") {
                 if name == Str::from("bootargs") {
                     if let Ok(s) = core::str::from_utf8(value) {
                         let s = s.trim_end_matches('\0');
@@ -126,12 +176,8 @@ fn parse_dtb(dtb_paddr: usize) {
                     info.initrd_end = parse_dtb_u64(value);
                     log::info!("DTB initrd-end: {:#x?}", info.initrd_end);
                 }
-            } else if in_memory && name == Str::from("reg") {
-                // Memory reg property: base + size (each 4 or 8 bytes,
-                // depending on #address-cells and #size-cells).
-                // Common layouts: 8+8 (QEMU virt) or 4+4.
+            } else if ctx.starts_with(b"memory") && name == Str::from("reg") {
                 if value.len() >= 16 {
-                    // 64-bit cells
                     let base = u64::from_be_bytes(value[0..8].try_into().unwrap()) as usize;
                     let size = u64::from_be_bytes(value[8..16].try_into().unwrap()) as usize;
                     log::info!(
@@ -143,7 +189,6 @@ fn parse_dtb(dtb_paddr: usize) {
                     info.memory_base = Some(base);
                     info.memory_size = Some(size);
                 } else if value.len() >= 8 {
-                    // 32-bit cells
                     let base = u32::from_be_bytes(value[0..4].try_into().unwrap()) as usize;
                     let size = u32::from_be_bytes(value[4..8].try_into().unwrap()) as usize;
                     log::info!(
@@ -154,6 +199,25 @@ fn parse_dtb(dtb_paddr: usize) {
                     );
                     info.memory_base = Some(base);
                     info.memory_size = Some(size);
+                }
+            } else if name == Str::from("compatible") {
+                // Check for PL011 UART
+                if value.windows(9).any(|w| w == b"arm,pl011") && info.uart_base.is_none() {
+                    // Extract address from node name: "pl011@ADDR" or "serial@ADDR"
+                    if let Some(addr) = parse_node_addr(ctx) {
+                        log::info!("DTB UART (PL011): {:#x}", addr);
+                        info.uart_base = Some(addr);
+                    }
+                }
+                // Check for GIC-400 or compatible GIC
+                if (value.windows(11).any(|w| w == b"arm,gic-400")
+                    || value.windows(19).any(|w| w == b"arm,cortex-a15-gic"))
+                    && info.gic_base.is_none()
+                {
+                    if let Some(addr) = parse_node_addr(ctx) {
+                        log::info!("DTB GIC: {:#x}", addr);
+                        info.gic_base = Some(addr);
+                    }
                 }
             }
             StepOver
@@ -176,6 +240,14 @@ fn parse_dtb(dtb_paddr: usize) {
             );
             INITRD_REGION.init_once_by(Some(start..end));
         }
+    }
+
+    // Store DTB-discovered UART and GIC addresses.
+    if let Some(uart) = info.uart_base {
+        DTB_UART_BASE.init_once_by(Some(uart));
+    }
+    if let Some(gic) = info.gic_base {
+        DTB_GIC_BASE.init_once_by(Some(gic));
     }
 
     // Use DTB-discovered memory to override compile-time defaults.
@@ -210,6 +282,13 @@ fn parse_dtb_u64(value: &[u8]) -> Option<usize> {
         8 => Some(u64::from_be_bytes(value.try_into().ok()?) as usize),
         _ => None,
     }
+}
+
+/// Parse an address from a DTB node name like "serial@9000000" or "intc@8000000".
+fn parse_node_addr(name: &[u8]) -> Option<usize> {
+    let at_pos = name.iter().position(|&b| b == b'@')?;
+    let addr_str = core::str::from_utf8(&name[at_pos + 1..]).ok()?;
+    usize::from_str_radix(addr_str, 16).ok()
 }
 
 pub fn primary_init() {
