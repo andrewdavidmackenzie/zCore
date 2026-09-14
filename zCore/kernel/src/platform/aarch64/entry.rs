@@ -41,7 +41,7 @@ extern "C" fn rust_main(dtb_paddr: usize) -> ! {
     #[cfg(feature = "board-raspi400")]
     let default_cmdline = "LOG=info:ROOTPROC=/bin/sh";
     #[cfg(not(feature = "board-raspi400"))]
-    let default_cmdline = "LOG=warn:ROOTPROC=/bin/sh";
+    let default_cmdline = "LOG=warn:ROOTPROC=/bin/busybox?sh";
 
     let config = KernelConfig {
         cmdline: option_env!("ZCORE_CMDLINE").unwrap_or(default_cmdline),
