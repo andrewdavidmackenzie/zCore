@@ -61,6 +61,7 @@ bitflags! {
 #[allow(dead_code)]
 pub struct Pl011Uart {
     inner: Pl011Inner,
+    crlf: bool,
     listener: EventListener,
 }
 
@@ -72,6 +73,7 @@ impl Pl011Uart {
                 inner.init();
                 inner
             },
+            crlf: false,
             listener: EventListener::new(),
         }
     }
@@ -80,13 +82,15 @@ impl Pl011Uart {
     ///
     /// `uart_clock` is the input clock frequency in Hz (e.g. 48_000_000 for Pi 400).
     /// `baud_rate` is the desired baud rate (e.g. 9600).
-    pub fn new_with_baud(base: usize, uart_clock: u32, baud_rate: u32) -> Self {
+    /// `crlf` controls whether `\r` is sent before `\n`.
+    pub fn new_with_baud(base: usize, uart_clock: u32, baud_rate: u32, crlf: bool) -> Self {
         Self {
             inner: {
                 let inner = Pl011Inner::new(base);
                 inner.init_with_baud(uart_clock, baud_rate);
                 inner
             },
+            crlf,
             listener: EventListener::new(),
         }
     }
@@ -96,7 +100,7 @@ impl Pl011Uart {
     }
 
     fn putchar(&self, data: u8) {
-        self.inner.putchar(data);
+        self.inner.putchar(data, self.crlf);
     }
 }
 
@@ -219,8 +223,8 @@ impl Pl011Inner {
         }
     }
 
-    fn putchar(&self, data: u8) {
-        if data == b'\n' {
+    fn putchar(&self, data: u8, crlf: bool) {
+        if crlf && data == b'\n' {
             // Send \r\n for serial terminals
             while !self.line_sts().contains(UartFrFlags::TXFE) {}
             self.write_reg(self.data_reg, b'\r' as u16);

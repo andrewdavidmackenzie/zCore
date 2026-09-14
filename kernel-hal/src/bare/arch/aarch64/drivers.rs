@@ -40,11 +40,18 @@ pub fn init_early() {
 
     // RPi 400: PL011 UART clock is 48MHz, baud rate 9600 (set in config.txt)
     #[cfg(feature = "board-raspi400")]
-    let uart = Pl011Uart::new_with_baud(phys_to_virt(uart_base), 48_000_000, 9600);
+    let uart = Pl011Uart::new_with_baud(phys_to_virt(uart_base), 48_000_000, 9600, true);
     #[cfg(not(feature = "board-raspi400"))]
     let uart = Pl011Uart::new(phys_to_virt(uart_base));
     let uart = Arc::new(uart);
 
+    // Pi 400: use non-secure Group 1 config (firmware leaves IRQs in Group 0)
+    #[cfg(feature = "board-raspi400")]
+    let gic = gic_400::init_nonsecure(
+        phys_to_virt(gic_base + GIC_GICC_OFFSET),
+        phys_to_virt(gic_base + GIC_GICD_OFFSET),
+    );
+    #[cfg(not(feature = "board-raspi400"))]
     let gic = gic_400::init(
         phys_to_virt(gic_base + GIC_GICC_OFFSET),
         phys_to_virt(gic_base + GIC_GICD_OFFSET),

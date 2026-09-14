@@ -74,8 +74,8 @@ raspi400-build:
 # Build and run zCore on QEMU raspi400 interactively with petal shell.
 # Ctrl-A X to exit QEMU.
 raspi400-run: raspi400-build
-	@echo "==> Starting zCore on QEMU raspi400 (Ctrl-A X to exit)..."
-	@qemu-system-aarch64 -machine raspi400 -m 2G \
+	@echo "==> Starting zCore on QEMU raspi4b (Ctrl-A X to exit)..."
+	@qemu-system-aarch64 -machine raspi4b -m 2G \
 		-display none -no-reboot -nographic \
 		-serial mon:stdio \
 		-kernel target/aarch64-raspi400/release/zcore.bin

@@ -25,6 +25,7 @@ hal_fn_impl! {
             let fr = (UART_VIRT + 0x18) as *const u32;
             for c in s.bytes() {
                 unsafe {
+                    #[cfg(feature = "board-raspi400")]
                     if c == b'\n' {
                         while core::ptr::read_volatile(fr) & (1 << 5) != 0 {}
                         core::ptr::write_volatile(uart, b'\r' as u32);

@@ -38,11 +38,11 @@ echo "==> Raspberry Pi 400 boot smoke test (Zircon mode)..."
 # Build using the Makefile target (Zircon mode with petal shell)
 make raspi400-build 2>&1 | tail -5
 
-echo "Running in QEMU raspi400..."
+echo "Running in QEMU raspi4b..."
 OUTPUT=$(mktemp)
 
 qemu-system-aarch64 \
-  -machine raspi400 -m 2G \
+  -machine raspi4b -m 2G \
   -display none -no-reboot -nographic \
   -serial mon:stdio \
   -kernel target/aarch64-raspi400/release/zcore.bin > "$OUTPUT" 2>&1 &
