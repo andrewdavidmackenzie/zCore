@@ -8,7 +8,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 
 .PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
-	petal-shell
+	petal-shell raspi400-build raspi400-run raspi400-sd
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -35,19 +35,56 @@ zircon-run:
 petal-shell:
 	@echo "==> Building petal shell for $(ARCH)..."
 	@cargo build -p userstart --target aarch64-unknown-none-softfloat \
-		--release --target-dir target/userstart 2>&1 | tail -1
-	@cargo petal-zbi --arch $(ARCH) --bin shell 2>&1 | tail -1
+		--release --target-dir target/userstart
+	@cargo petal-zbi --arch $(ARCH) --bin shell
 	@USERSTART_ELF="$$(pwd)/target/userstart/aarch64-unknown-none-softfloat/release/userstart" \
 		PETAL_ZBI="$$(pwd)/target/petal/$(ARCH)/petal.zbi" \
 		ZCORE_CMDLINE="LOG=warn" \
 		cargo build -p zcore --no-default-features --features zircon \
 		--target zCore/$(ARCH).json -Z json-target-spec \
 		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
-		--release 2>&1 | tail -1
+		--release
 	@echo "==> Starting petal shell (Ctrl-A X to exit QEMU)..."
 	@qemu-system-aarch64 -m 2G -display none -no-reboot -nographic \
 		-machine virt -cpu cortex-a72 -serial mon:stdio \
 		-kernel target/$(ARCH)/release/zcore
+
+# Build the kernel for Raspberry Pi 400 in Zircon mode.
+# Builds userstart + petal shell, packages into ZBI, builds kernel.
+raspi400-build:
+	@echo "==> Building userstart..."
+	@cargo build -p userstart --target aarch64-unknown-none-softfloat \
+		--release --target-dir target/userstart
+	@echo "==> Building petal shell ZBI..."
+	@cargo petal-zbi --arch aarch64 --bin shell
+	@echo "==> Building zCore kernel for Raspberry Pi 400..."
+	@USERSTART_ELF="$$(pwd)/target/userstart/aarch64-unknown-none-softfloat/release/userstart" \
+		PETAL_ZBI="$$(pwd)/target/petal/aarch64/petal.zbi" \
+		ZCORE_CMDLINE="LOG=warn" \
+		cargo build -p zcore --no-default-features --features "zircon,board-raspi400" \
+		--target zCore/aarch64-raspi400.json \
+		-Z json-target-spec \
+		-Z build-std=core,alloc \
+		-Z build-std-features=compiler-builtins-mem \
+		--release
+	@rust-objcopy --strip-all -O binary \
+		target/aarch64-raspi400/release/zcore \
+		target/aarch64-raspi400/release/zcore.bin
+
+# Build and run zCore on QEMU raspi400 interactively with petal shell.
+# Ctrl-A X to exit QEMU.
+raspi400-run: raspi400-build
+	@echo "==> Starting zCore on QEMU raspi4b (Ctrl-A X to exit)..."
+	@qemu-system-aarch64 -machine raspi4b -m 2G \
+		-display none -no-reboot -nographic \
+		-serial mon:stdio \
+		-kernel target/aarch64-raspi400/release/zcore.bin
+
+# Prepare an SD card for Raspberry Pi 4 / Pi 400.
+# Usage: make raspi400-sd SD=/Volumes/boot
+#   SD= is the mount point of the SD card's FAT32 partition.
+raspi400-sd: raspi400-build
+	@tools/raspi/prepare-sd.sh $(SD)
 
 # Zircon boot smoke test: build in Zircon mode, start QEMU, wait for
 # userstart hello message, verify clean shutdown.

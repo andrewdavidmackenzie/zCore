@@ -1,54 +1,104 @@
-use core::ptr::NonNull;
-
 use crate::arch::timer::set_next_trigger;
 use crate::drivers;
 use crate::hal_fn::mem::phys_to_virt;
-use crate::imp::config::VIRTIO_BASE;
-use crate::KCONFIG;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use kernel_drivers::irq::gic_400;
 use kernel_drivers::scheme::IrqScheme;
 use kernel_drivers::uart::{BufferedUart, Pl011Uart};
-use kernel_drivers::virtio::VirtIoBlk;
-use kernel_drivers::virtio::{MmioTransport, VirtIOHeader};
 use kernel_drivers::Device;
 
+/// GIC register offsets from gic_base.
+///
+/// QEMU virt:  GICD at base+0x0,     GICC at base+0x10000
+/// RPi 400:    GICD at base+0x1000,  GICC at base+0x2000
+#[cfg(not(feature = "board-raspi400"))]
+pub const GIC_GICC_OFFSET: usize = 0x1_0000;
+#[cfg(not(feature = "board-raspi400"))]
+pub const GIC_GICD_OFFSET: usize = 0x0;
+
+#[cfg(feature = "board-raspi400")]
+pub const GIC_GICC_OFFSET: usize = 0x2000;
+#[cfg(feature = "board-raspi400")]
+pub const GIC_GICD_OFFSET: usize = 0x1000;
+
+/// UART IRQ number.
+/// QEMU virt: SPI 1 (GIC INTID 33).
+/// RPi 400: GIC_SPI_INTERRUPT_UART0 = 121 (PL011).
+#[cfg(not(feature = "board-raspi400"))]
+const UART_IRQ: u32 = 33;
+#[cfg(feature = "board-raspi400")]
+const UART_IRQ: u32 = 121;
+
+/// Timer IRQ number (PPI 14 = IRQ 30 on both platforms).
+const TIMER_IRQ: u32 = 30;
+
 pub fn init_early() {
-    let uart = Pl011Uart::new(phys_to_virt(KCONFIG.uart_base));
+    let uart_base = super::uart_base();
+    let gic_base = super::gic_base();
+    log::info!("Drivers: UART={:#x}, GIC={:#x}", uart_base, gic_base);
+
+    // RPi 400: PL011 UART clock is 48MHz, baud rate 9600 (set in config.txt)
+    #[cfg(feature = "board-raspi400")]
+    let uart = Pl011Uart::new_with_baud(phys_to_virt(uart_base), 48_000_000, 9600, true);
+    #[cfg(not(feature = "board-raspi400"))]
+    let uart = Pl011Uart::new(phys_to_virt(uart_base));
     let uart = Arc::new(uart);
-    let gic = gic_400::init(
-        phys_to_virt(KCONFIG.gic_base + 0x1_0000),
-        phys_to_virt(KCONFIG.gic_base),
+
+    // Pi 400: use non-secure Group 1 config (firmware leaves IRQs in Group 0)
+    #[cfg(feature = "board-raspi400")]
+    let gic = gic_400::init_nonsecure(
+        phys_to_virt(gic_base + GIC_GICC_OFFSET),
+        phys_to_virt(gic_base + GIC_GICD_OFFSET),
     );
-    gic.irq_enable(30);
-    gic.irq_enable(33);
-    gic.register_handler(33, Box::new(handle_uart_irq)).ok();
-    gic.register_handler(30, Box::new(set_next_trigger)).ok();
+    #[cfg(not(feature = "board-raspi400"))]
+    let gic = gic_400::init(
+        phys_to_virt(gic_base + GIC_GICC_OFFSET),
+        phys_to_virt(gic_base + GIC_GICD_OFFSET),
+    );
+    gic.irq_enable(TIMER_IRQ);
+    gic.irq_enable(UART_IRQ);
+    gic.register_handler(UART_IRQ as usize, Box::new(handle_uart_irq))
+        .ok();
+    gic.register_handler(TIMER_IRQ as usize, Box::new(set_next_trigger))
+        .ok();
     drivers::add_device(Device::Irq(Arc::new(gic)));
     drivers::add_device(Device::Uart(BufferedUart::new(uart)));
 }
 
 pub fn init() {
-    let header = NonNull::new(phys_to_virt(VIRTIO_BASE) as *mut VirtIOHeader)
-        .expect("VIRTIO_BASE mapped to null");
-    match unsafe { MmioTransport::new(header) } {
-        Ok(transport) => match VirtIoBlk::new(transport) {
-            Ok(blk) => {
-                drivers::add_device(Device::Block(Arc::new(blk)));
-            }
+    #[cfg(feature = "board-raspi400")]
+    {
+        log::info!("RPi 400: no VirtIO, skipping block device init");
+        return;
+    }
+
+    #[cfg(not(feature = "board-raspi400"))]
+    {
+        use crate::imp::config::VIRTIO_BASE;
+        use core::ptr::NonNull;
+        use kernel_drivers::virtio::{MmioTransport, VirtIOHeader, VirtIoBlk};
+
+        let header = NonNull::new(phys_to_virt(VIRTIO_BASE) as *mut VirtIOHeader)
+            .expect("VIRTIO_BASE mapped to null");
+        match unsafe { MmioTransport::new(header) } {
+            Ok(transport) => match VirtIoBlk::new(transport) {
+                Ok(blk) => {
+                    drivers::add_device(Device::Block(Arc::new(blk)));
+                }
+                Err(e) => {
+                    log::warn!(
+                        "VirtIO block device init failed: {:?} (no block device?)",
+                        e
+                    );
+                }
+            },
             Err(e) => {
                 log::warn!(
-                    "VirtIO block device init failed: {:?} (no block device?)",
+                    "VirtIO MMIO transport init failed: {:?} (no VirtIO device attached?)",
                     e
                 );
             }
-        },
-        Err(e) => {
-            log::warn!(
-                "VirtIO MMIO transport init failed: {:?} (no VirtIO device attached?)",
-                e
-            );
         }
     }
 }

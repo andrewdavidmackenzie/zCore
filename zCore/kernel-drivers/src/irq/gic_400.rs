@@ -8,6 +8,7 @@ pub static GICC_SIZE: usize = 0x1000;
 pub static GICD_SIZE: usize = 0x1000;
 static GICD_CTLR: u32 = 0x000;
 static GICD_TYPER: u32 = 0x004;
+static GICD_IGROUPR: u32 = 0x080;
 static GICD_ISENABLER: u32 = 0x100;
 static GICD_ICENABLER: u32 = 0x180;
 static GICD_IPRIORITY: u32 = 0x400;
@@ -21,7 +22,7 @@ static GICC_PMR: u32 = 0x0004;
 pub struct IntController {
     gicc: GicCpuIf,
     gicd: GicDistIf,
-    manager: Mutex<IrqManager<50>>,
+    manager: Mutex<IrqManager<256>>,
 }
 
 struct GicDistIf {
@@ -43,11 +44,17 @@ impl IntController {
                 ncpus: 0,
                 nirqs: 0,
             },
-            manager: Mutex::new(IrqManager::new(0..50)),
+            manager: Mutex::new(IrqManager::new(0..256)),
         }
     }
 
-    fn init(&mut self) {
+    /// Initialize the GIC.
+    ///
+    /// `nonsecure_group1`: when true, set all IRQs to Group 1 (non-secure) and
+    /// enable Group 1 distribution. Needed on hardware where the firmware leaves
+    /// IRQs in Group 0 (secure), preventing delivery to non-secure EL1.
+    /// Should be false on QEMU virt where the default Group 0 config works.
+    fn init(&mut self, nonsecure_group1: bool) {
         unsafe {
             // Disable IRQ Distribution
             self.gicd.write(GICD_CTLR, 0);
@@ -55,6 +62,14 @@ impl IntController {
             let typer = self.gicd.read(GICD_TYPER);
             self.gicd.ncpus = ((typer & (0x7 << 5)) >> 5) + 1;
             self.gicd.nirqs = ((typer & 0x1f) + 1) * 32;
+
+            // Set all IRQs to Group 1 (non-secure) if requested
+            if nonsecure_group1 {
+                for irq in (0..self.gicd.nirqs).step_by(32) {
+                    self.gicd
+                        .write(GICD_IGROUPR + ((irq / 32) * 4), 0xffff_ffff);
+                }
+            }
 
             // Set all SPIs to level triggered
             for irq in (32..self.gicd.nirqs).step_by(16) {
@@ -85,13 +100,20 @@ impl IntController {
             }
 
             // Enable CPU0's GIC interface
-            self.gicc.write(GICC_CTLR, 1);
+            // Bit 0: EnableGrp1 (non-secure view of GICC_CTLR)
+            self.gicc.write(GICC_CTLR, 0x1);
 
-            // Set CPU0's Interrupt Priority Mask
+            // Set CPU0's Interrupt Priority Mask (allow all priorities)
             self.gicc.write(GICC_PMR, 0xff);
 
             // Enable IRQ distribution
-            self.gicd.write(GICD_CTLR, 0x1);
+            if nonsecure_group1 {
+                // Enable Group 0 + Group 1
+                self.gicd.write(GICD_CTLR, 0x3);
+            } else {
+                // Enable Group 0 only (default for QEMU virt)
+                self.gicd.write(GICD_CTLR, 0x1);
+            }
         }
     }
 
@@ -190,8 +212,18 @@ impl GicCpuIf {
 }
 
 pub fn init(gicc_base: usize, gicd_base: usize) -> IntController {
+    init_with_config(gicc_base, gicd_base, false)
+}
+
+/// Initialize with explicit Group 1 (non-secure) configuration.
+/// Set `nonsecure_group1` to true on hardware where firmware leaves IRQs in Group 0.
+pub fn init_nonsecure(gicc_base: usize, gicd_base: usize) -> IntController {
+    init_with_config(gicc_base, gicd_base, true)
+}
+
+fn init_with_config(gicc_base: usize, gicd_base: usize, nonsecure_group1: bool) -> IntController {
     let mut controller = IntController::new(gicc_base, gicd_base);
-    controller.init();
+    controller.init(nonsecure_group1);
     controller
 }
 

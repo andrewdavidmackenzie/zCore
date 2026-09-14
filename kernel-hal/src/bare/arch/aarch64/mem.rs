@@ -10,7 +10,14 @@ extern "C" {
 pub fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
     let mut regions = Vec::new();
     let start = ekernel as *const () as usize & PHYS_ADDR_MASK;
-    regions.push(start as PhysAddr..PHYS_MEMORY_END as PhysAddr);
+    let end = super::phys_memory_end();
+    log::info!(
+        "Free physical memory: {:#x}..{:#x} ({} MiB)",
+        start,
+        end,
+        (end - start) >> 20
+    );
+    regions.push(start as PhysAddr..end as PhysAddr);
     regions
 }
 

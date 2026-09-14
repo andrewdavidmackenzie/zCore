@@ -115,7 +115,7 @@ else
 	features += board-c910light link-user-img
     endif
   else ifeq ($(ARCH), aarch64)
-  	ifeq ($(PLATFORM), raspi4b)
+  	ifeq ($(PLATFORM), raspi400)
   	  features += link-user-img
   	endif
   endif

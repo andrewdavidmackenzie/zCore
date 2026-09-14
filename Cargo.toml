@@ -50,6 +50,11 @@ arch = "riscv64"
 [workspace.metadata.machines.qemu.virt-aarch64]
 arch = "aarch64"
 
+[workspace.metadata.machines.qemu.raspi400]
+arch = "aarch64"
+pci-support = false
+features = ["board-raspi400"]
+
 [workspace.metadata.machines.qemu.virt-x86_64]
 arch = "x86_64"
 

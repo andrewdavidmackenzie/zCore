@@ -23,9 +23,11 @@ cfg_if! {
                     use linux_object::fs::rcore_fs_wrapper::*;
                     if let Some(initrd) = init_ram_disk() {
                         Arc::new(MemBuf::new(initrd))
-                    } else {
-                        let block = kernel_hal::drivers::all_block().first_unwrap();
+                    } else if let Some(block) = kernel_hal::drivers::all_block().first() {
                         Arc::new(BlockCache::new(Block::new(block), 0x100))
+                    } else {
+                        panic!("No rootfs available: no initrd and no block device. \
+                                On RPi 400, pass rootfs via -initrd or use Zircon mode.");
                     }
                 }
             };
