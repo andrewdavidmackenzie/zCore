@@ -26,4 +26,9 @@ core_freq_min=500
 kernel=kernel8.img
 
 # Serial console baud rate
-init_uart_baud=115200
+init_uart_baud=9600
+
+# Enable the GIC (Generic Interrupt Controller).
+# NOTE: Timer interrupts are not yet working due to GIC Group 0/1
+# configuration issue -- see GitHub issue for details.
+enable_gic=1

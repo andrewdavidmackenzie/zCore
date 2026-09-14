@@ -8,6 +8,7 @@ pub static GICC_SIZE: usize = 0x1000;
 pub static GICD_SIZE: usize = 0x1000;
 static GICD_CTLR: u32 = 0x000;
 static GICD_TYPER: u32 = 0x004;
+static GICD_IGROUPR: u32 = 0x080;
 static GICD_ISENABLER: u32 = 0x100;
 static GICD_ICENABLER: u32 = 0x180;
 static GICD_IPRIORITY: u32 = 0x400;
@@ -56,6 +57,11 @@ impl IntController {
             self.gicd.ncpus = ((typer & (0x7 << 5)) >> 5) + 1;
             self.gicd.nirqs = ((typer & 0x1f) + 1) * 32;
 
+            // Set all IRQs to Group 1 (non-secure) so they are visible at EL1
+            for irq in (0..self.gicd.nirqs).step_by(32) {
+                self.gicd.write(GICD_IGROUPR + ((irq / 32) * 4), 0xffff_ffff);
+            }
+
             // Set all SPIs to level triggered
             for irq in (32..self.gicd.nirqs).step_by(16) {
                 self.gicd.write(GICD_ICFGR + ((irq / 16) * 4), 0);
@@ -85,13 +91,15 @@ impl IntController {
             }
 
             // Enable CPU0's GIC interface
-            self.gicc.write(GICC_CTLR, 1);
+            // Bit 0: EnableGrp1 (non-secure view of GICC_CTLR)
+            self.gicc.write(GICC_CTLR, 0x1);
 
-            // Set CPU0's Interrupt Priority Mask
+            // Set CPU0's Interrupt Priority Mask (allow all priorities)
             self.gicc.write(GICC_PMR, 0xff);
 
             // Enable IRQ distribution
-            self.gicd.write(GICD_CTLR, 0x1);
+            // Bit 0: EnableGrp0, Bit 1: EnableGrp1
+            self.gicd.write(GICD_CTLR, 0x3);
         }
     }
 

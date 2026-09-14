@@ -12,7 +12,31 @@ use crate::{mem::phys_to_virt, utils::init_once::InitOnce, PhysAddr};
 use alloc::string::{String, ToString};
 use core::ops::Range;
 
-hal_fn_impl_default!(crate::hal_fn::console);
+hal_fn_impl! {
+    impl mod crate::hal_fn::console {
+        fn console_write_early(s: &str) {
+            // Write directly to PL011 UART data register at virtual address.
+            #[cfg(feature = "board-raspi400")]
+            const UART_VIRT: usize = 0xFFFF_0000_FE20_1000;
+            #[cfg(not(feature = "board-raspi400"))]
+            const UART_VIRT: usize = 0xFFFF_0000_0900_0000;
+
+            let uart = UART_VIRT as *mut u32;
+            let fr = (UART_VIRT + 0x18) as *const u32;
+            for c in s.bytes() {
+                unsafe {
+                    if c == b'\n' {
+                        while core::ptr::read_volatile(fr) & (1 << 5) != 0 {}
+                        core::ptr::write_volatile(uart, b'\r' as u32);
+                    }
+                    // Wait for TX FIFO not full (UARTFR bit 5 = TXFF)
+                    while core::ptr::read_volatile(fr) & (1 << 5) != 0 {}
+                    core::ptr::write_volatile(uart, c as u32);
+                }
+            }
+        }
+    }
+}
 
 static INITRD_REGION: InitOnce<Option<Range<PhysAddr>>> = InitOnce::new_with_default(None);
 static CMDLINE: InitOnce<String> = InitOnce::new_with_default(String::new());

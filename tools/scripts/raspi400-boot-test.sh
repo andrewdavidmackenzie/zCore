@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# Raspberry Pi 4B boot smoke test: build kernel in Zircon mode with
-# petal shell, run in QEMU raspi4b, check for shell self-test output.
+# Raspberry Pi 400 boot smoke test: build kernel in Zircon mode with
+# petal shell, run in QEMU raspi400, check for shell self-test output.
 #
-# Usage: tools/scripts/raspi4b-boot-test.sh
+# Usage: tools/scripts/raspi400-boot-test.sh
 #
 # Exit code 0 = test passed
 # Exit code 1 = test failed
@@ -33,32 +33,32 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-echo "==> Raspberry Pi 4B boot smoke test (Zircon mode)..."
+echo "==> Raspberry Pi 400 boot smoke test (Zircon mode)..."
 
 # Build using the Makefile target (Zircon mode with petal shell)
-make raspi4b-build 2>&1 | tail -5
+make raspi400-build 2>&1 | tail -5
 
-echo "Running in QEMU raspi4b..."
+echo "Running in QEMU raspi400..."
 OUTPUT=$(mktemp)
 
 qemu-system-aarch64 \
-  -machine raspi4b -m 2G \
+  -machine raspi400 -m 2G \
   -display none -no-reboot -nographic \
   -serial mon:stdio \
-  -kernel target/aarch64-raspi4b/release/zcore.bin > "$OUTPUT" 2>&1 &
+  -kernel target/aarch64-raspi400/release/zcore.bin > "$OUTPUT" 2>&1 &
 QEMU_PID=$!
 
 ELAPSED=0
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   # Check for shell self-test output (proves full boot chain works)
   if grep -q "shell: self-test PASS" "$OUTPUT" 2>/dev/null; then
-    echo "PASS: raspi4b petal shell self-test passed"
+    echo "PASS: raspi400 petal shell self-test passed"
     exit 0
   fi
   if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     wait "$QEMU_PID" || true
     if grep -q "shell: self-test PASS" "$OUTPUT" 2>/dev/null; then
-      echo "PASS: raspi4b petal shell self-test passed"
+      echo "PASS: raspi400 petal shell self-test passed"
       exit 0
     fi
     echo "FAIL: QEMU exited without expected output"

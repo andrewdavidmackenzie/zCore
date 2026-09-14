@@ -27,7 +27,7 @@ cfg_if! {
                         Arc::new(BlockCache::new(Block::new(block), 0x100))
                     } else {
                         panic!("No rootfs available: no initrd and no block device. \
-                                On RPi4, pass rootfs via -initrd or use Zircon mode.");
+                                On RPi 400, pass rootfs via -initrd or use Zircon mode.");
                     }
                 }
             };

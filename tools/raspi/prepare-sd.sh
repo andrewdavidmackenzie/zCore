@@ -4,7 +4,7 @@
 #
 # This script:
 # 1. Downloads Pi firmware files (if not cached)
-# 2. Builds the kernel for raspi4b
+# 2. Builds the kernel for raspi400
 # 3. Copies firmware + kernel + config.txt to an existing FAT32 partition
 #
 # Usage:
@@ -54,9 +54,9 @@ fi
 # --- Step 2: Build the kernel ---
 echo "==> Building zCore kernel for Raspberry Pi 4..."
 cd "$PROJECT_DIR"
-make raspi4b-build
+make raspi400-build
 
-KERNEL_BIN="$PROJECT_DIR/target/aarch64-raspi4b/release/zcore.bin"
+KERNEL_BIN="$PROJECT_DIR/target/aarch64-raspi400/release/zcore.bin"
 if [ ! -f "$KERNEL_BIN" ]; then
     echo "ERROR: Kernel binary not found at $KERNEL_BIN"
     exit 1
@@ -96,7 +96,7 @@ ls -la "$BOOT_DIR/"
 echo ""
 echo "Next steps:"
 echo "  1. Eject the SD card safely"
-echo "  2. Insert into Pi 400 / Pi 4B"
+echo "  2. Insert into Pi 400"
 echo "  3. Connect a USB-to-serial adapter to GPIO pins 14 (TX) and 15 (RX)"
 echo "     Or use the Pi 400's built-in USB and a serial terminal"
 echo "  4. Open a serial terminal: screen /dev/tty.usbserial-* 115200"

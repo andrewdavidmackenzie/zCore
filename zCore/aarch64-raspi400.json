@@ -12,7 +12,7 @@
   "relocation-model": "static",
   "pre-link-args": {
     "ld.lld": [
-      "-TzCore/kernel/src/platform/aarch64/linker_raspi4b.ld"
+      "-TzCore/kernel/src/platform/aarch64/linker_raspi400.ld"
     ]
   },
   "target-pointer-width": 64

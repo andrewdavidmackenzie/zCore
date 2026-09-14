@@ -76,6 +76,21 @@ impl Pl011Uart {
         }
     }
 
+    /// Create a Pl011Uart and initialize with a specific baud rate.
+    ///
+    /// `uart_clock` is the input clock frequency in Hz (e.g. 48_000_000 for Pi 400).
+    /// `baud_rate` is the desired baud rate (e.g. 9600).
+    pub fn new_with_baud(base: usize, uart_clock: u32, baud_rate: u32) -> Self {
+        Self {
+            inner: {
+                let inner = Pl011Inner::new(base);
+                inner.init_with_baud(uart_clock, baud_rate);
+                inner
+            },
+            listener: EventListener::new(),
+        }
+    }
+
     fn getchar(&self) -> Option<u8> {
         self.inner.getchar()
     }
@@ -87,12 +102,15 @@ impl Pl011Uart {
 
 struct Pl011Inner {
     base: usize,
-    data_reg: u8,
-    flag_reg: u8,
-    line_ctrl_reg: u8,
-    ctrl_reg: u8,
-    intr_mask_setclr_reg: u8,
-    intr_clr_reg: u8,
+    // PL011 register offsets
+    data_reg: u8,       // 0x00 UARTDR
+    flag_reg: u8,       // 0x18 UARTFR
+    ibrd_reg: u8,       // 0x24 UARTIBRD (integer baud rate divisor)
+    fbrd_reg: u8,       // 0x28 UARTFBRD (fractional baud rate divisor)
+    line_ctrl_reg: u8,  // 0x2C UARTLCR_H
+    ctrl_reg: u8,       // 0x30 UARTCR
+    intr_mask_setclr_reg: u8, // 0x38 UARTIMSC
+    intr_clr_reg: u8,   // 0x44 UARTICR
 }
 
 impl Pl011Inner {
@@ -101,6 +119,8 @@ impl Pl011Inner {
             base,
             data_reg: 0x00,
             flag_reg: 0x18,
+            ibrd_reg: 0x24,
+            fbrd_reg: 0x28,
             line_ctrl_reg: 0x2c,
             ctrl_reg: 0x30,
             intr_mask_setclr_reg: 0x38,
@@ -118,6 +138,57 @@ impl Pl011Inner {
         }
     }
 
+    /// Initialize the UART with a specific baud rate.
+    ///
+    /// `uart_clock` is the input clock frequency in Hz.
+    /// `baud_rate` is the desired baud rate (e.g. 9600, 115200).
+    ///
+    /// PL011 init procedure (per ARM PrimeCell UART PL011 TRM):
+    /// 1. Disable UART
+    /// 2. Wait for current TX to complete
+    /// 3. Flush FIFOs
+    /// 4. Set baud rate divisors (IBRD, FBRD)
+    /// 5. Set line control (8N1)
+    /// 6. Clear pending interrupts
+    /// 7. Enable RX interrupt
+    /// 8. Re-enable UART
+    fn init_with_baud(&self, uart_clock: u32, baud_rate: u32) {
+        // 1. Disable UART
+        self.write_reg(self.ctrl_reg, 0);
+
+        // 2. Wait for any current TX to complete
+        while self.line_sts().contains(UartFrFlags::BUSY) {}
+
+        // 3. Flush FIFOs by disabling them
+        let mut lcrh = UartLcrhFlags::from_bits_truncate(self.read_reg(self.line_ctrl_reg));
+        lcrh.remove(UartLcrhFlags::FEN);
+        self.write_reg(self.line_ctrl_reg, lcrh.bits());
+
+        // 4. Set baud rate: divisor = uart_clock / (16 * baud_rate)
+        //    IBRD = integer part, FBRD = round(fractional * 64)
+        let divisor_x64 = ((uart_clock as u64) * 4) / (baud_rate as u64);
+        let ibrd = (divisor_x64 / 64) as u16;
+        let fbrd = (divisor_x64 % 64) as u16;
+        self.write_reg(self.ibrd_reg, ibrd);
+        self.write_reg(self.fbrd_reg, fbrd);
+
+        // 5. Set line control: 8 data bits, no parity, 1 stop bit (8N1)
+        //    WLEN bits [6:5] = 0b11 for 8 bits, FEN disabled
+        self.write_reg(self.line_ctrl_reg, 0b11 << 5);
+
+        // 6. Clear all pending interrupts
+        self.write_reg(self.intr_clr_reg, 0x7ff);
+
+        // 7. Enable RX interrupt
+        let imsc = UartImscFlags::RXIM;
+        self.write_reg(self.intr_mask_setclr_reg, imsc.bits);
+
+        // 8. Enable UART with TX and RX
+        let cr = UartCrFlags::UARTEN | UartCrFlags::TXE | UartCrFlags::RXE;
+        self.write_reg(self.ctrl_reg, cr.bits());
+    }
+
+    /// Legacy init (no baud rate change -- for QEMU where firmware sets it up).
     fn init(&self) {
         // Enable RX, TX, UART
         let flags = UartCrFlags::RXE | UartCrFlags::TXE | UartCrFlags::UARTEN;
@@ -149,6 +220,11 @@ impl Pl011Inner {
     }
 
     fn putchar(&self, data: u8) {
+        if data == b'\n' {
+            // Send \r\n for serial terminals
+            while !self.line_sts().contains(UartFrFlags::TXFE) {}
+            self.write_reg(self.data_reg, b'\r' as u16);
+        }
         while !self.line_sts().contains(UartFrFlags::TXFE) {}
         self.write_reg(self.data_reg, data as u16);
     }

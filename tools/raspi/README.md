@@ -6,7 +6,7 @@
 2. Mount the SD card (e.g., `/Volumes/boot` on macOS)
 3. Run:
    ```bash
-   make raspi4b-sd SD=/Volumes/boot
+   make raspi400-sd SD=/Volumes/boot
    ```
 4. Eject the SD card and insert into the Pi
 5. Connect a serial console (see below)
@@ -51,7 +51,7 @@ is to add Zircon mode support for RPi4.
 |------|--------|---------|
 | `start4.elf` | Pi firmware | GPU firmware, loads kernel |
 | `fixup4.dat` | Pi firmware | GPU memory fixup |
-| `bcm2711-rpi-4-b.dtb` | Pi firmware | Device tree for Pi 4B |
+| `bcm2711-rpi-4-b.dtb` | Pi firmware | Device tree for Pi 4B/Pi 400 |
 | `bcm2711-rpi-400.dtb` | Pi firmware | Device tree for Pi 400 |
 | `config.txt` | zCore | Boot configuration |
 | `kernel8.img` | zCore build | Kernel binary |
@@ -68,6 +68,6 @@ Key settings:
 ## Build Manually
 
 ```bash
-make raspi4b-build
-cp target/aarch64-raspi4b/release/zcore.bin /path/to/sd/kernel8.img
+make raspi400-build
+cp target/aarch64-raspi400/release/zcore.bin /path/to/sd/kernel8.img
 ```

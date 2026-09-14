@@ -12,22 +12,20 @@ hal_fn_impl! {
         }
 
         fn handle_irq(vector: usize) {
-            // TODO: timer and other devices with GIC interrupt controller
             crate::drivers::all_irq().first_unwrap().handle_irq(vector);
-            if vector == 30 {
-                debug!("Timer");
-            }
         }
 
         fn intr_off() {
             unsafe {
-                core::arch::asm!("msr daifset, #2");
+                // Mask both IRQ and FIQ
+                core::arch::asm!("msr daifset, #3");
             }
         }
 
         fn intr_on() {
             unsafe {
-                core::arch::asm!("msr daifclr, #2");
+                // Unmask both IRQ and FIQ (Group 0 interrupts arrive as FIQ on Pi 400)
+                core::arch::asm!("msr daifclr, #3");
             }
         }
 

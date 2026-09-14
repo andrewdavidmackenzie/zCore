@@ -11,23 +11,23 @@ use kernel_drivers::Device;
 /// GIC register offsets from gic_base.
 ///
 /// QEMU virt:  GICD at base+0x0,     GICC at base+0x10000
-/// RPi4:       GICD at base+0x1000,  GICC at base+0x2000
-#[cfg(not(feature = "board-raspi4b"))]
+/// RPi 400:    GICD at base+0x1000,  GICC at base+0x2000
+#[cfg(not(feature = "board-raspi400"))]
 pub const GIC_GICC_OFFSET: usize = 0x1_0000;
-#[cfg(not(feature = "board-raspi4b"))]
+#[cfg(not(feature = "board-raspi400"))]
 pub const GIC_GICD_OFFSET: usize = 0x0;
 
-#[cfg(feature = "board-raspi4b")]
+#[cfg(feature = "board-raspi400")]
 pub const GIC_GICC_OFFSET: usize = 0x2000;
-#[cfg(feature = "board-raspi4b")]
+#[cfg(feature = "board-raspi400")]
 pub const GIC_GICD_OFFSET: usize = 0x1000;
 
 /// UART IRQ number.
 /// QEMU virt: SPI 1 (GIC INTID 33).
-/// RPi4: GIC_SPI_INTERRUPT_UART0 = 121 (from QEMU bcm2838_peripherals.h).
-#[cfg(not(feature = "board-raspi4b"))]
+/// RPi 400: GIC_SPI_INTERRUPT_UART0 = 121 (PL011).
+#[cfg(not(feature = "board-raspi400"))]
 const UART_IRQ: u32 = 33;
-#[cfg(feature = "board-raspi4b")]
+#[cfg(feature = "board-raspi400")]
 const UART_IRQ: u32 = 121;
 
 /// Timer IRQ number (PPI 14 = IRQ 30 on both platforms).
@@ -37,8 +37,14 @@ pub fn init_early() {
     let uart_base = super::uart_base();
     let gic_base = super::gic_base();
     log::info!("Drivers: UART={:#x}, GIC={:#x}", uart_base, gic_base);
+
+    // RPi 400: PL011 UART clock is 48MHz, baud rate 9600 (set in config.txt)
+    #[cfg(feature = "board-raspi400")]
+    let uart = Pl011Uart::new_with_baud(phys_to_virt(uart_base), 48_000_000, 9600);
+    #[cfg(not(feature = "board-raspi400"))]
     let uart = Pl011Uart::new(phys_to_virt(uart_base));
     let uart = Arc::new(uart);
+
     let gic = gic_400::init(
         phys_to_virt(gic_base + GIC_GICC_OFFSET),
         phys_to_virt(gic_base + GIC_GICD_OFFSET),
@@ -54,13 +60,13 @@ pub fn init_early() {
 }
 
 pub fn init() {
-    #[cfg(feature = "board-raspi4b")]
+    #[cfg(feature = "board-raspi400")]
     {
-        log::info!("RPi4: no VirtIO, skipping block device init");
+        log::info!("RPi 400: no VirtIO, skipping block device init");
         return;
     }
 
-    #[cfg(not(feature = "board-raspi4b"))]
+    #[cfg(not(feature = "board-raspi400"))]
     {
         use crate::imp::config::VIRTIO_BASE;
         use core::ptr::NonNull;

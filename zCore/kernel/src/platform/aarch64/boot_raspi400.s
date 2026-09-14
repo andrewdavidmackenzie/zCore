@@ -1,46 +1,67 @@
 /*
- * aarch64 Boot Assembly for Raspberry Pi 4B (BCM2711)
+ * Raspberry Pi 400 boot assembly (AArch64).
  *
- * This code runs immediately after the kernel is loaded at 0x80000.
- * The CPU is at EL1 (or EL2 on real Pi -- we handle both), MMU is OFF.
+ * Entry: _boot at physical 0x80000, called by Pi firmware at EL2.
+ *   - x0 = DTB pointer (physical address)
+ *   - Caches may be on (firmware runs with caches enabled)
+ *   - MMU is off
  *
- * On entry:
- *   x0 = DTB pointer (from Pi firmware or QEMU -dtb)
- *
- * RPi 4B memory map:
- *   0x00000000..0x3FFFFFFF = 1 GiB RAM (low)
- *   0x40000000..0xFDFFFFFF = Additional RAM (if >1G) or unused
- *   0xFE000000..0xFEFFFFFF = BCM2835-compatible peripherals
- *   0xFF000000..0xFF7FFFFF = Reserved
- *   0xFF800000..0xFFFFFFFF = ARM local peripherals + GIC
- *
- * Page table layout (1 GiB block mappings, 2-level):
- *   BOOT_PT_L1_ID / BOOT_PT_L1_HI:
- *     [0]   -> 0x00000000..0x3FFFFFFF  (1 GiB, normal memory = RAM)
- *     [1]   -> 0x40000000..0x7FFFFFFF  (1 GiB, normal memory)
- *     [2]   -> 0x80000000..0xBFFFFFFF  (1 GiB, normal memory)
- *     [3]   -> 0xC0000000..0xFFFFFFFF  (1 GiB, device memory = peripherals + GIC)
+ * Boot sequence:
+ *   1. Early UART output ("zC") to confirm CPU is running
+ *   2. Drop from EL2 to EL1
+ *   3. Set up identity + high page tables (2-level: L0 -> L1 1GB blocks)
+ *   4. Enable MMU (without caches -- firmware leaves D-cache dirty)
+ *   5. Jump to virtual address, enable caches, set up stack, enter Rust
  */
 
 .section .text.boot, "ax"
+.global skernel
+skernel:
+
 .global _boot
 _boot:
-    /* On real Pi 4, firmware may start at EL2. Drop to EL1 if needed. */
+    /* === Early UART: PL011 at 0xFE201000 === */
+    /* At 9600 baud, each char takes ~1ms. Delay ~2M cycles between chars. */
+    movz    x8, #0x1000
+    movk    x8, #0xFE20, lsl #16
+    mov     w9, #'z'
+    str     w9, [x8]
+    mov     x11, #0x200000
+91: sub     x11, x11, #1
+    cbnz    x11, 91b
+    mov     w9, #'C'
+    str     w9, [x8]
+    mov     x11, #0x200000
+92: sub     x11, x11, #1
+    cbnz    x11, 92b
+    mov     w9, #'\r'
+    str     w9, [x8]
+    mov     x11, #0x200000
+93: sub     x11, x11, #1
+    cbnz    x11, 93b
+    mov     w9, #'\n'
+    str     w9, [x8]
+    mov     x11, #0x200000
+94: sub     x11, x11, #1
+    cbnz    x11, 94b
+
+    /* Drop from EL2 to EL1 if needed */
     mrs     x9, CurrentEL
     lsr     x9, x9, #2
     cmp     x9, #2
     b.ne    1f
 
-    /* We are at EL2. Configure EL1 and drop down. */
-    /* HCR_EL2: RW=1 (AArch64 at EL1) */
-    mov     x9, #(1 << 31)
+    /* Configure EL2 before dropping to EL1 */
+    mov     x9, #(1 << 31)          /* HCR_EL2: RW=1 (AArch64 at EL1) */
     msr     hcr_el2, x9
 
-    /* SPSR_EL2: D/A/I/F masked, EL1h mode (0x3c5) */
-    mov     x9, #0x3c5
-    msr     spsr_el2, x9
+    /* Enable EL1 access to physical timer and counter */
+    mov     x9, #3                  /* CNTHCTL_EL2: EL1PCEN=1, EL1PCTEN=1 */
+    msr     cnthctl_el2, x9
+    msr     cntvoff_el2, xzr       /* Virtual offset = 0 */
 
-    /* Return to _el1_entry at EL1 */
+    mov     x9, #0x3c5              /* SPSR_EL2: D/A/I/F masked, EL1h */
+    msr     spsr_el2, x9
     adr     x9, 1f
     msr     elr_el2, x9
     eret
@@ -156,12 +177,19 @@ _boot:
     dsb     sy
     isb
 
-    /* Enable MMU + caches */
+    /* Enable MMU without caches.
+       The Pi firmware leaves caches dirty. We enable MMU with both
+       I-cache and D-cache off, jump to virtual, then enable caches. */
     mrs     x0, sctlr_el1
     orr     x0, x0, #(1 << 0)     /* M: Enable MMU */
-    orr     x0, x0, #(1 << 2)     /* C: Enable D-cache */
-    orr     x0, x0, #(1 << 12)    /* I: Enable I-cache */
+    bic     x0, x0, #(1 << 2)     /* C: D-cache OFF */
+    bic     x0, x0, #(1 << 12)    /* I: I-cache OFF */
     msr     sctlr_el1, x0
+    isb
+
+    /* Invalidate I-cache before jumping to virtual addresses */
+    ic      iallu
+    dsb     sy
     isb
 
     /* ====== Jump to virtual address space ====== */
@@ -196,6 +224,13 @@ _start_virtual:
     adrp    x19, boot_stack_top
     add     x19, x19, :lo12:boot_stack_top
     mov     sp, x19
+
+    /* Enable caches now that we're in virtual space with stack set up */
+    mrs     x0, sctlr_el1
+    orr     x0, x0, #(1 << 2)     /* C: Enable D-cache */
+    orr     x0, x0, #(1 << 12)    /* I: Enable I-cache */
+    msr     sctlr_el1, x0
+    isb
 
     /* Restore DTB pointer as first argument */
     mov     x0, x20

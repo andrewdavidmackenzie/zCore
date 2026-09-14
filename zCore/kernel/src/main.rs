@@ -43,9 +43,16 @@ fn primary_main(config: kernel_hal::KernelConfig) {
     #[cfg(not(feature = "libos"))]
     memory::init();
     kernel_hal::primary_init_early(config, &handler::ZcoreKernelHandler);
+
+    // Now UART driver is registered -- println! works
+    #[cfg(feature = "board-raspi400")]
+    println!("zCore on Raspberry Pi 400!");
+
     let options = utils::boot_options();
     logging::set_max_level(&options.log_level);
+
     info!("Boot options: {:#?}", options);
+
     #[cfg(not(feature = "libos"))]
     memory::insert_regions(&kernel_hal::mem::free_pmem_regions());
     kernel_hal::primary_init();

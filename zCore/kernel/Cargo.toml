@@ -58,8 +58,8 @@ board-d1 = ["link-user-img", "no-pci", "kernel-hal/allwinner-drivers"]
 board-c910light = ["link-user-img", "kernel-hal/board-c910light", "no-pci"]
 # Run on u740
 board-fu740 = ["link-user-img", "kernel-hal/fu740-drivers"]
-# Run on Raspberry Pi 4B
-board-raspi4b = ["no-pci", "kernel-hal/board-raspi4b"]
+# Run on Raspberry Pi 400
+board-raspi400 = ["no-pci", "kernel-hal/board-raspi400"]
 
 # Use memory and ipi to simulate block device
 mock-disk = ["linux-object/mock-disk"]

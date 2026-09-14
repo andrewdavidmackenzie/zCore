@@ -16,7 +16,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
         Kind::Synchronous => {
             sync_handler(tf);
         }
-        Kind::Irq => {
+        Kind::Irq | Kind::Fiq => {
             use crate::hal_fn::mem::phys_to_virt;
             let gic_base = super::gic_base();
             crate::interrupt::handle_irq(get_irq_num(
