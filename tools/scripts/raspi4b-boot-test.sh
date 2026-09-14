@@ -11,6 +11,29 @@
 set -euo pipefail
 
 TIMEOUT=30
+QEMU_PID=""
+OUTPUT=""
+
+# Cleanup: kill QEMU and remove temp file on any exit.
+cleanup() {
+    if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
+        kill "$QEMU_PID" 2>/dev/null || true
+        # Wait up to 5 seconds for graceful exit
+        for _ in $(seq 1 5); do
+            if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+                break
+            fi
+            sleep 1
+        done
+        # Force kill if still alive
+        kill -KILL "$QEMU_PID" 2>/dev/null || true
+        wait "$QEMU_PID" 2>/dev/null || true
+    fi
+    [ -n "$OUTPUT" ] && rm -f "$OUTPUT"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "==> Raspberry Pi 4B boot smoke test..."
 
@@ -41,28 +64,20 @@ QEMU_PID=$!
 ELAPSED=0
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   # Check for kernel output that proves boot succeeded.
-  # The kernel prints "RPi4" as firmware_type in early boot logs,
-  # or we can look for any kernel log output.
+  # A panic means the kernel booted far enough to run Rust code.
   if grep -q "panicked at" "$OUTPUT" 2>/dev/null; then
-    # A panic means the kernel booted far enough to run Rust code.
-    # For now, this is a success (the panic is expected: no block device).
-    kill "$QEMU_PID" 2>/dev/null || true
-    wait "$QEMU_PID" 2>/dev/null || true
     echo "PASS: raspi4b kernel booted (reached Rust, panicked as expected on block device)"
-    rm -f "$OUTPUT"
     exit 0
   fi
   if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     wait "$QEMU_PID" || true
     if grep -q "panicked at" "$OUTPUT" 2>/dev/null; then
       echo "PASS: raspi4b kernel booted (reached Rust)"
-      rm -f "$OUTPUT"
       exit 0
     fi
     echo "FAIL: QEMU exited without expected output"
     echo "--- QEMU output ---"
     cat "$OUTPUT"
-    rm -f "$OUTPUT"
     exit 1
   fi
   sleep 1
@@ -72,6 +87,4 @@ done
 echo "FAIL: QEMU did not produce expected output within ${TIMEOUT}s"
 echo "--- QEMU output ---"
 cat "$OUTPUT"
-rm -f "$OUTPUT"
-kill "$QEMU_PID" 2>/dev/null || true
 exit 1

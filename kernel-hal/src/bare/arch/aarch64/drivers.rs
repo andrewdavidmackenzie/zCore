@@ -23,11 +23,12 @@ const GIC_GICC_OFFSET: usize = 0x2000;
 const GIC_GICD_OFFSET: usize = 0x1000;
 
 /// UART IRQ number.
-/// QEMU virt: SPI 1 (IRQ 33). RPi4: SPI 57 (IRQ 89).
+/// QEMU virt: SPI 1 (GIC INTID 33).
+/// RPi4: GIC_SPI_INTERRUPT_UART0 = 121 (from QEMU bcm2838_peripherals.h).
 #[cfg(not(feature = "board-raspi4b"))]
 const UART_IRQ: u32 = 33;
 #[cfg(feature = "board-raspi4b")]
-const UART_IRQ: u32 = 89;
+const UART_IRQ: u32 = 121;
 
 /// Timer IRQ number (PPI 14 = IRQ 30 on both platforms).
 const TIMER_IRQ: u32 = 30;

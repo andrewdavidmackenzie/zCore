@@ -21,7 +21,7 @@ static GICC_PMR: u32 = 0x0004;
 pub struct IntController {
     gicc: GicCpuIf,
     gicd: GicDistIf,
-    manager: Mutex<IrqManager<50>>,
+    manager: Mutex<IrqManager<256>>,
 }
 
 struct GicDistIf {
@@ -43,7 +43,7 @@ impl IntController {
                 ncpus: 0,
                 nirqs: 0,
             },
-            manager: Mutex::new(IrqManager::new(0..50)),
+            manager: Mutex::new(IrqManager::new(0..256)),
         }
     }
 
