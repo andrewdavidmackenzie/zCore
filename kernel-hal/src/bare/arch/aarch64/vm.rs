@@ -64,28 +64,34 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
         MMUFlags::READ | MMUFlags::WRITE,
     )?;
     // uart
+    let uart_base = super::uart_base();
     map_range(
-        phys_to_virt(KCONFIG.uart_base),
-        phys_to_virt(KCONFIG.uart_base) + UART_SIZE,
+        phys_to_virt(uart_base),
+        phys_to_virt(uart_base) + UART_SIZE,
         MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
     )?;
-    // gic
+    // gic (use the same offsets as drivers.rs)
+    let gic_base = super::gic_base();
+    let gicc_offset = super::drivers::GIC_GICC_OFFSET;
+    let gicd_offset = super::drivers::GIC_GICD_OFFSET;
     map_range(
-        phys_to_virt(KCONFIG.gic_base + 0x1_0000),
-        phys_to_virt(KCONFIG.gic_base + 0x1_0000) + GICC_SIZE,
+        phys_to_virt(gic_base + gicc_offset),
+        phys_to_virt(gic_base + gicc_offset) + GICC_SIZE,
         MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
     )?;
     map_range(
-        phys_to_virt(KCONFIG.gic_base),
-        phys_to_virt(KCONFIG.gic_base) + GICD_SIZE,
+        phys_to_virt(gic_base + gicd_offset),
+        phys_to_virt(gic_base + gicd_offset) + GICD_SIZE,
         MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
     )?;
-    // virtio_drivers
-    map_range(
-        phys_to_virt(VIRTIO_BASE),
-        phys_to_virt(VIRTIO_BASE) + VIRTIO_SIZE,
-        MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
-    )?;
+    // virtio_drivers (skip on boards without VirtIO)
+    if VIRTIO_BASE != 0 {
+        map_range(
+            phys_to_virt(VIRTIO_BASE),
+            phys_to_virt(VIRTIO_BASE) + VIRTIO_SIZE,
+            MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
+        )?;
+    }
     // initrd (if DTB provided initrd location)
     if let Some(initrd) = super::INITRD_REGION.as_ref() {
         map_range(

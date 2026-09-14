@@ -49,11 +49,19 @@ petal-shell:
 		-machine virt -cpu cortex-a72 -serial mon:stdio \
 		-kernel target/$(ARCH)/release/zcore
 
-# Build the kernel for Raspberry Pi 4B (QEMU raspi4b).
-# Uses Zircon mode (no block device needed).
+# Build the kernel for Raspberry Pi 4B (QEMU raspi4b) in Zircon mode.
+# Builds userstart + petal shell, packages into ZBI, builds kernel.
 raspi4b-build:
-	@echo "==> Building zCore for Raspberry Pi 4B..."
-	@cargo build -p zcore --no-default-features --features "linux,board-raspi4b" \
+	@echo "==> Building userstart..."
+	@cargo build -p userstart --target aarch64-unknown-none-softfloat \
+		--release --target-dir target/userstart 2>&1 | tail -1
+	@echo "==> Building petal shell ZBI..."
+	@cargo petal-zbi --arch aarch64 --bin shell 2>&1 | tail -1
+	@echo "==> Building zCore kernel for Raspberry Pi 4B..."
+	@USERSTART_ELF="$$(pwd)/target/userstart/aarch64-unknown-none-softfloat/release/userstart" \
+		PETAL_ZBI="$$(pwd)/target/petal/aarch64/petal.zbi" \
+		ZCORE_CMDLINE="LOG=warn" \
+		cargo build -p zcore --no-default-features --features "zircon,board-raspi4b" \
 		--target zCore/aarch64-raspi4b.json \
 		-Z json-target-spec \
 		-Z build-std=core,alloc \
@@ -63,7 +71,7 @@ raspi4b-build:
 		target/aarch64-raspi4b/release/zcore \
 		target/aarch64-raspi4b/release/zcore.bin
 
-# Build and run zCore on QEMU raspi4b interactively.
+# Build and run zCore on QEMU raspi4b interactively with petal shell.
 # Ctrl-A X to exit QEMU.
 raspi4b-run: raspi4b-build
 	@echo "==> Starting zCore on QEMU raspi4b (Ctrl-A X to exit)..."

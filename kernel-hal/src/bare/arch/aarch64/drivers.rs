@@ -13,14 +13,14 @@ use kernel_drivers::Device;
 /// QEMU virt:  GICD at base+0x0,     GICC at base+0x10000
 /// RPi4:       GICD at base+0x1000,  GICC at base+0x2000
 #[cfg(not(feature = "board-raspi4b"))]
-const GIC_GICC_OFFSET: usize = 0x1_0000;
+pub const GIC_GICC_OFFSET: usize = 0x1_0000;
 #[cfg(not(feature = "board-raspi4b"))]
-const GIC_GICD_OFFSET: usize = 0x0;
+pub const GIC_GICD_OFFSET: usize = 0x0;
 
 #[cfg(feature = "board-raspi4b")]
-const GIC_GICC_OFFSET: usize = 0x2000;
+pub const GIC_GICC_OFFSET: usize = 0x2000;
 #[cfg(feature = "board-raspi4b")]
-const GIC_GICD_OFFSET: usize = 0x1000;
+pub const GIC_GICD_OFFSET: usize = 0x1000;
 
 /// UART IRQ number.
 /// QEMU virt: SPI 1 (GIC INTID 33).

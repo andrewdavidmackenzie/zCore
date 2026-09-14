@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Raspberry Pi 4B boot smoke test: build kernel, run in QEMU raspi4b,
-# check for expected kernel output.
+# Raspberry Pi 4B boot smoke test: build kernel in Zircon mode with
+# petal shell, run in QEMU raspi4b, check for shell self-test output.
 #
 # Usage: tools/scripts/raspi4b-boot-test.sh
 #
@@ -18,14 +18,12 @@ OUTPUT=""
 cleanup() {
     if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
         kill "$QEMU_PID" 2>/dev/null || true
-        # Wait up to 5 seconds for graceful exit
         for _ in $(seq 1 5); do
             if ! kill -0 "$QEMU_PID" 2>/dev/null; then
                 break
             fi
             sleep 1
         done
-        # Force kill if still alive
         kill -KILL "$QEMU_PID" 2>/dev/null || true
         wait "$QEMU_PID" 2>/dev/null || true
     fi
@@ -35,21 +33,10 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-echo "==> Raspberry Pi 4B boot smoke test..."
+echo "==> Raspberry Pi 4B boot smoke test (Zircon mode)..."
 
-# Build the kernel for raspi4b (Linux mode -- will panic on block device,
-# but that's after successful boot + UART output, which is what we test).
-echo "Building kernel for raspi4b..."
-cargo build -p zcore --no-default-features --features "linux,board-raspi4b" \
-  --target zCore/aarch64-raspi4b.json \
-  -Z json-target-spec \
-  -Z build-std=core,alloc \
-  -Z build-std-features=compiler-builtins-mem \
-  --release 2>&1 | tail -3
-
-rust-objcopy --strip-all -O binary \
-  target/aarch64-raspi4b/release/zcore \
-  target/aarch64-raspi4b/release/zcore.bin
+# Build using the Makefile target (Zircon mode with petal shell)
+make raspi4b-build 2>&1 | tail -5
 
 echo "Running in QEMU raspi4b..."
 OUTPUT=$(mktemp)
@@ -63,16 +50,15 @@ QEMU_PID=$!
 
 ELAPSED=0
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-  # Check for kernel output that proves boot succeeded.
-  # A panic means the kernel booted far enough to run Rust code.
-  if grep -q "panicked at" "$OUTPUT" 2>/dev/null; then
-    echo "PASS: raspi4b kernel booted (reached Rust, panicked as expected on block device)"
+  # Check for shell self-test output (proves full boot chain works)
+  if grep -q "shell: self-test PASS" "$OUTPUT" 2>/dev/null; then
+    echo "PASS: raspi4b petal shell self-test passed"
     exit 0
   fi
   if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     wait "$QEMU_PID" || true
-    if grep -q "panicked at" "$OUTPUT" 2>/dev/null; then
-      echo "PASS: raspi4b kernel booted (reached Rust)"
+    if grep -q "shell: self-test PASS" "$OUTPUT" 2>/dev/null; then
+      echo "PASS: raspi4b petal shell self-test passed"
       exit 0
     fi
     echo "FAIL: QEMU exited without expected output"

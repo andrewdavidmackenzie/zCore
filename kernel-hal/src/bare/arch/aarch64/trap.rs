@@ -1,5 +1,5 @@
 use crate::context::TrapReason;
-use crate::{Info, Kind, Source, KCONFIG};
+use crate::{Info, Kind, Source};
 use cortex_a::registers::FAR_EL1;
 use kernel_drivers::irq::gic_400::get_irq_num;
 use tock_registers::interfaces::Readable;
@@ -18,9 +18,10 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
         }
         Kind::Irq => {
             use crate::hal_fn::mem::phys_to_virt;
+            let gic_base = super::gic_base();
             crate::interrupt::handle_irq(get_irq_num(
-                phys_to_virt(KCONFIG.gic_base + 0x1_0000),
-                phys_to_virt(KCONFIG.gic_base),
+                phys_to_virt(gic_base + super::drivers::GIC_GICC_OFFSET),
+                phys_to_virt(gic_base + super::drivers::GIC_GICD_OFFSET),
             ));
         }
         _ => {
