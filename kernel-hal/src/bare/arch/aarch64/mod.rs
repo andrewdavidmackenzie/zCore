@@ -16,6 +16,17 @@ hal_fn_impl_default!(crate::hal_fn::console);
 
 static INITRD_REGION: InitOnce<Option<Range<PhysAddr>>> = InitOnce::new_with_default(None);
 static CMDLINE: InitOnce<String> = InitOnce::new_with_default(String::new());
+/// DTB-discovered memory end address. If set, overrides the compile-time
+/// PHYS_MEMORY_END constant in free_pmem_regions().
+static DTB_MEMORY_END: InitOnce<Option<usize>> = InitOnce::new_with_default(None);
+
+/// Get the physical memory end address, preferring DTB-discovered value.
+pub fn phys_memory_end() -> usize {
+    match *DTB_MEMORY_END {
+        Some(end) => end,
+        None => config::PHYS_MEMORY_END,
+    }
+}
 
 pub fn cmdline() -> String {
     CMDLINE.clone()
@@ -167,9 +178,28 @@ fn parse_dtb(dtb_paddr: usize) {
         }
     }
 
-    // Log discovered memory (used for future dynamic memory configuration)
+    // Use DTB-discovered memory to override compile-time defaults.
+    // Cap at a reasonable limit to avoid mapping issues with the boot
+    // page tables (which only cover 3-4 GiB depending on board).
     if let (Some(base), Some(size)) = (info.memory_base, info.memory_size) {
-        log::info!("DTB memory region: {:#x}..{:#x}", base, base + size);
+        let end = base + size;
+        // Cap usable memory at 1 GiB from kernel end to stay within
+        // the boot page table mappings. The 4K remap in vm::init()
+        // will eventually map all physical memory properly.
+        let kernel_end = {
+            extern "C" {
+                fn ekernel();
+            }
+            ekernel as *const () as usize & config::PHYS_ADDR_MASK
+        };
+        let capped_end = end.min(kernel_end + 1024 * 1024 * 1024);
+        log::info!(
+            "DTB memory: {:#x}..{:#x}, usable end capped to {:#x}",
+            base,
+            end,
+            capped_end
+        );
+        DTB_MEMORY_END.init_once_by(Some(capped_end));
     }
 }
 
