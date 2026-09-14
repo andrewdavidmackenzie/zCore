@@ -8,7 +8,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 
 .PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
-	petal-shell raspi4b-build raspi4b-run
+	petal-shell raspi4b-build raspi4b-run raspi4b-sd
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -71,6 +71,12 @@ raspi4b-run: raspi4b-build
 		-display none -no-reboot -nographic \
 		-serial mon:stdio \
 		-kernel target/aarch64-raspi4b/release/zcore.bin
+
+# Prepare an SD card for Raspberry Pi 4 / Pi 400.
+# Usage: make raspi4b-sd SD=/Volumes/boot
+#   SD= is the mount point of the SD card's FAT32 partition.
+raspi4b-sd: raspi4b-build
+	@tools/raspi/prepare-sd.sh $(SD)
 
 # Zircon boot smoke test: build in Zircon mode, start QEMU, wait for
 # userstart hello message, verify clean shutdown.
