@@ -59,7 +59,8 @@ impl IntController {
 
             // Set all IRQs to Group 1 (non-secure) so they are visible at EL1
             for irq in (0..self.gicd.nirqs).step_by(32) {
-                self.gicd.write(GICD_IGROUPR + ((irq / 32) * 4), 0xffff_ffff);
+                self.gicd
+                    .write(GICD_IGROUPR + ((irq / 32) * 4), 0xffff_ffff);
             }
 
             // Set all SPIs to level triggered

@@ -103,14 +103,14 @@ impl Pl011Uart {
 struct Pl011Inner {
     base: usize,
     // PL011 register offsets
-    data_reg: u8,       // 0x00 UARTDR
-    flag_reg: u8,       // 0x18 UARTFR
-    ibrd_reg: u8,       // 0x24 UARTIBRD (integer baud rate divisor)
-    fbrd_reg: u8,       // 0x28 UARTFBRD (fractional baud rate divisor)
-    line_ctrl_reg: u8,  // 0x2C UARTLCR_H
-    ctrl_reg: u8,       // 0x30 UARTCR
+    data_reg: u8,             // 0x00 UARTDR
+    flag_reg: u8,             // 0x18 UARTFR
+    ibrd_reg: u8,             // 0x24 UARTIBRD (integer baud rate divisor)
+    fbrd_reg: u8,             // 0x28 UARTFBRD (fractional baud rate divisor)
+    line_ctrl_reg: u8,        // 0x2C UARTLCR_H
+    ctrl_reg: u8,             // 0x30 UARTCR
     intr_mask_setclr_reg: u8, // 0x38 UARTIMSC
-    intr_clr_reg: u8,   // 0x44 UARTICR
+    intr_clr_reg: u8,         // 0x44 UARTICR
 }
 
 impl Pl011Inner {
