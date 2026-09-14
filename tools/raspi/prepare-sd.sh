@@ -44,7 +44,7 @@ if [ ! -f "$FIRMWARE_CACHE/start4.elf" ]; then
     FIRMWARE_URL="https://github.com/raspberrypi/firmware/raw/$FIRMWARE_TAG/boot"
     for f in start4.elf fixup4.dat bcm2711-rpi-4-b.dtb bcm2711-rpi-400.dtb; do
         echo "  Downloading $f..."
-        curl -sL "$FIRMWARE_URL/$f" -o "$FIRMWARE_CACHE/$f"
+        curl --fail -sL "$FIRMWARE_URL/$f" -o "$FIRMWARE_CACHE/$f"
     done
     echo "  Firmware cached at $FIRMWARE_CACHE"
 else
@@ -78,7 +78,7 @@ mkdir -p "$BOOT_DIR/overlays"
 # The disable-bt overlay is in the firmware repo
 if [ ! -f "$FIRMWARE_CACHE/disable-bt.dtbo" ]; then
     OVERLAY_URL="https://github.com/raspberrypi/firmware/raw/$FIRMWARE_TAG/boot/overlays/disable-bt.dtbo"
-    curl -sL "$OVERLAY_URL" -o "$FIRMWARE_CACHE/disable-bt.dtbo"
+    curl --fail -sL "$OVERLAY_URL" -o "$FIRMWARE_CACHE/disable-bt.dtbo"
 fi
 cp "$FIRMWARE_CACHE/disable-bt.dtbo" "$BOOT_DIR/overlays/"
 
@@ -99,7 +99,7 @@ echo "  1. Eject the SD card safely"
 echo "  2. Insert into Pi 400"
 echo "  3. Connect a USB-to-serial adapter to GPIO pins 14 (TX) and 15 (RX)"
 echo "     Or use the Pi 400's built-in USB and a serial terminal"
-echo "  4. Open a serial terminal: screen /dev/tty.usbserial-* 115200"
+echo "  4. Open a serial terminal: screen /dev/tty.usbserial-* 9600"
 echo "  5. Power on the Pi"
 echo ""
 echo "You should see zCore kernel output on the serial console."

@@ -25,10 +25,10 @@ The Pi 400 has a GPIO header. Connect a USB-to-serial adapter:
 Open a serial terminal:
 ```bash
 # macOS
-screen /dev/tty.usbserial-* 115200
+screen /dev/tty.usbserial-* 9600
 
 # Linux
-screen /dev/ttyUSB0 115200
+screen /dev/ttyUSB0 9600
 ```
 
 ## What You'll See
@@ -41,9 +41,8 @@ The kernel boots and prints log messages to the serial console:
 ...
 ```
 
-Currently the kernel will panic after initialization because there's
-no rootfs (block device or initrd). This is expected -- the next step
-is to add Zircon mode support for RPi4.
+The kernel boots in Zircon mode with the petal shell. You should see
+the shell prompt after the boot log messages.
 
 ## Files on the SD Card
 
