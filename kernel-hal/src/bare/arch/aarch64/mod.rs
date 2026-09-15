@@ -327,9 +327,13 @@ pub fn secondary_init() {
 
 pub const fn timer_interrupt_vector() -> usize {
     #[cfg(feature = "board-raspi400")]
-    { 27 }
+    {
+        27
+    }
     #[cfg(not(feature = "board-raspi400"))]
-    { 30 }
+    {
+        30
+    }
 }
 
 pub fn timer_init() {

@@ -168,11 +168,11 @@ zCore on Raspberry Pi 400!
 ## Boot sequence
 
 1. **Pi firmware** (`start4.elf`) initializes GPU, DRAM, peripherals, UART at 9600 baud.
-2. **Firmware** loads `armstub8-gic.bin` to physical address 0x0 and releases ARM cores.
+2. **Firmware** loads `armstub8-gic.bin` to physical address 0x0, writes kernel entry
+   address to offset 0xFC and DTB pointer to offset 0xF8, then releases ARM cores.
 3. **Armstub** (EL3): configures GIC-400 (all interrupts to Group 1 / Non-Secure),
    sets SCR_EL3 (NS=1), drops to Non-Secure EL2.
-4. **Firmware** writes kernel entry address and DTB pointer to armstub mailbox.
-5. **Armstub** reads entry/DTB, branches to kernel at 0x80000.
+4. **Armstub** (EL2): reads entry/DTB from mailbox, branches to kernel at 0x80000.
 6. **Boot assembly** (`boot_raspi400.s`):
    - Prints `zC` to UART (confirms CPU is alive)
    - Drops from EL2 to EL1 (configures HCR_EL2, CNTHCTL_EL2)
