@@ -146,7 +146,6 @@ pub fn run_until_idle() -> bool {
         runtime.current_executor = Some(runtime.strong_executor.clone());
         // Release the global_runtime lock before switching
         drop(runtime);
-        debug!("run strong executor");
         switch(runtime_cx, executor_cx);
         // If this function returns, the strong_executor's future has
         // timed out or voluntarily yielded. Create a new executor for

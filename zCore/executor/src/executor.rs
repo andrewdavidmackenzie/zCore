@@ -60,7 +60,7 @@ impl Executor {
         pin_executor.init_stack_and_context();
 
         trace!(
-            "Executor::new: stack_base={:#x}, stack_top(ctx)={:#x}, rip={:#x}, cr3={:#x}",
+            "Executor::new: stack_base={:#x}, stack_top(ctx)={:#x}, pc={:#x}, ttbr0={:#x}",
             pin_executor.stack_base,
             pin_executor.context.get_sp(),
             pin_executor.context.get_pc(),
@@ -108,9 +108,7 @@ impl Executor {
                 let mut cx = Context::from_waker(&waker);
                 waker_ref.mark_borrowed(true);
                 self.task_id = task.id();
-                debug!("running future {}:{}", self.id(), task.id());
                 let ret = task.poll(&mut cx);
-                debug!("back from future {}:{}", self.id(), task.id());
                 self.task_id = 0;
                 waker_ref.mark_borrowed(false);
                 match ret {

@@ -17,20 +17,12 @@ hal_fn_impl! {
 
         fn intr_off() {
             unsafe {
-                // Mask IRQ (and FIQ on Pi 400 where Group 0 interrupts arrive as FIQ)
-                #[cfg(feature = "board-raspi400")]
-                core::arch::asm!("msr daifset, #3");
-                #[cfg(not(feature = "board-raspi400"))]
                 core::arch::asm!("msr daifset, #2");
             }
         }
 
         fn intr_on() {
             unsafe {
-                // Unmask IRQ (and FIQ on Pi 400 where Group 0 interrupts arrive as FIQ)
-                #[cfg(feature = "board-raspi400")]
-                core::arch::asm!("msr daifclr, #3");
-                #[cfg(not(feature = "board-raspi400"))]
                 core::arch::asm!("msr daifclr, #2");
             }
         }

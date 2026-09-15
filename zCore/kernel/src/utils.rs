@@ -124,6 +124,9 @@ pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
 pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
     kernel_hal::timer::timer_enable();
     info!("executor run!");
+
+    kernel_hal::interrupt::intr_on();
+
     loop {
         let has_task = executor::run_until_idle();
         if !has_task && cfg!(feature = "baremetal-test") {
