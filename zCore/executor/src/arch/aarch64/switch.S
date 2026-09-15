@@ -20,13 +20,14 @@ switch:
         stp     x19, x20, [x0, #-16]!
 
         ldr     x9, [x1, #104]
+        cbz     x9, 1f
         lsr     x10, x9, #12
         msr     ttbr0_el1, x9
         dsb     ishst
         tlbi    vaae1is, x10
         dsb     ish
         isb
-
+1:
         ldp     x19, x20, [x1], #16
         ldp     x21, x22, [x1], #16
         ldp     x23, x24, [x1], #16

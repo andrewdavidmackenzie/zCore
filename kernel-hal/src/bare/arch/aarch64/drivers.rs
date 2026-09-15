@@ -30,8 +30,13 @@ const UART_IRQ: u32 = 33;
 #[cfg(feature = "board-raspi400")]
 const UART_IRQ: u32 = 121;
 
-/// Timer IRQ number (PPI 14 = IRQ 30 on both platforms).
+/// Timer IRQ number.
+/// QEMU virt: physical timer PPI 14 = IRQ 30.
+/// RPi 400: virtual timer PPI 11 = IRQ 27 (matching Linux).
+#[cfg(not(feature = "board-raspi400"))]
 const TIMER_IRQ: u32 = 30;
+#[cfg(feature = "board-raspi400")]
+const TIMER_IRQ: u32 = 27;
 
 pub fn init_early() {
     let uart_base = super::uart_base();

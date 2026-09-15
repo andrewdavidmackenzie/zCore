@@ -19,10 +19,17 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
         Kind::Irq | Kind::Fiq => {
             use crate::hal_fn::mem::phys_to_virt;
             let gic_base = super::gic_base();
-            crate::interrupt::handle_irq(get_irq_num(
+            let irq_num = get_irq_num(
                 phys_to_virt(gic_base + super::drivers::GIC_GICC_OFFSET),
                 phys_to_virt(gic_base + super::drivers::GIC_GICD_OFFSET),
-            ));
+            );
+            crate::interrupt::handle_irq(irq_num);
+            // Timer IRQ: expire deadline wakeups and preempt the executor,
+            // matching what riscv64 and x86_64 do in their trap handlers.
+            if irq_num == super::timer_interrupt_vector() {
+                crate::timer::timer_tick();
+                executor::handle_timeout();
+            }
         }
         _ => {
             panic!(
