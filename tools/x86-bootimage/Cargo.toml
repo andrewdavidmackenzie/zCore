@@ -5,8 +5,13 @@ edition = "2021"
 description = "Helper tool to create x86_64 bootable disk images"
 
 [dependencies]
-# Uses a local fork of the bootloader crate with a wcslen fix for UEFI.
-# The fork is checked out as a git submodule at vendor/bootloader.
+# BIOS-only from crates.io (CI default).
+#
+# For UEFI support on real hardware, change this line to:
+#   bootloader = { path = "../../vendor/bootloader", default-features = false, features = ["bios", "uefi"] }
+# Then build with: cargo -Z bindeps build --release
+# Requires the vendor/bootloader submodule (patched wcslen fix).
 # See: https://github.com/rust-osdev/bootloader/issues/579
-bootloader = { path = "../../vendor/bootloader", default-features = false, features = ["bios", "uefi"] }
+# Tracked for removal: https://github.com/andrewdavidmackenzie/zCore/issues/263
+bootloader = { version = "0.11", default-features = false, features = ["bios"] }
 anyhow = "1"
