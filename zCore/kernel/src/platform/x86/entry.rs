@@ -113,7 +113,7 @@ fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
     };
 
     let config = KernelConfig {
-        cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=warn"),
+        cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=error"),
         initrd_start: match boot_info.ramdisk_addr {
             Optional::Some(addr) => addr,
             Optional::None => 0,

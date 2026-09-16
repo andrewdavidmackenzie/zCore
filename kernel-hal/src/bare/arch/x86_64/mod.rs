@@ -56,6 +56,17 @@ pub fn primary_init_early() {
     drivers::init_early().unwrap();
     // init framebuffer console (if available)
     fb_console::init();
+    // Log key boot values for diagnostics on real hardware
+    error!(
+        "phys_to_virt_offset = {:#x}",
+        crate::KCONFIG.phys_to_virt_offset
+    );
+    if let Some(ref fb) = crate::KCONFIG.framebuffer {
+        error!(
+            "framebuffer: {}x{}, bpp inferred, phys={:#x}",
+            fb.width, fb.height, fb.addr
+        );
+    }
 }
 
 pub fn primary_init() {

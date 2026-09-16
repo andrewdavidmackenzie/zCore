@@ -57,12 +57,16 @@ pub(super) fn init() -> DeviceResult {
 
     #[cfg(not(feature = "no-pci"))]
     {
-        // PCI scan
+        // PCI scan -- skip on real hardware for now, causes #GP on ThinkPad.
+        // TODO: investigate PCI config space access on UEFI-booted systems.
+        warn!("PCI scan skipped (disabled for real hardware debugging)");
+        /*
         use kernel_drivers::bus::pci;
         let pci_devs = pci::init(None)?;
         for d in pci_devs.into_iter() {
             drivers::add_device(d);
         }
+        */
     }
 
     // graphic and loopback features removed (see #237)
