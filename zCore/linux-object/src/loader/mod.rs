@@ -196,15 +196,20 @@ impl LinuxElfLoader {
                 let mut map = BTreeMap::new();
                 #[cfg(target_arch = "x86_64")]
                 {
-                    use xmas_elf::header::Type;
-                    let is_pie = elf.header.pt2.type_().as_type() == Type::SharedObject;
-                    if is_pie {
-                        map.insert(abi::AT_BASE, 0);
-                    } else {
-                        map.insert(abi::AT_BASE, base);
-                    }
-                    map.insert(abi::AT_PHDR, base + elf.header.pt2.ph_offset() as usize);
+                    // AT_BASE is the interpreter's load base address.
+                    // When there is no interpreter (static binaries, both
+                    // PIE and non-PIE), AT_BASE = 0 per Linux convention.
+                    // Interpreter loading is handled by the recursive
+                    // self.load() call above, which sets its own AT_BASE.
+                    map.insert(abi::AT_BASE, 0);
                     map.insert(abi::AT_ENTRY, entry);
+                    if let Some(phdr_vaddr) = elf.get_phdr_vaddr() {
+                        // Relocate PHDR address by the load base.
+                        // get_phdr_vaddr() returns the ELF virtual address
+                        // of the program headers (from PT_PHDR or inferred
+                        // from the first LOAD segment).
+                        map.insert(abi::AT_PHDR, base + phdr_vaddr as usize);
+                    }
                 }
                 #[cfg(target_arch = "riscv64")]
                 if let Some(phdr_vaddr) = elf.get_phdr_vaddr() {
