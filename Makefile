@@ -89,7 +89,9 @@ raspi400-sd: raspi400-build
 # Build x86_64 kernel in Zircon mode with petal shell.
 x86-zircon-build:
 	@echo "==> Building userstart..."
-	@cargo build -p userstart --target x86_64-unknown-none \
+	@RUSTFLAGS="-C relocation-model=static" \
+		cargo build -p userstart --target x86_64-unknown-none \
+		-Z build-std=core -Z build-std-features=compiler-builtins-mem \
 		--release --target-dir target/userstart
 	@echo "==> Building petal shell ZBI..."
 	@cargo petal-zbi --arch x86_64 --bin shell

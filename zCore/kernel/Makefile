@@ -12,7 +12,7 @@
 ARCH ?= x86_64
 PLATFORM ?= qemu
 MODE ?= release
-LOG ?= warn
+LOG ?= info
 LINUX ?=
 MOCK ?=
 LIBOS ?=

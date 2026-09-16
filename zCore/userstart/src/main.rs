@@ -295,6 +295,100 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     }
 }
 
+/// Apply ELF dynamic relocations from the PT_DYNAMIC segment.
+///
+/// Scans program headers for PT_DYNAMIC, reads DT_RELA/DT_RELASZ entries,
+/// and applies R_X86_64_RELATIVE / R_AARCH64_RELATIVE relocations by writing
+/// `base + addend` into the VMO at each relocation offset.
+fn apply_elf_relocations(
+    data: &[u8],
+    e_phoff: usize,
+    e_phentsize: usize,
+    e_phnum: usize,
+    vmo: HandleValue,
+    base: usize,
+) {
+    const PT_DYNAMIC: u32 = 2;
+    const DT_NULL: u64 = 0;
+    const DT_RELA: u64 = 7;
+    const DT_RELASZ: u64 = 8;
+
+    // R_X86_64_RELATIVE = 8, R_AARCH64_RELATIVE = 0x403
+    #[cfg(target_arch = "x86_64")]
+    const R_RELATIVE: u32 = 8;
+    #[cfg(target_arch = "aarch64")]
+    const R_RELATIVE: u32 = 0x403;
+    #[cfg(target_arch = "riscv64")]
+    const R_RELATIVE: u32 = 3;
+
+    // Find the PT_DYNAMIC segment.
+    let mut dyn_offset: usize = 0;
+    let mut dyn_size: usize = 0;
+    for i in 0..e_phnum {
+        let ph = &data[e_phoff + i * e_phentsize..];
+        let p_type = u32::from_le_bytes(ph[0..4].try_into().unwrap());
+        if p_type == PT_DYNAMIC {
+            // Use p_offset (file offset) to find the DYNAMIC entries in `data`.
+            dyn_offset = u64::from_le_bytes(ph[8..16].try_into().unwrap()) as usize;
+            dyn_size = u64::from_le_bytes(ph[32..40].try_into().unwrap()) as usize;
+            break;
+        }
+    }
+    if dyn_size == 0 {
+        return; // No DYNAMIC segment -- static binary, nothing to relocate.
+    }
+
+    // Parse DYNAMIC entries to find DT_RELA and DT_RELASZ.
+    let mut rela_vaddr: usize = 0;
+    let mut rela_size: usize = 0;
+    let mut pos = dyn_offset;
+    while pos + 16 <= dyn_offset + dyn_size && pos + 16 <= data.len() {
+        let d_tag = u64::from_le_bytes(data[pos..pos + 8].try_into().unwrap());
+        let d_val = u64::from_le_bytes(data[pos + 8..pos + 16].try_into().unwrap());
+        if d_tag == DT_NULL {
+            break;
+        } else if d_tag == DT_RELA {
+            rela_vaddr = d_val as usize;
+        } else if d_tag == DT_RELASZ {
+            rela_size = d_val as usize;
+        }
+        pos += 16;
+    }
+    if rela_size == 0 {
+        return; // No RELA entries.
+    }
+
+    // The DT_RELA value is a virtual address. For a PIE binary loaded
+    // from offset 0 in the file, vaddr == file offset for sections
+    // within PT_LOAD segments. Find the file offset by scanning LOAD
+    // segments.
+    let rela_file_offset = rela_vaddr; // works when first LOAD segment has p_offset==0
+
+    // Apply each Elf64_Rela entry: { r_offset(8), r_info(8), r_addend(8) }
+    const RELA_ENTRY_SIZE: usize = 24;
+    let mut i = 0;
+    while i < rela_size {
+        let entry = rela_file_offset + i;
+        if entry + RELA_ENTRY_SIZE > data.len() {
+            break;
+        }
+        let r_offset = u64::from_le_bytes(data[entry..entry + 8].try_into().unwrap()) as usize;
+        let r_info = u64::from_le_bytes(data[entry + 8..entry + 16].try_into().unwrap());
+        let r_addend = i64::from_le_bytes(data[entry + 16..entry + 24].try_into().unwrap());
+        let r_type = (r_info & 0xFFFFFFFF) as u32;
+
+        if r_type == R_RELATIVE {
+            // R_*_RELATIVE: *(base + r_offset) = base + r_addend
+            let value = (base as i64 + r_addend) as u64;
+            check("vmo_write(reloc)", unsafe {
+                zx_vmo_write(vmo, &value as *const u64 as *const u8, r_offset as u64, 8)
+            });
+        }
+        // Other relocation types are not expected in static-pie petal binaries.
+        i += RELA_ENTRY_SIZE;
+    }
+}
+
 /// Load an ELF binary into a process, mapping each PT_LOAD segment.
 /// Returns (entry_addr, map_end) where map_end is the highest mapped address.
 fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
@@ -363,6 +457,11 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
         }
     }
 
+    // Apply ELF relocations (PT_DYNAMIC -> DT_RELA entries).
+    // Petal binaries are PIE (ET_DYN) and have R_X86_64_RELATIVE
+    // relocations that must be applied before the code runs.
+    apply_elf_relocations(data, e_phoff, e_phentsize, e_phnum, code_vmo, base);
+
     // Make executable so code segments can be mapped with PERM_EXECUTE.
     let mut exec_vmo: HandleValue = ZX_HANDLE_INVALID;
     check("vmo_replace_as_executable", unsafe {
@@ -370,57 +469,27 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
     });
     code_vmo = exec_vmo;
 
-    // Map each PT_LOAD segment with its declared permissions.
-    const PF_X: u32 = 1;
-    const PF_W: u32 = 2;
-    const PF_R: u32 = 4;
-    let mut map_end: usize = 0;
+    // Map the entire VMO as a single RWX region at the load base.
+    // Individual per-segment permissions would require splitting
+    // overlapping page-aligned ranges, which is complex for small
+    // petal binaries. A single RWX mapping is simpler and sufficient.
+    let vm_flags =
+        ZX_VM_SPECIFIC | ZX_VM_MAP_RANGE | ZX_VM_PERM_READ | ZX_VM_PERM_WRITE | ZX_VM_PERM_EXECUTE;
 
-    for i in 0..e_phnum {
-        let ph = &data[e_phoff + i * e_phentsize..];
-        let p_type = u32::from_le_bytes(ph[0..4].try_into().unwrap());
-        if p_type != PT_LOAD {
-            continue;
-        }
-        let p_flags = u32::from_le_bytes(ph[4..8].try_into().unwrap());
-        let p_vaddr = u64::from_le_bytes(ph[16..24].try_into().unwrap()) as usize;
-        let p_memsz = u64::from_le_bytes(ph[40..48].try_into().unwrap()) as usize;
+    let mut mapped_addr: usize = 0;
+    check("vmar_map(elf)", unsafe {
+        zx_vmar_map(
+            vmar,
+            vm_flags,
+            base,
+            code_vmo,
+            0,
+            vmo_size,
+            &mut mapped_addr,
+        )
+    });
 
-        // Page-align the segment range
-        let seg_start = p_vaddr & !(PAGE_SIZE - 1);
-        let seg_end = (p_vaddr + p_memsz + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-        let seg_size = seg_end - seg_start;
-
-        // Convert ELF p_flags to VM permissions
-        let mut vm_flags = ZX_VM_SPECIFIC | ZX_VM_MAP_RANGE;
-        if p_flags & PF_R != 0 {
-            vm_flags |= ZX_VM_PERM_READ;
-        }
-        if p_flags & PF_W != 0 {
-            vm_flags |= ZX_VM_PERM_WRITE;
-        }
-        if p_flags & PF_X != 0 {
-            vm_flags |= ZX_VM_PERM_EXECUTE;
-        }
-
-        let mut seg_addr: usize = 0;
-        check("vmar_map(seg)", unsafe {
-            zx_vmar_map(
-                vmar,
-                vm_flags,
-                base + seg_start,
-                code_vmo,
-                seg_start,
-                seg_size,
-                &mut seg_addr,
-            )
-        });
-
-        let end = base + seg_end;
-        if end > map_end {
-            map_end = end;
-        }
-    }
+    let map_end = base + vmo_size;
     let entry = base + e_entry;
     debug_print(b"userstart: ELF loaded\n");
     (entry, map_end)
@@ -461,33 +530,15 @@ fn load_flat(data: &[u8], vmar: HandleValue) -> (usize, usize) {
     (code_base, code_base + map_size)
 }
 
-/// Print a u32 as decimal digits via debug_write.
-fn print_dec(mut n: u32) {
-    if n == 0 {
-        debug_write(b"0");
-        return;
-    }
-    let mut buf = [0u8; 10]; // u32 max is 10 digits
-    let mut i = buf.len();
-    while n > 0 {
-        i -= 1;
-        buf[i] = b'0' + (n % 10) as u8;
-        n /= 10;
-    }
-    debug_write(&buf[i..]);
-}
-
-/// Panic handler -- prints file and line number for diagnostics.
+/// Panic handler.
+///
+/// Prints a fixed message and exits. We intentionally avoid accessing
+/// `PanicInfo::location()` because userstart is built with
+/// `debug = false` in release mode, which can produce invalid string
+/// pointers for the file path, causing a kernel GPF when passed to
+/// `zx_debug_write`.
 #[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    debug_write(b"userstart: PANIC at ");
-    if let Some(loc) = info.location() {
-        debug_write(loc.file().as_bytes());
-        debug_write(b":");
-        print_dec(loc.line());
-    } else {
-        debug_write(b"<unknown>");
-    }
-    debug_write(b"\n");
+fn panic(_info: &PanicInfo) -> ! {
+    debug_write(b"userstart: PANIC!\n");
     process_exit(1);
 }
