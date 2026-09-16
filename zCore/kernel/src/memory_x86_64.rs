@@ -33,7 +33,7 @@ pub fn insert_regions(regions: &[Range<PhysAddr>]) {
         let frame_end = phys_addr_to_frame_idx(region.end - 1) + 1;
         if frame_start < frame_end {
             ba.insert(frame_start..frame_end);
-            info!(
+            trace!(
                 "Frame allocator: add range {:#x?}",
                 frame_idx_to_phys_addr(frame_start)..frame_idx_to_phys_addr(frame_end),
             );

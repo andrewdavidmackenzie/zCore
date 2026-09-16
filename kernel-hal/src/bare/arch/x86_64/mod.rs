@@ -95,7 +95,9 @@ pub fn primary_init() {
     // UserContext::enter_uspace() (kernel-hal/src/common/context.rs).
 
     // Boot application processors (SMP)
-    smp::boot_application_processors();
+    // TODO: SMP boot hangs on ThinkPad P1 Gen 3 -- investigate trampoline
+    // identity mapping with phys_to_virt mask. Skipping for now.
+    // smp::boot_application_processors();
 }
 
 pub fn timer_init() {
