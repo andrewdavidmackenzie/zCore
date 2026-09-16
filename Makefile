@@ -93,6 +93,18 @@ OUTPUT ?= target/x86_64/release/zcore-uefi.img
 x86-uefi-image: build
 	@tools/scripts/x86-uefi-image.sh $(OUTPUT)
 
+# Write a UEFI boot image to a USB drive.
+# Usage: make x86-uefi-usb USB=/dev/disk5
+# WARNING: This erases all data on the USB drive!
+USB ?= /dev/disk5
+x86-uefi-usb: x86-uefi-image
+	@echo "==> Writing UEFI image to $(USB)..."
+	diskutil unmountDisk $(USB)
+	sudo dd if=$(OUTPUT) of=$$(echo $(USB) | sed 's|/dev/disk|/dev/rdisk|') bs=1m
+	sync
+	diskutil eject $(USB)
+	@echo "==> Done. Insert USB into target machine and boot from UEFI."
+
 # Zircon boot smoke test: build in Zircon mode, start QEMU, wait for
 # userstart hello message, verify clean shutdown.
 zircon-boot-test:
