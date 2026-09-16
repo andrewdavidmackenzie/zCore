@@ -5,7 +5,6 @@ use zircon_object::{object::KernelObject, task::Process};
 pub struct BootOptions {
     #[allow(dead_code)]
     pub cmdline: String,
-    pub log_level: String,
     /// Root process path. Used by Linux (always) and Zircon bare-metal
     /// (rootfs-based boot). Not needed for Zircon libos (uses ZBI).
     #[cfg(any(feature = "linux", all(feature = "zircon", not(feature = "libos"))))]
@@ -46,17 +45,13 @@ pub fn boot_options() -> BootOptions {
                 std::process::exit(-1);
             }
 
-            let (cmdline, log_level) = if cfg!(feature = "zircon") {
-                let cmdline = args.get(2).cloned().unwrap_or_default();
-                let options = parse_cmdline(&cmdline);
-                let log_level = String::from(*options.get("LOG").unwrap_or(&""));
-                (cmdline, log_level)
+            let cmdline = if cfg!(feature = "zircon") {
+                args.get(2).cloned().unwrap_or_default()
             } else {
-                (String::new(), std::env::var("LOG").unwrap_or_default())
+                String::new()
             };
             BootOptions {
                 cmdline,
-                log_level,
                 #[cfg(any(feature = "linux", all(feature = "zircon", not(feature = "libos"))))]
                 root_proc: args[1..].join("?"),
             }
@@ -66,7 +61,6 @@ pub fn boot_options() -> BootOptions {
             let options = parse_cmdline(&cmdline);
             BootOptions {
                 cmdline: cmdline.clone(),
-                log_level: options.get("LOG").unwrap_or(&"").to_string(),
                 #[cfg(any(feature = "linux", all(feature = "zircon", not(feature = "libos"))))]
                 root_proc: options.get("ROOTPROC").unwrap_or(
                     if cfg!(feature = "linux") { &"/bin/busybox?sh" } else { &"/bin/hello" }

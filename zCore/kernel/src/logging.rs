@@ -1,16 +1,19 @@
 use core::fmt;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
 
-/// Initialize logging with the default max log level (WARN).
-pub fn init() {
+/// Initialize logging, extracting the log level from a cmdline string.
+///
+/// Parses `LOG=<level>` from the cmdline (e.g. "LOG=info ROOTPROC=/bin/sh").
+/// Defaults to WARN if not specified or unparseable.
+pub fn init(cmdline: &str) {
     static LOGGER: SimpleLogger = SimpleLogger;
     log::set_logger(&LOGGER).unwrap();
-    log::set_max_level(LevelFilter::Warn);
-}
-
-/// Reset max log level.
-pub fn set_max_level(level: &str) {
-    log::set_max_level(level.parse().unwrap_or(LevelFilter::Warn));
+    let level = cmdline
+        .split_whitespace()
+        .find_map(|s| s.strip_prefix("LOG="))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(LevelFilter::Warn);
+    log::set_max_level(level);
 }
 
 #[inline]

@@ -8,7 +8,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 
 .PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
-	petal-shell raspi400-build raspi400-run raspi400-sd x86-uefi-image
+	petal-shell raspi400-build raspi400-run raspi400-sd x86-zircon-build x86-uefi-image
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -86,12 +86,36 @@ raspi400-run: raspi400-build
 raspi400-sd: raspi400-build
 	@tools/raspi/prepare-sd.sh $(SD)
 
+# Build x86_64 kernel in Zircon mode with petal shell.
+x86-zircon-build:
+	@echo "==> Building userstart..."
+	@cargo build -p userstart --target x86_64-unknown-none \
+		--release --target-dir target/userstart
+	@echo "==> Building petal shell ZBI..."
+	@cargo petal-zbi --arch x86_64 --bin shell
+	@echo "==> Building zCore kernel (Zircon, x86_64)..."
+	@USERSTART_ELF="$$(pwd)/target/userstart/x86_64-unknown-none/release/userstart" \
+		PETAL_ZBI="$$(pwd)/target/petal/x86_64/petal.zbi" \
+		ZCORE_CMDLINE="LOG=info ROOTPROC=/bin/shell" \
+		cargo build -p zcore --no-default-features --features zircon \
+		--target zCore/x86_64.json -Z json-target-spec \
+		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
+		--release
+
 # Create a UEFI-bootable disk image for x86_64 real hardware.
 # The image can be written to a USB drive with dd.
 # Usage: make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img
+#        make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img MODE=zircon
+MODE ?= linux
 OUTPUT ?= target/x86_64/release/zcore-uefi.img
-x86-uefi-image: build
+x86-uefi-image:
+ifeq ($(MODE),zircon)
+	$(MAKE) x86-zircon-build
+	@tools/scripts/x86-uefi-image.sh $(OUTPUT) none
+else
+	$(MAKE) build ARCH=x86_64
 	@tools/scripts/x86-uefi-image.sh $(OUTPUT)
+endif
 
 # Write a UEFI boot image to a USB drive.
 # Usage: make x86-uefi-usb USB=/dev/disk5

@@ -109,9 +109,12 @@ pub fn write_str(s: &str) {
 
     for byte in s.bytes() {
         // Suppress ANSI escape sequences (e.g. "\x1b[31m" color codes).
+        // Format: ESC [ <parameter bytes 0x30-0x3F>* <final byte 0x40-0x7E>
+        // The '[' (0x5B) is the CSI introducer, not a final byte.
         if console.in_escape {
-            // CSI sequences end with a letter (0x40..=0x7E).
-            if matches!(byte, 0x40..=0x7E) {
+            // Final bytes are 0x40..=0x7E, but skip '[' (0x5B) which is
+            // the CSI introducer, and intermediate bytes (0x20..=0x2F).
+            if matches!(byte, 0x40..=0x7E) && byte != b'[' {
                 console.in_escape = false;
             }
             continue;

@@ -9,6 +9,7 @@
 set -euo pipefail
 
 OUTPUT="${1:?Usage: $0 <output-image>}"
+ROOTFS="${2:-auto}"  # "auto" = include if exists, "none" = skip
 KERNEL_ELF="target/x86_64/release/zcore"
 ROOTFS_IMG="zCore/x86_64.img"
 BOOTIMAGE_DIR="tools/x86-bootimage"
@@ -35,7 +36,7 @@ fi
 
 # Build the UEFI image
 ARGS=("$KERNEL_ELF" "$OUTPUT" "--uefi")
-if [ -f "$ROOTFS_IMG" ]; then
+if [ "$ROOTFS" != "none" ] && [ -f "$ROOTFS_IMG" ]; then
     ARGS+=("--ramdisk" "$ROOTFS_IMG")
 fi
 
