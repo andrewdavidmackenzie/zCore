@@ -11,6 +11,7 @@ pub struct BootOptions {
     pub root_proc: String,
 }
 
+#[allow(dead_code)]
 fn parse_cmdline(cmdline: &str) -> BTreeMap<&str, &str> {
     let mut options = BTreeMap::new();
     // Split on spaces (standard kernel cmdline format).

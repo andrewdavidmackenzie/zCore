@@ -3,7 +3,8 @@ use crate::utils::init_once::InitOnce;
 pub use super::imp::config::*;
 
 #[cfg(feature = "libos")]
-pub(crate) static KCONFIG: InitOnce<KernelConfig> = InitOnce::new_with_default(KernelConfig);
+pub(crate) static KCONFIG: InitOnce<KernelConfig> =
+    InitOnce::new_with_default(KernelConfig { cmdline: "" });
 
 #[cfg(not(feature = "libos"))]
 pub(crate) static KCONFIG: InitOnce<KernelConfig> = InitOnce::new();
