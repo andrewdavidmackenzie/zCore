@@ -91,19 +91,7 @@ fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
     };
 
     let phys_offset = match boot_info.physical_memory_offset {
-        Optional::Some(offset) => {
-            // Validate the physical memory offset is in canonical high-half range.
-            // The bootloader should map physical memory at 0xFFFF_8000_0000_0000
-            // (as configured in BOOTLOADER_CONFIG). If bit 63 is missing, the
-            // mapping is non-canonical and will cause #GP faults.
-            if offset & (1u64 << 63) == 0 {
-                // Workaround: some UEFI bootloader configurations produce an
-                // offset with bit 63 clear. Force it to the canonical form.
-                (offset | (1u64 << 63)) as usize
-            } else {
-                offset as usize
-            }
-        }
+        Optional::Some(offset) => offset as usize,
         Optional::None => 0,
     };
 
