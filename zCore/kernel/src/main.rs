@@ -39,7 +39,7 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 static MOCK_CORE: AtomicBool = AtomicBool::new(false);
 
 fn primary_main(config: kernel_hal::KernelConfig) {
-    logging::init();
+    logging::init(logging::parse_log_level(config.cmdline));
     #[cfg(not(feature = "libos"))]
     memory::init();
     kernel_hal::primary_init_early(config, &handler::ZcoreKernelHandler);
@@ -49,13 +49,13 @@ fn primary_main(config: kernel_hal::KernelConfig) {
     println!("zCore on Raspberry Pi 400!");
 
     let options = utils::boot_options();
-    logging::set_max_level(&options.log_level);
 
     info!("Boot options: {:#?}", options);
 
     #[cfg(not(feature = "libos"))]
     memory::insert_regions(&kernel_hal::mem::free_pmem_regions());
     kernel_hal::primary_init();
+    info!("primary_init done");
     STARTED.store(true, Ordering::SeqCst);
     cfg_if! {
         if #[cfg(all(feature = "linux", feature = "zircon"))] {
@@ -63,8 +63,11 @@ fn primary_main(config: kernel_hal::KernelConfig) {
         } else if #[cfg(feature = "linux")] {
             let args = options.root_proc.split('?').map(Into::into).collect(); // parse "arg0?arg1?arg2"
             let envs = alloc::vec!["PATH=/usr/sbin:/usr/bin:/sbin:/bin".into()];
+            info!("loading rootfs...");
             let rootfs = fs::rootfs();
+            info!("rootfs loaded, starting Linux process...");
             let proc = linux_loader::linux::run(args, envs, rootfs);
+            info!("Linux process started, entering executor...");
             utils::wait_for_exit(Some(proc))
         } else if #[cfg(feature = "zircon")] {
             // Try rootfs-based boot first (SFS image with petal programs).

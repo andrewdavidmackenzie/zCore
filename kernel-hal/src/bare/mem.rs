@@ -8,6 +8,12 @@ use crate::{PhysAddr, VirtAddr, KCONFIG};
 hal_fn_impl! {
     impl mod crate::hal_fn::mem {
         fn phys_to_virt(paddr: PhysAddr) -> VirtAddr {
+            // On x86_64, physical addresses are at most 52 bits wide.
+            // Mask off bits 52-63 which may contain PTE flags (NX bit etc.)
+            // if a caller passes a raw page table entry instead of a
+            // properly extracted physical address.
+            #[cfg(target_arch = "x86_64")]
+            let paddr = paddr & 0x000F_FFFF_FFFF_FFFF;
             KCONFIG.phys_to_virt_offset + paddr
         }
 

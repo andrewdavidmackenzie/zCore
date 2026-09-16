@@ -2,4 +2,6 @@
 
 /// Kernel configuration passed by kernel when calls [`crate::primary_init_early()`].
 #[derive(Debug)]
-pub struct KernelConfig;
+pub struct KernelConfig {
+    pub cmdline: &'static str,
+}

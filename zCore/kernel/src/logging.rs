@@ -1,16 +1,23 @@
 use core::fmt;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
 
-/// Initialize logging with the default max log level (WARN).
-pub fn init() {
+/// Initialize logging with the given log level filter.
+pub fn init(level: LevelFilter) {
     static LOGGER: SimpleLogger = SimpleLogger;
     log::set_logger(&LOGGER).unwrap();
-    log::set_max_level(LevelFilter::Warn);
+    log::set_max_level(level);
 }
 
-/// Reset max log level.
-pub fn set_max_level(level: &str) {
-    log::set_max_level(level.parse().unwrap_or(LevelFilter::Warn));
+/// Parse a log level from a kernel cmdline string.
+///
+/// Looks for `LOG=<level>` (e.g. "LOG=info ROOTPROC=/bin/sh").
+/// Returns the parsed level, or `Warn` if not specified or unparseable.
+pub fn parse_log_level(cmdline: &str) -> LevelFilter {
+    cmdline
+        .split_whitespace()
+        .find_map(|s| s.strip_prefix("LOG="))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(LevelFilter::Warn)
 }
 
 #[inline]
@@ -21,7 +28,7 @@ pub fn print(args: fmt::Arguments) {
 #[allow(dead_code)]
 #[inline]
 pub fn debug_print(args: fmt::Arguments) {
-    kernel_hal::console::debug_write_fmt(args);
+    kernel_hal::console::console_write_fmt(args);
 }
 
 #[macro_export]

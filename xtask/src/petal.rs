@@ -152,13 +152,13 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
 
 /// Build all petal programs and create a Zircon rootfs directory.
 /// The directory layout mirrors the Linux rootfs: `bin/hello`,
-/// `bin/channel_test`, `bin/vmo_test`.
+/// `bin/channel-test`, `bin/vmo-test`.
 /// Returns the path to the rootfs directory.
 pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
     let rootfs_dir = PROJECT_DIR.join("rootfs").join("zircon").join(arch.name());
     let bin_dir = rootfs_dir.join("bin");
 
-    const PETAL_BINS: &[&str] = &["hello", "channel_test", "vmo_test"];
+    const PETAL_BINS: &[&str] = &["hello", "channel-test", "vmo-test"];
 
     // Check if rootfs is already populated with all expected binaries
     if PETAL_BINS.iter().all(|name| bin_dir.join(name).is_file()) {

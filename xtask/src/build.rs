@@ -99,6 +99,12 @@ impl BuildConfig {
         if !features.contains("zircon") {
             features.insert("linux".into());
         }
+        // Pass through ZCORE_CMDLINE from the environment if set,
+        // allowing `make build LOG=info` to flow through to the kernel.
+        if let Ok(cmdline) = std::env::var("ZCORE_CMDLINE") {
+            env.insert("ZCORE_CMDLINE".into(), cmdline.into());
+        }
+
         Self {
             arch,
             debug: args.debug,
@@ -200,7 +206,7 @@ impl QemuArgs {
         } else if !is_zircon {
             // Build default Linux rootfs image
             self.arch.linux_rootfs().image();
-            INNER.join(format!("{}.img", self.arch.arch.name()))
+            INNER.join(format!("{}-linux.img", self.arch.arch.name()))
         } else {
             // Zircon mode: build rootfs image with petal programs.
             // The kernel prefers rootfs over embedded ZBI.
@@ -225,11 +231,11 @@ impl QemuArgs {
         // For Zircon with --rootfs-image, include ROOTPROC so the
         // kernel knows which program to load from the rootfs.
         let cmdline = if is_zircon && self.rootfs_image.is_some() {
-            format!("LOG={}:ROOTPROC=/bin/hello", self.log)
+            format!("LOG={} ROOTPROC=/bin/hello", self.log)
         } else if is_zircon {
             format!("LOG={}", self.log)
         } else {
-            format!("LOG={}:ROOTPROC=/bin/busybox?sh", self.log)
+            format!("LOG={} ROOTPROC=/bin/busybox?sh", self.log)
         };
         build_config
             .env

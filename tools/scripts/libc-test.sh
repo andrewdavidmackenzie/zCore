@@ -26,7 +26,7 @@ SESSION_TIMEOUT=300
 case "$ARCH" in
   aarch64)
     KERNEL="target/aarch64/release/zcore.bin"
-    IMAGE="zCore/aarch64.img"
+    IMAGE="zCore/aarch64-linux.img"
     CROSS_COMPILE="aarch64-linux-musl-"
     # Find musl cross-compiler: macOS uses Homebrew, Linux has it in PATH
     MUSL_BIN=""
@@ -48,7 +48,7 @@ case "$ARCH" in
   x86_64)
     KERNEL_ELF="target/x86_64/release/zcore"
     BOOT_IMG="target/x86_64/release/boot.img"
-    IMAGE="zCore/x86_64.img"
+    IMAGE="zCore/x86_64-linux.img"
     CROSS_COMPILE="x86_64-linux-musl-"
     # Find musl cross-compiler: macOS uses Homebrew, Linux has it in PATH
     MUSL_BIN=""

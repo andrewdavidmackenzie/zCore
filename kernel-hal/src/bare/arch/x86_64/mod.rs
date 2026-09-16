@@ -1,4 +1,5 @@
 mod drivers;
+pub(crate) mod fb_console;
 mod smp;
 mod trap;
 
@@ -11,7 +12,22 @@ pub mod vm;
 
 pub mod special;
 
-hal_fn_impl_default!(crate::hal_fn::console);
+hal_fn_impl! {
+    impl mod crate::hal_fn::console {
+        fn console_write_early(s: &str) {
+            // COM1 (0x3F8): direct register writes, always available on x86.
+            for b in s.bytes() {
+                unsafe {
+                    // Wait for THR empty (LSR bit 5)
+                    while x86::io::inb(0x3FD) & 0x20 == 0 {}
+                    x86::io::outb(0x3F8, b);
+                }
+            }
+            // Framebuffer: visible output on real hardware without serial.
+            fb_console::write_str(s);
+        }
+    }
+}
 
 use crate::KCONFIG;
 use x86_64::registers::control::{Cr4, Cr4Flags};
@@ -38,6 +54,19 @@ pub fn init_ram_disk() -> Option<&'static mut [u8]> {
 pub fn primary_init_early() {
     // init serial output first
     drivers::init_early().unwrap();
+    // init framebuffer console (if available)
+    fb_console::init();
+    // Log key boot values for diagnostics
+    info!(
+        "phys_to_virt_offset = {:#x}",
+        crate::KCONFIG.phys_to_virt_offset
+    );
+    if let Some(ref fb) = crate::KCONFIG.framebuffer {
+        info!(
+            "framebuffer: {}x{}, bpp inferred, phys={:#x}",
+            fb.width, fb.height, fb.addr
+        );
+    }
 }
 
 pub fn primary_init() {
@@ -66,7 +95,9 @@ pub fn primary_init() {
     // UserContext::enter_uspace() (kernel-hal/src/common/context.rs).
 
     // Boot application processors (SMP)
-    smp::boot_application_processors();
+    // TODO: SMP boot hangs on ThinkPad P1 Gen 3 -- investigate trampoline
+    // identity mapping with phys_to_virt mask. Skipping for now.
+    // smp::boot_application_processors();
 }
 
 pub fn timer_init() {

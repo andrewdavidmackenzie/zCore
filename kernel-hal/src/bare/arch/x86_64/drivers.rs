@@ -25,11 +25,14 @@ pub(super) fn init() -> DeviceResult {
         x86::io::outb(0xA1, 0xFF); // mask all on slave PIC
         x86::io::outb(0x21, 0xFF); // mask all on master PIC
     }
+    warn!("APIC: init local APIC BSP...");
     Apic::init_local_apic_bsp(crate::mem::phys_to_virt);
+    warn!("APIC: parsing ACPI tables...");
     let irq = Arc::new(Apic::new(
         super::special::pc_firmware_tables().0 as usize,
         crate::mem::phys_to_virt,
     ));
+    warn!("APIC: init done, setting up UART IRQs...");
     let uarts = drivers::all_uart();
     if let Some(u) = uarts.try_get(0) {
         irq.register_device(trap::X86_ISA_IRQ_COM1, u.clone().upcast())?;
@@ -40,16 +43,19 @@ pub(super) fn init() -> DeviceResult {
             irq.unmask(trap::X86_ISA_IRQ_COM2)?;
         }
     }
+    warn!("UART IRQs done, configuring APIC timer...");
 
     use x2apic::lapic::{TimerDivide, TimerMode};
 
     irq.register_local_apic_handler(trap::X86_INT_APIC_TIMER, Box::new(super::trap::super_timer))?;
 
+    warn!("Measuring CPU frequency...");
     // SAFETY: this will be called once and only once for every core
     Apic::local_apic().set_timer_mode(TimerMode::Periodic);
     Apic::local_apic().set_timer_divide(TimerDivide::Div1);
-    let cycles =
-        super::cpu::cpu_frequency() as u64 * 1_000_000 / super::super::timer::TICKS_PER_SEC;
+    let freq = super::cpu::cpu_frequency();
+    let cycles = freq as u64 * 1_000_000 / super::super::timer::TICKS_PER_SEC;
+    warn!("CPU freq={} MHz, timer cycles={}", freq, cycles);
     Apic::local_apic().set_timer_initial(cycles as u32);
     Apic::local_apic().disable_timer();
 
@@ -57,16 +63,10 @@ pub(super) fn init() -> DeviceResult {
 
     #[cfg(not(feature = "no-pci"))]
     {
-        // PCI scan
-        use kernel_drivers::bus::pci;
-        let pci_devs = pci::init(None)?;
-        for d in pci_devs.into_iter() {
-            drivers::add_device(d);
-        }
+        // PCI scan -- skip on real hardware for now (#269).
+        warn!("PCI scan skipped (#269)");
     }
 
-    // graphic and loopback features removed (see #237)
-
-    info!("Drivers init end.");
+    warn!("Drivers init end.");
     Ok(())
 }
