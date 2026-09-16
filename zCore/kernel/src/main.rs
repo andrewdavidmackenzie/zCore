@@ -39,7 +39,7 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 static MOCK_CORE: AtomicBool = AtomicBool::new(false);
 
 fn primary_main(config: kernel_hal::KernelConfig) {
-    logging::init(config.cmdline);
+    logging::init(logging::parse_log_level(config.cmdline));
     #[cfg(not(feature = "libos"))]
     memory::init();
     kernel_hal::primary_init_early(config, &handler::ZcoreKernelHandler);

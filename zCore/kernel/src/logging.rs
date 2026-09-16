@@ -1,19 +1,23 @@
 use core::fmt;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
 
-/// Initialize logging, extracting the log level from a cmdline string.
-///
-/// Parses `LOG=<level>` from the cmdline (e.g. "LOG=info ROOTPROC=/bin/sh").
-/// Defaults to WARN if not specified or unparseable.
-pub fn init(cmdline: &str) {
+/// Initialize logging with the given log level filter.
+pub fn init(level: LevelFilter) {
     static LOGGER: SimpleLogger = SimpleLogger;
     log::set_logger(&LOGGER).unwrap();
-    let level = cmdline
+    log::set_max_level(level);
+}
+
+/// Parse a log level from a kernel cmdline string.
+///
+/// Looks for `LOG=<level>` (e.g. "LOG=info ROOTPROC=/bin/sh").
+/// Returns the parsed level, or `Warn` if not specified or unparseable.
+pub fn parse_log_level(cmdline: &str) -> LevelFilter {
+    cmdline
         .split_whitespace()
         .find_map(|s| s.strip_prefix("LOG="))
         .and_then(|s| s.parse().ok())
-        .unwrap_or(LevelFilter::Warn);
-    log::set_max_level(level);
+        .unwrap_or(LevelFilter::Warn)
 }
 
 #[inline]
