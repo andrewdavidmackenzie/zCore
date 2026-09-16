@@ -13,11 +13,8 @@ pub struct BootOptions {
 
 fn parse_cmdline(cmdline: &str) -> BTreeMap<&str, &str> {
     let mut options = BTreeMap::new();
-    // Split on both spaces and colons to support:
-    //   - Pi firmware DTB bootargs (space-separated)
-    //   - zCore compile-time cmdline (colon-separated)
-    //   - Mixed (firmware prepends space-separated args before our colon-separated ones)
-    for token in cmdline.split(|c: char| c == ' ' || c == ':') {
+    // Split on spaces (standard kernel cmdline format).
+    for token in cmdline.split_whitespace() {
         let token = token.trim();
         if token.is_empty() {
             continue;

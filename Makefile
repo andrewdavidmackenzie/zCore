@@ -15,7 +15,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 # cargo bin:   compiles the kernel ELF (for riscv64, also objcopy to .bin)
 build:
 	cargo image --arch $(ARCH)
-	ZCORE_CMDLINE="LOG=$(LOG):ROOTPROC=/bin/busybox?sh" cargo bin -m virt-$(ARCH)
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo bin -m virt-$(ARCH)
 
 # Build (if needed) and run zCore interactively in QEMU.
 # cargo qemu does: build rootfs image, build kernel, launch QEMU.

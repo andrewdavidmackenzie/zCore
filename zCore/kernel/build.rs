@@ -28,11 +28,11 @@ fn main() {
         std::env::var("TARGET").unwrap()
     );
 
-    // Provide a default ZCORE_CMDLINE if not set (allows building the
-    // kernel without xtask setting it).
-    if std::env::var("ZCORE_CMDLINE").is_err() {
-        println!("cargo:rustc-env=ZCORE_CMDLINE=LOG=warn");
-    }
+    // Pass ZCORE_CMDLINE to the kernel as a compile-time env var.
+    // Defaults to LOG=warn if not set by the build system.
+    println!("cargo:rerun-if-env-changed=ZCORE_CMDLINE");
+    let cmdline = std::env::var("ZCORE_CMDLINE").unwrap_or_else(|_| "LOG=warn".to_string());
+    println!("cargo:rustc-env=ZCORE_CMDLINE={cmdline}");
 
     // For Zircon mode: if PETAL_ZBI is not set, generate an empty stub
     // so include_bytes! doesn't fail. The rootfs-based boot path doesn't
