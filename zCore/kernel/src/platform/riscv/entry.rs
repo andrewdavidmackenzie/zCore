@@ -82,6 +82,7 @@ device tree:       {device_tree_paddr:016x}..{:016x}
     );
     // Transfer control
     crate::primary_main(KernelConfig {
+        cmdline: env!("ZCORE_CMDLINE"),
         phys_to_virt_offset: mem_info.offset(),
         dtb_paddr: device_tree_paddr,
         dtb_size: dtb.total_size() as _,
