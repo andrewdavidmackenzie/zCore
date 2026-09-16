@@ -27,6 +27,8 @@ struct FbConsole {
     /// Maximum columns and rows.
     max_col: u32,
     max_row: u32,
+    /// True when inside an ANSI escape sequence (suppress output).
+    in_escape: bool,
 }
 
 unsafe impl Send for FbConsole {}
@@ -69,6 +71,7 @@ pub fn init() {
         row: 0,
         max_col: fb.width / CHAR_W,
         max_row: fb.height / CHAR_H,
+        in_escape: false,
     };
 
     // Clear screen to dark blue (visible sign of life).
@@ -105,7 +108,19 @@ pub fn write_str(s: &str) {
     };
 
     for byte in s.bytes() {
+        // Suppress ANSI escape sequences (e.g. "\x1b[31m" color codes).
+        if console.in_escape {
+            // CSI sequences end with a letter (0x40..=0x7E).
+            if matches!(byte, 0x40..=0x7E) {
+                console.in_escape = false;
+            }
+            continue;
+        }
+
         match byte {
+            0x1b => {
+                console.in_escape = true;
+            }
             b'\n' | b'\r' => {
                 if byte == b'\n' {
                     console.col = 0;
@@ -136,9 +151,7 @@ pub fn write_str(s: &str) {
                     }
                 }
             }
-            // Skip ANSI escape sequences (color codes from the logger).
-            0x1b => {} // Start of escape -- handled by skipping until 'm'
-            _ => {}    // Ignore other control chars
+            _ => {} // Ignore other control chars
         }
     }
 }

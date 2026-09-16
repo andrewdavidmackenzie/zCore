@@ -8,7 +8,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 
 .PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
-	petal-shell raspi400-build raspi400-run raspi400-sd
+	petal-shell raspi400-build raspi400-run raspi400-sd x86-uefi-image
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -85,6 +85,13 @@ raspi400-run: raspi400-build
 #   SD= is the mount point of the SD card's FAT32 partition.
 raspi400-sd: raspi400-build
 	@tools/raspi/prepare-sd.sh $(SD)
+
+# Create a UEFI-bootable disk image for x86_64 real hardware.
+# The image can be written to a USB drive with dd.
+# Usage: make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img
+OUTPUT ?= target/x86_64/release/zcore-uefi.img
+x86-uefi-image: build
+	@tools/scripts/x86-uefi-image.sh $(OUTPUT)
 
 # Zircon boot smoke test: build in Zircon mode, start QEMU, wait for
 # userstart hello message, verify clean shutdown.

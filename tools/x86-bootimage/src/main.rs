@@ -1,13 +1,14 @@
 //! Helper tool to create x86_64 bootable disk images.
 //!
-//! Uses the `bootloader` crate to create BIOS bootable images
+//! Uses the `bootloader` crate to create BIOS and UEFI bootable images
 //! from the zCore kernel ELF, optionally embedding a ramdisk (rootfs).
 //!
-//! UEFI boot requires rebuilding with the patched bootloader fork.
-//! See Cargo.toml for instructions.
-//!
 //! Usage:
-//!   x86-bootimage <kernel-elf> <output-image> [--ramdisk <rootfs-image>]
+//!   x86-bootimage <kernel-elf> <output-image> [--ramdisk <rootfs-image>] [--uefi]
+//!
+//! The --uefi flag requires building with the "uefi" feature and the
+//! patched bootloader fork. Use tools/scripts/x86-uefi-image.sh which
+//! handles this automatically.
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -16,7 +17,7 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
         eprintln!(
-            "Usage: {} <kernel-elf> <output-image> [--ramdisk <rootfs-image>]",
+            "Usage: {} <kernel-elf> <output-image> [--ramdisk <rootfs-image>] [--uefi]",
             args[0]
         );
         std::process::exit(1);
@@ -24,6 +25,7 @@ fn main() -> Result<()> {
 
     let kernel_path = PathBuf::from(&args[1]);
     let output_path = PathBuf::from(&args[2]);
+    let uefi_mode = args.iter().any(|a| a == "--uefi");
 
     // Parse optional --ramdisk <path>
     let ramdisk_path = match args.iter().position(|a| a == "--ramdisk") {
@@ -43,18 +45,18 @@ fn main() -> Result<()> {
         }
     }
 
-    let mut boot = bootloader::BiosBoot::new(&kernel_path);
-    if let Some(ref rd) = ramdisk_path {
-        println!("  Ramdisk: {}", rd.display());
-        boot.set_ramdisk(rd as &Path);
-    }
-
+    let mode = if uefi_mode { "UEFI" } else { "BIOS" };
     println!(
-        "Creating BIOS boot image from {}...",
+        "Creating {} boot image from {}...",
+        mode,
         kernel_path.display()
     );
-    boot.create_disk_image(&output_path)
-        .context("failed to create BIOS boot image")?;
+
+    if uefi_mode {
+        create_uefi_image(&kernel_path, &output_path, ramdisk_path.as_deref())?;
+    } else {
+        create_bios_image(&kernel_path, &output_path, ramdisk_path.as_deref())?;
+    }
 
     println!(
         "Boot image created: {} ({} bytes)",
@@ -62,4 +64,33 @@ fn main() -> Result<()> {
         std::fs::metadata(&output_path)?.len()
     );
     Ok(())
+}
+
+fn create_bios_image(kernel: &Path, output: &Path, ramdisk: Option<&Path>) -> Result<()> {
+    let mut boot = bootloader::BiosBoot::new(kernel);
+    if let Some(rd) = ramdisk {
+        println!("  Ramdisk: {}", rd.display());
+        boot.set_ramdisk(rd);
+    }
+    boot.create_disk_image(output)
+        .context("failed to create BIOS boot image")
+}
+
+#[cfg(feature = "uefi")]
+fn create_uefi_image(kernel: &Path, output: &Path, ramdisk: Option<&Path>) -> Result<()> {
+    let mut boot = bootloader::UefiBoot::new(kernel);
+    if let Some(rd) = ramdisk {
+        println!("  Ramdisk: {}", rd.display());
+        boot.set_ramdisk(rd);
+    }
+    boot.create_disk_image(output)
+        .context("failed to create UEFI boot image")
+}
+
+#[cfg(not(feature = "uefi"))]
+fn create_uefi_image(_kernel: &Path, _output: &Path, _ramdisk: Option<&Path>) -> Result<()> {
+    anyhow::bail!(
+        "UEFI support not enabled in this build.\n\
+         Use tools/scripts/x86-uefi-image.sh to create UEFI images."
+    )
 }
