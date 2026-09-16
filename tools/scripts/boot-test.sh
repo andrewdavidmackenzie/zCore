@@ -18,7 +18,7 @@ PROMPT_PATTERN='/ # '
 case "$ARCH" in
   aarch64)
     KERNEL="target/aarch64/release/zcore.bin"
-    IMAGE="zCore/aarch64.img"
+    IMAGE="zCore/aarch64-linux.img"
     QEMU_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -33,7 +33,7 @@ case "$ARCH" in
     # Build the boot image from the kernel ELF + rootfs SFS image.
     KERNEL_ELF="target/x86_64/release/zcore"
     BOOT_IMG="target/x86_64/release/boot.img"
-    ROOTFS_IMG="zCore/x86_64.img"
+    ROOTFS_IMG="zCore/x86_64-linux.img"
     BOOTIMAGE_TOOL="tools/x86-bootimage/target/release/x86-bootimage"
 
     if [ ! -f "$BOOTIMAGE_TOOL" ]; then

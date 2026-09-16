@@ -9,7 +9,7 @@ impl super::LinuxRootfs {
         self.make(false);
         // Image path
         let inner = PROJECT_DIR.join("zCore");
-        let image = inner.join(format!("{arch}.img", arch = self.0.name()));
+        let image = inner.join(format!("{arch}-linux.img", arch = self.0.name()));
         // Skip image creation if it already exists and is newer than the
         // rootfs directory. Recreating the image on every run triggers a
         // full kernel recompile because the image lives inside the zCore

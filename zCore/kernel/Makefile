@@ -195,7 +195,7 @@ else ifeq ($(ARCH), aarch64)
 		-serial file:/tmp/serial.out \
 		-bios ../ignored/target/aarch64/firmware/QEMU_EFI.fd \
 		-hda fat:rw:disk \
-		-drive file=aarch64.img,if=none,format=raw,id=x0 \
+		-drive file=aarch64-linux.img,if=none,format=raw,id=x0 \
 		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 endif
 
@@ -386,7 +386,7 @@ $(qemu_disk):
 ifeq ($(ARCH), riscv64)
 # FIXME: no longer need to create QCOW2 when use initrd for RISC-V
 	@echo Generating riscv64 sfsimg
-	@qemu-img convert -f raw riscv64.img -O qcow2 $@
+	@qemu-img convert -f raw riscv64-linux.img -O qcow2 $@
 	@qemu-img resize $@ +5M
 else
 	@qemu-img create -f qcow2 $@ 100M

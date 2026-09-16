@@ -41,12 +41,12 @@ change. See [#79](https://github.com/andrewdavidmackenzie/zCore/issues/79).
 
 | Path                  | Generator          |
 |-----------------------|--------------------|
-| `zCore/aarch64.img`   | `cargo image`      |
+| `zCore/aarch64-linux.img`   | `cargo image`      |
 |   SFS image from      | (xtask             |
 |   `rootfs/aarch64/`.  | LinuxRootfs::      |
 |   Used as virtio-blk  | image())           |
 |   drive in QEMU.      |                    |
-| `zCore/riscv64.img`   | `cargo image`      |
+| `zCore/riscv64-linux.img`   | `cargo image`      |
 |   SFS image from      |                    |
 |   `rootfs/riscv64/`.  |                    |
 |   Used as initrd.     |                    |

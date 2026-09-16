@@ -347,8 +347,8 @@ ifeq ($(XTASK), 1)
 	cargo image --arch $(ARCH)
 else ifeq ($(ARCH), riscv64)
 	@echo building riscv.img
-	@rcore-fs-fuse zCore/riscv64.img rootfs/riscv zip
-	@qemu-img resize -f raw zCore/riscv64.img +5M
+	@rcore-fs-fuse zCore/riscv64-linux.img rootfs/riscv zip
+	@qemu-img resize -f raw zCore/riscv64-linux.img +5M
 endif
 
 # Run clippy on all workspace crates.

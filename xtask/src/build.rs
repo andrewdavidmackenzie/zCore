@@ -200,7 +200,7 @@ impl QemuArgs {
         } else if !is_zircon {
             // Build default Linux rootfs image
             self.arch.linux_rootfs().image();
-            INNER.join(format!("{}.img", self.arch.arch.name()))
+            INNER.join(format!("{}-linux.img", self.arch.arch.name()))
         } else {
             // Zircon mode: build rootfs image with petal programs.
             // The kernel prefers rootfs over embedded ZBI.
