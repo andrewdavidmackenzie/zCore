@@ -461,9 +461,33 @@ fn load_flat(data: &[u8], vmar: HandleValue) -> (usize, usize) {
     (code_base, code_base + map_size)
 }
 
-/// Panic handler.
+/// Print a u32 as decimal digits via debug_write.
+fn print_dec(mut n: u32) {
+    if n == 0 {
+        debug_write(b"0");
+        return;
+    }
+    let mut buf = [0u8; 10]; // u32 max is 10 digits
+    let mut i = buf.len();
+    while n > 0 {
+        i -= 1;
+        buf[i] = b'0' + (n % 10) as u8;
+        n /= 10;
+    }
+    debug_write(&buf[i..]);
+}
+
+/// Panic handler -- prints file and line number for diagnostics.
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    debug_write(b"userstart: PANIC!\n");
+fn panic(info: &PanicInfo) -> ! {
+    debug_write(b"userstart: PANIC at ");
+    if let Some(loc) = info.location() {
+        debug_write(loc.file().as_bytes());
+        debug_write(b":");
+        print_dec(loc.line());
+    } else {
+        debug_write(b"<unknown>");
+    }
+    debug_write(b"\n");
     process_exit(1);
 }
