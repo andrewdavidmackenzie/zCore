@@ -12,13 +12,15 @@ const CHAR_H: u32 = 16;
 /// Framebuffer console state.
 struct FbConsole {
     /// Virtual address of the framebuffer.
-    base: *mut u32,
+    base: *mut u8,
     /// Width in pixels.
     width: u32,
     /// Height in pixels.
     height: u32,
-    /// Stride in pixels (may differ from width).
-    stride: u32,
+    /// Stride in bytes (stride_pixels * bpp).
+    stride_bytes: u32,
+    /// Bytes per pixel (3 for BGR, 4 for BGRA).
+    bpp: u32,
     /// Current cursor position (column, row) in character cells.
     col: u32,
     row: u32,
@@ -43,11 +45,26 @@ pub fn init() {
     // Convert physical address to virtual using the phys_to_virt offset.
     let vaddr = (fb.addr as usize) + crate::KCONFIG.phys_to_virt_offset;
 
+    // Bytes per pixel: typically 3 (BGR) or 4 (BGRA).
+    // Default to 4 if not specified (FramebufferInfo doesn't have bpp,
+    // so infer from size: size / (height * stride) = bpp).
+    let bpp = if fb.height > 0 && fb.stride > 0 {
+        let total_pixels = fb.height as u64 * fb.stride as u64;
+        if total_pixels > 0 {
+            (fb.size / total_pixels) as u32
+        } else {
+            4
+        }
+    } else {
+        4
+    };
+
     let console = FbConsole {
-        base: vaddr as *mut u32,
+        base: vaddr as *mut u8,
         width: fb.width,
         height: fb.height,
-        stride: fb.stride,
+        stride_bytes: fb.stride * bpp,
+        bpp,
         col: 0,
         row: 0,
         max_col: fb.width / CHAR_W,
@@ -55,12 +72,23 @@ pub fn init() {
     };
 
     // Clear screen to dark blue (visible sign of life).
-    let bg = 0x00102040u32; // dark blue-grey
     unsafe {
-        for y in 0..console.height {
-            for x in 0..console.width {
-                let offset = (y * console.stride + x) as isize;
-                core::ptr::write_volatile(console.base.offset(offset), bg);
+        let total = (console.height * console.stride_bytes) as usize;
+        let buf = core::slice::from_raw_parts_mut(console.base, total);
+        for y in 0..console.height as usize {
+            for x in 0..console.width as usize {
+                let off = y * console.stride_bytes as usize + x * bpp as usize;
+                // BGR: B=0x40, G=0x20, R=0x10
+                buf[off] = 0x40;
+                if bpp >= 2 {
+                    buf[off + 1] = 0x20;
+                }
+                if bpp >= 3 {
+                    buf[off + 2] = 0x10;
+                }
+                if bpp >= 4 {
+                    buf[off + 3] = 0x00;
+                }
             }
         }
     }
@@ -116,20 +144,31 @@ pub fn write_str(s: &str) {
 }
 
 fn scroll_up(console: &mut FbConsole) {
-    let row_bytes = console.stride as usize;
+    let stride = console.stride_bytes as usize;
     let char_rows = CHAR_H as usize;
+    let bpp = console.bpp as usize;
     unsafe {
         // Move all rows up by one character row.
         for y in 0..(console.height as usize - char_rows) {
-            let dst = console.base.add(y * row_bytes);
-            let src = console.base.add((y + char_rows) * row_bytes);
-            core::ptr::copy(src, dst, row_bytes);
+            let dst = console.base.add(y * stride);
+            let src = console.base.add((y + char_rows) * stride);
+            core::ptr::copy(src, dst, stride);
         }
         // Clear the bottom row.
-        let bg = 0x00102040u32;
         for y in (console.height as usize - char_rows)..console.height as usize {
             for x in 0..console.width as usize {
-                core::ptr::write_volatile(console.base.add(y * row_bytes + x), bg);
+                let off = y * stride + x * bpp;
+                let p = console.base.add(off);
+                core::ptr::write_volatile(p, 0x40);
+                if bpp >= 2 {
+                    core::ptr::write_volatile(p.add(1), 0x20);
+                }
+                if bpp >= 3 {
+                    core::ptr::write_volatile(p.add(2), 0x10);
+                }
+                if bpp >= 4 {
+                    core::ptr::write_volatile(p.add(3), 0x00);
+                }
             }
         }
     }
@@ -137,23 +176,35 @@ fn scroll_up(console: &mut FbConsole) {
 }
 
 fn draw_char(console: &FbConsole, ch: u8, col: u32, row: u32) {
-    let fg = 0x00C0C0C0u32; // light grey
-    let bg = 0x00102040u32; // dark blue-grey
     let glyph = &FONT_8X16[(ch as usize) * 16..(ch as usize) * 16 + 16];
+    let bpp = console.bpp as usize;
+    let stride = console.stride_bytes as usize;
+    let x0 = (col * CHAR_W) as usize;
+    let y0 = (row * CHAR_H) as usize;
 
-    let x0 = col * CHAR_W;
-    let y0 = row * CHAR_H;
-
+    // Foreground: light grey (BGR: B=0xC0, G=0xC0, R=0xC0)
+    // Background: dark blue-grey (BGR: B=0x40, G=0x20, R=0x10)
     for (dy, &glyph_row) in glyph.iter().enumerate() {
-        for dx in 0..8u32 {
-            let pixel = if (glyph_row >> (7 - dx)) & 1 != 0 {
-                fg
+        for dx in 0..8usize {
+            let is_fg = (glyph_row >> (7 - dx)) & 1 != 0;
+            let (b, g, r) = if is_fg {
+                (0xC0u8, 0xC0u8, 0xC0u8)
             } else {
-                bg
+                (0x40u8, 0x20u8, 0x10u8)
             };
-            let offset = ((y0 + dy as u32) * console.stride + x0 + dx) as isize;
+            let off = (y0 + dy) * stride + (x0 + dx) * bpp;
             unsafe {
-                core::ptr::write_volatile(console.base.offset(offset), pixel);
+                let p = console.base.add(off);
+                core::ptr::write_volatile(p, b);
+                if bpp >= 2 {
+                    core::ptr::write_volatile(p.add(1), g);
+                }
+                if bpp >= 3 {
+                    core::ptr::write_volatile(p.add(2), r);
+                }
+                if bpp >= 4 {
+                    core::ptr::write_volatile(p.add(3), 0xFF);
+                }
             }
         }
     }
