@@ -41,7 +41,7 @@ case "$ARCH" in
 
     if [ ! -f "$BOOTIMAGE_TOOL" ]; then
       echo "Building x86-bootimage tool..."
-      cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
+      cargo -Z bindeps build --release --manifest-path tools/x86-bootimage/Cargo.toml
     fi
     BOOTIMAGE_ARGS=("$KERNEL_ELF" "$BOOT_IMG")
     if [ -f "$ROOTFS_IMG" ]; then

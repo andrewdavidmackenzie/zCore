@@ -1,3 +1,7 @@
 [submodule "libc-test"]
 	path = libc-test
 	url = https://github.com/rcore-os/libc-test
+[submodule "vendor/bootloader"]
+	path = vendor/bootloader
+	url = https://github.com/andrewdavidmackenzie/bootloader
+	branch = fix-wcslen
