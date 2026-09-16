@@ -5,10 +5,6 @@
 //!
 //! Usage:
 //!   x86-bootimage <kernel-elf> <output-image> [--ramdisk <rootfs-image>] [--uefi]
-//!
-//! The --uefi flag requires building with the "uefi" feature and the
-//! patched bootloader fork. Use tools/scripts/x86-uefi-image.sh which
-//! handles this automatically.
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -53,9 +49,21 @@ fn main() -> Result<()> {
     );
 
     if uefi_mode {
-        create_uefi_image(&kernel_path, &output_path, ramdisk_path.as_deref())?;
+        let mut boot = bootloader::UefiBoot::new(&kernel_path);
+        if let Some(ref rd) = ramdisk_path {
+            println!("  Ramdisk: {}", rd.display());
+            boot.set_ramdisk(rd as &Path);
+        }
+        boot.create_disk_image(&output_path)
+            .context("failed to create UEFI boot image")?;
     } else {
-        create_bios_image(&kernel_path, &output_path, ramdisk_path.as_deref())?;
+        let mut boot = bootloader::BiosBoot::new(&kernel_path);
+        if let Some(ref rd) = ramdisk_path {
+            println!("  Ramdisk: {}", rd.display());
+            boot.set_ramdisk(rd as &Path);
+        }
+        boot.create_disk_image(&output_path)
+            .context("failed to create BIOS boot image")?;
     }
 
     println!(
@@ -64,33 +72,4 @@ fn main() -> Result<()> {
         std::fs::metadata(&output_path)?.len()
     );
     Ok(())
-}
-
-fn create_bios_image(kernel: &Path, output: &Path, ramdisk: Option<&Path>) -> Result<()> {
-    let mut boot = bootloader::BiosBoot::new(kernel);
-    if let Some(rd) = ramdisk {
-        println!("  Ramdisk: {}", rd.display());
-        boot.set_ramdisk(rd);
-    }
-    boot.create_disk_image(output)
-        .context("failed to create BIOS boot image")
-}
-
-#[cfg(feature = "uefi")]
-fn create_uefi_image(kernel: &Path, output: &Path, ramdisk: Option<&Path>) -> Result<()> {
-    let mut boot = bootloader::UefiBoot::new(kernel);
-    if let Some(rd) = ramdisk {
-        println!("  Ramdisk: {}", rd.display());
-        boot.set_ramdisk(rd);
-    }
-    boot.create_disk_image(output)
-        .context("failed to create UEFI boot image")
-}
-
-#[cfg(not(feature = "uefi"))]
-fn create_uefi_image(_kernel: &Path, _output: &Path, _ramdisk: Option<&Path>) -> Result<()> {
-    anyhow::bail!(
-        "UEFI support not enabled in this build.\n\
-         Use tools/scripts/x86-uefi-image.sh to create UEFI images."
-    )
 }

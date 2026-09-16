@@ -2,8 +2,6 @@
 #
 # Build a UEFI-bootable disk image for x86_64 real hardware.
 #
-# Requires the vendor/bootloader git submodule to be checked out.
-#
 # Usage: tools/scripts/x86-uefi-image.sh <output-image>
 #
 # The output image can be written to a USB drive with dd.
@@ -14,15 +12,7 @@ OUTPUT="${1:?Usage: $0 <output-image>}"
 KERNEL_ELF="target/x86_64/release/zcore"
 ROOTFS_IMG="zCore/x86_64.img"
 BOOTIMAGE_DIR="tools/x86-bootimage"
-BOOTIMAGE_TOML="$BOOTIMAGE_DIR/Cargo.toml"
 BOOTIMAGE_TOOL="$BOOTIMAGE_DIR/target/release/x86-bootimage"
-
-# Check prerequisites
-if [ ! -d "vendor/bootloader/uefi" ]; then
-    echo "ERROR: vendor/bootloader submodule not checked out."
-    echo "Run: git submodule update --init vendor/bootloader"
-    exit 1
-fi
 
 # Build kernel if needed
 if [ ! -f "$KERNEL_ELF" ]; then
@@ -37,23 +27,11 @@ if [ ! -f "$KERNEL_ELF" ]; then
     exit 1
 fi
 
-# Save original Cargo.toml and swap to the UEFI-enabled fork
-ORIGINAL_DEP=$(grep '^bootloader = ' "$BOOTIMAGE_TOML")
-UEFI_DEP='bootloader = { path = "../../vendor/bootloader", default-features = false, features = ["bios", "uefi"] }'
-
-cleanup() {
-    # Restore original Cargo.toml
-    if [ -f "${BOOTIMAGE_TOML}.orig" ]; then
-        mv "${BOOTIMAGE_TOML}.orig" "$BOOTIMAGE_TOML"
-    fi
-}
-trap cleanup EXIT
-
-cp "$BOOTIMAGE_TOML" "${BOOTIMAGE_TOML}.orig"
-sed "s|^bootloader = .*|${UEFI_DEP}|" "${BOOTIMAGE_TOML}.orig" > "$BOOTIMAGE_TOML"
-
-echo "Building x86-bootimage tool with UEFI support..."
-cargo -Z bindeps build --release --manifest-path "$BOOTIMAGE_TOML" --features uefi
+# Build the bootimage tool if needed
+if [ ! -f "$BOOTIMAGE_TOOL" ]; then
+    echo "Building x86-bootimage tool..."
+    cargo build --release --manifest-path "$BOOTIMAGE_DIR/Cargo.toml"
+fi
 
 # Build the UEFI image
 ARGS=("$KERNEL_ELF" "$OUTPUT" "--uefi")
