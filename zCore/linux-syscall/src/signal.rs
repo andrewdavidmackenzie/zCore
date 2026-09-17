@@ -8,7 +8,9 @@
 //! - sigaltstack
 
 use super::*;
-use linux_object::signal::{Signal, SignalAction, SignalStack, SignalStackFlags, Sigset};
+use linux_object::signal::{
+    SigInfo, SiginfoFields, Signal, SignalAction, SignalCode, SignalStack, SignalStackFlags, Sigset,
+};
 use linux_object::thread::ThreadExt;
 use numeric_enum_macro::numeric_enum;
 
@@ -188,6 +190,15 @@ impl Syscall<'_> {
                     }
                     sig => {
                         let process: Arc<Process> = obj.downcast_arc().unwrap();
+                        let info = SigInfo {
+                            signo: sig as i32,
+                            code: SignalCode::USER,
+                            field: SiginfoFields::new(
+                                self.zircon_process().id() as i32,
+                                self.linux_process().uid() as i32,
+                            ),
+                            ..Default::default()
+                        };
                         let tids = process.thread_ids();
                         let mut delivered = false;
                         for tid in tids {
@@ -197,7 +208,7 @@ impl Syscall<'_> {
                             if thread_linux.signal_mask.contains(sig) {
                                 continue;
                             } else {
-                                thread_linux.insert_signal(signal);
+                                thread_linux.insert_signal_info(signal, info);
                                 delivered = true;
                                 break;
                             }
@@ -231,8 +242,17 @@ impl Syscall<'_> {
         match parent.get_child(tid as u64) {
             Ok(obj) => {
                 let thread: Arc<Thread> = obj.downcast_arc().unwrap();
+                let info = SigInfo {
+                    signo: signal as i32,
+                    code: SignalCode::TKILL,
+                    field: SiginfoFields::new(
+                        self.zircon_process().id() as i32,
+                        self.linux_process().uid() as i32,
+                    ),
+                    ..Default::default()
+                };
                 let mut thread_linux = thread.lock_linux();
-                thread_linux.insert_signal(signal);
+                thread_linux.insert_signal_info(signal, info);
                 drop(thread_linux);
                 // Wake any blocked wait_signal futures on this process
                 parent.signal_set(zircon_object::object::Signal::SIGCHLD);
@@ -261,8 +281,17 @@ impl Syscall<'_> {
         {
             Ok(Ok(obj)) => {
                 let thread: Arc<Thread> = obj.downcast_arc().unwrap();
+                let info = SigInfo {
+                    signo: signal as i32,
+                    code: SignalCode::TKILL,
+                    field: SiginfoFields::new(
+                        self.zircon_process().id() as i32,
+                        self.linux_process().uid() as i32,
+                    ),
+                    ..Default::default()
+                };
                 let mut thread_linux = thread.lock_linux();
-                thread_linux.insert_signal(signal);
+                thread_linux.insert_signal_info(signal, info);
                 drop(thread_linux);
                 // Wake any blocked wait_signal futures on the calling process
                 parent.signal_set(zircon_object::object::Signal::SIGCHLD);

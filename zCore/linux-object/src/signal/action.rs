@@ -68,22 +68,43 @@ pub struct SignalAction {
     pub mask: Sigset,
 }
 
+/// The `_sifields` union from Linux `siginfo_t`.
+///
+/// The first two fields (`si_pid`, `si_uid`) are common to the `_kill`,
+/// `_rt`, and `_sigchld` variants. Remaining space is zero-padded to
+/// maintain the 128-byte total size of `siginfo_t`.
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct SiginfoFields {
+    /// Sending process ID.
+    pub pid: i32,
+    /// Real user ID of sending process.
+    pub uid: i32,
+    /// Remaining bytes (value, status, etc.) -- zero-padded.
     pad: [u8; Self::PAD_SIZE],
-    // TODO: fill this union
 }
 
 impl SiginfoFields {
-    const PAD_SIZE: usize = 128 - 2 * core::mem::size_of::<i32>() - core::mem::size_of::<usize>();
+    // Total siginfo size is 128 bytes. Subtract signo(4) + errno(4) + code(4/usize)
+    // + pid(4) + uid(4).
+    const PAD_SIZE: usize =
+        128 - 2 * core::mem::size_of::<i32>() - core::mem::size_of::<usize>() - 2 * 4;
+}
+
+impl SiginfoFields {
+    /// Create with sender PID and UID.
+    pub fn new(pid: i32, uid: i32) -> Self {
+        SiginfoFields {
+            pid,
+            uid,
+            pad: [0; Self::PAD_SIZE],
+        }
+    }
 }
 
 impl Default for SiginfoFields {
     fn default() -> Self {
-        SiginfoFields {
-            pad: [0; Self::PAD_SIZE],
-        }
+        Self::new(0, 0)
     }
 }
 

@@ -69,8 +69,8 @@ async fn run_user(thread: CurrentThread) {
         }
 
         // check the signal and handle
-        if let Some((signal, sigmask)) = thread.inner().lock_linux().handle_signal() {
-            ctx = handle_signal(&thread, ctx, signal, sigmask);
+        if let Some((signal, siginfo, sigmask)) = thread.inner().lock_linux().handle_signal() {
+            ctx = handle_signal(&thread, ctx, signal, siginfo, sigmask);
         }
 
         // run
@@ -116,12 +116,12 @@ fn handle_signal(
     thread: &CurrentThread,
     mut ctx: Box<UserContext>,
     signal: Signal,
+    signal_info: SigInfo,
     sigmask: Sigset,
 ) -> Box<UserContext> {
     let user_sp = ctx.get_field(UserContextField::StackPointer);
     let user_pc = ctx.get_field(UserContextField::InstrPointer);
     let action = thread.proc().linux().signal_action(signal);
-    let signal_info = SigInfo::default();
     let signal_context = SignalUserContext {
         sig_mask: sigmask,
         context: MachineContext::new(user_pc),
