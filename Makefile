@@ -7,8 +7,9 @@ STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
 .PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
-	libos-build-linux libos-build-zircon libos-run-linux \
-	petal-shell raspi400-build raspi400-run raspi400-sd x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
+	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
+	petal-shell raspi400-build raspi400-run raspi400-sd \
+	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -62,10 +63,20 @@ ifeq ($(shell uname),Darwin)
 	 else echo "Warning: could not determine disk for $(SD)"; fi
 endif
 
+# Build x86_64 kernel in Linux mode.
+x86-linux-build:
+	@echo "==> Building zCore kernel (Linux, x86_64)..."
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m qemu-x86_64
+
 # Build x86_64 kernel in Zircon mode with petal shell.
 x86-zircon-build:
 	@echo "==> Building zCore kernel (Zircon, x86_64)..."
 	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" cargo zcore-build -m qemu-x86_64 --personality zircon
+
+# Build and run x86_64 Linux in QEMU.
+# Ctrl-A X to exit QEMU.
+x86-linux-run: x86-linux-build
+	cargo qemu -m qemu-x86_64 --log $(LOG)
 
 # Build and run x86_64 Zircon with petal shell in QEMU.
 # Ctrl-A X to exit QEMU.
@@ -165,6 +176,10 @@ libos-build-zircon:
 # Run libos in Linux mode with busybox shell
 libos-run-linux:
 	cargo linux-libos --args "/bin/busybox sh"
+
+# Run libos in Zircon mode (runs petal hello and exits)
+libos-run-zircon: libos-build-zircon
+	./target/release/zcore
 
 # configure build environment (platform toolchain)
 config:

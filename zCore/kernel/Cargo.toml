@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["PanQL <panqinglin00@163.com>", "Yuekai Jia <equation618@gmail.com>"]
 edition = "2021"
 
-
 default-run = "zcore"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -98,3 +97,9 @@ bitmap-allocator = "0.4"
 buddy_system_allocator = "0.8"
 bootloader_api = "0.11"
 # rvm = { git = "https://github.com/rcore-os/RVM", rev = "e91d625", optional = true }
+
+[lints.cargo]
+# rcore-fs-sfs is used in bare-metal mode (both linux and zircon
+# personalities) but the code is cfg'd out in libos mode. The cargo
+# unused-deps lint cannot see through cfg gates.
+unused_dependencies = "allow"
