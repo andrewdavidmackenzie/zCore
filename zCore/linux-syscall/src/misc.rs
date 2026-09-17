@@ -6,7 +6,6 @@ use kernel_hal::timer::timer_now;
 use linux_object::process::LinuxProcess;
 use linux_object::thread::ThreadExt;
 use linux_object::time::*;
-use zircon_object::task::ThreadState;
 
 /// PR_SET_NAME: set the name of the calling thread.
 const PR_SET_NAME: usize = 15;
@@ -202,19 +201,44 @@ impl Syscall<'_> {
         };
         match op {
             FutexFlags::WAIT => {
+                use linux_object::thread::Interruptible;
                 let future = futex.wait(val as _);
                 let timeout_addr: UserInPtr<TimeSpec> = val2.into();
                 let res = if let Some(timeout) = timeout_addr.read_if_not_null().unwrap() {
-                    self.thread
-                        .blocking_run(
-                            future,
-                            ThreadState::BlockedFutex,
-                            timer_now() + Duration::from(timeout),
-                            None,
-                        )
-                        .await
+                    // Timeout path: race the futex wait against a sleep timer,
+                    // both interruptible by signals.
+                    let deadline = timer_now() + Duration::from(timeout);
+                    let timeout_future = async {
+                        kernel_hal::thread::SleepFuture::new(deadline).await;
+                        Err::<(), _>(zircon_object::ZxError::TIMED_OUT)
+                    };
+                    // Pin both futures since select! needs them.
+                    let mut wait_fut = core::pin::pin!(future);
+                    let mut timeout_fut = core::pin::pin!(timeout_future);
+
+                    // Simple select: poll both, return whichever completes first.
+                    use core::future::Future;
+                    use core::task::Poll;
+                    let combined = core::future::poll_fn(|cx| {
+                        // Check signals first
+                        {
+                            let mut linux = self.thread.lock_linux();
+                            if linux.has_pending_signal() {
+                                linux.clear_signal_waker();
+                                return Poll::Ready(Err(zircon_object::ZxError::CANCELED));
+                            }
+                            linux.set_signal_waker(cx.waker().clone());
+                        }
+                        if let Poll::Ready(r) = wait_fut.as_mut().poll(cx) {
+                            return Poll::Ready(r);
+                        }
+                        if let Poll::Ready(r) = timeout_fut.as_mut().poll(cx) {
+                            return Poll::Ready(r);
+                        }
+                        Poll::Pending
+                    });
+                    combined.await
                 } else {
-                    use linux_object::thread::Interruptible;
                     match future.interruptible(self.thread).await {
                         Ok(zx_result) => zx_result,
                         Err(_) => return Err(LxError::EINTR),
@@ -222,8 +246,7 @@ impl Syscall<'_> {
                 };
                 match res {
                     Ok(_) => {
-                        // Check for pending signals after a successful wait;
-                        // preserve EAGAIN (value mismatch) and ETIMEDOUT as-is.
+                        // Check for pending signals after a successful wait.
                         if self.thread.lock_linux().has_pending_signal() {
                             return Err(LxError::EINTR);
                         }
