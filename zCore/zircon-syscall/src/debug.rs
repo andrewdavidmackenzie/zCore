@@ -4,7 +4,7 @@ use zircon_object::dev::*;
 impl Syscall<'_> {
     /// Write debug info to the serial port.
     pub fn sys_debug_write(&self, buf: UserInPtr<u8>, len: usize) -> ZxResult {
-        info!("debug.write: buf=({:?}; {:#x})", buf, len);
+        trace!("debug.write: buf=({:?}; {:#x})", buf, len);
         kernel_hal::console::console_write_str(buf.as_str(len)?);
         Ok(())
     }
@@ -17,9 +17,11 @@ impl Syscall<'_> {
         buf_size: u32,
         mut actual: UserOutPtr<u32>,
     ) -> ZxResult {
-        info!(
+        trace!(
             "debug.read: handle={:#x}, buf=({:?}; {:#x})",
-            handle, buf, buf_size
+            handle,
+            buf,
+            buf_size
         );
         let proc = self.thread.proc();
         proc.get_object::<Resource>(handle)?

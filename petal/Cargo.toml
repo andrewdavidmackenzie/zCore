@@ -30,7 +30,6 @@ path = "src/bin/shell.rs"
 
 [dependencies]
 zx = { path = "../zCore/zx" }
-noline = { version = "0.5", default-features = false, features = ["alloc"] }
 embedded-io = "0.6"
 
 # Profile settings are in the workspace root Cargo.toml

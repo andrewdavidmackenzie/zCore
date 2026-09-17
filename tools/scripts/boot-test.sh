@@ -90,6 +90,22 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   if grep -q "$PROMPT_PATTERN" "$OUTPUT" 2>/dev/null; then
     echo "Shell prompt reached in ${ELAPSED}s"
 
+    # Verify the shell can execute a command.
+    # Use printf to construct the marker at runtime inside the guest
+    # shell, so the serial echo of the command itself won't match.
+    echo "Sending test command..."
+    printf '%s\n' "printf '%s%s\\n' boot_test_ ok" >&3
+    sleep 2
+    if ! grep -q "boot_test_ok" "$OUTPUT" 2>/dev/null; then
+      echo "FAIL: shell did not execute test command"
+      echo "--- QEMU output ---"
+      cat "$OUTPUT"
+      exec 3>&- 2>/dev/null || true
+      kill "$QEMU_PID" 2>/dev/null || true
+      exit 1
+    fi
+    echo "Shell command executed successfully"
+
     # Send poweroff command and wait for QEMU to exit cleanly
     echo "Sending 'poweroff -f'..."
     echo "poweroff -f" >&3

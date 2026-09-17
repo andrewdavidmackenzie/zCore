@@ -34,6 +34,32 @@ fn main() {
     let cmdline = std::env::var("ZCORE_CMDLINE").unwrap_or_else(|_| "LOG=warn".to_string());
     println!("cargo:rustc-env=ZCORE_CMDLINE={cmdline}");
 
+    // Force rebuild when any source file in dependency crates changes.
+    // Cargo normally tracks source changes, but the rerun-if-env-changed
+    // directives above (ZCORE_CMDLINE, PETAL_ZBI, USERSTART_ELF) override
+    // the default "rerun if anything changes" behavior. Adding directory
+    // watches restores rebuild triggering for dependency source changes.
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let workspace_root = std::path::Path::new(&manifest_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    for dir in [
+        "zCore/linux-object/src",
+        "zCore/linux-syscall/src",
+        "zCore/linux-loader/src",
+        "zCore/zircon-object/src",
+        "zCore/zircon-syscall/src",
+        "zCore/zircon-loader/src",
+        "kernel-hal/src",
+    ] {
+        let path = workspace_root.join(dir);
+        if path.exists() {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
+    }
+
     // For Zircon mode: if PETAL_ZBI is not set, generate an empty stub
     // so include_bytes! doesn't fail. The rootfs-based boot path doesn't
     // need the embedded ZBI.
@@ -43,7 +69,10 @@ fn main() {
         let stub = out.join("empty.zbi");
         std::fs::write(stub.as_path(), b"").unwrap();
         println!("cargo:rustc-env=PETAL_ZBI={}", stub.display());
-        println!("cargo:warning=PETAL_ZBI not set, using empty stub (rootfs-based boot only)");
+        // Only warn in Zircon mode where the ZBI is actually needed.
+        if std::env::var("CARGO_FEATURE_ZIRCON").is_ok() {
+            println!("cargo:warning=PETAL_ZBI not set, using empty stub (rootfs-based boot only)");
+        }
     }
 
     // For Zircon mode: if USERSTART_ELF is not set, generate an empty stub.
