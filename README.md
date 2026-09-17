@@ -62,6 +62,11 @@ cargo bin -m qemu-aarch64
 # Build and run in QEMU
 cargo qemu -m qemu-aarch64
 cargo qemu -m qemu-x86_64 --personality zircon --log info
+
+# Build and run as a host process (no QEMU needed)
+cargo zcore-build -m libos
+cargo linux-libos --args "/bin/busybox ls"
+cargo zcore-build -m libos --personality zircon
 ```
 
 ### Makefile shortcuts
@@ -71,6 +76,8 @@ make linux-run               # cargo qemu -m qemu-aarch64 (linux)
 make zircon-run              # cargo qemu -m qemu-aarch64 --personality zircon
 make raspi400-build          # cargo bin -m raspi400
 make raspi400-sd SD=/Volumes/boot   # flash SD card for Pi 400
+make libos-build-linux       # cargo zcore-build -m libos
+make libos-run-linux         # run libos with busybox shell
 make clippy-all              # clippy on all code (all archs, libos, userspace, tests)
 make test                    # boot smoke test + libc conformance tests
 ```
