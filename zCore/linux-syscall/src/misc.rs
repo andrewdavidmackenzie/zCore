@@ -560,6 +560,60 @@ bitflags! {
     }
 }
 
+impl Syscall<'_> {
+    /// Create a pair of connected Unix domain sockets.
+    ///
+    /// Only `AF_UNIX` (domain=1) with `SOCK_STREAM` is supported.
+    /// Returns two file descriptors in `sv` that are bidirectional.
+    pub fn sys_socketpair(
+        &self,
+        domain: usize,
+        socket_type: usize,
+        _protocol: usize,
+        mut sv: UserOutPtr<[i32; 2]>,
+    ) -> SysResult {
+        const AF_UNIX: usize = 1;
+        const SOCK_STREAM: usize = 1;
+        #[allow(dead_code)]
+        const SOCK_CLOEXEC: usize = 0o2000000;
+        const SOCK_NONBLOCK: usize = 0o4000;
+
+        info!(
+            "socketpair: domain={}, type={:#x}, protocol={}",
+            domain, socket_type, _protocol
+        );
+
+        if domain != AF_UNIX {
+            return Err(LxError::EAFNOSUPPORT);
+        }
+        let base_type = socket_type & 0xf;
+        if base_type != SOCK_STREAM {
+            warn!(
+                "socketpair: only SOCK_STREAM is supported, got {}",
+                base_type
+            );
+            return Err(LxError::ENOSYS);
+        }
+
+        let (a, b) = linux_object::fs::unix_socket::UnixSocketEnd::create_pair();
+
+        // Apply flags
+        if socket_type & SOCK_NONBLOCK != 0 {
+            use linux_object::fs::{FileLike, OpenFlags};
+            let _ = FileLike::set_flags(a.as_ref(), OpenFlags::RDWR | OpenFlags::NON_BLOCK);
+            let _ = FileLike::set_flags(b.as_ref(), OpenFlags::RDWR | OpenFlags::NON_BLOCK);
+        }
+
+        let proc = self.linux_process();
+        let fd_a: i32 = proc.add_file(a)?.into();
+        let fd_b: i32 = proc.add_file(b)?.into();
+
+        info!("socketpair: fd_a={}, fd_b={}", fd_a, fd_b);
+        sv.write([fd_a, fd_b])?;
+        Ok(0)
+    }
+}
+
 const USER_STACK_SIZE: usize = 8 * 1024 * 1024; // 8 MB, the default config of Linux
 
 const RLIMIT_STACK: usize = 3;
