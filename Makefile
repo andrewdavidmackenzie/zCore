@@ -6,8 +6,8 @@ XTASK ?= 1
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
-.PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy clippy-all check doc clean \
-	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
+.PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
+	libos-build-linux libos-build-zircon libos-run-linux \
 	petal-shell raspi400-build raspi400-run raspi400-sd x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
 
 # Build the rootfs image and kernel for the target architecture.
@@ -154,21 +154,17 @@ libc-test: boot-test
 # Requires x86_64 host (Linux or macOS) or aarch64 Linux.
 # Two personalities: Linux (busybox shell) and Zircon (petal programs).
 
-# Build libos in Linux mode
+# Build libos in Linux mode (default personality)
 libos-build-linux:
 	cargo zcore-build -m libos
 
-# Build libos in Zircon mode (builds userstart + petal first)
+# Build libos in Zircon mode (builds userstart + petal automatically)
 libos-build-zircon:
-	cargo xtask libos-build-zircon
+	cargo zcore-build -m libos --personality zircon
 
 # Run libos in Linux mode with busybox shell
 libos-run-linux:
 	cargo linux-libos --args "/bin/busybox sh"
-
-# Convenience aliases
-libos-build: libos-build-linux
-libos-run: libos-run-linux
 
 # configure build environment (platform toolchain)
 config:
