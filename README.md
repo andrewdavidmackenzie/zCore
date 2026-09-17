@@ -13,7 +13,7 @@ An OS kernel based on Zircon with Linux compatibility.
 ## Quick start
 
 ```bash
-make run
+make linux-run
 ```
 
 This builds and boots zCore on QEMU (aarch64) with a minimal Linux
@@ -67,7 +67,7 @@ cargo qemu -m qemu-x86_64 --personality zircon --log info
 ### Makefile shortcuts
 
 ```bash
-make run                     # cargo qemu -m qemu-aarch64 (linux)
+make linux-run               # cargo qemu -m qemu-aarch64 (linux)
 make zircon-run              # cargo qemu -m qemu-aarch64 --personality zircon
 make raspi400-build          # cargo bin -m raspi400
 make raspi400-sd SD=/Volumes/boot   # flash SD card for Pi 400

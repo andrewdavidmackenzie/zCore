@@ -6,7 +6,7 @@ XTASK ?= 1
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
-.PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy clippy-all check doc clean \
+.PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy clippy-all check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
 	petal-shell raspi400-build raspi400-run raspi400-sd x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
 
@@ -17,9 +17,9 @@ build:
 	cargo image --arch $(ARCH)
 	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo bin -m qemu-$(ARCH)
 
-# Build (if needed) and run zCore interactively in QEMU.
+# Build (if needed) and run zCore in Linux mode interactively in QEMU.
 # cargo qemu does: build rootfs image, build kernel, launch QEMU.
-run:
+linux-run:
 	cargo qemu -m qemu-$(ARCH)
 
 # Build and run zCore in Zircon mode (userstart hello program).
