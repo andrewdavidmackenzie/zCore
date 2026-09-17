@@ -55,7 +55,7 @@ ZBI="target/petal/${ARCH}/petal.zbi"
 # Build the kernel with rootfs ROOTPROC set to /bin/hello
 USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" \
   PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
-  ZCORE_CMDLINE="LOG=info ROOTPROC=/bin/hello" cargo build \
+  ZCORE_CMDLINE="LOG=${LOG:-info} ROOTPROC=/bin/hello" cargo build \
   -p zcore \
   --no-default-features --features zircon \
   --target "zCore/${ARCH}.json" \

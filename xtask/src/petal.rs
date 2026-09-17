@@ -41,6 +41,8 @@ pub fn build_petal(arch: Arch, bin_name: &str) -> PathBuf {
         .arg("--bin")
         .arg(bin_name)
         .args(["-Z", "build-std=core,alloc"])
+        .args(["-Z", "build-std-features=compiler-builtins-mem"])
+        .env("RUSTFLAGS", "-C relocation-model=static")
         .status()
         .expect("failed to run cargo build for petal");
 

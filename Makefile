@@ -8,7 +8,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 
 .PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
-	petal-shell raspi400-build raspi400-run raspi400-sd x86-zircon-build x86-uefi-image x86-uefi-usb
+	petal-shell raspi400-build raspi400-run raspi400-sd x86-zircon-build x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -25,7 +25,7 @@ run:
 # Build and run zCore in Zircon mode (userstart hello program).
 # The kernel constructs a test ZBI in-memory -- no external ZBI file needed.
 # Use LOG=info (or debug/trace/warn/error) to control log verbosity.
-LOG ?= warn
+LOG ?= info
 zircon-run:
 	cargo qemu --arch $(ARCH) --zircon --log $(LOG)
 
@@ -39,7 +39,7 @@ petal-shell:
 	@cargo petal-zbi --arch $(ARCH) --bin shell
 	@USERSTART_ELF="$$(pwd)/target/userstart/aarch64-unknown-none-softfloat/release/userstart" \
 		PETAL_ZBI="$$(pwd)/target/petal/$(ARCH)/petal.zbi" \
-		ZCORE_CMDLINE="LOG=warn" \
+		ZCORE_CMDLINE="LOG=$(LOG)" \
 		cargo build -p zcore --no-default-features --features zircon \
 		--target zCore/$(ARCH).json -Z json-target-spec \
 		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
@@ -60,7 +60,7 @@ raspi400-build:
 	@echo "==> Building zCore kernel for Raspberry Pi 400..."
 	@USERSTART_ELF="$$(pwd)/target/userstart/aarch64-unknown-none-softfloat/release/userstart" \
 		PETAL_ZBI="$$(pwd)/target/petal/aarch64/petal.zbi" \
-		ZCORE_CMDLINE="LOG=warn" \
+		ZCORE_CMDLINE="LOG=$(LOG)" \
 		cargo build -p zcore --no-default-features --features "zircon,board-raspi400" \
 		--target zCore/aarch64-raspi400.json \
 		-Z json-target-spec \
@@ -89,14 +89,16 @@ raspi400-sd: raspi400-build
 # Build x86_64 kernel in Zircon mode with petal shell.
 x86-zircon-build:
 	@echo "==> Building userstart..."
-	@cargo build -p userstart --target x86_64-unknown-none \
+	@RUSTFLAGS="-C relocation-model=static" \
+		cargo build -p userstart --target x86_64-unknown-none \
+		-Z build-std=core -Z build-std-features=compiler-builtins-mem \
 		--release --target-dir target/userstart
 	@echo "==> Building petal shell ZBI..."
 	@cargo petal-zbi --arch x86_64 --bin shell
 	@echo "==> Building zCore kernel (Zircon, x86_64)..."
 	@USERSTART_ELF="$$(pwd)/target/userstart/x86_64-unknown-none/release/userstart" \
 		PETAL_ZBI="$$(pwd)/target/petal/x86_64/petal.zbi" \
-		ZCORE_CMDLINE="LOG=info ROOTPROC=/bin/shell" \
+		ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" \
 		cargo build -p zcore --no-default-features --features zircon \
 		--target zCore/x86_64.json -Z json-target-spec \
 		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
@@ -118,16 +120,26 @@ else
 endif
 
 # Write a UEFI boot image to a USB drive.
-# Usage: make x86-uefi-usb USB=/dev/disk5
 # WARNING: This erases all data on the USB drive!
 USB ?= /dev/disk5
-x86-uefi-usb: x86-uefi-image
+define write-usb
 	@echo "==> Writing UEFI image to $(USB)..."
 	diskutil unmountDisk $(USB)
 	sudo dd if=$(OUTPUT) of=$$(echo $(USB) | sed 's|/dev/disk|/dev/rdisk|') bs=1m
 	sync
 	diskutil eject $(USB)
 	@echo "==> Done. Insert USB into target machine and boot from UEFI."
+endef
+
+# Usage: make x86-uefi-usb-linux USB=/dev/disk5 [LOG=info]
+x86-uefi-usb-linux:
+	$(MAKE) x86-uefi-image MODE=linux
+	$(write-usb)
+
+# Usage: make x86-uefi-usb-zircon USB=/dev/disk5 [LOG=debug]
+x86-uefi-usb-zircon:
+	$(MAKE) x86-uefi-image MODE=zircon
+	$(write-usb)
 
 # Zircon boot smoke test: build in Zircon mode, start QEMU, wait for
 # userstart hello message, verify clean shutdown.

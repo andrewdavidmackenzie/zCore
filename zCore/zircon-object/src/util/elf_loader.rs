@@ -149,10 +149,6 @@ impl ElfExt for ElfFile<'_> {
         Ok(path)
     }
 
-    /*
-     * [ ERROR ] page fualt from user mode 0x40 READ
-     */
-
     fn get_phdr_vaddr(&self) -> Option<u64> {
         if let Some(phdr) = self
             .program_iter()

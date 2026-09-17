@@ -58,7 +58,7 @@ run_test() {
   # Build kernel with this ZBI
   if ! USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" \
     PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
-    ZCORE_CMDLINE="LOG=warn" cargo build \
+    ZCORE_CMDLINE="LOG=${LOG:-info}" cargo build \
     -p zcore \
     --no-default-features --features zircon \
     --target "zCore/${ARCH}.json" \

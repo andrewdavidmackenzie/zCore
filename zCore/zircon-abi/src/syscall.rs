@@ -288,16 +288,14 @@ pub unsafe fn syscall7(
     );
     #[cfg(target_arch = "x86_64")]
     {
-        // x86_64 syscall ABI only has 6 register args. The 7th is on the stack.
-        // Push it, syscall, pop it.
+        // x86_64 syscall ABI: 6 args in registers (rdi, rsi, rdx, r10,
+        // r8, r9), 7th arg in r12. The kernel handler reads r12 directly.
         core::arch::asm!(
-            "push {arg6}",
             "syscall",
-            "pop {arg6}",
-            arg6 = in(reg) a6,
             in("eax") num,
             in("rdi") a0, in("rsi") a1, in("rdx") a2,
             in("r10") a3, in("r8") a4, in("r9") a5,
+            in("r12") a6,
             lateout("rax") ret,
             out("rcx") _, out("r11") _,
         );
@@ -316,7 +314,7 @@ pub unsafe fn syscall7(
 
 /// Raw syscall with 8 arguments.
 ///
-/// On x86_64 args 7 and 8 are passed on the stack.
+/// On x86_64 args 7 and 8 are passed in r12 and r13.
 /// On aarch64 and riscv64, registers x7/a7 are used (note: a7 is also
 /// the syscall number register on riscv64, loaded before the args).
 #[inline(always)]
@@ -344,18 +342,15 @@ pub unsafe fn syscall8(
     );
     #[cfg(target_arch = "x86_64")]
     {
-        // x86_64: args 7 and 8 on the stack
+        // x86_64 syscall ABI: 6 args in registers (rdi, rsi, rdx, r10,
+        // r8, r9), 7th and 8th args in r12 and r13. The kernel handler
+        // reads r12/r13 directly.
         core::arch::asm!(
-            "push {arg7}",
-            "push {arg6}",
             "syscall",
-            "pop {arg6}",
-            "pop {arg7}",
-            arg6 = in(reg) a6,
-            arg7 = in(reg) a7,
             in("eax") num,
             in("rdi") a0, in("rsi") a1, in("rdx") a2,
             in("r10") a3, in("r8") a4, in("r9") a5,
+            in("r12") a6, in("r13") a7,
             lateout("rax") ret,
             out("rcx") _, out("r11") _,
         );
