@@ -45,6 +45,8 @@ impl ThreadExt for Thread {
             robust_list_len: 0,
             handling_signal: None,
             signal_waker: None,
+            user_time_ns: 0,
+            sys_time_ns: 0,
         });
         Thread::create_with_ext(proc, "", linux_thread)
     }
@@ -271,6 +273,10 @@ pub struct LinuxThread {
     /// Used to wake a thread when a signal is delivered, enabling
     /// EINTR returns from blocking syscalls.
     signal_waker: Option<Waker>,
+    /// Accumulated user-mode CPU time (nanoseconds).
+    user_time_ns: u128,
+    /// Accumulated system/kernel-mode CPU time (nanoseconds).
+    sys_time_ns: u128,
 }
 
 fn unmodified_check(siginfo: &SigInfo, user_ctx: &SignalUserContext) -> usize {
@@ -370,6 +376,26 @@ impl LinuxThread {
     /// Check if any unmasked signal is pending.
     pub fn has_pending_signal(&self) -> bool {
         self.signals.mask_with(&self.signal_mask).is_not_empty()
+    }
+
+    /// Add user-mode CPU time (nanoseconds).
+    pub fn add_user_time(&mut self, ns: u128) {
+        self.user_time_ns += ns;
+    }
+
+    /// Add system/kernel-mode CPU time (nanoseconds).
+    pub fn add_sys_time(&mut self, ns: u128) {
+        self.sys_time_ns += ns;
+    }
+
+    /// Get accumulated user-mode CPU time (nanoseconds).
+    pub fn user_time_ns(&self) -> u128 {
+        self.user_time_ns
+    }
+
+    /// Get accumulated system-mode CPU time (nanoseconds).
+    pub fn sys_time_ns(&self) -> u128 {
+        self.sys_time_ns
     }
 }
 
