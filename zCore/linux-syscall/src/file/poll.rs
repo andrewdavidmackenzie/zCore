@@ -13,9 +13,11 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 use core::time::Duration;
 use kernel_hal::timer;
+use linux_object::error::LxError;
 use linux_object::fs::{
     EpollEvent, EpollFile, FileDesc, PollEvents, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD,
 };
+use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 
 impl Syscall<'_> {
@@ -45,6 +47,17 @@ impl Syscall<'_> {
 
             fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
                 use PollEvents as PE;
+
+                // Check for pending signals -- return EINTR if any.
+                {
+                    let mut linux = self.syscall.thread.lock_linux();
+                    if linux.has_pending_signal() {
+                        linux.clear_signal_waker();
+                        return Poll::Ready(Err(LxError::EINTR));
+                    }
+                    linux.set_signal_waker(cx.waker().clone());
+                }
+
                 let proc = self.syscall.linux_process();
                 let mut events = 0;
 
