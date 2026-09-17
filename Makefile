@@ -15,7 +15,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 # cargo bin:   compiles the kernel ELF (for riscv64, also objcopy to .bin)
 build:
 	cargo image --arch $(ARCH)
-	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo bin -m virt-$(ARCH)
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo bin -m qemu-$(ARCH)
 
 # Build (if needed) and run zCore interactively in QEMU.
 # cargo qemu does: build rootfs image, build kernel, launch QEMU.
@@ -40,14 +40,14 @@ petal-shell:
 	@USERSTART_ELF="$$(pwd)/target/userstart/aarch64-unknown-none-softfloat/release/userstart" \
 		PETAL_ZBI="$$(pwd)/target/petal/$(ARCH)/petal.zbi" \
 		ZCORE_CMDLINE="LOG=$(LOG)" \
-		cargo build -p zcore --no-default-features --features zircon \
-		--target zCore/$(ARCH).json -Z json-target-spec \
+		cargo build -p zcore --no-default-features --features "zircon,pl011-uart,gic-400,virtio" \
+		--target targets/qemu-$(ARCH).json -Z json-target-spec \
 		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
 		--release
 	@echo "==> Starting petal shell (Ctrl-A X to exit QEMU)..."
 	@qemu-system-aarch64 -m 2G -display none -no-reboot -nographic \
 		-machine virt -cpu cortex-a72 -serial mon:stdio \
-		-kernel target/$(ARCH)/release/zcore
+		-kernel target/qemu-$(ARCH)/release/zcore
 
 # Build the kernel for Raspberry Pi 400 in Zircon mode.
 # Builds userstart + petal shell, packages into ZBI, builds kernel.
@@ -61,15 +61,15 @@ raspi400-build:
 	@USERSTART_ELF="$$(pwd)/target/userstart/aarch64-unknown-none-softfloat/release/userstart" \
 		PETAL_ZBI="$$(pwd)/target/petal/aarch64/petal.zbi" \
 		ZCORE_CMDLINE="LOG=$(LOG)" \
-		cargo build -p zcore --no-default-features --features "zircon,board-raspi400" \
-		--target zCore/aarch64-raspi400.json \
+		cargo build -p zcore --no-default-features --features "zircon,board-raspi400,pl011-uart,gic-400" \
+		--target targets/raspi400.json \
 		-Z json-target-spec \
 		-Z build-std=core,alloc \
 		-Z build-std-features=compiler-builtins-mem \
 		--release
 	@rust-objcopy --strip-all -O binary \
-		target/aarch64-raspi400/release/zcore \
-		target/aarch64-raspi400/release/zcore.bin
+		target/raspi400/release/zcore \
+		target/raspi400/release/zcore.bin
 
 # Build and run zCore on QEMU raspi400 interactively with petal shell.
 # Ctrl-A X to exit QEMU.
@@ -78,7 +78,7 @@ raspi400-run: raspi400-build
 	@qemu-system-aarch64 -machine raspi4b -m 2G \
 		-display none -no-reboot -nographic \
 		-serial mon:stdio \
-		-kernel target/aarch64-raspi400/release/zcore.bin
+		-kernel target/raspi400/release/zcore.bin
 
 # Prepare an SD card for Raspberry Pi 4 / Pi 400.
 # Usage: make raspi400-sd SD=/Volumes/boot
@@ -99,8 +99,9 @@ x86-zircon-build:
 	@USERSTART_ELF="$$(pwd)/target/userstart/x86_64-unknown-none/release/userstart" \
 		PETAL_ZBI="$$(pwd)/target/petal/x86_64/petal.zbi" \
 		ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" \
-		cargo build -p zcore --no-default-features --features "zircon,ps2-keyboard" \
-		--target zCore/x86_64.json -Z json-target-spec \
+		cargo build -p zcore --no-default-features --features "zircon,uart-16550,apic,pci,ps2-keyboard" \
+		--target targets/qemu-x86_64.json \
+		-Z json-target-spec \
 		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
 		--release
 
@@ -108,20 +109,20 @@ x86-zircon-build:
 # Ctrl-A X to exit QEMU.
 x86-zircon-run: x86-zircon-build
 	@tools/x86-bootimage/target/release/x86-bootimage \
-		target/x86_64/release/zcore \
-		target/x86_64/release/zcore-zircon.img
+		target/qemu-x86_64/release/zcore \
+		target/qemu-x86_64/release/zcore-zircon.img
 	@echo "==> Starting x86_64 Zircon (Ctrl-A X to exit QEMU)..."
 	@qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
 		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
 		-serial mon:stdio \
-		-drive format=raw,file=target/x86_64/release/zcore-zircon.img
+		-drive format=raw,file=target/qemu-x86_64/release/zcore-zircon.img
 
 # Create a UEFI-bootable disk image for x86_64 real hardware.
 # The image can be written to a USB drive with dd.
 # Usage: make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img
 #        make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img MODE=zircon
 MODE ?= linux
-OUTPUT ?= target/x86_64/release/zcore-uefi.img
+OUTPUT ?= target/qemu-x86_64/release/zcore-uefi.img
 x86-uefi-image:
 ifeq ($(MODE),zircon)
 	$(MAKE) x86-zircon-build
@@ -380,13 +381,21 @@ endif
 #         Each package is listed explicitly so --no-deps can skip
 #         shared crates (executor, region-alloc).
 # Step 2: host-side tools (xtask, region-alloc) via native target.
+# Per-arch driver features for clippy (must match qemu-<arch>.toml drivers).
+ifeq ($(ARCH), aarch64)
+CLIPPY_DRIVERS = pl011-uart,gic-400,virtio
+else ifeq ($(ARCH), x86_64)
+CLIPPY_DRIVERS = uart-16550,apic,pci,ps2-keyboard
+else ifeq ($(ARCH), riscv64)
+CLIPPY_DRIVERS = uart-16550,riscv-intc,riscv-plic,pci
+endif
 clippy:
 	@echo "==> Clippy: kernel crates ($(ARCH))..."
 	cargo clippy \
 		-p zcore -p kernel-hal -p linux-object -p linux-syscall \
 		-p linux-loader -p zircon-object -p zircon-syscall -p kernel-drivers \
-		--no-default-features --features linux \
-		--target zCore/$(ARCH).json \
+		--no-default-features --features "linux,$(CLIPPY_DRIVERS)" \
+		--target targets/qemu-$(ARCH).json \
 		-Z json-target-spec \
 		-Z build-std=core,alloc \
 		-Z build-std-features=compiler-builtins-mem \
@@ -394,7 +403,7 @@ clippy:
 	@echo "==> Clippy: zircon-loader (requires USERSTART_ELF)..."
 	@if [ -n "$(USERSTART_ELF)" ]; then \
 		cargo clippy -p zircon-loader \
-			--target zCore/$(ARCH).json \
+			--target targets/qemu-$(ARCH).json \
 			-Z json-target-spec \
 			-Z build-std=core,alloc \
 			-Z build-std-features=compiler-builtins-mem \

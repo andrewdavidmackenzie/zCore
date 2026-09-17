@@ -1,0 +1,12 @@
+# LibOS mode -- runs zCore as a host process
+#
+# No QEMU, no custom target spec. Builds with the host's native
+# toolchain. Used for development and testing without a VM.
+
+arch = "host"
+linker-script = ""
+drivers = ["mock-uart"]
+features = ["libos"]
+
+# No [qemu] section -- runs natively.
+# No [rustc-target] section -- uses host default target.

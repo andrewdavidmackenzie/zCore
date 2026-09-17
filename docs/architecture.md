@@ -943,7 +943,7 @@ allocation).
 The PCI code in zircon-object is always compiled (not feature-gated). However,
 it's only exercised at runtime when the machine has PCI support (controlled by
 `pci_support` in `[workspace.metadata.machines]`). QEMU virt machines have PCI;
-embedded boards (nezha, cr1825, visionfive) do not. The `no-pci` feature in the
+embedded boards (nezha, cr1825, visionfive) do not. The `pci` feature in the
 drivers crate skips PCI bus scanning. The region-alloc code is dormant on non-
 PCI machines.
 

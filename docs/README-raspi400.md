@@ -103,8 +103,8 @@ make raspi400-sd SD=/Volumes/BOOT
    - `bcm2711-rpi-400.dtb` -- device tree blob (Pi 400)
    - `overlays/` directory (at minimum, `overlays/disable-bt.dtbo`)
 
-3. Copy `armstub/armstub8-gic.bin` from this repo (or build it with
-   `aarch64-none-elf-gcc` from `armstub/armstub8-gic.S`).
+3. Copy `tools/armstub/armstub8-gic.bin` from this repo (or build it with
+   `aarch64-none-elf-gcc` from `tools/armstub/armstub8-gic.S`).
 
 4. Create `config.txt`:
 
@@ -194,7 +194,7 @@ The Pi firmware's default armstub does not configure the GIC-400 interrupt
 groups. Without this configuration, all interrupts remain in Group 0 (Secure)
 and cannot be received by the Non-Secure EL1 kernel.
 
-The `armstub/armstub8-gic.S` in this repo is based on the upstream
+The `tools/armstub/armstub8-gic.S` in this repo is based on the upstream
 [Raspberry Pi armstub](https://github.com/raspberrypi/tools/blob/master/armstubs/armstub8.S)
 with one critical fix: `setup_gic` is called **before** `SCR_EL3.NS` is set
 to 1, so the `GICD_IGROUPR` writes happen while the CPU is still in Secure
@@ -206,9 +206,9 @@ To rebuild:
 ```bash
 aarch64-none-elf-gcc -DGIC=1 -DBCM2711=1 -nostdlib -nostartfiles \
   -Wl,--section-start=.text=0x0 \
-  -o armstub/armstub8-gic.elf armstub/armstub8-gic.S
+  -o tools/armstub/armstub8-gic.elf tools/armstub/armstub8-gic.S
 aarch64-none-elf-objcopy -O binary \
-  armstub/armstub8-gic.elf armstub/armstub8-gic.bin
+  tools/armstub/armstub8-gic.elf tools/armstub/armstub8-gic.bin
 ```
 
 ## Known issues

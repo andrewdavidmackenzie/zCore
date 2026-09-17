@@ -17,7 +17,7 @@ TIMEOUT=30
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore.bin"
+    KERNEL="target/qemu-aarch64/release/zcore.bin"
     ROOTFS_IMG="zCore/${ARCH}-zircon.img"
     QEMU_BASE_CMD=(
       qemu-system-aarch64
@@ -57,8 +57,8 @@ USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" 
   PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
   ZCORE_CMDLINE="LOG=${LOG:-info} ROOTPROC=/bin/hello" cargo build \
   -p zcore \
-  --no-default-features --features zircon \
-  --target "zCore/${ARCH}.json" \
+  --no-default-features --features "zircon,pl011-uart,gic-400,virtio" \
+  --target "targets/qemu-${ARCH}.json" \
   -Z json-target-spec \
   -Z build-std=core,alloc \
   -Z build-std-features=compiler-builtins-mem \
@@ -67,14 +67,14 @@ USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" 
 # Strip ELF to raw binary (QEMU needs raw binary for DTB passthrough)
 OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)
 if [ -n "$OBJCOPY" ]; then
-  "$OBJCOPY" --strip-all -O binary "target/aarch64/release/zcore" "$KERNEL"
+  "$OBJCOPY" --strip-all -O binary "target/qemu-aarch64/release/zcore" "$KERNEL"
 elif command -v llvm-objcopy >/dev/null 2>&1; then
-  llvm-objcopy --strip-all -O binary "target/aarch64/release/zcore" "$KERNEL"
+  llvm-objcopy --strip-all -O binary "target/qemu-aarch64/release/zcore" "$KERNEL"
 elif command -v rust-objcopy >/dev/null 2>&1; then
-  rust-objcopy --strip-all -O binary "target/aarch64/release/zcore" "$KERNEL"
+  rust-objcopy --strip-all -O binary "target/qemu-aarch64/release/zcore" "$KERNEL"
 else
   echo "WARNING: no objcopy found, using ELF (DTB may not work)"
-  cp "target/aarch64/release/zcore" "$KERNEL"
+  cp "target/qemu-aarch64/release/zcore" "$KERNEL"
 fi
 
 echo "==> Running Zircon rootfs boot test..."

@@ -22,16 +22,22 @@ libos = [
 board-c910light = []
 board-raspi400 = []
 link-user-img = []
-# Enable extra page table falgs for T-Head CPU with MAEE on
+# Enable extra page table flags for T-Head CPU with MAEE on
 thead-maee = []
-# Disable PCI
-no-pci = ["kernel-drivers/no-pci"]
-# Enable allwinner drivers
-allwinner-drivers = ["kernel-drivers/allwinner"]
-# Enable fu740 drivers
-fu740-drivers = ["kernel-drivers/fu740"]
-# PS/2 keyboard input (x86_64 boards with i8042 controller)
+
+# --- Driver features (forwarded to kernel-drivers) ---
+apic = ["kernel-drivers/apic"]
+gic-400 = ["kernel-drivers/gic-400"]
+riscv-plic = ["kernel-drivers/riscv-plic"]
+riscv-intc = ["kernel-drivers/riscv-intc"]
+pl011-uart = ["kernel-drivers/pl011-uart"]
+uart-16550 = ["kernel-drivers/uart-16550"]
 ps2-keyboard = ["kernel-drivers/ps2-keyboard"]
+virtio = ["kernel-drivers/virtio"]
+mock-uart = ["kernel-drivers/mock-uart"]
+pci = ["kernel-drivers/pci"]
+allwinner-drivers = ["kernel-drivers/allwinner"]
+fu740-drivers = ["kernel-drivers/fu740"]
 
 [dependencies]
 log = "0.4"

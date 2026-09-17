@@ -19,31 +19,14 @@ doc = false
 [features]
 # Print colorless logs
 colorless-log = []
-
-# graphic feature removed (see #237)
-# Enable extra page table falgs for T-Head CPU with MAEE on
 thead-maee = ["kernel-hal/thead-maee"]
-# Disable PCI
-no-pci = ["kernel-hal/no-pci"]
-# Enable allwinner drivers
-allwinner-drivers = ["kernel-hal/allwinner-drivers"]
-# Enable fu740 drivers
-fu740-drivers = ["kernel-hal/fu740-drivers"]
-# TODO
-# loopback feature removed (see #237)
-
-# Directly link the user image to the kernel image
 link-user-img = []
-
-# For bare-metal testing, if kernel panic or the root process is finished,
-# shutdown the machine and exit QEMU.
 baremetal-test = ["executor/baremetal-test"]
+mock-disk = ["linux-object/mock-disk"]
 
-# Run as Zircon mode (rcore-fs and rcore-fs-sfs for rootfs-based boot)
+# --- Personality ---
 zircon = ["zircon-loader", "rcore-fs", "rcore-fs-sfs"]
-# Run as Linux mode
 linux = ["linux-loader", "linux-object", "rcore-fs", "rcore-fs-sfs"]
-# Run as LibOS mode
 libos = [
   "kernel-hal/libos",
   "linux-loader?/libos",
@@ -52,19 +35,25 @@ libos = [
   "rcore-fs-hostfs",
 ]
 
-# Run on Allwinner d1
-board-d1 = ["link-user-img", "no-pci", "kernel-hal/allwinner-drivers"]
-# T-HEAD C910 Light val board
-board-c910light = ["link-user-img", "kernel-hal/board-c910light", "no-pci"]
-# Run on u740
-board-fu740 = ["link-user-img", "kernel-hal/fu740-drivers"]
-# Run on Raspberry Pi 400
-board-raspi400 = ["no-pci", "kernel-hal/board-raspi400"]
-# PS/2 keyboard input (for x86_64 boards with i8042 controller)
+# --- Driver features (forwarded to kernel-hal -> kernel-drivers) ---
+apic = ["kernel-hal/apic"]
+gic-400 = ["kernel-hal/gic-400"]
+riscv-plic = ["kernel-hal/riscv-plic"]
+riscv-intc = ["kernel-hal/riscv-intc"]
+pl011-uart = ["kernel-hal/pl011-uart"]
+uart-16550 = ["kernel-hal/uart-16550"]
 ps2-keyboard = ["kernel-hal/ps2-keyboard"]
+mock-uart = ["kernel-hal/mock-uart"]
+virtio = ["kernel-hal/virtio"]
+pci = ["kernel-hal/pci"]
+allwinner-drivers = ["kernel-hal/allwinner-drivers"]
+fu740-drivers = ["kernel-hal/fu740-drivers"]
 
-# Use memory and ipi to simulate block device
-mock-disk = ["linux-object/mock-disk"]
+# --- Board presets (combine personality + drivers + board-specific flags) ---
+board-d1 = ["link-user-img", "allwinner-drivers"]
+board-c910light = ["link-user-img", "kernel-hal/board-c910light"]
+board-fu740 = ["link-user-img", "fu740-drivers"]
+board-raspi400 = ["kernel-hal/board-raspi400"]
 
 [dependencies]
 log = "0.4"

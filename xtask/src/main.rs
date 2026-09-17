@@ -404,7 +404,7 @@ fn check_style() {
     for arch in [Arch::Riscv64, Arch::X86_64, Arch::Aarch64] {
         println!("    Checks {} bare-metal", arch.name());
         BuildConfig::from_args(BuildArgs {
-            machine: format!("virt-{}", arch.name()),
+            machine: format!("qemu-{}", arch.name()),
             debug: false,
         })
         .invoke(Cargo::clippy);

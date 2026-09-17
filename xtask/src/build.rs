@@ -1,5 +1,5 @@
-use crate::config::MachineConfig;
-use crate::{linux::LinuxRootfs, Arch, ArchArg, PROJECT_DIR};
+use crate::config::TargetConfig;
+use crate::{Arch, ArchArg, PROJECT_DIR};
 use once_cell::sync::Lazy;
 use os_xtask_utils::{dir, BinUtil, Cargo, CommandExt, Ext, Qemu};
 use std::{
@@ -67,57 +67,60 @@ static INNER: Lazy<PathBuf> = Lazy::new(|| PROJECT_DIR.join("zCore"));
 
 pub(crate) struct BuildConfig {
     arch: Arch,
+    /// Target name (e.g., "qemu-aarch64") -- determines output directory.
+    target_name: String,
     debug: bool,
     env: HashMap<OsString, OsString>,
     pub(crate) features: HashSet<String>,
+    /// Path to the generated rustc target spec JSON.
+    target_json: PathBuf,
 }
 
 impl BuildConfig {
     pub fn from_args(args: BuildArgs) -> Self {
-        let machine = MachineConfig::select(args.machine).expect("Unknown target machine");
-        let mut features = HashSet::from_iter(machine.features.iter().cloned());
+        let target = TargetConfig::load(&args.machine);
+        let arch = Arch::from_str(&target.arch).unwrap_or_else(|_| {
+            panic!(
+                "Unknown arch '{}' in target '{}'",
+                target.arch, args.machine
+            )
+        });
+
+        let mut features: HashSet<String> = target.cargo_features().into_iter().collect();
         let mut env = HashMap::new();
-        let arch = Arch::from_str(&machine.arch)
-            .unwrap_or_else(|_| panic!("Unknown arch {} for machine", machine.arch));
-        // Recursively build image
-        if let Some(path) = &machine.user_img {
-            features.insert("link-user-img".into());
-            env.insert(
-                "USER_IMG".into(),
-                if path.is_absolute() {
-                    path.as_os_str().to_os_string()
-                } else {
-                    PROJECT_DIR.join(path).as_os_str().to_os_string()
-                },
-            );
-            LinuxRootfs::new(arch).image();
-        }
-        // PCI not supported
-        if !machine.pci_support {
-            features.insert("no-pci".into());
-        }
+
+        // Default to Linux personality unless Zircon is explicitly set.
         if !features.contains("zircon") {
             features.insert("linux".into());
         }
+
+        // PCI is now a positive feature -- included only when listed
+        // in the target's drivers list.
+
         // Pass through ZCORE_CMDLINE from the environment if set,
         // allowing `make build LOG=info` to flow through to the kernel.
         if let Ok(cmdline) = std::env::var("ZCORE_CMDLINE") {
             env.insert("ZCORE_CMDLINE".into(), cmdline.into());
         }
 
+        // Generate the rustc target spec JSON.
+        let target_json = target.write_target_json(&args.machine);
+
         Self {
             arch,
+            target_name: args.machine.clone(),
             debug: args.debug,
             env,
             features,
+            target_json,
         }
     }
 
     #[inline]
-    fn target_file_path(&self) -> PathBuf {
+    pub(crate) fn target_file_path(&self) -> PathBuf {
         PROJECT_DIR
             .join("target")
-            .join(self.arch.name())
+            .join(&self.target_name)
             .join(if self.debug { "debug" } else { "release" })
             .join("zcore")
     }
@@ -127,7 +130,7 @@ impl BuildConfig {
         cargo
             .package("zcore")
             .features(false, &self.features)
-            .target(INNER.join(format!("{}.json", self.arch.name())))
+            .target(&self.target_json)
             .args(["-Z", "json-target-spec"])
             .args(["-Z", "build-std=core,alloc"])
             .args(["-Z", "build-std-features=compiler-builtins-mem"])
@@ -216,17 +219,14 @@ impl QemuArgs {
         // Build various strings
         let arch = self.arch.arch;
         let arch_str = arch.name();
-        let obj = PROJECT_DIR
-            .join("target")
-            .join(self.arch.arch.name())
-            .join(if self.debug { "debug" } else { "release" })
-            .join("zcore");
+        let target_name = format!("qemu-{}", arch_str);
 
         // Build the kernel
         let mut build_config = BuildConfig::from_args(BuildArgs {
-            machine: format!("virt-{}", self.arch.arch.name()),
+            machine: target_name.clone(),
             debug: self.debug,
         });
+        let obj = build_config.target_file_path();
         // Set the kernel command line via compile-time env var.
         // For Zircon with --rootfs-image, include ROOTPROC so the
         // kernel knows which program to load from the rootfs.
@@ -286,7 +286,8 @@ impl QemuArgs {
             Arch::X86_64 => {
                 // Create a bootable BIOS disk image using the x86-bootimage tool
                 let disk_image = PROJECT_DIR
-                    .join("target/x86_64")
+                    .join("target")
+                    .join(&target_name)
                     .join(if self.debug { "debug" } else { "release" })
                     .join("boot.img");
 

@@ -45,7 +45,7 @@ qemu-system-aarch64 \
   -machine raspi4b -m 2G \
   -display none -no-reboot -nographic \
   -serial mon:stdio \
-  -kernel target/aarch64-raspi400/release/zcore.bin > "$OUTPUT" 2>&1 &
+  -kernel target/raspi400/release/zcore.bin > "$OUTPUT" 2>&1 &
 QEMU_PID=$!
 
 ELAPSED=0

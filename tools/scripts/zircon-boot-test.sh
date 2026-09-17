@@ -16,7 +16,7 @@ TIMEOUT=30
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore"
+    KERNEL="target/qemu-aarch64/release/zcore"
     QEMU_BASE_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -60,8 +60,8 @@ run_test() {
     PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
     ZCORE_CMDLINE="LOG=${LOG:-info}" cargo build \
     -p zcore \
-    --no-default-features --features zircon \
-    --target "zCore/${ARCH}.json" \
+    --no-default-features --features "zircon,pl011-uart,gic-400,virtio" \
+    --target "targets/qemu-${ARCH}.json" \
     -Z json-target-spec \
     -Z build-std=core,alloc \
     -Z build-std-features=compiler-builtins-mem \

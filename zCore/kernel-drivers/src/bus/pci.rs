@@ -22,10 +22,10 @@ const PCI_CAP_ID_MSI: u8 = 0x05;
 
 struct PortOpsImpl;
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(feature = "apic")]
 use x86_64::instructions::port::Port;
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(feature = "apic")]
 impl PortOps for PortOpsImpl {
     unsafe fn read8(&self, port: u16) -> u8 {
         Port::new(port).read()
@@ -47,7 +47,7 @@ impl PortOps for PortOpsImpl {
     }
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(feature = "apic")]
 const PCI_BASE: usize = 0; //Fix me
 
 #[cfg(any(target_arch = "mips", target_arch = "riscv64"))]
@@ -59,9 +59,9 @@ const PCI_BASE: usize = 0xbbe00000;
 #[cfg(target_arch = "riscv64")]
 const PCI_BASE: usize = 0x30000000;
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(feature = "apic")]
 const PCI_ACCESS: CSpaceAccessMethod = CSpaceAccessMethod::IO;
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(feature = "apic"))]
 const PCI_ACCESS: CSpaceAccessMethod = CSpaceAccessMethod::MemoryMapped(PCI_BASE as *mut u8);
 
 #[cfg(any(target_arch = "mips", target_arch = "riscv64"))]

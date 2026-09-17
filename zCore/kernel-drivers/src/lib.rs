@@ -18,16 +18,28 @@ extern crate log;
 use alloc::sync::Arc;
 use core::fmt;
 
+// --- Driver modules ---
+// Each optional driver is gated by its own feature flag.
+// Arch-specific drivers (APIC, GIC, PLIC, PL011, Uart16550Pmio) are
+// gated by target_arch since they can't compile on other architectures.
+
+/// PCI bus enumeration.
+pub mod bus;
+/// Interrupt controller drivers.
+pub mod irq;
+/// Keyboard input drivers.
+pub mod keyboard;
+/// UART serial port drivers.
+pub mod uart;
+/// VirtIO device drivers (block, console, GPU, input).
 #[cfg(any(feature = "virtio", doc))]
 pub mod virtio;
 
+// --- Infrastructure modules (always compiled) ---
 pub mod builder;
-pub mod bus;
 pub mod io;
-pub mod irq;
 pub mod prelude;
 pub mod scheme;
-pub mod uart;
 pub mod utils;
 
 /// The error type for external device.

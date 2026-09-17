@@ -74,7 +74,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qemu-utils wget
 
       - name: Build ${{ matrix.arch }} bare-metal linux
-        run: cargo bin -m virt-${{ matrix.arch }}
+        run: cargo bin -m qemu-${{ matrix.arch }}
 
   libos:
     name: LibOS build

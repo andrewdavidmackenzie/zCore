@@ -65,8 +65,8 @@ pub(super) fn init() -> DeviceResult {
     // ConsoleInput buffer via the callback.
     #[cfg(feature = "ps2-keyboard")]
     {
+        use kernel_drivers::keyboard::Ps2Keyboard;
         use kernel_drivers::scheme::SchemeUpcast;
-        use kernel_drivers::uart::Ps2Keyboard;
         let kbd = Arc::new(Ps2Keyboard::new(crate::common::console::console_input_push));
         irq.register_device(trap::X86_ISA_IRQ_KEYBOARD, kbd.clone().upcast())?;
         irq.unmask(trap::X86_ISA_IRQ_KEYBOARD)?;
@@ -91,7 +91,7 @@ pub(super) fn init() -> DeviceResult {
 
     drivers::add_device(Device::Irq(irq));
 
-    #[cfg(not(feature = "no-pci"))]
+    #[cfg(feature = "pci")]
     {
         // PCI scan -- skip on real hardware for now (#269).
         warn!("PCI scan skipped (#269)");

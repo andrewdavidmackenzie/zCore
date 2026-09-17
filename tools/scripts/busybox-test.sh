@@ -22,7 +22,7 @@ CMD_TIMEOUT=10
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore.bin"
+    KERNEL="target/qemu-aarch64/release/zcore.bin"
     IMAGE="zCore/aarch64-linux.img"
     QEMU_CMD=(
       qemu-system-aarch64
@@ -34,8 +34,8 @@ case "$ARCH" in
     )
     ;;
   x86_64)
-    KERNEL_ELF="target/x86_64/release/zcore"
-    BOOT_IMG="target/x86_64/release/boot.img"
+    KERNEL_ELF="target/qemu-x86_64/release/zcore"
+    BOOT_IMG="target/qemu-x86_64/release/boot.img"
     ROOTFS_IMG="zCore/x86_64-linux.img"
     BOOTIMAGE_TOOL="tools/x86-bootimage/target/release/x86-bootimage"
 
