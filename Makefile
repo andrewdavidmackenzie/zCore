@@ -85,6 +85,12 @@ raspi400-run: raspi400-build
 #   SD= is the mount point of the SD card's FAT32 partition.
 raspi400-sd: raspi400-build
 	@tools/raspi/prepare-sd.sh $(SD)
+ifeq ($(shell uname),Darwin)
+	@echo "==> Ejecting SD card..."
+	@disk=$$(diskutil info "$(SD)" 2>/dev/null | grep "Part of Whole" | awk '{print $$NF}'); \
+	 if [ -n "$$disk" ]; then diskutil eject "/dev/$$disk"; \
+	 else echo "Warning: could not determine disk for $(SD)"; fi
+endif
 
 # Build x86_64 kernel in Zircon mode with petal shell.
 x86-zircon-build:

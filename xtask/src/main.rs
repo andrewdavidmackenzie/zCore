@@ -471,7 +471,7 @@ mod libos {
                 "-p",
                 "zcore",
                 "--features",
-                "zircon,libos",
+                "zircon,libos,mock-uart",
                 "--release",
             ])
             .env("USERSTART_ELF", &userstart_path)
