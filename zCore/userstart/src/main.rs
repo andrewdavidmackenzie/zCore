@@ -407,7 +407,9 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
 
     const PT_LOAD: u32 = 1;
 
-    let base: usize = 0x10000; // load base to avoid null page
+    // The ELF is linked at 0x10000 (set in petal.ld), so no additional
+    // base offset is needed -- the segment vaddrs are already correct.
+    let base: usize = 0;
 
     // Create a single VMO large enough for all segments.
     // Find the total size first.

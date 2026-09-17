@@ -1,7 +1,9 @@
 /* Linker script for petal userspace programs.
  *
- * Places code at virtual address 0. The kernel loads the ELF
- * directly with proper segment permissions via load_from_elf().
+ * Places code at virtual address 0x10000. This matches the load
+ * base used by userstart's ELF loader, so absolute addresses in
+ * the binary (GOT entries, string literals) are correct at runtime
+ * without needing dynamic relocations.
  *
  * .text and .rodata are merged into one RX segment to avoid
  * page-overlap failures in the VMAR mapper (small programs would
@@ -11,7 +13,7 @@
 ENTRY(_start)
 
 SECTIONS {
-    . = 0;
+    . = 0x10000;
 
     .text : {
         *(.text .text.*)
