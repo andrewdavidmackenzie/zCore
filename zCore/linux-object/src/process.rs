@@ -21,6 +21,7 @@ use hashbrown::HashMap;
 use kernel_hal::VirtAddr;
 use lock::{Mutex, MutexGuard};
 use rcore_fs::vfs::{FileSystem, INode};
+use spin::Mutex as SpinMutex;
 
 use zircon_object::{
     object::{KernelObject, KoID, Signal},
@@ -439,12 +440,34 @@ impl LinuxProcess {
         self.inner.lock().groups = groups;
     }
 
-    /// Get futex object.
+    /// Get a private futex object (per-process, keyed by virtual address).
     #[allow(unsafe_code)]
     pub fn get_futex(&self, uaddr: VirtAddr) -> Arc<Futex> {
         let mut inner = self.inner.lock();
         inner
             .futexes
+            .entry(uaddr)
+            .or_insert_with(|| {
+                let value = unsafe { &*(uaddr as *const AtomicI32) };
+                Futex::new(value)
+            })
+            .clone()
+    }
+
+    /// Get a shared (process-visible) futex object from the global table.
+    ///
+    /// Shared futexes are keyed by virtual address in a global table,
+    /// allowing multiple processes that map the same memory at the same
+    /// address to share a futex. This covers the common fork() case
+    /// where parent and child share the same address space layout.
+    #[allow(unsafe_code)]
+    pub fn get_shared_futex(uaddr: VirtAddr) -> Arc<Futex> {
+        static SHARED_FUTEXES: SpinMutex<Option<HashMap<VirtAddr, Arc<Futex>>>> =
+            SpinMutex::new(None);
+
+        let mut table = SHARED_FUTEXES.lock();
+        let table = table.get_or_insert_with(HashMap::new);
+        table
             .entry(uaddr)
             .or_insert_with(|| {
                 let value = unsafe { &*(uaddr as *const AtomicI32) };
