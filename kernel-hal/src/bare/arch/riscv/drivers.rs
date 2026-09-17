@@ -3,7 +3,7 @@ use alloc::format;
 
 use kernel_drivers::builder::{DevicetreeDriverBuilder, IoMapper};
 use kernel_drivers::irq::riscv::ScauseIntCode;
-use kernel_drivers::uart::BufferedUart;
+
 use kernel_drivers::{Device, DeviceResult};
 
 use crate::common::vm::GenericPageTable;
@@ -62,7 +62,20 @@ pub(super) fn init() -> DeviceResult {
     // add drivers
     for dev in dev_list.into_iter() {
         if let Device::Uart(uart) = dev {
-            drivers::add_device(Device::Uart(BufferedUart::new(uart)));
+            // Wire UART received bytes to the shared console input buffer.
+            #[allow(unused_imports)]
+            use kernel_drivers::scheme::{EventScheme, UartScheme};
+            let u = uart.clone();
+            uart.subscribe(
+                Box::new(move |_| {
+                    while let Some(c) = u.try_recv().unwrap_or(None) {
+                        let c = if c == b'\r' { b'\n' } else { c };
+                        crate::common::console::console_input_push(c);
+                    }
+                }),
+                false,
+            );
+            drivers::add_device(Device::Uart(uart));
         } else {
             drivers::add_device(dev);
         }

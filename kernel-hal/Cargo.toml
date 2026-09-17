@@ -30,6 +30,8 @@ no-pci = ["kernel-drivers/no-pci"]
 allwinner-drivers = ["kernel-drivers/allwinner"]
 # Enable fu740 drivers
 fu740-drivers = ["kernel-drivers/fu740"]
+# PS/2 keyboard input (x86_64 boards with i8042 controller)
+ps2-keyboard = ["kernel-drivers/ps2-keyboard"]
 
 [dependencies]
 log = "0.4"

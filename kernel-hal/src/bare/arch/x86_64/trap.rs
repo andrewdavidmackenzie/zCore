@@ -8,6 +8,9 @@ pub(super) const _X86_INT_APIC_ERROR: usize = X86_INT_LOCAL_APIC_BASE + 0x2;
 
 // ISA IRQ numbers
 pub(super) const _X86_ISA_IRQ_PIT: usize = 0;
+#[cfg(feature = "ps2-keyboard")]
+pub(super) const X86_ISA_IRQ_KEYBOARD: usize = 1;
+#[cfg(not(feature = "ps2-keyboard"))]
 pub(super) const _X86_ISA_IRQ_KEYBOARD: usize = 1;
 pub(super) const _X86_ISA_IRQ_PIC2: usize = 2;
 pub(super) const X86_ISA_IRQ_COM2: usize = 3;

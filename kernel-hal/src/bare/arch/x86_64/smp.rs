@@ -70,6 +70,7 @@ const TRAMPOLINE_DATA_OFFSET: usize = 0x100;
 /// - Jumps to 64-bit code
 /// - Loads stack and entry point from TrampolineData
 /// - Calls the Rust entry point
+///
 /// Pre-assembled AP trampoline binary (NASM output).
 ///
 /// Assembled with: nasm -f bin trampoline.asm

@@ -52,42 +52,32 @@ impl Future for SleepFuture {
     }
 }
 
+/// Future that reads from the shared console input buffer.
+///
+/// Completes when at least one byte is available from any input device
+/// (UART, PS/2 keyboard, etc.) that has pushed data into `ConsoleInput`.
 #[must_use = "`console_read()` does nothing unless polled/`await`-ed"]
-pub(super) struct SerialReadFuture<'a> {
+pub(super) struct ConsoleReadFuture<'a> {
     buf: &'a mut [u8],
 }
 
-impl<'a> SerialReadFuture<'a> {
+impl<'a> ConsoleReadFuture<'a> {
     pub fn new(buf: &'a mut [u8]) -> Self {
         Self { buf }
     }
 }
 
-impl Future for SerialReadFuture<'_> {
+impl Future for ConsoleReadFuture<'_> {
     type Output = usize;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let uart = if let Some(uart) = crate::drivers::all_uart().first() {
-            uart
-        } else {
-            return Poll::Pending;
-        };
         let buf = &mut self.get_mut().buf;
-        let mut n = 0;
-        for i in 0..buf.len() {
-            if let Some(c) = uart.try_recv().unwrap_or(None) {
-                buf[i] = c;
-                n += 1;
-            } else {
-                break;
-            }
-        }
+        let n = super::console::console_input_poll(buf, Some(cx.waker().clone()));
         if n > 0 {
-            return Poll::Ready(n);
+            Poll::Ready(n)
+        } else {
+            Poll::Pending
         }
-        let waker = cx.waker().clone();
-        uart.subscribe(Box::new(move |_| waker.wake_by_ref()), true);
-        Poll::Pending
     }
 }
 
