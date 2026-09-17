@@ -8,7 +8,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 
 .PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
-	petal-shell raspi400-build raspi400-run raspi400-sd x86-zircon-build x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
+	petal-shell raspi400-build raspi400-run raspi400-sd x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -103,6 +103,18 @@ x86-zircon-build:
 		--target zCore/x86_64.json -Z json-target-spec \
 		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
 		--release
+
+# Build and run x86_64 Zircon with petal shell in QEMU.
+# Ctrl-A X to exit QEMU.
+x86-zircon-run: x86-zircon-build
+	@tools/x86-bootimage/target/release/x86-bootimage \
+		target/x86_64/release/zcore \
+		target/x86_64/release/zcore-zircon.img
+	@echo "==> Starting x86_64 Zircon (Ctrl-A X to exit QEMU)..."
+	@qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
+		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
+		-serial mon:stdio \
+		-drive format=raw,file=target/x86_64/release/zcore-zircon.img
 
 # Create a UEFI-bootable disk image for x86_64 real hardware.
 # The image can be written to a USB drive with dd.
