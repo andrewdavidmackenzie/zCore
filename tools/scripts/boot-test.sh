@@ -90,6 +90,20 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   if grep -q "$PROMPT_PATTERN" "$OUTPUT" 2>/dev/null; then
     echo "Shell prompt reached in ${ELAPSED}s"
 
+    # Verify the shell can execute a command
+    echo "Sending test command..."
+    echo "echo boot_test_ok" >&3
+    sleep 2
+    if ! grep -q "boot_test_ok" "$OUTPUT" 2>/dev/null; then
+      echo "FAIL: shell did not execute test command"
+      echo "--- QEMU output ---"
+      cat "$OUTPUT"
+      exec 3>&- 2>/dev/null || true
+      kill "$QEMU_PID" 2>/dev/null || true
+      exit 1
+    fi
+    echo "Shell command executed successfully"
+
     # Send poweroff command and wait for QEMU to exit cleanly
     echo "Sending 'poweroff -f'..."
     echo "poweroff -f" >&3
