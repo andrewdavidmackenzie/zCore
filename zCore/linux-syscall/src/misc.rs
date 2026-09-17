@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use bitflags::bitflags;
 use core::time::Duration;
 use kernel_hal::timer::timer_now;
+use linux_object::process::LinuxProcess;
 use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 use zircon_object::task::ThreadState;
@@ -192,12 +193,13 @@ impl Syscall<'_> {
             uaddr, op, val, val2,
         );
         let op = FutexFlags::from_bits_truncate(op);
-        if !op.contains(FutexFlags::PRIVATE) {
-            warn!("process-shared futex is unimplemented");
-            // return Err(LxError::ENOSYS);
-        }
+        let is_private = op.contains(FutexFlags::PRIVATE);
         let op = op - FutexFlags::PRIVATE;
-        let futex = self.linux_process().get_futex(uaddr);
+        let futex = if is_private {
+            self.linux_process().get_futex(uaddr)
+        } else {
+            LinuxProcess::get_shared_futex(uaddr)
+        };
         match op {
             FutexFlags::WAIT => {
                 let future = futex.wait(val as _);
@@ -235,7 +237,11 @@ impl Syscall<'_> {
                 if uaddr == uaddr2 {
                     return Err(LxError::EINVAL);
                 }
-                let requeue_futex = self.linux_process().get_futex(uaddr2);
+                let requeue_futex = if is_private {
+                    self.linux_process().get_futex(uaddr2)
+                } else {
+                    LinuxProcess::get_shared_futex(uaddr2)
+                };
                 futex
                     .requeue(0, val as _, val2, &requeue_futex, None, false)
                     .map_err(|e| e.into())
@@ -244,7 +250,11 @@ impl Syscall<'_> {
                 if uaddr == uaddr2 {
                     return Err(LxError::EINVAL);
                 }
-                let requeue_futex = self.linux_process().get_futex(uaddr2);
+                let requeue_futex = if is_private {
+                    self.linux_process().get_futex(uaddr2)
+                } else {
+                    LinuxProcess::get_shared_futex(uaddr2)
+                };
                 futex
                     .requeue(val3 as _, val as _, val2, &requeue_futex, None, true)
                     .map_err(|e| e.into())
