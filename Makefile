@@ -7,7 +7,7 @@ STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
 .PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
-	libos-build-linux libos-build-zircon libos-run-linux \
+	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
 	petal-shell raspi400-build raspi400-run raspi400-sd \
 	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
 
@@ -177,10 +177,10 @@ libos-build-zircon:
 libos-run-linux:
 	cargo linux-libos --args "/bin/busybox sh"
 
-# Run libos in Zircon mode (not yet working -- see issue #280)
-# libos-run-zircon:
-# 	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality zircon
-# 	./target/release/zcore
+# Run libos in Zircon mode (known broken -- see #281)
+libos-run-zircon:
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality zircon
+	./target/release/zcore
 
 # configure build environment (platform toolchain)
 config:

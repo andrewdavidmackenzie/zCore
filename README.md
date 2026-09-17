@@ -76,7 +76,7 @@ cargo linux-libos --args "/bin/busybox ls"          # build + run linux libos
 | QEMU (any arch) | `make linux-run`           | `make zircon-run`            |
 | x86_64 specific | `make x86-linux-build/run` | `make x86-zircon-build/run`  |
 | LibOS build     | `make libos-build-linux`   | `make libos-build-zircon`    |
-| LibOS run | `make libos-run-linux` | not yet working (#280) |
+| LibOS run | `make libos-run-linux` | `make libos-run-zircon` (#281) |
 | Pi 400          | n/a (zircon only)          | `make raspi400-build/run/sd` |
 
 ```bash
