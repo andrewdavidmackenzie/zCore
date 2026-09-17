@@ -7,7 +7,7 @@ STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
 .PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
-	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
+	libos-build-linux libos-build-zircon libos-run-linux \
 	petal-shell raspi400-build raspi400-run raspi400-sd \
 	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
 
@@ -167,19 +167,20 @@ libc-test: boot-test
 
 # Build libos in Linux mode (default personality)
 libos-build-linux:
-	cargo zcore-build -m libos
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos
 
 # Build libos in Zircon mode (builds userstart + petal automatically)
 libos-build-zircon:
-	cargo zcore-build -m libos --personality zircon
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality zircon
 
 # Run libos in Linux mode with busybox shell
 libos-run-linux:
 	cargo linux-libos --args "/bin/busybox sh"
 
-# Run libos in Zircon mode (runs petal hello and exits)
-libos-run-zircon: libos-build-zircon
-	./target/release/zcore
+# Run libos in Zircon mode (not yet working -- see issue #280)
+# libos-run-zircon:
+# 	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality zircon
+# 	./target/release/zcore
 
 # configure build environment (platform toolchain)
 config:

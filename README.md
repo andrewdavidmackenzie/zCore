@@ -71,13 +71,13 @@ cargo linux-libos --args "/bin/busybox ls"          # build + run linux libos
 
 ### Makefile shortcuts
 
-| Scope | Linux | Zircon |
-|-------|-------|--------|
-| QEMU (any arch) | `make linux-run` | `make zircon-run` |
-| x86_64 specific | `make x86-linux-build/run` | `make x86-zircon-build/run` |
-| LibOS build | `make libos-build-linux` | `make libos-build-zircon` |
-| LibOS run | `make libos-run-linux` | `make libos-run-zircon` |
-| Pi 400 | n/a (zircon only) | `make raspi400-build/run/sd` |
+| Scope           | Linux                      | Zircon                       |
+|-----------------|----------------------------|------------------------------|
+| QEMU (any arch) | `make linux-run`           | `make zircon-run`            |
+| x86_64 specific | `make x86-linux-build/run` | `make x86-zircon-build/run`  |
+| LibOS build     | `make libos-build-linux`   | `make libos-build-zircon`    |
+| LibOS run | `make libos-run-linux` | not yet working (#280) |
+| Pi 400          | n/a (zircon only)          | `make raspi400-build/run/sd` |
 
 ```bash
 make raspi400-sd SD=/Volumes/boot   # flash SD card for Pi 400
