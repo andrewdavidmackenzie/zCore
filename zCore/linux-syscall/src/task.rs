@@ -350,11 +350,15 @@ impl Syscall<'_> {
         Ok(0)
     }
 
-    //    pub fn sys_yield(&self) -> SysResult {
-    //        thread::yield_now();
-    //        Ok(0)
-    //    }
-    //
+    /// Voluntarily yield the CPU to allow other threads to run
+    /// (see [linux man sched_yield(2)](https://www.man7.org/linux/man-pages/man2/sched_yield.2.html)).
+    ///
+    /// Always succeeds and returns 0.
+    pub async fn sys_sched_yield(&self) -> SysResult {
+        info!("sched_yield:");
+        kernel_hal::thread::yield_now().await;
+        Ok(0)
+    }
 
     /// `sys_gettid` returns the caller's thread ID (TID)
     /// (see [linux man gettid(2)](https://www.man7.org/linux/man-pages/man2/gettid.2.html)).

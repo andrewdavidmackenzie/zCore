@@ -163,7 +163,7 @@ impl Syscall<'_> {
             Sys::KILL => self.sys_kill(a0 as isize, a1),
 
             // schedule
-            Sys::SCHED_YIELD => Ok(0),
+            Sys::SCHED_YIELD => self.sys_sched_yield().await,
             Sys::SCHED_GETAFFINITY => self.sys_sched_getaffinity(a0, a1, a2.into()),
             Sys::SCHED_SETAFFINITY => Ok(0),
 
