@@ -1,22 +1,29 @@
-//! External interrupt request and handle.
+//! Interrupt controller drivers.
+//!
+//! Each controller is gated by its own feature flag.
 
-cfg_if::cfg_if! {
-    if #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))] {
-        mod riscv_intc;
-        mod riscv_plic;
+#[cfg(feature = "riscv-intc")]
+mod riscv_intc;
+#[cfg(feature = "riscv-plic")]
+mod riscv_plic;
 
-        /// Implementation of risc-v interrupt controller.
-        pub mod riscv {
-            pub use super::riscv_intc::{Intc, ScauseIntCode};
-            pub use super::riscv_plic::Plic;
-        }
-    } else if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
-        mod x86_apic;
-        /// Implementation of x86 Advanced Programmable Interrupt Controller.
-        pub mod x86 {
-            pub use super::x86_apic::Apic;
-        }
-    } else if #[cfg(target_arch = "aarch64")] {
-        pub mod gic_400;
-    }
+/// RISC-V interrupt controller implementations.
+#[cfg(any(feature = "riscv-intc", feature = "riscv-plic"))]
+pub mod riscv {
+    #[cfg(feature = "riscv-intc")]
+    pub use super::riscv_intc::{Intc, ScauseIntCode};
+    #[cfg(feature = "riscv-plic")]
+    pub use super::riscv_plic::Plic;
 }
+
+#[cfg(feature = "apic")]
+mod x86_apic;
+/// x86 Advanced Programmable Interrupt Controller.
+#[cfg(feature = "apic")]
+pub mod x86 {
+    pub use super::x86_apic::Apic;
+}
+
+/// ARM Generic Interrupt Controller (GIC-400).
+#[cfg(feature = "gic-400")]
+pub mod gic_400;

@@ -16,7 +16,7 @@ TIMEOUT=30
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore"
+    KERNEL="target/qemu-aarch64/release/zcore"
     QEMU_BASE_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -56,16 +56,10 @@ run_test() {
   local ZBI="target/petal/${ARCH}/petal.zbi"
 
   # Build kernel with this ZBI
-  if ! USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" \
-    PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
-    ZCORE_CMDLINE="LOG=${LOG:-info}" cargo build \
-    -p zcore \
-    --no-default-features --features zircon \
-    --target "zCore/${ARCH}.json" \
-    -Z json-target-spec \
-    -Z build-std=core,alloc \
-    -Z build-std-features=compiler-builtins-mem \
-    --release; then
+  if ! USERSTART_ELF="$(pwd)/$USERSTART" \
+    PETAL_ZBI="$(pwd)/$ZBI" \
+    ZCORE_CMDLINE="LOG=${LOG:-info}" \
+    cargo zcore-build -m "qemu-${ARCH}" --personality zircon; then
     echo "FAIL: kernel build failed for '$bin_name'"
     return 1
   fi

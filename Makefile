@@ -6,70 +6,41 @@ XTASK ?= 1
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
-.PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy clippy-all check doc clean \
-	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
-	petal-shell raspi400-build raspi400-run raspi400-sd x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
+.PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
+	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
+	petal-shell raspi400-build raspi400-run raspi400-sd \
+	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
 # cargo bin:   compiles the kernel ELF (for riscv64, also objcopy to .bin)
 build:
 	cargo image --arch $(ARCH)
-	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo bin -m virt-$(ARCH)
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo bin -m qemu-$(ARCH)
 
-# Build (if needed) and run zCore interactively in QEMU.
+# Build (if needed) and run zCore in Linux mode interactively in QEMU.
 # cargo qemu does: build rootfs image, build kernel, launch QEMU.
-run:
-	cargo qemu --arch $(ARCH)
+linux-run:
+	cargo qemu -m qemu-$(ARCH)
 
 # Build and run zCore in Zircon mode (userstart hello program).
-# The kernel constructs a test ZBI in-memory -- no external ZBI file needed.
 # Use LOG=info (or debug/trace/warn/error) to control log verbosity.
 LOG ?= info
 zircon-run:
-	cargo qemu --arch $(ARCH) --zircon --log $(LOG)
+	cargo qemu -m qemu-$(ARCH) --personality zircon --log $(LOG)
 
 # Run the petal shell interactively in QEMU.
 # Boots zCore in Zircon mode with the shell as the init program.
 # Type 'help', 'echo hello', 'version', 'exit'. Ctrl-A X to kill QEMU.
 petal-shell:
-	@echo "==> Building petal shell for $(ARCH)..."
-	@cargo build -p userstart --target aarch64-unknown-none-softfloat \
-		--release --target-dir target/userstart
-	@cargo petal-zbi --arch $(ARCH) --bin shell
-	@USERSTART_ELF="$$(pwd)/target/userstart/aarch64-unknown-none-softfloat/release/userstart" \
-		PETAL_ZBI="$$(pwd)/target/petal/$(ARCH)/petal.zbi" \
-		ZCORE_CMDLINE="LOG=$(LOG)" \
-		cargo build -p zcore --no-default-features --features zircon \
-		--target zCore/$(ARCH).json -Z json-target-spec \
-		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
-		--release
-	@echo "==> Starting petal shell (Ctrl-A X to exit QEMU)..."
-	@qemu-system-aarch64 -m 2G -display none -no-reboot -nographic \
-		-machine virt -cpu cortex-a72 -serial mon:stdio \
-		-kernel target/$(ARCH)/release/zcore
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo qemu -m qemu-$(ARCH) --personality zircon --log $(LOG)
 
 # Build the kernel for Raspberry Pi 400 in Zircon mode.
-# Builds userstart + petal shell, packages into ZBI, builds kernel.
+# Userstart, petal ZBI, features, and target spec all come from
+# targets/raspi400.toml via xtask.
 raspi400-build:
-	@echo "==> Building userstart..."
-	@cargo build -p userstart --target aarch64-unknown-none-softfloat \
-		--release --target-dir target/userstart
-	@echo "==> Building petal shell ZBI..."
-	@cargo petal-zbi --arch aarch64 --bin shell
 	@echo "==> Building zCore kernel for Raspberry Pi 400..."
-	@USERSTART_ELF="$$(pwd)/target/userstart/aarch64-unknown-none-softfloat/release/userstart" \
-		PETAL_ZBI="$$(pwd)/target/petal/aarch64/petal.zbi" \
-		ZCORE_CMDLINE="LOG=$(LOG)" \
-		cargo build -p zcore --no-default-features --features "zircon,board-raspi400" \
-		--target zCore/aarch64-raspi400.json \
-		-Z json-target-spec \
-		-Z build-std=core,alloc \
-		-Z build-std-features=compiler-builtins-mem \
-		--release
-	@rust-objcopy --strip-all -O binary \
-		target/aarch64-raspi400/release/zcore \
-		target/aarch64-raspi400/release/zcore.bin
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo bin -m raspi400
 
 # Build and run zCore on QEMU raspi400 interactively with petal shell.
 # Ctrl-A X to exit QEMU.
@@ -78,50 +49,53 @@ raspi400-run: raspi400-build
 	@qemu-system-aarch64 -machine raspi4b -m 2G \
 		-display none -no-reboot -nographic \
 		-serial mon:stdio \
-		-kernel target/aarch64-raspi400/release/zcore.bin
+		-kernel target/raspi400/release/zcore.bin
 
 # Prepare an SD card for Raspberry Pi 4 / Pi 400.
 # Usage: make raspi400-sd SD=/Volumes/boot
 #   SD= is the mount point of the SD card's FAT32 partition.
 raspi400-sd: raspi400-build
 	@tools/raspi/prepare-sd.sh $(SD)
+ifeq ($(shell uname),Darwin)
+	@echo "==> Ejecting SD card..."
+	@disk=$$(diskutil info "$(SD)" 2>/dev/null | grep "Part of Whole" | awk '{print $$NF}'); \
+	 if [ -n "$$disk" ]; then diskutil eject "/dev/$$disk"; \
+	 else echo "Warning: could not determine disk for $(SD)"; fi
+endif
+
+# Build x86_64 kernel in Linux mode.
+x86-linux-build:
+	@echo "==> Building zCore kernel (Linux, x86_64)..."
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m qemu-x86_64
 
 # Build x86_64 kernel in Zircon mode with petal shell.
 x86-zircon-build:
-	@echo "==> Building userstart..."
-	@RUSTFLAGS="-C relocation-model=static" \
-		cargo build -p userstart --target x86_64-unknown-none \
-		-Z build-std=core -Z build-std-features=compiler-builtins-mem \
-		--release --target-dir target/userstart
-	@echo "==> Building petal shell ZBI..."
-	@cargo petal-zbi --arch x86_64 --bin shell
 	@echo "==> Building zCore kernel (Zircon, x86_64)..."
-	@USERSTART_ELF="$$(pwd)/target/userstart/x86_64-unknown-none/release/userstart" \
-		PETAL_ZBI="$$(pwd)/target/petal/x86_64/petal.zbi" \
-		ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" \
-		cargo build -p zcore --no-default-features --features "zircon,ps2-keyboard" \
-		--target zCore/x86_64.json -Z json-target-spec \
-		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
-		--release
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" cargo zcore-build -m qemu-x86_64 --personality zircon
+
+# Build and run x86_64 Linux in QEMU.
+# Ctrl-A X to exit QEMU.
+x86-linux-run: x86-linux-build
+	cargo qemu -m qemu-x86_64 --log $(LOG)
 
 # Build and run x86_64 Zircon with petal shell in QEMU.
 # Ctrl-A X to exit QEMU.
 x86-zircon-run: x86-zircon-build
 	@tools/x86-bootimage/target/release/x86-bootimage \
-		target/x86_64/release/zcore \
-		target/x86_64/release/zcore-zircon.img
+		target/qemu-x86_64/release/zcore \
+		target/qemu-x86_64/release/zcore-zircon.img
 	@echo "==> Starting x86_64 Zircon (Ctrl-A X to exit QEMU)..."
 	@qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
 		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
 		-serial mon:stdio \
-		-drive format=raw,file=target/x86_64/release/zcore-zircon.img
+		-drive format=raw,file=target/qemu-x86_64/release/zcore-zircon.img
 
 # Create a UEFI-bootable disk image for x86_64 real hardware.
 # The image can be written to a USB drive with dd.
 # Usage: make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img
 #        make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img MODE=zircon
 MODE ?= linux
-OUTPUT ?= target/x86_64/release/zcore-uefi.img
+OUTPUT ?= target/qemu-x86_64/release/zcore-uefi.img
 x86-uefi-image:
 ifeq ($(MODE),zircon)
 	$(MAKE) x86-zircon-build
@@ -191,21 +165,22 @@ libc-test: boot-test
 # Requires x86_64 host (Linux or macOS) or aarch64 Linux.
 # Two personalities: Linux (busybox shell) and Zircon (petal programs).
 
-# Build libos in Linux mode
+# Build libos in Linux mode (default personality)
 libos-build-linux:
-	cargo build -p zcore --features linux,libos --release
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos
 
-# Build libos in Zircon mode (builds userstart + petal first)
+# Build libos in Zircon mode (builds userstart + petal automatically)
 libos-build-zircon:
-	cargo xtask libos-build-zircon
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality zircon
 
 # Run libos in Linux mode with busybox shell
 libos-run-linux:
 	cargo linux-libos --args "/bin/busybox sh"
 
-# Convenience aliases
-libos-build: libos-build-linux
-libos-run: libos-run-linux
+# Run libos in Zircon mode (known broken -- see #281)
+libos-run-zircon:
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality zircon
+	./target/release/zcore
 
 # configure build environment (platform toolchain)
 config:
@@ -375,56 +350,10 @@ else ifeq ($(ARCH), riscv64)
 	@qemu-img resize -f raw zCore/riscv64-linux.img +5M
 endif
 
-# Run clippy on all workspace crates.
-# Step 1: kernel + OS crates via the custom bare-metal target.
-#         Each package is listed explicitly so --no-deps can skip
-#         shared crates (executor, region-alloc).
-# Step 2: host-side tools (xtask, region-alloc) via native target.
-clippy:
-	@echo "==> Clippy: kernel crates ($(ARCH))..."
-	cargo clippy \
-		-p zcore -p kernel-hal -p linux-object -p linux-syscall \
-		-p linux-loader -p zircon-object -p zircon-syscall -p kernel-drivers \
-		--no-default-features --features linux \
-		--target zCore/$(ARCH).json \
-		-Z json-target-spec \
-		-Z build-std=core,alloc \
-		-Z build-std-features=compiler-builtins-mem \
-		--no-deps -- --deny warnings
-	@echo "==> Clippy: zircon-loader (requires USERSTART_ELF)..."
-	@if [ -n "$(USERSTART_ELF)" ]; then \
-		cargo clippy -p zircon-loader \
-			--target zCore/$(ARCH).json \
-			-Z json-target-spec \
-			-Z build-std=core,alloc \
-			-Z build-std-features=compiler-builtins-mem \
-			--no-deps -- --deny warnings; \
-	else \
-		echo "  (skipped -- set USERSTART_ELF to enable)"; \
-	fi
-	@echo "==> Clippy: host tools..."
-	cargo clippy -p xtask -p region-alloc -p zircon-abi \
-		--no-deps -- --deny warnings
-	@echo "==> Clippy: userspace programs ($(ARCH))..."
-ifeq ($(ARCH), aarch64)
-	cargo clippy -p petal -p userstart \
-		--target aarch64-unknown-none-softfloat \
-		--no-deps -- --deny warnings
-else ifeq ($(ARCH), riscv64)
-	cargo clippy -p petal -p userstart \
-		--target riscv64gc-unknown-none-elf \
-		--no-deps -- --deny warnings
-else ifeq ($(ARCH), x86_64)
-	cargo clippy -p petal -p userstart \
-		--target x86_64-unknown-none \
-		--no-deps -- --deny warnings
-endif
-
 # Run clippy for all architectures (catches cross-platform issues).
+# Features come from targets/qemu-<arch>.toml via xtask.
 clippy-all:
-	$(MAKE) clippy ARCH=aarch64
-	$(MAKE) clippy ARCH=x86_64
-	$(MAKE) clippy ARCH=riscv64
+	cargo check-style
 
 # check code style
 check:

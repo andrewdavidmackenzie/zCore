@@ -56,7 +56,7 @@ echo "==> Building zCore kernel for Raspberry Pi 4..."
 cd "$PROJECT_DIR"
 make raspi400-build
 
-KERNEL_BIN="$PROJECT_DIR/target/aarch64-raspi400/release/zcore.bin"
+KERNEL_BIN="$PROJECT_DIR/target/raspi400/release/zcore.bin"
 if [ ! -f "$KERNEL_BIN" ]; then
     echo "ERROR: Kernel binary not found at $KERNEL_BIN"
     exit 1

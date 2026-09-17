@@ -13,7 +13,7 @@ An OS kernel based on Zircon with Linux compatibility.
 ## Quick start
 
 ```bash
-make run
+make linux-run
 ```
 
 This builds and boots zCore on QEMU (aarch64) with a minimal Linux
@@ -26,6 +26,89 @@ Type `poweroff -f` at the `/ #` prompt (or press `Ctrl-A X`) to exit.
 
 Prerequisites: Rust nightly, QEMU, and `aarch64-linux-musl-gcc`
 (on macOS: `make config` installs the cross-compiler via Homebrew).
+
+## Building
+
+All build commands are target-driven. Each target is defined in a TOML
+file under `targets/` that specifies the architecture, drivers, features,
+and default personality (linux or zircon). You never need to specify
+feature flags manually.
+
+### Available targets
+
+| Target | Arch | Personality | Hardware |
+|--------|------|-------------|----------|
+| `qemu-aarch64` | aarch64 | linux | QEMU virt |
+| `qemu-x86_64` | x86_64 | linux | QEMU q35 |
+| `qemu-riscv64` | riscv64 | linux | QEMU virt |
+| `raspi400` | aarch64 | zircon | Raspberry Pi 400 |
+| `x86-laptop` | x86_64 | zircon | x86_64 real hardware (UEFI) |
+| `libos` | host | linux | runs as a host process |
+
+### Build commands
+
+```bash
+# Build a kernel (features come from targets/<name>.toml)
+cargo zcore-build -m qemu-aarch64
+cargo zcore-build -m raspi400
+cargo zcore-build -m libos
+
+# Override the default personality
+cargo zcore-build -m qemu-aarch64 --personality zircon
+
+# Build and strip to raw binary
+cargo bin -m qemu-aarch64
+
+# Build and run in QEMU
+cargo qemu -m qemu-aarch64
+cargo qemu -m qemu-x86_64 --personality zircon --log info
+
+# Build and run as a host process (no QEMU needed)
+cargo zcore-build -m libos                         # linux (default personality)
+cargo zcore-build -m libos --personality zircon     # zircon
+cargo linux-libos --args "/bin/busybox ls"          # build + run linux libos
+```
+
+### Makefile shortcuts
+
+| Scope           | Linux                      | Zircon                       |
+|-----------------|----------------------------|------------------------------|
+| QEMU (any arch) | `make linux-run`           | `make zircon-run`            |
+| x86_64 specific | `make x86-linux-build/run` | `make x86-zircon-build/run`  |
+| LibOS build     | `make libos-build-linux`   | `make libos-build-zircon`    |
+| LibOS run | `make libos-run-linux` | `make libos-run-zircon` (#281) |
+| Pi 400          | n/a (zircon only)          | `make raspi400-build/run/sd` |
+
+```bash
+make raspi400-sd SD=/Volumes/boot   # flash SD card for Pi 400
+make clippy-all              # clippy on all code (all archs, libos, userspace, tests)
+make test                    # boot smoke test + libc conformance tests
+```
+
+### Target configuration
+
+Each `targets/<name>.toml` file is the single source of truth:
+
+```toml
+# targets/qemu-aarch64.toml
+default-personality = "linux"
+arch = "aarch64"
+linker-script = "zCore/kernel/src/platform/aarch64/linker.ld"
+drivers = ["pl011-uart", "gic-400", "virtio-blk"]
+
+[qemu]
+machine = "virt"
+cpu = "cortex-a72"
+memory = "2G"
+
+[rustc-target]
+llvm-target = "aarch64-unknown-linux-gnu"
+# ...
+```
+
+The `drivers` list maps to cargo feature flags in `kernel-drivers`.
+The `default-personality` sets whether the kernel boots with Linux
+syscall emulation or the Zircon microkernel personality.
 
 ## Original README
 

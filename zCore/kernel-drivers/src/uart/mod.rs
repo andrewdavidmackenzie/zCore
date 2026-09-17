@@ -1,18 +1,20 @@
-//! Uart device driver.
+//! UART device drivers.
+//!
+//! Each UART variant is gated by its own feature flag.
 
 mod buffered;
-mod uart_16550;
-
 pub use buffered::BufferedUart;
-pub use uart_16550::Uart16550Mmio;
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(feature = "uart-16550")]
+mod uart_16550;
+#[cfg(feature = "uart-16550")]
+pub use uart_16550::Uart16550Mmio;
+#[cfg(all(feature = "uart-16550", target_arch = "x86_64"))]
 pub use uart_16550::Uart16550Pmio;
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(feature = "pl011-uart")]
 mod uart_pl011;
-
-#[cfg(target_arch = "aarch64")]
+#[cfg(feature = "pl011-uart")]
 pub use uart_pl011::Pl011Uart;
 
 #[cfg(feature = "allwinner")]
@@ -27,18 +29,9 @@ mod uart_u740;
 #[cfg(feature = "fu740")]
 pub use uart_u740::UartU740Mmio;
 
-/// PS/2 keyboard via i8042 controller.
-/// Pushes decoded keystrokes to a caller-provided callback
-/// (typically the console input buffer).
-#[cfg(all(feature = "ps2-keyboard", target_arch = "x86_64"))]
-mod ps2_keyboard;
-
-#[cfg(all(feature = "ps2-keyboard", target_arch = "x86_64"))]
-pub use ps2_keyboard::Ps2Keyboard;
-
 /// Mock UART for LibOS mode (reads from host stdin, writes to host stderr).
-#[cfg(feature = "libos")]
+#[cfg(feature = "mock-uart")]
 mod mock_uart;
 
-#[cfg(feature = "libos")]
+#[cfg(feature = "mock-uart")]
 pub use mock_uart::MockUart;

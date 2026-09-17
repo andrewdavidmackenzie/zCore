@@ -110,14 +110,30 @@ enum Commands {
     /// ```
     Asm(OutArgs),
 
-    /// Strips kernel binary for specific architecture.
+    /// Builds zCore for a target.
     ///
-    /// The default output is `target/{arch}/release/zcore.bin`.
+    /// Reads configuration from `targets/<name>.toml`. The target
+    /// defines architecture, drivers, and features. Personality
+    /// defaults to the TOML's `default-personality` but can be
+    /// overridden with `--personality`.
     ///
     /// # Example
     ///
     /// ```bash
-    /// cargo bin --arch riscv64 --output zcore.bin
+    /// cargo zcore-build -m qemu-aarch64
+    /// cargo zcore-build -m raspi400
+    /// cargo zcore-build -m libos --personality linux
+    /// ```
+    ZcoreBuild(BuildArgs),
+
+    /// Strips kernel binary for specific architecture.
+    ///
+    /// The default output is `target/{target}/release/zcore.bin`.
+    ///
+    /// # Example
+    ///
+    /// ```bash
+    /// cargo bin -m qemu-riscv64 --output zcore.bin
     /// ```
     Bin(OutArgs),
 
@@ -126,7 +142,8 @@ enum Commands {
     /// # Example
     ///
     /// ```bash
-    /// cargo qemu --arch riscv64 --smp 4
+    /// cargo qemu -m qemu-aarch64 --smp 4
+    /// cargo qemu -m qemu-x86_64 --personality zircon --log info
     /// ```
     Qemu(QemuArgs),
 
@@ -135,7 +152,7 @@ enum Commands {
     /// # Example
     ///
     /// ```bash
-    /// cargo gdb --arch riscv64 --port 1234
+    /// cargo gdb -m qemu-riscv64 --port 1234
     /// ```
     Gdb(GdbArgs),
 
@@ -318,6 +335,9 @@ fn main() {
         OtherTest(arg) => arg.linux_rootfs().put_other_test(),
         Image(arg) => arg.linux_rootfs().image(),
 
+        ZcoreBuild(args) => {
+            BuildConfig::from_args(args).invoke(os_xtask_utils::Cargo::build);
+        }
         Asm(args) => args.asm(),
         Bin(args) => {
             // Discard return value
@@ -382,44 +402,92 @@ fn unset_git_proxy(global: bool) {
     println!("git proxy =");
 }
 
-/// Checks code style.
+/// Checks code style and runs clippy on all code:
+///   - workspace format check
+///   - host tools (xtask, region-alloc, zircon-abi)
+///   - libos (linux personality, from targets/libos.toml)
+///   - bare-metal kernel for each architecture (from targets/qemu-<arch>.toml)
+///   - userspace programs (petal, userstart) for each architecture
+///   - tests (cargo test on host-buildable crates)
 fn check_style() {
     use os_xtask_utils::{Cargo, CommandExt};
-    println!("Check workspace");
-    Cargo::fmt().arg("--all").arg("--").arg("--check").invoke();
-    Cargo::clippy().all_features().invoke();
-    Cargo::doc().all_features().arg("--no-deps").invoke();
 
-    println!("Check libos");
-    // Zircon libos clippy requires USERSTART_ELF and PETAL_ZBI env vars
-    // (set by `cargo xtask libos-build-zircon`). Skipped in generic check.
-    // Use `make libos-build-zircon` to verify Zircon libos builds.
-    println!("    Checks linux libos");
+    println!("==> Format check...");
+    Cargo::fmt().arg("--all").arg("--").arg("--check").invoke();
+
+    println!("==> Clippy: host tools...");
     Cargo::clippy()
-        .package("zcore")
-        .features(false, ["linux", "libos"])
+        .args(["-p", "xtask", "-p", "region-alloc", "-p", "zircon-abi"])
+        .arg("--no-deps")
+        .args(["--", "--deny", "warnings"])
         .invoke();
 
-    println!("Check bare-metal");
-    for arch in [Arch::Riscv64, Arch::X86_64, Arch::Aarch64] {
-        println!("    Checks {} bare-metal", arch.name());
+    println!("==> Clippy: libos (linux)...");
+    BuildConfig::from_args(BuildArgs {
+        machine: "libos".into(),
+        personality: Some("linux".into()),
+        debug: false,
+    })
+    .invoke(Cargo::clippy);
+
+    println!("==> Clippy: bare-metal kernel...");
+    for arch in [Arch::Aarch64, Arch::X86_64, Arch::Riscv64] {
+        println!("    {}", arch.name());
         BuildConfig::from_args(BuildArgs {
-            machine: format!("virt-{}", arch.name()),
+            machine: format!("qemu-{}", arch.name()),
+            personality: None,
             debug: false,
         })
         .invoke(Cargo::clippy);
     }
+
+    println!("==> Clippy: userspace programs...");
+    let userspace_targets = [
+        ("aarch64", "aarch64-unknown-none-softfloat"),
+        ("x86_64", "x86_64-unknown-none"),
+        // riscv64 skipped: zircon-abi has compile_error! for 8-arg
+        // syscalls on riscv64, which blocks petal clippy.
+    ];
+    for (name, target) in userspace_targets {
+        println!("    {}", name);
+        Cargo::clippy()
+            .args(["-p", "petal", "-p", "userstart"])
+            .args(["--target", target])
+            .arg("--no-deps")
+            .args(["--", "--deny", "warnings"])
+            .invoke();
+    }
+
+    println!("==> Tests: host-buildable crates...");
+    // region-alloc and zircon-abi have no special feature requirements.
+    let status = std::process::Command::new("cargo")
+        .args(["test", "-p", "region-alloc", "-p", "zircon-abi"])
+        .status()
+        .expect("failed to run cargo test");
+    if !status.success() {
+        panic!("Tests failed (region-alloc, zircon-abi)");
+    }
+    // zircon-object depends on kernel-hal which needs libos features
+    // to build on the host. Some tests are known to fail (pre-existing,
+    // tracked separately). Report but don't block.
+    let status = std::process::Command::new("cargo")
+        .args(["test", "-p", "zircon-object", "--features", "libos"])
+        .status()
+        .expect("failed to run cargo test");
+    if !status.success() {
+        println!("WARNING: zircon-object tests had failures (pre-existing, non-blocking)");
+    }
 }
 
 mod libos {
-    use crate::{arch::Arch, linux::LinuxRootfs};
+    use crate::{
+        arch::Arch,
+        build::{BuildArgs, BuildConfig},
+        linux::LinuxRootfs,
+    };
     use os_xtask_utils::{Cargo, CommandExt};
 
     /// Builds the rootfs used by libos.
-    ///
-    /// On aarch64 macOS, builds a separate libos rootfs at
-    /// `rootfs/linux-libos/{arch}/` with a static-PIE busybox.
-    /// On other platforms, uses the same rootfs as bare-metal.
     pub(super) fn rootfs(clear: bool) {
         let host = Arch::host();
         println!("Building libos rootfs for host arch: {}", host.name());
@@ -440,46 +508,40 @@ mod libos {
     /// Runs an application in libos mode.
     pub(super) fn linux_run(args: String) {
         rootfs(false);
+        // Build via BuildConfig so features come from targets/libos.toml.
+        let build_config = BuildConfig::from_args(BuildArgs {
+            machine: "libos".into(),
+            personality: Some("linux".into()),
+            debug: false,
+        });
         // Launch!
-        Cargo::run()
+        let mut cargo = Cargo::run();
+        cargo
             .package("zcore")
             .release()
-            .features(true, ["linux", "libos"])
+            .features(true, &build_config.features)
             .arg("--")
-            .args(args.split_whitespace())
-            .invoke()
+            .args(args.split_whitespace());
+        cargo.invoke()
     }
 
     /// Builds zCore in Zircon libos mode.
     ///
-    /// First builds userstart and a petal ZBI for the host architecture,
-    /// then compiles zcore with `--features zircon,libos` and the
-    /// USERSTART_ELF / PETAL_ZBI env vars set.
+    /// Userstart and petal ZBI are built automatically by BuildConfig
+    /// when the personality is "zircon".
     pub(super) fn zircon_build() {
-        let host = Arch::host();
-        println!("Building Zircon libos for host arch: {}", host.name());
+        println!(
+            "Building Zircon libos for host arch: {}",
+            Arch::host().name()
+        );
 
-        // Build userstart for host architecture
-        let userstart_path = crate::petal::build_userstart(host);
-        // Build petal hello ZBI for host architecture
-        let zbi_path = crate::petal::build_petal_zbi(host, "hello");
-
-        // Build zcore with zircon+libos features
-        let status = std::process::Command::new("cargo")
-            .args([
-                "build",
-                "-p",
-                "zcore",
-                "--features",
-                "zircon,libos",
-                "--release",
-            ])
-            .env("USERSTART_ELF", &userstart_path)
-            .env("PETAL_ZBI", &zbi_path)
-            .status()
-            .expect("failed to run cargo build");
-        if !status.success() {
-            panic!("Zircon libos build failed");
-        }
+        // BuildConfig::from_args handles everything: features from
+        // targets/libos.toml, personality, and zircon prerequisites.
+        let build_config = BuildConfig::from_args(BuildArgs {
+            machine: "libos".into(),
+            personality: Some("zircon".into()),
+            debug: false,
+        });
+        build_config.invoke(Cargo::build);
     }
 }

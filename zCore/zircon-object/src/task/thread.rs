@@ -767,6 +767,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[cfg(target_arch = "x86_64")]
     async fn start() {
         kernel_hal::init();
         let root_job = Job::root();

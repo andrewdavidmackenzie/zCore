@@ -54,7 +54,8 @@ hal_fn_impl! {
         }
 
         fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
-            vec![PAGE_SIZE..PMEM_SIZE]
+            let range = PAGE_SIZE..PMEM_SIZE;
+            vec![range]
         }
 
         fn pmem_read(paddr: PhysAddr, buf: &mut [u8]) {

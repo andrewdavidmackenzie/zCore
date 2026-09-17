@@ -12,7 +12,7 @@ graphic = ["rcore-console"]
 mock = ["async-std", "sdl2"]
 virtio = ["virtio-drivers"]
 loopback = []
-no-pci = []
+
 
 # special drivers for hardwares
 

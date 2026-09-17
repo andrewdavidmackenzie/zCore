@@ -81,7 +81,7 @@ pub(super) fn init() -> DeviceResult {
         }
     }
 
-    #[cfg(not(feature = "no-pci"))]
+    #[cfg(feature = "pci")]
     {
         use alloc::sync::Arc;
         use kernel_drivers::bus::pci;

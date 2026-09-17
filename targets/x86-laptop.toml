@@ -1,0 +1,35 @@
+# x86_64 laptop (e.g., ThinkPad P1 Gen 3) -- Linux or Zircon
+#
+# Real hardware: no serial/COM port, framebuffer console output,
+# PS/2 keyboard input via i8042 controller, APIC, PCI.
+# Boots from USB via UEFI.
+#
+# TODO: fb-console is always compiled in on x86_64 and not yet
+# controllable via the drivers list. When driver selection is
+# fully implemented, add "fb-console" here.
+
+default-personality = "zircon"
+arch = "x86_64"
+linker-script = "zCore/kernel/src/platform/x86/linker.ld"
+drivers = ["apic", "ps2-keyboard"]
+
+# No [qemu] section -- this is real hardware.
+# Use `make x86-uefi-usb-linux` or `make x86-uefi-usb-zircon` to
+# build a UEFI boot image and write it to a USB drive.
+
+[rustc-target]
+llvm-target = "x86_64-unknown-none-elf"
+data-layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
+features = "-mmx,-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-avx,-avx2,+soft-float"
+code-model = "kernel"
+cpu = "x86-64"
+max-atomic-width = 64
+target-pointer-width = 64
+target-endian = "little"
+target-c-int-width = 32
+disable-redzone = true
+rustc-abi = "softfloat"
+position-independent-executables = false
+static-position-independent-executables = false
+plt-by-default = false
+relro-level = "full"

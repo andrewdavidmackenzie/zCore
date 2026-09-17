@@ -250,8 +250,25 @@ fn parse_dtb(dtb_paddr: usize) {
         _ => StepOver,
     });
 
-    // Use DTB bootargs if available, otherwise fall back to compile-time
-    let cmdline = info.bootargs.unwrap_or_else(|| KCONFIG.cmdline.to_string());
+    // Merge DTB bootargs with compile-time cmdline.
+    // DTB bootargs take precedence for keys that appear in both;
+    // compile-time keys (like LOG=) are appended if not in DTB.
+    let cmdline = match info.bootargs {
+        Some(dtb_args) => {
+            let mut merged = dtb_args.clone();
+            // Append compile-time cmdline keys not already in DTB bootargs
+            for token in KCONFIG.cmdline.split_whitespace() {
+                if let Some(key) = token.split('=').next() {
+                    if !dtb_args.split_whitespace().any(|t| t.starts_with(key)) {
+                        merged.push(' ');
+                        merged.push_str(token);
+                    }
+                }
+            }
+            merged
+        }
+        None => KCONFIG.cmdline.to_string(),
+    };
     CMDLINE.init_once_by(cmdline);
 
     // Set initrd region if both start and end are provided

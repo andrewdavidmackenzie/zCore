@@ -43,12 +43,16 @@ pub fn init_early() {
     let gic_base = super::gic_base();
     log::info!("Drivers: UART={:#x}, GIC={:#x}", uart_base, gic_base);
 
-    // RPi 400: PL011 UART clock is 48MHz, baud rate 9600 (set in config.txt)
+    // Use firmware-configured UART (no baud rate change needed).
+    // init_with_baud() disables the UART to reconfigure, which can
+    // hang if the PL011 BUSY flag stays set after disable (ARM TRM:
+    // BUSY reflects transmitter state, undefined after CR disable).
     #[cfg(feature = "board-raspi400")]
-    let uart = Pl011Uart::new_with_baud(phys_to_virt(uart_base), 48_000_000, 9600, true);
+    let uart = Arc::new(Pl011Uart::new_crlf(phys_to_virt(uart_base)));
     #[cfg(not(feature = "board-raspi400"))]
-    let uart = Pl011Uart::new(phys_to_virt(uart_base));
-    let uart = Arc::new(uart);
+    let uart = Arc::new(Pl011Uart::new(phys_to_virt(uart_base)));
+
+    log::info!("PL011 UART initialized");
 
     // Pi 400: use non-secure Group 1 config (firmware leaves IRQs in Group 0)
     #[cfg(feature = "board-raspi400")]
@@ -61,6 +65,7 @@ pub fn init_early() {
         phys_to_virt(gic_base + GIC_GICC_OFFSET),
         phys_to_virt(gic_base + GIC_GICD_OFFSET),
     );
+    log::info!("GIC-400 initialized");
     gic.irq_enable(TIMER_IRQ);
     gic.irq_enable(UART_IRQ);
     gic.register_handler(UART_IRQ as usize, Box::new(handle_uart_irq))

@@ -1,0 +1,26 @@
+# QEMU aarch64 virt machine -- Linux or Zircon
+#
+# Standard QEMU virtual machine with PL011 UART, GIC-400, VirtIO block.
+# Used for development and CI testing.
+
+default-personality = "linux"
+arch = "aarch64"
+linker-script = "zCore/kernel/src/platform/aarch64/linker.ld"
+drivers = ["pl011-uart", "gic-400", "virtio-blk"]
+
+[qemu]
+machine = "virt"
+cpu = "cortex-a72"
+memory = "2G"
+
+# Rustc target specification.
+# These fields are written to a JSON file at build time and passed
+# to rustc via --target.
+[rustc-target]
+llvm-target = "aarch64-unknown-linux-gnu"
+data-layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"
+features = "+strict-align,+neon,+fp-armv8"
+max-atomic-width = 128
+relocation-model = "static"
+target-pointer-width = 64
+disable-redzone = true

@@ -1,4 +1,4 @@
-#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
+#[cfg(feature = "pci")]
 pub mod pci;
 
 pub fn phys_to_virt(paddr: PhysAddr) -> VirtAddr {

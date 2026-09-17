@@ -268,19 +268,22 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
         let base_vaddr =
             parse_reg(node, props).and_then(|(paddr, size)| self.mmap(paddr as _, size as _))?;
 
-        use crate::uart::*;
         let dev = Device::Uart(match comp {
+            #[cfg(feature = "uart-16550")]
             c if c.contains("ns16550a") => {
-                Arc::new(unsafe { Uart16550Mmio::<u8>::new(base_vaddr) })
+                Arc::new(unsafe { crate::uart::Uart16550Mmio::<u8>::new(base_vaddr) })
             }
+            #[cfg(feature = "uart-16550")]
             c if c.contains("snps,dw-apb-uart") => {
-                Arc::new(unsafe { Uart16550Mmio::<u32>::new(base_vaddr) })
+                Arc::new(unsafe { crate::uart::Uart16550Mmio::<u32>::new(base_vaddr) })
             }
             #[cfg(feature = "allwinner")]
-            c if c.contains("allwinner,sun20i-uart") => Arc::new(UartAllwinner::new(base_vaddr)),
+            c if c.contains("allwinner,sun20i-uart") => {
+                Arc::new(crate::uart::UartAllwinner::new(base_vaddr))
+            }
             #[cfg(feature = "fu740")]
             c if c.contains("sifive,fu740-c000-uart") => {
-                Arc::new(unsafe { UartU740Mmio::<u32>::new(base_vaddr) })
+                Arc::new(unsafe { crate::uart::UartU740Mmio::<u32>::new(base_vaddr) })
             }
             _ => return Err(DeviceError::NotSupported),
         });
