@@ -119,8 +119,8 @@ impl Syscall<'_> {
     /// provides a simple way of getting overall system statistics
     pub fn sys_sysinfo(&mut self, mut sys_info: UserOutPtr<SysInfo>) -> SysResult {
         use kernel_hal::timer;
-        // Note: timer_now() is boot-relative in bare-metal mode (correct
-        // for uptime) but Unix-epoch-based in libos mode.
+        // timer_now() returns monotonic (boot-relative) time in both
+        // bare-metal and libos modes, which is correct for uptime.
         let uptime = timer::timer_now().as_secs();
 
         // Compute total RAM from boot-time free physical memory regions

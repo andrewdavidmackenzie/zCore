@@ -161,9 +161,22 @@ hal_fn_def! {
         /// Set the first time interrupt
         pub fn timer_enable();
 
-        /// Get current time.
-        /// TODO: use `Instant` as return type.
+        /// Get monotonic time (duration since boot).
+        ///
+        /// This is the CLOCK_MONOTONIC source. It never goes backwards
+        /// and is not affected by NTP or manual clock adjustments.
         pub fn timer_now() -> Duration;
+
+        /// Get wall-clock (real) time as duration since Unix epoch.
+        ///
+        /// This is the CLOCK_REALTIME source. In bare-metal mode without
+        /// an RTC, this falls back to boot-relative time (same as
+        /// `timer_now()`). In libos mode, this returns `SystemTime::now()`.
+        pub fn timer_clock_realtime() -> Duration {
+            // Default: same as monotonic (no RTC available).
+            // Overridden in libos mode to return wall-clock time.
+            timer_now()
+        }
 
         /// Converting from now-relative durations to absolute deadlines.
         pub fn deadline_after(dur: Duration) -> Duration {
