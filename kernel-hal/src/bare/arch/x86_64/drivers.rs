@@ -1,18 +1,35 @@
 use alloc::{boxed::Box, sync::Arc};
 
 use kernel_drivers::irq::x86::Apic;
-use kernel_drivers::scheme::IrqScheme;
-use kernel_drivers::uart::{BufferedUart, Uart16550Pmio};
+use kernel_drivers::scheme::{EventScheme, IrqScheme, UartScheme};
+use kernel_drivers::uart::Uart16550Pmio;
 use kernel_drivers::{Device, DeviceResult};
 
 use super::trap;
 use crate::drivers;
 
+/// Create a UART device and wire its received bytes to the console
+/// input buffer. The raw UART is registered directly (no BufferedUart
+/// wrapper) -- console input goes through `ConsoleInput`, and console
+/// output goes through `UartScheme::write_str()`.
+fn create_uart_with_console_input(base: u16) -> Arc<dyn UartScheme> {
+    let uart = Arc::new(Uart16550Pmio::new(base));
+    let u = uart.clone();
+    uart.subscribe(
+        Box::new(move |_| {
+            while let Some(c) = u.try_recv().unwrap_or(None) {
+                let c = if c == b'\r' { b'\n' } else { c };
+                crate::common::console::console_input_push(c);
+            }
+        }),
+        false,
+    );
+    uart
+}
+
 pub(super) fn init_early() -> DeviceResult {
-    let uart = Arc::new(Uart16550Pmio::new(0x3F8));
-    drivers::add_device(Device::Uart(BufferedUart::new(uart)));
-    let uart = Arc::new(Uart16550Pmio::new(0x2F8));
-    drivers::add_device(Device::Uart(BufferedUart::new(uart)));
+    drivers::add_device(Device::Uart(create_uart_with_console_input(0x3F8)));
+    drivers::add_device(Device::Uart(create_uart_with_console_input(0x2F8)));
     Ok(())
 }
 
@@ -43,6 +60,19 @@ pub(super) fn init() -> DeviceResult {
             irq.unmask(trap::X86_ISA_IRQ_COM2)?;
         }
     }
+    // PS/2 keyboard via i8042 controller (IRQ 1).
+    // Decoded keystrokes are pushed directly into the shared
+    // ConsoleInput buffer via the callback.
+    #[cfg(feature = "ps2-keyboard")]
+    {
+        use kernel_drivers::scheme::SchemeUpcast;
+        use kernel_drivers::uart::Ps2Keyboard;
+        let kbd = Arc::new(Ps2Keyboard::new(crate::common::console::console_input_push));
+        irq.register_device(trap::X86_ISA_IRQ_KEYBOARD, kbd.clone().upcast())?;
+        irq.unmask(trap::X86_ISA_IRQ_KEYBOARD)?;
+        info!("PS/2 keyboard registered on IRQ 1");
+    }
+
     warn!("UART IRQs done, configuring APIC timer...");
 
     use x2apic::lapic::{TimerDivide, TimerMode};

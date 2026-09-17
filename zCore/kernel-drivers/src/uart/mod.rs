@@ -27,6 +27,15 @@ mod uart_u740;
 #[cfg(feature = "fu740")]
 pub use uart_u740::UartU740Mmio;
 
+/// PS/2 keyboard via i8042 controller.
+/// Pushes decoded keystrokes to a caller-provided callback
+/// (typically the console input buffer).
+#[cfg(all(feature = "ps2-keyboard", target_arch = "x86_64"))]
+mod ps2_keyboard;
+
+#[cfg(all(feature = "ps2-keyboard", target_arch = "x86_64"))]
+pub use ps2_keyboard::Ps2Keyboard;
+
 /// Mock UART for LibOS mode (reads from host stdin, writes to host stderr).
 #[cfg(feature = "libos")]
 mod mock_uart;

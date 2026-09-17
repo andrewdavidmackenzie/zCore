@@ -4,8 +4,8 @@ use crate::hal_fn::mem::phys_to_virt;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use kernel_drivers::irq::gic_400;
-use kernel_drivers::scheme::IrqScheme;
-use kernel_drivers::uart::{BufferedUart, Pl011Uart};
+use kernel_drivers::scheme::{EventScheme, IrqScheme, UartScheme};
+use kernel_drivers::uart::Pl011Uart;
 use kernel_drivers::Device;
 
 /// GIC register offsets from gic_base.
@@ -68,7 +68,18 @@ pub fn init_early() {
     gic.register_handler(TIMER_IRQ as usize, Box::new(set_next_trigger))
         .ok();
     drivers::add_device(Device::Irq(Arc::new(gic)));
-    drivers::add_device(Device::Uart(BufferedUart::new(uart)));
+    // Wire UART received bytes to the shared console input buffer.
+    let u = uart.clone();
+    uart.subscribe(
+        Box::new(move |_| {
+            while let Some(c) = u.try_recv().unwrap_or(None) {
+                let c = if c == b'\r' { b'\n' } else { c };
+                crate::common::console::console_input_push(c);
+            }
+        }),
+        false,
+    );
+    drivers::add_device(Device::Uart(uart));
 }
 
 pub fn init() {

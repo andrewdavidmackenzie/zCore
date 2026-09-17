@@ -14,6 +14,8 @@ board_malta = []
 # Special hardware drivers
 allwinner = ["d1-pac"]
 fu740 = []
+# PS/2 keyboard via i8042 controller (x86_64 only)
+ps2-keyboard = ["pc-keyboard"]
 
 [dependencies]
 log = "0.4"
@@ -33,6 +35,7 @@ async-std = { version = "1.10", optional = true }
 acpi = "4.1"
 x2apic = "0.5"
 x86_64 = "0.15"
+pc-keyboard = { version = "0.9", optional = true }
 
 [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
 riscv = "0.9"

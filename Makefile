@@ -6,7 +6,7 @@ XTASK ?= 1
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
-.PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy check doc clean \
+.PHONY: help build run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy clippy-all check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-build libos-run \
 	petal-shell raspi400-build raspi400-run raspi400-sd x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
 
@@ -99,7 +99,7 @@ x86-zircon-build:
 	@USERSTART_ELF="$$(pwd)/target/userstart/x86_64-unknown-none/release/userstart" \
 		PETAL_ZBI="$$(pwd)/target/petal/x86_64/petal.zbi" \
 		ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" \
-		cargo build -p zcore --no-default-features --features zircon \
+		cargo build -p zcore --no-default-features --features "zircon,ps2-keyboard" \
 		--target zCore/x86_64.json -Z json-target-spec \
 		-Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem \
 		--release
@@ -419,6 +419,12 @@ else ifeq ($(ARCH), x86_64)
 		--target x86_64-unknown-none \
 		--no-deps -- --deny warnings
 endif
+
+# Run clippy for all architectures (catches cross-platform issues).
+clippy-all:
+	$(MAKE) clippy ARCH=aarch64
+	$(MAKE) clippy ARCH=x86_64
+	$(MAKE) clippy ARCH=riscv64
 
 # check code style
 check:

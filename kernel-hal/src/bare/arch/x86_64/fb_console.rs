@@ -52,11 +52,7 @@ pub fn init() {
     // so infer from size: size / (height * stride) = bpp).
     let bpp = if fb.height > 0 && fb.stride > 0 {
         let total_pixels = fb.height as u64 * fb.stride as u64;
-        if total_pixels > 0 {
-            (fb.size / total_pixels) as u32
-        } else {
-            4
-        }
+        (fb.size.checked_div(total_pixels).unwrap_or(4)) as u32
     } else {
         4
     };

@@ -60,6 +60,8 @@ board-c910light = ["link-user-img", "kernel-hal/board-c910light", "no-pci"]
 board-fu740 = ["link-user-img", "kernel-hal/fu740-drivers"]
 # Run on Raspberry Pi 400
 board-raspi400 = ["no-pci", "kernel-hal/board-raspi400"]
+# PS/2 keyboard input (for x86_64 boards with i8042 controller)
+ps2-keyboard = ["kernel-hal/ps2-keyboard"]
 
 # Use memory and ipi to simulate block device
 mock-disk = ["linux-object/mock-disk"]

@@ -121,7 +121,7 @@ impl Syscall<'_> {
                     ((end - addr_win.base) & (PCIE_ECAM_BYTES_PER_BUS as u64 - 1)) as usize;
                 let new_bus_end: usize =
                     addr_win.size / PCIE_ECAM_BYTES_PER_BUS + addr_win.bus_start as usize - 1;
-                if new_bus_end as usize >= PCIE_MAX_BUSSES {
+                if new_bus_end >= PCIE_MAX_BUSSES {
                     return Err(ZxError::INVALID_ARGS);
                 }
                 addr_win.bus_end = new_bus_end as u8;

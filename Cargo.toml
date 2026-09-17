@@ -57,6 +57,7 @@ features = ["board-raspi400"]
 
 [workspace.metadata.machines.qemu.virt-x86_64]
 arch = "x86_64"
+features = ["ps2-keyboard"]
 
 [workspace.metadata.machines.allwinner.nezha]
 arch = "riscv64"
