@@ -3,6 +3,7 @@
 # Standard QEMU virtual machine with 16550 UART (via device tree),
 # RISC-V PLIC interrupt controller.
 
+default-personality = "linux"
 arch = "riscv64"
 linker-script = "zCore/kernel/src/platform/riscv/linker.ld"
 drivers = ["uart-16550", "riscv-intc", "riscv-plic", "pci"]

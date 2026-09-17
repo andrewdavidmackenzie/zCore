@@ -1,4 +1,5 @@
 # SiFive FU740 RISC-V board (not actively tested)
+default-personality = "linux"
 arch = "riscv64"
 linker-script = "zCore/kernel/src/platform/riscv/linker.ld"
 drivers = ["riscv-intc", "riscv-plic", "pci"]

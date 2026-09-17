@@ -71,21 +71,21 @@ pub fn install_sigsys_handler() {
 // needs its own jump buffer.
 std::thread_local! {
     static KERNEL_JMP_BUF: std::cell::UnsafeCell<[u64; 32]> =
-        std::cell::UnsafeCell::new([0u64; 32]);
+        const { std::cell::UnsafeCell::new([0u64; 32]) };
     static CURRENT_CTX: std::cell::Cell<*mut UserContext> =
-        std::cell::Cell::new(core::ptr::null_mut());
+        const { std::cell::Cell::new(core::ptr::null_mut()) };
     /// macOS's tpidr_el0 value for this thread. Saved before entering
     /// user code and restored in the SIGTRAP handler. On macOS,
     /// tpidr_el0 is a small integer (thread slot index); musl uses
     /// it as a TLS pointer. We swap between the two on each
     /// user/kernel transition.
-    static MACOS_TPIDR: std::cell::Cell<u64> = std::cell::Cell::new(0);
+    static MACOS_TPIDR: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     /// Per-thread copy of UserContext for the noreturn jump to user code.
     /// We copy the context here because the compiler may free the caller's
     /// stack frame before a noreturn callee reads a pointer argument.
     /// Thread-local storage is not affected by stack frame deallocation.
     static JUMP_CTX: std::cell::UnsafeCell<UserContext> =
-        std::cell::UnsafeCell::new(unsafe { core::mem::zeroed() });
+        const { std::cell::UnsafeCell::new(unsafe { core::mem::zeroed() }) };
 }
 
 extern "C" {
@@ -119,7 +119,7 @@ std::thread_local! {
     /// Per-thread alternate signal stack memory.
     /// Allocated once per worker thread, freed when the thread exits.
     static SIGALT_STACK: std::cell::RefCell<Option<Vec<u8>>> =
-        std::cell::RefCell::new(None);
+        const { std::cell::RefCell::new(None) };
 }
 
 /// Ensure the current thread has an alternate signal stack configured.
@@ -335,7 +335,7 @@ fn write_hex(buf: &mut [u8], val: usize) -> usize {
     let mut n = 0;
     let mut v = val;
     while v > 0 {
-        tmp[n] = b"0123456789abcdef"[(v & 0xf) as usize];
+        tmp[n] = b"0123456789abcdef"[v & 0xf];
         v >>= 4;
         n += 1;
     }

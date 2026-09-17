@@ -17,7 +17,11 @@ use std::{
 /// Parsed target configuration from a `targets/<name>.toml` file.
 #[derive(Debug, Deserialize)]
 pub struct TargetConfig {
-    /// Target architecture: "aarch64", "x86_64", "riscv64".
+    /// Default personality: "linux" or "zircon".
+    /// Can be overridden at build time with `--personality`.
+    #[serde(rename = "default-personality", default = "default_personality")]
+    pub default_personality: String,
+    /// Target architecture: "aarch64", "x86_64", "riscv64", "host".
     pub arch: String,
     /// Path to the linker script (relative to workspace root).
     #[serde(rename = "linker-script")]
@@ -55,6 +59,10 @@ pub struct QemuConfig {
 
 fn default_memory() -> String {
     "2G".to_string()
+}
+
+fn default_personality() -> String {
+    "linux".to_string()
 }
 
 /// Well-known driver names and their corresponding cargo feature flags.

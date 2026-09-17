@@ -12,9 +12,14 @@ use std::{
 
 #[derive(Clone, Args)]
 pub(crate) struct BuildArgs {
-    /// Which machine is build for.
+    /// Target name (e.g., "qemu-aarch64", "raspi400", "libos").
+    /// Reads configuration from targets/<name>.toml.
     #[clap(long, short)]
     pub machine: String,
+    /// Personality override: "linux" or "zircon".
+    /// If not set, uses the target's default-personality from the TOML.
+    #[clap(long)]
+    pub personality: Option<String>,
     /// Build as debug mode.
     #[clap(long)]
     pub debug: bool,
@@ -31,14 +36,15 @@ pub(crate) struct OutArgs {
 
 #[derive(Args)]
 pub(crate) struct QemuArgs {
-    #[clap(flatten)]
-    arch: ArchArg,
+    /// Target name (e.g., "qemu-aarch64"). Must have a [qemu] section.
+    #[clap(long, short)]
+    machine: String,
+    /// Personality override: "linux" or "zircon".
+    #[clap(long)]
+    personality: Option<String>,
     /// Build as debug mode.
     #[clap(long)]
     debug: bool,
-    /// Boot in Zircon mode (instead of Linux mode).
-    #[clap(long)]
-    zircon: bool,
     /// Log level (error, warn, info, debug, trace). Default: warn.
     #[clap(long, default_value = "warn")]
     log: String,
@@ -57,8 +63,9 @@ pub(crate) struct QemuArgs {
 
 #[derive(Args)]
 pub(crate) struct GdbArgs {
-    #[clap(flatten)]
-    arch: ArchArg,
+    /// Target name (e.g., "qemu-aarch64").
+    #[clap(long, short)]
+    machine: String,
     #[clap(long)]
     port: u16,
 }
@@ -69,8 +76,10 @@ pub(crate) struct BuildConfig {
     arch: Arch,
     /// Target name (e.g., "qemu-aarch64") -- determines output directory.
     target_name: String,
+    /// Whether this is a libos (host-native) target.
+    is_libos: bool,
     debug: bool,
-    env: HashMap<OsString, OsString>,
+    pub(crate) env: HashMap<OsString, OsString>,
     pub(crate) features: HashSet<String>,
     /// Path to the generated rustc target spec JSON.
     target_json: PathBuf,
@@ -79,23 +88,35 @@ pub(crate) struct BuildConfig {
 impl BuildConfig {
     pub fn from_args(args: BuildArgs) -> Self {
         let target = TargetConfig::load(&args.machine);
-        let arch = Arch::from_str(&target.arch).unwrap_or_else(|_| {
-            panic!(
-                "Unknown arch '{}' in target '{}'",
-                target.arch, args.machine
-            )
-        });
+
+        // Determine personality: CLI override > TOML default.
+        let personality = args
+            .personality
+            .clone()
+            .unwrap_or_else(|| target.default_personality.clone());
+        assert!(
+            personality == "linux" || personality == "zircon",
+            "Invalid personality '{}' -- must be 'linux' or 'zircon'",
+            personality
+        );
+
+        let is_libos = target.arch == "host";
+        let arch = if is_libos {
+            Arch::host()
+        } else {
+            Arch::from_str(&target.arch).unwrap_or_else(|_| {
+                panic!(
+                    "Unknown arch '{}' in target '{}'",
+                    target.arch, args.machine
+                )
+            })
+        };
 
         let mut features: HashSet<String> = target.cargo_features().into_iter().collect();
         let mut env = HashMap::new();
 
-        // Default to Linux personality unless Zircon is explicitly set.
-        if !features.contains("zircon") {
-            features.insert("linux".into());
-        }
-
-        // PCI is now a positive feature -- included only when listed
-        // in the target's drivers list.
+        // Set personality feature.
+        features.insert(personality.clone());
 
         // Pass through ZCORE_CMDLINE from the environment if set,
         // allowing `make build LOG=info` to flow through to the kernel.
@@ -103,12 +124,42 @@ impl BuildConfig {
             env.insert("ZCORE_CMDLINE".into(), cmdline.into());
         }
 
-        // Generate the rustc target spec JSON.
-        let target_json = target.write_target_json(&args.machine);
+        // Generate the rustc target spec JSON (not needed for libos).
+        let target_json = if is_libos {
+            // LibOS uses the host's native target -- no JSON needed.
+            PathBuf::new()
+        } else {
+            target.write_target_json(&args.machine)
+        };
+
+        // Zircon personality requires userstart and petal ZBI.
+        // Build them now unless already provided via environment
+        // (e.g., when the test script builds a specific ZBI first).
+        if personality == "zircon" {
+            if std::env::var("USERSTART_ELF").is_err() {
+                let userstart_path = crate::petal::build_userstart(arch);
+                env.insert("USERSTART_ELF".into(), userstart_path.into_os_string());
+            } else {
+                env.insert(
+                    "USERSTART_ELF".into(),
+                    std::env::var("USERSTART_ELF").unwrap().into(),
+                );
+            }
+            if std::env::var("PETAL_ZBI").is_err() {
+                let zbi_path = crate::petal::build_petal_zbi(arch, "hello");
+                env.insert("PETAL_ZBI".into(), zbi_path.into_os_string());
+            } else {
+                env.insert(
+                    "PETAL_ZBI".into(),
+                    std::env::var("PETAL_ZBI").unwrap().into(),
+                );
+            }
+        }
 
         Self {
             arch,
             target_name: args.machine.clone(),
+            is_libos,
             debug: args.debug,
             env,
             features,
@@ -127,16 +178,20 @@ impl BuildConfig {
 
     pub fn invoke(&self, cargo: impl FnOnce() -> Cargo) {
         let mut cargo = cargo();
-        cargo
-            .package("zcore")
-            .features(false, &self.features)
-            .target(&self.target_json)
-            .args(["-Z", "json-target-spec"])
-            .args(["-Z", "build-std=core,alloc"])
-            .args(["-Z", "build-std-features=compiler-builtins-mem"])
-            .conditional(!self.debug, |cargo| {
-                cargo.release();
-            });
+        cargo.package("zcore").features(false, &self.features);
+        if self.is_libos {
+            // LibOS builds with the host's native target -- no custom
+            // target spec, no build-std.
+        } else {
+            cargo
+                .target(&self.target_json)
+                .args(["-Z", "json-target-spec"])
+                .args(["-Z", "build-std=core,alloc"])
+                .args(["-Z", "build-std-features=compiler-builtins-mem"]);
+        }
+        cargo.conditional(!self.debug, |cargo| {
+            cargo.release();
+        });
         for (key, val) in &self.env {
             println!("set build env: {key:?} : {val:?}");
             cargo.env(key, val);
@@ -194,7 +249,18 @@ impl OutArgs {
 impl QemuArgs {
     /// Launches in qemu.
     pub fn qemu(self) {
-        let is_zircon = self.zircon;
+        let target_name = self.machine.clone();
+
+        // Build the kernel -- personality comes from TOML default or --personality override.
+        let mut build_config = BuildConfig::from_args(BuildArgs {
+            machine: target_name.clone(),
+            personality: self.personality.clone(),
+            debug: self.debug,
+        });
+
+        let is_zircon = build_config.features.contains("zircon");
+        let arch = build_config.arch;
+        let arch_str = arch.name();
 
         // Determine the rootfs image path: custom or default.
         let rootfs_img = if let Some(ref custom) = self.rootfs_image {
@@ -208,28 +274,16 @@ impl QemuArgs {
             custom.clone()
         } else if !is_zircon {
             // Build default Linux rootfs image
-            self.arch.linux_rootfs().image();
-            INNER.join(format!("{}-linux.img", self.arch.arch.name()))
+            ArchArg { arch }.linux_rootfs().image();
+            INNER.join(format!("{}-linux.img", arch_str))
         } else {
             // Zircon mode: build rootfs image with petal programs.
             // The kernel prefers rootfs over embedded ZBI.
-            crate::petal::build_zircon_rootfs_image(self.arch.arch)
+            crate::petal::build_zircon_rootfs_image(arch)
         };
 
-        // Build various strings
-        let arch = self.arch.arch;
-        let arch_str = arch.name();
-        let target_name = format!("qemu-{}", arch_str);
-
-        // Build the kernel
-        let mut build_config = BuildConfig::from_args(BuildArgs {
-            machine: target_name.clone(),
-            debug: self.debug,
-        });
         let obj = build_config.target_file_path();
         // Set the kernel command line via compile-time env var.
-        // For Zircon with --rootfs-image, include ROOTPROC so the
-        // kernel knows which program to load from the rootfs.
         let cmdline = if is_zircon && self.rootfs_image.is_some() {
             format!("LOG={} ROOTPROC=/bin/hello", self.log)
         } else if is_zircon {
@@ -241,21 +295,7 @@ impl QemuArgs {
             .env
             .insert("ZCORE_CMDLINE".into(), cmdline.into());
 
-        if is_zircon {
-            build_config.features.remove("linux");
-            build_config.features.insert("zircon".into());
-            // Embed userstart+ZBI as a compile-time fallback.
-            // The kernel prefers rootfs (SFS image) when available,
-            // falling back to embedded ZBI only when no rootfs is found.
-            let userstart_path = crate::petal::build_userstart(arch);
-            build_config
-                .env
-                .insert("USERSTART_ELF".into(), userstart_path.into_os_string());
-            let zbi_path = crate::petal::build_petal_zbi(arch, "hello");
-            build_config
-                .env
-                .insert("PETAL_ZBI".into(), zbi_path.into_os_string());
-        }
+        // Zircon userstart+ZBI are already built by BuildConfig::from_args().
 
         // For riscv64 we need a raw binary; for aarch64 we use the ELF directly
         // Build the kernel as a stripped raw binary. QEMU -kernel loads
@@ -368,7 +408,9 @@ impl QemuArgs {
 
 impl GdbArgs {
     pub fn gdb(&self) {
-        match self.arch.arch {
+        let target = TargetConfig::load(&self.machine);
+        let arch = Arch::from_str(&target.arch).expect("unknown arch");
+        match arch {
             Arch::Riscv64 => {
                 Ext::new("riscv64-unknown-elf-gdb")
                     .args(["-ex", &format!("target remote localhost:{}", self.port)])

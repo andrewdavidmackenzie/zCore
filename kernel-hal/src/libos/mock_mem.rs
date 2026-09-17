@@ -167,9 +167,9 @@ impl MockMemory {
                 });
             };
 
-            // needs_memcpy: false for file-backed (data is in the file),
+            // false for file-backed (data is in the file),
             // true for anonymous (must copy from PMEM).
-            let needs_memcpy = match state {
+            match state {
                 None if can_file_back => {
                     // First mapping: try file-backed MAP_SHARED.
                     let prot_flags = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
@@ -231,9 +231,7 @@ impl MockMemory {
                     true
                 }
                 Some(HostPageState::Anonymous) => true,
-            };
-
-            needs_memcpy
+            }
         };
 
         if needs_memcpy {

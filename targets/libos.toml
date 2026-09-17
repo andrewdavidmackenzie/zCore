@@ -3,6 +3,7 @@
 # No QEMU, no custom target spec. Builds with the host's native
 # toolchain. Used for development and testing without a VM.
 
+default-personality = "linux"
 arch = "host"
 linker-script = ""
 drivers = ["mock-uart"]

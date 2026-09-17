@@ -3,6 +3,7 @@
 # Real hardware: BCM2711 SoC, PL011 UART, GIC-400 (non-secure),
 # no VirtIO, no PCI. Boots from SD card.
 
+default-personality = "zircon"
 arch = "aarch64"
 linker-script = "zCore/kernel/src/platform/aarch64/linker_raspi400.ld"
 drivers = ["pl011-uart", "gic-400"]

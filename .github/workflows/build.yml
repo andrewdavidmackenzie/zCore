@@ -88,7 +88,7 @@ jobs:
           components: rust-src, llvm-tools-preview
 
       - name: Build libos (Linux mode)
-        run: cargo build -p zcore --features linux,libos,mock-uart
+        run: cargo zcore-build -m libos
 
       - name: Build libos (Zircon mode)
-        run: cargo xtask libos-build-zircon
+        run: cargo zcore-build -m libos --personality zircon

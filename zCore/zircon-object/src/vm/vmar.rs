@@ -654,9 +654,9 @@ impl VmAddressRegion {
             // away and actually reaches the memory-mapped page.
             // On aarch64 macOS, file-backed MAP_SHARED pages may
             // not be updated by regular copy_nonoverlapping.
-            for i in 0..actual_size {
+            for (i, &byte) in buf[..actual_size].iter().enumerate() {
                 unsafe {
-                    core::ptr::write_volatile((vaddr + i) as *mut u8, buf[i]);
+                    core::ptr::write_volatile((vaddr + i) as *mut u8, byte);
                 }
             }
             if is_exec {

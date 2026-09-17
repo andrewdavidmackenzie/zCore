@@ -53,16 +53,10 @@ cargo petal-zbi --arch "$ARCH" --bin hello 2>&1 | tail -1
 ZBI="target/petal/${ARCH}/petal.zbi"
 
 # Build the kernel with rootfs ROOTPROC set to /bin/hello
-USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" \
-  PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
-  ZCORE_CMDLINE="LOG=${LOG:-info} ROOTPROC=/bin/hello" cargo build \
-  -p zcore \
-  --no-default-features --features "zircon,pl011-uart,gic-400,virtio" \
-  --target "targets/qemu-${ARCH}.json" \
-  -Z json-target-spec \
-  -Z build-std=core,alloc \
-  -Z build-std-features=compiler-builtins-mem \
-  --release
+USERSTART_ELF="$(pwd)/$USERSTART" \
+  PETAL_ZBI="$(pwd)/$ZBI" \
+  ZCORE_CMDLINE="LOG=${LOG:-info} ROOTPROC=/bin/hello" \
+  cargo zcore-build -m "qemu-${ARCH}" --personality zircon
 
 # Strip ELF to raw binary (QEMU needs raw binary for DTB passthrough)
 OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)

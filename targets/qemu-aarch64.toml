@@ -3,6 +3,7 @@
 # Standard QEMU virtual machine with PL011 UART, GIC-400, VirtIO block.
 # Used for development and CI testing.
 
+default-personality = "linux"
 arch = "aarch64"
 linker-script = "zCore/kernel/src/platform/aarch64/linker.ld"
 drivers = ["pl011-uart", "gic-400", "virtio-blk"]

@@ -8,6 +8,7 @@
 # controllable via the drivers list. When driver selection is
 # fully implemented, add "fb-console" here.
 
+default-personality = "zircon"
 arch = "x86_64"
 linker-script = "zCore/kernel/src/platform/x86/linker.ld"
 drivers = ["apic", "ps2-keyboard"]
