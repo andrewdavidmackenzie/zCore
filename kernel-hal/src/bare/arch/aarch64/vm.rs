@@ -138,7 +138,7 @@ hal_fn_impl! {
         fn activate_paging(vmtoken: PhysAddr) {
             let check_if_user = (vmtoken & USER_TABLE_FLAG) != 0;
             let vmtoken = vmtoken & PHYS_ADDR_MASK;
-            info!("set {} page_table @ {:#x}", if check_if_user { "user" } else { "kernel" }, vmtoken);
+            trace!("set {} page_table @ {:#x}", if check_if_user { "user" } else { "kernel" }, vmtoken);
             if check_if_user {
                 TTBR0_EL1.set(vmtoken as _);
             } else {

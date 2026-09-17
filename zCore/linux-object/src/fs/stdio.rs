@@ -121,7 +121,7 @@ impl INode for Stdin {
                 Ok(0)
             }
             TCGETS | TIOCSPGRP => {
-                warn!("stdin TCGETS | TIOCSPGRP, pretend to be tty.");
+                trace!("stdin TCGETS | TIOCSPGRP, pretend to be tty.");
                 // pretend to be tty
                 Ok(0)
             }
@@ -167,7 +167,7 @@ impl INode for Stdout {
                 Ok(0)
             }
             TCGETS | TIOCSPGRP => {
-                warn!("stdout TCGETS | TIOCSPGRP, pretend to be tty.");
+                trace!("stdout TCGETS | TIOCSPGRP, pretend to be tty.");
                 // pretend to be tty
                 Ok(0)
             }

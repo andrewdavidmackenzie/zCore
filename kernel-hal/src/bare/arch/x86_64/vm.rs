@@ -19,7 +19,7 @@ hal_fn_impl! {
             let frame = PhysFrame::containing_address(x86_64::PhysAddr::new(vmtoken as _));
             if Cr3::read().0 != frame {
                 unsafe { Cr3::write(frame, Cr3Flags::empty()) };
-                debug!("set page_table @ {:#x}", vmtoken);
+                trace!("set page_table @ {:#x}", vmtoken);
             }
         }
 
