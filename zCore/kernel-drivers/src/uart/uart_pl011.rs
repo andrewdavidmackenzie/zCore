@@ -78,6 +78,22 @@ impl Pl011Uart {
         }
     }
 
+    /// Create a Pl011Uart without touching hardware configuration.
+    ///
+    /// The firmware is expected to have already configured the UART
+    /// (baud rate, line control, FIFOs). Only enables the RX interrupt.
+    pub fn new_crlf(base: usize) -> Self {
+        Self {
+            inner: {
+                let inner = Pl011Inner::new(base);
+                inner.init_irq_only();
+                inner
+            },
+            crlf: true,
+            listener: EventListener::new(),
+        }
+    }
+
     /// Create a Pl011Uart and initialize with a specific baud rate.
     ///
     /// `uart_clock` is the input clock frequency in Hz (e.g. 48_000_000 for Pi 400).
@@ -208,6 +224,14 @@ impl Pl011Inner {
         self.write_reg(self.intr_mask_setclr_reg, flags.bits);
 
         // Clear pending interrupts
+        self.write_reg(self.intr_clr_reg, 0x7ff);
+    }
+
+    /// Minimal init: only enable RX interrupt, don't touch UART config.
+    /// For use when firmware has already configured the UART correctly.
+    fn init_irq_only(&self) {
+        let flags = UartImscFlags::RXIM;
+        self.write_reg(self.intr_mask_setclr_reg, flags.bits);
         self.write_reg(self.intr_clr_reg, 0x7ff);
     }
 
