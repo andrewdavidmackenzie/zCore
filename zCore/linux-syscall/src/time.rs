@@ -7,6 +7,7 @@ use kernel_hal::{user::UserInPtr, user::UserOutPtr};
 use linux_object::error::LxError;
 use linux_object::error::SysResult;
 use linux_object::signal::Signal as LinuxSignal;
+use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 
 const USEC_PER_TICK: usize = 10000;
@@ -123,18 +124,31 @@ impl Syscall<'_> {
         }
     }
 
-    /// get resource usage
-    /// currently only support ru_utime and ru_stime:
-    /// - `ru_utime`: user CPU time used
-    /// - `ru_stime`: system CPU time used
+    /// Get resource usage statistics
+    /// (see [linux man getrusage(2)](https://www.man7.org/linux/man-pages/man2/getrusage.2.html)).
     pub fn sys_getrusage(&mut self, who: usize, mut rusage: UserOutPtr<RUsage>) -> SysResult {
         info!("getrusage: who: {}, rusage: {:?}", who, rusage);
         if rusage.is_null() {
             return Err(LxError::EINVAL);
         }
+        use core::time::Duration;
+        const RUSAGE_SELF: usize = 0;
+        const RUSAGE_CHILDREN: usize = usize::MAX; // -1 as usize
+
+        let (user_ns, sys_ns) = match who {
+            RUSAGE_SELF => {
+                let linux = self.thread.lock_linux();
+                (linux.user_time_ns(), linux.sys_time_ns())
+            }
+            RUSAGE_CHILDREN => {
+                let proc = self.linux_process();
+                proc.children_cpu_time()
+            }
+            _ => return Err(LxError::EINVAL),
+        };
         let new_rusage = RUsage {
-            utime: TimeVal::now(),
-            stime: TimeVal::now(),
+            utime: TimeVal::from_duration(Duration::from_nanos(user_ns as u64)),
+            stime: TimeVal::from_duration(Duration::from_nanos(sys_ns as u64)),
         };
         rusage.write(new_rusage)?;
         Ok(0)
@@ -278,23 +292,34 @@ impl Syscall<'_> {
         Ok(0)
     }
 
-    /// stores the current process times in the struct tms that buf points to
+    /// Get process times
+    /// (see [linux man times(2)](https://www.man7.org/linux/man-pages/man2/times.2.html)).
+    ///
+    /// Returns clock ticks since boot. The `Tms` struct contains per-process
+    /// user and system CPU time, plus accumulated children times.
     pub fn sys_times(&mut self, mut buf: UserOutPtr<Tms>) -> SysResult {
         info!("times: buf: {:?}", buf);
 
         let tv = TimeVal::now();
-
         let tick = (tv.sec * 1_000_000 + tv.usec) / USEC_PER_TICK;
 
         if !buf.is_null() {
-            // Per-process CPU time accounting is not implemented.
-            // Return zeros rather than wall-clock time, which would
-            // be incorrect (includes sleep time and other processes).
+            // Convert nanoseconds to clock ticks (100 Hz = 10ms per tick).
+            const NS_PER_TICK: u128 = USEC_PER_TICK as u128 * 1_000;
+
+            let linux = self.thread.lock_linux();
+            let user_ticks = linux.user_time_ns() / NS_PER_TICK;
+            let sys_ticks = linux.sys_time_ns() / NS_PER_TICK;
+            drop(linux);
+
+            let proc = self.linux_process();
+            let (cu_ns, cs_ns) = proc.children_cpu_time();
+
             let new_buf = Tms {
-                tms_utime: 0,
-                tms_stime: 0,
-                tms_cutime: 0,
-                tms_cstime: 0,
+                tms_utime: user_ticks as u64,
+                tms_stime: sys_ticks as u64,
+                tms_cutime: (cu_ns / NS_PER_TICK) as u64,
+                tms_cstime: (cs_ns / NS_PER_TICK) as u64,
             };
             buf.write(new_buf)?;
         } else {

@@ -238,6 +238,10 @@ struct LinuxProcessInner {
     umask: u32,
     /// Supplementary group IDs
     groups: Vec<u32>,
+    /// Accumulated user CPU time of waited-for children (nanoseconds).
+    children_user_time_ns: u128,
+    /// Accumulated system CPU time of waited-for children (nanoseconds).
+    children_sys_time_ns: u128,
 }
 
 /// Per-process POSIX timer state.
@@ -1019,6 +1023,19 @@ impl LinuxProcess {
             }
         });
         timer::timer_set(deadline, callback);
+    }
+
+    /// Get accumulated CPU time of waited-for children.
+    pub fn children_cpu_time(&self) -> (u128, u128) {
+        let inner = self.inner.lock();
+        (inner.children_user_time_ns, inner.children_sys_time_ns)
+    }
+
+    /// Accumulate a child's CPU time into this process's children totals.
+    pub fn add_children_cpu_time(&self, user_ns: u128, sys_ns: u128) {
+        let mut inner = self.inner.lock();
+        inner.children_user_time_ns += user_ns;
+        inner.children_sys_time_ns += sys_ns;
     }
 }
 

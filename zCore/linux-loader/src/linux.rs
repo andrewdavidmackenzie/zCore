@@ -80,7 +80,9 @@ async fn run_user(thread: CurrentThread) {
             ctx.get_field(UserContextField::InstrPointer),
             ctx.get_field(UserContextField::StackPointer),
         );
+        let user_start = kernel_hal::timer::timer_now();
         ctx.enter_uspace();
+        let user_time = kernel_hal::timer::timer_now() - user_start;
         debug!(
             "back from user: tid = {} pc = {:x} sp = {:x} trap = {:?}",
             thread.id(),
@@ -89,7 +91,21 @@ async fn run_user(thread: CurrentThread) {
             ctx.trap_reason(),
         );
         // handle trap/interrupt/syscall
-        if let Err(err) = handle_user_trap(&thread, ctx).await {
+        let sys_start = kernel_hal::timer::timer_now();
+        let trap_result = handle_user_trap(&thread, ctx).await;
+        let sys_time = kernel_hal::timer::timer_now() - sys_start;
+
+        // Accumulate CPU time on the thread.
+        {
+            let inner = thread.inner();
+            let mut linux = inner.lock_linux();
+            linux.add_user_time(user_time.as_nanos());
+            linux.add_sys_time(sys_time.as_nanos());
+        }
+        // Also update the zircon-object time counter (used by get_time()).
+        thread.time_add(user_time.as_nanos());
+
+        if let Err(err) = trap_result {
             thread.exit_linux(err as i32);
         }
     }
