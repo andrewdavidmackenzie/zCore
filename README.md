@@ -71,14 +71,16 @@ cargo linux-libos --args "/bin/busybox ls"          # build + run linux libos
 
 ### Makefile shortcuts
 
+| Scope | Linux | Zircon |
+|-------|-------|--------|
+| QEMU (any arch) | `make linux-run` | `make zircon-run` |
+| x86_64 specific | `make x86-linux-build/run` | `make x86-zircon-build/run` |
+| LibOS build | `make libos-build-linux` | `make libos-build-zircon` |
+| LibOS run | `make libos-run-linux` | `make libos-run-zircon` |
+| Pi 400 | n/a (zircon only) | `make raspi400-build/run/sd` |
+
 ```bash
-make linux-run               # cargo qemu -m qemu-aarch64 (linux)
-make zircon-run              # cargo qemu -m qemu-aarch64 --personality zircon
-make raspi400-build          # cargo bin -m raspi400
 make raspi400-sd SD=/Volumes/boot   # flash SD card for Pi 400
-make libos-build-linux       # build libos (linux personality)
-make libos-build-zircon      # build libos (zircon personality)
-make libos-run-linux         # build + run libos with busybox shell
 make clippy-all              # clippy on all code (all archs, libos, userspace, tests)
 make test                    # boot smoke test + libc conformance tests
 ```
