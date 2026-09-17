@@ -59,6 +59,7 @@ fn read_line(io: &Console) -> Option<alloc::string::String> {
     use embedded_io::Read;
 
     let mut line = String::new();
+    const MAX_LINE_LEN: usize = 4096;
     let mut buf = [0u8; 1];
     let mut io_mut = Console {
         resource: io.resource,
@@ -91,12 +92,13 @@ fn read_line(io: &Console) -> Option<alloc::string::String> {
                     }
                     // Ctrl-D on empty line = exit
                     0x04 if line.is_empty() => return None,
-                    // Printable ASCII
-                    0x20..=0x7e => {
+                    // Printable ASCII (bounded to prevent OOM)
+                    0x20..=0x7e if line.len() < MAX_LINE_LEN => {
                         line.push(ch as char);
                         zx::debug_write(&[ch]);
                     }
-                    _ => {} // ignore other control chars
+                    0x20..=0x7e => zx::debug_write(b"\x07"), // bell on overflow
+                    _ => {}                                  // ignore other control chars
                 }
             }
             Err(_) => return None,

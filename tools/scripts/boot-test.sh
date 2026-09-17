@@ -90,9 +90,11 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   if grep -q "$PROMPT_PATTERN" "$OUTPUT" 2>/dev/null; then
     echo "Shell prompt reached in ${ELAPSED}s"
 
-    # Verify the shell can execute a command
+    # Verify the shell can execute a command.
+    # Use printf to construct the marker at runtime inside the guest
+    # shell, so the serial echo of the command itself won't match.
     echo "Sending test command..."
-    echo "echo boot_test_ok" >&3
+    printf '%s\n' "printf '%s%s\\n' boot_test_ ok" >&3
     sleep 2
     if ! grep -q "boot_test_ok" "$OUTPUT" 2>/dev/null; then
       echo "FAIL: shell did not execute test command"
