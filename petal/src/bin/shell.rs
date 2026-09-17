@@ -13,7 +13,6 @@ extern crate alloc;
 extern crate petal;
 
 use alloc::vec::Vec;
-use noline::builder::EditorBuilder;
 
 /// Bootstrap handle indices (must match userstart's forward order).
 const H_ROOT_JOB: usize = 0;
@@ -50,6 +49,58 @@ impl embedded_io::Write for Console {
 
     fn flush(&mut self) -> Result<(), Self::Error> {
         Ok(())
+    }
+}
+
+/// Read a line from the serial console, echoing characters.
+/// Returns None on EOF / read error.
+fn read_line(io: &Console) -> Option<alloc::string::String> {
+    use alloc::string::String;
+    use embedded_io::Read;
+
+    let mut line = String::new();
+    let mut buf = [0u8; 1];
+    let mut io_mut = Console {
+        resource: io.resource,
+    };
+
+    zx::debug_write(b"petal> ");
+
+    loop {
+        match io_mut.read(&mut buf) {
+            Ok(0) => return None, // EOF
+            Ok(_) => {
+                let ch = buf[0];
+                match ch {
+                    b'\r' | b'\n' => {
+                        zx::debug_write(b"\n");
+                        return Some(line);
+                    }
+                    // Backspace / DEL
+                    0x7f | 0x08 => {
+                        if !line.is_empty() {
+                            line.pop();
+                            zx::debug_write(b"\x08 \x08"); // erase char
+                        }
+                    }
+                    // Ctrl-C
+                    0x03 => {
+                        zx::debug_write(b"^C\n");
+                        line.clear();
+                        zx::debug_write(b"petal> ");
+                    }
+                    // Ctrl-D on empty line = exit
+                    0x04 if line.is_empty() => return None,
+                    // Printable ASCII
+                    0x20..=0x7e => {
+                        line.push(ch as char);
+                        zx::debug_write(&[ch]);
+                    }
+                    _ => {} // ignore other control chars
+                }
+            }
+            Err(_) => return None,
+        }
     }
 }
 
@@ -104,30 +155,25 @@ pub fn main() {
         root_resource: handles[H_ROOT_RESOURCE],
     };
 
-    // Interactive mode with noline editor
+    // Interactive mode: simple line reader over serial console.
+    // We avoid noline's terminal probe (ANSI cursor-position query)
+    // because QEMU's serial console doesn't respond to it, causing
+    // the shell to hang.
     zx::debug_write(b"\nType 'help' for commands, 'exit' to quit.\n\n");
 
-    let mut io = Console {
+    let io = Console {
         resource: ctx.root_resource,
     };
 
-    let Ok(mut editor) = EditorBuilder::new_unbounded()
-        .with_unbounded_history()
-        .build_sync(&mut io)
-    else {
-        zx::debug_write(b"shell: failed to initialize editor\n");
-        return;
-    };
-
     loop {
-        match editor.readline("petal> ", &mut io) {
-            Ok(line) => {
+        match read_line(&io) {
+            Some(line) => {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && run_command(trimmed, &ctx) {
                     break;
                 }
             }
-            Err(_) => {
+            None => {
                 zx::debug_write(b"\ngoodbye\n");
                 break;
             }

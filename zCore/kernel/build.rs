@@ -43,7 +43,6 @@ fn main() {
         let stub = out.join("empty.zbi");
         std::fs::write(stub.as_path(), b"").unwrap();
         println!("cargo:rustc-env=PETAL_ZBI={}", stub.display());
-        println!("cargo:warning=PETAL_ZBI not set, using empty stub (rootfs-based boot only)");
     }
 
     // For Zircon mode: if USERSTART_ELF is not set, generate an empty stub.
