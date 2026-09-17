@@ -61,15 +61,18 @@ impl Syscall<'_> {
         Ok(())
     }
 
-    #[allow(unsafe_code)]
     /// Read log entries from debuglog.
+    ///
+    /// Returns the number of bytes read on success (as a positive isize),
+    /// matching Zircon's `zx_debuglog_read` ABI where the byte count is
+    /// returned through the status value.
     pub fn sys_debuglog_read(
         &self,
         handle_value: HandleValue,
         options: u32,
         mut buf: UserOutPtr<u8>,
         len: usize,
-    ) -> ZxResult {
+    ) -> Result<isize, ZxError> {
         info!(
             "debuglog.read: handle={:#x?}, options={:#x?}, buf=({:#x?}; {:#x?})",
             handle_value, options, buf, len,
@@ -85,7 +88,6 @@ impl Syscall<'_> {
             return Err(ZxError::SHOULD_WAIT);
         }
         buf.write_array(&buffer[..actual_len])?;
-        // special case: return actual_len as status
-        Err(unsafe { core::mem::transmute::<u32, zircon_object::ZxError>(actual_len as u32) })
+        Ok(actual_len as isize)
     }
 }
