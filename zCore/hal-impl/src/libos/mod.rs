@@ -19,7 +19,17 @@ pub mod libos;
 
 pub use super::hal_fn::rand;
 
-hal_fn_impl_default!(rand, super::hal_fn::console);
+hal_fn_impl_default!(rand);
+
+// Provide a real console for libos mode -- write to host stderr.
+hal_fn_impl! {
+    impl mod crate::hal_fn::console {
+        fn console_write_early(s: &str) {
+            use std::io::Write;
+            let _ = std::io::stderr().write_all(s.as_bytes());
+        }
+    }
+}
 // platform module is implemented in platform.rs, not default
 
 #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
