@@ -13,6 +13,3 @@ cfg_if! {
         mod arch;
     }
 }
-
-#[allow(unused_imports)]
-pub use arch::consts::*;

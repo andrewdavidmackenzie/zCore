@@ -1,6 +1,6 @@
 //! User context.
 
-use crate::{MMUFlags, VirtAddr};
+use crate::MMUFlags;
 use core::fmt;
 use trapframe::UserContext as UserContextInner;
 
@@ -22,27 +22,8 @@ cfg_if! {
     }
 }
 
-/// For reading and writing fields in [`UserContext`].
-#[derive(Debug)]
-pub enum UserContextField {
-    InstrPointer,
-    StackPointer,
-    ThreadPointer,
-    ReturnValue,
-}
-
-/// Reason of the trap.
-#[derive(Debug, PartialEq, Eq)]
-pub enum TrapReason {
-    Syscall,
-    Interrupt(usize),
-    PageFault(VirtAddr, MMUFlags),
-    UndefinedInstruction,
-    SoftwareBreakpoint,
-    HardwareBreakpoint,
-    UnalignedAccess,
-    GernelFault(usize),
-}
+// Re-export from hal crate.
+pub use hal::{TrapReason, UserContextField};
 
 cfg_if! {
     if #[cfg(not(feature = "libos"))] {
@@ -53,125 +34,128 @@ cfg_if! {
     }
 }
 
-impl TrapReason {
-    /// Get [`TrapReason`] from `trap_num` and `error_code` in trap frame for x86.
-    #[cfg(target_arch = "x86_64")]
-    pub fn from(trap_num: usize, error_code: usize) -> Self {
-        use x86::irq::*;
-        const X86_INT_BASE: u8 = 0x20;
-        const X86_INT_MAX: u8 = 0xff;
+// --- TrapReason constructors (arch-specific) ---
+// These are free functions rather than inherent methods because
+// TrapReason is now defined in the `hal` crate.
 
-        // See https://github.com/rcore-os/trapframe-rs/blob/25cb5282aca8ceb4f7fc4dcd61e7e73b67d9ae00/src/arch/x86_64/syscall.S#L117
-        if trap_num == 0x100 {
-            return Self::Syscall;
-        }
-        match trap_num as u8 {
-            DEBUG_VECTOR => Self::HardwareBreakpoint,
-            BREAKPOINT_VECTOR => Self::SoftwareBreakpoint,
-            INVALID_OPCODE_VECTOR => Self::UndefinedInstruction,
-            ALIGNMENT_CHECK_VECTOR => Self::UnalignedAccess,
-            PAGE_FAULT_VECTOR => {
-                bitflags::bitflags! {
-                    struct PageFaultErrorCode: u32 {
-                        const PRESENT =     1 << 0;
-                        const WRITE =       1 << 1;
-                        const USER =        1 << 2;
-                        const RESERVED =    1 << 3;
-                        const INST =        1 << 4;
-                    }
-                }
-                let fault_vaddr = x86_64::registers::control::Cr2::read()
-                    .expect("invalid CR2")
-                    .as_u64() as _;
-                let code = PageFaultErrorCode::from_bits_truncate(error_code as u32);
-                let mut flags = MMUFlags::empty();
-                if code.contains(PageFaultErrorCode::WRITE) {
-                    flags |= MMUFlags::WRITE
-                } else {
-                    flags |= MMUFlags::READ
-                }
-                if code.contains(PageFaultErrorCode::USER) {
-                    flags |= MMUFlags::USER
-                }
-                if code.contains(PageFaultErrorCode::INST) {
-                    flags |= MMUFlags::EXECUTE
-                }
-                if code.contains(PageFaultErrorCode::RESERVED) {
-                    error!("page table entry has reserved bits set!");
-                }
-                Self::PageFault(fault_vaddr, flags)
-            }
-            vec @ X86_INT_BASE..=X86_INT_MAX => Self::Interrupt(vec as usize),
-            _ => Self::GernelFault(trap_num),
-        }
+/// Get [`TrapReason`] from `trap_num` and `error_code` in trap frame for x86.
+#[cfg(target_arch = "x86_64")]
+pub fn trap_reason_from(trap_num: usize, error_code: usize) -> TrapReason {
+    use x86::irq::*;
+    const X86_INT_BASE: u8 = 0x20;
+    const X86_INT_MAX: u8 = 0xff;
+
+    // See https://github.com/rcore-os/trapframe-rs/blob/25cb5282aca8ceb4f7fc4dcd61e7e73b67d9ae00/src/arch/x86_64/syscall.S#L117
+    if trap_num == 0x100 {
+        return TrapReason::Syscall;
     }
-
-    #[cfg(target_arch = "riscv64")]
-    pub fn from(scause: riscv::register::scause::Scause) -> Self {
-        use riscv::register::scause::{Exception, Trap};
-        let stval = riscv::register::stval::read();
-        match scause.cause() {
-            Trap::Exception(Exception::UserEnvCall) => Self::Syscall,
-            Trap::Exception(Exception::Breakpoint) => Self::SoftwareBreakpoint,
-            Trap::Exception(Exception::IllegalInstruction) => Self::UndefinedInstruction,
-            Trap::Exception(Exception::InstructionMisaligned)
-            | Trap::Exception(Exception::StoreMisaligned) => Self::UnalignedAccess,
-            Trap::Exception(Exception::LoadPageFault) => Self::PageFault(stval, MMUFlags::READ),
-            Trap::Exception(Exception::StorePageFault) => Self::PageFault(stval, MMUFlags::WRITE),
-            Trap::Exception(Exception::InstructionPageFault) => {
-                Self::PageFault(stval, MMUFlags::EXECUTE)
+    match trap_num as u8 {
+        DEBUG_VECTOR => TrapReason::HardwareBreakpoint,
+        BREAKPOINT_VECTOR => TrapReason::SoftwareBreakpoint,
+        INVALID_OPCODE_VECTOR => TrapReason::UndefinedInstruction,
+        ALIGNMENT_CHECK_VECTOR => TrapReason::UnalignedAccess,
+        PAGE_FAULT_VECTOR => {
+            bitflags::bitflags! {
+                struct PageFaultErrorCode: u32 {
+                    const PRESENT =     1 << 0;
+                    const WRITE =       1 << 1;
+                    const USER =        1 << 2;
+                    const RESERVED =    1 << 3;
+                    const INST =        1 << 4;
+                }
             }
-            Trap::Interrupt(_) => Self::Interrupt(scause.code()),
-            _ => Self::GernelFault(scause.code()),
+            let fault_vaddr = x86_64::registers::control::Cr2::read()
+                .expect("invalid CR2")
+                .as_u64() as _;
+            let code = PageFaultErrorCode::from_bits_truncate(error_code as u32);
+            let mut flags = MMUFlags::empty();
+            if code.contains(PageFaultErrorCode::WRITE) {
+                flags |= MMUFlags::WRITE
+            } else {
+                flags |= MMUFlags::READ
+            }
+            if code.contains(PageFaultErrorCode::USER) {
+                flags |= MMUFlags::USER
+            }
+            if code.contains(PageFaultErrorCode::INST) {
+                flags |= MMUFlags::EXECUTE
+            }
+            if code.contains(PageFaultErrorCode::RESERVED) {
+                error!("page table entry has reserved bits set!");
+            }
+            TrapReason::PageFault(fault_vaddr, flags)
         }
+        vec @ X86_INT_BASE..=X86_INT_MAX => TrapReason::Interrupt(vec as usize),
+        _ => TrapReason::GernelFault(trap_num),
     }
+}
 
-    #[cfg(target_arch = "aarch64")]
-    pub fn from(esr: usize) -> Self {
-        // TODO: check if is right
-        use crate::{Fault, Info, Kind, Source, Syndrome};
-        use cortex_a::registers::{ESR_EL1, FAR_EL1};
-        use tock_registers::interfaces::Readable;
+/// Get [`TrapReason`] from riscv scause register.
+#[cfg(target_arch = "riscv64")]
+pub fn trap_reason_from(scause: riscv::register::scause::Scause) -> TrapReason {
+    use riscv::register::scause::{Exception, Trap};
+    let stval = riscv::register::stval::read();
+    match scause.cause() {
+        Trap::Exception(Exception::UserEnvCall) => TrapReason::Syscall,
+        Trap::Exception(Exception::Breakpoint) => TrapReason::SoftwareBreakpoint,
+        Trap::Exception(Exception::IllegalInstruction) => TrapReason::UndefinedInstruction,
+        Trap::Exception(Exception::InstructionMisaligned)
+        | Trap::Exception(Exception::StoreMisaligned) => TrapReason::UnalignedAccess,
+        Trap::Exception(Exception::LoadPageFault) => TrapReason::PageFault(stval, MMUFlags::READ),
+        Trap::Exception(Exception::StorePageFault) => TrapReason::PageFault(stval, MMUFlags::WRITE),
+        Trap::Exception(Exception::InstructionPageFault) => {
+            TrapReason::PageFault(stval, MMUFlags::EXECUTE)
+        }
+        Trap::Interrupt(_) => TrapReason::Interrupt(scause.code()),
+        _ => TrapReason::GernelFault(scause.code()),
+    }
+}
 
-        let info = Info {
-            source: Source::from(esr & 0xffff),
-            kind: Kind::from((esr >> 16) & 0xffff),
-        };
-        let esr = ESR_EL1.get() as u32;
-        match info.kind {
-            Kind::Synchronous => match Syndrome::from(esr) {
-                Syndrome::Breakpoint => Self::SoftwareBreakpoint,
-                Syndrome::Svc(_) => Self::Syscall,
-                Syndrome::DataAbort { kind: _, level: _ } => Self::PageFault(
-                    FAR_EL1.get() as _,
-                    MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER,
-                ),
-                Syndrome::InstructionAbort {
-                    kind: Fault::Permission,
-                    level: _,
-                } => Self::PageFault(FAR_EL1.get() as _, MMUFlags::EXECUTE | MMUFlags::USER),
-                Syndrome::PCAlignmentFault | Syndrome::SpAlignmentFault => Self::UnalignedAccess,
-                _ => Self::GernelFault(esr as usize),
-            },
-            Kind::Irq => Self::Interrupt(
-                #[cfg(not(feature = "libos"))]
-                {
-                    use crate::hal_fn::mem::phys_to_virt;
-                    let gic_base = crate::imp::arch::gic_base();
-                    let (gicc, gicd) = (
-                        phys_to_virt(gic_base + crate::imp::arch::drivers::GIC_GICC_OFFSET),
-                        phys_to_virt(gic_base + crate::imp::arch::drivers::GIC_GICD_OFFSET),
-                    );
-                    kernel_drivers::irq::gic_400::get_irq_num(gicc, gicd)
-                },
-                #[cfg(feature = "libos")]
-                {
-                    // TODO: interrupt in libOS
-                    usize::MAX
-                },
+/// Get [`TrapReason`] from aarch64 ESR value.
+#[cfg(target_arch = "aarch64")]
+pub fn trap_reason_from(esr: usize) -> TrapReason {
+    use crate::{Fault, Info, Kind, Source, Syndrome};
+    use cortex_a::registers::{ESR_EL1, FAR_EL1};
+    use tock_registers::interfaces::Readable;
+
+    let info = Info {
+        source: Source::from(esr & 0xffff),
+        kind: Kind::from((esr >> 16) & 0xffff),
+    };
+    let esr = ESR_EL1.get() as u32;
+    match info.kind {
+        Kind::Synchronous => match Syndrome::from(esr) {
+            Syndrome::Breakpoint => TrapReason::SoftwareBreakpoint,
+            Syndrome::Svc(_) => TrapReason::Syscall,
+            Syndrome::DataAbort { kind: _, level: _ } => TrapReason::PageFault(
+                FAR_EL1.get() as _,
+                MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER,
             ),
-            _ => Self::GernelFault(esr as usize),
-        }
+            Syndrome::InstructionAbort {
+                kind: Fault::Permission,
+                level: _,
+            } => TrapReason::PageFault(FAR_EL1.get() as _, MMUFlags::EXECUTE | MMUFlags::USER),
+            Syndrome::PCAlignmentFault | Syndrome::SpAlignmentFault => TrapReason::UnalignedAccess,
+            _ => TrapReason::GernelFault(esr as usize),
+        },
+        Kind::Irq => TrapReason::Interrupt(
+            #[cfg(not(feature = "libos"))]
+            {
+                use crate::hal_fn::mem::phys_to_virt;
+                let gic_base = crate::imp::arch::gic_base();
+                let (gicc, gicd) = (
+                    phys_to_virt(gic_base + crate::imp::arch::drivers::GIC_GICC_OFFSET),
+                    phys_to_virt(gic_base + crate::imp::arch::drivers::GIC_GICD_OFFSET),
+                );
+                kernel_drivers::irq::gic_400::get_irq_num(gicc, gicd)
+            },
+            #[cfg(feature = "libos")]
+            {
+                // TODO: interrupt in libOS
+                usize::MAX
+            },
+        ),
+        _ => TrapReason::GernelFault(esr as usize),
     }
 }
 
@@ -298,16 +282,16 @@ impl UserContext {
     pub fn trap_reason(&self) -> TrapReason {
         cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
-                TrapReason::from(self.inner.trap_num, self.inner.error_code)
+                trap_reason_from(self.inner.trap_num, self.inner.error_code)
             } else if #[cfg(all(target_arch = "aarch64", feature = "libos"))] {
                 // In libos mode, all traps come from the SIGSYS handler
                 // (intercepted SVC #0). ESR_EL1 is not accessible from EL0.
                 let _ = self.inner.trap_num;
                 TrapReason::Syscall
             } else if #[cfg(target_arch = "aarch64")] {
-                TrapReason::from(self.inner.trap_num)
+                trap_reason_from(self.inner.trap_num)
             } else if #[cfg(target_arch = "riscv64")] {
-                TrapReason::from(riscv::register::scause::read())
+                trap_reason_from(riscv::register::scause::read())
             } else {
                 unimplemented!()
             }

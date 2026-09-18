@@ -9,7 +9,8 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 .PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
 	petal-shell raspi400-build raspi400-run raspi400-sd \
-	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
+	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon \
+	pre-push
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -349,6 +350,37 @@ else ifeq ($(ARCH), riscv64)
 	@rcore-fs-fuse zCore/riscv64-linux.img rootfs/riscv zip
 	@qemu-img resize -f raw zCore/riscv64-linux.img +5M
 endif
+
+# Pre-push check: mirrors all CI jobs locally.
+# Run this before every push to avoid CI failures.
+# Requires: qemu-system-aarch64, qemu-system-x86_64.
+pre-push:
+	@echo "==> [1/11] Format check..."
+	cargo fmt --all -- --check
+	@echo "==> [2/11] Workspace build..."
+	cargo build
+	@echo "==> [3/11] Unit tests..."
+	cargo test --no-fail-fast
+	@echo "==> [4/11] Bare-metal aarch64 (build + rootfs)..."
+	$(MAKE) build ARCH=aarch64
+	@echo "==> [5/11] Boot smoke test (aarch64)..."
+	$(MAKE) boot-test ARCH=aarch64
+	@echo "==> [6/11] Bare-metal riscv64..."
+	cargo zcore-build -m qemu-riscv64
+	@echo "==> [7/11] Bare-metal x86_64 (build + rootfs)..."
+	$(MAKE) build ARCH=x86_64
+	@echo "==> [8/11] Boot smoke test (x86_64)..."
+	$(MAKE) boot-test ARCH=x86_64
+	@echo "==> [9/11] LibOS (Linux + Zircon)..."
+	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos
+	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos --personality zircon
+	@echo "==> [10/11] Zircon boot test (aarch64)..."
+	$(MAKE) zircon-boot-test ARCH=aarch64
+	@tools/scripts/zircon-rootfs-test.sh aarch64
+	@echo "==> [11/11] Libc tests (aarch64 + x86_64)..."
+	$(MAKE) libc-test ARCH=aarch64
+	$(MAKE) libc-test ARCH=x86_64
+	@echo "==> All pre-push checks passed."
 
 # Run clippy for all architectures (catches cross-platform issues).
 # Features come from targets/qemu-<arch>.toml via xtask.

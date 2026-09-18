@@ -61,7 +61,7 @@ impl MockMemory {
     /// Low-level file-backed mmap. Used for the PMEM backing store
     /// (where vaddr, len, and offset are always host-page-aligned).
     fn mmap_file(&self, vaddr: VirtAddr, len: usize, offset: usize, prot: MMUFlags) {
-        let prot_flags = ProtFlags::from(prot) - ProtFlags::PROT_EXEC;
+        let prot_flags = mmu_flags_to_prot(prot) - ProtFlags::PROT_EXEC;
         let flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
         unsafe {
             mman::mmap(vaddr as _, len, prot_flags, flags, self.fd, offset as _).unwrap_or_else(
@@ -106,7 +106,7 @@ impl MockMemory {
                 prot
             };
 
-            let prot_noexec = ProtFlags::from(prot) - ProtFlags::PROT_EXEC;
+            let prot_noexec = mmu_flags_to_prot(prot) - ProtFlags::PROT_EXEC;
             let flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
             unsafe { mman::mmap(vaddr as _, len, prot_noexec, flags, self.fd, paddr as _) }
                 .unwrap_or_else(|err| {
@@ -272,7 +272,7 @@ impl MockMemory {
             }
             #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
             {
-                let p = ProtFlags::from(prot);
+                let p = mmu_flags_to_prot(prot);
                 unsafe { mman::mprotect(aligned_vaddr as _, aligned_len, p) }.unwrap_or_else(
                     |err| {
                         panic!(
@@ -318,14 +318,13 @@ impl MockMemory {
             prot
         };
 
-        unsafe { mman::mprotect(aligned_vaddr as _, aligned_len, prot.into()) }.unwrap_or_else(
-            |err| {
+        unsafe { mman::mprotect(aligned_vaddr as _, aligned_len, mmu_flags_to_prot(prot)) }
+            .unwrap_or_else(|err| {
                 panic!(
                     "mprotect failed: vaddr={:#x}, len={:#x}, prot={:?}: {:?}",
                     aligned_vaddr, aligned_len, prot, err
                 )
-            },
-        );
+            });
     }
 
     pub fn phys_to_virt(&self, paddr: PhysAddr) -> VirtAddr {
@@ -349,18 +348,16 @@ impl Drop for MockMemory {
     }
 }
 
-impl From<MMUFlags> for ProtFlags {
-    fn from(f: MMUFlags) -> Self {
-        let mut flags = Self::empty();
-        if f.contains(MMUFlags::READ) {
-            flags |= ProtFlags::PROT_READ;
-        }
-        if f.contains(MMUFlags::WRITE) {
-            flags |= ProtFlags::PROT_WRITE;
-        }
-        if f.contains(MMUFlags::EXECUTE) {
-            flags |= ProtFlags::PROT_EXEC;
-        }
-        flags
+fn mmu_flags_to_prot(f: MMUFlags) -> ProtFlags {
+    let mut flags = ProtFlags::empty();
+    if f.contains(MMUFlags::READ) {
+        flags |= ProtFlags::PROT_READ;
     }
+    if f.contains(MMUFlags::WRITE) {
+        flags |= ProtFlags::PROT_WRITE;
+    }
+    if f.contains(MMUFlags::EXECUTE) {
+        flags |= ProtFlags::PROT_EXEC;
+    }
+    flags
 }

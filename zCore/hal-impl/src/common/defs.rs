@@ -1,37 +1,5 @@
-use bitflags::bitflags;
-use numeric_enum_macro::numeric_enum;
+//! Common type re-exports from the `hal` crate.
 
-/// Re-export unified error/result types from hal crate.
-pub use hal::{DeviceError, DeviceResult};
-
-bitflags! {
-    /// Generic memory flags.
-    pub struct MMUFlags: usize {
-        #[allow(clippy::identity_op)]
-        const CACHE_1   = 1 << 0;
-        const CACHE_2   = 1 << 1;
-        const READ      = 1 << 2;
-        const WRITE     = 1 << 3;
-        const EXECUTE   = 1 << 4;
-        const USER      = 1 << 5;
-        const HUGE_PAGE = 1 << 6;
-        const DEVICE    = 1 << 7;
-        const RXW = Self::READ.bits | Self::WRITE.bits | Self::EXECUTE.bits;
-    }
-}
-numeric_enum! {
-    #[repr(u32)]
-    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    /// Generic cache policy.
-    pub enum CachePolicy {
-        Cached = 0,
-        Uncached = 1,
-        UncachedDevice = 2,
-        WriteCombining = 3,
-    }
-}
-
-/// The smallest size of a page (4K).
-pub const PAGE_SIZE: usize = super::vm::PageSize::Size4K as usize;
+pub use hal::{CachePolicy, DeviceError, DeviceResult, MMUFlags, PAGE_SIZE};
 
 pub use super::addr::{DevVAddr, PhysAddr, VirtAddr};
