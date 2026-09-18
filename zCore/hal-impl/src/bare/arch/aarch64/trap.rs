@@ -1,7 +1,7 @@
 use crate::context::{trap_reason_from, TrapReason};
 use crate::{Info, Kind, Source};
+use ::drivers::irq::gic_400::get_irq_num;
 use cortex_a::registers::FAR_EL1;
-use kernel_drivers::irq::gic_400::get_irq_num;
 use tock_registers::interfaces::Readable;
 use trapframe::TrapFrame;
 

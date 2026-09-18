@@ -38,11 +38,11 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 #[cfg(all(not(any(feature = "libos")), feature = "mock-disk"))]
 static MOCK_CORE: AtomicBool = AtomicBool::new(false);
 
-fn primary_main(config: kernel_hal::KernelConfig) {
+fn primary_main(config: hal_impl::KernelConfig) {
     logging::init(logging::parse_log_level(config.cmdline));
     #[cfg(not(feature = "libos"))]
     memory::init();
-    kernel_hal::primary_init_early(config, &handler::ZcoreKernelHandler);
+    hal_impl::primary_init_early(config, &handler::ZcoreKernelHandler);
 
     // Now UART driver is registered -- println! works
     #[cfg(feature = "board-raspi400")]
@@ -53,8 +53,8 @@ fn primary_main(config: kernel_hal::KernelConfig) {
     info!("Boot options: {:#?}", options);
 
     #[cfg(not(feature = "libos"))]
-    memory::insert_regions(&kernel_hal::mem::free_pmem_regions());
-    kernel_hal::primary_init();
+    memory::insert_regions(&hal_impl::mem::free_pmem_regions());
+    hal_impl::primary_init();
     info!("primary_init done");
     STARTED.store(true, Ordering::SeqCst);
     cfg_if! {
@@ -112,8 +112,8 @@ fn secondary_main() -> ! {
     while !STARTED.load(Ordering::SeqCst) {
         core::hint::spin_loop();
     }
-    kernel_hal::secondary_init();
-    info!("hart{} inited", kernel_hal::cpu::cpu_id());
+    hal_impl::secondary_init();
+    info!("hart{} inited", hal_impl::cpu::cpu_id());
     #[cfg(feature = "mock-disk")]
     {
         if MOCK_CORE

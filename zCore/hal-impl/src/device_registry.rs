@@ -4,13 +4,11 @@ use alloc::{sync::Arc, vec::Vec};
 
 use lock::{RwLock, RwLockReadGuard};
 
-use kernel_drivers::scheme::{
-    BlockScheme, DisplayScheme, InputScheme, IrqScheme, Scheme, UartScheme,
-};
-use kernel_drivers::Device;
+use ::drivers::scheme::{BlockScheme, DisplayScheme, InputScheme, IrqScheme, Scheme, UartScheme};
+use ::drivers::Device;
 
-/// Re-exported modules from crate [`kernel_drivers`].
-pub use kernel_drivers::{prelude, scheme};
+/// Re-exported modules from crate [`drivers`].
+pub use ::drivers::{prelude, scheme};
 
 /// A wrapper of a device array with the same [`Scheme`].
 pub struct DeviceList<T: Scheme + ?Sized>(RwLock<Vec<Arc<T>>>);

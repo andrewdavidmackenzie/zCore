@@ -1,13 +1,13 @@
 use alloc::boxed::Box;
 use alloc::format;
 
-use kernel_drivers::builder::{DevicetreeDriverBuilder, IoMapper};
-use kernel_drivers::irq::riscv::ScauseIntCode;
+use ::drivers::builder::{DevicetreeDriverBuilder, IoMapper};
+use ::drivers::irq::riscv::ScauseIntCode;
 
-use kernel_drivers::{Device, DeviceResult};
+use ::drivers::{Device, DeviceResult};
 
 use crate::common::vm::GenericPageTable;
-use crate::{drivers, mem::phys_to_virt, CachePolicy, MMUFlags, PhysAddr, VirtAddr};
+use crate::{mem::phys_to_virt, CachePolicy, MMUFlags, PhysAddr, VirtAddr};
 
 struct IoMapperImpl;
 
@@ -64,7 +64,7 @@ pub(super) fn init() -> DeviceResult {
         if let Device::Uart(uart) = dev {
             // Wire UART received bytes to the shared console input buffer.
             #[allow(unused_imports)]
-            use kernel_drivers::scheme::{EventScheme, UartScheme};
+            use ::drivers::scheme::{EventScheme, UartScheme};
             let u = uart.clone();
             uart.subscribe(
                 Box::new(move |_| {
@@ -75,19 +75,19 @@ pub(super) fn init() -> DeviceResult {
                 }),
                 false,
             );
-            drivers::add_device(Device::Uart(uart));
+            crate::device_registry::add_device(Device::Uart(uart));
         } else {
-            drivers::add_device(dev);
+            crate::device_registry::add_device(dev);
         }
     }
 
     #[cfg(feature = "pci")]
     {
+        use ::drivers::bus::pci;
         use alloc::sync::Arc;
-        use kernel_drivers::bus::pci;
         let pci_devs = pci::init(Some(Arc::new(IoMapperImpl)))?;
         for d in pci_devs.into_iter() {
-            drivers::add_device(d);
+            crate::device_registry::add_device(d);
         }
     }
 
@@ -97,7 +97,7 @@ pub(super) fn init() -> DeviceResult {
 }
 
 pub(super) fn intc_init() -> DeviceResult {
-    let irq = drivers::all_irq()
+    let irq = crate::device_registry::all_irq()
         .find(format!("riscv-intc-cpu{}", crate::cpu::cpu_id()).as_str())
         .expect("IRQ device 'riscv-intc' not initialized!");
     // register soft interrupts handler

@@ -12,7 +12,7 @@ hal_fn_impl! {
         }
 
         fn handle_irq(vector: usize) {
-            crate::drivers::all_irq().first_unwrap().handle_irq(vector);
+            crate::device_registry::all_irq().first_unwrap().handle_irq(vector);
         }
 
         fn intr_off() {

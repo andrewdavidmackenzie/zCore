@@ -8,7 +8,7 @@
 //! let mut syscall = Syscall {
 //!     thread,
 //!     thread_fn,
-//!     syscall_entry: kernel_hal::context::syscall_entry as usize,
+//!     syscall_entry: hal_impl::context::syscall_entry as usize,
 //! };
 //! let ret = syscall.syscall(num, args).await;
 //! ```
@@ -27,7 +27,7 @@ extern crate log;
 use alloc::sync::Arc;
 use core::convert::TryFrom;
 
-use kernel_hal::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
+use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use linux_object::error::{LxError, SysResult};
 use linux_object::fs::FileDesc;
 use linux_object::process::{wait_child, wait_child_any, LinuxProcess, ProcessExt, RLimit};

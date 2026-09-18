@@ -48,7 +48,7 @@ impl LinuxElfLoader {
         // On hosted aarch64 macOS, patch svc #0 → brk #1 in executable
         // segments so the host kernel doesn't intercept supervisor calls.
         #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-        let data = if kernel_hal::platform::is_hosted() {
+        let data = if hal_impl::platform::is_hosted() {
             use xmas_elf::program::Type as PhType;
             const SVC_0: [u8; 4] = 0xd4000001u32.to_le_bytes();
             const BRK_1: [u8; 4] = 0xd4200020u32.to_le_bytes();
@@ -138,7 +138,7 @@ impl LinuxElfLoader {
             // On hosted platforms with TEXTREL, apply relocations ourselves
             // since rcrt1 can't write to RX pages on W^X-enforcing hosts.
             // On bare-metal, skip and let rcrt1 handle it.
-            if kernel_hal::platform::needs_kernel_textrel() {
+            if hal_impl::platform::needs_kernel_textrel() {
                 if elf.has_textrel() {
                     info!(
                         "PIE binary with TEXTREL: applying relocations in loader (W^X workaround)"
@@ -257,7 +257,7 @@ impl LinuxElfLoader {
 
         // On hosted platforms where user pages are disconnected from
         // the VMO backing store, copy stack data directly to user pages.
-        if kernel_hal::platform::needs_user_write_flush() {
+        if hal_impl::platform::needs_user_write_flush() {
             unsafe {
                 let dst = sp as *mut u8;
                 let src = init_stack.as_ref().as_ptr();

@@ -5,8 +5,8 @@
 
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::info::{MemoryRegionKind, Optional};
-use kernel_hal::config::{FramebufferInfo, MemoryRegion, MemoryType};
-use kernel_hal::KernelConfig;
+use hal_impl::config::{FramebufferInfo, MemoryRegion, MemoryType};
+use hal_impl::KernelConfig;
 
 /// Maximum number of memory regions we can store.
 const MAX_MEMORY_REGIONS: usize = 256;
@@ -109,7 +109,7 @@ fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
             *core::ptr::addr_of!(MEMORY_REGION_COUNT),
         )
     };
-    kernel_hal::config::set_x86_boot_data(
+    hal_impl::config::set_x86_boot_data(
         framebuffer,
         0, // smbios
         memory_map,

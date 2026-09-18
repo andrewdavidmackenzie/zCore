@@ -238,7 +238,7 @@ impl From<FsError> for LxError {
     }
 }
 
-use kernel_hal::user::Error;
+use hal_impl::user::Error;
 
 impl From<Error> for LxError {
     fn from(e: Error) -> Self {

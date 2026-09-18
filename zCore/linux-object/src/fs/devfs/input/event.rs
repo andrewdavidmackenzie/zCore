@@ -4,8 +4,8 @@ use core::{any::Any, future::Future, mem::size_of, pin::Pin};
 
 use lock::Mutex;
 
-use kernel_hal::drivers::prelude::{InputEvent, InputEventType};
-use kernel_hal::drivers::scheme::InputScheme;
+use hal::scheme::input::{InputEvent, InputEventType};
+use hal::InputScheme;
 use rcore_fs::vfs::*;
 use rcore_fs_devfs::DevFS;
 

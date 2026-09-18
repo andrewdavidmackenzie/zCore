@@ -5,7 +5,7 @@
 //! transformation: `clock_time = (mono - reference_mono) * rate + offset`.
 
 use crate::object::*;
-use kernel_hal::timer::timer_now;
+use hal_impl::timer::timer_now;
 use lock::Mutex;
 
 /// Clock creation options.

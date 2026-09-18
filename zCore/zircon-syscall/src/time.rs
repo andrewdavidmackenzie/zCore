@@ -6,7 +6,7 @@ use {
         sync::atomic::{AtomicU64, Ordering},
         time::Duration,
     },
-    kernel_hal::timer::timer_now,
+    hal_impl::timer::timer_now,
     zircon_object::{dev::*, signal::Clock, task::*},
 };
 
@@ -148,9 +148,9 @@ impl Syscall<'_> {
     pub async fn sys_nanosleep(&self, deadline: Deadline) -> ZxResult {
         info!("nanosleep: deadline={:?}", deadline);
         if deadline.0 <= 0 {
-            kernel_hal::thread::yield_now().await;
+            hal_impl::thread::yield_now().await;
         } else {
-            let future = kernel_hal::thread::sleep_until(deadline.into());
+            let future = hal_impl::thread::sleep_until(deadline.into());
             pin_mut!(future);
             self.thread
                 .blocking_run(

@@ -1,12 +1,11 @@
 #[cfg(feature = "mock-uart")]
 pub(super) fn init_early() {
-    use crate::drivers;
+    use ::drivers::uart::MockUart;
+    use ::drivers::{scheme::Scheme, Device};
     use alloc::sync::Arc;
-    use kernel_drivers::uart::MockUart;
-    use kernel_drivers::{scheme::Scheme, Device};
 
     let uart = Arc::new(MockUart::new());
-    drivers::add_device(Device::Uart(uart.clone()));
+    crate::device_registry::add_device(Device::Uart(uart.clone()));
     MockUart::start_irq_service(move || uart.handle_irq(0));
 }
 

@@ -10,7 +10,7 @@ use {
     bitflags::bitflags,
     core::ops::Deref,
     core::sync::atomic::{AtomicBool, Ordering},
-    kernel_hal::CachePolicy,
+    hal_impl::CachePolicy,
     lock::{Mutex, MutexGuard},
 };
 

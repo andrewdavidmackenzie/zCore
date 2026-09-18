@@ -153,7 +153,7 @@ impl Pager {
     }
 }
 
-use kernel_hal::PAGE_SIZE;
+use hal::PAGE_SIZE;
 
 // Pager operation codes (from Fuchsia's zircon/types.h)
 const ZX_PAGER_OP_FAIL: u32 = 1;

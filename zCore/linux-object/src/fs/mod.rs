@@ -32,7 +32,7 @@ use core::convert::TryFrom;
 use async_trait::async_trait;
 use downcast_rs::impl_downcast;
 
-use kernel_hal::drivers;
+use hal_impl::device_registry;
 use rcore_fs::vfs::{FileSystem, FileType, INode, Result};
 use rcore_fs_devfs::{
     special::{NullINode, ZeroINode},
@@ -168,7 +168,7 @@ pub fn create_root_fs(rootfs: Arc<dyn FileSystem>) -> Arc<dyn INode> {
     // EventDev, MiceDev, FbDev required display/input drivers.
 
     // Add uart devices at `/dev/ttyS{i}`
-    for (i, uart) in drivers::all_uart().as_vec().iter().enumerate() {
+    for (i, uart) in device_registry::all_uart().as_vec().iter().enumerate() {
         let fname = format!("ttyS{}", i);
         if let Err(e) = devfs_root.add(&fname, Arc::new(devfs::UartDev::new(i, uart.clone()))) {
             warn!("failed to mknod /dev/{}: {:?}", fname, e);

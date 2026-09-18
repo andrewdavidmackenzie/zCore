@@ -19,7 +19,7 @@ The HAL consists of two crates:
   `CachePolicy`, `TrapReason`), and device error types. No platform-specific
   code. No external dependencies beyond `bitflags` and `log`.
 
-- **`hal-impl`** (package name: `kernel-hal`) -- Platform implementations:
+- **`hal-impl`** (package name: `hal-impl`) -- Platform implementations:
   provides a unified, architecture-independent interface for all hardware
   interaction. Implements the traits defined in `hal`. Abstracts differences
   between three CPU architectures (aarch64, riscv64, x86_64) and two execution
@@ -92,7 +92,7 @@ for the evaluation of migrating to traits.
 
 ## HAL Interface Modules
 
-The complete interface is declared in `kernel-hal/src/hal_fn.rs`:
+The complete interface is declared in `hal-impl/src/hal_fn.rs`:
 
 ### `boot`
 Init sequences, command line, init RAM disk.
@@ -195,7 +195,7 @@ hal/src/ ................. Pure interface crate (no arch-specific code)
     irq.rs             IrqScheme + IrqHandler/IrqTriggerMode/IrqPolarity
     uart.rs            UartScheme
 
-hal-impl/src/ ........... Platform implementations (package: kernel-hal)
+hal-impl/src/ ........... Platform implementations (package: hal-impl)
   lib.rs               Selects bare vs libos backend
   macros.rs            hal_fn_def!/hal_fn_impl! macros
   hal_fn.rs            Complete HAL interface declaration
@@ -258,7 +258,7 @@ in the kernel) provides callbacks FROM the HAL INTO the kernel. It has 4 methods
 - `frame_dealloc(paddr)` -- free a frame
 - `handle_page_fault(vaddr)` -- handle a page fault
 
-This exists because `kernel-hal` (a library crate) cannot depend on `zCore`
+This exists because `hal-impl` (a library crate) cannot depend on `zCore`
 (the binary crate) -- that would be a circular dependency. But the HAL needs to
 allocate physical frames (managed by zCore's allocator). The solution is
 dependency inversion:
@@ -274,7 +274,7 @@ The name "KernelHandler" is vague -- better names would be `KernelCallbacks` or
 
 Possible simplifications (see
 [#78](https://github.com/andrewdavidmackenzie/zCore/issues/78)):
-- Move the allocator into kernel-hal itself (requires restructuring
+- Move the allocator into hal-impl itself (requires restructuring
   `#[global_allocator]`)
 - Create a `kernel-alloc` crate both can depend on
 - Use function pointers instead of a trait
@@ -291,7 +291,7 @@ Platform-dependent code is split between two locations:
 - Binary crate entry points (`_start`, `rust_main`)
 - Platform constants
 
-**`kernel-hal/src/bare/arch/`** -- Post-boot runtime:
+**`hal-impl/src/bare/arch/`** -- Post-boot runtime:
 - Interrupt handling and dispatch
 - Timer management
 - Trap/exception handling
@@ -300,7 +300,7 @@ Platform-dependent code is split between two locations:
 
 The split exists because linker scripts and `#[no_mangle]` entry points MUST be
 in the final binary crate (Rust requirement). However, `entry.rs` and
-`consts.rs` could potentially be moved into kernel-hal. See
+`consts.rs` could potentially be moved into hal-impl. See
 [#77](https://github.com/andrewdavidmackenzie/zCore/issues/77).
 
 ---
@@ -313,7 +313,7 @@ The current HAL design has several divergences from a clean HAL model:
 read/write) and the HAL provides platform-specific glue (phys_to_virt, DMA
 alloc) via FFI. This part is clean.
 
-2. **kernel-hal mixes interface and implementation.** `hal_fn.rs` defines the
+2. **hal-impl mixes interface and implementation.** `hal_fn.rs` defines the
 interface, `bare/` and `libos/` provide implementations, but `common/` has
 shared types AND logic (futures, user pointer validation, PhysFrame RAII). The
 shared logic should arguably be in the kernel, not the HAL.

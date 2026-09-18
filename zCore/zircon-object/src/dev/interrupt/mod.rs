@@ -294,7 +294,7 @@ impl Interrupt {
         }
         if inner.timestamp == 0 {
             // Not sure ZX_CLOCK_MONOTONIC or ZX_CLOCK_UTC
-            inner.timestamp = kernel_hal::timer::timer_now().as_nanos() as i64;
+            inner.timestamp = hal_impl::timer::timer_now().as_nanos() as i64;
         }
         match &inner.port {
             Some(port) => {

@@ -23,7 +23,7 @@ cfg_if! {
                     use linux_object::fs::rcore_fs_wrapper::*;
                     if let Some(initrd) = init_ram_disk() {
                         Arc::new(MemBuf::new(initrd))
-                    } else if let Some(block) = kernel_hal::drivers::all_block().first() {
+                    } else if let Some(block) = hal_impl::device_registry::all_block().first() {
                         Arc::new(BlockCache::new(Block::new(block), 0x100))
                     } else {
                         panic!("No rootfs available: no initrd and no block device. \
@@ -91,7 +91,7 @@ cfg_if! {
             }
 
             // Try VirtIO block device (aarch64, or fallback from initrd)
-            if let Some(block) = kernel_hal::drivers::all_block().first() {
+            if let Some(block) = hal_impl::device_registry::all_block().first() {
                 info!("Trying Zircon rootfs from block device...");
                 let dev: Arc<dyn rcore_fs::dev::Device> = Arc::new(BlockDevice(block));
                 if let Ok(fs) = SimpleFileSystem::open(dev) {
@@ -158,14 +158,14 @@ pub(crate) fn init_ram_disk() -> Option<&'static mut [u8]> {
             )
         })
     } else {
-        kernel_hal::boot::init_ram_disk()
+        hal_impl::boot::init_ram_disk()
     }
 }
 
 /// Try to get an initrd for Zircon mode (same mechanism as Linux).
 #[cfg(all(not(feature = "libos"), feature = "zircon"))]
 fn zircon_init_ram_disk() -> Option<&'static mut [u8]> {
-    kernel_hal::boot::init_ram_disk()
+    hal_impl::boot::init_ram_disk()
 }
 
 /// Minimal rcore-fs Device wrapper for an in-memory buffer.
@@ -199,7 +199,7 @@ impl rcore_fs::dev::Device for MemBufDevice {
 
 /// Minimal rcore-fs Device wrapper for a VirtIO block device.
 #[cfg(all(not(feature = "libos"), feature = "zircon"))]
-struct BlockDevice(alloc::sync::Arc<dyn kernel_hal::drivers::scheme::BlockScheme>);
+struct BlockDevice(alloc::sync::Arc<dyn hal_impl::device_registry::scheme::BlockScheme>);
 
 #[cfg(all(not(feature = "libos"), feature = "zircon"))]
 impl rcore_fs::dev::Device for BlockDevice {

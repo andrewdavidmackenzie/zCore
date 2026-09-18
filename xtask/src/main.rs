@@ -101,7 +101,7 @@ enum Commands {
 
     /// Dumps the kernel disassembly.
     ///
-    /// The default output is `target/zcore.asm`.
+    /// The default output is `target/kernel.asm`.
     ///
     /// # Example
     ///
@@ -128,12 +128,12 @@ enum Commands {
 
     /// Strips kernel binary for specific architecture.
     ///
-    /// The default output is `target/{target}/release/zcore.bin`.
+    /// The default output is `target/{target}/release/kernel.bin`.
     ///
     /// # Example
     ///
     /// ```bash
-    /// cargo bin -m qemu-riscv64 --output zcore.bin
+    /// cargo bin -m qemu-riscv64 --output kernel.bin
     /// ```
     Bin(OutArgs),
 
@@ -467,7 +467,7 @@ fn check_style() {
     if !status.success() {
         panic!("Tests failed (region-alloc, zircon-abi)");
     }
-    // zircon-object depends on kernel-hal which needs libos features
+    // zircon-object depends on hal-impl which needs libos features
     // to build on the host. Some tests are known to fail (pre-existing,
     // tracked separately). Report but don't block.
     let status = std::process::Command::new("cargo")
@@ -517,7 +517,7 @@ mod libos {
         // Launch!
         let mut cargo = Cargo::run();
         cargo
-            .package("zcore")
+            .package("kernel")
             .release()
             .features(true, &build_config.features)
             .arg("--")

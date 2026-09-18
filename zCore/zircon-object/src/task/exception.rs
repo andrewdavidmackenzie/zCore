@@ -2,7 +2,8 @@ use alloc::{sync::Arc, vec::Vec};
 use core::mem::size_of;
 
 use futures::channel::oneshot;
-use kernel_hal::context::{TrapReason, UserContext};
+use hal::TrapReason;
+use hal_impl::context::UserContext;
 use lock::Mutex;
 
 use super::{Job, Task, Thread};

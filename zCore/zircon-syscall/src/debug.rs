@@ -5,7 +5,7 @@ impl Syscall<'_> {
     /// Write debug info to the serial port.
     pub fn sys_debug_write(&self, buf: UserInPtr<u8>, len: usize) -> ZxResult {
         trace!("debug.write: buf=({:?}; {:#x})", buf, len);
-        kernel_hal::console::console_write_str(&buf.read_string(len)?);
+        hal_impl::console::console_write_str(&buf.read_string(len)?);
         Ok(())
     }
 
@@ -27,7 +27,7 @@ impl Syscall<'_> {
         proc.get_object::<Resource>(handle)?
             .validate(ResourceKind::ROOT)?;
         let mut vec = vec![0u8; buf_size as usize];
-        let len = kernel_hal::console::console_read(&mut vec).await;
+        let len = hal_impl::console::console_read(&mut vec).await;
         buf.write_array(&vec[..len])?;
         actual.write(len as u32)?;
         Ok(())

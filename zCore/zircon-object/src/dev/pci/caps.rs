@@ -3,7 +3,7 @@ use crate::{ZxError, ZxResult};
 
 use alloc::boxed::Box;
 use core::convert::TryFrom;
-use kernel_hal::interrupt;
+use hal_impl::interrupt;
 use lock::Mutex;
 
 /// Enumeration for PCI capabilities.

@@ -7,7 +7,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use bitflags::bitflags;
 
-use kernel_hal::context::UserContextField;
+use hal::UserContextField;
 use linux_object::thread::{CurrentThreadExt, RobustList, ThreadExt};
 use linux_object::time::TimeSpec;
 use linux_object::{fs::INodeExt, loader::LinuxElfLoader};
@@ -356,7 +356,7 @@ impl Syscall<'_> {
     /// Always succeeds and returns 0.
     pub async fn sys_sched_yield(&self) -> SysResult {
         info!("sched_yield:");
-        kernel_hal::thread::yield_now().await;
+        hal_impl::thread::yield_now().await;
         Ok(0)
     }
 
@@ -427,8 +427,8 @@ impl Syscall<'_> {
     pub async fn sys_nanosleep(&self, req: UserInPtr<TimeSpec>) -> SysResult {
         info!("nanosleep: deadline={:?}", req);
         let duration = req.read()?.into();
-        use kernel_hal::thread::SleepFuture;
-        use kernel_hal::timer;
+        use hal_impl::thread::SleepFuture;
+        use hal_impl::timer;
         use linux_object::thread::Interruptible;
         let sleep = SleepFuture::new(timer::deadline_after(duration));
         match sleep.interruptible(self.thread).await {

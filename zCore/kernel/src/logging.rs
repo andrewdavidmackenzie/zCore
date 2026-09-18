@@ -22,13 +22,13 @@ pub fn parse_log_level(cmdline: &str) -> LevelFilter {
 
 #[inline]
 pub fn print(args: fmt::Arguments) {
-    kernel_hal::console::console_write_fmt(args);
+    hal_impl::console::console_write_fmt(args);
 }
 
 #[allow(dead_code)]
 #[inline]
 pub fn debug_print(args: fmt::Arguments) {
-    kernel_hal::console::console_write_fmt(args);
+    hal_impl::console::console_write_fmt(args);
 }
 
 #[macro_export]
@@ -105,9 +105,9 @@ impl Log for SimpleLogger {
         if !self.enabled(record.metadata()) {
             return;
         }
-        let now = kernel_hal::timer::timer_now();
-        let cpu_id = kernel_hal::cpu::cpu_id();
-        let (tid, pid) = (0, 0); //kernel_hal::thread::get_tid();
+        let now = hal_impl::timer::timer_now();
+        let cpu_id = hal_impl::cpu::cpu_id();
+        let (tid, pid) = (0, 0); //hal_impl::thread::get_tid();
         let level = record.level();
         let target = record.target();
         let level_color = match level {

@@ -10,9 +10,9 @@ pub mod timer;
 pub mod vm;
 
 use crate::{mem::phys_to_virt, utils::init_once::InitOnce, PhysAddr};
+use ::drivers::utils::devicetree::Devicetree;
 use alloc::{string::String, vec::Vec};
 use core::ops::Range;
-use kernel_drivers::utils::devicetree::Devicetree;
 
 static CMDLINE: InitOnce<String> = InitOnce::new_with_default(String::new());
 static INITRD_REGION: InitOnce<Option<Range<PhysAddr>>> = InitOnce::new_with_default(None);
@@ -65,7 +65,7 @@ pub fn secondary_init() {
     vm::init();
     info!("cpu {} drivers init ...", crate::cpu::cpu_id());
     drivers::intc_init().unwrap();
-    let plic = crate::drivers::all_irq()
+    let plic = crate::device_registry::all_irq()
         .find("riscv-plic")
         .expect("IRQ device 'riscv-plic' not initialized!");
     info!(

@@ -2,8 +2,8 @@
 
 use core::ops::Range;
 
-use crate::drivers::all_irq;
-use crate::drivers::prelude::{IrqHandler, IrqPolarity, IrqTriggerMode};
+use crate::device_registry::all_irq;
+use crate::device_registry::prelude::{IrqHandler, IrqPolarity, IrqTriggerMode};
 use crate::DeviceResult;
 use alloc::vec::Vec;
 use x86_64::instructions::interrupts;

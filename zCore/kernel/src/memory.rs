@@ -8,8 +8,8 @@ use core::{
     ptr::NonNull,
 };
 use customizable_buddy::{BuddyAllocator, LinkedListBuddy, UsizeBuddy};
-use kernel_hal::mem::{phys_to_virt, virt_to_phys};
-use kernel_hal::PhysAddr;
+use hal_impl::mem::{phys_to_virt, virt_to_phys};
+use hal_impl::PhysAddr;
 use lock::Mutex;
 
 /// Heap allocator.

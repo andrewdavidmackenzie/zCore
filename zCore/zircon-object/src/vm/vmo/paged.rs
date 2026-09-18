@@ -8,7 +8,7 @@ use {
     core::cell::{Ref, RefCell, RefMut},
     core::ops::Range,
     core::sync::atomic::*,
-    kernel_hal::{
+    hal_impl::{
         mem::{phys_to_virt, PhysFrame},
         PAGE_SIZE,
     },
@@ -191,7 +191,7 @@ impl VMObjectPaged {
             let (_guard, mut inner) = vmo.get_inner_mut();
             inner.contiguous = true;
             for (i, f) in frames.drain(0..).enumerate() {
-                kernel_hal::mem::pmem_zero(f.paddr(), PAGE_SIZE);
+                hal_impl::mem::pmem_zero(f.paddr(), PAGE_SIZE);
                 let mut state = PageState::new(f);
                 state.pin_count += 1;
                 inner.frames.insert(i, state);
@@ -228,7 +228,7 @@ impl VMObjectTrait for VMObjectPaged {
             return Err(ZxError::BAD_STATE);
         }
         inner.for_each_page(offset, buf.len(), MMUFlags::READ, |paddr, buf_range| {
-            kernel_hal::mem::pmem_read(paddr, &mut buf[buf_range]);
+            hal_impl::mem::pmem_read(paddr, &mut buf[buf_range]);
         })
     }
 
@@ -238,7 +238,7 @@ impl VMObjectTrait for VMObjectPaged {
             return Err(ZxError::BAD_STATE);
         }
         inner.for_each_page(offset, buf.len(), MMUFlags::WRITE, |paddr, buf_range| {
-            kernel_hal::mem::pmem_write(paddr, &buf[buf_range]);
+            hal_impl::mem::pmem_write(paddr, &buf[buf_range]);
         })
     }
 
@@ -262,7 +262,7 @@ impl VMObjectTrait for VMObjectPaged {
             } else if inner.committed_pages_in_range(block.block, block.block + 1) != 0 {
                 // check whether this page is initialized, otherwise nothing should be done
                 let paddr = inner.commit_page(block.block, MMUFlags::WRITE)?;
-                kernel_hal::mem::pmem_zero(paddr + block.begin, block.len());
+                hal_impl::mem::pmem_zero(paddr + block.begin, block.len());
             }
         }
         inner.release_unwanted_pages_in_parent(unwanted);
@@ -377,7 +377,7 @@ impl VMObjectTrait for VMObjectPaged {
         }
         if inner.cache_policy == CachePolicy::Cached && policy != CachePolicy::Cached {
             for value in inner.frames.values() {
-                kernel_hal::mem::frame_flush(value.frame.paddr());
+                hal_impl::mem::frame_flush(value.frame.paddr());
             }
         }
         inner.cache_policy = policy;
@@ -548,7 +548,7 @@ impl VMObjectPagedInner {
             if out_of_range || no_parent {
                 if !flags.contains(MMUFlags::WRITE) {
                     // read-only, just return zero frame
-                    return Ok(CommitResult::Ref(kernel_hal::mem::ZERO_FRAME.paddr()));
+                    return Ok(CommitResult::Ref(hal_impl::mem::ZERO_FRAME.paddr()));
                 }
                 // lazy allocate zero frame
                 // This calls the HAL layer's hal_frame_alloc; ensure parameter signatures match when implementing
@@ -631,7 +631,7 @@ impl VMObjectPagedInner {
         } else if flags.contains(MMUFlags::WRITE) && child_tag.is_split() {
             // copy-on-write
             let target_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
-            kernel_hal::mem::pmem_copy(target_frame.paddr(), frame.frame.paddr(), PAGE_SIZE);
+            hal_impl::mem::pmem_copy(target_frame.paddr(), frame.frame.paddr(), PAGE_SIZE);
             frame.tag = child_tag;
             return Ok(CommitResult::CopyOnWrite(target_frame, true));
         }

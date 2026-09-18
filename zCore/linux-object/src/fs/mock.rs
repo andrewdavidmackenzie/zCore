@@ -6,7 +6,7 @@ use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::intrinsics::{atomic_load_acquire, atomic_store_release};
 use core::sync::atomic::{AtomicBool, Ordering};
-use kernel_hal::{
+use hal_impl::{
     cpu::cpu_id,
     interrupt::{send_ipi, wait_for_interrupt},
     timer::timer_now,

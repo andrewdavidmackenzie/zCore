@@ -4,10 +4,8 @@
 
 use super::constants::*;
 use crate::{ZxError, ZxResult};
-use kernel_hal::{
-    drivers::prelude::{IrqPolarity, IrqTriggerMode},
-    interrupt,
-};
+use hal::scheme::irq::{IrqPolarity, IrqTriggerMode};
+use hal_impl::interrupt;
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug)]

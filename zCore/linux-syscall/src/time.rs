@@ -3,7 +3,7 @@
 //!
 use crate::Syscall;
 use core::convert::TryFrom;
-use kernel_hal::{user::UserInPtr, user::UserOutPtr};
+use hal_impl::{user::UserInPtr, user::UserOutPtr};
 use linux_object::error::LxError;
 use linux_object::error::SysResult;
 use linux_object::signal::Signal as LinuxSignal;
@@ -41,19 +41,19 @@ impl Syscall<'_> {
         let clock_id = ClockId::from(clock);
         let duration = match clock_id {
             ClockId::ClockRealTime | ClockId::ClockRealTimeCoarse => {
-                kernel_hal::timer::timer_clock_realtime()
+                hal_impl::timer::timer_clock_realtime()
             }
             ClockId::ClockMonotonic
             | ClockId::ClockMonotonicRaw
             | ClockId::ClockMonotonicCoarse
-            | ClockId::ClockBootTime => kernel_hal::timer::timer_now(),
+            | ClockId::ClockBootTime => hal_impl::timer::timer_now(),
             // CPU time clocks: not yet implemented, return monotonic as fallback
             ClockId::ClockProcessCpuTimeId | ClockId::ClockThreadCpuTimeId => {
                 warn!(
                     "clock_gettime: {:?} not implemented, returning monotonic",
                     clock_id
                 );
-                kernel_hal::timer::timer_now()
+                hal_impl::timer::timer_now()
             }
             _ => return Err(LxError::EINVAL),
         };
@@ -346,8 +346,8 @@ impl Syscall<'_> {
             rem
         );
         use core::time::Duration;
-        use kernel_hal::thread::SleepFuture;
-        use kernel_hal::timer;
+        use hal_impl::thread::SleepFuture;
+        use hal_impl::timer;
         use linux_object::thread::Interruptible;
         let duration: Duration = req.read()?.into();
         let clockid = ClockId::from(clockid);

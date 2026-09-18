@@ -4,8 +4,8 @@ use core::{any::Any, future::Future, pin::Pin};
 
 use lock::Mutex;
 
-use kernel_hal::drivers::prelude::input::{Mouse, MouseFlags, MouseState};
-use kernel_hal::drivers::scheme::{EventScheme, InputScheme};
+use hal_impl::device_registry::prelude::input::{Mouse, MouseFlags, MouseState};
+use hal::{EventScheme, InputScheme};
 use rcore_fs::vfs::*;
 use rcore_fs_devfs::DevFS;
 

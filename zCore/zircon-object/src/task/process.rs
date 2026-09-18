@@ -143,7 +143,7 @@ impl Process {
     /// # use std::sync::Arc;
     /// # use zircon_object::task::*;
     /// # use zircon_object::object::*;
-    /// # kernel_hal::init();
+    /// # hal_impl::init();
     /// # async_std::task::block_on(async {
     /// let job = Job::root();
     /// let proc = Process::create(&job, "proc").unwrap();

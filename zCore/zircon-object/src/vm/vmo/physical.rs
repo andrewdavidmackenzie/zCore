@@ -39,21 +39,21 @@ impl VMObjectTrait for VMObjectPhysical {
     fn read(&self, offset: usize, buf: &mut [u8]) -> ZxResult {
         let _ = self.data_lock.lock();
         assert!(offset + buf.len() <= self.len());
-        kernel_hal::mem::pmem_read(self.paddr + offset, buf);
+        hal_impl::mem::pmem_read(self.paddr + offset, buf);
         Ok(())
     }
 
     fn write(&self, offset: usize, buf: &[u8]) -> ZxResult {
         let _ = self.data_lock.lock();
         assert!(offset + buf.len() <= self.len());
-        kernel_hal::mem::pmem_write(self.paddr + offset, buf);
+        hal_impl::mem::pmem_write(self.paddr + offset, buf);
         Ok(())
     }
 
     fn zero(&self, offset: usize, len: usize) -> ZxResult {
         let _ = self.data_lock.lock();
         assert!(offset + len <= self.len());
-        kernel_hal::mem::pmem_zero(self.paddr + offset, len);
+        hal_impl::mem::pmem_zero(self.paddr + offset, len);
         Ok(())
     }
 
@@ -118,7 +118,7 @@ impl VMObjectTrait for VMObjectPhysical {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel_hal::CachePolicy;
+    use hal::CachePolicy;
 
     #[test]
     fn read_write() {

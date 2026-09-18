@@ -1,12 +1,11 @@
 use crate::arch::timer::set_next_trigger;
-use crate::drivers;
 use crate::hal_fn::mem::phys_to_virt;
+use ::drivers::irq::gic_400;
+use ::drivers::scheme::{EventScheme, IrqScheme, UartScheme};
+use ::drivers::uart::Pl011Uart;
+use ::drivers::Device;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
-use kernel_drivers::irq::gic_400;
-use kernel_drivers::scheme::{EventScheme, IrqScheme, UartScheme};
-use kernel_drivers::uart::Pl011Uart;
-use kernel_drivers::Device;
 
 /// GIC register offsets from gic_base.
 ///
@@ -72,7 +71,7 @@ pub fn init_early() {
         .ok();
     gic.register_handler(TIMER_IRQ as usize, Box::new(set_next_trigger))
         .ok();
-    drivers::add_device(Device::Irq(Arc::new(gic)));
+    crate::device_registry::add_device(Device::Irq(Arc::new(gic)));
     // Wire UART received bytes to the shared console input buffer.
     let u = uart.clone();
     uart.subscribe(
@@ -84,7 +83,7 @@ pub fn init_early() {
         }),
         false,
     );
-    drivers::add_device(Device::Uart(uart));
+    crate::device_registry::add_device(Device::Uart(uart));
 }
 
 pub fn init() {
@@ -97,15 +96,15 @@ pub fn init() {
     #[cfg(not(feature = "board-raspi400"))]
     {
         use crate::imp::config::VIRTIO_BASE;
+        use ::drivers::virtio::{MmioTransport, VirtIOHeader, VirtIoBlk};
         use core::ptr::NonNull;
-        use kernel_drivers::virtio::{MmioTransport, VirtIOHeader, VirtIoBlk};
 
         let header = NonNull::new(phys_to_virt(VIRTIO_BASE) as *mut VirtIOHeader)
             .expect("VIRTIO_BASE mapped to null");
         match unsafe { MmioTransport::new(header) } {
             Ok(transport) => match VirtIoBlk::new(transport) {
                 Ok(blk) => {
-                    drivers::add_device(Device::Block(Arc::new(blk)));
+                    crate::device_registry::add_device(Device::Block(Arc::new(blk)));
                 }
                 Err(e) => {
                     log::warn!(
@@ -125,5 +124,7 @@ pub fn init() {
 }
 
 fn handle_uart_irq() {
-    crate::drivers::all_uart().first_unwrap().handle_irq(0);
+    crate::device_registry::all_uart()
+        .first_unwrap()
+        .handle_irq(0);
 }

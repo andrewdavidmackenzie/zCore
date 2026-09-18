@@ -4,7 +4,7 @@ use super::{
 };
 use core::arch::naked_asm;
 use dtb_walker::{Dtb, DtbObj, HeaderError::*, Property, Str, WalkOperation::*};
-use kernel_hal::KernelConfig;
+use hal_impl::KernelConfig;
 
 /// Kernel entry point.
 ///

@@ -10,7 +10,7 @@ all need to be fully initialized.
 
 Some components can conveniently use existing crate
 libraries. The memory-related functions in the
-intermediate abstraction layer `kernel-hal` that needed
+intermediate abstraction layer `hal-impl` that needed
 implementation include:
 
 * PageTable -- create or retrieve page tables
@@ -39,7 +39,7 @@ correctly:
 
 Following this path:
 
-| QEMU riscv64 | - | kernel-hal-bare | - | kernel-hal | - | zircon-object / linux-object | - | linux-syscall | - | linux-loader | - | busybox |
+| QEMU riscv64 | - | hal-impl/bare | - | hal-impl | - | zircon-object / linux-object | - | linux-syscall | - | linux-loader | - | busybox |
 |--------------|---|-----------------|---|------------|---|------------------------------|---|---------------|---|--------------|---|---------|
 
 ### Implementation Approach
@@ -57,7 +57,7 @@ Following this path:
 * Create a Rust target-spec JSON file for riscv64
 * Create the corresponding linker script (.ld) and
   boot entry assembly (.asm) for riscv64
-* The main modifications are in kernel-hal-bare:
+* The main modifications are in hal-impl/bare:
   add the riscv architecture under `arch/`, including
   hardware initialization and OpenSBI interface
   wrappers
@@ -70,8 +70,8 @@ Following this path:
   - Errors may come from multiple sources: riscv64
     dependencies in Cargo.toml (disable non-essential
     crates first, add architecture-specific ones)
-  - Missing interfaces in kernel-hal-bare that need
-    implementation (see definitions in kernel-hal;
+  - Missing interfaces in hal-impl/bare that need
+    implementation (see definitions in hal-impl;
     reference the arch/x86_64 functions)
   - `target_arch` cfg changes from x86_64 to riscv64
     -- related functions and variables need to be

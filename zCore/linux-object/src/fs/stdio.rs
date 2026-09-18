@@ -9,7 +9,7 @@ use core::any::Any;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
-use kernel_hal::console::{self, ConsoleWinSize};
+use hal_impl::console::{self, ConsoleWinSize};
 use lock::Mutex;
 use rcore_fs::vfs::*;
 
@@ -62,7 +62,7 @@ impl INode for Stdin {
             return Ok(1);
         }
         // Try the shared console input buffer (no waker for sync read).
-        let n = kernel_hal::console::console_input_poll(buf, None);
+        let n = hal_impl::console::console_input_poll(buf, None);
         if n > 0 {
             Ok(n)
         } else {
@@ -96,8 +96,7 @@ impl INode for Stdin {
                 }
                 // Atomically check for data and register waker if empty.
                 let mut probe = [0u8; 1];
-                let n =
-                    kernel_hal::console::console_input_poll(&mut probe, Some(cx.waker().clone()));
+                let n = hal_impl::console::console_input_poll(&mut probe, Some(cx.waker().clone()));
                 if n > 0 {
                     self.stdin.push(probe[0] as char);
                     return Poll::Ready(self.stdin.poll());
@@ -146,7 +145,7 @@ impl INode for Stdout {
     fn write_at(&self, _offset: usize, buf: &[u8]) -> Result<usize> {
         // we do not care the utf-8 things, we just want to print it!
         let s = unsafe { core::str::from_utf8_unchecked(buf) };
-        kernel_hal::console::console_write_str(s);
+        hal_impl::console::console_write_str(s);
         Ok(buf.len())
     }
     fn poll(&self) -> Result<PollStatus> {

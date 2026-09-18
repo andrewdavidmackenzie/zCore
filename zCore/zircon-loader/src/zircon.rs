@@ -18,8 +18,9 @@ use core::{future::Future, pin::Pin};
 
 use xmas_elf::ElfFile;
 
-use kernel_hal::context::{TrapReason, UserContext, UserContextField};
-use kernel_hal::{MMUFlags, PAGE_SIZE};
+use hal::{MMUFlags, PAGE_SIZE};
+use hal::{TrapReason, UserContextField};
+use hal_impl::context::UserContext;
 use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
 use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::kcounter;
@@ -250,7 +251,7 @@ fn thread_fn(thread: CurrentThread) -> Pin<Box<dyn Future<Output = ()> + Send + 
 }
 
 async fn run_user(thread: CurrentThread) {
-    kernel_hal::thread::set_current_thread(Some(thread.inner()));
+    hal_impl::thread::set_current_thread(Some(thread.inner()));
     if thread.is_first_thread() {
         thread
             .handle_exception(ExceptionType::ProcessStarting)
@@ -268,7 +269,7 @@ async fn run_user(thread: CurrentThread) {
         // run
         trace!("go to user: {:#x?}", ctx);
         debug!("switch to {}|{}", thread.proc().name(), thread.name());
-        let tmp_time = kernel_hal::timer::timer_now().as_nanos();
+        let tmp_time = hal_impl::timer::timer_now().as_nanos();
 
         // * Attention
         // The code will enter a magic zone from here.
@@ -277,7 +278,7 @@ async fn run_user(thread: CurrentThread) {
         ctx.enter_uspace();
 
         // Back from the userspace
-        let time = kernel_hal::timer::timer_now().as_nanos() - tmp_time;
+        let time = hal_impl::timer::timer_now().as_nanos() - tmp_time;
         thread.time_add(time);
         trace!("back from user: {:#x?}", ctx);
         EXCEPTIONS_USER.add(1);
@@ -297,8 +298,8 @@ async fn run_user(thread: CurrentThread) {
     if thread.is_first_thread() && thread.proc().name() == "userstart" {
         info!("Zircon root process (userstart) exited, shutting down");
         info!("(if QEMU does not exit, press Ctrl-A then X to quit)");
-        if !kernel_hal::platform::is_hosted() {
-            kernel_hal::cpu::reset();
+        if !hal_impl::platform::is_hosted() {
+            hal_impl::cpu::reset();
         }
     }
 }
@@ -326,8 +327,8 @@ async fn handler_user_trap(
     match reason {
         TrapReason::Interrupt(vector) => {
             EXCEPTIONS_IRQ.add(1); // FIXME
-            kernel_hal::interrupt::handle_irq(vector);
-            kernel_hal::thread::yield_now().await;
+            hal_impl::interrupt::handle_irq(vector);
+            hal_impl::thread::yield_now().await;
             Ok(())
         }
         TrapReason::PageFault(vaddr, flags) => {
@@ -344,7 +345,7 @@ async fn handler_user_trap(
                     // Yield multiple times to give the pager process
                     // time to run and supply the requested pages.
                     for _ in 0..100 {
-                        kernel_hal::thread::yield_now().await;
+                        hal_impl::thread::yield_now().await;
                     }
                     Ok(())
                 }
@@ -388,7 +389,7 @@ fn syscall_args(ctx: &UserContext) -> [usize; 8] {
     let regs = ctx.general();
     cfg_if! {
         if #[cfg(target_arch = "x86_64")] {
-            if kernel_hal::platform::syscall_args_from_stack() {
+            if hal_impl::platform::syscall_args_from_stack() {
                 let arg7 = unsafe{ (regs.rsp as *const usize).read() };
                 let arg8 = unsafe{ (regs.rsp as *const usize).add(1).read() };
                 [regs.rdi, regs.rsi, regs.rdx, regs.rcx, regs.r8, regs.r9, arg7, arg8]
@@ -521,7 +522,7 @@ fn create_vdso_vmo() -> Arc<VmObject> {
     }
 
     // Write VdsoConstants into the data page at offset 0x7000.
-    let vdso_constants = kernel_hal::vdso::vdso_constants();
+    let vdso_constants = hal_impl::vdso::vdso_constants();
     let constants_bytes = unsafe {
         core::slice::from_raw_parts(
             &vdso_constants as *const _ as *const u8,

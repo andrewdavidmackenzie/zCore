@@ -67,7 +67,7 @@ fn default_personality() -> String {
 
 /// Well-known driver names and their corresponding cargo feature flags.
 /// Every driver in the `drivers` list maps to a cargo feature that gates
-/// its compilation in kernel-drivers.
+/// its compilation in drivers.
 fn driver_to_feature(driver: &str) -> &'static str {
     match driver {
         // Interrupt controllers

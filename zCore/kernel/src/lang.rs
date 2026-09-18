@@ -4,11 +4,11 @@ use core::panic::PanicInfo;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    println!("\n\npanic cpu={}\n{}", kernel_hal::cpu::cpu_id(), info);
+    println!("\n\npanic cpu={}\n{}", hal_impl::cpu::cpu_id(), info);
     error!("\n\n{info}");
 
     if cfg!(feature = "baremetal-test") {
-        kernel_hal::cpu::reset();
+        hal_impl::cpu::reset();
     } else {
         loop {
             core::hint::spin_loop();

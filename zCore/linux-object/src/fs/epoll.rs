@@ -113,7 +113,7 @@ impl EpollFile {
         use core::pin::Pin;
         use core::task::{Context, Poll};
         use core::time::Duration;
-        use kernel_hal::timer;
+        use hal_impl::timer;
 
         struct EpollWaitFuture<'a> {
             epoll: &'a EpollFile,

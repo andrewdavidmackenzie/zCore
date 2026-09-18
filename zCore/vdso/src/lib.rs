@@ -38,7 +38,7 @@ include!(concat!(env!("OUT_DIR"), "/trampolines.rs"));
 // ELF, they would override the trampoline stubs for the corresponding
 // syscall numbers.
 
-/// VdsoConstants layout matching kernel-hal/src/common/vdso.rs.
+/// VdsoConstants layout matching hal-impl/src/common/vdso.rs.
 #[repr(C)]
 pub struct VdsoConstants {
     max_num_cpus: u32,

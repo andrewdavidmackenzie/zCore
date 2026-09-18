@@ -1,7 +1,7 @@
 use {
     super::*,
     bitflags::bitflags,
-    kernel_hal::CachePolicy,
+    hal_impl::CachePolicy,
     numeric_enum_macro::numeric_enum,
     zircon_object::{dev::*, task::PolicyCondition, vm::*},
 };

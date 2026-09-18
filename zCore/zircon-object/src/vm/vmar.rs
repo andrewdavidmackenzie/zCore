@@ -3,9 +3,8 @@ use {
     crate::object::*,
     alloc::{sync::Arc, vec, vec::Vec},
     bitflags::bitflags,
-    kernel_hal::vm::{
-        GenericPageTable, IgnoreNotMappedErr, Page, PageSize, PageTable, PagingError, PagingResult,
-    },
+    hal::vm::{GenericPageTable, IgnoreNotMappedErr, Page, PageSize, PagingError, PagingResult},
+    hal_impl::vm::PageTable,
     lock::Mutex,
 };
 
@@ -642,16 +641,12 @@ impl VmAddressRegion {
         // builds. The runtime check via needs_user_write_flush() ensures
         // it only executes on platforms that actually need it.
         #[cfg(not(target_os = "none"))]
-        if kernel_hal::platform::needs_user_write_flush() {
+        if hal_impl::platform::needs_user_write_flush() {
             let page_idx = (vaddr - map_inner.addr) / PAGE_SIZE;
             let is_exec = page_idx < map_inner.flags.len()
                 && map_inner.flags[page_idx].contains(MMUFlags::EXECUTE);
             if is_exec {
-                kernel_hal::mem::pmem_mprotect(
-                    vaddr,
-                    actual_size,
-                    MMUFlags::READ | MMUFlags::WRITE,
-                );
+                hal_impl::mem::pmem_mprotect(vaddr, actual_size, MMUFlags::READ | MMUFlags::WRITE);
             }
             for (i, &byte) in buf[..actual_size].iter().enumerate() {
                 unsafe {
@@ -659,7 +654,7 @@ impl VmAddressRegion {
                 }
             }
             if is_exec {
-                kernel_hal::mem::pmem_mprotect(
+                hal_impl::mem::pmem_mprotect(
                     vaddr,
                     actual_size,
                     MMUFlags::READ | MMUFlags::EXECUTE,
