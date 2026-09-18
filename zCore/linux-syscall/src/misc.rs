@@ -20,7 +20,7 @@ impl Syscall<'_> {
             PR_SET_NAME => {
                 let name_ptr: UserInPtr<u8> = arg.into();
                 // PR_SET_NAME: read at most 16 bytes (including NUL)
-                let buf = name_ptr.as_slice(16)?;
+                let buf = name_ptr.read_array(16)?;
                 let len = buf.iter().position(|&b| b == 0).unwrap_or(15).min(15);
                 let name = core::str::from_utf8(&buf[..len]).unwrap_or("?");
                 self.thread.set_name(name);

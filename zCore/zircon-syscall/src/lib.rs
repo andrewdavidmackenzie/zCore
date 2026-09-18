@@ -320,9 +320,15 @@ impl Syscall<'_> {
                 }),
             Sys::FUTEX_WAKE_HANDLE_CLOSE_THREAD_EXIT => {
                 // atomic_store_explicit(value_ptr, new_value, memory_order_release)
-                UserInPtr::<AtomicI32>::from(a0)
-                    .as_ref()
-                    .store(a2 as i32, Ordering::Release);
+                // SMAP: single atomic store to user futex word.
+                #[allow(unsafe_code)]
+                {
+                    unsafe {
+                        kernel_hal::user::smap_allow();
+                        (*(a0 as *const AtomicI32)).store(a2 as i32, Ordering::Release);
+                        kernel_hal::user::smap_deny();
+                    }
+                }
                 let _ = self.sys_futex_wake(a0.into(), a1 as _);
                 let _ = self.sys_handle_close(a3 as _);
                 self.sys_thread_exit()

@@ -158,6 +158,8 @@ extern "C" fn ap_entry() -> ! {
             f.insert(Cr4Flags::OSFXSR);
             f.insert(Cr4Flags::OSXMMEXCPT_ENABLE);
         });
+        // Enable SMAP on APs if the BSP detected support.
+        crate::user::init_smap();
 
         // Clear CR0.EM for SSE
         use x86_64::registers::control::{Cr0, Cr0Flags};

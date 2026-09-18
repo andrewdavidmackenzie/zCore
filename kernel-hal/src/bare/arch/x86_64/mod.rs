@@ -90,6 +90,11 @@ pub fn primary_init() {
             f.insert(Cr4Flags::OSFXSR); // enable FXSAVE/FXRSTOR
             f.insert(Cr4Flags::OSXMMEXCPT_ENABLE); // enable SSE exceptions
         });
+
+        // Detect SMAP support and enable it if available.
+        // copy_from_user/copy_to_user APIs bracket user memory access
+        // with stac/clac when SMAP is active.
+        crate::user::init_smap();
     }
     // FPU/SSE state is saved/restored via FXSAVE/FXRSTOR in
     // UserContext::enter_uspace() (kernel-hal/src/common/context.rs).

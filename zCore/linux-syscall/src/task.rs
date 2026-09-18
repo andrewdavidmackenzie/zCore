@@ -290,7 +290,7 @@ impl Syscall<'_> {
         argv: UserInPtr<UserInPtr<u8>>,
         envp: UserInPtr<UserInPtr<u8>>,
     ) -> SysResult {
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         let args = argv.read_cstring_array()?;
         let mut envs: Vec<String> = Vec::new();
         if !envp.is_null() {
@@ -313,7 +313,7 @@ impl Syscall<'_> {
 
         // Read program file
         let proc = self.linux_process();
-        let inode = proc.lookup_inode(path)?;
+        let inode = proc.lookup_inode(&path)?;
         let data = inode.read_as_vec()?;
 
         proc.remove_cloexec_files();

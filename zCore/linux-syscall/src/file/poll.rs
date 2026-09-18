@@ -445,7 +445,7 @@ impl FdSet {
                 return Err(LxError::EINVAL);
             }
             // save the fdset, and clear it
-            let origin = BitVec::from_slice(addr.as_slice(len)?).unwrap();
+            let origin = BitVec::from_slice(&addr.read_array(len)?).unwrap();
             let vec0 = vec![0u32; len];
             addr.write_array(&vec0)?;
             Ok(FdSet { addr, origin })

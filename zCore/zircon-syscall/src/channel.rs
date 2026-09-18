@@ -97,9 +97,9 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let data = user_bytes.read_array(num_bytes as usize)?;
-        let handles = user_handles.as_slice(num_handles as usize)?;
+        let handles = user_handles.read_array(num_handles as usize)?;
         let transfer_self = handles.contains(&handle_value);
-        let handles = proc.remove_handles(handles)?;
+        let handles = proc.remove_handles(&handles)?;
         if transfer_self {
             return Err(ZxError::NOT_SUPPORTED);
         }
@@ -162,8 +162,8 @@ impl Syscall<'_> {
         let wr_msg = MessagePacket {
             data: args.wr_bytes.read_array(args.wr_num_bytes as usize)?,
             handles: {
-                let handles = args.wr_handles.as_slice(args.wr_num_handles as usize)?;
-                let handles = proc.remove_handles(handles)?;
+                let handles = args.wr_handles.read_array(args.wr_num_handles as usize)?;
+                let handles = proc.remove_handles(&handles)?;
                 for handle in handles.iter() {
                     if !handle.rights.contains(Rights::TRANSFER) {
                         return Err(ZxError::ACCESS_DENIED);
