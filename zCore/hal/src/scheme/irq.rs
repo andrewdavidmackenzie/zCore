@@ -85,9 +85,4 @@ pub trait IrqScheme: Scheme {
     fn init_hart(&self) {
         unimplemented!()
     }
-
-    /// [for x86_64] enable apic timer
-    fn apic_timer_enable(&self) {
-        unimplemented!()
-    }
 }

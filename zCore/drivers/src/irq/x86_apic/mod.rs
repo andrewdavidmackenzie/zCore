@@ -71,6 +71,14 @@ impl Apic {
             Err(DeviceError::InvalidParam)
         }
     }
+
+    /// Enable the local APIC timer.
+    ///
+    /// This is x86-specific and not part of the generic [`IrqScheme`] trait.
+    pub fn apic_timer_enable(&self) {
+        // SAFETY: this will called only once for every core
+        Apic::local_apic().enable_timer();
+    }
 }
 
 impl Scheme for Apic {
@@ -167,10 +175,5 @@ impl IrqScheme for Apic {
         } else {
             Err(DeviceError::InvalidParam)
         }
-    }
-
-    fn apic_timer_enable(&self) {
-        // SAFETY: this will called only once for every core
-        Apic::local_apic().enable_timer();
     }
 }
