@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 use core::any::Any;
-use kernel_drivers::{scheme::UartScheme, DeviceError};
+use kernel_hal::drivers::scheme::UartScheme;
+use kernel_hal::DeviceError;
 use rcore_fs::vfs::{make_rdev, FileType, FsError, INode, Metadata, PollStatus, Result, Timespec};
 use rcore_fs_devfs::DevFS;
 
