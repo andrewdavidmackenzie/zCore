@@ -12,10 +12,18 @@ For boot sequence details, see [boot-process.md](boot-process.md).
 
 ## Purpose
 
-The `kernel-hal` crate provides a unified, architecture-independent interface
-for all hardware interaction. It abstracts differences between three CPU
-architectures (aarch64, riscv64, x86_64) and two execution modes (bare-metal vs
-libos).
+The HAL consists of two crates:
+
+- **`hal`** -- Pure interface: trait definitions (`Scheme`, `UartScheme`,
+  `GenericPageTable`, `KernelHandler`), common types (`MMUFlags`, `PhysAddr`,
+  `CachePolicy`, `TrapReason`), and device error types. No platform-specific
+  code. No external dependencies beyond `bitflags` and `log`.
+
+- **`hal-impl`** (package name: `kernel-hal`) -- Platform implementations:
+  provides a unified, architecture-independent interface for all hardware
+  interaction. Implements the traits defined in `hal`. Abstracts differences
+  between three CPU architectures (aarch64, riscv64, x86_64) and two execution
+  modes (bare-metal vs libos).
 
 ---
 
@@ -169,47 +177,57 @@ syscall overhead matters.
 ## Directory Structure
 
 ```
-kernel-hal/src/
-  lib.rs ............... Selects bare vs libos backend
-  macros.rs ............ hal_fn_def!/hal_fn_impl! macros
-  hal_fn.rs ............ Complete HAL interface declaration
-  kernel_handler.rs .... KernelHandler trait (callbacks)
-  config.rs ............ KernelConfig re-export
-  drivers.rs ........... Device registry + FFI glue
+hal/src/ ................. Pure interface crate (no arch-specific code)
+  lib.rs               Re-exports
+  addr.rs              PhysAddr, VirtAddr, DevVAddr
+  config.rs            KernelConfig struct
+  context.rs           TrapReason, UserContextField
+  defs.rs              MMUFlags, CachePolicy, PAGE_SIZE
+  device.rs            DeviceError, DeviceResult
+  kernel_handler.rs    KernelHandler trait
+  vm.rs                GenericPageTable, PagingError, PageSize, Page
+  scheme/              Driver trait definitions
+    mod.rs             Scheme, SchemeUpcast
+    block.rs           BlockScheme
+    display.rs         DisplayScheme + color/framebuffer types
+    event.rs           EventScheme, EventHandler
+    input.rs           InputScheme + input event types
+    irq.rs             IrqScheme + IrqHandler/IrqTriggerMode/IrqPolarity
+    uart.rs            UartScheme
 
-  common/ .............. Shared types (both modes)
-    addr.rs            PhysAddr/VirtAddr aliases
-    context.rs         UserContext wrapper
-    defs.rs            HalError, MMUFlags, PAGE_SIZE
+hal-impl/src/ ........... Platform implementations (package: kernel-hal)
+  lib.rs               Selects bare vs libos backend
+  macros.rs            hal_fn_def!/hal_fn_impl! macros
+  hal_fn.rs            Complete HAL interface declaration
+  kernel_handler.rs    KernelHandler re-export + KHANDLER static
+  config.rs            KernelConfig re-export + KCONFIG static
+  drivers.rs           Device registry + FFI glue
+
+  common/              Shared implementation (both modes)
+    addr.rs            Address utility aliases
+    aarch64_exception  ARM exception model types (aarch64 only)
+    context.rs         UserContext wrapper + trap_reason_from()
+    defs.rs            Re-exports from hal
     future.rs          Async futures
     ipi.rs             Inter-processor interrupt queues
     mem.rs             PhysFrame (RAII frame wrapper)
     thread.rs          sleep_until, yield_now
     user.rs            UserPtr<T,P> safe wrappers
     vdso.rs            VdsoConstants structure
-    vm.rs              GenericPageTable trait
+    vm.rs              Re-exports from hal
 
-  bare/ ................ Bare-metal backend
+  bare/                Bare-metal backend
     boot.rs            Init sequence impl
     mem.rs             phys_to_virt, pmem read/write
     thread.rs          spawn via executor crate
     timer.rs           Timer via naive-timer
-    net.rs             Loopback network (smoltcp)
     arch/aarch64/      ARM64 specifics
-      config.rs        KernelConfig struct
-      cpu.rs           MPIDR_EL1, PSCI reset
-      drivers.rs       GIC-400 + PL011 + VirtIO init
-      interrupt.rs     DAIF, GIC IRQ handling
-      mem.rs           Free memory regions
-      timer.rs         CNTPCT_EL0 generic timer
-      trap.rs          Exception dispatch
-      vm.rs            4-level page table, TTBR
-    arch/riscv/        RISC-V specifics (similar)
-    arch/x86_64/       x86_64 specifics (similar)
+    arch/riscv/        RISC-V specifics
+    arch/x86_64/       x86_64 specifics
 
-  libos/ ............... LibOS backend
+  libos/               LibOS backend
     boot.rs            Init (creates MockUart)
-    config.rs          KernelConfig = unit struct
+    config.rs          LibOS config
     cpu.rs             cpu_id = thread ID
     drivers.rs         Mock UART/display/input
     dummy.rs           DummyKernelHandler
@@ -221,7 +239,7 @@ kernel-hal/src/
     vm.rs              PageTable via mmap/munmap
     macos.rs           %fs/%gs TLS signal handler
 
-  utils/ ............... Utility data structures
+  utils/               Utility data structures
     init_once.rs       One-shot initialization
     lazy_init.rs       Lazy init with DerefMut
     mpsc_queue.rs      Lock-free MPSC queue
@@ -232,8 +250,8 @@ kernel-hal/src/
 
 ## KernelHandler Callback Pattern
 
-The `KernelHandler` trait (`kernel-hal/src/kernel_handler.rs`) provides
-callbacks FROM the HAL INTO the kernel. It has 4 methods:
+The `KernelHandler` trait (defined in `hal/src/kernel_handler.rs`, implemented
+in the kernel) provides callbacks FROM the HAL INTO the kernel. It has 4 methods:
 
 - `frame_alloc()` -- allocate a physical frame
 - `frame_alloc_contiguous(count, align)` -- allocate contiguous frames
