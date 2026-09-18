@@ -17,15 +17,16 @@ elf = ["xmas-elf"]
 hypervisor = []
 
 libos = [
-    "kernel-hal/libos",
+    "hal-impl/libos",
 ]
 
 [dependencies]
+hal = { path = "../hal" }
 bitflags = "1.3"
 log = "0.4"
 hashbrown = "0.9"
 downcast-rs = { version = "1.2", default-features = false }
-kernel-hal = { path = "../hal-impl", default-features = false }
+hal-impl = { path = "../hal-impl", default-features = false }
 numeric-enum-macro = "0.2"
 futures = { version = "0.3", default-features = false, features = [
     "alloc",

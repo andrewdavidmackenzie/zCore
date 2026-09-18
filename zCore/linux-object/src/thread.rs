@@ -8,8 +8,8 @@ use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
-use kernel_hal::context::{UserContext, UserContextField};
-use kernel_hal::user::{Out, UserInPtr, UserOutPtr, UserPtr};
+use hal_impl::context::{UserContext, UserContextField};
+use hal_impl::user::{Out, UserInPtr, UserOutPtr, UserPtr};
 use lock::{Mutex, MutexGuard};
 use zircon_object::task::{CurrentThread, Process, Thread};
 use zircon_object::ZxResult;
@@ -201,15 +201,15 @@ impl CurrentThreadExt for CurrentThread {
                     match vmar.get_vaddr_flags(vaddr) {
                         Ok(vaddr_flags) => {
                             is_handle_write_pagefault &=
-                                !vaddr_flags.contains(kernel_hal::MMUFlags::WRITE);
+                                !vaddr_flags.contains(hal_impl::MMUFlags::WRITE);
                         }
-                        Err(kernel_hal::vm::PagingError::NotMapped) => {
+                        Err(hal_impl::vm::PagingError::NotMapped) => {
                             is_handle_write_pagefault &= true;
                         }
-                        Err(kernel_hal::vm::PagingError::NoMemory) => {
+                        Err(hal_impl::vm::PagingError::NoMemory) => {
                             is_handle_write_pagefault &= true;
                         }
-                        Err(kernel_hal::vm::PagingError::AlreadyMapped) => {
+                        Err(hal_impl::vm::PagingError::AlreadyMapped) => {
                             is_handle_write_pagefault &= true;
                         }
                     }

@@ -70,8 +70,8 @@ endif
 ################ Internal variables ################
 
 qemu := qemu-system-$(ARCH)
-kernel_elf := $(build_path)/zcore
-kernel_img := $(build_path)/zcore.bin
+kernel_elf := $(build_path)/kernel
+kernel_img := $(build_path)/kernel.bin
 esp := $(build_path)/esp
 ovmf := ../rboot/OVMF.fd
 qemu_disk := $(build_path)/disk.qcow2
@@ -255,13 +255,13 @@ debug: build
 else
 build: $(kernel_img)
 ifeq ($(PLATFORM), fu740)
-	gzip -9 -cvf $(build_path)/zcore.bin > ./zcore.bin.gz
-	mkimage -f ../firmware/riscv/fu740_fdt.its ./zcore-fu740.itb
-	@echo 'Build zcore-fu740.itb FIT-uImage done'
+	gzip -9 -cvf $(build_path)/kernel.bin > ./kernel.bin.gz
+	mkimage -f ../firmware/riscv/fu740_fdt.its ./kernel-fu740.itb
+	@echo 'Build kernel-fu740.itb FIT-uImage done'
 else ifeq ($(PLATFORM), c910light)
 	mkimage -A riscv -O linux -C none -T kernel -a 0x200000 -e 0x200000 \
 		-n "zCore for c910" \
-		-d $(build_path)/zcore.bin uImageC910
+		-d $(build_path)/kernel.bin uImageC910
 endif
 run: build justrun
 debug: build debugrun
@@ -277,10 +277,10 @@ ifeq ($(ARCH), aarch64)
 	$(sed) 's#\"cmdline\":.*#\"cmdline\": \"$(CMDLINE)\",#' disk/EFI/Boot/Boot.json
 endif
 ifeq ($(PLATFORM), d1)
-	$(OBJCOPY) ../firmware/riscv/d1_fw_payload.elf --strip-all -O binary ./zcore_d1.bin
-	dd if=$(kernel_img) of=zcore_d1.bin bs=512 seek=2048
+	$(OBJCOPY) ../firmware/riscv/d1_fw_payload.elf --strip-all -O binary ./kernel_d1.bin
+	dd if=$(kernel_img) of=kernel_d1.bin bs=512 seek=2048
 	xfel ddr ddr3
-	xfel write 0x40000000 zcore_d1.bin
+	xfel write 0x40000000 kernel_d1.bin
 	xfel exec 0x40000000
 else
 	$(qemu) $(qemu_opts)
@@ -313,7 +313,7 @@ kernel:
 	SMP=$(SMP) cargo build $(build_args)
 ifeq ($(ARCH), aarch64)
 	@mkdir -p disk/EFI/Boot
-	@cp ../target/aarch64/$(MODE)/zcore disk/os
+	@cp ../target/aarch64/$(MODE)/kernel disk/os
 endif
 
 .PHONY: disasm
@@ -347,7 +347,7 @@ ifeq ($(ARCH), x86_64)
 	mkdir -p $(esp)/EFI/zCore $(esp)/EFI/Boot
 	cp ../rboot/target/x86_64-unknown-uefi/release/rboot.efi $(esp)/EFI/Boot/BootX64.efi
 	cp rboot.conf $(esp)/EFI/Boot/rboot.conf
-	cp $(kernel_elf) $(esp)/EFI/zCore/zcore.elf
+	cp $(kernel_elf) $(esp)/EFI/zCore/kernel.elf
 	cp $(user_img) $(esp)/EFI/zCore/
 else ifeq ($(ARCH), riscv64)
 	$(OBJCOPY) $(kernel_elf) --strip-all -O binary $@
@@ -356,8 +356,8 @@ endif
 .PHONY: image
 image:
 # for macOS only
-	hdiutil create -fs fat32 -ov -volname EFI -format UDTO -srcfolder $(esp) $(build_path)/zcore.cdr
-	qemu-img convert -f raw $(build_path)/zcore.cdr -O qcow2 $(build_path)/zcore.qcow2
+	hdiutil create -fs fat32 -ov -volname EFI -format UDTO -srcfolder $(esp) $(build_path)/kernel.cdr
+	qemu-img convert -f raw $(build_path)/kernel.cdr -O qcow2 $(build_path)/kernel.qcow2
 
 ################ Deprecated ################
 

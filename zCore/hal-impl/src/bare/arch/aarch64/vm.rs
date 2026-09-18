@@ -3,9 +3,9 @@ use crate::imp::config::*;
 use crate::utils::page_table::{GenericPTE, PageTableImpl, PageTableLevel4};
 use crate::MMUFlags;
 use crate::{PhysAddr, VirtAddr, KCONFIG};
+use ::drivers::irq::gic_400::{GICC_SIZE, GICD_SIZE};
 use core::fmt::{Debug, Formatter, Result};
 use cortex_a::registers::*;
-use kernel_drivers::irq::gic_400::{GICC_SIZE, GICD_SIZE};
 use lock::Mutex;
 use tock_registers::interfaces::{Readable, Writeable};
 

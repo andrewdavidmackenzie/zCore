@@ -53,9 +53,9 @@ impl Futex {
     fn load_user_value(&self) -> i32 {
         let ptr = self.user_addr as *const AtomicI32;
         unsafe {
-            kernel_hal::user::smap_allow();
+            hal_impl::user::smap_allow();
             let val = (*ptr).load(Ordering::SeqCst);
-            kernel_hal::user::smap_deny();
+            hal_impl::user::smap_deny();
             val
         }
     }

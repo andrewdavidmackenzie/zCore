@@ -32,7 +32,7 @@ impl ProcInitInfo {
         writer.push_str(&self.args[0])?;
         // 16 random bytes for AT_RANDOM (musl uses this for stack canary / TLS)
         let mut random_bytes = [0u8; 16];
-        kernel_hal::rand::fill_random(&mut random_bytes);
+        hal_impl::rand::fill_random(&mut random_bytes);
         writer.push_slice(&random_bytes)?;
         let random_ptr = writer.sp;
         // environment strings

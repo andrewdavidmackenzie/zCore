@@ -50,7 +50,7 @@ raspi400-run: raspi400-build
 	@qemu-system-aarch64 -machine raspi4b -m 2G \
 		-display none -no-reboot -nographic \
 		-serial mon:stdio \
-		-kernel target/raspi400/release/zcore.bin
+		-kernel target/raspi400/release/kernel.bin
 
 # Prepare an SD card for Raspberry Pi 4 / Pi 400.
 # Usage: make raspi400-sd SD=/Volumes/boot
@@ -83,20 +83,20 @@ x86-linux-run: x86-linux-build
 # Ctrl-A X to exit QEMU.
 x86-zircon-run: x86-zircon-build
 	@tools/x86-bootimage/target/release/x86-bootimage \
-		target/qemu-x86_64/release/zcore \
-		target/qemu-x86_64/release/zcore-zircon.img
+		target/qemu-x86_64/release/kernel \
+		target/qemu-x86_64/release/kernel-zircon.img
 	@echo "==> Starting x86_64 Zircon (Ctrl-A X to exit QEMU)..."
 	@qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
 		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
 		-serial mon:stdio \
-		-drive format=raw,file=target/qemu-x86_64/release/zcore-zircon.img
+		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img
 
 # Create a UEFI-bootable disk image for x86_64 real hardware.
 # The image can be written to a USB drive with dd.
 # Usage: make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img
 #        make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img MODE=zircon
 MODE ?= linux
-OUTPUT ?= target/qemu-x86_64/release/zcore-uefi.img
+OUTPUT ?= target/qemu-x86_64/release/kernel-uefi.img
 x86-uefi-image:
 ifeq ($(MODE),zircon)
 	$(MAKE) x86-zircon-build
@@ -181,7 +181,7 @@ libos-run-linux:
 # Run libos in Zircon mode (known broken -- see #281)
 libos-run-zircon:
 	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality zircon
-	./target/release/zcore
+	./target/release/kernel
 
 # configure build environment (platform toolchain)
 config:

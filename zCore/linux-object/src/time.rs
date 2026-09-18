@@ -109,12 +109,12 @@ pub const SIGEV_NONE: i32 = 1;
 impl TimeSpec {
     /// Current monotonic time (duration since boot).
     pub fn now() -> TimeSpec {
-        Self::from_duration(kernel_hal::timer::timer_now())
+        Self::from_duration(hal_impl::timer::timer_now())
     }
 
     /// Current wall-clock time (duration since Unix epoch).
     pub fn now_realtime() -> TimeSpec {
-        Self::from_duration(kernel_hal::timer::timer_clock_realtime())
+        Self::from_duration(hal_impl::timer::timer_clock_realtime())
     }
 
     /// update TimeSpec for a file inode

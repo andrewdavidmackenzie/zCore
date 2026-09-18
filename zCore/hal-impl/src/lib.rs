@@ -24,7 +24,7 @@ mod hal_fn;
 mod kernel_handler;
 mod utils;
 
-pub mod drivers;
+pub mod device_registry;
 
 cfg_if! {
     if #[cfg(feature = "libos")] {

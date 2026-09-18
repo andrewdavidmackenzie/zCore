@@ -1,16 +1,16 @@
 [package]
-name = "zcore"
+name = "kernel"
 version = "0.1.0"
 authors = ["PanQL <panqinglin00@163.com>", "Yuekai Jia <equation618@gmail.com>"]
 edition = "2021"
 
-default-run = "zcore"
+default-run = "kernel"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
 # Disable cargo test, bench and doc for this package
-name = "zcore"
+name = "kernel"
 test = false
 bench = false
 doc = false
@@ -18,7 +18,7 @@ doc = false
 [features]
 # Print colorless logs
 colorless-log = []
-thead-maee = ["kernel-hal/thead-maee"]
+thead-maee = ["hal-impl/thead-maee"]
 link-user-img = []
 baremetal-test = ["executor/baremetal-test"]
 mock-disk = ["linux-object/mock-disk"]
@@ -27,38 +27,38 @@ mock-disk = ["linux-object/mock-disk"]
 zircon = ["zircon-loader", "rcore-fs", "rcore-fs-sfs"]
 linux = ["linux-loader", "linux-object", "rcore-fs", "rcore-fs-sfs"]
 libos = [
-  "kernel-hal/libos",
+  "hal-impl/libos",
   "linux-loader?/libos",
   "async-std",
   "chrono",
   "rcore-fs-hostfs",
 ]
 
-# --- Driver features (forwarded to kernel-hal -> kernel-drivers) ---
-apic = ["kernel-hal/apic"]
-gic-400 = ["kernel-hal/gic-400"]
-riscv-plic = ["kernel-hal/riscv-plic"]
-riscv-intc = ["kernel-hal/riscv-intc"]
-pl011-uart = ["kernel-hal/pl011-uart"]
-uart-16550 = ["kernel-hal/uart-16550"]
-ps2-keyboard = ["kernel-hal/ps2-keyboard"]
-mock-uart = ["kernel-hal/mock-uart"]
-virtio = ["kernel-hal/virtio"]
-pci = ["kernel-hal/pci"]
-allwinner-drivers = ["kernel-hal/allwinner-drivers"]
-fu740-drivers = ["kernel-hal/fu740-drivers"]
+# --- Driver features (forwarded to hal-impl -> drivers) ---
+apic = ["hal-impl/apic"]
+gic-400 = ["hal-impl/gic-400"]
+riscv-plic = ["hal-impl/riscv-plic"]
+riscv-intc = ["hal-impl/riscv-intc"]
+pl011-uart = ["hal-impl/pl011-uart"]
+uart-16550 = ["hal-impl/uart-16550"]
+ps2-keyboard = ["hal-impl/ps2-keyboard"]
+mock-uart = ["hal-impl/mock-uart"]
+virtio = ["hal-impl/virtio"]
+pci = ["hal-impl/pci"]
+allwinner-drivers = ["hal-impl/allwinner-drivers"]
+fu740-drivers = ["hal-impl/fu740-drivers"]
 
 # --- Board presets (combine personality + drivers + board-specific flags) ---
 board-d1 = ["link-user-img", "allwinner-drivers"]
-board-c910light = ["link-user-img", "kernel-hal/board-c910light"]
+board-c910light = ["link-user-img", "hal-impl/board-c910light"]
 board-fu740 = ["link-user-img", "fu740-drivers"]
-board-raspi400 = ["kernel-hal/board-raspi400"]
+board-raspi400 = ["hal-impl/board-raspi400"]
 
 [dependencies]
 log = "0.4"
 cfg-if = "1.0"
 spin = "0.9.4"
-kernel-hal = { path = "../hal-impl", default-features = false }
+hal-impl = { path = "../hal-impl", default-features = false }
 zircon-object = { path = "../zircon-object" }
 zircon-loader = { path = "../zircon-loader", optional = true }
 linux-loader = { path = "../linux-loader", optional = true }

@@ -26,7 +26,7 @@ hal_fn_impl! {
         fn reset() -> ! {
             info!("shutdown...");
             loop {
-                use kernel_drivers::io::{Io, Pmio};
+                use ::drivers::io::{Io, Pmio};
                 Pmio::<u16>::new(0x604).write(0x2000);
                 super::interrupt::wait_for_interrupt();
             }

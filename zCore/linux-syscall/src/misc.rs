@@ -2,7 +2,7 @@ use super::*;
 use alloc::vec::Vec;
 use bitflags::bitflags;
 use core::time::Duration;
-use kernel_hal::timer::timer_now;
+use hal_impl::timer::timer_now;
 use linux_object::process::LinuxProcess;
 use linux_object::thread::ThreadExt;
 use linux_object::time::*;
@@ -72,7 +72,7 @@ impl Syscall<'_> {
             ARCH_SET_FS => {
                 info!("sys_arch_prctl: set FSBASE to {:#x}", addr);
                 self.thread.with_context(|ctx| {
-                    ctx.set_field(kernel_hal::context::UserContextField::ThreadPointer, addr)
+                    ctx.set_field(hal_impl::context::UserContextField::ThreadPointer, addr)
                 })?;
                 Ok(0)
             }
@@ -88,7 +88,7 @@ impl Syscall<'_> {
         #[cfg(not(target_os = "none"))]
         let release = release + "-libos";
 
-        let vdso_const = kernel_hal::vdso::vdso_constants();
+        let vdso_const = hal_impl::vdso::vdso_constants();
 
         let arch = if cfg!(target_arch = "x86_64") {
             "x86_64"
@@ -118,13 +118,13 @@ impl Syscall<'_> {
 
     /// provides a simple way of getting overall system statistics
     pub fn sys_sysinfo(&mut self, mut sys_info: UserOutPtr<SysInfo>) -> SysResult {
-        use kernel_hal::timer;
+        use hal_impl::timer;
         // timer_now() returns monotonic (boot-relative) time in both
         // bare-metal and libos modes, which is correct for uptime.
         let uptime = timer::timer_now().as_secs();
 
         // Compute total RAM from boot-time free physical memory regions
-        let totalram: u64 = kernel_hal::mem::free_pmem_regions()
+        let totalram: u64 = hal_impl::mem::free_pmem_regions()
             .iter()
             .map(|r| (r.end - r.start) as u64)
             .sum();
@@ -209,7 +209,7 @@ impl Syscall<'_> {
                     // both interruptible by signals.
                     let deadline = timer_now() + Duration::from(timeout);
                     let timeout_future = async {
-                        kernel_hal::thread::SleepFuture::new(deadline).await;
+                        hal_impl::thread::SleepFuture::new(deadline).await;
                         Err::<(), _>(zircon_object::ZxError::TIMED_OUT)
                     };
                     // Pin both futures since select! needs them.
@@ -360,11 +360,11 @@ impl Syscall<'_> {
         match cmd {
             LINUX_REBOOT_CMD_POWER_OFF | LINUX_REBOOT_CMD_HALT => {
                 warn!("system power off");
-                kernel_hal::cpu::reset(); // PSCI SYSTEM_OFF
+                hal_impl::cpu::reset(); // PSCI SYSTEM_OFF
             }
             LINUX_REBOOT_CMD_RESTART => {
                 warn!("system restart");
-                kernel_hal::cpu::reset(); // TODO: use PSCI SYSTEM_RESET
+                hal_impl::cpu::reset(); // TODO: use PSCI SYSTEM_RESET
             }
             _ => {
                 warn!("reboot: unsupported cmd {:#x}", cmd);
@@ -384,7 +384,7 @@ impl Syscall<'_> {
     pub fn sys_getrandom(&mut self, mut buf: UserOutPtr<u8>, len: usize, flag: u32) -> SysResult {
         info!("getrandom: buf: {:?}, len: {:?}, flag {:?}", buf, len, flag);
         let mut buffer = vec![0u8; len];
-        kernel_hal::rand::fill_random(&mut buffer);
+        hal_impl::rand::fill_random(&mut buffer);
         buf.write_array(&buffer[..len])?;
         Ok(len)
     }

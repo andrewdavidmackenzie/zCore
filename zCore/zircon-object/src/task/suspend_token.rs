@@ -13,7 +13,7 @@ use {
 /// # use std::sync::Arc;
 /// # use zircon_object::task::*;
 /// # use zircon_object::object::{KernelObject, Signal};
-/// # kernel_hal::init();
+/// # hal_impl::init();
 /// let job = Job::root();
 /// let proc = Process::create(&job, "proc").unwrap();
 /// let thread = Thread::create(&proc, "thread").unwrap();

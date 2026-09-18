@@ -147,7 +147,7 @@ pub fn trap_reason_from(esr: usize) -> TrapReason {
                     phys_to_virt(gic_base + crate::imp::arch::drivers::GIC_GICC_OFFSET),
                     phys_to_virt(gic_base + crate::imp::arch::drivers::GIC_GICD_OFFSET),
                 );
-                kernel_drivers::irq::gic_400::get_irq_num(gicc, gicd)
+                ::drivers::irq::gic_400::get_irq_num(gicc, gicd)
             },
             #[cfg(feature = "libos")]
             {

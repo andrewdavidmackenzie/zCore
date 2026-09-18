@@ -12,7 +12,7 @@
 
 use super::*;
 use bitflags::bitflags;
-use kernel_hal::user::UserOutPtr;
+use hal_impl::user::UserOutPtr;
 use linux_object::fs::vfs::FileType;
 
 impl Syscall<'_> {

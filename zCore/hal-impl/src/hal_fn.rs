@@ -1,7 +1,7 @@
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use core::{any::Any, future::Future, ops::Range, time::Duration};
 
-use crate::drivers::prelude::{IrqHandler, IrqPolarity, IrqTriggerMode};
+use crate::device_registry::prelude::{IrqHandler, IrqPolarity, IrqTriggerMode};
 use crate::{common, DeviceResult, KernelConfig, KernelHandler, PhysAddr, VirtAddr};
 
 hal_fn_def! {

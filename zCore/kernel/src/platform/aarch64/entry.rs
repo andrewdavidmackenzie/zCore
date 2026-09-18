@@ -1,4 +1,4 @@
-use kernel_hal::KernelConfig;
+use hal_impl::KernelConfig;
 
 // Include the boot assembly (page table setup + MMU enable + stack setup)
 #[cfg(not(feature = "board-raspi400"))]
@@ -42,7 +42,7 @@ extern "C" fn rust_main(dtb_paddr: usize) -> ! {
 
     // Store board-specific UART and GIC base addresses in hal-impl statics.
     // These are used as fallbacks if the DTB doesn't provide them.
-    kernel_hal::arch::set_board_bases(board::UART_BASE, board::GIC_BASE);
+    hal_impl::arch::set_board_bases(board::UART_BASE, board::GIC_BASE);
 
     let config = KernelConfig {
         cmdline: option_env!("ZCORE_CMDLINE").unwrap_or(default_cmdline),

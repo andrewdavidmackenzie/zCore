@@ -8,7 +8,7 @@
 //! Original location: zCore/hal-impl/src/bare/net.rs (identical copy
 //! also existed at zCore/hal-impl/src/libos/net.rs).
 //!
-//! Dependencies needed: smoltcp, lock, kernel-drivers (for Device enum),
+//! Dependencies needed: smoltcp, lock, drivers (for Device enum),
 //! and the device registry (add_device/all_net).
 
 // --- Original code below (not compiled) ---

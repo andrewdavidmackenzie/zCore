@@ -19,7 +19,7 @@ hal_fn_impl! {
 
         fn handle_irq(cause: usize) {
             trace!("Handle irq cause: {}", cause);
-            let irq = crate::drivers::all_irq()
+            let irq = crate::device_registry::all_irq()
                 .find(alloc::format!("riscv-intc-cpu{}", crate::cpu::cpu_id()).as_str())
                 .expect("IRQ device 'riscv-intc' not initialized!");
             irq.handle_irq(cause)

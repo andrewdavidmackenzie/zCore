@@ -12,7 +12,7 @@
 //! - Device error types (`DeviceError`, `DeviceResult`)
 //!
 //! No architecture-specific code lives here. Platform implementations
-//! are in the `hal-impl` crate (Cargo package name: `kernel-hal`).
+//! are in the `hal-impl` crate (Cargo package name: `hal-impl`).
 
 #![no_std]
 #![deny(warnings)]

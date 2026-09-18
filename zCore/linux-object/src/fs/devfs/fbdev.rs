@@ -3,9 +3,9 @@
 use alloc::sync::Arc;
 use core::{any::Any, convert::From};
 
-use kernel_hal::drivers::prelude::{ColorFormat, DisplayInfo};
-use kernel_hal::drivers::scheme::DisplayScheme;
-use kernel_hal::vm::{GenericPageTable, PageTable};
+use hal::scheme::display::{ColorFormat, DisplayInfo};
+use hal::DisplayScheme;
+use hal_impl::vm::{GenericPageTable, PageTable};
 use rcore_fs::vfs::*;
 use rcore_fs_devfs::DevFS;
 use zircon_object::vm::{page_aligned, pages, VmObject};

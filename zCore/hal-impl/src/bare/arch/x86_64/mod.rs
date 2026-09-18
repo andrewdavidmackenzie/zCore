@@ -97,7 +97,7 @@ pub fn primary_init() {
         crate::user::init_smap();
     }
     // FPU/SSE state is saved/restored via FXSAVE/FXRSTOR in
-    // UserContext::enter_uspace() (kernel-hal/src/common/context.rs).
+    // UserContext::enter_uspace() (hal-impl/src/common/context.rs).
 
     // Boot application processors (SMP)
     // TODO: SMP boot hangs on ThinkPad P1 Gen 3 -- investigate trampoline
@@ -110,5 +110,5 @@ pub fn timer_init() {
 }
 
 pub fn secondary_init() {
-    kernel_drivers::irq::x86::Apic::init_local_apic_ap();
+    ::drivers::irq::x86::Apic::init_local_apic_ap();
 }

@@ -1,4 +1,4 @@
-use kernel_hal::interrupt;
+use hal_impl::interrupt;
 use {super::*, lock::Mutex};
 
 pub struct EventInterrupt {

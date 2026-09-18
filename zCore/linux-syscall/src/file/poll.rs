@@ -12,7 +12,7 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use core::time::Duration;
-use kernel_hal::timer;
+use hal_impl::timer;
 use linux_object::error::LxError;
 use linux_object::fs::{
     EpollEvent, EpollFile, FileDesc, PollEvents, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD,

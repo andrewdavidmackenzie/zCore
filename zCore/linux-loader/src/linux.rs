@@ -6,8 +6,9 @@ use linux_object::signal::{
     MachineContext, SigInfo, Signal, SignalActionFlags, SignalUserContext, Sigset,
 };
 
-use kernel_hal::context::{TrapReason, UserContext, UserContextField};
-use kernel_hal::interrupt::{intr_off, intr_on};
+use hal::{TrapReason, UserContextField};
+use hal_impl::context::UserContext;
+use hal_impl::interrupt::{intr_off, intr_on};
 use linux_object::fs::{vfs::FileSystem, INodeExt};
 use linux_object::thread::{CurrentThreadExt, ThreadExt};
 use linux_object::{loader::LinuxElfLoader, process::ProcessExt};
@@ -22,7 +23,7 @@ pub fn run(args: Vec<String>, envs: Vec<String>, rootfs: Arc<dyn FileSystem>) ->
     let proc = Process::create_linux(&job, rootfs.clone()).unwrap();
     let thread = Thread::create_linux(&proc).unwrap();
     let loader = LinuxElfLoader {
-        syscall_entry: kernel_hal::context::syscall_entry as *const () as usize,
+        syscall_entry: hal_impl::context::syscall_entry as *const () as usize,
         stack_pages: USER_STACK_PAGES,
         root_inode: rootfs.root_inode(),
     };
@@ -31,7 +32,7 @@ pub fn run(args: Vec<String>, envs: Vec<String>, rootfs: Arc<dyn FileSystem>) ->
     let data = inode.read_as_vec().unwrap();
     let path = args[0].clone();
 
-    let pg_token = kernel_hal::vm::current_vmtoken();
+    let pg_token = hal_impl::vm::current_vmtoken();
     debug!("current pgt = {:#x}", pg_token);
     // Load the ELF and configure the thread's entry point and stack
     let (entry, sp, initial_brk) = loader.load(&proc.vmar(), &data, args, envs, path).unwrap();
@@ -60,7 +61,7 @@ fn thread_fn(thread: CurrentThread) -> Pin<Box<dyn Future<Output = ()> + Send + 
 /// - handle trap/interrupt/syscall according to the return value
 /// - return the context to the user thread
 async fn run_user(thread: CurrentThread) {
-    kernel_hal::thread::set_current_thread(Some(thread.inner()));
+    hal_impl::thread::set_current_thread(Some(thread.inner()));
     loop {
         // wait
         let mut ctx = thread.wait_for_run().await;
@@ -80,9 +81,9 @@ async fn run_user(thread: CurrentThread) {
             ctx.get_field(UserContextField::InstrPointer),
             ctx.get_field(UserContextField::StackPointer),
         );
-        let user_start = kernel_hal::timer::timer_now();
+        let user_start = hal_impl::timer::timer_now();
         ctx.enter_uspace();
-        let user_time = kernel_hal::timer::timer_now() - user_start;
+        let user_time = hal_impl::timer::timer_now() - user_start;
         debug!(
             "back from user: tid = {} pc = {:x} sp = {:x} trap = {:?}",
             thread.id(),
@@ -91,9 +92,9 @@ async fn run_user(thread: CurrentThread) {
             ctx.trap_reason(),
         );
         // handle trap/interrupt/syscall
-        let sys_start = kernel_hal::timer::timer_now();
+        let sys_start = hal_impl::timer::timer_now();
         let trap_result = handle_user_trap(&thread, ctx).await;
-        let sys_time = kernel_hal::timer::timer_now() - sys_start;
+        let sys_time = hal_impl::timer::timer_now() - sys_start;
 
         // Accumulate CPU time on the thread.
         {
@@ -109,7 +110,7 @@ async fn run_user(thread: CurrentThread) {
             thread.exit_linux(err as i32);
         }
     }
-    kernel_hal::thread::set_current_thread(None);
+    hal_impl::thread::set_current_thread(None);
 }
 
 fn handle_signal(
@@ -188,7 +189,7 @@ async fn handle_user_trap(thread: &CurrentThread, mut ctx: Box<UserContext>) -> 
         let mut syscall = linux_syscall::Syscall {
             thread,
             thread_fn,
-            syscall_entry: kernel_hal::context::syscall_entry as *const () as usize,
+            syscall_entry: hal_impl::context::syscall_entry as *const () as usize,
         };
         trace!("Syscall : {} {:x?}", num as u32, args);
         run_with_irq_enable! {
@@ -203,11 +204,10 @@ async fn handle_user_trap(thread: &CurrentThread, mut ctx: Box<UserContext>) -> 
     let pid = thread.proc().id();
     match reason {
         TrapReason::Interrupt(vector) => {
-            kernel_hal::interrupt::handle_irq(vector);
-            if !kernel_hal::platform::is_hosted()
-                && vector == kernel_hal::context::TIMER_INTERRUPT_VEC
+            hal_impl::interrupt::handle_irq(vector);
+            if !hal_impl::platform::is_hosted() && vector == hal_impl::context::TIMER_INTERRUPT_VEC
             {
-                kernel_hal::thread::yield_now().await;
+                hal_impl::thread::yield_now().await;
             }
             Ok(())
         }

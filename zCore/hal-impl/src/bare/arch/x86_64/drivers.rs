@@ -1,12 +1,11 @@
 use alloc::{boxed::Box, sync::Arc};
 
-use kernel_drivers::irq::x86::Apic;
-use kernel_drivers::scheme::{EventScheme, IrqScheme, UartScheme};
-use kernel_drivers::uart::Uart16550Pmio;
-use kernel_drivers::{Device, DeviceResult};
+use ::drivers::irq::x86::Apic;
+use ::drivers::scheme::{EventScheme, IrqScheme, UartScheme};
+use ::drivers::uart::Uart16550Pmio;
+use ::drivers::{Device, DeviceResult};
 
 use super::trap;
-use crate::drivers;
 
 /// Create a UART device and wire its received bytes to the console
 /// input buffer. The raw UART is registered directly (no BufferedUart
@@ -28,8 +27,8 @@ fn create_uart_with_console_input(base: u16) -> Arc<dyn UartScheme> {
 }
 
 pub(super) fn init_early() -> DeviceResult {
-    drivers::add_device(Device::Uart(create_uart_with_console_input(0x3F8)));
-    drivers::add_device(Device::Uart(create_uart_with_console_input(0x2F8)));
+    crate::device_registry::add_device(Device::Uart(create_uart_with_console_input(0x3F8)));
+    crate::device_registry::add_device(Device::Uart(create_uart_with_console_input(0x2F8)));
     Ok(())
 }
 
@@ -50,7 +49,7 @@ pub(super) fn init() -> DeviceResult {
         crate::mem::phys_to_virt,
     ));
     warn!("APIC: init done, setting up UART IRQs...");
-    let uarts = drivers::all_uart();
+    let uarts = crate::device_registry::all_uart();
     if let Some(u) = uarts.try_get(0) {
         irq.register_device(trap::X86_ISA_IRQ_COM1, u.clone().upcast())?;
         irq.unmask(trap::X86_ISA_IRQ_COM1)?;
@@ -65,8 +64,8 @@ pub(super) fn init() -> DeviceResult {
     // ConsoleInput buffer via the callback.
     #[cfg(feature = "ps2-keyboard")]
     {
-        use kernel_drivers::keyboard::Ps2Keyboard;
-        use kernel_drivers::scheme::SchemeUpcast;
+        use ::drivers::keyboard::Ps2Keyboard;
+        use ::drivers::scheme::SchemeUpcast;
         let kbd = Arc::new(Ps2Keyboard::new(crate::common::console::console_input_push));
         irq.register_device(trap::X86_ISA_IRQ_KEYBOARD, kbd.clone().upcast())?;
         irq.unmask(trap::X86_ISA_IRQ_KEYBOARD)?;
@@ -89,17 +88,17 @@ pub(super) fn init() -> DeviceResult {
     Apic::local_apic().set_timer_initial(cycles as u32);
     Apic::local_apic().disable_timer();
 
-    drivers::add_device(Device::Irq(irq));
+    crate::device_registry::add_device(Device::Irq(irq));
 
     #[cfg(feature = "pci")]
     {
-        use kernel_drivers::bus::pci;
+        use ::drivers::bus::pci;
         info!("PCI: scanning bus...");
         match pci::init(None) {
             Ok(devices) => {
                 info!("PCI: found {} device(s)", devices.len());
                 for dev in devices {
-                    drivers::add_device(dev);
+                    crate::device_registry::add_device(dev);
                 }
             }
             Err(e) => warn!("PCI: scan failed: {:?}", e),

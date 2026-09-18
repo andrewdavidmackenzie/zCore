@@ -1,4 +1,4 @@
-use kernel_hal::{KernelHandler, MMUFlags};
+use hal_impl::{KernelHandler, MMUFlags};
 use zircon_object::task::Thread;
 
 #[cfg(not(feature = "libos"))]
@@ -14,7 +14,7 @@ impl KernelHandler for ZcoreKernelHandler {
         }
         #[cfg(feature = "libos")]
         {
-            kernel_hal::libos_frame::frame_alloc()
+            hal_impl::libos_frame::frame_alloc()
         }
     }
 
@@ -25,7 +25,7 @@ impl KernelHandler for ZcoreKernelHandler {
         }
         #[cfg(feature = "libos")]
         {
-            kernel_hal::libos_frame::frame_alloc_contiguous(frame_count, align_log2)
+            hal_impl::libos_frame::frame_alloc_contiguous(frame_count, align_log2)
         }
     }
 
@@ -34,12 +34,12 @@ impl KernelHandler for ZcoreKernelHandler {
         memory::frame_dealloc(paddr);
         #[cfg(feature = "libos")]
         {
-            kernel_hal::libos_frame::frame_dealloc(paddr);
+            hal_impl::libos_frame::frame_dealloc(paddr);
         }
     }
 
     fn handle_page_fault(&self, fault_vaddr: usize, access_flags: MMUFlags) {
-        if let Some(thread) = kernel_hal::thread::get_current_thread() {
+        if let Some(thread) = hal_impl::thread::get_current_thread() {
             let thread = thread.downcast::<Thread>().unwrap();
             let vmar = thread.proc().vmar();
             if let Err(err) = vmar.handle_page_fault(fault_vaddr, access_flags) {

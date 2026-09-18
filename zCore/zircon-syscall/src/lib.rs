@@ -15,7 +15,7 @@ use core::convert::TryFrom;
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use futures::pin_mut;
-use kernel_hal::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
+use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use zircon_object::object::{wait_signal_many, KernelObject, KoID, Rights, Signal};
 use zircon_object::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
 use zircon_object::task::{CurrentThread, ThreadFn};
@@ -324,9 +324,9 @@ impl Syscall<'_> {
                 #[allow(unsafe_code)]
                 {
                     unsafe {
-                        kernel_hal::user::smap_allow();
+                        hal_impl::user::smap_allow();
                         (*(a0 as *const AtomicI32)).store(a2 as i32, Ordering::Release);
-                        kernel_hal::user::smap_deny();
+                        hal_impl::user::smap_deny();
                     }
                 }
                 let _ = self.sys_futex_wake(a0.into(), a1 as _);

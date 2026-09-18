@@ -2,7 +2,7 @@
 
 use bitmap_allocator::BitAlloc;
 use core::ops::Range;
-use kernel_hal::PhysAddr;
+use hal_impl::PhysAddr;
 use lock::Mutex;
 
 type FrameAlloc = bitmap_allocator::BitAlloc16M; // max 64G
@@ -160,12 +160,12 @@ mod rvm_extern_fn {
     #[cfg(target_arch = "x86_64")]
     #[rvm::extern_fn(is_host_timer_interrupt)]
     fn rvm_is_host_timer_interrupt(vector: u8) -> bool {
-        vector == 32 // IRQ0 + Timer in kernel-hal-bare/src/arch/x86_64/interrupt.rs
+        vector == 32 // IRQ0 + Timer in hal-impl-bare/src/arch/x86_64/interrupt.rs
     }
 
     #[cfg(target_arch = "x86_64")]
     #[rvm::extern_fn(is_host_serial_interrupt)]
     fn rvm_is_host_serial_interrupt(vector: u8) -> bool {
-        vector == 36 // IRQ0 + COM1 in kernel-hal-bare/src/arch/x86_64/interrupt.rs
+        vector == 36 // IRQ0 + COM1 in hal-impl-bare/src/arch/x86_64/interrupt.rs
     }
 }

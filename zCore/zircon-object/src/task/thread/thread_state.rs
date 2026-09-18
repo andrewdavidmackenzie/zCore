@@ -1,5 +1,5 @@
 use crate::{ZxError, ZxResult};
-use kernel_hal::context::UserContext;
+use hal_impl::context::UserContext;
 use numeric_enum_macro::numeric_enum;
 
 numeric_enum! {

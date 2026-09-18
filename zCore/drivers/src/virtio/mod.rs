@@ -48,8 +48,8 @@ fn virtio_err(err: Error) -> DeviceError {
 // instead of the old `#[no_mangle] extern "C"` FFI functions.
 //
 // We define HalImpl here in the `drivers` crate (where the virtio device types
-// live) and delegate to the FFI functions that `kernel-hal` still provides.
-// This avoids a circular dependency between `drivers` and `kernel-hal`.
+// live) and delegate to the FFI functions that `hal-impl` still provides.
+// This avoids a circular dependency between `drivers` and `hal-impl`.
 
 use core::ptr::NonNull;
 use virtio_drivers::{BufferDirection, Hal, PhysAddr};
@@ -64,7 +64,7 @@ extern "C" {
 }
 
 /// HAL implementation that delegates to the `#[no_mangle]` FFI functions
-/// provided by `kernel-hal`.
+/// provided by `hal-impl`.
 pub enum HalImpl {}
 
 unsafe impl Hal for HalImpl {

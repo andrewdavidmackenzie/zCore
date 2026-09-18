@@ -1,5 +1,5 @@
 [package]
-name = "zcore-vdso"
+name = "vdso"
 version = "0.1.0"
 edition = "2021"
 description = "Zircon vDSO: syscall trampolines and system constant accessors"

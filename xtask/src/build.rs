@@ -173,12 +173,12 @@ impl BuildConfig {
             .join("target")
             .join(&self.target_name)
             .join(if self.debug { "debug" } else { "release" })
-            .join("zcore")
+            .join("kernel")
     }
 
     pub fn invoke(&self, cargo: impl FnOnce() -> Cargo) {
         let mut cargo = cargo();
-        cargo.package("zcore").features(false, &self.features);
+        cargo.package("kernel").features(false, &self.features);
         if self.is_libos {
             // LibOS builds with the host's native target -- no custom
             // target spec, no build-std.
@@ -206,7 +206,7 @@ impl BuildConfig {
         let obj = self.target_file_path();
         let out = output.unwrap_or_else(|| obj.with_extension("bin"));
         // Generate
-        println!("strip zcore to {}", out.display());
+        println!("strip kernel to {}", out.display());
         dir::create_parent(&out).unwrap();
         let mut objcopy = BinUtil::objcopy();
         // riscv64 requires explicit --binary-architecture for objcopy
@@ -231,7 +231,7 @@ impl OutArgs {
         build.invoke(Cargo::build);
         // Determine output path
         let obj = build.target_file_path();
-        let out = output.unwrap_or_else(|| PROJECT_DIR.join("target/zcore.asm"));
+        let out = output.unwrap_or_else(|| PROJECT_DIR.join("target/kernel.asm"));
         // Generate
         println!("Asm file dumps to '{}'.", out.display());
         dir::create_parent(&out).unwrap();

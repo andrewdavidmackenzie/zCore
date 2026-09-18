@@ -127,7 +127,7 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
                 match comp {
                     #[cfg(feature = "virtio")]
                     c if c.contains("virtio,mmio") => self.parse_virtio(node, props),
-                    // Ethernet drivers removed from kernel-drivers (see #237)
+                    // Ethernet drivers removed from drivers (see #237)
                     c if c.contains("ns16550a") || c.iter().any(|str| str.ends_with("uart")) => {
                         self.parse_uart(node, comp, props)
                     }
@@ -255,7 +255,7 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
         Ok((dev, interrupts_extended))
     }
 
-    // parse_ethernet removed from kernel-drivers (see #237)
+    // parse_ethernet removed from drivers (see #237)
 
     /// Parse nodes for UART devices.
     fn parse_uart(

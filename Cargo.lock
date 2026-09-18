@@ -608,6 +608,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
+name = "drivers"
+version = "0.1.0"
+dependencies = [
+ "acpi",
+ "async-std",
+ "bitflags 1.3.2",
+ "bitmap-allocator",
+ "cfg-if",
+ "d1-pac",
+ "device_tree",
+ "hal",
+ "lock",
+ "log",
+ "pc-keyboard",
+ "pci",
+ "riscv 0.9.0",
+ "spin 0.9.4",
+ "virtio-drivers",
+ "x2apic",
+ "x86_64",
+]
+
+[[package]]
 name = "dtb-walker"
 version = "0.2.0-alpha.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -873,6 +896,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "hal-impl"
+version = "0.1.0"
+dependencies = [
+ "acpi",
+ "async-std",
+ "bitflags 1.3.2",
+ "bitmap-allocator",
+ "cfg-if",
+ "cortex-a",
+ "drivers",
+ "dtb-walker",
+ "executor",
+ "git-version",
+ "hal",
+ "lock",
+ "log",
+ "naive-timer",
+ "nix",
+ "raw-cpuid 11.6.0",
+ "riscv 0.9.0",
+ "sbi-rt",
+ "spin 0.9.4",
+ "tempfile",
+ "tock-registers",
+ "trapframe",
+ "x2apic",
+ "x86",
+ "x86_64",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -996,57 +1050,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "kernel-drivers"
+name = "kernel"
 version = "0.1.0"
 dependencies = [
- "acpi",
  "async-std",
- "bitflags 1.3.2",
  "bitmap-allocator",
+ "bootloader_api",
+ "buddy_system_allocator",
  "cfg-if",
- "d1-pac",
- "device_tree",
- "hal",
- "lock",
- "log",
- "pc-keyboard",
- "pci",
- "riscv 0.9.0",
- "spin 0.9.4",
- "virtio-drivers",
- "x2apic",
- "x86_64",
-]
-
-[[package]]
-name = "kernel-hal"
-version = "0.1.0"
-dependencies = [
- "acpi",
- "async-std",
- "bitflags 1.3.2",
- "bitmap-allocator",
- "cfg-if",
- "cortex-a",
+ "chrono",
+ "customizable-buddy",
  "dtb-walker",
  "executor",
- "git-version",
- "hal",
- "kernel-drivers",
+ "hal-impl",
+ "linux-loader",
+ "linux-object",
  "lock",
  "log",
- "naive-timer",
- "nix",
- "raw-cpuid 11.6.0",
+ "page-table",
+ "r0",
+ "rcore-fs",
+ "rcore-fs-hostfs",
+ "rcore-fs-sfs",
  "riscv 0.9.0",
  "sbi-rt",
  "spin 0.9.4",
- "tempfile",
- "tock-registers",
- "trapframe",
- "x2apic",
- "x86",
- "x86_64",
+ "zircon-loader",
+ "zircon-object",
 ]
 
 [[package]]
@@ -1112,7 +1142,8 @@ version = "0.1.0"
 dependencies = [
  "cfg-if",
  "executor",
- "kernel-hal",
+ "hal",
+ "hal-impl",
  "linux-object",
  "linux-syscall",
  "log",
@@ -1127,8 +1158,9 @@ dependencies = [
  "bitflags 1.3.2",
  "cfg-if",
  "downcast-rs",
+ "hal",
+ "hal-impl",
  "hashbrown",
- "kernel-hal",
  "lock",
  "log",
  "numeric-enum-macro",
@@ -1150,7 +1182,8 @@ dependencies = [
  "bitflags 1.3.2",
  "bitvec",
  "futures",
- "kernel-hal",
+ "hal",
+ "hal-impl",
  "linux-object",
  "lock",
  "log",
@@ -2131,6 +2164,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
+name = "vdso"
+version = "0.1.0"
+
+[[package]]
 name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2428,40 +2465,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zcore"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "bitmap-allocator",
- "bootloader_api",
- "buddy_system_allocator",
- "cfg-if",
- "chrono",
- "customizable-buddy",
- "dtb-walker",
- "executor",
- "kernel-hal",
- "linux-loader",
- "linux-object",
- "lock",
- "log",
- "page-table",
- "r0",
- "rcore-fs",
- "rcore-fs-hostfs",
- "rcore-fs-sfs",
- "riscv 0.9.0",
- "sbi-rt",
- "spin 0.9.4",
- "zircon-loader",
- "zircon-object",
-]
-
-[[package]]
-name = "zcore-vdso"
-version = "0.1.0"
-
-[[package]]
 name = "zero"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2498,7 +2501,8 @@ version = "0.1.0"
 dependencies = [
  "cfg-if",
  "executor",
- "kernel-hal",
+ "hal",
+ "hal-impl",
  "log",
  "rcore-fs",
  "xmas-elf",
@@ -2515,8 +2519,9 @@ dependencies = [
  "cfg-if",
  "downcast-rs",
  "futures",
+ "hal",
+ "hal-impl",
  "hashbrown",
- "kernel-hal",
  "lock",
  "log",
  "numeric-enum-macro",
@@ -2532,7 +2537,8 @@ dependencies = [
  "bitflags 1.3.2",
  "cfg-if",
  "futures",
- "kernel-hal",
+ "hal",
+ "hal-impl",
  "lock",
  "log",
  "numeric-enum-macro",

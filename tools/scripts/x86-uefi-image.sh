@@ -10,7 +10,7 @@ set -euo pipefail
 
 OUTPUT="${1:?Usage: $0 <output-image>}"
 ROOTFS="${2:-auto}"  # "auto" = include if exists, "none" = skip
-KERNEL_ELF="${KERNEL_ELF:-target/qemu-x86_64/release/zcore}"
+KERNEL_ELF="${KERNEL_ELF:-target/qemu-x86_64/release/kernel}"
 ROOTFS_IMG="zCore/x86_64-linux.img"
 BOOTIMAGE_DIR="tools/x86-bootimage"
 BOOTIMAGE_TOOL="$BOOTIMAGE_DIR/target/release/x86-bootimage"

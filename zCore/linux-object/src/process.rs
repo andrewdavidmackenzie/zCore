@@ -16,8 +16,8 @@ use alloc::{
     vec::Vec,
 };
 use core::time::Duration;
+use hal::VirtAddr;
 use hashbrown::HashMap;
-use kernel_hal::VirtAddr;
 use lock::{Mutex, MutexGuard};
 use rcore_fs::vfs::{FileSystem, INode};
 use spin::Mutex as SpinMutex;
@@ -740,7 +740,7 @@ impl LinuxProcess {
         let inner = self.inner.lock();
         let it_value = match inner.itimer_real_deadline {
             Some(deadline) => {
-                let now = kernel_hal::timer::timer_now();
+                let now = hal_impl::timer::timer_now();
                 let remaining = deadline.saturating_sub(now);
                 crate::time::TimeVal::from_duration(remaining)
             }
@@ -772,7 +772,7 @@ impl LinuxProcess {
             inner.itimer_real_deadline = None;
         } else {
             // Arm
-            let deadline = kernel_hal::timer::deadline_after(value_dur);
+            let deadline = hal_impl::timer::deadline_after(value_dur);
             inner.itimer_real_deadline = Some(deadline);
             let weak_proc = Arc::downgrade(proc);
             drop(inner); // release lock before scheduling
@@ -789,7 +789,7 @@ impl LinuxProcess {
         interval: Duration,
         generation: u64,
     ) {
-        use kernel_hal::timer;
+        use hal_impl::timer;
 
         let callback: Box<dyn FnOnce(Duration) + Send + Sync> = Box::new(move |_now| {
             let proc = match proc.upgrade() {
@@ -880,7 +880,7 @@ impl LinuxProcess {
         let old = {
             let it_value = match timer.deadline {
                 Some(deadline) => {
-                    let now = kernel_hal::timer::timer_now();
+                    let now = hal_impl::timer::timer_now();
                     crate::time::TimeSpec::from_duration(deadline.saturating_sub(now))
                 }
                 None => crate::time::TimeSpec::default(),
@@ -906,10 +906,10 @@ impl LinuxProcess {
         } else {
             let deadline = if flags & 1 != 0 {
                 // TIMER_ABSTIME: convert to relative then to timer domain
-                let now = kernel_hal::timer::timer_now();
-                kernel_hal::timer::deadline_after(value_dur.saturating_sub(now))
+                let now = hal_impl::timer::timer_now();
+                hal_impl::timer::deadline_after(value_dur.saturating_sub(now))
             } else {
-                kernel_hal::timer::deadline_after(value_dur)
+                hal_impl::timer::deadline_after(value_dur)
             };
             timer.deadline = Some(deadline);
             let signal = timer.signal;
@@ -936,7 +936,7 @@ impl LinuxProcess {
         let timer = inner.posix_timers.get(&id).ok_or(LxError::EINVAL)?;
         let it_value = match timer.deadline {
             Some(deadline) => {
-                let now = kernel_hal::timer::timer_now();
+                let now = hal_impl::timer::timer_now();
                 crate::time::TimeSpec::from_duration(deadline.saturating_sub(now))
             }
             None => crate::time::TimeSpec::default(),
@@ -968,7 +968,7 @@ impl LinuxProcess {
         notify: i32,
         generation: u64,
     ) {
-        use kernel_hal::timer;
+        use hal_impl::timer;
 
         let callback: Box<dyn FnOnce(Duration) + Send + Sync> = Box::new(move |_now| {
             let proc = match proc.upgrade() {

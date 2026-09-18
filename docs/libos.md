@@ -67,12 +67,12 @@ tree:
 
 ```
 zCore [libos]
- +-- kernel-hal [libos]
+ +-- hal-impl [libos]
  |    +-- drivers [mock]
  |    +-- nix, tempfile, async-std,
  |        bitmap-allocator
  +-- loader [libos]
- |    +-- kernel-hal [libos]
+ |    +-- hal-impl [libos]
  |    +-- zircon-object [aspace-separate]
  +-- async-std, chrono, rcore-fs-hostfs
 ```

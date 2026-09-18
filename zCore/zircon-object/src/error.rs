@@ -229,7 +229,7 @@ pub enum ZxError {
     CONNECTION_ABORTED = -76,
 }
 
-use kernel_hal::user::Error;
+use hal_impl::user::Error;
 
 impl From<Error> for ZxError {
     fn from(e: Error) -> Self {

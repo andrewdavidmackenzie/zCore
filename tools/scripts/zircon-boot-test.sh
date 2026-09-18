@@ -16,7 +16,7 @@ TIMEOUT=30
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/qemu-aarch64/release/zcore"
+    KERNEL="target/qemu-aarch64/release/kernel"
     QEMU_BASE_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic

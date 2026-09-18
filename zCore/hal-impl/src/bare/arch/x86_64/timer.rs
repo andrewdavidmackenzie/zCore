@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use kernel_drivers::irq::x86::Apic;
+use ::drivers::irq::x86::Apic;
 
 pub fn timer_now() -> Duration {
     let cycle = unsafe { core::arch::x86_64::_rdtsc() };
