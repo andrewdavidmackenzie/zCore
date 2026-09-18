@@ -43,12 +43,12 @@ impl Syscall<'_> {
             handle_value, elem_size, count
         );
         if count != 0 {
-            let data = user_bytes.as_slice(count * elem_size)?;
+            let data = user_bytes.read_array(count * elem_size)?;
             let actual_count = self
                 .thread
                 .proc()
                 .get_object_with_rights::<Fifo>(handle_value, Rights::WRITE)?
-                .write(elem_size, data, count)?;
+                .write(elem_size, &data, count)?;
             actual_count_ptr.write_if_not_null(actual_count)?;
             Ok(())
         } else {

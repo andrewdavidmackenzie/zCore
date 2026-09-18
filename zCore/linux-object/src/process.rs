@@ -15,7 +15,6 @@ use alloc::{
     sync::{Arc, Weak},
     vec::Vec,
 };
-use core::sync::atomic::AtomicI32;
 use core::time::Duration;
 use hashbrown::HashMap;
 use kernel_hal::VirtAddr;
@@ -445,16 +444,12 @@ impl LinuxProcess {
     }
 
     /// Get a private futex object (per-process, keyed by virtual address).
-    #[allow(unsafe_code)]
     pub fn get_futex(&self, uaddr: VirtAddr) -> Arc<Futex> {
         let mut inner = self.inner.lock();
         inner
             .futexes
             .entry(uaddr)
-            .or_insert_with(|| {
-                let value = unsafe { &*(uaddr as *const AtomicI32) };
-                Futex::new(value)
-            })
+            .or_insert_with(|| Futex::new(uaddr))
             .clone()
     }
 
@@ -464,7 +459,6 @@ impl LinuxProcess {
     /// allowing multiple processes that map the same memory at the same
     /// address to share a futex. This covers the common fork() case
     /// where parent and child share the same address space layout.
-    #[allow(unsafe_code)]
     pub fn get_shared_futex(uaddr: VirtAddr) -> Arc<Futex> {
         static SHARED_FUTEXES: SpinMutex<Option<HashMap<VirtAddr, Arc<Futex>>>> =
             SpinMutex::new(None);
@@ -473,10 +467,7 @@ impl LinuxProcess {
         let table = table.get_or_insert_with(HashMap::new);
         table
             .entry(uaddr)
-            .or_insert_with(|| {
-                let value = unsafe { &*(uaddr as *const AtomicI32) };
-                Futex::new(value)
-            })
+            .or_insert_with(|| Futex::new(uaddr))
             .clone()
     }
 

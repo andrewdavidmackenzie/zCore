@@ -37,7 +37,7 @@ impl Syscall<'_> {
         info!("write: fd={:?}, base={:?}, len={:#x}", fd, base, len);
         self.linux_process()
             .get_file_like(fd)?
-            .write(base.as_slice(len)?)
+            .write(&base.read_array(len)?)
     }
 
     /// read from or write to a file descriptor at a given offset
@@ -77,7 +77,7 @@ impl Syscall<'_> {
         );
         self.linux_process()
             .get_file_like(fd)?
-            .write_at(offset, base.as_slice(len)?)
+            .write_at(offset, &base.read_array(len)?)
     }
 
     /// works just like read except that multiple buffers are filled.
@@ -143,9 +143,9 @@ impl Syscall<'_> {
 
     /// cause the regular file named by path to be truncated to a size of precisely length bytes.
     pub fn sys_truncate(&self, path: UserInPtr<u8>, len: usize) -> SysResult {
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         info!("truncate: path={:?}, len={}", path, len);
-        self.linux_process().lookup_inode(path)?.resize(len)?;
+        self.linux_process().lookup_inode(&path)?.resize(len)?;
         Ok(0)
     }
 
@@ -353,7 +353,7 @@ impl Syscall<'_> {
         flags: usize,
     ) -> SysResult {
         // TODO: check permissions based on uid/gid
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         let flags = AtFlags::from_bits_truncate(flags);
         info!(
             "faccessat: dirfd={:?}, path={:?}, mode={:#o}, flags={:?}",
@@ -361,7 +361,7 @@ impl Syscall<'_> {
         );
         let proc = self.linux_process();
         let follow = !flags.contains(AtFlags::SYMLINK_NOFOLLOW);
-        let _inode = proc.lookup_inode_at(dirfd, path, follow)?;
+        let _inode = proc.lookup_inode_at(dirfd, &path, follow)?;
         Ok(0)
     }
 
@@ -386,13 +386,13 @@ impl Syscall<'_> {
 
     /// Change file mode bits relative to a directory fd.
     pub fn sys_fchmodat(&self, dirfd: FileDesc, path: UserInPtr<u8>, mode: u32) -> SysResult {
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         info!(
             "fchmodat: dirfd={:?}, path={:?}, mode={:#o}",
             dirfd, path, mode
         );
         let proc = self.linux_process();
-        let inode = proc.lookup_inode_at(dirfd, path, true)?;
+        let inode = proc.lookup_inode_at(dirfd, &path, true)?;
         let mut metadata = inode.metadata()?;
         metadata.mode = (mode & 0o7777) as u16;
         inode.set_metadata(&metadata)?;
@@ -431,7 +431,7 @@ impl Syscall<'_> {
         group: u32,
         flags: usize,
     ) -> SysResult {
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         let at_flags = AtFlags::from_bits_truncate(flags);
         let follow = !at_flags.contains(AtFlags::SYMLINK_NOFOLLOW);
         info!(
@@ -439,7 +439,7 @@ impl Syscall<'_> {
             dirfd, path, owner, group, at_flags
         );
         let proc = self.linux_process();
-        let inode = proc.lookup_inode_at(dirfd, path, follow)?;
+        let inode = proc.lookup_inode_at(dirfd, &path, follow)?;
         let mut metadata = inode.metadata()?;
         if owner != u32::MAX {
             metadata.uid = owner as usize;
@@ -478,7 +478,7 @@ impl Syscall<'_> {
             info!("futimens: fd: {:?}, times: {:?}", fd, times);
             proc.get_file(fd)?.inode()
         } else {
-            let pathname = pathname.as_c_str()?;
+            let pathname = pathname.read_c_string()?;
             info!(
                 "utimensat: dirfd: {:?}, pathname: {:?}, times: {:?}, flags: {:#x}",
                 dirfd, pathname, times, flags
@@ -490,7 +490,7 @@ impl Syscall<'_> {
             } else {
                 return Err(LxError::EINVAL);
             };
-            proc.lookup_inode_at(dirfd, pathname, follow)?
+            proc.lookup_inode_at(dirfd, &pathname, follow)?
         };
         let mut metadata = inode.metadata()?;
         if times[0].nsec != UTIME_OMIT {
@@ -522,7 +522,7 @@ impl Syscall<'_> {
     /// `path` is the pathname of **any file** within the mounted filesystem.
     /// `buf` is a pointer to a `StatFs` structure.
     pub fn sys_statfs(&self, path: UserInPtr<u8>, mut buf: UserOutPtr<StatFs>) -> SysResult {
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         info!("statfs: path={:?}, buf={:?}", path, buf);
 
         // TODO
@@ -640,8 +640,8 @@ impl Syscall<'_> {
         _flags: usize,
         _data: UserInPtr<u8>,
     ) -> SysResult {
-        let target = target.as_c_str()?;
-        let fstype = fstype.as_c_str()?;
+        let target = target.read_c_string()?;
+        let fstype = fstype.read_c_string()?;
         warn!(
             "mount: target={:?}, fstype={:?} — not implemented (see issue #36)",
             target, fstype
@@ -654,7 +654,7 @@ impl Syscall<'_> {
     /// Not yet implemented — the rcore-fs MountFS crate does not
     /// expose an unmount API. Returns ENOSYS.
     pub fn sys_umount2(&self, target: UserInPtr<u8>, _flags: usize) -> SysResult {
-        let target = target.as_c_str()?;
+        let target = target.read_c_string()?;
         warn!(
             "umount2: target={:?} — not implemented (see issue #36)",
             target

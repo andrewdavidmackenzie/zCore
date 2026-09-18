@@ -1,5 +1,5 @@
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
-use core::{any::Any, sync::atomic::AtomicI32};
+use core::any::Any;
 
 use futures::channel::oneshot::{self, Receiver, Sender};
 use hashbrown::HashMap;
@@ -357,13 +357,13 @@ impl Process {
         self.inner.lock().get_handle(handle_value)
     }
 
-    /// Get a futex from the process
-    pub fn get_futex(&self, addr: &'static AtomicI32) -> Arc<Futex> {
+    /// Get a futex from the process, keyed by user-space address.
+    pub fn get_futex(&self, user_addr: usize) -> Arc<Futex> {
         let mut inner = self.inner.lock();
         inner
             .futexes
-            .entry(addr as *const AtomicI32 as usize)
-            .or_insert_with(|| Futex::new(addr))
+            .entry(user_addr)
+            .or_insert_with(|| Futex::new(user_addr))
             .clone()
     }
 

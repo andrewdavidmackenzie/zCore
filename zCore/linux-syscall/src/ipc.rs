@@ -96,7 +96,7 @@ impl Syscall<'_> {
     /// - If `op` is -1, see [`release`](linux_object::sync::Semaphore::release).
     pub async fn sys_semop(&self, id: usize, ops: UserInPtr<SemBuf>, num_ops: usize) -> SysResult {
         info!("semop: id: {}", id);
-        let ops = ops.as_slice(num_ops)?;
+        let ops = ops.read_array(num_ops)?;
 
         let sem_array = self
             .linux_process()
@@ -106,7 +106,7 @@ impl Syscall<'_> {
         // validated before any changes are committed. Currently operations are
         // applied one at a time, which can leave partial state on failure.
         sem_array.otime();
-        for &SemBuf { num, op, flags } in ops {
+        for &SemBuf { num, op, flags } in &ops {
             let flags = SemFlags::from_bits_truncate(flags);
             if flags.contains(SemFlags::IPC_NOWAIT) {
                 warn!("semop: IPC_NOWAIT not implemented, returning EAGAIN");
@@ -189,9 +189,9 @@ impl Syscall<'_> {
                 const SEMVMX: u16 = 32767;
                 let nsems = sem_array.semid_ds.lock().nsems;
                 let ptr: UserInPtr<u16> = UserInPtr::from(arg);
-                let values = ptr.as_slice(nsems)?;
+                let values = ptr.read_array(nsems)?;
                 // Validate all values are within SEMVMX before modifying
-                for &val in values {
+                for &val in &values {
                     if val > SEMVMX {
                         return Err(LxError::ERANGE);
                     }

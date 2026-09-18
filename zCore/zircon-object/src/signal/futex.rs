@@ -17,7 +17,8 @@ use lock::Mutex;
 /// resources in the uncontested case.
 pub struct Futex {
     base: KObjectBase,
-    value: &'static AtomicI32,
+    /// User-space address of the futex word.
+    user_addr: usize,
     inner: Mutex<FutexInner>,
 }
 
@@ -31,20 +32,32 @@ struct FutexInner {
 }
 
 impl Futex {
-    /// Create a new Futex.
+    /// Create a new Futex keyed by a user-space address.
     ///
-    /// The parameter `value` is the reference to
-    /// an userspace `AtomicI32`. This reference is the
-    /// information used in kernel to track what futex given threads are
-    /// waiting on. The kernel does not currently modify the value of
-    /// `*value`. It is up to userspace code to correctly atomically modify this
-    /// value across threads in order to build mutexes and so on.
-    pub fn new(value: &'static AtomicI32) -> Arc<Self> {
+    /// `user_addr` is the virtual address of the user-space `i32` that
+    /// threads will wait on. The kernel atomically loads this value
+    /// (via `load_user_value`) to check for spurious wakeups.
+    pub fn new(user_addr: usize) -> Arc<Self> {
         Arc::new(Futex {
             base: KObjectBase::default(),
-            value,
+            user_addr,
             inner: Mutex::new(FutexInner::default()),
         })
+    }
+
+    /// Atomically load the i32 at the user-space futex address.
+    ///
+    /// Uses `stac`/`clac` on x86_64 to temporarily allow kernel
+    /// access to user pages when SMAP is enabled.
+    #[allow(unsafe_code)]
+    fn load_user_value(&self) -> i32 {
+        let ptr = self.user_addr as *const AtomicI32;
+        unsafe {
+            kernel_hal::user::smap_allow();
+            let val = (*ptr).load(Ordering::SeqCst);
+            kernel_hal::user::smap_deny();
+            val
+        }
     }
 
     /// Wait on a futex.
@@ -137,7 +150,7 @@ impl Futex {
                 // first time?
                 if inner.waker.is_none() {
                     // check value
-                    let value = inner.futex.value.load(Ordering::SeqCst);
+                    let value = inner.futex.load_user_value();
                     if value != self.current_value {
                         return Poll::Ready(Err(ZxError::BAD_STATE));
                     }
@@ -245,7 +258,7 @@ impl Futex {
             let a = self.inner.lock();
             (a, b)
         };
-        if check_value && self.value.load(Ordering::SeqCst) != current_value {
+        if check_value && self.load_user_value() != current_value {
             return Err(ZxError::BAD_STATE);
         }
         // wake
@@ -329,7 +342,7 @@ mod tests {
     #[async_std::test]
     async fn wait() {
         static VALUE: AtomicI32 = AtomicI32::new(1);
-        let futex = Futex::new(&VALUE);
+        let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
 
         let count = futex.wake(1);
         assert_eq!(count, 0);
@@ -356,9 +369,9 @@ mod tests {
     #[async_std::test]
     async fn requeue() {
         static VALUE: AtomicI32 = AtomicI32::new(1);
-        let futex = Futex::new(&VALUE);
+        let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
         static REQUEUE_VALUE: AtomicI32 = AtomicI32::new(100);
-        let requeue_futex = Futex::new(&REQUEUE_VALUE);
+        let requeue_futex = Futex::new(&REQUEUE_VALUE as *const AtomicI32 as usize);
 
         let count = futex.wake(1);
         assert_eq!(count, 0);
@@ -412,7 +425,7 @@ mod tests {
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
         static VALUE: AtomicI32 = AtomicI32::new(1);
-        let futex = proc.get_futex(&VALUE);
+        let futex = proc.get_futex(&VALUE as *const AtomicI32 as usize);
         assert!(futex.owner().is_none());
         futex.inner.lock().set_owner(Some(thread.clone()));
 

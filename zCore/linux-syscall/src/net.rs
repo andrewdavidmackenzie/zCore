@@ -104,7 +104,7 @@ impl Syscall<'_> {
         file_like
             .clone()
             .as_socket()?
-            .setsockopt(level, optname, optval.as_slice(optlen)?)
+            .setsockopt(level, optname, &optval.read_array(optlen)?)
     }
 
     /// get options for the socket referred to by the file descriptor sockfd.
@@ -216,7 +216,7 @@ impl Syscall<'_> {
         file_like
             .clone()
             .as_socket()?
-            .write(buf.as_slice(len)?, endpoint)?;
+            .write(&buf.read_array(len)?, endpoint)?;
         Ok(len)
     }
 

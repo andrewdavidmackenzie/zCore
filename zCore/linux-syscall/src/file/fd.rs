@@ -23,13 +23,11 @@ impl Syscall<'_> {
         mode: usize,
     ) -> SysResult {
         let proc = self.linux_process();
-        let path = path.as_c_str()?;
+        let mut path = path.read_c_string()?;
         // hard code special path
-        let path = if path == "/dev/shm/testshm" {
-            "/testshm"
-        } else {
-            path
-        };
+        if path == "/dev/shm/testshm" {
+            path = "/testshm".into();
+        }
         let flags = OpenFlags::from_bits_truncate(flags);
         info!(
             "openat: dir_fd={:?}, path={:?}, flags={:?}, mode={:#o}",
@@ -37,7 +35,7 @@ impl Syscall<'_> {
         );
 
         let inode = if flags.contains(OpenFlags::CREATE) {
-            let (dir_path, file_name) = split_path(path);
+            let (dir_path, file_name) = split_path(&path);
             // relative to cwd
             let dir_inode = proc.lookup_inode_at(dir_fd, dir_path, true)?;
             match dir_inode.find(file_name) {
@@ -54,9 +52,9 @@ impl Syscall<'_> {
                 Err(e) => return Err(LxError::from(e)),
             }
         } else {
-            proc.lookup_inode_at(dir_fd, path, true)?
+            proc.lookup_inode_at(dir_fd, &path, true)?
         };
-        let file = File::new(inode, flags, path.into());
+        let file = File::new(inode, flags, path);
         let fd = proc.add_file(file)?;
         Ok(fd.into())
     }

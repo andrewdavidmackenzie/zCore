@@ -40,7 +40,7 @@ impl Syscall<'_> {
                 .thread
                 .proc()
                 .get_object_with_rights::<Socket>(handle_value, Rights::WRITE)?
-                .write(user_bytes.as_slice(count)?)?;
+                .write(&user_bytes.read_array(count)?)?;
             actual_count_ptr.write_if_not_null(actual_count)?;
             Ok(())
         } else {

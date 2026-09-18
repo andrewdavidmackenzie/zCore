@@ -137,7 +137,7 @@ impl Syscall<'_> {
         match property {
             Property::Name => {
                 let length = buffer_size.min(MAX_NAME_LEN);
-                object.set_name(UserInPtr::<u8>::from(buffer).as_str(length)?);
+                object.set_name(&UserInPtr::<u8>::from(buffer).read_string(length)?);
                 Ok(())
             }
             Property::ProcessDebugAddr => {

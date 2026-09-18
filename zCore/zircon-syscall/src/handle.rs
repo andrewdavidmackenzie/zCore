@@ -55,9 +55,9 @@ impl Syscall<'_> {
             handles, num_handles,
         );
         let proc = self.thread.proc();
-        for handle in handles.as_slice(num_handles)? {
-            if *handle != INVALID_HANDLE {
-                proc.remove_handle(*handle)?;
+        for handle in handles.read_array(num_handles)? {
+            if handle != INVALID_HANDLE {
+                proc.remove_handle(handle)?;
             }
         }
         Ok(())
