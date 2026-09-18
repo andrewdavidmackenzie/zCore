@@ -9,6 +9,7 @@ mod pipe;
 mod pseudo;
 pub mod rcore_fs_wrapper;
 mod stdio;
+pub mod unix_socket;
 
 #[cfg(feature = "mock-disk")]
 pub mod mock;
