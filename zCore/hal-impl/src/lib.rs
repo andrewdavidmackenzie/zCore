@@ -39,6 +39,8 @@ cfg_if! {
 pub(crate) use config::KCONFIG;
 pub(crate) use kernel_handler::KHANDLER;
 
+#[cfg(target_arch = "aarch64")]
+pub use common::aarch64_exception::*;
 pub use common::{addr, console, context, defs::*, ipi::*, user};
 pub use config::KernelConfig;
 pub use imp::{

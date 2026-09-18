@@ -1,3 +1,8 @@
+/// AArch64 exception types (Kind, Source, Info, Fault, Syndrome).
+/// Kept in common/ because `context.rs` needs them for both bare and libos.
+#[cfg(target_arch = "aarch64")]
+pub mod aarch64_exception;
+
 pub(super) mod defs;
 pub(super) mod future;
 pub(super) mod mem;
