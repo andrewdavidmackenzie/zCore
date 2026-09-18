@@ -1,13 +1,8 @@
 use bitflags::bitflags;
 use numeric_enum_macro::numeric_enum;
 
-/// The error type which is returned from HAL functions.
-/// TODO: more error types.
-#[derive(Debug)]
-pub struct HalError;
-
-/// The result type returned by HAL functions.
-pub type HalResult<T = ()> = core::result::Result<T, HalError>;
+/// Re-export unified error/result types from hal crate.
+pub use hal::{DeviceError, DeviceResult};
 
 bitflags! {
     /// Generic memory flags.

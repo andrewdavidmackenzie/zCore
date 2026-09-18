@@ -1,14 +1,13 @@
 //! Device drivers.
 
 use alloc::{sync::Arc, vec::Vec};
-use core::convert::From;
 
 use lock::{RwLock, RwLockReadGuard};
 
 use kernel_drivers::scheme::{
     BlockScheme, DisplayScheme, InputScheme, IrqScheme, Scheme, UartScheme,
 };
-use kernel_drivers::{Device, DeviceError};
+use kernel_drivers::Device;
 
 /// Re-exported modules from crate [`kernel_drivers`].
 pub use kernel_drivers::{prelude, scheme};
@@ -108,13 +107,6 @@ pub fn all_irq() -> &'static DeviceList<dyn IrqScheme> {
 /// Returns all devices which implement the [`UartScheme`].
 pub fn all_uart() -> &'static DeviceList<dyn UartScheme> {
     &DEVICES.uart
-}
-
-impl From<DeviceError> for crate::HalError {
-    fn from(err: DeviceError) -> Self {
-        warn!("{:?}", err);
-        Self
-    }
 }
 
 #[cfg(not(feature = "libos"))]

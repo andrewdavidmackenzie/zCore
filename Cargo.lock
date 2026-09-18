@@ -905,6 +905,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hal"
+version = "0.1.0"
+
+[[package]]
 name = "hash32"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1057,6 +1061,7 @@ dependencies = [
  "cfg-if",
  "d1-pac",
  "device_tree",
+ "hal",
  "lock",
  "log",
  "numeric-enum-macro",
@@ -1082,6 +1087,7 @@ dependencies = [
  "dtb-walker",
  "executor",
  "git-version",
+ "hal",
  "kernel-drivers",
  "lock",
  "log",

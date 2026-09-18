@@ -2,7 +2,7 @@ use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use core::{any::Any, future::Future, ops::Range, time::Duration};
 
 use crate::drivers::prelude::{IrqHandler, IrqPolarity, IrqTriggerMode};
-use crate::{common, HalResult, KernelConfig, KernelHandler, PhysAddr, VirtAddr};
+use crate::{common, DeviceResult, KernelConfig, KernelHandler, PhysAddr, VirtAddr};
 
 hal_fn_def! {
     /// Bootstrap and initialization.
@@ -104,38 +104,38 @@ hal_fn_def! {
         pub fn intr_get() -> bool;
 
         /// Disable IRQ.
-        pub fn mask_irq(vector: usize) -> HalResult;
+        pub fn mask_irq(vector: usize) -> DeviceResult;
 
         /// Enable IRQ.
-        pub fn unmask_irq(vector: usize) -> HalResult;
+        pub fn unmask_irq(vector: usize) -> DeviceResult;
 
         /// Configure the specified interrupt vector. If it is invoked, it must be
         /// invoked prior to interrupt registration.
-        pub fn configure_irq(vector: usize, tm: IrqTriggerMode, pol: IrqPolarity) -> HalResult;
+        pub fn configure_irq(vector: usize, tm: IrqTriggerMode, pol: IrqPolarity) -> DeviceResult;
 
         /// Add an interrupt handler to an IRQ.
-        pub fn register_irq_handler(vector: usize, handler: IrqHandler) -> HalResult;
+        pub fn register_irq_handler(vector: usize, handler: IrqHandler) -> DeviceResult;
 
         /// Remove the interrupt handler to an IRQ.
-        pub fn unregister_irq_handler(vector: usize) -> HalResult;
+        pub fn unregister_irq_handler(vector: usize) -> DeviceResult;
 
         /// Handle IRQ.
         pub fn handle_irq(vector: usize);
 
         /// Method used for platform allocation of blocks of MSI and MSI-X compatible
         /// IRQ targets.
-        pub fn msi_alloc_block(requested_irqs: usize) -> HalResult<Range<usize>>;
+        pub fn msi_alloc_block(requested_irqs: usize) -> DeviceResult<Range<usize>>;
 
         /// Method used to free a block of MSI IRQs previously allocated by msi_alloc_block().
         /// This does not unregister IRQ handlers.
-        pub fn msi_free_block(block: Range<usize>) -> HalResult;
+        pub fn msi_free_block(block: Range<usize>) -> DeviceResult;
 
         /// Register a handler function for a given msi_id within an msi_block_t. Passing a
         /// NULL handler will effectively unregister a handler for a given msi_id within the
         /// block.
-        pub fn msi_register_handler(block: Range<usize>, msi_id: usize, handler: IrqHandler) -> HalResult;
+        pub fn msi_register_handler(block: Range<usize>, msi_id: usize, handler: IrqHandler) -> DeviceResult;
 
-        pub fn send_ipi(cpuid: usize, reason: usize) -> HalResult;
+        pub fn send_ipi(cpuid: usize, reason: usize) -> DeviceResult;
 
         pub fn ipi_reason() -> Vec<usize>;
     }

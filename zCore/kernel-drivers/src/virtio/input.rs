@@ -3,6 +3,7 @@ use virtio_drivers::device::input::{InputConfigSelect, VirtIOInput as InnerDrive
 use virtio_drivers::transport::mmio::MmioTransport;
 
 use super::HalImpl;
+use super::VirtioResultExt;
 use crate::prelude::{CapabilityType, InputCapability, InputEvent, InputEventType};
 use crate::scheme::{impl_event_scheme, InputScheme, Scheme};
 use crate::utils::EventListener;
@@ -15,7 +16,7 @@ pub struct VirtIoInput {
 
 impl VirtIoInput {
     pub fn new(transport: MmioTransport) -> DeviceResult<Self> {
-        let inner = Mutex::new(InnerDriver::new(transport)?);
+        let inner = Mutex::new(InnerDriver::new(transport).virt()?);
         Ok(Self {
             inner,
             listener: EventListener::new(),

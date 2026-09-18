@@ -3,6 +3,7 @@ use virtio_drivers::device::gpu::VirtIOGpu as InnerDriver;
 use virtio_drivers::transport::mmio::MmioTransport;
 
 use super::HalImpl;
+use super::VirtioResultExt;
 use crate::prelude::{ColorFormat, DisplayInfo, FrameBuffer};
 use crate::scheme::{DisplayScheme, Scheme};
 use crate::DeviceResult;
@@ -18,11 +19,11 @@ static CURSOR_IMG: &[u8] = include_bytes!("../display/resource/cursor.bin"); // 
 
 impl VirtIoGpu {
     pub fn new(transport: MmioTransport) -> DeviceResult<Self> {
-        let mut gpu = InnerDriver::new(transport)?;
-        let fb = gpu.setup_framebuffer()?;
+        let mut gpu = InnerDriver::new(transport).virt()?;
+        let fb = gpu.setup_framebuffer().virt()?;
         let fb_base_vaddr = fb.as_ptr() as usize;
         let fb_size = fb.len();
-        let (width, height) = gpu.resolution()?;
+        let (width, height) = gpu.resolution().virt()?;
         let info = DisplayInfo {
             width,
             height,
@@ -36,7 +37,8 @@ impl VirtIoGpu {
             height / 2,
             CURSOR_HOT_X,
             CURSOR_HOT_Y,
-        )?;
+        )
+        .virt()?;
         Ok(Self {
             info,
             inner: Mutex::new(gpu),
@@ -73,7 +75,7 @@ impl DisplayScheme for VirtIoGpu {
     }
 
     fn flush(&self) -> DeviceResult {
-        self.inner.lock().flush()?;
+        self.inner.lock().flush().virt()?;
         Ok(())
     }
 }

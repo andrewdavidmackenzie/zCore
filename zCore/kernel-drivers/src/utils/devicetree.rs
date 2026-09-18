@@ -140,7 +140,7 @@ fn from_cells(cells: &[u32], cell_num: u32) -> DeviceResult<u64> {
 
 /// Parse the `reg` property, about `reg`: <https://elinux.org/Device_Tree_Usage#How_Addressing_Works>.
 pub fn parse_reg(node: &Node, props: &InheritProps) -> DeviceResult<(u64, u64)> {
-    let cells = node.prop_cells("reg")?;
+    let cells = node.prop_cells("reg").map_err(prop_err)?;
     let addr = from_cells(&cells, props.parent_address_cells)?;
     let size = from_cells(
         &cells[props.parent_address_cells as usize..],
@@ -153,9 +153,9 @@ pub fn parse_reg(node: &Node, props: &InheritProps) -> DeviceResult<(u64, u64)> 
 /// property, the first element is the interrupt parent.
 pub fn parse_interrupts(node: &Node, props: &InheritProps) -> DeviceResult<InterruptsProp> {
     if node.has_prop("interrupts-extended") {
-        Ok(node.prop_cells("interrupts-extended")?)
+        Ok(node.prop_cells("interrupts-extended").map_err(prop_err)?)
     } else if node.has_prop("interrupts") && props.interrupt_parent > 0 {
-        let mut ret = node.prop_cells("interrupts")?;
+        let mut ret = node.prop_cells("interrupts").map_err(prop_err)?;
         ret.insert(0, props.interrupt_parent);
         Ok(ret)
     } else {
@@ -163,8 +163,7 @@ pub fn parse_interrupts(node: &Node, props: &InheritProps) -> DeviceResult<Inter
     }
 }
 
-impl From<PropError> for DeviceError {
-    fn from(_err: PropError) -> Self {
-        Self::InvalidParam
-    }
+/// Convert a device tree property error to a DeviceError.
+fn prop_err(_e: PropError) -> DeviceError {
+    DeviceError::InvalidParam
 }

@@ -11,25 +11,34 @@ pub use gpu::VirtIoGpu;
 pub use input::VirtIoInput;
 pub use virtio_drivers::transport::mmio::{MmioTransport, VirtIOHeader};
 
-use crate::DeviceError;
-use core::convert::From;
+use crate::{DeviceError, DeviceResult};
 use virtio_drivers::Error;
 
-impl From<Error> for DeviceError {
-    fn from(err: Error) -> Self {
-        match err {
-            Error::QueueFull => Self::NotReady,
-            Error::NotReady => Self::NotReady,
-            Error::WrongToken => Self::IoError,
-            Error::AlreadyUsed => Self::AlreadyExists,
-            Error::InvalidParam => Self::InvalidParam,
-            Error::DmaError => Self::DmaError,
-            Error::IoError => Self::IoError,
-            Error::Unsupported => Self::NotSupported,
-            Error::ConfigSpaceTooSmall => Self::InvalidParam,
-            Error::ConfigSpaceMissing => Self::InvalidParam,
-            Error::SocketDeviceError(_) => Self::IoError,
-        }
+/// Extension trait to convert virtio Results to DeviceResults via `?`.
+pub(crate) trait VirtioResultExt<T> {
+    fn virt(self) -> DeviceResult<T>;
+}
+
+impl<T> VirtioResultExt<T> for Result<T, Error> {
+    fn virt(self) -> DeviceResult<T> {
+        self.map_err(virtio_err)
+    }
+}
+
+/// Convert a virtio error to a DeviceError.
+fn virtio_err(err: Error) -> DeviceError {
+    match err {
+        Error::QueueFull => DeviceError::NotReady,
+        Error::NotReady => DeviceError::NotReady,
+        Error::WrongToken => DeviceError::IoError,
+        Error::AlreadyUsed => DeviceError::AlreadyExists,
+        Error::InvalidParam => DeviceError::InvalidParam,
+        Error::DmaError => DeviceError::DmaError,
+        Error::IoError => DeviceError::IoError,
+        Error::Unsupported => DeviceError::NotSupported,
+        Error::ConfigSpaceTooSmall => DeviceError::InvalidParam,
+        Error::ConfigSpaceMissing => DeviceError::InvalidParam,
+        Error::SocketDeviceError(_) => DeviceError::IoError,
     }
 }
 

@@ -4,7 +4,7 @@ use core::ops::Range;
 
 use crate::drivers::all_irq;
 use crate::drivers::prelude::{IrqHandler, IrqPolarity, IrqTriggerMode};
-use crate::HalResult;
+use crate::DeviceResult;
 use alloc::vec::Vec;
 use x86_64::instructions::interrupts;
 
@@ -34,47 +34,47 @@ hal_fn_impl! {
             interrupts::are_enabled()
         }
 
-        fn mask_irq(gsi: usize) -> HalResult {
-            Ok(all_irq().first_unwrap().mask(gsi)?)
+        fn mask_irq(gsi: usize) -> DeviceResult {
+            all_irq().first_unwrap().mask(gsi)
         }
 
-        fn unmask_irq(gsi: usize) -> HalResult {
-            Ok(all_irq().first_unwrap().unmask(gsi)?)
+        fn unmask_irq(gsi: usize) -> DeviceResult {
+            all_irq().first_unwrap().unmask(gsi)
         }
 
-        fn configure_irq(gsi: usize, tm: IrqTriggerMode, pol: IrqPolarity) -> HalResult {
-            Ok(all_irq().first_unwrap().configure(gsi, tm, pol)?)
+        fn configure_irq(gsi: usize, tm: IrqTriggerMode, pol: IrqPolarity) -> DeviceResult {
+            all_irq().first_unwrap().configure(gsi, tm, pol)
         }
 
-        fn register_irq_handler(gsi: usize, handler: IrqHandler) -> HalResult {
-            Ok(all_irq().first_unwrap().register_handler(gsi, handler)?)
+        fn register_irq_handler(gsi: usize, handler: IrqHandler) -> DeviceResult {
+            all_irq().first_unwrap().register_handler(gsi, handler)
         }
 
-        fn unregister_irq_handler(gsi: usize) -> HalResult {
-            Ok(all_irq().first_unwrap().unregister(gsi)?)
+        fn unregister_irq_handler(gsi: usize) -> DeviceResult {
+            all_irq().first_unwrap().unregister(gsi)
         }
 
         fn handle_irq(vector: usize) {
             all_irq().first_unwrap().handle_irq(vector);
         }
 
-        fn msi_alloc_block(requested_irqs: usize) -> HalResult<Range<usize>> {
-            Ok(all_irq().first_unwrap().msi_alloc_block(requested_irqs)?)
+        fn msi_alloc_block(requested_irqs: usize) -> DeviceResult<Range<usize>> {
+            all_irq().first_unwrap().msi_alloc_block(requested_irqs)
         }
 
-        fn msi_free_block(block: Range<usize>) -> HalResult {
-            Ok(all_irq().first_unwrap().msi_free_block(block)?)
+        fn msi_free_block(block: Range<usize>) -> DeviceResult {
+            all_irq().first_unwrap().msi_free_block(block)
         }
 
         fn msi_register_handler(
             block: Range<usize>,
             msi_id: usize,
             handler: IrqHandler,
-        ) -> HalResult {
-            Ok(all_irq().first_unwrap().msi_register_handler(block, msi_id, handler)?)
+        ) -> DeviceResult {
+            all_irq().first_unwrap().msi_register_handler(block, msi_id, handler)
         }
 
-        fn send_ipi(cpuid: usize, reason: usize) -> HalResult {
+        fn send_ipi(cpuid: usize, reason: usize) -> DeviceResult {
             trace!("ipi [{}] => [{}]: {:x}", super::cpu::cpu_id(), cpuid, reason);
             panic!("send_ipi unsupported for x86_64");
         }

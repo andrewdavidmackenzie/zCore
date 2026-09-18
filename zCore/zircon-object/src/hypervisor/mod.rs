@@ -4,7 +4,7 @@ mod guest;
 mod vcpu;
 
 use super::ZxError;
-use kernel_hal::{GenericPageTable, HalError, MMUFlags, Result};
+use kernel_hal::{DeviceError, GenericPageTable, MMUFlags, Result};
 use rvm::{
     ArchRvmPageTable, GuestPhysAddr, HostPhysAddr, IntoRvmPageTableFlags, RvmError, RvmPageTable,
 };
@@ -60,21 +60,21 @@ impl GenericPageTable for VmmPageTable {
     fn map(&mut self, gpaddr: GuestPhysAddr, hpaddr: HostPhysAddr, flags: MMUFlags) -> Result<()> {
         self.0
             .map(gpaddr, hpaddr, VmmPageTableFlags(flags))
-            .map_err(|_| HalError)
+            .map_err(|_| DeviceError)
     }
 
     fn unmap(&mut self, gpaddr: GuestPhysAddr) -> Result<()> {
-        self.0.unmap(gpaddr).map_err(|_| HalError)
+        self.0.unmap(gpaddr).map_err(|_| DeviceError)
     }
 
     fn protect(&mut self, gpaddr: GuestPhysAddr, flags: MMUFlags) -> Result<()> {
         self.0
             .protect(gpaddr, VmmPageTableFlags(flags))
-            .map_err(|_| HalError)
+            .map_err(|_| DeviceError)
     }
 
     fn query(&mut self, gpaddr: GuestPhysAddr) -> Result<HostPhysAddr> {
-        self.0.query(gpaddr).map_err(|_| HalError)
+        self.0.query(gpaddr).map_err(|_| DeviceError)
     }
 
     fn table_phys(&self) -> HostPhysAddr {

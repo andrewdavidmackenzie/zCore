@@ -1,5 +1,5 @@
 //! Interrupts management.
-use crate::HalResult;
+use crate::DeviceResult;
 use alloc::vec::Vec;
 use cortex_a::asm::wfi;
 
@@ -33,7 +33,7 @@ hal_fn_impl! {
             !DAIF.is_set(DAIF::I)
         }
 
-        fn send_ipi(cpuid: usize, reason: usize) -> HalResult {
+        fn send_ipi(cpuid: usize, reason: usize) -> DeviceResult {
             trace!("ipi [{}] => [{}]: {:x}", super::cpu::cpu_id(), cpuid, reason);
             panic!("send_ipi unsupported for aarch64");
         }
