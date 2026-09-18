@@ -1,24 +1,6 @@
 //! Kernel configuration.
 use crate::PAGE_SIZE;
 
-/// Kernel configuration passed by kernel when calls [`crate::primary_init_early()`].
-#[repr(C)]
-#[derive(Debug, Clone)]
-pub struct KernelConfig {
-    /// boot cmd line (set via ZCORE_CMDLINE env var at compile time; DTB override tracked in #136)
-    pub cmdline: &'static str,
-    /// firmware type
-    pub firmware_type: &'static str, // TODO: Only the value QEMU is ever written. Unclear if used.
-    /// UART base address
-    pub uart_base: usize,
-    /// GIC base address
-    pub gic_base: usize,
-    /// phystovirt offset
-    pub phys_to_virt_offset: usize,
-    /// DTB physical address (0 if not available)
-    pub dtb_paddr: usize,
-}
-
 // --- Board-specific constants ---
 
 #[cfg(not(feature = "board-raspi400"))]

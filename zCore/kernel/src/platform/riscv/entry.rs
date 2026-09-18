@@ -86,6 +86,7 @@ device tree:       {device_tree_paddr:016x}..{:016x}
         phys_to_virt_offset: mem_info.offset(),
         dtb_paddr: device_tree_paddr,
         dtb_size: dtb.total_size() as _,
+        ..Default::default()
     });
     sbi_rt::system_reset(sbi_rt::Shutdown, sbi_rt::NoReason);
     unreachable!()

@@ -184,7 +184,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     let stack_top = stack_base + stack_size;
 
-    // Step 7b: Map vDSO into init process at a high address
+    // Step 7b: Map vDSO into the init process at a high address
     // to avoid interfering with code/stack regions.
     // Map code pages (0-6) as RX and data page (7) as R.
     let vdso_base_addr = stack_top + 0x10000;

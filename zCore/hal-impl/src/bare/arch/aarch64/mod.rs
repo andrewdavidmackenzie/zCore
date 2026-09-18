@@ -12,6 +12,20 @@ use crate::{mem::phys_to_virt, utils::init_once::InitOnce, PhysAddr};
 use alloc::string::{String, ToString};
 use core::ops::Range;
 
+/// Board-default UART base address, set by the platform entry point.
+/// Overridden by DTB discovery if available.
+static BOARD_UART_BASE: InitOnce<usize> = InitOnce::new();
+/// Board-default GIC base address, set by the platform entry point.
+/// Overridden by DTB discovery if available.
+static BOARD_GIC_BASE: InitOnce<usize> = InitOnce::new();
+
+/// Set the board-default UART and GIC base addresses.
+/// Called from the platform entry point before `primary_init_early()`.
+pub fn set_board_bases(uart_base: usize, gic_base: usize) {
+    BOARD_UART_BASE.init_once_by(uart_base);
+    BOARD_GIC_BASE.init_once_by(gic_base);
+}
+
 hal_fn_impl! {
     impl mod crate::hal_fn::console {
         fn console_write_early(s: &str) {
@@ -82,7 +96,7 @@ pub fn primary_init_early() {
 pub fn uart_base() -> usize {
     match *DTB_UART_BASE {
         Some(base) => base,
-        None => KCONFIG.uart_base,
+        None => *BOARD_UART_BASE,
     }
 }
 
@@ -90,7 +104,7 @@ pub fn uart_base() -> usize {
 pub fn gic_base() -> usize {
     match *DTB_GIC_BASE {
         Some(base) => base,
-        None => KCONFIG.gic_base,
+        None => *BOARD_GIC_BASE,
     }
 }
 

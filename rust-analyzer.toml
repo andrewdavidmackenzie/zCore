@@ -1,0 +1,16 @@
+# rust-analyzer configuration for zCore
+#
+# Multiple crates define #[panic_handler] (kernel, userstart, vdso)
+# which is valid (separate binaries) but confuses the IDE.
+# Setting a specific check target reduces false positives.
+
+[cargo]
+# Analyze the kernel crate with libos features by default.
+# This avoids cross-compilation target issues and the duplicate
+# panic_handler warning (userstart/vdso are separate binaries
+# that rust-analyzer doesn't need to analyze simultaneously).
+features = ["linux", "libos", "mock-uart"]
+
+[check]
+# Use clippy for in-editor diagnostics.
+command = "clippy"

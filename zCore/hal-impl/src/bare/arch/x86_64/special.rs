@@ -4,5 +4,5 @@ pub use kernel_drivers::io::{Io, Pmio};
 
 /// Get physical address of `acpi_rsdp` and `smbios` on x86_64.
 pub fn pc_firmware_tables() -> (u64, u64) {
-    (crate::KCONFIG.acpi_rsdp, crate::KCONFIG.smbios)
+    (crate::KCONFIG.acpi_rsdp, *super::config::SMBIOS)
 }

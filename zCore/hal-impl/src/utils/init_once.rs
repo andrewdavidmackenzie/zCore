@@ -14,7 +14,6 @@ impl<T> InitOnce<T> {
         }
     }
 
-    #[cfg(any(doc, not(target_arch = "x86_64"), feature = "libos"))]
     pub const fn new_with_default(value: T) -> Self {
         Self {
             inner: Once::new(),

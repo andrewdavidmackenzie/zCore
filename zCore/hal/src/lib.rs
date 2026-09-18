@@ -16,12 +16,14 @@
 extern crate alloc;
 
 pub mod addr;
+pub mod config;
 pub mod defs;
 pub mod device;
 pub mod scheme;
 
 // Re-export commonly used types at the crate root.
 pub use addr::{DevVAddr, PhysAddr, VirtAddr};
+pub use config::KernelConfig;
 pub use defs::PAGE_SIZE;
 pub use device::{DeviceError, DeviceResult};
 pub use scheme::{Scheme, SchemeUpcast};

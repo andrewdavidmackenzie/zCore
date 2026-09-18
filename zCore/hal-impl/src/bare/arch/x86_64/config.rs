@@ -1,7 +1,9 @@
 //! Kernel configuration for x86_64.
 //!
-//! On x86_64, the bootloader provides a BootInfo struct that is passed
-//! to the kernel entry point. The KernelConfig stores a reference to it.
+//! Types for boot-time data (memory map, framebuffer) and statics
+//! for arch-specific values that don't belong in the unified KernelConfig.
+
+use crate::utils::init_once::InitOnce;
 
 /// A memory region reported by the bootloader.
 #[derive(Debug, Clone, Copy)]
@@ -46,28 +48,30 @@ pub struct FramebufferInfo {
     pub size: u64,
 }
 
-/// Kernel configuration passed by the bootloader.
-#[derive(Debug)]
-pub struct KernelConfig {
-    /// Kernel command line (currently empty -- bootloader doesn't provide one).
-    pub cmdline: &'static str,
-    /// Initramfs/ramdisk start address.
-    pub initrd_start: u64,
-    /// Initramfs/ramdisk size.
-    pub initrd_size: u64,
+// --- Arch-specific statics (not in the unified KernelConfig) ---
 
-    /// Memory map from the bootloader.
-    pub memory_map: &'static [MemoryRegion],
-    /// Offset added to physical addresses to get virtual addresses.
-    pub phys_to_virt_offset: usize,
+/// Framebuffer info, set by the platform entry point.
+pub(crate) static FRAMEBUFFER: InitOnce<Option<FramebufferInfo>> = InitOnce::new_with_default(None);
 
-    /// Framebuffer for display output.
-    pub framebuffer: Option<FramebufferInfo>,
+/// SMBIOS address, set by the platform entry point.
+pub(crate) static SMBIOS: InitOnce<u64> = InitOnce::new_with_default(0);
 
-    /// ACPI RSDP physical address (0 if not available).
-    pub acpi_rsdp: u64,
-    /// SMBIOS address (0 if not available).
-    pub smbios: u64,
-    /// Function to start on Application Processor cores.
-    pub ap_fn: fn() -> !,
+/// Memory map from the bootloader.
+pub(crate) static MEMORY_MAP: InitOnce<&'static [MemoryRegion]> = InitOnce::new_with_default(&[]);
+
+/// Function to start on Application Processor cores.
+pub(crate) static AP_FN: InitOnce<Option<fn() -> !>> = InitOnce::new_with_default(None);
+
+/// Set arch-specific boot data. Called from the platform entry point
+/// before `primary_init_early()`.
+pub fn set_x86_boot_data(
+    framebuffer: Option<FramebufferInfo>,
+    smbios: u64,
+    memory_map: &'static [MemoryRegion],
+    ap_fn: Option<fn() -> !>,
+) {
+    FRAMEBUFFER.init_once_by(framebuffer);
+    SMBIOS.init_once_by(smbios);
+    MEMORY_MAP.init_once_by(memory_map);
+    AP_FN.init_once_by(ap_fn);
 }

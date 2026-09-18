@@ -5,7 +5,8 @@
 
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::info::{MemoryRegionKind, Optional};
-use kernel_hal::config::{FramebufferInfo, KernelConfig, MemoryRegion, MemoryType};
+use kernel_hal::config::{FramebufferInfo, MemoryRegion, MemoryType};
+use kernel_hal::KernelConfig;
 
 /// Maximum number of memory regions we can store.
 const MAX_MEMORY_REGIONS: usize = 256;
@@ -100,6 +101,21 @@ fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
         Optional::None => 0,
     };
 
+    // Store arch-specific boot data (framebuffer, memory map, etc.) in
+    // hal-impl statics before constructing the unified KernelConfig.
+    let memory_map: &'static [MemoryRegion] = unsafe {
+        core::slice::from_raw_parts(
+            core::ptr::addr_of!(MEMORY_REGIONS) as *const MemoryRegion,
+            *core::ptr::addr_of!(MEMORY_REGION_COUNT),
+        )
+    };
+    kernel_hal::config::set_x86_boot_data(
+        framebuffer,
+        0, // smbios
+        memory_map,
+        Some(crate::secondary_main),
+    );
+
     let config = KernelConfig {
         cmdline: env!("ZCORE_CMDLINE"),
         initrd_start: match boot_info.ramdisk_addr {
@@ -107,17 +123,9 @@ fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
             Optional::None => 0,
         },
         initrd_size: boot_info.ramdisk_len,
-        memory_map: unsafe {
-            core::slice::from_raw_parts(
-                core::ptr::addr_of!(MEMORY_REGIONS) as *const MemoryRegion,
-                *core::ptr::addr_of!(MEMORY_REGION_COUNT),
-            )
-        },
         phys_to_virt_offset: phys_offset,
-        framebuffer,
         acpi_rsdp: rsdp,
-        smbios: 0,
-        ap_fn: crate::secondary_main,
+        ..Default::default()
     };
 
     crate::primary_main(config);
