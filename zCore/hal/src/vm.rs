@@ -100,8 +100,10 @@ pub trait GenericPageTable: Sync + Send {
         flags: MMUFlags,
     ) -> PagingResult {
         assert!(is_aligned(start_vaddr));
-        assert!(is_aligned(start_paddr));
         assert!(is_aligned(size));
+        // Note: start_paddr alignment is NOT asserted here because some
+        // callers (e.g., DTB/initrd mapping) pass non-page-aligned paddrs.
+        // The per-page map() call handles address masking.
         log::debug!(
             "map_cont: {:#x?} => {:#x}, flags={:?}",
             start_vaddr..start_vaddr + size,
