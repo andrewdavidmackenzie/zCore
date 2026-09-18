@@ -9,7 +9,8 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 .PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
 	petal-shell raspi400-build raspi400-run raspi400-sd \
-	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon
+	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon \
+	pre-push
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -349,6 +350,27 @@ else ifeq ($(ARCH), riscv64)
 	@rcore-fs-fuse zCore/riscv64-linux.img rootfs/riscv zip
 	@qemu-img resize -f raw zCore/riscv64-linux.img +5M
 endif
+
+# Pre-push check: builds everything CI will build.
+# Run this before pushing to catch cross-platform issues locally.
+pre-push:
+	@echo "==> Format check..."
+	cargo fmt --all -- --check
+	@echo "==> Workspace build..."
+	cargo build
+	@echo "==> Unit tests..."
+	cargo test --no-fail-fast
+	@echo "==> Bare-metal aarch64..."
+	cargo zcore-build -m qemu-aarch64
+	@echo "==> Bare-metal riscv64..."
+	cargo zcore-build -m qemu-riscv64
+	@echo "==> Bare-metal x86_64..."
+	cargo bin -m qemu-x86_64
+	@echo "==> LibOS (Linux mode)..."
+	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos
+	@echo "==> LibOS (Zircon mode)..."
+	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos --personality zircon
+	@echo "==> All pre-push checks passed."
 
 # Run clippy for all architectures (catches cross-platform issues).
 # Features come from targets/qemu-<arch>.toml via xtask.

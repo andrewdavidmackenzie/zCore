@@ -49,60 +49,56 @@ hal_fn_impl! {
     }
 }
 
-impl From<MMUFlags> for PTF {
-    fn from(f: MMUFlags) -> Self {
-        if f.is_empty() {
-            return PTF::empty();
-        }
-        let mut flags = PTF::PRESENT;
-        if f.contains(MMUFlags::WRITE) {
-            flags |= PTF::WRITABLE;
-        }
-        if !f.contains(MMUFlags::EXECUTE) {
-            flags |= PTF::NO_EXECUTE;
-        }
-        if f.contains(MMUFlags::USER) {
-            flags |= PTF::USER_ACCESSIBLE;
-        }
-        let cache_policy = (f.bits() & 3) as u32; // lowest bits store the cache policy
-        match CachePolicy::try_from(cache_policy) {
-            Ok(CachePolicy::Cached) => {
-                flags.remove(PTF::WRITE_THROUGH);
-            }
-            Ok(CachePolicy::Uncached) | Ok(CachePolicy::UncachedDevice) => {
-                flags |= PTF::NO_CACHE | PTF::WRITE_THROUGH;
-            }
-            Ok(CachePolicy::WriteCombining) => {
-                flags |= PTF::NO_CACHE | PTF::WRITE_THROUGH;
-                // At level 1 (large pages), bit 12 (0x1000) is set for PAT,
-                // but bitflags does not include this bit. Let the page table manage it directly.
-            }
-            Err(_) => unreachable!("invalid cache policy"),
-        }
-        flags
+fn mmu_to_ptf(f: MMUFlags) -> PTF {
+    if f.is_empty() {
+        return PTF::empty();
     }
+    let mut flags = PTF::PRESENT;
+    if f.contains(MMUFlags::WRITE) {
+        flags |= PTF::WRITABLE;
+    }
+    if !f.contains(MMUFlags::EXECUTE) {
+        flags |= PTF::NO_EXECUTE;
+    }
+    if f.contains(MMUFlags::USER) {
+        flags |= PTF::USER_ACCESSIBLE;
+    }
+    let cache_policy = (f.bits() & 3) as u32; // lowest bits store the cache policy
+    match CachePolicy::try_from(cache_policy) {
+        Ok(CachePolicy::Cached) => {
+            flags.remove(PTF::WRITE_THROUGH);
+        }
+        Ok(CachePolicy::Uncached) | Ok(CachePolicy::UncachedDevice) => {
+            flags |= PTF::NO_CACHE | PTF::WRITE_THROUGH;
+        }
+        Ok(CachePolicy::WriteCombining) => {
+            flags |= PTF::NO_CACHE | PTF::WRITE_THROUGH;
+            // At level 1 (large pages), bit 12 (0x1000) is set for PAT,
+            // but bitflags does not include this bit. Let the page table manage it directly.
+        }
+        Err(_) => unreachable!("invalid cache policy"),
+    }
+    flags
 }
 
-impl From<PTF> for MMUFlags {
-    fn from(f: PTF) -> Self {
-        if f.is_empty() {
-            return Self::empty();
-        }
-        let mut ret = Self::READ;
-        if f.contains(PTF::WRITABLE) {
-            ret |= Self::WRITE;
-        }
-        if !f.contains(PTF::NO_EXECUTE) {
-            ret |= Self::EXECUTE;
-        }
-        if f.contains(PTF::USER_ACCESSIBLE) {
-            ret |= Self::USER;
-        }
-        if f.contains(PTF::NO_CACHE | PTF::WRITE_THROUGH) {
-            ret |= Self::CACHE_1;
-        }
-        ret
+fn ptf_to_mmu(f: PTF) -> MMUFlags {
+    if f.is_empty() {
+        return MMUFlags::empty();
     }
+    let mut ret = MMUFlags::READ;
+    if f.contains(PTF::WRITABLE) {
+        ret |= MMUFlags::WRITE;
+    }
+    if !f.contains(PTF::NO_EXECUTE) {
+        ret |= MMUFlags::EXECUTE;
+    }
+    if f.contains(PTF::USER_ACCESSIBLE) {
+        ret |= MMUFlags::USER;
+    }
+    if f.contains(PTF::NO_CACHE | PTF::WRITE_THROUGH) {
+        ret |= MMUFlags::CACHE_1;
+    }
+    ret
 }
 
 const PHYS_ADDR_MASK: u64 = 0x000f_ffff_ffff_f000; // 12..52
@@ -117,7 +113,7 @@ impl GenericPTE for X86PTE {
         (self.0 & PHYS_ADDR_MASK) as _
     }
     fn flags(&self) -> MMUFlags {
-        PTF::from_bits_truncate(self.0).into()
+        ptf_to_mmu(PTF::from_bits_truncate(self.0))
     }
     fn is_unused(&self) -> bool {
         self.0 == 0
@@ -133,7 +129,7 @@ impl GenericPTE for X86PTE {
         self.0 = (self.0 & !PHYS_ADDR_MASK) | (paddr as u64 & PHYS_ADDR_MASK);
     }
     fn set_flags(&mut self, flags: MMUFlags, is_huge: bool) {
-        let mut flags: PTF = flags.into();
+        let mut flags: PTF = mmu_to_ptf(flags);
         if is_huge {
             flags |= PTF::HUGE_PAGE;
         }
