@@ -400,7 +400,25 @@ impl Syscall<'_> {
         let epoll = epoll_like
             .downcast_ref::<EpollFile>()
             .ok_or(LxError::EINVAL)?;
-        let ready = epoll.wait(maxevents, timeout).await?;
+        // Wrap epoll wait in a signal-interruptible poll_fn so that
+        // signal delivery returns EINTR (matching Linux behavior).
+        use core::future::poll_fn;
+        use core::task::Poll;
+        let mut wait_fut = Box::pin(epoll.wait(maxevents, timeout));
+        let ready = poll_fn(|cx| {
+            {
+                let mut linux = self.thread.lock_linux();
+                if linux.has_pending_signal() {
+                    linux.clear_signal_waker();
+                    return Poll::Ready(Err(LxError::EINTR));
+                }
+                linux.set_signal_waker(cx.waker().clone());
+            }
+            wait_fut.as_mut().poll(cx)
+        })
+        .await?;
+        // Clean up the signal waker after epoll_wait completes.
+        self.thread.lock_linux().clear_signal_waker();
         let count = ready.len();
         if count > 0 {
             events.write_array(&ready)?;

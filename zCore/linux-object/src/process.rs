@@ -114,11 +114,14 @@ pub async fn wait_child(
     nonblock: bool,
     thread: &zircon_object::task::Thread,
 ) -> LxResult<ExitCode> {
+    let proc_obj: Arc<dyn KernelObject> = proc.clone();
     loop {
-        // Check for pending signals before blocking
-        if thread.lock_linux().has_pending_signal() {
-            return Err(LxError::EINTR);
-        }
+        // Clear SIGCHLD before inspecting child status so we don't
+        // miss a child exit that happens during inspection.
+        proc_obj.signal_clear(Signal::SIGCHLD);
+        // Check child status first -- ready results take precedence
+        // over pending signals (avoids spurious EINTR when data is
+        // already available).
         let mut inner = proc.linux().inner.lock();
         let child = inner.children.get(&pid).ok_or(LxError::ECHILD)?;
         if let Status::Exited(code) = child.status() {
@@ -129,14 +132,12 @@ pub async fn wait_child(
             return Err(LxError::EAGAIN);
         }
         drop(inner);
-        // Wait for SIGCHLD on the parent process.
-        let proc_obj: Arc<dyn KernelObject> = proc.clone();
-        proc_obj.signal_clear(Signal::SIGCHLD);
-        proc_obj.wait_signal(Signal::SIGCHLD).await;
-        // Check for pending signals after wakeup
+        // Now check for pending signals (after confirming no result).
         if thread.lock_linux().has_pending_signal() {
             return Err(LxError::EINTR);
         }
+        // Block until SIGCHLD or a signal interrupts us.
+        wait_for_sigchld_or_signal(&proc_obj, thread).await?;
     }
 }
 
@@ -149,7 +150,11 @@ pub async fn wait_child_any(
     nonblock: bool,
     thread: &zircon_object::task::Thread,
 ) -> LxResult<(KoID, ExitCode)> {
+    let proc_obj: Arc<dyn KernelObject> = proc.clone();
     loop {
+        // Clear SIGCHLD before inspecting children.
+        proc_obj.signal_clear(Signal::SIGCHLD);
+        // Check children first -- ready results take precedence.
         let mut inner = proc.linux().inner.lock();
         if inner.children.is_empty() {
             return Err(LxError::ECHILD);
@@ -164,14 +169,59 @@ pub async fn wait_child_any(
         if nonblock {
             return Err(LxError::EAGAIN);
         }
-        let proc_obj: Arc<dyn KernelObject> = proc.clone();
-        proc_obj.signal_clear(Signal::SIGCHLD);
-        proc_obj.wait_signal(Signal::SIGCHLD).await;
-        // Check for pending signals after wakeup
+        // Check for pending signals after confirming no child exited.
         if thread.lock_linux().has_pending_signal() {
             return Err(LxError::EINTR);
         }
+        // Block until SIGCHLD or a signal interrupts us.
+        wait_for_sigchld_or_signal(&proc_obj, thread).await?;
     }
+}
+
+/// Block until either SIGCHLD is set on the process object (child
+/// status change) or a Linux signal is delivered to the thread
+/// (returns `Err(EINTR)`).
+///
+/// Callers must clear SIGCHLD before inspecting child status and
+/// calling this helper, so notifications from child exits that
+/// happen after inspection are not lost.
+///
+/// This registers the thread's `signal_waker` so that
+/// `insert_signal()` can wake us for EINTR.
+async fn wait_for_sigchld_or_signal(
+    proc_obj: &Arc<dyn KernelObject>,
+    thread: &zircon_object::task::Thread,
+) -> LxResult<()> {
+    use alloc::boxed::Box;
+    use core::future::{poll_fn, Future};
+    use core::pin::Pin;
+    use core::task::Poll;
+
+    // SIGCHLD was already cleared by the caller before child inspection.
+    let mut wait_fut: Pin<Box<dyn Future<Output = Signal> + Send>> =
+        Box::pin(proc_obj.wait_signal(Signal::SIGCHLD));
+
+    poll_fn(|cx| {
+        // Check for pending signals and register the signal_waker
+        // atomically under one lock (no race window).
+        {
+            let mut linux = thread.lock_linux();
+            if linux.has_pending_signal() {
+                linux.clear_signal_waker();
+                return Poll::Ready(Err(LxError::EINTR));
+            }
+            linux.set_signal_waker(cx.waker().clone());
+        }
+        // Also poll the SIGCHLD wait_signal future.
+        match wait_fut.as_mut().poll(cx) {
+            Poll::Ready(_) => {
+                thread.lock_linux().clear_signal_waker();
+                Poll::Ready(Ok(()))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    })
+    .await
 }
 
 /// Linux specific process information.
