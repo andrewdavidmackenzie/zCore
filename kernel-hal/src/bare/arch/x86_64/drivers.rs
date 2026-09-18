@@ -93,8 +93,17 @@ pub(super) fn init() -> DeviceResult {
 
     #[cfg(feature = "pci")]
     {
-        // PCI scan -- skip on real hardware for now (#269).
-        warn!("PCI scan skipped (#269)");
+        use kernel_drivers::bus::pci;
+        info!("PCI: scanning bus...");
+        match pci::init(None) {
+            Ok(devices) => {
+                info!("PCI: found {} device(s)", devices.len());
+                for dev in devices {
+                    drivers::add_device(dev);
+                }
+            }
+            Err(e) => warn!("PCI: scan failed: {:?}", e),
+        }
     }
 
     warn!("Drivers init end.");
