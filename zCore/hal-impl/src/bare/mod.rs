@@ -20,7 +20,9 @@ pub mod mem;
 pub mod thread;
 pub mod timer;
 
-pub use self::arch::{config, cpu, interrupt, vm};
+#[cfg(not(any(target_arch = "riscv32", target_arch = "riscv64")))]
+pub use self::arch::config;
+pub use self::arch::{cpu, interrupt, vm};
 pub use super::hal_fn::{platform, rand, vdso};
 
 hal_fn_impl_default!(rand, vdso, platform);

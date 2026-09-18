@@ -38,7 +38,7 @@ static FB_CONSOLE: Mutex<Option<FbConsole>> = Mutex::new(None);
 /// Initialize the framebuffer console from the kernel config.
 /// Must be called after the framebuffer virtual mapping is available.
 pub fn init() {
-    let fb = match crate::KCONFIG.framebuffer {
+    let fb = match *super::config::FRAMEBUFFER {
         Some(ref fb) => fb,
         None => return,
     };

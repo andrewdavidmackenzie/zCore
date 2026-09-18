@@ -157,22 +157,11 @@ impl TrapReason {
                 #[cfg(not(feature = "libos"))]
                 {
                     use crate::hal_fn::mem::phys_to_virt;
-                    #[cfg(target_arch = "aarch64")]
-                    let (gicc, gicd) = {
-                        let gic_base = crate::imp::arch::gic_base();
-                        (
-                            phys_to_virt(gic_base + crate::imp::arch::drivers::GIC_GICC_OFFSET),
-                            phys_to_virt(gic_base + crate::imp::arch::drivers::GIC_GICD_OFFSET),
-                        )
-                    };
-                    #[cfg(not(target_arch = "aarch64"))]
-                    let (gicc, gicd) = {
-                        use crate::KCONFIG;
-                        (
-                            phys_to_virt(KCONFIG.gic_base + 0x1_0000),
-                            phys_to_virt(KCONFIG.gic_base),
-                        )
-                    };
+                    let gic_base = crate::imp::arch::gic_base();
+                    let (gicc, gicd) = (
+                        phys_to_virt(gic_base + crate::imp::arch::drivers::GIC_GICC_OFFSET),
+                        phys_to_virt(gic_base + crate::imp::arch::drivers::GIC_GICD_OFFSET),
+                    );
                     kernel_drivers::irq::gic_400::get_irq_num(gicc, gicd)
                 },
                 #[cfg(feature = "libos")]

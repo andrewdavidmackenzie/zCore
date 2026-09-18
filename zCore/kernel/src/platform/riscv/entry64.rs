@@ -88,6 +88,7 @@ pub extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> 
         phys_to_virt_offset: PHY_MEM_OFS,
         dtb_paddr: device_tree_paddr,
         dtb_size: 2 * 1024 * 1024,
+        ..Default::default()
     };
     crate::primary_main(config);
     unreachable!()

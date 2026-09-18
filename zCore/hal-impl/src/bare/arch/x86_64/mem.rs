@@ -2,13 +2,12 @@ use alloc::vec::Vec;
 use core::arch::x86_64::{__cpuid, _mm_clflush, _mm_mfence};
 use core::ops::Range;
 
-use super::config::MemoryType;
+use super::config::{MemoryType, MEMORY_MAP};
 
-use crate::{mem::phys_to_virt, PhysAddr, KCONFIG, PAGE_SIZE};
+use crate::{mem::phys_to_virt, PhysAddr, PAGE_SIZE};
 
 pub fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
-    KCONFIG
-        .memory_map
+    MEMORY_MAP
         .iter()
         .filter_map(|r| {
             if r.memory_type == MemoryType::Conventional {

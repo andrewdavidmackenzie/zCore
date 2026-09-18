@@ -9,7 +9,7 @@
 //! - Userspace-only functions that read from a kernel-mapped data
 //!   page (VdsoConstants) without making syscalls
 //!
-//! The VdsoConstants data page is mapped by the kernel at a known
+//! The kernel maps the VdsoConstants data page at a known
 //! offset in the vDSO VMO. Functions like `zx_system_get_num_cpus`
 //! and `zx_ticks_per_second` read directly from this page.
 
@@ -124,8 +124,8 @@ pub extern "C" fn zx_system_get_version_string() -> *const u8 {
 
 /// Get the current monotonic time in nanoseconds.
 ///
-/// In Fuchsia's real vDSO this reads shared memory + hardware tick
-/// counter entirely in userspace. For now, falls back to the kernel
+/// In Fuchsia's real vDSO this reads shared memory and hardware tick
+/// counter entirely in userspace. For now, it falls back to the kernel
 /// syscall.
 // TODO: implement userspace-only time reading using VdsoConstants
 // tick-to-mono conversion ratios + hardware tick counter.
@@ -142,7 +142,7 @@ pub unsafe extern "C" fn zx_clock_get_monotonic() -> i64 {
 /// Read the hardware tick counter.
 ///
 /// In Fuchsia's real vDSO this reads the hardware counter directly.
-/// For now, falls back to the kernel syscall.
+/// For now, it falls back to the kernel syscall.
 // TODO: implement direct hardware counter read per architecture.
 #[no_mangle]
 pub unsafe extern "C" fn zx_ticks_get() -> i64 {
