@@ -238,6 +238,16 @@ impl Syscall<'_> {
             type Output = SysResult;
 
             fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+                // Check for pending signals -- return EINTR if any.
+                {
+                    let mut linux = self.syscall.thread.lock_linux();
+                    if linux.has_pending_signal() {
+                        linux.clear_signal_waker();
+                        return Poll::Ready(Err(LxError::EINTR));
+                    }
+                    linux.set_signal_waker(cx.waker().clone());
+                }
+
                 let files = self.syscall.linux_process().get_files()?;
 
                 let mut events = 0;

@@ -10,6 +10,7 @@
 //! - access, faccessat
 
 use super::*;
+use linux_object::thread::ThreadExt;
 use linux_object::{process::FsInfo, time::TimeSpec};
 
 impl Syscall<'_> {
@@ -20,6 +21,10 @@ impl Syscall<'_> {
     /// - len – number of bytes to read
     pub async fn sys_read(&self, fd: FileDesc, mut base: UserOutPtr<u8>, len: usize) -> SysResult {
         info!("read: fd={:?}, base={:?}, len={:#x}", fd, base, len);
+        // Check for pending signals before potentially blocking on a pipe/socket.
+        if self.thread.lock_linux().has_pending_signal() {
+            return Err(LxError::EINTR);
+        }
         let proc = self.linux_process();
         let file_like = proc.get_file_like(fd)?;
         let mut buf = vec![0u8; len];
