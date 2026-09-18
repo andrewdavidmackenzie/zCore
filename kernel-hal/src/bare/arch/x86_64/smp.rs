@@ -403,7 +403,7 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
         let frame = alloc_zeroed_page();
         pml4[pml4_idx] = frame as u64 | 0x3; // present + writable
     }
-    let pdpt_phys = (pml4[pml4_idx] & !0xFFF) as usize;
+    let pdpt_phys = (pml4[pml4_idx] & PTE_ADDR_MASK) as usize;
 
     let pdpt = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pdpt_phys) as *mut u64, 512) };
     let pdpt_idx = (page >> 30) & 0x1FF;
@@ -418,7 +418,7 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
         );
         return;
     }
-    let pd_phys = (pdpt[pdpt_idx] & !0xFFF) as usize;
+    let pd_phys = (pdpt[pdpt_idx] & PTE_ADDR_MASK) as usize;
 
     let pd = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pd_phys) as *mut u64, 512) };
     let pd_idx = (page >> 21) & 0x1FF;
@@ -433,7 +433,7 @@ fn add_identity_mapping(pml4_phys: usize, phys_addr: usize) {
         );
         return;
     }
-    let pt_phys = (pd[pd_idx] & !0xFFF) as usize;
+    let pt_phys = (pd[pd_idx] & PTE_ADDR_MASK) as usize;
 
     let pt = unsafe { core::slice::from_raw_parts_mut(phys_to_virt(pt_phys) as *mut u64, 512) };
     let pt_idx = (page >> 12) & 0x1FF;
@@ -483,6 +483,11 @@ fn alloc_zeroed_page() -> usize {
     phys
 }
 
+/// Mask for extracting the physical address from a PTE.
+/// Bits 12..51 contain the physical page frame number.
+/// Bits 0-11 are flag bits, bits 52-63 are flag bits (including NX at 63).
+const PTE_ADDR_MASK: u64 = 0x000F_FFFF_FFFF_F000;
+
 /// Translate a virtual address to physical by walking the current page table.
 fn virt_to_phys(vaddr: usize) -> usize {
     let cr3: usize;
@@ -495,31 +500,40 @@ fn virt_to_phys(vaddr: usize) -> usize {
     assert!(pml4e & 1 != 0, "PML4 entry not present for {:#x}", vaddr);
 
     let pdpt = unsafe {
-        core::slice::from_raw_parts(phys_to_virt((pml4e & !0xFFF) as usize) as *const u64, 512)
+        core::slice::from_raw_parts(
+            phys_to_virt((pml4e & PTE_ADDR_MASK) as usize) as *const u64,
+            512,
+        )
     };
     let pdpte = pdpt[(vaddr >> 30) & 0x1FF];
     assert!(pdpte & 1 != 0, "PDPT entry not present for {:#x}", vaddr);
     // Check for 1GB huge page
     if pdpte & 0x80 != 0 {
-        return ((pdpte & !0x3FFFFFFF) as usize) | (vaddr & 0x3FFFFFFF);
+        return ((pdpte & PTE_ADDR_MASK) as usize & !0x3FFFFFFF) | (vaddr & 0x3FFFFFFF);
     }
 
     let pd = unsafe {
-        core::slice::from_raw_parts(phys_to_virt((pdpte & !0xFFF) as usize) as *const u64, 512)
+        core::slice::from_raw_parts(
+            phys_to_virt((pdpte & PTE_ADDR_MASK) as usize) as *const u64,
+            512,
+        )
     };
     let pde = pd[(vaddr >> 21) & 0x1FF];
     assert!(pde & 1 != 0, "PD entry not present for {:#x}", vaddr);
     // Check for 2MB huge page
     if pde & 0x80 != 0 {
-        return ((pde & !0x1FFFFF) as usize) | (vaddr & 0x1FFFFF);
+        return ((pde & PTE_ADDR_MASK) as usize & !0x1FFFFF) | (vaddr & 0x1FFFFF);
     }
 
     let pt = unsafe {
-        core::slice::from_raw_parts(phys_to_virt((pde & !0xFFF) as usize) as *const u64, 512)
+        core::slice::from_raw_parts(
+            phys_to_virt((pde & PTE_ADDR_MASK) as usize) as *const u64,
+            512,
+        )
     };
     let pte = pt[(vaddr >> 12) & 0x1FF];
     assert!(pte & 1 != 0, "PT entry not present for {:#x}", vaddr);
-    ((pte & !0xFFF) as usize) | (vaddr & 0xFFF)
+    (pte & PTE_ADDR_MASK) as usize | (vaddr & 0xFFF)
 }
 
 /// Spin-wait delay in milliseconds (approximate, uses TSC).
