@@ -164,13 +164,14 @@ impl UserContext {
     /// Returns [`TrapReason`] according to the context.
     pub fn trap_reason(&self) -> TrapReason {
         cfg_if! {
-            if #[cfg(target_arch = "x86_64")] {
-                crate::imp::arch::trap::trap_reason_from(self.inner.trap_num, self.inner.error_code)
-            } else if #[cfg(all(target_arch = "aarch64", feature = "libos"))] {
-                // In libos mode, all traps come from the SIGSYS handler
-                // (intercepted SVC #0). ESR_EL1 is not accessible from EL0.
+            if #[cfg(feature = "libos")] {
+                // In libos mode, all traps come from the signal-based
+                // trapframe (SIGSYS for syscalls). Hardware registers
+                // (CR2, ESR_EL1, scause) are not accessible.
                 let _ = self.inner.trap_num;
                 TrapReason::Syscall
+            } else if #[cfg(target_arch = "x86_64")] {
+                crate::imp::arch::trap::trap_reason_from(self.inner.trap_num, self.inner.error_code)
             } else if #[cfg(target_arch = "aarch64")] {
                 crate::imp::arch::trap::trap_reason_from(self.inner.trap_num)
             } else if #[cfg(target_arch = "riscv64")] {
