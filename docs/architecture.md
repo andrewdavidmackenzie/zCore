@@ -229,11 +229,21 @@ aarch64`).
 
 ---
 
-### `kernel-hal/` -- Hardware Abstraction Layer
+### `hal/` -- HAL Interface (trait definitions and common types)
+
+**Purpose:** Defines the interface contract between the kernel and platform.
+Contains driver traits (`Scheme`, `UartScheme`, `IrqScheme`, etc.), common types
+(`MMUFlags`, `PhysAddr`, `CachePolicy`), the `GenericPageTable` trait,
+`KernelHandler` trait, `TrapReason`/`UserContextField` enums, and device error
+types. Zero architecture-specific code -- this is the pure abstraction layer.
+
+**Directory:** `zCore/hal/`
+
+### `hal-impl/` (package name: `kernel-hal`) -- HAL Implementation
 
 **Purpose:** Provides a unified, architecture-independent interface for all
 hardware interaction. Abstracts differences between three CPU architectures and
-two execution modes (bare-metal vs libos).
+two execution modes (bare-metal vs libos). Implements the traits defined in `hal`.
 
 **Key design:** Uses a macro-based trait dispatch system (`hal_fn_def!` /
 `hal_fn_impl!`) that declares the full HAL interface and allows pluggable
@@ -310,17 +320,15 @@ for high-frequency calls where syscall overhead matters.
 
 - `console` -- early console output
 
-**Structure:**
+**Structure (hal-impl):**
 - `src/hal_fn.rs` -- Complete HAL interface declaration
-- `src/common/` -- Shared types (addresses, contexts, futures, page tables,
-  user pointers)
+- `src/common/` -- Shared implementation code (contexts, futures, user pointers)
 - `src/bare/` -- Bare-metal backend with `arch/aarch64`, `arch/riscv`,
   `arch/x86_64`
 
-They exist at `kernel-hal/src/bare/arch/aarch64/`, `kernel-
-hal/src/bare/arch/riscv/`, and `kernel-hal/src/bare/arch/x86_64/`. Each
-contains: `mod.rs`, `config.rs`, `cpu.rs`, `drivers.rs`, `interrupt.rs`,
-`mem.rs`, `timer.rs`, `trap.rs`, `vm.rs`. Confirmed present on disk.
+Per-arch directories are at `hal-impl/src/bare/arch/{aarch64,riscv,x86_64}/`.
+Each contains: `mod.rs`, `config.rs`, `cpu.rs`, `drivers.rs`, `interrupt.rs`,
+`mem.rs`, `timer.rs`, `trap.rs`, `vm.rs`.
 
 
 - `src/libos/` -- LibOS backend (simulates hardware via mmap, tmpfiles, SDL)
