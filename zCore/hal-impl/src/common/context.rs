@@ -86,7 +86,7 @@ pub fn trap_reason_from(trap_num: usize, error_code: usize) -> TrapReason {
             TrapReason::PageFault(fault_vaddr, flags)
         }
         vec @ X86_INT_BASE..=X86_INT_MAX => TrapReason::Interrupt(vec as usize),
-        _ => TrapReason::GernelFault(trap_num),
+        _ => TrapReason::GeneralFault(trap_num),
     }
 }
 
@@ -107,7 +107,7 @@ pub fn trap_reason_from(scause: riscv::register::scause::Scause) -> TrapReason {
             TrapReason::PageFault(stval, MMUFlags::EXECUTE)
         }
         Trap::Interrupt(_) => TrapReason::Interrupt(scause.code()),
-        _ => TrapReason::GernelFault(scause.code()),
+        _ => TrapReason::GeneralFault(scause.code()),
     }
 }
 
@@ -136,7 +136,7 @@ pub fn trap_reason_from(esr: usize) -> TrapReason {
                 level: _,
             } => TrapReason::PageFault(FAR_EL1.get() as _, MMUFlags::EXECUTE | MMUFlags::USER),
             Syndrome::PCAlignmentFault | Syndrome::SpAlignmentFault => TrapReason::UnalignedAccess,
-            _ => TrapReason::GernelFault(esr as usize),
+            _ => TrapReason::GeneralFault(esr as usize),
         },
         Kind::Irq => TrapReason::Interrupt(
             #[cfg(not(feature = "libos"))]
@@ -155,7 +155,7 @@ pub fn trap_reason_from(esr: usize) -> TrapReason {
                 usize::MAX
             },
         ),
-        _ => TrapReason::GernelFault(esr as usize),
+        _ => TrapReason::GeneralFault(esr as usize),
     }
 }
 

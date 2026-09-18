@@ -52,7 +52,9 @@ fn main() {
         "zCore/zircon-object/src",
         "zCore/zircon-syscall/src",
         "zCore/zircon-loader/src",
-        "kernel-hal/src",
+        "zCore/hal/src",
+        "zCore/hal-impl/src",
+        "zCore/drivers/src",
     ] {
         let path = workspace_root.join(dir);
         if path.exists() {

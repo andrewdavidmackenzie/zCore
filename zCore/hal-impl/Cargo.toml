@@ -6,7 +6,7 @@ authors = [
   "Yuekai Jia <equation618@gmail.com>",
 ]
 edition = "2021"
-description = "Kernel HAL interface definations."
+description = "HAL implementation -- platform-specific backends for the hal crate"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
