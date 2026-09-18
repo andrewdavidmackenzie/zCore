@@ -1,7 +1,5 @@
 //! Kernel configuration.
-
-/// Kernel configuration passed by kernel when calls [`crate::primary_init_early()`].
-#[derive(Debug)]
-pub struct KernelConfig {
-    pub cmdline: &'static str,
-}
+//!
+//! The unified KernelConfig is defined in the `hal` crate and re-exported
+//! via `kernel_hal::KernelConfig`. This module is kept for any future
+//! libos-specific constants.

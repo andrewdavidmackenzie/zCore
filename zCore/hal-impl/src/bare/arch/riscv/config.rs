@@ -1,10 +1,5 @@
 //! Kernel configuration.
-
-/// Kernel configuration passed by kernel when calls [`crate::primary_init_early()`].
-#[derive(Debug)]
-pub struct KernelConfig {
-    pub cmdline: &'static str,
-    pub phys_to_virt_offset: usize,
-    pub dtb_paddr: usize,
-    pub dtb_size: usize,
-}
+//!
+//! The unified KernelConfig is defined in the `hal` crate and re-exported
+//! via `kernel_hal::KernelConfig`. This module is kept for any future
+//! riscv-specific constants.

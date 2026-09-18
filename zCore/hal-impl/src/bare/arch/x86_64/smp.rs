@@ -5,7 +5,7 @@
 //! through protected mode to long mode, then jumps to the kernel's
 //! `secondary_main()` function.
 
-use crate::{mem::phys_to_virt, KCONFIG};
+use crate::mem::phys_to_virt;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -165,8 +165,12 @@ extern "C" fn ap_entry() -> ! {
         use x86_64::registers::control::{Cr0, Cr0Flags};
         Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
     }
-    // Call the kernel's secondary_main (stored in KernelConfig)
-    (KCONFIG.ap_fn)()
+    // Call the kernel's secondary_main (stored in arch-specific static)
+    if let Some(f) = *super::config::AP_FN {
+        f()
+    } else {
+        panic!("AP started but no ap_fn configured");
+    }
 }
 
 /// Boot all Application Processors.
@@ -175,7 +179,7 @@ extern "C" fn ap_entry() -> ! {
 /// Enumerates CPUs via ACPI MADT, allocates per-AP stacks, copies the
 /// trampoline to low memory, and sends INIT-SIPI-SIPI to each AP.
 pub fn boot_application_processors() {
-    let rsdp = KCONFIG.acpi_rsdp;
+    let rsdp = crate::KCONFIG.acpi_rsdp;
     if rsdp == 0 {
         warn!("No ACPI RSDP -- cannot enumerate APs, skipping SMP boot");
         return;

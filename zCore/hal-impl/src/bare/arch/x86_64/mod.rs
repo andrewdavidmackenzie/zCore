@@ -61,7 +61,7 @@ pub fn primary_init_early() {
         "phys_to_virt_offset = {:#x}",
         crate::KCONFIG.phys_to_virt_offset
     );
-    if let Some(ref fb) = crate::KCONFIG.framebuffer {
+    if let Some(ref fb) = *config::FRAMEBUFFER {
         info!(
             "framebuffer: {}x{}, bpp inferred, phys={:#x}",
             fb.width, fb.height, fb.addr

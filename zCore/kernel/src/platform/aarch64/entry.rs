@@ -15,7 +15,6 @@ mod board {
     pub const PHYS_TO_VIRT_OFFSET: usize = 0xffff_0000_0000_0000;
     pub const UART_BASE: usize = 0x0900_0000;
     pub const GIC_BASE: usize = 0x0800_0000;
-    pub const FIRMWARE_TYPE: &str = "QEMU";
 }
 
 #[cfg(feature = "board-raspi400")]
@@ -27,7 +26,6 @@ mod board {
     pub const PHYS_TO_VIRT_OFFSET: usize = 0xffff_0000_0000_0000;
     pub const UART_BASE: usize = 0xFE20_1000; // PL011 UART0
     pub const GIC_BASE: usize = 0xFF84_0000; // GIC base (GICD at +0x1000, GICC at +0x2000)
-    pub const FIRMWARE_TYPE: &str = "RPi400";
 }
 
 /// Rust entry point, called from boot assembly after MMU is enabled.
@@ -43,13 +41,15 @@ extern "C" fn rust_main(dtb_paddr: usize) -> ! {
     #[cfg(not(feature = "board-raspi400"))]
     let default_cmdline = "LOG=warn:ROOTPROC=/bin/busybox?sh";
 
+    // Store board-specific UART and GIC base addresses in hal-impl statics.
+    // These are used as fallbacks if the DTB doesn't provide them.
+    kernel_hal::arch::set_board_bases(board::UART_BASE, board::GIC_BASE);
+
     let config = KernelConfig {
         cmdline: option_env!("ZCORE_CMDLINE").unwrap_or(default_cmdline),
-        firmware_type: board::FIRMWARE_TYPE,
-        uart_base: board::UART_BASE,
-        gic_base: board::GIC_BASE,
         phys_to_virt_offset: board::PHYS_TO_VIRT_OFFSET,
         dtb_paddr,
+        ..Default::default()
     };
 
     save_offset(board::PHYS_TO_VIRT_OFFSET);
