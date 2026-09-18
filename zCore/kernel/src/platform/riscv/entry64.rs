@@ -22,11 +22,6 @@ pub mod consts {
     pub const KERNEL_HEAP_SIZE: usize = 80 * 1024 * 1024;
     /// Get HART number from the environment variable
     pub const SMP: &str = core::env!("SMP");
-
-    #[inline]
-    pub fn phys_to_virt_offset() -> usize {
-        KERNEL_BASE - PHYS_MEMORY_BASE
-    }
 }
 
 extern "C" {

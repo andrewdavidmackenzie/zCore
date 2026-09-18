@@ -1,4 +1,3 @@
-use super::consts::save_offset;
 use kernel_hal::KernelConfig;
 
 // Include the boot assembly (page table setup + MMU enable + stack setup)
@@ -52,7 +51,6 @@ extern "C" fn rust_main(dtb_paddr: usize) -> ! {
         ..Default::default()
     };
 
-    save_offset(board::PHYS_TO_VIRT_OFFSET);
     crate::primary_main(config);
     unreachable!()
 }
