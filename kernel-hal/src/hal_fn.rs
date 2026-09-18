@@ -218,6 +218,36 @@ hal_fn_def! {
         }
     }
 
+    /// Platform capabilities and policies.
+    ///
+    /// These allow OS crates to query platform behavior without
+    /// checking `cfg(feature = "libos")` directly.
+    pub mod platform {
+        /// Whether the kernel is running as a hosted process (libos mode).
+        ///
+        /// When true, the kernel runs inside a host OS process and uses
+        /// host memory mappings. When false, it runs on bare hardware
+        /// with its own page tables.
+        pub fn is_hosted() -> bool { false }
+
+        /// Whether user-space memory writes via VMO need to be followed
+        /// by a direct write_volatile to the user VA for coherency.
+        ///
+        /// On some libos hosts (e.g., macOS with 16K pages), mmap'd
+        /// user pages may not see writes to the backing VMO storage
+        /// until explicitly flushed through the user VA.
+        pub fn needs_user_write_flush() -> bool { false }
+
+        /// Whether the platform needs kernel-side TEXTREL relocation
+        /// for PIE binaries (because W^X prevents runtime relocation).
+        pub fn needs_kernel_textrel() -> bool { false }
+
+        /// Whether syscall args 7-8 come from the user stack instead
+        /// of registers. True on x86_64 libos where the host ABI uses
+        /// the stack for overflow arguments.
+        pub fn syscall_args_from_stack() -> bool { false }
+    }
+
     /// VDSO constants.
     pub mod vdso: common::vdso {
         /// Get platform specific information.

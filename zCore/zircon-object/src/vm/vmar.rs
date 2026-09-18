@@ -635,25 +635,24 @@ impl VmAddressRegion {
         // store. The VMO write above updates PMEM but not user pages.
         // Even on 4K hosts, this direct write is harmless (the page is
         // MAP_SHARED from the same backing store).
-        #[cfg(feature = "libos")]
-        {
+        // On hosted platforms where user pages are disconnected from
+        // the VMO backing store, also write directly to the user VA.
+        // This block is compile-time gated because pmem_mprotect and
+        // the icache flush are only available on hosted (non-bare-metal)
+        // builds. The runtime check via needs_user_write_flush() ensures
+        // it only executes on platforms that actually need it.
+        #[cfg(not(target_os = "none"))]
+        if kernel_hal::platform::needs_user_write_flush() {
             let page_idx = (vaddr - map_inner.addr) / PAGE_SIZE;
             let is_exec = page_idx < map_inner.flags.len()
                 && map_inner.flags[page_idx].contains(MMUFlags::EXECUTE);
             if is_exec {
-                // Temporarily make writable for patching executable pages.
-                // Use the full write range (host-page alignment is handled
-                // by pmem_mprotect internally).
                 kernel_hal::mem::pmem_mprotect(
                     vaddr,
                     actual_size,
                     MMUFlags::READ | MMUFlags::WRITE,
                 );
             }
-            // Use write_volatile to ensure the write is not optimized
-            // away and actually reaches the memory-mapped page.
-            // On aarch64 macOS, file-backed MAP_SHARED pages may
-            // not be updated by regular copy_nonoverlapping.
             for (i, &byte) in buf[..actual_size].iter().enumerate() {
                 unsafe {
                     core::ptr::write_volatile((vaddr + i) as *mut u8, byte);
@@ -665,9 +664,6 @@ impl VmAddressRegion {
                     actual_size,
                     MMUFlags::READ | MMUFlags::EXECUTE,
                 );
-                // On aarch64 macOS, flush the instruction cache after
-                // modifying code pages. Without this, the CPU may
-                // execute stale cached instructions.
                 #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
                 unsafe {
                     extern "C" {

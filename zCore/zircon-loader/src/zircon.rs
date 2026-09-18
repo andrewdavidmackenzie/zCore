@@ -297,8 +297,9 @@ async fn run_user(thread: CurrentThread) {
     if thread.is_first_thread() && thread.proc().name() == "userstart" {
         info!("Zircon root process (userstart) exited, shutting down");
         info!("(if QEMU does not exit, press Ctrl-A then X to quit)");
-        #[cfg(not(feature = "libos"))]
-        kernel_hal::cpu::reset();
+        if !kernel_hal::platform::is_hosted() {
+            kernel_hal::cpu::reset();
+        }
     }
 }
 
@@ -387,7 +388,7 @@ fn syscall_args(ctx: &UserContext) -> [usize; 8] {
     let regs = ctx.general();
     cfg_if! {
         if #[cfg(target_arch = "x86_64")] {
-            if cfg!(feature = "libos") {
+            if kernel_hal::platform::syscall_args_from_stack() {
                 let arg7 = unsafe{ (regs.rsp as *const usize).read() };
                 let arg8 = unsafe{ (regs.rsp as *const usize).add(1).read() };
                 [regs.rdi, regs.rsi, regs.rdx, regs.rcx, regs.r8, regs.r9, arg7, arg8]

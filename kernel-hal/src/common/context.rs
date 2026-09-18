@@ -44,8 +44,14 @@ pub enum TrapReason {
     GernelFault(usize),
 }
 
-#[cfg(not(feature = "libos"))]
-pub const TIMER_INTERRUPT_VEC: usize = crate::timer_interrupt_vector();
+cfg_if! {
+    if #[cfg(not(feature = "libos"))] {
+        pub const TIMER_INTERRUPT_VEC: usize = crate::timer_interrupt_vector();
+    } else {
+        /// Dummy value -- libos mode has no hardware timer interrupts.
+        pub const TIMER_INTERRUPT_VEC: usize = usize::MAX;
+    }
+}
 
 impl TrapReason {
     /// Get [`TrapReason`] from `trap_num` and `error_code` in trap frame for x86.
