@@ -13,5 +13,5 @@ pub const MAX_CORE_NUM: usize = 8;
 
 // Re-export arch-specific config types and functions so that
 // `kernel_hal::config::FramebufferInfo` etc. work from entry points.
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", not(feature = "libos")))]
 pub use crate::imp::config::{set_x86_boot_data, FramebufferInfo, MemoryRegion, MemoryType};
