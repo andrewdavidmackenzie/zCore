@@ -6,11 +6,6 @@ pub const STACK_PAGES_PER_HART: usize = 32;
 /// Maximum number of SMP hardware threads.
 pub const MAX_HART_NUM: usize = 5;
 
-#[inline]
-pub fn phys_to_virt_offset() -> usize {
-    kernel_mem_info().offset()
-}
-
 use spin::Once;
 
 /// Kernel memory layout information.

@@ -1,6 +1,5 @@
 //! Define dynamic memory allocation.
 
-use crate::platform::phys_to_virt_offset;
 use alloc::alloc::handle_alloc_error;
 use core::{
     alloc::{GlobalAlloc, Layout},
@@ -9,6 +8,7 @@ use core::{
     ptr::NonNull,
 };
 use customizable_buddy::{BuddyAllocator, LinkedListBuddy, UsizeBuddy};
+use kernel_hal::mem::{phys_to_virt, virt_to_phys};
 use kernel_hal::PhysAddr;
 use lock::Mutex;
 
@@ -66,13 +66,12 @@ pub fn init() {
 /// Register memory regions with the allocator.
 pub fn insert_regions(regions: &[Range<PhysAddr>]) {
     let mut heap = HEAP.0.lock();
-    let offset = phys_to_virt_offset();
     regions
         .iter()
         .filter(|region| !region.is_empty())
         .for_each(|region| unsafe {
             heap.transfer(
-                NonNull::new_unchecked((region.start + offset) as *mut u8),
+                NonNull::new_unchecked(phys_to_virt(region.start) as *mut u8),
                 region.len(),
             );
         });
@@ -87,12 +86,12 @@ pub fn frame_alloc(frame_count: usize, align_log2: usize) -> Option<PhysAddr> {
         })
         .ok()?;
     assert_eq!(size, frame_count << PAGE_BITS);
-    Some(ptr.as_ptr() as PhysAddr - phys_to_virt_offset())
+    Some(virt_to_phys(ptr.as_ptr() as usize))
 }
 
 pub fn frame_dealloc(target: PhysAddr) {
     HEAP.0.lock().deallocate(
-        unsafe { NonNull::new_unchecked((target + phys_to_virt_offset()) as *mut u8) },
+        unsafe { NonNull::new_unchecked(phys_to_virt(target) as *mut u8) },
         1 << PAGE_BITS,
     );
 }

@@ -1,15 +1,4 @@
-// aarch64
-
-use spin::Once;
-
-static OFFSET: Once<usize> = Once::new();
-
-#[inline]
-pub(super) fn save_offset(offset: usize) {
-    OFFSET.call_once(|| offset);
-}
-
-#[inline]
-pub fn phys_to_virt_offset() -> usize {
-    *OFFSET.wait()
-}
+//! Platform constants for aarch64.
+//!
+//! The phys_to_virt_offset is now stored in KernelConfig and accessed
+//! via kernel_hal::mem::phys_to_virt(). No per-arch constants needed.
