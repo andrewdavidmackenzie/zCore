@@ -86,9 +86,11 @@ x86-zircon-run: x86-zircon-build
 		target/qemu-x86_64/release/kernel \
 		target/qemu-x86_64/release/kernel-zircon.img
 	@echo "==> Starting x86_64 Zircon (Ctrl-A X to exit QEMU)..."
-	@qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
+	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
+	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
 		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
 		-serial mon:stdio \
+		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img
 
 # Create a UEFI-bootable disk image for x86_64 real hardware.
