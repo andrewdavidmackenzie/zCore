@@ -1,4 +1,4 @@
-use crate::HalResult;
+use crate::DeviceResult;
 
 hal_fn_impl! {
     impl mod crate::hal_fn::interrupt {
@@ -8,7 +8,7 @@ hal_fn_impl! {
         fn intr_get() -> bool {
             false
         }
-        fn send_ipi(cpuid: usize, reason: usize) -> HalResult {
+        fn send_ipi(cpuid: usize, reason: usize) -> DeviceResult {
             trace!("ipi [{}] => [{}]: {:x}", super::cpu::cpu_id(), cpuid, reason);
             Ok(())
         }

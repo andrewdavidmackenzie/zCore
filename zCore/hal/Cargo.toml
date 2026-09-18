@@ -1,0 +1,11 @@
+[package]
+name = "hal"
+version = "0.1.0"
+edition = "2021"
+description = "HAL abstraction layer -- trait definitions and common types"
+
+[features]
+default = []
+
+# No external dependencies -- only uses core and alloc.
+[dependencies]

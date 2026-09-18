@@ -5,6 +5,7 @@ use virtio_drivers::device::console::VirtIOConsole as InnerDriver;
 use virtio_drivers::transport::mmio::MmioTransport;
 
 use super::HalImpl;
+use super::VirtioResultExt;
 use crate::prelude::DeviceResult;
 use crate::scheme::{impl_event_scheme, Scheme, UartScheme};
 use crate::utils::EventListener;
@@ -19,7 +20,7 @@ impl_event_scheme!(VirtIoConsole);
 impl VirtIoConsole {
     pub fn new(transport: MmioTransport) -> DeviceResult<Self> {
         Ok(Self {
-            inner: Mutex::new(InnerDriver::new(transport)?),
+            inner: Mutex::new(InnerDriver::new(transport).virt()?),
             listener: EventListener::new(),
         })
     }
@@ -40,11 +41,11 @@ impl Scheme for VirtIoConsole {
 
 impl UartScheme for VirtIoConsole {
     fn try_recv(&self) -> DeviceResult<Option<u8>> {
-        Ok(self.inner.lock().recv(true)?)
+        self.inner.lock().recv(true).virt()
     }
 
     fn send(&self, ch: u8) -> DeviceResult {
-        self.inner.lock().send(ch)?;
+        self.inner.lock().send(ch).virt()?;
         Ok(())
     }
 }

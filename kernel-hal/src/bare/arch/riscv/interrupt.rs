@@ -1,6 +1,7 @@
 //! Interrupts management.
-use crate::{HalError, HalResult};
+use crate::DeviceResult;
 use alloc::vec::Vec;
+use hal::DeviceError;
 use riscv::{asm, register::sstatus};
 
 hal_fn_impl! {
@@ -37,7 +38,7 @@ hal_fn_impl! {
         }
 
         #[allow(deprecated)]
-        fn send_ipi(cpuid: usize, reason: usize) -> HalResult {
+        fn send_ipi(cpuid: usize, reason: usize) -> DeviceResult {
             trace!("ipi [{}] => [{}]", super::cpu::cpu_id(), cpuid);
             let queue = crate::common::ipi::ipi_queue(cpuid);
             let idx = queue.alloc_entry();
@@ -49,7 +50,7 @@ hal_fn_impl! {
                 sbi_rt::legacy::send_ipi(&mask as *const usize as usize);
                 return Ok(());
             }
-            Err(HalError)
+            Err(DeviceError::NotSupported)
         }
 
         fn ipi_reason() -> Vec<usize> {

@@ -42,29 +42,8 @@ pub mod prelude;
 pub mod scheme;
 pub mod utils;
 
-/// The error type for external device.
-#[derive(Debug)]
-pub enum DeviceError {
-    /// The buffer is too small.
-    BufferTooSmall,
-    /// The device is not ready.
-    NotReady,
-    /// Invalid parameter.
-    InvalidParam,
-    /// Failed to alloc DMA memory.
-    DmaError,
-    /// I/O Error
-    IoError,
-    /// A resource with the specified identifier already exists.
-    AlreadyExists,
-    /// No resource to allocate.
-    NoResources,
-    /// The device driver is not implemented, supported, or enabled.
-    NotSupported,
-}
-
-/// A type alias for the result of a device operation.
-pub type DeviceResult<T = ()> = core::result::Result<T, DeviceError>;
+// DeviceError and DeviceResult are re-exported from hal.
+pub use hal::{DeviceError, DeviceResult};
 
 /// Static shell of shared dynamic device [`Scheme`](crate::scheme::Scheme) types.
 #[derive(Clone)]
@@ -106,5 +85,5 @@ impl fmt::Debug for Device {
     }
 }
 
-type PhysAddr = usize;
-type VirtAddr = usize;
+/// Re-export canonical address types from the HAL crate.
+pub use hal::{PhysAddr, VirtAddr};

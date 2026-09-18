@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "zCore/hal",
     "zCore/kernel-drivers",
     "kernel-hal",
     "zCore/zircon-object",
