@@ -351,25 +351,35 @@ else ifeq ($(ARCH), riscv64)
 	@qemu-img resize -f raw zCore/riscv64-linux.img +5M
 endif
 
-# Pre-push check: builds everything CI will build.
-# Run this before pushing to catch cross-platform issues locally.
+# Pre-push check: mirrors all CI jobs locally.
+# Run this before every push to avoid CI failures.
+# Requires: qemu-system-aarch64, qemu-system-x86_64.
 pre-push:
-	@echo "==> Format check..."
+	@echo "==> [1/11] Format check..."
 	cargo fmt --all -- --check
-	@echo "==> Workspace build..."
+	@echo "==> [2/11] Workspace build..."
 	cargo build
-	@echo "==> Unit tests..."
+	@echo "==> [3/11] Unit tests..."
 	cargo test --no-fail-fast
-	@echo "==> Bare-metal aarch64..."
-	cargo zcore-build -m qemu-aarch64
-	@echo "==> Bare-metal riscv64..."
+	@echo "==> [4/11] Bare-metal aarch64 (build + rootfs)..."
+	$(MAKE) build ARCH=aarch64
+	@echo "==> [5/11] Boot smoke test (aarch64)..."
+	$(MAKE) boot-test ARCH=aarch64
+	@echo "==> [6/11] Bare-metal riscv64..."
 	cargo zcore-build -m qemu-riscv64
-	@echo "==> Bare-metal x86_64..."
-	cargo bin -m qemu-x86_64
-	@echo "==> LibOS (Linux mode)..."
+	@echo "==> [7/11] Bare-metal x86_64 (build + rootfs)..."
+	$(MAKE) build ARCH=x86_64
+	@echo "==> [8/11] Boot smoke test (x86_64)..."
+	$(MAKE) boot-test ARCH=x86_64
+	@echo "==> [9/11] LibOS (Linux + Zircon)..."
 	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos
-	@echo "==> LibOS (Zircon mode)..."
 	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos --personality zircon
+	@echo "==> [10/11] Zircon boot test (aarch64)..."
+	$(MAKE) zircon-boot-test ARCH=aarch64
+	@tools/scripts/zircon-rootfs-test.sh aarch64
+	@echo "==> [11/11] Libc tests (aarch64 + x86_64)..."
+	$(MAKE) libc-test ARCH=aarch64
+	$(MAKE) libc-test ARCH=x86_64
 	@echo "==> All pre-push checks passed."
 
 # Run clippy for all architectures (catches cross-platform issues).
