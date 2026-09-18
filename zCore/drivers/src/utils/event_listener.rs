@@ -1,9 +1,9 @@
-use alloc::{boxed::Box, vec::Vec};
+use alloc::vec::Vec;
 
 use lock::Mutex;
 
-/// A type alias for the closure to handle device event.
-pub type EventHandler<T = ()> = Box<dyn Fn(&T) + Send + Sync>;
+// Re-export the canonical EventHandler type from the hal crate.
+pub use hal::scheme::event::EventHandler;
 
 /// Device event listener.
 ///

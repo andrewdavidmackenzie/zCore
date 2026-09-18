@@ -4,7 +4,8 @@
 //! platform-specific implementations. It contains:
 //!
 //! - Common types (`PhysAddr`, `VirtAddr`, `PAGE_SIZE`)
-//! - Base driver trait (`Scheme`, `SchemeUpcast`)
+//! - Driver traits (`Scheme`, `UartScheme`, `IrqScheme`, `BlockScheme`,
+//!   `DisplayScheme`, `InputScheme`, `EventScheme`)
 //! - Device error types (`DeviceError`, `DeviceResult`)
 //!
 //! No architecture-specific code lives here. Platform implementations
@@ -26,4 +27,7 @@ pub use addr::{DevVAddr, PhysAddr, VirtAddr};
 pub use config::KernelConfig;
 pub use defs::PAGE_SIZE;
 pub use device::{DeviceError, DeviceResult};
-pub use scheme::{Scheme, SchemeUpcast};
+pub use scheme::{
+    BlockScheme, DisplayScheme, EventScheme, InputScheme, IrqScheme, Scheme, SchemeUpcast,
+    UartScheme,
+};

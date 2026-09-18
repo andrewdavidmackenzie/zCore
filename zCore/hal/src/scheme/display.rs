@@ -1,6 +1,9 @@
+//! Display device driver trait and supporting types.
+
 use super::Scheme;
 use crate::DeviceResult;
 
+/// An RGB color value (24-bit, stored in a `u32`).
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RgbColor(u32);
@@ -14,6 +17,7 @@ pub enum ColorFormat {
     ARGB8888,
 }
 
+/// A rectangle defined by position and size.
 #[derive(Debug)]
 pub struct Rectangle {
     pub x: u32,
@@ -22,10 +26,12 @@ pub struct Rectangle {
     pub height: u32,
 }
 
+/// A mutable view of the framebuffer memory.
 pub struct FrameBuffer<'a> {
     raw: &'a mut [u8],
 }
 
+/// Information about the display device.
 #[derive(Debug, Clone, Copy)]
 pub struct DisplayInfo {
     /// visible width
@@ -160,7 +166,9 @@ impl DisplayInfo {
     }
 }
 
+/// Trait for display device drivers.
 pub trait DisplayScheme: Scheme {
+    /// Returns display info.
     fn info(&self) -> DisplayInfo;
 
     /// Returns the framebuffer.

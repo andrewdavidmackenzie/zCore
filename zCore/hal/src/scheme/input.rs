@@ -1,10 +1,10 @@
+//! Input device driver trait and supporting types.
+
 use core::fmt;
 
 use super::{event::EventScheme, Scheme};
 
 // Linux input event type constants (from input-event-codes.h).
-// Only the constants needed by InputEventType are included here.
-// The full set is in drivers/src/input/input_event_codes.rs.
 const EV_SYN: u16 = 0x00;
 const EV_KEY: u16 = 0x01;
 const EV_REL: u16 = 0x02;
@@ -18,43 +18,70 @@ const EV_FF: u16 = 0x15;
 const EV_PWR: u16 = 0x16;
 const EV_FF_STATUS: u16 = 0x17;
 
-numeric_enum_macro::numeric_enum! {
-    #[repr(u16)]
-    #[derive(Clone, Copy, Debug)]
-    /// Linux input event codes.
-    ///
-    /// Reference: <https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/input-event-codes.h>
-    pub enum InputEventType {
-        /// Used as markers to separate events. Events may be separated in time or in space,
-        /// such as with the multitouch protocol.
-        Syn = EV_SYN,
-        /// Used to describe state changes of keyboards, buttons, or other key-like devices.
-        Key = EV_KEY,
-        /// Used to describe relative axis value changes, e.g. moving the mouse 5 units
-        /// to the left.
-        RelAxis = EV_REL,
-        /// Used to describe absolute axis value changes, e.g. describing the coordinates
-        /// of a touch on a touchscreen.
-        AbsAxis = EV_ABS,
-        /// Used to describe miscellaneous input data that do not fit into other types.
-        Misc = EV_MSC,
-        /// Used to describe binary state input switches.
-        Switch = EV_SW,
-        /// Used to turn LEDs on devices on and off.
-        Led = EV_LED,
-        /// Used to output sound to devices.
-        Sound = EV_SND,
-        /// Used for autorepeating devices.
-        Repeat = EV_REP,
-        /// Used to send force feedback commands to an input device.
-        FeedBack = EV_FF,
-        /// A special type for power button and switch input.
-        Power = EV_PWR,
-        /// Used to receive force feedback device status.
-        FeedBackStatus = EV_FF_STATUS,
+/// Linux input event codes.
+///
+/// Reference: <https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/input-event-codes.h>
+#[repr(u16)]
+#[derive(Clone, Copy, Debug)]
+pub enum InputEventType {
+    /// Used as markers to separate events. Events may be separated in time or in space,
+    /// such as with the multitouch protocol.
+    Syn = EV_SYN,
+    /// Used to describe state changes of keyboards, buttons, or other key-like devices.
+    Key = EV_KEY,
+    /// Used to describe relative axis value changes, e.g. moving the mouse 5 units
+    /// to the left.
+    RelAxis = EV_REL,
+    /// Used to describe absolute axis value changes, e.g. describing the coordinates
+    /// of a touch on a touchscreen.
+    AbsAxis = EV_ABS,
+    /// Used to describe miscellaneous input data that do not fit into other types.
+    Misc = EV_MSC,
+    /// Used to describe binary state input switches.
+    Switch = EV_SW,
+    /// Used to turn LEDs on devices on and off.
+    Led = EV_LED,
+    /// Used to output sound to devices.
+    Sound = EV_SND,
+    /// Used for autorepeating devices.
+    Repeat = EV_REP,
+    /// Used to send force feedback commands to an input device.
+    FeedBack = EV_FF,
+    /// A special type for power button and switch input.
+    Power = EV_PWR,
+    /// Used to receive force feedback device status.
+    FeedBackStatus = EV_FF_STATUS,
+}
+
+impl TryFrom<u16> for InputEventType {
+    type Error = u16;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value {
+            EV_SYN => Ok(Self::Syn),
+            EV_KEY => Ok(Self::Key),
+            EV_REL => Ok(Self::RelAxis),
+            EV_ABS => Ok(Self::AbsAxis),
+            EV_MSC => Ok(Self::Misc),
+            EV_SW => Ok(Self::Switch),
+            EV_LED => Ok(Self::Led),
+            EV_SND => Ok(Self::Sound),
+            EV_REP => Ok(Self::Repeat),
+            EV_FF => Ok(Self::FeedBack),
+            EV_PWR => Ok(Self::Power),
+            EV_FF_STATUS => Ok(Self::FeedBackStatus),
+            other => Err(other),
+        }
     }
 }
 
+impl From<InputEventType> for u16 {
+    fn from(val: InputEventType) -> u16 {
+        val as u16
+    }
+}
+
+/// An input event.
 #[derive(Clone, Copy, Debug)]
 pub struct InputEvent {
     pub event_type: InputEventType,
@@ -62,6 +89,7 @@ pub struct InputEvent {
     pub value: i32,
 }
 
+/// The kind of input capability to query.
 #[repr(u16)]
 #[derive(Clone, Copy, Debug)]
 pub enum CapabilityType {
@@ -77,8 +105,8 @@ pub enum CapabilityType {
     InputProp,
 }
 
+/// A bitmap describing input capabilities (up to 1024 bits).
 pub struct InputCapability {
-    /// bitmap to support up to 1024 bits.
     bitmap: [u64; 16],
 }
 
@@ -140,6 +168,7 @@ impl fmt::Debug for InputCapability {
     }
 }
 
+/// Trait for input device drivers.
 pub trait InputScheme: Scheme + EventScheme<Event = InputEvent> {
     /// Returns the capability bitmap of the specific kind of event.
     fn capability(&self, cap_type: CapabilityType) -> InputCapability;

@@ -1,16 +1,12 @@
-use crate::utils::EventHandler;
+//! Event scheme macro.
+//!
+//! The [`EventScheme`] trait and [`EventHandler`] type alias are defined
+//! in the `hal` crate. This module provides the `impl_event_scheme!`
+//! macro which generates implementations that delegate to an
+//! `EventListener` field.
 
-pub trait EventScheme {
-    type Event;
-
-    /// Trigger the event manually and call its handler immediately.
-    fn trigger(&self, event: Self::Event);
-
-    /// Subscribe events, call the `handler` when an input event occurs.
-    /// If `once` is ture, unsubscribe automatically after handling.
-    fn subscribe(&self, handler: EventHandler<Self::Event>, once: bool);
-}
-
+/// Generate an [`EventScheme`](hal::EventScheme) implementation that delegates
+/// to a `self.listener` field of type [`EventListener`](crate::utils::EventListener).
 macro_rules! impl_event_scheme {
     ($struct:ident $(, $event_ty:ty)?) => {
         impl_event_scheme!(@impl_base $struct $(, $event_ty)?);
@@ -23,17 +19,17 @@ macro_rules! impl_event_scheme {
     };
 
     (@impl_base $struct:ident $(, $event_ty:ty)?) => {
-        impl $crate::scheme::EventScheme for $struct {
+        impl hal::EventScheme for $struct {
             impl_event_scheme!(@impl_body $(, $event_ty)?);
         }
     };
     (@impl_base $struct:ident<'_> $(, $event_ty:ty)?) => {
-        impl $crate::scheme::EventScheme for $struct<'_> {
+        impl hal::EventScheme for $struct<'_> {
             impl_event_scheme!(@impl_body $(, $event_ty)?);
         }
     };
     (@impl_base $struct:ident < $($types:ident),* > $(where $($preds:tt)+)? $(, $event_ty:ty)?) => {
-        impl < $($types),* > $crate::scheme::EventScheme for $struct < $($types),* >
+        impl < $($types),* > hal::EventScheme for $struct < $($types),* >
             $(where $($preds)+)?
         {
             impl_event_scheme!(@impl_body $(, $event_ty)?);
@@ -55,7 +51,7 @@ macro_rules! impl_event_scheme {
         }
 
         #[inline]
-        fn subscribe(&self, handler: $crate::utils::EventHandler<Self::Event>, once: bool) {
+        fn subscribe(&self, handler: hal::scheme::event::EventHandler<Self::Event>, once: bool) {
             self.listener.subscribe(handler, once);
         }
     };

@@ -1,53 +1,22 @@
-//! The [`Scheme`] describe some functions must be implemented for different type of devices,
-//! there are many [`Scheme`] traits in this mod.
+//! Driver trait definitions.
 //!
-//! If you need to develop a new device, just implement the corresponding trait.
-//!
-//! The [`Scheme`] trait is suitable for any architecture.
-
-pub(super) mod block;
-pub(super) mod display;
-pub(super) mod input;
-pub(super) mod irq;
-pub(super) mod uart;
+//! Traits are defined in the `hal` crate and re-exported here.
+//! The `impl_event_scheme!` macro and `EventListener` remain here
+//! because they depend on the `lock` crate.
 
 #[macro_use]
 pub(super) mod event;
 pub(super) use impl_event_scheme;
 
-use alloc::sync::Arc;
-
-pub use block::BlockScheme;
-pub use display::DisplayScheme;
-pub use event::EventScheme;
-pub use input::InputScheme;
-pub use irq::IrqScheme;
-pub use uart::UartScheme;
-
-/// Common of all device drivers.
-///
-/// Every device must says its name and handles interrupts.
-pub trait Scheme: SchemeUpcast + Send + Sync {
-    /// Returns name of the driver.
-    fn name(&self) -> &str;
-
-    /// Handles an interrupt.
-    fn handle_irq(&self, _irq_num: usize) {}
-}
-
-/// Used to convert a concrete type pointer to a general [`Scheme`] pointer.
-pub trait SchemeUpcast {
-    /// Performs the conversion.
-    fn upcast<'a>(self: Arc<Self>) -> Arc<dyn Scheme + 'a>
-    where
-        Self: 'a;
-}
-
-impl<T: Scheme + Sized> SchemeUpcast for T {
-    fn upcast<'a>(self: Arc<Self>) -> Arc<dyn Scheme + 'a>
-    where
-        Self: 'a,
-    {
-        self
-    }
-}
+// Re-export all traits and types from the hal crate.
+pub use hal::scheme::block::BlockScheme;
+pub use hal::scheme::display::{
+    self, ColorFormat, DisplayInfo, DisplayScheme, FrameBuffer, Rectangle, RgbColor,
+};
+pub use hal::scheme::event::{EventHandler, EventScheme};
+pub use hal::scheme::input::{
+    self, CapabilityType, InputCapability, InputEvent, InputEventType, InputScheme,
+};
+pub use hal::scheme::irq::{self, IrqHandler, IrqPolarity, IrqScheme, IrqTriggerMode};
+pub use hal::scheme::uart::UartScheme;
+pub use hal::scheme::{Scheme, SchemeUpcast};

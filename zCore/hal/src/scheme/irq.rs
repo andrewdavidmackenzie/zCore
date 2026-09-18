@@ -1,3 +1,5 @@
+//! Interrupt controller driver trait.
+
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::ops::Range;
@@ -5,21 +7,28 @@ use core::ops::Range;
 use super::Scheme;
 use crate::DeviceResult;
 
-/// A type alias for
+/// A type alias for interrupt handler closures.
 pub type IrqHandler = Box<dyn Fn() + Send + Sync>;
 
+/// Interrupt trigger mode.
 #[derive(Debug)]
 pub enum IrqTriggerMode {
+    /// Edge-triggered.
     Edge,
+    /// Level-triggered.
     Level,
 }
 
+/// Interrupt polarity.
 #[derive(Debug)]
 pub enum IrqPolarity {
+    /// Active-high.
     ActiveHigh,
+    /// Active-low.
     ActiveLow,
 }
 
+/// Trait for interrupt controller drivers.
 pub trait IrqScheme: Scheme {
     /// Is a valid IRQ number.
     fn is_valid_irq(&self, irq_num: usize) -> bool;
