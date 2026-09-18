@@ -907,6 +907,10 @@ dependencies = [
 [[package]]
 name = "hal"
 version = "0.1.0"
+dependencies = [
+ "bitflags 1.3.2",
+ "log",
+]
 
 [[package]]
 name = "hash32"
@@ -1092,7 +1096,6 @@ dependencies = [
  "log",
  "naive-timer",
  "nix",
- "numeric-enum-macro",
  "raw-cpuid 11.6.0",
  "riscv 0.9.0",
  "sbi-rt",

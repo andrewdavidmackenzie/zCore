@@ -7,5 +7,6 @@ description = "HAL abstraction layer -- trait definitions and common types"
 [features]
 default = []
 
-# No external dependencies -- only uses core and alloc.
 [dependencies]
+bitflags = "1.3"
+log = "0.4"

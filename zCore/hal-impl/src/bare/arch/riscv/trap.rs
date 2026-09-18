@@ -1,4 +1,4 @@
-use crate::context::TrapReason;
+use crate::context::{trap_reason_from, TrapReason};
 use crate::thread::{get_current_thread, set_current_thread};
 use crate::IpiReason;
 use alloc::vec::Vec;
@@ -33,13 +33,13 @@ pub(super) fn super_soft() {
 #[no_mangle]
 pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
     let scause = scause::read();
-    trace!("kernel trap happened: {:?}", TrapReason::from(scause));
+    trace!("kernel trap happened: {:?}", trap_reason_from(scause));
     trace!(
         "sepc = 0x{:x} pgtoken = 0x{:x}",
         tf.sepc,
         crate::vm::current_vmtoken()
     );
-    match TrapReason::from(scause) {
+    match trap_reason_from(scause) {
         TrapReason::SoftwareBreakpoint => breakpoint(&mut tf.sepc),
         TrapReason::PageFault(vaddr, flags) => crate::KHANDLER.handle_page_fault(vaddr, flags),
         TrapReason::Interrupt(vector) => {

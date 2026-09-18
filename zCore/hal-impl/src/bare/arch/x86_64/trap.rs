@@ -1,4 +1,4 @@
-use crate::context::TrapReason;
+use crate::context::{trap_reason_from, TrapReason};
 use trapframe::TrapFrame;
 
 pub(super) const X86_INT_LOCAL_APIC_BASE: usize = 0xf0;
@@ -35,7 +35,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
         super::cpu::cpu_id()
     );
 
-    match TrapReason::from(tf.trap_num, tf.error_code) {
+    match trap_reason_from(tf.trap_num, tf.error_code) {
         TrapReason::HardwareBreakpoint | TrapReason::SoftwareBreakpoint => breakpoint(),
         TrapReason::PageFault(vaddr, flags) => crate::KHANDLER.handle_page_fault(vaddr, flags),
         TrapReason::Interrupt(vector) => {

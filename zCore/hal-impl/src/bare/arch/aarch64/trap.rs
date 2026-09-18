@@ -1,4 +1,4 @@
-use crate::context::TrapReason;
+use crate::context::{trap_reason_from, TrapReason};
 use crate::{Info, Kind, Source};
 use cortex_a::registers::FAR_EL1;
 use kernel_drivers::irq::gic_400::get_irq_num;
@@ -47,7 +47,7 @@ fn breakpoint(elr: &mut usize) {
 }
 
 fn sync_handler(tf: &mut TrapFrame) {
-    match TrapReason::from(tf.trap_num) {
+    match trap_reason_from(tf.trap_num) {
         TrapReason::PageFault(vaddr, flags) => crate::KHANDLER.handle_page_fault(vaddr, flags),
         TrapReason::SoftwareBreakpoint => breakpoint(&mut tf.elr),
         other => error!(
