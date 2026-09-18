@@ -45,11 +45,13 @@ impl LinuxElfLoader {
         // instead of processing it as a Mach trap. Unlike svc, brk
         // does NOT corrupt any registers (XNU's syscall return path
         // overwrites x0/x1 for svc, but brk bypasses it entirely).
-        #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
-        let data = {
+        // On hosted aarch64 macOS, patch svc #0 → brk #1 in executable
+        // segments so the host kernel doesn't intercept supervisor calls.
+        #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+        let data = if kernel_hal::platform::is_hosted() {
             use xmas_elf::program::Type as PhType;
             const SVC_0: [u8; 4] = 0xd4000001u32.to_le_bytes();
-            const BRK_1: [u8; 4] = 0xd4200020u32.to_le_bytes(); // brk #1
+            const BRK_1: [u8; 4] = 0xd4200020u32.to_le_bytes();
             let pre_elf = ElfFile::new(data).map_err(|_| ZxError::INVALID_ARGS)?;
             let mut patched_data = data.to_vec();
             let mut total = 0usize;
@@ -74,8 +76,10 @@ impl LinuxElfLoader {
                 info!("Patched {} svc #0 -> brk #1 in executable segments", total);
             }
             patched_data
+        } else {
+            data.to_vec()
         };
-        #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
+        #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
         let data: &[u8] = &data;
 
         let elf = ElfFile::new(data).map_err(|_| ZxError::INVALID_ARGS)?;
@@ -131,11 +135,10 @@ impl LinuxElfLoader {
                 }
             }
         } else {
-            // On libos with TEXTREL, apply relocations ourselves since
-            // rcrt1 can't write to RX pages on W^X-enforcing hosts.
-            // On other platforms, skip and let rcrt1 handle it.
-            #[cfg(feature = "libos")]
-            {
+            // On hosted platforms with TEXTREL, apply relocations ourselves
+            // since rcrt1 can't write to RX pages on W^X-enforcing hosts.
+            // On bare-metal, skip and let rcrt1 handle it.
+            if kernel_hal::platform::needs_kernel_textrel() {
                 if elf.has_textrel() {
                     info!(
                         "PIE binary with TEXTREL: applying relocations in loader (W^X workaround)"
@@ -176,9 +179,7 @@ impl LinuxElfLoader {
                 } else {
                     info!("PIE binary: skipping relocator (rcrt1 will self-relocate)");
                 }
-            }
-            #[cfg(not(feature = "libos"))]
-            {
+            } else {
                 info!("PIE binary: skipping relocator (rcrt1 will self-relocate)");
             }
         }
@@ -254,15 +255,14 @@ impl LinuxElfLoader {
         stack_vmo.write(self.stack_pages * PAGE_SIZE - init_stack.len(), &init_stack)?;
         sp -= init_stack.len();
 
-        // On 16K hosts, the stack pages are MAP_ANON copies that were
-        // populated (with zeros) at map time. The VMO write above
-        // updated PMEM but not the anonymous user pages. Copy the
-        // stack data directly to the user-visible pages.
-        #[cfg(all(feature = "libos", target_arch = "aarch64", target_os = "macos"))]
-        unsafe {
-            let dst = sp as *mut u8;
-            let src = init_stack.as_ref().as_ptr();
-            core::ptr::copy_nonoverlapping(src, dst, init_stack.len());
+        // On hosted platforms where user pages are disconnected from
+        // the VMO backing store, copy stack data directly to user pages.
+        if kernel_hal::platform::needs_user_write_flush() {
+            unsafe {
+                let dst = sp as *mut u8;
+                let src = init_stack.as_ref().as_ptr();
+                core::ptr::copy_nonoverlapping(src, dst, init_stack.len());
+            }
         }
 
         debug!(
