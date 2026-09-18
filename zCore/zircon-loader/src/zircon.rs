@@ -364,7 +364,7 @@ async fn handler_user_trap(
         TrapReason::SoftwareBreakpoint => Err(ExceptionType::SoftwareBreakpoint),
         TrapReason::HardwareBreakpoint => Err(ExceptionType::HardwareBreakpoint),
         TrapReason::UnalignedAccess => Err(ExceptionType::UnalignedAccess),
-        TrapReason::GernelFault(_) => Err(ExceptionType::General),
+        TrapReason::GeneralFault(_) => Err(ExceptionType::General),
         _ => unreachable!(),
     }
 }

@@ -21,5 +21,5 @@ pub enum TrapReason {
     SoftwareBreakpoint,
     HardwareBreakpoint,
     UnalignedAccess,
-    GernelFault(usize),
+    GeneralFault(usize),
 }
