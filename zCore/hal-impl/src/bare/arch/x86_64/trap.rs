@@ -1,5 +1,56 @@
-use crate::context::{trap_reason_from, TrapReason};
+use crate::MMUFlags;
+use hal::TrapReason;
 use trapframe::TrapFrame;
+
+/// Get [`TrapReason`] from `trap_num` and `error_code` in trap frame.
+pub fn trap_reason_from(trap_num: usize, error_code: usize) -> TrapReason {
+    use x86::irq::*;
+    const X86_INT_BASE: u8 = 0x20;
+    const X86_INT_MAX: u8 = 0xff;
+
+    if trap_num == 0x100 {
+        return TrapReason::Syscall;
+    }
+    match trap_num as u8 {
+        DEBUG_VECTOR => TrapReason::HardwareBreakpoint,
+        BREAKPOINT_VECTOR => TrapReason::SoftwareBreakpoint,
+        INVALID_OPCODE_VECTOR => TrapReason::UndefinedInstruction,
+        ALIGNMENT_CHECK_VECTOR => TrapReason::UnalignedAccess,
+        PAGE_FAULT_VECTOR => {
+            bitflags::bitflags! {
+                struct PageFaultErrorCode: u32 {
+                    const PRESENT =     1 << 0;
+                    const WRITE =       1 << 1;
+                    const USER =        1 << 2;
+                    const RESERVED =    1 << 3;
+                    const INST =        1 << 4;
+                }
+            }
+            let fault_vaddr = x86_64::registers::control::Cr2::read()
+                .expect("invalid CR2")
+                .as_u64() as _;
+            let code = PageFaultErrorCode::from_bits_truncate(error_code as u32);
+            let mut flags = MMUFlags::empty();
+            if code.contains(PageFaultErrorCode::WRITE) {
+                flags |= MMUFlags::WRITE
+            } else {
+                flags |= MMUFlags::READ
+            }
+            if code.contains(PageFaultErrorCode::USER) {
+                flags |= MMUFlags::USER
+            }
+            if code.contains(PageFaultErrorCode::INST) {
+                flags |= MMUFlags::EXECUTE
+            }
+            if code.contains(PageFaultErrorCode::RESERVED) {
+                error!("page table entry has reserved bits set!");
+            }
+            TrapReason::PageFault(fault_vaddr, flags)
+        }
+        vec @ X86_INT_BASE..=X86_INT_MAX => TrapReason::Interrupt(vec as usize),
+        _ => TrapReason::GeneralFault(trap_num),
+    }
+}
 
 pub(super) const X86_INT_LOCAL_APIC_BASE: usize = 0xf0;
 pub(super) const _X86_INT_APIC_SPURIOUS: usize = X86_INT_LOCAL_APIC_BASE;

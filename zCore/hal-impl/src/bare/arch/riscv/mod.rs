@@ -1,5 +1,5 @@
 mod drivers;
-mod trap;
+pub(crate) mod trap;
 
 pub mod config;
 pub mod cpu;
