@@ -48,7 +48,54 @@ impl super::LinuxRootfs {
                     .env("PATH", path_with_musl_gcc)
                     .invoke();
             }
-            Arch::X86_64 | Arch::Aarch64 => todo!(),
+            Arch::Aarch64 => {
+                let path_with_musl_gcc = join_path_env(&[musl.join("bin")]);
+                println!("Configuring ffmpeg for aarch64, please wait...");
+                Ext::new("./configure")
+                    .current_dir(&build)
+                    .arg("--enable-cross-compile")
+                    .arg("--cross-prefix=aarch64-linux-musl-")
+                    .arg("--arch=aarch64")
+                    .arg("--target-os=linux")
+                    .arg("--enable-static")
+                    .arg("--enable-shared")
+                    .arg("--disable-doc")
+                    .arg(format!(
+                        "--prefix={}",
+                        build.canonicalize().unwrap().join("install").display(),
+                    ))
+                    .env("PATH", &path_with_musl_gcc)
+                    .invoke();
+                Make::install()
+                    .current_dir(&build)
+                    .j(num_cpus::get().min(8))
+                    .env("PATH", path_with_musl_gcc)
+                    .invoke();
+            }
+            Arch::X86_64 => {
+                let path_with_musl_gcc = join_path_env(&[musl.join("bin")]);
+                println!("Configuring ffmpeg for x86_64, please wait...");
+                Ext::new("./configure")
+                    .current_dir(&build)
+                    .arg("--enable-cross-compile")
+                    .arg("--cross-prefix=x86_64-linux-musl-")
+                    .arg("--arch=x86_64")
+                    .arg("--target-os=linux")
+                    .arg("--enable-static")
+                    .arg("--enable-shared")
+                    .arg("--disable-doc")
+                    .arg(format!(
+                        "--prefix={}",
+                        build.canonicalize().unwrap().join("install").display(),
+                    ))
+                    .env("PATH", &path_with_musl_gcc)
+                    .invoke();
+                Make::install()
+                    .current_dir(&build)
+                    .j(num_cpus::get().min(8))
+                    .env("PATH", path_with_musl_gcc)
+                    .invoke();
+            }
         }
         // Copy libraries
         self.put_libs(musl, build.join("install"));
@@ -122,35 +169,44 @@ impl super::LinuxRootfs {
 
     /// Generates a cmake toolchain file for the opencv build.
     fn opencv_cmake(&self, ffmpeg: impl AsRef<Path>) -> String {
-        // cmake is tricky
-        if !matches!(self.0, Arch::Riscv64) {
-            todo!();
-        }
-        const HEAD: &str = "\
-set(CMAKE_SYSTEM_NAME      \"Linux\")
-set(CMAKE_SYSTEM_PROCESSOR \"riscv64\")
+        let (processor, compiler_prefix, arch_flags) = match self.0 {
+            Arch::Riscv64 => ("riscv64", "riscv64-linux-musl-", "-march=rv64gc"),
+            Arch::Aarch64 => ("aarch64", "aarch64-linux-musl-", ""),
+            Arch::X86_64 => ("x86_64", "x86_64-linux-musl-", ""),
+        };
 
-set(CMAKE_C_COMPILER   riscv64-linux-musl-gcc)
-set(CMAKE_CXX_COMPILER riscv64-linux-musl-g++)
+        let mut head = format!(
+            "\
+set(CMAKE_SYSTEM_NAME      \"Linux\")
+set(CMAKE_SYSTEM_PROCESSOR \"{processor}\")
+
+set(CMAKE_C_COMPILER   {compiler_prefix}gcc)
+set(CMAKE_CXX_COMPILER {compiler_prefix}g++)
 
 set(CMAKE_C_FLAGS   \"\" CACHE STRING \"\")
-set(CMAKE_CXX_FLAGS \"\" CACHE STRING \"\")
+set(CMAKE_CXX_FLAGS \"\" CACHE STRING \"\")"
+        );
 
-set(CMAKE_C_FLAGS   \"-march=rv64gc ${CMAKE_C_FLAGS}   ${CMAKE_PASS_TEST_FLAGS}\")
-set(CMAKE_CXX_FLAGS \"-march=rv64gc ${CMAKE_CXX_FLAGS} ${CMAKE_PASS_TEST_FLAGS}\")";
+        if !arch_flags.is_empty() {
+            head.push_str(&format!(
+                "\n\n\
+set(CMAKE_C_FLAGS   \"{arch_flags} ${{CMAKE_C_FLAGS}}   ${{CMAKE_PASS_TEST_FLAGS}}\")
+set(CMAKE_CXX_FLAGS \"{arch_flags} ${{CMAKE_CXX_FLAGS}} ${{CMAKE_PASS_TEST_FLAGS}}\")"
+            ));
+        }
 
         let ffmpeg = ffmpeg.as_ref();
         if ffmpeg.is_dir() {
             format!(
                 "\
-{HEAD}
+{head}
 
 set(CMAKE_LD_FFMPEG_FLAGS  \"-Wl,-rpath-link,{}\")
 set(CMAKE_EXE_LINKER_FLAGS \"${{CMAKE_EXE_LINKER_FLAGS}} ${{CMAKE_LD_FFMPEG_FLAGS}}\")",
                 ffmpeg.canonicalize().unwrap().display()
             )
         } else {
-            HEAD.into()
+            head
         }
     }
 }
