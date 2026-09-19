@@ -5,7 +5,7 @@
 
 default-personality = "linux"
 arch = "aarch64"
-linker-script = "zCore/kernel/src/platform/aarch64/linker.ld"
+linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker.ld"
 drivers = ["pl011-uart", "gic-400", "virtio-blk"]
 
 [qemu]

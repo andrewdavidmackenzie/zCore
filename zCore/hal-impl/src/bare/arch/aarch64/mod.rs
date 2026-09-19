@@ -370,3 +370,4 @@ pub const fn timer_interrupt_vector() -> usize {
 pub fn timer_init() {
     timer::init();
 }
+pub mod platform;

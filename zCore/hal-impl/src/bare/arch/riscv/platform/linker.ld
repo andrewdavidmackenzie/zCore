@@ -1,6 +1,6 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
-INCLUDE zCore/kernel/src/platform/riscv/kernel-vars.ld
+INCLUDE zCore/hal-impl/src/bare/arch/riscv/platform/kernel-vars.ld
 SECTIONS
 {
     . = BASE_ADDRESS;

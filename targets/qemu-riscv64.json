@@ -16,7 +16,7 @@
   "panic-strategy": "abort",
   "pre-link-args": {
     "ld.lld": [
-      "-TzCore/kernel/src/platform/riscv/linker.ld"
+      "-TzCore/hal-impl/src/bare/arch/riscv/platform/linker.ld"
     ]
   },
   "relocation-model": "static",

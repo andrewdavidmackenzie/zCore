@@ -75,3 +75,4 @@ pub fn secondary_init() {
     );
     plic.init_hart();
 }
+pub mod platform;

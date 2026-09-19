@@ -15,20 +15,16 @@ cfg_if! {
             use rcore_fs::dev::Device;
 
             let device: Arc<dyn Device> = {
-                #[cfg(feature = "mock-disk")]{
-                    let block = linux_object::fs::mock_block();
-                    Arc::new(block)
-                }
-                #[cfg(not(feature = "mock-disk"))] {
-                    use linux_object::fs::rcore_fs_wrapper::*;
-                    if let Some(initrd) = init_ram_disk() {
-                        Arc::new(MemBuf::new(initrd))
-                    } else if let Some(block) = hal_impl::device_registry::all_block().first() {
-                        Arc::new(BlockCache::new(Block::new(block), 0x100))
-                    } else {
-                        panic!("No rootfs available: no initrd and no block device. \
-                                On RPi 400, pass rootfs via -initrd or use Zircon mode.");
-                    }
+                use linux_object::fs::rcore_fs_wrapper::*;
+                if let Some(initrd) = init_ram_disk() {
+                    Arc::new(MemBuf::new(initrd))
+                } else if let Some(block) = hal_impl::device_registry::all_block().first() {
+                    Arc::new(BlockCache::new(Block::new(block), 0x100))
+                } else {
+                    panic!(
+                        "No rootfs available: no initrd and no block device. \
+                         On RPi 400, pass rootfs via -initrd or use Zircon mode."
+                    );
                 }
             };
             info!("Opening the rootfs...");
@@ -102,6 +98,17 @@ cfg_if! {
             }
 
             None
+        }
+        /// Try to open a Zircon rootfs (works for both libos and bare-metal).
+        pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
+            #[cfg(feature = "libos")]
+            {
+                try_libos_rootfs()
+            }
+            #[cfg(not(feature = "libos"))]
+            {
+                try_rootfs()
+            }
         }
     }
 }

@@ -1,9 +1,10 @@
 global_asm!(include_str!("boot.asm"));
 
+use crate::imp::arch::sbi::{hart_start, send_ipi, SBI_SUCCESS};
+use crate::imp::kernel_entry;
 use core::arch::{asm, global_asm};
 use core::str::FromStr;
-use hal_impl::arch::sbi::{hart_start, send_ipi, SBI_SUCCESS};
-use hal_impl::KernelConfig;
+use hal::KernelConfig;
 
 #[no_mangle]
 pub static PHY_MEM_OFS: usize = consts::KERNEL_BASE - consts::PHYS_MEMORY_BASE;
@@ -79,13 +80,13 @@ pub extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> 
     }
 
     let config = KernelConfig {
-        cmdline: env!("ZCORE_CMDLINE"),
+        cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=warn"),
         phys_to_virt_offset: PHY_MEM_OFS,
         dtb_paddr: device_tree_paddr,
         dtb_size: 2 * 1024 * 1024,
         ..Default::default()
     };
-    crate::primary_main(config);
+    unsafe { kernel_entry::primary_core_init(config) }
     unreachable!()
 }
 
@@ -99,5 +100,5 @@ pub extern "C" fn secondary_rust_main(hartid: usize) -> ! {
         sstatus |= 1 << 18; // set SUM=1
         asm!("csrw sstatus, {0}", in(reg) sstatus);
     };
-    crate::secondary_main();
+    unsafe { kernel_entry::secondary_core_init() };
 }

@@ -1,71 +1,61 @@
-use alloc::{collections::BTreeMap, string::String, sync::Arc};
+use alloc::{string::String, sync::Arc};
 use zircon_object::{object::KernelObject, task::Process};
 
 #[derive(Debug)]
 pub struct BootOptions {
     #[allow(dead_code)]
     pub cmdline: String,
-    /// Root process path. Used by Linux (always) and Zircon bare-metal
-    /// (rootfs-based boot). Not needed for Zircon libos (uses ZBI).
-    #[cfg(any(feature = "linux", all(feature = "zircon", not(feature = "libos"))))]
+    /// Root process path (e.g. "/bin/busybox?sh" or "/bin/hello").
     pub root_proc: String,
 }
 
-#[allow(dead_code)]
-fn parse_cmdline(cmdline: &str) -> BTreeMap<&str, &str> {
-    let mut options = BTreeMap::new();
-    // Split on spaces (standard kernel cmdline format).
-    for token in cmdline.split_whitespace() {
-        let token = token.trim();
-        if token.is_empty() {
-            continue;
-        }
-        // parse "key=value"
-        let mut iter = token.splitn(2, '=');
-        if let Some(key) = iter.next() {
-            if let Some(value) = iter.next() {
-                options.insert(key.trim(), value.trim());
-            }
-        }
-    }
-    options
+pub fn boot_options() -> BootOptions {
+    use alloc::string::ToString;
+    let cmdline = hal_impl::boot::cmdline();
+    let root_proc = parse_cmdline_value(&cmdline, "ROOTPROC")
+        .unwrap_or(if cfg!(feature = "linux") {
+            "/bin/busybox?sh"
+        } else {
+            "/bin/hello"
+        })
+        .to_string();
+    BootOptions { cmdline, root_proc }
 }
 
-pub fn boot_options() -> BootOptions {
-    cfg_if! {
-        if #[cfg(feature = "libos")] {
-            let args = std::env::args().collect::<Vec<_>>();
-            if args.len() < 2 {
-                #[cfg(feature = "linux")]
-                println!("Usage: {} PROGRAM", args[0]);
-                #[cfg(feature = "zircon")]
-                println!("Usage: {} ZBI_FILE [CMDLINE]", args[0]);
-                std::process::exit(-1);
-            }
-
-            let cmdline = if cfg!(feature = "zircon") {
-                args.get(2).cloned().unwrap_or_default()
-            } else {
-                String::new()
-            };
-            BootOptions {
-                cmdline,
-                #[cfg(any(feature = "linux", all(feature = "zircon", not(feature = "libos"))))]
-                root_proc: args[1..].join("?"),
-            }
-        } else {
-            use alloc::string::ToString;
-            let cmdline = hal_impl::boot::cmdline();
-            let options = parse_cmdline(&cmdline);
-            BootOptions {
-                cmdline: cmdline.clone(),
-                #[cfg(any(feature = "linux", all(feature = "zircon", not(feature = "libos"))))]
-                root_proc: options.get("ROOTPROC").unwrap_or(
-                    if cfg!(feature = "linux") { &"/bin/busybox?sh" } else { &"/bin/hello" }
-                ).to_string(),
+/// Extract a value from a "KEY=VALUE KEY2=VALUE2" cmdline string.
+fn parse_cmdline_value<'a>(cmdline: &'a str, key: &str) -> Option<&'a str> {
+    for token in cmdline.split_whitespace() {
+        let mut iter = token.splitn(2, '=');
+        if let (Some(k), Some(v)) = (iter.next(), iter.next()) {
+            if k.trim() == key {
+                return Some(v.trim());
             }
         }
     }
+    None
+}
+
+/// Wait for the init process to exit, then terminate.
+pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
+    let exit_code = if let Some(proc) = proc {
+        let future = async move {
+            use zircon_object::object::Signal;
+            let object: Arc<dyn KernelObject> = proc.clone();
+            let signal = if cfg!(any(feature = "linux", feature = "baremetal-test")) {
+                Signal::PROCESS_TERMINATED
+            } else {
+                Signal::USER_SIGNAL_0
+            };
+            object.wait_signal(signal).await;
+            check_exit_code(proc)
+        };
+        hal_impl::run_executor(future)
+    } else {
+        warn!("No process to run!");
+        0
+    };
+    info!("exiting with code {}", exit_code);
+    hal_impl::cpu::reset()
 }
 
 fn check_exit_code(proc: Arc<Process>) -> i32 {
@@ -86,84 +76,3 @@ fn check_exit_code(proc: Arc<Process>) -> i32 {
     }
     code as i32
 }
-
-#[cfg(feature = "libos")]
-pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
-    let exit_code = if let Some(proc) = proc {
-        let future = async move {
-            use zircon_object::object::Signal;
-            let object: Arc<dyn KernelObject> = proc.clone();
-            let signal = if cfg!(any(feature = "linux", feature = "baremetal-test")) {
-                Signal::PROCESS_TERMINATED
-            } else {
-                Signal::USER_SIGNAL_0
-            };
-            object.wait_signal(signal).await;
-            check_exit_code(proc)
-        };
-
-        // graphic mode removed (see #237)
-
-        async_std::task::block_on(future)
-    } else {
-        warn!("No process to run, exit!");
-        0
-    };
-    std::process::exit(exit_code);
-}
-
-#[cfg(not(feature = "libos"))]
-pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
-    hal_impl::timer::timer_enable();
-    info!("executor run!");
-
-    hal_impl::interrupt::intr_on();
-
-    loop {
-        let has_task = executor::run_until_idle();
-        if !has_task && cfg!(feature = "baremetal-test") {
-            proc.map(check_exit_code);
-            hal_impl::cpu::reset();
-        }
-        hal_impl::interrupt::wait_for_interrupt();
-    }
-}
-
-#[cfg(all(not(feature = "libos"), feature = "mock-disk"))]
-pub fn mock_disk() -> ! {
-    use crate::fs::init_ram_disk;
-    info!("mock core: {}", hal_impl::cpu::cpu_id());
-    if let Some(initrd) = init_ram_disk() {
-        linux_object::fs::mocking_block(initrd)
-    } else {
-        panic!("can't find disk image in memory")
-    }
-}
-
-// pub fn nvme_test(){
-//     use alloc::boxed::Box;
-//     let irq = hal_impl::device_registry::all_irq().find("riscv-plic").unwrap();
-//     let nvme = hal_impl::device_registry::all_block().find("nvme").unwrap();
-//     let irq_num = 33;
-//     let _r = irq.register_handler(irq_num, Box::new(move || nvme.handle_irq(irq_num)));
-
-//     let _r = irq.unmask(irq_num);
-
-//     let nvme_block = hal_impl::device_registry::all_block()
-//     .find("nvme")
-//     .unwrap();
-
-//     let buf1:&[u8] = &[1u8;512];
-//     let _r = nvme_block.write_block(0, &buf1);
-//     warn!("r {:?}", _r);
-//     let mut read_buf = [0u8; 512];
-//     let _r = nvme_block.read_block(0, &mut read_buf);
-//     warn!("read_buf: {:?}", read_buf);
-
-//     let buf2:&[u8] = &[2u8;512];
-//     let _r = nvme_block.write_block(1, &buf2);
-//     warn!("r {:?}", _r);
-//     let mut read_buf = [0u8; 512];
-//     let _r = nvme_block.read_block(1, &mut read_buf);
-//     warn!("read_buf: {:?}", read_buf);
-// }

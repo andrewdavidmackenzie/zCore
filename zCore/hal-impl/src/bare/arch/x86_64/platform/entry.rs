@@ -3,10 +3,12 @@
 // The bootloader handles UEFI/BIOS boot, page table setup, and
 // provides boot info to the kernel via bootloader_api::BootInfo.
 
+use crate::imp::kernel_entry;
+
+use crate::config::{FramebufferInfo, MemoryRegion, MemoryType};
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::info::{MemoryRegionKind, Optional};
-use hal_impl::config::{FramebufferInfo, MemoryRegion, MemoryType};
-use hal_impl::KernelConfig;
+use hal::KernelConfig;
 
 /// Maximum number of memory regions we can store.
 const MAX_MEMORY_REGIONS: usize = 256;
@@ -109,15 +111,15 @@ fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
             *core::ptr::addr_of!(MEMORY_REGION_COUNT),
         )
     };
-    hal_impl::config::set_x86_boot_data(
+    crate::config::set_x86_boot_data(
         framebuffer,
         0, // smbios
         memory_map,
-        Some(crate::secondary_main),
+        Some(ap_entry),
     );
 
     let config = KernelConfig {
-        cmdline: env!("ZCORE_CMDLINE"),
+        cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=warn"),
         initrd_start: match boot_info.ramdisk_addr {
             Optional::Some(addr) => addr,
             Optional::None => 0,
@@ -128,6 +130,10 @@ fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
         ..Default::default()
     };
 
-    crate::primary_main(config);
-    unreachable!()
+    unsafe { kernel_entry::primary_core_init(config) }
+}
+
+/// Application processor entry point wrapper for SMP boot.
+fn ap_entry() -> ! {
+    unsafe { kernel_entry::secondary_core_init() }
 }

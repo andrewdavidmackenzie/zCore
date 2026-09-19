@@ -15,7 +15,12 @@ cfg_if! {
 }
 
 pub mod boot;
+pub(crate) mod kernel_entry;
+pub mod lang;
 pub mod mem;
+pub mod memory;
+mod run_executor;
+pub use run_executor::run_executor;
 // net module removed: loopback/network features moved out of kernel (#237)
 pub mod thread;
 pub mod timer;

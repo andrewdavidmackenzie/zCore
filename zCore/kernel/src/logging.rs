@@ -1,4 +1,3 @@
-use core::fmt;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
 
 /// Initialize logging with the given log level filter.
@@ -20,21 +19,10 @@ pub fn parse_log_level(cmdline: &str) -> LevelFilter {
         .unwrap_or(LevelFilter::Warn)
 }
 
-#[inline]
-pub fn print(args: fmt::Arguments) {
-    hal_impl::console::console_write_fmt(args);
-}
-
-#[allow(dead_code)]
-#[inline]
-pub fn debug_print(args: fmt::Arguments) {
-    hal_impl::console::console_write_fmt(args);
-}
-
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => {
-        $crate::logging::print(core::format_args!($($arg)*));
+        hal_impl::console::console_write_fmt(core::format_args!($($arg)*));
     }
 }
 
@@ -42,24 +30,8 @@ macro_rules! print {
 macro_rules! println {
     () => ($crate::print!("\r\n"));
     ($($arg:tt)*) => {
-        $crate::logging::print(core::format_args!($($arg)*));
+        hal_impl::console::console_write_fmt(core::format_args!($($arg)*));
         $crate::print!("\r\n");
-    }
-}
-
-#[macro_export]
-macro_rules! debug_print {
-    ($($arg:tt)*) => {
-        $crate::logging::debug_print(core::format_args!($($arg)*));
-    }
-}
-
-#[macro_export]
-macro_rules! debug_println {
-    () => ($crate::print!("\r\n"));
-    ($($arg:tt)*) => {
-        $crate::logging::debug_print(core::format_args!($($arg)*));
-        $crate::debug_print!("\r\n");
     }
 }
 
@@ -124,7 +96,7 @@ impl Log for SimpleLogger {
             Level::Debug => ColorCode::Cyan,
             Level::Trace => ColorCode::BrightBlack,
         };
-        print(with_color!(
+        hal_impl::console::console_write_fmt(with_color!(
             ColorCode::White,
             "[{time} {level} {info} {data}\n",
             time = {
