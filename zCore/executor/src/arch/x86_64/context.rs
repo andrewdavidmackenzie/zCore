@@ -22,4 +22,14 @@ impl ContextData {
             ..ContextData::default()
         }
     }
+
+    /// Program counter.
+    pub fn pc(&self) -> usize {
+        self.rip
+    }
+
+    /// Page table base register (CR3).
+    pub fn pgbr(&self) -> usize {
+        self.cr3
+    }
 }

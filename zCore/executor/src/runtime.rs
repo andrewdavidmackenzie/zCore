@@ -6,7 +6,7 @@ use crate::{
 
 #[cfg(target_arch = "x86_64")]
 use crate::context::Context;
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+#[cfg(not(target_arch = "x86_64"))]
 use crate::context::ContextData as Context;
 
 use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
@@ -84,19 +84,15 @@ impl ExecutorRuntime {
         self.task_collection.remove_task(key)
     }
 
-    #[cfg(target_arch = "riscv64")]
     fn get_context(&self) -> usize {
-        &self.context as *const Context as usize
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn get_context(&self) -> usize {
-        self.context.get_context()
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn get_context(&self) -> usize {
-        &self.context as *const Context as usize
+        #[cfg(target_arch = "x86_64")]
+        {
+            self.context.get_context()
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            &self.context as *const Context as usize
+        }
     }
 }
 

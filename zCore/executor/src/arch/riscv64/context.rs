@@ -19,4 +19,19 @@ impl ContextData {
             ..ContextData::default()
         }
     }
+
+    /// Program counter (return address register).
+    pub fn pc(&self) -> usize {
+        self.ra
+    }
+
+    /// Stack pointer.
+    pub fn sp(&self) -> usize {
+        self.sp
+    }
+
+    /// Page table base register (SATP).
+    pub fn pgbr(&self) -> usize {
+        self.satp
+    }
 }

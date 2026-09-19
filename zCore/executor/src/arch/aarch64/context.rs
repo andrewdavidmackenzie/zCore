@@ -19,4 +19,19 @@ impl ContextData {
             ttbr0,
         }
     }
+
+    /// Program counter (link register).
+    pub fn pc(&self) -> usize {
+        self.lr
+    }
+
+    /// Stack pointer.
+    pub fn sp(&self) -> usize {
+        self.sp
+    }
+
+    /// Page table base register (TTBR0).
+    pub fn pgbr(&self) -> usize {
+        self.ttbr0
+    }
 }
