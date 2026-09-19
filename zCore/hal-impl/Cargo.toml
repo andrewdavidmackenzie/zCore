@@ -20,6 +20,7 @@ libos = [
   "drivers/libos",
 ]
 board-c910light = []
+board-fu740 = []
 board-raspi400 = []
 link-user-img = []
 # Enable extra page table flags for T-Head CPU with MAEE on
@@ -58,11 +59,18 @@ bitmap-allocator = { version = "0.4", optional = true }
 [target.'cfg(target_os = "none")'.dependencies]
 naive-timer = "0.2.0"
 executor = { path = "../executor" }
+# Frame/heap allocators (moved from kernel)
+customizable-buddy = "0.0.3"
+bitmap-allocator = "0.4"
+buddy_system_allocator = "0.8"
 
 # For riscv
 [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
 riscv = "0.9"
 sbi-rt = { version = "0.0.2", features = ["legacy"] }
+dtb-walker = "=0.2.0-alpha.3"
+r0 = "1.0"
+page-table = "0.0.6"
 
 # For x86_64
 [target.'cfg(target_arch = "x86_64")'.dependencies]
@@ -83,3 +91,4 @@ dtb-walker = "=0.2.0-alpha.3"
 raw-cpuid = "11"
 x2apic = "0.5"
 acpi = "4.1"
+bootloader_api = "0.11"

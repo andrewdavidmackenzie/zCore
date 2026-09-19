@@ -1,41 +1,15 @@
 use hal_impl::{KernelHandler, MMUFlags};
 use zircon_object::task::Thread;
 
-#[cfg(not(feature = "libos"))]
-use super::memory;
-
 pub struct ZcoreKernelHandler;
 
 impl KernelHandler for ZcoreKernelHandler {
-    fn frame_alloc(&self) -> Option<usize> {
-        #[cfg(not(feature = "libos"))]
-        {
-            memory::frame_alloc(1, 0)
-        }
-        #[cfg(feature = "libos")]
-        {
-            hal_impl::libos_frame::frame_alloc()
-        }
-    }
-
     fn frame_alloc_contiguous(&self, frame_count: usize, align_log2: usize) -> Option<usize> {
-        #[cfg(not(feature = "libos"))]
-        {
-            memory::frame_alloc(frame_count, align_log2)
-        }
-        #[cfg(feature = "libos")]
-        {
-            hal_impl::libos_frame::frame_alloc_contiguous(frame_count, align_log2)
-        }
+        hal_impl::memory::frame_alloc(frame_count, align_log2)
     }
 
     fn frame_dealloc(&self, paddr: usize) {
-        #[cfg(not(feature = "libos"))]
-        memory::frame_dealloc(paddr);
-        #[cfg(feature = "libos")]
-        {
-            hal_impl::libos_frame::frame_dealloc(paddr);
-        }
+        hal_impl::memory::frame_dealloc(paddr);
     }
 
     fn handle_page_fault(&self, fault_vaddr: usize, access_flags: MMUFlags) {

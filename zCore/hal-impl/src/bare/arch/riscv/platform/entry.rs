@@ -2,9 +2,10 @@ use super::{
     boot_page_table::BootPageTable,
     consts::{kernel_mem_info, MAX_HART_NUM, STACK_PAGES_PER_HART},
 };
+use crate::imp::kernel_entry;
 use core::arch::naked_asm;
 use dtb_walker::{Dtb, DtbObj, HeaderError::*, Property, Str, WalkOperation::*};
-use hal_impl::KernelConfig;
+use hal::KernelConfig;
 
 /// Kernel entry point.
 ///
@@ -61,7 +62,7 @@ extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> ! {
     }
     .unwrap();
     // Print boot information
-    println!(
+    log::info!(
         "
 boot page table launched, sstatus = {sstatus:#x}
 kernel (physical): {:016x}..{:016x}
@@ -80,22 +81,22 @@ device tree:       {device_tree_paddr:016x}..{:016x}
         &dtb,
         secondary_hart_start as *const () as usize - mem_info.offset(),
     );
-    // Transfer control
-    crate::primary_main(KernelConfig {
-        cmdline: env!("ZCORE_CMDLINE"),
-        phys_to_virt_offset: mem_info.offset(),
-        dtb_paddr: device_tree_paddr,
-        dtb_size: dtb.total_size() as _,
-        ..Default::default()
-    });
-    sbi_rt::system_reset(sbi_rt::Shutdown, sbi_rt::NoReason);
-    unreachable!()
+    // Transfer control to the kernel's primary_core_init
+    unsafe {
+        kernel_entry::primary_core_init(KernelConfig {
+            cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=warn"),
+            phys_to_virt_offset: mem_info.offset(),
+            dtb_paddr: device_tree_paddr,
+            dtb_size: dtb.total_size() as _,
+            ..Default::default()
+        })
+    }
 }
 
 /// Secondary hart boot.
 extern "C" fn secondary_rust_main() -> ! {
     let _ = unsafe { BOOT_PAGE_TABLE.launch() };
-    crate::secondary_main()
+    unsafe { kernel_entry::secondary_core_init() }
 }
 
 /// Set up the boot stack based on the hardware thread ID.
@@ -127,7 +128,7 @@ unsafe extern "C" fn select_stack(hartid: usize) {
 // Boot secondary harts
 fn boot_secondary_harts(boot_hartid: usize, dtb: &Dtb, start_addr: usize) {
     if sbi_rt::probe_extension(sbi_rt::Hsm).is_unavailable() {
-        println!("HSM SBI extension is not supported for current SEE.");
+        log::info!("HSM SBI extension is not supported for current SEE.");
         return;
     }
 
@@ -177,23 +178,23 @@ fn boot_secondary_harts(boot_hartid: usize, dtb: &Dtb, start_addr: usize) {
             if path.name().starts_with("cpu@") && status != Str::from("okay") =>
         {
             if let Some(id) = cpu.take() {
-                println!("hart{id} has status: {status}");
+                log::info!("hart{id} has status: {status}");
             }
             StepOut
         }
         DtbObj::Property(_) => StepOver,
     });
-    println!();
+    log::info!("");
 }
 
 fn hart_start(boot_hartid: usize, hartid: usize, start_addr: usize) {
     if hartid != boot_hartid {
-        println!("hart{hartid} is booting...");
+        log::info!("hart{hartid} is booting...");
         let ret = sbi_rt::hart_start(hartid, start_addr, 0);
         if ret.is_err() {
             panic!("start hart{hartid} failed. error: {ret:?}");
         }
     } else {
-        println!("hart{hartid} is the primary hart.");
+        log::info!("hart{hartid} is the primary hart.");
     }
 }

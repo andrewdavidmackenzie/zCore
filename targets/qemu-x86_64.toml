@@ -5,7 +5,7 @@
 
 default-personality = "linux"
 arch = "x86_64"
-linker-script = "zCore/kernel/src/platform/x86/linker.ld"
+linker-script = "zCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
 drivers = ["uart-16550", "apic", "pci"]
 
 [qemu]

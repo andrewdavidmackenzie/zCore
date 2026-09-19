@@ -15,7 +15,7 @@
   "position-independent-executables": false,
   "pre-link-args": {
     "ld.lld": [
-      "-TzCore/kernel/src/platform/x86/linker.ld"
+      "-TzCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
     ]
   },
   "relro-level": "full",

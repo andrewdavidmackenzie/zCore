@@ -21,7 +21,6 @@ colorless-log = []
 thead-maee = ["hal-impl/thead-maee"]
 link-user-img = []
 baremetal-test = ["executor/baremetal-test"]
-mock-disk = ["linux-object/mock-disk"]
 
 # --- Personality ---
 zircon = ["zircon-loader", "rcore-fs", "rcore-fs-sfs"]
@@ -51,7 +50,7 @@ fu740-drivers = ["hal-impl/fu740-drivers"]
 # --- Board presets (combine personality + drivers + board-specific flags) ---
 board-d1 = ["link-user-img", "allwinner-drivers"]
 board-c910light = ["link-user-img", "hal-impl/board-c910light"]
-board-fu740 = ["link-user-img", "fu740-drivers"]
+board-fu740 = ["link-user-img", "fu740-drivers", "hal-impl/board-fu740"]
 board-raspi400 = ["hal-impl/board-raspi400"]
 
 [dependencies]
@@ -73,7 +72,6 @@ rcore-fs-sfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 async-std = { version = "1.10", optional = true }
 chrono = { version = "0.4", optional = true }
-bitmap-allocator = "0.4"
 rcore-fs-hostfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
 
 # RISC-V
@@ -83,18 +81,14 @@ riscv = "0.9"
 dtb-walker = "=0.2.0-alpha.3"
 page-table = "0.0.6"
 sbi-rt = { version = "0.0.2", features = ["legacy"] }
-customizable-buddy = "0.0.3"
 
 # Bare-metal mode on aarch64
 # rayboot dependency removed — using direct kernel boot with QEMU -kernel
 # See issue #2 for details on the migration from UEFI/rayboot to direct boot
 [target.'cfg(all(target_os = "none", target_arch = "aarch64"))'.dependencies]
-customizable-buddy = "0.0.3"
 
 # Bare-metal mode on x86_64
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
-bitmap-allocator = "0.4"
-buddy_system_allocator = "0.8"
 bootloader_api = "0.11"
 # rvm = { git = "https://github.com/rcore-os/RVM", rev = "e91d625", optional = true }
 

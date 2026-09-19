@@ -178,7 +178,7 @@ libos-build-zircon:
 
 # Run libos in Linux mode with busybox shell
 libos-run-linux:
-	cargo linux-libos --args "/bin/busybox sh"
+	cargo linux-libos --args "/bin/busybox?sh"
 
 # Run libos in Zircon mode (known broken -- see #281)
 libos-run-zircon:

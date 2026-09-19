@@ -4,6 +4,10 @@ use crate::{KernelConfig, KernelHandler, KCONFIG, KHANDLER};
 
 hal_fn_impl! {
     impl mod crate::hal_fn::boot {
+        fn cmdline() -> alloc::string::String {
+            KCONFIG.cmdline.into()
+        }
+
         fn primary_init_early(cfg: KernelConfig, handler: &'static impl KernelHandler) {
             KCONFIG.init_once_by(cfg);
             KHANDLER.init_once_by(handler);

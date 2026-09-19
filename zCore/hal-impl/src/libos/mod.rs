@@ -2,12 +2,15 @@ mod drivers;
 mod dummy;
 mod mock_mem;
 pub mod platform;
+mod run_executor;
+pub use run_executor::run_executor;
 
 pub mod boot;
 pub mod config;
 pub mod cpu;
 pub mod interrupt;
 pub mod mem;
+pub mod memory;
 // net module removed: loopback/network features moved out of kernel (#237)
 pub mod thread;
 pub mod timer;

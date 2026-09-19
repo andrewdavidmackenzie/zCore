@@ -5,7 +5,7 @@
 
 default-personality = "zircon"
 arch = "aarch64"
-linker-script = "zCore/kernel/src/platform/aarch64/linker_raspi400.ld"
+linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker_raspi400.ld"
 drivers = ["pl011-uart", "gic-400"]
 features = ["board-raspi400"]
 

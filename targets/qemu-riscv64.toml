@@ -5,7 +5,7 @@
 
 default-personality = "linux"
 arch = "riscv64"
-linker-script = "zCore/kernel/src/platform/riscv/linker.ld"
+linker-script = "zCore/hal-impl/src/bare/arch/riscv/platform/linker.ld"
 drivers = ["uart-16550", "riscv-intc", "riscv-plic", "pci"]
 
 [qemu]
