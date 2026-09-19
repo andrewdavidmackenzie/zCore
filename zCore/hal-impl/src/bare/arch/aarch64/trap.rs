@@ -1,9 +1,47 @@
-use crate::context::{trap_reason_from, TrapReason};
-use crate::{Info, Kind, Source};
+use crate::{Info, Kind, MMUFlags, Source};
 use ::drivers::irq::gic_400::get_irq_num;
 use cortex_a::registers::FAR_EL1;
+use hal::TrapReason;
 use tock_registers::interfaces::Readable;
 use trapframe::TrapFrame;
+
+/// Get [`TrapReason`] from aarch64 ESR value.
+pub fn trap_reason_from(esr: usize) -> TrapReason {
+    use crate::{Fault, Syndrome};
+    use cortex_a::registers::ESR_EL1;
+
+    let info = Info {
+        source: Source::from(esr & 0xffff),
+        kind: Kind::from((esr >> 16) & 0xffff),
+    };
+    let esr = ESR_EL1.get() as u32;
+    match info.kind {
+        Kind::Synchronous => match Syndrome::from(esr) {
+            Syndrome::Breakpoint => TrapReason::SoftwareBreakpoint,
+            Syndrome::Svc(_) => TrapReason::Syscall,
+            Syndrome::DataAbort { kind: _, level: _ } => TrapReason::PageFault(
+                FAR_EL1.get() as _,
+                MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER,
+            ),
+            Syndrome::InstructionAbort {
+                kind: Fault::Permission,
+                level: _,
+            } => TrapReason::PageFault(FAR_EL1.get() as _, MMUFlags::EXECUTE | MMUFlags::USER),
+            Syndrome::PCAlignmentFault | Syndrome::SpAlignmentFault => TrapReason::UnalignedAccess,
+            _ => TrapReason::GeneralFault(esr as usize),
+        },
+        Kind::Irq => TrapReason::Interrupt({
+            use crate::hal_fn::mem::phys_to_virt;
+            let gic_base = super::gic_base();
+            let (gicc, gicd) = (
+                phys_to_virt(gic_base + super::drivers::GIC_GICC_OFFSET),
+                phys_to_virt(gic_base + super::drivers::GIC_GICD_OFFSET),
+            );
+            get_irq_num(gicc, gicd)
+        }),
+        _ => TrapReason::GeneralFault(esr as usize),
+    }
+}
 
 #[no_mangle]
 pub extern "C" fn trap_handler(tf: &mut TrapFrame) {

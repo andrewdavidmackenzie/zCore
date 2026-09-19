@@ -1,9 +1,29 @@
-use crate::context::{trap_reason_from, TrapReason};
 use crate::thread::{get_current_thread, set_current_thread};
-use crate::IpiReason;
+use crate::{IpiReason, MMUFlags};
 use alloc::vec::Vec;
+use hal::TrapReason;
 use riscv::register::scause;
 use trapframe::TrapFrame;
+
+/// Get [`TrapReason`] from riscv scause register.
+pub fn trap_reason_from(scause: scause::Scause) -> TrapReason {
+    use riscv::register::scause::{Exception, Trap};
+    let stval = riscv::register::stval::read();
+    match scause.cause() {
+        Trap::Exception(Exception::UserEnvCall) => TrapReason::Syscall,
+        Trap::Exception(Exception::Breakpoint) => TrapReason::SoftwareBreakpoint,
+        Trap::Exception(Exception::IllegalInstruction) => TrapReason::UndefinedInstruction,
+        Trap::Exception(Exception::InstructionMisaligned)
+        | Trap::Exception(Exception::StoreMisaligned) => TrapReason::UnalignedAccess,
+        Trap::Exception(Exception::LoadPageFault) => TrapReason::PageFault(stval, MMUFlags::READ),
+        Trap::Exception(Exception::StorePageFault) => TrapReason::PageFault(stval, MMUFlags::WRITE),
+        Trap::Exception(Exception::InstructionPageFault) => {
+            TrapReason::PageFault(stval, MMUFlags::EXECUTE)
+        }
+        Trap::Interrupt(_) => TrapReason::Interrupt(scause.code()),
+        _ => TrapReason::GeneralFault(scause.code()),
+    }
+}
 pub(super) const SUPERVISOR_TIMER_INT_VEC: usize = 5; // scause::Interrupt::SupervisorTimer
 
 fn breakpoint(sepc: &mut usize) {

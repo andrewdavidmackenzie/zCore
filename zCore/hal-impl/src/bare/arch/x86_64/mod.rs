@@ -1,7 +1,7 @@
 mod drivers;
 pub(crate) mod fb_console;
 mod smp;
-mod trap;
+pub(crate) mod trap;
 
 pub mod config;
 pub mod cpu;
