@@ -506,19 +506,18 @@ impl<P: Policy> IoVec<P> {
         self.ptr.check()
     }
 
-    #[deprecated = "returns reference to user memory; use read_to_vec() instead"]
-    #[allow(deprecated)]
-    pub fn as_slice(&self) -> Result<&[u8]> {
-        self.as_mut_slice().map(|s| &*s)
-    }
-
     /// Returns a mutable slice pointing into user memory.
-    /// Use `copy_from_user`/`copy_to_user` patterns with `read_to_vec`/`write_from_buf` instead.
-    #[allow(clippy::mut_from_ref)]
-    #[deprecated = "returns reference to user memory"]
-    pub fn as_mut_slice(&self) -> Result<&mut [u8]> {
+    ///
+    /// # Safety
+    ///
+    /// This is unsound from a shared reference (`&self`) because
+    /// multiple callers can obtain overlapping mutable slices.
+    /// Use `read_to_vec()` and `write_from_buf()` instead.
+    ///
+    /// Kept for internal use only; callers must ensure no aliasing.
+    pub(crate) unsafe fn as_mut_slice_unchecked(&self) -> Result<&mut [u8]> {
         if !self.ptr.is_null() {
-            Ok(with_user_access(|| unsafe {
+            Ok(with_user_access(|| {
                 core::slice::from_raw_parts_mut(self.ptr.0, self.len)
             }))
         } else {
