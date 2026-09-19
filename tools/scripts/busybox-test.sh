@@ -50,11 +50,14 @@ case "$ARCH" in
     "$BOOTIMAGE_TOOL" "${BOOTIMAGE_ARGS[@]}"
 
     KERNEL="$BOOT_IMG"
+    source "$(dirname "$0")/find-ovmf.sh"
+    OVMF=$(find_ovmf) || exit 1
     QEMU_CMD=(
       qemu-system-x86_64
       -m 2G -display none -no-reboot -nographic
       -machine q35 -cpu qemu64,+fsgsbase,+rdrand
       -serial mon:stdio
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF"
       -drive "format=raw,file=$BOOT_IMG"
     )
     ;;

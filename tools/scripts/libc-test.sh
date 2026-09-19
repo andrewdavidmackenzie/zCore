@@ -58,13 +58,16 @@ case "$ARCH" in
         MUSL_BIN="$MUSL_PREFIX/libexec/bin"
       fi
     fi
-    # x86_64 uses a BIOS disk image with embedded ramdisk
+    # x86_64 uses a UEFI disk image with embedded ramdisk
     KERNEL="$BOOT_IMG"
+    source "$(dirname "$0")/find-ovmf.sh"
+    OVMF=$(find_ovmf) || exit 1
     QEMU_CMD=(
       qemu-system-x86_64
       -m 2G -display none -no-reboot -nographic
       -machine q35 -cpu qemu64,+fsgsbase,+rdrand
       -serial mon:stdio
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF"
       -drive "format=raw,file=$BOOT_IMG"
     )
     # Flag to rebuild boot image after rootfs changes
