@@ -10,6 +10,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linu
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
 	petal-shell raspi400-build raspi400-run raspi400-sd \
 	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon \
+	debug-qemu debug-gdb \
 	pre-push
 
 # Build the rootfs image and kernel for the target architecture.
@@ -23,6 +24,31 @@ build:
 # cargo qemu does: build rootfs image, build kernel, launch QEMU.
 linux-run:
 	cargo qemu -m qemu-$(ARCH)
+
+# --- Remote Debugging via QEMU ---
+# Step 1: Start QEMU paused, waiting for debugger on localhost:1234.
+# Step 2: In another terminal, connect with: make debug-lldb
+#         Or from RustRover: Run > Attach to Process > Remote GDB, host=localhost port=1234
+debug-qemu: build
+	@echo "==> Starting QEMU in debug mode (paused, waiting for debugger on :1234)..."
+	@echo "    Connect with: make debug-lldb"
+	@echo "    Or RustRover: Run > Attach to Process > Remote GDB Server, localhost:1234"
+	@echo "    Kernel symbols: target/qemu-$(ARCH)/release/kernel"
+	@qemu-system-aarch64 -m 2G -display none -no-reboot -nographic \
+		-machine virt -cpu cortex-a72 \
+		-kernel target/qemu-aarch64/release/kernel.bin \
+		-serial mon:stdio \
+		-initrd zCore/aarch64-linux.img \
+		-S -s
+
+# Connect lldb to a running QEMU debug session.
+# Uses the system lldb (or set LLDB to RustRover's bundled version).
+LLDB ?= lldb
+debug-lldb:
+	@echo "==> Connecting lldb to QEMU on :1234..."
+	@$(LLDB) \
+		-o "file target/qemu-aarch64/release/kernel" \
+		-o "gdb-remote 1234"
 
 # Build and run zCore in Zircon mode (userstart hello program).
 # Use LOG=info (or debug/trace/warn/error) to control log verbosity.
