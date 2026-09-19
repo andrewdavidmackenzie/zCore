@@ -296,4 +296,4 @@ pub fn get_bar0_mem(loc: Location) -> Option<(usize, usize)> {
         })
 }
 
-// all devices stored in：AllDeviceList
+// all devices stored in: AllDeviceList
