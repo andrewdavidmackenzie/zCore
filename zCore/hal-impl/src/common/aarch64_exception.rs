@@ -100,9 +100,17 @@ pub enum Syndrome {
     Hvc(u16),
     Smc(u16),
     MsrMrsSystem,
-    InstructionAbort { kind: Fault, level: u8 },
+    InstructionAbort {
+        kind: Fault,
+        level: u8,
+    },
     PCAlignmentFault,
-    DataAbort { kind: Fault, level: u8 },
+    DataAbort {
+        kind: Fault,
+        level: u8,
+        /// WnR bit (ISS bit 6): true if the fault was caused by a write access.
+        is_write: bool,
+    },
     SpAlignmentFault,
     TrappedFpu,
     SError,
@@ -147,6 +155,7 @@ impl From<u32> for Syndrome {
             0b100100 | 0b100101 => DataAbort {
                 kind: Fault::from(iss),
                 level: (iss & 0b11) as u8,
+                is_write: iss & (1 << 6) != 0,
             },
             0b100110 => SpAlignmentFault,
             0b101000 => TrappedFpu,

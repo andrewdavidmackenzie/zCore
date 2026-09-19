@@ -976,11 +976,13 @@ impl VmMapping {
         // If we are already locked, we are handling page fault/map range
         // In this case we can just ignore the operation since we will update the mapping later
         if let Some(inner) = inner {
-            let start = offset.max(inner.vmo_offset);
-            let end = (inner.vmo_offset + inner.size / PAGE_SIZE).min(offset + len);
+            // offset and len are in page units; convert vmo_offset (bytes) to pages
+            let vmo_offset_pages = inner.vmo_offset / PAGE_SIZE;
+            let start = offset.max(vmo_offset_pages);
+            let end = (vmo_offset_pages + inner.size / PAGE_SIZE).min(offset + len);
             if !(start..end).is_empty() {
                 let mut pg_table = self.page_table.lock();
-                for i in (start - inner.vmo_offset)..(end - inner.vmo_offset) {
+                for i in (start - vmo_offset_pages)..(end - vmo_offset_pages) {
                     match op {
                         RangeChangeOp::RemoveWrite => {
                             let mut new_flag = inner.flags[i];
