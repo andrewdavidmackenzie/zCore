@@ -81,9 +81,28 @@ impl MockMemory {
     /// On hosts with larger pages (16K on aarch64 macOS), this uses
     /// anonymous mappings + memcpy to avoid clobbering adjacent 4K
     /// guest pages that share the same host page.
-    pub fn mmap(&self, vaddr: VirtAddr, len: usize, paddr: PhysAddr, prot: MMUFlags) {
+    /// Map `paddr` to `vaddr` in the guest address space.
+    ///
+    /// Returns `true` on success, `false` if the mapping could not be
+    /// created (e.g., macOS rejects `MAP_FIXED` at low virtual addresses).
+    pub fn mmap(&self, vaddr: VirtAddr, len: usize, paddr: PhysAddr, prot: MMUFlags) -> bool {
         assert!(paddr < self.size);
         assert!(paddr + len <= self.size);
+
+        // On aarch64 macOS, MAP_FIXED fails below ~0x200000000 (8 GiB).
+        // Return false instead of panicking so the caller can propagate
+        // a PagingError::NoMemory.
+        #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+        {
+            const MACOS_AARCH64_MIN_MMAP: usize = 0x2_0000_0000;
+            if vaddr < MACOS_AARCH64_MIN_MMAP {
+                warn!(
+                    "mmap: vaddr={:#x} is below macOS aarch64 minimum ({:#x}), skipping",
+                    vaddr, MACOS_AARCH64_MIN_MMAP
+                );
+                return false;
+            }
+        }
 
         let hps = host_page_size();
 
@@ -108,17 +127,20 @@ impl MockMemory {
 
             let prot_noexec = mmu_flags_to_prot(prot) - ProtFlags::PROT_EXEC;
             let flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
-            unsafe { mman::mmap(vaddr as _, len, prot_noexec, flags, self.fd, paddr as _) }
-                .unwrap_or_else(|err| {
-                    panic!(
+            match unsafe { mman::mmap(vaddr as _, len, prot_noexec, flags, self.fd, paddr as _) } {
+                Ok(_) => {}
+                Err(err) => {
+                    warn!(
                         "mmap failed: fd={}, offset={:#x}, len={:#x}, vaddr={:#x}: {:?}",
                         self.fd, paddr, len, vaddr, err
-                    )
-                });
+                    );
+                    return false;
+                }
+            }
             if prot.contains(MMUFlags::EXECUTE) {
                 self.mprotect(vaddr, len, prot);
             }
-            return;
+            return true;
         }
 
         // Host page size > 4K (e.g., 16K on aarch64 macOS).
@@ -148,8 +170,9 @@ impl MockMemory {
             let can_file_back = vaddr_offset == paddr_offset;
 
             // Helper: create anonymous mapping for this host page.
-            let map_anon = || {
-                unsafe {
+            // Returns false if the mapping failed (e.g., low address on macOS).
+            let map_anon = || -> bool {
+                let result = unsafe {
                     mman::mmap(
                         aligned_vaddr as _,
                         hps,
@@ -158,13 +181,18 @@ impl MockMemory {
                         -1,
                         0,
                     )
+                };
+                match result {
+                    Ok(_) => true,
+                    Err(err) => {
+                        warn!(
+                            "mmap anon failed: vaddr={:#x}, len={:#x}: {:?} \
+                             (macOS restricts MAP_FIXED at low addresses)",
+                            aligned_vaddr, hps, err
+                        );
+                        false
+                    }
                 }
-                .unwrap_or_else(|err| {
-                    panic!(
-                        "mmap anon failed: vaddr={:#x}, len={:#x}: {:?}",
-                        aligned_vaddr, hps, err
-                    )
-                });
             };
 
             // false for file-backed (data is in the file),
@@ -190,7 +218,9 @@ impl MockMemory {
                             false // data is in the file
                         }
                         Err(_) => {
-                            map_anon();
+                            if !map_anon() {
+                                return false;
+                            }
                             pages.insert(aligned_vaddr, HostPageState::Anonymous);
                             true
                         }
@@ -198,7 +228,9 @@ impl MockMemory {
                 }
                 None => {
                     // Offset mismatch: must use MAP_ANON.
-                    map_anon();
+                    if !map_anon() {
+                        return false;
+                    }
                     pages.insert(aligned_vaddr, HostPageState::Anonymous);
                     true
                 }
@@ -219,7 +251,9 @@ impl MockMemory {
                             hps,
                         );
                     }
-                    map_anon();
+                    if !map_anon() {
+                        return false;
+                    }
                     unsafe {
                         core::ptr::copy_nonoverlapping(
                             saved.as_ptr(),
@@ -286,6 +320,7 @@ impl MockMemory {
         // Non-executable pages stay RW (the anonymous mapping default).
         // The data is synced to PMEM via write() below, not via mmap
         // sharing, since these are MAP_PRIVATE pages.
+        true
     }
 
     pub fn munmap(&self, vaddr: VirtAddr, len: usize) {

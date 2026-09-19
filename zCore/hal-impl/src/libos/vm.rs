@@ -42,8 +42,11 @@ impl GenericPageTable for PageTable {
         debug_assert!(page.size as usize == PAGE_SIZE);
         debug_assert!(is_aligned(paddr));
         if paddr < PMEM_SIZE {
-            MOCK_PHYS_MEM.mmap(page.vaddr, PAGE_SIZE, paddr, flags);
-            Ok(())
+            if MOCK_PHYS_MEM.mmap(page.vaddr, PAGE_SIZE, paddr, flags) {
+                Ok(())
+            } else {
+                Err(PagingError::NoMemory)
+            }
         } else {
             Err(PagingError::NoMemory)
         }
