@@ -18,7 +18,7 @@ TIMEOUT=30
 case "$ARCH" in
   aarch64)
     KERNEL="target/qemu-aarch64/release/kernel.bin"
-    ROOTFS_IMG="zCore/${ARCH}-zircon.img"
+    ROOTFS_IMG="target/qemu-${ARCH}/release/${ARCH}-zircon.img"
     QEMU_BASE_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic

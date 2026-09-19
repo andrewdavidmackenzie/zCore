@@ -1,6 +1,5 @@
 use crate::config::TargetConfig;
 use crate::{Arch, ArchArg, PROJECT_DIR};
-use once_cell::sync::Lazy;
 use os_xtask_utils::{dir, BinUtil, Cargo, CommandExt, Ext, Qemu};
 use std::{
     collections::{HashMap, HashSet},
@@ -69,8 +68,6 @@ pub(crate) struct GdbArgs {
     #[clap(long)]
     port: u16,
 }
-
-static INNER: Lazy<PathBuf> = Lazy::new(|| PROJECT_DIR.join("zCore"));
 
 pub(crate) struct BuildConfig {
     arch: Arch,
@@ -274,8 +271,9 @@ impl QemuArgs {
             custom.clone()
         } else if !is_zircon {
             // Build default Linux rootfs image
-            ArchArg { arch }.linux_rootfs().image();
-            INNER.join(format!("{}-linux.img", arch_str))
+            let rootfs = ArchArg { arch }.linux_rootfs();
+            rootfs.image();
+            rootfs.image_path()
         } else {
             // Zircon mode: build rootfs image with petal programs.
             // The kernel prefers rootfs over embedded ZBI.

@@ -4,7 +4,7 @@ ARCH ?= aarch64
 XTASK ?= 1
 
 STRIP := $(ARCH)-linux-musl-strip
-export PATH=$(shell printenv PATH):$(CURDIR)/ignored/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
+export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
 .PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
@@ -38,7 +38,7 @@ debug-qemu: build
 		-machine virt -cpu cortex-a72 \
 		-kernel target/qemu-aarch64/release/kernel.bin \
 		-serial mon:stdio \
-		-initrd zCore/aarch64-linux.img \
+		-initrd target/qemu-aarch64/release/aarch64-linux.img \
 		-S -s
 
 # Connect lldb to a running QEMU debug session.
@@ -360,9 +360,9 @@ rootfs:
 ifeq ($(XTASK), 1)
 	cargo rootfs --arch $(ARCH)
 else ifeq ($(ARCH), riscv64)
-	@rm -rf rootfs/riscv && mkdir -p rootfs/riscv/bin
-	@wget https://github.com/rcore-os/busybox-prebuilts/raw/master/busybox-1.30.1-riscv64/busybox -O rootfs/riscv/bin/busybox
-	@ln -s busybox rootfs/riscv/bin/ls
+	@rm -rf target/rootfs/riscv && mkdir -p target/rootfs/riscv/bin
+	@wget https://github.com/rcore-os/busybox-prebuilts/raw/master/busybox-1.30.1-riscv64/busybox -O target/rootfs/riscv/bin/busybox
+	@ln -s busybox target/rootfs/riscv/bin/ls
 endif
 
 # put other tests into rootfs
@@ -375,8 +375,9 @@ ifeq ($(XTASK), 1)
 	cargo image --arch $(ARCH)
 else ifeq ($(ARCH), riscv64)
 	@echo building riscv.img
-	@rcore-fs-fuse zCore/riscv64-linux.img rootfs/riscv zip
-	@qemu-img resize -f raw zCore/riscv64-linux.img +5M
+	@mkdir -p target/qemu-riscv64/release
+	@rcore-fs-fuse target/qemu-riscv64/release/riscv64-linux.img target/rootfs/riscv zip
+	@qemu-img resize -f raw target/qemu-riscv64/release/riscv64-linux.img +5M
 endif
 
 # Pre-push check: mirrors all CI jobs locally.
@@ -424,9 +425,11 @@ doc:
 	cargo doc --open
 
 # clean targets
+# `cargo clean` removes target/ which includes rootfs, images, and kernel binaries.
 clean:
 	cargo clean
 	rm -f  *.asm
+	# Legacy locations (can be removed once all local checkouts are migrated)
 	rm -rf rootfs
 	rm -rf zCore/disk
 	find zCore -maxdepth 1 -name "*.img" -delete
@@ -434,10 +437,12 @@ clean:
 
 # delete targets, including those that are large and compile slowly
 cleanup: clean
+	rm -rf .build-cache/target
 	rm -rf ignored/target
 
 # delete everything, including origin files that are downloaded directly
 clean-everything: clean
+	rm -rf .build-cache
 	rm -rf ignored
 
 # rt-test:

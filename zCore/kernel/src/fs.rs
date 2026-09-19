@@ -37,7 +37,7 @@ cfg_if! {
         use rcore_fs::vfs::FileSystem;
 
         /// Try to open a Zircon rootfs via HostFS in libos mode.
-        /// Returns a filesystem rooted at `rootfs/zircon/{host_arch}/`.
+        /// Returns a filesystem rooted at `target/rootfs/zircon/{host_arch}/`.
         #[cfg(feature = "libos")]
         pub fn try_libos_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
             let path = libos_rootfs_path("zircon");
@@ -115,11 +115,11 @@ cfg_if! {
 
 /// Construct the libos rootfs path.
 ///
-/// On aarch64 macOS, uses `rootfs/{personality}-libos/{arch}/` which
-/// contains a static-PIE busybox (needed because non-PIE binaries
+/// On aarch64 macOS, uses `target/rootfs/{personality}-libos/{arch}/`
+/// which contains a static-PIE busybox (needed because non-PIE binaries
 /// can't be loaded above macOS's ~0x400000000 address space minimum).
-/// On other platforms, uses `rootfs/{personality}/{arch}/` (same as
-/// bare-metal).
+/// On other platforms, uses `target/rootfs/{personality}/{arch}/` (same
+/// layout as bare-metal).
 #[cfg(feature = "libos")]
 fn libos_rootfs_path(personality: &str) -> std::path::PathBuf {
     let project_dir = if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
@@ -136,19 +136,17 @@ fn libos_rootfs_path(personality: &str) -> std::path::PathBuf {
     } else {
         "unknown"
     };
+    let rootfs_base = project_dir.join("target").join("rootfs");
     // On aarch64 macOS, use the separate libos rootfs with static-PIE binaries.
     // Fall back to the shared rootfs if the libos one doesn't exist yet.
     #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
     {
-        let libos_path = project_dir
-            .join("rootfs")
-            .join(format!("{personality}-libos"))
-            .join(arch);
+        let libos_path = rootfs_base.join(format!("{personality}-libos")).join(arch);
         if libos_path.is_dir() {
             return libos_path;
         }
     }
-    project_dir.join("rootfs").join(personality).join(arch)
+    rootfs_base.join(personality).join(arch)
 }
 
 #[cfg(all(not(feature = "libos"), feature = "linux"))]

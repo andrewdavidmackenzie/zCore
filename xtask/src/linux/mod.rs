@@ -87,18 +87,23 @@ impl LinuxRootfs {
     }
 
     /// Returns the rootfs path for the specified architecture.
-    /// Layout: `rootfs/linux/{arch}/`
+    /// Layout: `target/rootfs/linux/{arch}/`
     #[inline]
     pub fn path(&self) -> PathBuf {
-        PROJECT_DIR.join("rootfs").join("linux").join(self.0.name())
+        PROJECT_DIR
+            .join("target")
+            .join("rootfs")
+            .join("linux")
+            .join(self.0.name())
     }
 
     /// Returns the libos-specific rootfs path.
-    /// Layout: `rootfs/linux-libos/{arch}/`
+    /// Layout: `target/rootfs/linux-libos/{arch}/`
     /// Used on aarch64 macOS where a static-PIE busybox is needed.
     #[inline]
     pub fn libos_path(&self) -> PathBuf {
         PROJECT_DIR
+            .join("target")
             .join("rootfs")
             .join("linux-libos")
             .join(self.0.name())
