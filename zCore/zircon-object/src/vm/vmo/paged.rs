@@ -546,12 +546,19 @@ impl VMObjectPagedInner {
         if no_frame {
             // if out_of_range
             if out_of_range || no_parent {
-                if !flags.contains(MMUFlags::WRITE) {
-                    // read-only, just return zero frame
-                    return Ok(CommitResult::Ref(hal_impl::mem::ZERO_FRAME.paddr()));
-                }
-                // lazy allocate zero frame
-                // This calls the HAL layer's hal_frame_alloc; ensure parameter signatures match when implementing
+                // Always allocate a real zero-filled frame.  The global
+                // ZERO_FRAME must never be returned here because:
+                //
+                // - Leaf nodes (Origin / Snapshot) would map it into page
+                //   tables.  A later `mprotect` could add WRITE, allowing
+                //   writes to the shared page and corrupting it for everyone.
+                //
+                // - Even for hidden nodes, returning `Ref(ZERO_FRAME)` is
+                //   unsafe: the recursive caller in a Snapshot leaf forwards
+                //   `Ref` results directly (line `r => return Ok(r)`)
+                //   without inserting a frame, so the leaf has no `frames`
+                //   entry.  A later `create_child` (fork) would then fail
+                //   to transfer the page to the hidden node, losing data.
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if out_of_range {
                     // can never be a hidden vmo

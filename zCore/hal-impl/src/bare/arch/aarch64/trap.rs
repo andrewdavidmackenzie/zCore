@@ -19,10 +19,17 @@ pub fn trap_reason_from(esr: usize) -> TrapReason {
         Kind::Synchronous => match Syndrome::from(esr) {
             Syndrome::Breakpoint => TrapReason::SoftwareBreakpoint,
             Syndrome::Svc(_) => TrapReason::Syscall,
-            Syndrome::DataAbort { kind: _, level: _ } => TrapReason::PageFault(
-                FAR_EL1.get() as _,
-                MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER,
-            ),
+            Syndrome::DataAbort {
+                kind: _,
+                level: _,
+                is_write,
+            } => {
+                let mut flags = MMUFlags::READ | MMUFlags::USER;
+                if is_write {
+                    flags |= MMUFlags::WRITE;
+                }
+                TrapReason::PageFault(FAR_EL1.get() as _, flags)
+            }
             Syndrome::InstructionAbort {
                 kind: Fault::Permission,
                 level: _,
