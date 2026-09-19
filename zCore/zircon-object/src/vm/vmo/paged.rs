@@ -546,21 +546,19 @@ impl VMObjectPagedInner {
         if no_frame {
             // if out_of_range
             if out_of_range || no_parent {
-                // Hidden nodes may return a transient reference to the shared
-                // ZERO_FRAME because hidden-node results are never mapped into
-                // page tables directly — they are consumed by the recursive
-                // caller and either copied (COW) or forwarded.
+                // Always allocate a real zero-filled frame.  The global
+                // ZERO_FRAME must never be returned here because:
                 //
-                // Leaf nodes (Origin / Snapshot) must NOT use ZERO_FRAME
-                // because the returned paddr may be mapped writable (e.g.
-                // after mprotect adds WRITE).  Writing to the shared
-                // ZERO_FRAME would corrupt it for all users, and — crucially —
-                // the page would have no entry in `self.frames`, so
-                // `create_child` (fork) would not transfer it to the hidden
-                // node, losing the data in the child process.
-                if !flags.contains(MMUFlags::WRITE) && self.type_.is_hidden() {
-                    return Ok(CommitResult::Ref(hal_impl::mem::ZERO_FRAME.paddr()));
-                }
+                // - Leaf nodes (Origin / Snapshot) would map it into page
+                //   tables.  A later `mprotect` could add WRITE, allowing
+                //   writes to the shared page and corrupting it for everyone.
+                //
+                // - Even for hidden nodes, returning `Ref(ZERO_FRAME)` is
+                //   unsafe: the recursive caller in a Snapshot leaf forwards
+                //   `Ref` results directly (line `r => return Ok(r)`)
+                //   without inserting a frame, so the leaf has no `frames`
+                //   entry.  A later `create_child` (fork) would then fail
+                //   to transfer the page to the hidden node, losing data.
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if out_of_range {
                     // can never be a hidden vmo

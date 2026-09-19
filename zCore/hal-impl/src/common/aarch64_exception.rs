@@ -172,3 +172,66 @@ impl From<u32> for Syndrome {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build an ESR value from exception class and ISS fields.
+    fn make_esr(ec: u32, iss: u32) -> u32 {
+        (ec << 26) | (iss & 0xFF_FFFF)
+    }
+
+    #[test]
+    fn data_abort_read_clears_is_write() {
+        // EC 0b100100 = DataAbort from lower EL.
+        // ISS: Translation fault level 1 (DFSC=0b000101), WnR=0 (bit 6 clear).
+        let esr = make_esr(0b100100, 0b000101);
+        match Syndrome::from(esr) {
+            Syndrome::DataAbort {
+                kind,
+                level,
+                is_write,
+            } => {
+                assert_eq!(kind, Fault::Translation);
+                assert_eq!(level, 1);
+                assert!(!is_write, "WnR should be clear for a read fault");
+            }
+            other => panic!("expected DataAbort, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn data_abort_write_sets_is_write() {
+        // EC 0b100101 = DataAbort from current EL.
+        // ISS: Permission fault level 3 (DFSC=0b001111), WnR=1 (bit 6 set).
+        let iss = 0b001111 | (1 << 6);
+        let esr = make_esr(0b100101, iss);
+        match Syndrome::from(esr) {
+            Syndrome::DataAbort {
+                kind,
+                level,
+                is_write,
+            } => {
+                assert_eq!(kind, Fault::Permission);
+                assert_eq!(level, 3);
+                assert!(is_write, "WnR should be set for a write fault");
+            }
+            other => panic!("expected DataAbort, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn instruction_abort_has_no_is_write() {
+        // EC 0b100000 = InstructionAbort from lower EL.
+        // ISS: Translation fault level 2 (IFSC=0b000110).
+        let esr = make_esr(0b100000, 0b000110);
+        match Syndrome::from(esr) {
+            Syndrome::InstructionAbort { kind, level } => {
+                assert_eq!(kind, Fault::Translation);
+                assert_eq!(level, 2);
+            }
+            other => panic!("expected InstructionAbort, got {:?}", other),
+        }
+    }
+}
