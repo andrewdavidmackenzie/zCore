@@ -29,14 +29,10 @@ impl super::LinuxRootfs {
             )
             .current_dir(&dir)
             .invoke();
-        // FIXME Why does this need to be replaced?
-        if let Arch::Riscv64 = self.0 {
-            fs::copy(
-                riscv64_special().join("libc-test/functional/tls_align-static.exe"),
-                dir.join("src/functional/tls_align-static.exe"),
-            )
-            .unwrap();
-        }
+        // Note: tls_align test fails on all architectures due to
+        // incomplete TLS alignment support in zCore's ELF loader.
+        // A riscv64-only prebuilt replacement was previously used here
+        // but didn't actually fix the test. Removed in #234.
 
         // Remove unnecessary libc-test files
         let elf_path = OsString::from("src");
