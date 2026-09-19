@@ -1,3 +1,4 @@
+use cfg_if::cfg_if;
 #[cfg(not(feature = "libos"))]
 use core::cell::UnsafeCell;
 

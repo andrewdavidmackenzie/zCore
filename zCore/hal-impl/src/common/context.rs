@@ -1,5 +1,6 @@
 //! User context.
 
+use cfg_if::cfg_if;
 use core::fmt;
 use trapframe::UserContext as UserContextInner;
 

@@ -16,10 +16,6 @@ extern crate alloc;
 #[macro_use]
 extern crate log;
 
-#[cfg(test)]
-#[macro_use]
-extern crate std;
-
 pub mod debuglog;
 pub mod dev;
 mod error;
