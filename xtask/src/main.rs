@@ -32,13 +32,25 @@ use crate::build::{BuildArgs, BuildConfig};
 static PROJECT_DIR: Lazy<&'static Path> =
     Lazy::new(|| Path::new(std::env!("CARGO_MANIFEST_DIR")).parent().unwrap());
 /// The path to store arch-dependent files from network.
-static ARCHS: Lazy<PathBuf> =
-    Lazy::new(|| PROJECT_DIR.join("ignored").join("origin").join("archs"));
+/// Downloads are kept under `.build-cache/` so they survive `cargo clean`
+/// (which removes only `target/`).
+static ARCHS: Lazy<PathBuf> = Lazy::new(|| {
+    PROJECT_DIR
+        .join(".build-cache")
+        .join("origin")
+        .join("archs")
+});
 /// The path to store third party repos from network.
-static REPOS: Lazy<PathBuf> =
-    Lazy::new(|| PROJECT_DIR.join("ignored").join("origin").join("repos"));
-/// The path to cache generated files durning processes.
-static TARGET: Lazy<PathBuf> = Lazy::new(|| PROJECT_DIR.join("ignored").join("target"));
+static REPOS: Lazy<PathBuf> = Lazy::new(|| {
+    PROJECT_DIR
+        .join(".build-cache")
+        .join("origin")
+        .join("repos")
+});
+/// The path to cache generated files during build processes (compiled
+/// busybox, extracted toolchains, etc.).  Kept under `.build-cache/` so
+/// they survive `cargo clean`.
+static TARGET: Lazy<PathBuf> = Lazy::new(|| PROJECT_DIR.join(".build-cache").join("target"));
 
 /// Build or test zCore.
 #[derive(Parser)]
@@ -498,7 +510,7 @@ mod libos {
     pub(super) fn put_libc_test() {
         rootfs(false);
         println!(
-            "LibOS rootfs built at rootfs/linux/{}. To run libc-test, use: \
+            "LibOS rootfs built at target/rootfs/linux/{}. To run libc-test, use: \
              tools/scripts/libc-test.sh {}",
             Arch::host().name(),
             Arch::host().name()

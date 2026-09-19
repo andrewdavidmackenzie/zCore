@@ -3,13 +3,25 @@ use os_xtask_utils::{CommandExt, Qemu};
 use std::{fs, path::Path};
 
 impl super::LinuxRootfs {
+    /// Returns the path for the Linux rootfs image file.
+    ///
+    /// Layout: `target/qemu-{arch}/release/{arch}-linux.img`
+    pub fn image_path(&self) -> std::path::PathBuf {
+        let dir = PROJECT_DIR
+            .join("target")
+            .join(format!("qemu-{}", self.0.name()))
+            .join("release");
+        os_xtask_utils::dir::create_parent(&dir.join("_")).unwrap_or(());
+        fs::create_dir_all(&dir).ok();
+        dir.join(format!("{arch}-linux.img", arch = self.0.name()))
+    }
+
     /// Generates the rootfs image.
     pub fn image(&self) {
         // Recursively build rootfs
         self.make(false);
         // Image path
-        let inner = PROJECT_DIR.join("zCore");
-        let image = inner.join(format!("{arch}-linux.img", arch = self.0.name()));
+        let image = self.image_path();
         // Skip image creation if it already exists and is newer than the
         // rootfs directory. Recreating the image on every run triggers a
         // full kernel recompile because the image lives inside the zCore

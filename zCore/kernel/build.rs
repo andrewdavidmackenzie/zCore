@@ -22,12 +22,15 @@ fn main() {
         .unwrap();
     }
 
-    // If linking a rootfs image, set the image path in an environment variable
+    // If linking a rootfs image, set the image path in an environment variable.
+    // The image is under target/qemu-{arch}/release/ (see xtask/src/linux/image.rs).
     #[cfg(feature = "link-user-img")]
-    println!(
-        "cargo:rustc-env=USER_IMG=zCore/{}.img",
-        std::env::var("TARGET").unwrap()
-    );
+    {
+        let target = std::env::var("TARGET").unwrap();
+        // Extract the arch prefix (e.g. "aarch64" from "aarch64-unknown-none-softfloat")
+        let arch = target.split('-').next().unwrap_or(&target);
+        println!("cargo:rustc-env=USER_IMG=target/qemu-{arch}/release/{target}.img",);
+    }
 
     // Pass ZCORE_CMDLINE to the kernel as a compile-time env var.
     // Defaults to LOG=warn if not set by the build system.

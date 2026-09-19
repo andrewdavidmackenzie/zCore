@@ -157,7 +157,11 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
 /// `bin/channel-test`, `bin/vmo-test`.
 /// Returns the path to the rootfs directory.
 pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
-    let rootfs_dir = PROJECT_DIR.join("rootfs").join("zircon").join(arch.name());
+    let rootfs_dir = PROJECT_DIR
+        .join("target")
+        .join("rootfs")
+        .join("zircon")
+        .join(arch.name());
     let bin_dir = rootfs_dir.join("bin");
 
     const PETAL_BINS: &[&str] = &["hello", "channel-test", "vmo-test"];
@@ -195,9 +199,12 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
 /// Returns the path to the image file.
 pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
     let rootfs_dir = build_zircon_rootfs(arch);
-    let image = PROJECT_DIR
-        .join("zCore")
-        .join(format!("{}-zircon.img", arch.name()));
+    let dir = PROJECT_DIR
+        .join("target")
+        .join(format!("qemu-{}", arch.name()))
+        .join("release");
+    std::fs::create_dir_all(&dir).ok();
+    let image = dir.join(format!("{}-zircon.img", arch.name()));
 
     // Skip if image exists and is newer than all rootfs binaries
     if image.is_file() {
