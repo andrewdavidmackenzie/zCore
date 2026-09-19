@@ -1,156 +1,110 @@
-cfg_if! {
-    if #[cfg(feature = "linux")] {
-        use alloc::sync::Arc;
-        use rcore_fs::vfs::FileSystem;
+//! Filesystem initialization.
+//!
+//! Provides `rootfs()` (Linux) or `zbi()` + `try_zircon_rootfs()` (Zircon)
+//! depending on the kernel personality. Platform differences (libos vs
+//! bare-metal) are handled by hal-impl, not by cfg guards here.
 
-        #[cfg(feature = "libos")]
-        pub fn rootfs() -> Arc<dyn FileSystem> {
-            let path = libos_rootfs_path("linux");
-            info!("LibOS rootfs: {}", path.display());
-            rcore_fs_hostfs::HostFS::new(path)
-        }
+// ── Linux personality ──────────────────────────────────────────────────
 
-        #[cfg(not(feature = "libos"))]
-        pub fn rootfs() -> Arc<dyn FileSystem> {
-            use rcore_fs::dev::Device;
+#[cfg(feature = "linux")]
+pub fn rootfs() -> alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem> {
+    use alloc::sync::Arc;
 
-            let device: Arc<dyn Device> = {
-                use linux_object::fs::rcore_fs_wrapper::*;
-                if let Some(initrd) = init_ram_disk() {
-                    Arc::new(MemBuf::new(initrd))
-                } else if let Some(block) = hal_impl::device_registry::all_block().first() {
-                    Arc::new(BlockCache::new(Block::new(block), 0x100))
-                } else {
-                    panic!(
-                        "No rootfs available: no initrd and no block device. \
-                         On RPi 400, pass rootfs via -initrd or use Zircon mode."
-                    );
-                }
-            };
-            info!("Opening the rootfs...");
-            rcore_fs_sfs::SimpleFileSystem::open(device).expect("failed to open device SimpleFS")
-        }
-    } else if #[cfg(feature = "zircon")] {
-        #[cfg(not(feature = "libos"))]
-        use alloc::sync::Arc;
-        #[cfg(not(feature = "libos"))]
-        use rcore_fs::vfs::FileSystem;
+    // LibOS mode: use HostFS from the rootfs directory on the host.
+    #[cfg(feature = "libos")]
+    if let Some(path) = hal_impl::platform::libos_rootfs_path("linux") {
+        info!("LibOS rootfs: {}", path);
+        return rcore_fs_hostfs::HostFS::new(path);
+    }
 
-        /// Try to open a Zircon rootfs via HostFS in libos mode.
-        /// Returns a filesystem rooted at `target/rootfs/zircon/{host_arch}/`.
-        #[cfg(feature = "libos")]
-        pub fn try_libos_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
-            let path = libos_rootfs_path("zircon");
-            if path.is_dir() && path.join("bin").is_dir() {
-                info!("LibOS Zircon rootfs: {}", path.display());
-                Some(rcore_fs_hostfs::HostFS::new(path))
-            } else {
-                None
-            }
-        }
-
-        #[cfg(feature = "libos")]
-        pub fn zbi() -> impl AsRef<[u8]> {
-            let path = std::env::args().nth(1).expect(
-                "Usage: zcore-libos <ZBI_FILE>\n\
-                 Build a petal ZBI with: cargo petal-zbi --arch aarch64"
+    // Bare-metal: open an SFS image from initrd or block device.
+    use rcore_fs::dev::Device;
+    let device: Arc<dyn Device> = {
+        use linux_object::fs::rcore_fs_wrapper::*;
+        if let Some(initrd) = init_ram_disk() {
+            Arc::new(MemBuf::new(initrd))
+        } else if let Some(block) = hal_impl::device_registry::all_block().first() {
+            Arc::new(BlockCache::new(Block::new(block), 0x100))
+        } else {
+            panic!(
+                "No rootfs available: no initrd and no block device. \
+                 On RPi 400, pass rootfs via -initrd or use Zircon mode."
             );
-            std::fs::read(path).expect("failed to read ZBI file")
         }
-
-        #[cfg(not(feature = "libos"))]
-        pub fn zbi() -> impl AsRef<[u8]> {
-            // The petal ZBI is embedded at compile time via the PETAL_ZBI env var.
-            // If not set, build.rs provides an empty stub -- the rootfs-based
-            // boot path should be used instead.
-            const ZBI_DATA: &[u8] = include_bytes!(env!("PETAL_ZBI"));
-            ZBI_DATA
-        }
-
-
-
-        /// Try to open an SFS rootfs (from VirtIO block device or initrd).
-        /// Returns None if no rootfs device is available.
-        #[cfg(not(feature = "libos"))]
-        pub fn try_rootfs() -> Option<Arc<dyn FileSystem>> {
-            use rcore_fs_sfs::SimpleFileSystem;
-
-            // Try initrd first (riscv64, x86_64)
-            if let Some(initrd) = zircon_init_ram_disk() {
-                info!("Trying Zircon rootfs from initrd...");
-                let dev = Arc::new(MemBufDevice(spin::Mutex::new(initrd)));
-                if let Ok(fs) = SimpleFileSystem::open(dev) {
-                    let fs: Arc<dyn FileSystem> = fs;
-                    return Some(fs);
-                }
-                warn!("Initrd is not a valid SFS image, trying block device...");
-            }
-
-            // Try VirtIO block device (aarch64, or fallback from initrd)
-            if let Some(block) = hal_impl::device_registry::all_block().first() {
-                info!("Trying Zircon rootfs from block device...");
-                let dev: Arc<dyn rcore_fs::dev::Device> = Arc::new(BlockDevice(block));
-                if let Ok(fs) = SimpleFileSystem::open(dev) {
-                    let fs: Arc<dyn FileSystem> = fs;
-                    return Some(fs);
-                }
-                warn!("Block device is not a valid SFS image");
-            }
-
-            None
-        }
-        /// Try to open a Zircon rootfs (works for both libos and bare-metal).
-        pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
-            #[cfg(feature = "libos")]
-            {
-                try_libos_rootfs()
-            }
-            #[cfg(not(feature = "libos"))]
-            {
-                try_rootfs()
-            }
-        }
-    }
+    };
+    info!("Opening the rootfs...");
+    rcore_fs_sfs::SimpleFileSystem::open(device).expect("failed to open device SimpleFS")
 }
 
-/// Construct the libos rootfs path.
-///
-/// On aarch64 macOS, uses `target/rootfs/{personality}-libos/{arch}/`
-/// which contains a static-PIE busybox (needed because non-PIE binaries
-/// can't be loaded above macOS's ~0x400000000 address space minimum).
-/// On other platforms, uses `target/rootfs/{personality}/{arch}/` (same
-/// layout as bare-metal).
-#[cfg(feature = "libos")]
-fn libos_rootfs_path(personality: &str) -> std::path::PathBuf {
-    let project_dir = if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        std::path::Path::new(&dir).parent().unwrap().to_path_buf()
-    } else {
-        std::env::current_dir().unwrap()
-    };
-    let arch = if cfg!(target_arch = "x86_64") {
-        "x86_64"
-    } else if cfg!(target_arch = "aarch64") {
-        "aarch64"
-    } else if cfg!(target_arch = "riscv64") {
-        "riscv64"
-    } else {
-        "unknown"
-    };
-    let rootfs_base = project_dir.join("target").join("rootfs");
-    // On aarch64 macOS, use the separate libos rootfs with static-PIE binaries.
-    // Fall back to the shared rootfs if the libos one doesn't exist yet.
-    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+// ── Zircon personality ─────────────────────────────────────────────────
+
+#[cfg(feature = "zircon")]
+pub fn zbi() -> impl AsRef<[u8]> {
+    #[cfg(feature = "libos")]
     {
-        let libos_path = rootfs_base.join(format!("{personality}-libos")).join(arch);
-        if libos_path.is_dir() {
-            return libos_path;
-        }
+        let path = std::env::args().nth(1).expect(
+            "Usage: zcore-libos <ZBI_FILE>\n\
+             Build a petal ZBI with: cargo petal-zbi --arch aarch64",
+        );
+        return std::fs::read(path).expect("failed to read ZBI file");
     }
-    rootfs_base.join(personality).join(arch)
+
+    #[cfg(not(feature = "libos"))]
+    {
+        const ZBI_DATA: &[u8] = include_bytes!(env!("PETAL_ZBI"));
+        ZBI_DATA.to_vec()
+    }
 }
 
-#[cfg(all(not(feature = "libos"), feature = "linux"))]
+/// Try to open a Zircon rootfs (works for both libos and bare-metal).
+#[cfg(feature = "zircon")]
+pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
+    // LibOS mode: use HostFS.
+    #[cfg(feature = "libos")]
+    if let Some(path) = hal_impl::platform::libos_rootfs_path("zircon") {
+        let path = std::path::PathBuf::from(path);
+        if path.is_dir() && path.join("bin").is_dir() {
+            info!("LibOS Zircon rootfs: {}", path.display());
+            return Some(rcore_fs_hostfs::HostFS::new(path));
+        }
+        return None;
+    }
+
+    // Bare-metal: try initrd or block device.
+    use alloc::sync::Arc;
+    use rcore_fs::vfs::FileSystem;
+    use rcore_fs_sfs::SimpleFileSystem;
+
+    if let Some(initrd) = hal_impl::boot::init_ram_disk() {
+        info!("Trying Zircon rootfs from initrd...");
+        let dev = Arc::new(MemBufDevice(spin::Mutex::new(initrd)));
+        if let Ok(fs) = SimpleFileSystem::open(dev) {
+            let fs: Arc<dyn FileSystem> = fs;
+            return Some(fs);
+        }
+        warn!("Initrd is not a valid SFS image, trying block device...");
+    }
+
+    if let Some(block) = hal_impl::device_registry::all_block().first() {
+        info!("Trying Zircon rootfs from block device...");
+        let dev: Arc<dyn rcore_fs::dev::Device> = Arc::new(BlockDevice(block));
+        if let Ok(fs) = SimpleFileSystem::open(dev) {
+            let fs: Arc<dyn FileSystem> = fs;
+            return Some(fs);
+        }
+        warn!("Block device is not a valid SFS image");
+    }
+
+    None
+}
+
+// ── Initrd support (bare-metal only) ──────────────────────────────────
+
+#[cfg(feature = "linux")]
 pub(crate) fn init_ram_disk() -> Option<&'static mut [u8]> {
+    if hal_impl::platform::is_hosted() {
+        return None;
+    }
     if cfg!(feature = "link-user-img") {
         extern "C" {
             fn _user_img_start();
@@ -167,17 +121,13 @@ pub(crate) fn init_ram_disk() -> Option<&'static mut [u8]> {
     }
 }
 
-/// Try to get an initrd for Zircon mode (same mechanism as Linux).
-#[cfg(all(not(feature = "libos"), feature = "zircon"))]
-fn zircon_init_ram_disk() -> Option<&'static mut [u8]> {
-    hal_impl::boot::init_ram_disk()
-}
+// ── Device wrappers (bare-metal Zircon) ───────────────────────────────
 
 /// Minimal rcore-fs Device wrapper for an in-memory buffer.
-#[cfg(all(not(feature = "libos"), feature = "zircon"))]
+#[cfg(feature = "zircon")]
 struct MemBufDevice(spin::Mutex<&'static mut [u8]>);
 
-#[cfg(all(not(feature = "libos"), feature = "zircon"))]
+#[cfg(feature = "zircon")]
 impl rcore_fs::dev::Device for MemBufDevice {
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> rcore_fs::dev::Result<usize> {
         let data = self.0.lock();
@@ -203,10 +153,10 @@ impl rcore_fs::dev::Device for MemBufDevice {
 }
 
 /// Minimal rcore-fs Device wrapper for a VirtIO block device.
-#[cfg(all(not(feature = "libos"), feature = "zircon"))]
+#[cfg(feature = "zircon")]
 struct BlockDevice(alloc::sync::Arc<dyn hal_impl::device_registry::scheme::BlockScheme>);
 
-#[cfg(all(not(feature = "libos"), feature = "zircon"))]
+#[cfg(feature = "zircon")]
 impl rcore_fs::dev::Device for BlockDevice {
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> rcore_fs::dev::Result<usize> {
         if buf.is_empty() {
@@ -242,15 +192,12 @@ impl rcore_fs::dev::Device for BlockDevice {
             .ok_or(rcore_fs::dev::DevError)?;
         let skip = offset % BLK_SIZE;
         let mut tmp = alloc::vec![0u8; (end_blk - start_blk) * BLK_SIZE];
-        // Read existing data (propagate errors)
         for (i, blk) in (start_blk..end_blk).enumerate() {
             self.0
                 .read_block(blk, &mut tmp[i * BLK_SIZE..(i + 1) * BLK_SIZE])
                 .map_err(|_| rcore_fs::dev::DevError)?;
         }
-        // Overlay new data
         tmp[skip..skip + buf.len()].copy_from_slice(buf);
-        // Write back
         for (i, blk) in (start_blk..end_blk).enumerate() {
             self.0
                 .write_block(blk, &tmp[i * BLK_SIZE..(i + 1) * BLK_SIZE])
@@ -263,8 +210,8 @@ impl rcore_fs::dev::Device for BlockDevice {
     }
 }
 
-// Hard link rootfs img
-#[cfg(all(not(feature = "libos"), feature = "linux"))]
+// ── Embedded rootfs image (link-user-img feature) ─────────────────────
+
 #[cfg(feature = "link-user-img")]
 core::arch::global_asm!(concat!(
     r#"
