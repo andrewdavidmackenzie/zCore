@@ -246,6 +246,12 @@ hal_fn_def! {
         /// of registers. True on x86_64 libos where the host ABI uses
         /// the stack for overflow arguments.
         pub fn syscall_args_from_stack() -> bool { false }
+
+        /// Returns the host filesystem path for the rootfs directory
+        /// in libos mode.  Returns `None` on bare-metal.
+        ///
+        /// The `personality` parameter is `"linux"` or `"zircon"`.
+        pub fn libos_rootfs_path(personality: &str) -> Option<String> { None }
     }
 
     /// VDSO constants.
