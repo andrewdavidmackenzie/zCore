@@ -17,70 +17,45 @@ impl Context {
         }
     }
 
-    #[cfg(target_arch = "x86_64")]
+    /// Returns the raw context pointer/address.
+    ///
+    /// On x86_64, returns the address of the `context` field (because
+    /// ContextData is pushed onto the stack and the switch assembly
+    /// expects a pointer-to-pointer). On other arches, returns the
+    /// stored context address directly.
     pub fn get_context(&self) -> usize {
-        (&self.context) as *const usize as _
+        #[cfg(target_arch = "x86_64")]
+        {
+            (&self.context) as *const usize as _
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            self.context
+        }
     }
 
-    #[cfg(target_arch = "x86_64")]
+    /// Returns the stack pointer.
+    ///
+    /// On x86_64 and aarch64, the context value IS the stack pointer.
+    /// On riscv64, it's read from the ContextData.
     pub fn get_sp(&self) -> usize {
-        self.context
+        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+        {
+            self.context
+        }
+        #[cfg(target_arch = "riscv64")]
+        {
+            self.get_context_data().sp()
+        }
     }
 
-    #[cfg(target_arch = "x86_64")]
+    /// Returns the program counter.
     pub fn get_pc(&self) -> usize {
-        let context_data = self.get_context_data();
-        context_data.rip
+        self.get_context_data().pc()
     }
 
-    #[cfg(target_arch = "x86_64")]
+    /// Returns the page table base register.
     pub fn get_pgbr(&self) -> usize {
-        let context_data = self.get_context_data();
-        context_data.cr3
-    }
-
-    #[cfg(target_arch = "riscv64")]
-    pub fn get_context(&self) -> usize {
-        self.context
-    }
-
-    #[cfg(target_arch = "riscv64")]
-    pub fn get_sp(&self) -> usize {
-        let context_data = self.get_context_data();
-        context_data.sp
-    }
-
-    #[cfg(target_arch = "riscv64")]
-    pub fn get_pc(&self) -> usize {
-        let context_data = self.get_context_data();
-        context_data.ra
-    }
-
-    #[cfg(target_arch = "riscv64")]
-    pub fn get_pgbr(&self) -> usize {
-        let context_data = self.get_context_data();
-        context_data.satp
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    pub fn get_context(&self) -> usize {
-        self.context
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    pub fn get_sp(&self) -> usize {
-        self.context
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    pub fn get_pc(&self) -> usize {
-        let context_data = self.get_context_data();
-        context_data.lr
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    pub fn get_pgbr(&self) -> usize {
-        let context_data = self.get_context_data();
-        context_data.ttbr0
+        self.get_context_data().pgbr()
     }
 }
