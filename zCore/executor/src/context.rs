@@ -36,14 +36,15 @@ impl Context {
 
     /// Returns the stack pointer.
     ///
-    /// On x86_64 and aarch64, the context value IS the stack pointer.
-    /// On riscv64, it's read from the ContextData.
+    /// On x86_64, the context value is the stack pointer (ContextData
+    /// is pushed onto the stack). On aarch64 and riscv64, the sp is
+    /// read from the ContextData struct.
     pub fn get_sp(&self) -> usize {
-        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+        #[cfg(target_arch = "x86_64")]
         {
             self.context
         }
-        #[cfg(target_arch = "riscv64")]
+        #[cfg(not(target_arch = "x86_64"))]
         {
             self.get_context_data().sp()
         }
