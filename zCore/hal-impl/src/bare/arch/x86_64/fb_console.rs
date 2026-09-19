@@ -71,24 +71,33 @@ pub fn init() {
     };
 
     // Clear screen to dark blue (visible sign of life).
+    // Use a bulk memset approach: fill each scanline with the background
+    // pixel repeated. For uniform colors where B==G==R, we could use
+    // write_bytes, but our dark blue background (B=0x40,G=0x20,R=0x10)
+    // has distinct channel values. Build one scanline, then replicate.
     unsafe {
-        let total = (console.height * console.stride_bytes) as usize;
-        let buf = core::slice::from_raw_parts_mut(console.base, total);
-        for y in 0..console.height as usize {
-            for x in 0..console.width as usize {
-                let off = y * console.stride_bytes as usize + x * bpp as usize;
-                // BGR: B=0x40, G=0x20, R=0x10
-                buf[off] = 0x40;
+        let stride = console.stride_bytes as usize;
+        let w = console.width as usize;
+        // Build a single scanline buffer with the background pattern.
+        let scanline = alloc::vec![0u8; stride];
+        // Fill it with background pixels (alloc inits to zero, so alpha is 0x00).
+        let scanline = {
+            let mut s = scanline;
+            for x in 0..w {
+                let off = x * bpp as usize;
+                s[off] = 0x40; // B
                 if bpp >= 2 {
-                    buf[off + 1] = 0x20;
+                    s[off + 1] = 0x20; // G
                 }
                 if bpp >= 3 {
-                    buf[off + 2] = 0x10;
-                }
-                if bpp >= 4 {
-                    buf[off + 3] = 0x00;
+                    s[off + 2] = 0x10; // R
                 }
             }
+            s
+        };
+        // Blast the scanline to every row.
+        for y in 0..console.height as usize {
+            core::ptr::copy_nonoverlapping(scanline.as_ptr(), console.base.add(y * stride), stride);
         }
     }
 
@@ -159,29 +168,27 @@ fn scroll_up(console: &mut FbConsole) {
     let stride = console.stride_bytes as usize;
     let char_rows = CHAR_H as usize;
     let bpp = console.bpp as usize;
+    let scroll_lines = console.height as usize - char_rows;
     unsafe {
-        // Move all rows up by one character row.
-        for y in 0..(console.height as usize - char_rows) {
-            let dst = console.base.add(y * stride);
-            let src = console.base.add((y + char_rows) * stride);
-            core::ptr::copy(src, dst, stride);
-        }
-        // Clear the bottom row.
-        for y in (console.height as usize - char_rows)..console.height as usize {
-            for x in 0..console.width as usize {
-                let off = y * stride + x * bpp;
-                let p = console.base.add(off);
-                core::ptr::write_volatile(p, 0x40);
-                if bpp >= 2 {
-                    core::ptr::write_volatile(p.add(1), 0x20);
-                }
-                if bpp >= 3 {
-                    core::ptr::write_volatile(p.add(2), 0x10);
-                }
-                if bpp >= 4 {
-                    core::ptr::write_volatile(p.add(3), 0x00);
-                }
+        // Move all rows up by one character row in a single bulk copy.
+        let dst = console.base;
+        let src = console.base.add(char_rows * stride);
+        core::ptr::copy(src, dst, scroll_lines * stride);
+        // Clear the bottom character row using a scanline pattern.
+        let w = console.width as usize;
+        let mut bg_line = alloc::vec![0u8; stride];
+        for x in 0..w {
+            let off = x * bpp;
+            bg_line[off] = 0x40;
+            if bpp >= 2 {
+                bg_line[off + 1] = 0x20;
             }
+            if bpp >= 3 {
+                bg_line[off + 2] = 0x10;
+            }
+        }
+        for y in scroll_lines..console.height as usize {
+            core::ptr::copy_nonoverlapping(bg_line.as_ptr(), console.base.add(y * stride), stride);
         }
     }
     console.row = console.max_row - 1;
@@ -193,31 +200,48 @@ fn draw_char(console: &FbConsole, ch: u8, col: u32, row: u32) {
     let stride = console.stride_bytes as usize;
     let x0 = (col * CHAR_W) as usize;
     let y0 = (row * CHAR_H) as usize;
+    let char_stride = CHAR_W as usize * bpp;
 
     // Foreground: light grey (BGR: B=0xC0, G=0xC0, R=0xC0)
     // Background: dark blue-grey (BGR: B=0x40, G=0x20, R=0x10)
+    // Build each glyph scanline into a buffer, then copy it out in one
+    // operation. This reduces framebuffer writes from 8*bpp volatile
+    // stores per row to a single copy_nonoverlapping per row.
+    let mut buf = [0u8; 8 * 4]; // max 8 pixels * 4 bpp
     for (dy, &glyph_row) in glyph.iter().enumerate() {
         for dx in 0..8usize {
             let is_fg = (glyph_row >> (7 - dx)) & 1 != 0;
-            let (b, g, r) = if is_fg {
-                (0xC0u8, 0xC0u8, 0xC0u8)
-            } else {
-                (0x40u8, 0x20u8, 0x10u8)
-            };
-            let off = (y0 + dy) * stride + (x0 + dx) * bpp;
-            unsafe {
-                let p = console.base.add(off);
-                core::ptr::write_volatile(p, b);
+            let off = dx * bpp;
+            if is_fg {
+                buf[off] = 0xC0;
                 if bpp >= 2 {
-                    core::ptr::write_volatile(p.add(1), g);
+                    buf[off + 1] = 0xC0;
                 }
                 if bpp >= 3 {
-                    core::ptr::write_volatile(p.add(2), r);
+                    buf[off + 2] = 0xC0;
                 }
                 if bpp >= 4 {
-                    core::ptr::write_volatile(p.add(3), 0xFF);
+                    buf[off + 3] = 0xFF;
+                }
+            } else {
+                buf[off] = 0x40;
+                if bpp >= 2 {
+                    buf[off + 1] = 0x20;
+                }
+                if bpp >= 3 {
+                    buf[off + 2] = 0x10;
+                }
+                if bpp >= 4 {
+                    buf[off + 3] = 0x00;
                 }
             }
+        }
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                buf.as_ptr(),
+                console.base.add((y0 + dy) * stride + x0 * bpp),
+                char_stride,
+            );
         }
     }
 }
