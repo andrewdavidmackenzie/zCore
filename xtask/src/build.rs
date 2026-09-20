@@ -153,6 +153,20 @@ impl BuildConfig {
             }
         }
 
+        // The `riscv` crate gates CSR access behind `cfg(riscv)`.
+        // Custom JSON target specs don't automatically set this flag,
+        // so we add it via RUSTFLAGS for riscv64 targets.
+        if matches!(arch, Arch::Riscv64) && !is_libos {
+            let mut flags = std::env::var("RUSTFLAGS").unwrap_or_default();
+            if !flags.contains("--cfg riscv") {
+                if !flags.is_empty() {
+                    flags.push(' ');
+                }
+                flags.push_str("--cfg riscv");
+            }
+            env.insert("RUSTFLAGS".into(), flags.into());
+        }
+
         Self {
             arch,
             target_name: args.machine.clone(),

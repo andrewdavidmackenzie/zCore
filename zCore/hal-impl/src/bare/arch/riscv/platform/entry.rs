@@ -42,12 +42,6 @@ static mut BOOT_PAGE_TABLE: BootPageTable = BootPageTable::ZERO;
 
 /// Primary hart boot.
 extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> ! {
-    // Early diagnostic: print via SBI before anything else.
-    // This confirms execution reached Rust code even if later init fails.
-    for &ch in b"zCore: riscv64 entry reached\n" {
-        super::super::sbi::console_putchar(ch as usize);
-    }
-
     // Zero the BSS segment
     extern "C" {
         static mut sbss: u64;
