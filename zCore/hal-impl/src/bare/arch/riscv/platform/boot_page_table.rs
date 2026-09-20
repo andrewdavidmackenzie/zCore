@@ -1,4 +1,5 @@
 use super::consts::{kernel_mem_info, kernel_mem_probe};
+use cfg_if::cfg_if;
 use core::arch::{asm, naked_asm};
 use page_table::{MmuMeta, Pte, Sv39, VAddr, VmFlags, VmMeta, PPN};
 

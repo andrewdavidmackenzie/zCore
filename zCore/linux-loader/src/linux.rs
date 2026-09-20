@@ -1,6 +1,7 @@
 //! Run Linux process and manage trap/interrupt/syscall.
 
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use cfg_if::cfg_if;
 use core::{future::Future, pin::Pin};
 use linux_object::signal::{
     MachineContext, SigInfo, Signal, SignalActionFlags, SignalUserContext, Sigset,

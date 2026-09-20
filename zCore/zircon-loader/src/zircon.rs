@@ -14,6 +14,7 @@
 //! program is used instead (writes a debug message and exits).
 
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use cfg_if::cfg_if;
 use core::{future::Future, pin::Pin};
 
 use xmas_elf::ElfFile;

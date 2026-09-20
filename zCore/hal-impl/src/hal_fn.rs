@@ -1,4 +1,5 @@
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use cfg_if::cfg_if;
 use core::{any::Any, future::Future, ops::Range, time::Duration};
 
 use crate::device_registry::prelude::{IrqHandler, IrqPolarity, IrqTriggerMode};

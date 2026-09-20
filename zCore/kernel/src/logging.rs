@@ -1,3 +1,4 @@
+use cfg_if::cfg_if;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
 
 /// Initialize logging with the given log level filter.

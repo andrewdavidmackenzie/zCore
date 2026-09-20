@@ -12,8 +12,8 @@
 extern crate alloc;
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate cfg_if;
+
+use cfg_if::cfg_if;
 
 #[macro_use]
 mod macros;

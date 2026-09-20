@@ -2,6 +2,7 @@ global_asm!(include_str!("boot.asm"));
 
 use crate::imp::arch::sbi::{hart_start, send_ipi, SBI_SUCCESS};
 use crate::imp::kernel_entry;
+use cfg_if::cfg_if;
 use core::arch::{asm, global_asm};
 use core::str::FromStr;
 use hal::KernelConfig;

@@ -1,5 +1,6 @@
 //! Virtual memory operations.
 
+use cfg_if::cfg_if;
 use core::fmt::{Debug, Formatter, Result};
 use core::slice;
 
