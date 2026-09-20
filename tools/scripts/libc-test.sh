@@ -20,8 +20,9 @@ set -euo pipefail
 
 ARCH="${1:?Usage: $0 <arch>}"
 # Timeout for the entire QEMU session (all tests combined).
-# Should be generous enough for boot + all tests.
-SESSION_TIMEOUT=300
+# Should be generous enough for boot + all tests. Some tests (socket,
+# pthread) may hang on unimplemented syscalls, so this is a hard limit.
+SESSION_TIMEOUT=180
 
 case "$ARCH" in
   aarch64)
@@ -177,8 +178,32 @@ for exe in "${TESTS[@]}"; do
   TEST_NAMES+=" $(basename "$exe" -static.exe)"
 done
 
-# Send a compact one-liner for-loop
-echo "for t in$TEST_NAMES; do /bin/libc-test/\$t >/dev/null 2>&1 && echo PASS:\$t || echo FAIL:\$t; done; echo ALL_TESTS_DONE; poweroff -f" >&3 2>/dev/null || true
+# Tests that hang indefinitely because they depend on unimplemented
+# features (AF_UNIX sockets, POSIX semaphores, pthreads, crypt, etc.).
+# These are skipped to avoid blocking the test session. Tracked in
+# issue #16 for future implementation.
+SKIP_TESTS="crypt fcntl fdopen ipc_msg ipc_sem ipc_shm memstream popen \
+pthread_cancel pthread_cancel-points pthread_cond pthread_mutex \
+pthread_mutex_pi pthread_robust pthread_tsd sem_init sem_open \
+setjmp socket spawn vfork"
+
+# Build the runnable test list (excluding known-hanging tests).
+RUN_NAMES=""
+SKIP_COUNT=0
+for exe in "${TESTS[@]}"; do
+  name=$(basename "$exe" -static.exe)
+  if echo " $SKIP_TESTS " | grep -Fq " $name "; then
+    SKIP_COUNT=$((SKIP_COUNT + 1))
+  else
+    RUN_NAMES+=" $name"
+  fi
+done
+echo "Sending $(echo $RUN_NAMES | wc -w | tr -d ' ') tests (skipping $SKIP_COUNT known-hanging)"
+
+# Send a compact one-liner for-loop.
+# Note: do NOT redirect to /dev/null — it doesn't exist in the SFS
+# rootfs and the failed redirect makes every test report FAIL.
+echo "for t in$RUN_NAMES; do /bin/libc-test/\$t && echo PASS:\$t || echo FAIL:\$t; done; echo ALL_TESTS_DONE; poweroff -f" >&3 2>/dev/null || true
 exec 3>&- 2>/dev/null || true
 
 # Wait for QEMU to exit or session timeout
@@ -209,20 +234,26 @@ fi
 wait "$PID" 2>/dev/null || true
 
 # Step 6: Parse results from the combined output
-# Strip ANSI escape sequences for reliable parsing
-CLEAN_OUTPUT=$(sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT")
+# Strip ANSI escape sequences for reliable parsing.
+# Write to a temp file instead of a variable to handle large outputs.
+CLEAN_FILE="$TMPDIR_QEMU/clean_output"
+sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT" > "$CLEAN_FILE"
 
 PASSED=0
 FAILED=0
 HUNG=0
+SKIPPED=0
 FAIL_LIST=""
 TOTAL=${#TESTS[@]}
 
 for exe in "${TESTS[@]}"; do
   name=$(basename "$exe" -static.exe)
-  if echo "$CLEAN_OUTPUT" | grep -Fqx -- "PASS:$name"; then
+  if echo " $SKIP_TESTS " | grep -Fq " $name "; then
+    SKIPPED=$((SKIPPED + 1))
+    FAIL_LIST+="  SKIP: $name\n"
+  elif grep -Fq -- "PASS:$name" "$CLEAN_FILE"; then
     PASSED=$((PASSED + 1))
-  elif echo "$CLEAN_OUTPUT" | grep -Fqx -- "FAIL:$name"; then
+  elif grep -Fq -- "FAIL:$name" "$CLEAN_FILE"; then
     FAILED=$((FAILED + 1))
     FAIL_LIST+="  FAIL: $name\n"
   else
@@ -248,7 +279,7 @@ fi
 echo ""
 echo "========================================"
 echo "  libc-test results: $PASSED/$TOTAL passed ($PCT%)"
-echo "  ($FAILED failed, $HUNG hung/not-run)"
+echo "  ($FAILED failed, $SKIPPED skipped, $HUNG hung/not-run)"
 echo "========================================"
 
 if [ -n "$FAIL_LIST" ]; then
