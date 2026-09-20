@@ -79,13 +79,13 @@ bitflags! {
         /// TRANSFER | DUPLICATE | WAIT | INSPECT
         const BASIC = Self::TRANSFER.bits | Self::DUPLICATE.bits | Self::WAIT.bits | Self::INSPECT.bits;
 
-        /// READ ｜ WRITE
+        /// READ | WRITE
         const IO = Self::READ.bits | Self::WRITE.bits;
 
-        /// GET_PROPERTY ｜ SET_PROPERTY
+        /// GET_PROPERTY | SET_PROPERTY
         const PROPERTY = Self::GET_PROPERTY.bits | Self::SET_PROPERTY.bits;
 
-        /// GET_POLICY ｜ SET_POLICY
+        /// GET_POLICY | SET_POLICY
         const POLICY = Self::GET_POLICY.bits | Self::SET_POLICY.bits;
 
         /// BASIC & !Self::DUPLICATE | IO | SIGNAL | SIGNAL_PEER
@@ -126,7 +126,7 @@ bitflags! {
         /// BASIC | SIGNAL
         const DEFAULT_EVENT = Self::BASIC.bits | Self::SIGNAL.bits;
 
-        /// BASIC | SIGNAL ｜ SIGNAL_PEER
+        /// BASIC | SIGNAL | SIGNAL_PEER
         const DEFAULT_EVENTPAIR = Self::BASIC.bits | Self::SIGNAL.bits | Self::SIGNAL_PEER.bits;
 
         /// BASIC | IO | SIGNAL | SIGNAL_PEER
