@@ -59,6 +59,19 @@ case "$ARCH" in
       -drive "format=raw,file=$BOOT_IMG"
     )
     ;;
+  riscv64)
+    KERNEL="target/qemu-riscv64/release/kernel.bin"
+    IMAGE="target/qemu-riscv64/release/riscv64-linux.img"
+    QEMU_CMD=(
+      qemu-system-riscv64
+      -m 2G -display none -no-reboot -nographic
+      -machine virt
+      -kernel "$KERNEL"
+      -bios default
+      -serial mon:stdio
+      -initrd "$IMAGE"
+    )
+    ;;
   *)
     echo "ERROR: boot-test.sh does not yet support arch '$ARCH'"
     exit 1
