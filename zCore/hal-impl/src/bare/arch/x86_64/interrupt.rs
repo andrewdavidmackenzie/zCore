@@ -76,11 +76,20 @@ hal_fn_impl! {
 
         fn send_ipi(cpuid: usize, reason: usize) -> DeviceResult {
             trace!("ipi [{}] => [{}]: {:x}", super::cpu::cpu_id(), cpuid, reason);
-            panic!("send_ipi unsupported for x86_64");
+            // Push the reason into the target CPU's IPI queue
+            let queue = crate::common::ipi::ipi_queue(cpuid);
+            if let Some(idx) = queue.alloc_entry() {
+                *queue.entry_at(idx) = reason;
+                queue.commit_entry(idx);
+            }
+            // Send a fixed IPI via the local APIC to the target CPU
+            let lapic = ::drivers::irq::x86::Apic::local_apic();
+            lapic.send_ipi(0xFE, (cpuid as u32) << 24); // Vector 0xFE = IPI
+            Ok(())
         }
 
         fn ipi_reason() -> Vec<usize> {
-            panic!("ipi_reason unsupported for x86_64");
+            crate::common::ipi::ipi_reason()
         }
     }
 }
