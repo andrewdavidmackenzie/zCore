@@ -612,6 +612,143 @@ impl Syscall<'_> {
         sv.write([fd_a, fd_b])?;
         Ok(0)
     }
+
+    /// Create an endpoint for communication.
+    ///
+    /// Only `AF_UNIX` (domain=1) with `SOCK_STREAM` or `SOCK_DGRAM` is
+    /// supported. Returns a file descriptor for the new socket.
+    pub fn sys_socket(&self, domain: usize, socket_type: usize, protocol: usize) -> SysResult {
+        const AF_UNIX: usize = 1;
+        const SOCK_STREAM: usize = 1;
+        const SOCK_DGRAM: usize = 2;
+        const SOCK_NONBLOCK: usize = 0o4000;
+
+        info!(
+            "socket: domain={}, type={:#x}, protocol={}",
+            domain, socket_type, protocol
+        );
+
+        if domain != AF_UNIX {
+            warn!("socket: only AF_UNIX is supported, got domain={}", domain);
+            return Err(LxError::EAFNOSUPPORT);
+        }
+        let base_type = socket_type & 0xf;
+        if base_type != SOCK_STREAM && base_type != SOCK_DGRAM {
+            warn!("socket: unsupported type {}", base_type);
+            return Err(LxError::ENOSYS);
+        }
+
+        // Create an unconnected socket (a pair where the peer side is
+        // not yet attached). We create a self-connected pair and return
+        // one end; the other end is discarded (will show as peer-closed
+        // until connect() is implemented).
+        let (a, _b) = linux_object::fs::unix_socket::UnixSocketEnd::create_pair();
+
+        if socket_type & SOCK_NONBLOCK != 0 {
+            use linux_object::fs::{FileLike, OpenFlags};
+            let _ = FileLike::set_flags(a.as_ref(), OpenFlags::RDWR | OpenFlags::NON_BLOCK);
+        }
+
+        let proc = self.linux_process();
+        let fd: i32 = proc.add_file(a)?.into();
+        info!("socket: fd={}", fd);
+        Ok(fd as usize)
+    }
+
+    /// Shut down part of a full-duplex connection.
+    pub fn sys_shutdown(&self, fd: FileDesc, how: usize) -> SysResult {
+        info!("shutdown: fd={:?}, how={}", fd, how);
+        let proc = self.linux_process();
+        // Just close the fd — full shutdown semantics not implemented.
+        proc.close_file(fd)?;
+        Ok(0)
+    }
+
+    /// Get socket name (local address).
+    pub fn sys_getsockname(
+        &self,
+        fd: FileDesc,
+        mut addr: UserOutPtr<u8>,
+        mut addrlen: UserOutPtr<u32>,
+    ) -> SysResult {
+        info!("getsockname: fd={:?}", fd);
+        // Return AF_UNIX with empty path (unnamed socket).
+        let sa_family: u16 = 1; // AF_UNIX
+        addr.write_array(&sa_family.to_ne_bytes())?;
+        addrlen.write(2)?; // sizeof(sa_family_t)
+        Ok(0)
+    }
+
+    /// Get peer socket name.
+    pub fn sys_getpeername(
+        &self,
+        fd: FileDesc,
+        mut addr: UserOutPtr<u8>,
+        mut addrlen: UserOutPtr<u32>,
+    ) -> SysResult {
+        info!("getpeername: fd={:?}", fd);
+        let sa_family: u16 = 1; // AF_UNIX
+        addr.write_array(&sa_family.to_ne_bytes())?;
+        addrlen.write(2)?;
+        Ok(0)
+    }
+
+    /// Set socket options.
+    pub fn sys_setsockopt(
+        &self,
+        fd: FileDesc,
+        level: usize,
+        optname: usize,
+        _optval: UserInPtr<u8>,
+        _optlen: usize,
+    ) -> SysResult {
+        info!(
+            "setsockopt: fd={:?}, level={}, optname={}",
+            fd, level, optname
+        );
+        // Accept silently — most socket options are irrelevant for AF_UNIX.
+        Ok(0)
+    }
+
+    /// Get socket options.
+    pub fn sys_getsockopt(
+        &self,
+        fd: FileDesc,
+        level: usize,
+        optname: usize,
+        mut optval: UserOutPtr<u32>,
+        mut optlen: UserOutPtr<u32>,
+    ) -> SysResult {
+        info!(
+            "getsockopt: fd={:?}, level={}, optname={}",
+            fd, level, optname
+        );
+        const SOL_SOCKET: usize = 1;
+        const SO_ERROR: usize = 4;
+        const SO_TYPE: usize = 3;
+        const SOCK_STREAM: u32 = 1;
+
+        if level == SOL_SOCKET {
+            match optname {
+                SO_ERROR => {
+                    optval.write(0)?; // no error
+                    optlen.write(4)?;
+                }
+                SO_TYPE => {
+                    optval.write(SOCK_STREAM)?;
+                    optlen.write(4)?;
+                }
+                _ => {
+                    optval.write(0)?;
+                    optlen.write(4)?;
+                }
+            }
+        } else {
+            optval.write(0)?;
+            optlen.write(4)?;
+        }
+        Ok(0)
+    }
 }
 
 const USER_STACK_SIZE: usize = 8 * 1024 * 1024; // 8 MB, the default config of Linux

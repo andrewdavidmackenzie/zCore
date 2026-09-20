@@ -164,23 +164,23 @@ impl Syscall<'_> {
             Sys::SCHED_GETAFFINITY => self.sys_sched_getaffinity(a0, a1, a2.into()),
             Sys::SCHED_SETAFFINITY => Ok(0),
 
-            // socket -- network drivers removed from kernel (#237)
-            Sys::SOCKET
-            | Sys::CONNECT
+            // socket -- only AF_UNIX is supported (#62)
+            Sys::SOCKET => self.sys_socket(a0, a1, a2),
+            Sys::SHUTDOWN => self.sys_shutdown(a0.into(), a1),
+            Sys::GETSOCKNAME => self.sys_getsockname(a0.into(), a1.into(), a2.into()),
+            Sys::GETPEERNAME => self.sys_getpeername(a0.into(), a1.into(), a2.into()),
+            Sys::SETSOCKOPT => self.sys_setsockopt(a0.into(), a1, a2, a3.into(), a4),
+            Sys::GETSOCKOPT => self.sys_getsockopt(a0.into(), a1, a2, a3.into(), a4.into()),
+            Sys::CONNECT
             | Sys::ACCEPT
             | Sys::ACCEPT4
             | Sys::SENDTO
             | Sys::RECVFROM
             | Sys::SENDMSG
             | Sys::RECVMSG
-            | Sys::SHUTDOWN
             | Sys::BIND
-            | Sys::LISTEN
-            | Sys::GETSOCKNAME
-            | Sys::GETPEERNAME
-            | Sys::SETSOCKOPT
-            | Sys::GETSOCKOPT => {
-                warn!("socket syscall {:?}: network not available", sys_type);
+            | Sys::LISTEN => {
+                warn!("socket syscall {:?}: not yet implemented", sys_type);
                 Err(LxError::ENOSYS)
             }
 
