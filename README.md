@@ -110,24 +110,34 @@ The `drivers` list maps to cargo feature flags in `kernel-drivers`.
 The `default-personality` sets whether the kernel boots with Linux
 syscall emulation or the Zircon microkernel personality.
 
-## Original README
+## Attribution and History
 
-  Reimplement `Zircon` microkernel in safe Rust as a userspace program!
+This project is a fork of [rcore-os/zCore](https://github.com/rcore-os/zCore),
+originally created by **Runji Wang** and the
+[rCore-OS community](https://github.com/rcore-os) at Tsinghua University.
+The original project reimplements Google's Zircon microkernel in safe Rust,
+with a Linux syscall compatibility layer.
 
-- zCore设计架构概述
-- 支持bare-metal模式的Zircon & Linux
-- 支持libos模式的Zircon & Linux
-- 支持的图形应用程序等更多指导请查看[原版README文档](README-arch.md)。
+### Key contributors to the original project
 
-## 启动内核
+- **Runji Wang** ([@wangrunji0408](https://github.com/wrj)) -- creator and
+  primary architect of the Zircon object model, HAL abstraction, and Linux
+  syscall layer.
+- **Yuekai Jia** ([@equation314](https://github.com/equation314)) -- x86_64
+  platform support, UEFI boot, VirtIO drivers.
+- **Chenyuan Yang** -- riscv64 platform port, SBI boot.
 
-   ```bash
-   cargo qemu --arch riscv64
-   ```
+### This fork
 
-   这个命令会使用 qemu-system-riscv64 启动 zCore。
+This fork (maintained by [@andrewdavidmackenzie](https://github.com/andrewdavidmackenzie))
+focuses on:
+- aarch64 bare-metal (QEMU virt, Raspberry Pi 400)
+- Linux syscall completeness (libc-test pass rate: 44/69 = 63%)
+- Code quality (English comments, modern Rust idioms, CI coverage)
+- Zircon personality via the petal userspace toolkit
 
-   默认的文件系统中将包含 busybox 应用程序和 musl-libc 链接器。它们是用自动下载的 musl-libc RISC-V 交叉编译工具链编译的。
+See [CHANGELOG](docs/) and the [issue tracker](https://github.com/andrewdavidmackenzie/zCore/issues)
+for current development activity.
 
 ## 目录
 
