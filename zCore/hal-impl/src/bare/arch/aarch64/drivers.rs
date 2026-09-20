@@ -128,3 +128,20 @@ fn handle_uart_irq() {
         .first_unwrap()
         .handle_irq(0);
 }
+
+/// Initialize the per-core GIC CPU interface for secondary cores.
+///
+/// The GIC Distributor (GICD) is global and already initialized by
+/// the primary core. Each secondary core only needs to enable its
+/// own banked CPU Interface (GICC_CTLR, GICC_PMR).
+pub fn init_secondary_gic() {
+    let gic_base = super::gic_base();
+    let gicc_base = phys_to_virt(gic_base + GIC_GICC_OFFSET);
+    unsafe {
+        // Enable Group 1 interrupts
+        core::ptr::write_volatile(gicc_base as *mut u32, 0x1);
+        // Set priority mask to accept all priorities
+        core::ptr::write_volatile((gicc_base + 0x4) as *mut u32, 0xff);
+    }
+    log::info!("secondary GIC CPU interface initialized");
+}

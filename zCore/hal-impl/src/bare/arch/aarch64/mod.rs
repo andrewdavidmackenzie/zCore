@@ -352,8 +352,17 @@ pub fn primary_init() {
     drivers::init();
 }
 
+/// Per-core initialization for secondary (AP) cores.
+///
+/// Called after the secondary core has set up its stack and enabled
+/// the MMU. Initializes per-core hardware: GIC CPU interface and
+/// generic timer.
 pub fn secondary_init() {
-    unimplemented!()
+    // Initialize the per-core GIC CPU interface (banked registers)
+    drivers::init_secondary_gic();
+    // Enable the per-core timer
+    timer::init();
+    info!("secondary core {} initialized", cpu::cpu_id());
 }
 
 pub const fn timer_interrupt_vector() -> usize {
