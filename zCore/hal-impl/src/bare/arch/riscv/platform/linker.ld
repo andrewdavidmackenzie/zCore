@@ -1,6 +1,12 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 INCLUDE zCore/hal-impl/src/bare/arch/riscv/platform/kernel-vars.ld
+
+/* Force the linker to keep kernel entry points even with --gc-sections.
+   These are called via extern "Rust" declarations resolved at link time. */
+EXTERN(primary_core_init)
+EXTERN(secondary_core_init)
+
 SECTIONS
 {
     . = BASE_ADDRESS;
@@ -8,7 +14,7 @@ SECTIONS
 
     .text : {
         stext = .;
-        *(.text.entry)
+        KEEP(*(.text.entry))
         *(.text .text.*)
         etext = .;
     }
@@ -27,12 +33,12 @@ SECTIONS
         edata = .;
     }
 
-    .stack ALIGN(4K) : {
+    .stack ALIGN(4K) (NOLOAD) : {
         sstack = .;
         *(.bss.stack)
     }
 
-    .bss ALIGN(4K) : {
+    .bss ALIGN(4K) (NOLOAD) : {
         bootstack = .;
         *(.bss.bootstack)
         bootstacktop = .;
