@@ -57,8 +57,8 @@ impl BootPageTable {
             0,
             self.0.as_ptr() as usize >> Sv39::PAGE_BITS,
         );
-        // The original address space is still mapped, so no need to flush the TLB
-        // riscv::asm::sfence_vma_all();
+        // Flush the TLB to pick up new page table mappings
+        asm!("sfence.vma");
         // Jump to the corresponding position in the high page
         Self::jump_higher(kernel_mem_info().offset());
         // Set kernel access to user pages
