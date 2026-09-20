@@ -51,8 +51,11 @@ pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
         };
         hal_impl::run_executor(future)
     } else {
-        warn!("No process to run!");
-        0
+        // Secondary core: enter the executor idle loop to service
+        // tasks spawned by the primary core. The future never
+        // completes — secondary cores run until the system shuts down.
+        let future = core::future::pending::<i32>();
+        hal_impl::run_executor(future)
     };
     info!("exiting with code {}", exit_code);
     hal_impl::cpu::reset()
