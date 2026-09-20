@@ -288,5 +288,20 @@ if [ -n "$FAIL_LIST" ]; then
   printf '%b' "$FAIL_LIST"
 fi
 
-# Always exit 0 — this test reports progress, not pass/fail.
+# Ratchet: enforce a minimum pass count so regressions are caught.
+# Update MIN_PASS when fixes increase the pass count.
+# Set to -1 for architectures without an established baseline.
+case "$ARCH" in
+  aarch64) MIN_PASS=39 ;; # 39-44 depending on timing; some tests are flaky
+  x86_64)  MIN_PASS=-1 ;; # TODO: establish x86_64 baseline
+  *)       MIN_PASS=-1 ;;
+esac
+
+if [ "$MIN_PASS" -ge 0 ] && [ "$PASSED" -lt "$MIN_PASS" ]; then
+  echo ""
+  echo "REGRESSION: $PASSED passed < minimum $MIN_PASS for $ARCH"
+  echo "A recent change broke libc-tests. Investigate before merging."
+  exit 1
+fi
+
 exit 0

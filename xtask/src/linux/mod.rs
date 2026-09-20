@@ -54,6 +54,11 @@ impl LinuxRootfs {
         dir::clear(&dir).unwrap();
         fs::create_dir(&bin).unwrap();
         fs::create_dir(&lib).unwrap();
+        // /tmp is needed by libc-test (tmpfile, writetemp) and many programs.
+        // /dev is a placeholder — actual device nodes are not supported by
+        // SFS, but having the directory avoids ENOENT on /dev/null lookups.
+        fs::create_dir(dir.join("tmp")).unwrap();
+        fs::create_dir(dir.join("dev")).unwrap();
         // Copy busybox
         fs::copy(busybox, bin.join("busybox")).unwrap();
         // Copy libc.so
