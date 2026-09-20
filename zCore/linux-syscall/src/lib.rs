@@ -171,15 +171,12 @@ impl Syscall<'_> {
             Sys::GETPEERNAME => self.sys_getpeername(a0.into(), a1.into(), a2.into()),
             Sys::SETSOCKOPT => self.sys_setsockopt(a0.into(), a1, a2, a3.into(), a4),
             Sys::GETSOCKOPT => self.sys_getsockopt(a0.into(), a1, a2, a3.into(), a4.into()),
-            Sys::CONNECT
-            | Sys::ACCEPT
-            | Sys::ACCEPT4
-            | Sys::SENDTO
-            | Sys::RECVFROM
-            | Sys::SENDMSG
-            | Sys::RECVMSG
-            | Sys::BIND
-            | Sys::LISTEN => {
+            Sys::BIND => self.sys_bind(a0.into(), a1.into(), a2),
+            Sys::LISTEN => self.sys_listen(a0.into(), a1),
+            Sys::ACCEPT => self.sys_accept(a0.into(), a1.into(), a2.into()),
+            Sys::ACCEPT4 => self.sys_accept(a0.into(), a1.into(), a2.into()),
+            Sys::CONNECT => self.sys_connect(a0.into(), a1.into(), a2),
+            Sys::SENDTO | Sys::RECVFROM | Sys::SENDMSG | Sys::RECVMSG => {
                 warn!("socket syscall {:?}: not yet implemented", sys_type);
                 Err(LxError::ENOSYS)
             }

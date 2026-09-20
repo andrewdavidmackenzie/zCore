@@ -105,6 +105,7 @@ pub enum LxError {
     EPFNOSUPPORT = 96,
     /// Address family not supported by protocol
     EAFNOSUPPORT = 97,
+    EADDRINUSE = 98,
     /// No buffer space available
     ENOBUFS = 105,
     /// Transport endpoint is already connected
@@ -167,6 +168,7 @@ impl fmt::Display for LxError {
             ENOPROTOOPT => "Protocol not available",
             EPFNOSUPPORT => "Protocol family not supported",
             EAFNOSUPPORT => "Address family not supported by protocol",
+            EADDRINUSE => "Address already in use",
             ENOBUFS => "No buffer space available",
             EISCONN => "Transport endpoint is already connected",
             ENOTCONN => "Transport endpoint is not connected",
