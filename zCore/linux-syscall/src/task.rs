@@ -95,7 +95,14 @@ impl Syscall<'_> {
             self.zircon_process().id(),
             new_proc.id()
         );
-        new_proc.wait_signal(Signal::SIGNALED).await; // wait for execve
+        // Wait for either execve (USER_SIGNAL_0) or exit (PROCESS_TERMINATED).
+        // Using USER_SIGNAL_0 instead of SIGNALED avoids the persistence
+        // problem: SIGNALED == PROCESS_TERMINATED (same bit), so setting
+        // SIGNALED on execve would permanently mark the process as
+        // "terminated" and break subsequent wait operations.
+        new_proc
+            .wait_signal(Signal::USER_SIGNAL_0 | Signal::PROCESS_TERMINATED)
+            .await;
         Ok(new_proc.id() as usize)
     }
 
@@ -338,12 +345,12 @@ impl Syscall<'_> {
         // Reset signal dispositions on exec (SIG_IGN preserved, others to SIG_DFL)
         proc.reset_signal_actions_on_exec();
 
-        // Note: signal_set(SIGNALED) to release vfork parent is intentionally
-        // omitted. Setting SIGNALED on the child process persists across the
-        // process lifetime and causes regressions in subsequent fork/exec
-        // operations. The vfork parent resumes via other mechanisms (child
-        // exit sets PROCESS_TERMINATED, or the busybox shell doesn't use
-        // true vfork semantics).
+        // Signal the vfork parent (if any) that execve completed.
+        // Uses USER_SIGNAL_0 instead of SIGNALED to avoid the persistence
+        // problem: SIGNALED == PROCESS_TERMINATED (same bit 3), so setting
+        // it would permanently mark the process as "terminated".
+        // USER_SIGNAL_0 (bit 24) is a separate bit that doesn't conflict.
+        self.zircon_process().signal_set(Signal::USER_SIGNAL_0);
 
         self.thread
             .with_context(|ctx| ctx.setup_uspace(entry, sp, &[0, 0, 0]))?;
