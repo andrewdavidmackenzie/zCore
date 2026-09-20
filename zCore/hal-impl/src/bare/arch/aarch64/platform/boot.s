@@ -243,9 +243,10 @@ _start_virtual:
     b       1b
 2:
 
-    /* Set up the boot stack */
-    adrp    x19, boot_stack_top
-    add     x19, x19, :lo12:boot_stack_top
+    /* Set up the boot stack for core 0 (first 32 KiB) */
+    adrp    x19, boot_stack
+    add     x19, x19, :lo12:boot_stack
+    add     x19, x19, #0x8000       /* top of first 32 KiB slot */
     mov     sp, x19
 
     /* Restore DTB pointer as first argument */
@@ -276,9 +277,79 @@ BOOT_PT_L1_ID:
 BOOT_PT_L1_HI:
     .space 4096
 
-/* ====== Boot stack ====== */
+/* ====== Secondary core entry (called via PSCI CPU_ON) ====== */
+/*
+ * When PSCI CPU_ON wakes a secondary core, it enters here at the
+ * physical address. The MMU is off. Page tables are already populated
+ * by the BSP. We just need to:
+ *   1. Configure MAIR/TCR/TTBR (same values as BSP)
+ *   2. Enable the MMU
+ *   3. Jump to virtual address space
+ *   4. Set up a per-core stack
+ *   5. Call secondary_core_init (Rust)
+ */
+.section .text.boot, "ax"
+.global _secondary_entry
+_secondary_entry:
+    /* Configure MAIR_EL1 (same as primary) */
+    ldr     x0, =0x00000000004404FF
+    msr     mair_el1, x0
+    isb
+
+    /* Configure TCR_EL1 (same as primary) */
+    ldr     x0, =0x00000002B5103510
+    msr     tcr_el1, x0
+    isb
+
+    /* Load page tables (already populated by BSP) */
+    adrp    x0, BOOT_PT_L0_LO
+    add     x0, x0, :lo12:BOOT_PT_L0_LO
+    msr     ttbr0_el1, x0
+
+    adrp    x0, BOOT_PT_L0_HI
+    add     x0, x0, :lo12:BOOT_PT_L0_HI
+    msr     ttbr1_el1, x0
+
+    tlbi    vmalle1
+    dsb     sy
+    isb
+
+    /* Enable the MMU */
+    mrs     x0, sctlr_el1
+    orr     x0, x0, #(1 << 0)     /* M: Enable MMU */
+    orr     x0, x0, #(1 << 2)     /* C: Enable D-cache */
+    orr     x0, x0, #(1 << 12)    /* I: Enable I-cache */
+    msr     sctlr_el1, x0
+    isb
+
+    /* Jump to virtual address space */
+    ldr     x0, =_secondary_virtual
+    br      x0
+
+.section .text.entry, "ax"
+.global _secondary_virtual
+_secondary_virtual:
+    /* Now executing at virtual addresses */
+
+    /* Set up per-core stack: read MPIDR_EL1 Aff0 for core ID */
+    mrs     x0, MPIDR_EL1
+    and     x0, x0, #0xFF           /* Aff0 = core ID */
+
+    /* Stack pointer = boot_stack_top + (core_id + 1) * STACK_SIZE */
+    /* Core 0 uses the first stack, core 1 the second, etc. */
+    add     x0, x0, #1
+    ldr     x1, =0x8000             /* 32 KiB per core */
+    mul     x0, x0, x1
+    adrp    x1, boot_stack
+    add     x1, x1, :lo12:boot_stack
+    add     sp, x1, x0
+
+    /* Call Rust secondary core init (never returns) */
+    b       secondary_core_init
+
+/* ====== Boot stacks (4 cores x 32 KiB = 128 KiB) ====== */
 .section .bss.stack
 .align 12
 boot_stack:
-    .space 0x8000   /* 32 KiB */
+    .space 0x20000   /* 128 KiB (4 cores x 32 KiB) */
 boot_stack_top:

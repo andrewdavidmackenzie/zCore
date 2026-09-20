@@ -350,6 +350,39 @@ fn parse_node_addr(name: &[u8]) -> Option<usize> {
 pub fn primary_init() {
     vm::init();
     drivers::init();
+    // Start secondary cores (QEMU virt uses PSCI)
+    #[cfg(not(feature = "board-raspi400"))]
+    start_secondary_cores();
+}
+
+/// Start secondary cores via PSCI CPU_ON.
+///
+/// On QEMU virt, secondary cores are powered off at boot. We use
+/// PSCI CPU_ON to start each one at the `_secondary_entry` physical
+/// address. The secondary entry assembly enables the MMU and jumps
+/// to `secondary_core_init` in Rust.
+#[cfg(not(feature = "board-raspi400"))]
+fn start_secondary_cores() {
+    extern "C" {
+        fn _secondary_entry();
+    }
+    // The entry point must be a physical address.
+    // _secondary_entry is linked at a virtual address; subtract the offset.
+    let phys_to_virt_offset = crate::KCONFIG.phys_to_virt_offset;
+    let entry_vaddr = _secondary_entry as *const () as usize;
+    let entry_paddr = entry_vaddr - phys_to_virt_offset;
+
+    // Start cores 1, 2, 3 (core 0 is the BSP)
+    for core_id in 1..4u64 {
+        info!(
+            "Starting secondary core {} at paddr {:#x}",
+            core_id, entry_paddr
+        );
+        match cpu::psci_cpu_on(core_id as usize, entry_paddr, 0) {
+            Ok(()) => info!("Core {} started successfully", core_id),
+            Err(e) => warn!("Failed to start core {}: PSCI error {}", core_id, e),
+        }
+    }
 }
 
 /// Per-core initialization for secondary (AP) cores.
