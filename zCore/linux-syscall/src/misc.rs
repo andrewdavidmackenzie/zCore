@@ -749,6 +749,108 @@ impl Syscall<'_> {
         }
         Ok(0)
     }
+
+    /// Bind a socket to a local address (path for AF_UNIX).
+    pub fn sys_bind(&self, fd: FileDesc, addr: UserInPtr<u8>, addrlen: usize) -> SysResult {
+        // Parse sockaddr_un: sa_family (2 bytes) + sun_path (up to 108 bytes)
+        if addrlen < 3 {
+            return Err(LxError::EINVAL);
+        }
+        let buf = addr.read_array(addrlen.min(110))?;
+        let _sa_family = u16::from_ne_bytes([buf[0], buf[1]]);
+        // Extract path (null-terminated)
+        let path_bytes = &buf[2..];
+        let path_len = path_bytes
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(path_bytes.len());
+        let path = core::str::from_utf8(&path_bytes[..path_len]).map_err(|_| LxError::EINVAL)?;
+        info!("bind: fd={:?}, path={:?}", fd, path);
+
+        // Verify fd is a socket
+        let proc = self.linux_process();
+        let _file = proc.get_file_like(fd)?;
+
+        // Register the listener (bind doesn't create the queue yet,
+        // but we register early for simplicity — listen() is a no-op).
+        linux_object::fs::unix_socket::bind_listener(
+            alloc::string::String::from(path),
+            128, // default backlog
+        )?;
+        Ok(0)
+    }
+
+    /// Mark a socket as passive (willing to accept connections).
+    pub fn sys_listen(&self, fd: FileDesc, backlog: usize) -> SysResult {
+        info!("listen: fd={:?}, backlog={}", fd, backlog);
+        // The listener was already created in bind(). listen() is a no-op.
+        let proc = self.linux_process();
+        let _file = proc.get_file_like(fd)?;
+        Ok(0)
+    }
+
+    /// Accept a connection on a listening socket.
+    ///
+    /// Returns a new file descriptor for the accepted connection.
+    pub fn sys_accept(
+        &self,
+        fd: FileDesc,
+        mut addr: UserOutPtr<u8>,
+        mut addrlen: UserOutPtr<u32>,
+    ) -> SysResult {
+        info!("accept: fd={:?}", fd);
+        let proc = self.linux_process();
+        let _file = proc.get_file_like(fd)?;
+
+        // Find the listener associated with this fd.
+        // For simplicity, check all listeners for pending connections.
+        let listeners = linux_object::fs::unix_socket::UNIX_LISTENERS.lock();
+        for (_path, listener) in listeners.iter() {
+            if let Some(conn) = listener.pop_connection() {
+                let new_fd: i32 = proc.add_file(conn)?.into();
+                // Write peer address if requested
+                if !addr.is_null() {
+                    let sa_family: u16 = 1; // AF_UNIX
+                    let _ = addr.write_array(&sa_family.to_ne_bytes());
+                    if !addrlen.is_null() {
+                        let _ = addrlen.write(2);
+                    }
+                }
+                info!("accept: new_fd={}", new_fd);
+                return Ok(new_fd as usize);
+            }
+        }
+        // No pending connections — would block.
+        // TODO: async wait for connections.
+        Err(LxError::EAGAIN)
+    }
+
+    /// Connect a socket to a remote address (path for AF_UNIX).
+    pub fn sys_connect(&self, fd: FileDesc, addr: UserInPtr<u8>, addrlen: usize) -> SysResult {
+        if addrlen < 3 {
+            return Err(LxError::EINVAL);
+        }
+        let buf = addr.read_array(addrlen.min(110))?;
+        let _sa_family = u16::from_ne_bytes([buf[0], buf[1]]);
+        let path_bytes = &buf[2..];
+        let path_len = path_bytes
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(path_bytes.len());
+        let path = core::str::from_utf8(&path_bytes[..path_len]).map_err(|_| LxError::EINVAL)?;
+        info!("connect: fd={:?}, path={:?}", fd, path);
+
+        let proc = self.linux_process();
+        // Close the old unconnected socket end
+        proc.close_file(fd)?;
+
+        // Connect to the listener and get the client end
+        let client_end = linux_object::fs::unix_socket::connect_to(path)?;
+
+        // Add the connected socket as the same fd
+        proc.add_file_at(fd, client_end)?;
+        Ok(0)
+    }
 }
 
 const USER_STACK_SIZE: usize = 8 * 1024 * 1024; // 8 MB, the default config of Linux

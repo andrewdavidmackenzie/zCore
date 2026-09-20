@@ -1,11 +1,21 @@
-//! Unix domain socket (AF_UNIX) -- minimal implementation.
+//! Unix domain socket (AF_UNIX) implementation.
 //!
-//! Currently supports `socketpair()` only (connected SOCK_STREAM pairs).
-//! Path-based addressing (bind/listen/accept/connect) is not yet implemented.
+//! Supports:
+//! - `socketpair()` — connected SOCK_STREAM pairs
+//! - `socket()` + `bind()` + `listen()` + `accept()` — server sockets
+//! - `socket()` + `connect()` — client sockets
+//!
+//! Path-based addressing uses a global registry mapping filesystem
+//! paths to listener queues.
 
 use crate::fs::{FileLike, OpenFlags};
 use crate::sync::{Event, EventBus};
-use alloc::{boxed::Box, collections::vec_deque::VecDeque, sync::Arc};
+use alloc::{
+    boxed::Box,
+    collections::{btree_map::BTreeMap, vec_deque::VecDeque},
+    string::String,
+    sync::Arc,
+};
 use core::any::Any;
 use core::future::Future;
 use core::pin::Pin;
@@ -16,6 +26,84 @@ use zircon_object::impl_kobject;
 use zircon_object::object::*;
 
 use crate::error::{LxError, LxResult};
+
+/// Global registry of bound Unix socket listeners.
+///
+/// Maps filesystem paths to listener queues. When a client calls
+/// `connect(path)`, it looks up the listener here and pushes a
+/// new connection into the queue.
+/// Global registry — public for accept() in linux-syscall.
+pub static UNIX_LISTENERS: Mutex<BTreeMap<String, Arc<UnixListener>>> = Mutex::new(BTreeMap::new());
+
+/// A Unix domain socket listener (created by bind + listen).
+pub struct UnixListener {
+    /// Pending connections waiting to be accept()ed.
+    /// Each entry is one end of a connected pair — the other end
+    /// was returned to the connecting client.
+    queue: Mutex<VecDeque<Arc<UnixSocketEnd>>>,
+    /// Notifies accept() when a new connection arrives.
+    eventbus: Mutex<EventBus>,
+    /// Maximum queue length (backlog from listen()).
+    _backlog: usize,
+}
+
+impl UnixListener {
+    fn new(backlog: usize) -> Self {
+        Self {
+            queue: Mutex::new(VecDeque::new()),
+            eventbus: Mutex::new(EventBus::default()),
+            _backlog: backlog,
+        }
+    }
+
+    /// Push a new connection into the accept queue.
+    fn push_connection(&self, end: Arc<UnixSocketEnd>) {
+        self.queue.lock().push_back(end);
+        self.eventbus.lock().set(Event::READABLE);
+    }
+
+    /// Pop a connection from the accept queue.
+    pub fn pop_connection(&self) -> Option<Arc<UnixSocketEnd>> {
+        let mut q = self.queue.lock();
+        let conn = q.pop_front();
+        if q.is_empty() {
+            self.eventbus.lock().clear(Event::READABLE);
+        }
+        conn
+    }
+
+    /// Check if there are pending connections.
+    pub fn has_pending(&self) -> bool {
+        !self.queue.lock().is_empty()
+    }
+}
+
+/// Bind a path to a listener in the global registry.
+pub fn bind_listener(path: String, backlog: usize) -> LxResult<Arc<UnixListener>> {
+    let mut listeners = UNIX_LISTENERS.lock();
+    if listeners.contains_key(&path) {
+        return Err(LxError::EADDRINUSE);
+    }
+    let listener = Arc::new(UnixListener::new(backlog));
+    listeners.insert(path, listener.clone());
+    Ok(listener)
+}
+
+/// Connect to a listener at the given path.
+/// Returns the client's end of the connected socket pair.
+pub fn connect_to(path: &str) -> LxResult<Arc<UnixSocketEnd>> {
+    let listeners = UNIX_LISTENERS.lock();
+    let listener = listeners.get(path).ok_or(LxError::ECONNREFUSED)?;
+    // Create a connected pair — server gets one end, client gets the other.
+    let (server_end, client_end) = UnixSocketEnd::create_pair();
+    listener.push_connection(server_end);
+    Ok(client_end)
+}
+
+/// Remove a listener from the registry (called on close/cleanup).
+pub fn unbind_listener(path: &str) {
+    UNIX_LISTENERS.lock().remove(path);
+}
 
 /// Shared data for one direction of a Unix socket pair.
 struct ChannelData {
