@@ -291,6 +291,11 @@ BOOT_PT_L1_HI:
 .section .text.boot, "ax"
 .global _secondary_entry
 _secondary_entry:
+    /* Enable FP/SIMD (same as primary) */
+    mov     x0, #(3 << 20)
+    msr     cpacr_el1, x0
+    isb
+
     /* Configure MAIR_EL1 (same as primary) */
     ldr     x0, =0x00000000004404FF
     msr     mair_el1, x0
