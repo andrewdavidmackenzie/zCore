@@ -105,7 +105,7 @@ impl Syscall<'_> {
             Sys::MKDIRAT => self.sys_mkdirat(a0.into(), a1.into(), a2),
             Sys::LINKAT => self.sys_linkat(a0.into(), a1.into(), a2.into(), a3.into(), a4),
             Sys::UNLINKAT => self.sys_unlinkat(a0.into(), a1.into(), a2),
-            Sys::SYMLINKAT => self.unimplemented("symlinkat", Err(LxError::EACCES)),
+            Sys::SYMLINKAT => self.sys_symlinkat(a0.into(), a1.into(), a2.into()),
             Sys::READLINKAT => self.sys_readlinkat(a0.into(), a1.into(), a2.into(), a3),
             // File permission operations
             Sys::FCHMOD => self.sys_fchmod(a0.into(), a1 as u32),
@@ -149,10 +149,7 @@ impl Syscall<'_> {
             Sys::MMAP => self.sys_mmap(a0, a1, a2, a3, a4.into(), a5 as _).await,
             Sys::MPROTECT => self.sys_mprotect(a0, a1, a2),
             Sys::MUNMAP => self.sys_munmap(a0, a1),
-            Sys::MADVISE => {
-                info!("madvise unimplemented");
-                Ok(0)
-            }
+            Sys::MADVISE => self.sys_madvise(a0, a1, a2),
             Sys::MREMAP => self.sys_mremap(a0, a1, a2, a3, a4),
 
             // signal
@@ -347,12 +344,6 @@ impl Syscall<'_> {
         let proc = self.zircon_process();
         proc.exit(-1);
         Err(LxError::ENOSYS)
-    }
-
-    /// unimplemented syscalls
-    fn unimplemented(&self, name: &str, ret: SysResult) -> SysResult {
-        warn!("{}: unimplemented", name);
-        ret
     }
 
     /// get zircon process

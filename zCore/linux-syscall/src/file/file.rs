@@ -357,7 +357,6 @@ impl Syscall<'_> {
         mode: usize,
         flags: usize,
     ) -> SysResult {
-        // TODO: check permissions based on uid/gid
         let path = path.read_c_string()?;
         let flags = AtFlags::from_bits_truncate(flags);
         info!(
@@ -366,7 +365,35 @@ impl Syscall<'_> {
         );
         let proc = self.linux_process();
         let follow = !flags.contains(AtFlags::SYMLINK_NOFOLLOW);
-        let _inode = proc.lookup_inode_at(dirfd, &path, follow)?;
+        let inode = proc.lookup_inode_at(dirfd, &path, follow)?;
+        // F_OK (0) just checks existence — already handled by lookup_inode_at.
+        if mode == 0 {
+            return Ok(0);
+        }
+        // Check R/W/X permission bits against the inode's mode and the
+        // process's effective uid/gid.
+        let meta = inode.metadata().map_err(|_| LxError::EIO)?;
+        let file_mode = meta.mode as usize;
+        let euid = proc.euid();
+        let egid = proc.egid();
+        // Determine which permission bits apply (owner / group / other).
+        let perm_bits = if euid == 0 {
+            // Root can read/write anything; execute requires at least one x bit.
+            if mode & 1 != 0 && file_mode & 0o111 == 0 {
+                return Err(LxError::EACCES);
+            }
+            return Ok(0);
+        } else if euid as usize == meta.uid {
+            (file_mode >> 6) & 7
+        } else if egid as usize == meta.gid {
+            (file_mode >> 3) & 7
+        } else {
+            file_mode & 7
+        };
+        // mode bits: R_OK=4, W_OK=2, X_OK=1
+        if mode & perm_bits != mode {
+            return Err(LxError::EACCES);
+        }
         Ok(0)
     }
 

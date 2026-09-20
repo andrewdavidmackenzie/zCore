@@ -1,4 +1,4 @@
-﻿//! Directory operations
+//! Directory operations
 //!
 //! - getcwd
 //! - chdir
@@ -251,6 +251,30 @@ impl Syscall<'_> {
     /// read value of symbolic link
     pub fn sys_readlink(&self, path: UserInPtr<u8>, base: UserOutPtr<u8>, len: usize) -> SysResult {
         self.sys_readlinkat(FileDesc::CWD, path, base, len)
+    }
+
+    /// Create a symbolic link relative to a directory file descriptor.
+    ///
+    /// `target` is the string that the symlink will point to.
+    /// `linkpath` is the pathname of the symlink to create, relative to `newdirfd`.
+    pub fn sys_symlinkat(
+        &self,
+        target: UserInPtr<u8>,
+        newdirfd: FileDesc,
+        linkpath: UserInPtr<u8>,
+    ) -> SysResult {
+        let target = target.read_c_string()?;
+        let linkpath = linkpath.read_c_string()?;
+        info!(
+            "symlinkat: target={:?}, newdirfd={:?}, linkpath={:?}",
+            target, newdirfd, linkpath
+        );
+        let proc = self.linux_process();
+        let (dir_path, file_name) = linux_object::fs::split_path(&linkpath);
+        let dir_inode = proc.lookup_inode_at(newdirfd, dir_path, true)?;
+        let symlink_inode = dir_inode.create(file_name, FileType::SymLink, 0o777)?;
+        symlink_inode.write_at(0, target.as_bytes())?;
+        Ok(0)
     }
 
     /// Read value of a symbolic link relative to a directory file descriptor.
