@@ -176,6 +176,12 @@ boot-test: build
 	@echo "==> Boot smoke test ($(ARCH))..."
 	@tools/scripts/boot-test.sh $(ARCH)
 
+# SMP smoke test: boot with -smp 4, verify all cores initialize.
+# Only for aarch64 (other arches don't have SMP yet).
+smp-test: build
+	@echo "==> SMP smoke test ($(ARCH))..."
+	@tools/scripts/smp-test.sh $(ARCH)
+
 # Run busybox applet tests: echo, ls, cat, pipes, etc.
 # Verifies that common busybox commands work end-to-end in QEMU.
 # Depends on boot-test to ensure serialization under parallel make.
