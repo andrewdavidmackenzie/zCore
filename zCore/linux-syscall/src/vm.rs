@@ -337,6 +337,20 @@ impl Syscall<'_> {
         Ok(0)
     }
 
+    /// Give advice about use of memory.
+    ///
+    /// Linux accepts all advice values without error. MADV_DONTNEED
+    /// should ideally decommit pages, but that requires VmMapping
+    /// API extensions. For now, all advice is accepted as a no-op.
+    pub fn sys_madvise(&self, addr: usize, len: usize, advice: usize) -> SysResult {
+        info!(
+            "madvise: addr={:#x}, len={:#x}, advice={}",
+            addr, len, advice
+        );
+        let _ = (addr, len); // suppress unused warnings
+        Ok(0)
+    }
+
     /// Unmap files or devices into memory
     /// (see [linux man munmap(2)](https://www.man7.org/linux/man-pages/man2/munmap.2.html)).
     ///
