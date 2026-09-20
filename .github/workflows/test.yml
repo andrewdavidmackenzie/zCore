@@ -143,8 +143,9 @@ jobs:
         run: make build ARCH=riscv64
 
       - name: Boot smoke test
-        # Known failure: riscv64 kernel hangs at boot (issue #3).
-        # continue-on-error provides visibility without blocking CI.
+        # riscv64 reaches Rust entry but hangs during init (issue #3).
+        # Linker fix (PR #344) resolved the empty binary, but kernel
+        # init still fails. Keep continue-on-error until fully fixed.
         continue-on-error: true
         run: make boot-test ARCH=riscv64
 
