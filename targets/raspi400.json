@@ -11,7 +11,7 @@
   "panic-strategy": "abort",
   "pre-link-args": {
     "ld.lld": [
-      "-TzCore/kernel/src/platform/aarch64/linker_raspi400.ld"
+      "-TzCore/hal-impl/src/bare/arch/aarch64/platform/linker_raspi400.ld"
     ]
   },
   "relocation-model": "static",

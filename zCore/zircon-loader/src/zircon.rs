@@ -137,6 +137,20 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
         entry
     );
 
+    // Flush I-cache after loading executable code.
+    // On real hardware (Pi 400), the I-cache and D-cache are not coherent.
+    // Without this, the CPU may execute stale/zero data from I-cache.
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        core::arch::asm!(
+            "dsb ish",  // ensure D-cache writes are visible
+            "ic iallu", // invalidate entire I-cache
+            "dsb ish",  // ensure I-cache invalidation completes
+            "isb",      // synchronize instruction stream
+        );
+        info!("I-cache invalidated after loading userstart");
+    }
+
     // Create the vDSO VMO with syscall trampolines and constants.
     let vdso_vmo = create_vdso_vmo();
 
@@ -334,7 +348,7 @@ async fn handler_user_trap(
         }
         TrapReason::PageFault(vaddr, flags) => {
             EXCEPTIONS_PGFAULT.add(1);
-            info!("page fault from user mode @ {:#x}({:?})", vaddr, flags);
+            trace!("page fault from user mode @ {:#x}({:?})", vaddr, flags);
             let vmar = thread.proc().vmar();
             match vmar.handle_page_fault(vaddr, flags) {
                 Ok(()) => Ok(()),
@@ -342,7 +356,7 @@ async fn handler_user_trap(
                     // Pager-backed VMO: the pager has been notified.
                     // Yield repeatedly to let the pager supply pages.
                     // The thread will re-fault after this returns Ok(()).
-                    info!("page fault: waiting for pager to supply pages");
+                    trace!("page fault: waiting for pager to supply pages");
                     // Yield multiple times to give the pager process
                     // time to run and supply the requested pages.
                     for _ in 0..100 {

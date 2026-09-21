@@ -227,10 +227,13 @@ impl Pl011Inner {
         self.write_reg(self.intr_clr_reg, 0x7ff);
     }
 
-    /// Minimal init: only enable RX interrupt, don't touch UART config.
+    /// Minimal init: only enable RX interrupts, don't touch UART config.
     /// For use when firmware has already configured the UART correctly.
+    /// RXIM fires when the RX FIFO reaches its trigger level.
+    /// RTIM fires when data sits in a non-empty RX FIFO for 32 bit
+    /// periods without new data — this handles single-character input.
     fn init_irq_only(&self) {
-        let flags = UartImscFlags::RXIM;
+        let flags = UartImscFlags::RXIM | UartImscFlags::RTIM;
         self.write_reg(self.intr_mask_setclr_reg, flags.bits);
         self.write_reg(self.intr_clr_reg, 0x7ff);
     }
@@ -240,7 +243,7 @@ impl Pl011Inner {
     }
 
     fn getchar(&self) -> Option<u8> {
-        if self.line_sts().contains(UartFrFlags::RXFF) {
+        if !self.line_sts().contains(UartFrFlags::RXFE) {
             Some(self.read_reg(self.data_reg) as u8)
         } else {
             None

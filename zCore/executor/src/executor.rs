@@ -73,6 +73,14 @@ impl Executor {
     fn init_stack_and_context(&mut self) {
         let mut stack_top = self.stack_base + STACK_SIZE;
         let self_addr = self as *const Self as usize;
+        // Push executor address AND maintain 16-byte SP alignment
+        // (AArch64 calling convention requires 16-byte aligned SP).
+        // push_stack subtracts 8 bytes for one usize, so we push a
+        // padding word first, then the real value — keeping SP aligned.
+        #[cfg(target_arch = "aarch64")]
+        {
+            stack_top = unsafe { push_stack(stack_top, 0usize) }; // padding
+        }
         stack_top = unsafe { push_stack(stack_top, self_addr) };
         #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
         {

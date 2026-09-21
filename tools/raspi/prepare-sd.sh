@@ -56,7 +56,7 @@ echo "==> Building zCore kernel for Raspberry Pi 4..."
 cd "$PROJECT_DIR"
 make raspi400-build
 
-KERNEL_BIN="$PROJECT_DIR/target/raspi400/release/zcore.bin"
+KERNEL_BIN="$PROJECT_DIR/target/raspi400/release/kernel.bin"
 if [ ! -f "$KERNEL_BIN" ]; then
     echo "ERROR: Kernel binary not found at $KERNEL_BIN"
     exit 1
@@ -99,7 +99,7 @@ echo "  1. Eject the SD card safely"
 echo "  2. Insert into Pi 400"
 echo "  3. Connect a USB-to-serial adapter to GPIO pins 14 (TX) and 15 (RX)"
 echo "     Or use the Pi 400's built-in USB and a serial terminal"
-echo "  4. Open a serial terminal: screen /dev/tty.usbserial-* 9600"
+echo "  4. Open a serial terminal: screen /dev/tty.usbserial-* 115200"
 echo "  5. Power on the Pi"
 echo ""
 echo "You should see zCore kernel output on the serial console."

@@ -39,13 +39,13 @@ pub(crate) fn wait_for_interrupt() {
 
 pub(crate) fn intr_on() {
     unsafe {
-        core::arch::asm!("msr daifclr, #2");
+        core::arch::asm!("msr daifclr, #2", "isb");
     }
 }
 
 pub(crate) fn intr_off() {
     unsafe {
-        core::arch::asm!("msr daifset, #2");
+        core::arch::asm!("msr daifset, #2", "isb");
     }
 }
 

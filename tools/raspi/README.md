@@ -25,10 +25,10 @@ The Pi 400 has a GPIO header. Connect a USB-to-serial adapter:
 Open a serial terminal:
 ```bash
 # macOS
-screen /dev/tty.usbserial-* 9600
+screen /dev/tty.usbserial-* 115200
 
 # Linux
-screen /dev/ttyUSB0 9600
+screen /dev/ttyUSB0 115200
 ```
 
 ## What You'll See
