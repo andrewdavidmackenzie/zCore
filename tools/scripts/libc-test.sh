@@ -303,10 +303,14 @@ fi
 # Ratchet: enforce a minimum pass count so regressions are caught.
 # Update MIN_PASS when fixes increase the pass count.
 # Set to -1 for architectures without an established baseline.
-case "$ARCH" in
-  aarch64) MIN_PASS=39 ;; # 39-44 depending on timing; some tests are flaky
-  x86_64)  MIN_PASS=-1 ;; # TODO: establish x86_64 baseline
-  *)       MIN_PASS=-1 ;;
+# Thresholds are per-OS because QEMU behavior differs (e.g. timer
+# resolution, pipe handling) between macOS and Linux hosts.
+HOST_OS="$(uname -s)"
+case "$ARCH/$HOST_OS" in
+  aarch64/Darwin) MIN_PASS=39 ;; # macOS: 39-48 depending on timing
+  aarch64/Linux)  MIN_PASS=-1 ;; # ubuntu: observing baseline (see #339)
+  x86_64/*)       MIN_PASS=-1 ;; # TODO: establish x86_64 baseline
+  *)              MIN_PASS=-1 ;;
 esac
 
 if [ "$MIN_PASS" -ge 0 ] && [ "$PASSED" -lt "$MIN_PASS" ]; then
