@@ -2,6 +2,8 @@ use alloc::{boxed::Box, sync::Arc};
 
 use ::drivers::irq::x86::Apic;
 use ::drivers::scheme::IrqScheme;
+#[cfg(feature = "uart-16550")]
+use ::drivers::scheme::EventScheme;
 use ::drivers::{Device, DeviceResult};
 
 use super::trap;

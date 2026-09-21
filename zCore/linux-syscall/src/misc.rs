@@ -805,7 +805,7 @@ impl Syscall<'_> {
         // Find the listener associated with this fd.
         // For simplicity, check all listeners for pending connections.
         let listeners = linux_object::fs::unix_socket::UNIX_LISTENERS.lock();
-        for (_path, listener) in listeners.iter() {
+        for listener in listeners.values() {
             if let Some(conn) = listener.pop_connection() {
                 let new_fd: i32 = proc.add_file(conn)?.into();
                 // Write peer address if requested
