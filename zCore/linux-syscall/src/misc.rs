@@ -851,6 +851,263 @@ impl Syscall<'_> {
         proc.add_file_at(fd, client_end)?;
         Ok(0)
     }
+
+    /// Send data on a socket.
+    ///
+    /// For connected AF_UNIX sockets, `dest_addr` is ignored (must be
+    /// null or the destination is already established by `connect`).
+    pub fn sys_sendto(
+        &self,
+        fd: FileDesc,
+        buf: UserInPtr<u8>,
+        len: usize,
+        flags: usize,
+        _dest_addr: UserInPtr<u8>,
+        _addrlen: usize,
+    ) -> SysResult {
+        info!("sendto: fd={:?}, len={}, flags={:#x}", fd, len, flags);
+        let proc = self.linux_process();
+        let file = proc.get_file_like(fd)?;
+        let data = buf.read_array(len)?;
+        let written = file.write(&data)?;
+        Ok(written)
+    }
+
+    /// Receive data from a socket.
+    ///
+    /// For connected AF_UNIX sockets, `src_addr` is filled with
+    /// AF_UNIX family if non-null.
+    pub async fn sys_recvfrom(
+        &self,
+        fd: FileDesc,
+        mut buf: UserOutPtr<u8>,
+        len: usize,
+        flags: usize,
+        mut src_addr: UserOutPtr<u8>,
+        mut addrlen: UserOutPtr<u32>,
+    ) -> SysResult {
+        info!("recvfrom: fd={:?}, len={}, flags={:#x}", fd, len, flags);
+        let proc = self.linux_process();
+        let file = proc.get_file_like(fd)?;
+
+        const MSG_PEEK: usize = 2;
+        if flags & MSG_PEEK != 0 {
+            warn!("recvfrom: MSG_PEEK not supported");
+        }
+
+        let mut data = vec![0u8; len];
+        let n = file.read(&mut data).await?;
+        buf.write_array(&data[..n])?;
+
+        // Fill source address if requested
+        if !src_addr.is_null() {
+            let sa_family: u16 = 1; // AF_UNIX
+            let _ = src_addr.write_array(&sa_family.to_ne_bytes());
+            if !addrlen.is_null() {
+                let _ = addrlen.write(2);
+            }
+        }
+        Ok(n)
+    }
+
+    /// Send a message on a socket with structured data (iovec + ancillary).
+    ///
+    /// Supports SCM_RIGHTS for passing file descriptors over AF_UNIX.
+    pub fn sys_sendmsg(&self, fd: FileDesc, msg_ptr: UserInPtr<u8>, flags: usize) -> SysResult {
+        info!("sendmsg: fd={:?}, flags={:#x}", fd, flags);
+
+        // Read the msghdr structure from userspace.
+        // Layout (LP64): msg_name(8) + msg_namelen(4) + pad(4) +
+        //   msg_iov(8) + msg_iovlen(8) + msg_control(8) +
+        //   msg_controllen(8) + msg_flags(4)
+        let hdr_bytes = msg_ptr.read_array(56)?;
+        let msg_iov_ptr = usize::from_ne_bytes(hdr_bytes[16..24].try_into().unwrap());
+        let msg_iovlen = usize::from_ne_bytes(hdr_bytes[24..32].try_into().unwrap());
+        let msg_control_ptr = usize::from_ne_bytes(hdr_bytes[32..40].try_into().unwrap());
+        let msg_controllen = usize::from_ne_bytes(hdr_bytes[40..48].try_into().unwrap());
+
+        // Gather data from iovec array
+        let iov_in: UserInPtr<IoVecIn> = msg_iov_ptr.into();
+        let iovs = iov_in.read_iovecs(msg_iovlen)?;
+        let data = iovs.read_to_vec()?;
+
+        // Parse ancillary data (control messages) for SCM_RIGHTS
+        let ancillary = if msg_control_ptr != 0 && msg_controllen > 0 {
+            self.parse_cmsg_scm_rights(msg_control_ptr, msg_controllen)?
+        } else {
+            None
+        };
+
+        // Send via the socket
+        let proc = self.linux_process();
+        let file = proc.get_file_like(fd)?;
+        let socket = file
+            .as_socket()?
+            .downcast_ref::<linux_object::fs::unix_socket::UnixSocketEnd>()
+            .ok_or(LxError::ENOTSOCK)?;
+        let written = socket.send_with_fds(&data, ancillary)?;
+        Ok(written)
+    }
+
+    /// Receive a message from a socket with structured data (iovec + ancillary).
+    ///
+    /// Supports SCM_RIGHTS for receiving file descriptors over AF_UNIX.
+    pub async fn sys_recvmsg(
+        &self,
+        fd: FileDesc,
+        msg_ptr: UserInPtr<u8>,
+        flags: usize,
+    ) -> SysResult {
+        info!("recvmsg: fd={:?}, flags={:#x}", fd, flags);
+
+        // Read the msghdr structure from userspace
+        let hdr_bytes = msg_ptr.read_array(56)?;
+        let msg_iov_ptr = usize::from_ne_bytes(hdr_bytes[16..24].try_into().unwrap());
+        let msg_iovlen = usize::from_ne_bytes(hdr_bytes[24..32].try_into().unwrap());
+        let msg_control_ptr = usize::from_ne_bytes(hdr_bytes[32..40].try_into().unwrap());
+        let msg_controllen = usize::from_ne_bytes(hdr_bytes[40..48].try_into().unwrap());
+
+        // Read iovec array to determine buffer size
+        let iov_out: UserInPtr<IoVecOut> = msg_iov_ptr.into();
+        let mut iovs = iov_out.read_iovecs(msg_iovlen)?;
+        let total_len = iovs.total_len();
+
+        // Receive data + ancillary fds from the socket
+        let proc = self.linux_process();
+        let file = proc.get_file_like(fd)?;
+        let socket = file
+            .as_socket()?
+            .downcast_ref::<linux_object::fs::unix_socket::UnixSocketEnd>()
+            .ok_or(LxError::ENOTSOCK)?;
+
+        let mut data = vec![0u8; total_len];
+        let (n, ancillary) = socket.recv_with_fds(&mut data).await?;
+
+        // Scatter data into iovec buffers
+        iovs.write_from_buf(&data[..n])?;
+
+        // Build ancillary response (SCM_RIGHTS) if fds were received
+        let controllen_out = if let Some(ref anc) = ancillary {
+            if !anc.fds.is_empty() && msg_control_ptr != 0 && msg_controllen > 0 {
+                self.build_cmsg_scm_rights(msg_control_ptr, msg_controllen, &anc.fds)?
+            } else {
+                0usize
+            }
+        } else {
+            0usize
+        };
+
+        // Update msg_controllen in the msghdr to reflect actual ancillary data written
+        let controllen_bytes = controllen_out.to_ne_bytes();
+        // msg_controllen is at offset 40 in msghdr
+        let mut controllen_ptr: UserOutPtr<u8> = (msg_ptr.as_addr() + 40).into();
+        controllen_ptr.write_array(&controllen_bytes)?;
+
+        // Set msg_flags to 0 (offset 48 in msghdr)
+        let mut flags_ptr: UserOutPtr<u8> = (msg_ptr.as_addr() + 48).into();
+        flags_ptr.write_array(&0u32.to_ne_bytes())?;
+
+        Ok(n)
+    }
+
+    /// Parse SCM_RIGHTS control messages from userspace.
+    ///
+    /// Extracts file descriptors from `cmsghdr` with `cmsg_type == SCM_RIGHTS`.
+    fn parse_cmsg_scm_rights(
+        &self,
+        control_ptr: usize,
+        controllen: usize,
+    ) -> Result<Option<linux_object::fs::unix_socket::AncillaryFds>, LxError> {
+        use linux_object::fs::unix_socket::AncillaryFds;
+
+        const SOL_SOCKET: u32 = 1;
+        const SCM_RIGHTS: u32 = 1;
+        // cmsghdr: cmsg_len(8) + cmsg_level(4) + cmsg_type(4) = 16 bytes header
+        const CMSG_HDR_SIZE: usize = 16;
+        // cmsghdr alignment (8 bytes on LP64)
+        const CMSG_ALIGN: usize = 8;
+
+        let ctrl_in: UserInPtr<u8> = control_ptr.into();
+        let ctrl_bytes = ctrl_in.read_array(controllen)?;
+
+        let proc = self.linux_process();
+        let mut fds_out = alloc::vec::Vec::new();
+        let mut offset = 0;
+
+        while offset + CMSG_HDR_SIZE <= controllen {
+            let cmsg_len = usize::from_ne_bytes(ctrl_bytes[offset..offset + 8].try_into().unwrap());
+            if cmsg_len < CMSG_HDR_SIZE || offset + cmsg_len > controllen {
+                break;
+            }
+            let cmsg_level =
+                u32::from_ne_bytes(ctrl_bytes[offset + 8..offset + 12].try_into().unwrap());
+            let cmsg_type =
+                u32::from_ne_bytes(ctrl_bytes[offset + 12..offset + 16].try_into().unwrap());
+
+            if cmsg_level == SOL_SOCKET && cmsg_type == SCM_RIGHTS {
+                let data_len = cmsg_len - CMSG_HDR_SIZE;
+                let fd_count = data_len / 4; // each fd is an i32
+                for i in 0..fd_count {
+                    let fd_offset = offset + CMSG_HDR_SIZE + i * 4;
+                    let raw_fd = i32::from_ne_bytes(
+                        ctrl_bytes[fd_offset..fd_offset + 4].try_into().unwrap(),
+                    );
+                    let fd = FileDesc::from(raw_fd);
+                    let file = proc.get_file_like(fd)?;
+                    fds_out.push(file);
+                }
+            }
+            // Advance to next cmsghdr (aligned)
+            offset += (cmsg_len + CMSG_ALIGN - 1) & !(CMSG_ALIGN - 1);
+        }
+
+        if fds_out.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(AncillaryFds { fds: fds_out }))
+        }
+    }
+
+    /// Build SCM_RIGHTS control message in userspace buffer.
+    ///
+    /// Returns the total number of bytes written to the control buffer.
+    fn build_cmsg_scm_rights(
+        &self,
+        control_ptr: usize,
+        controllen: usize,
+        fds: &[Arc<dyn linux_object::fs::FileLike>],
+    ) -> Result<usize, LxError> {
+        const SOL_SOCKET: u32 = 1;
+        const SCM_RIGHTS: u32 = 1;
+        const CMSG_HDR_SIZE: usize = 16;
+
+        let data_len = fds.len() * 4; // each fd is an i32
+        let cmsg_len = CMSG_HDR_SIZE + data_len;
+        if cmsg_len > controllen {
+            // Not enough space — silently truncate (MSG_CTRUNC)
+            return Ok(0);
+        }
+
+        let proc = self.linux_process();
+
+        // Build the cmsghdr + fd array
+        let mut cmsg = alloc::vec![0u8; cmsg_len];
+        cmsg[0..8].copy_from_slice(&(cmsg_len as u64).to_ne_bytes());
+        cmsg[8..12].copy_from_slice(&SOL_SOCKET.to_ne_bytes());
+        cmsg[12..16].copy_from_slice(&SCM_RIGHTS.to_ne_bytes());
+
+        for (i, file) in fds.iter().enumerate() {
+            // Dup the file into the receiving process's fd table
+            let duped = file.dup()?;
+            let new_fd: i32 = proc.add_file(duped)?.into();
+            let offset = CMSG_HDR_SIZE + i * 4;
+            cmsg[offset..offset + 4].copy_from_slice(&new_fd.to_ne_bytes());
+        }
+
+        let mut ctrl_out: UserOutPtr<u8> = control_ptr.into();
+        ctrl_out.write_array(&cmsg)?;
+        Ok(cmsg_len)
+    }
 }
 
 const USER_STACK_SIZE: usize = 8 * 1024 * 1024; // 8 MB, the default config of Linux

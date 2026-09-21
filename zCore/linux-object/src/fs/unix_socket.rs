@@ -15,6 +15,7 @@ use alloc::{
     collections::{btree_map::BTreeMap, vec_deque::VecDeque},
     string::String,
     sync::Arc,
+    vec::Vec,
 };
 use core::any::Any;
 use core::future::Future;
@@ -105,9 +106,23 @@ pub fn unbind_listener(path: &str) {
     UNIX_LISTENERS.lock().remove(path);
 }
 
+/// Ancillary data attached to a message (e.g. SCM_RIGHTS file descriptors).
+///
+/// Each ancillary message is paired with a byte offset in the data stream,
+/// so `recvmsg` can deliver them with the correct data segment.
+#[derive(Clone)]
+pub struct AncillaryFds {
+    /// File-like objects being passed (SCM_RIGHTS).
+    pub fds: Vec<Arc<dyn FileLike>>,
+}
+
 /// Shared data for one direction of a Unix socket pair.
 struct ChannelData {
     buf: VecDeque<u8>,
+    /// Queue of ancillary fd sets waiting to be received.
+    /// Each `sendmsg` with SCM_RIGHTS pushes one entry; each `recvmsg`
+    /// pops it.
+    ancillary_fds: VecDeque<AncillaryFds>,
     eventbus: EventBus,
     /// Number of endpoints referencing this channel.
     /// When it drops to 0, the channel is closed.
@@ -138,11 +153,13 @@ impl UnixSocketEnd {
     pub fn create_pair() -> (Arc<Self>, Arc<Self>) {
         let channel_ab = Arc::new(Mutex::new(ChannelData {
             buf: VecDeque::new(),
+            ancillary_fds: VecDeque::new(),
             eventbus: EventBus::default(),
             ref_count: 2,
         }));
         let channel_ba = Arc::new(Mutex::new(ChannelData {
             buf: VecDeque::new(),
+            ancillary_fds: VecDeque::new(),
             eventbus: EventBus::default(),
             ref_count: 2,
         }));
@@ -172,6 +189,57 @@ impl UnixSocketEnd {
 
     fn is_peer_closed(&self) -> bool {
         self.write_channel.lock().ref_count < 2
+    }
+
+    /// Write data to the peer, optionally attaching file descriptors.
+    ///
+    /// Used by `sendmsg` (with fds) and `sendto`/`write` (without).
+    pub fn send_with_fds(&self, data: &[u8], fds: Option<AncillaryFds>) -> LxResult<usize> {
+        if self.is_peer_closed() {
+            return Err(LxError::EPIPE);
+        }
+        let mut ch = self.write_channel.lock();
+        for &b in data {
+            ch.buf.push_back(b);
+        }
+        if let Some(ancillary) = fds {
+            if !ancillary.fds.is_empty() {
+                ch.ancillary_fds.push_back(ancillary);
+            }
+        }
+        ch.eventbus.set(Event::READABLE);
+        Ok(data.len())
+    }
+
+    /// Read data from the channel, optionally receiving file descriptors.
+    ///
+    /// Returns `(bytes_read, ancillary_fds)`. The ancillary fds are
+    /// drained from the queue — at most one set per `recvmsg` call.
+    pub async fn recv_with_fds(&self, buf: &mut [u8]) -> LxResult<(usize, Option<AncillaryFds>)> {
+        if buf.is_empty() {
+            return Ok((0, None));
+        }
+        loop {
+            {
+                let mut ch = self.read_channel.lock();
+                if !ch.buf.is_empty() {
+                    let len = core::cmp::min(buf.len(), ch.buf.len());
+                    for item in buf.iter_mut().take(len) {
+                        *item = ch.buf.pop_front().unwrap();
+                    }
+                    if ch.buf.is_empty() {
+                        ch.eventbus.clear(Event::READABLE);
+                    }
+                    // Pop one ancillary message if available.
+                    let ancillary = ch.ancillary_fds.pop_front();
+                    return Ok((len, ancillary));
+                }
+                if ch.ref_count < 2 {
+                    return Ok((0, None));
+                }
+            }
+            ReadFuture { socket: self }.await;
+        }
     }
 }
 
@@ -243,15 +311,7 @@ impl FileLike for UnixSocketEnd {
     }
 
     fn write(&self, buf: &[u8]) -> LxResult<usize> {
-        if self.is_peer_closed() {
-            return Err(LxError::EPIPE);
-        }
-        let mut ch = self.write_channel.lock();
-        for &b in buf {
-            ch.buf.push_back(b);
-        }
-        ch.eventbus.set(Event::READABLE);
-        Ok(buf.len())
+        self.send_with_fds(buf, None)
     }
 
     async fn read_at(&self, _offset: u64, buf: &mut [u8]) -> LxResult<usize> {
