@@ -329,8 +329,8 @@ clean-everything: clean
 # Clone and build the Fuchsia project in ../fuschia for testing alongside zCore.
 # Requires: x86-64 Linux host with curl, git, unzip installed.
 # Cross-compiles Fuchsia for aarch64 (qemu-arm64 board).
-FUSCHIA_DIR := $(CURDIR)/../fuschia
-build-fuschia:
+FUSCHIA_DIR := $(CURDIR)/../fuchsia
+build-fucshia:
 	@echo "==> Checking prerequisites..."
 	@which curl >/dev/null 2>&1 || { echo "ERROR: curl not found"; exit 1; }
 	@which git >/dev/null 2>&1 || { echo "ERROR: git not found"; exit 1; }
