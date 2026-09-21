@@ -176,10 +176,13 @@ impl Syscall<'_> {
             Sys::ACCEPT => self.sys_accept(a0.into(), a1.into(), a2.into()),
             Sys::ACCEPT4 => self.sys_accept(a0.into(), a1.into(), a2.into()),
             Sys::CONNECT => self.sys_connect(a0.into(), a1.into(), a2),
-            Sys::SENDTO | Sys::RECVFROM | Sys::SENDMSG | Sys::RECVMSG => {
-                warn!("socket syscall {:?}: not yet implemented", sys_type);
-                Err(LxError::ENOSYS)
+            Sys::SENDTO => self.sys_sendto(a0.into(), a1.into(), a2, a3, a4.into(), a5),
+            Sys::RECVFROM => {
+                self.sys_recvfrom(a0.into(), a1.into(), a2, a3, a4.into(), a5.into())
+                    .await
             }
+            Sys::SENDMSG => self.sys_sendmsg(a0.into(), a1.into(), a2),
+            Sys::RECVMSG => self.sys_recvmsg(a0.into(), a1.into(), a2).await,
 
             // process
             Sys::EXECVE => self.sys_execve(a0.into(), a1.into(), a2.into()),
