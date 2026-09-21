@@ -40,6 +40,11 @@ pci = ["drivers/pci"]
 allwinner-drivers = ["drivers/allwinner"]
 fu740-drivers = ["drivers/fu740"]
 
+[package.metadata.cargo-all-features]
+# Bare-metal paths require custom target specs. Only the libos
+# (default) feature set compiles on the host.
+skip_package = true
+
 [dependencies]
 hal = { path = "../hal" }
 log = "0.4"

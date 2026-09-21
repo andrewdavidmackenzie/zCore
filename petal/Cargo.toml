@@ -28,6 +28,10 @@ path = "src/bin/alloc_test.rs"
 name = "shell"
 path = "src/bin/shell.rs"
 
+[package.metadata.cargo-all-features]
+# Userspace binaries require bare-metal targets (aarch64-unknown-none-softfloat, etc.).
+skip_package = true
+
 [dependencies]
 zx = { path = "../zCore/zx" }
 embedded-io = "0.6"

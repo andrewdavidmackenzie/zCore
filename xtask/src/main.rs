@@ -417,8 +417,8 @@ fn unset_git_proxy(global: bool) {
 /// Checks code style and runs clippy on all code:
 ///   - workspace format check
 ///   - host tools (xtask, region-alloc, zircon-abi)
-///   - libos (linux personality, from targets/libos.toml)
-///   - bare-metal kernel for each architecture (from targets/qemu-<arch>.toml)
+///   - libos (linux and zircon personalities, from targets/libos.toml)
+///   - bare-metal kernel for each architecture and personality (from targets/qemu-<arch>.toml)
 ///   - userspace programs (petal, userstart) for each architecture
 ///   - tests (cargo test on host-buildable crates)
 fn check_style() {
@@ -442,12 +442,31 @@ fn check_style() {
     })
     .invoke(Cargo::clippy);
 
-    println!("==> Clippy: bare-metal kernel...");
+    println!("==> Clippy: libos (zircon)...");
+    BuildConfig::from_args(BuildArgs {
+        machine: "libos".into(),
+        personality: Some("zircon".into()),
+        debug: false,
+    })
+    .invoke(Cargo::clippy);
+
+    println!("==> Clippy: bare-metal kernel (linux)...");
     for arch in [Arch::Aarch64, Arch::X86_64, Arch::Riscv64] {
         println!("    {}", arch.name());
         BuildConfig::from_args(BuildArgs {
             machine: format!("qemu-{}", arch.name()),
-            personality: None,
+            personality: Some("linux".into()),
+            debug: false,
+        })
+        .invoke(Cargo::clippy);
+    }
+
+    println!("==> Clippy: bare-metal kernel (zircon)...");
+    for arch in [Arch::Aarch64, Arch::X86_64, Arch::Riscv64] {
+        println!("    {}", arch.name());
+        BuildConfig::from_args(BuildArgs {
+            machine: format!("qemu-{}", arch.name()),
+            personality: Some("zircon".into()),
             debug: false,
         })
         .invoke(Cargo::clippy);

@@ -11,6 +11,13 @@ description = "Linux kernel objects"
 mock-disk = []
 libos = ["hal-impl/libos"]
 
+[package.metadata.cargo-all-features]
+# hal-impl needs libos to compile on the host.
+always_include_features = ["libos"]
+# mock-disk uses unstable core::intrinsics that are broken on current nightly.
+# TODO: fix mock-disk and remove from denylist.
+denylist = ["mock-disk"]
+
 [dependencies]
 hal = { path = "../hal" }
 async-trait = "0.1"

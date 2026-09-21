@@ -11,7 +11,7 @@ impl super::LinuxRootfs {
             .join("target")
             .join(format!("qemu-{}", self.0.name()))
             .join("release");
-        os_xtask_utils::dir::create_parent(&dir.join("_")).unwrap_or(());
+        os_xtask_utils::dir::create_parent(dir.join("_")).unwrap_or(());
         fs::create_dir_all(&dir).ok();
         dir.join(format!("{arch}-linux.img", arch = self.0.name()))
     }

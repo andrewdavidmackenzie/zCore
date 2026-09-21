@@ -7,6 +7,11 @@ description = "Linux syscalls implementation"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[package.metadata.cargo-all-features]
+# Depends on hal-impl (default-features = false) with no libos feature
+# of its own. Cannot compile on the host standalone.
+skip_package = true
+
 [dependencies]
 hal = { path = "../hal" }
 log = "0.4"

@@ -1,0 +1,23 @@
+name: Feature Combinations CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check-all-features:
+    name: Check feature combinations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Install cargo-all-features
+        run: cargo install cargo-all-features
+
+      - name: Check all feature combinations
+        run: cargo all-features check

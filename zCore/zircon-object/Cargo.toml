@@ -20,6 +20,13 @@ libos = [
     "hal-impl/libos",
 ]
 
+[package.metadata.cargo-all-features]
+# hal-impl needs libos to compile on the host.
+always_include_features = ["libos"]
+# hypervisor feature is a stub (rvm dependency is commented out). Broken.
+# TODO: fix or remove hypervisor feature, then remove from denylist.
+denylist = ["hypervisor"]
+
 [dependencies]
 hal = { path = "../hal" }
 bitflags = "1.3"
