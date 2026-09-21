@@ -178,10 +178,7 @@ jobs:
         run: tools/scripts/zircon-rootfs-test.sh aarch64
 
   libc-test:
-    name: Libc Test (aarch64)
-    # Must run on macOS: ubuntu QEMU delivers EOF to busybox sh when
-    # the pipe write end closes, killing the test for-loop before it
-    # completes. macOS QEMU does not have this issue.
+    name: Libc Test (aarch64, macOS)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -228,6 +225,34 @@ jobs:
 
       - name: Install QEMU (macOS)
         run: brew install qemu
+
+      - name: Build kernel and rootfs
+        run: make build ARCH=aarch64
+
+      - name: Run libc-test
+        run: make libc-test ARCH=aarch64
+
+  libc-test-ubuntu:
+    name: Libc Test (aarch64, ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, llvm-tools-preview
+
+      - name: Cache busybox source
+        uses: actions/cache@v4
+        with:
+          path: .build-cache/origin/repos/busybox
+          key: busybox-src-v2
+
+      - name: Install QEMU and tools
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-utils wget
 
       - name: Build kernel and rootfs
         run: make build ARCH=aarch64
