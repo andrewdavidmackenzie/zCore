@@ -348,7 +348,7 @@ async fn handler_user_trap(
         }
         TrapReason::PageFault(vaddr, flags) => {
             EXCEPTIONS_PGFAULT.add(1);
-            info!("page fault from user mode @ {:#x}({:?})", vaddr, flags);
+            trace!("page fault from user mode @ {:#x}({:?})", vaddr, flags);
             let vmar = thread.proc().vmar();
             match vmar.handle_page_fault(vaddr, flags) {
                 Ok(()) => Ok(()),
@@ -356,7 +356,7 @@ async fn handler_user_trap(
                     // Pager-backed VMO: the pager has been notified.
                     // Yield repeatedly to let the pager supply pages.
                     // The thread will re-fault after this returns Ok(()).
-                    info!("page fault: waiting for pager to supply pages");
+                    trace!("page fault: waiting for pager to supply pages");
                     // Yield multiple times to give the pager process
                     // time to run and supply the requested pages.
                     for _ in 0..100 {
