@@ -164,11 +164,18 @@ fi
 
 echo "Shell prompt reached in ${ELAPSED}s"
 
-# Give busybox time to finish initializing after the prompt appears.
-# On slow cross-arch emulation (x86_64 → aarch64 via TCG), the prompt
-# may appear in the serial output before busybox's input handler is
-# ready to accept commands.
-sleep 2
+# Wait for the shell to be ready to accept input by sending a short
+# probe command and waiting for its output. The shell prompt may appear
+# in the serial output before busybox has fully initialized its input
+# handler. Without this handshake, a long command sent immediately
+# after the prompt can be partially or fully lost.
+echo "echo READY" >&3 2>/dev/null || true
+READY_WAIT=0
+while [ "$READY_WAIT" -lt 10 ]; do
+  if grep -q "READY" "$OUTPUT" 2>/dev/null; then break; fi
+  sleep 1
+  READY_WAIT=$((READY_WAIT + 1))
+done
 
 # Send a single for-loop command that runs all tests sequentially.
 # Each test is run directly -- if it crashes or exits non-zero, we
