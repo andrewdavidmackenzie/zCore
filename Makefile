@@ -353,10 +353,12 @@ build-fuschia:
 	else \
 		echo "==> Fuchsia source already exists at $(FUSCHIA_DIR)/fuchsia, skipping clone."; \
 	fi
-	@echo "==> Configuring Fuchsia build (terminal.qemu-arm64)..."
+	@echo "==> Configuring Fuchsia build...(fx set workbench_eng.x64)"
+	@export PATH="$(FUSCHIA_DIR)/fuchsia/fuchsia/.jiri_root/bin:$PATH"
+	@jiri init -analytics-opt=false "$(FUSCHIA_DIR)/fuchsia/fuchsia"
 	@cd "$(FUSCHIA_DIR)/fuchsia" && \
 		source scripts/fx-env.sh && \
-		fx set terminal.qemu-arm64
+		fx set workbench_eng.x64
 	@echo "==> Building Fuchsia..."
 	@cd "$(FUSCHIA_DIR)/fuchsia" && \
 		source scripts/fx-env.sh && \
