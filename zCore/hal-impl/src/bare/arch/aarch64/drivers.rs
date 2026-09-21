@@ -26,8 +26,9 @@ pub const GIC_GICD_OFFSET: usize = 0x1000;
 /// RPi 400: GIC_SPI_INTERRUPT_UART0 = 121 (PL011).
 #[cfg(not(feature = "board-raspi400"))]
 const UART_IRQ: u32 = 33;
+// DTB: interrupts = <0x00 0x79 0x04> => SPI 121 => GIC INTID 121+32 = 153
 #[cfg(feature = "board-raspi400")]
-const UART_IRQ: u32 = 121;
+const UART_IRQ: u32 = 153;
 
 /// Timer IRQ number.
 /// QEMU virt: physical timer PPI 14 = IRQ 30.
