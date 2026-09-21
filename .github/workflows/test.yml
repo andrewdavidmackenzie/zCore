@@ -159,6 +159,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@nightly
         with:
+          toolchain: nightly-2026-09-19
           components: rust-src, llvm-tools-preview
           targets: aarch64-unknown-none-softfloat
 
