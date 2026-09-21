@@ -11,6 +11,11 @@ description = "Zircon syscalls implementation"
 # hypervisor = ["zircon-object/hypervisor"]
 deny-page-fault = []
 
+[package.metadata.cargo-all-features]
+# Depends on hal-impl (default-features = false) with no libos feature
+# of its own. Cannot compile on the host standalone.
+skip_package = true
+
 [dependencies]
 hal = { path = "../hal" }
 log = "0.4"

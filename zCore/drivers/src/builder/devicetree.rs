@@ -24,7 +24,16 @@ use crate::{
     },
     Device, DeviceError, DeviceResult, PhysAddr, VirtAddr,
 };
-use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
+#[cfg(any(
+    feature = "riscv-plic",
+    feature = "riscv-intc",
+    feature = "virtio",
+    feature = "uart-16550",
+    feature = "pl011-uart",
+    feature = "gic-400",
+))]
+use alloc::sync::Arc;
+use alloc::{collections::BTreeMap, vec::Vec};
 
 const MODULE: &str = "device-tree";
 

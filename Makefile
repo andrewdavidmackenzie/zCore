@@ -394,31 +394,39 @@ endif
 # Run this before every push to avoid CI failures.
 # Requires: qemu-system-aarch64, qemu-system-x86_64.
 pre-push:
-	@echo "==> [1/11] Format check..."
-	cargo fmt --all -- --check
-	@echo "==> [2/11] Workspace build..."
+	@echo "==> [1/15] Clippy (all targets + personalities)..."
+	cargo check-style
+	@echo "==> [2/15] Workspace build..."
 	cargo build
-	@echo "==> [3/11] Unit tests..."
+	@echo "==> [3/15] Unit tests..."
 	cargo test --no-fail-fast
-	@echo "==> [4/11] Bare-metal aarch64 (build + rootfs)..."
+	@echo "==> [4/15] Bare-metal aarch64 (build + rootfs)..."
 	$(MAKE) build ARCH=aarch64
-	@echo "==> [5/11] Boot smoke test (aarch64)..."
+	@echo "==> [5/15] Boot smoke test (aarch64)..."
 	$(MAKE) boot-test ARCH=aarch64
-	@echo "==> [6/11] Bare-metal riscv64..."
+	@echo "==> [6/15] Bare-metal riscv64..."
 	cargo zcore-build -m qemu-riscv64
-	@echo "==> [7/11] Bare-metal x86_64 (build + rootfs)..."
+	@echo "==> [7/15] Bare-metal x86_64 (build + rootfs)..."
 	$(MAKE) build ARCH=x86_64
-	@echo "==> [8/11] Boot smoke test (x86_64)..."
+	@echo "==> [8/15] Boot smoke test (x86_64)..."
 	$(MAKE) boot-test ARCH=x86_64
-	@echo "==> [9/11] LibOS (Linux + Zircon)..."
+	@echo "==> [9/15] Bare-metal x86_64 zircon..."
+	cargo bin -m qemu-x86_64 --personality zircon
+	@echo "==> [10/15] LibOS (Linux + Zircon)..."
 	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos
 	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos --personality zircon
-	@echo "==> [10/11] Zircon boot test (aarch64)..."
+	@echo "==> [11/15] Hardware targets (build-only)..."
+	cargo bin -m raspi400
+	cargo bin -m x86-laptop
+	@echo "==> [12/15] Zircon boot test (aarch64)..."
 	$(MAKE) zircon-boot-test ARCH=aarch64
 	@tools/scripts/zircon-rootfs-test.sh aarch64
-	@echo "==> [11/11] Libc tests (aarch64 + x86_64)..."
+	@echo "==> [13/15] Libc tests (aarch64 + x86_64)..."
 	$(MAKE) libc-test ARCH=aarch64
 	$(MAKE) libc-test ARCH=x86_64
+	@echo "==> [14/15] Check all feature combinations..."
+	$(MAKE) check-all-features
+	@echo "==> [15/15] Done."
 	@echo "==> All pre-push checks passed."
 
 # Run clippy for all architectures (catches cross-platform issues).
@@ -429,6 +437,11 @@ clippy-all:
 # check code style
 check:
 	cargo check-style
+
+# Check all feature combinations on host-buildable crates.
+# Requires: cargo install cargo-all-features
+check-all-features:
+	cargo all-features check
 
 # build and open project document
 doc:

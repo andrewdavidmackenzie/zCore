@@ -92,6 +92,11 @@ sbi-rt = { version = "0.0.2", features = ["legacy"] }
 bootloader_api = "0.11"
 # rvm = { git = "https://github.com/rcore-os/RVM", rev = "e91d625", optional = true }
 
+[package.metadata.cargo-all-features]
+# Requires custom JSON target specs and -Z build-std; cannot be
+# checked by cargo-all-features. Covered by xtask check-style.
+skip_package = true
+
 [lints.cargo]
 # rcore-fs-sfs is used in bare-metal mode (both linux and zircon
 # personalities) but the code is cfg'd out in libos mode. The cargo

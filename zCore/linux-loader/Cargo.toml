@@ -17,3 +17,7 @@ executor = { path = "../executor" }
 [features]
 default = []
 libos = ["hal-impl/libos", "zircon-object/aspace-separate", "zircon-object/libos", "linux-object/libos"]
+
+[package.metadata.cargo-all-features]
+# hal-impl needs libos to compile on the host.
+always_include_features = ["libos"]

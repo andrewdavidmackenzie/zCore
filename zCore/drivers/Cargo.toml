@@ -39,6 +39,16 @@ libos = ["dep:async-std"]
 # Legacy (dead code, kept for cfg compatibility)
 board_malta = []
 
+[package.metadata.cargo-all-features]
+# Most driver features need architecture-specific targets. Only libos
+# mode can be checked on the host. mock-uart requires libos (uses std).
+denylist = [
+    "apic", "gic-400", "riscv-plic", "riscv-intc",
+    "pl011-uart", "uart-16550", "ps2-keyboard",
+    "virtio", "pci", "allwinner", "fu740", "board_malta",
+    "mock-uart",
+]
+
 [dependencies]
 hal = { path = "../hal" }
 log = "0.4"

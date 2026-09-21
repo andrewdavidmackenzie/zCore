@@ -5,5 +5,9 @@ edition = "2021"
 description = "Safe Rust bindings for Zircon kernel objects, layered on zircon-abi"
 license = "MIT"
 
+[package.metadata.cargo-all-features]
+# Userspace library requiring bare-metal targets.
+skip_package = true
+
 [dependencies]
 zircon-abi = { path = "../zircon-abi", features = ["userspace"] }
