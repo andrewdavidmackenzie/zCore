@@ -44,17 +44,17 @@ Connect the USB-to-serial adapter to the Pi 400's GPIO header:
 
 ### Serial terminal
 
-Connect at **9600 baud**, 8N1:
+Connect at **115200 baud**, 8N1:
 
 ```bash
 # Using cu (recommended on macOS)
-cu -l /dev/tty.usbserial-* -s 9600
+cu -l /dev/tty.usbserial-* -s 115200
 
 # Using screen
-screen /dev/tty.usbserial-* 9600
+screen /dev/tty.usbserial-* 115200
 
 # Using minicom
-minicom -D /dev/tty.usbserial-* -b 9600
+minicom -D /dev/tty.usbserial-* -b 115200
 ```
 
 To exit `cu`: type `~.`
@@ -116,7 +116,7 @@ disable_splash=1
 core_freq=500
 core_freq_min=500
 kernel=kernel8.img
-init_uart_baud=9600
+init_uart_baud=115200
 enable_gic=1
 armstub=armstub8-gic.bin
 ```
@@ -151,7 +151,7 @@ cp target/aarch64-raspi400/release/zcore.bin /Volumes/BOOT/kernel8.img
 
 1. Insert the SD card into the Pi 400.
 2. Connect the USB-to-serial adapter.
-3. Open the serial terminal (9600 baud).
+3. Open the serial terminal (115200 baud).
 4. Power on the Pi 400 (USB-C).
 5. You should see:
 
@@ -167,7 +167,7 @@ zCore on Raspberry Pi 400!
 
 ## Boot sequence
 
-1. **Pi firmware** (`start4.elf`) initializes GPU, DRAM, peripherals, UART at 9600 baud.
+1. **Pi firmware** (`start4.elf`) initializes GPU, DRAM, peripherals, UART at 115200 baud.
 2. **Firmware** loads `armstub8-gic.bin` to physical address 0x0, writes kernel entry
    address to offset 0xFC and DTB pointer to offset 0xF8, then releases ARM cores.
 3. **Armstub** (EL3): configures GIC-400 (all interrupts to Group 1 / Non-Secure),
@@ -183,7 +183,7 @@ zCore on Raspberry Pi 400!
 7. **Rust entry** (`entry.rs`):
    - Initializes logging, memory allocator
    - Parses DTB for UART/GIC addresses, memory regions, bootargs
-   - Initializes PL011 UART driver at 9600 baud (48MHz clock)
+    - Initializes PL011 UART driver (keeps firmware baud rate, enables RX interrupts)
    - Initializes GIC-400 (Non-Secure Group 1 mode)
    - Enables virtual timer (CNTV, IRQ 27)
    - Loads petal shell ZBI and starts userboot
@@ -258,6 +258,6 @@ binary works on QEMU `raspi4b`.
 | `core_freq=500` | Recommended | Fix core clock for stable UART baud |
 | `core_freq_min=500` | Recommended | Prevent clock scaling |
 | `kernel=kernel8.img` | Default | Kernel filename (default for AArch64) |
-| `init_uart_baud=9600` | Required | Set UART baud rate to 9600 |
+| `init_uart_baud=115200` | Required | Set UART baud rate to 115200 |
 | `enable_gic=1` | Required | Enable GIC interrupt controller |
 | `armstub=armstub8-gic.bin` | Required | Load custom armstub with GIC Group 1 config |
