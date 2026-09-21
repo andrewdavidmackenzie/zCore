@@ -1,16 +1,21 @@
 use alloc::{boxed::Box, sync::Arc};
 
 use ::drivers::irq::x86::Apic;
-use ::drivers::scheme::{EventScheme, IrqScheme, UartScheme};
-use ::drivers::uart::Uart16550Pmio;
+use ::drivers::scheme::{EventScheme, IrqScheme};
 use ::drivers::{Device, DeviceResult};
 
 use super::trap;
+
+#[cfg(feature = "uart-16550")]
+use ::drivers::scheme::UartScheme;
+#[cfg(feature = "uart-16550")]
+use ::drivers::uart::Uart16550Pmio;
 
 /// Create a UART device and wire its received bytes to the console
 /// input buffer. The raw UART is registered directly (no BufferedUart
 /// wrapper) -- console input goes through `ConsoleInput`, and console
 /// output goes through `UartScheme::write_str()`.
+#[cfg(feature = "uart-16550")]
 fn create_uart_with_console_input(base: u16) -> Arc<dyn UartScheme> {
     let uart = Arc::new(Uart16550Pmio::new(base));
     let u = uart.clone();
@@ -27,8 +32,11 @@ fn create_uart_with_console_input(base: u16) -> Arc<dyn UartScheme> {
 }
 
 pub(super) fn init_early() -> DeviceResult {
-    crate::device_registry::add_device(Device::Uart(create_uart_with_console_input(0x3F8)));
-    crate::device_registry::add_device(Device::Uart(create_uart_with_console_input(0x2F8)));
+    #[cfg(feature = "uart-16550")]
+    {
+        crate::device_registry::add_device(Device::Uart(create_uart_with_console_input(0x3F8)));
+        crate::device_registry::add_device(Device::Uart(create_uart_with_console_input(0x2F8)));
+    }
     Ok(())
 }
 
@@ -48,15 +56,18 @@ pub(super) fn init() -> DeviceResult {
         super::special::pc_firmware_tables().0 as usize,
         crate::mem::phys_to_virt,
     ));
-    warn!("APIC: init done, setting up UART IRQs...");
-    let uarts = crate::device_registry::all_uart();
-    if let Some(u) = uarts.try_get(0) {
-        irq.register_device(trap::X86_ISA_IRQ_COM1, u.clone().upcast())?;
-        irq.unmask(trap::X86_ISA_IRQ_COM1)?;
+    #[cfg(feature = "uart-16550")]
+    {
+        warn!("APIC: init done, setting up UART IRQs...");
+        let uarts = crate::device_registry::all_uart();
+        if let Some(u) = uarts.try_get(0) {
+            irq.register_device(trap::X86_ISA_IRQ_COM1, u.clone().upcast())?;
+            irq.unmask(trap::X86_ISA_IRQ_COM1)?;
 
-        if let Some(u) = uarts.try_get(1) {
-            irq.register_device(trap::X86_ISA_IRQ_COM2, u.clone().upcast())?;
-            irq.unmask(trap::X86_ISA_IRQ_COM2)?;
+            if let Some(u) = uarts.try_get(1) {
+                irq.register_device(trap::X86_ISA_IRQ_COM2, u.clone().upcast())?;
+                irq.unmask(trap::X86_ISA_IRQ_COM2)?;
+            }
         }
     }
     // PS/2 keyboard via i8042 controller (IRQ 1).
