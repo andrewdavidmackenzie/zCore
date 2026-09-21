@@ -137,6 +137,20 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
         entry
     );
 
+    // Flush I-cache after loading executable code.
+    // On real hardware (Pi 400), the I-cache and D-cache are not coherent.
+    // Without this, the CPU may execute stale/zero data from I-cache.
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        core::arch::asm!(
+            "dsb ish",  // ensure D-cache writes are visible
+            "ic iallu", // invalidate entire I-cache
+            "dsb ish",  // ensure I-cache invalidation completes
+            "isb",      // synchronize instruction stream
+        );
+        info!("I-cache invalidated after loading userstart");
+    }
+
     // Create the vDSO VMO with syscall trampolines and constants.
     let vdso_vmo = create_vdso_vmo();
 

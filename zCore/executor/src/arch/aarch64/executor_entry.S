@@ -11,5 +11,3 @@
 executor_entry:
 	ldr x0, [sp]
 	b run_executor
-
-

@@ -140,9 +140,17 @@ pub fn run_until_idle() -> bool {
         let executor_cx = runtime.strong_executor.context.get_context();
         debug!("switch idle -> {}", runtime.strong_executor.id());
         runtime.current_executor = Some(runtime.strong_executor.clone());
-        // Release the global_runtime lock before switching
+        // Release the global_runtime lock before switching.
+        // Disable interrupts across the gap between setting
+        // current_executor and entering switch(). If a timer IRQ
+        // fires here, sched_yield() sees current_executor=Some and
+        // attempts a context switch while still in the runtime
+        // context, corrupting state. The executor re-enables
+        // interrupts when it polls tasks or waits.
+        crate::arch::intr_off();
         drop(runtime);
         switch(runtime_cx, executor_cx);
+        crate::arch::intr_on();
         // If this function returns, the strong_executor's future has
         // timed out or voluntarily yielded. Create a new executor for
         // subsequent futures, promote it to strong_executor, and demote
@@ -175,8 +183,10 @@ pub fn run_until_idle() -> bool {
                 let executor_ctx = executor.context.get_context();
                 debug!("switch idle -> {}", executor.id());
                 runtime.current_executor = Some(executor);
+                crate::arch::intr_off();
                 drop(runtime);
                 switch(runtime_cx as _, executor_ctx as _);
+                crate::arch::intr_on();
                 runtime = get_current_runtime();
                 runtime.current_executor = None;
             }

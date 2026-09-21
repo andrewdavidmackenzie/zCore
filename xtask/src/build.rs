@@ -143,7 +143,7 @@ impl BuildConfig {
                 );
             }
             if std::env::var("PETAL_ZBI").is_err() {
-                let zbi_path = crate::petal::build_petal_zbi(arch, "hello");
+                let zbi_path = crate::petal::build_petal_zbi(arch, "shell");
                 env.insert("PETAL_ZBI".into(), zbi_path.into_os_string());
             } else {
                 env.insert(

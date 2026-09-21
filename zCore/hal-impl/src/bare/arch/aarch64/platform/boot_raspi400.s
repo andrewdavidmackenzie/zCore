@@ -184,6 +184,7 @@ _boot:
     orr     x0, x0, #(1 << 0)     /* M: Enable MMU */
     bic     x0, x0, #(1 << 2)     /* C: D-cache OFF */
     bic     x0, x0, #(1 << 12)    /* I: I-cache OFF */
+    bic     x0, x0, #(1 << 19)    /* WXN: OFF — don't make writable pages XN */
     msr     sctlr_el1, x0
     isb
 
