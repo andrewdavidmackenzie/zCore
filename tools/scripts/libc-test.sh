@@ -200,16 +200,18 @@ for exe in "${TESTS[@]}"; do
 done
 echo "Sending $(echo $RUN_NAMES | wc -w | tr -d ' ') tests (skipping $SKIP_COUNT known-hanging)"
 
-# Send a compact one-liner for-loop.
-# Note: do NOT redirect to /dev/null — it doesn't exist in the SFS
-# rootfs and the failed redirect makes every test report FAIL.
+# Send each test as a separate command rather than one giant for-loop.
+# A 500+ byte command line can overflow busybox's serial input buffer
+# on slow QEMU emulation (x86_64 host → aarch64 guest), causing the
+# entire command to be silently dropped.
 #
 # Keep fd 3 open after writing — do NOT close it with exec 3>&-.
 # On ubuntu QEMU, closing the last pipe writer delivers EOF to
-# busybox sh, killing it before the for-loop finishes. Keeping fd 3
-# open avoids this. It will be closed when the script exits or QEMU
-# terminates.
-echo "for t in$RUN_NAMES; do /bin/libc-test/\$t && echo PASS:\$t || echo FAIL:\$t; done; echo ALL_TESTS_DONE; poweroff -f" >&3 2>/dev/null || true
+# busybox sh, killing it before commands finish.
+for t in $RUN_NAMES; do
+  echo "/bin/libc-test/$t && echo PASS:$t || echo FAIL:$t" >&3 2>/dev/null || true
+done
+echo "echo ALL_TESTS_DONE; poweroff -f" >&3 2>/dev/null || true
 
 # Wait for QEMU to exit or session timeout
 W=0
