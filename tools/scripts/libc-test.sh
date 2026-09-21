@@ -157,7 +157,6 @@ if ! $prompt_found; then
   exec 3>&- 2>/dev/null || true
   kill "$PID" 2>/dev/null || true
   wait "$PID" 2>/dev/null || true
-  # PIPE_HOLDER_PID not set yet at this point (created after prompt check)
   rm -rf "$TMPDIR_QEMU"
   echo "ERROR: QEMU failed to boot (no shell prompt after ${BOOT_TIMEOUT}s)"
   exit 0
@@ -201,18 +200,16 @@ for exe in "${TESTS[@]}"; do
 done
 echo "Sending $(echo $RUN_NAMES | wc -w | tr -d ' ') tests (skipping $SKIP_COUNT known-hanging)"
 
-# Hold the pipe open with a background process so that closing fd 3
-# doesn't deliver EOF to busybox. On ubuntu QEMU, closing the last
-# writer on the pipe causes busybox sh to exit before the for-loop
-# finishes. The sleep process keeps the write end open until killed.
-sleep infinity > "$QEMU_IN" &
-PIPE_HOLDER_PID=$!
-
 # Send a compact one-liner for-loop.
 # Note: do NOT redirect to /dev/null — it doesn't exist in the SFS
 # rootfs and the failed redirect makes every test report FAIL.
+#
+# Keep fd 3 open after writing — do NOT close it with exec 3>&-.
+# On ubuntu QEMU, closing the last pipe writer delivers EOF to
+# busybox sh, killing it before the for-loop finishes. Keeping fd 3
+# open avoids this. It will be closed when the script exits or QEMU
+# terminates.
 echo "for t in$RUN_NAMES; do /bin/libc-test/\$t && echo PASS:\$t || echo FAIL:\$t; done; echo ALL_TESTS_DONE; poweroff -f" >&3 2>/dev/null || true
-exec 3>&- 2>/dev/null || true
 
 # Wait for QEMU to exit or session timeout
 W=0
@@ -241,9 +238,8 @@ if ! $completed && kill -0 "$PID" 2>/dev/null; then
 fi
 wait "$PID" 2>/dev/null || true
 
-# Clean up the pipe holder
-kill "$PIPE_HOLDER_PID" 2>/dev/null || true
-wait "$PIPE_HOLDER_PID" 2>/dev/null || true
+# Close the pipe write end now that QEMU has exited
+exec 3>&- 2>/dev/null || true
 
 # Step 6: Parse results from the combined output
 # Strip ANSI escape sequences for reliable parsing.
