@@ -78,7 +78,7 @@ impl super::LinuxRootfs {
             .linux_musl_cross()
             .join("bin")
             .join(format!("{}-linux-musl-gcc", self.0.name()));
-        fs::read_dir("linux-syscall/test")
+        fs::read_dir("zCore/linux-syscall/test")
             .unwrap()
             .filter_map(|res| res.ok())
             .map(|entry| entry.path())
