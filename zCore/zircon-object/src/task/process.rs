@@ -304,6 +304,18 @@ impl Process {
         &self.ext
     }
 
+    /// Detect the process personality from its extension type.
+    ///
+    /// Linux processes have a non-unit extension (LinuxProcess),
+    /// Zircon processes have `()` as their extension.
+    pub fn personality(&self) -> super::Personality {
+        if self.ext.downcast_ref::<()>().is_some() {
+            super::Personality::Zircon
+        } else {
+            super::Personality::Linux
+        }
+    }
+
     /// Get the `VmAddressRegion` of the process.
     pub fn vmar(&self) -> Arc<VmAddressRegion> {
         self.vmar.clone()
