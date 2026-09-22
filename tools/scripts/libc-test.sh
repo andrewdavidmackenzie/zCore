@@ -22,7 +22,7 @@ ARCH="${1:?Usage: $0 <arch>}"
 # Timeout for the entire QEMU session (all tests combined).
 # Should be generous enough for boot + all tests. Some tests (socket,
 # pthread) may hang on unimplemented syscalls, so this is a hard limit.
-SESSION_TIMEOUT=180
+SESSION_TIMEOUT=120
 
 case "$ARCH" in
   aarch64)
@@ -108,6 +108,39 @@ for exe in "${TESTS[@]}"; do
     PATH="${MUSL_BIN:+$MUSL_BIN:}$PATH" "${CROSS_COMPILE}strip" "$TEST_DIR/$name" 2>/dev/null || true
 done
 
+# Tests that hang indefinitely because they depend on unimplemented
+# features (AF_UNIX sockets, POSIX semaphores, pthreads, crypt, etc.).
+# These are skipped to avoid blocking the test session. Tracked in
+# issue #16 for future implementation.
+SKIP_TESTS="crypt fcntl fdopen ipc_msg ipc_sem ipc_shm memstream popen \
+pthread_cancel pthread_cancel-points pthread_cond pthread_mutex \
+pthread_mutex_pi pthread_robust pthread_tsd sem_init sem_open \
+setjmp socket spawn vfork"
+
+# Step 2b: Generate test runner script in the rootfs.
+# Embedding the test list in a script avoids sending a long command
+# through the serial console. Busybox reads stdin character-by-character
+# via poll(), so long commands take a very long time to process.
+echo "==> Generating test runner script..."
+RUNNER="target/rootfs/linux/$ARCH/bin/run-tests.sh"
+RUN_COUNT=0
+SKIP_COUNT=0
+{
+  for exe in "${TESTS[@]}"; do
+    name=$(basename "$exe" -static.exe)
+    if echo " $SKIP_TESTS " | grep -Fq " $name "; then
+      SKIP_COUNT=$((SKIP_COUNT + 1))
+      continue
+    fi
+    RUN_COUNT=$((RUN_COUNT + 1))
+    echo "/bin/libc-test/$name && echo PASS:$name || echo FAIL:$name"
+  done
+  echo 'echo ALL_TESTS_DONE'
+  echo 'poweroff -f'
+} > "$RUNNER"
+chmod +x "$RUNNER"
+echo "   $RUN_COUNT tests in runner (skipping $SKIP_COUNT known-hanging)"
+
 # Step 3: Rebuild image
 echo "==> Rebuilding rootfs image..."
 rm -f "$IMAGE"
@@ -186,46 +219,10 @@ if ! $ready_ok; then
   exit 0
 fi
 
-# Send a single for-loop command that runs all tests sequentially.
-# Each test is run directly -- if it crashes or exits non-zero, we
-# report FAIL. If the whole session times out, remaining tests are
-# reported as HANG.
-#
-# We send the command as a single line to avoid pipe-buffering issues
-# with the busybox shell reading character-by-character.
-
-# Build the test list as a space-separated string
-TEST_NAMES=""
-for exe in "${TESTS[@]}"; do
-  TEST_NAMES+=" $(basename "$exe" -static.exe)"
-done
-
-# Tests that hang indefinitely because they depend on unimplemented
-# features (AF_UNIX sockets, POSIX semaphores, pthreads, crypt, etc.).
-# These are skipped to avoid blocking the test session. Tracked in
-# issue #16 for future implementation.
-SKIP_TESTS="crypt fcntl fdopen ipc_msg ipc_sem ipc_shm memstream popen \
-pthread_cancel pthread_cancel-points pthread_cond pthread_mutex \
-pthread_mutex_pi pthread_robust pthread_tsd sem_init sem_open \
-setjmp socket spawn vfork"
-
-# Build the runnable test list (excluding known-hanging tests).
-RUN_NAMES=""
-SKIP_COUNT=0
-for exe in "${TESTS[@]}"; do
-  name=$(basename "$exe" -static.exe)
-  if echo " $SKIP_TESTS " | grep -Fq " $name "; then
-    SKIP_COUNT=$((SKIP_COUNT + 1))
-  else
-    RUN_NAMES+=" $name"
-  fi
-done
-echo "Sending $(echo $RUN_NAMES | wc -w | tr -d ' ') tests (skipping $SKIP_COUNT known-hanging)"
-
-# Send all tests as a single for-loop command.
-# Keep fd 3 open — closing it delivers EOF to busybox on some QEMU
-# configurations. fd 3 is closed after QEMU exits (in cleanup below).
-echo "for t in$RUN_NAMES; do /bin/libc-test/\$t && echo PASS:\$t || echo FAIL:\$t; done; echo ALL_TESTS_DONE; poweroff -f" >&3 2>/dev/null || true
+# Run the embedded test script via sh. This sends only ~30 bytes
+# through the serial console instead of a 500+ byte for-loop.
+# (zCore doesn't support #! shebangs, so we invoke sh explicitly.)
+echo "/bin/sh /bin/run-tests.sh" >&3 2>/dev/null || true
 
 # Wait for QEMU to exit or session timeout
 W=0
