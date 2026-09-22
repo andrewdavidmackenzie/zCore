@@ -413,21 +413,23 @@ pre-push:
 	$(MAKE) boot-test ARCH=x86_64
 	@echo "==> [9/15] Bare-metal x86_64 zircon..."
 	cargo bin -m qemu-x86_64 --personality zircon
-	@echo "==> [10/15] LibOS (Linux + Zircon)..."
+	@echo "==> [10/16] Dual personality (build-only)..."
+	cargo bin -m qemu-aarch64 --personality linux,zircon
+	@echo "==> [11/16] LibOS (Linux + Zircon)..."
 	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos
 	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos --personality zircon
-	@echo "==> [11/15] Hardware targets (build-only)..."
+	@echo "==> [12/16] Hardware targets (build-only)..."
 	cargo bin -m raspi400
 	cargo bin -m x86-laptop
-	@echo "==> [12/15] Zircon boot test (aarch64)..."
+	@echo "==> [13/16] Zircon boot test (aarch64)..."
 	$(MAKE) zircon-boot-test ARCH=aarch64
 	@tools/scripts/zircon-rootfs-test.sh aarch64
-	@echo "==> [13/15] Libc tests (aarch64 + x86_64)..."
+	@echo "==> [14/16] Libc tests (aarch64 + x86_64)..."
 	$(MAKE) libc-test ARCH=aarch64
 	$(MAKE) libc-test ARCH=x86_64
-	@echo "==> [14/15] Check all feature combinations..."
+	@echo "==> [15/16] Check all feature combinations..."
 	$(MAKE) check-all-features
-	@echo "==> [15/15] Done."
+	@echo "==> [16/16] Done."
 	@echo "==> All pre-push checks passed."
 
 # Run clippy for all architectures (catches cross-platform issues).

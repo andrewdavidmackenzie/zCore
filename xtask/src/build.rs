@@ -87,15 +87,12 @@ impl BuildConfig {
         let target = TargetConfig::load(&args.machine);
 
         // Determine personality: CLI override > TOML default.
+        // Supports comma-separated list for multiple personalities
+        // (e.g. "linux,zircon" for a dual-personality kernel).
         let personality = args
             .personality
             .clone()
             .unwrap_or_else(|| target.default_personality.clone());
-        assert!(
-            personality == "linux" || personality == "zircon",
-            "Invalid personality '{}' -- must be 'linux' or 'zircon'",
-            personality
-        );
 
         let is_libos = target.arch == "host";
         let arch = if is_libos {
@@ -112,8 +109,19 @@ impl BuildConfig {
         let mut features: HashSet<String> = target.cargo_features().into_iter().collect();
         let mut env = HashMap::new();
 
-        // Set personality feature.
-        features.insert(personality.clone());
+        // Set personality feature(s).
+        // Comma-separated lists allow multiple personalities
+        // (e.g. "linux,zircon" for a dual-personality kernel).
+        let personalities: Vec<&str> = personality.split(',').collect();
+        for p in &personalities {
+            let p = p.trim();
+            assert!(
+                p == "linux" || p == "zircon",
+                "Invalid personality '{}' -- must be 'linux' or 'zircon'",
+                p
+            );
+            features.insert(p.to_string());
+        }
 
         // Pass through ZCORE_CMDLINE from the environment if set,
         // allowing `make build LOG=info` to flow through to the kernel.
@@ -132,7 +140,7 @@ impl BuildConfig {
         // Zircon personality requires userstart and petal ZBI.
         // Build them now unless already provided via environment
         // (e.g., when the test script builds a specific ZBI first).
-        if personality == "zircon" {
+        if personalities.contains(&"zircon") {
             if std::env::var("USERSTART_ELF").is_err() {
                 let userstart_path = crate::petal::build_userstart(arch);
                 env.insert("USERSTART_ELF".into(), userstart_path.into_os_string());
@@ -270,6 +278,8 @@ impl QemuArgs {
         });
 
         let is_zircon = build_config.features.contains("zircon");
+        let is_linux = build_config.features.contains("linux");
+        let is_dual = is_linux && is_zircon;
         let arch = build_config.arch;
         let arch_str = arch.name();
 
@@ -283,7 +293,7 @@ impl QemuArgs {
             }
             println!("Using custom rootfs image: {}", custom.display());
             custom.clone()
-        } else if !is_zircon {
+        } else if is_linux {
             // Build default Linux rootfs image
             let rootfs = ArchArg { arch }.linux_rootfs();
             rootfs.image();
@@ -296,7 +306,13 @@ impl QemuArgs {
 
         let obj = build_config.target_file_path();
         // Set the kernel command line via compile-time env var.
-        let cmdline = if is_zircon && self.rootfs_image.is_some() {
+        let cmdline = if is_dual {
+            // Dual personality: default to Linux with busybox
+            format!(
+                "LOG={} PERSONALITY=linux ROOTPROC=/bin/busybox?sh",
+                self.log
+            )
+        } else if is_zircon && self.rootfs_image.is_some() {
             format!("LOG={} ROOTPROC=/bin/hello", self.log)
         } else if is_zircon {
             format!("LOG={}", self.log)
