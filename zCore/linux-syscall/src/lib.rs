@@ -268,7 +268,15 @@ impl Syscall<'_> {
             Sys::GETPGID => self.sys_getpgid(a0),
             Sys::GETGROUPS => self.sys_getgroups(a0 as i32, a1.into()),
             Sys::SETGROUPS => self.sys_setgroups(a0, a1.into()),
-            Sys::SETPRIORITY => Ok(0), // scheduling priority — stub
+            Sys::SETPRIORITY => self.sys_setpriority(a0, a1, a2 as i32),
+            Sys::GETPRIORITY => self.sys_getpriority(a0, a1),
+            Sys::SCHED_SETPARAM => self.sys_sched_setparam(a0, a1.into()),
+            Sys::SCHED_GETPARAM => self.sys_sched_getparam(a0, a1.into()),
+            Sys::SCHED_SETSCHEDULER => self.sys_sched_setscheduler(a0, a1, a2.into()),
+            Sys::SCHED_GETSCHEDULER => self.sys_sched_getscheduler(a0),
+            Sys::SCHED_GET_PRIORITY_MAX => self.sys_sched_get_priority_max(a0),
+            Sys::SCHED_GET_PRIORITY_MIN => self.sys_sched_get_priority_min(a0),
+            Sys::SCHED_RR_GET_INTERVAL => self.sys_sched_rr_get_interval(a0, a1.into()),
             Sys::PRCTL => self.sys_prctl(a0, a1),
             Sys::MEMBARRIER => Ok(0), // memory barrier — no-op on single CPU
             Sys::PRLIMIT64 => self.sys_prlimit64(a0, a1, a2.into(), a3.into()),

@@ -528,6 +528,99 @@ impl Syscall<'_> {
         Ok(old as usize)
     }
 
+    // --- Scheduler and resource priority syscalls ---
+
+    /// Set process/user priority (nice value).
+    pub fn sys_setpriority(&self, which: usize, who: usize, prio: i32) -> SysResult {
+        info!("setpriority: which={}, who={}, prio={}", which, who, prio);
+        // Accept silently — single-priority system
+        Ok(0)
+    }
+
+    /// Get process/user priority.
+    /// Linux encodes nice as 20-nice, so default nice 0 returns 20.
+    pub fn sys_getpriority(&self, which: usize, who: usize) -> SysResult {
+        info!("getpriority: which={}, who={}", which, who);
+        // Return default nice value (20 = nice 0, per Linux convention)
+        Ok(20)
+    }
+
+    /// Set scheduling parameters (priority).
+    pub fn sys_sched_setparam(&self, pid: usize, _param: UserInPtr<u8>) -> SysResult {
+        info!("sched_setparam: pid={}", pid);
+        // Only priority 0 is valid for SCHED_OTHER
+        Ok(0)
+    }
+
+    /// Get scheduling parameters.
+    pub fn sys_sched_getparam(&self, pid: usize, mut param: UserOutPtr<u32>) -> SysResult {
+        info!("sched_getparam: pid={}", pid);
+        // Return sched_priority = 0 (only valid for SCHED_OTHER)
+        param.write(0)?;
+        Ok(0)
+    }
+
+    /// Set scheduling policy and parameters.
+    pub fn sys_sched_setscheduler(
+        &self,
+        pid: usize,
+        policy: usize,
+        _param: UserInPtr<u8>,
+    ) -> SysResult {
+        info!("sched_setscheduler: pid={}, policy={}", pid, policy);
+        const SCHED_OTHER: usize = 0;
+        if policy != SCHED_OTHER {
+            // Only SCHED_OTHER is supported
+            return Err(LxError::EINVAL);
+        }
+        Ok(0)
+    }
+
+    /// Get scheduling policy.
+    pub fn sys_sched_getscheduler(&self, pid: usize) -> SysResult {
+        info!("sched_getscheduler: pid={}", pid);
+        // Always SCHED_OTHER (0)
+        Ok(0)
+    }
+
+    /// Get maximum priority for a scheduling policy.
+    pub fn sys_sched_get_priority_max(&self, policy: usize) -> SysResult {
+        info!("sched_get_priority_max: policy={}", policy);
+        const SCHED_OTHER: usize = 0;
+        const SCHED_FIFO: usize = 1;
+        const SCHED_RR: usize = 2;
+        match policy {
+            SCHED_OTHER => Ok(0),
+            SCHED_FIFO | SCHED_RR => Ok(99),
+            _ => Err(LxError::EINVAL),
+        }
+    }
+
+    /// Get minimum priority for a scheduling policy.
+    pub fn sys_sched_get_priority_min(&self, policy: usize) -> SysResult {
+        info!("sched_get_priority_min: policy={}", policy);
+        const SCHED_OTHER: usize = 0;
+        const SCHED_FIFO: usize = 1;
+        const SCHED_RR: usize = 2;
+        match policy {
+            SCHED_OTHER => Ok(0),
+            SCHED_FIFO | SCHED_RR => Ok(1),
+            _ => Err(LxError::EINVAL),
+        }
+    }
+
+    /// Get the round-robin time quantum for a process.
+    pub fn sys_sched_rr_get_interval(
+        &self,
+        pid: usize,
+        mut interval: UserOutPtr<[u64; 2]>,
+    ) -> SysResult {
+        info!("sched_rr_get_interval: pid={}", pid);
+        // Return 100ms quantum (timespec: sec=0, nsec=100_000_000)
+        interval.write([0, 100_000_000])?;
+        Ok(0)
+    }
+
     /// Set process group ID. If pid==0, uses the calling
     /// process. If pgid==0, the target becomes its own
     /// process group leader. Negative pgid values are rejected.
