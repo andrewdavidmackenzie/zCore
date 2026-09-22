@@ -1,8 +1,10 @@
 //! Linux Inter-Process Communication
 #![deny(missing_docs)]
+mod msgqueue;
 mod semary;
 mod shared_mem;
 
+pub use self::msgqueue::*;
 pub use self::semary::*;
 pub use self::shared_mem::*;
 use alloc::collections::BTreeMap;
@@ -28,7 +30,7 @@ pub struct ShmProc {
 
 bitflags! {
     /// ipc get bit flags
-    struct IpcGetFlag: usize {
+    pub(crate) struct IpcGetFlag: usize {
         const CREAT = 1 << 9;
         const EXCLUSIVE = 1 << 10;
         const NO_WAIT = 1 << 11;
