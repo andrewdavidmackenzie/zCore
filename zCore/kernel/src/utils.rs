@@ -22,6 +22,31 @@ pub fn boot_options() -> BootOptions {
     BootOptions { cmdline, root_proc }
 }
 
+/// Determine which personality to boot from command line or defaults.
+///
+/// Checks `PERSONALITY=linux` or `PERSONALITY=zircon` in the command line.
+/// Falls back to the compile-time default: linux if enabled, else zircon.
+pub fn parse_personality(cmdline: &str) -> &'static str {
+    if let Some(p) = parse_cmdline_value(cmdline, "PERSONALITY") {
+        match p {
+            #[cfg(feature = "linux")]
+            "linux" => return "linux",
+            #[cfg(feature = "zircon")]
+            "zircon" => return "zircon",
+            _ => warn!(
+                "PERSONALITY={} not available (not compiled or unknown), using default",
+                p
+            ),
+        }
+    }
+    // Default: prefer linux if compiled in, else zircon
+    if cfg!(feature = "linux") {
+        "linux"
+    } else {
+        "zircon"
+    }
+}
+
 /// Extract a value from a "KEY=VALUE KEY2=VALUE2" cmdline string.
 fn parse_cmdline_value<'a>(cmdline: &'a str, key: &str) -> Option<&'a str> {
     for token in cmdline.split_whitespace() {
@@ -41,11 +66,10 @@ pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
         let future = async move {
             use zircon_object::object::Signal;
             let object: Arc<dyn KernelObject> = proc.clone();
-            let signal = if cfg!(any(feature = "linux", feature = "baremetal-test")) {
-                Signal::PROCESS_TERMINATED
-            } else {
-                Signal::USER_SIGNAL_0
-            };
+            // Wait for either termination signal — Linux processes use
+            // PROCESS_TERMINATED, Zircon processes use USER_SIGNAL_0.
+            // In dual-personality mode, wait for either.
+            let signal = Signal::PROCESS_TERMINATED | Signal::USER_SIGNAL_0;
             object.wait_signal(signal).await;
             check_exit_code(proc)
         };
