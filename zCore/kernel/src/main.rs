@@ -3,11 +3,9 @@
 #![deny(warnings)]
 #![allow(static_mut_refs)]
 
-// Exactly one personality must be selected.
-#[cfg(all(feature = "linux", feature = "zircon"))]
-compile_error!("Features `linux` and `zircon` cannot be enabled at the same time");
+// At least one personality must be selected.
 #[cfg(not(any(feature = "linux", feature = "zircon")))]
-compile_error!("One of the features `linux` or `zircon` must be enabled");
+compile_error!("At least one of the features `linux` or `zircon` must be enabled");
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -50,22 +48,33 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) {
     utils::wait_for_exit(Some(proc))
 }
 
-/// Start the Linux personality. Returns the init process.
-#[cfg(feature = "linux")]
+/// Start the appropriate personality based on boot options.
+///
+/// When both `linux` and `zircon` features are enabled, the
+/// personality is selected by the `PERSONALITY` command-line
+/// parameter (default: linux). When only one feature is enabled,
+/// that personality is used unconditionally.
 fn boot_personality(options: utils::BootOptions) -> alloc::sync::Arc<zircon_object::task::Process> {
-    let args = options.root_proc.split('?').map(Into::into).collect();
-    let envs = alloc::vec!["PATH=/usr/sbin:/usr/bin:/sbin:/bin".into()];
-    linux_loader::linux::run(args, envs, fs::rootfs())
-}
+    let personality = utils::parse_personality(&options.cmdline);
+    info!("Personality: {}", personality);
 
-/// Start the Zircon personality. Returns the init process.
-#[cfg(feature = "zircon")]
-fn boot_personality(options: utils::BootOptions) -> alloc::sync::Arc<zircon_object::task::Process> {
-    if let Some(rootfs) = fs::try_zircon_rootfs() {
-        let init_path = options.root_proc.split('?').next().unwrap_or("/bin/hello");
-        zircon_loader::zircon::run_from_rootfs(rootfs, init_path)
-    } else {
-        zircon_loader::zircon::run_userboot(fs::zbi(), &options.cmdline)
+    match personality {
+        #[cfg(feature = "linux")]
+        "linux" => {
+            let args = options.root_proc.split('?').map(Into::into).collect();
+            let envs = alloc::vec!["PATH=/usr/sbin:/usr/bin:/sbin:/bin".into()];
+            linux_loader::linux::run(args, envs, fs::rootfs())
+        }
+        #[cfg(feature = "zircon")]
+        "zircon" => {
+            if let Some(rootfs) = fs::try_zircon_rootfs() {
+                let init_path = options.root_proc.split('?').next().unwrap_or("/bin/hello");
+                zircon_loader::zircon::run_from_rootfs(rootfs, init_path)
+            } else {
+                zircon_loader::zircon::run_userboot(fs::zbi(), &options.cmdline)
+            }
+        }
+        other => panic!("Unknown or disabled personality: {}", other),
     }
 }
 
