@@ -305,6 +305,16 @@ impl Syscall<'_> {
             Sys::VMSPLICE => Err(LxError::ENOSYS), // user pages↔pipe
 
             // filesystem notification — stubs (no VFS event hooks)
+            // timerfd
+            Sys::TIMERFD_CREATE => self.sys_timerfd_create(a0 as i32, a1 as i32),
+            Sys::TIMERFD_SETTIME => {
+                self.sys_timerfd_settime(a0.into(), a1 as i32, a2.into(), a3.into())
+            }
+            Sys::TIMERFD_GETTIME => self.sys_timerfd_gettime(a0.into(), a1.into()),
+
+            // signalfd
+            Sys::SIGNALFD4 => self.sys_signalfd4(a0 as i32, a1.into(), a2, a3 as i32),
+
             Sys::INOTIFY_INIT1 => Err(LxError::ENOSYS),
             Sys::INOTIFY_ADD_WATCH => Err(LxError::ENOSYS),
             Sys::INOTIFY_RM_WATCH => Err(LxError::ENOSYS),
@@ -384,7 +394,7 @@ impl Syscall<'_> {
                     .await
             }
             Sys::DUP2 => self.sys_dup2(a0.into(), a1.into()),
-            //            Sys::ALARM => self.unimplemented("alarm", Ok(0)),
+            Sys::ALARM => self.sys_alarm(a0 as u32),
             Sys::FORK => self.sys_fork(),
             Sys::VFORK => self.sys_vfork().await,
             Sys::RENAME => self.sys_rename(a0.into(), a1.into()),
@@ -398,6 +408,7 @@ impl Syscall<'_> {
             Sys::ARCH_PRCTL => self.sys_arch_prctl(a0 as _, a1),
             Sys::TIME => self.sys_time(a0.into()),
             Sys::CLONE => self.sys_clone(a0, a1, a2.into(), a4, a3.into()),
+            Sys::SIGNALFD => self.sys_signalfd4(a0 as i32, a1.into(), a2, 0),
             Sys::INOTIFY_INIT => Err(LxError::ENOSYS),
             Sys::PAUSE => self.sys_pause().await,
             Sys::EPOLL_CREATE => self.sys_epoll_create(a0),
