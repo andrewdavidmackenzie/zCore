@@ -60,6 +60,81 @@ impl Syscall<'_> {
     pub fn sys_stat(&self, path: UserInPtr<u8>, stat_ptr: UserOutPtr<Stat>) -> SysResult {
         self.sys_fstatat(FileDesc::CWD, path, stat_ptr, 0)
     }
+
+    /// Extended file stat with mask-selectable fields.
+    ///
+    /// Returns a `struct statx` (256 bytes) with basic file information.
+    /// The `mask` parameter selects which fields to fill; we fill all
+    /// available fields regardless.
+    pub fn sys_statx(
+        &self,
+        dirfd: FileDesc,
+        path: UserInPtr<u8>,
+        flags: i32,
+        _mask: u32,
+        mut statxbuf: UserOutPtr<u8>,
+    ) -> SysResult {
+        let path = path.read_c_string()?;
+        info!(
+            "statx: dirfd={:?}, path={:?}, flags={:#x}",
+            dirfd, path, flags
+        );
+
+        let follow = flags & 0x100 == 0; // AT_SYMLINK_NOFOLLOW = 0x100
+        let inode = self.linux_process().lookup_inode_at(dirfd, &path, follow)?;
+        let meta = inode.metadata()?;
+
+        // Build statx struct (256 bytes, all zeros initially)
+        let mut buf = [0u8; 256];
+        // stx_mask: u32 at offset 0 — which fields are filled
+        // STATX_BASIC_STATS = 0x07ff
+        buf[0..4].copy_from_slice(&0x07ffu32.to_ne_bytes());
+        // stx_blksize: u32 at offset 4
+        buf[4..8].copy_from_slice(&(meta.blk_size as u32).to_ne_bytes());
+        // stx_attributes: u64 at offset 8 — file attributes (none)
+        // stx_nlink: u32 at offset 16
+        buf[16..20].copy_from_slice(&(meta.nlinks as u32).to_ne_bytes());
+        // stx_uid: u32 at offset 20
+        buf[20..24].copy_from_slice(&(meta.uid as u32).to_ne_bytes());
+        // stx_gid: u32 at offset 24
+        buf[24..28].copy_from_slice(&(meta.gid as u32).to_ne_bytes());
+        // stx_mode: u16 at offset 28 (file type + permissions)
+        let file_type: u16 = match meta.type_ {
+            rcore_fs::vfs::FileType::File => 0o100000,
+            rcore_fs::vfs::FileType::Dir => 0o040000,
+            rcore_fs::vfs::FileType::SymLink => 0o120000,
+            rcore_fs::vfs::FileType::CharDevice => 0o020000,
+            rcore_fs::vfs::FileType::BlockDevice => 0o060000,
+            rcore_fs::vfs::FileType::NamedPipe => 0o010000,
+            rcore_fs::vfs::FileType::Socket => 0o140000,
+        };
+        let mode = file_type | (meta.mode as u16 & 0o7777);
+        buf[28..30].copy_from_slice(&mode.to_ne_bytes());
+        // stx_ino: u64 at offset 32
+        buf[32..40].copy_from_slice(&(meta.inode as u64).to_ne_bytes());
+        // stx_size: u64 at offset 40
+        buf[40..48].copy_from_slice(&(meta.size as u64).to_ne_bytes());
+        // stx_blocks: u64 at offset 48
+        buf[48..56].copy_from_slice(&(meta.blocks as u64).to_ne_bytes());
+        // stx_attributes_mask: u64 at offset 56
+        // Timestamps (statx_timestamp: tv_sec i64 + tv_nsec u32 + pad u32 = 16 bytes each)
+        // stx_atime at offset 64, stx_btime at offset 80, stx_ctime at offset 96, stx_mtime at offset 112
+        let atime_sec = (meta.atime.sec as i64).to_ne_bytes();
+        let atime_nsec = (meta.atime.nsec as u32).to_ne_bytes();
+        buf[64..72].copy_from_slice(&atime_sec);
+        buf[72..76].copy_from_slice(&atime_nsec);
+        let ctime_sec = (meta.ctime.sec as i64).to_ne_bytes();
+        let ctime_nsec = (meta.ctime.nsec as u32).to_ne_bytes();
+        buf[96..104].copy_from_slice(&ctime_sec);
+        buf[104..108].copy_from_slice(&ctime_nsec);
+        let mtime_sec = (meta.mtime.sec as i64).to_ne_bytes();
+        let mtime_nsec = (meta.mtime.nsec as u32).to_ne_bytes();
+        buf[112..120].copy_from_slice(&mtime_sec);
+        buf[120..124].copy_from_slice(&mtime_nsec);
+
+        statxbuf.write_array(&buf)?;
+        Ok(0)
+    }
 }
 
 #[cfg(not(target_arch = "mips"))]

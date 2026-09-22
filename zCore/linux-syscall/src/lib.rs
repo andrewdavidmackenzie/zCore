@@ -260,6 +260,16 @@ impl Syscall<'_> {
             Sys::GETRANDOM => self.sys_getrandom(a0.into(), a1, a2 as u32),
             Sys::RT_SIGQUEUEINFO => self.sys_rt_sigqueueinfo(a0 as _, a1, a2.into()),
 
+            // filesystem notification — stubs (no VFS event hooks)
+            Sys::INOTIFY_INIT1 => Err(LxError::ENOSYS),
+            Sys::INOTIFY_ADD_WATCH => Err(LxError::ENOSYS),
+            Sys::INOTIFY_RM_WATCH => Err(LxError::ENOSYS),
+            Sys::FANOTIFY_INIT => Err(LxError::ENOSYS),
+            Sys::FANOTIFY_MARK => Err(LxError::ENOSYS),
+
+            // statx — extended stat
+            Sys::STATX => self.sys_statx(a0.into(), a1.into(), a2 as i32, a3 as u32, a4.into()),
+
             // kernel module — not applicable for zCore
             Sys::INIT_MODULE => Err(LxError::ENOSYS),
             Sys::FINIT_MODULE => Err(LxError::ENOSYS),
@@ -322,6 +332,7 @@ impl Syscall<'_> {
             Sys::ARCH_PRCTL => self.sys_arch_prctl(a0 as _, a1),
             Sys::TIME => self.sys_time(a0.into()),
             Sys::CLONE => self.sys_clone(a0, a1, a2.into(), a4, a3.into()),
+            Sys::INOTIFY_INIT => Err(LxError::ENOSYS),
             Sys::EPOLL_CREATE => self.sys_epoll_create(a0),
             Sys::EPOLL_WAIT => self.sys_epoll_wait(a0, a1.into(), a2, a3 as isize).await,
             _ => self.unknown_syscall(sys_type),
