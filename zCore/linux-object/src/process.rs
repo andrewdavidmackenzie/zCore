@@ -457,7 +457,7 @@ impl LinuxProcess {
             inner.egid = gid;
             inner.saved_gid = gid;
             inner.fsgid = gid;
-        } else if gid == inner.gid {
+        } else if gid == inner.gid || gid == inner.saved_gid {
             inner.egid = gid;
             inner.fsgid = gid;
         } else {
