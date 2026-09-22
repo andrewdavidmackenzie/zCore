@@ -423,7 +423,7 @@ fn syscall_args(ctx: &UserContext) -> [usize; 8] {
 
 /// Run a petal program directly from an SFS rootfs filesystem.
 ///
-/// This is the rootfs-based boot path for Zircon personality, analogous
+/// This is the rootfs-based boot path for Zircon flavour, analogous
 /// to how Linux loads busybox from its rootfs. The petal program is a flat
 /// binary (not ELF) loaded at a fixed address.
 ///

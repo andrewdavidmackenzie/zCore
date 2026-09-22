@@ -59,7 +59,7 @@ run_test() {
   if ! USERSTART_ELF="$(pwd)/$USERSTART" \
     PETAL_ZBI="$(pwd)/$ZBI" \
     ZCORE_CMDLINE="LOG=${LOG:-info}" \
-    cargo zcore-build -m "qemu-${ARCH}" --personality none; then
+    cargo zcore-build -m "qemu-${ARCH}"; then
     echo "FAIL: kernel build failed for '$bin_name'"
     return 1
   fi
@@ -114,7 +114,7 @@ run_test() {
 # Run all petal tests
 FAILED=0
 
-run_test "hello" "petal: Hello from petal on zCore!" || FAILED=$((FAILED + 1))
+run_test "hello" "Hello from Zircon on zCore!" || FAILED=$((FAILED + 1))
 run_test "channel-test" "channel_test: PASS" || FAILED=$((FAILED + 1))
 run_test "vmo-test" "vmo_test: PASS" || FAILED=$((FAILED + 1))
 run_test "vdso-test" "vdso_test: PASS" || FAILED=$((FAILED + 1))

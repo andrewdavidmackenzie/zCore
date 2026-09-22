@@ -1,11 +1,12 @@
 //! Run Linux process and manage trap/interrupt/syscall.
 
-use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 use cfg_if::cfg_if;
 use core::{future::Future, pin::Pin};
 use linux_object::signal::{
     MachineContext, SigInfo, Signal, SignalActionFlags, SignalUserContext, Sigset,
 };
+use spin::Once;
 
 use hal::{TrapReason, UserContextField};
 use hal_impl::context::UserContext;
@@ -16,9 +17,56 @@ use linux_object::{loader::LinuxElfLoader, process::ProcessExt};
 use zircon_object::task::{CurrentThread, Job, Process, Thread, ThreadState};
 use zircon_object::{object::KernelObject, vm::USER_STACK_PAGES, ZxError, ZxResult};
 
+/// Global rootfs reference, set at boot by `run()` or `init_spawn()`.
+/// Used by `spawn_linux_process()` to create new Linux processes.
+static LINUX_ROOTFS: Once<Arc<dyn FileSystem>> = Once::new();
+
+/// Register the Linux spawn function globally.
+///
+/// Called once during boot (from `run()` or explicitly). After this,
+/// Zircon syscalls like `debug_exec` can spawn Linux processes via
+/// `zircon_object::task::spawn::spawn_linux()`.
+pub fn init_spawn(rootfs: Arc<dyn FileSystem>) {
+    LINUX_ROOTFS.call_once(|| rootfs);
+    zircon_object::task::spawn::set_linux_spawn_fn(spawn_linux_process);
+}
+
+/// Spawn a Linux process from ELF data.
+///
+/// Used for cross-flavour exec: a Zircon process (petal shell)
+/// can run a Linux binary via `debug_exec`.
+fn spawn_linux_process(elf_data: &[u8], path: &str) -> ZxResult<Arc<Process>> {
+    let rootfs = LINUX_ROOTFS.get().ok_or(ZxError::BAD_STATE)?.clone();
+
+    let job = Job::root();
+    let proc = Process::create_linux(&job, rootfs.clone())?;
+    let thread = Thread::create_linux(&proc)?;
+    let loader = LinuxElfLoader {
+        syscall_entry: hal_impl::context::syscall_entry as *const () as usize,
+        stack_pages: USER_STACK_PAGES,
+        root_inode: rootfs.root_inode(),
+    };
+
+    let args: Vec<String> = vec![path.into()];
+    let envs: Vec<String> = vec!["PATH=/usr/sbin:/usr/bin:/sbin:/bin".into()];
+    let (entry, sp, initial_brk) = loader
+        .load(&proc.vmar(), elf_data, args, envs, path.into())
+        .map_err(|_| ZxError::INVALID_ARGS)?;
+    proc.linux().set_brk(initial_brk);
+
+    thread
+        .start_with_entry(entry, sp, 0, 0, thread_fn)
+        .expect("failed to start Linux thread");
+
+    Ok(proc)
+}
+
 /// Create and run main Linux process
 pub fn run(args: Vec<String>, envs: Vec<String>, rootfs: Arc<dyn FileSystem>) -> Arc<Process> {
     info!("Run Linux process: args={:?}, envs={:?}", args, envs);
+
+    // Register spawn function so Zircon can cross-spawn Linux processes.
+    init_spawn(rootfs.clone());
 
     let job = Job::root();
     let proc = Process::create_linux(&job, rootfs.clone()).unwrap();

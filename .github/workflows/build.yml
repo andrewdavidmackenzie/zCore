@@ -78,7 +78,7 @@ jobs:
 
       - name: Build ${{ matrix.arch }} bare-metal (Zircon only)
         if: matrix.arch == 'x86_64'
-        run: cargo bin -m qemu-${{ matrix.arch }} --personality none
+        run: cargo bin -m qemu-${{ matrix.arch }}
 
   libos:
     name: LibOS build
@@ -95,7 +95,7 @@ jobs:
         run: cargo zcore-build -m libos --personality linux
 
       - name: Build libos (Zircon mode)
-        run: cargo zcore-build -m libos --personality none
+        run: cargo zcore-build -m libos
 
   clippy:
     name: Clippy (all targets)

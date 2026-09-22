@@ -22,10 +22,10 @@ thead-maee = ["hal-impl/thead-maee"]
 link-user-img = []
 baremetal-test = ["executor/baremetal-test"]
 
-# --- Personality ---
-# Zircon is the base personality (always enabled).
+# --- Flavour ---
+# Zircon is the base flavour (always enabled).
 # Linux is additive — adds Linux syscall emulation on top of Zircon.
-linux = ["linux-loader", "linux-object"]
+linux = ["linux-loader", "linux-object", "zircon-object/linux"]
 libos = [
   "hal-impl/libos",
   "linux-loader?/libos",
@@ -48,7 +48,7 @@ pci = ["hal-impl/pci"]
 allwinner-drivers = ["hal-impl/allwinner-drivers"]
 fu740-drivers = ["hal-impl/fu740-drivers"]
 
-# --- Board presets (combine personality + drivers + board-specific flags) ---
+# --- Board presets (combine flavour + drivers + board-specific flags) ---
 board-d1 = ["link-user-img", "allwinner-drivers"]
 board-c910light = ["link-user-img", "hal-impl/board-c910light"]
 board-fu740 = ["link-user-img", "fu740-drivers", "hal-impl/board-fu740"]

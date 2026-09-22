@@ -269,6 +269,7 @@ impl Syscall<'_> {
             Sys::TICKS_GET_VIA_KERNEL => self.sys_ticks_get_via_kernel(a0.into()),
             Sys::TIMER_CREATE => self.sys_timer_create(a0 as _, a1 as _, a2.into()),
             Sys::DEBUG_WRITE => self.sys_debug_write(a0.into(), a1 as _),
+            Sys::DEBUG_EXEC => self.sys_debug_exec(a0.into(), a1 as _).await,
             Sys::DEBUGLOG_CREATE => self.sys_debuglog_create(a0 as _, a1 as _, a2.into()),
             Sys::DEBUGLOG_WRITE => self.sys_debuglog_write(a0 as _, a1 as _, a2.into(), a3 as _),
             Sys::DEBUGLOG_READ => {

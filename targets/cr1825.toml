@@ -1,5 +1,5 @@
 # Cvitek CR1825 RISC-V board (not actively tested)
-default-personality = "linux"
+default-flavour = "linux"
 arch = "riscv64"
 linker-script = "zCore/hal-impl/src/bare/arch/riscv/platform/linker.ld"
 drivers = ["riscv-intc", "riscv-plic"]

@@ -3,7 +3,7 @@
 # Standard QEMU virtual machine with 16550 UART, APIC, PCI.
 # Serial console provides both input and output in QEMU.
 
-default-personality = "linux"
+default-flavour = "linux"
 arch = "x86_64"
 linker-script = "zCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
 drivers = ["uart-16550", "apic", "pci"]

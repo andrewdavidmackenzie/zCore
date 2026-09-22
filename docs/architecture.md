@@ -71,44 +71,44 @@ names would be `KernelCallbacks`, `HalToKernelBridge`, or `KernelServices`.
 Consider renaming in a future cleanup issue.
 
 
-- OS personality selection (Zircon is always the base; Linux is additive)
+- OS flavour selection (Zircon is always the base; Linux is additive)
 
 Zircon is always compiled as the base kernel. The `linux` cargo feature adds
-Linux syscall emulation on top. In `zCore/kernel/src/main.rs`, `boot_personality()`
+Linux syscall emulation on top. In `zCore/kernel/src/main.rs`, `boot_init()`
 selects the init process based on the `PERSONALITY=` command line parameter.
 Linux calls `linux_loader::linux::run()` with a rootfs; Zircon calls
-`zircon_loader::zircon::run_userboot()` with a ZBI. Both personalities can
+`zircon_loader::zircon::run_userboot()` with a ZBI. Both flavours can
 coexist in the same kernel binary when `linux` is enabled.
 
 
 The core reason is that Linux mode pulls in `linux-object` (filesystem,
 signals, SysV IPC) and `linux-syscall` as compile-time dependencies. These are
 not runtime-loadable modules. Both modes share `zircon-object` underneath, so
-the kernel object model IS shared. In theory, if the personality-specific code
+the kernel object model IS shared. In theory, if the flavour-specific code
 (rootfs init, syscall dispatch table, process creation) were moved to
 dynamically-selected modules or to userspace servers, both could coexist. The
 main blockers: (1) Linux's in-kernel VFS would need to become a userspace
 server, (2) the loader would need to support both syscall dispatch tables
 simultaneously, (3) the startup path in main.rs would need to launch both
-personality servers.
+flavour servers.
 See [#74](https://github.com/andrewdavidmackenzie/zCore/issues/74).
 
 
-In a pure microkernel, it shouldn't. But zCore has personality-specific code in
+In a pure microkernel, it shouldn't. But zCore has flavour-specific code in
 the kernel: (1) Linux mode needs in-kernel filesystem (SFS), (2) the loader
 creates first processes differently (ELF+auxvec vs userboot+channel+handles),
 (3) `handler.rs` unconditionally downcasts to `zircon_object::task::Thread` for
-page faults. Both personalities share Zircon objects underneath -- Linux is
+page faults. Both flavours share Zircon objects underneath -- Linux is
 implemented ON TOP of Zircon primitives, not alongside. This is architectural
 debt from the research/educational origins.
 
 
-The personality-specific code in `zCore/src/` is small: `fs.rs` (rootfs vs
+The flavour-specific code in `zCore/src/` is small: `fs.rs` (rootfs vs
 ZBI), the startup branch in `main.rs`, and boot option parsing in `utils.rs`.
-These could be abstracted behind a trait like `OsPersonality::start()`. The
-real blocker is that both personalities share `zircon-object` as the common
+These could be abstracted behind a trait like `OsFlavour::start()`. The
+real blocker is that both flavours share `zircon-object` as the common
 kernel object model -- Linux extends it via `ProcessExt`/`ThreadExt`. A truly
-clean split would require defining a personality-neutral kernel object
+clean split would require defining a flavour-neutral kernel object
 interface, which would be a major refactor. Running both simultaneously is not
 currently possible. See [#75](https://github.com/andrewdavidmackenzie/zCore/issues/75).
 
@@ -405,7 +405,7 @@ TODO Describe this more, including the "scheme" concept
 
 **Purpose:** Implements all Zircon kernel objects -- the fundamental
 abstractions of Google's Fuchsia/Zircon microkernel. This is the core of zCore,
-used by both Zircon and Linux personalities.
+used by both Zircon and Linux flavours.
 
 Cargo supports having a `[lib]` and `[[bin]]` in the same
 crate. But zircon-object is also depended on by `linux-object`, `linux-
@@ -414,11 +414,11 @@ would create a circular dependency (those crates can't depend on zCore).
 Keeping it as a separate library crate is the correct architecture.
 
 
-"Zircon personality" means zCore boots the Fuchsia **userboot** process -- the
+"Zircon flavour" means zCore boots the Fuchsia **userboot** process -- the
 first userspace program in the Fuchsia boot sequence. It reimplements the
 Zircon KERNEL side (kernel objects + syscalls) but runs REAL Fuchsia prebuilt
 userspace binaries (userboot.so, libzircon.so). It's not a full Fuchsia
-personality (no component framework, no FIDL, no package management) -- just
+flavour (no component framework, no FIDL, no package management) -- just
 enough to boot userboot and run Zircon core tests. A full Fuchsia stack would
 require many more userspace services.
 
@@ -590,7 +590,7 @@ See [#82](https://github.com/andrewdavidmackenzie/zCore/issues/82).
 **Workspace dependencies:** `zircon-object`, `linux-object`, `hal-impl`
 
 Because zircon-object provides the SHARED kernel object model used by both
-personalities. linux-syscall directly uses: `Process`, `Thread`,
+flavours. linux-syscall directly uses: `Process`, `Thread`,
 `CurrentThread`, `ThreadFn` (task management), `VmObject`, `MMUFlags`,
 `PAGE_SIZE` (VM), `KernelObject`, `Signal` (signaling), `ThreadState` (futex
 blocking). These are the core types -- linux-object extends them with Linux-

@@ -168,6 +168,7 @@ const SYSCALLS: &[(&str, u32)] = &[
     // Composite syscalls
     ("zx_futex_wake_handle_close_thread_exit", 200),
     ("zx_vmar_unmap_handle_close_thread_exit", 201),
+    ("zx_debug_exec", 202),
 ];
 
 fn main() {

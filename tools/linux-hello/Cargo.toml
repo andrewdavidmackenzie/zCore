@@ -1,0 +1,10 @@
+[package]
+name = "linux-hello"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "linux-hello"
+path = "src/main.rs"

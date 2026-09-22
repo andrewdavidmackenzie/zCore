@@ -125,16 +125,16 @@ enum Commands {
     /// Builds zCore for a target.
     ///
     /// Reads configuration from `targets/<name>.toml`. The target
-    /// defines architecture, drivers, and features. Personality
-    /// defaults to the TOML's `default-personality` but can be
-    /// overridden with `--personality`.
+    /// defines architecture, drivers, and features. Flavour
+    /// defaults to the TOML's `default-flavour` but can be
+    /// overridden with `--flavour`.
     ///
     /// # Example
     ///
     /// ```bash
     /// cargo zcore-build -m qemu-aarch64
     /// cargo zcore-build -m raspi400
-    /// cargo zcore-build -m libos --personality linux
+    /// cargo zcore-build -m libos --flavour linux
     /// ```
     ZcoreBuild(BuildArgs),
 
@@ -417,8 +417,8 @@ fn unset_git_proxy(global: bool) {
 /// Checks code style and runs clippy on all code:
 ///   - workspace format check
 ///   - host tools (xtask, region-alloc, zircon-abi)
-///   - libos (linux and zircon personalities, from targets/libos.toml)
-///   - bare-metal kernel for each architecture and personality (from targets/qemu-<arch>.toml)
+///   - libos (linux and zircon flavours, from targets/libos.toml)
+///   - bare-metal kernel for each architecture and flavour (from targets/qemu-<arch>.toml)
 ///   - userspace programs (petal, userstart) for each architecture
 ///   - tests (cargo test on host-buildable crates)
 fn check_style() {
@@ -437,7 +437,7 @@ fn check_style() {
     println!("==> Clippy: libos (linux)...");
     BuildConfig::from_args(BuildArgs {
         machine: "libos".into(),
-        personality: Some("linux".into()),
+        flavour: Some("linux".into()),
         debug: false,
     })
     .invoke(Cargo::clippy);
@@ -445,7 +445,7 @@ fn check_style() {
     println!("==> Clippy: libos (zircon)...");
     BuildConfig::from_args(BuildArgs {
         machine: "libos".into(),
-        personality: Some("none".into()),
+        flavour: None,
         debug: false,
     })
     .invoke(Cargo::clippy);
@@ -455,7 +455,7 @@ fn check_style() {
         println!("    {}", arch.name());
         BuildConfig::from_args(BuildArgs {
             machine: format!("qemu-{}", arch.name()),
-            personality: Some("linux".into()),
+            flavour: Some("linux".into()),
             debug: false,
         })
         .invoke(Cargo::clippy);
@@ -468,7 +468,7 @@ fn check_style() {
         println!("    {}", arch.name());
         BuildConfig::from_args(BuildArgs {
             machine: format!("qemu-{}", arch.name()),
-            personality: Some("none".into()),
+            flavour: None,
             debug: false,
         })
         .invoke(Cargo::clippy);
@@ -545,7 +545,7 @@ mod libos {
         // Build via BuildConfig so features come from targets/libos.toml.
         let build_config = BuildConfig::from_args(BuildArgs {
             machine: "libos".into(),
-            personality: Some("linux".into()),
+            flavour: Some("linux".into()),
             debug: false,
         });
         // Launch!
@@ -570,10 +570,10 @@ mod libos {
         );
 
         // BuildConfig::from_args handles everything: features from
-        // targets/libos.toml, personality, and zircon prerequisites.
+        // targets/libos.toml, flavour, and zircon prerequisites.
         let build_config = BuildConfig::from_args(BuildArgs {
             machine: "libos".into(),
-            personality: Some("none".into()),
+            flavour: None,
             debug: false,
         });
         build_config.invoke(Cargo::build);

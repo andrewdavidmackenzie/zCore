@@ -23,6 +23,18 @@ For faster iteration, use `make pre-push-quick` which runs clippy,
 fmt, unit tests, and builds (~3 min) but skips QEMU boot tests.
 Run the full `make pre-push` before the final push.
 
+## Problem-solving principles
+- **Never silence errors or warnings without understanding the root cause.**
+  Downgrading a log level or suppressing output is not a fix. Investigate
+  why the error occurs and fix the underlying problem.
+- **Never assume something is "pre-existing" without verifying.** Check
+  whether the issue exists on master before dismissing it.
+- **Never choose the simplest option.** Choose the most correct option
+  regardless of effort. Simple hacks create technical debt.
+- **Drive to understand root causes.** Ask "why does this happen?" not
+  "how do I hide this?" Trace the code path, understand the failure
+  mode, then fix it properly.
+
 ## PR workflow
 After pushing commits to a PR:
 1. Wait for CI checks to complete

@@ -251,8 +251,8 @@ hal_fn_def! {
         /// Returns the host filesystem path for the rootfs directory
         /// in libos mode.  Returns `None` on bare-metal.
         ///
-        /// The `personality` parameter is `"linux"` or `"none"` (Zircon is always the base).
-        pub fn libos_rootfs_path(personality: &str) -> Option<String> { None }
+        /// The `flavour` parameter is `"linux"` or `"zircon"`.
+        pub fn libos_rootfs_path(flavour: &str) -> Option<String> { None }
     }
 
     /// VDSO constants.

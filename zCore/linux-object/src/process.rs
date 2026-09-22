@@ -94,6 +94,9 @@ impl ProcessExt for Process {
         new_proc.add_signal_callback(Box::new(move |signal| {
             if signal.contains(Signal::PROCESS_TERMINATED) {
                 info!("Received signal: {:?}", signal);
+                // Set the Zircon object signal (wakes wait_child_any).
+                // This also wakes any thread blocked in poll/select
+                // via the signal callback mechanism.
                 parent.signal_set(Signal::SIGCHLD);
             }
             false

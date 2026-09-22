@@ -9,10 +9,10 @@ hal = { path = "../hal" }
 log = "0.4"
 cfg-if = "1.0"
 hal-impl = { path = "../hal-impl", default-features = false }
-zircon-object = { path = "../zircon-object", features = ["elf"] }
+zircon-object = { path = "../zircon-object", features = ["elf", "linux"] }
 linux-object = { path = "../linux-object" }
 linux-syscall = { path = "../linux-syscall" }
-executor = { path = "../executor" }
+spin = "0.9"
 
 [features]
 default = []

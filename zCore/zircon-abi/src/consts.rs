@@ -280,6 +280,8 @@ pub const SYS_RESTRICTED_UNBIND_STATE: u32 = 184;
 
 // Cache operations
 pub const SYS_CACHE_FLUSH: u32 = 185;
+/// Execute a program from the rootfs by path (zCore extension).
+pub const SYS_DEBUG_EXEC: u32 = 202;
 
 // ── Type aliases ────────────────────────────────────────────────────
 

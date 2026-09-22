@@ -304,15 +304,15 @@ impl Process {
         &self.ext
     }
 
-    /// Detect the process personality from its extension type.
+    /// Detect the process flavour from its extension type.
     ///
     /// Linux processes have a non-unit extension (LinuxProcess),
     /// Zircon processes have `()` as their extension.
-    pub fn personality(&self) -> super::Personality {
+    pub fn flavour(&self) -> super::Flavour {
         if self.ext.downcast_ref::<()>().is_some() {
-            super::Personality::Zircon
+            super::Flavour::Zircon
         } else {
-            super::Personality::Linux
+            super::Flavour::Linux
         }
     }
 

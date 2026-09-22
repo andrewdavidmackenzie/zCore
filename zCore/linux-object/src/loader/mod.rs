@@ -128,10 +128,11 @@ impl LinuxElfLoader {
         use xmas_elf::header::Type;
         let is_pie = elf.header.pt2.type_().as_type() == Type::SharedObject;
         if !is_pie {
-            match elf.relocate(image_vmar) {
-                Ok(()) => info!("elf relocate passed !"),
-                Err(error) => {
-                    warn!("elf relocate Err:{:?}, base {:x?}", error, base);
+            // Only relocate if the ELF has a .rela.dyn section.
+            // Static binaries don't have one — nothing to relocate.
+            if elf.find_section_by_name(".rela.dyn").is_some() {
+                if let Err(error) = elf.relocate(image_vmar) {
+                    warn!("elf relocate failed: {:?}", error);
                 }
             }
         } else {

@@ -198,7 +198,7 @@ impl Syscall<'_> {
             Sys::RECVMSG => self.sys_recvmsg(a0.into(), a1.into(), a2).await,
 
             // process
-            Sys::EXECVE => self.sys_execve(a0.into(), a1.into(), a2.into()),
+            Sys::EXECVE => self.sys_execve(a0.into(), a1.into(), a2.into()).await,
             Sys::EXIT => self.sys_exit(a0 as _),
             Sys::EXIT_GROUP => self.sys_exit_group(a0 as _),
             Sys::WAIT4 => self.sys_wait4(a0 as _, a1.into(), a2 as _).await,

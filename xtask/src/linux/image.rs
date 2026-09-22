@@ -20,6 +20,11 @@ impl super::LinuxRootfs {
     pub fn image(&self) {
         // Recursively build rootfs
         self.make(false);
+        // Copy cross-flavour demo binaries (petal hello, linux-hello, petal shell)
+        // into the Linux rootfs. Skip on riscv64 (petal can't build there).
+        if !matches!(self.0, crate::Arch::Riscv64) {
+            crate::petal::copy_petal_to_linux_rootfs(self.0);
+        }
         // Image path
         let image = self.image_path();
         // Skip image creation if it already exists and is newer than the

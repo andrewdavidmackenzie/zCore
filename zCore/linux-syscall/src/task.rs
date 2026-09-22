@@ -291,7 +291,7 @@ impl Syscall<'_> {
     /// > threads are terminated before the new image is loaded. zCore does not
     /// > yet explicitly terminate sibling threads during exec; it only clears
     /// > the shared VMAR.
-    pub fn sys_execve(
+    pub async fn sys_execve(
         &mut self,
         path: UserInPtr<u8>,
         argv: UserInPtr<UserInPtr<u8>>,
@@ -323,24 +323,29 @@ impl Syscall<'_> {
         let inode = proc.lookup_inode(&path)?;
         let data = inode.read_as_vec()?;
 
-        // Detect personality from ELF header.
-        let personality = zircon_object::task::Personality::from_elf(&data);
-        if personality == zircon_object::task::Personality::Zircon {
+        // Detect flavour from ELF header.
+        let flavour = zircon_object::task::Flavour::from_elf(&data);
+        if flavour == zircon_object::task::Flavour::Zircon {
             info!(
-                "execve: {:?} is a Zircon binary — cross-personality spawn",
+                "execve: {:?} is a Zircon binary — cross-flavour spawn",
                 path
             );
             // Spawn via the globally registered Zircon spawn config.
             let job = self.zircon_process().job();
             match zircon_object::task::spawn::spawn_zircon(&job, &path, &data) {
-                Some(Ok(_zircon_proc)) => {
+                Some(Ok(zircon_proc)) => {
                     info!("Zircon process '{}' spawned successfully", path);
-                    // Exit this Linux process. The Zircon process runs
-                    // independently. The parent shell's wait4() sees
-                    // this child exit with code 0.
-                    let zircon_proc = self.zircon_process();
-                    zircon_proc.exit(0);
-                    return Err(LxError::ENOSYS);
+                    // Wait for the Zircon process to finish before
+                    // exiting the Linux child. Use timed sleeps to
+                    // yield the executor and let the Zircon thread run.
+                    while zircon_proc.exit_code().is_none() {
+                        hal_impl::thread::sleep_until(
+                            hal_impl::timer::timer_now() + core::time::Duration::from_millis(1),
+                        )
+                        .await;
+                    }
+                    let code = zircon_proc.exit_code().unwrap_or(0) as i32;
+                    return self.sys_exit_group(code);
                 }
                 Some(Err(e)) => {
                     error!("Failed to spawn Zircon process '{}': {:?}", path, e);
