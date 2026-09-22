@@ -47,3 +47,25 @@ pub enum Personality {
     /// no extension, handle-based IPC.
     Zircon,
 }
+
+/// ELF OS/ABI value for zCore Zircon personality binaries.
+///
+/// Set in `e_ident[EI_OSABI]` (byte 7) at build time by xtask.
+/// The kernel checks this byte during `execve` to determine
+/// which personality to use for the new process.
+pub const ELFOSABI_ZIRCON: u8 = 0xFC;
+
+impl Personality {
+    /// Detect personality from ELF binary data.
+    ///
+    /// Checks `e_ident[EI_OSABI]` (byte 7):
+    /// - `ELFOSABI_ZIRCON` (0xFC) → Zircon
+    /// - anything else → Linux (default, compatible with standard ELFs)
+    pub fn from_elf(data: &[u8]) -> Self {
+        if data.len() >= 8 && data[0..4] == *b"\x7fELF" && data[7] == ELFOSABI_ZIRCON {
+            Personality::Zircon
+        } else {
+            Personality::Linux
+        }
+    }
+}

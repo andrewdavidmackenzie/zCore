@@ -5,6 +5,15 @@ use crate::PROJECT_DIR;
 use std::path::PathBuf;
 use std::process::Command;
 
+/// ELF OS/ABI value for zCore Zircon personality binaries.
+///
+/// Set in `e_ident[EI_OSABI]` (byte 7) of petal ELF binaries at build time.
+/// The kernel's `execve` checks this byte to determine whether to use
+/// Linux or Zircon syscall dispatch for the new process.
+///
+/// Value 0xFC is in the OS-specific range (64-255) of the ELF spec.
+pub const ELFOSABI_ZIRCON: u8 = 0xFC;
+
 /// Target triple for each architecture when building petal programs.
 fn petal_target(arch: Arch) -> &'static str {
     match arch {
@@ -50,7 +59,29 @@ pub fn build_petal(arch: Arch, bin_name: &str) -> PathBuf {
         panic!("petal build failed");
     }
 
-    target_dir.join(target).join("release").join(bin_name)
+    let elf_path = target_dir.join(target).join("release").join(bin_name);
+    set_elf_osabi(&elf_path, ELFOSABI_ZIRCON);
+    elf_path
+}
+
+/// Patch the ELF OS/ABI byte (e_ident[7]) in an ELF binary.
+fn set_elf_osabi(path: &std::path::Path, osabi: u8) {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .unwrap_or_else(|e| panic!("failed to open ELF {}: {}", path.display(), e));
+    let mut magic = [0u8; 8];
+    file.read_exact(&mut magic)
+        .unwrap_or_else(|e| panic!("failed to read ELF header: {}", e));
+    assert!(
+        &magic[0..4] == b"\x7fELF",
+        "Not an ELF file: {}",
+        path.display()
+    );
+    file.seek(SeekFrom::Start(7)).unwrap();
+    file.write_all(&[osabi]).unwrap();
 }
 
 /// Strip an ELF binary to a flat binary using objcopy.
@@ -149,7 +180,9 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
         panic!("userstart build failed");
     }
 
-    target_dir.join(target).join("release").join("userstart")
+    let elf_path = target_dir.join(target).join("release").join("userstart");
+    set_elf_osabi(&elf_path, ELFOSABI_ZIRCON);
+    elf_path
 }
 
 /// Build all petal programs and create a Zircon rootfs directory.
