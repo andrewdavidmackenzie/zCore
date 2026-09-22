@@ -273,6 +273,14 @@ impl Syscall<'_> {
             Sys::INIT_MODULE => Err(LxError::ENOSYS),
             Sys::FINIT_MODULE => Err(LxError::ENOSYS),
             Sys::DELETE_MODULE => Err(LxError::ENOSYS),
+
+            // modern syscalls — stubs returning ENOSYS so programs
+            // can probe and fall back gracefully instead of crashing
+            Sys::SECCOMP => Err(LxError::ENOSYS),
+            Sys::BPF => Err(LxError::ENOSYS),
+            Sys::CLONE3 => Err(LxError::ENOSYS),
+            Sys::CLOSE_RANGE => Err(LxError::ENOSYS),
+            Sys::OPENAT2 => Err(LxError::ENOSYS),
             #[cfg(not(target_arch = "aarch64"))]
             Sys::BLOCK_IN_KERNEL => self.sys_block_in_kernel(),
 
