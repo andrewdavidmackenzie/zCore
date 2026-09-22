@@ -162,6 +162,12 @@ impl Syscall<'_> {
             // signal
             Sys::RT_SIGACTION => self.sys_rt_sigaction(a0, a1.into(), a2.into(), a3),
             Sys::RT_SIGPROCMASK => self.sys_rt_sigprocmask(a0 as _, a1.into(), a2.into(), a3),
+            Sys::RT_SIGPENDING => self.sys_rt_sigpending(a0.into(), a1),
+            Sys::RT_SIGTIMEDWAIT => {
+                self.sys_rt_sigtimedwait(a0.into(), a1.into(), a2.into(), a3)
+                    .await
+            }
+            Sys::RT_SIGSUSPEND => self.sys_rt_sigsuspend(a0.into(), a1).await,
             Sys::RT_SIGRETURN => self.sys_rt_sigreturn(),
             Sys::SIGALTSTACK => self.sys_sigaltstack(a0.into(), a1.into()),
             Sys::KILL => self.sys_kill(a0 as isize, a1),
@@ -357,6 +363,7 @@ impl Syscall<'_> {
             Sys::TIME => self.sys_time(a0.into()),
             Sys::CLONE => self.sys_clone(a0, a1, a2.into(), a4, a3.into()),
             Sys::INOTIFY_INIT => Err(LxError::ENOSYS),
+            Sys::PAUSE => self.sys_pause().await,
             Sys::EPOLL_CREATE => self.sys_epoll_create(a0),
             Sys::EPOLL_WAIT => self.sys_epoll_wait(a0, a1.into(), a2, a3 as isize).await,
             _ => self.unknown_syscall(sys_type),

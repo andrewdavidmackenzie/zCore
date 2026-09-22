@@ -900,6 +900,18 @@ impl LinuxProcess {
         self.inner.lock().pending_signals.insert(sig);
     }
 
+    /// Get the raw pending signal bitmask.
+    pub fn pending_signals(&self) -> u64 {
+        self.inner.lock().pending_signals.val()
+    }
+
+    /// Clear a specific signal from the pending set.
+    pub fn clear_pending_signal(&self, signo: usize) {
+        let mut inner = self.inner.lock();
+        let val = inner.pending_signals.val() & !(1u64 << (signo - 1));
+        inner.pending_signals = crate::signal::Sigset::new(val);
+    }
+
     /// Check process-level pending signals against a thread's mask.
     /// Returns and removes any signals that are now unmasked.
     pub fn take_pending_signals(&self, mask: &crate::signal::Sigset) -> crate::signal::Sigset {
