@@ -462,7 +462,9 @@ fn check_style() {
     }
 
     println!("==> Clippy: bare-metal kernel (zircon)...");
-    for arch in [Arch::Aarch64, Arch::X86_64, Arch::Riscv64] {
+    // riscv64 skipped: zircon-abi has compile_error! for 8-arg syscalls
+    // on riscv64, which blocks the userstart build needed for zircon clippy.
+    for arch in [Arch::Aarch64, Arch::X86_64] {
         println!("    {}", arch.name());
         BuildConfig::from_args(BuildArgs {
             machine: format!("qemu-{}", arch.name()),
