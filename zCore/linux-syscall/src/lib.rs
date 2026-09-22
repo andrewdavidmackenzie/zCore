@@ -299,6 +299,20 @@ impl Syscall<'_> {
             Sys::FINIT_MODULE => Err(LxError::ENOSYS),
             Sys::DELETE_MODULE => Err(LxError::ENOSYS),
 
+            // capabilities
+            Sys::CAPGET => self.sys_capget(a0.into(), a1.into()),
+            Sys::CAPSET => self.sys_capset(a0.into(), a1.into()),
+
+            // ptrace — not implemented
+            Sys::PTRACE => Err(LxError::ENOSYS),
+
+            // async I/O — not implemented
+            Sys::IO_SETUP => Err(LxError::ENOSYS),
+            Sys::IO_DESTROY => Err(LxError::ENOSYS),
+            Sys::IO_GETEVENTS => Err(LxError::ENOSYS),
+            Sys::IO_SUBMIT => Err(LxError::ENOSYS),
+            Sys::IO_CANCEL => Err(LxError::ENOSYS),
+
             // modern syscalls — stubs returning ENOSYS so programs
             // can probe and fall back gracefully instead of crashing
             Sys::SECCOMP => Err(LxError::ENOSYS),
