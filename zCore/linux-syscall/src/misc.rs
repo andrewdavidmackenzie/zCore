@@ -589,6 +589,67 @@ impl Syscall<'_> {
         Ok(0)
     }
 
+    // --- Timer and signal fd syscalls ---
+
+    /// Set a SIGALRM timer. Returns seconds remaining on previous alarm.
+    pub fn sys_alarm(&self, seconds: u32) -> SysResult {
+        use linux_object::time::{ITimerVal, TimeVal};
+        info!("alarm: seconds={}", seconds);
+        let new_val = ITimerVal {
+            it_interval: TimeVal { sec: 0, usec: 0 }, // one-shot
+            it_value: TimeVal {
+                sec: seconds as usize,
+                usec: 0,
+            },
+        };
+        let proc = self.linux_process();
+        let zircon_proc = self.zircon_process();
+        let old = proc.set_itimer_real(new_val, zircon_proc);
+        // Return seconds remaining on previous alarm (rounded up)
+        let remaining = old.it_value.sec + if old.it_value.usec > 0 { 1 } else { 0 };
+        Ok(remaining)
+    }
+
+    /// Create a timer file descriptor.
+    ///
+    /// Returns a file descriptor. Currently a minimal stub — the fd
+    /// exists but timerfd_settime is needed to arm it.
+    pub fn sys_timerfd_create(&self, clockid: i32, flags: i32) -> SysResult {
+        info!("timerfd_create: clockid={}, flags={:#x}", clockid, flags);
+        // Return ENOSYS — full implementation requires a new FileLike type
+        Err(LxError::ENOSYS)
+    }
+
+    /// Arm or disarm a timer fd.
+    pub fn sys_timerfd_settime(
+        &self,
+        _fd: FileDesc,
+        _flags: i32,
+        _new_value: UserInPtr<u8>,
+        _old_value: UserOutPtr<u8>,
+    ) -> SysResult {
+        info!("timerfd_settime");
+        Err(LxError::ENOSYS)
+    }
+
+    /// Get remaining time on a timer fd.
+    pub fn sys_timerfd_gettime(&self, _fd: FileDesc, _curr_value: UserOutPtr<u8>) -> SysResult {
+        info!("timerfd_gettime");
+        Err(LxError::ENOSYS)
+    }
+
+    /// Create or modify a signal file descriptor.
+    pub fn sys_signalfd4(
+        &self,
+        _fd: i32,
+        _mask: UserInPtr<u64>,
+        _sizemask: usize,
+        _flags: i32,
+    ) -> SysResult {
+        info!("signalfd4");
+        Err(LxError::ENOSYS)
+    }
+
     /// Set the file mode creation mask. Returns the
     /// previous value.
     pub fn sys_umask(&self, mask: u32) -> SysResult {
