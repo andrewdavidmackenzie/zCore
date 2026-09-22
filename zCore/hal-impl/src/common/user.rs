@@ -515,7 +515,7 @@ impl<P: Policy> IoVec<P> {
     /// Use `read_to_vec()` and `write_from_buf()` instead.
     ///
     /// Kept for internal use only; callers must ensure no aliasing.
-    pub(crate) unsafe fn as_mut_slice_unchecked(&self) -> Result<&mut [u8]> {
+    pub(crate) unsafe fn as_mut_slice_unchecked(&mut self) -> Result<&mut [u8]> {
         if !self.ptr.is_null() {
             Ok(with_user_access(|| {
                 core::slice::from_raw_parts_mut(self.ptr.0, self.len)

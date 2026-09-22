@@ -1,6 +1,7 @@
 #ifdef HAVE_GETRANDOM
  #include <sys/random.h>
 #else
+ #include <unistd.h>
  #include <syscall.h>
  #include <linux/random.h>
 #endif

@@ -46,7 +46,7 @@ pub fn zbi() -> impl AsRef<[u8]> {
             "Usage: zcore-libos <ZBI_FILE>\n\
              Build a petal ZBI with: cargo petal-zbi --arch aarch64",
         );
-        return std::fs::read(path).expect("failed to read ZBI file");
+        std::fs::read(path).expect("failed to read ZBI file")
     }
 
     #[cfg(not(feature = "libos"))]

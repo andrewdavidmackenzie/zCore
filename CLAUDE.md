@@ -7,6 +7,18 @@ To build and run zCore the default command to use is:
 cargo qemu --arch aarch64
 ```
 
+## Pre-push checks
+**Always run `make pre-push` before pushing commits.** This runs the same
+checks as CI (clippy, fmt, builds, boot tests, libc tests, feature
+combinations) and catches failures locally before they show up in CI.
+
+```bash
+make pre-push
+```
+
+If `make pre-push` fails, fix the issue before pushing. Do not push
+code that fails pre-push checks.
+
 ## PR workflow
 After pushing commits to a PR:
 1. Wait for CI checks to complete
