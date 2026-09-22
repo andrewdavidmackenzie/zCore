@@ -50,7 +50,7 @@ hal_fn_impl! {
             //                   [23:16] = CPU target list (bitmask)
             //                   [3:0]   = SGI interrupt ID (0)
             let target_mask = 1u32 << cpuid;
-            let sgir_val = (target_mask << 16) as u32;
+            let sgir_val = target_mask << 16;
             unsafe {
                 core::ptr::write_volatile(gicd_sgir as *mut u32, sgir_val);
             }
