@@ -474,10 +474,10 @@ clean-everything: clean
 # 	cd rootfs/x86_64/rt-tests && make
 # 	echo x86 gcc build rt-test,now need manual modificy.
 
-# Clone and build the Fuchsia project in ../fuschia for testing alongside zCore.
+# Clone and build the Fuchsia project in ../fuchsia for testing alongside zCore.
 # Requires: x86-64 Linux host with curl, git, unzip installed.
 # Cross-compiles Fuchsia for aarch64 (qemu-arm64 board).
-FUSCHIA_DIR := $(CURDIR)/../fuchsia
+FUCHSIA_DIR := $(CURDIR)/../fuchsia
 build-fuchsia:
 	@echo "==> Checking prerequisites..."
 	@which curl >/dev/null 2>&1 || { echo "ERROR: curl not found"; exit 1; }
@@ -491,24 +491,24 @@ build-fuchsia:
 		echo "ERROR: Fuchsia build requires x86_64 host (detected: $$(uname -m))"; \
 		exit 1; \
 	fi
-	@if [ ! -d "$(FUSCHIA_DIR)/fuchsia/.jiri_root" ]; then \
-		echo "==> Cloning Fuchsia source into $(FUSCHIA_DIR)..."; \
-		mkdir -p "$(FUSCHIA_DIR)"; \
-		cd "$(FUSCHIA_DIR)" && \
+	@if [ ! -d "$(FUCHSIA_DIR)/fuchsia/.jiri_root" ]; then \
+		echo "==> Cloning Fuchsia source into $(FUCHSIA_DIR)..."; \
+		mkdir -p "$(FUCHSIA_DIR)"; \
+		cd "$(FUCHSIA_DIR)" && \
 		test -d fuchsia || git clone https://fuchsia.googlesource.com/fuchsia && \
 		cd fuchsia && \
 		bash scripts/bootstrap; \
 	else \
-		echo "==> Fuchsia source already exists at $(FUSCHIA_DIR)/fuchsia, skipping clone."; \
+		echo "==> Fuchsia source already exists at $(FUCHSIA_DIR)/fuchsia, skipping clone."; \
 	fi
 	@echo "==> Configuring Fuchsia build...(fx set workbench_eng.x64)"
-	@export PATH="$(FUSCHIA_DIR)/fuchsia/fuchsia/.jiri_root/bin:$PATH"
-	@jiri init -analytics-opt=false "$(FUSCHIA_DIR)/fuchsia/fuchsia"
-	@cd "$(FUSCHIA_DIR)/fuchsia/fuchsia" && \
+	@export PATH="$(FUCHSIA_DIR)/fuchsia/fuchsia/.jiri_root/bin:$PATH"
+	@jiri init -analytics-opt=false "$(FUCHSIA_DIR)/fuchsia/fuchsia"
+	@cd "$(FUCHSIA_DIR)/fuchsia/fuchsia" && \
 		source scripts/fx-env.sh && \
 		.jiri_root/bin/fx set workbench_eng.x64
 	@echo "==> Building Fuchsia..."
-	@cd "$(FUSCHIA_DIR)/fuchsia/fuchsia" && \
+	@cd "$(FUCHSIA_DIR)/fuchsia/fuchsia" && \
 		source scripts/fx-env.sh && \
 		.jiri_root/bin/fx build
-	@echo "==> Fuchsia build complete at $(FUSCHIA_DIR)/fuchsia"
+	@echo "==> Fuchsia build complete at $(FUCHSIA_DIR)/fuchsia"
