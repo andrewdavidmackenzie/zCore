@@ -255,6 +255,8 @@ struct LinuxProcessInner {
     semaphores: SemProc,
     /// Share Memory
     shm_identifiers: ShmProc,
+    /// Message Queues
+    msg_queues: MsgProc,
     /// Futexes
     futexes: HashMap<VirtAddr, Arc<Futex>>,
     /// Child processes
@@ -965,6 +967,21 @@ impl LinuxProcess {
     /// Remove an `SemArray` by ID
     pub fn semaphores_remove(&self, id: usize) {
         self.inner.lock().semaphores.remove(id)
+    }
+
+    /// Add a message queue and return its ID.
+    pub fn msg_add(&self, queue: Arc<MsgQueue>) -> usize {
+        self.inner.lock().msg_queues.add(queue)
+    }
+
+    /// Get a message queue by ID.
+    pub fn msg_get(&self, id: usize) -> Option<Arc<MsgQueue>> {
+        self.inner.lock().msg_queues.get(id)
+    }
+
+    /// Remove a message queue by ID.
+    pub fn msg_remove(&self, id: usize) {
+        self.inner.lock().msg_queues.remove(id)
     }
 
     /// get ShmId from Virtual Addr

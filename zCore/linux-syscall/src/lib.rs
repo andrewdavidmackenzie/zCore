@@ -241,6 +241,14 @@ impl Syscall<'_> {
             Sys::SHMDT => self.sys_shmdt(a0, a1, a2),
             #[cfg(not(target_arch = "mips"))]
             Sys::SHMCTL => self.sys_shmctl(a0, a1, a2),
+            #[cfg(not(target_arch = "mips"))]
+            Sys::MSGGET => self.sys_msgget(a0, a1),
+            #[cfg(not(target_arch = "mips"))]
+            Sys::MSGSND => self.sys_msgsnd(a0, a1.into(), a2, a3),
+            #[cfg(not(target_arch = "mips"))]
+            Sys::MSGRCV => self.sys_msgrcv(a0, a1.into(), a2, a3 as isize, a4),
+            #[cfg(not(target_arch = "mips"))]
+            Sys::MSGCTL => self.sys_msgctl(a0, a1, a2),
 
             // system
             Sys::GETPID => self.sys_getpid(),
