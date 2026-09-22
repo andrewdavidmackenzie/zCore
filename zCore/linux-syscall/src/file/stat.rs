@@ -108,6 +108,7 @@ impl Syscall<'_> {
             rcore_fs::vfs::FileType::NamedPipe => 0o010000,
             rcore_fs::vfs::FileType::Socket => 0o140000,
         };
+        #[allow(clippy::unnecessary_cast)]
         let mode = file_type | (meta.mode as u16 & 0o7777);
         buf[28..30].copy_from_slice(&mode.to_ne_bytes());
         // stx_ino: u64 at offset 32
@@ -119,18 +120,22 @@ impl Syscall<'_> {
         // stx_attributes_mask: u64 at offset 56
         // Timestamps (statx_timestamp: tv_sec i64 + tv_nsec u32 + pad u32 = 16 bytes each)
         // stx_atime at offset 64, stx_btime at offset 80, stx_ctime at offset 96, stx_mtime at offset 112
-        let atime_sec = (meta.atime.sec as i64).to_ne_bytes();
-        let atime_nsec = (meta.atime.nsec as u32).to_ne_bytes();
-        buf[64..72].copy_from_slice(&atime_sec);
-        buf[72..76].copy_from_slice(&atime_nsec);
-        let ctime_sec = (meta.ctime.sec as i64).to_ne_bytes();
-        let ctime_nsec = (meta.ctime.nsec as u32).to_ne_bytes();
-        buf[96..104].copy_from_slice(&ctime_sec);
-        buf[104..108].copy_from_slice(&ctime_nsec);
-        let mtime_sec = (meta.mtime.sec as i64).to_ne_bytes();
-        let mtime_nsec = (meta.mtime.nsec as u32).to_ne_bytes();
-        buf[112..120].copy_from_slice(&mtime_sec);
-        buf[120..124].copy_from_slice(&mtime_nsec);
+        // Timestamps — use allow for casts that may be identity on some platforms
+        #[allow(clippy::unnecessary_cast)]
+        {
+            let atime_sec = (meta.atime.sec as i64).to_ne_bytes();
+            let atime_nsec = (meta.atime.nsec as u32).to_ne_bytes();
+            buf[64..72].copy_from_slice(&atime_sec);
+            buf[72..76].copy_from_slice(&atime_nsec);
+            let ctime_sec = (meta.ctime.sec as i64).to_ne_bytes();
+            let ctime_nsec = (meta.ctime.nsec as u32).to_ne_bytes();
+            buf[96..104].copy_from_slice(&ctime_sec);
+            buf[104..108].copy_from_slice(&ctime_nsec);
+            let mtime_sec = (meta.mtime.sec as i64).to_ne_bytes();
+            let mtime_nsec = (meta.mtime.nsec as u32).to_ne_bytes();
+            buf[112..120].copy_from_slice(&mtime_sec);
+            buf[120..124].copy_from_slice(&mtime_nsec);
+        }
 
         statxbuf.write_array(&buf)?;
         Ok(0)
