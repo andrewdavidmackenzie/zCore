@@ -323,6 +323,35 @@ impl Syscall<'_> {
         let inode = proc.lookup_inode(&path)?;
         let data = inode.read_as_vec()?;
 
+        // Detect personality from ELF header.
+        let personality = zircon_object::task::Personality::from_elf(&data);
+        if personality == zircon_object::task::Personality::Zircon {
+            info!(
+                "execve: {:?} is a Zircon binary — cross-personality spawn",
+                path
+            );
+            // Spawn via the globally registered Zircon spawn config.
+            let job = self.zircon_process().job();
+            match zircon_object::task::spawn::spawn_zircon(&job, &path, &data) {
+                Some(Ok(_proc)) => {
+                    info!("Zircon process '{}' spawned successfully", path);
+                    // The Zircon process runs concurrently. Return
+                    // ENOEXEC to the Linux caller so fork+exec
+                    // semantics work (the forked child exits, the
+                    // Zircon process continues independently).
+                    return Err(LxError::ENOEXEC);
+                }
+                Some(Err(e)) => {
+                    error!("Failed to spawn Zircon process '{}': {:?}", path, e);
+                    return Err(LxError::ENOEXEC);
+                }
+                None => {
+                    warn!("Zircon spawn config not registered");
+                    return Err(LxError::ENOEXEC);
+                }
+            }
+        }
+
         proc.remove_cloexec_files();
 
         // WARNING: About to destroy the old application's user space.

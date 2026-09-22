@@ -429,7 +429,7 @@ handling (VFS, signals, networking, etc.) runs in kernel space.
 - riscv64 QEMU: SFS image as initrd (`-initrd`)
 - LibOS: Host filesystem passthrough (HostFS)
 
-### Zircon Mode (`--features zircon`)
+### Zircon Mode (default, no extra features needed)
 
 Zircon mode has two boot paths, selected automatically at runtime:
 

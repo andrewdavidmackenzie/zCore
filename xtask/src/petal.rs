@@ -64,7 +64,13 @@ pub fn build_petal(arch: Arch, bin_name: &str) -> PathBuf {
     elf_path
 }
 
-/// Patch the ELF OS/ABI byte (e_ident[7]) in an ELF binary.
+/// ELF e_ident field indices.
+const EI_OSABI: u64 = 7;
+
+/// ELF magic number.
+const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
+
+/// Patch the ELF OS/ABI byte (`e_ident[EI_OSABI]`) in an ELF binary.
 fn set_elf_osabi(path: &std::path::Path, osabi: u8) {
     use std::io::{Read, Seek, SeekFrom, Write};
     let mut file = std::fs::OpenOptions::new()
@@ -72,15 +78,15 @@ fn set_elf_osabi(path: &std::path::Path, osabi: u8) {
         .write(true)
         .open(path)
         .unwrap_or_else(|e| panic!("failed to open ELF {}: {}", path.display(), e));
-    let mut magic = [0u8; 8];
-    file.read_exact(&mut magic)
+    let mut header = [0u8; 8];
+    file.read_exact(&mut header)
         .unwrap_or_else(|e| panic!("failed to read ELF header: {}", e));
     assert!(
-        &magic[0..4] == b"\x7fELF",
+        header[0..4] == ELF_MAGIC,
         "Not an ELF file: {}",
         path.display()
     );
-    file.seek(SeekFrom::Start(7)).unwrap();
+    file.seek(SeekFrom::Start(EI_OSABI)).unwrap();
     file.write_all(&[osabi]).unwrap();
 }
 
@@ -183,6 +189,30 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
     let elf_path = target_dir.join(target).join("release").join("userstart");
     set_elf_osabi(&elf_path, ELFOSABI_ZIRCON);
     elf_path
+}
+
+/// Copy petal hello binary into the Linux rootfs so Zircon binaries
+/// can be tested from the Linux busybox shell.
+pub fn copy_petal_to_linux_rootfs(arch: Arch) {
+    let hello = build_petal(arch, "hello");
+    let linux_bin = PROJECT_DIR
+        .join("target")
+        .join("rootfs")
+        .join("linux")
+        .join(arch.name())
+        .join("bin");
+    if linux_bin.is_dir() {
+        let dest = linux_bin.join("zircon-hello");
+        std::fs::copy(&hello, &dest).unwrap_or_else(|e| {
+            panic!(
+                "failed to copy petal hello to Linux rootfs: {} -> {}: {}",
+                hello.display(),
+                dest.display(),
+                e
+            )
+        });
+        println!("Copied petal hello -> {}", dest.display());
+    }
 }
 
 /// Build all petal programs and create a Zircon rootfs directory.

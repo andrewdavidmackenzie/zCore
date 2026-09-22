@@ -71,14 +71,14 @@ names would be `KernelCallbacks`, `HalToKernelBridge`, or `KernelServices`.
 Consider renaming in a future cleanup issue.
 
 
-- OS personality selection (Linux vs Zircon, mutually exclusive via features)
+- OS personality selection (Zircon is always the base; Linux is additive)
 
-In `zCore/src/main.rs:49-65`, a `cfg_if!` block checks `feature = "linux"` vs
-`feature = "zircon"` (panics if both). Linux calls `zcore_loader::linux::run()`
-with a rootfs; Zircon calls `zcore_loader::zircon::run_userboot()` with a ZBI.
-Features are defined in `zCore/Cargo.toml`: `linux = ["zcore-loader/linux",
-"linux-object", "rcore-fs", "rcore-fs-sfs"]` and `zircon = ["zcore-
-loader/zircon"]`. They are mutually exclusive compile-time choices.
+Zircon is always compiled as the base kernel. The `linux` cargo feature adds
+Linux syscall emulation on top. In `zCore/kernel/src/main.rs`, `boot_personality()`
+selects the init process based on the `PERSONALITY=` command line parameter.
+Linux calls `linux_loader::linux::run()` with a rootfs; Zircon calls
+`zircon_loader::zircon::run_userboot()` with a ZBI. Both personalities can
+coexist in the same kernel binary when `linux` is enabled.
 
 
 The core reason is that Linux mode pulls in `linux-object` (filesystem,

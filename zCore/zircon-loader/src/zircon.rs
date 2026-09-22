@@ -27,8 +27,8 @@ use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::kcounter;
 use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::task::{CurrentThread, ExceptionType, Job, Process, Thread, ThreadState};
-use zircon_object::util::elf_loader::{ElfExt, VmarExt};
-use zircon_object::vm::{VmObject, VmarFlags};
+use zircon_object::util::elf_loader::ElfExt;
+use zircon_object::vm::VmObject;
 use zircon_object::ZxError;
 
 // vDSO VMO layout: pages 0-6 reserved for code, page 7 for VdsoConstants data.
@@ -430,13 +430,25 @@ fn syscall_args(ctx: &UserContext) -> [usize; 8] {
 /// This path does NOT use userstart or ZBI -- the kernel loads the program
 /// directly, creating a process with the same handle protocol that userstart
 /// would provide.
+/// Create a `SpawnConfig` for Zircon processes.
+///
+/// Uses the vDSO and thread_fn from this loader module.
+pub fn zircon_spawn_config() -> zircon_object::task::spawn::SpawnConfig {
+    zircon_object::task::spawn::SpawnConfig {
+        vdso_vmo: create_vdso_vmo(),
+        vdso_code_size: VDSO_DATA_OFFSET,
+        stack_pages: 8,
+        thread_fn,
+    }
+}
+
+/// Boot a Zircon process from a rootfs filesystem.
 pub fn run_from_rootfs(
     rootfs: Arc<dyn rcore_fs::vfs::FileSystem>,
     init_path: &str,
 ) -> Arc<Process> {
     info!("Zircon rootfs boot: loading '{}'", init_path);
 
-    // Read the program binary from the filesystem
     let inode = rootfs
         .root_inode()
         .lookup(init_path)
@@ -453,68 +465,10 @@ pub fn run_from_rootfs(
         program_data.len()
     );
 
-    // Create a process and load the program
     let job = Job::root();
-    let proc = Process::create(&job, "init").unwrap();
-    let thread = Thread::create(&proc, "init-main").unwrap();
-    let vmar = proc.vmar();
-
-    // Load ELF using the same infrastructure as Linux and userstart.
-    // Allocates a sub-VMAR, maps each LOAD segment with proper
-    // permissions (RX for code, RW for data), and returns the entry.
-    let elf = ElfFile::new(&program_data).expect("failed to parse init program as ELF");
-    let size = elf.load_segment_size();
-    let image_vmar = vmar
-        .allocate(None, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
-        .expect("failed to allocate image VMAR");
-    let _vmo = image_vmar
-        .load_from_elf(&elf)
-        .expect("failed to load ELF segments");
-    let base = image_vmar.addr();
-    let entry = base + elf.header.pt2.entry_point() as usize;
-    info!(
-        "ELF loaded: base={:#x}, entry={:#x}, size={:#x}",
-        base, entry, size
-    );
-
-    // Create stack above the loaded image
-    let stack_pages = 8;
-    let stack_size = stack_pages * PAGE_SIZE;
-    let stack_vmo = VmObject::new_paged(stack_pages);
-    stack_vmo.set_name("init-stack");
-    let stack_flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER;
-    let stack_base = vmar
-        .map(None, stack_vmo, 0, stack_size, stack_flags)
-        .unwrap();
-    let sp = stack_base + stack_size;
-    info!("Stack at {:#x}-{:#x}, sp={:#x}", stack_base, sp, sp);
-
-    // Map vDSO into the process (code + data pages).
-    let vdso_vmo = create_vdso_vmo();
-    let vdso_code_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
-    let vdso_code_addr = vmar
-        .map(None, vdso_vmo.clone(), 0, VDSO_DATA_OFFSET, vdso_code_flags)
-        .unwrap();
-    let vdso_data_flags = MMUFlags::READ | MMUFlags::USER;
-    let _vdso_data_addr = vmar
-        .map(None, vdso_vmo, VDSO_DATA_OFFSET, PAGE_SIZE, vdso_data_flags)
-        .unwrap();
-
-    // Create a bootstrap channel (petal programs expect a startup handle).
-    // ch0 is the kernel end, ch1 goes to the process.
-    let (ch0, ch1) = Channel::create();
-
-    // Add ch0 to the process handle table so it stays alive and the
-    // channel doesn't close when ch1 is the only reference.
-    let ch0_handle = Handle::new(ch0, Rights::DEFAULT_CHANNEL);
-    proc.add_handle(ch0_handle);
-
-    // Start the process. _start(startup_handle, vdso_base).
-    let handle = Handle::new(ch1, Rights::DEFAULT_CHANNEL);
-    proc.start(&thread, entry, sp, Some(handle), vdso_code_addr, thread_fn)
-        .expect("failed to start init process");
-
-    proc
+    let config = zircon_spawn_config();
+    zircon_object::task::spawn::spawn_process(&job, "init", &program_data, &config)
+        .expect("failed to spawn init process")
 }
 
 /// Create a vDSO VMO with syscall trampolines and VdsoConstants.

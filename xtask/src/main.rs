@@ -155,7 +155,7 @@ enum Commands {
     ///
     /// ```bash
     /// cargo qemu -m qemu-aarch64 --smp 4
-    /// cargo qemu -m qemu-x86_64 --personality zircon --log info
+    /// cargo qemu -m qemu-x86_64 --log info
     /// ```
     Qemu(QemuArgs),
 
@@ -445,7 +445,7 @@ fn check_style() {
     println!("==> Clippy: libos (zircon)...");
     BuildConfig::from_args(BuildArgs {
         machine: "libos".into(),
-        personality: Some("zircon".into()),
+        personality: Some("none".into()),
         debug: false,
     })
     .invoke(Cargo::clippy);
@@ -468,7 +468,7 @@ fn check_style() {
         println!("    {}", arch.name());
         BuildConfig::from_args(BuildArgs {
             machine: format!("qemu-{}", arch.name()),
-            personality: Some("zircon".into()),
+            personality: Some("none".into()),
             debug: false,
         })
         .invoke(Cargo::clippy);
@@ -562,7 +562,7 @@ mod libos {
     /// Builds zCore in Zircon libos mode.
     ///
     /// Userstart and petal ZBI are built automatically by BuildConfig
-    /// when the personality is "zircon".
+    /// for Zircon-only builds (no Linux).
     pub(super) fn zircon_build() {
         println!(
             "Building Zircon libos for host arch: {}",
@@ -573,7 +573,7 @@ mod libos {
         // targets/libos.toml, personality, and zircon prerequisites.
         let build_config = BuildConfig::from_args(BuildArgs {
             machine: "libos".into(),
-            personality: Some("zircon".into()),
+            personality: Some("none".into()),
             debug: false,
         });
         build_config.invoke(Cargo::build);

@@ -59,7 +59,7 @@ run_test() {
   if ! USERSTART_ELF="$(pwd)/$USERSTART" \
     PETAL_ZBI="$(pwd)/$ZBI" \
     ZCORE_CMDLINE="LOG=${LOG:-info}" \
-    cargo zcore-build -m "qemu-${ARCH}" --personality zircon; then
+    cargo zcore-build -m "qemu-${ARCH}" --personality none; then
     echo "FAIL: kernel build failed for '$bin_name'"
     return 1
   fi

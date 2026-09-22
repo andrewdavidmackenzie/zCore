@@ -165,7 +165,7 @@ object` (`Arc<dyn KernelObject>` -> concrete type) and `linux-object` (`dyn
 FileLike` -> `EpollFile`).
 
 **`xmas-elf`** (0.7) ELF binary parser. Used by `zircon-object` (behind `elf`
-feature), `linux-object`, and `loader` (behind `zircon` feature).
+feature), `linux-object`, and `loader` (always included).
 
 **`bitvec`** (0.22) Bit-vector type for `FdSet` in select/pselect. Used by
 `linux-syscall`.

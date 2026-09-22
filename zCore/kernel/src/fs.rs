@@ -38,7 +38,6 @@ pub fn rootfs() -> alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem> {
 
 // ── Zircon personality ─────────────────────────────────────────────────
 
-#[cfg(feature = "zircon")]
 pub fn zbi() -> impl AsRef<[u8]> {
     #[cfg(feature = "libos")]
     {
@@ -56,8 +55,6 @@ pub fn zbi() -> impl AsRef<[u8]> {
     }
 }
 
-/// Try to open a Zircon rootfs (works for both libos and bare-metal).
-#[cfg(feature = "zircon")]
 pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
     // LibOS mode: use HostFS.
     #[cfg(feature = "libos")]
@@ -123,11 +120,8 @@ pub(crate) fn init_ram_disk() -> Option<&'static mut [u8]> {
 
 // ── Device wrappers (bare-metal Zircon) ───────────────────────────────
 
-/// Minimal rcore-fs Device wrapper for an in-memory buffer.
-#[cfg(feature = "zircon")]
 struct MemBufDevice(spin::Mutex<&'static mut [u8]>);
 
-#[cfg(feature = "zircon")]
 impl rcore_fs::dev::Device for MemBufDevice {
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> rcore_fs::dev::Result<usize> {
         let data = self.0.lock();
@@ -152,11 +146,8 @@ impl rcore_fs::dev::Device for MemBufDevice {
     }
 }
 
-/// Minimal rcore-fs Device wrapper for a VirtIO block device.
-#[cfg(feature = "zircon")]
 struct BlockDevice(alloc::sync::Arc<dyn hal_impl::device_registry::scheme::BlockScheme>);
 
-#[cfg(feature = "zircon")]
 impl rcore_fs::dev::Device for BlockDevice {
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> rcore_fs::dev::Result<usize> {
         if buf.is_empty() {
