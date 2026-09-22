@@ -36,3 +36,14 @@ pub trait Task: Sync + Send {
 
 /// The return code set when a task is killed via zx_task_kill().
 pub const TASK_RETCODE_SYSCALL_KILL: i64 = -1028;
+
+/// Kernel personality — determines syscall ABI and process model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Personality {
+    /// Linux personality: syscall via x8 (aarch64), 6 args,
+    /// LinuxProcess extension, POSIX signal model.
+    Linux,
+    /// Zircon personality: syscall via x16 (aarch64), 8 args,
+    /// no extension, handle-based IPC.
+    Zircon,
+}
