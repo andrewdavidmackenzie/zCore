@@ -25,9 +25,13 @@ pub struct TimeVal {
 }
 
 impl TimeVal {
-    /// create TimeVal
+    /// Current monotonic time.
     pub fn now() -> TimeVal {
         TimeSpec::now().into()
+    }
+    /// Current wall-clock time.
+    pub fn now_realtime() -> TimeVal {
+        TimeSpec::now_realtime().into()
     }
     /// to msec
     pub fn to_msec(&self) -> usize {
@@ -103,13 +107,14 @@ pub const SIGEV_SIGNAL: i32 = 0;
 pub const SIGEV_NONE: i32 = 1;
 
 impl TimeSpec {
-    /// create TimeSpec
+    /// Current monotonic time (duration since boot).
     pub fn now() -> TimeSpec {
-        let time = kernel_hal::timer::timer_now();
-        TimeSpec {
-            sec: time.as_secs() as usize,
-            nsec: (time.as_nanos() % 1_000_000_000) as usize,
-        }
+        Self::from_duration(hal_impl::timer::timer_now())
+    }
+
+    /// Current wall-clock time (duration since Unix epoch).
+    pub fn now_realtime() -> TimeSpec {
+        Self::from_duration(hal_impl::timer::timer_clock_realtime())
     }
 
     /// update TimeSpec for a file inode

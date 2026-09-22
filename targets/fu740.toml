@@ -1,0 +1,22 @@
+# SiFive FU740 RISC-V board (not actively tested)
+default-personality = "linux"
+arch = "riscv64"
+linker-script = "zCore/hal-impl/src/bare/arch/riscv/platform/linker.ld"
+drivers = ["riscv-intc", "riscv-plic", "pci"]
+features = ["fu740-drivers"]
+
+[rustc-target]
+llvm-target = "riscv64"
+data-layout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"
+features = "+m,+a,+c"
+os = "none"
+llvm-abiname = "lp64"
+code-model = "medium"
+cpu = "generic-rv64"
+max-atomic-width = 64
+target-pointer-width = 64
+target-endian = "little"
+target-c-int-width = 32
+relocation-model = "static"
+eh-frame-header = false
+emit-debug-gdb-scripts = false

@@ -2,13 +2,14 @@
 
 use crate::error::{LxError, SysResult};
 use crate::process::ProcessExt;
-use crate::signal::{SigInfo, Signal, SignalStack, SignalUserContext, Sigset};
+use crate::signal::{SigInfo, Signal, SignalCode, SignalStack, SignalUserContext, Sigset};
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
-use kernel_hal::context::{UserContext, UserContextField};
-use kernel_hal::user::{Out, UserInPtr, UserOutPtr, UserPtr};
+use hal_impl::context::{UserContext, UserContextField};
+use hal_impl::user::{Out, UserInPtr, UserOutPtr, UserPtr};
 use lock::{Mutex, MutexGuard};
 use zircon_object::task::{CurrentThread, Process, Thread};
 use zircon_object::ZxResult;
@@ -45,6 +46,9 @@ impl ThreadExt for Thread {
             robust_list_len: 0,
             handling_signal: None,
             signal_waker: None,
+            user_time_ns: 0,
+            sys_time_ns: 0,
+            siginfo_queue: VecDeque::new(),
         });
         Thread::create_with_ext(proc, "", linux_thread)
     }
@@ -197,15 +201,15 @@ impl CurrentThreadExt for CurrentThread {
                     match vmar.get_vaddr_flags(vaddr) {
                         Ok(vaddr_flags) => {
                             is_handle_write_pagefault &=
-                                !vaddr_flags.contains(kernel_hal::MMUFlags::WRITE);
+                                !vaddr_flags.contains(hal_impl::MMUFlags::WRITE);
                         }
-                        Err(kernel_hal::vm::PagingError::NotMapped) => {
+                        Err(hal_impl::vm::PagingError::NotMapped) => {
                             is_handle_write_pagefault &= true;
                         }
-                        Err(kernel_hal::vm::PagingError::NoMemory) => {
+                        Err(hal_impl::vm::PagingError::NoMemory) => {
                             is_handle_write_pagefault &= true;
                         }
-                        Err(kernel_hal::vm::PagingError::AlreadyMapped) => {
+                        Err(hal_impl::vm::PagingError::AlreadyMapped) => {
                             is_handle_write_pagefault &= true;
                         }
                     }
@@ -271,6 +275,13 @@ pub struct LinuxThread {
     /// Used to wake a thread when a signal is delivered, enabling
     /// EINTR returns from blocking syscalls.
     signal_waker: Option<Waker>,
+    /// Accumulated user-mode CPU time (nanoseconds).
+    user_time_ns: u128,
+    /// Accumulated system/kernel-mode CPU time (nanoseconds).
+    sys_time_ns: u128,
+    /// Per-signal siginfo payloads. Standard signals coalesce (at most
+    /// one entry per signal number); real-time signals may queue.
+    siginfo_queue: VecDeque<SigInfo>,
 }
 
 fn unmodified_check(siginfo: &SigInfo, user_ctx: &SignalUserContext) -> usize {
@@ -322,8 +333,8 @@ impl LinuxThread {
         (self.signals, self.signal_mask, self.handling_signal)
     }
 
-    /// Handle signal
-    pub fn handle_signal(&mut self) -> Option<(Signal, Sigset)> {
+    /// Handle signal -- returns the signal, its siginfo, and the current mask.
+    pub fn handle_signal(&mut self) -> Option<(Signal, SigInfo, Sigset)> {
         if self.handling_signal.is_none() {
             let signal = self
                 .signals
@@ -332,7 +343,11 @@ impl LinuxThread {
             if let Some(signal) = signal {
                 self.handling_signal = Some(signal as u32);
                 self.signals.remove(signal);
-                return Some((signal, self.signal_mask));
+                let info = self.pop_siginfo(signal).unwrap_or(SigInfo {
+                    signo: signal as i32,
+                    ..Default::default()
+                });
+                return Some((signal, info, self.signal_mask));
             }
         }
         None
@@ -340,19 +355,47 @@ impl LinuxThread {
 
     /// Insert a signal into the pending set and wake any blocked Future.
     ///
-    /// This replaces direct `signals.insert()` calls. When an unmasked
-    /// signal is inserted, it wakes the thread's signal_waker (if any),
-    /// causing blocking syscalls to return EINTR.
-    ///
-    /// Callers should also call `proc.signal_set(Signal::SIGCHLD)` on
-    /// the target process to wake any `wait_signal` futures (e.g. in
-    /// wait4/waitpid).
+    /// Stores a default `SigInfo` for the signal. For signals with
+    /// payload (rt_sigqueueinfo), use `insert_signal_info` instead.
     pub fn insert_signal(&mut self, sig: Signal) {
+        let info = SigInfo {
+            signo: sig as i32,
+            code: SignalCode::KERNEL,
+            ..Default::default()
+        };
+        self.insert_signal_info(sig, info);
+    }
+
+    /// Insert a signal with a specific `SigInfo` payload.
+    ///
+    /// Standard signals (1-31) coalesce: if the signal is already
+    /// pending, the new siginfo replaces the old one. Real-time
+    /// signals (32-64) queue individually.
+    pub fn insert_signal_info(&mut self, sig: Signal, info: SigInfo) {
+        let is_rt = (sig as u32) >= 32;
+        if is_rt || !self.signals.contains(sig) {
+            // Queue the siginfo (RT signals always queue; standard
+            // signals only queue if not already pending).
+            self.siginfo_queue.push_back(info);
+        }
         self.signals.insert(sig);
         if !self.signal_mask.contains(sig) {
             if let Some(waker) = self.signal_waker.as_ref() {
                 waker.wake_by_ref();
             }
+        }
+    }
+
+    /// Pop the siginfo for a specific signal from the queue.
+    ///
+    /// Returns `None` if no siginfo was stored (shouldn't happen in
+    /// normal usage since `insert_signal` always stores one).
+    pub fn pop_siginfo(&mut self, sig: Signal) -> Option<SigInfo> {
+        let signo = sig as i32;
+        if let Some(pos) = self.siginfo_queue.iter().position(|i| i.signo == signo) {
+            self.siginfo_queue.remove(pos)
+        } else {
+            None
         }
     }
 
@@ -370,6 +413,26 @@ impl LinuxThread {
     /// Check if any unmasked signal is pending.
     pub fn has_pending_signal(&self) -> bool {
         self.signals.mask_with(&self.signal_mask).is_not_empty()
+    }
+
+    /// Add user-mode CPU time (nanoseconds).
+    pub fn add_user_time(&mut self, ns: u128) {
+        self.user_time_ns += ns;
+    }
+
+    /// Add system/kernel-mode CPU time (nanoseconds).
+    pub fn add_sys_time(&mut self, ns: u128) {
+        self.sys_time_ns += ns;
+    }
+
+    /// Get accumulated user-mode CPU time (nanoseconds).
+    pub fn user_time_ns(&self) -> u128 {
+        self.user_time_ns
+    }
+
+    /// Get accumulated system-mode CPU time (nanoseconds).
+    pub fn sys_time_ns(&self) -> u128 {
+        self.sys_time_ns
     }
 }
 

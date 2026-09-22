@@ -14,12 +14,14 @@
 //! program is used instead (writes a debug message and exits).
 
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use cfg_if::cfg_if;
 use core::{future::Future, pin::Pin};
 
 use xmas_elf::ElfFile;
 
-use kernel_hal::context::{TrapReason, UserContext, UserContextField};
-use kernel_hal::{MMUFlags, PAGE_SIZE};
+use hal::{MMUFlags, PAGE_SIZE};
+use hal::{TrapReason, UserContextField};
+use hal_impl::context::UserContext;
 use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
 use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::kcounter;
@@ -134,6 +136,20 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
         userstart_elf_bytes.len(),
         entry
     );
+
+    // Flush I-cache after loading executable code.
+    // On real hardware (Pi 400), the I-cache and D-cache are not coherent.
+    // Without this, the CPU may execute stale/zero data from I-cache.
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        core::arch::asm!(
+            "dsb ish",  // ensure D-cache writes are visible
+            "ic iallu", // invalidate entire I-cache
+            "dsb ish",  // ensure I-cache invalidation completes
+            "isb",      // synchronize instruction stream
+        );
+        info!("I-cache invalidated after loading userstart");
+    }
 
     // Create the vDSO VMO with syscall trampolines and constants.
     let vdso_vmo = create_vdso_vmo();
@@ -250,7 +266,7 @@ fn thread_fn(thread: CurrentThread) -> Pin<Box<dyn Future<Output = ()> + Send + 
 }
 
 async fn run_user(thread: CurrentThread) {
-    kernel_hal::thread::set_current_thread(Some(thread.inner()));
+    hal_impl::thread::set_current_thread(Some(thread.inner()));
     if thread.is_first_thread() {
         thread
             .handle_exception(ExceptionType::ProcessStarting)
@@ -268,7 +284,7 @@ async fn run_user(thread: CurrentThread) {
         // run
         trace!("go to user: {:#x?}", ctx);
         debug!("switch to {}|{}", thread.proc().name(), thread.name());
-        let tmp_time = kernel_hal::timer::timer_now().as_nanos();
+        let tmp_time = hal_impl::timer::timer_now().as_nanos();
 
         // * Attention
         // The code will enter a magic zone from here.
@@ -277,7 +293,7 @@ async fn run_user(thread: CurrentThread) {
         ctx.enter_uspace();
 
         // Back from the userspace
-        let time = kernel_hal::timer::timer_now().as_nanos() - tmp_time;
+        let time = hal_impl::timer::timer_now().as_nanos() - tmp_time;
         thread.time_add(time);
         trace!("back from user: {:#x?}", ctx);
         EXCEPTIONS_USER.add(1);
@@ -297,8 +313,9 @@ async fn run_user(thread: CurrentThread) {
     if thread.is_first_thread() && thread.proc().name() == "userstart" {
         info!("Zircon root process (userstart) exited, shutting down");
         info!("(if QEMU does not exit, press Ctrl-A then X to quit)");
-        #[cfg(not(feature = "libos"))]
-        kernel_hal::cpu::reset();
+        if !hal_impl::platform::is_hosted() {
+            hal_impl::cpu::reset();
+        }
     }
 }
 
@@ -325,13 +342,13 @@ async fn handler_user_trap(
     match reason {
         TrapReason::Interrupt(vector) => {
             EXCEPTIONS_IRQ.add(1); // FIXME
-            kernel_hal::interrupt::handle_irq(vector);
-            kernel_hal::thread::yield_now().await;
+            hal_impl::interrupt::handle_irq(vector);
+            hal_impl::thread::yield_now().await;
             Ok(())
         }
         TrapReason::PageFault(vaddr, flags) => {
             EXCEPTIONS_PGFAULT.add(1);
-            info!("page fault from user mode @ {:#x}({:?})", vaddr, flags);
+            trace!("page fault from user mode @ {:#x}({:?})", vaddr, flags);
             let vmar = thread.proc().vmar();
             match vmar.handle_page_fault(vaddr, flags) {
                 Ok(()) => Ok(()),
@@ -339,11 +356,11 @@ async fn handler_user_trap(
                     // Pager-backed VMO: the pager has been notified.
                     // Yield repeatedly to let the pager supply pages.
                     // The thread will re-fault after this returns Ok(()).
-                    info!("page fault: waiting for pager to supply pages");
+                    trace!("page fault: waiting for pager to supply pages");
                     // Yield multiple times to give the pager process
                     // time to run and supply the requested pages.
                     for _ in 0..100 {
-                        kernel_hal::thread::yield_now().await;
+                        hal_impl::thread::yield_now().await;
                     }
                     Ok(())
                 }
@@ -363,7 +380,7 @@ async fn handler_user_trap(
         TrapReason::SoftwareBreakpoint => Err(ExceptionType::SoftwareBreakpoint),
         TrapReason::HardwareBreakpoint => Err(ExceptionType::HardwareBreakpoint),
         TrapReason::UnalignedAccess => Err(ExceptionType::UnalignedAccess),
-        TrapReason::GernelFault(_) => Err(ExceptionType::General),
+        TrapReason::GeneralFault(_) => Err(ExceptionType::General),
         _ => unreachable!(),
     }
 }
@@ -387,7 +404,7 @@ fn syscall_args(ctx: &UserContext) -> [usize; 8] {
     let regs = ctx.general();
     cfg_if! {
         if #[cfg(target_arch = "x86_64")] {
-            if cfg!(feature = "libos") {
+            if hal_impl::platform::syscall_args_from_stack() {
                 let arg7 = unsafe{ (regs.rsp as *const usize).read() };
                 let arg8 = unsafe{ (regs.rsp as *const usize).add(1).read() };
                 [regs.rdi, regs.rsi, regs.rdx, regs.rcx, regs.r8, regs.r9, arg7, arg8]
@@ -520,7 +537,7 @@ fn create_vdso_vmo() -> Arc<VmObject> {
     }
 
     // Write VdsoConstants into the data page at offset 0x7000.
-    let vdso_constants = kernel_hal::vdso::vdso_constants();
+    let vdso_constants = hal_impl::vdso::vdso_constants();
     let constants_bytes = unsafe {
         core::slice::from_raw_parts(
             &vdso_constants as *const _ as *const u8,

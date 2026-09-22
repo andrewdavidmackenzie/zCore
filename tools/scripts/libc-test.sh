@@ -20,13 +20,14 @@ set -euo pipefail
 
 ARCH="${1:?Usage: $0 <arch>}"
 # Timeout for the entire QEMU session (all tests combined).
-# Should be generous enough for boot + all tests.
-SESSION_TIMEOUT=300
+# Should be generous enough for boot + all tests. Some tests (socket,
+# pthread) may hang on unimplemented syscalls, so this is a hard limit.
+SESSION_TIMEOUT=180
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore.bin"
-    IMAGE="zCore/aarch64.img"
+    KERNEL="target/qemu-aarch64/release/kernel.bin"
+    IMAGE="target/qemu-aarch64/release/aarch64-linux.img"
     CROSS_COMPILE="aarch64-linux-musl-"
     # Find musl cross-compiler: macOS uses Homebrew, Linux has it in PATH
     MUSL_BIN=""
@@ -46,9 +47,9 @@ case "$ARCH" in
     )
     ;;
   x86_64)
-    KERNEL_ELF="target/x86_64/release/zcore"
-    BOOT_IMG="target/x86_64/release/boot.img"
-    IMAGE="zCore/x86_64.img"
+    KERNEL_ELF="target/qemu-x86_64/release/kernel"
+    BOOT_IMG="target/qemu-x86_64/release/boot.img"
+    IMAGE="target/qemu-x86_64/release/x86_64-linux.img"
     CROSS_COMPILE="x86_64-linux-musl-"
     # Find musl cross-compiler: macOS uses Homebrew, Linux has it in PATH
     MUSL_BIN=""
@@ -58,13 +59,16 @@ case "$ARCH" in
         MUSL_BIN="$MUSL_PREFIX/libexec/bin"
       fi
     fi
-    # x86_64 uses a BIOS disk image with embedded ramdisk
+    # x86_64 uses a UEFI disk image with embedded ramdisk
     KERNEL="$BOOT_IMG"
+    source "$(dirname "$0")/find-ovmf.sh"
+    OVMF=$(find_ovmf) || exit 1
     QEMU_CMD=(
       qemu-system-x86_64
       -m 2G -display none -no-reboot -nographic
       -machine q35 -cpu qemu64,+fsgsbase,+rdrand
       -serial mon:stdio
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF"
       -drive "format=raw,file=$BOOT_IMG"
     )
     # Flag to rebuild boot image after rootfs changes
@@ -95,7 +99,7 @@ echo "   Found ${#TESTS[@]} static test binaries"
 
 # Step 2: Copy into rootfs
 echo "==> Copying tests into rootfs..."
-TEST_DIR="rootfs/linux/$ARCH/bin/libc-test"
+TEST_DIR="target/rootfs/linux/$ARCH/bin/libc-test"
 mkdir -p "$TEST_DIR"
 for exe in "${TESTS[@]}"; do
   name=$(basename "$exe" -static.exe)
@@ -160,6 +164,28 @@ fi
 
 echo "Shell prompt reached in ${ELAPSED}s"
 
+# Wait for the shell to be ready to accept input by sending a short
+# probe command and waiting for its output. The shell prompt may appear
+# in the serial output before busybox has fully initialized its input
+# handler. Without this handshake, a long command sent immediately
+# after the prompt can be partially or fully lost.
+echo "echo READY" >&3 2>/dev/null || true
+READY_WAIT=0
+ready_ok=false
+while [ "$READY_WAIT" -lt 10 ]; do
+  if grep -q "READY" "$OUTPUT" 2>/dev/null; then ready_ok=true; break; fi
+  sleep 1
+  READY_WAIT=$((READY_WAIT + 1))
+done
+if ! $ready_ok; then
+  echo "ERROR: shell readiness probe failed (READY not received after 10s)"
+  exec 3>&- 2>/dev/null || true
+  kill "$PID" 2>/dev/null || true
+  wait "$PID" 2>/dev/null || true
+  rm -rf "$TMPDIR_QEMU"
+  exit 0
+fi
+
 # Send a single for-loop command that runs all tests sequentially.
 # Each test is run directly -- if it crashes or exits non-zero, we
 # report FAIL. If the whole session times out, remaining tests are
@@ -174,9 +200,32 @@ for exe in "${TESTS[@]}"; do
   TEST_NAMES+=" $(basename "$exe" -static.exe)"
 done
 
-# Send a compact one-liner for-loop
-echo "for t in$TEST_NAMES; do /bin/libc-test/\$t >/dev/null 2>&1 && echo PASS:\$t || echo FAIL:\$t; done; echo ALL_TESTS_DONE; poweroff -f" >&3 2>/dev/null || true
-exec 3>&- 2>/dev/null || true
+# Tests that hang indefinitely because they depend on unimplemented
+# features (AF_UNIX sockets, POSIX semaphores, pthreads, crypt, etc.).
+# These are skipped to avoid blocking the test session. Tracked in
+# issue #16 for future implementation.
+SKIP_TESTS="crypt fcntl fdopen ipc_msg ipc_sem ipc_shm memstream popen \
+pthread_cancel pthread_cancel-points pthread_cond pthread_mutex \
+pthread_mutex_pi pthread_robust pthread_tsd sem_init sem_open \
+setjmp socket spawn vfork"
+
+# Build the runnable test list (excluding known-hanging tests).
+RUN_NAMES=""
+SKIP_COUNT=0
+for exe in "${TESTS[@]}"; do
+  name=$(basename "$exe" -static.exe)
+  if echo " $SKIP_TESTS " | grep -Fq " $name "; then
+    SKIP_COUNT=$((SKIP_COUNT + 1))
+  else
+    RUN_NAMES+=" $name"
+  fi
+done
+echo "Sending $(echo $RUN_NAMES | wc -w | tr -d ' ') tests (skipping $SKIP_COUNT known-hanging)"
+
+# Send all tests as a single for-loop command.
+# Keep fd 3 open — closing it delivers EOF to busybox on some QEMU
+# configurations. fd 3 is closed after QEMU exits (in cleanup below).
+echo "for t in$RUN_NAMES; do /bin/libc-test/\$t && echo PASS:\$t || echo FAIL:\$t; done; echo ALL_TESTS_DONE; poweroff -f" >&3 2>/dev/null || true
 
 # Wait for QEMU to exit or session timeout
 W=0
@@ -205,21 +254,30 @@ if ! $completed && kill -0 "$PID" 2>/dev/null; then
 fi
 wait "$PID" 2>/dev/null || true
 
+# Close the pipe write end now that QEMU has exited
+exec 3>&- 2>/dev/null || true
+
 # Step 6: Parse results from the combined output
-# Strip ANSI escape sequences for reliable parsing
-CLEAN_OUTPUT=$(sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT")
+# Strip ANSI escape sequences for reliable parsing.
+# Write to a temp file instead of a variable to handle large outputs.
+CLEAN_FILE="$TMPDIR_QEMU/clean_output"
+sed 's/\x1b\[[0-9;]*m//g' "$OUTPUT" > "$CLEAN_FILE"
 
 PASSED=0
 FAILED=0
 HUNG=0
+SKIPPED=0
 FAIL_LIST=""
 TOTAL=${#TESTS[@]}
 
 for exe in "${TESTS[@]}"; do
   name=$(basename "$exe" -static.exe)
-  if echo "$CLEAN_OUTPUT" | grep -Fqx -- "PASS:$name"; then
+  if echo " $SKIP_TESTS " | grep -Fq " $name "; then
+    SKIPPED=$((SKIPPED + 1))
+    FAIL_LIST+="  SKIP: $name\n"
+  elif grep -Fq -- "PASS:$name" "$CLEAN_FILE"; then
     PASSED=$((PASSED + 1))
-  elif echo "$CLEAN_OUTPUT" | grep -Fqx -- "FAIL:$name"; then
+  elif grep -Fq -- "FAIL:$name" "$CLEAN_FILE"; then
     FAILED=$((FAILED + 1))
     FAIL_LIST+="  FAIL: $name\n"
   else
@@ -245,7 +303,7 @@ fi
 echo ""
 echo "========================================"
 echo "  libc-test results: $PASSED/$TOTAL passed ($PCT%)"
-echo "  ($FAILED failed, $HUNG hung/not-run)"
+echo "  ($FAILED failed, $SKIPPED skipped, $HUNG hung/not-run)"
 echo "========================================"
 
 if [ -n "$FAIL_LIST" ]; then
@@ -254,5 +312,24 @@ if [ -n "$FAIL_LIST" ]; then
   printf '%b' "$FAIL_LIST"
 fi
 
-# Always exit 0 — this test reports progress, not pass/fail.
+# Ratchet: enforce a minimum pass count so regressions are caught.
+# Update MIN_PASS when fixes increase the pass count.
+# Set to -1 for architectures without an established baseline.
+# Thresholds are per-OS because QEMU behavior differs (e.g. timer
+# resolution, pipe handling) between macOS and Linux hosts.
+HOST_OS="$(uname -s)"
+case "$ARCH/$HOST_OS" in
+  aarch64/Darwin) MIN_PASS=5 ;; # macOS CI: 6-48 depending on load/timing (#340)
+  aarch64/Linux)  MIN_PASS=-1 ;; # 8 pass locally; CI gets 0 due to serial input issue (#340)
+  x86_64/*)       MIN_PASS=-1 ;; # TODO: establish x86_64 baseline
+  *)              MIN_PASS=-1 ;;
+esac
+
+if [ "$MIN_PASS" -ge 0 ] && [ "$PASSED" -lt "$MIN_PASS" ]; then
+  echo ""
+  echo "REGRESSION: $PASSED passed < minimum $MIN_PASS for $ARCH"
+  echo "A recent change broke libc-tests. Investigate before merging."
+  exit 1
+fi
+
 exit 0

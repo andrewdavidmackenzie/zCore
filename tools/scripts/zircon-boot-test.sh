@@ -16,7 +16,7 @@ TIMEOUT=30
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore"
+    KERNEL="target/qemu-aarch64/release/kernel"
     QEMU_BASE_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -56,16 +56,10 @@ run_test() {
   local ZBI="target/petal/${ARCH}/petal.zbi"
 
   # Build kernel with this ZBI
-  if ! USERSTART_ELF="$(cd "$(dirname "$USERSTART")" && pwd)/$(basename "$USERSTART")" \
-    PETAL_ZBI="$(cd "$(dirname "$ZBI")" && pwd)/$(basename "$ZBI")" \
-    ZCORE_CMDLINE="LOG=warn" cargo build \
-    -p zcore \
-    --no-default-features --features zircon \
-    --target "zCore/${ARCH}.json" \
-    -Z json-target-spec \
-    -Z build-std=core,alloc \
-    -Z build-std-features=compiler-builtins-mem \
-    --release; then
+  if ! USERSTART_ELF="$(pwd)/$USERSTART" \
+    PETAL_ZBI="$(pwd)/$ZBI" \
+    ZCORE_CMDLINE="LOG=${LOG:-info}" \
+    cargo zcore-build -m "qemu-${ARCH}" --personality zircon; then
     echo "FAIL: kernel build failed for '$bin_name'"
     return 1
   fi
@@ -81,6 +75,15 @@ run_test() {
 
   local ELAPSED=0
   while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    # Check if the expected pattern appeared (QEMU may still be running).
+    if grep -q "$expected_pattern" "$OUTPUT" 2>/dev/null; then
+      # Pattern found -- kill QEMU if still running and report success.
+      kill "$QEMU_PID" 2>/dev/null || true
+      wait "$QEMU_PID" 2>/dev/null || true
+      echo "PASS: $bin_name (exit=0)"
+      rm -f "$OUTPUT"
+      return 0
+    fi
     if ! kill -0 "$QEMU_PID" 2>/dev/null; then
       local QEMU_EXIT=0
       wait "$QEMU_PID" || QEMU_EXIT=$?
@@ -112,9 +115,11 @@ run_test() {
 FAILED=0
 
 run_test "hello" "petal: Hello from petal on zCore!" || FAILED=$((FAILED + 1))
-run_test "channel_test" "channel_test: PASS" || FAILED=$((FAILED + 1))
-run_test "vmo_test" "vmo_test: PASS" || FAILED=$((FAILED + 1))
-run_test "vdso_test" "vdso_test: PASS" || FAILED=$((FAILED + 1))
+run_test "channel-test" "channel_test: PASS" || FAILED=$((FAILED + 1))
+run_test "vmo-test" "vmo_test: PASS" || FAILED=$((FAILED + 1))
+run_test "vdso-test" "vdso_test: PASS" || FAILED=$((FAILED + 1))
+run_test "alloc-test" "alloc_test: PASS" || FAILED=$((FAILED + 1))
+run_test "shell" "shell: self-test PASS" || FAILED=$((FAILED + 1))
 # vdso_call_test blocked on #241 (petal ELF loading with data sections)
 
 echo ""

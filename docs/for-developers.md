@@ -44,7 +44,7 @@ nightly.
 
 #### [`doc_cfg`](https://doc.rust-lang.org/unstable-book/language-features/doc-cfg.html)
 
-Used in: `zcore-drivers`, `kernel-hal`, `zcore-loader`
+Used in: `zcore-drivers`, `hal-impl`, `zcore-loader`
 
 Marks platform availability information in generated
 documentation. Improves documentation quality but does

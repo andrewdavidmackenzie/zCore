@@ -13,7 +13,7 @@ An OS kernel based on Zircon with Linux compatibility.
 ## Quick start
 
 ```bash
-make run
+make linux-run
 ```
 
 This builds and boots zCore on QEMU (aarch64) with a minimal Linux
@@ -27,24 +27,117 @@ Type `poweroff -f` at the `/ #` prompt (or press `Ctrl-A X`) to exit.
 Prerequisites: Rust nightly, QEMU, and `aarch64-linux-musl-gcc`
 (on macOS: `make config` installs the cross-compiler via Homebrew).
 
-## Original README
+## Building
 
-  Reimplement `Zircon` microkernel in safe Rust as a userspace program!
+All build commands are target-driven. Each target is defined in a TOML
+file under `targets/` that specifies the architecture, drivers, features,
+and default personality (linux or zircon). You never need to specify
+feature flags manually.
 
-- zCore设计架构概述
-- 支持bare-metal模式的Zircon & Linux
-- 支持libos模式的Zircon & Linux
-- 支持的图形应用程序等更多指导请查看[原版README文档](README-arch.md)。
+### Available targets
 
-## 启动内核
+| Target | Arch | Personality | Hardware |
+|--------|------|-------------|----------|
+| `qemu-aarch64` | aarch64 | linux | QEMU virt |
+| `qemu-x86_64` | x86_64 | linux | QEMU q35 |
+| `qemu-riscv64` | riscv64 | linux | QEMU virt |
+| `raspi400` | aarch64 | zircon | Raspberry Pi 400 |
+| `x86-laptop` | x86_64 | zircon | x86_64 real hardware (UEFI) |
+| `libos` | host | linux | runs as a host process |
 
-   ```bash
-   cargo qemu --arch riscv64
-   ```
+### Build commands
 
-   这个命令会使用 qemu-system-riscv64 启动 zCore。
+```bash
+# Build a kernel (features come from targets/<name>.toml)
+cargo zcore-build -m qemu-aarch64
+cargo zcore-build -m raspi400
+cargo zcore-build -m libos
 
-   默认的文件系统中将包含 busybox 应用程序和 musl-libc 链接器。它们是用自动下载的 musl-libc RISC-V 交叉编译工具链编译的。
+# Override the default personality
+cargo zcore-build -m qemu-aarch64 --personality zircon
+
+# Build and strip to raw binary
+cargo bin -m qemu-aarch64
+
+# Build and run in QEMU
+cargo qemu -m qemu-aarch64
+cargo qemu -m qemu-x86_64 --personality zircon --log info
+
+# Build and run as a host process (no QEMU needed)
+cargo zcore-build -m libos                         # linux (default personality)
+cargo zcore-build -m libos --personality zircon     # zircon
+cargo linux-libos --args "/bin/busybox ls"          # build + run linux libos
+```
+
+### Makefile shortcuts
+
+| Scope           | Linux                      | Zircon                         |
+|-----------------|----------------------------|--------------------------------|
+| QEMU (any arch) | `make linux-run`           | `make zircon-run`              |
+| x86_64 specific | `make x86-linux-build/run` | `make x86-zircon-build/run`    |
+| LibOS build     | `make libos-build-linux`   | `make libos-build-zircon`      |
+| LibOS run       | `make libos-run-linux`     | `make libos-run-zircon` (#281) |
+| Pi 400          | n/a (zircon only)          | `make raspi400-build/run/sd`   |
+
+```bash
+make raspi400-sd SD=/Volumes/boot   # flash SD card for Pi 400
+make clippy-all              # clippy on all code (all archs, libos, userspace, tests)
+make test                    # boot smoke test + libc conformance tests
+```
+
+### Target configuration
+
+Each `targets/<name>.toml` file is the single source of truth:
+
+```toml
+# targets/qemu-aarch64.toml
+default-personality = "linux"
+arch = "aarch64"
+linker-script = "zCore/kernel/src/platform/aarch64/linker.ld"
+drivers = ["pl011-uart", "gic-400", "virtio-blk"]
+
+[qemu]
+machine = "virt"
+cpu = "cortex-a72"
+memory = "2G"
+
+[rustc-target]
+llvm-target = "aarch64-unknown-linux-gnu"
+# ...
+```
+
+The `drivers` list maps to cargo feature flags in `kernel-drivers`.
+The `default-personality` sets whether the kernel boots with Linux
+syscall emulation or the Zircon microkernel personality.
+
+## Attribution and History
+
+This project is a fork of [rcore-os/zCore](https://github.com/rcore-os/zCore),
+originally created by **Runji Wang** and the
+[rCore-OS community](https://github.com/rcore-os) at Tsinghua University.
+The original project reimplements Google's Zircon microkernel in safe Rust,
+with a Linux syscall compatibility layer.
+
+### Key contributors to the original project
+
+- **Runji Wang** ([@wangrunji0408](https://github.com/wrj)) -- creator and
+  primary architect of the Zircon object model, HAL abstraction, and Linux
+  syscall layer.
+- **Yuekai Jia** ([@equation314](https://github.com/equation314)) -- x86_64
+  platform support, UEFI boot, VirtIO drivers.
+- **Chenyuan Yang** -- riscv64 platform port, SBI boot.
+
+### This fork
+
+This fork (maintained by [@andrewdavidmackenzie](https://github.com/andrewdavidmackenzie))
+focuses on:
+- aarch64 bare-metal (QEMU virt, Raspberry Pi 400)
+- Linux syscall completeness (libc-test pass rate: 44/69 = 63%)
+- Code quality (English comments, modern Rust idioms, CI coverage)
+- Zircon personality via the petal userspace toolkit
+
+See [CHANGELOG](docs/) and the [issue tracker](https://github.com/andrewdavidmackenzie/zCore/issues)
+for current development activity.
 
 ## 目录
 

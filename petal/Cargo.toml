@@ -9,21 +9,31 @@ name = "hello"
 path = "src/bin/hello.rs"
 
 [[bin]]
-name = "channel_test"
+name = "channel-test"
 path = "src/bin/channel_test.rs"
 
 [[bin]]
-name = "vmo_test"
+name = "vmo-test"
 path = "src/bin/vmo_test.rs"
 
 [[bin]]
-name = "vdso_test"
+name = "vdso-test"
 path = "src/bin/vdso_test.rs"
 
-## vdso_call_test is blocked on #241 (petal ELF loading with data sections).
-## See #226 Phase G.
+[[bin]]
+name = "alloc-test"
+path = "src/bin/alloc_test.rs"
+
+[[bin]]
+name = "shell"
+path = "src/bin/shell.rs"
+
+[package.metadata.cargo-all-features]
+# Userspace binaries require bare-metal targets (aarch64-unknown-none-softfloat, etc.).
+skip_package = true
 
 [dependencies]
 zx = { path = "../zCore/zx" }
+embedded-io = "0.6"
 
 # Profile settings are in the workspace root Cargo.toml

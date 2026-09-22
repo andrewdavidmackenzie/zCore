@@ -14,7 +14,7 @@ impl Syscall<'_> {
         mut proc_handle: UserOutPtr<HandleValue>,
         mut vmar_handle: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        let name = name.as_str(name_size)?;
+        let name = name.read_string(name_size)?;
         info!(
             "proc.create: job={:#x?}, name={:?}, options={:#x?}",
             job, name, options,
@@ -26,7 +26,7 @@ impl Syscall<'_> {
         let job = proc
             .get_object_with_rights::<Job>(job, Rights::MANAGE_PROCESS)
             .or_else(|_| proc.get_object_with_rights::<Job>(job, Rights::WRITE))?;
-        let new_proc = Process::create(&job, name)?;
+        let new_proc = Process::create(&job, &name)?;
         let new_vmar = new_proc.vmar();
         let proc_handle_value = proc.add_handle(Handle::new(new_proc, Rights::DEFAULT_PROCESS));
         let vmar_handle_value = proc.add_handle(Handle::new(
@@ -57,7 +57,7 @@ impl Syscall<'_> {
         options: u32,
         mut thread_handle: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        let name = name.as_str(name_size)?;
+        let name = name.read_string(name_size)?;
         info!(
             "thread.create: proc={:#x?}, name={:?}, options={:#x?}",
             proc_handle, name, options,
@@ -67,7 +67,7 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let process = proc.get_object_with_rights::<Process>(proc_handle, Rights::MANAGE_THREAD)?;
-        let thread = Thread::create(&process, name)?;
+        let thread = Thread::create(&process, &name)?;
         let handle = proc.add_handle(Handle::new(thread, Rights::DEFAULT_THREAD));
         thread_handle.write(handle)?;
         Ok(())
@@ -149,7 +149,7 @@ impl Syscall<'_> {
         self.thread
             .proc()
             .get_object_with_rights::<Thread>(handle, Rights::WRITE)?
-            .write_state(kind, buffer.as_slice(buffer_size)?)
+            .write_state(kind, &buffer.read_array(buffer_size)?)
     }
 
     /// Sets process as critical to job.
@@ -305,7 +305,7 @@ impl Syscall<'_> {
                 };
                 job.set_policy_basic(
                     policy_option,
-                    UserInPtr::from(policy).as_slice(count as usize)?,
+                    &UserInPtr::from(policy).read_array(count as usize)?,
                 )
             }
             //JOB_POL_BASE_V2 => unimplemented!(),
@@ -364,7 +364,7 @@ impl Syscall<'_> {
                 .proc()
                 .get_object_with_rights::<Process>(handle_value, Rights::READ | Rights::WRITE)?
                 .vmar()
-                .write_memory(vaddr, buffer.as_slice(buffer_size)?)?;
+                .write_memory(vaddr, &buffer.read_array(buffer_size)?)?;
             actual.write(len)?;
             Ok(())
         }

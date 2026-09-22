@@ -5,10 +5,11 @@ edition = "2021"
 description = "Zircon user program loader and runner."
 
 [dependencies]
+hal = { path = "../hal" }
 log = "0.4"
 cfg-if = "1.0"
 xmas-elf = "0.7"
-kernel-hal = { path = "../../kernel-hal", default-features = false }
+hal-impl = { path = "../hal-impl", default-features = false }
 zircon-object = { path = "../zircon-object", features = ["elf"] }
 zircon-syscall = { path = "../zircon-syscall" }
 executor = { path = "../executor" }
@@ -16,4 +17,8 @@ rcore-fs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
 
 [features]
 default = []
-libos = ["kernel-hal/libos", "zircon-object/aspace-separate", "zircon-object/libos"]
+libos = ["hal-impl/libos", "zircon-object/aspace-separate", "zircon-object/libos"]
+
+[package.metadata.cargo-all-features]
+# hal-impl needs libos to compile on the host.
+always_include_features = ["libos"]

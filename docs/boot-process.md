@@ -464,7 +464,7 @@ an SFS rootfs and load an init program from it.
 ```bash
 # Build and run with rootfs
 cargo xtask zircon-rootfs --arch aarch64
-cargo qemu --arch aarch64 --zircon --rootfs-image zCore/aarch64-zircon.img
+cargo qemu --arch aarch64 --zircon --rootfs-image target/qemu-aarch64/release/aarch64-zircon.img
 ```
 
 #### ZBI-based boot (fallback, Fuchsia-compatible)
@@ -510,7 +510,7 @@ cargo qemu --arch aarch64 --rootfs-image path/to/custom.img
 
 # Zircon with petal rootfs
 cargo xtask zircon-rootfs --arch aarch64
-cargo qemu --arch aarch64 --zircon --rootfs-image zCore/aarch64-zircon.img
+cargo qemu --arch aarch64 --zircon --rootfs-image target/qemu-aarch64/release/aarch64-zircon.img
 ```
 
 The `cargo xtask zircon-rootfs` command builds an SFS image containing

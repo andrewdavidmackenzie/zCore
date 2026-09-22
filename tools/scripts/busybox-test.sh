@@ -22,8 +22,8 @@ CMD_TIMEOUT=10
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore.bin"
-    IMAGE="zCore/aarch64.img"
+    KERNEL="target/qemu-aarch64/release/kernel.bin"
+    IMAGE="target/qemu-aarch64/release/aarch64-linux.img"
     QEMU_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -34,9 +34,9 @@ case "$ARCH" in
     )
     ;;
   x86_64)
-    KERNEL_ELF="target/x86_64/release/zcore"
-    BOOT_IMG="target/x86_64/release/boot.img"
-    ROOTFS_IMG="zCore/x86_64.img"
+    KERNEL_ELF="target/qemu-x86_64/release/kernel"
+    BOOT_IMG="target/qemu-x86_64/release/boot.img"
+    ROOTFS_IMG="target/qemu-x86_64/release/x86_64-linux.img"
     BOOTIMAGE_TOOL="tools/x86-bootimage/target/release/x86-bootimage"
 
     if [ ! -f "$BOOTIMAGE_TOOL" ]; then
@@ -50,11 +50,14 @@ case "$ARCH" in
     "$BOOTIMAGE_TOOL" "${BOOTIMAGE_ARGS[@]}"
 
     KERNEL="$BOOT_IMG"
+    source "$(dirname "$0")/find-ovmf.sh"
+    OVMF=$(find_ovmf) || exit 1
     QEMU_CMD=(
       qemu-system-x86_64
       -m 2G -display none -no-reboot -nographic
       -machine q35 -cpu qemu64,+fsgsbase,+rdrand
       -serial mon:stdio
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF"
       -drive "format=raw,file=$BOOT_IMG"
     )
     ;;

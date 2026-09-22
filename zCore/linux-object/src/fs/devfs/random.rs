@@ -36,7 +36,7 @@ impl RandomINode {
 impl INode for RandomINode {
     fn read_at(&self, _offset: usize, buf: &mut [u8]) -> Result<usize> {
         if self.secure {
-            kernel_hal::rand::fill_random(buf)
+            hal_impl::rand::fill_random(buf)
         } else {
             let mut data = self.data.lock();
             // from K&R

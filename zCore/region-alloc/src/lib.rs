@@ -66,9 +66,13 @@ impl RegionAllocator {
         }
     }
 
+    /// Try to allocate a specific region `[base, base + size)`.
+    /// Returns true if the region was available and has been removed.
     pub fn allocate_by_addr(&mut self, base: usize, size: usize) -> bool {
+        let end = base.saturating_add(size);
         for r in &self.regions {
-            if r.base <= base && base + size <= r.base + r.size {
+            let r_end = r.base.saturating_add(r.size);
+            if r.base <= base && end <= r_end {
                 self.subtract(base, size);
                 return true;
             }
@@ -85,8 +89,9 @@ impl RegionAllocator {
             if size > r.size {
                 continue;
             }
-            let base = (r.base + align) & !align;
-            if r.base <= base && base + size <= r.base + r.size {
+            let base = (r.base.saturating_add(align)) & !align;
+            let r_end = r.base.saturating_add(r.size);
+            if r.base <= base && base.saturating_add(size) <= r_end {
                 self.subtract(base, size);
                 return Some((base, size));
             }
@@ -101,13 +106,17 @@ impl RegionAllocator {
     pub fn len(&self) -> usize {
         self.regions.len()
     }
+    /// Return true if there are no regions in the set.
     pub fn is_empty(&self) -> bool {
         self.regions.is_empty()
     }
-    /// Check whether the point is covered.
+    /// Check whether the point `addr` is covered by any region.
+    ///
+    /// Regions are half-open intervals `[base, base + size)`, so the
+    /// endpoint `base + size` is NOT included.
     pub fn check_point(&self, addr: usize) -> bool {
         for r in &self.regions {
-            if r.base <= addr && addr <= r.base + r.size {
+            if r.base <= addr && addr < r.base.saturating_add(r.size) {
                 return true;
             }
         }
@@ -115,9 +124,11 @@ impl RegionAllocator {
     }
 
     fn intersection_all(&mut self, region: &Region) -> Vec<Region> {
+        let region_end = region.base.saturating_add(region.size);
         self.regions
             .extract_if(.., |r| {
-                !(r.base > region.base + region.size || r.base + r.size < region.base)
+                let r_end = r.base.saturating_add(r.size);
+                !(r.base > region_end || r_end < region.base)
             })
             .collect()
     }
@@ -125,8 +136,8 @@ impl RegionAllocator {
         self.regions.insert(a);
     }
     fn merge_internal(a: &mut Region, b: Region) -> Option<Region> {
-        let a_end = a.base + a.size;
-        let b_end = b.base + b.size;
+        let a_end = a.base.saturating_add(a.size);
+        let b_end = b.base.saturating_add(b.size);
         if a_end < b.base || b_end < a.base {
             return Some(b);
         }
@@ -138,8 +149,8 @@ impl RegionAllocator {
         None
     }
     fn subtract_internal(target: Region, src: &mut Region) -> (Option<Region>, Option<Region>) {
-        let t_end = target.base + target.size;
-        let s_end = src.base + src.size;
+        let t_end = target.base.saturating_add(target.size);
+        let s_end = src.base.saturating_add(src.size);
         let left = if src.base > target.base {
             Some(Region {
                 base: target.base,

@@ -337,6 +337,62 @@ impl Syscall<'_> {
         Ok(0)
     }
 
+    /// Give advice about use of memory.
+    ///
+    /// Linux accepts all advice values without error. MADV_DONTNEED
+    /// should ideally decommit pages, but that requires VmMapping
+    /// API extensions. For now, all advice is accepted as a no-op.
+    pub fn sys_madvise(&self, addr: usize, len: usize, advice: usize) -> SysResult {
+        info!(
+            "madvise: addr={:#x}, len={:#x}, advice={}",
+            addr, len, advice
+        );
+        let _ = (addr, len); // suppress unused warnings
+        Ok(0)
+    }
+
+    /// Synchronize a memory-mapped file region with disk.
+    ///
+    /// Since SFS writes are synchronous and there is no page cache,
+    /// this is effectively a no-op. Validates flags only.
+    pub fn sys_msync(&self, addr: usize, len: usize, flags: usize) -> SysResult {
+        info!(
+            "msync: addr={:#x}, len={:#x}, flags={:#x}",
+            addr, len, flags
+        );
+        const MS_ASYNC: usize = 1;
+        const MS_SYNC: usize = 4;
+        const MS_INVALIDATE: usize = 2;
+        let valid = MS_ASYNC | MS_SYNC | MS_INVALIDATE;
+        if flags & !valid != 0 {
+            return Err(LxError::EINVAL);
+        }
+        // MS_ASYNC and MS_SYNC are mutually exclusive
+        if flags & MS_ASYNC != 0 && flags & MS_SYNC != 0 {
+            return Err(LxError::EINVAL);
+        }
+        Ok(0)
+    }
+
+    /// Check whether pages are resident in memory.
+    ///
+    /// Since zCore has no swap, all mapped pages are resident.
+    /// Fills the output vector with all 1s.
+    pub fn sys_mincore(&self, addr: usize, len: usize, mut vec: UserOutPtr<u8>) -> SysResult {
+        info!("mincore: addr={:#x}, len={:#x}", addr, len);
+        if addr & 0xFFF != 0 || len == 0 {
+            return Err(LxError::EINVAL);
+        }
+        if vec.is_null() {
+            return Err(LxError::EFAULT);
+        }
+        let page_count = len.div_ceil(0x1000);
+        // All pages resident (bit 0 set) — zCore has no swap
+        let ones = alloc::vec![1u8; page_count];
+        vec.write_array(&ones)?;
+        Ok(0)
+    }
+
     /// Unmap files or devices into memory
     /// (see [linux man munmap(2)](https://www.man7.org/linux/man-pages/man2/munmap.2.html)).
     ///

@@ -6,7 +6,7 @@ use crate::{
 
 #[cfg(target_arch = "x86_64")]
 use crate::context::Context;
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+#[cfg(not(target_arch = "x86_64"))]
 use crate::context::ContextData as Context;
 
 use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
@@ -84,19 +84,15 @@ impl ExecutorRuntime {
         self.task_collection.remove_task(key)
     }
 
-    #[cfg(target_arch = "riscv64")]
     fn get_context(&self) -> usize {
-        &self.context as *const Context as usize
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn get_context(&self) -> usize {
-        self.context.get_context()
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn get_context(&self) -> usize {
-        &self.context as *const Context as usize
+        #[cfg(target_arch = "x86_64")]
+        {
+            self.context.get_context()
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            &self.context as *const Context as usize
+        }
     }
 }
 
@@ -144,10 +140,17 @@ pub fn run_until_idle() -> bool {
         let executor_cx = runtime.strong_executor.context.get_context();
         debug!("switch idle -> {}", runtime.strong_executor.id());
         runtime.current_executor = Some(runtime.strong_executor.clone());
-        // Release the global_runtime lock before switching
+        // Release the global_runtime lock before switching.
+        // Disable interrupts across the gap between setting
+        // current_executor and entering switch(). If a timer IRQ
+        // fires here, sched_yield() sees current_executor=Some and
+        // attempts a context switch while still in the runtime
+        // context, corrupting state. The executor re-enables
+        // interrupts when it polls tasks or waits.
+        crate::arch::intr_off();
         drop(runtime);
-        debug!("run strong executor");
         switch(runtime_cx, executor_cx);
+        crate::arch::intr_on();
         // If this function returns, the strong_executor's future has
         // timed out or voluntarily yielded. Create a new executor for
         // subsequent futures, promote it to strong_executor, and demote
@@ -180,8 +183,10 @@ pub fn run_until_idle() -> bool {
                 let executor_ctx = executor.context.get_context();
                 debug!("switch idle -> {}", executor.id());
                 runtime.current_executor = Some(executor);
+                crate::arch::intr_off();
                 drop(runtime);
                 switch(runtime_cx as _, executor_ctx as _);
+                crate::arch::intr_on();
                 runtime = get_current_runtime();
                 runtime.current_executor = None;
             }

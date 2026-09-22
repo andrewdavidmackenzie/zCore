@@ -54,6 +54,11 @@ impl LinuxRootfs {
         dir::clear(&dir).unwrap();
         fs::create_dir(&bin).unwrap();
         fs::create_dir(&lib).unwrap();
+        // /tmp is needed by libc-test (tmpfile, writetemp) and many programs.
+        // /dev is a placeholder — actual device nodes are not supported by
+        // SFS, but having the directory avoids ENOENT on /dev/null lookups.
+        fs::create_dir(dir.join("tmp")).unwrap();
+        fs::create_dir(dir.join("dev")).unwrap();
         // Copy busybox
         fs::copy(busybox, bin.join("busybox")).unwrap();
         // Copy libc.so
@@ -87,18 +92,23 @@ impl LinuxRootfs {
     }
 
     /// Returns the rootfs path for the specified architecture.
-    /// Layout: `rootfs/linux/{arch}/`
+    /// Layout: `target/rootfs/linux/{arch}/`
     #[inline]
     pub fn path(&self) -> PathBuf {
-        PROJECT_DIR.join("rootfs").join("linux").join(self.0.name())
+        PROJECT_DIR
+            .join("target")
+            .join("rootfs")
+            .join("linux")
+            .join(self.0.name())
     }
 
     /// Returns the libos-specific rootfs path.
-    /// Layout: `rootfs/linux-libos/{arch}/`
+    /// Layout: `target/rootfs/linux-libos/{arch}/`
     /// Used on aarch64 macOS where a static-PIE busybox is needed.
     #[inline]
     pub fn libos_path(&self) -> PathBuf {
         PROJECT_DIR
+            .join("target")
             .join("rootfs")
             .join("linux-libos")
             .join(self.0.name())
@@ -197,7 +207,9 @@ impl LinuxRootfs {
         Make::new().current_dir(&target).arg("defconfig").invoke();
         let config_path = target.join(".config");
         let config = fs::read_to_string(&config_path).expect("failed to read .config");
-        let mut config = config.replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y");
+        let mut config = config
+            .replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y")
+            .replace("CONFIG_STATIC=n", "CONFIG_STATIC=y");
         config = config.replace(
             r#"CONFIG_EXTRA_CFLAGS="""#,
             r#"CONFIG_EXTRA_CFLAGS="-fpie""#,
@@ -279,7 +291,9 @@ impl LinuxRootfs {
         // implement the mmap semantics required by musl's dynamic linker.
         let config_path = target.join(".config");
         let config = fs::read_to_string(&config_path).expect("failed to read .config");
-        let config = config.replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y");
+        let config = config
+            .replace("# CONFIG_STATIC is not set", "CONFIG_STATIC=y")
+            .replace("CONFIG_STATIC=n", "CONFIG_STATIC=y");
         fs::write(&config_path, config).expect("failed to write .config");
         // Compile
         let musl = musl.as_ref();

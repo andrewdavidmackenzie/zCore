@@ -15,7 +15,7 @@ use core::convert::TryFrom;
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use futures::pin_mut;
-use kernel_hal::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
+use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use zircon_object::object::{wait_signal_many, KernelObject, KoID, Rights, Signal};
 use zircon_object::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
 use zircon_object::task::{CurrentThread, ThreadFn};
@@ -271,7 +271,12 @@ impl Syscall<'_> {
             Sys::DEBUG_WRITE => self.sys_debug_write(a0.into(), a1 as _),
             Sys::DEBUGLOG_CREATE => self.sys_debuglog_create(a0 as _, a1 as _, a2.into()),
             Sys::DEBUGLOG_WRITE => self.sys_debuglog_write(a0 as _, a1 as _, a2.into(), a3 as _),
-            Sys::DEBUGLOG_READ => self.sys_debuglog_read(a0 as _, a1 as _, a2.into(), a3 as _),
+            Sys::DEBUGLOG_READ => {
+                return match self.sys_debuglog_read(a0 as _, a1 as _, a2.into(), a3 as _) {
+                    Ok(count) => count,
+                    Err(err) => err as isize,
+                };
+            }
             Sys::RESOURCE_CREATE => self.sys_resource_create(
                 a0 as _,
                 a1 as _,
@@ -315,9 +320,15 @@ impl Syscall<'_> {
                 }),
             Sys::FUTEX_WAKE_HANDLE_CLOSE_THREAD_EXIT => {
                 // atomic_store_explicit(value_ptr, new_value, memory_order_release)
-                UserInPtr::<AtomicI32>::from(a0)
-                    .as_ref()
-                    .store(a2 as i32, Ordering::Release);
+                // SMAP: single atomic store to user futex word.
+                #[allow(unsafe_code)]
+                {
+                    unsafe {
+                        hal_impl::user::smap_allow();
+                        (*(a0 as *const AtomicI32)).store(a2 as i32, Ordering::Release);
+                        hal_impl::user::smap_deny();
+                    }
+                }
                 let _ = self.sys_futex_wake(a0.into(), a1 as _);
                 let _ = self.sys_handle_close(a3 as _);
                 self.sys_thread_exit()
@@ -478,7 +489,13 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
         };
-        info!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
+        // Log debug I/O syscalls at trace level to avoid flooding the
+        // serial console during interactive shell sessions.
+        if matches!(sys_type, Sys::DEBUG_WRITE | Sys::DEBUG_READ) {
+            trace!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
+        } else {
+            info!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
+        }
         match ret {
             Ok(_) => 0,
             Err(err) => err as isize,

@@ -8,7 +8,9 @@
 //! - sigaltstack
 
 use super::*;
-use linux_object::signal::{Signal, SignalAction, SignalStack, SignalStackFlags, Sigset};
+use linux_object::signal::{
+    SigInfo, SiginfoFields, Signal, SignalAction, SignalCode, SignalStack, SignalStackFlags, Sigset,
+};
 use linux_object::thread::ThreadExt;
 use numeric_enum_macro::numeric_enum;
 
@@ -188,6 +190,15 @@ impl Syscall<'_> {
                     }
                     sig => {
                         let process: Arc<Process> = obj.downcast_arc().unwrap();
+                        let info = SigInfo {
+                            signo: sig as i32,
+                            code: SignalCode::USER,
+                            field: SiginfoFields::new(
+                                self.zircon_process().id() as i32,
+                                self.linux_process().uid() as i32,
+                            ),
+                            ..Default::default()
+                        };
                         let tids = process.thread_ids();
                         let mut delivered = false;
                         for tid in tids {
@@ -197,7 +208,7 @@ impl Syscall<'_> {
                             if thread_linux.signal_mask.contains(sig) {
                                 continue;
                             } else {
-                                thread_linux.insert_signal(signal);
+                                thread_linux.insert_signal_info(signal, info);
                                 delivered = true;
                                 break;
                             }
@@ -231,8 +242,17 @@ impl Syscall<'_> {
         match parent.get_child(tid as u64) {
             Ok(obj) => {
                 let thread: Arc<Thread> = obj.downcast_arc().unwrap();
+                let info = SigInfo {
+                    signo: signal as i32,
+                    code: SignalCode::TKILL,
+                    field: SiginfoFields::new(
+                        self.zircon_process().id() as i32,
+                        self.linux_process().uid() as i32,
+                    ),
+                    ..Default::default()
+                };
                 let mut thread_linux = thread.lock_linux();
-                thread_linux.insert_signal(signal);
+                thread_linux.insert_signal_info(signal, info);
                 drop(thread_linux);
                 // Wake any blocked wait_signal futures on this process
                 parent.signal_set(zircon_object::object::Signal::SIGCHLD);
@@ -261,8 +281,17 @@ impl Syscall<'_> {
         {
             Ok(Ok(obj)) => {
                 let thread: Arc<Thread> = obj.downcast_arc().unwrap();
+                let info = SigInfo {
+                    signo: signal as i32,
+                    code: SignalCode::TKILL,
+                    field: SiginfoFields::new(
+                        self.zircon_process().id() as i32,
+                        self.linux_process().uid() as i32,
+                    ),
+                    ..Default::default()
+                };
                 let mut thread_linux = thread.lock_linux();
-                thread_linux.insert_signal(signal);
+                thread_linux.insert_signal_info(signal, info);
                 drop(thread_linux);
                 // Wake any blocked wait_signal futures on the calling process
                 parent.signal_set(zircon_object::object::Signal::SIGCHLD);
@@ -351,5 +380,144 @@ impl Syscall<'_> {
             }
             Err(_) => Err(LxError::ESRCH),
         }
+    }
+
+    /// Return the set of signals pending for the calling thread/process.
+    pub fn sys_rt_sigpending(&self, mut set: UserOutPtr<u64>, sigsetsize: usize) -> SysResult {
+        info!("rt_sigpending: sigsetsize={}", sigsetsize);
+        if sigsetsize != 8 {
+            return Err(LxError::EINVAL);
+        }
+        let proc = self.linux_process();
+        let pending = proc.pending_signals();
+        set.write(pending)?;
+        Ok(0)
+    }
+
+    /// Synchronously wait for a signal from a given set, with timeout.
+    ///
+    /// Returns the signal number on success, or EAGAIN on timeout.
+    pub async fn sys_rt_sigtimedwait(
+        &self,
+        set: UserInPtr<u64>,
+        mut info: UserOutPtr<u8>,
+        timeout: UserInPtr<u8>,
+        sigsetsize: usize,
+    ) -> SysResult {
+        info!("rt_sigtimedwait: sigsetsize={}", sigsetsize);
+        if sigsetsize != 8 {
+            return Err(LxError::EINVAL);
+        }
+        let _mask = set.read()?;
+        // Read timeout (struct timespec: sec + nsec)
+        let timeout_ns = if !timeout.is_null() {
+            let ts = timeout.read_array(16)?;
+            let sec = i64::from_ne_bytes(ts[0..8].try_into().unwrap());
+            let nsec = i64::from_ne_bytes(ts[8..16].try_into().unwrap());
+            if sec < 0 || nsec < 0 {
+                return Err(LxError::EINVAL);
+            }
+            (sec as u64) * 1_000_000_000 + nsec as u64
+        } else {
+            // No timeout — block indefinitely (not yet supported)
+            return Err(LxError::EAGAIN);
+        };
+
+        // Simple implementation: check pending signals, return EAGAIN if none
+        // A full implementation would block with a timeout.
+        let proc = self.linux_process();
+        let pending = proc.pending_signals();
+        if pending & _mask != 0 {
+            // Find the first pending signal in the set
+            for sig in 1..=64 {
+                if pending & _mask & (1u64 << (sig - 1)) != 0 {
+                    // Clear it from pending
+                    proc.clear_pending_signal(sig);
+                    // Write siginfo if requested
+                    if !info.is_null() {
+                        let mut si = [0u8; 128]; // sizeof(siginfo_t)
+                        si[0..4].copy_from_slice(&(sig as i32).to_ne_bytes()); // si_signo
+                        info.write_array(&si)?;
+                    }
+                    return Ok(sig);
+                }
+            }
+        }
+
+        // No matching pending signal — if timeout is 0, return immediately
+        if timeout_ns == 0 {
+            return Err(LxError::EAGAIN);
+        }
+
+        // Non-zero timeout: yield and check again
+        // (simplified — a full implementation would wake on signal delivery)
+        for _ in 0..100 {
+            hal_impl::thread::yield_now().await;
+            let pending2 = proc.pending_signals();
+            if pending2 & _mask != 0 {
+                for sig in 1..=64 {
+                    if pending2 & _mask & (1u64 << (sig - 1)) != 0 {
+                        proc.clear_pending_signal(sig);
+                        if !info.is_null() {
+                            let mut si = [0u8; 128];
+                            si[0..4].copy_from_slice(&(sig as i32).to_ne_bytes());
+                            info.write_array(&si)?;
+                        }
+                        return Ok(sig);
+                    }
+                }
+            }
+        }
+        Err(LxError::EAGAIN)
+    }
+
+    /// Temporarily replace signal mask and suspend until a signal arrives.
+    ///
+    /// Always returns EINTR (woken by signal) or blocks forever.
+    pub async fn sys_rt_sigsuspend(&self, mask: UserInPtr<u64>, sigsetsize: usize) -> SysResult {
+        info!("rt_sigsuspend: sigsetsize={}", sigsetsize);
+        if sigsetsize != 8 {
+            return Err(LxError::EINVAL);
+        }
+        let new_mask = Sigset::new(mask.read()?);
+        // Save current mask and set new one
+        let old_mask = {
+            let mut thread = self.thread.lock_linux();
+            let old = thread.signal_mask;
+            thread.signal_mask = new_mask;
+            old
+        };
+
+        // Wait for a signal (yield repeatedly)
+        // A proper implementation would block until a signal is delivered
+        // and then restore the mask before returning.
+        for _ in 0..1000 {
+            hal_impl::thread::yield_now().await;
+            let proc = self.linux_process();
+            let pending = proc.pending_signals();
+            if pending & !new_mask.val() != 0 {
+                break;
+            }
+        }
+
+        // Restore original mask
+        self.thread.lock_linux().signal_mask = old_mask;
+        Err(LxError::EINTR)
+    }
+
+    /// Wait for any signal (x86_64 legacy).
+    /// Equivalent to sigsuspend with the current mask.
+    pub async fn sys_pause(&self) -> SysResult {
+        info!("pause");
+        for _ in 0..1000 {
+            hal_impl::thread::yield_now().await;
+            let proc = self.linux_process();
+            let pending = proc.pending_signals();
+            let mask = self.thread.lock_linux().signal_mask;
+            if pending & !mask.val() != 0 {
+                break;
+            }
+        }
+        Err(LxError::EINTR)
     }
 }

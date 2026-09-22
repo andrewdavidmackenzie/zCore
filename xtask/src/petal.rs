@@ -41,6 +41,8 @@ pub fn build_petal(arch: Arch, bin_name: &str) -> PathBuf {
         .arg("--bin")
         .arg(bin_name)
         .args(["-Z", "build-std=core,alloc"])
+        .args(["-Z", "build-std-features=compiler-builtins-mem"])
+        .env("RUSTFLAGS", "-C relocation-model=static")
         .status()
         .expect("failed to run cargo build for petal");
 
@@ -152,13 +154,17 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
 
 /// Build all petal programs and create a Zircon rootfs directory.
 /// The directory layout mirrors the Linux rootfs: `bin/hello`,
-/// `bin/channel_test`, `bin/vmo_test`.
+/// `bin/channel-test`, `bin/vmo-test`.
 /// Returns the path to the rootfs directory.
 pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
-    let rootfs_dir = PROJECT_DIR.join("rootfs").join("zircon").join(arch.name());
+    let rootfs_dir = PROJECT_DIR
+        .join("target")
+        .join("rootfs")
+        .join("zircon")
+        .join(arch.name());
     let bin_dir = rootfs_dir.join("bin");
 
-    const PETAL_BINS: &[&str] = &["hello", "channel_test", "vmo_test"];
+    const PETAL_BINS: &[&str] = &["hello", "channel-test", "vmo-test"];
 
     // Check if rootfs is already populated with all expected binaries
     if PETAL_BINS.iter().all(|name| bin_dir.join(name).is_file()) {
@@ -193,9 +199,12 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
 /// Returns the path to the image file.
 pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
     let rootfs_dir = build_zircon_rootfs(arch);
-    let image = PROJECT_DIR
-        .join("zCore")
-        .join(format!("{}-zircon.img", arch.name()));
+    let dir = PROJECT_DIR
+        .join("target")
+        .join(format!("qemu-{}", arch.name()))
+        .join("release");
+    std::fs::create_dir_all(&dir).ok();
+    let image = dir.join(format!("{}-zircon.img", arch.name()));
 
     // Skip if image exists and is newer than all rootfs binaries
     if image.is_file() {

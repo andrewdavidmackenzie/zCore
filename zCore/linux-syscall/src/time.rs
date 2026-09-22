@@ -3,10 +3,11 @@
 //!
 use crate::Syscall;
 use core::convert::TryFrom;
-use kernel_hal::{user::UserInPtr, user::UserOutPtr};
+use hal_impl::{user::UserInPtr, user::UserOutPtr};
 use linux_object::error::LxError;
 use linux_object::error::SysResult;
 use linux_object::signal::Signal as LinuxSignal;
+use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 
 const USEC_PER_TICK: usize = 10000;
@@ -30,18 +31,38 @@ impl Syscall<'_> {
         Ok(0)
     }
 
-    /// finds the resolution (precision) of the specified clock clockid, and,
-    /// if buffer is non-NULL, stores it in the struct timespec pointed to by buffer
+    /// Get the time of the specified clock
+    /// (see [linux man clock_gettime(2)](https://www.man7.org/linux/man-pages/man2/clock_gettime.2.html)).
     pub fn sys_clock_gettime(&self, clock: usize, mut buf: UserOutPtr<TimeSpec>) -> SysResult {
         info!("clock_gettime: id={:?} buf={:?}", clock, buf);
         if buf.is_null() {
             return Err(LxError::EINVAL);
         }
-        let ts = TimeSpec::now();
+        let clock_id = ClockId::from(clock);
+        let duration = match clock_id {
+            ClockId::ClockRealTime | ClockId::ClockRealTimeCoarse => {
+                hal_impl::timer::timer_clock_realtime()
+            }
+            ClockId::ClockMonotonic
+            | ClockId::ClockMonotonicRaw
+            | ClockId::ClockMonotonicCoarse
+            | ClockId::ClockBootTime => hal_impl::timer::timer_now(),
+            // CPU time clocks: not yet implemented, return monotonic as fallback
+            ClockId::ClockProcessCpuTimeId | ClockId::ClockThreadCpuTimeId => {
+                warn!(
+                    "clock_gettime: {:?} not implemented, returning monotonic",
+                    clock_id
+                );
+                hal_impl::timer::timer_now()
+            }
+            _ => return Err(LxError::EINVAL),
+        };
+        let ts = TimeSpec {
+            sec: duration.as_secs() as usize,
+            nsec: (duration.as_nanos() % 1_000_000_000) as usize,
+        };
         buf.write(ts)?;
-
         info!("TimeSpec: {:?}", ts);
-
         Ok(0)
     }
 
@@ -67,7 +88,7 @@ impl Syscall<'_> {
             return Err(LxError::EINVAL);
         }
 
-        let timeval = TimeVal::now();
+        let timeval = TimeVal::now_realtime();
         tv.write(timeval)?;
 
         info!("TimeVal: {:?}", timeval);
@@ -75,14 +96,14 @@ impl Syscall<'_> {
         Ok(0)
     }
 
-    /// get time in seconds
+    /// get time in seconds (wall-clock)
     #[cfg(target_arch = "x86_64")]
     pub fn sys_time(&mut self, mut time: UserOutPtr<u64>) -> SysResult {
         info!("time: time: {:?}", time);
         if time.is_null() {
             return Err(LxError::EINVAL);
         }
-        let sec = TimeSpec::now().sec;
+        let sec = TimeSpec::now_realtime().sec;
         time.write(sec as u64)?;
         Ok(sec)
     }
@@ -103,18 +124,31 @@ impl Syscall<'_> {
         }
     }
 
-    /// get resource usage
-    /// currently only support ru_utime and ru_stime:
-    /// - `ru_utime`: user CPU time used
-    /// - `ru_stime`: system CPU time used
+    /// Get resource usage statistics
+    /// (see [linux man getrusage(2)](https://www.man7.org/linux/man-pages/man2/getrusage.2.html)).
     pub fn sys_getrusage(&mut self, who: usize, mut rusage: UserOutPtr<RUsage>) -> SysResult {
         info!("getrusage: who: {}, rusage: {:?}", who, rusage);
         if rusage.is_null() {
             return Err(LxError::EINVAL);
         }
+        use core::time::Duration;
+        const RUSAGE_SELF: usize = 0;
+        const RUSAGE_CHILDREN: usize = usize::MAX; // -1 as usize
+
+        let (user_ns, sys_ns) = match who {
+            RUSAGE_SELF => {
+                let linux = self.thread.lock_linux();
+                (linux.user_time_ns(), linux.sys_time_ns())
+            }
+            RUSAGE_CHILDREN => {
+                let proc = self.linux_process();
+                proc.children_cpu_time()
+            }
+            _ => return Err(LxError::EINVAL),
+        };
         let new_rusage = RUsage {
-            utime: TimeVal::now(),
-            stime: TimeVal::now(),
+            utime: TimeVal::from_duration(Duration::from_nanos(user_ns as u64)),
+            stime: TimeVal::from_duration(Duration::from_nanos(sys_ns as u64)),
         };
         rusage.write(new_rusage)?;
         Ok(0)
@@ -258,23 +292,34 @@ impl Syscall<'_> {
         Ok(0)
     }
 
-    /// stores the current process times in the struct tms that buf points to
+    /// Get process times
+    /// (see [linux man times(2)](https://www.man7.org/linux/man-pages/man2/times.2.html)).
+    ///
+    /// Returns clock ticks since boot. The `Tms` struct contains per-process
+    /// user and system CPU time, plus accumulated children times.
     pub fn sys_times(&mut self, mut buf: UserOutPtr<Tms>) -> SysResult {
         info!("times: buf: {:?}", buf);
 
         let tv = TimeVal::now();
-
         let tick = (tv.sec * 1_000_000 + tv.usec) / USEC_PER_TICK;
 
         if !buf.is_null() {
-            // Per-process CPU time accounting is not implemented.
-            // Return zeros rather than wall-clock time, which would
-            // be incorrect (includes sleep time and other processes).
+            // Convert nanoseconds to clock ticks (100 Hz = 10ms per tick).
+            const NS_PER_TICK: u128 = USEC_PER_TICK as u128 * 1_000;
+
+            let linux = self.thread.lock_linux();
+            let user_ticks = linux.user_time_ns() / NS_PER_TICK;
+            let sys_ticks = linux.sys_time_ns() / NS_PER_TICK;
+            drop(linux);
+
+            let proc = self.linux_process();
+            let (cu_ns, cs_ns) = proc.children_cpu_time();
+
             let new_buf = Tms {
-                tms_utime: 0,
-                tms_stime: 0,
-                tms_cutime: 0,
-                tms_cstime: 0,
+                tms_utime: user_ticks as u64,
+                tms_stime: sys_ticks as u64,
+                tms_cutime: (cu_ns / NS_PER_TICK) as u64,
+                tms_cstime: (cs_ns / NS_PER_TICK) as u64,
             };
             buf.write(new_buf)?;
         } else {
@@ -301,43 +346,37 @@ impl Syscall<'_> {
             rem
         );
         use core::time::Duration;
-        use kernel_hal::thread::SleepFuture;
-        use kernel_hal::timer;
+        use hal_impl::thread::SleepFuture;
+        use hal_impl::timer;
         use linux_object::thread::Interruptible;
         let duration: Duration = req.read()?.into();
         let clockid = ClockId::from(clockid);
         let flags = ClockFlags::from(flags);
         info!("clockid={:?}, flags={:?}", clockid, flags,);
-        let sleep_result = match clockid {
-            ClockId::ClockRealTime | ClockId::ClockMonotonic => match flags {
-                ClockFlags::ZeroFlag => {
-                    SleepFuture::new(timer::deadline_after(duration))
+        // Get the current time for the requested clock domain.
+        let clock_now = match clockid {
+            ClockId::ClockRealTime => timer::timer_clock_realtime(),
+            ClockId::ClockMonotonic => timer::timer_now(),
+            _ => return Err(LxError::EINVAL),
+        };
+        let sleep_result = match flags {
+            ClockFlags::ZeroFlag => {
+                // Relative sleep -- clock domain doesn't matter.
+                SleepFuture::new(timer::deadline_after(duration))
+                    .interruptible(self.thread)
+                    .await
+            }
+            ClockFlags::TimerAbsTime => {
+                // Absolute deadline in the specified clock domain.
+                let remaining = duration.saturating_sub(clock_now);
+                if remaining.is_zero() {
+                    Ok(())
+                } else {
+                    SleepFuture::new(timer::deadline_after(remaining))
                         .interruptible(self.thread)
                         .await
                 }
-                ClockFlags::TimerAbsTime => {
-                    // Convert absolute deadline to relative duration, then
-                    // re-add to the timer domain via deadline_after.
-                    //
-                    // Note: timer_now() supplies the same time source for all
-                    // clock IDs (boot-relative on bare metal, Unix epoch in
-                    // libos). Proper CLOCK_REALTIME vs CLOCK_MONOTONIC
-                    // separation would require clock-specific time sources in
-                    // the HAL. This is a pre-existing limitation shared with
-                    // sys_clock_gettime, which also uses timer_now() for all
-                    // clocks via TimeSpec::now().
-                    let now = timer::timer_now();
-                    let remaining = duration.saturating_sub(now);
-                    if remaining.is_zero() {
-                        Ok(())
-                    } else {
-                        SleepFuture::new(timer::deadline_after(remaining))
-                            .interruptible(self.thread)
-                            .await
-                    }
-                }
-            },
-            _ => return Err(LxError::EINVAL),
+            }
         };
         match sleep_result {
             Ok(()) => Ok(0),

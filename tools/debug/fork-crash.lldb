@@ -1,0 +1,24 @@
+# LLDB script to debug the fork crash (issue #210).
+#
+# Usage:
+#   Terminal 1: make debug-qemu
+#   Terminal 2: lldb -s tools/debug/fork-crash.lldb
+#
+# This sets a breakpoint at the crashing instruction (0x4cf55c in busybox)
+# and a breakpoint at the page fault handler to catch the crash.
+
+file target/qemu-aarch64/release/kernel
+gdb-remote 1234
+
+# Break at the page fault error path in linux-loader
+# (the "failed to handle page fault from user mode" error message)
+breakpoint set --name handle_page_fault
+
+# Continue - let the kernel boot and wait for shell
+continue
+
+# When the shell appears, type 'uname' in the QEMU terminal.
+# The breakpoint should hit when the parent crashes after fork.
+# At the breakpoint, inspect:
+#   reg read x0 x3 x4 x26
+#   memory read <address>

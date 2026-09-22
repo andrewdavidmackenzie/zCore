@@ -141,7 +141,7 @@ impl Pl011Inner {
     }
 
     fn getchar(&self) -> Option<u8> {
-        if self.line_sts().contains(UartFrFlags::RXFF) {
+        if !self.line_sts().contains(UartFrFlags::RXFE) {
             Some(self.read_reg(self.data_reg) as u8)
         } else {
             None

@@ -123,7 +123,7 @@ fs, plus HostFS in libos mode. The in-kernel FS is a pragmatic shortcut for
 Linux compat -- ideally it would be a userspace server.
 
 
-It is a HAL implementation (kernel-hal/src/libos/), but the feature also
+It is a HAL implementation (hal-impl/src/libos/), but the feature also
 affects code outside the HAL: `zCore/src/main.rs` (no_std toggle), `fs.rs`
 (HostFS vs SFS), `utils.rs` (std::env::args), `logging.rs` (chrono timestamps),
 and `loader/` (run_fncall vs run). There are ~44 occurrences across 15 files.
@@ -134,9 +134,9 @@ no_std, real HW vs host OS).
 
 `zCore/src/platform/` contains **pre-HAL bootstrap** code: assembly boot (page
 tables, MMU enable), linker scripts (.ld), and entry points that must live in
-the binary crate. kernel-hal's `bare/arch/aarch64/` handles the **post-boot
+the binary crate. hal-impl's `bare/arch/aarch64/` handles the **post-boot
 runtime** HAL (interrupts, timers, trap handling, memory mapping). The split
-is: `platform/` = "get to Rust"; `kernel-hal/` = "run Rust OS services". Linker
+is: `platform/` = "get to Rust"; `hal-impl/` = "run Rust OS services". Linker
 scripts and binary entry points cannot be in library crates, which is why
 platform/ exists in the binary crate.
 
@@ -147,9 +147,9 @@ practical constraint is Rust's crate system: linker scripts (.ld) and the
 Assembly files that set up initial page tables and stacks before any Rust code
 can run also live here because they need `global_asm!` in the binary crate
 context. However, you're right that `entry.rs` (the Rust code after assembly)
-and `consts.rs` COULD be moved into kernel-hal with some refactoring.
+and `consts.rs` COULD be moved into hal-impl with some refactoring.
 See [#77](https://github.com/andrewdavidmackenzie/zCore/issues/77). Explore moving
-all possible platform code into kernel-hal, leaving only the minimal binary-
+all possible platform code into hal-impl, leaving only the minimal binary-
 crate-required bits (linker scripts, assembly stubs) in `zCore/src/platform/`.
 
 
@@ -221,7 +221,7 @@ since the xtask-based build uses `-kernel` (direct kernel load) not UEFI.
 See [#79](https://github.com/andrewdavidmackenzie/zCore/issues/79).
 
 
-**Workspace dependencies:** `kernel-hal`, `loader`, `zircon-object`,
+**Workspace dependencies:** `hal-impl`, `loader`, `zircon-object`,
 `executor`, `linux-object` (optional)
 
 **Status:** Actively used. This is the primary build target (`cargo qemu --arch
@@ -229,11 +229,21 @@ aarch64`).
 
 ---
 
-### `kernel-hal/` -- Hardware Abstraction Layer
+### `hal/` -- HAL Interface (trait definitions and common types)
+
+**Purpose:** Defines the interface contract between the kernel and platform.
+Contains driver traits (`Scheme`, `UartScheme`, `IrqScheme`, etc.), common types
+(`MMUFlags`, `PhysAddr`, `CachePolicy`), the `GenericPageTable` trait,
+`KernelHandler` trait, `TrapReason`/`UserContextField` enums, and device error
+types. Zero architecture-specific code -- this is the pure abstraction layer.
+
+**Directory:** `zCore/hal/`
+
+### `hal-impl/` (package name: `hal-impl`) -- HAL Implementation
 
 **Purpose:** Provides a unified, architecture-independent interface for all
 hardware interaction. Abstracts differences between three CPU architectures and
-two execution modes (bare-metal vs libos).
+two execution modes (bare-metal vs libos). Implements the traits defined in `hal`.
 
 **Key design:** Uses a macro-based trait dispatch system (`hal_fn_def!` /
 `hal_fn_impl!`) that declares the full HAL interface and allows pluggable
@@ -310,25 +320,23 @@ for high-frequency calls where syscall overhead matters.
 
 - `console` -- early console output
 
-**Structure:**
+**Structure (hal-impl):**
 - `src/hal_fn.rs` -- Complete HAL interface declaration
-- `src/common/` -- Shared types (addresses, contexts, futures, page tables,
-  user pointers)
+- `src/common/` -- Shared implementation code (contexts, futures, user pointers)
 - `src/bare/` -- Bare-metal backend with `arch/aarch64`, `arch/riscv`,
   `arch/x86_64`
 
-They exist at `kernel-hal/src/bare/arch/aarch64/`, `kernel-
-hal/src/bare/arch/riscv/`, and `kernel-hal/src/bare/arch/x86_64/`. Each
-contains: `mod.rs`, `config.rs`, `cpu.rs`, `drivers.rs`, `interrupt.rs`,
-`mem.rs`, `timer.rs`, `trap.rs`, `vm.rs`. Confirmed present on disk.
+Per-arch directories are at `hal-impl/src/bare/arch/{aarch64,riscv,x86_64}/`.
+Each contains: `mod.rs`, `config.rs`, `cpu.rs`, `drivers.rs`, `interrupt.rs`,
+`mem.rs`, `timer.rs`, `trap.rs`, `vm.rs`.
 
 
 - `src/libos/` -- LibOS backend (simulates hardware via mmap, tmpfiles, SDL)
 
-Yes. `kernel-hal/Cargo.toml` defines `libos` as a feature: `libos = ["nix",
+Yes. `hal-impl/Cargo.toml` defines `libos` as a feature: `libos = ["nix",
 "tempfile", "async-std", "bitmap-allocator", "zcore-drivers/mock"]`. When libos
 is off, `lib.rs` selects the `bare/` backend via `cfg_if!`; the entire `libos/`
-module is not compiled. Note: `kernel-hal` defaults to `libos` being ON, but
+module is not compiled. Note: `hal-impl` defaults to `libos` being ON, but
 `zCore` imports it with `default-features = false`.
 
 
@@ -352,8 +360,8 @@ See [#81](https://github.com/andrewdavidmackenzie/zCore/issues/81).
 - `src/kernel_handler.rs` -- `KernelHandler` trait (callbacks from HAL into
   kernel)
 
-`kernel-hal` is a library crate; `zCore` is the binary crate. The dependency
-flows one way: `zCore -> kernel-hal`. The HAL cannot `use zCore` (circular
+`hal-impl` is a library crate; `zCore` is the binary crate. The dependency
+flows one way: `zCore -> hal-impl`. The HAL cannot `use zCore` (circular
 dependency). But the HAL needs to allocate physical frames (managed by zCore's
 allocator). Solution: **dependency inversion**. The HAL defines `KernelHandler`
 trait; zCore implements it (`ZcoreKernelHandler`); zCore passes `&'static
@@ -362,10 +370,10 @@ the trait. This is a standard pattern in layered systems.
 
 
 The callback pattern exists solely because Rust prevents circular crate
-dependencies. kernel-hal (library) cannot depend on zCore (binary). The
+dependencies. hal-impl (library) cannot depend on zCore (binary). The
 allocator lives in zCore because it needs the `#[global_allocator]` attribute
 (binary crate only). Simplification options: (1) Move the allocator into
-kernel-hal itself (requires making kernel-hal the binary crate or using a
+hal-impl itself (requires making hal-impl the binary crate or using a
 separate allocator crate). (2) Create a `kernel-alloc` crate that both kernel-
 hal and zCore depend on. (3) Make the page fault handler a function pointer
 registered at init, not a trait. All would eliminate KernelHandler. Covered by
@@ -379,14 +387,14 @@ only)
 
 TODO Describe this more, including the "scheme" concept
   > The "Scheme" concept is in the `drivers` crate,
-  > not kernel-hal. See the `drivers/` section below.
+  > not hal-impl. See the `drivers/` section below.
   > `Scheme` is a base trait all drivers implement
   > (provides `name()` and `handle_irq()`). Specific
   > device traits extend it: `BlockScheme` (read/write
   > blocks), `UartScheme` (send/recv bytes),
   > `NetScheme` (send/recv packets), `DisplayScheme`
   > (framebuffer), `InputScheme` (events),
-  > `IrqScheme` (interrupt controller). kernel-hal
+  > `IrqScheme` (interrupt controller). hal-impl
   > re-exports these traits and manages device
   > registries (`DeviceList<T>`) with accessors like
   > `all_block()`, `all_uart()`, etc.
@@ -486,7 +494,7 @@ overrides for `get_child()`, `peer()`, etc.
 - Interior mutability via `lock::Mutex` throughout
 - Async/await for blocking operations (wait_signal, Port::wait, Futex::wait)
 
-**Workspace dependencies:** `kernel-hal`, `region-alloc`
+**Workspace dependencies:** `hal-impl`, `region-alloc`
 
 **Status:** Actively used. Foundation crate for the entire kernel.
 
@@ -541,7 +549,7 @@ the kernel loads the initial process; subsequent processes are loaded by the
 kernel via execve().
 
 
-**Workspace dependencies:** `zircon-object`, `kernel-hal`, `drivers` (zcore-
+**Workspace dependencies:** `zircon-object`, `hal-impl`, `drivers` (zcore-
 drivers)
 
 **Status:** Actively used. Required for Linux mode.
@@ -579,7 +587,7 @@ by libc-test.
 See [#82](https://github.com/andrewdavidmackenzie/zCore/issues/82).
 
 
-**Workspace dependencies:** `zircon-object`, `linux-object`, `kernel-hal`
+**Workspace dependencies:** `zircon-object`, `linux-object`, `hal-impl`
 
 Because zircon-object provides the SHARED kernel object model used by both
 personalities. linux-syscall directly uses: `Process`, `Thread`,
@@ -661,7 +669,7 @@ feature-gated)
 - User memory access via typed safe pointers
 - Async for blocking syscalls
 
-**Workspace dependencies:** `zircon-object`, `kernel-hal`
+**Workspace dependencies:** `zircon-object`, `hal-impl`
 
 Confirmed: `zCore/zircon-syscall/Cargo.toml` depends on `zircon-object` and `kernel-
 hal` only. No dependency on the `zCore` binary crate. The dependency flows one
@@ -739,7 +747,7 @@ either. These tests are only run manually via `cargo test -p zcore-loader
 See [#80](https://github.com/andrewdavidmackenzie/zCore/issues/80).
 
 
-**Workspace dependencies:** `kernel-hal`, `zircon-object`, `linux-object`,
+**Workspace dependencies:** `hal-impl`, `zircon-object`, `linux-object`,
 `linux-syscall`, `zircon-syscall`, `executor`
 
 **Status:** Actively used. Central integration point.
@@ -761,12 +769,12 @@ concrete implementations for multiple architectures.
 
 The `drivers` crate has NO workspace dependencies and communicates via extern
 "C" FFI. This decouples drivers from the kernel object model, making them
-potentially reusable in other OS projects. kernel-hal's `drivers.rs` acts as a
+potentially reusable in other OS projects. hal-impl's `drivers.rs` acts as a
 consumer: it re-exports scheme traits, manages device registries, and provides
 the FFI functions (virtio_dma_alloc, drivers_phys_to_virt) that drivers call
 for DMA and address translation. The trait definitions are in `drivers/`
-because the driver implementations need them, and putting them in kernel-hal
-would create a circular dependency (kernel-hal already depends on drivers).
+because the driver implementations need them, and putting them in hal-impl
+would create a circular dependency (hal-impl already depends on drivers).
 
 
 **Driver types:**
@@ -809,7 +817,7 @@ in `zCore/src/platform/aarch64/entry.rs:9` as `uart_base: 0x0900_0000` in
 **Workspace dependencies:** None (self-contained, uses FFI to kernel)
 
 **No, drivers run in kernel (supervisor) mode.** The `drivers` crate is a
-library linked into the final `zCore` kernel ELF via kernel-hal. The FFI
+library linked into the final `zCore` kernel ELF via hal-impl. The FFI
 boundary (`extern "C"`) is a link-time abstraction for crate decoupling, not a
 process boundary. All driver code executes in supervisor mode alongside the
 rest of the kernel.
@@ -892,7 +900,7 @@ dependency, architecture-specific scheduling).
 
 **Workspace dependencies:** None
 
-**Status:** Actively used. Depended on by `kernel-hal`, `loader`, and `zCore`.
+**Status:** Actively used. Depended on by `hal-impl`, `loader`, and `zCore`.
 
 The executor is the kernel's scheduler on bare metal. Each CPU runs
 `run_until_idle()` in an infinite loop. It picks tasks (futures) from a
@@ -943,7 +951,7 @@ allocation).
 The PCI code in zircon-object is always compiled (not feature-gated). However,
 it's only exercised at runtime when the machine has PCI support (controlled by
 `pci_support` in `[workspace.metadata.machines]`). QEMU virt machines have PCI;
-embedded boards (nezha, cr1825, visionfive) do not. The `no-pci` feature in the
+embedded boards (nezha, cr1825, visionfive) do not. The `pci` feature in the
 drivers crate skips PCI bus scanning. The region-alloc code is dormant on non-
 PCI machines.
 

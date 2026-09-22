@@ -1,0 +1,104 @@
+[package]
+name = "kernel"
+version = "0.1.0"
+authors = ["PanQL <panqinglin00@163.com>", "Yuekai Jia <equation618@gmail.com>"]
+edition = "2021"
+
+default-run = "kernel"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+# Disable cargo test, bench and doc for this package
+name = "kernel"
+test = false
+bench = false
+doc = false
+
+[features]
+# Print colorless logs
+colorless-log = []
+thead-maee = ["hal-impl/thead-maee"]
+link-user-img = []
+baremetal-test = ["executor/baremetal-test"]
+
+# --- Personality ---
+zircon = ["zircon-loader", "rcore-fs", "rcore-fs-sfs"]
+linux = ["linux-loader", "linux-object", "rcore-fs", "rcore-fs-sfs"]
+libos = [
+  "hal-impl/libos",
+  "linux-loader?/libos",
+  "async-std",
+  "chrono",
+  "rcore-fs-hostfs",
+]
+
+# --- Driver features (forwarded to hal-impl -> drivers) ---
+apic = ["hal-impl/apic"]
+gic-400 = ["hal-impl/gic-400"]
+riscv-plic = ["hal-impl/riscv-plic"]
+riscv-intc = ["hal-impl/riscv-intc"]
+pl011-uart = ["hal-impl/pl011-uart"]
+uart-16550 = ["hal-impl/uart-16550"]
+ps2-keyboard = ["hal-impl/ps2-keyboard"]
+mock-uart = ["hal-impl/mock-uart"]
+virtio = ["hal-impl/virtio"]
+pci = ["hal-impl/pci"]
+allwinner-drivers = ["hal-impl/allwinner-drivers"]
+fu740-drivers = ["hal-impl/fu740-drivers"]
+
+# --- Board presets (combine personality + drivers + board-specific flags) ---
+board-d1 = ["link-user-img", "allwinner-drivers"]
+board-c910light = ["link-user-img", "hal-impl/board-c910light"]
+board-fu740 = ["link-user-img", "fu740-drivers", "hal-impl/board-fu740"]
+board-raspi400 = ["hal-impl/board-raspi400"]
+
+[dependencies]
+log = "0.4"
+cfg-if = "1.0"
+spin = "0.9.4"
+hal-impl = { path = "../hal-impl", default-features = false }
+zircon-object = { path = "../zircon-object" }
+zircon-loader = { path = "../zircon-loader", optional = true }
+linux-loader = { path = "../linux-loader", optional = true }
+linux-object = { path = "../linux-object", optional = true }
+
+lock = { path = "../lock" }
+executor = { path = "../executor" }
+rcore-fs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
+rcore-fs-sfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
+
+# LibOS mode
+[target.'cfg(not(target_os = "none"))'.dependencies]
+async-std = { version = "1.10", optional = true }
+chrono = { version = "0.4", optional = true }
+rcore-fs-hostfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
+
+# RISC-V
+[target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
+r0 = "1"
+riscv = "0.9"
+dtb-walker = "=0.2.0-alpha.3"
+page-table = "0.0.6"
+sbi-rt = { version = "0.0.2", features = ["legacy"] }
+
+# Bare-metal mode on aarch64
+# rayboot dependency removed — using direct kernel boot with QEMU -kernel
+# See issue #2 for details on the migration from UEFI/rayboot to direct boot
+[target.'cfg(all(target_os = "none", target_arch = "aarch64"))'.dependencies]
+
+# Bare-metal mode on x86_64
+[target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
+bootloader_api = "0.11"
+# rvm = { git = "https://github.com/rcore-os/RVM", rev = "e91d625", optional = true }
+
+[package.metadata.cargo-all-features]
+# Requires custom JSON target specs and -Z build-std; cannot be
+# checked by cargo-all-features. Covered by xtask check-style.
+skip_package = true
+
+[lints.cargo]
+# rcore-fs-sfs is used in bare-metal mode (both linux and zircon
+# personalities) but the code is cfg'd out in libos mode. The cargo
+# unused-deps lint cannot see through cfg gates.
+unused_dependencies = "allow"

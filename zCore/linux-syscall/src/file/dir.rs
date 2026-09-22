@@ -1,4 +1,4 @@
-﻿//! Directory operations
+//! Directory operations
 //!
 //! - getcwd
 //! - chdir
@@ -12,7 +12,7 @@
 
 use super::*;
 use bitflags::bitflags;
-use kernel_hal::user::UserOutPtr;
+use hal_impl::user::UserOutPtr;
 use linux_object::fs::vfs::FileType;
 
 impl Syscall<'_> {
@@ -34,10 +34,25 @@ impl Syscall<'_> {
     /// Change the current directory.
     /// - `path` – pointer to string with name of path
     pub fn sys_chdir(&self, path: UserInPtr<u8>) -> SysResult {
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         info!("chdir: path={:?}", path);
 
         let proc = self.linux_process();
+        let inode = proc.lookup_inode(&path)?;
+        let info = inode.metadata()?;
+        if info.type_ != FileType::Dir {
+            return Err(LxError::ENOTDIR);
+        }
+        proc.change_directory(&path);
+        Ok(0)
+    }
+
+    /// Change the current working directory by file descriptor.
+    pub fn sys_fchdir(&self, fd: FileDesc) -> SysResult {
+        info!("fchdir: fd={:?}", fd);
+        let proc = self.linux_process();
+        let file = proc.get_file(fd)?;
+        let path = file.path();
         let inode = proc.lookup_inode(path)?;
         let info = inode.metadata()?;
         if info.type_ != FileType::Dir {
@@ -56,7 +71,7 @@ impl Syscall<'_> {
 
     /// create directory relative to directory file descriptor
     pub fn sys_mkdirat(&self, dirfd: FileDesc, path: UserInPtr<u8>, mode: usize) -> SysResult {
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         if path.len() >= 4096 {
             return Err(LxError::ENAMETOOLONG);
         }
@@ -65,7 +80,7 @@ impl Syscall<'_> {
             dirfd, path, mode
         );
 
-        let (dir_path, file_name) = split_path(path);
+        let (dir_path, file_name) = split_path(&path);
         let proc = self.linux_process();
         let inode = proc.lookup_inode_at(dirfd, dir_path, true)?;
         if inode.find(file_name).is_ok() {
@@ -78,10 +93,10 @@ impl Syscall<'_> {
     /// Remove a directory.
     /// - path – pointer to string with directory name
     pub fn sys_rmdir(&self, path: UserInPtr<u8>) -> SysResult {
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         info!("rmdir: path={:?}", path);
 
-        let (dir_path, file_name) = split_path(path);
+        let (dir_path, file_name) = split_path(&path);
         let proc = self.linux_process();
         let dir_inode = proc.lookup_inode(dir_path)?;
         let file_inode = dir_inode.find(file_name)?;
@@ -149,8 +164,8 @@ impl Syscall<'_> {
         newpath: UserInPtr<u8>,
         flags: usize,
     ) -> SysResult {
-        let oldpath = oldpath.as_c_str()?;
-        let newpath = newpath.as_c_str()?;
+        let oldpath = oldpath.read_c_string()?;
+        let newpath = newpath.read_c_string()?;
         let flags = AtFlags::from_bits_truncate(flags);
         info!(
             "linkat: olddirfd={:?}, oldpath={:?}, newdirfd={:?}, newpath={:?}, flags={:?}",
@@ -158,8 +173,8 @@ impl Syscall<'_> {
         );
 
         let proc = self.linux_process();
-        let (new_dir_path, new_file_name) = split_path(newpath);
-        let inode = proc.lookup_inode_at(olddirfd, oldpath, true)?;
+        let (new_dir_path, new_file_name) = split_path(&newpath);
+        let inode = proc.lookup_inode_at(olddirfd, &oldpath, true)?;
         let new_dir_inode = proc.lookup_inode_at(newdirfd, new_dir_path, true)?;
         new_dir_inode.link(new_file_name, &inode)?;
         Ok(0)
@@ -176,13 +191,11 @@ impl Syscall<'_> {
     /// remove directory entry relative to directory file descriptor
     /// The unlinkat() system call operates in exactly the same way as either unlink or rmdir.
     pub fn sys_unlinkat(&self, dirfd: FileDesc, path: UserInPtr<u8>, flags: usize) -> SysResult {
-        let path = path.as_c_str()?;
+        let mut path = path.read_c_string()?;
         // hard code special path
-        let path = if path == "/dev/shm/testshm" {
-            "/testshm"
-        } else {
-            path
-        };
+        if path == "/dev/shm/testshm" {
+            path = "/testshm".into();
+        }
         let flags = AtFlags::from_bits_truncate(flags);
         info!(
             "unlinkat: dirfd={:?}, path={:?}, flags={:?}",
@@ -190,7 +203,7 @@ impl Syscall<'_> {
         );
 
         let proc = self.linux_process();
-        let (dir_path, file_name) = split_path(path);
+        let (dir_path, file_name) = split_path(&path);
         let dir_inode = proc.lookup_inode_at(dirfd, dir_path, true)?;
         let file_inode = dir_inode.find(file_name)?;
         if file_inode.metadata()?.type_ == FileType::Dir {
@@ -234,16 +247,16 @@ impl Syscall<'_> {
         newdirfd: FileDesc,
         newpath: UserInPtr<u8>,
     ) -> SysResult {
-        let oldpath = oldpath.as_c_str()?;
-        let newpath = newpath.as_c_str()?;
+        let oldpath = oldpath.read_c_string()?;
+        let newpath = newpath.read_c_string()?;
         info!(
             "renameat: olddirfd={:?}, oldpath={:?}, newdirfd={:?}, newpath={:?}",
             olddirfd, oldpath, newdirfd, newpath
         );
 
         let proc = self.linux_process();
-        let (old_dir_path, old_file_name) = split_path(oldpath);
-        let (new_dir_path, new_file_name) = split_path(newpath);
+        let (old_dir_path, old_file_name) = split_path(&oldpath);
+        let (new_dir_path, new_file_name) = split_path(&newpath);
         let old_dir_inode = proc.lookup_inode_at(olddirfd, old_dir_path, false)?;
         let new_dir_inode = proc.lookup_inode_at(newdirfd, new_dir_path, false)?;
         old_dir_inode.move_(old_file_name, &new_dir_inode, new_file_name)?;
@@ -253,6 +266,30 @@ impl Syscall<'_> {
     /// read value of symbolic link
     pub fn sys_readlink(&self, path: UserInPtr<u8>, base: UserOutPtr<u8>, len: usize) -> SysResult {
         self.sys_readlinkat(FileDesc::CWD, path, base, len)
+    }
+
+    /// Create a symbolic link relative to a directory file descriptor.
+    ///
+    /// `target` is the string that the symlink will point to.
+    /// `linkpath` is the pathname of the symlink to create, relative to `newdirfd`.
+    pub fn sys_symlinkat(
+        &self,
+        target: UserInPtr<u8>,
+        newdirfd: FileDesc,
+        linkpath: UserInPtr<u8>,
+    ) -> SysResult {
+        let target = target.read_c_string()?;
+        let linkpath = linkpath.read_c_string()?;
+        info!(
+            "symlinkat: target={:?}, newdirfd={:?}, linkpath={:?}",
+            target, newdirfd, linkpath
+        );
+        let proc = self.linux_process();
+        let (dir_path, file_name) = linux_object::fs::split_path(&linkpath);
+        let dir_inode = proc.lookup_inode_at(newdirfd, dir_path, true)?;
+        let symlink_inode = dir_inode.create(file_name, FileType::SymLink, 0o777)?;
+        symlink_inode.write_at(0, target.as_bytes())?;
+        Ok(0)
     }
 
     /// Read value of a symbolic link relative to a directory file descriptor.
@@ -269,14 +306,14 @@ impl Syscall<'_> {
         mut base: UserOutPtr<u8>,
         len: usize,
     ) -> SysResult {
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         info!(
             "readlinkat: dirfd={:?}, path={:?}, base={:?}, len={}",
             dirfd, path, base, len
         );
 
         let proc = self.linux_process();
-        let inode = proc.lookup_inode_at(dirfd, path, false)?;
+        let inode = proc.lookup_inode_at(dirfd, &path, false)?;
         if inode.metadata()?.type_ != FileType::SymLink {
             return Err(LxError::EINVAL);
         }

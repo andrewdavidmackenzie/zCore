@@ -7,19 +7,7 @@ mod vmo;
 pub use self::{stream::*, vmar::*, vmo::*};
 use super::{ZxError, ZxResult};
 use alloc::sync::Arc;
-pub use kernel_hal::{CachePolicy, MMUFlags};
-
-/// Physical Address
-pub type PhysAddr = usize;
-
-/// Virtual Address
-pub type VirtAddr = usize;
-
-/// Device Address
-pub type DevVAddr = usize;
-
-/// Size of a page
-pub const PAGE_SIZE: usize = 0x1000;
+pub use hal::{CachePolicy, DevVAddr, MMUFlags, PhysAddr, VirtAddr, PAGE_SIZE};
 
 /// log2(PAGE_SIZE)
 pub const PAGE_SIZE_LOG2: usize = 12;
@@ -82,10 +70,10 @@ mod test {
     #[test]
     fn test_round_pages() {
         assert_eq!(roundup_pages(0), 0);
-        assert_eq!(roundup_pages(core::usize::MAX), 0);
+        assert_eq!(roundup_pages(usize::MAX), 0);
         assert_eq!(
-            roundup_pages(core::usize::MAX - PAGE_SIZE + 1),
-            core::usize::MAX - PAGE_SIZE + 1
+            roundup_pages(usize::MAX - PAGE_SIZE + 1),
+            usize::MAX - PAGE_SIZE + 1
         );
         assert_eq!(roundup_pages(PAGE_SIZE * 3 - 1), PAGE_SIZE * 3);
     }

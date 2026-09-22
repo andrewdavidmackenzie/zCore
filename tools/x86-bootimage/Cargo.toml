@@ -5,6 +5,8 @@ edition = "2021"
 description = "Helper tool to create x86_64 bootable disk images"
 
 [dependencies]
-# Default features include both bios and uefi.
-bootloader = { version = "0.11", default-features = false, features = ["bios"] }
+# UEFI-only boot support. BIOS boot removed (#265).
+# The wcslen fix (https://github.com/rust-osdev/bootloader/issues/579) is
+# now in compiler_builtins (rust nightly 2026-09-15+).
+bootloader = { version = "0.11", default-features = false, features = ["uefi"] }
 anyhow = "1"

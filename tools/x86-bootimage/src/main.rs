@@ -1,12 +1,7 @@
-//! Helper tool to create x86_64 bootable disk images.
+//! Helper tool to create x86_64 UEFI bootable disk images.
 //!
-//! Uses the `bootloader` crate to create BIOS bootable images
+//! Uses the `bootloader` crate to create UEFI bootable images
 //! from the zCore kernel ELF, optionally embedding a ramdisk (rootfs).
-//!
-//! UEFI boot is blocked by an upstream issue:
-//! https://github.com/rust-osdev/bootloader/issues/579
-//! When fixed, enable the `uefi` feature in Cargo.toml and
-//! add UEFI support here.
 //!
 //! Usage:
 //!   x86-bootimage <kernel-elf> <output-image> [--ramdisk <rootfs-image>]
@@ -45,18 +40,18 @@ fn main() -> Result<()> {
         }
     }
 
-    let mut boot = bootloader::BiosBoot::new(&kernel_path);
+    println!(
+        "Creating UEFI boot image from {}...",
+        kernel_path.display()
+    );
+
+    let mut boot = bootloader::UefiBoot::new(&kernel_path);
     if let Some(ref rd) = ramdisk_path {
         println!("  Ramdisk: {}", rd.display());
         boot.set_ramdisk(rd as &Path);
     }
-
-    println!(
-        "Creating BIOS boot image from {}...",
-        kernel_path.display()
-    );
     boot.create_disk_image(&output_path)
-        .context("failed to create BIOS boot image")?;
+        .context("failed to create UEFI boot image")?;
 
     println!(
         "Boot image created: {} ({} bytes)",

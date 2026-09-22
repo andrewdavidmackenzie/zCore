@@ -65,8 +65,8 @@ impl Syscall<'_> {
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::WRITE)?;
         let mut actual_count = 0;
         for io_vec in data.iter() {
-            actual_count +=
-                stream.write(io_vec.as_slice()?, options.contains(WriteOptions::APPEND))?;
+            let buf = io_vec.read_to_vec()?;
+            actual_count += stream.write(&buf, options.contains(WriteOptions::APPEND))?;
         }
         actual_count_ptr.write_if_not_null(actual_count)?;
         Ok(())
@@ -94,7 +94,8 @@ impl Syscall<'_> {
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::WRITE)?;
         let mut actual_count = 0;
         for io_vec in data.iter() {
-            actual_count += stream.write_at(io_vec.as_slice()?, offset)?;
+            let buf = io_vec.read_to_vec()?;
+            actual_count += stream.write_at(&buf, offset)?;
             offset += actual_count;
         }
         actual_count_ptr.write_if_not_null(actual_count)?;
@@ -117,12 +118,14 @@ impl Syscall<'_> {
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let mut data = vector.read_iovecs(vector_size)?;
+        let data = vector.read_iovecs(vector_size)?;
         let proc = self.thread.proc();
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::READ)?;
         let mut actual_count = 0usize;
-        for io_vec in data.iter_mut() {
-            actual_count += stream.read(io_vec.as_mut_slice()?)?;
+        for io_vec in data.iter() {
+            let mut buf = vec![0u8; io_vec.len()];
+            actual_count += stream.read(&mut buf)?;
+            io_vec.write_from_slice(&buf)?;
         }
         actual_count_ptr.write_if_not_null(actual_count)?;
         Ok(())
@@ -145,12 +148,14 @@ impl Syscall<'_> {
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let mut data = vector.read_iovecs(vector_size)?;
+        let data = vector.read_iovecs(vector_size)?;
         let proc = self.thread.proc();
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::READ)?;
         let mut actual_count = 0usize;
-        for io_vec in data.iter_mut() {
-            actual_count += stream.read_at(io_vec.as_mut_slice()?, offset)?;
+        for io_vec in data.iter() {
+            let mut buf = vec![0u8; io_vec.len()];
+            actual_count += stream.read_at(&mut buf, offset)?;
+            io_vec.write_from_slice(&buf)?;
             offset += actual_count;
         }
         actual_count_ptr.write_if_not_null(actual_count)?;

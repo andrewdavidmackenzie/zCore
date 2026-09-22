@@ -12,10 +12,18 @@ For boot sequence details, see [boot-process.md](boot-process.md).
 
 ## Purpose
 
-The `kernel-hal` crate provides a unified, architecture-independent interface
-for all hardware interaction. It abstracts differences between three CPU
-architectures (aarch64, riscv64, x86_64) and two execution modes (bare-metal vs
-libos).
+The HAL consists of two crates:
+
+- **`hal`** -- Pure interface: trait definitions (`Scheme`, `UartScheme`,
+  `GenericPageTable`, `KernelHandler`), common types (`MMUFlags`, `PhysAddr`,
+  `CachePolicy`, `TrapReason`), and device error types. No platform-specific
+  code. No external dependencies beyond `bitflags` and `log`.
+
+- **`hal-impl`** (package name: `hal-impl`) -- Platform implementations:
+  provides a unified, architecture-independent interface for all hardware
+  interaction. Implements the traits defined in `hal`. Abstracts differences
+  between three CPU architectures (aarch64, riscv64, x86_64) and two execution
+  modes (bare-metal vs libos).
 
 ---
 
@@ -84,7 +92,7 @@ for the evaluation of migrating to traits.
 
 ## HAL Interface Modules
 
-The complete interface is declared in `kernel-hal/src/hal_fn.rs`:
+The complete interface is declared in `hal-impl/src/hal_fn.rs`:
 
 ### `boot`
 Init sequences, command line, init RAM disk.
@@ -169,47 +177,57 @@ syscall overhead matters.
 ## Directory Structure
 
 ```
-kernel-hal/src/
-  lib.rs ............... Selects bare vs libos backend
-  macros.rs ............ hal_fn_def!/hal_fn_impl! macros
-  hal_fn.rs ............ Complete HAL interface declaration
-  kernel_handler.rs .... KernelHandler trait (callbacks)
-  config.rs ............ KernelConfig re-export
-  drivers.rs ........... Device registry + FFI glue
+hal/src/ ................. Pure interface crate (no arch-specific code)
+  lib.rs               Re-exports
+  addr.rs              PhysAddr, VirtAddr, DevVAddr
+  config.rs            KernelConfig struct
+  context.rs           TrapReason, UserContextField
+  defs.rs              MMUFlags, CachePolicy, PAGE_SIZE
+  device.rs            DeviceError, DeviceResult
+  kernel_handler.rs    KernelHandler trait
+  vm.rs                GenericPageTable, PagingError, PageSize, Page
+  scheme/              Driver trait definitions
+    mod.rs             Scheme, SchemeUpcast
+    block.rs           BlockScheme
+    display.rs         DisplayScheme + color/framebuffer types
+    event.rs           EventScheme, EventHandler
+    input.rs           InputScheme + input event types
+    irq.rs             IrqScheme + IrqHandler/IrqTriggerMode/IrqPolarity
+    uart.rs            UartScheme
 
-  common/ .............. Shared types (both modes)
-    addr.rs            PhysAddr/VirtAddr aliases
-    context.rs         UserContext wrapper
-    defs.rs            HalError, MMUFlags, PAGE_SIZE
+hal-impl/src/ ........... Platform implementations (package: hal-impl)
+  lib.rs               Selects bare vs libos backend
+  macros.rs            hal_fn_def!/hal_fn_impl! macros
+  hal_fn.rs            Complete HAL interface declaration
+  kernel_handler.rs    KernelHandler re-export + KHANDLER static
+  config.rs            KernelConfig re-export + KCONFIG static
+  drivers.rs           Device registry + FFI glue
+
+  common/              Shared implementation (both modes)
+    addr.rs            Address utility aliases
+    aarch64_exception  ARM exception model types (aarch64 only)
+    context.rs         UserContext wrapper + trap_reason_from()
+    defs.rs            Re-exports from hal
     future.rs          Async futures
     ipi.rs             Inter-processor interrupt queues
     mem.rs             PhysFrame (RAII frame wrapper)
     thread.rs          sleep_until, yield_now
     user.rs            UserPtr<T,P> safe wrappers
     vdso.rs            VdsoConstants structure
-    vm.rs              GenericPageTable trait
+    vm.rs              Re-exports from hal
 
-  bare/ ................ Bare-metal backend
+  bare/                Bare-metal backend
     boot.rs            Init sequence impl
     mem.rs             phys_to_virt, pmem read/write
     thread.rs          spawn via executor crate
     timer.rs           Timer via naive-timer
-    net.rs             Loopback network (smoltcp)
     arch/aarch64/      ARM64 specifics
-      config.rs        KernelConfig struct
-      cpu.rs           MPIDR_EL1, PSCI reset
-      drivers.rs       GIC-400 + PL011 + VirtIO init
-      interrupt.rs     DAIF, GIC IRQ handling
-      mem.rs           Free memory regions
-      timer.rs         CNTPCT_EL0 generic timer
-      trap.rs          Exception dispatch
-      vm.rs            4-level page table, TTBR
-    arch/riscv/        RISC-V specifics (similar)
-    arch/x86_64/       x86_64 specifics (similar)
+    arch/riscv/        RISC-V specifics
+    arch/x86_64/       x86_64 specifics
 
-  libos/ ............... LibOS backend
+  libos/               LibOS backend
     boot.rs            Init (creates MockUart)
-    config.rs          KernelConfig = unit struct
+    config.rs          LibOS config
     cpu.rs             cpu_id = thread ID
     drivers.rs         Mock UART/display/input
     dummy.rs           DummyKernelHandler
@@ -221,7 +239,7 @@ kernel-hal/src/
     vm.rs              PageTable via mmap/munmap
     macos.rs           %fs/%gs TLS signal handler
 
-  utils/ ............... Utility data structures
+  utils/               Utility data structures
     init_once.rs       One-shot initialization
     lazy_init.rs       Lazy init with DerefMut
     mpsc_queue.rs      Lock-free MPSC queue
@@ -232,15 +250,15 @@ kernel-hal/src/
 
 ## KernelHandler Callback Pattern
 
-The `KernelHandler` trait (`kernel-hal/src/kernel_handler.rs`) provides
-callbacks FROM the HAL INTO the kernel. It has 4 methods:
+The `KernelHandler` trait (defined in `hal/src/kernel_handler.rs`, implemented
+in the kernel) provides callbacks FROM the HAL INTO the kernel. It has 4 methods:
 
 - `frame_alloc()` -- allocate a physical frame
 - `frame_alloc_contiguous(count, align)` -- allocate contiguous frames
 - `frame_dealloc(paddr)` -- free a frame
 - `handle_page_fault(vaddr)` -- handle a page fault
 
-This exists because `kernel-hal` (a library crate) cannot depend on `zCore`
+This exists because `hal-impl` (a library crate) cannot depend on `zCore`
 (the binary crate) -- that would be a circular dependency. But the HAL needs to
 allocate physical frames (managed by zCore's allocator). The solution is
 dependency inversion:
@@ -256,7 +274,7 @@ The name "KernelHandler" is vague -- better names would be `KernelCallbacks` or
 
 Possible simplifications (see
 [#78](https://github.com/andrewdavidmackenzie/zCore/issues/78)):
-- Move the allocator into kernel-hal itself (requires restructuring
+- Move the allocator into hal-impl itself (requires restructuring
   `#[global_allocator]`)
 - Create a `kernel-alloc` crate both can depend on
 - Use function pointers instead of a trait
@@ -273,7 +291,7 @@ Platform-dependent code is split between two locations:
 - Binary crate entry points (`_start`, `rust_main`)
 - Platform constants
 
-**`kernel-hal/src/bare/arch/`** -- Post-boot runtime:
+**`hal-impl/src/bare/arch/`** -- Post-boot runtime:
 - Interrupt handling and dispatch
 - Timer management
 - Trap/exception handling
@@ -282,7 +300,7 @@ Platform-dependent code is split between two locations:
 
 The split exists because linker scripts and `#[no_mangle]` entry points MUST be
 in the final binary crate (Rust requirement). However, `entry.rs` and
-`consts.rs` could potentially be moved into kernel-hal. See
+`consts.rs` could potentially be moved into hal-impl. See
 [#77](https://github.com/andrewdavidmackenzie/zCore/issues/77).
 
 ---
@@ -295,7 +313,7 @@ The current HAL design has several divergences from a clean HAL model:
 read/write) and the HAL provides platform-specific glue (phys_to_virt, DMA
 alloc) via FFI. This part is clean.
 
-2. **kernel-hal mixes interface and implementation.** `hal_fn.rs` defines the
+2. **hal-impl mixes interface and implementation.** `hal_fn.rs` defines the
 interface, `bare/` and `libos/` provide implementations, but `common/` has
 shared types AND logic (futures, user pointer validation, PhysFrame RAII). The
 shared logic should arguably be in the kernel, not the HAL.

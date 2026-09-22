@@ -74,7 +74,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qemu-utils wget
 
       - name: Build ${{ matrix.arch }} bare-metal linux
-        run: cargo bin -m virt-${{ matrix.arch }}
+        run: cargo bin -m qemu-${{ matrix.arch }}
+
+      - name: Build ${{ matrix.arch }} bare-metal zircon
+        if: matrix.arch == 'x86_64'
+        run: cargo bin -m qemu-${{ matrix.arch }} --personality zircon
 
   libos:
     name: LibOS build
@@ -88,7 +92,36 @@ jobs:
           components: rust-src, llvm-tools-preview
 
       - name: Build libos (Linux mode)
-        run: cargo build -p zcore --features linux,libos
+        run: cargo zcore-build -m libos
 
       - name: Build libos (Zircon mode)
-        run: cargo xtask libos-build-zircon
+        run: cargo zcore-build -m libos --personality zircon
+
+  clippy:
+    name: Clippy (all targets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, rustfmt, clippy, llvm-tools-preview
+
+      - name: Clippy all targets and personalities
+        run: cargo check-style
+
+  hardware-targets:
+    name: Hardware targets (build-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, llvm-tools-preview
+
+      - name: Build raspi400
+        run: cargo bin -m raspi400
+
+      - name: Build x86-laptop
+        run: cargo bin -m x86-laptop

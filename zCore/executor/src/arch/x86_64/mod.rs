@@ -16,7 +16,7 @@ pub(crate) fn cpu_id() -> u8 {
     raw_cpuid::CpuId::new()
         .get_feature_info()
         .unwrap()
-        .initial_local_apic_id() as u8
+        .initial_local_apic_id()
 }
 
 // pub(crate) fn pg_base_addr() -> usize {

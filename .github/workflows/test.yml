@@ -43,7 +43,7 @@ jobs:
       - name: Cache busybox source
         uses: actions/cache@v4
         with:
-          path: ignored/origin/repos/busybox
+          path: .build-cache/origin/repos/busybox
           key: busybox-src-v2
 
       - name: Cache musl-cross toolchain (macOS)
@@ -106,17 +106,44 @@ jobs:
       - name: Cache busybox source
         uses: actions/cache@v4
         with:
-          path: ignored/origin/repos/busybox
+          path: .build-cache/origin/repos/busybox
           key: busybox-src-v2
 
       - name: Install QEMU and tools
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils wget
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf qemu-utils wget
 
       - name: Build kernel and rootfs
         run: make build ARCH=x86_64
 
       - name: Boot smoke test
         run: make boot-test ARCH=x86_64
+
+  boot-smoke-test-riscv64:
+    name: Boot Smoke Test (riscv64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, llvm-tools-preview
+
+      - name: Cache busybox source
+        uses: actions/cache@v4
+        with:
+          path: .build-cache/origin/repos/busybox
+          key: busybox-src-v2
+
+      - name: Install QEMU and tools
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-misc qemu-utils wget
+
+      - name: Build kernel and rootfs
+        run: make build ARCH=riscv64
+
+      - name: Boot smoke test
+        run: make boot-test ARCH=riscv64
 
   zircon-boot-test:
     name: Zircon Boot Test (aarch64)
@@ -132,6 +159,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@nightly
         with:
+          toolchain: nightly-2026-09-19
           components: rust-src, llvm-tools-preview
           targets: aarch64-unknown-none-softfloat
 
@@ -150,9 +178,62 @@ jobs:
         run: tools/scripts/zircon-rootfs-test.sh aarch64
 
   libc-test:
-    name: Libc Test (aarch64)
-    # macOS removed: redundant with ubuntu (same test binaries + QEMU).
-    # See #248 for CI optimization.
+    name: Libc Test (aarch64, macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, llvm-tools-preview
+
+      - name: Cache busybox source
+        uses: actions/cache@v4
+        with:
+          path: .build-cache/origin/repos/busybox
+          key: busybox-src-v2
+
+      - name: Cache musl-cross toolchain (macOS)
+        id: cache-musl
+        uses: actions/cache@v4
+        with:
+          path: /opt/homebrew/Cellar/musl-cross
+          key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11
+
+      - name: Install cross-compilation toolchain (macOS)
+        if: steps.cache-musl.outputs.cache-hit != 'true'
+        run: make config
+
+      - name: Restore musl-cross symlinks (macOS)
+        if: steps.cache-musl.outputs.cache-hit == 'true'
+        run: brew link musl-cross 2>/dev/null || brew tap FiloSottile/musl-cross && brew link filosottile/musl-cross/musl-cross 2>/dev/null || true
+
+      - name: Install kernel headers (macOS, cached)
+        if: steps.cache-musl.outputs.cache-hit == 'true'
+        run: |
+          MUSL_PREFIX=$(brew --prefix musl-cross)/libexec
+          for MUSL_ARCH in aarch64; do
+            SYSROOT="$MUSL_PREFIX/$MUSL_ARCH-linux-musl"
+            if [ ! -f "$SYSROOT/include/linux/compiler.h" ]; then
+              make config
+              break
+            fi
+          done
+
+      - name: Install QEMU (macOS)
+        run: brew install qemu
+
+      - name: Build kernel and rootfs
+        run: make build ARCH=aarch64
+
+      - name: Run libc-test
+        run: make libc-test ARCH=aarch64
+
+  libc-test-ubuntu:
+    name: Libc Test (aarch64, ubuntu)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -167,11 +248,11 @@ jobs:
       - name: Cache busybox source
         uses: actions/cache@v4
         with:
-          path: ignored/origin/repos/busybox
+          path: .build-cache/origin/repos/busybox
           key: busybox-src-v2
 
       - name: Install QEMU and tools
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-misc qemu-utils wget
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-utils wget
 
       - name: Build kernel and rootfs
         run: make build ARCH=aarch64
@@ -196,11 +277,11 @@ jobs:
       - name: Cache busybox source
         uses: actions/cache@v4
         with:
-          path: ignored/origin/repos/busybox
+          path: .build-cache/origin/repos/busybox
           key: busybox-src-v2
 
       - name: Install QEMU and tools
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils wget
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf qemu-utils wget
 
       - name: Build kernel and rootfs
         run: make build ARCH=x86_64

@@ -15,12 +15,12 @@ use alloc::{
     sync::{Arc, Weak},
     vec::Vec,
 };
-use core::sync::atomic::AtomicI32;
 use core::time::Duration;
+use hal::VirtAddr;
 use hashbrown::HashMap;
-use kernel_hal::VirtAddr;
 use lock::{Mutex, MutexGuard};
 use rcore_fs::vfs::{FileSystem, INode};
+use spin::Mutex as SpinMutex;
 
 use zircon_object::{
     object::{KernelObject, KoID, Signal},
@@ -70,6 +70,10 @@ impl ProcessExt for Process {
                 gid: linux_parent_inner.gid,
                 euid: linux_parent_inner.euid,
                 egid: linux_parent_inner.egid,
+                saved_uid: linux_parent_inner.saved_uid,
+                saved_gid: linux_parent_inner.saved_gid,
+                fsuid: linux_parent_inner.fsuid,
+                fsgid: linux_parent_inner.fsgid,
                 pgid: linux_parent_inner.pgid,
                 session_id: linux_parent_inner.session_id,
                 umask: linux_parent_inner.umask,
@@ -114,11 +118,14 @@ pub async fn wait_child(
     nonblock: bool,
     thread: &zircon_object::task::Thread,
 ) -> LxResult<ExitCode> {
+    let proc_obj: Arc<dyn KernelObject> = proc.clone();
     loop {
-        // Check for pending signals before blocking
-        if thread.lock_linux().has_pending_signal() {
-            return Err(LxError::EINTR);
-        }
+        // Clear SIGCHLD before inspecting child status so we don't
+        // miss a child exit that happens during inspection.
+        proc_obj.signal_clear(Signal::SIGCHLD);
+        // Check child status first -- ready results take precedence
+        // over pending signals (avoids spurious EINTR when data is
+        // already available).
         let mut inner = proc.linux().inner.lock();
         let child = inner.children.get(&pid).ok_or(LxError::ECHILD)?;
         if let Status::Exited(code) = child.status() {
@@ -129,14 +136,12 @@ pub async fn wait_child(
             return Err(LxError::EAGAIN);
         }
         drop(inner);
-        // Wait for SIGCHLD on the parent process.
-        let proc_obj: Arc<dyn KernelObject> = proc.clone();
-        proc_obj.signal_clear(Signal::SIGCHLD);
-        proc_obj.wait_signal(Signal::SIGCHLD).await;
-        // Check for pending signals after wakeup
+        // Now check for pending signals (after confirming no result).
         if thread.lock_linux().has_pending_signal() {
             return Err(LxError::EINTR);
         }
+        // Block until SIGCHLD or a signal interrupts us.
+        wait_for_sigchld_or_signal(&proc_obj, thread).await?;
     }
 }
 
@@ -149,7 +154,11 @@ pub async fn wait_child_any(
     nonblock: bool,
     thread: &zircon_object::task::Thread,
 ) -> LxResult<(KoID, ExitCode)> {
+    let proc_obj: Arc<dyn KernelObject> = proc.clone();
     loop {
+        // Clear SIGCHLD before inspecting children.
+        proc_obj.signal_clear(Signal::SIGCHLD);
+        // Check children first -- ready results take precedence.
         let mut inner = proc.linux().inner.lock();
         if inner.children.is_empty() {
             return Err(LxError::ECHILD);
@@ -164,14 +173,59 @@ pub async fn wait_child_any(
         if nonblock {
             return Err(LxError::EAGAIN);
         }
-        let proc_obj: Arc<dyn KernelObject> = proc.clone();
-        proc_obj.signal_clear(Signal::SIGCHLD);
-        proc_obj.wait_signal(Signal::SIGCHLD).await;
-        // Check for pending signals after wakeup
+        // Check for pending signals after confirming no child exited.
         if thread.lock_linux().has_pending_signal() {
             return Err(LxError::EINTR);
         }
+        // Block until SIGCHLD or a signal interrupts us.
+        wait_for_sigchld_or_signal(&proc_obj, thread).await?;
     }
+}
+
+/// Block until either SIGCHLD is set on the process object (child
+/// status change) or a Linux signal is delivered to the thread
+/// (returns `Err(EINTR)`).
+///
+/// Callers must clear SIGCHLD before inspecting child status and
+/// calling this helper, so notifications from child exits that
+/// happen after inspection are not lost.
+///
+/// This registers the thread's `signal_waker` so that
+/// `insert_signal()` can wake us for EINTR.
+async fn wait_for_sigchld_or_signal(
+    proc_obj: &Arc<dyn KernelObject>,
+    thread: &zircon_object::task::Thread,
+) -> LxResult<()> {
+    use alloc::boxed::Box;
+    use core::future::{poll_fn, Future};
+    use core::pin::Pin;
+    use core::task::Poll;
+
+    // SIGCHLD was already cleared by the caller before child inspection.
+    let mut wait_fut: Pin<Box<dyn Future<Output = Signal> + Send>> =
+        Box::pin(proc_obj.wait_signal(Signal::SIGCHLD));
+
+    poll_fn(|cx| {
+        // Check for pending signals and register the signal_waker
+        // atomically under one lock (no race window).
+        {
+            let mut linux = thread.lock_linux();
+            if linux.has_pending_signal() {
+                linux.clear_signal_waker();
+                return Poll::Ready(Err(LxError::EINTR));
+            }
+            linux.set_signal_waker(cx.waker().clone());
+        }
+        // Also poll the SIGCHLD wait_signal future.
+        match wait_fut.as_mut().poll(cx) {
+            Poll::Ready(_) => {
+                thread.lock_linux().clear_signal_waker();
+                Poll::Ready(Ok(()))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    })
+    .await
 }
 
 /// Linux specific process information.
@@ -230,6 +284,14 @@ struct LinuxProcessInner {
     euid: u32,
     /// Effective group ID
     egid: u32,
+    /// Saved set-user-ID (set during execve)
+    saved_uid: u32,
+    /// Saved set-group-ID (set during execve)
+    saved_gid: u32,
+    /// Filesystem UID (used for access checks; tracks euid by default)
+    fsuid: u32,
+    /// Filesystem GID (used for access checks; tracks egid by default)
+    fsgid: u32,
     /// Process group ID (0 = same as own PID)
     pgid: u64,
     /// Session ID (0 = same as own PID)
@@ -238,6 +300,10 @@ struct LinuxProcessInner {
     umask: u32,
     /// Supplementary group IDs
     groups: Vec<u32>,
+    /// Accumulated user CPU time of waited-for children (nanoseconds).
+    children_user_time_ns: u128,
+    /// Accumulated system CPU time of waited-for children (nanoseconds).
+    children_sys_time_ns: u128,
 }
 
 /// Per-process POSIX timer state.
@@ -379,6 +445,189 @@ impl LinuxProcess {
         Ok(old_euid)
     }
 
+    /// Set the real group ID.
+    /// If privileged (euid == 0), sets real, effective, and saved GID.
+    /// Otherwise, only sets effective GID if it matches real GID.
+    #[allow(clippy::result_unit_err)]
+    pub fn set_gid(&self, gid: u32) -> Result<u32, ()> {
+        let mut inner = self.inner.lock();
+        let old_egid = inner.egid;
+        if inner.euid == 0 {
+            inner.gid = gid;
+            inner.egid = gid;
+            inner.saved_gid = gid;
+            inner.fsgid = gid;
+        } else if gid == inner.gid || gid == inner.saved_gid {
+            inner.egid = gid;
+            inner.fsgid = gid;
+        } else {
+            return Err(());
+        }
+        Ok(old_egid)
+    }
+
+    /// Set real and effective user IDs.
+    #[allow(clippy::result_unit_err)]
+    pub fn set_reuid(&self, ruid: i32, euid: i32) -> Result<(), ()> {
+        let mut inner = self.inner.lock();
+        if inner.euid != 0 {
+            // Unprivileged: ruid must be -1 or match real/euid,
+            // euid must be -1 or match real/euid/saved
+            if ruid != -1 && ruid as u32 != inner.uid && ruid as u32 != inner.euid {
+                return Err(());
+            }
+            if euid != -1
+                && euid as u32 != inner.uid
+                && euid as u32 != inner.euid
+                && euid as u32 != inner.saved_uid
+            {
+                return Err(());
+            }
+        }
+        if ruid != -1 {
+            inner.uid = ruid as u32;
+        }
+        if euid != -1 {
+            inner.euid = euid as u32;
+            inner.fsuid = euid as u32;
+        }
+        // If real UID was set, save the effective UID
+        if ruid != -1 {
+            inner.saved_uid = inner.euid;
+        }
+        Ok(())
+    }
+
+    /// Set real and effective group IDs.
+    #[allow(clippy::result_unit_err)]
+    pub fn set_regid(&self, rgid: i32, egid: i32) -> Result<(), ()> {
+        let mut inner = self.inner.lock();
+        if inner.euid != 0 {
+            if rgid != -1 && rgid as u32 != inner.gid && rgid as u32 != inner.egid {
+                return Err(());
+            }
+            if egid != -1
+                && egid as u32 != inner.gid
+                && egid as u32 != inner.egid
+                && egid as u32 != inner.saved_gid
+            {
+                return Err(());
+            }
+        }
+        if rgid != -1 {
+            inner.gid = rgid as u32;
+        }
+        if egid != -1 {
+            inner.egid = egid as u32;
+            inner.fsgid = egid as u32;
+        }
+        if rgid != -1 {
+            inner.saved_gid = inner.egid;
+        }
+        Ok(())
+    }
+
+    /// Set real, effective, and saved user IDs.
+    #[allow(clippy::result_unit_err)]
+    pub fn set_resuid(&self, ruid: i32, euid: i32, suid: i32) -> Result<(), ()> {
+        let mut inner = self.inner.lock();
+        if inner.euid != 0 {
+            let allowed = [inner.uid, inner.euid, inner.saved_uid];
+            if ruid != -1 && !allowed.contains(&(ruid as u32)) {
+                return Err(());
+            }
+            if euid != -1 && !allowed.contains(&(euid as u32)) {
+                return Err(());
+            }
+            if suid != -1 && !allowed.contains(&(suid as u32)) {
+                return Err(());
+            }
+        }
+        if ruid != -1 {
+            inner.uid = ruid as u32;
+        }
+        if euid != -1 {
+            inner.euid = euid as u32;
+            inner.fsuid = euid as u32;
+        }
+        if suid != -1 {
+            inner.saved_uid = suid as u32;
+        }
+        Ok(())
+    }
+
+    /// Get real, effective, and saved user IDs.
+    pub fn get_resuid(&self) -> (u32, u32, u32) {
+        let inner = self.inner.lock();
+        (inner.uid, inner.euid, inner.saved_uid)
+    }
+
+    /// Set real, effective, and saved group IDs.
+    #[allow(clippy::result_unit_err)]
+    pub fn set_resgid(&self, rgid: i32, egid: i32, sgid: i32) -> Result<(), ()> {
+        let mut inner = self.inner.lock();
+        if inner.euid != 0 {
+            let allowed = [inner.gid, inner.egid, inner.saved_gid];
+            if rgid != -1 && !allowed.contains(&(rgid as u32)) {
+                return Err(());
+            }
+            if egid != -1 && !allowed.contains(&(egid as u32)) {
+                return Err(());
+            }
+            if sgid != -1 && !allowed.contains(&(sgid as u32)) {
+                return Err(());
+            }
+        }
+        if rgid != -1 {
+            inner.gid = rgid as u32;
+        }
+        if egid != -1 {
+            inner.egid = egid as u32;
+            inner.fsgid = egid as u32;
+        }
+        if sgid != -1 {
+            inner.saved_gid = sgid as u32;
+        }
+        Ok(())
+    }
+
+    /// Get real, effective, and saved group IDs.
+    pub fn get_resgid(&self) -> (u32, u32, u32) {
+        let inner = self.inner.lock();
+        (inner.gid, inner.egid, inner.saved_gid)
+    }
+
+    /// Set filesystem UID. Returns the previous fsuid.
+    pub fn set_fsuid(&self, fsuid: u32) -> u32 {
+        let mut inner = self.inner.lock();
+        let old = inner.fsuid;
+        // Only root or matching uid/euid/saved_uid can set fsuid
+        if inner.euid == 0
+            || fsuid == inner.uid
+            || fsuid == inner.euid
+            || fsuid == inner.saved_uid
+            || fsuid == inner.fsuid
+        {
+            inner.fsuid = fsuid;
+        }
+        old
+    }
+
+    /// Set filesystem GID. Returns the previous fsgid.
+    pub fn set_fsgid(&self, fsgid: u32) -> u32 {
+        let mut inner = self.inner.lock();
+        let old = inner.fsgid;
+        if inner.euid == 0
+            || fsgid == inner.gid
+            || fsgid == inner.egid
+            || fsgid == inner.saved_gid
+            || fsgid == inner.fsgid
+        {
+            inner.fsgid = fsgid;
+        }
+        old
+    }
+
     /// Get the process group ID. Returns 0 if no explicit
     /// PGID has been set via setpgid().
     pub fn pgid(&self) -> u64 {
@@ -439,17 +688,31 @@ impl LinuxProcess {
         self.inner.lock().groups = groups;
     }
 
-    /// Get futex object.
-    #[allow(unsafe_code)]
+    /// Get a private futex object (per-process, keyed by virtual address).
     pub fn get_futex(&self, uaddr: VirtAddr) -> Arc<Futex> {
         let mut inner = self.inner.lock();
         inner
             .futexes
             .entry(uaddr)
-            .or_insert_with(|| {
-                let value = unsafe { &*(uaddr as *const AtomicI32) };
-                Futex::new(value)
-            })
+            .or_insert_with(|| Futex::new(uaddr))
+            .clone()
+    }
+
+    /// Get a shared (process-visible) futex object from the global table.
+    ///
+    /// Shared futexes are keyed by virtual address in a global table,
+    /// allowing multiple processes that map the same memory at the same
+    /// address to share a futex. This covers the common fork() case
+    /// where parent and child share the same address space layout.
+    pub fn get_shared_futex(uaddr: VirtAddr) -> Arc<Futex> {
+        static SHARED_FUTEXES: SpinMutex<Option<HashMap<VirtAddr, Arc<Futex>>>> =
+            SpinMutex::new(None);
+
+        let mut table = SHARED_FUTEXES.lock();
+        let table = table.get_or_insert_with(HashMap::new);
+        table
+            .entry(uaddr)
+            .or_insert_with(|| Futex::new(uaddr))
             .clone()
     }
 
@@ -637,6 +900,18 @@ impl LinuxProcess {
         self.inner.lock().pending_signals.insert(sig);
     }
 
+    /// Get the raw pending signal bitmask.
+    pub fn pending_signals(&self) -> u64 {
+        self.inner.lock().pending_signals.val()
+    }
+
+    /// Clear a specific signal from the pending set.
+    pub fn clear_pending_signal(&self, signo: usize) {
+        let mut inner = self.inner.lock();
+        let val = inner.pending_signals.val() & !(1u64 << (signo - 1));
+        inner.pending_signals = crate::signal::Sigset::new(val);
+    }
+
     /// Check process-level pending signals against a thread's mask.
     /// Returns and removes any signals that are now unmasked.
     pub fn take_pending_signals(&self, mask: &crate::signal::Sigset) -> crate::signal::Sigset {
@@ -722,7 +997,7 @@ impl LinuxProcess {
         let inner = self.inner.lock();
         let it_value = match inner.itimer_real_deadline {
             Some(deadline) => {
-                let now = kernel_hal::timer::timer_now();
+                let now = hal_impl::timer::timer_now();
                 let remaining = deadline.saturating_sub(now);
                 crate::time::TimeVal::from_duration(remaining)
             }
@@ -754,7 +1029,7 @@ impl LinuxProcess {
             inner.itimer_real_deadline = None;
         } else {
             // Arm
-            let deadline = kernel_hal::timer::deadline_after(value_dur);
+            let deadline = hal_impl::timer::deadline_after(value_dur);
             inner.itimer_real_deadline = Some(deadline);
             let weak_proc = Arc::downgrade(proc);
             drop(inner); // release lock before scheduling
@@ -771,7 +1046,7 @@ impl LinuxProcess {
         interval: Duration,
         generation: u64,
     ) {
-        use kernel_hal::timer;
+        use hal_impl::timer;
 
         let callback: Box<dyn FnOnce(Duration) + Send + Sync> = Box::new(move |_now| {
             let proc = match proc.upgrade() {
@@ -862,7 +1137,7 @@ impl LinuxProcess {
         let old = {
             let it_value = match timer.deadline {
                 Some(deadline) => {
-                    let now = kernel_hal::timer::timer_now();
+                    let now = hal_impl::timer::timer_now();
                     crate::time::TimeSpec::from_duration(deadline.saturating_sub(now))
                 }
                 None => crate::time::TimeSpec::default(),
@@ -888,10 +1163,10 @@ impl LinuxProcess {
         } else {
             let deadline = if flags & 1 != 0 {
                 // TIMER_ABSTIME: convert to relative then to timer domain
-                let now = kernel_hal::timer::timer_now();
-                kernel_hal::timer::deadline_after(value_dur.saturating_sub(now))
+                let now = hal_impl::timer::timer_now();
+                hal_impl::timer::deadline_after(value_dur.saturating_sub(now))
             } else {
-                kernel_hal::timer::deadline_after(value_dur)
+                hal_impl::timer::deadline_after(value_dur)
             };
             timer.deadline = Some(deadline);
             let signal = timer.signal;
@@ -918,7 +1193,7 @@ impl LinuxProcess {
         let timer = inner.posix_timers.get(&id).ok_or(LxError::EINVAL)?;
         let it_value = match timer.deadline {
             Some(deadline) => {
-                let now = kernel_hal::timer::timer_now();
+                let now = hal_impl::timer::timer_now();
                 crate::time::TimeSpec::from_duration(deadline.saturating_sub(now))
             }
             None => crate::time::TimeSpec::default(),
@@ -950,7 +1225,7 @@ impl LinuxProcess {
         notify: i32,
         generation: u64,
     ) {
-        use kernel_hal::timer;
+        use hal_impl::timer;
 
         let callback: Box<dyn FnOnce(Duration) + Send + Sync> = Box::new(move |_now| {
             let proc = match proc.upgrade() {
@@ -1019,6 +1294,19 @@ impl LinuxProcess {
             }
         });
         timer::timer_set(deadline, callback);
+    }
+
+    /// Get accumulated CPU time of waited-for children.
+    pub fn children_cpu_time(&self) -> (u128, u128) {
+        let inner = self.inner.lock();
+        (inner.children_user_time_ns, inner.children_sys_time_ns)
+    }
+
+    /// Accumulate a child's CPU time into this process's children totals.
+    pub fn add_children_cpu_time(&self, user_ns: u128, sys_ns: u128) {
+        let mut inner = self.inner.lock();
+        inner.children_user_time_ns += user_ns;
+        inner.children_sys_time_ns += sys_ns;
     }
 }
 

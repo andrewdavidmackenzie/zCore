@@ -17,8 +17,8 @@ PROMPT_PATTERN='/ # '
 
 case "$ARCH" in
   aarch64)
-    KERNEL="target/aarch64/release/zcore.bin"
-    IMAGE="zCore/aarch64.img"
+    KERNEL="target/qemu-aarch64/release/kernel.bin"
+    IMAGE="target/qemu-aarch64/release/aarch64-linux.img"
     QEMU_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
@@ -31,9 +31,9 @@ case "$ARCH" in
   x86_64)
     # x86_64 uses a BIOS bootable disk image that bundles kernel + rootfs.
     # Build the boot image from the kernel ELF + rootfs SFS image.
-    KERNEL_ELF="target/x86_64/release/zcore"
-    BOOT_IMG="target/x86_64/release/boot.img"
-    ROOTFS_IMG="zCore/x86_64.img"
+    KERNEL_ELF="target/qemu-x86_64/release/kernel"
+    BOOT_IMG="target/qemu-x86_64/release/boot.img"
+    ROOTFS_IMG="target/qemu-x86_64/release/x86_64-linux.img"
     BOOTIMAGE_TOOL="tools/x86-bootimage/target/release/x86-bootimage"
 
     if [ ! -f "$BOOTIMAGE_TOOL" ]; then
@@ -47,12 +47,29 @@ case "$ARCH" in
     "$BOOTIMAGE_TOOL" "${BOOTIMAGE_ARGS[@]}"
 
     KERNEL="$BOOT_IMG"
+    # Find OVMF UEFI firmware
+    source "$(dirname "$0")/find-ovmf.sh"
+    OVMF=$(find_ovmf) || exit 1
     QEMU_CMD=(
       qemu-system-x86_64
       -m 2G -display none -no-reboot -nographic
       -machine q35 -cpu qemu64,+fsgsbase,+rdrand
       -serial mon:stdio
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF"
       -drive "format=raw,file=$BOOT_IMG"
+    )
+    ;;
+  riscv64)
+    KERNEL="target/qemu-riscv64/release/kernel.bin"
+    IMAGE="target/qemu-riscv64/release/riscv64-linux.img"
+    QEMU_CMD=(
+      qemu-system-riscv64
+      -m 2G -display none -no-reboot -nographic
+      -machine virt
+      -kernel "$KERNEL"
+      -bios default
+      -serial mon:stdio
+      -initrd "$IMAGE"
     )
     ;;
   *)
@@ -89,6 +106,22 @@ ELAPSED=0
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   if grep -q "$PROMPT_PATTERN" "$OUTPUT" 2>/dev/null; then
     echo "Shell prompt reached in ${ELAPSED}s"
+
+    # Verify the shell can execute a command.
+    # Use printf to construct the marker at runtime inside the guest
+    # shell, so the serial echo of the command itself won't match.
+    echo "Sending test command..."
+    printf '%s\n' "printf '%s%s\\n' boot_test_ ok" >&3
+    sleep 2
+    if ! grep -q "boot_test_ok" "$OUTPUT" 2>/dev/null; then
+      echo "FAIL: shell did not execute test command"
+      echo "--- QEMU output ---"
+      cat "$OUTPUT"
+      exec 3>&- 2>/dev/null || true
+      kill "$QEMU_PID" 2>/dev/null || true
+      exit 1
+    fi
+    echo "Shell command executed successfully"
 
     # Send poweroff command and wait for QEMU to exit cleanly
     echo "Sending 'poweroff -f'..."

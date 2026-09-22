@@ -109,7 +109,7 @@ impl DlogBuffer {
             datalen: data.len() as u16,
             severity,
             flags: flags as u8,
-            timestamp: kernel_hal::timer::timer_now().as_nanos() as u64,
+            timestamp: hal_impl::timer::timer_now().as_nanos() as u64,
             pid,
             tid,
         };

@@ -61,15 +61,12 @@ impl Task {
             inner: Mutex::new(TaskInner {
                 priority,
                 state: TaskState::RUNNABLE,
-                intr_enable: false,
+                intr_enable: true,
             }),
             finish: Arc::new(AtomicBool::new(false)),
         }
     }
     pub fn poll(&self, cx: &mut Context) -> Poll<()> {
-        // if self.finish.load(Ordering::Relaxed) {
-        //     return Poll::Ready(());
-        // }
         let mut f = self.future.lock();
         if self.inner.lock().intr_enable {
             crate::arch::intr_on();

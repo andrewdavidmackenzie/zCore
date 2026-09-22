@@ -7,7 +7,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use bitflags::bitflags;
 
-use kernel_hal::context::UserContextField;
+use hal::UserContextField;
 use linux_object::thread::{CurrentThreadExt, RobustList, ThreadExt};
 use linux_object::time::TimeSpec;
 use linux_object::{fs::INodeExt, loader::LinuxElfLoader};
@@ -95,7 +95,14 @@ impl Syscall<'_> {
             self.zircon_process().id(),
             new_proc.id()
         );
-        new_proc.wait_signal(Signal::SIGNALED).await; // wait for execve
+        // Wait for either execve (USER_SIGNAL_0) or exit (PROCESS_TERMINATED).
+        // Using USER_SIGNAL_0 instead of SIGNALED avoids the persistence
+        // problem: SIGNALED == PROCESS_TERMINATED (same bit), so setting
+        // SIGNALED on execve would permanently mark the process as
+        // "terminated" and break subsequent wait operations.
+        new_proc
+            .wait_signal(Signal::USER_SIGNAL_0 | Signal::PROCESS_TERMINATED)
+            .await;
         Ok(new_proc.id() as usize)
     }
 
@@ -290,7 +297,7 @@ impl Syscall<'_> {
         argv: UserInPtr<UserInPtr<u8>>,
         envp: UserInPtr<UserInPtr<u8>>,
     ) -> SysResult {
-        let path = path.as_c_str()?;
+        let path = path.read_c_string()?;
         let args = argv.read_cstring_array()?;
         let mut envs: Vec<String> = Vec::new();
         if !envp.is_null() {
@@ -313,7 +320,7 @@ impl Syscall<'_> {
 
         // Read program file
         let proc = self.linux_process();
-        let inode = proc.lookup_inode(path)?;
+        let inode = proc.lookup_inode(&path)?;
         let data = inode.read_as_vec()?;
 
         proc.remove_cloexec_files();
@@ -338,23 +345,27 @@ impl Syscall<'_> {
         // Reset signal dispositions on exec (SIG_IGN preserved, others to SIG_DFL)
         proc.reset_signal_actions_on_exec();
 
-        // Note: signal_set(SIGNALED) to release vfork parent is intentionally
-        // omitted. Setting SIGNALED on the child process persists across the
-        // process lifetime and causes regressions in subsequent fork/exec
-        // operations. The vfork parent resumes via other mechanisms (child
-        // exit sets PROCESS_TERMINATED, or the busybox shell doesn't use
-        // true vfork semantics).
+        // Signal the vfork parent (if any) that execve completed.
+        // Uses USER_SIGNAL_0 instead of SIGNALED to avoid the persistence
+        // problem: SIGNALED == PROCESS_TERMINATED (same bit 3), so setting
+        // it would permanently mark the process as "terminated".
+        // USER_SIGNAL_0 (bit 24) is a separate bit that doesn't conflict.
+        self.zircon_process().signal_set(Signal::USER_SIGNAL_0);
 
         self.thread
             .with_context(|ctx| ctx.setup_uspace(entry, sp, &[0, 0, 0]))?;
         Ok(0)
     }
 
-    //    pub fn sys_yield(&self) -> SysResult {
-    //        thread::yield_now();
-    //        Ok(0)
-    //    }
-    //
+    /// Voluntarily yield the CPU to allow other threads to run
+    /// (see [linux man sched_yield(2)](https://www.man7.org/linux/man-pages/man2/sched_yield.2.html)).
+    ///
+    /// Always succeeds and returns 0.
+    pub async fn sys_sched_yield(&self) -> SysResult {
+        info!("sched_yield:");
+        hal_impl::thread::yield_now().await;
+        Ok(0)
+    }
 
     /// `sys_gettid` returns the caller's thread ID (TID)
     /// (see [linux man gettid(2)](https://www.man7.org/linux/man-pages/man2/gettid.2.html)).
@@ -423,8 +434,8 @@ impl Syscall<'_> {
     pub async fn sys_nanosleep(&self, req: UserInPtr<TimeSpec>) -> SysResult {
         info!("nanosleep: deadline={:?}", req);
         let duration = req.read()?.into();
-        use kernel_hal::thread::SleepFuture;
-        use kernel_hal::timer;
+        use hal_impl::thread::SleepFuture;
+        use hal_impl::timer;
         use linux_object::thread::Interruptible;
         let sleep = SleepFuture::new(timer::deadline_after(duration));
         match sleep.interruptible(self.thread).await {

@@ -9,26 +9,16 @@ use core::any::Any;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
-use kernel_hal::console::{self, ConsoleWinSize};
+use hal_impl::console::{self, ConsoleWinSize};
 use lock::Mutex;
 use rcore_fs::vfs::*;
 
-/// STDIN global reference
-pub static STDIN: spin::Lazy<Arc<Stdin>> = spin::Lazy::new(|| {
-    let stdin = Arc::new(Stdin::default());
-    let cloned = stdin.clone();
-    if let Some(uart) = kernel_hal::drivers::all_uart().first() {
-        uart.clone().subscribe(
-            Box::new(move |_| {
-                while let Some(c) = uart.try_recv().unwrap_or(None) {
-                    cloned.push(c as char);
-                }
-            }),
-            false,
-        );
-    }
-    stdin
-});
+/// STDIN global reference.
+///
+/// Reads from the shared console input buffer (`ConsoleInput`), which
+/// is fed by whatever input devices the platform provides (UART, PS/2
+/// keyboard, etc.).
+pub static STDIN: spin::Lazy<Arc<Stdin>> = spin::Lazy::new(|| Arc::new(Stdin::default()));
 /// STDOUT global reference
 pub static STDOUT: spin::Lazy<Arc<Stdout>> = spin::Lazy::new(Default::default);
 
@@ -66,9 +56,15 @@ pub struct Stdout;
 
 impl INode for Stdin {
     fn read_at(&self, _offset: usize, buf: &mut [u8]) -> Result<usize> {
+        // Try the internal buffer first (for any previously pushed chars).
         if self.can_read() {
             buf[0] = self.pop() as u8;
-            Ok(1)
+            return Ok(1);
+        }
+        // Try the shared console input buffer (no waker for sync read).
+        let n = hal_impl::console::console_input_poll(buf, None);
+        if n > 0 {
+            Ok(n)
         } else {
             Err(FsError::Again)
         }
@@ -98,13 +94,13 @@ impl INode for Stdin {
                 if self.stdin.can_read() {
                     return Poll::Ready(self.stdin.poll());
                 }
-                let waker = cx.waker().clone();
-                self.stdin.eventbus.lock().subscribe(Box::new({
-                    move |_| {
-                        waker.wake_by_ref();
-                        true
-                    }
-                }));
+                // Atomically check for data and register waker if empty.
+                let mut probe = [0u8; 1];
+                let n = hal_impl::console::console_input_poll(&mut probe, Some(cx.waker().clone()));
+                if n > 0 {
+                    self.stdin.push(probe[0] as char);
+                    return Poll::Ready(self.stdin.poll());
+                }
                 Poll::Pending
             }
         }
@@ -121,7 +117,7 @@ impl INode for Stdin {
                 Ok(0)
             }
             TCGETS | TIOCSPGRP => {
-                warn!("stdin TCGETS | TIOCSPGRP, pretend to be tty.");
+                trace!("stdin TCGETS | TIOCSPGRP, pretend to be tty.");
                 // pretend to be tty
                 Ok(0)
             }
@@ -149,7 +145,7 @@ impl INode for Stdout {
     fn write_at(&self, _offset: usize, buf: &[u8]) -> Result<usize> {
         // we do not care the utf-8 things, we just want to print it!
         let s = unsafe { core::str::from_utf8_unchecked(buf) };
-        kernel_hal::console::console_write_str(s);
+        hal_impl::console::console_write_str(s);
         Ok(buf.len())
     }
     fn poll(&self) -> Result<PollStatus> {
@@ -167,7 +163,7 @@ impl INode for Stdout {
                 Ok(0)
             }
             TCGETS | TIOCSPGRP => {
-                warn!("stdout TCGETS | TIOCSPGRP, pretend to be tty.");
+                trace!("stdout TCGETS | TIOCSPGRP, pretend to be tty.");
                 // pretend to be tty
                 Ok(0)
             }

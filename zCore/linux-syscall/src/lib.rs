@@ -8,7 +8,7 @@
 //! let mut syscall = Syscall {
 //!     thread,
 //!     thread_fn,
-//!     syscall_entry: kernel_hal::context::syscall_entry as usize,
+//!     syscall_entry: hal_impl::context::syscall_entry as usize,
 //! };
 //! let ret = syscall.syscall(num, args).await;
 //! ```
@@ -27,7 +27,7 @@ extern crate log;
 use alloc::sync::Arc;
 use core::convert::TryFrom;
 
-use kernel_hal::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
+use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use linux_object::error::{LxError, SysResult};
 use linux_object::fs::FileDesc;
 use linux_object::process::{wait_child, wait_child_any, LinuxProcess, ProcessExt, RLimit};
@@ -105,7 +105,7 @@ impl Syscall<'_> {
             Sys::MKDIRAT => self.sys_mkdirat(a0.into(), a1.into(), a2),
             Sys::LINKAT => self.sys_linkat(a0.into(), a1.into(), a2.into(), a3.into(), a4),
             Sys::UNLINKAT => self.sys_unlinkat(a0.into(), a1.into(), a2),
-            Sys::SYMLINKAT => self.unimplemented("symlinkat", Err(LxError::EACCES)),
+            Sys::SYMLINKAT => self.sys_symlinkat(a0.into(), a1.into(), a2.into()),
             Sys::READLINKAT => self.sys_readlinkat(a0.into(), a1.into(), a2.into(), a3),
             // File permission operations
             Sys::FCHMOD => self.sys_fchmod(a0.into(), a1 as u32),
@@ -136,7 +136,7 @@ impl Syscall<'_> {
             }
             Sys::EVENTFD2 => self.sys_eventfd2(a0, a1),
 
-            Sys::SOCKETPAIR => Err(LxError::ENOSYS), // network removed (#237)
+            Sys::SOCKETPAIR => self.sys_socketpair(a0, a1, a2, a3.into()),
             // file system
             Sys::STATFS => self.sys_statfs(a0.into(), a1.into()),
             Sys::FSTATFS => self.sys_fstatfs(a0.into(), a1.into()),
@@ -149,43 +149,53 @@ impl Syscall<'_> {
             Sys::MMAP => self.sys_mmap(a0, a1, a2, a3, a4.into(), a5 as _).await,
             Sys::MPROTECT => self.sys_mprotect(a0, a1, a2),
             Sys::MUNMAP => self.sys_munmap(a0, a1),
-            Sys::MADVISE => {
-                info!("madvise unimplemented");
-                Ok(0)
-            }
+            Sys::MADVISE => self.sys_madvise(a0, a1, a2),
             Sys::MREMAP => self.sys_mremap(a0, a1, a2, a3, a4),
+            Sys::MSYNC => self.sys_msync(a0, a1, a2),
+            Sys::MINCORE => self.sys_mincore(a0, a1, a2.into()),
+            Sys::MLOCK => Ok(0), // no swap — all pages are locked
+            Sys::MUNLOCK => Ok(0),
+            Sys::MLOCKALL => Ok(0),
+            Sys::MUNLOCKALL => Ok(0),
+            Sys::MLOCK2 => Ok(0),
 
             // signal
             Sys::RT_SIGACTION => self.sys_rt_sigaction(a0, a1.into(), a2.into(), a3),
             Sys::RT_SIGPROCMASK => self.sys_rt_sigprocmask(a0 as _, a1.into(), a2.into(), a3),
+            Sys::RT_SIGPENDING => self.sys_rt_sigpending(a0.into(), a1),
+            Sys::RT_SIGTIMEDWAIT => {
+                self.sys_rt_sigtimedwait(a0.into(), a1.into(), a2.into(), a3)
+                    .await
+            }
+            Sys::RT_SIGSUSPEND => self.sys_rt_sigsuspend(a0.into(), a1).await,
             Sys::RT_SIGRETURN => self.sys_rt_sigreturn(),
             Sys::SIGALTSTACK => self.sys_sigaltstack(a0.into(), a1.into()),
             Sys::KILL => self.sys_kill(a0 as isize, a1),
 
             // schedule
-            Sys::SCHED_YIELD => Ok(0),
+            Sys::SCHED_YIELD => self.sys_sched_yield().await,
             Sys::SCHED_GETAFFINITY => self.sys_sched_getaffinity(a0, a1, a2.into()),
             Sys::SCHED_SETAFFINITY => Ok(0),
 
-            // socket -- network drivers removed from kernel (#237)
-            Sys::SOCKET
-            | Sys::CONNECT
-            | Sys::ACCEPT
-            | Sys::ACCEPT4
-            | Sys::SENDTO
-            | Sys::RECVFROM
-            | Sys::SENDMSG
-            | Sys::RECVMSG
-            | Sys::SHUTDOWN
-            | Sys::BIND
-            | Sys::LISTEN
-            | Sys::GETSOCKNAME
-            | Sys::GETPEERNAME
-            | Sys::SETSOCKOPT
-            | Sys::GETSOCKOPT => {
-                warn!("socket syscall {:?}: network not available", sys_type);
-                Err(LxError::ENOSYS)
+            // socket -- only AF_UNIX is supported (#62)
+            Sys::SOCKET => self.sys_socket(a0, a1, a2),
+            Sys::SHUTDOWN => self.sys_shutdown(a0.into(), a1),
+            Sys::GETSOCKNAME => self.sys_getsockname(a0.into(), a1.into(), a2.into()),
+            Sys::GETPEERNAME => self.sys_getpeername(a0.into(), a1.into(), a2.into()),
+            Sys::SETSOCKOPT => self.sys_setsockopt(a0.into(), a1, a2, a3.into(), a4),
+            Sys::GETSOCKOPT => self.sys_getsockopt(a0.into(), a1, a2, a3.into(), a4.into()),
+            Sys::BIND => self.sys_bind(a0.into(), a1.into(), a2),
+            Sys::LISTEN => self.sys_listen(a0.into(), a1),
+            Sys::ACCEPT => self.sys_accept(a0.into(), a1.into(), a2.into()),
+            Sys::ACCEPT4 => self.sys_accept(a0.into(), a1.into(), a2.into()),
+            Sys::CONNECT => self.sys_connect(a0.into(), a1.into(), a2),
+            Sys::SENDTO => self.sys_sendto(a0.into(), a1.into(), a2, a3, a4.into(), a5),
+            Sys::RECVFROM => {
+                self.sys_recvfrom(a0.into(), a1.into(), a2, a3, a4.into(), a5.into())
+                    .await
             }
+            Sys::SENDMSG => self.sys_sendmsg(a0.into(), a1.into(), a2),
+            Sys::RECVMSG => self.sys_recvmsg(a0.into(), a1.into(), a2).await,
 
             // process
             Sys::EXECVE => self.sys_execve(a0.into(), a1.into(), a2.into()),
@@ -246,8 +256,17 @@ impl Syscall<'_> {
             Sys::GETUID => self.sys_getuid(),
             Sys::GETGID => self.sys_getgid(),
             Sys::SETUID => self.sys_setuid(a0 as u32),
+            Sys::SETGID => self.sys_setgid(a0 as u32),
             Sys::GETEUID => self.sys_geteuid(),
             Sys::GETEGID => self.sys_getegid(),
+            Sys::SETREUID => self.sys_setreuid(a0 as i32, a1 as i32),
+            Sys::SETREGID => self.sys_setregid(a0 as i32, a1 as i32),
+            Sys::SETRESUID => self.sys_setresuid(a0 as i32, a1 as i32, a2 as i32),
+            Sys::GETRESUID => self.sys_getresuid(a0.into(), a1.into(), a2.into()),
+            Sys::SETRESGID => self.sys_setresgid(a0 as i32, a1 as i32, a2 as i32),
+            Sys::GETRESGID => self.sys_getresgid(a0.into(), a1.into(), a2.into()),
+            Sys::SETFSUID => self.sys_setfsuid(a0 as u32),
+            Sys::SETFSGID => self.sys_setfsgid(a0 as u32),
             Sys::SETPGID => self.sys_setpgid(a0, a1 as isize),
             Sys::GETPPID => self.sys_getppid(),
             Sys::SETSID => self.sys_setsid(),
@@ -255,7 +274,15 @@ impl Syscall<'_> {
             Sys::GETPGID => self.sys_getpgid(a0),
             Sys::GETGROUPS => self.sys_getgroups(a0 as i32, a1.into()),
             Sys::SETGROUPS => self.sys_setgroups(a0, a1.into()),
-            Sys::SETPRIORITY => Ok(0), // scheduling priority — stub
+            Sys::SETPRIORITY => self.sys_setpriority(a0, a1, a2 as i32),
+            Sys::GETPRIORITY => self.sys_getpriority(a0, a1),
+            Sys::SCHED_SETPARAM => self.sys_sched_setparam(a0, a1.into()),
+            Sys::SCHED_GETPARAM => self.sys_sched_getparam(a0, a1.into()),
+            Sys::SCHED_SETSCHEDULER => self.sys_sched_setscheduler(a0, a1, a2.into()),
+            Sys::SCHED_GETSCHEDULER => self.sys_sched_getscheduler(a0),
+            Sys::SCHED_GET_PRIORITY_MAX => self.sys_sched_get_priority_max(a0),
+            Sys::SCHED_GET_PRIORITY_MIN => self.sys_sched_get_priority_min(a0),
+            Sys::SCHED_RR_GET_INTERVAL => self.sys_sched_rr_get_interval(a0, a1.into()),
             Sys::PRCTL => self.sys_prctl(a0, a1),
             Sys::MEMBARRIER => Ok(0), // memory barrier — no-op on single CPU
             Sys::PRLIMIT64 => self.sys_prlimit64(a0, a1, a2.into(), a3.into()),
@@ -263,10 +290,48 @@ impl Syscall<'_> {
             Sys::GETRANDOM => self.sys_getrandom(a0.into(), a1, a2 as u32),
             Sys::RT_SIGQUEUEINFO => self.sys_rt_sigqueueinfo(a0 as _, a1, a2.into()),
 
+            // file operations — stubs for splice family
+            Sys::FALLOCATE => self.sys_fallocate(a0.into(), a1 as i32, a2 as i64, a3 as i64),
+            Sys::SPLICE => Err(LxError::ENOSYS), // pipe↔fd zero-copy — complex
+            Sys::TEE => Err(LxError::ENOSYS),    // pipe↔pipe zero-copy
+            Sys::VMSPLICE => Err(LxError::ENOSYS), // user pages↔pipe
+
+            // filesystem notification — stubs (no VFS event hooks)
+            Sys::INOTIFY_INIT1 => Err(LxError::ENOSYS),
+            Sys::INOTIFY_ADD_WATCH => Err(LxError::ENOSYS),
+            Sys::INOTIFY_RM_WATCH => Err(LxError::ENOSYS),
+            Sys::FANOTIFY_INIT => Err(LxError::ENOSYS),
+            Sys::FANOTIFY_MARK => Err(LxError::ENOSYS),
+
+            // statx — extended stat
+            Sys::STATX => self.sys_statx(a0.into(), a1.into(), a2 as i32, a3 as u32, a4.into()),
+
             // kernel module — not applicable for zCore
             Sys::INIT_MODULE => Err(LxError::ENOSYS),
             Sys::FINIT_MODULE => Err(LxError::ENOSYS),
             Sys::DELETE_MODULE => Err(LxError::ENOSYS),
+
+            // capabilities
+            Sys::CAPGET => self.sys_capget(a0.into(), a1.into()),
+            Sys::CAPSET => self.sys_capset(a0.into(), a1.into()),
+
+            // ptrace — not implemented
+            Sys::PTRACE => Err(LxError::ENOSYS),
+
+            // async I/O — not implemented
+            Sys::IO_SETUP => Err(LxError::ENOSYS),
+            Sys::IO_DESTROY => Err(LxError::ENOSYS),
+            Sys::IO_GETEVENTS => Err(LxError::ENOSYS),
+            Sys::IO_SUBMIT => Err(LxError::ENOSYS),
+            Sys::IO_CANCEL => Err(LxError::ENOSYS),
+
+            // modern syscalls — stubs returning ENOSYS so programs
+            // can probe and fall back gracefully instead of crashing
+            Sys::SECCOMP => Err(LxError::ENOSYS),
+            Sys::BPF => Err(LxError::ENOSYS),
+            Sys::CLONE3 => Err(LxError::ENOSYS),
+            Sys::CLOSE_RANGE => Err(LxError::ENOSYS),
+            Sys::OPENAT2 => Err(LxError::ENOSYS),
             #[cfg(not(target_arch = "aarch64"))]
             Sys::BLOCK_IN_KERNEL => self.sys_block_in_kernel(),
 
@@ -325,8 +390,14 @@ impl Syscall<'_> {
             Sys::ARCH_PRCTL => self.sys_arch_prctl(a0 as _, a1),
             Sys::TIME => self.sys_time(a0.into()),
             Sys::CLONE => self.sys_clone(a0, a1, a2.into(), a4, a3.into()),
+            Sys::INOTIFY_INIT => Err(LxError::ENOSYS),
+            Sys::PAUSE => self.sys_pause().await,
             Sys::EPOLL_CREATE => self.sys_epoll_create(a0),
             Sys::EPOLL_WAIT => self.sys_epoll_wait(a0, a1.into(), a2, a3 as isize).await,
+            Sys::CREAT => self.sys_open(a0.into(), 0o101, a1), // O_CREAT|O_WRONLY|O_TRUNC
+            Sys::GETPGRP => self.sys_getpgid(0),
+            Sys::FCHDIR => self.sys_fchdir(a0.into()),
+            Sys::LCHOWN => Ok(0), // ownership changes are no-ops (single-user)
             _ => self.unknown_syscall(sys_type),
         }
     }
@@ -347,12 +418,6 @@ impl Syscall<'_> {
         let proc = self.zircon_process();
         proc.exit(-1);
         Err(LxError::ENOSYS)
-    }
-
-    /// unimplemented syscalls
-    fn unimplemented(&self, name: &str, ret: SysResult) -> SysResult {
-        warn!("{}: unimplemented", name);
-        ret
     }
 
     /// get zircon process

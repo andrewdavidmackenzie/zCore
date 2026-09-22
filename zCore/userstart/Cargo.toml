@@ -8,6 +8,10 @@ description = "First userspace process for zCore Zircon mode"
 name = "userstart"
 path = "src/main.rs"
 
+[package.metadata.cargo-all-features]
+# Userspace binary requiring bare-metal targets.
+skip_package = true
+
 [dependencies]
 zircon-abi = { path = "../zircon-abi", features = ["userspace"] }
 

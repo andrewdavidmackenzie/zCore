@@ -12,10 +12,12 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use core::time::Duration;
-use kernel_hal::timer;
+use hal_impl::timer;
+use linux_object::error::LxError;
 use linux_object::fs::{
     EpollEvent, EpollFile, FileDesc, PollEvents, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD,
 };
+use linux_object::thread::ThreadExt;
 use linux_object::time::*;
 
 impl Syscall<'_> {
@@ -45,6 +47,17 @@ impl Syscall<'_> {
 
             fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
                 use PollEvents as PE;
+
+                // Check for pending signals -- return EINTR if any.
+                {
+                    let mut linux = self.syscall.thread.lock_linux();
+                    if linux.has_pending_signal() {
+                        linux.clear_signal_waker();
+                        return Poll::Ready(Err(LxError::EINTR));
+                    }
+                    linux.set_signal_waker(cx.waker().clone());
+                }
+
                 let proc = self.syscall.linux_process();
                 let mut events = 0;
 
@@ -225,6 +238,16 @@ impl Syscall<'_> {
             type Output = SysResult;
 
             fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+                // Check for pending signals -- return EINTR if any.
+                {
+                    let mut linux = self.syscall.thread.lock_linux();
+                    if linux.has_pending_signal() {
+                        linux.clear_signal_waker();
+                        return Poll::Ready(Err(LxError::EINTR));
+                    }
+                    linux.set_signal_waker(cx.waker().clone());
+                }
+
                 let files = self.syscall.linux_process().get_files()?;
 
                 let mut events = 0;
@@ -377,7 +400,25 @@ impl Syscall<'_> {
         let epoll = epoll_like
             .downcast_ref::<EpollFile>()
             .ok_or(LxError::EINVAL)?;
-        let ready = epoll.wait(maxevents, timeout).await?;
+        // Wrap epoll wait in a signal-interruptible poll_fn so that
+        // signal delivery returns EINTR (matching Linux behavior).
+        use core::future::poll_fn;
+        use core::task::Poll;
+        let mut wait_fut = Box::pin(epoll.wait(maxevents, timeout));
+        let ready = poll_fn(|cx| {
+            {
+                let mut linux = self.thread.lock_linux();
+                if linux.has_pending_signal() {
+                    linux.clear_signal_waker();
+                    return Poll::Ready(Err(LxError::EINTR));
+                }
+                linux.set_signal_waker(cx.waker().clone());
+            }
+            wait_fut.as_mut().poll(cx)
+        })
+        .await?;
+        // Clean up the signal waker after epoll_wait completes.
+        self.thread.lock_linux().clear_signal_waker();
         let count = ready.len();
         if count > 0 {
             events.write_array(&ready)?;
@@ -422,7 +463,7 @@ impl FdSet {
                 return Err(LxError::EINVAL);
             }
             // save the fdset, and clear it
-            let origin = BitVec::from_slice(addr.as_slice(len)?).unwrap();
+            let origin = BitVec::from_slice(&addr.read_array(len)?).unwrap();
             let vec0 = vec![0u32; len];
             addr.write_array(&vec0)?;
             Ok(FdSet { addr, origin })

@@ -16,7 +16,7 @@ These are large, complex crates that provide significant functionality to
 zCore. A change or update in any of these would have broad impact.
 
 **`smoltcp`** (git, rev `35e833e3`) User-space TCP/IP network stack. Provides
-TCP, UDP, raw, and ICMP sockets. Used by `drivers`, `kernel-hal`, and `linux-
+TCP, UDP, raw, and ICMP sockets. Used by `drivers`, `hal-impl`, and `linux-
 object`. Pinned to a specific git revision. Features enabled: `proto-ipv4`,
 `proto-ipv6`, `proto-igmp`, `socket-raw`, `socket-udp`, `socket-tcp`, `socket-
 icmp`, `async`.
@@ -54,7 +54,7 @@ See [#76](https://github.com/andrewdavidmackenzie/zCore/issues/76).
 
 **`trapframe`** (0.9.0, crates.io) User/kernel context save/restore and trap
 frame structures. Provides `UserContext` for entering and returning from user-
-space. Used by `kernel-hal`. Critical for the entire syscall entry/exit path.
+space. Used by `hal-impl`. Critical for the entire syscall entry/exit path.
 
 **`virtio-drivers`** (git, rev `2aaf7d6`) VirtIO device driver implementations
 (block, GPU, input, console, network). Used by `drivers` behind the `virtio`
@@ -66,7 +66,7 @@ feature (enabled by default).
 
 **`async-std`** (1.10, crates.io) Full async runtime for the host OS. Provides
 task spawning, sleeping, I/O, and the `#[async_std::main]` /
-`#[async_std::test]` macros. Used in libos mode by `kernel-hal`, `zCore`,
+`#[async_std::test]` macros. Used in libos mode by `hal-impl`, `zCore`,
 `drivers`; used in tests by `zircon-object`, `linux-syscall`, `loader`.
 
 ### Architecture-Specific Hardware Crates
@@ -75,16 +75,16 @@ These crates provide register access, instruction wrappers, and hardware
 abstractions for specific CPU architectures.
 
 **AArch64:**
-- `cortex-a` (7.2.0) -- ARM Cortex-A register access. Used by `kernel-hal`,
+- `cortex-a` (7.2.0) -- ARM Cortex-A register access. Used by `hal-impl`,
   `executor`.
 - `tock-registers` (0.7) -- Type-safe MMIO register definitions. Used by
-  `kernel-hal`, `executor`.
+  `hal-impl`, `executor`.
 
 **RISC-V:**
 - `riscv` (0.8/0.9) -- CSR access, `satp` register. Used by `drivers`, `kernel-
   hal`, `zCore`, `executor`. Note: two different versions in the workspace.
 - `sbi-rt` (0.0.2) -- SBI runtime calls (hart start, system reset). Used by
-  `kernel-hal`, `zCore`.
+  `hal-impl`, `zCore`.
 - `dtb-walker` (0.2.0-alpha.3) -- Device tree blob parsing. Used by `zCore`
   (riscv only).
 - `page-table` (0.0.6) -- Sv39 page table types. Used by `zCore` (riscv only).
@@ -92,17 +92,17 @@ abstractions for specific CPU architectures.
 
 **x86_64:**
 - `x86_64` (0.14) -- Page tables, GDT, IDT, control registers. Used by
-  `drivers`, `kernel-hal`, `executor`.
-- `x86` (0.46) -- I/O ports, MSRs, segment registers. Used by `kernel-hal`.
+  `drivers`, `hal-impl`, `executor`.
+- `x86` (0.46) -- I/O ports, MSRs, segment registers. Used by `hal-impl`.
 - `x2apic` (0.4) -- Local APIC and I/O APIC drivers. Used by `drivers`,
-  `kernel-hal`.
-- `raw-cpuid` (9.0/10.2) -- CPUID instruction wrapper. Used by `kernel-hal`,
+  `hal-impl`.
+- `raw-cpuid` (9.0/10.2) -- CPUID instruction wrapper. Used by `hal-impl`,
   `executor`. Two versions.
-- `uefi` (0.16) -- UEFI boot services types. Used by `kernel-hal` (bare-metal
+- `uefi` (0.16) -- UEFI boot services types. Used by `hal-impl` (bare-metal
   x86_64).
 - `rboot` (git, rev `ad21575`) -- UEFI bootloader interface (`BootInfo`
   struct). Used by `zCore` (bare-metal x86_64).
-- `x86-smpboot` (git, rev `1069df3`) -- SMP AP startup. Used by `kernel-hal`
+- `x86-smpboot` (git, rev `1069df3`) -- SMP AP startup. Used by `hal-impl`
   (bare-metal x86_64).
 - `acpi` (4.1) -- ACPI table parsing. Used by `drivers` (x86_64).
 
@@ -118,7 +118,7 @@ implementations from the rCore ecosystem. Used by `drivers`.
 access. Used by `drivers`.
 
 **`bitmap-allocator`** (git, rev `88e871a5`) Bitmap-based physical frame
-allocator. Used by `drivers`, `kernel-hal` (libos), `zCore` (x86_64 + libos).
+allocator. Used by `drivers`, `hal-impl` (libos), `zCore` (x86_64 + libos).
 
 **`d1-pac`** (0.0.27, optional) Allwinner D1 peripheral access crate. Used by
 `drivers` behind `allwinner` feature.
@@ -127,14 +127,14 @@ allocator. Used by `drivers`, `kernel-hal` (libos), `zCore` (x86_64 + libos).
 
 **`lock`** (git, kernel-sync, rev `8486b8`) Kernel-compatible `Mutex` /
 `RwLock`. The most widely used sync primitive across the project. Used by 7
-crates: `drivers`, `kernel-hal`, `zircon-object`, `zircon-syscall`, `linux-
+crates: `drivers`, `hal-impl`, `zircon-object`, `zircon-syscall`, `linux-
 object`, `linux-syscall`, `zCore`.
 
 **`spin`** (0.9) `Once<T>` for one-time initialization and spinlocks. Used by
-`kernel-hal`, `zCore`, `executor`.
+`hal-impl`, `zCore`, `executor`.
 
 **`lazy_static`** (1.4) Lazy-initialized statics. Used with `spin_no_std`
-feature in kernel crates. Used by `drivers`, `kernel-hal`, `zircon-object`,
+feature in kernel crates. Used by `drivers`, `hal-impl`, `zircon-object`,
 `linux-object`, `linux-syscall`, `executor`.
 
 `std::sync::LazyLock` is std-only, not no_std. `core::cell::LazyCell` (Rust
@@ -205,7 +205,7 @@ Note: "mock drivers" could also be called "host OS drivers" since they delegate
 to real host OS facilities (stdin, stderr, mmap) rather than truly mocking
 hardware behavior.
 
-**`tempfile`** (3) Temporary file creation. Used by `kernel-hal` for the mock
+**`tempfile`** (3) Temporary file creation. Used by `hal-impl` for the mock
 physical memory backing store.
 
 **`chrono`** (0.4) Date/time formatting. Used by `zCore` for human-readable log

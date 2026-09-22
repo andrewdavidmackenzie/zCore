@@ -3,9 +3,7 @@
 
 use alloc::sync::Arc;
 
-extern crate rcore_fs;
-
-use kernel_hal::drivers::scheme::BlockScheme;
+use hal::BlockScheme;
 use lock::RwLock;
 use rcore_fs::dev::{BlockDevice, DevError, Device, Result};
 

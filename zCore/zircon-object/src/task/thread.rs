@@ -10,7 +10,7 @@ use core::{any::Any, future::Future, pin::Pin};
 use bitflags::bitflags;
 use cfg_if::cfg_if;
 use futures::{channel::oneshot::*, future::FutureExt, pin_mut, select_biased};
-use kernel_hal::context::UserContext;
+use hal_impl::context::UserContext;
 use lock::Mutex;
 
 use self::thread_state::ContextAccessState;
@@ -203,7 +203,7 @@ impl Thread {
     /// ```
     /// # use std::sync::Arc;
     /// # use zircon_object::task::*;
-    /// # kernel_hal::init();
+    /// # hal_impl::init();
     /// let job = Job::root();
     /// let proc = Process::create(&job, "proc").unwrap();
     /// // create a thread with extension info
@@ -281,7 +281,7 @@ impl Thread {
             .change_state(ThreadState::Running, &self.base);
         let current = CurrentThread(self.clone());
         let future = thread_fn(current);
-        kernel_hal::thread::spawn(ThreadSwitchFuture::new(self.clone(), future));
+        hal_impl::thread::spawn(ThreadSwitchFuture::new(self.clone(), future));
         Ok(())
     }
 
@@ -548,14 +548,14 @@ impl CurrentThread {
             select_biased! {
                 ret = future.fuse() => ret.into_result(),
                 _ = killed.fuse() => Err(ZxError::STOP),
-                _ = kernel_hal::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
+                _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
                 _ = cancel_token.fuse() => Err(ZxError::CANCELED),
             }
         } else {
             select_biased! {
                 ret = future.fuse() => ret.into_result(),
                 _ = killed.fuse() => Err(ZxError::STOP),
-                _ = kernel_hal::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
+                _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
             }
         };
         let mut inner = self.inner.lock();
@@ -734,15 +734,15 @@ impl Future for ThreadSwitchFuture {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         cfg_if! {
             if #[cfg(all(target_os = "none", target_arch = "aarch64"))] {
-                use kernel_hal::arch::config::USER_TABLE_FLAG;
-                kernel_hal::vm::activate_paging(self.thread.proc().vmar().table_phys() | USER_TABLE_FLAG);
+                use hal_impl::arch::config::USER_TABLE_FLAG;
+                hal_impl::vm::activate_paging(self.thread.proc().vmar().table_phys() | USER_TABLE_FLAG);
             } else {
-                kernel_hal::vm::activate_paging(self.thread.proc().vmar().table_phys());
+                hal_impl::vm::activate_paging(self.thread.proc().vmar().table_phys());
             }
         }
-        kernel_hal::thread::set_current_thread(Some(self.thread.clone()));
+        hal_impl::thread::set_current_thread(Some(self.thread.clone()));
         let ret = self.future.lock().as_mut().poll(cx);
-        kernel_hal::thread::set_current_thread(None);
+        hal_impl::thread::set_current_thread(None);
         ret
     }
 }
@@ -752,7 +752,7 @@ mod tests {
     use super::*;
     use crate::object::*;
     use crate::task::*;
-    use kernel_hal::timer::timer_now;
+    use hal_impl::timer::timer_now;
 
     #[test]
     fn create() {
@@ -767,8 +767,9 @@ mod tests {
     }
 
     #[async_std::test]
+    #[cfg(target_arch = "x86_64")]
     async fn start() {
-        kernel_hal::init();
+        hal_impl::init();
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
@@ -889,7 +890,7 @@ mod tests {
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
-        const SIZE: usize = core::mem::size_of::<kernel_hal::context::GeneralRegs>();
+        const SIZE: usize = core::mem::size_of::<hal_impl::context::GeneralRegs>();
         let mut buf = [0; 10];
         assert_eq!(
             thread.read_state(ThreadStateKind::General, &mut buf).err(),

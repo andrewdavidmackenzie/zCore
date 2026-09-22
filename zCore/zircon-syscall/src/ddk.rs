@@ -1,7 +1,7 @@
 use {
     super::*,
     bitflags::bitflags,
-    kernel_hal::DevVAddr,
+    hal_impl::DevVAddr,
     zircon_object::{dev::*, signal::*, task::*, vm::*},
 };
 
@@ -147,7 +147,7 @@ impl Syscall<'_> {
             .validate(ResourceKind::ROOT)?;
         cfg_if::cfg_if! {
             if #[cfg(all(target_arch = "x86_64", target_os = "none"))] {
-                let (acpi_rsdp, smbios) = kernel_hal::x86_64::pc_firmware_tables();
+                let (acpi_rsdp, smbios) = hal_impl::x86_64::pc_firmware_tables();
                 acpi_rsdp_ptr.write(acpi_rsdp)?;
                 smbios_ptr.write(smbios)?;
                 Ok(())

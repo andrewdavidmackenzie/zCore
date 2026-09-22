@@ -2,15 +2,19 @@
 !.github/*
 !.cargo/*
 
+# Cargo build output (includes rootfs, images, and kernel binaries)
 **/target
-*.img
 
+# Build cache: downloaded toolchains, compiled busybox, etc.
+# Survives `cargo clean` (which only removes target/).
+/.build-cache
+
+# Legacy locations (safe to remove from checkouts that predate #79)
+*.img
 /ignored
 /rootfs
-# for aarch64 only
 /zCore/disk
 
 .DS_Store
 __pycache__
-kernel-vars.ld
 

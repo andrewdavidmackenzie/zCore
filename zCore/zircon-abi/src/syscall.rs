@@ -288,16 +288,14 @@ pub unsafe fn syscall7(
     );
     #[cfg(target_arch = "x86_64")]
     {
-        // x86_64 syscall ABI only has 6 register args. The 7th is on the stack.
-        // Push it, syscall, pop it.
+        // x86_64 syscall ABI: 6 args in registers (rdi, rsi, rdx, r10,
+        // r8, r9), 7th arg in r12. The kernel handler reads r12 directly.
         core::arch::asm!(
-            "push {arg6}",
             "syscall",
-            "pop {arg6}",
-            arg6 = in(reg) a6,
             in("eax") num,
             in("rdi") a0, in("rsi") a1, in("rdx") a2,
             in("r10") a3, in("r8") a4, in("r9") a5,
+            in("r12") a6,
             lateout("rax") ret,
             out("rcx") _, out("r11") _,
         );
@@ -316,7 +314,7 @@ pub unsafe fn syscall7(
 
 /// Raw syscall with 8 arguments.
 ///
-/// On x86_64 args 7 and 8 are passed on the stack.
+/// On x86_64 args 7 and 8 are passed in r12 and r13.
 /// On aarch64 and riscv64, registers x7/a7 are used (note: a7 is also
 /// the syscall number register on riscv64, loaded before the args).
 #[inline(always)]
@@ -344,18 +342,15 @@ pub unsafe fn syscall8(
     );
     #[cfg(target_arch = "x86_64")]
     {
-        // x86_64: args 7 and 8 on the stack
+        // x86_64 syscall ABI: 6 args in registers (rdi, rsi, rdx, r10,
+        // r8, r9), 7th and 8th args in r12 and r13. The kernel handler
+        // reads r12/r13 directly.
         core::arch::asm!(
-            "push {arg7}",
-            "push {arg6}",
             "syscall",
-            "pop {arg6}",
-            "pop {arg7}",
-            arg6 = in(reg) a6,
-            arg7 = in(reg) a7,
             in("eax") num,
             in("rdi") a0, in("rsi") a1, in("rdx") a2,
             in("r10") a3, in("r8") a4, in("r9") a5,
+            in("r12") a6, in("r13") a7,
             lateout("rax") ret,
             out("rcx") _, out("r11") _,
         );
@@ -393,6 +388,37 @@ pub fn debug_write(msg: &[u8]) -> ZxStatus {
 /// Write a debug message to the kernel log (safe wrapper, str).
 pub fn debug_print(msg: &str) -> ZxStatus {
     debug_write(msg.as_bytes())
+}
+
+/// Read from the debug serial port (safe wrapper).
+///
+/// Requires a resource handle with root access. Blocks until data
+/// is available. Returns the number of bytes read.
+pub fn debug_read(resource: HandleValue, buf: &mut [u8]) -> Result<usize, ZxStatus> {
+    let mut actual: u32 = 0;
+    let status =
+        unsafe { zx_debug_read(resource, buf.as_mut_ptr(), buf.len() as u32, &mut actual) };
+    if status == 0 {
+        Ok(actual as usize)
+    } else {
+        Err(status)
+    }
+}
+
+/// Raw debug read syscall.
+pub unsafe fn zx_debug_read(
+    resource: HandleValue,
+    buf: *mut u8,
+    buf_size: u32,
+    actual: *mut u32,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_DEBUG_READ,
+        resource as u64,
+        buf as u64,
+        buf_size as u64,
+        actual as u64,
+    )
 }
 
 /// Exit the current process (safe wrapper).
@@ -826,6 +852,25 @@ pub unsafe fn zx_object_get_info(
     )
 }
 
+/// Get a child object by KOID.
+///
+/// # Safety
+/// `out` must be a valid pointer.
+pub unsafe fn zx_object_get_child(
+    handle: HandleValue,
+    koid: u64,
+    rights: u32,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall4(
+        crate::consts::SYS_OBJECT_GET_CHILD,
+        handle as u64,
+        koid,
+        rights as u64,
+        out as u64,
+    )
+}
+
 /// Get a property of an object.
 ///
 /// # Safety
@@ -1026,6 +1071,18 @@ pub unsafe fn zx_fifo_create(
         out0 as u64,
         out1 as u64,
     )
+}
+
+// --- Clock syscalls ---
+
+/// Get the current time for a clock.
+///
+/// `clock_id`: 0 = monotonic, 1 = UTC, 2 = thread.
+///
+/// # Safety
+/// `time` must be a valid pointer.
+pub unsafe fn zx_clock_get(clock_id: u32, time: *mut i64) -> ZxStatus {
+    syscall2(crate::consts::SYS_CLOCK_GET, clock_id as u64, time as u64)
 }
 
 // --- Timer syscalls ---

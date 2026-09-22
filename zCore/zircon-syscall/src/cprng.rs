@@ -10,7 +10,7 @@ impl Syscall<'_> {
         info!("cprng_draw_once: buf=({:?}; {:?})", buf, len);
         let mut res = vec![0u8; len];
         // Fill random bytes to the buffer
-        kernel_hal::rand::fill_random(&mut res);
+        hal_impl::rand::fill_random(&mut res);
         buf.write_array(&res)?;
         Ok(())
     }
