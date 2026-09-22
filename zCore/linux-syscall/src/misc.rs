@@ -520,6 +520,75 @@ impl Syscall<'_> {
         Ok(old as usize)
     }
 
+    // --- Linux capability syscalls ---
+
+    /// Get process capabilities.
+    ///
+    /// The `hdrp` points to a `cap_user_header` (version + pid),
+    /// and `datap` points to a `cap_user_data` (effective, permitted,
+    /// inheritable bitmasks). Since all processes run as root, we
+    /// report full capabilities.
+    pub fn sys_capget(&self, hdrp: UserInPtr<u8>, mut datap: UserOutPtr<u8>) -> SysResult {
+        // Read header to get version
+        let hdr = hdrp.read_array(8)?;
+        let version = u32::from_ne_bytes(hdr[0..4].try_into().unwrap());
+        info!("capget: version={:#x}", version);
+
+        if datap.is_null() {
+            return Ok(0); // just checking version support
+        }
+
+        // All capabilities granted (root).
+        // Version 3 uses two 32-bit halves per set (3 sets * 2 = 6 u32s = 24 bytes)
+        // Version 1 uses one 32-bit word per set (3 sets = 3 u32s = 12 bytes)
+        const V3: u32 = 0x2008_0522;
+        const V1: u32 = 0x1998_0330;
+        let full: u32 = 0xFFFF_FFFF;
+
+        match version {
+            V3 => {
+                // effective[0], effective[1], permitted[0], permitted[1],
+                // inheritable[0], inheritable[1]
+                let mut data = [0u8; 24];
+                // cap_user_data has: effective, permitted, inheritable (each u32)
+                // For V3: two structs of {effective, permitted, inheritable}
+                // Struct 1 (low 32 bits):
+                data[0..4].copy_from_slice(&full.to_ne_bytes()); // effective
+                data[4..8].copy_from_slice(&full.to_ne_bytes()); // permitted
+                data[8..12].copy_from_slice(&full.to_ne_bytes()); // inheritable
+                                                                  // Struct 2 (high 32 bits):
+                data[12..16].copy_from_slice(&full.to_ne_bytes()); // effective
+                data[16..20].copy_from_slice(&full.to_ne_bytes()); // permitted
+                data[20..24].copy_from_slice(&full.to_ne_bytes()); // inheritable
+                datap.write_array(&data)?;
+            }
+            V1 => {
+                let mut data = [0u8; 12];
+                data[0..4].copy_from_slice(&full.to_ne_bytes()); // effective
+                data[4..8].copy_from_slice(&full.to_ne_bytes()); // permitted
+                data[8..12].copy_from_slice(&full.to_ne_bytes()); // inheritable
+                datap.write_array(&data)?;
+            }
+            _ => {
+                // Unknown version — return EINVAL
+                return Err(LxError::EINVAL);
+            }
+        }
+        Ok(0)
+    }
+
+    /// Set process capabilities.
+    ///
+    /// Since all processes run as root with full capabilities, we
+    /// accept any capset request silently.
+    pub fn sys_capset(&self, hdrp: UserInPtr<u8>, _datap: UserInPtr<u8>) -> SysResult {
+        let hdr = hdrp.read_array(8)?;
+        let version = u32::from_ne_bytes(hdr[0..4].try_into().unwrap());
+        info!("capset: version={:#x}", version);
+        // Accept silently — all processes have full capabilities
+        Ok(0)
+    }
+
     /// Set the file mode creation mask. Returns the
     /// previous value.
     pub fn sys_umask(&self, mask: u32) -> SysResult {
