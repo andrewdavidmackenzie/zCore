@@ -29,9 +29,14 @@ pub fn boot_options() -> BootOptions {
 pub fn parse_personality(cmdline: &str) -> &'static str {
     if let Some(p) = parse_cmdline_value(cmdline, "PERSONALITY") {
         match p {
+            #[cfg(feature = "linux")]
             "linux" => return "linux",
+            #[cfg(feature = "zircon")]
             "zircon" => return "zircon",
-            _ => warn!("Unknown PERSONALITY={}, using default", p),
+            _ => warn!(
+                "PERSONALITY={} not available (not compiled or unknown), using default",
+                p
+            ),
         }
     }
     // Default: prefer linux if compiled in, else zircon

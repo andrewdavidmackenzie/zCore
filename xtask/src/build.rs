@@ -279,7 +279,8 @@ impl QemuArgs {
 
         let is_zircon = build_config.features.contains("zircon");
         let is_linux = build_config.features.contains("linux");
-        let is_dual = is_linux && is_zircon;
+        // In dual mode, Linux rootfs is needed (Linux is the default personality).
+        let needs_rootfs = is_linux;
         let arch = build_config.arch;
         let arch_str = arch.name();
 
@@ -306,8 +307,8 @@ impl QemuArgs {
 
         let obj = build_config.target_file_path();
         // Set the kernel command line via compile-time env var.
-        let cmdline = if is_dual {
-            // Dual personality: default to Linux with busybox
+        let cmdline = if is_linux && is_zircon {
+            // Both personalities: default to Linux with busybox
             format!(
                 "LOG={} PERSONALITY=linux ROOTPROC=/bin/busybox?sh",
                 self.log
@@ -346,7 +347,7 @@ impl QemuArgs {
                     .arg(&bin)
                     .args(["-bios", "default"])
                     .args(["-serial", "mon:stdio"]);
-                if !is_zircon || self.rootfs_image.is_some() {
+                if needs_rootfs || self.rootfs_image.is_some() {
                     // Pass rootfs image as initrd
                     qemu.arg("-initrd").arg(&rootfs_img);
                 }
@@ -381,7 +382,7 @@ impl QemuArgs {
                 // Embed the rootfs SFS image as a ramdisk in the boot image.
                 // The bootloader loads it into physical memory and exposes it
                 // via BootInfo.ramdisk_addr / ramdisk_len.
-                if !is_zircon || self.rootfs_image.is_some() {
+                if needs_rootfs || self.rootfs_image.is_some() {
                     if rootfs_img.exists() {
                         cmd.arg("--ramdisk").arg(&rootfs_img);
                     } else {
@@ -418,7 +419,7 @@ impl QemuArgs {
                     .arg("-kernel")
                     .arg(&bin)
                     .args(["-serial", "mon:stdio"]);
-                if !is_zircon || self.rootfs_image.is_some() {
+                if needs_rootfs || self.rootfs_image.is_some() {
                     // Pass rootfs image via initrd. QEMU sets
                     // linux,initrd-start/end in the DTB, which the
                     // kernel reads via parse_dtb().
