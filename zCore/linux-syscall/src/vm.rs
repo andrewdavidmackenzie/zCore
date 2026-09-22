@@ -380,11 +380,14 @@ impl Syscall<'_> {
     /// Fills the output vector with all 1s.
     pub fn sys_mincore(&self, addr: usize, len: usize, mut vec: UserOutPtr<u8>) -> SysResult {
         info!("mincore: addr={:#x}, len={:#x}", addr, len);
-        if addr & 0xFFF != 0 {
+        if addr & 0xFFF != 0 || len == 0 {
             return Err(LxError::EINVAL);
         }
+        if vec.is_null() {
+            return Err(LxError::EFAULT);
+        }
         let page_count = len.div_ceil(0x1000);
-        // All pages resident (bit 0 set)
+        // All pages resident (bit 0 set) — zCore has no swap
         let ones = alloc::vec![1u8; page_count];
         vec.write_array(&ones)?;
         Ok(0)
