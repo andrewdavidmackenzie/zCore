@@ -333,13 +333,14 @@ impl Syscall<'_> {
             // Spawn via the globally registered Zircon spawn config.
             let job = self.zircon_process().job();
             match zircon_object::task::spawn::spawn_zircon(&job, &path, &data) {
-                Some(Ok(_proc)) => {
+                Some(Ok(_zircon_proc)) => {
                     info!("Zircon process '{}' spawned successfully", path);
-                    // The Zircon process runs concurrently. Return
-                    // ENOEXEC to the Linux caller so fork+exec
-                    // semantics work (the forked child exits, the
-                    // Zircon process continues independently).
-                    return Err(LxError::ENOEXEC);
+                    // Exit this Linux process. The Zircon process runs
+                    // independently. The parent shell's wait4() sees
+                    // this child exit with code 0.
+                    let zircon_proc = self.zircon_process();
+                    zircon_proc.exit(0);
+                    return Err(LxError::ENOSYS);
                 }
                 Some(Err(e)) => {
                     error!("Failed to spawn Zircon process '{}': {:?}", path, e);
