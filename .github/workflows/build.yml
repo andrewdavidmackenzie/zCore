@@ -125,3 +125,6 @@ jobs:
 
       - name: Build x86-laptop
         run: cargo bin -m x86-laptop
+
+      - name: Build dual personality (linux,zircon) aarch64
+        run: cargo bin -m qemu-aarch64 --personality linux,zircon
