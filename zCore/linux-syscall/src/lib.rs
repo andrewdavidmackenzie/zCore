@@ -151,6 +151,13 @@ impl Syscall<'_> {
             Sys::MUNMAP => self.sys_munmap(a0, a1),
             Sys::MADVISE => self.sys_madvise(a0, a1, a2),
             Sys::MREMAP => self.sys_mremap(a0, a1, a2, a3, a4),
+            Sys::MSYNC => self.sys_msync(a0, a1, a2),
+            Sys::MINCORE => self.sys_mincore(a0, a1, a2.into()),
+            Sys::MLOCK => Ok(0), // no swap — all pages are locked
+            Sys::MUNLOCK => Ok(0),
+            Sys::MLOCKALL => Ok(0),
+            Sys::MUNLOCKALL => Ok(0),
+            Sys::MLOCK2 => Ok(0),
 
             // signal
             Sys::RT_SIGACTION => self.sys_rt_sigaction(a0, a1.into(), a2.into(), a3),
