@@ -383,7 +383,7 @@ impl Syscall<'_> {
         if addr & 0xFFF != 0 {
             return Err(LxError::EINVAL);
         }
-        let page_count = (len + 0xFFF) / 0x1000;
+        let page_count = len.div_ceil(0x1000);
         // All pages resident (bit 0 set)
         let ones = alloc::vec![1u8; page_count];
         vec.write_array(&ones)?;
