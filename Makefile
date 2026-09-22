@@ -330,7 +330,7 @@ clean-everything: clean
 # Requires: x86-64 Linux host with curl, git, unzip installed.
 # Cross-compiles Fuchsia for aarch64 (qemu-arm64 board).
 FUSCHIA_DIR := $(CURDIR)/../fuchsia
-build-fucshia:
+build-fuchsia:
 	@echo "==> Checking prerequisites..."
 	@which curl >/dev/null 2>&1 || { echo "ERROR: curl not found"; exit 1; }
 	@which git >/dev/null 2>&1 || { echo "ERROR: git not found"; exit 1; }
@@ -356,11 +356,11 @@ build-fucshia:
 	@echo "==> Configuring Fuchsia build...(fx set workbench_eng.x64)"
 	@export PATH="$(FUSCHIA_DIR)/fuchsia/fuchsia/.jiri_root/bin:$PATH"
 	@jiri init -analytics-opt=false "$(FUSCHIA_DIR)/fuchsia/fuchsia"
-	@cd "$(FUSCHIA_DIR)/fuchsia" && \
+	@cd "$(FUSCHIA_DIR)/fuchsia/fuchsia" && \
 		source scripts/fx-env.sh && \
-		fx set workbench_eng.x64
+		.jiri_root/bin/fx set workbench_eng.x64
 	@echo "==> Building Fuchsia..."
-	@cd "$(FUSCHIA_DIR)/fuchsia" && \
+	@cd "$(FUSCHIA_DIR)/fuchsia/fuchsia" && \
 		source scripts/fx-env.sh && \
-		fx build
+		.jiri_root/bin/fx build
 	@echo "==> Fuchsia build complete at $(FUSCHIA_DIR)/fuchsia"
