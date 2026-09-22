@@ -70,6 +70,10 @@ impl ProcessExt for Process {
                 gid: linux_parent_inner.gid,
                 euid: linux_parent_inner.euid,
                 egid: linux_parent_inner.egid,
+                saved_uid: linux_parent_inner.saved_uid,
+                saved_gid: linux_parent_inner.saved_gid,
+                fsuid: linux_parent_inner.fsuid,
+                fsgid: linux_parent_inner.fsgid,
                 pgid: linux_parent_inner.pgid,
                 session_id: linux_parent_inner.session_id,
                 umask: linux_parent_inner.umask,
@@ -280,6 +284,14 @@ struct LinuxProcessInner {
     euid: u32,
     /// Effective group ID
     egid: u32,
+    /// Saved set-user-ID (set during execve)
+    saved_uid: u32,
+    /// Saved set-group-ID (set during execve)
+    saved_gid: u32,
+    /// Filesystem UID (used for access checks; tracks euid by default)
+    fsuid: u32,
+    /// Filesystem GID (used for access checks; tracks egid by default)
+    fsgid: u32,
     /// Process group ID (0 = same as own PID)
     pgid: u64,
     /// Session ID (0 = same as own PID)
@@ -431,6 +443,189 @@ impl LinuxProcess {
             return Err(());
         }
         Ok(old_euid)
+    }
+
+    /// Set the real group ID.
+    /// If privileged (euid == 0), sets real, effective, and saved GID.
+    /// Otherwise, only sets effective GID if it matches real GID.
+    #[allow(clippy::result_unit_err)]
+    pub fn set_gid(&self, gid: u32) -> Result<u32, ()> {
+        let mut inner = self.inner.lock();
+        let old_egid = inner.egid;
+        if inner.euid == 0 {
+            inner.gid = gid;
+            inner.egid = gid;
+            inner.saved_gid = gid;
+            inner.fsgid = gid;
+        } else if gid == inner.gid {
+            inner.egid = gid;
+            inner.fsgid = gid;
+        } else {
+            return Err(());
+        }
+        Ok(old_egid)
+    }
+
+    /// Set real and effective user IDs.
+    #[allow(clippy::result_unit_err)]
+    pub fn set_reuid(&self, ruid: i32, euid: i32) -> Result<(), ()> {
+        let mut inner = self.inner.lock();
+        if inner.euid != 0 {
+            // Unprivileged: ruid must be -1 or match real/euid,
+            // euid must be -1 or match real/euid/saved
+            if ruid != -1 && ruid as u32 != inner.uid && ruid as u32 != inner.euid {
+                return Err(());
+            }
+            if euid != -1
+                && euid as u32 != inner.uid
+                && euid as u32 != inner.euid
+                && euid as u32 != inner.saved_uid
+            {
+                return Err(());
+            }
+        }
+        if ruid != -1 {
+            inner.uid = ruid as u32;
+        }
+        if euid != -1 {
+            inner.euid = euid as u32;
+            inner.fsuid = euid as u32;
+        }
+        // If real UID was set, save the effective UID
+        if ruid != -1 {
+            inner.saved_uid = inner.euid;
+        }
+        Ok(())
+    }
+
+    /// Set real and effective group IDs.
+    #[allow(clippy::result_unit_err)]
+    pub fn set_regid(&self, rgid: i32, egid: i32) -> Result<(), ()> {
+        let mut inner = self.inner.lock();
+        if inner.euid != 0 {
+            if rgid != -1 && rgid as u32 != inner.gid && rgid as u32 != inner.egid {
+                return Err(());
+            }
+            if egid != -1
+                && egid as u32 != inner.gid
+                && egid as u32 != inner.egid
+                && egid as u32 != inner.saved_gid
+            {
+                return Err(());
+            }
+        }
+        if rgid != -1 {
+            inner.gid = rgid as u32;
+        }
+        if egid != -1 {
+            inner.egid = egid as u32;
+            inner.fsgid = egid as u32;
+        }
+        if rgid != -1 {
+            inner.saved_gid = inner.egid;
+        }
+        Ok(())
+    }
+
+    /// Set real, effective, and saved user IDs.
+    #[allow(clippy::result_unit_err)]
+    pub fn set_resuid(&self, ruid: i32, euid: i32, suid: i32) -> Result<(), ()> {
+        let mut inner = self.inner.lock();
+        if inner.euid != 0 {
+            let allowed = [inner.uid, inner.euid, inner.saved_uid];
+            if ruid != -1 && !allowed.contains(&(ruid as u32)) {
+                return Err(());
+            }
+            if euid != -1 && !allowed.contains(&(euid as u32)) {
+                return Err(());
+            }
+            if suid != -1 && !allowed.contains(&(suid as u32)) {
+                return Err(());
+            }
+        }
+        if ruid != -1 {
+            inner.uid = ruid as u32;
+        }
+        if euid != -1 {
+            inner.euid = euid as u32;
+            inner.fsuid = euid as u32;
+        }
+        if suid != -1 {
+            inner.saved_uid = suid as u32;
+        }
+        Ok(())
+    }
+
+    /// Get real, effective, and saved user IDs.
+    pub fn get_resuid(&self) -> (u32, u32, u32) {
+        let inner = self.inner.lock();
+        (inner.uid, inner.euid, inner.saved_uid)
+    }
+
+    /// Set real, effective, and saved group IDs.
+    #[allow(clippy::result_unit_err)]
+    pub fn set_resgid(&self, rgid: i32, egid: i32, sgid: i32) -> Result<(), ()> {
+        let mut inner = self.inner.lock();
+        if inner.euid != 0 {
+            let allowed = [inner.gid, inner.egid, inner.saved_gid];
+            if rgid != -1 && !allowed.contains(&(rgid as u32)) {
+                return Err(());
+            }
+            if egid != -1 && !allowed.contains(&(egid as u32)) {
+                return Err(());
+            }
+            if sgid != -1 && !allowed.contains(&(sgid as u32)) {
+                return Err(());
+            }
+        }
+        if rgid != -1 {
+            inner.gid = rgid as u32;
+        }
+        if egid != -1 {
+            inner.egid = egid as u32;
+            inner.fsgid = egid as u32;
+        }
+        if sgid != -1 {
+            inner.saved_gid = sgid as u32;
+        }
+        Ok(())
+    }
+
+    /// Get real, effective, and saved group IDs.
+    pub fn get_resgid(&self) -> (u32, u32, u32) {
+        let inner = self.inner.lock();
+        (inner.gid, inner.egid, inner.saved_gid)
+    }
+
+    /// Set filesystem UID. Returns the previous fsuid.
+    pub fn set_fsuid(&self, fsuid: u32) -> u32 {
+        let mut inner = self.inner.lock();
+        let old = inner.fsuid;
+        // Only root or matching uid/euid/saved_uid can set fsuid
+        if inner.euid == 0
+            || fsuid == inner.uid
+            || fsuid == inner.euid
+            || fsuid == inner.saved_uid
+            || fsuid == inner.fsuid
+        {
+            inner.fsuid = fsuid;
+        }
+        old
+    }
+
+    /// Set filesystem GID. Returns the previous fsgid.
+    pub fn set_fsgid(&self, fsgid: u32) -> u32 {
+        let mut inner = self.inner.lock();
+        let old = inner.fsgid;
+        if inner.euid == 0
+            || fsgid == inner.gid
+            || fsgid == inner.egid
+            || fsgid == inner.saved_gid
+            || fsgid == inner.fsgid
+        {
+            inner.fsgid = fsgid;
+        }
+        old
     }
 
     /// Get the process group ID. Returns 0 if no explicit

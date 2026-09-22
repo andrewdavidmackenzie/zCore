@@ -431,6 +431,95 @@ impl Syscall<'_> {
             .map_err(|_| LxError::EPERM)
     }
 
+    /// Set the real group ID.
+    pub fn sys_setgid(&self, gid: u32) -> SysResult {
+        info!("setgid: gid={}", gid);
+        self.linux_process()
+            .set_gid(gid)
+            .map(|_| 0)
+            .map_err(|_| LxError::EPERM)
+    }
+
+    /// Set real and effective user IDs.
+    pub fn sys_setreuid(&self, ruid: i32, euid: i32) -> SysResult {
+        info!("setreuid: ruid={}, euid={}", ruid, euid);
+        self.linux_process()
+            .set_reuid(ruid, euid)
+            .map(|_| 0)
+            .map_err(|_| LxError::EPERM)
+    }
+
+    /// Set real and effective group IDs.
+    pub fn sys_setregid(&self, rgid: i32, egid: i32) -> SysResult {
+        info!("setregid: rgid={}, egid={}", rgid, egid);
+        self.linux_process()
+            .set_regid(rgid, egid)
+            .map(|_| 0)
+            .map_err(|_| LxError::EPERM)
+    }
+
+    /// Set real, effective, and saved user IDs.
+    pub fn sys_setresuid(&self, ruid: i32, euid: i32, suid: i32) -> SysResult {
+        info!("setresuid: ruid={}, euid={}, suid={}", ruid, euid, suid);
+        self.linux_process()
+            .set_resuid(ruid, euid, suid)
+            .map(|_| 0)
+            .map_err(|_| LxError::EPERM)
+    }
+
+    /// Get real, effective, and saved user IDs.
+    pub fn sys_getresuid(
+        &self,
+        mut ruid: UserOutPtr<u32>,
+        mut euid: UserOutPtr<u32>,
+        mut suid: UserOutPtr<u32>,
+    ) -> SysResult {
+        let (r, e, s) = self.linux_process().get_resuid();
+        info!("getresuid: ruid={}, euid={}, suid={}", r, e, s);
+        ruid.write(r)?;
+        euid.write(e)?;
+        suid.write(s)?;
+        Ok(0)
+    }
+
+    /// Set real, effective, and saved group IDs.
+    pub fn sys_setresgid(&self, rgid: i32, egid: i32, sgid: i32) -> SysResult {
+        info!("setresgid: rgid={}, egid={}, sgid={}", rgid, egid, sgid);
+        self.linux_process()
+            .set_resgid(rgid, egid, sgid)
+            .map(|_| 0)
+            .map_err(|_| LxError::EPERM)
+    }
+
+    /// Get real, effective, and saved group IDs.
+    pub fn sys_getresgid(
+        &self,
+        mut rgid: UserOutPtr<u32>,
+        mut egid: UserOutPtr<u32>,
+        mut sgid: UserOutPtr<u32>,
+    ) -> SysResult {
+        let (r, e, s) = self.linux_process().get_resgid();
+        info!("getresgid: rgid={}, egid={}, sgid={}", r, e, s);
+        rgid.write(r)?;
+        egid.write(e)?;
+        sgid.write(s)?;
+        Ok(0)
+    }
+
+    /// Set filesystem UID (for access checks). Returns previous fsuid.
+    pub fn sys_setfsuid(&self, fsuid: u32) -> SysResult {
+        let old = self.linux_process().set_fsuid(fsuid);
+        info!("setfsuid: fsuid={} => old={}", fsuid, old);
+        Ok(old as usize)
+    }
+
+    /// Set filesystem GID (for access checks). Returns previous fsgid.
+    pub fn sys_setfsgid(&self, fsgid: u32) -> SysResult {
+        let old = self.linux_process().set_fsgid(fsgid);
+        info!("setfsgid: fsgid={} => old={}", fsgid, old);
+        Ok(old as usize)
+    }
+
     /// Set the file mode creation mask. Returns the
     /// previous value.
     pub fn sys_umask(&self, mask: u32) -> SysResult {
