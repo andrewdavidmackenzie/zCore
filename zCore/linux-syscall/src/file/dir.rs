@@ -47,6 +47,21 @@ impl Syscall<'_> {
         Ok(0)
     }
 
+    /// Change the current working directory by file descriptor.
+    pub fn sys_fchdir(&self, fd: FileDesc) -> SysResult {
+        info!("fchdir: fd={:?}", fd);
+        let proc = self.linux_process();
+        let file = proc.get_file(fd)?;
+        let path = file.path();
+        let inode = proc.lookup_inode(path)?;
+        let info = inode.metadata()?;
+        if info.type_ != FileType::Dir {
+            return Err(LxError::ENOTDIR);
+        }
+        proc.change_directory(path);
+        Ok(0)
+    }
+
     /// Make a directory.
     /// - path – pointer to string with directory name
     /// - mode – file system permissions mode

@@ -162,6 +162,33 @@ impl Syscall<'_> {
         Ok(0)
     }
 
+    /// Pre-allocate or manipulate file space.
+    ///
+    /// Mode 0 ensures the file is at least `offset + len` bytes.
+    /// Other modes (punch hole, collapse range, etc.) return EOPNOTSUPP.
+    pub fn sys_fallocate(&self, fd: FileDesc, mode: i32, offset: i64, len: i64) -> SysResult {
+        info!(
+            "fallocate: fd={:?}, mode={}, offset={}, len={}",
+            fd, mode, offset, len
+        );
+        if offset < 0 || len <= 0 {
+            return Err(LxError::EINVAL);
+        }
+        if mode != 0 {
+            // Only basic allocation mode is supported
+            warn!("fallocate: mode {} not supported", mode);
+            return Err(LxError::ENOSYS);
+        }
+        let proc = self.linux_process();
+        let file = proc.get_file(fd)?;
+        let target_len = (offset + len) as u64;
+        let current_len = file.metadata()?.size as u64;
+        if target_len > current_len {
+            file.set_len(target_len)?;
+        }
+        Ok(0)
+    }
+
     /// copies data between one file descriptor and another.
     pub async fn sys_sendfile(
         &self,

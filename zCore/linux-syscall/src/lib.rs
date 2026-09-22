@@ -290,6 +290,12 @@ impl Syscall<'_> {
             Sys::GETRANDOM => self.sys_getrandom(a0.into(), a1, a2 as u32),
             Sys::RT_SIGQUEUEINFO => self.sys_rt_sigqueueinfo(a0 as _, a1, a2.into()),
 
+            // file operations — stubs for splice family
+            Sys::FALLOCATE => self.sys_fallocate(a0.into(), a1 as i32, a2 as i64, a3 as i64),
+            Sys::SPLICE => Err(LxError::ENOSYS), // pipe↔fd zero-copy — complex
+            Sys::TEE => Err(LxError::ENOSYS),    // pipe↔pipe zero-copy
+            Sys::VMSPLICE => Err(LxError::ENOSYS), // user pages↔pipe
+
             // filesystem notification — stubs (no VFS event hooks)
             Sys::INOTIFY_INIT1 => Err(LxError::ENOSYS),
             Sys::INOTIFY_ADD_WATCH => Err(LxError::ENOSYS),
@@ -388,6 +394,10 @@ impl Syscall<'_> {
             Sys::PAUSE => self.sys_pause().await,
             Sys::EPOLL_CREATE => self.sys_epoll_create(a0),
             Sys::EPOLL_WAIT => self.sys_epoll_wait(a0, a1.into(), a2, a3 as isize).await,
+            Sys::CREAT => self.sys_open(a0.into(), 0o101, a1), // O_CREAT|O_WRONLY|O_TRUNC
+            Sys::GETPGRP => self.sys_getpgid(0),
+            Sys::FCHDIR => self.sys_fchdir(a0.into()),
+            Sys::LCHOWN => Ok(0), // ownership changes are no-ops (single-user)
             _ => self.unknown_syscall(sys_type),
         }
     }
