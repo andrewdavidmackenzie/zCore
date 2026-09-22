@@ -278,9 +278,9 @@ impl Syscall<'_> {
 
             // file operations — stubs for splice family
             Sys::FALLOCATE => self.sys_fallocate(a0.into(), a1 as i32, a2 as i64, a3 as i64),
-            Sys::SPLICE => Err(LxError::ENOSYS),   // pipe↔fd zero-copy — complex
-            Sys::TEE => Err(LxError::ENOSYS),       // pipe↔pipe zero-copy
-            Sys::VMSPLICE => Err(LxError::ENOSYS),  // user pages↔pipe
+            Sys::SPLICE => Err(LxError::ENOSYS), // pipe↔fd zero-copy — complex
+            Sys::TEE => Err(LxError::ENOSYS),    // pipe↔pipe zero-copy
+            Sys::VMSPLICE => Err(LxError::ENOSYS), // user pages↔pipe
 
             // filesystem notification — stubs (no VFS event hooks)
             Sys::INOTIFY_INIT1 => Err(LxError::ENOSYS),
