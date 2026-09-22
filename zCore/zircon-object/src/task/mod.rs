@@ -7,6 +7,9 @@ mod exception;
 mod job;
 mod job_policy;
 mod process;
+/// Process spawning from ELF binaries.
+#[cfg(feature = "elf")]
+pub mod spawn;
 mod suspend_token;
 mod thread;
 
@@ -48,21 +51,31 @@ pub enum Personality {
     Zircon,
 }
 
+// ELF e_ident field indices (from the ELF specification).
+/// Index of OS/ABI byte in `e_ident`.
+const EI_OSABI: usize = 7;
+
+/// ELF magic number (`\x7fELF`).
+const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
+
 /// ELF OS/ABI value for zCore Zircon personality binaries.
 ///
-/// Set in `e_ident[EI_OSABI]` (byte 7) at build time by xtask.
-/// The kernel checks this byte during `execve` to determine
+/// Set in `e_ident[EI_OSABI]` at build time by xtask.
+/// The kernel checks this field during `execve` to determine
 /// which personality to use for the new process.
+///
+/// Value 0xFC is in the OS-specific range (64-255) of the ELF spec,
+/// avoiding conflicts with standard ELFOSABI values (NONE=0, Linux=3, etc.).
 pub const ELFOSABI_ZIRCON: u8 = 0xFC;
 
 impl Personality {
     /// Detect personality from ELF binary data.
     ///
-    /// Checks `e_ident[EI_OSABI]` (byte 7):
+    /// Checks `e_ident[EI_OSABI]`:
     /// - `ELFOSABI_ZIRCON` (0xFC) → Zircon
     /// - anything else → Linux (default, compatible with standard ELFs)
     pub fn from_elf(data: &[u8]) -> Self {
-        if data.len() >= 8 && data[0..4] == *b"\x7fELF" && data[7] == ELFOSABI_ZIRCON {
+        if data.len() > EI_OSABI && data[0..4] == ELF_MAGIC && data[EI_OSABI] == ELFOSABI_ZIRCON {
             Personality::Zircon
         } else {
             Personality::Linux

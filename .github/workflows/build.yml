@@ -76,9 +76,9 @@ jobs:
       - name: Build ${{ matrix.arch }} bare-metal linux
         run: cargo bin -m qemu-${{ matrix.arch }}
 
-      - name: Build ${{ matrix.arch }} bare-metal zircon
+      - name: Build ${{ matrix.arch }} bare-metal (Zircon only)
         if: matrix.arch == 'x86_64'
-        run: cargo bin -m qemu-${{ matrix.arch }} --personality zircon
+        run: cargo bin -m qemu-${{ matrix.arch }} --personality none
 
   libos:
     name: LibOS build
@@ -92,10 +92,10 @@ jobs:
           components: rust-src, llvm-tools-preview
 
       - name: Build libos (Linux mode)
-        run: cargo zcore-build -m libos
+        run: cargo zcore-build -m libos --personality linux
 
       - name: Build libos (Zircon mode)
-        run: cargo zcore-build -m libos --personality zircon
+        run: cargo zcore-build -m libos --personality none
 
   clippy:
     name: Clippy (all targets)
@@ -126,5 +126,5 @@ jobs:
       - name: Build x86-laptop
         run: cargo bin -m x86-laptop
 
-      - name: Build dual personality (linux,zircon) aarch64
-        run: cargo bin -m qemu-aarch64 --personality linux,zircon
+      - name: Build with Linux emulation (aarch64)
+        run: cargo bin -m qemu-aarch64 --personality linux

@@ -17,8 +17,9 @@ use std::{
 /// Parsed target configuration from a `targets/<name>.toml` file.
 #[derive(Debug, Deserialize)]
 pub struct TargetConfig {
-    /// Default personality: "linux" or "zircon".
-    /// Can be overridden at build time with `--personality`.
+    /// Whether to include Linux emulation by default.
+    /// Zircon is always included. Set to "linux" to also enable
+    /// Linux syscall emulation. Can be overridden with `--personality linux`.
     #[serde(rename = "default-personality", default = "default_personality")]
     pub default_personality: String,
     /// Target architecture: "aarch64", "x86_64", "riscv64", "host".

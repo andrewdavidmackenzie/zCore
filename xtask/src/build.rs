@@ -15,7 +15,7 @@ pub(crate) struct BuildArgs {
     /// Reads configuration from targets/<name>.toml.
     #[clap(long, short)]
     pub machine: String,
-    /// Personality override: "linux" or "zircon".
+    /// Personality override: "linux" to add Linux emulation, "none" for Zircon only.
     /// If not set, uses the target's default-personality from the TOML.
     #[clap(long)]
     pub personality: Option<String>,
@@ -38,7 +38,7 @@ pub(crate) struct QemuArgs {
     /// Target name (e.g., "qemu-aarch64"). Must have a [qemu] section.
     #[clap(long, short)]
     machine: String,
-    /// Personality override: "linux" or "zircon".
+    /// Personality override: "linux" to add Linux emulation, "none" for Zircon only.
     #[clap(long)]
     personality: Option<String>,
     /// Build as debug mode.
@@ -88,7 +88,7 @@ impl BuildConfig {
 
         // Determine personality: CLI override > TOML default.
         // Supports comma-separated list for multiple personalities
-        // (e.g. "linux,zircon" for a dual-personality kernel).
+        // (e.g. "linux" to add Linux emulation).
         let personality = args
             .personality
             .clone()
@@ -109,18 +109,21 @@ impl BuildConfig {
         let mut features: HashSet<String> = target.cargo_features().into_iter().collect();
         let mut env = HashMap::new();
 
-        // Set personality feature(s).
-        // Comma-separated lists allow multiple personalities
-        // (e.g. "linux,zircon" for a dual-personality kernel).
-        let personalities: Vec<&str> = personality.split(',').collect();
+        // Zircon is always the base. The only additive personality
+        // is "linux" which adds Linux syscall emulation on top.
+        let personalities: Vec<&str> = personality.split(',').map(str::trim).collect();
         for p in &personalities {
-            let p = p.trim();
-            assert!(
-                p == "linux" || p == "zircon",
-                "Invalid personality '{}' -- must be 'linux' or 'zircon'",
-                p
-            );
-            features.insert(p.to_string());
+            match *p {
+                "linux" => {
+                    features.insert("linux".to_string());
+                }
+                "none" => {} // Zircon only, no additions
+                other => panic!(
+                    "Unknown personality '{}' — use 'linux' to add Linux emulation, \
+                     or 'none' for Zircon only",
+                    other
+                ),
+            }
         }
 
         // Pass through ZCORE_CMDLINE from the environment if set,
@@ -137,27 +140,21 @@ impl BuildConfig {
             target.write_target_json(&args.machine)
         };
 
-        // Zircon personality requires userstart and petal ZBI.
-        // Build them now unless already provided via environment
-        // (e.g., when the test script builds a specific ZBI first).
-        if personalities.contains(&"zircon") {
-            if std::env::var("USERSTART_ELF").is_err() {
+        // Zircon is always the base — build userstart and petal ZBI
+        // unless already provided via environment.
+        // Skip on riscv64: zircon-abi has compile_error! for 8-arg syscalls.
+        if !matches!(arch, Arch::Riscv64) {
+            if let Ok(val) = std::env::var("USERSTART_ELF") {
+                env.insert("USERSTART_ELF".into(), val.into());
+            } else {
                 let userstart_path = crate::petal::build_userstart(arch);
                 env.insert("USERSTART_ELF".into(), userstart_path.into_os_string());
-            } else {
-                env.insert(
-                    "USERSTART_ELF".into(),
-                    std::env::var("USERSTART_ELF").unwrap().into(),
-                );
             }
-            if std::env::var("PETAL_ZBI").is_err() {
+            if let Ok(val) = std::env::var("PETAL_ZBI") {
+                env.insert("PETAL_ZBI".into(), val.into());
+            } else {
                 let zbi_path = crate::petal::build_petal_zbi(arch, "shell");
                 env.insert("PETAL_ZBI".into(), zbi_path.into_os_string());
-            } else {
-                env.insert(
-                    "PETAL_ZBI".into(),
-                    std::env::var("PETAL_ZBI").unwrap().into(),
-                );
             }
         }
 
@@ -277,9 +274,8 @@ impl QemuArgs {
             debug: self.debug,
         });
 
-        let is_zircon = build_config.features.contains("zircon");
+        // Zircon is always the base. Linux is additive.
         let is_linux = build_config.features.contains("linux");
-        // In dual mode, Linux rootfs is needed (Linux is the default personality).
         let needs_rootfs = is_linux;
         let arch = build_config.arch;
         let arch_str = arch.name();
@@ -298,6 +294,12 @@ impl QemuArgs {
             // Build default Linux rootfs image
             let rootfs = ArchArg { arch }.linux_rootfs();
             rootfs.image();
+            // Copy petal hello into the Linux rootfs for cross-personality testing
+            if !matches!(arch, Arch::Riscv64) {
+                crate::petal::copy_petal_to_linux_rootfs(arch);
+                // Rebuild image to include the petal binary
+                rootfs.image();
+            }
             rootfs.image_path()
         } else {
             // Zircon mode: build rootfs image with petal programs.
@@ -307,18 +309,18 @@ impl QemuArgs {
 
         let obj = build_config.target_file_path();
         // Set the kernel command line via compile-time env var.
-        let cmdline = if is_linux && is_zircon {
-            // Both personalities: default to Linux with busybox
+        let cmdline = if is_linux {
+            // Linux personality: boot busybox shell
             format!(
                 "LOG={} PERSONALITY=linux ROOTPROC=/bin/busybox?sh",
                 self.log
             )
-        } else if is_zircon && self.rootfs_image.is_some() {
+        } else if self.rootfs_image.is_some() {
+            // Zircon with custom rootfs
             format!("LOG={} ROOTPROC=/bin/hello", self.log)
-        } else if is_zircon {
-            format!("LOG={}", self.log)
         } else {
-            format!("LOG={} ROOTPROC=/bin/busybox?sh", self.log)
+            // Zircon only (default)
+            format!("LOG={}", self.log)
         };
         build_config
             .env

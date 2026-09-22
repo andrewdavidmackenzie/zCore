@@ -12,7 +12,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 	petal-shell raspi400-build raspi400-run raspi400-sd \
 	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon \
 	debug-qemu debug-gdb \
-	pre-push
+	pre-push pre-push-quick
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -55,13 +55,13 @@ debug-lldb:
 # Use LOG=info (or debug/trace/warn/error) to control log verbosity.
 LOG ?= info
 zircon-run:
-	cargo qemu -m qemu-$(ARCH) --personality zircon --log $(LOG)
+	cargo qemu -m qemu-$(ARCH) --personality none --log $(LOG)
 
 # Run the petal shell interactively in QEMU.
 # Boots zCore in Zircon mode with the shell as the init program.
 # Type 'help', 'echo hello', 'version', 'exit'. Ctrl-A X to kill QEMU.
 petal-shell:
-	ZCORE_CMDLINE="LOG=$(LOG)" cargo qemu -m qemu-$(ARCH) --personality zircon --log $(LOG)
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo qemu -m qemu-$(ARCH) --personality none --log $(LOG)
 
 # Build the kernel for Raspberry Pi 400 in Zircon mode.
 # Userstart, petal ZBI, features, and target spec all come from
@@ -94,12 +94,12 @@ endif
 # Build x86_64 kernel in Linux mode.
 x86-linux-build:
 	@echo "==> Building zCore kernel (Linux, x86_64)..."
-	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m qemu-x86_64
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m qemu-x86_64 --personality linux
 
 # Build x86_64 kernel in Zircon mode with petal shell.
 x86-zircon-build:
 	@echo "==> Building zCore kernel (Zircon, x86_64)..."
-	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" cargo zcore-build -m qemu-x86_64 --personality zircon
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" cargo zcore-build -m qemu-x86_64 --personality none
 
 # Build and run x86_64 Linux in QEMU.
 # Ctrl-A X to exit QEMU.
@@ -205,13 +205,13 @@ libc-test: boot-test
 # Requires x86_64 host (Linux or macOS) or aarch64 Linux.
 # Two personalities: Linux (busybox shell) and Zircon (petal programs).
 
-# Build libos in Linux mode (default personality)
+# Build libos in Linux mode
 libos-build-linux:
-	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality linux
 
 # Build libos in Zircon mode (builds userstart + petal automatically)
 libos-build-zircon:
-	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality zircon
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality none
 
 # Run libos in Linux mode with busybox shell
 libos-run-linux:
@@ -219,7 +219,7 @@ libos-run-linux:
 
 # Run libos in Zircon mode (known broken -- see #281)
 libos-run-zircon:
-	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality zircon
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --personality none
 	./target/release/kernel
 
 # configure build environment (platform toolchain)
@@ -393,6 +393,26 @@ endif
 
 # Pre-push check: mirrors all CI jobs locally.
 # Run this before every push to avoid CI failures.
+# Fast pre-push: clippy + fmt + builds (no QEMU tests).
+# Catches ~90% of CI failures in ~3 minutes.
+pre-push-quick:
+	@echo "==> [1/7] Clippy (all targets + personalities)..."
+	cargo check-style
+	@echo "==> [2/7] Workspace build..."
+	cargo build
+	@echo "==> [3/7] Unit tests..."
+	cargo test --no-fail-fast
+	@echo "==> [4/7] Bare-metal aarch64..."
+	$(MAKE) build ARCH=aarch64
+	@echo "==> [5/7] Bare-metal x86_64..."
+	$(MAKE) build ARCH=x86_64
+	@echo "==> [6/7] Hardware targets..."
+	cargo bin -m raspi400
+	cargo bin -m x86-laptop
+	@echo "==> [7/7] Done."
+	@echo "==> Quick pre-push checks passed."
+
+# Full pre-push: everything CI checks (slow — includes QEMU boot tests).
 # Requires: qemu-system-aarch64, qemu-system-x86_64.
 pre-push:
 	@echo "==> [1/15] Clippy (all targets + personalities)..."
@@ -412,12 +432,12 @@ pre-push:
 	@echo "==> [8/15] Boot smoke test (x86_64)..."
 	$(MAKE) boot-test ARCH=x86_64
 	@echo "==> [9/15] Bare-metal x86_64 zircon..."
-	cargo bin -m qemu-x86_64 --personality zircon
+	cargo bin -m qemu-x86_64
 	@echo "==> [10/16] Dual personality (build-only)..."
-	cargo bin -m qemu-aarch64 --personality linux,zircon
+	cargo bin -m qemu-aarch64 --personality linux
 	@echo "==> [11/16] LibOS (Linux + Zircon)..."
-	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos
-	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos --personality zircon
+	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos --personality linux
+	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos --personality none
 	@echo "==> [12/16] Hardware targets (build-only)..."
 	cargo bin -m raspi400
 	cargo bin -m x86-laptop

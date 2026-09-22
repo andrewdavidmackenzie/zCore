@@ -106,7 +106,7 @@ loader/
  +-- zircon-object/
  +-- linux-object/     (optional, "linux")
  +-- linux-syscall/    (optional, "linux")
- +-- zircon-syscall/   (optional, "zircon")
+ +-- zircon-syscall/   (always included)
  +-- third-party/executor/
 
 The loader runs in **kernel (supervisor) mode**.
@@ -398,8 +398,8 @@ needed for Linux mode.
 Feature combination testing
 (see [#80](https://github.com/andrewdavidmackenzie/zCore/issues/80)):
 a CI job should test: (1) `--features linux` only,
-(2) `--features zircon` only, (3) `--features
-linux,libos`, (4) `--features zircon,libos`,
+(2) zircon-only (no extra features), (3) `--features
+linux,libos`, (4) zircon + libos,
 (5) bare-metal aarch64/riscv64/x86_64. Note: `linux`
 + `zircon` together will panic at runtime but should
 compile. Could use `cargo-hack` for systematic

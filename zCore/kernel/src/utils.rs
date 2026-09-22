@@ -22,28 +22,23 @@ pub fn boot_options() -> BootOptions {
     BootOptions { cmdline, root_proc }
 }
 
-/// Determine which personality to boot from command line or defaults.
+/// Determine whether to boot with Linux emulation.
 ///
-/// Checks `PERSONALITY=linux` or `PERSONALITY=zircon` in the command line.
-/// Falls back to the compile-time default: linux if enabled, else zircon.
-pub fn parse_personality(cmdline: &str) -> &'static str {
-    if let Some(p) = parse_cmdline_value(cmdline, "PERSONALITY") {
-        match p {
-            #[cfg(feature = "linux")]
-            "linux" => return "linux",
-            #[cfg(feature = "zircon")]
-            "zircon" => return "zircon",
-            _ => warn!(
-                "PERSONALITY={} not available (not compiled or unknown), using default",
-                p
-            ),
-        }
+/// Zircon is always the base. Returns `true` if `PERSONALITY=linux`
+/// is in the command line AND the `linux` feature is compiled in.
+pub fn use_linux(cmdline: &str) -> bool {
+    if !cfg!(feature = "linux") {
+        return false;
     }
-    // Default: prefer linux if compiled in, else zircon
-    if cfg!(feature = "linux") {
-        "linux"
-    } else {
-        "zircon"
+    // Default to linux when compiled in, unless overridden
+    match parse_cmdline_value(cmdline, "PERSONALITY") {
+        Some("linux") => true,
+        Some("none") => false,
+        Some(other) => {
+            warn!("Unknown PERSONALITY={}, defaulting to linux", other);
+            true
+        }
+        None => true, // linux is the default when compiled in
     }
 }
 

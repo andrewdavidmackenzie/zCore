@@ -23,8 +23,9 @@ link-user-img = []
 baremetal-test = ["executor/baremetal-test"]
 
 # --- Personality ---
-zircon = ["zircon-loader", "rcore-fs", "rcore-fs-sfs"]
-linux = ["linux-loader", "linux-object", "rcore-fs", "rcore-fs-sfs"]
+# Zircon is the base personality (always enabled).
+# Linux is additive — adds Linux syscall emulation on top of Zircon.
+linux = ["linux-loader", "linux-object"]
 libos = [
   "hal-impl/libos",
   "linux-loader?/libos",
@@ -59,14 +60,14 @@ cfg-if = "1.0"
 spin = "0.9.4"
 hal-impl = { path = "../hal-impl", default-features = false }
 zircon-object = { path = "../zircon-object" }
-zircon-loader = { path = "../zircon-loader", optional = true }
+zircon-loader = { path = "../zircon-loader" }
 linux-loader = { path = "../linux-loader", optional = true }
 linux-object = { path = "../linux-object", optional = true }
 
 lock = { path = "../lock" }
 executor = { path = "../executor" }
-rcore-fs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
-rcore-fs-sfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
+rcore-fs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
+rcore-fs-sfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
 
 # LibOS mode
 [target.'cfg(not(target_os = "none"))'.dependencies]

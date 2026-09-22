@@ -56,7 +56,7 @@ ZBI="target/petal/${ARCH}/petal.zbi"
 USERSTART_ELF="$(pwd)/$USERSTART" \
   PETAL_ZBI="$(pwd)/$ZBI" \
   ZCORE_CMDLINE="LOG=${LOG:-info} ROOTPROC=/bin/hello" \
-  cargo zcore-build -m "qemu-${ARCH}" --personality zircon
+  cargo zcore-build -m "qemu-${ARCH}" --personality none
 
 # Strip ELF to raw binary (QEMU needs raw binary for DTB passthrough)
 OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)

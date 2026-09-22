@@ -19,6 +19,10 @@ make pre-push
 If `make pre-push` fails, fix the issue before pushing. Do not push
 code that fails pre-push checks.
 
+For faster iteration, use `make pre-push-quick` which runs clippy,
+fmt, unit tests, and builds (~3 min) but skips QEMU boot tests.
+Run the full `make pre-push` before the final push.
+
 ## PR workflow
 After pushing commits to a PR:
 1. Wait for CI checks to complete
