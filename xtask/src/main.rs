@@ -486,6 +486,7 @@ fn check_style() {
         Cargo::clippy()
             .args(["-p", "petal", "-p", "userstart"])
             .args(["--target", target])
+            .args(["-Z", "build-std=core,alloc"])
             .arg("--no-deps")
             .args(["--", "--deny", "warnings"])
             .invoke();
