@@ -469,9 +469,11 @@ pre-push:
 	$(MAKE) build ARCH=aarch64
 	@echo "==> [5/15] Boot smoke test (aarch64)..."
 	$(MAKE) boot-test ARCH=aarch64
-	@echo "==> [6/15] Bare-metal riscv64..."
+	@echo "==> [6/16] Bare-metal riscv64..."
 	cargo zcore-build -m qemu-riscv64
-	@echo "==> [7/15] Bare-metal x86_64 (build + rootfs)..."
+	@echo "==> [6.5/16] Boot smoke test (riscv64)..."
+	tools/scripts/riscv64-boot-test.sh
+	@echo "==> [7/16] Bare-metal x86_64 (build + rootfs)..."
 	$(MAKE) build ARCH=x86_64
 	@echo "==> [8/15] Boot smoke test (x86_64)..."
 	$(MAKE) boot-test ARCH=x86_64
