@@ -22,26 +22,6 @@ pub fn boot_options() -> BootOptions {
     BootOptions { cmdline, root_proc }
 }
 
-/// Determine whether to boot with Linux emulation.
-///
-/// Zircon is always the base. Returns `true` if `PERSONALITY=linux`
-/// is in the command line AND the `linux` feature is compiled in.
-pub fn use_linux(cmdline: &str) -> bool {
-    if !cfg!(feature = "linux") {
-        return false;
-    }
-    // Default to linux when compiled in, unless overridden
-    match parse_cmdline_value(cmdline, "PERSONALITY") {
-        Some("linux") => true,
-        Some("none") => false,
-        Some(other) => {
-            warn!("Unknown PERSONALITY={}, defaulting to linux", other);
-            true
-        }
-        None => true, // linux is the default when compiled in
-    }
-}
-
 /// Extract a value from a "KEY=VALUE KEY2=VALUE2" cmdline string.
 fn parse_cmdline_value<'a>(cmdline: &'a str, key: &str) -> Option<&'a str> {
     for token in cmdline.split_whitespace() {
@@ -63,7 +43,7 @@ pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
             let object: Arc<dyn KernelObject> = proc.clone();
             // Wait for either termination signal — Linux processes use
             // PROCESS_TERMINATED, Zircon processes use USER_SIGNAL_0.
-            // In dual-personality mode, wait for either.
+            // In dual-flavour mode, wait for either.
             let signal = Signal::PROCESS_TERMINATED | Signal::USER_SIGNAL_0;
             object.wait_signal(signal).await;
             check_exit_code(proc)

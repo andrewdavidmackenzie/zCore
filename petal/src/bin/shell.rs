@@ -197,6 +197,7 @@ fn run_command(line: &str, ctx: &Ctx) -> bool {
         "version" => cmd_version(),
         "uptime" => cmd_uptime(),
         "sysinfo" => cmd_sysinfo(),
+        "exec" => cmd_exec(&parts[1..]),
         "dmesg" => cmd_dmesg(ctx),
         "ps" => cmd_ps(ctx),
         "mem" => cmd_mem(ctx),
@@ -205,9 +206,17 @@ fn run_command(line: &str, ctx: &Ctx) -> bool {
             return true;
         }
         _ => {
-            zx::debug_write(b"unknown command: ");
-            zx::debug_write(parts[0].as_bytes());
-            zx::debug_write(b"\n");
+            // Try to exec as a program path
+            let status = zx::sys::debug_exec(parts[0]);
+            if status != 0 {
+                if parts[0].starts_with('/') {
+                    zx::debug_write(b"unsupported binary flavour: ");
+                } else {
+                    zx::debug_write(b"unknown command: ");
+                }
+                zx::debug_write(parts[0].as_bytes());
+                zx::debug_write(b"\r\n");
+            }
         }
     }
     false
@@ -216,16 +225,31 @@ fn run_command(line: &str, ctx: &Ctx) -> bool {
 // --- Builtins ---
 
 fn cmd_help() {
-    zx::debug_write(b"Available commands:\n");
-    zx::debug_write(b"  help     - show this message\n");
-    zx::debug_write(b"  echo     - print arguments\n");
-    zx::debug_write(b"  version  - show shell version\n");
-    zx::debug_write(b"  uptime   - show system uptime\n");
-    zx::debug_write(b"  sysinfo  - CPU count, memory, version\n");
-    zx::debug_write(b"  dmesg    - show kernel log\n");
-    zx::debug_write(b"  ps       - list processes\n");
-    zx::debug_write(b"  mem      - show memory stats\n");
-    zx::debug_write(b"  exit     - exit the shell\n");
+    zx::debug_write(b"Available commands:\r\n");
+    zx::debug_write(b"  help     - show this message\r\n");
+    zx::debug_write(b"  echo     - print arguments\r\n");
+    zx::debug_write(b"  exec     - run a program from rootfs\r\n");
+    zx::debug_write(b"  version  - show shell version\r\n");
+    zx::debug_write(b"  uptime   - show system uptime\r\n");
+    zx::debug_write(b"  sysinfo  - CPU count, memory, version\r\n");
+    zx::debug_write(b"  dmesg    - show kernel log\r\n");
+    zx::debug_write(b"  ps       - list processes\r\n");
+    zx::debug_write(b"  mem      - show memory stats\r\n");
+    zx::debug_write(b"  exit     - exit the shell\r\n");
+}
+
+fn cmd_exec(args: &[&str]) {
+    if args.is_empty() {
+        zx::debug_write(b"usage: exec <path>\r\n");
+        return;
+    }
+    let path = args[0];
+    let status = zx::sys::debug_exec(path);
+    if status != 0 {
+        zx::debug_write(b"exec failed: ");
+        zx::debug_write(path.as_bytes());
+        zx::debug_write(b"\r\n");
+    }
 }
 
 fn cmd_echo(args: &[&str]) {

@@ -1143,12 +1143,12 @@ name = "linux-loader"
 version = "0.1.0"
 dependencies = [
  "cfg-if",
- "executor",
  "hal",
  "hal-impl",
  "linux-object",
  "linux-syscall",
  "log",
+ "spin 0.9.4",
  "zircon-object",
 ]
 

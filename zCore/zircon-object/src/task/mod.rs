@@ -40,13 +40,13 @@ pub trait Task: Sync + Send {
 /// The return code set when a task is killed via zx_task_kill().
 pub const TASK_RETCODE_SYSCALL_KILL: i64 = -1028;
 
-/// Kernel personality — determines syscall ABI and process model.
+/// Process flavour — determines syscall ABI and process model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Personality {
-    /// Linux personality: syscall via x8 (aarch64), 6 args,
+pub enum Flavour {
+    /// Linux flavour: syscall via x8 (aarch64), 6 args,
     /// LinuxProcess extension, POSIX signal model.
     Linux,
-    /// Zircon personality: syscall via x16 (aarch64), 8 args,
+    /// Zircon flavour: syscall via x16 (aarch64), 8 args,
     /// no extension, handle-based IPC.
     Zircon,
 }
@@ -58,27 +58,27 @@ const EI_OSABI: usize = 7;
 /// ELF magic number (`\x7fELF`).
 const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
 
-/// ELF OS/ABI value for zCore Zircon personality binaries.
+/// ELF OS/ABI value for zCore Zircon flavour binaries.
 ///
 /// Set in `e_ident[EI_OSABI]` at build time by xtask.
 /// The kernel checks this field during `execve` to determine
-/// which personality to use for the new process.
+/// which flavour to use for the new process.
 ///
 /// Value 0xFC is in the OS-specific range (64-255) of the ELF spec,
 /// avoiding conflicts with standard ELFOSABI values (NONE=0, Linux=3, etc.).
 pub const ELFOSABI_ZIRCON: u8 = 0xFC;
 
-impl Personality {
-    /// Detect personality from ELF binary data.
+impl Flavour {
+    /// Detect process flavour from ELF binary data.
     ///
     /// Checks `e_ident[EI_OSABI]`:
     /// - `ELFOSABI_ZIRCON` (0xFC) → Zircon
     /// - anything else → Linux (default, compatible with standard ELFs)
     pub fn from_elf(data: &[u8]) -> Self {
         if data.len() > EI_OSABI && data[0..4] == ELF_MAGIC && data[EI_OSABI] == ELFOSABI_ZIRCON {
-            Personality::Zircon
+            Flavour::Zircon
         } else {
-            Personality::Linux
+            Flavour::Linux
         }
     }
 }

@@ -36,7 +36,7 @@ feature flags manually.
 
 ### Available targets
 
-| Target | Arch | Personality | Hardware |
+| Target | Arch | Flavour | Hardware |
 |--------|------|-------------|----------|
 | `qemu-aarch64` | aarch64 | linux | QEMU virt |
 | `qemu-x86_64` | x86_64 | linux | QEMU q35 |
@@ -53,7 +53,7 @@ cargo zcore-build -m qemu-aarch64
 cargo zcore-build -m raspi400
 cargo zcore-build -m libos
 
-# Override the default personality
+# Override the default flavour
 cargo zcore-build -m qemu-aarch64
 
 # Build and strip to raw binary
@@ -64,7 +64,7 @@ cargo qemu -m qemu-aarch64
 cargo qemu -m qemu-x86_64 --log info
 
 # Build and run as a host process (no QEMU needed)
-cargo zcore-build -m libos                         # linux (default personality)
+cargo zcore-build -m libos                         # linux (default flavour)
 cargo zcore-build -m libos     # Zircon only
 cargo linux-libos --args "/bin/busybox ls"          # build + run linux libos
 ```
@@ -91,7 +91,7 @@ Each `targets/<name>.toml` file is the single source of truth:
 
 ```toml
 # targets/qemu-aarch64.toml
-default-personality = "linux"
+default-flavour = "linux"
 arch = "aarch64"
 linker-script = "zCore/kernel/src/platform/aarch64/linker.ld"
 drivers = ["pl011-uart", "gic-400", "virtio-blk"]
@@ -107,8 +107,8 @@ llvm-target = "aarch64-unknown-linux-gnu"
 ```
 
 The `drivers` list maps to cargo feature flags in `kernel-drivers`.
-The `default-personality` sets whether the kernel boots with Linux
-syscall emulation or the Zircon microkernel personality.
+The `default-flavour` sets whether the kernel boots with Linux
+syscall emulation or the Zircon microkernel flavour.
 
 ## Attribution and History
 
@@ -134,7 +134,7 @@ focuses on:
 - aarch64 bare-metal (QEMU virt, Raspberry Pi 400)
 - Linux syscall completeness (libc-test pass rate: 44/69 = 63%)
 - Code quality (English comments, modern Rust idioms, CI coverage)
-- Zircon personality via the petal userspace toolkit
+- Zircon flavour via the petal userspace toolkit
 
 See [CHANGELOG](docs/) and the [issue tracker](https://github.com/andrewdavidmackenzie/zCore/issues)
 for current development activity.

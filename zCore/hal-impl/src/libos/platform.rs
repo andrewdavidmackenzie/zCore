@@ -18,7 +18,7 @@ hal_fn_impl! {
             cfg!(target_arch = "x86_64")
         }
 
-        fn libos_rootfs_path(personality: &str) -> Option<String> {
+        fn libos_rootfs_path(flavour: &str) -> Option<String> {
             let project_dir = if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
                 std::path::Path::new(&dir).parent().unwrap().to_path_buf()
             } else {
@@ -39,13 +39,13 @@ hal_fn_impl! {
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
             {
                 let libos_path = rootfs_base
-                    .join(format!("{personality}-libos"))
+                    .join(format!("{flavour}-libos"))
                     .join(arch);
                 if libos_path.is_dir() {
                     return Some(libos_path.to_string_lossy().into_owned());
                 }
             }
-            let path = rootfs_base.join(personality).join(arch);
+            let path = rootfs_base.join(flavour).join(arch);
             Some(path.to_string_lossy().into_owned())
         }
     }

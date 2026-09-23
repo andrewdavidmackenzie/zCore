@@ -62,6 +62,7 @@ static DTB_MEMORY_END: InitOnce<Option<usize>> = InitOnce::new_with_default(None
 static DTB_UART_BASE: InitOnce<Option<usize>> = InitOnce::new_with_default(None);
 /// DTB-discovered GIC base address (distributor).
 static DTB_GIC_BASE: InitOnce<Option<usize>> = InitOnce::new_with_default(None);
+static DTB_CPU_COUNT: InitOnce<usize> = InitOnce::new_with_default(1);
 
 /// Get the physical memory end address, preferring DTB-discovered value.
 pub fn phys_memory_end() -> usize {
@@ -117,6 +118,7 @@ struct DtbInfo {
     memory_size: Option<usize>,
     uart_base: Option<usize>,
     gic_base: Option<usize>,
+    cpu_count: usize,
 }
 
 /// Parse the DTB to extract bootargs, initrd, and hardware info.
@@ -150,6 +152,7 @@ fn parse_dtb(dtb_paddr: usize) {
         memory_size: None,
         uart_base: None,
         gic_base: None,
+        cpu_count: 0,
     };
 
     // Track which top-level node we're inside for property context.
@@ -178,11 +181,20 @@ fn parse_dtb(dtb_paddr: usize) {
                 {
                     return StepInto;
                 }
-                // Also step into soc/ to find nested devices
-                if name_bytes == b"soc" {
+                // Also step into soc/ and cpus/ to find nested devices
+                if name_bytes == b"soc" || name_bytes == b"cpus" {
+                    current_node_len = name_bytes.len().min(64);
+                    current_node[..current_node_len]
+                        .copy_from_slice(&name_bytes[..current_node_len]);
+                    node_depth = 1;
                     return StepInto;
                 }
-            } else if node_depth == 1 {
+            } else if node_depth >= 1 {
+                // Inside /cpus (depth 1 or 2) -- count cpu@N nodes
+                if name_bytes.starts_with(b"cpu@") {
+                    info.cpu_count += 1;
+                    return StepOver;
+                }
                 // Inside /soc -- look for UART and interrupt controller
                 current_node_len = name_bytes.len().min(64);
                 current_node[..current_node_len].copy_from_slice(&name_bytes[..current_node_len]);
@@ -305,6 +317,10 @@ fn parse_dtb(dtb_paddr: usize) {
     if let Some(gic) = info.gic_base {
         DTB_GIC_BASE.init_once_by(Some(gic));
     }
+    if info.cpu_count > 0 {
+        DTB_CPU_COUNT.init_once_by(info.cpu_count);
+        log::info!("DTB: {} CPU(s) detected", info.cpu_count);
+    }
 
     // Use DTB-discovered memory to override compile-time defaults.
     // Cap at a reasonable limit to avoid mapping issues with the boot
@@ -372,8 +388,10 @@ fn start_secondary_cores() {
     let entry_vaddr = _secondary_entry as *const () as usize;
     let entry_paddr = entry_vaddr - phys_to_virt_offset;
 
-    // Start cores 1, 2, 3 (core 0 is the BSP)
-    for core_id in 1..4u64 {
+    // Start secondary cores (core 0 is the BSP).
+    // CPU count comes from DTB; only start cores that actually exist.
+    let cpu_count = *DTB_CPU_COUNT;
+    for core_id in 1..cpu_count as u64 {
         info!(
             "Starting secondary core {} at paddr {:#x}",
             core_id, entry_paddr

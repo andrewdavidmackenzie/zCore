@@ -175,3 +175,4 @@
 
 #define ZX_SYS_futex_wake_handle_close_thread_exit 200
 #define ZX_SYS_vmar_unmap_handle_close_thread_exit 201
+#define ZX_SYS_debug_exec 202

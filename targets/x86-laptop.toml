@@ -8,8 +8,6 @@
 # controllable via the drivers list. When driver selection is
 # fully implemented, add "fb-console" here.
 
-# Zircon only (no Linux emulation). Use --personality linux to add it.
-default-personality = "none"
 arch = "x86_64"
 linker-script = "zCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
 drivers = ["apic", "ps2-keyboard"]

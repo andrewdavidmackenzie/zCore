@@ -15,10 +15,10 @@ pub(crate) struct BuildArgs {
     /// Reads configuration from targets/<name>.toml.
     #[clap(long, short)]
     pub machine: String,
-    /// Personality override: "linux" to add Linux emulation, "none" for Zircon only.
-    /// If not set, uses the target's default-personality from the TOML.
+    /// Flavour: "linux" to add Linux emulation. Omit for Zircon only.
+    /// If not set, uses the target's default-flavour from the TOML.
     #[clap(long)]
-    pub personality: Option<String>,
+    pub flavour: Option<String>,
     /// Build as debug mode.
     #[clap(long)]
     pub debug: bool,
@@ -38,9 +38,9 @@ pub(crate) struct QemuArgs {
     /// Target name (e.g., "qemu-aarch64"). Must have a [qemu] section.
     #[clap(long, short)]
     machine: String,
-    /// Personality override: "linux" to add Linux emulation, "none" for Zircon only.
+    /// Flavour: "linux" to add Linux emulation. Omit for Zircon only.
     #[clap(long)]
-    personality: Option<String>,
+    flavour: Option<String>,
     /// Build as debug mode.
     #[clap(long)]
     debug: bool,
@@ -80,19 +80,21 @@ pub(crate) struct BuildConfig {
     pub(crate) features: HashSet<String>,
     /// Path to the generated rustc target spec JSON.
     target_json: PathBuf,
+    /// Number of CPU cores from target config.
+    cores: u8,
 }
 
 impl BuildConfig {
     pub fn from_args(args: BuildArgs) -> Self {
         let target = TargetConfig::load(&args.machine);
 
-        // Determine personality: CLI override > TOML default.
-        // Supports comma-separated list for multiple personalities
+        // Determine flavour: CLI override > TOML default.
+        // Supports comma-separated list for multiple flavours
         // (e.g. "linux" to add Linux emulation).
-        let personality = args
-            .personality
+        let flavour = args
+            .flavour
             .clone()
-            .unwrap_or_else(|| target.default_personality.clone());
+            .unwrap_or_else(|| target.default_flavour.clone());
 
         let is_libos = target.arch == "host";
         let arch = if is_libos {
@@ -109,20 +111,19 @@ impl BuildConfig {
         let mut features: HashSet<String> = target.cargo_features().into_iter().collect();
         let mut env = HashMap::new();
 
-        // Zircon is always the base. The only additive personality
-        // is "linux" which adds Linux syscall emulation on top.
-        let personalities: Vec<&str> = personality.split(',').map(str::trim).collect();
-        for p in &personalities {
-            match *p {
-                "linux" => {
-                    features.insert("linux".to_string());
+        // Zircon is always the base. "linux" adds Linux syscall emulation.
+        if !flavour.is_empty() {
+            for p in flavour.split(',').map(str::trim) {
+                match p {
+                    "linux" => {
+                        features.insert("linux".to_string());
+                    }
+                    "" => {}
+                    other => panic!(
+                        "Unknown flavour '{}' — use 'linux' to add Linux emulation",
+                        other
+                    ),
                 }
-                "none" => {} // Zircon only, no additions
-                other => panic!(
-                    "Unknown personality '{}' — use 'linux' to add Linux emulation, \
-                     or 'none' for Zircon only",
-                    other
-                ),
             }
         }
 
@@ -180,6 +181,7 @@ impl BuildConfig {
             env,
             features,
             target_json,
+            cores: target.cores,
         }
     }
 
@@ -267,16 +269,18 @@ impl QemuArgs {
     pub fn qemu(self) {
         let target_name = self.machine.clone();
 
-        // Build the kernel -- personality comes from TOML default or --personality override.
+        // Build the kernel -- flavour comes from TOML default or --flavour override.
         let mut build_config = BuildConfig::from_args(BuildArgs {
             machine: target_name.clone(),
-            personality: self.personality.clone(),
+            flavour: self.flavour.clone(),
             debug: self.debug,
         });
 
         // Zircon is always the base. Linux is additive.
         let is_linux = build_config.features.contains("linux");
-        let needs_rootfs = is_linux;
+        // Always provide a rootfs — it contains both Linux and Zircon
+        // binaries regardless of which flavour features are enabled.
+        let needs_rootfs = true;
         let arch = build_config.arch;
         let arch_str = arch.name();
 
@@ -290,41 +294,33 @@ impl QemuArgs {
             }
             println!("Using custom rootfs image: {}", custom.display());
             custom.clone()
-        } else if is_linux {
-            // Build default Linux rootfs image
+        } else {
+            // Build rootfs with all binaries (busybox + petal programs).
+            // Same rootfs regardless of flavour — ROOTPROC selects init.
             let rootfs = ArchArg { arch }.linux_rootfs();
             rootfs.image();
-            // Copy petal hello into the Linux rootfs for cross-personality testing
-            if !matches!(arch, Arch::Riscv64) {
-                crate::petal::copy_petal_to_linux_rootfs(arch);
-                // Rebuild image to include the petal binary
-                rootfs.image();
-            }
             rootfs.image_path()
-        } else {
-            // Zircon mode: build rootfs image with petal programs.
-            // The kernel prefers rootfs over embedded ZBI.
-            crate::petal::build_zircon_rootfs_image(arch)
         };
 
         let obj = build_config.target_file_path();
         // Set the kernel command line via compile-time env var.
-        let cmdline = if is_linux {
-            // Linux personality: boot busybox shell
-            format!(
-                "LOG={} PERSONALITY=linux ROOTPROC=/bin/busybox?sh",
-                self.log
-            )
-        } else if self.rootfs_image.is_some() {
-            // Zircon with custom rootfs
-            format!("LOG={} ROOTPROC=/bin/hello", self.log)
-        } else {
-            // Zircon only (default)
-            format!("LOG={}", self.log)
-        };
-        build_config
+        // If ZCORE_CMDLINE was passed through from the environment
+        // (e.g. by the Makefile demo targets), use that instead.
+        if !build_config
             .env
-            .insert("ZCORE_CMDLINE".into(), cmdline.into());
+            .contains_key(&OsString::from("ZCORE_CMDLINE"))
+        {
+            let cmdline = if is_linux {
+                // With Linux: default to busybox shell
+                format!("LOG={} ROOTPROC=/bin/busybox?sh", self.log)
+            } else {
+                // Without Linux: default to petal shell
+                format!("LOG={} ROOTPROC=/bin/shell", self.log)
+            };
+            build_config
+                .env
+                .insert("ZCORE_CMDLINE".into(), cmdline.into());
+        }
 
         // Zircon userstart+ZBI are already built by BuildConfig::from_args().
 
@@ -342,6 +338,10 @@ impl QemuArgs {
             .optional(&self.smp, |qemu, smp| {
                 qemu.args(["-smp", &smp.to_string()]);
             });
+        // Use target core count if no CLI override
+        if self.smp.is_none() && build_config.cores > 1 {
+            qemu.args(["-smp", &build_config.cores.to_string()]);
+        }
         match arch {
             Arch::Riscv64 => {
                 qemu.args(["-machine", "virt"])

@@ -22,9 +22,9 @@ zCore supports three execution modes and three CPU architectures:
 | **riscv64**  | Active             | Supported (D1, C910, FU740, StarFive) | Active       |
 | **x86_64**   | Active (BIOS boot) | Planned (#174, needs UEFI #151)       | Active       |
 
-### Personalities and Userspace
+### Flavours and Userspace
 
-zCore supports two OS personalities: **Linux** and **Zircon**. Each has
+zCore supports two OS flavours: **Linux** and **Zircon**. Each has
 its own syscall layer, userspace format, and boot mechanism. Both can
 run in bare-metal (QEMU and real hardware) and LibOS modes.
 
@@ -50,13 +50,13 @@ Sub-issues:
 - #175 -- Decouple Zircon userspace from kernel build (runtime ZBI loading)
 - #176 -- Unified rootfs structure with multiple selectable userspaces
 - #177 -- Zircon: load ELF directly instead of flat binary
-- #178 -- LibOS: unify rootfs/ZBI loading between personalities
+- #178 -- LibOS: unify rootfs/ZBI loading between flavours
 
 TODO: Update the list of issues above based on recent work.
 
 After platform-specific initialization, all paths converge at
 `primary_main()` in `zCore/src/main.rs`, which branches into either
-Linux or Zircon personality mode.
+Linux or Zircon flavour mode.
 
 ---
 
@@ -409,9 +409,9 @@ All platforms converge at `primary_main()` in `zCore/src/main.rs`:
 
 ---
 
-## Personality Launch
+## Flavour Launch
 
-The personality is selected at compile time via mutually exclusive features:
+The flavour is selected at compile time via mutually exclusive features:
 
 ### Linux Mode (`--features linux`)
 
@@ -458,7 +458,7 @@ Init program (userspace, petal/)
 Kernel detects PROCESS_TERMINATED -> shuts down
 ```
 
-This path aligns Zircon's boot with Linux's: both personalities mount
+This path aligns Zircon's boot with Linux's: both flavours mount
 an SFS rootfs and load an init program from it.
 
 ```bash
@@ -502,7 +502,7 @@ Userstart exits -> kernel shuts down
 ### Custom Rootfs Image
 
 The `--rootfs-image` flag passes a custom SFS rootfs image to QEMU,
-usable with either personality:
+usable with either flavour:
 
 ```bash
 # Linux with custom rootfs

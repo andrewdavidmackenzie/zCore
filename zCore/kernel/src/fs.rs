@@ -1,12 +1,29 @@
 //! Filesystem initialization.
 //!
-//! Provides `rootfs()` (Linux) or `zbi()` + `try_zircon_rootfs()` (Zircon)
-//! depending on the kernel personality. Platform differences (libos vs
-//! bare-metal) are handled by hal-impl, not by cfg guards here.
+//! Provides rootfs access for both Linux and Zircon personalities.
+//! Platform differences (libos vs bare-metal) are handled by hal-impl.
 
-// ── Linux personality ──────────────────────────────────────────────────
+/// Try to open a rootfs (works for both Linux and Zircon).
+/// Returns None if no rootfs is available.
+pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
+    try_zircon_rootfs()
+}
+
+/// Read a file from the rootfs by path.
+/// Used as a callback for `zircon_object::task::spawn::set_rootfs_reader`.
+pub fn read_rootfs_file(path: &str) -> Option<alloc::vec::Vec<u8>> {
+    let rootfs = try_rootfs()?;
+    let inode = rootfs.root_inode().lookup(path).ok()?;
+    let meta = inode.metadata().ok()?;
+    let mut data = alloc::vec![0u8; meta.size];
+    inode.read_at(0, &mut data).ok()?;
+    Some(data)
+}
+
+// ── Linux flavour ─────────────────────────────────────────────────────
 
 #[cfg(feature = "linux")]
+#[allow(dead_code)]
 pub fn rootfs() -> alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem> {
     use alloc::sync::Arc;
 
@@ -36,7 +53,7 @@ pub fn rootfs() -> alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem> {
     rcore_fs_sfs::SimpleFileSystem::open(device).expect("failed to open device SimpleFS")
 }
 
-// ── Zircon personality ─────────────────────────────────────────────────
+// ── Zircon flavour ────────────────────────────────────────────────────
 
 pub fn zbi() -> impl AsRef<[u8]> {
     #[cfg(feature = "libos")]
@@ -98,6 +115,7 @@ pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSys
 // ── Initrd support (bare-metal only) ──────────────────────────────────
 
 #[cfg(feature = "linux")]
+#[allow(dead_code)]
 pub(crate) fn init_ram_disk() -> Option<&'static mut [u8]> {
     if hal_impl::platform::is_hosted() {
         return None;

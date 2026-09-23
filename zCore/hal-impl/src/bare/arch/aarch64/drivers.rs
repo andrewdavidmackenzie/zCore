@@ -94,7 +94,7 @@ pub fn init() {
         return;
     }
 
-    #[cfg(not(feature = "board-raspi400"))]
+    #[cfg(all(feature = "virtio", not(feature = "board-raspi400")))]
     {
         use crate::imp::config::VIRTIO_BASE;
         use ::drivers::virtio::{MmioTransport, VirtIOHeader, VirtIoBlk};

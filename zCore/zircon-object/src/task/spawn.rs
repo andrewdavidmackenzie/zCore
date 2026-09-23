@@ -3,7 +3,7 @@
 //! Provides a reusable `spawn_process` function that creates a Zircon
 //! process from raw ELF data. Used by:
 //! - `zircon-loader` for Zircon init and rootfs programs
-//! - `linux-syscall` for cross-personality execve (Linux → Zircon)
+//! - `linux-syscall` for cross-flavour execve (Linux → Zircon)
 //!
 //! The `SpawnConfig` is created by `zircon-loader` (which owns the vDSO
 //! and thread_fn) and can be registered globally via `set_spawn_config`
@@ -25,10 +25,78 @@ use crate::vm::{MMUFlags, VmObject, VmarFlags, PAGE_SIZE};
 /// dependency on `zircon-loader`.
 static GLOBAL_SPAWN_CONFIG: Once<SpawnConfig> = Once::new();
 
+/// Function type for reading a file from the rootfs.
+type RootfsReadFn = fn(&str) -> Option<alloc::vec::Vec<u8>>;
+
+/// Callback to read a file from the rootfs.
+/// Registered at boot by the kernel.
+static ROOTFS_READ_FN: Once<RootfsReadFn> = Once::new();
+
+/// Register the rootfs file reader.
+pub fn set_rootfs_reader(f: fn(&str) -> Option<alloc::vec::Vec<u8>>) {
+    ROOTFS_READ_FN.call_once(|| f);
+}
+
+/// Read a file from the rootfs.
+pub fn read_rootfs_file(path: &str) -> Option<alloc::vec::Vec<u8>> {
+    ROOTFS_READ_FN.get().and_then(|f| f(path))
+}
+
 /// Register the global Zircon spawn configuration.
 /// Called once at kernel init by `zircon-loader`.
 pub fn set_spawn_config(config: SpawnConfig) {
     GLOBAL_SPAWN_CONFIG.call_once(|| config);
+}
+
+/// Function type for spawning a Linux process from ELF data.
+/// Takes (elf_data, path) and returns the process.
+#[cfg(feature = "linux")]
+type LinuxSpawnFn = fn(&[u8], &str) -> crate::ZxResult<Arc<Process>>;
+
+/// Global Linux spawn function, registered at boot when the linux
+/// feature is enabled. Allows Zircon syscalls to spawn Linux processes.
+#[cfg(feature = "linux")]
+static LINUX_SPAWN_FN: Once<LinuxSpawnFn> = Once::new();
+
+/// Register the Linux spawn function.
+#[cfg(feature = "linux")]
+pub fn set_linux_spawn_fn(f: LinuxSpawnFn) {
+    LINUX_SPAWN_FN.call_once(|| f);
+}
+
+/// Spawn a Linux process from ELF data.
+/// Returns None if no Linux spawn function has been registered
+/// (or if the `linux` feature is not enabled).
+#[cfg(feature = "linux")]
+pub fn spawn_linux(elf_data: &[u8], path: &str) -> Option<crate::ZxResult<Arc<Process>>> {
+    LINUX_SPAWN_FN.get().map(|f| f(elf_data, path))
+}
+
+/// Spawn a Linux process — stub when linux feature is disabled.
+#[cfg(not(feature = "linux"))]
+pub fn spawn_linux(_elf_data: &[u8], _path: &str) -> Option<crate::ZxResult<Arc<Process>>> {
+    None
+}
+
+/// Spawn a process by flavour — unified dispatch.
+///
+/// Detects the flavour and delegates to the appropriate spawn function.
+/// Returns an error if the flavour's spawn function is not registered
+/// (e.g. Linux flavour when `linux` feature is not compiled in).
+pub fn spawn_by_flavour(
+    flavour: super::Flavour,
+    job: &Arc<Job>,
+    path: &str,
+    elf_data: &[u8],
+) -> crate::ZxResult<Arc<Process>> {
+    match flavour {
+        super::Flavour::Zircon => {
+            spawn_zircon(job, path, elf_data).unwrap_or_else(|| Err(crate::ZxError::BAD_STATE))
+        }
+        super::Flavour::Linux => {
+            spawn_linux(elf_data, path).unwrap_or_else(|| Err(crate::ZxError::NOT_SUPPORTED))
+        }
+    }
 }
 
 /// Spawn a Zircon process using the globally registered config.
@@ -110,8 +178,30 @@ pub fn spawn_process(
         vdso_data_flags,
     )?;
 
-    // Bootstrap channel
+    // Bootstrap channel — send root job and root resource handles
+    // so petal programs can access kernel services.
     let (ch0, ch1) = Channel::create();
+
+    // Create handles for the root job and a root resource.
+    let root_job = job.clone();
+    use crate::dev::Resource;
+    let root_resource = Resource::create(
+        "root",
+        crate::dev::ResourceKind::ROOT,
+        0,
+        0,
+        crate::dev::ResourceFlags::empty(),
+    );
+    let bootstrap_handles = alloc::vec![
+        Handle::new(root_job, Rights::DEFAULT_CHANNEL),
+        Handle::new(root_resource, Rights::DEFAULT_CHANNEL),
+    ];
+    let msg = crate::ipc::MessagePacket {
+        data: alloc::vec![0u8; 4], // minimal data
+        handles: bootstrap_handles,
+    };
+    ch0.write(msg).map_err(|_| crate::ZxError::INTERNAL)?;
+
     proc.add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
     let handle = Handle::new(ch1, Rights::DEFAULT_CHANNEL);
 

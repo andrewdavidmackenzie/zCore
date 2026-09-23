@@ -19,11 +19,19 @@ use std::{
 pub struct TargetConfig {
     /// Whether to include Linux emulation by default.
     /// Zircon is always included. Set to "linux" to also enable
-    /// Linux syscall emulation. Can be overridden with `--personality linux`.
-    #[serde(rename = "default-personality", default = "default_personality")]
-    pub default_personality: String,
+    /// Linux syscall emulation. Can be overridden with `--flavour linux`.
+    #[serde(
+        alias = "default-personality",
+        rename = "default-flavour",
+        default = "default_flavour"
+    )]
+    pub default_flavour: String,
     /// Target architecture: "aarch64", "x86_64", "riscv64", "host".
     pub arch: String,
+    /// Number of CPU cores. Defaults to 1.
+    /// Used to pass -smp to QEMU and to limit SMP core startup.
+    #[serde(default = "default_cores")]
+    pub cores: u8,
     /// Path to the linker script (relative to workspace root).
     #[serde(rename = "linker-script")]
     pub linker_script: String,
@@ -62,8 +70,12 @@ fn default_memory() -> String {
     "2G".to_string()
 }
 
-fn default_personality() -> String {
-    "linux".to_string()
+fn default_cores() -> u8 {
+    1
+}
+
+fn default_flavour() -> String {
+    String::new() // No linux by default; targets opt-in via default-flavour = "linux"
 }
 
 /// Well-known driver names and their corresponding cargo feature flags.

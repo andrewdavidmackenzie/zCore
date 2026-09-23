@@ -122,7 +122,7 @@ The loader crate supports BOTH: `pub mod linux`
 and `pub mod zircon` are independently feature-
 gated. Both features can be enabled simultaneously
 (in fact, `loader/Cargo.toml` defaults to both
-on). However, at RUNTIME only one personality is
+on). However, at RUNTIME only one flavour is
 used per boot -- the zCore binary selects which
 `run()` to call based on its own feature flags.
 
@@ -392,7 +392,7 @@ A change in `drivers` can transitively affect every crate in the project.
 Loader DOES depend on zircon-object (for Process, Thread, Job, VMAR, Channel,
 Handle, Rights, ELF loader). It ALSO depends on linux-object (optional, behind
 `linux` feature). Both are listed in loader/Cargo.toml. The difference: zircon-
-object is always needed (both personalities share it); linux-object is only
+object is always needed (both flavours share it); linux-object is only
 needed for Linux mode.
 
 Feature combination testing

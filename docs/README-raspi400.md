@@ -1,6 +1,6 @@
 # Raspberry Pi 400 (BCM2711)
 
-zCore runs on the Raspberry Pi 400 (and Pi 4B) in Zircon personality mode.
+zCore runs on the Raspberry Pi 400 (and Pi 4B) in Zircon flavour mode.
 
 ## Current status
 

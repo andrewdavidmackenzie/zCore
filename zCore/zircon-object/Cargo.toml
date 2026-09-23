@@ -13,6 +13,7 @@ description = "Zircon kernel objects"
 [features]
 aspace-separate = []
 elf = ["xmas-elf"]
+linux = []
 #hypervisor = ["rvm"]
 hypervisor = []
 

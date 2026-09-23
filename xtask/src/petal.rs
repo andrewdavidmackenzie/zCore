@@ -5,7 +5,7 @@ use crate::PROJECT_DIR;
 use std::path::PathBuf;
 use std::process::Command;
 
-/// ELF OS/ABI value for zCore Zircon personality binaries.
+/// ELF OS/ABI value for zCore Zircon flavour binaries.
 ///
 /// Set in `e_ident[EI_OSABI]` (byte 7) of petal ELF binaries at build time.
 /// The kernel's `execve` checks this byte to determine whether to use
@@ -193,6 +193,8 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
 
 /// Copy petal hello binary into the Linux rootfs so Zircon binaries
 /// can be tested from the Linux busybox shell.
+/// Copy demo binaries into the Linux rootfs for cross-flavour testing.
+/// Adds both Zircon (petal hello) and Linux (linux-hello) binaries.
 pub fn copy_petal_to_linux_rootfs(arch: Arch) {
     let hello = build_petal(arch, "hello");
     let linux_bin = PROJECT_DIR
@@ -202,6 +204,7 @@ pub fn copy_petal_to_linux_rootfs(arch: Arch) {
         .join(arch.name())
         .join("bin");
     if linux_bin.is_dir() {
+        // Copy Zircon hello (tagged with ELFOSABI_ZIRCON)
         let dest = linux_bin.join("zircon-hello");
         std::fs::copy(&hello, &dest).unwrap_or_else(|e| {
             panic!(
@@ -212,6 +215,53 @@ pub fn copy_petal_to_linux_rootfs(arch: Arch) {
             )
         });
         println!("Copied petal hello -> {}", dest.display());
+
+        // Build linux-hello (Rust, statically linked with musl)
+        let linux_target = match arch {
+            Arch::Aarch64 => "aarch64-unknown-linux-musl",
+            Arch::X86_64 => "x86_64-unknown-linux-musl",
+            Arch::Riscv64 => "riscv64gc-unknown-linux-musl",
+        };
+        let musl_cross = arch.linux_musl_cross();
+        let linker = musl_cross
+            .join("bin")
+            .join(format!("{}-linux-musl-gcc", arch.name()));
+        let linker_env = format!(
+            "CARGO_TARGET_{}_LINKER",
+            linux_target.to_uppercase().replace('-', "_")
+        );
+        let status = Command::new("cargo")
+            .args(["build", "--release"])
+            .arg("--manifest-path")
+            .arg(PROJECT_DIR.join("tools/linux-hello/Cargo.toml"))
+            .arg("--target")
+            .arg(linux_target)
+            .env(&linker_env, &linker)
+            .status();
+        match status {
+            Ok(s) if s.success() => {
+                let built = PROJECT_DIR
+                    .join("tools/linux-hello/target")
+                    .join(linux_target)
+                    .join("release")
+                    .join("linux-hello");
+                let dest = linux_bin.join("linux-hello");
+                std::fs::copy(&built, &dest)
+                    .unwrap_or_else(|e| panic!("failed to copy linux-hello: {}", e));
+                println!("Built linux-hello -> {}", dest.display());
+            }
+            _ => println!(
+                "WARNING: failed to build linux-hello (target {} may not be installed)",
+                linux_target
+            ),
+        }
+
+        // Also copy petal shell for Zircon-init demo
+        let shell = build_petal(arch, "shell");
+        let dest = linux_bin.join("shell");
+        std::fs::copy(&shell, &dest)
+            .unwrap_or_else(|e| panic!("failed to copy petal shell: {}", e));
+        println!("Copied petal shell -> {}", dest.display());
     }
 }
 

@@ -3,8 +3,6 @@
 # Real hardware: BCM2711 SoC, PL011 UART, GIC-400 (non-secure),
 # no VirtIO, no PCI. Boots from SD card.
 
-# Zircon only (no Linux emulation). Use --personality linux to add it.
-default-personality = "none"
 arch = "aarch64"
 linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker_raspi400.ld"
 drivers = ["pl011-uart", "gic-400"]
