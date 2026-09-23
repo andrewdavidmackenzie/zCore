@@ -41,8 +41,11 @@ pub(super) fn super_timer() {
 }
 
 pub(super) fn super_soft() {
-    #[allow(deprecated)]
-    sbi_rt::legacy::clear_ipi();
+    // Clear the supervisor software interrupt pending bit directly
+    // via the SIP CSR (replaces deprecated sbi_rt::legacy::clear_ipi).
+    unsafe {
+        core::arch::asm!("csrc sip, {}", in(reg) 1 << 1); // bit 1 = SSIP
+    }
     let reasons: Vec<IpiReason> = crate::interrupt::ipi_reason()
         .iter()
         .map(|x| IpiReason::from(*x))

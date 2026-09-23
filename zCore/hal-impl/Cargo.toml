@@ -72,7 +72,7 @@ buddy_system_allocator = "0.8"
 # For riscv
 [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
 riscv = "0.9"
-sbi-rt = { version = "0.0.2", features = ["legacy"] }
+sbi-rt = { version = "0.0.4", features = ["legacy"] }
 dtb-walker = "=0.2.0-alpha.3"
 r0 = "1.0"
 page-table = "0.0.6"

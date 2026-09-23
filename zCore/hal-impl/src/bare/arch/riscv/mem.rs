@@ -56,6 +56,14 @@ pub fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
     FREE_PMEM_REGIONS.clone()
 }
 
+/// Flush a physical page from cache.
+///
+/// On standard RISC-V, data caches are coherent and don't require
+/// explicit flushing. A `fence` instruction ensures memory ordering.
+/// Non-standard extensions (e.g. T-HEAD's cache management) would
+/// need board-specific handling.
 pub fn frame_flush(_target: crate::PhysAddr) {
-    unimplemented!()
+    // RISC-V standard ISA has no explicit data cache flush.
+    // Ensure memory ordering with a fence.
+    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
 }
