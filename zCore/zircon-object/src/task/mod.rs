@@ -49,6 +49,10 @@ pub enum Flavour {
     /// Zircon flavour: syscall via x16 (aarch64), 8 args,
     /// no extension, handle-based IPC.
     Zircon,
+    /// WASI flavour: WebAssembly binary executed via an interpreter.
+    /// The kernel spawns a host interpreter (e.g. `/bin/wasi-runner`)
+    /// with the .wasm file path as an argument.
+    Wasi,
 }
 
 // ELF e_ident field indices (from the ELF specification).
@@ -57,6 +61,9 @@ const EI_OSABI: usize = 7;
 
 /// ELF magic number (`\x7fELF`).
 const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
+
+/// WASM magic number (`\0asm`).
+const WASM_MAGIC: [u8; 4] = [0x00, b'a', b's', b'm'];
 
 /// ELF OS/ABI value for zCore Zircon flavour binaries.
 ///
@@ -69,12 +76,17 @@ const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
 pub const ELFOSABI_ZIRCON: u8 = 0xFC;
 
 impl Flavour {
-    /// Detect process flavour from ELF binary data.
+    /// Detect process flavour from binary data.
     ///
-    /// Checks `e_ident[EI_OSABI]`:
-    /// - `ELFOSABI_ZIRCON` (0xFC) → Zircon
-    /// - anything else → Linux (default, compatible with standard ELFs)
+    /// Checks magic bytes:
+    /// - `\0asm` → WASI (WebAssembly)
+    /// - `\x7fELF` + `ELFOSABI_ZIRCON` (0xFC) → Zircon
+    /// - `\x7fELF` + anything else → Linux
+    /// - Unknown → Linux (fallback)
     pub fn from_elf(data: &[u8]) -> Self {
+        if data.len() >= 4 && data[0..4] == WASM_MAGIC {
+            return Flavour::Wasi;
+        }
         if data.len() > EI_OSABI && data[0..4] == ELF_MAGIC && data[EI_OSABI] == ELFOSABI_ZIRCON {
             Flavour::Zircon
         } else {

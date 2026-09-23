@@ -35,7 +35,7 @@ pub fn init_spawn(rootfs: Arc<dyn FileSystem>) {
 ///
 /// Used for cross-flavour exec: a Zircon process (petal shell)
 /// can run a Linux binary via `debug_exec`.
-fn spawn_linux_process(elf_data: &[u8], path: &str) -> ZxResult<Arc<Process>> {
+fn spawn_linux_process(elf_data: &[u8], args: &[&str]) -> ZxResult<Arc<Process>> {
     let rootfs = LINUX_ROOTFS.get().ok_or(ZxError::BAD_STATE)?.clone();
 
     let job = Job::root();
@@ -47,10 +47,11 @@ fn spawn_linux_process(elf_data: &[u8], path: &str) -> ZxResult<Arc<Process>> {
         root_inode: rootfs.root_inode(),
     };
 
-    let args: Vec<String> = vec![path.into()];
+    let path = args.first().copied().unwrap_or("/unknown");
+    let str_args: Vec<String> = args.iter().map(|&s| s.into()).collect();
     let envs: Vec<String> = vec!["PATH=/usr/sbin:/usr/bin:/sbin:/bin".into()];
     let (entry, sp, initial_brk) = loader
-        .load(&proc.vmar(), elf_data, args, envs, path.into())
+        .load(&proc.vmar(), elf_data, str_args, envs, path.into())
         .map_err(|_| ZxError::INVALID_ARGS)?;
     proc.linux().set_brk(initial_brk);
 

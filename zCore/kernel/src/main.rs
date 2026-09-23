@@ -102,6 +102,12 @@ fn boot_init(options: utils::BootOptions) -> alloc::sync::Arc<zircon_object::tas
                             init_path
                         );
                     }
+                    zircon_object::task::Flavour::Wasi => {
+                        panic!(
+                            "Init binary '{}' is a WASM file — cannot use as init process",
+                            init_path
+                        );
+                    }
                 }
             }
         }
