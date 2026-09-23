@@ -1,0 +1,11 @@
+[package]
+name = "wasi-hello"
+version = "0.1.0"
+edition = "2021"
+description = "Hello world WASI program for zCore demo"
+
+[workspace]
+
+[[bin]]
+name = "wasi-hello"
+path = "src/main.rs"
