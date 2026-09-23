@@ -1,6 +1,5 @@
 global_asm!(include_str!("boot.asm"));
 
-use crate::imp::arch::sbi::{hart_start, send_ipi, SBI_SUCCESS};
 use crate::imp::kernel_entry;
 use cfg_if::cfg_if;
 use core::arch::{asm, global_asm};
@@ -61,19 +60,18 @@ pub extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> 
 
         if id != hartid {
             println!("hart{id} is booting");
-            let err_code = hart_start(
+            let ret = sbi_rt::hart_start(
                 id,
-                secondary_hart_start as usize - PHY_MEM_OFS, // cal physical address
+                secondary_hart_start as usize - PHY_MEM_OFS, // physical address
                 0,
             );
-            if err_code != SBI_SUCCESS {
-                panic!("start hart{} failed. error code={}", id, err_code);
+            if ret.is_err() {
+                panic!("start hart{} failed: {:?}", id, ret);
             }
 
-            let hart_mask: usize = 1 << id;
-            let err_code = send_ipi(&hart_mask as *const _ as usize);
-            if err_code != SBI_SUCCESS {
-                panic!("send ipi to hart{} failed. error code={}", id, err_code);
+            let ret = sbi_rt::send_ipi(1 << id, 0);
+            if ret.is_err() {
+                panic!("send ipi to hart{} failed: {:?}", id, ret);
             }
         } else {
             println!("hart{id} is the primary hart");

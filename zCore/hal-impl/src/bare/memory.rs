@@ -31,7 +31,13 @@ mod buddy {
     static HEAP: LockedHeap = LockedHeap(Mutex::new(BuddyAllocator::new()));
 
     /// Initial memory reserved for boot (2 MiB).
-    static mut MEMORY: [u8; 2 * 1024 * 1024] = [0u8; 2 * 1024 * 1024];
+    /// Page-aligned to satisfy the buddy allocator's minimum order
+    /// requirement (min_order = 3 on 64-bit, i.e. 8-byte aligned).
+    /// Without this, the linker may place the array at an odd address
+    /// (seen on riscv64), causing an underflow in the buddy allocator.
+    #[repr(C, align(4096))]
+    struct AlignedMemory([u8; 2 * 1024 * 1024]);
+    static mut MEMORY: AlignedMemory = AlignedMemory([0u8; 2 * 1024 * 1024]);
 
     unsafe impl GlobalAlloc for LockedHeap {
         #[inline]
@@ -53,11 +59,11 @@ mod buddy {
 
     pub fn init() {
         unsafe {
-            log::info!("MEMORY = {:#?}", MEMORY.as_ptr_range());
+            log::info!("MEMORY = {:#?}", MEMORY.0.as_ptr_range());
             let mut heap = HEAP.0.lock();
-            let ptr = NonNull::new(MEMORY.as_mut_ptr()).unwrap();
+            let ptr = NonNull::new(MEMORY.0.as_mut_ptr()).unwrap();
             heap.init(core::mem::size_of::<usize>().trailing_zeros() as _, ptr);
-            heap.transfer(ptr, MEMORY.len());
+            heap.transfer(ptr, MEMORY.0.len());
         }
     }
 
