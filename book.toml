@@ -1,0 +1,16 @@
+[book]
+title = "zCore Documentation"
+authors = ["Andrew Mackenzie", "zCore Contributors"]
+language = "en"
+src = "docs"
+description = "Documentation for zCore, a Rust reimplementation of the Zircon microkernel with Linux compatibility"
+
+[build]
+build-dir = "target/book"
+
+[output.html]
+git-repository-url = "https://github.com/andrewdavidmackenzie/zCore"
+edit-url-template = "https://github.com/andrewdavidmackenzie/zCore/edit/master/docs/{path}"
+
+[output.html.search]
+enable = true

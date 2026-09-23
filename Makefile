@@ -102,6 +102,11 @@ demo-zircon: rootfs
 	ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/shell" \
 		cargo qemu -m qemu-$(ARCH) --flavour "" --log warn
 
+# ── Documentation ──────────────────────────────────────────────────────
+# Build the mdbook documentation site into target/book/.
+book:
+	mdbook build
+
 # Build the kernel for Raspberry Pi 400 in Zircon mode.
 # Userstart, petal ZBI, features, and target spec all come from
 # targets/raspi400.toml via xtask.
