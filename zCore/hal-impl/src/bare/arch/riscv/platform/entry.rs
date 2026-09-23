@@ -188,6 +188,10 @@ fn boot_secondary_harts(boot_hartid: usize, dtb: &Dtb, start_addr: usize) {
 }
 
 fn hart_start(boot_hartid: usize, hartid: usize, start_addr: usize) {
+    if hartid >= MAX_HART_NUM {
+        log::warn!("hart{hartid} exceeds MAX_HART_NUM ({MAX_HART_NUM}), skipping");
+        return;
+    }
     if hartid != boot_hartid {
         log::info!("hart{hartid} is booting...");
         let ret = sbi_rt::hart_start(hartid, start_addr, 0);

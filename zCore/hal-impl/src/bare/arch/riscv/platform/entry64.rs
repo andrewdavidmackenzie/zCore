@@ -69,7 +69,7 @@ pub extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> 
                 panic!("start hart{} failed: {:?}", id, ret);
             }
 
-            let ret = sbi_rt::send_ipi(1 << id, 0);
+            let ret = sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(1 << id, 0));
             if ret.is_err() {
                 panic!("send ipi to hart{} failed: {:?}", id, ret);
             }

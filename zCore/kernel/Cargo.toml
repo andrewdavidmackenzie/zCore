@@ -81,7 +81,7 @@ r0 = "1"
 riscv = "0.9"
 dtb-walker = "=0.2.0-alpha.3"
 page-table = "0.0.6"
-sbi-rt = { version = "0.0.2", features = ["legacy"] }
+sbi-rt = { version = "0.0.4", features = ["legacy"] }
 
 # Bare-metal mode on aarch64
 # rayboot dependency removed — using direct kernel boot with QEMU -kernel

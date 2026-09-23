@@ -46,8 +46,7 @@ hal_fn_impl! {
                 let entry = queue.entry_at(idx);
                 *entry = reason;
                 queue.commit_entry(idx);
-                let mask:usize = 1 << cpuid;
-                sbi_rt::legacy::send_ipi(&mask as *const usize as usize);
+                sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(1 << cpuid, 0));
                 return Ok(());
             }
             Err(DeviceError::NotSupported)
