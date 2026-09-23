@@ -49,9 +49,10 @@ pub fn set_spawn_config(config: SpawnConfig) {
 }
 
 /// Function type for spawning a Linux process from ELF data.
-/// Takes (elf_data, path) and returns the process.
+/// Takes (elf_data, args) and returns the process.
+/// args[0] is the program path.
 #[cfg(feature = "linux")]
-type LinuxSpawnFn = fn(&[u8], &str) -> crate::ZxResult<Arc<Process>>;
+type LinuxSpawnFn = fn(&[u8], &[&str]) -> crate::ZxResult<Arc<Process>>;
 
 /// Global Linux spawn function, registered at boot when the linux
 /// feature is enabled. Allows Zircon syscalls to spawn Linux processes.
@@ -64,17 +65,37 @@ pub fn set_linux_spawn_fn(f: LinuxSpawnFn) {
     LINUX_SPAWN_FN.call_once(|| f);
 }
 
-/// Spawn a Linux process from ELF data.
+/// Spawn a Linux process from ELF data with a single path argument.
 /// Returns None if no Linux spawn function has been registered
 /// (or if the `linux` feature is not enabled).
 #[cfg(feature = "linux")]
 pub fn spawn_linux(elf_data: &[u8], path: &str) -> Option<crate::ZxResult<Arc<Process>>> {
-    LINUX_SPAWN_FN.get().map(|f| f(elf_data, path))
+    LINUX_SPAWN_FN.get().map(|f| f(elf_data, &[path]))
 }
 
 /// Spawn a Linux process — stub when linux feature is disabled.
 #[cfg(not(feature = "linux"))]
 pub fn spawn_linux(_elf_data: &[u8], _path: &str) -> Option<crate::ZxResult<Arc<Process>>> {
+    None
+}
+
+/// Spawn a Linux process with explicit arguments.
+#[cfg(feature = "linux")]
+pub fn spawn_linux_with_args(
+    elf_data: &[u8],
+    _path: &str,
+    args: &[&str],
+) -> Option<crate::ZxResult<Arc<Process>>> {
+    LINUX_SPAWN_FN.get().map(|f| f(elf_data, args))
+}
+
+/// Spawn a Linux process with args — stub when linux feature is disabled.
+#[cfg(not(feature = "linux"))]
+pub fn spawn_linux_with_args(
+    _elf_data: &[u8],
+    _path: &str,
+    _args: &[&str],
+) -> Option<crate::ZxResult<Arc<Process>>> {
     None
 }
 
@@ -96,7 +117,26 @@ pub fn spawn_by_flavour(
         super::Flavour::Linux => {
             spawn_linux(elf_data, path).unwrap_or_else(|| Err(crate::ZxError::NOT_SUPPORTED))
         }
+        super::Flavour::Wasi => {
+            // WASI binaries need an interpreter. Spawn the interpreter
+            // as a Linux process with the .wasm path as an argument.
+            spawn_wasi_via_interpreter(path)
+        }
     }
+}
+
+/// Spawn a WASI binary via the `/bin/wasi-runner` interpreter.
+///
+/// Reads the interpreter from rootfs, spawns it as a Linux process
+/// with argv = `["/bin/wasi-runner", path]`.
+fn spawn_wasi_via_interpreter(wasm_path: &str) -> crate::ZxResult<Arc<Process>> {
+    const INTERPRETER: &str = "/bin/wasi-runner";
+    let interp_data = read_rootfs_file(INTERPRETER).ok_or(crate::ZxError::NOT_FOUND)?;
+    // Spawn the interpreter with the wasm path as an argument.
+    // The spawn function sets argv[0] = path, so we encode both
+    // the interpreter and wasm path in the args string.
+    spawn_linux_with_args(&interp_data, INTERPRETER, &[INTERPRETER, wasm_path])
+        .unwrap_or_else(|| Err(crate::ZxError::NOT_SUPPORTED))
 }
 
 /// Spawn a Zircon process using the globally registered config.

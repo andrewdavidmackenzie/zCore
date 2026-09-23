@@ -1,0 +1,14 @@
+[package]
+name = "wasi-runner"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal WASI runner for zCore — runs .wasm files using wasmi"
+
+[workspace]
+
+[[bin]]
+name = "wasi-runner"
+path = "src/main.rs"
+
+[dependencies]
+wasmi = { version = "2.0", default-features = false, features = ["std", "validate"] }

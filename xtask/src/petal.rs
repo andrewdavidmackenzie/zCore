@@ -262,6 +262,55 @@ pub fn copy_petal_to_linux_rootfs(arch: Arch) {
         std::fs::copy(&shell, &dest)
             .unwrap_or_else(|e| panic!("failed to copy petal shell: {}", e));
         println!("Copied petal shell -> {}", dest.display());
+
+        // Build wasi-runner (Linux musl-static binary)
+        let wasi_status = Command::new("cargo")
+            .args(["build", "--release"])
+            .arg("--manifest-path")
+            .arg(PROJECT_DIR.join("tools/wasi-runner/Cargo.toml"))
+            .arg("--target")
+            .arg(linux_target)
+            .env(&linker_env, &linker)
+            .status();
+        match wasi_status {
+            Ok(s) if s.success() => {
+                let built = PROJECT_DIR
+                    .join("tools/wasi-runner/target")
+                    .join(linux_target)
+                    .join("release")
+                    .join("wasi-runner");
+                let dest = linux_bin.join("wasi-runner");
+                std::fs::copy(&built, &dest)
+                    .unwrap_or_else(|e| panic!("failed to copy wasi-runner: {}", e));
+                println!("Built wasi-runner -> {}", dest.display());
+            }
+            _ => println!(
+                "WARNING: failed to build wasi-runner (target {} may not be installed)",
+                linux_target
+            ),
+        }
+
+        // Build wasi-hello (wasm32-wasip1 target)
+        let wasi_hello_status = Command::new("cargo")
+            .args(["build", "--release"])
+            .arg("--manifest-path")
+            .arg(PROJECT_DIR.join("tools/wasi-hello/Cargo.toml"))
+            .arg("--target")
+            .arg("wasm32-wasip1")
+            .status();
+        match wasi_hello_status {
+            Ok(s) if s.success() => {
+                let built = PROJECT_DIR
+                    .join("tools/wasi-hello/target/wasm32-wasip1/release/wasi-hello.wasm");
+                let dest = linux_bin.join("hello.wasm");
+                std::fs::copy(&built, &dest)
+                    .unwrap_or_else(|e| panic!("failed to copy hello.wasm: {}", e));
+                println!("Built hello.wasm -> {}", dest.display());
+            }
+            _ => println!(
+                "WARNING: failed to build wasi-hello (wasm32-wasip1 target may not be installed)"
+            ),
+        }
     }
 }
 

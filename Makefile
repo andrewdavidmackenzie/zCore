@@ -91,6 +91,11 @@ demo-petal: rootfs
 demo-petal-test: rootfs
 	tools/scripts/demo-petal-test.sh $(ARCH)
 
+# Test: boot petal shell with Linux, run /bin/hello.wasm via wasi-runner,
+# verify output.
+demo-wasi-test: rootfs
+	tools/scripts/demo-wasi-test.sh $(ARCH)
+
 # Demo: boot into petal shell (Zircon only, no Linux)
 # /bin/linux-hello should return an error.
 demo-zircon: rootfs
