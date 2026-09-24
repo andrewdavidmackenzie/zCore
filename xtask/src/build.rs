@@ -324,11 +324,14 @@ impl QemuArgs {
 
         // Zircon userstart+ZBI are already built by BuildConfig::from_args().
 
-        // For riscv64 we need a raw binary; for aarch64 we use the ELF directly
-        // Build the kernel as a stripped raw binary. QEMU -kernel loads
-        // it at the base of RAM. On aarch64, raw binary is required so
-        // QEMU passes the DTB pointer in x0 (needed for -initrd).
-        let bin = build_config.bin(None);
+        // Build the stripped raw binary for raw boot paths.
+        // UEFI boot uses the ELF directly (not the raw binary).
+        let bin = if !build_config.features.contains("uefi-boot") {
+            build_config.bin(None)
+        } else {
+            // UEFI path doesn't need raw binary — skip objcopy
+            build_config.target_file_path()
+        };
         // Set qemu arguments
         let mut qemu = Qemu::system(arch_str);
         qemu.args(["-m", "2G"])
@@ -411,6 +414,155 @@ impl QemuArgs {
                         "-drive",
                         &format!("format=raw,file={}", disk_image.display()),
                     ]);
+            }
+            Arch::Aarch64 if build_config.features.contains("uefi-boot") => {
+                // UEFI boot: create an ESP disk image with the kernel,
+                // initrd, DTB, and UEFI stub, then boot via edk2 firmware.
+                let release_dir = PROJECT_DIR
+                    .join("target")
+                    .join(&target_name)
+                    .join(if self.debug { "debug" } else { "release" });
+
+                // Build UEFI stub
+                let stub_efi = PROJECT_DIR
+                    .join("tools/aarch64-uefi-stub/target/aarch64-unknown-uefi/release/aarch64-uefi-stub.efi");
+                println!("Building aarch64 UEFI stub...");
+                let status = std::process::Command::new("cargo")
+                    .args(["build", "--release"])
+                    .arg("--manifest-path")
+                    .arg(PROJECT_DIR.join("tools/aarch64-uefi-stub/Cargo.toml"))
+                    .arg("--target")
+                    .arg("aarch64-unknown-uefi")
+                    .status()
+                    .expect("failed to build UEFI stub");
+                if !status.success() {
+                    panic!("UEFI stub build failed");
+                }
+
+                // Strip kernel
+                let kernel_stripped = release_dir.join("kernel.stripped");
+                let objcopy_status = std::process::Command::new("llvm-objcopy")
+                    .args(["--strip-debug"])
+                    .arg(&obj)
+                    .arg(&kernel_stripped)
+                    .status();
+                if objcopy_status.map_or(true, |s| !s.success()) {
+                    // Try rust-objcopy as fallback
+                    let _ = std::process::Command::new("rust-objcopy")
+                        .args(["--strip-debug"])
+                        .arg(&obj)
+                        .arg(&kernel_stripped)
+                        .status();
+                }
+
+                // Generate DTB from QEMU
+                let dtb_path = release_dir.join("virt.dtb");
+                let _ = std::process::Command::new(format!("qemu-system-{}", arch_str))
+                    .arg("-M")
+                    .arg(format!("virt,dumpdtb={}", dtb_path.display()))
+                    .args(["-cpu", "cortex-a72", "-m", "2G", "-smp", "1"])
+                    .output();
+
+                // Create ESP image
+                let esp_img = release_dir.join("esp.img");
+                let vars_fd = release_dir.join("vars.fd");
+                println!("Creating UEFI ESP image...");
+                // Create 128 MB FAT32 image
+                let _ = std::process::Command::new("dd")
+                    .args([
+                        "if=/dev/zero",
+                        &format!("of={}", esp_img.display()),
+                        "bs=1M",
+                        "count=128",
+                    ])
+                    .output();
+                let mformat_out = std::process::Command::new("mformat")
+                    .args(["-i", esp_img.to_str().unwrap(), "-F", "::"])
+                    .output()
+                    .expect("failed to run mformat - is mtools installed?");
+                if !mformat_out.status.success() {
+                    panic!(
+                        "mformat failed: {}",
+                        String::from_utf8_lossy(&mformat_out.stderr)
+                    );
+                }
+                let _ = std::process::Command::new("mmd")
+                    .args(["-i", esp_img.to_str().unwrap(), "::/EFI"])
+                    .output();
+                let _ = std::process::Command::new("mmd")
+                    .args(["-i", esp_img.to_str().unwrap(), "::/EFI/BOOT"])
+                    .output();
+                let mcopy_stub_out = std::process::Command::new("mcopy")
+                    .args(["-i", esp_img.to_str().unwrap()])
+                    .arg(stub_efi.to_str().unwrap())
+                    .arg("::/EFI/BOOT/BOOTAA64.EFI")
+                    .output()
+                    .expect("failed to run mcopy - is mtools installed?");
+                if !mcopy_stub_out.status.success() {
+                    panic!(
+                        "mcopy UEFI stub failed: {}",
+                        String::from_utf8_lossy(&mcopy_stub_out.stderr)
+                    );
+                }
+                let mcopy_kernel_out = std::process::Command::new("mcopy")
+                    .args(["-i", esp_img.to_str().unwrap()])
+                    .arg(kernel_stripped.to_str().unwrap())
+                    .arg("::/kernel")
+                    .output()
+                    .expect("failed to run mcopy - is mtools installed?");
+                if !mcopy_kernel_out.status.success() {
+                    panic!(
+                        "mcopy kernel failed: {}",
+                        String::from_utf8_lossy(&mcopy_kernel_out.stderr)
+                    );
+                }
+                if rootfs_img.exists() {
+                    let _ = std::process::Command::new("mcopy")
+                        .args(["-i", esp_img.to_str().unwrap()])
+                        .arg(rootfs_img.to_str().unwrap())
+                        .arg("::/initrd.img")
+                        .output();
+                }
+                if dtb_path.exists() {
+                    let _ = std::process::Command::new("mcopy")
+                        .args(["-i", esp_img.to_str().unwrap()])
+                        .arg(dtb_path.to_str().unwrap())
+                        .arg("::/virt.dtb")
+                        .output();
+                }
+                // Create empty NVRAM
+                let _ = std::process::Command::new("dd")
+                    .args([
+                        "if=/dev/zero",
+                        &format!("of={}", vars_fd.display()),
+                        "bs=1M",
+                        "count=64",
+                    ])
+                    .output();
+
+                // Find edk2 firmware
+                let edk2_paths = [
+                    "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+                    "/usr/share/qemu/edk2-aarch64-code.fd",
+                    "/usr/share/AAVMF/AAVMF_CODE.fd",
+                ];
+                let edk2 = edk2_paths
+                    .iter()
+                    .find(|p| std::path::Path::new(p).exists())
+                    .expect("edk2-aarch64-code.fd not found. Install QEMU UEFI firmware.");
+
+                qemu.args(["-machine", "virt"])
+                    .args(["-cpu", "cortex-a72"])
+                    .args(["-nographic"])
+                    .args([
+                        "-drive",
+                        &format!("if=pflash,format=raw,readonly=on,file={}", edk2),
+                    ])
+                    .args([
+                        "-drive",
+                        &format!("if=pflash,format=raw,file={}", vars_fd.display()),
+                    ])
+                    .args(["-drive", &format!("format=raw,file={}", esp_img.display())]);
             }
             Arch::Aarch64 => {
                 // Direct kernel boot with raw binary. QEMU loads it at

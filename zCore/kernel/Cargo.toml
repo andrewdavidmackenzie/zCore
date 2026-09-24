@@ -45,6 +45,7 @@ ps2-keyboard = ["hal-impl/ps2-keyboard"]
 mock-uart = ["hal-impl/mock-uart"]
 virtio = ["hal-impl/virtio"]
 pci = ["hal-impl/pci"]
+uefi-boot = ["hal-impl/uefi-boot"]
 allwinner-drivers = ["hal-impl/allwinner-drivers"]
 fu740-drivers = ["hal-impl/fu740-drivers"]
 

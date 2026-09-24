@@ -90,6 +90,16 @@ pub fn primary_init_early() {
     } else {
         CMDLINE.init_once_by(KCONFIG.cmdline.to_string());
     }
+
+    // If DTB didn't provide initrd location, use KernelConfig
+    // (set by UEFI stub via UefiBootInfo).
+    if INITRD_REGION.as_ref().is_none() && KCONFIG.initrd_start != 0 && KCONFIG.initrd_size != 0 {
+        let start = KCONFIG.initrd_start as usize;
+        let end = start + KCONFIG.initrd_size as usize;
+        log::info!("Initrd from boot info: {:#x}..{:#x}", start, end);
+        INITRD_REGION.init_once_by(Some(start..end));
+    }
+
     drivers::init_early();
 }
 
@@ -206,6 +216,26 @@ fn parse_dtb(dtb_paddr: usize) {
                     || name_bytes.starts_with(b"interrupt-controller")
                 {
                     return StepInto;
+                }
+            }
+            StepOver
+        }
+        DtbObj::Property(Property::Reg(reg)) => {
+            let ctx = &current_node[..current_node_len];
+            if ctx.starts_with(b"memory") {
+                for range in reg {
+                    let base = range.start;
+                    let size = range.end - range.start;
+                    log::info!(
+                        "DTB memory (reg): base={:#x}, size={:#x} ({} MiB)",
+                        base,
+                        size,
+                        size >> 20
+                    );
+                    if info.memory_base.is_none() {
+                        info.memory_base = Some(base);
+                        info.memory_size = Some(size);
+                    }
                 }
             }
             StepOver
@@ -366,8 +396,9 @@ fn parse_node_addr(name: &[u8]) -> Option<usize> {
 pub fn primary_init() {
     vm::init();
     drivers::init();
-    // Start secondary cores (QEMU virt uses PSCI)
-    #[cfg(not(feature = "board-raspi400"))]
+    // Start secondary cores (QEMU virt uses PSCI).
+    // UEFI boot: SMP not yet implemented (single-core for now).
+    #[cfg(all(not(feature = "board-raspi400"), not(feature = "uefi-boot")))]
     start_secondary_cores();
 }
 
@@ -377,7 +408,7 @@ pub fn primary_init() {
 /// PSCI CPU_ON to start each one at the `_secondary_entry` physical
 /// address. The secondary entry assembly enables the MMU and jumps
 /// to `secondary_core_init` in Rust.
-#[cfg(not(feature = "board-raspi400"))]
+#[cfg(all(not(feature = "board-raspi400"), not(feature = "uefi-boot")))]
 fn start_secondary_cores() {
     extern "C" {
         fn _secondary_entry();

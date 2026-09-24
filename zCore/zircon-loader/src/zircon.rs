@@ -282,8 +282,6 @@ async fn run_user(thread: CurrentThread) {
         }
 
         // run
-        trace!("go to user: {:#x?}", ctx);
-        debug!("switch to {}|{}", thread.proc().name(), thread.name());
         let tmp_time = hal_impl::timer::timer_now().as_nanos();
 
         // * Attention

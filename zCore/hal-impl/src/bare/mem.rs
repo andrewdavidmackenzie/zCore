@@ -32,13 +32,11 @@ hal_fn_impl! {
         }
 
         fn pmem_write(paddr: PhysAddr, buf: &[u8]) {
-            trace!("pmem_write: paddr={:#x}, len={:#x}", paddr, buf.len());
             let dst = phys_to_virt(paddr) as *mut u8;
             unsafe { dst.copy_from_nonoverlapping(buf.as_ptr(), buf.len()) };
         }
 
         fn pmem_zero(paddr: PhysAddr, len: usize) {
-            trace!("pmem_zero: paddr={:#x}, len={:#x}", paddr, len);
             unsafe { core::ptr::write_bytes(phys_to_virt(paddr) as *mut u8, 0, len) };
         }
 

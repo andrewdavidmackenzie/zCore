@@ -209,13 +209,23 @@ fn run_command(line: &str, ctx: &Ctx) -> bool {
             // Try to exec as a program path
             let status = zx::sys::debug_exec(parts[0]);
             if status != 0 {
-                if parts[0].starts_with('/') {
-                    zx::debug_write(b"unsupported binary flavour: ");
-                } else {
+                if !parts[0].starts_with('/') {
                     zx::debug_write(b"unknown command: ");
+                    zx::debug_write(parts[0].as_bytes());
+                    zx::debug_write(b"\r\n");
+                } else {
+                    let err_name = match status {
+                        -25 => "NOT_FOUND",
+                        -2 => "NOT_SUPPORTED",
+                        -10 => "INVALID_ARGS",
+                        -5 => "BAD_STATE",
+                        _ => "UNKNOWN",
+                    };
+                    zx::debug_write(err_name.as_bytes());
+                    zx::debug_write(b": failed to exec ");
+                    zx::debug_write(parts[0].as_bytes());
+                    zx::debug_write(b"\r\n");
                 }
-                zx::debug_write(parts[0].as_bytes());
-                zx::debug_write(b"\r\n");
             }
         }
     }

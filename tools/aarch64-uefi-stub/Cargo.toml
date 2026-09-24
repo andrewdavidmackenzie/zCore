@@ -1,0 +1,11 @@
+[package]
+name = "aarch64-uefi-stub"
+version = "0.1.0"
+edition = "2021"
+description = "UEFI boot stub for zCore aarch64 — collects boot info and loads the kernel"
+
+[workspace]
+
+[dependencies]
+uefi = { version = "0.41", features = ["global_allocator", "panic_handler"] }
+log = "0.4"

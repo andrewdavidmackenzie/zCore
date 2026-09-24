@@ -32,3 +32,8 @@ init_uart_baud=115200
 # NOTE: Timer interrupts are not yet working due to GIC Group 0/1
 # configuration issue -- see GitHub issue for details.
 enable_gic=1
+
+# Load the rootfs initrd image into RAM after the kernel.
+# The firmware sets linux,initrd-start/end in the DTB so
+# the kernel can find and mount it.
+initramfs initrd.img followkernel

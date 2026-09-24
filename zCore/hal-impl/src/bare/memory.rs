@@ -30,14 +30,16 @@ mod buddy {
     #[global_allocator]
     static HEAP: LockedHeap = LockedHeap(Mutex::new(BuddyAllocator::new()));
 
-    /// Initial memory reserved for boot (2 MiB).
+    /// Initial memory reserved for boot (4 MiB).
     /// Page-aligned to satisfy the buddy allocator's minimum order
     /// requirement (min_order = 3 on 64-bit, i.e. 8-byte aligned).
     /// Without this, the linker may place the array at an odd address
     /// (seen on riscv64), causing an underflow in the buddy allocator.
+    /// 4 MiB is enough for page table allocation when mapping ~1 GiB
+    /// of physical memory with 4K pages (~512 L3 page tables = 2 MiB).
     #[repr(C, align(4096))]
-    struct AlignedMemory([u8; 2 * 1024 * 1024]);
-    static mut MEMORY: AlignedMemory = AlignedMemory([0u8; 2 * 1024 * 1024]);
+    struct AlignedMemory([u8; 4 * 1024 * 1024]);
+    static mut MEMORY: AlignedMemory = AlignedMemory([0u8; 4 * 1024 * 1024]);
 
     unsafe impl GlobalAlloc for LockedHeap {
         #[inline]

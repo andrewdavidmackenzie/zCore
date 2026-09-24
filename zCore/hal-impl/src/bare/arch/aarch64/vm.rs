@@ -9,8 +9,11 @@ use cortex_a::registers::*;
 use lock::Mutex;
 use tock_registers::interfaces::{Readable, Writeable};
 
-static KERNEL_PT: spin::Lazy<Mutex<PageTable>> =
-    spin::Lazy::new(|| Mutex::new(init_kernel_page_table().unwrap()));
+static KERNEL_PT: spin::Lazy<Mutex<PageTable>> = spin::Lazy::new(|| {
+    Mutex::new(init_kernel_page_table().unwrap_or_else(|e| {
+        panic!("init_kernel_page_table failed: {:?}", e);
+    }))
+});
 
 /// remap kernel ELF segments with 4K page
 fn init_kernel_page_table() -> PagingResult<PageTable> {
@@ -138,10 +141,12 @@ hal_fn_impl! {
         fn activate_paging(vmtoken: PhysAddr) {
             let check_if_user = (vmtoken & USER_TABLE_FLAG) != 0;
             let vmtoken = vmtoken & PHYS_ADDR_MASK;
-            trace!("set {} page_table @ {:#x}", if check_if_user { "user" } else { "kernel" }, vmtoken);
             if check_if_user {
                 TTBR0_EL1.set(vmtoken as _);
             } else {
+                // Write to UART before switching — after this, the CPU
+                // uses the new page tables and if they're wrong, we crash
+                // with no output.
                 TTBR1_EL1.set(vmtoken as _);
             }
             flush_tlb_all();
