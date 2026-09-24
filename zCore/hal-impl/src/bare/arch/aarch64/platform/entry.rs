@@ -23,6 +23,31 @@ mod board {
     pub const GIC_BASE: usize = 0xFF84_0000;
 }
 
+/// UEFI entry point — called by the UEFI stub after it has set up
+/// page tables and enabled the MMU. The stub passes DTB paddr in x0
+/// and sets up a temporary stack. This function sets up the kernel's
+/// boot stack and falls through to rust_main.
+///
+/// The symbol is exported so the UEFI stub can find it via ELF symbol
+/// table or by using a fixed offset from the kernel base.
+#[no_mangle]
+#[link_section = ".text"]
+pub extern "C" fn rust_main_uefi(dtb_paddr: usize) -> ! {
+    // Set up the boot stack (same location as boot.s uses).
+    // boot_stack is defined in .bss.stack, 32 KiB per core.
+    extern "C" {
+        static boot_stack: u8;
+    }
+    unsafe {
+        let stack_top = core::ptr::addr_of!(boot_stack) as usize + 0x8000;
+        core::arch::asm!(
+            "mov sp, {sp}",
+            sp = in(reg) stack_top,
+        );
+    }
+    rust_main(dtb_paddr)
+}
+
 /// Rust entry point, called from boot assembly after MMU is enabled.
 #[no_mangle]
 extern "C" fn rust_main(dtb_paddr: usize) -> ! {
