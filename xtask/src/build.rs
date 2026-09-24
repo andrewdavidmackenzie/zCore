@@ -324,11 +324,14 @@ impl QemuArgs {
 
         // Zircon userstart+ZBI are already built by BuildConfig::from_args().
 
-        // For riscv64 we need a raw binary; for aarch64 we use the ELF directly
-        // Build the kernel as a stripped raw binary. QEMU -kernel loads
-        // it at the base of RAM. On aarch64, raw binary is required so
-        // QEMU passes the DTB pointer in x0 (needed for -initrd).
-        let bin = build_config.bin(None);
+        // Build the stripped raw binary for raw boot paths.
+        // UEFI boot uses the ELF directly (not the raw binary).
+        let bin = if !build_config.features.contains("uefi-boot") {
+            build_config.bin(None)
+        } else {
+            // UEFI path doesn't need raw binary — skip objcopy
+            build_config.target_file_path()
+        };
         // Set qemu arguments
         let mut qemu = Qemu::system(arch_str);
         qemu.args(["-m", "2G"])

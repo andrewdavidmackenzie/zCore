@@ -27,7 +27,8 @@ pub fn free_pmem_regions() -> Vec<Range<PhysAddr>> {
     let start = align_up(ekernel as *const () as usize & PHYS_ADDR_MASK);
     let end = crate::addr::align_down(super::phys_memory_end());
 
-    let mut regions = vec![start as PhysAddr..end as PhysAddr];
+    let mut regions = alloc::vec::Vec::new();
+    regions.push(start as PhysAddr..end as PhysAddr);
 
     // Exclude the DTB region
     if KCONFIG.dtb_paddr != 0 && KCONFIG.dtb_size != 0 {

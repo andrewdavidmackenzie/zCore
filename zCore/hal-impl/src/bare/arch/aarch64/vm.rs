@@ -147,18 +147,7 @@ hal_fn_impl! {
                 // Write to UART before switching — after this, the CPU
                 // uses the new page tables and if they're wrong, we crash
                 // with no output.
-                let uart = 0xffff_0000_0900_0000 as *mut u8;
-                unsafe {
-                    for &b in b"TTBR1<-" {
-                        core::ptr::write_volatile(uart, b);
-                    }
-                }
                 TTBR1_EL1.set(vmtoken as _);
-                unsafe {
-                    for &b in b"OK\r\n" {
-                        core::ptr::write_volatile(uart, b);
-                    }
-                }
             }
             flush_tlb_all();
         }
