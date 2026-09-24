@@ -210,6 +210,15 @@ fn parse_dtb(dtb_paddr: usize) {
             }
             StepOver
         }
+        DtbObj::Property(Property::Reg(_reg)) => {
+            // DTB Reg properties are handled by dtb_walker's typed
+            // iterator. Memory discovery via Reg is needed for UEFI
+            // boot but currently triggers AlreadyMapped in vm::init
+            // due to overlapping page table mappings. Tracked in a
+            // follow-up issue. For now, memory falls back to
+            // PHYS_MEMORY_END (100 MiB) on raw boot.
+            StepOver
+        }
         DtbObj::Property(Property::General { name, value }) => {
             let ctx = &current_node[..current_node_len];
 
