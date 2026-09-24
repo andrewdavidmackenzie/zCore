@@ -40,6 +40,11 @@ pci = ["drivers/pci"]
 allwinner-drivers = ["drivers/allwinner"]
 fu740-drivers = ["drivers/fu740"]
 
+# --- Boot mode ---
+# When set, the kernel is linked for UEFI boot (different link address,
+# no boot assembly). The UEFI stub handles page tables and MMU setup.
+uefi-boot = []
+
 [package.metadata.cargo-all-features]
 # Bare-metal paths require custom target specs. Only the libos
 # (default) feature set compiles on the host.

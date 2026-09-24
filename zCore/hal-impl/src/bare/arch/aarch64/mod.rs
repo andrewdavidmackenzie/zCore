@@ -366,8 +366,9 @@ fn parse_node_addr(name: &[u8]) -> Option<usize> {
 pub fn primary_init() {
     vm::init();
     drivers::init();
-    // Start secondary cores (QEMU virt uses PSCI)
-    #[cfg(not(feature = "board-raspi400"))]
+    // Start secondary cores (QEMU virt uses PSCI).
+    // UEFI boot: SMP not yet implemented (single-core for now).
+    #[cfg(all(not(feature = "board-raspi400"), not(feature = "uefi-boot")))]
     start_secondary_cores();
 }
 
@@ -377,7 +378,7 @@ pub fn primary_init() {
 /// PSCI CPU_ON to start each one at the `_secondary_entry` physical
 /// address. The secondary entry assembly enables the MMU and jumps
 /// to `secondary_core_init` in Rust.
-#[cfg(not(feature = "board-raspi400"))]
+#[cfg(all(not(feature = "board-raspi400"), not(feature = "uefi-boot")))]
 fn start_secondary_cores() {
     extern "C" {
         fn _secondary_entry();

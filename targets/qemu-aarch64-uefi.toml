@@ -1,0 +1,28 @@
+# QEMU aarch64 virt machine -- UEFI boot
+#
+# Same hardware as qemu-aarch64, but boots via UEFI firmware (edk2)
+# instead of raw -kernel. The kernel is linked at 0x80200000 to avoid
+# overlap with the UEFI stub loaded by firmware.
+#
+# Use: cargo qemu -m qemu-aarch64-uefi
+
+default-flavour = "linux"
+arch = "aarch64"
+cores = 4
+linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker-uefi.ld"
+drivers = ["pl011-uart", "gic-400"]
+features = ["uefi-boot"]
+
+[qemu]
+machine = "virt"
+cpu = "cortex-a72"
+memory = "2G"
+
+[rustc-target]
+llvm-target = "aarch64-unknown-linux-gnu"
+data-layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"
+features = "+strict-align,+neon,+fp-armv8"
+max-atomic-width = 128
+relocation-model = "static"
+target-pointer-width = 64
+disable-redzone = true

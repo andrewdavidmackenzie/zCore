@@ -1,10 +1,11 @@
 use crate::imp::kernel_entry;
 use hal::KernelConfig;
 
-// Include the boot assembly (page table setup + MMU enable + stack setup)
-#[cfg(not(feature = "board-raspi400"))]
+// Include the boot assembly (page table setup + MMU enable + stack setup).
+// Skipped for UEFI boot — the UEFI stub handles this.
+#[cfg(all(not(feature = "board-raspi400"), not(feature = "uefi-boot")))]
 core::arch::global_asm!(include_str!("boot.s"));
-#[cfg(feature = "board-raspi400")]
+#[cfg(all(feature = "board-raspi400", not(feature = "uefi-boot")))]
 core::arch::global_asm!(include_str!("boot_raspi400.s"));
 
 // --- Board constants ---
@@ -32,20 +33,19 @@ mod board {
 /// table or by using a fixed offset from the kernel base.
 #[no_mangle]
 #[link_section = ".text"]
-pub extern "C" fn rust_main_uefi(dtb_paddr: usize) -> ! {
-    // Set up the boot stack (same location as boot.s uses).
-    // boot_stack is defined in .bss.stack, 32 KiB per core.
-    extern "C" {
-        static boot_stack: u8;
-    }
-    unsafe {
-        let stack_top = core::ptr::addr_of!(boot_stack) as usize + 0x8000;
-        core::arch::asm!(
-            "mov sp, {sp}",
-            sp = in(reg) stack_top,
-        );
-    }
-    rust_main(dtb_paddr)
+#[unsafe(naked)]
+pub unsafe extern "C" fn rust_main_uefi(_dtb_paddr: usize) -> ! {
+    // Set up the boot stack and jump to rust_main.
+    // Must be naked to avoid compiler-generated stack usage before
+    // we switch to the kernel's boot stack.
+    // x0 = dtb_paddr (preserved for rust_main)
+    core::arch::naked_asm!(
+        "adrp x1, boot_stack",
+        "add  x1, x1, :lo12:boot_stack",
+        "add  x1, x1, #0x8000", // top of first 32 KiB slot
+        "mov  sp, x1",
+        "b    rust_main",
+    );
 }
 
 /// Rust entry point, called from boot assembly after MMU is enabled.

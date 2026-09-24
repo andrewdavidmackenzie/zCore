@@ -24,6 +24,8 @@ use uefi::proto::media::fs::SimpleFileSystem;
 // ── Constants ────────────────────────────────────────────────────────
 
 const UART_BASE: *mut u8 = 0x0900_0000 as *mut u8;
+/// Physical-to-virtual offset. The kernel virtual address space starts
+/// at 0xffff_0000_0000_0000. Must match the linker script.
 const PHYS_TO_VIRT_OFFSET: u64 = 0xffff_0000_0000_0000;
 const KERNEL_PATH: &str = "\\kernel";
 const INITRD_PATH: &str = "\\initrd.img";
@@ -206,6 +208,9 @@ fn main() -> Status {
         uart_puts("DTB at 0x");
         uart_put_hex(dtb_paddr);
         uart_puts("\n");
+    } else {
+        // Dump all config table GUIDs for debugging
+        dump_config_tables();
     }
 
     // 5. Build page tables
@@ -425,7 +430,7 @@ unsafe fn install_page_tables_and_jump(
     _initrd_start: u64,
     _initrd_size: u64,
 ) -> ! {
-    // Disable MMU
+    // Disable MMU (UEFI left it on with its own page tables)
     asm!(
         "mrs x1, sctlr_el1",
         "bic x1, x1, #1",
@@ -438,13 +443,11 @@ unsafe fn install_page_tables_and_jump(
     // Must match boot.s
     asm!("mov x1, #0xFF04", "msr mair_el1, x1", "isb", out("x1") _);
 
-    // Set TCR
+    // Set TCR — must match boot.s
     asm!(
         "ldr x1, ={tcr}",
         "msr tcr_el1, x1",
         "isb",
-        // Must match boot.s: T0SZ=T1SZ=16 (48-bit VA), TG0=4K, TG1=4K,
-        // IPS=40-bit, SH/IRGN/ORGN for inner shareable write-back
         tcr = const 0x0000_0002_B510_3510u64,
         out("x1") _,
     );
@@ -474,9 +477,9 @@ unsafe fn install_page_tables_and_jump(
         out("x1") _,
     );
 
-    uart_puts("MMU enabled, jumping to kernel\n");
+    uart_puts("Jumping to kernel\n");
 
-    // Jump to kernel. rust_main(dtb_paddr) in x0.
+    // Jump to kernel. rust_main_uefi(dtb_paddr) in x0.
     asm!(
         "mov x0, {dtb}",
         "br {entry}",
@@ -517,6 +520,34 @@ fn load_file(path: &str) -> Option<Vec<u8>> {
 }
 
 // ── DTB / GOP ────────────────────────────────────────────────────────
+
+fn dump_config_tables() {
+    let st = match uefi::table::system_table_raw() {
+        Some(st) => unsafe { st.as_ref() },
+        None => return,
+    };
+    let entries = unsafe {
+        core::slice::from_raw_parts(
+            st.configuration_table,
+            st.number_of_configuration_table_entries,
+        )
+    };
+    uart_puts("Config tables (");
+    uart_put_dec(entries.len() as u64);
+    uart_puts("):\n");
+    for entry in entries {
+        let bytes = entry.vendor_guid.to_bytes();
+        uart_puts("  ");
+        for b in bytes {
+            let hex = b"0123456789abcdef";
+            uart_putc(hex[(b >> 4) as usize]);
+            uart_putc(hex[(b & 0xf) as usize]);
+        }
+        uart_puts(" -> 0x");
+        uart_put_hex(entry.vendor_table as u64);
+        uart_puts("\n");
+    }
+}
 
 fn find_dtb() -> Option<usize> {
     let dtb_guid = uefi::guid!("b1b621d5-f19c-41a5-830b-d9152c69aae0");
