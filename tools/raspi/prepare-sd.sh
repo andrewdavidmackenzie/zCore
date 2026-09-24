@@ -88,6 +88,20 @@ cp "$SCRIPT_DIR/config.txt" "$BOOT_DIR/"
 # Kernel
 cp "$KERNEL_BIN" "$BOOT_DIR/kernel8.img"
 
+# Rootfs (initrd) — contains busybox, petal binaries, etc.
+ROOTFS_IMG="$PROJECT_DIR/target/qemu-aarch64/release/aarch64-linux.img"
+if [ ! -f "$ROOTFS_IMG" ]; then
+    echo "==> Building rootfs image..."
+    cd "$PROJECT_DIR"
+    cargo image --arch aarch64
+fi
+if [ -f "$ROOTFS_IMG" ]; then
+    cp "$ROOTFS_IMG" "$BOOT_DIR/initrd.img"
+    echo "  Copied rootfs ($(du -h "$ROOTFS_IMG" | cut -f1)) as initrd.img"
+else
+    echo "  WARNING: rootfs image not found, skipping initrd"
+fi
+
 echo ""
 echo "==> SD card prepared successfully!"
 echo ""
