@@ -221,18 +221,26 @@ fn main() -> Status {
         uart_puts("\n");
         addr as u64
     } else if let Some(dtb_data) = load_file(DTB_PATH) {
-        // Load DTB from ESP to a safe physical address
-        let dtb_addr: u64 = 0x4700_0000; // below initrd
+        // Load DTB from ESP — allocate pages dynamically via UEFI
         let num_pages = (dtb_data.len() + 4095) / 4096;
-        let _ = uefi::boot::allocate_pages(
-            uefi::boot::AllocateType::Address(dtb_addr),
+        let dtb_ptr = uefi::boot::allocate_pages(
+            uefi::boot::AllocateType::AnyPages,
             uefi::boot::MemoryType::LOADER_DATA,
             num_pages,
-        );
+        )
+        .unwrap_or_else(|e| {
+            uart_puts("FATAL: allocate_pages for DTB failed: ");
+            uart_put_hex(e.status().0 as u64);
+            uart_puts("\n");
+            loop {
+                core::hint::spin_loop();
+            }
+        });
+        let dtb_addr = dtb_ptr.as_ptr() as u64;
         unsafe {
             core::ptr::copy_nonoverlapping(
                 dtb_data.as_ptr(),
-                dtb_addr as *mut u8,
+                dtb_ptr.as_ptr(),
                 dtb_data.len(),
             );
         }
@@ -251,11 +259,27 @@ fn main() -> Status {
     build_page_tables();
     uart_puts("Page tables ready\n");
 
-    // 6. Exit boot services
     // 6. Prepare boot info struct for the kernel
-    //    Place it at a safe physical address (below kernel, page-aligned)
-    const BOOT_INFO_ADDR: u64 = 0x4600_0000;
-    let boot_info = unsafe { &mut *(BOOT_INFO_ADDR as *mut BootInfo) };
+    //    Allocate a page via UEFI for the boot info struct.
+    let boot_info_pages = 1; // BootInfo fits in a single 4K page
+    let boot_info_ptr = uefi::boot::allocate_pages(
+        uefi::boot::AllocateType::AnyPages,
+        uefi::boot::MemoryType::LOADER_DATA,
+        boot_info_pages,
+    )
+    .unwrap_or_else(|e| {
+        uart_puts("FATAL: allocate_pages for boot_info failed: ");
+        uart_put_hex(e.status().0 as u64);
+        uart_puts("\n");
+        loop {
+            core::hint::spin_loop();
+        }
+    });
+    let boot_info_addr = boot_info_ptr.as_ptr() as u64;
+    uart_puts("Boot info allocated at 0x");
+    uart_put_hex(boot_info_addr);
+    uart_puts("\n");
+    let boot_info = unsafe { &mut *(boot_info_ptr.as_ptr() as *mut BootInfo) };
     boot_info.magic = 0x5A_43_55_45; // "ZCUE"
     boot_info.dtb_paddr = dtb_paddr;
     boot_info.dtb_size = if dtb_paddr != 0 { 1048576 } else { 0 }; // 1 MiB
@@ -272,7 +296,7 @@ fn main() -> Status {
     // 7. Install page tables and jump to kernel
     //    Pass boot_info address instead of raw dtb_paddr
     unsafe {
-        install_page_tables_and_jump(entry, BOOT_INFO_ADDR);
+        install_page_tables_and_jump(entry, boot_info_addr);
     }
 }
 
@@ -281,6 +305,12 @@ fn main() -> Status {
 /// Parse ELF and load PT_LOAD segments at their linked physical addresses.
 /// Uses UEFI AllocatePages to reserve the target memory regions.
 fn load_elf_at_linked_address(data: &[u8]) -> u64 {
+    if data.len() < core::mem::size_of::<Elf64Header>() {
+        uart_puts("FATAL: ELF data too small for header\n");
+        loop {
+            core::hint::spin_loop();
+        }
+    }
     let hdr = unsafe { &*(data.as_ptr() as *const Elf64Header) };
     if &hdr.e_ident[0..4] != b"\x7fELF" || hdr.e_machine != 0xB7 {
         uart_puts("FATAL: invalid aarch64 ELF\n");
@@ -291,6 +321,15 @@ fn load_elf_at_linked_address(data: &[u8]) -> u64 {
 
     let ph_offset = hdr.e_phoff as usize;
     let ph_size = hdr.e_phentsize as usize;
+    let ph_end = ph_offset
+        .checked_add((hdr.e_phnum as usize).checked_mul(ph_size).unwrap_or(usize::MAX))
+        .unwrap_or(usize::MAX);
+    if ph_end > data.len() {
+        uart_puts("FATAL: ELF program headers extend past end of file\n");
+        loop {
+            core::hint::spin_loop();
+        }
+    }
 
     for i in 0..hdr.e_phnum as usize {
         let phdr = unsafe { &*(data.as_ptr().add(ph_offset + i * ph_size) as *const Elf64Phdr) };
@@ -322,13 +361,14 @@ fn load_elf_at_linked_address(data: &[u8]) -> u64 {
         ) {
             Ok(_) => {}
             Err(e) => {
-                uart_puts("  WARNING: allocate_pages at 0x");
+                uart_puts("FATAL: allocate_pages for kernel segment at 0x");
                 uart_put_hex(page_addr);
                 uart_puts(" failed: ");
                 uart_put_hex(e.status().0 as u64);
-                uart_puts(" (continuing anyway)\n");
-                // Continue — the memory might already be available as
-                // conventional memory without explicit allocation.
+                uart_puts("\n");
+                loop {
+                    core::hint::spin_loop();
+                }
             }
         }
 
@@ -375,6 +415,15 @@ fn find_symbol(data: &[u8], hdr: &Elf64Header, name: &str) -> Option<u64> {
     let sh_offset = hdr.e_shoff as usize;
     let sh_size = hdr.e_shentsize as usize;
     let sh_num = hdr.e_shnum as usize;
+
+    // Bounds-check section headers
+    let sh_end = sh_offset
+        .checked_add(sh_num.checked_mul(sh_size).unwrap_or(usize::MAX))
+        .unwrap_or(usize::MAX);
+    if sh_end > data.len() {
+        uart_puts("WARNING: ELF section headers extend past end of file\n");
+        return None;
+    }
 
     // Find .symtab section
     for i in 0..sh_num {
@@ -434,17 +483,24 @@ fn load_initrd() -> (u64, u64) {
     uart_put_dec(data.len() as u64);
     uart_puts(" bytes\n");
 
-    // Allocate pages for the initrd above the kernel region.
-    // Use 0x4800_0000 (above the kernel's ~6 MB footprint starting at 0x4008_0000).
-    let initrd_paddr: u64 = 0x4800_0000;
+    // Allocate pages for the initrd dynamically via UEFI.
     let num_pages = (data.len() + 4095) / 4096;
-    let _ = uefi::boot::allocate_pages(
-        uefi::boot::AllocateType::Address(initrd_paddr),
+    let initrd_ptr = uefi::boot::allocate_pages(
+        uefi::boot::AllocateType::AnyPages,
         uefi::boot::MemoryType::LOADER_DATA,
         num_pages,
-    );
+    )
+    .unwrap_or_else(|e| {
+        uart_puts("FATAL: allocate_pages for initrd failed: ");
+        uart_put_hex(e.status().0 as u64);
+        uart_puts("\n");
+        loop {
+            core::hint::spin_loop();
+        }
+    });
+    let initrd_paddr = initrd_ptr.as_ptr() as u64;
     unsafe {
-        core::ptr::copy_nonoverlapping(data.as_ptr(), initrd_paddr as *mut u8, data.len());
+        core::ptr::copy_nonoverlapping(data.as_ptr(), initrd_ptr.as_ptr(), data.len());
     }
     uart_puts("Initrd at 0x");
     uart_put_hex(initrd_paddr);

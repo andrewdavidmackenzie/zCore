@@ -426,19 +426,17 @@ impl QemuArgs {
                 // Build UEFI stub
                 let stub_efi = PROJECT_DIR
                     .join("tools/aarch64-uefi-stub/target/aarch64-unknown-uefi/release/aarch64-uefi-stub.efi");
-                if !stub_efi.exists() {
-                    println!("Building aarch64 UEFI stub...");
-                    let status = std::process::Command::new("cargo")
-                        .args(["build", "--release"])
-                        .arg("--manifest-path")
-                        .arg(PROJECT_DIR.join("tools/aarch64-uefi-stub/Cargo.toml"))
-                        .arg("--target")
-                        .arg("aarch64-unknown-uefi")
-                        .status()
-                        .expect("failed to build UEFI stub");
-                    if !status.success() {
-                        panic!("UEFI stub build failed");
-                    }
+                println!("Building aarch64 UEFI stub...");
+                let status = std::process::Command::new("cargo")
+                    .args(["build", "--release"])
+                    .arg("--manifest-path")
+                    .arg(PROJECT_DIR.join("tools/aarch64-uefi-stub/Cargo.toml"))
+                    .arg("--target")
+                    .arg("aarch64-unknown-uefi")
+                    .status()
+                    .expect("failed to build UEFI stub");
+                if !status.success() {
+                    panic!("UEFI stub build failed");
                 }
 
                 // Strip kernel
@@ -478,25 +476,46 @@ impl QemuArgs {
                         "count=128",
                     ])
                     .output();
-                let _ = std::process::Command::new("mformat")
+                let mformat_out = std::process::Command::new("mformat")
                     .args(["-i", esp_img.to_str().unwrap(), "-F", "::"])
-                    .output();
+                    .output()
+                    .expect("failed to run mformat - is mtools installed?");
+                if !mformat_out.status.success() {
+                    panic!(
+                        "mformat failed: {}",
+                        String::from_utf8_lossy(&mformat_out.stderr)
+                    );
+                }
                 let _ = std::process::Command::new("mmd")
                     .args(["-i", esp_img.to_str().unwrap(), "::/EFI"])
                     .output();
                 let _ = std::process::Command::new("mmd")
                     .args(["-i", esp_img.to_str().unwrap(), "::/EFI/BOOT"])
                     .output();
-                let _ = std::process::Command::new("mcopy")
+                let mcopy_stub_out = std::process::Command::new("mcopy")
                     .args(["-i", esp_img.to_str().unwrap()])
                     .arg(stub_efi.to_str().unwrap())
                     .arg("::/EFI/BOOT/BOOTAA64.EFI")
-                    .output();
-                let _ = std::process::Command::new("mcopy")
+                    .output()
+                    .expect("failed to run mcopy - is mtools installed?");
+                if !mcopy_stub_out.status.success() {
+                    panic!(
+                        "mcopy UEFI stub failed: {}",
+                        String::from_utf8_lossy(&mcopy_stub_out.stderr)
+                    );
+                }
+                let mcopy_kernel_out = std::process::Command::new("mcopy")
                     .args(["-i", esp_img.to_str().unwrap()])
                     .arg(kernel_stripped.to_str().unwrap())
                     .arg("::/kernel")
-                    .output();
+                    .output()
+                    .expect("failed to run mcopy - is mtools installed?");
+                if !mcopy_kernel_out.status.success() {
+                    panic!(
+                        "mcopy kernel failed: {}",
+                        String::from_utf8_lossy(&mcopy_kernel_out.stderr)
+                    );
+                }
                 if rootfs_img.exists() {
                     let _ = std::process::Command::new("mcopy")
                         .args(["-i", esp_img.to_str().unwrap()])

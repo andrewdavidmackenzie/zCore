@@ -110,6 +110,10 @@ demo-busybox-uefi: rootfs
 	ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/busybox?sh" \
 		cargo qemu -m qemu-aarch64-uefi --log warn
 
+# Test: UEFI boot with petal shell, run /bin/zircon-hello
+uefi-boot-test: rootfs
+	tools/scripts/uefi-boot-test.sh
+
 # Demo: boot into petal shell (Zircon only, no Linux)
 # /bin/linux-hello should return an error.
 demo-zircon: rootfs
