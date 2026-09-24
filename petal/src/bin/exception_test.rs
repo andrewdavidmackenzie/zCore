@@ -11,18 +11,17 @@
 
 extern crate alloc;
 extern crate petal;
-
 use zx::sys::{
     zx_channel_read, zx_handle_close, zx_object_wait_one, zx_process_create, zx_process_start,
-    zx_process_write_memory, zx_task_create_exception_channel, zx_thread_create, zx_vmar_map,
-    zx_vmo_create, HandleValue,
+    zx_task_create_exception_channel, zx_thread_create, zx_vmar_map, zx_vmo_create,
+    zx_vmo_replace_as_executable, zx_vmo_write, HandleValue,
 };
 
 const PAGE_SIZE: usize = 4096;
 /// ZX_CHANNEL_READABLE signal
 const ZX_CHANNEL_READABLE: u32 = 1 << 0;
 /// ZX_CHANNEL_PEER_CLOSED signal
-const ZX_CHANNEL_PEER_CLOSED: u32 = 1 << 1;
+const ZX_CHANNEL_PEER_CLOSED: u32 = 1 << 2;
 /// ZX_TIME_INFINITE
 const ZX_TIME_INFINITE: i64 = i64::MAX;
 
@@ -91,16 +90,8 @@ pub fn main() {
     let mut code_vmo: HandleValue = 0;
     let status = unsafe { zx_vmo_create(PAGE_SIZE as u64, 0, &mut code_vmo) };
     check(status, b"vmo_create code");
-    // Map code page into child VMAR (RW first, then write code)
-    // ZX_VM_PERM_READ | ZX_VM_PERM_WRITE = 0x3
-    // Note: PERM_EXECUTE (0x4) requires VMO to have EXECUTE right.
-    // The process page table 1 GiB blocks allow execution regardless.
-    let mut code_addr: usize = 0;
-    let status =
-        unsafe { zx_vmar_map(vmar_handle, 0x3, 0, code_vmo, 0, PAGE_SIZE, &mut code_addr) };
-    check(status, b"vmar_map code");
 
-    // Write breakpoint instruction to the code page
+    // Write breakpoint instruction to the VMO before making executable
     // aarch64: brk #0 = 0xd4200000
     // x86_64: int3 = 0xcc
     #[cfg(target_arch = "aarch64")]
@@ -109,18 +100,21 @@ pub fn main() {
     #[cfg(target_arch = "x86_64")]
     let brk_instr: [u8; 1] = [0xcc]; // int3
 
-    let mut actual: usize = 0;
-    let status = unsafe {
-        zx_process_write_memory(
-            proc_handle,
-            code_addr,
-            brk_instr.as_ptr(),
-            brk_instr.len(),
-            &mut actual,
-        )
-    };
-    check(status, b"process_write_memory brk");
-    zx::debug_write(b"exception_test: breakpoint code written\r\n");
+    let status = unsafe { zx_vmo_write(code_vmo, brk_instr.as_ptr(), 0, brk_instr.len()) };
+    check(status, b"vmo_write brk");
+
+    // Make the VMO executable (required for PERM_EXECUTE mapping)
+    let mut exec_vmo: HandleValue = 0;
+    let status = unsafe { zx_vmo_replace_as_executable(code_vmo, 0, &mut exec_vmo) };
+    check(status, b"vmo_replace_as_executable");
+
+    // Map code page into child VMAR as RX
+    // ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE = 0x5
+    let mut code_addr: usize = 0;
+    let status =
+        unsafe { zx_vmar_map(vmar_handle, 0x5, 0, exec_vmo, 0, PAGE_SIZE, &mut code_addr) };
+    check(status, b"vmar_map code RX");
+    zx::debug_write(b"exception_test: breakpoint code mapped\r\n");
 
     // Create a stack VMO and map it
     let mut stack_vmo: HandleValue = 0;
@@ -161,79 +155,102 @@ pub fn main() {
     check(status, b"process_start");
     zx::debug_write(b"exception_test: child started, waiting for exception\r\n");
 
-    // Wait for the exception channel to become readable or peer-closed
-    // (peer-closed means the child died without triggering an exception)
-    let mut observed: u32 = 0;
-    let status = unsafe {
-        zx_object_wait_one(
-            exc_channel,
-            ZX_CHANNEL_READABLE | ZX_CHANNEL_PEER_CLOSED,
-            ZX_TIME_INFINITE,
-            &mut observed,
-        )
-    };
-    check(status, b"object_wait_one exc_channel");
+    // Exception type constants (zx_exception_info_t.type)
+    const ZX_EXCP_SW_BREAKPOINT: u32 = 0x0308;
+    const ZX_EXCP_THREAD_STARTING: u32 = 0x8008;
+    const ZX_EXCP_PROCESS_STARTING: u32 = 0x8308;
 
-    if observed & ZX_CHANNEL_PEER_CLOSED != 0 && observed & ZX_CHANNEL_READABLE == 0 {
-        zx::debug_write(b"exception_test: FAIL - child died without exception\r\n");
-        zx::Process::exit(1);
-    }
-    if observed & ZX_CHANNEL_READABLE == 0 {
-        zx::debug_write(b"exception_test: FAIL - channel not readable\r\n");
-        zx::Process::exit(1);
-    }
+    // Loop reading exceptions from the debugger channel.
+    // The kernel sends synthetic exceptions (ProcessStarting,
+    // ThreadStarting) before the child enters user mode. We must
+    // consume and acknowledge each by closing the exception handle,
+    // which lets the child thread resume. Then we wait for the
+    // real breakpoint exception.
+    loop {
+        let mut observed: u32 = 0;
+        let status = unsafe {
+            zx_object_wait_one(
+                exc_channel,
+                ZX_CHANNEL_READABLE | ZX_CHANNEL_PEER_CLOSED,
+                ZX_TIME_INFINITE,
+                &mut observed,
+            )
+        };
+        check(status, b"object_wait_one exc_channel");
 
-    // Read the exception from the channel
-    let mut exc_data = [0u8; 64];
-    let mut exc_handles = [0u32; 4];
-    let mut exc_bytes: u32 = 0;
-    let mut exc_handle_count: u32 = 0;
-    let status = unsafe {
-        zx_channel_read(
-            exc_channel,
-            0,
-            exc_data.as_mut_ptr(),
-            exc_handles.as_mut_ptr(),
-            exc_data.len() as u32,
-            exc_handles.len() as u32,
-            &mut exc_bytes,
-            &mut exc_handle_count,
-        )
-    };
-    check(status, b"channel_read exception");
-
-    // Verify we got an exception handle
-    if exc_handle_count < 1 || exc_handles[0] == 0 {
-        zx::debug_write(b"exception_test: FAIL - no exception handle\r\n");
-        zx::Process::exit(1);
-    }
-
-    // Verify the exception type is a software breakpoint.
-    // The exception data starts with a zx_exception_info_t:
-    //   pid (u64), tid (u64), type (u32)
-    // Type 0x0308 = ZX_EXCP_SW_BREAKPOINT
-    if exc_bytes >= 20 {
-        let exc_type = u32::from_le_bytes(exc_data[16..20].try_into().unwrap());
-        if exc_type != 0x0308 {
-            zx::debug_write(b"exception_test: FAIL - wrong exception type\r\n");
+        if observed & ZX_CHANNEL_PEER_CLOSED != 0 && observed & ZX_CHANNEL_READABLE == 0 {
+            zx::debug_write(b"exception_test: FAIL - child died without breakpoint exception\r\n");
             zx::Process::exit(1);
         }
-        zx::debug_write(b"exception_test: breakpoint exception verified\r\n");
-    } else {
-        zx::debug_write(b"exception_test: WARNING - exception data too short to verify type\r\n");
+
+        // Read the exception from the channel
+        let mut exc_data = [0u8; 64];
+        let mut exc_handles = [0u32; 4];
+        let mut exc_bytes: u32 = 0;
+        let mut exc_handle_count: u32 = 0;
+        let status = unsafe {
+            zx_channel_read(
+                exc_channel,
+                0,
+                exc_data.as_mut_ptr(),
+                exc_handles.as_mut_ptr(),
+                exc_data.len() as u32,
+                exc_handles.len() as u32,
+                &mut exc_bytes,
+                &mut exc_handle_count,
+            )
+        };
+        check(status, b"channel_read exception");
+
+        if exc_handle_count < 1 || exc_handles[0] == 0 {
+            zx::debug_write(b"exception_test: FAIL - no exception handle\r\n");
+            zx::Process::exit(1);
+        }
+
+        // Parse the exception type from zx_exception_info_t:
+        //   pid (u64), tid (u64), type (u32)
+        if exc_bytes < 20 {
+            zx::debug_write(b"exception_test: FAIL - exception data too short\r\n");
+            zx::Process::exit(1);
+        }
+        let exc_type = u32::from_le_bytes(exc_data[16..20].try_into().unwrap());
+
+        if exc_type == ZX_EXCP_PROCESS_STARTING || exc_type == ZX_EXCP_THREAD_STARTING {
+            // Synthetic exception — close the handle to resume the child
+            if exc_type == ZX_EXCP_THREAD_STARTING {
+                zx::debug_write(b"exception_test: ThreadStarting - resuming child\r\n");
+            } else {
+                zx::debug_write(b"exception_test: ProcessStarting - resuming child\r\n");
+            }
+            for &h in &exc_handles[..exc_handle_count as usize] {
+                if h != 0 {
+                    unsafe { zx_handle_close(h) };
+                }
+            }
+            continue;
+        }
+
+        if exc_type != ZX_EXCP_SW_BREAKPOINT {
+            zx::debug_write(b"exception_test: FAIL - unexpected exception type\r\n");
+            zx::Process::exit(1);
+        }
+        zx::debug_write(b"exception_test: breakpoint exception received\r\n");
+
+        // Clean up exception handles
+        for &h in &exc_handles[..exc_handle_count as usize] {
+            if h != 0 {
+                unsafe { zx_handle_close(h) };
+            }
+        }
+        break;
     }
 
     // Clean up
     unsafe {
-        for &h in &exc_handles[..exc_handle_count as usize] {
-            if h != 0 {
-                zx_handle_close(h);
-            }
-        }
         zx_handle_close(exc_channel);
         zx_handle_close(thread_handle);
         zx_handle_close(stack_vmo);
-        zx_handle_close(code_vmo);
+        zx_handle_close(exec_vmo);
         zx_handle_close(vmar_handle);
         zx_handle_close(proc_handle);
         zx_handle_close(job_handle);

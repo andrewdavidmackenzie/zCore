@@ -7,7 +7,7 @@ use trapframe::TrapFrame;
 
 /// Get [`TrapReason`] from aarch64 ESR value.
 pub fn trap_reason_from(esr: usize) -> TrapReason {
-    use crate::{Fault, Syndrome};
+    use crate::Syndrome;
     use cortex_a::registers::ESR_EL1;
 
     let info = Info {
@@ -17,7 +17,7 @@ pub fn trap_reason_from(esr: usize) -> TrapReason {
     let esr = ESR_EL1.get() as u32;
     match info.kind {
         Kind::Synchronous => match Syndrome::from(esr) {
-            Syndrome::Breakpoint => TrapReason::SoftwareBreakpoint,
+            Syndrome::Breakpoint | Syndrome::Brk(_) => TrapReason::SoftwareBreakpoint,
             Syndrome::Svc(_) => TrapReason::Syscall,
             Syndrome::DataAbort {
                 kind: _,
@@ -30,10 +30,9 @@ pub fn trap_reason_from(esr: usize) -> TrapReason {
                 }
                 TrapReason::PageFault(FAR_EL1.get() as _, flags)
             }
-            Syndrome::InstructionAbort {
-                kind: Fault::Permission,
-                level: _,
-            } => TrapReason::PageFault(FAR_EL1.get() as _, MMUFlags::EXECUTE | MMUFlags::USER),
+            Syndrome::InstructionAbort { kind: _, level: _ } => {
+                TrapReason::PageFault(FAR_EL1.get() as _, MMUFlags::EXECUTE | MMUFlags::USER)
+            }
             Syndrome::PCAlignmentFault | Syndrome::SpAlignmentFault => TrapReason::UnalignedAccess,
             _ => TrapReason::GeneralFault(esr as usize),
         },
