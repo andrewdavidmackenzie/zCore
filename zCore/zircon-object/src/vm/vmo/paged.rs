@@ -233,13 +233,18 @@ impl VMObjectTrait for VMObjectPaged {
     }
 
     fn write(&self, offset: usize, buf: &[u8]) -> ZxResult {
+        info!("VMO write: offset={:#x}, len={}", offset, buf.len());
         let (_guard, mut inner) = self.get_inner_mut();
+        info!("VMO write: lock acquired, cache={:?}", inner.cache_policy);
         if inner.cache_policy != CachePolicy::Cached {
             return Err(ZxError::BAD_STATE);
         }
-        inner.for_each_page(offset, buf.len(), MMUFlags::WRITE, |paddr, buf_range| {
+        info!("VMO write: calling for_each_page");
+        let result = inner.for_each_page(offset, buf.len(), MMUFlags::WRITE, |paddr, buf_range| {
             hal_impl::mem::pmem_write(paddr, &buf[buf_range]);
-        })
+        });
+        info!("VMO write: done, result={:?}", result);
+        result
     }
 
     fn zero(&self, offset: usize, len: usize) -> ZxResult {

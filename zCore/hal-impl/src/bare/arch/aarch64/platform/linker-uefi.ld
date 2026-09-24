@@ -46,12 +46,14 @@ SECTIONS
     }
 
     . = ALIGN(4K);
-    .bss (NOLOAD) : AT(ADDR(.bss) - PHYS_OFFSET) {
+    .bss.stack (NOLOAD) : AT(ADDR(.bss.stack) - PHYS_OFFSET) {
         boot_stack = .;
-        *(.bss.stack)
+        . += 0x20000;   /* 128 KiB boot stack (4 cores x 32 KiB) */
         . = ALIGN(4K);
         boot_stack_top = .;
+    }
 
+    .bss (NOLOAD) : AT(ADDR(.bss) - PHYS_OFFSET) {
         sbss = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)

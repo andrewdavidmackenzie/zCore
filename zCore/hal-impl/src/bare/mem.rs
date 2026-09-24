@@ -32,14 +32,32 @@ hal_fn_impl! {
         }
 
         fn pmem_write(paddr: PhysAddr, buf: &[u8]) {
-            trace!("pmem_write: paddr={:#x}, len={:#x}", paddr, buf.len());
+            #[cfg(feature = "uefi-boot")]
+            unsafe {
+                let u = 0xffff_0000_0900_0000 as *mut u8;
+                core::ptr::write_volatile(u, b'W');
+            }
             let dst = phys_to_virt(paddr) as *mut u8;
             unsafe { dst.copy_from_nonoverlapping(buf.as_ptr(), buf.len()) };
+            #[cfg(feature = "uefi-boot")]
+            unsafe {
+                let u = 0xffff_0000_0900_0000 as *mut u8;
+                core::ptr::write_volatile(u, b'w');
+            }
         }
 
         fn pmem_zero(paddr: PhysAddr, len: usize) {
-            trace!("pmem_zero: paddr={:#x}, len={:#x}", paddr, len);
+            #[cfg(feature = "uefi-boot")]
+            unsafe {
+                let u = 0xffff_0000_0900_0000 as *mut u8;
+                core::ptr::write_volatile(u, b'Z');
+            }
             unsafe { core::ptr::write_bytes(phys_to_virt(paddr) as *mut u8, 0, len) };
+            #[cfg(feature = "uefi-boot")]
+            unsafe {
+                let u = 0xffff_0000_0900_0000 as *mut u8;
+                core::ptr::write_volatile(u, b'z');
+            }
         }
 
         fn pmem_copy(dst: PhysAddr, src: PhysAddr, len: usize) {

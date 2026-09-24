@@ -48,6 +48,15 @@ pub unsafe extern "C" fn rust_main_uefi(_boot_info_ptr: usize) -> ! {
     );
 }
 
+// UEFI boot: explicit boot stack allocation.
+// On raw boot, boot.s defines .bss.stack with 128 KiB.
+// On UEFI boot, boot.s is excluded, so we allocate the stack here.
+// rust_main_uefi sets SP to the top of this buffer.
+#[cfg(feature = "uefi-boot")]
+#[link_section = ".bss.stack"]
+#[used]
+static UEFI_BOOT_STACK: [u8; 128 * 1024] = [0u8; 128 * 1024];
+
 // UEFI debug exception vector — dumps ESR/FAR/ELR to UART.
 #[cfg(feature = "uefi-boot")]
 core::arch::global_asm!(
@@ -178,19 +187,24 @@ extern "C" fn rust_main_from_uefi(boot_info_ptr: usize) -> ! {
     super::super::set_board_bases(board::UART_BASE, board::GIC_BASE);
 
     let bi = unsafe { &*(boot_info_ptr as *const UefiBootInfo) };
-    if bi.magic != UefiBootInfo::MAGIC {
-        // Fallback: boot_info_ptr is just dtb_paddr (old interface)
-        rust_main(boot_info_ptr);
-    }
-
-    let config = KernelConfig {
-        cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=info"),
-        phys_to_virt_offset: board::PHYS_TO_VIRT_OFFSET,
-        dtb_paddr: bi.dtb_paddr as usize,
-        dtb_size: bi.dtb_size as usize,
-        initrd_start: bi.initrd_start,
-        initrd_size: bi.initrd_size,
-        ..Default::default()
+    let config = if bi.magic == UefiBootInfo::MAGIC {
+        KernelConfig {
+            cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=info"),
+            phys_to_virt_offset: board::PHYS_TO_VIRT_OFFSET,
+            dtb_paddr: bi.dtb_paddr as usize,
+            dtb_size: bi.dtb_size as usize,
+            initrd_start: bi.initrd_start,
+            initrd_size: bi.initrd_size,
+            ..Default::default()
+        }
+    } else {
+        // Fallback: boot_info_ptr is just dtb_paddr
+        KernelConfig {
+            cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=info"),
+            phys_to_virt_offset: board::PHYS_TO_VIRT_OFFSET,
+            dtb_paddr: boot_info_ptr,
+            ..Default::default()
+        }
     };
 
     unsafe { kernel_entry::primary_core_init(config) }
