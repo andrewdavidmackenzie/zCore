@@ -180,35 +180,25 @@ pub fn spawn_process(
     use crate::util::elf_loader::*;
     use xmas_elf::ElfFile;
 
-    info!("spawn_process: creating process '{}'", name);
     let proc = Process::create(job, name)?;
     let thread = Thread::create(&proc, &format!("{}-main", name))?;
     let vmar = proc.vmar();
 
     // Load ELF segments
-    info!("spawn_process: loading ELF");
     let elf = ElfFile::new(elf_data).map_err(|_| crate::ZxError::INVALID_ARGS)?;
     let size = elf.load_segment_size();
-    info!("spawn_process: allocating VMAR ({} bytes)", size);
     let image_vmar = vmar.allocate(None, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)?;
-    info!("spawn_process: loading ELF into VMAR");
     let _vmo = image_vmar.load_from_elf(&elf)?;
     let base = image_vmar.addr();
     let entry = base + elf.header.pt2.entry_point() as usize;
-    info!(
-        "spawn_process: ELF loaded at {:#x}, entry {:#x}",
-        base, entry
-    );
 
     // Stack
     let stack_size = config.stack_pages * PAGE_SIZE;
     let stack_vmo = VmObject::new_paged(config.stack_pages);
     stack_vmo.set_name(&format!("{}-stack", name));
     let stack_flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER;
-    info!("spawn_process: mapping stack");
     let stack_base = vmar.map(None, stack_vmo, 0, stack_size, stack_flags)?;
     let sp = stack_base + stack_size;
-    info!("spawn_process: stack at {:#x}, sp={:#x}", stack_base, sp);
 
     // vDSO: code pages (RX) + data page (R)
     let vdso_code_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
@@ -254,75 +244,6 @@ pub fn spawn_process(
 
     proc.add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
     let handle = Handle::new(ch1, Rights::DEFAULT_CHANNEL);
-
-    // Dump process page table root and key info
-    let pt_phys = vmar.table_phys();
-    info!(
-        "spawn: pt={:#x} entry={:#x} sp={:#x} vdso={:#x} base={:#x}",
-        pt_phys, entry, sp, vdso_code_addr, base
-    );
-    // Walk the page table for key addresses using hardware read
-    #[cfg(target_arch = "aarch64")]
-    {
-        let pt_virt = hal_impl::mem::phys_to_virt(pt_phys);
-        let l0_table = unsafe { core::slice::from_raw_parts(pt_virt as *const u64, 512) };
-        // L0 index for addr < 0x100_0000_0000 is 0
-        info!("  L0[0]={:#018x} L0[1]={:#018x}", l0_table[0], l0_table[1]);
-        if l0_table[0] != 0 {
-            let l1_phys = l0_table[0] & 0xFF_FFFF_F000;
-            let l1_virt = hal_impl::mem::phys_to_virt(l1_phys as usize);
-            let l1_table = unsafe { core::slice::from_raw_parts(l1_virt as *const u64, 512) };
-            // L1 index for addr 0x10000 is 0 (< 1 GiB)
-            info!("  L1[0]={:#018x}", l1_table[0]);
-            if l1_table[0] != 0 && (l1_table[0] & 0x3) == 0x3 {
-                // Table descriptor → L2
-                let l2_phys = l1_table[0] & 0xFF_FFFF_F000;
-                let l2_virt = hal_impl::mem::phys_to_virt(l2_phys as usize);
-                let l2_table = unsafe { core::slice::from_raw_parts(l2_virt as *const u64, 512) };
-                // L2 index for 0x10000: (0x10000 >> 21) & 0x1ff = 0
-                info!("  L2[0]={:#018x}", l2_table[0]);
-                if l2_table[0] != 0 && (l2_table[0] & 0x3) == 0x3 {
-                    // Table descriptor → L3
-                    let l3_phys = l2_table[0] & 0xFF_FFFF_F000;
-                    let l3_virt = hal_impl::mem::phys_to_virt(l3_phys as usize);
-                    let l3_table =
-                        unsafe { core::slice::from_raw_parts(l3_virt as *const u64, 512) };
-                    // Dump L3 entries for text (0x10000) and BSS (0x13000, 0x53000)
-                    for &uaddr in &[0x10000usize, 0x11000, 0x13000, 0x14000, 0x52000, 0x53000] {
-                        let idx = (uaddr >> 12) & 0x1ff;
-                        info!("  L3[{:#x}]({:#x})={:#018x}", idx, uaddr, l3_table[idx]);
-                    }
-                }
-            }
-        }
-    }
-
-    // Verify user code at entry point is correct
-    #[cfg(target_arch = "aarch64")]
-    {
-        // L3 entry for entry page
-        let entry_page = entry & !0xFFF;
-        let l3_idx = (entry_page >> 12) & 0x1ff;
-        let pt_virt = hal_impl::mem::phys_to_virt(pt_phys);
-        let l0 = unsafe { *(pt_virt as *const u64) };
-        let l1_virt = hal_impl::mem::phys_to_virt((l0 & 0xFF_FFFF_F000) as usize);
-        let l1 = unsafe { *(l1_virt as *const u64) };
-        let l2_virt = hal_impl::mem::phys_to_virt((l1 & 0xFF_FFFF_F000) as usize);
-        let l2 = unsafe { *(l2_virt as *const u64) };
-        let l3_virt = hal_impl::mem::phys_to_virt((l2 & 0xFF_FFFF_F000) as usize);
-        let l3_entry = unsafe { *((l3_virt as *const u64).add(l3_idx)) };
-        let page_phys = (l3_entry & 0xFF_FFFF_F000) as usize;
-        let page_virt = hal_impl::mem::phys_to_virt(page_phys);
-        let offset = entry & 0xFFF;
-        let first_instr = unsafe { *((page_virt + offset) as *const u32) };
-        info!(
-            "spawn: code at entry {:#x}: phys={:#x} instr={:#010x}",
-            entry,
-            page_phys + offset,
-            first_instr
-        );
-        // Expected: 0xf81f0ffe (str x30, [sp, #-0x10]!)
-    }
 
     // Start: _start(startup_handle, vdso_base)
     proc.start(
