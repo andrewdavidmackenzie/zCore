@@ -394,38 +394,6 @@ fn parse_node_addr(name: &[u8]) -> Option<usize> {
 }
 
 pub fn primary_init() {
-    // On UEFI boot, install a debug exception handler that dumps
-    // ESR/FAR/ELR to UART. This overrides trapframe's handler so
-    // we can see exactly what faults during vm::init.
-    #[cfg(feature = "uefi-boot")]
-    {
-        platform::entry::install_debug_exception_vector();
-        // Check exception level
-        let current_el: u64;
-        unsafe { core::arch::asm!("mrs {}, CurrentEL", out(reg) current_el) };
-        log::info!("CurrentEL: {:#x} (EL{})", current_el, (current_el >> 2) & 3);
-
-        // Check VBAR_EL1
-        let vbar: u64;
-        unsafe { core::arch::asm!("mrs {}, vbar_el1", out(reg) vbar) };
-        log::info!("VBAR_EL1: {:#x}", vbar);
-
-        // Test: can we write to memory in the free region?
-        let test_paddr: usize = 0x8097d000;
-        let test_vaddr = test_paddr + crate::KCONFIG.phys_to_virt_offset;
-        log::info!(
-            "Memory test: writing to vaddr {:#x} (phys {:#x})",
-            test_vaddr,
-            test_paddr
-        );
-        unsafe {
-            let ptr = test_vaddr as *mut u64;
-            core::ptr::write_volatile(ptr, 0xDEADBEEF);
-            let val = core::ptr::read_volatile(ptr);
-            log::info!("Memory test: read back {:#x}", val);
-        }
-    }
-
     vm::init();
     drivers::init();
     // Start secondary cores (QEMU virt uses PSCI).

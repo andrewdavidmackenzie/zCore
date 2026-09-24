@@ -282,8 +282,18 @@ async fn run_user(thread: CurrentThread) {
         }
 
         // run
-        trace!("go to user: {:#x?}", ctx);
-        debug!("switch to {}|{}", thread.proc().name(), thread.name());
+        // Log first entry to user space only
+        static FIRST_ENTRY: core::sync::atomic::AtomicBool =
+            core::sync::atomic::AtomicBool::new(true);
+        if FIRST_ENTRY.swap(false, core::sync::atomic::Ordering::Relaxed) {
+            info!(
+                "FIRST enter_uspace: elr={:#x} sp={:#x} x0={:#x} x1={:#x}",
+                ctx.get_field(UserContextField::InstrPointer),
+                ctx.get_field(UserContextField::StackPointer),
+                ctx.general().x0,
+                ctx.general().x1,
+            );
+        }
         let tmp_time = hal_impl::timer::timer_now().as_nanos();
 
         // * Attention
