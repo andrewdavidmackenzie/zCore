@@ -92,7 +92,7 @@ jobs:
           components: rust-src, llvm-tools-preview
 
       - name: Build libos (Linux mode)
-        run: cargo zcore-build -m libos --personality linux
+        run: cargo zcore-build -m libos --flavour linux
 
       - name: Build libos (Zircon mode)
         run: cargo zcore-build -m libos
@@ -127,4 +127,4 @@ jobs:
         run: cargo bin -m x86-laptop
 
       - name: Build with Linux emulation (aarch64)
-        run: cargo bin -m qemu-aarch64 --personality linux
+        run: cargo bin -m qemu-aarch64 --flavour linux
