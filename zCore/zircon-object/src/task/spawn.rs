@@ -255,6 +255,10 @@ pub fn spawn_process(
     proc.add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
     let handle = Handle::new(ch1, Rights::DEFAULT_CHANNEL);
 
+    info!(
+        "spawn_process: starting, entry={:#x} sp={:#x} vdso={:#x}",
+        entry, sp, vdso_code_addr
+    );
     // Start: _start(startup_handle, vdso_base)
     proc.start(
         &thread,

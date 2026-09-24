@@ -116,20 +116,12 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
 }
 
 pub fn init() {
-    #[cfg(feature = "uefi-boot")]
-    {
-        info!("UEFI boot: skipping page table remap (1 GiB blocks from stub)");
-        return;
-    }
-    #[allow(unreachable_code)]
-    {
-        let mut pt = KERNEL_PT.lock();
-        info!("initialized kernel page table @ {:#x}", pt.table_phys());
-        unsafe {
-            pt.activate();
-            TTBR0_EL1.set(0);
-            flush_tlb_all();
-        }
+    let mut pt = KERNEL_PT.lock();
+    info!("initialized kernel page table @ {:#x}", pt.table_phys());
+    unsafe {
+        pt.activate();
+        TTBR0_EL1.set(0);
+        flush_tlb_all();
     }
 }
 

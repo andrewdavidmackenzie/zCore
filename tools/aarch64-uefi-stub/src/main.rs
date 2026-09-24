@@ -509,12 +509,15 @@ unsafe fn install_page_tables_and_jump(entry: u64, boot_info_addr: u64) -> ! {
         t1 = in(reg) ttbr1,
     );
 
-    // Enable MMU + caches
+    // Set SCTLR_EL1 to a clean value — don't inherit UEFI's settings.
+    // UEFI may have set PAN, WXN, SPAN, or other bits that interfere
+    // with the kernel's operation. Use the same minimal set as boot.s:
+    // M (MMU), C (data cache), I (instruction cache).
     asm!(
-        "mrs x1, sctlr_el1",
-        "orr x1, x1, #1",
-        "orr x1, x1, #(1<<2)",
-        "orr x1, x1, #(1<<12)",
+        "mov x1, #0",
+        "orr x1, x1, #(1<<0)",  // M: Enable MMU
+        "orr x1, x1, #(1<<2)",  // C: Enable D-cache
+        "orr x1, x1, #(1<<12)", // I: Enable I-cache
         "msr sctlr_el1, x1",
         "isb",
         out("x1") _,
