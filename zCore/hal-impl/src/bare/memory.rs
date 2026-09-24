@@ -86,11 +86,6 @@ mod buddy {
 
     pub fn frame_alloc(frame_count: usize, align_log2: usize) -> Option<PhysAddr> {
         use crate::hal_fn::mem::virt_to_phys;
-        #[cfg(feature = "uefi-boot")]
-        unsafe {
-            let u = 0xffff_0000_0900_0000 as *mut u8;
-            core::ptr::write_volatile(u, b'A');
-        }
         let (ptr, size) = HEAP
             .0
             .lock()
@@ -99,13 +94,7 @@ mod buddy {
             })
             .ok()?;
         assert_eq!(size, frame_count << PAGE_BITS);
-        let paddr = virt_to_phys(ptr.as_ptr() as usize);
-        #[cfg(feature = "uefi-boot")]
-        unsafe {
-            let u = 0xffff_0000_0900_0000 as *mut u8;
-            core::ptr::write_volatile(u, b'a');
-        }
-        Some(paddr)
+        Some(virt_to_phys(ptr.as_ptr() as usize))
     }
 
     pub fn frame_dealloc(target: PhysAddr) {
