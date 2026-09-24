@@ -14,12 +14,9 @@ extern crate alloc;
 extern crate petal;
 
 use zx::sys::{
-    zx_channel_read, zx_handle_close, zx_object_wait_one, zx_process_create,
-    zx_process_write_memory, zx_task_create_exception_channel, zx_thread_create, zx_vmar_map,
-    zx_vmo_create, zx_vmo_write, HandleValue,
+    zx_channel_read, zx_handle_close, zx_process_create, zx_task_create_exception_channel,
+    HandleValue,
 };
-
-const PAGE_SIZE: usize = 4096;
 
 fn check(status: i32, msg: &[u8]) {
     if status != 0 {
