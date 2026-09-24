@@ -21,6 +21,8 @@ use zx::sys::{
 const PAGE_SIZE: usize = 4096;
 /// ZX_CHANNEL_READABLE signal
 const ZX_CHANNEL_READABLE: u32 = 1 << 0;
+/// ZX_CHANNEL_PEER_CLOSED signal
+const ZX_CHANNEL_PEER_CLOSED: u32 = 1 << 1;
 /// ZX_TIME_INFINITE
 const ZX_TIME_INFINITE: i64 = i64::MAX;
 
@@ -159,18 +161,23 @@ pub fn main() {
     check(status, b"process_start");
     zx::debug_write(b"exception_test: child started, waiting for exception\r\n");
 
-    // Wait for the exception channel to become readable
+    // Wait for the exception channel to become readable or peer-closed
+    // (peer-closed means the child died without triggering an exception)
     let mut observed: u32 = 0;
     let status = unsafe {
         zx_object_wait_one(
             exc_channel,
-            ZX_CHANNEL_READABLE,
+            ZX_CHANNEL_READABLE | ZX_CHANNEL_PEER_CLOSED,
             ZX_TIME_INFINITE,
             &mut observed,
         )
     };
     check(status, b"object_wait_one exc_channel");
 
+    if observed & ZX_CHANNEL_PEER_CLOSED != 0 && observed & ZX_CHANNEL_READABLE == 0 {
+        zx::debug_write(b"exception_test: FAIL - child died without exception\r\n");
+        zx::Process::exit(1);
+    }
     if observed & ZX_CHANNEL_READABLE == 0 {
         zx::debug_write(b"exception_test: FAIL - channel not readable\r\n");
         zx::Process::exit(1);
@@ -194,12 +201,26 @@ pub fn main() {
         )
     };
     check(status, b"channel_read exception");
-    zx::debug_write(b"exception_test: exception received!\r\n");
 
     // Verify we got an exception handle
     if exc_handle_count < 1 || exc_handles[0] == 0 {
         zx::debug_write(b"exception_test: FAIL - no exception handle\r\n");
         zx::Process::exit(1);
+    }
+
+    // Verify the exception type is a software breakpoint.
+    // The exception data starts with a zx_exception_info_t:
+    //   pid (u64), tid (u64), type (u32)
+    // Type 0x0308 = ZX_EXCP_SW_BREAKPOINT
+    if exc_bytes >= 20 {
+        let exc_type = u32::from_le_bytes(exc_data[16..20].try_into().unwrap());
+        if exc_type != 0x0308 {
+            zx::debug_write(b"exception_test: FAIL - wrong exception type\r\n");
+            zx::Process::exit(1);
+        }
+        zx::debug_write(b"exception_test: breakpoint exception verified\r\n");
+    } else {
+        zx::debug_write(b"exception_test: WARNING - exception data too short to verify type\r\n");
     }
 
     // Clean up
