@@ -29,6 +29,8 @@ const UART_BASE: *mut u8 = 0x0900_0000 as *mut u8;
 const PHYS_TO_VIRT_OFFSET: u64 = 0xffff_0000_0000_0000;
 const KERNEL_PATH: &str = "\\kernel";
 const INITRD_PATH: &str = "\\initrd.img";
+/// DTB path on the ESP (loaded if UEFI config tables don't have one).
+const DTB_PATH: &str = "\\virt.dtb";
 
 // ── UART helpers ─────────────────────────────────────────────────────
 
@@ -202,16 +204,38 @@ fn main() -> Status {
     // 3. Load initrd (optional) — allocate at a known safe address
     let (initrd_start, initrd_size) = load_initrd();
 
-    // 4. Collect DTB
-    let dtb_paddr = find_dtb().unwrap_or(0) as u64;
-    if dtb_paddr != 0 {
-        uart_puts("DTB at 0x");
-        uart_put_hex(dtb_paddr);
+    // 4. Collect DTB — try UEFI config tables first, then ESP file
+    let dtb_paddr = if let Some(addr) = find_dtb() {
+        uart_puts("DTB from UEFI config table at 0x");
+        uart_put_hex(addr as u64);
         uart_puts("\n");
+        addr as u64
+    } else if let Some(dtb_data) = load_file(DTB_PATH) {
+        // Load DTB from ESP to a safe physical address
+        let dtb_addr: u64 = 0x4700_0000; // below initrd
+        let num_pages = (dtb_data.len() + 4095) / 4096;
+        let _ = uefi::boot::allocate_pages(
+            uefi::boot::AllocateType::Address(dtb_addr),
+            uefi::boot::MemoryType::LOADER_DATA,
+            num_pages,
+        );
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                dtb_data.as_ptr(),
+                dtb_addr as *mut u8,
+                dtb_data.len(),
+            );
+        }
+        uart_puts("DTB loaded from ESP: ");
+        uart_put_dec(dtb_data.len() as u64);
+        uart_puts(" bytes at 0x");
+        uart_put_hex(dtb_addr);
+        uart_puts("\n");
+        dtb_addr
     } else {
-        // Dump all config table GUIDs for debugging
-        dump_config_tables();
-    }
+        uart_puts("WARNING: no DTB found (UEFI config tables or ESP)\n");
+        0u64
+    };
 
     // 5. Build page tables
     build_page_tables();
@@ -480,11 +504,11 @@ unsafe fn install_page_tables_and_jump(
     uart_puts("Jumping to kernel\n");
 
     // Jump to kernel. rust_main_uefi(dtb_paddr) in x0.
+    // Use explicit registers to avoid compiler register conflicts.
     asm!(
-        "mov x0, {dtb}",
-        "br {entry}",
-        dtb = in(reg) dtb_paddr,
-        entry = in(reg) entry,
+        "br x1",
+        in("x0") dtb_paddr,
+        in("x1") entry,
         options(noreturn),
     );
 }
