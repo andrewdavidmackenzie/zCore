@@ -1353,4 +1353,34 @@ mod tests {
             assert_eq!((vmar.addr() as *const u8).read(), 2);
         }
     }
+
+    #[test]
+    fn read_write_memory() {
+        let root_vmar = VmAddressRegion::new_root();
+        let child_vmar = root_vmar
+            .allocate(None, 0x4000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+            .expect("failed to create child VMAR");
+
+        let vmo = VmObject::new_paged(1);
+        let flags = MMUFlags::READ | MMUFlags::WRITE;
+        let addr = child_vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
+
+        // Write to the mapped region via write_memory
+        let test_data = b"Hello, cross-process memory!";
+        let written = root_vmar.write_memory(addr, test_data).unwrap();
+        assert_eq!(written, test_data.len());
+
+        // Read it back via read_memory
+        let mut buf = [0u8; 64];
+        let read = root_vmar
+            .read_memory(addr, &mut buf[..test_data.len()])
+            .unwrap();
+        assert_eq!(read, test_data.len());
+        assert_eq!(&buf[..test_data.len()], test_data);
+
+        // Read from unmapped address should fail
+        let bad_addr = addr + 0x10000;
+        let mut bad_buf = [0u8; 4];
+        assert!(root_vmar.read_memory(bad_addr, &mut bad_buf).is_err());
+    }
 }

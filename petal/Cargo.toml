@@ -32,6 +32,10 @@ path = "src/bin/shell.rs"
 name = "process-mem-test"
 path = "src/bin/process_mem_test.rs"
 
+[[bin]]
+name = "exception-test"
+path = "src/bin/exception_test.rs"
+
 [package.metadata.cargo-all-features]
 # Userspace binaries require bare-metal targets (aarch64-unknown-none-softfloat, etc.).
 skip_package = true

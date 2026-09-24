@@ -121,6 +121,7 @@ run_test "vdso-test" "vdso_test: PASS" || FAILED=$((FAILED + 1))
 run_test "alloc-test" "alloc_test: PASS" || FAILED=$((FAILED + 1))
 run_test "shell" "shell: self-test PASS" || FAILED=$((FAILED + 1))
 run_test "process-mem-test" "process_mem_test: PASS" || FAILED=$((FAILED + 1))
+run_test "exception-test" "exception_test: PASS" || FAILED=$((FAILED + 1))
 # vdso_call_test blocked on #241 (petal ELF loading with data sections)
 
 echo ""
