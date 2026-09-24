@@ -1550,3 +1550,63 @@ pub unsafe fn zx_ktrace_write(handle: HandleValue, id: u32, arg0: u32, arg1: u32
         arg1 as u64,
     )
 }
+
+// ── Process memory access ────────────────────────────────────────────
+
+/// Read from another process's address space.
+///
+/// `handle` must have `ZX_RIGHT_READ | ZX_RIGHT_WRITE` on the target process.
+pub unsafe fn zx_process_read_memory(
+    handle: HandleValue,
+    vaddr: usize,
+    buffer: *mut u8,
+    buffer_size: usize,
+    actual: *mut usize,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_PROCESS_READ_MEMORY,
+        handle as u64,
+        vaddr as u64,
+        buffer as u64,
+        buffer_size as u64,
+        actual as u64,
+    )
+}
+
+/// Write to another process's address space.
+///
+/// `handle` must have `ZX_RIGHT_READ | ZX_RIGHT_WRITE` on the target process.
+pub unsafe fn zx_process_write_memory(
+    handle: HandleValue,
+    vaddr: usize,
+    buffer: *const u8,
+    buffer_size: usize,
+    actual: *mut usize,
+) -> ZxStatus {
+    syscall5(
+        crate::consts::SYS_PROCESS_WRITE_MEMORY,
+        handle as u64,
+        vaddr as u64,
+        buffer as u64,
+        buffer_size as u64,
+        actual as u64,
+    )
+}
+
+// ── Exception channel ────────────────────────────────────────────────
+
+/// Create an exception channel for a task (process, thread, or job).
+///
+/// `options`: 0 for normal, `ZX_EXCEPTION_CHANNEL_DEBUGGER` (1) for debugger.
+pub unsafe fn zx_task_create_exception_channel(
+    handle: HandleValue,
+    options: u32,
+    out: *mut HandleValue,
+) -> ZxStatus {
+    syscall3(
+        crate::consts::SYS_TASK_CREATE_EXCEPTION_CHANNEL,
+        handle as u64,
+        options as u64,
+        out as u64,
+    )
+}
