@@ -9,8 +9,11 @@ use cortex_a::registers::*;
 use lock::Mutex;
 use tock_registers::interfaces::{Readable, Writeable};
 
-static KERNEL_PT: spin::Lazy<Mutex<PageTable>> =
-    spin::Lazy::new(|| Mutex::new(init_kernel_page_table().unwrap()));
+static KERNEL_PT: spin::Lazy<Mutex<PageTable>> = spin::Lazy::new(|| {
+    Mutex::new(init_kernel_page_table().unwrap_or_else(|e| {
+        panic!("init_kernel_page_table failed: {:?}", e);
+    }))
+});
 
 /// remap kernel ELF segments with 4K page
 fn init_kernel_page_table() -> PagingResult<PageTable> {
@@ -113,12 +116,23 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
 }
 
 pub fn init() {
-    let mut pt = KERNEL_PT.lock();
-    info!("initialized kernel page table @ {:#x}", pt.table_phys());
-    unsafe {
-        pt.activate();
-        TTBR0_EL1.set(0);
-        flush_tlb_all();
+    #[cfg(not(feature = "uefi-boot"))]
+    {
+        let mut pt = KERNEL_PT.lock();
+        info!("initialized kernel page table @ {:#x}", pt.table_phys());
+        unsafe {
+            pt.activate();
+            TTBR0_EL1.set(0);
+            flush_tlb_all();
+        }
+    }
+    #[cfg(feature = "uefi-boot")]
+    {
+        // UEFI boot: keep the stub's 1 GiB block page tables.
+        // They cover 0-3 GiB which is sufficient for QEMU virt.
+        // Fine-grained 4K page tables with proper RWX permissions
+        // can be added later.
+        info!("UEFI boot: using stub page tables (1 GiB blocks)");
     }
 }
 

@@ -90,6 +90,16 @@ pub fn primary_init_early() {
     } else {
         CMDLINE.init_once_by(KCONFIG.cmdline.to_string());
     }
+
+    // If DTB didn't provide initrd location, use KernelConfig
+    // (set by UEFI stub via UefiBootInfo).
+    if INITRD_REGION.as_ref().is_none() && KCONFIG.initrd_start != 0 && KCONFIG.initrd_size != 0 {
+        let start = KCONFIG.initrd_start as usize;
+        let end = start + KCONFIG.initrd_size as usize;
+        log::info!("Initrd from boot info: {:#x}..{:#x}", start, end);
+        INITRD_REGION.init_once_by(Some(start..end));
+    }
+
     drivers::init_early();
 }
 
@@ -210,13 +220,24 @@ fn parse_dtb(dtb_paddr: usize) {
             }
             StepOver
         }
-        DtbObj::Property(Property::Reg(_reg)) => {
-            // DTB Reg properties are handled by dtb_walker's typed
-            // iterator. Memory discovery via Reg is needed for UEFI
-            // boot but currently triggers AlreadyMapped in vm::init
-            // due to overlapping page table mappings. Tracked in a
-            // follow-up issue. For now, memory falls back to
-            // PHYS_MEMORY_END (100 MiB) on raw boot.
+        DtbObj::Property(Property::Reg(reg)) => {
+            let ctx = &current_node[..current_node_len];
+            if ctx.starts_with(b"memory") {
+                for range in reg {
+                    let base = range.start;
+                    let size = range.end - range.start;
+                    log::info!(
+                        "DTB memory (reg): base={:#x}, size={:#x} ({} MiB)",
+                        base,
+                        size,
+                        size >> 20
+                    );
+                    if info.memory_base.is_none() {
+                        info.memory_base = Some(base);
+                        info.memory_size = Some(size);
+                    }
+                }
+            }
             StepOver
         }
         DtbObj::Property(Property::General { name, value }) => {

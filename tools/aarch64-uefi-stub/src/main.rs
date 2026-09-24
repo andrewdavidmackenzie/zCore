@@ -24,6 +24,16 @@ use uefi::proto::media::fs::SimpleFileSystem;
 // ── Constants ────────────────────────────────────────────────────────
 
 const UART_BASE: *mut u8 = 0x0900_0000 as *mut u8;
+
+/// Boot info passed to the kernel. Must match UefiBootInfo in the kernel.
+#[repr(C)]
+struct BootInfo {
+    magic: u64,
+    dtb_paddr: u64,
+    dtb_size: u64,
+    initrd_start: u64,
+    initrd_size: u64,
+}
 /// Physical-to-virtual offset. The kernel virtual address space starts
 /// at 0xffff_0000_0000_0000. Must match the linker script.
 const PHYS_TO_VIRT_OFFSET: u64 = 0xffff_0000_0000_0000;
@@ -242,13 +252,24 @@ fn main() -> Status {
     uart_puts("Page tables ready\n");
 
     // 6. Exit boot services
+    // 6. Prepare boot info struct for the kernel
+    //    Place it at a safe physical address (below kernel, page-aligned)
+    const BOOT_INFO_ADDR: u64 = 0x4600_0000;
+    let boot_info = unsafe { &mut *(BOOT_INFO_ADDR as *mut BootInfo) };
+    boot_info.magic = 0x5A_43_55_45; // "ZCUE"
+    boot_info.dtb_paddr = dtb_paddr;
+    boot_info.dtb_size = if dtb_paddr != 0 { 1048576 } else { 0 }; // 1 MiB
+    boot_info.initrd_start = initrd_start;
+    boot_info.initrd_size = initrd_size;
+
     uart_puts("Exiting boot services...\n");
     let _ = unsafe { uefi::boot::exit_boot_services(Some(uefi::boot::MemoryType::LOADER_DATA)) };
     uart_puts("Boot services exited\n");
 
     // 7. Install page tables and jump to kernel
+    //    Pass boot_info address instead of raw dtb_paddr
     unsafe {
-        install_page_tables_and_jump(entry, dtb_paddr, initrd_start, initrd_size);
+        install_page_tables_and_jump(entry, BOOT_INFO_ADDR);
     }
 }
 
@@ -448,12 +469,7 @@ fn build_page_tables() {
 
 // ── Jump to kernel ───────────────────────────────────────────────────
 
-unsafe fn install_page_tables_and_jump(
-    entry: u64,
-    dtb_paddr: u64,
-    _initrd_start: u64,
-    _initrd_size: u64,
-) -> ! {
+unsafe fn install_page_tables_and_jump(entry: u64, boot_info_addr: u64) -> ! {
     // Disable MMU (UEFI left it on with its own page tables)
     asm!(
         "mrs x1, sctlr_el1",
@@ -503,11 +519,10 @@ unsafe fn install_page_tables_and_jump(
 
     uart_puts("Jumping to kernel\n");
 
-    // Jump to kernel. rust_main_uefi(dtb_paddr) in x0.
-    // Use explicit registers to avoid compiler register conflicts.
+    // Jump to kernel. rust_main_uefi(boot_info_addr) in x0.
     asm!(
         "br x1",
-        in("x0") dtb_paddr,
+        in("x0") boot_info_addr,
         in("x1") entry,
         options(noreturn),
     );

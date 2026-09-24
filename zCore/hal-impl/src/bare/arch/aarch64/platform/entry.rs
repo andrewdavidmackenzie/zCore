@@ -34,18 +34,44 @@ mod board {
 #[no_mangle]
 #[link_section = ".text"]
 #[unsafe(naked)]
-pub unsafe extern "C" fn rust_main_uefi(_dtb_paddr: usize) -> ! {
-    // Set up the boot stack and jump to rust_main.
+pub unsafe extern "C" fn rust_main_uefi(_boot_info_ptr: usize) -> ! {
+    // Set up the boot stack and jump to rust_main_from_uefi.
     // Must be naked to avoid compiler-generated stack usage before
     // we switch to the kernel's boot stack.
-    // x0 = dtb_paddr (preserved for rust_main)
+    // x0 = pointer to UefiBootInfo (preserved)
     core::arch::naked_asm!(
         "adrp x1, boot_stack",
         "add  x1, x1, :lo12:boot_stack",
-        "add  x1, x1, #0x8000", // top of first 32 KiB slot
+        "add  x1, x1, #0x8000",
         "mov  sp, x1",
-        "b    rust_main",
+        "b    rust_main_from_uefi",
     );
+}
+
+/// Entry point for UEFI boot — extracts boot info and calls rust_main.
+#[no_mangle]
+extern "C" fn rust_main_from_uefi(boot_info_ptr: usize) -> ! {
+    use super::uefi_boot_info::UefiBootInfo;
+
+    super::super::set_board_bases(board::UART_BASE, board::GIC_BASE);
+
+    let bi = unsafe { &*(boot_info_ptr as *const UefiBootInfo) };
+    if bi.magic != UefiBootInfo::MAGIC {
+        // Fallback: boot_info_ptr is just dtb_paddr (old interface)
+        rust_main(boot_info_ptr);
+    }
+
+    let config = KernelConfig {
+        cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=info"),
+        phys_to_virt_offset: board::PHYS_TO_VIRT_OFFSET,
+        dtb_paddr: bi.dtb_paddr as usize,
+        dtb_size: bi.dtb_size as usize,
+        initrd_start: bi.initrd_start,
+        initrd_size: bi.initrd_size,
+        ..Default::default()
+    };
+
+    unsafe { kernel_entry::primary_core_init(config) }
 }
 
 /// Rust entry point, called from boot assembly after MMU is enabled.
