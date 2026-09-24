@@ -96,6 +96,20 @@ demo-petal-test: rootfs
 demo-wasi-test: rootfs
 	tools/scripts/demo-wasi-test.sh $(ARCH)
 
+# ── UEFI boot demos (aarch64 only) ─────────────────────────────────────
+# Same demos but booting via UEFI firmware instead of raw -kernel.
+# Requires: mtools (mformat, mcopy, mmd), edk2-aarch64-code.fd
+
+# Demo: UEFI petal shell (with Linux)
+demo-petal-uefi: rootfs
+	ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/shell" \
+		cargo qemu -m qemu-aarch64-uefi --log warn
+
+# Demo: UEFI busybox shell
+demo-busybox-uefi: rootfs
+	ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/busybox?sh" \
+		cargo qemu -m qemu-aarch64-uefi --log warn
+
 # Demo: boot into petal shell (Zircon only, no Linux)
 # /bin/linux-hello should return an error.
 demo-zircon: rootfs

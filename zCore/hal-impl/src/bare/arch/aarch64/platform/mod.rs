@@ -1,2 +1,2 @@
-pub mod entry;
+mod entry;
 pub mod uefi_boot_info;
