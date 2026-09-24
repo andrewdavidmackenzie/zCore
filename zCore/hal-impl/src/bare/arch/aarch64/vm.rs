@@ -116,6 +116,16 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
 }
 
 pub fn init() {
+    #[cfg(feature = "uefi-boot")]
+    {
+        // UEFI boot: skip page table remap for now. The stub's 1 GiB
+        // block mappings cover all of 0-3 GiB physical memory, which is
+        // sufficient. Fine-grained page table with proper permissions
+        // is a follow-up improvement.
+        info!("UEFI boot: using 1 GiB block page tables from stub");
+        return;
+    }
+
     #[cfg(not(feature = "uefi-boot"))]
     {
         let mut pt = KERNEL_PT.lock();
@@ -125,14 +135,6 @@ pub fn init() {
             TTBR0_EL1.set(0);
             flush_tlb_all();
         }
-    }
-    #[cfg(feature = "uefi-boot")]
-    {
-        // UEFI boot: keep the stub's 1 GiB block page tables.
-        // They cover 0-3 GiB which is sufficient for QEMU virt.
-        // Fine-grained 4K page tables with proper RWX permissions
-        // can be added later.
-        info!("UEFI boot: using stub page tables (1 GiB blocks)");
     }
 }
 
@@ -152,11 +154,24 @@ hal_fn_impl! {
         fn activate_paging(vmtoken: PhysAddr) {
             let check_if_user = (vmtoken & USER_TABLE_FLAG) != 0;
             let vmtoken = vmtoken & PHYS_ADDR_MASK;
-            trace!("set {} page_table @ {:#x}", if check_if_user { "user" } else { "kernel" }, vmtoken);
             if check_if_user {
                 TTBR0_EL1.set(vmtoken as _);
             } else {
+                // Write to UART before switching — after this, the CPU
+                // uses the new page tables and if they're wrong, we crash
+                // with no output.
+                let uart = 0xffff_0000_0900_0000 as *mut u8;
+                unsafe {
+                    for &b in b"TTBR1<-" {
+                        core::ptr::write_volatile(uart, b);
+                    }
+                }
                 TTBR1_EL1.set(vmtoken as _);
+                unsafe {
+                    for &b in b"OK\r\n" {
+                        core::ptr::write_volatile(uart, b);
+                    }
+                }
             }
             flush_tlb_all();
         }

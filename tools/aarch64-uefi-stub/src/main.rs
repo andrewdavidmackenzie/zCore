@@ -517,6 +517,30 @@ unsafe fn install_page_tables_and_jump(entry: u64, boot_info_addr: u64) -> ! {
         out("x1") _,
     );
 
+    // Flush data cache and invalidate instruction cache for the
+    // entire kernel load region. The stub wrote kernel code via data
+    // stores — the instruction cache may have stale entries.
+    let kernel_start = 0x8020_0000u64;
+    let kernel_end = 0x80A0_0000u64; // ~8 MiB, covers kernel + BSS
+    let mut addr = kernel_start;
+    while addr < kernel_end {
+        asm!(
+            "dc cvau, {addr}",  // Clean data cache to point of unification
+            addr = in(reg) addr,
+        );
+        addr += 64; // cache line size
+    }
+    asm!("dsb ish");
+    addr = kernel_start;
+    while addr < kernel_end {
+        asm!(
+            "ic ivau, {addr}",  // Invalidate instruction cache
+            addr = in(reg) addr,
+        );
+        addr += 64;
+    }
+    asm!("dsb ish", "isb");
+
     uart_puts("Jumping to kernel\n");
 
     // Jump to kernel. rust_main_uefi(boot_info_addr) in x0.

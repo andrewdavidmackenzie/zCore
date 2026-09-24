@@ -36,6 +36,7 @@ SECTIONS
         erodata = .;
     }
 
+    . = ALIGN(4K);
     .data : AT(ADDR(.data) - PHYS_OFFSET) {
         sdata = .;
         *(.data .data.*)
@@ -44,6 +45,7 @@ SECTIONS
         edata = .;
     }
 
+    . = ALIGN(4K);
     .bss (NOLOAD) : AT(ADDR(.bss) - PHYS_OFFSET) {
         boot_stack = .;
         *(.bss.stack)
