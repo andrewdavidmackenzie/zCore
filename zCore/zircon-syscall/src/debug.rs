@@ -46,13 +46,13 @@ impl Syscall<'_> {
         if !path.starts_with('/') {
             return Err(ZxError::INVALID_ARGS);
         }
-        info!("debug.exec: path={:?}", path);
+        debug!("debug.exec: path={:?}", path);
 
         // Read the binary from the rootfs.
         let data = zircon_object::task::spawn::read_rootfs_file(&path).ok_or(ZxError::NOT_FOUND)?;
 
         let flavour = Flavour::from_elf(&data);
-        info!("debug.exec: detected flavour {:?}", flavour);
+        debug!("debug.exec: detected flavour {:?}", flavour);
 
         // Spawn by flavour — unified dispatch.
         let job = self.thread.proc().job();

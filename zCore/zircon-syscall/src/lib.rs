@@ -492,10 +492,17 @@ impl Syscall<'_> {
         };
         // Log debug I/O syscalls at trace level to avoid flooding the
         // serial console during interactive shell sessions.
-        if matches!(sys_type, Sys::DEBUG_WRITE | Sys::DEBUG_READ) {
-            trace!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
-        } else {
-            info!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
+        // Log errors at error level, success at info/trace.
+        match (&ret, &sys_type) {
+            (_, Sys::DEBUG_WRITE | Sys::DEBUG_READ) => {
+                trace!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
+            }
+            (Err(_), _) => {
+                error!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
+            }
+            _ => {
+                info!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
+            }
         }
         match ret {
             Ok(_) => 0,
