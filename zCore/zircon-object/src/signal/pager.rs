@@ -160,3 +160,60 @@ const ZX_PAGER_OP_FAIL: u32 = 1;
 const ZX_PAGER_OP_DIRTY: u32 = 2;
 const ZX_PAGER_OP_WRITEBACK_BEGIN: u32 = 3;
 const ZX_PAGER_OP_WRITEBACK_END: u32 = 4;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vm::VmObject;
+
+    #[test]
+    fn create_pager() {
+        let pager = Pager::new();
+        assert_eq!(pager.inner.lock().vmos.len(), 0);
+    }
+
+    #[test]
+    fn create_vmo() {
+        let pager = Pager::new();
+        let vmo = pager.create_vmo(0, 0, PAGE_SIZE as u64).unwrap();
+        assert_eq!(vmo.len(), PAGE_SIZE);
+        assert_eq!(pager.inner.lock().vmos.len(), 1);
+    }
+
+    #[test]
+    fn detach_vmo() {
+        let pager = Pager::new();
+        let vmo = pager.create_vmo(0, 0, PAGE_SIZE as u64).unwrap();
+        assert_eq!(pager.inner.lock().vmos.len(), 1);
+        pager.detach_vmo(&vmo).unwrap();
+        assert_eq!(pager.inner.lock().vmos.len(), 0);
+
+        // Detaching again should fail
+        assert!(pager.detach_vmo(&vmo).is_err());
+    }
+
+    #[test]
+    fn supply_pages() {
+        let pager = Pager::new();
+        let pager_vmo = pager.create_vmo(0, 0, PAGE_SIZE as u64).unwrap();
+
+        // Create a source VMO with data
+        let src_vmo = VmObject::new_paged(1);
+        src_vmo.write(0, b"pager data!").unwrap();
+
+        // Supply the page
+        let result = pager.supply_pages(&pager_vmo, 0, PAGE_SIZE as u64, &src_vmo, 0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn op_range_on_wrong_vmo() {
+        let pager = Pager::new();
+        let _pager_vmo = pager.create_vmo(0, 0, PAGE_SIZE as u64).unwrap();
+        let other_vmo = VmObject::new_paged(1);
+        // Operating on a VMO that doesn't belong to this pager should fail
+        assert!(pager
+            .op_range(ZX_PAGER_OP_FAIL, &other_vmo, 0, PAGE_SIZE as u64, 0)
+            .is_err());
+    }
+}
