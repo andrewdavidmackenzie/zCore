@@ -56,6 +56,19 @@ pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
         let future = core::future::pending::<i32>();
         hal_impl::run_executor(future)
     };
+    // Print exit code via UART directly in case logging is broken
+    let uart = 0xffff_0000_0900_0000 as *mut u8;
+    unsafe {
+        for &b in b"EXIT CODE: " {
+            core::ptr::write_volatile(uart, b);
+        }
+        let code_str = if exit_code == 0 { b"0" } else { b"-1" };
+        for &b in code_str.as_slice() {
+            core::ptr::write_volatile(uart, b);
+        }
+        core::ptr::write_volatile(uart, b'\r');
+        core::ptr::write_volatile(uart, b'\n');
+    }
     info!("exiting with code {}", exit_code);
     hal_impl::cpu::reset()
 }

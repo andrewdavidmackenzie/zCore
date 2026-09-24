@@ -20,18 +20,33 @@ pub trait VmarExt {
 impl VmarExt for VmAddressRegion {
     fn load_from_elf(&self, elf: &ElfFile) -> ZxResult<Arc<VmObject>> {
         let mut first_vmo = None;
+        let mut seg_idx = 0u32;
         for ph in elf.program_iter() {
             if ph.get_type().unwrap() != Type::Load {
                 continue;
             }
+            info!(
+                "load_from_elf: seg {} vaddr={:#x} memsz={:#x} filesz={:#x}",
+                seg_idx,
+                ph.virtual_addr(),
+                ph.mem_size(),
+                ph.file_size()
+            );
             let vmo = make_vmo(elf, ph)?;
+            info!(
+                "load_from_elf: seg {} vmo created, len={:#x}",
+                seg_idx,
+                vmo.len()
+            );
             let offset = ph.virtual_addr() as usize / PAGE_SIZE * PAGE_SIZE;
             let flags = ph.flags().to_mmu_flags();
-            trace!("ph:{:#x?}, offset:{:#x?}, flags:{:#x?}", ph, offset, flags);
-            // Map VMO into VMAR at the computed offset
             self.map_at(offset, vmo.clone(), 0, vmo.len(), flags)?;
-            debug!("Map [{:x}, {:x})", offset, offset + vmo.len());
+            info!(
+                "load_from_elf: seg {} mapped at offset {:#x}",
+                seg_idx, offset
+            );
             first_vmo.get_or_insert(vmo);
+            seg_idx += 1;
         }
         Ok(first_vmo.unwrap())
     }
@@ -73,20 +88,21 @@ impl FlagsExt for Flags {
 fn make_vmo(elf: &ElfFile, ph: ProgramHeader) -> ZxResult<Arc<VmObject>> {
     assert_eq!(ph.get_type().unwrap(), Type::Load);
     let page_offset = ph.virtual_addr() as usize % PAGE_SIZE;
-    // Pages needed for (VirtAddr remainder + MemSiz)
     let pages = pages(ph.mem_size() as usize + page_offset);
-    trace!(
-        "VmObject new pages: {:#x}, virtual_addr: {:#x}",
-        pages,
-        page_offset
-    );
+    info!("make_vmo: pages={}, page_offset={:#x}", pages, page_offset);
     let vmo = VmObject::new_paged(pages);
+    info!("make_vmo: vmo created");
     let data = match ph.get_data(elf).unwrap() {
         SegmentData::Undefined(data) => data,
         _ => return Err(ZxError::INVALID_ARGS),
     };
-    // Call VMObjectTrait.write to allocate physical memory and write program data
+    info!(
+        "make_vmo: writing {} bytes at offset {:#x}",
+        data.len(),
+        page_offset
+    );
     vmo.write(page_offset, data)?;
+    info!("make_vmo: done");
     Ok(vmo)
 }
 

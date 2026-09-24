@@ -262,6 +262,9 @@ fn main() -> Status {
     boot_info.initrd_start = initrd_start;
     boot_info.initrd_size = initrd_size;
 
+    // Disable UEFI watchdog timer before exiting boot services.
+    // The watchdog might reboot the machine if not disabled.
+    let _ = uefi::boot::set_watchdog_timer(0, 0, None);
     uart_puts("Exiting boot services...\n");
     let _ = unsafe { uefi::boot::exit_boot_services(Some(uefi::boot::MemoryType::LOADER_DATA)) };
     uart_puts("Boot services exited\n");

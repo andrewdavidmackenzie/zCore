@@ -118,15 +118,10 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
 pub fn init() {
     #[cfg(feature = "uefi-boot")]
     {
-        // UEFI boot: skip page table remap for now. The stub's 1 GiB
-        // block mappings cover all of 0-3 GiB physical memory, which is
-        // sufficient. Fine-grained page table with proper permissions
-        // is a follow-up improvement.
-        info!("UEFI boot: using 1 GiB block page tables from stub");
+        info!("UEFI boot: skipping page table remap (1 GiB blocks from stub)");
         return;
     }
-
-    #[cfg(not(feature = "uefi-boot"))]
+    #[allow(unreachable_code)]
     {
         let mut pt = KERNEL_PT.lock();
         info!("initialized kernel page table @ {:#x}", pt.table_phys());

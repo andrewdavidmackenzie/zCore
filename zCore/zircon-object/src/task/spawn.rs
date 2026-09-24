@@ -180,25 +180,35 @@ pub fn spawn_process(
     use crate::util::elf_loader::*;
     use xmas_elf::ElfFile;
 
+    info!("spawn_process: creating process '{}'", name);
     let proc = Process::create(job, name)?;
     let thread = Thread::create(&proc, &format!("{}-main", name))?;
     let vmar = proc.vmar();
 
     // Load ELF segments
+    info!("spawn_process: loading ELF");
     let elf = ElfFile::new(elf_data).map_err(|_| crate::ZxError::INVALID_ARGS)?;
     let size = elf.load_segment_size();
+    info!("spawn_process: allocating VMAR ({} bytes)", size);
     let image_vmar = vmar.allocate(None, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)?;
+    info!("spawn_process: loading ELF into VMAR");
     let _vmo = image_vmar.load_from_elf(&elf)?;
     let base = image_vmar.addr();
     let entry = base + elf.header.pt2.entry_point() as usize;
+    info!(
+        "spawn_process: ELF loaded at {:#x}, entry {:#x}",
+        base, entry
+    );
 
     // Stack
     let stack_size = config.stack_pages * PAGE_SIZE;
     let stack_vmo = VmObject::new_paged(config.stack_pages);
     stack_vmo.set_name(&format!("{}-stack", name));
     let stack_flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER;
+    info!("spawn_process: mapping stack");
     let stack_base = vmar.map(None, stack_vmo, 0, stack_size, stack_flags)?;
     let sp = stack_base + stack_size;
+    info!("spawn_process: stack at {:#x}, sp={:#x}", stack_base, sp);
 
     // vDSO: code pages (RX) + data page (R)
     let vdso_code_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;

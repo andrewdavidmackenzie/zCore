@@ -48,6 +48,128 @@ pub unsafe extern "C" fn rust_main_uefi(_boot_info_ptr: usize) -> ! {
     );
 }
 
+// UEFI debug exception vector — dumps ESR/FAR/ELR to UART.
+#[cfg(feature = "uefi-boot")]
+core::arch::global_asm!(
+    ".align 11",
+    ".global uefi_debug_vectors",
+    "uefi_debug_vectors:",
+    // Current EL with SP0 (4 entries x 0x80 bytes)
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    // Current EL with SPx (4 entries x 0x80 bytes)
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    // Lower EL AArch64 (4 entries x 0x80 bytes)
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    // Lower EL AArch32 (4 entries x 0x80 bytes)
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    ".align 7",
+    "b uefi_debug_exc_handler",
+    "uefi_debug_exc_handler:",
+    "mrs x0, esr_el1",
+    "mrs x1, far_el1",
+    "mrs x2, elr_el1",
+    // Write "EXC " to UART
+    "ldr x3, =0xffff000009000000",
+    "mov w4, #'E'",
+    "strb w4, [x3]",
+    "mov w4, #'X'",
+    "strb w4, [x3]",
+    "mov w4, #'C'",
+    "strb w4, [x3]",
+    "mov w4, #' '",
+    "strb w4, [x3]",
+    // Print ESR as hex (x0)
+    "mov x5, #60", // shift start
+    "1:",
+    "lsr x6, x0, x5",
+    "and x6, x6, #0xf",
+    "cmp x6, #10",
+    "blt 2f",
+    "add x6, x6, #('a' - 10)",
+    "b 3f",
+    "2: add x6, x6, #'0'",
+    "3: strb w6, [x3]",
+    "subs x5, x5, #4",
+    "bge 1b",
+    "mov w4, #' '",
+    "strb w4, [x3]",
+    // Print FAR as hex (x1)
+    "mov x5, #60",
+    "4:",
+    "lsr x6, x1, x5",
+    "and x6, x6, #0xf",
+    "cmp x6, #10",
+    "blt 5f",
+    "add x6, x6, #('a' - 10)",
+    "b 6f",
+    "5: add x6, x6, #'0'",
+    "6: strb w6, [x3]",
+    "subs x5, x5, #4",
+    "bge 4b",
+    "mov w4, #' '",
+    "strb w4, [x3]",
+    // Print ELR as hex (x2)
+    "mov x5, #60",
+    "7:",
+    "lsr x6, x2, x5",
+    "and x6, x6, #0xf",
+    "cmp x6, #10",
+    "blt 8f",
+    "add x6, x6, #('a' - 10)",
+    "b 9f",
+    "8: add x6, x6, #'0'",
+    "9: strb w6, [x3]",
+    "subs x5, x5, #4",
+    "bge 7b",
+    "mov w4, #'\\r'",
+    "strb w4, [x3]",
+    "mov w4, #'\\n'",
+    "strb w4, [x3]",
+    // Spin
+    "10: wfe",
+    "b 10b",
+);
+
+#[cfg(feature = "uefi-boot")]
+pub fn install_debug_exception_vector() {
+    extern "C" {
+        fn uefi_debug_vectors();
+    }
+    unsafe {
+        core::arch::asm!(
+            "msr vbar_el1, {v}",
+            "isb",
+            v = in(reg) uefi_debug_vectors as *const () as usize,
+        );
+    }
+}
+
 /// Entry point for UEFI boot — extracts boot info and calls rust_main.
 #[no_mangle]
 extern "C" fn rust_main_from_uefi(boot_info_ptr: usize) -> ! {
