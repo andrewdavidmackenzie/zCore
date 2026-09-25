@@ -977,4 +977,26 @@ mod tests {
         thread.time_add(10);
         assert_eq!(thread.get_time(), 10);
     }
+
+    #[test]
+    fn exit() {
+        let root_job = Job::root();
+        let proc = Process::create(&root_job, "proc").expect("failed to create process");
+        let thread = Thread::create(&proc, "thread").expect("failed to create thread");
+
+        // Initial state should be New (not Dying).
+        assert_ne!(thread.state(), ThreadState::Dying);
+        assert_eq!(thread.state(), ThreadState::New);
+
+        // Wrap in CurrentThread and call exit.
+        let current = CurrentThread(thread.clone());
+        current.exit();
+
+        // After exit, thread state should be Dying.
+        assert_eq!(thread.state(), ThreadState::Dying);
+
+        // Calling exit again should be idempotent (not panic).
+        current.exit();
+        assert_eq!(thread.state(), ThreadState::Dying);
+    }
 }

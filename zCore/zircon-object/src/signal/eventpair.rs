@@ -90,4 +90,41 @@ mod tests {
         assert_eq!(event0.peer().err(), Some(ZxError::PEER_CLOSED));
         assert_eq!(event0.related_koid(), 0);
     }
+
+    #[test]
+    fn signal_peer() {
+        let (ep0, ep1) = EventPair::create();
+
+        // Signal USER_SIGNAL_0 on ep1 via ep0's peer.
+        ep0.peer()
+            .unwrap()
+            .signal_change(Signal::empty(), Signal::USER_SIGNAL_0);
+        assert!(ep1.signal().contains(Signal::USER_SIGNAL_0));
+
+        // Clear USER_SIGNAL_0 on ep1 via ep0's peer.
+        ep0.peer()
+            .unwrap()
+            .signal_change(Signal::USER_SIGNAL_0, Signal::empty());
+        assert!(!ep1.signal().contains(Signal::USER_SIGNAL_0));
+    }
+
+    #[test]
+    fn signal_peer_bidirectional() {
+        let (ep0, ep1) = EventPair::create();
+
+        // Signal from ep1 side to ep0.
+        ep1.peer()
+            .unwrap()
+            .signal_change(Signal::empty(), Signal::SIGNALED);
+        assert!(ep0.signal().contains(Signal::SIGNALED));
+
+        // ep1 itself should NOT have SIGNALED (it was set on ep0).
+        assert!(!ep1.signal().contains(Signal::SIGNALED));
+
+        // Clear it.
+        ep1.peer()
+            .unwrap()
+            .signal_change(Signal::SIGNALED, Signal::empty());
+        assert!(!ep0.signal().contains(Signal::SIGNALED));
+    }
 }

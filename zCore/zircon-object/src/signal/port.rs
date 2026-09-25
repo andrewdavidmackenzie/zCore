@@ -267,4 +267,53 @@ mod tests {
         let packet = port.wait().await;
         assert_eq!(PortPacketRepr::from(&packet), packet_repr);
     }
+
+    #[test]
+    fn cancel_async() {
+        let port = Port::new(0).unwrap();
+        let source = DummyObject::new();
+        let source_koid = source.id();
+        let key = 42u64;
+
+        // Register an async subscription and get the cancel flag.
+        let cancel_flag = port.register_async(source_koid, key);
+        assert!(!cancel_flag.load(core::sync::atomic::Ordering::Relaxed));
+
+        // Cancelling a matching subscription should succeed and set the flag.
+        assert!(port.cancel_async(source_koid, key).is_ok());
+        assert!(cancel_flag.load(core::sync::atomic::Ordering::Relaxed));
+
+        // Cancelling again (no remaining subscription) should return NOT_FOUND.
+        assert_eq!(
+            port.cancel_async(source_koid, key).err(),
+            Some(ZxError::NOT_FOUND)
+        );
+
+        // Cancelling with a nonexistent koid should return NOT_FOUND.
+        assert_eq!(
+            port.cancel_async(source_koid + 9999, key).err(),
+            Some(ZxError::NOT_FOUND)
+        );
+    }
+
+    #[test]
+    fn cancel_async_multiple_flags() {
+        let port = Port::new(0).unwrap();
+        let source = DummyObject::new();
+        let source_koid = source.id();
+        let key = 7u64;
+
+        // Register multiple subscriptions on the same (koid, key).
+        let flag1 = port.register_async(source_koid, key);
+        let flag2 = port.register_async(source_koid, key);
+
+        // Both should start unset.
+        assert!(!flag1.load(core::sync::atomic::Ordering::Relaxed));
+        assert!(!flag2.load(core::sync::atomic::Ordering::Relaxed));
+
+        // A single cancel should set all flags for that (koid, key).
+        assert!(port.cancel_async(source_koid, key).is_ok());
+        assert!(flag1.load(core::sync::atomic::Ordering::Relaxed));
+        assert!(flag2.load(core::sync::atomic::Ordering::Relaxed));
+    }
 }

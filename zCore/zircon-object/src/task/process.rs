@@ -768,6 +768,48 @@ mod tests {
     }
 
     #[test]
+    fn handle_replace() {
+        let root_job = Job::root();
+        let proc = Process::create(&root_job, "proc").expect("failed to create process");
+
+        // Add a handle with DUPLICATE + READ rights.
+        let original_rights = Rights::DUPLICATE | Rights::READ;
+        let handle_value = proc.add_handle(Handle::new(proc.clone(), original_rights));
+
+        // Duplicate with reduced rights (READ only).
+        let reduced_rights = Rights::READ;
+        let new_handle_value = proc
+            .dup_handle_operating_rights(handle_value, |_| Ok(reduced_rights))
+            .unwrap();
+
+        // Verify the new handle has the reduced rights.
+        assert_eq!(
+            proc.get_handle(new_handle_value).unwrap().rights,
+            reduced_rights
+        );
+
+        // Remove the original handle (simulating replace behavior).
+        proc.remove_handle(handle_value).unwrap();
+
+        // The old handle should now be gone.
+        assert_eq!(
+            proc.get_handle(handle_value).err(),
+            Some(ZxError::BAD_HANDLE)
+        );
+
+        // The new handle should still be valid with reduced rights.
+        let handle = proc.get_handle(new_handle_value).unwrap();
+        assert_eq!(handle.rights, reduced_rights);
+
+        // The new handle should reference the same object.
+        let object: Arc<Process> = handle
+            .object
+            .downcast_arc::<Process>()
+            .expect("wrong object type");
+        assert!(Arc::ptr_eq(&object, &proc));
+    }
+
+    #[test]
     fn get_child() {
         let root_job = Job::root();
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
