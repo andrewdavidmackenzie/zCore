@@ -147,3 +147,77 @@ pub struct StreamInfo {
     /// get/set through 'object_[get/set]_property(vmo_handle, ...)'
     content_size: u64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vm::VmObject;
+
+    #[test]
+    fn create_and_write_read() {
+        let vmo = VmObject::new_paged(4); // 4 pages = 16K
+        let stream = Stream::create(vmo, 0, 0);
+
+        // Write data
+        let data = b"Hello, Stream!";
+        let written = stream.write(data, false).expect("write failed");
+        assert_eq!(written, data.len());
+
+        // Seek back to start
+        let pos = stream.seek(SeekOrigin::Start, 0).expect("seek failed");
+        assert_eq!(pos, 0);
+
+        // Read it back
+        let mut buf = [0u8; 64];
+        let read = stream.read(&mut buf[..data.len()]).expect("read failed");
+        assert_eq!(read, data.len());
+        assert_eq!(&buf[..data.len()], data);
+    }
+
+    #[test]
+    fn write_at_read_at() {
+        let vmo = VmObject::new_paged(4);
+        let stream = Stream::create(vmo, 0, 0);
+
+        let data = b"offset test";
+        let offset = 100;
+        let written = stream.write_at(data, offset).expect("write_at failed");
+        assert_eq!(written, data.len());
+
+        let mut buf = [0u8; 64];
+        let read = stream
+            .read_at(&mut buf[..data.len()], offset)
+            .expect("read_at failed");
+        assert_eq!(read, data.len());
+        assert_eq!(&buf[..data.len()], data);
+    }
+
+    #[test]
+    fn seek_operations() {
+        let vmo = VmObject::new_paged(4);
+        let stream = Stream::create(vmo, 0, 0);
+
+        // Write some data to establish content
+        stream.write(b"1234567890", false).unwrap();
+
+        // Seek from start
+        assert_eq!(stream.seek(SeekOrigin::Start, 5).unwrap(), 5);
+
+        // Seek from current (relative)
+        assert_eq!(stream.seek(SeekOrigin::Current, 3).unwrap(), 8);
+
+        // Seek from end (negative offset from content end)
+        assert_eq!(stream.seek(SeekOrigin::End, -2).unwrap(), 8);
+
+        // Seek to start
+        assert_eq!(stream.seek(SeekOrigin::Start, 0).unwrap(), 0);
+    }
+
+    #[test]
+    fn get_info() {
+        let vmo = VmObject::new_paged(1);
+        let stream = Stream::create(vmo, 42, 0);
+        let info = stream.get_info();
+        assert_eq!(info.seek, 42);
+    }
+}

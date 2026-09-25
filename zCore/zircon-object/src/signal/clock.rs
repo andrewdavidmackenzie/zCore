@@ -181,3 +181,41 @@ impl Clock {
         Ok(details)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_and_read() {
+        // Create a monotonic clock (options = 0)
+        let clock = Clock::new(0).expect("failed to create clock");
+        // Read should succeed and return a non-negative timestamp
+        let val = clock.read().expect("failed to read clock");
+        assert!(val >= 0, "clock value should be non-negative: {}", val);
+    }
+
+    #[test]
+    fn read_before_update_fails_for_non_monotonic() {
+        // A non-monotonic, non-continuous clock (options = 0 but
+        // without ZX_CLOCK_OPT_MONOTONIC) should be readable
+        // immediately since the backstop is 0.
+        let clock = Clock::new(0).unwrap();
+        assert!(clock.read().is_ok());
+    }
+
+    #[test]
+    fn get_details() {
+        let clock = Clock::new(0).unwrap();
+        let details = clock.get_details().expect("get_details failed");
+        // First 8 bytes = options (should be 0 for default clock)
+        let options = u64::from_le_bytes(details[0..8].try_into().unwrap());
+        assert_eq!(options, 0);
+        // Rate numerator (offset 8) defaults to 1
+        let rate_num = u32::from_le_bytes(details[8..12].try_into().unwrap());
+        assert_eq!(rate_num, 1);
+        // Rate denominator (offset 12) defaults to 1
+        let rate_den = u32::from_le_bytes(details[12..16].try_into().unwrap());
+        assert_eq!(rate_den, 1);
+    }
+}

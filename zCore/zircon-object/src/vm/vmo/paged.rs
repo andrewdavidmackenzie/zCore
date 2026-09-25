@@ -1232,4 +1232,36 @@ mod tests {
             buf[0]
         }
     }
+
+    #[test]
+    fn set_size() {
+        let vmo = VmObject::new_paged_with_resizable(true, 2);
+        assert_eq!(vmo.len(), 2 * PAGE_SIZE);
+
+        // Grow
+        vmo.set_len(4 * PAGE_SIZE).unwrap();
+        assert_eq!(vmo.len(), 4 * PAGE_SIZE);
+
+        // Shrink
+        vmo.set_len(1 * PAGE_SIZE).unwrap();
+        assert_eq!(vmo.len(), 1 * PAGE_SIZE);
+
+        // Non-resizable VMO should fail
+        let fixed_vmo = VmObject::new_paged(2);
+        assert!(fixed_vmo.set_len(4 * PAGE_SIZE).is_err());
+    }
+
+    #[test]
+    fn zero_range() {
+        let vmo = VmObject::new_paged(1);
+        // Write data
+        vmo.write(0, b"Hello World!").unwrap();
+        // Zero a portion
+        vmo.zero(0, 5).unwrap();
+        // Verify zeroed part
+        let mut buf = [0u8; 12];
+        vmo.read(0, &mut buf).unwrap();
+        assert_eq!(&buf[0..5], &[0, 0, 0, 0, 0]);
+        assert_eq!(&buf[5..12], b" World!");
+    }
 }
