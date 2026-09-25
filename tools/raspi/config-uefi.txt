@@ -1,43 +1,21 @@
 # Zirconia Raspberry Pi 400 UEFI boot configuration
 #
-# This file is read by the Pi GPU firmware (start4.elf) to configure
-# the hardware before loading the UEFI firmware (RPI_EFI.fd).
+# Based on pftf/RPi4 v1.53 config.txt with Zirconia additions.
+# This file is read by the Pi GPU firmware (start4.elf) before
+# loading the UEFI firmware (RPI_EFI.fd).
 
-# Boot in 64-bit mode (AArch64)
 arm_64bit=1
-
-# Boost CPU frequency slightly
 arm_boost=1
-
-# Enable UART output from the GPU bootloader (before EDK2 starts)
 enable_uart=1
 uart_2ndstage=1
-
-# Enable the GIC (Generic Interrupt Controller)
 enable_gic=1
-
-# Load EDK2 UEFI firmware as the ARM stub (replaces default boot chain)
 armstub=RPI_EFI.fd
-
-# Prevent GPU from passing its own kernel command line (EDK2 handles boot)
 disable_commandline_tags=1
-
-# Remove black border on HDMI output
 disable_overscan=1
-
-# Suppress the GPU rainbow splash screen
-disable_splash=1
-
-# Fixed DTB load address (required by EDK2)
 device_tree_address=0x3e0000
 device_tree_end=0x400000
-
-# Move Bluetooth to mini-UART, freeing PL011 for serial console
 dtoverlay=miniuart-bt
-
-# Use upstream kernel-style device tree for Pi 4
 dtoverlay=upstream-pi4
 
-# Fixed core clock for stable UART baud rate
-core_freq=500
-core_freq_min=500
+# Zirconia additions
+disable_splash=1
