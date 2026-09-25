@@ -398,14 +398,8 @@ impl Syscall<'_> {
             #[cfg(feature = "hypervisor")]
             Sys::VCPU_WRITE_STATE => self.sys_vcpu_write_state(a0 as _, a1 as _, a2, a3 as _),
             // Stubs for known but unimplemented syscalls
-            Sys::OBJECT_SET_PROFILE => {
-                warn!("object.set_profile: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
-            Sys::PROFILE_CREATE => {
-                warn!("profile.create: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::OBJECT_SET_PROFILE => self.sys_object_set_profile(a0 as _, a1 as _, a2 as _),
+            Sys::PROFILE_CREATE => self.sys_profile_create(a0 as _, a1 as _, a2.into(), a3.into()),
             Sys::VMAR_OP_RANGE => {
                 self.sys_vmar_op_range(a0 as _, a1 as _, a2 as _, a3 as _, a4, a5)
             }

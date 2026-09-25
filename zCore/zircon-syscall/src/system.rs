@@ -63,10 +63,7 @@ impl Syscall<'_> {
         info!("system.powerctl: resource={:#x}, cmd={}", resource, cmd);
         let proc = self.thread.proc();
         // Validate: require root resource
-        proc.get_object_with_rights::<zircon_object::dev::Resource>(
-            resource,
-            Rights::empty(),
-        )?;
+        proc.get_object_with_rights::<zircon_object::dev::Resource>(resource, Rights::empty())?;
 
         match cmd {
             POWERCTL_REBOOT | POWERCTL_REBOOT_BOOTLOADER | POWERCTL_REBOOT_RECOVERY => {

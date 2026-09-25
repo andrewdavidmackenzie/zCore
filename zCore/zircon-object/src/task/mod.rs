@@ -7,6 +7,7 @@ mod exception;
 mod job;
 mod job_policy;
 mod process;
+mod profile;
 /// Process spawning from ELF binaries.
 #[cfg(feature = "elf")]
 pub mod spawn;
@@ -14,7 +15,7 @@ mod suspend_token;
 mod thread;
 
 pub use {
-    self::exception::*, self::job::*, self::job_policy::*, self::process::*,
+    self::exception::*, self::job::*, self::job_policy::*, self::process::*, self::profile::*,
     self::suspend_token::*, self::thread::*,
 };
 
