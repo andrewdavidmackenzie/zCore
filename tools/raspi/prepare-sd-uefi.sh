@@ -35,11 +35,24 @@ BOOT_DIR="${1:?Usage: $0 <mount-point-of-SD-FAT32-partition>}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PFTF_CACHE="$PROJECT_DIR/target/pftf-firmware"
-PFTF_VERSION="v1.39"  # Latest stable pftf release
+PFTF_VERSION="v1.53"  # Stable pftf release (2026-08-31)
 
 if [ ! -d "$BOOT_DIR" ]; then
-    echo "ERROR: $BOOT_DIR does not exist or is not mounted"
+    echo "ERROR: $BOOT_DIR does not exist"
     exit 1
+fi
+
+# Verify the path is a mount point (not just a local directory)
+if command -v mountpoint >/dev/null 2>&1; then
+    if ! mountpoint -q "$BOOT_DIR"; then
+        echo "WARNING: $BOOT_DIR does not appear to be a mount point."
+        echo "         If this is not a mounted SD card partition, files will"
+        echo "         be written to the host filesystem instead."
+        read -r -p "Continue anyway? [y/N] " reply
+        if [ "$reply" != "y" ] && [ "$reply" != "Y" ]; then
+            exit 1
+        fi
+    fi
 fi
 
 echo "==> Preparing Pi 400 UEFI SD card at: $BOOT_DIR"
