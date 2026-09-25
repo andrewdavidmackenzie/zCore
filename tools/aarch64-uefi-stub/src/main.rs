@@ -82,9 +82,9 @@ fn keyboard_prompt() {
 
     // Also print to UEFI console (HDMI output)
     uefi::system::with_stdout(|stdout| {
-        let _ = stdout.output_string(
-            uefi::cstr16!("\r\n[zCore] Press Enter to boot (or type to test input):\r\n> "),
-        );
+        let _ = stdout.output_string(uefi::cstr16!(
+            "\r\n[zCore] Press Enter to boot (or type to test input):\r\n> "
+        ));
     });
 
     uefi::system::with_stdin(|stdin| {
@@ -317,11 +317,7 @@ fn main() -> Status {
         });
         let dtb_addr = dtb_ptr.as_ptr() as u64;
         unsafe {
-            core::ptr::copy_nonoverlapping(
-                dtb_data.as_ptr(),
-                dtb_ptr.as_ptr(),
-                dtb_data.len(),
-            );
+            core::ptr::copy_nonoverlapping(dtb_data.as_ptr(), dtb_ptr.as_ptr(), dtb_data.len());
         }
         uart_puts("DTB loaded from ESP: ");
         uart_put_dec(dtb_data.len() as u64);
@@ -365,6 +361,11 @@ fn main() -> Status {
     boot_info.initrd_start = initrd_start;
     boot_info.initrd_size = initrd_size;
 
+    // Disable UEFI watchdog timer. The firmware arms a 5-minute
+    // watchdog by default. Must be disabled before the keyboard
+    // prompt (which waits indefinitely) and before ExitBootServices.
+    let _ = uefi::boot::set_watchdog_timer(0, 0, None);
+
     // 6b. Interactive keyboard prompt (UEFI ConIn).
     //     Reads from the Pi 400's built-in keyboard (or any USB keyboard)
     //     via the UEFI console input protocol. This only works before
@@ -372,10 +373,6 @@ fn main() -> Status {
     //     native USB driver.
     #[cfg(feature = "uefi-console")]
     keyboard_prompt();
-
-    // Disable UEFI watchdog timer before exiting boot services.
-    // The watchdog might reboot the machine if not disabled.
-    let _ = uefi::boot::set_watchdog_timer(0, 0, None);
     uart_puts("Exiting boot services...\n");
     let _ = unsafe { uefi::boot::exit_boot_services(Some(uefi::boot::MemoryType::LOADER_DATA)) };
     uart_puts("Boot services exited\n");
@@ -411,7 +408,11 @@ fn load_elf_at_linked_address(data: &[u8]) -> (u64, u64, u64) {
     let ph_offset = hdr.e_phoff as usize;
     let ph_size = hdr.e_phentsize as usize;
     let ph_end = ph_offset
-        .checked_add((hdr.e_phnum as usize).checked_mul(ph_size).unwrap_or(usize::MAX))
+        .checked_add(
+            (hdr.e_phnum as usize)
+                .checked_mul(ph_size)
+                .unwrap_or(usize::MAX),
+        )
         .unwrap_or(usize::MAX);
     if ph_end > data.len() {
         uart_puts("FATAL: ELF program headers extend past end of file\n");
