@@ -12,7 +12,8 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 	petal-shell raspi400-build raspi400-run raspi400-sd raspi400-uefi-sd \
 	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon \
 	debug-qemu debug-gdb \
-	pre-push pre-push-quick demo-busybox demo-petal demo-zircon
+	pre-push pre-push-quick demo-busybox demo-petal demo-zircon \
+	boot-logo uefi-firmware
 
 # Build the rootfs image and kernel for the target architecture.
 # cargo image: builds rootfs dir (busybox + musl libc) -> packs into SFS image
@@ -153,7 +154,22 @@ ifeq ($(shell uname),Darwin)
 	 else echo "Warning: could not determine disk for $(SD)"; fi
 endif
 
+# ── UEFI boot logo and firmware ─────────────────────────────────────────
+
+# Regenerate the UEFI boot logo BMP from the SVG source.
+# Requires: rsvg-convert (librsvg), magick (ImageMagick 7)
+boot-logo:
+	@tools/scripts/generate-boot-logo.sh
+
+# Build custom pftf/RPi4 UEFI firmware with Zirconia boot logo.
+# Requires: Docker (macOS) or gcc-aarch64-linux-gnu (Linux).
+# The first build clones pftf/RPi4 (~1 GB) and takes ~5-10 minutes.
+uefi-firmware:
+	@tools/scripts/build-uefi-firmware.sh
+
 # Prepare SD card for Pi 400 UEFI boot (pftf firmware + zCore UEFI stub).
+# If custom firmware exists (from 'make uefi-firmware'), it will be used
+# automatically, showing the Zirconia logo at boot instead of the RPi logo.
 # Usage: make raspi400-uefi-sd SD=/Volumes/boot
 #   SD= is the mount point of the SD card's FAT32 partition.
 raspi400-uefi-sd:
