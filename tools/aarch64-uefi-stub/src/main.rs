@@ -23,7 +23,10 @@ use uefi::proto::media::fs::SimpleFileSystem;
 
 // ── Constants ────────────────────────────────────────────────────────
 
-const UART_BASE: *mut u8 = 0x0900_0000 as *mut u8;
+#[cfg(not(feature = "board-raspi400"))]
+const UART_BASE: *mut u8 = 0x0900_0000 as *mut u8; // QEMU virt PL011
+#[cfg(feature = "board-raspi400")]
+const UART_BASE: *mut u8 = 0xFE20_1000 as *mut u8; // BCM2711 PL011
 
 /// Boot info passed to the kernel. Must match UefiBootInfo in the kernel.
 #[repr(C)]
@@ -40,7 +43,10 @@ const PHYS_TO_VIRT_OFFSET: u64 = 0xffff_0000_0000_0000;
 const KERNEL_PATH: &str = "\\kernel";
 const INITRD_PATH: &str = "\\initrd.img";
 /// DTB path on the ESP (loaded if UEFI config tables don't have one).
+#[cfg(not(feature = "board-raspi400"))]
 const DTB_PATH: &str = "\\virt.dtb";
+#[cfg(feature = "board-raspi400")]
+const DTB_PATH: &str = "\\bcm2711-rpi-400.dtb";
 
 // ── UART helpers ─────────────────────────────────────────────────────
 
@@ -203,9 +209,13 @@ fn main() -> Status {
     // 2. Parse ELF and load segments at their linked physical addresses.
     //    Uses UEFI AllocatePages to reserve the exact physical regions
     //    the kernel expects, then copies segments directly there.
-    let entry = load_elf_at_linked_address(&kernel_data);
+    let (entry, kernel_load_start, kernel_load_end) = load_elf_at_linked_address(&kernel_data);
     uart_puts("Kernel entry: 0x");
     uart_put_hex(entry);
+    uart_puts(", load range: 0x");
+    uart_put_hex(kernel_load_start);
+    uart_puts("-0x");
+    uart_put_hex(kernel_load_end);
     uart_puts("\n");
 
     // Free the ELF buffer — segments are now at their final addresses.
@@ -296,7 +306,7 @@ fn main() -> Status {
     // 7. Install page tables and jump to kernel
     //    Pass boot_info address instead of raw dtb_paddr
     unsafe {
-        install_page_tables_and_jump(entry, boot_info_addr);
+        install_page_tables_and_jump(entry, boot_info_addr, kernel_load_start, kernel_load_end);
     }
 }
 
@@ -304,7 +314,9 @@ fn main() -> Status {
 
 /// Parse ELF and load PT_LOAD segments at their linked physical addresses.
 /// Uses UEFI AllocatePages to reserve the target memory regions.
-fn load_elf_at_linked_address(data: &[u8]) -> u64 {
+/// Load ELF segments at their linked physical addresses.
+/// Returns (entry_point, load_start_paddr, load_end_paddr).
+fn load_elf_at_linked_address(data: &[u8]) -> (u64, u64, u64) {
     if data.len() < core::mem::size_of::<Elf64Header>() {
         uart_puts("FATAL: ELF data too small for header\n");
         loop {
@@ -330,6 +342,9 @@ fn load_elf_at_linked_address(data: &[u8]) -> u64 {
             core::hint::spin_loop();
         }
     }
+
+    let mut load_min: u64 = u64::MAX;
+    let mut load_max: u64 = 0;
 
     for i in 0..hdr.e_phnum as usize {
         let phdr = unsafe { &*(data.as_ptr().add(ph_offset + i * ph_size) as *const Elf64Phdr) };
@@ -392,11 +407,20 @@ fn load_elf_at_linked_address(data: &[u8]) -> u64 {
                 );
             }
         }
+
+        // Track the load range for cache flushing
+        if paddr < load_min {
+            load_min = paddr;
+        }
+        let seg_end = paddr + phdr.p_memsz;
+        if seg_end > load_max {
+            load_max = seg_end;
+        }
     }
 
     // Find rust_main_uefi symbol for UEFI entry
     let uefi_entry = find_symbol(data, hdr, "rust_main_uefi");
-    match uefi_entry {
+    let entry = match uefi_entry {
         Some(addr) => {
             uart_puts("Found rust_main_uefi at 0x");
             uart_put_hex(addr);
@@ -407,7 +431,13 @@ fn load_elf_at_linked_address(data: &[u8]) -> u64 {
             uart_puts("WARNING: rust_main_uefi not found, using ELF entry\n");
             hdr.e_entry
         }
-    }
+    };
+
+    // Page-align the load range for cache flushing
+    load_min &= !0xFFF;
+    load_max = (load_max + 0xFFF) & !0xFFF;
+
+    (entry, load_min, load_max)
 }
 
 /// Find a symbol by name in the ELF symbol table.
@@ -512,14 +542,18 @@ fn load_initrd() -> (u64, u64) {
 
 fn build_page_tables() {
     unsafe {
-        // L1 identity: 0-1G device, 1-2G normal, 2-3G normal
+        // L1 identity: 0-1G device, 1-2G normal, 2-3G normal, 3-4G device
+        // The 4th GiB maps Pi 400 peripherals (0xFE201000 UART, 0xFF840000 GIC).
+        // Harmless on QEMU where the 4th GiB is unused.
         PT_L1_ID.0[0] = block_desc(0x0000_0000, true);
         PT_L1_ID.0[1] = block_desc(0x4000_0000, false);
         PT_L1_ID.0[2] = block_desc(0x8000_0000, false);
+        PT_L1_ID.0[3] = block_desc(0xC000_0000, true);
         // L1 high: same
         PT_L1_HI.0[0] = block_desc(0x0000_0000, true);
         PT_L1_HI.0[1] = block_desc(0x4000_0000, false);
         PT_L1_HI.0[2] = block_desc(0x8000_0000, false);
+        PT_L1_HI.0[3] = block_desc(0xC000_0000, true);
         // L0 tables
         PT_L0_LO.0[0] = table_desc(core::ptr::addr_of!(PT_L1_ID) as u64);
         PT_L0_HI.0[0] = table_desc(core::ptr::addr_of!(PT_L1_HI) as u64);
@@ -528,7 +562,12 @@ fn build_page_tables() {
 
 // ── Jump to kernel ───────────────────────────────────────────────────
 
-unsafe fn install_page_tables_and_jump(entry: u64, boot_info_addr: u64) -> ! {
+unsafe fn install_page_tables_and_jump(
+    entry: u64,
+    boot_info_addr: u64,
+    kernel_start: u64,
+    kernel_end: u64,
+) -> ! {
     // Disable MMU (UEFI left it on with its own page tables)
     asm!(
         "mrs x1, sctlr_el1",
@@ -589,8 +628,6 @@ unsafe fn install_page_tables_and_jump(entry: u64, boot_info_addr: u64) -> ! {
     // Flush data cache and invalidate instruction cache for the
     // entire kernel load region. The stub wrote kernel code via data
     // stores — the instruction cache may have stale entries.
-    let kernel_start = 0x8020_0000u64;
-    let kernel_end = 0x80A0_0000u64; // ~8 MiB, covers kernel + BSS
     let mut addr = kernel_start;
     while addr < kernel_end {
         asm!(
