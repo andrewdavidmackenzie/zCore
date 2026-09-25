@@ -1355,6 +1355,59 @@ mod tests {
     }
 
     #[test]
+    fn protect_invalid_args() {
+        let vmar = VmAddressRegion::new_root();
+        let base = vmar.addr();
+        let flags = MMUFlags::READ;
+
+        // Non-page-aligned addr should return INVALID_ARGS.
+        assert_eq!(
+            vmar.protect(base + 1, PAGE_SIZE, flags),
+            Err(ZxError::INVALID_ARGS)
+        );
+
+        // Non-page-aligned len should return INVALID_ARGS.
+        assert_eq!(
+            vmar.protect(base, PAGE_SIZE + 1, flags),
+            Err(ZxError::INVALID_ARGS)
+        );
+
+        // Both non-aligned should return INVALID_ARGS.
+        assert_eq!(
+            vmar.protect(base + 1, PAGE_SIZE + 1, flags),
+            Err(ZxError::INVALID_ARGS)
+        );
+    }
+
+    #[test]
+    fn protect_not_found() {
+        let vmar = VmAddressRegion::new_root();
+        let base = vmar.addr();
+        let flags = MMUFlags::READ;
+
+        // No mappings at all — should return NOT_FOUND.
+        assert_eq!(
+            vmar.protect(base, PAGE_SIZE, flags),
+            Err(ZxError::NOT_FOUND)
+        );
+    }
+
+    #[test]
+    fn protect_valid_mapping() {
+        let vmar = VmAddressRegion::new_root();
+        let vmo = VmObject::new_paged(1);
+        let map_flags = MMUFlags::READ | MMUFlags::WRITE;
+
+        // Create a mapping.
+        vmar.map_at(0, vmo, 0, PAGE_SIZE, map_flags).unwrap();
+
+        let base = vmar.addr();
+
+        // Protect with a subset of the original permissions should succeed.
+        assert!(vmar.protect(base, PAGE_SIZE, MMUFlags::READ).is_ok());
+    }
+
+    #[test]
     fn read_write_memory() {
         let root_vmar = VmAddressRegion::new_root();
         let child_vmar = root_vmar
