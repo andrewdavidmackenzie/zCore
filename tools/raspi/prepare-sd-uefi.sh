@@ -93,7 +93,20 @@ if [ ! -f "$KERNEL_ELF" ]; then
     exit 1
 fi
 
-# --- Step 4: Copy pftf firmware to SD card ---
+# --- Step 4: Remove old raw boot files that conflict with UEFI boot ---
+echo "==> Removing old raw boot files (if any)..."
+for f in kernel8.img armstub8-gic.bin cmdline.txt; do
+    if [ -f "$BOOT_DIR/$f" ]; then
+        echo "  Removing $f (raw boot leftover)"
+        rm -f "$BOOT_DIR/$f"
+    fi
+done
+# Remove old config.txt — pftf provides its own
+rm -f "$BOOT_DIR/config.txt"
+# Remove old firmware backups
+rm -f "$BOOT_DIR/start4.elf.old" "$BOOT_DIR/fixup4.dat.old"
+
+# --- Step 5: Copy pftf firmware to SD card ---
 echo "==> Copying pftf UEFI firmware to $BOOT_DIR..."
 
 # Core pftf files that replace Pi's native boot chain
@@ -109,12 +122,12 @@ if [ -d "$PFTF_CACHE/overlays" ]; then
     cp -r "$PFTF_CACHE/overlays/"* "$BOOT_DIR/overlays/" 2>/dev/null || true
 fi
 
-# --- Step 5: Install zCore UEFI stub as default boot application ---
+# --- Step 6: Install zCore UEFI stub as default boot application ---
 echo "==> Installing zCore UEFI stub..."
 mkdir -p "$BOOT_DIR/EFI/BOOT"
 cp "$STUB_EFI" "$BOOT_DIR/EFI/BOOT/BOOTAA64.EFI"
 
-# --- Step 6: Copy kernel and initrd ---
+# --- Step 7: Copy kernel and initrd ---
 echo "==> Copying kernel..."
 cp "$KERNEL_ELF" "$BOOT_DIR/kernel"
 
