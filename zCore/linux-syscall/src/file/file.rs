@@ -20,7 +20,7 @@ impl Syscall<'_> {
     /// - base – pointer to the buffer to fill with read contents
     /// - len – number of bytes to read
     pub async fn sys_read(&self, fd: FileDesc, mut base: UserOutPtr<u8>, len: usize) -> SysResult {
-        info!("read: fd={:?}, base={:?}, len={:#x}", fd, base, len);
+        debug!("read: fd={:?}, base={:?}, len={:#x}", fd, base, len);
         // Check for pending signals before potentially blocking on a pipe/socket.
         if self.thread.lock_linux().has_pending_signal() {
             return Err(LxError::EINTR);
@@ -39,7 +39,7 @@ impl Syscall<'_> {
     /// - base – pointer to the buffer write
     /// - len – number of bytes to write
     pub fn sys_write(&self, fd: FileDesc, base: UserInPtr<u8>, len: usize) -> SysResult {
-        info!("write: fd={:?}, base={:?}, len={:#x}", fd, base, len);
+        debug!("write: fd={:?}, base={:?}, len={:#x}", fd, base, len);
         self.linux_process()
             .get_file_like(fd)?
             .write(&base.read_array(len)?)
@@ -55,7 +55,7 @@ impl Syscall<'_> {
         len: usize,
         offset: u64,
     ) -> SysResult {
-        info!(
+        debug!(
             "pread: fd={:?}, base={:?}, len={}, offset={}",
             fd, base, len, offset
         );
@@ -76,7 +76,7 @@ impl Syscall<'_> {
         len: usize,
         offset: u64,
     ) -> SysResult {
-        info!(
+        debug!(
             "pwrite: fd={:?}, base={:?}, len={}, offset={}",
             fd, base, len, offset
         );
@@ -94,7 +94,7 @@ impl Syscall<'_> {
         iov_ptr: UserInPtr<IoVecOut>,
         iov_count: usize,
     ) -> SysResult {
-        info!("readv: fd={:?}, iov={:?}, count={}", fd, iov_ptr, iov_count);
+        debug!("readv: fd={:?}, iov={:?}, count={}", fd, iov_ptr, iov_count);
         let mut iovs = iov_ptr.read_iovecs(iov_count)?;
         let proc = self.linux_process();
         let file_like = proc.get_file_like(fd)?;
@@ -113,7 +113,7 @@ impl Syscall<'_> {
         iov_ptr: UserInPtr<IoVecIn>,
         iov_count: usize,
     ) -> SysResult {
-        info!(
+        debug!(
             "writev: fd={:?}, iov={:?}, count={}",
             fd, iov_ptr, iov_count
         );
@@ -138,7 +138,7 @@ impl Syscall<'_> {
             SEEK_CUR => SeekFrom::Current(offset),
             _ => return Err(LxError::EINVAL),
         };
-        info!("lseek: fd={:?}, pos={:?}", fd, pos);
+        debug!("lseek: fd={:?}, pos={:?}", fd, pos);
 
         let proc = self.linux_process();
         let file = proc.get_file(fd)?;
@@ -149,14 +149,14 @@ impl Syscall<'_> {
     /// cause the regular file named by path to be truncated to a size of precisely length bytes.
     pub fn sys_truncate(&self, path: UserInPtr<u8>, len: usize) -> SysResult {
         let path = path.read_c_string()?;
-        info!("truncate: path={:?}, len={}", path, len);
+        debug!("truncate: path={:?}, len={}", path, len);
         self.linux_process().lookup_inode(&path)?.resize(len)?;
         Ok(0)
     }
 
     /// cause the regular file referenced by fd to be truncated to a size of precisely length bytes.
     pub fn sys_ftruncate(&self, fd: FileDesc, len: usize) -> SysResult {
-        info!("ftruncate: fd={:?}, len={}", fd, len);
+        debug!("ftruncate: fd={:?}, len={}", fd, len);
         let proc = self.linux_process();
         proc.get_file(fd)?.set_len(len as u64)?;
         Ok(0)
@@ -167,7 +167,7 @@ impl Syscall<'_> {
     /// Mode 0 ensures the file is at least `offset + len` bytes.
     /// Other modes (punch hole, collapse range, etc.) return EOPNOTSUPP.
     pub fn sys_fallocate(&self, fd: FileDesc, mode: i32, offset: i64, len: i64) -> SysResult {
-        info!(
+        debug!(
             "fallocate: fd={:?}, mode={}, offset={}, len={}",
             fd, mode, offset, len
         );
@@ -211,7 +211,7 @@ impl Syscall<'_> {
         count: usize,
         flags: usize,
     ) -> SysResult {
-        info!(
+        debug!(
             "copy_file_range: in={:?}, out={:?}, in_offset={:?}, out_offset={:?}, count={}, flags={}",
             in_fd, out_fd, in_offset, out_offset, count, flags
         );
@@ -255,7 +255,7 @@ impl Syscall<'_> {
             while bytes_written < read_len {
                 let write_len = out_file.write(&buffer[bytes_written..(bytes_written + rlen)])?;
                 if write_len == 0 {
-                    info!(
+                    debug!(
                         "copy_file_range:END_ERR in={:?}, out={:?}, in_offset={:?}, out_offset={:?}, count={} = bytes_read {}, bytes_written {}, write_len {}",
                         in_fd, out_fd, in_offset, out_offset, count, bytes_read, bytes_written, write_len
                     );
@@ -281,7 +281,7 @@ impl Syscall<'_> {
 
     /// causes all buffered modifications to file metadata and data to be written to the underlying file systems.
     pub fn sys_sync(&self) -> SysResult {
-        info!("sync:");
+        debug!("sync:");
         let proc = self.linux_process();
         proc.root_inode().fs().sync()?;
         Ok(0)
@@ -290,7 +290,7 @@ impl Syscall<'_> {
     /// transfers ("flushes") all modified in-core data of (i.e., modified buffer cache pages for) the file
     /// referred to by the file descriptor fd to the disk device
     pub fn sys_fsync(&self, fd: FileDesc) -> SysResult {
-        info!("fsync: fd={:?}", fd);
+        debug!("fsync: fd={:?}", fd);
         let proc = self.linux_process();
         proc.get_file(fd)?.sync_all()?;
         Ok(0)
@@ -298,7 +298,7 @@ impl Syscall<'_> {
 
     /// is similar to fsync(), but does not flush modified metadata unless that metadata is needed
     pub fn sys_fdatasync(&self, fd: FileDesc) -> SysResult {
-        info!("fdatasync: fd={:?}", fd);
+        debug!("fdatasync: fd={:?}", fd);
         let proc = self.linux_process();
         proc.get_file(fd)?.sync_data()?;
         Ok(0)
@@ -313,7 +313,7 @@ impl Syscall<'_> {
         arg2: usize,
         arg3: usize,
     ) -> SysResult {
-        info!(
+        debug!(
             "ioctl: fd={:?}, request={:#x}, args=[{:#x}, {:#x}, {:#x}]",
             fd, request, arg1, arg2, arg3
         );
@@ -326,7 +326,7 @@ impl Syscall<'_> {
     /// - cmd – cmd flag
     /// - arg – additional parameters based on cmd
     pub fn sys_fcntl(&self, fd: FileDesc, cmd: usize, arg: usize) -> SysResult {
-        info!("fcntl: fd={:?}, cmd={}, arg={}", fd, cmd, arg);
+        debug!("fcntl: fd={:?}, cmd={}, arg={}", fd, cmd, arg);
         let proc = self.linux_process();
         let file_like = proc.get_file_like(fd)?;
         if let Ok(cmd) = FcntlCmd::try_from(cmd) {
@@ -386,7 +386,7 @@ impl Syscall<'_> {
     ) -> SysResult {
         let path = path.read_c_string()?;
         let flags = AtFlags::from_bits_truncate(flags);
-        info!(
+        debug!(
             "faccessat: dirfd={:?}, path={:?}, mode={:#o}, flags={:?}",
             dirfd, path, mode, flags
         );
@@ -426,7 +426,7 @@ impl Syscall<'_> {
 
     /// Change file mode bits by file descriptor.
     pub fn sys_fchmod(&self, fd: FileDesc, mode: u32) -> SysResult {
-        info!("fchmod: fd={:?}, mode={:#o}", fd, mode);
+        debug!("fchmod: fd={:?}, mode={:#o}", fd, mode);
         let proc = self.linux_process();
         let file = proc.get_file(fd)?;
         let inode = file.inode();
@@ -446,7 +446,7 @@ impl Syscall<'_> {
     /// Change file mode bits relative to a directory fd.
     pub fn sys_fchmodat(&self, dirfd: FileDesc, path: UserInPtr<u8>, mode: u32) -> SysResult {
         let path = path.read_c_string()?;
-        info!(
+        debug!(
             "fchmodat: dirfd={:?}, path={:?}, mode={:#o}",
             dirfd, path, mode
         );
@@ -460,7 +460,7 @@ impl Syscall<'_> {
 
     /// Change file owner by file descriptor.
     pub fn sys_fchown(&self, fd: FileDesc, owner: u32, group: u32) -> SysResult {
-        info!("fchown: fd={:?}, owner={}, group={}", fd, owner, group);
+        debug!("fchown: fd={:?}, owner={}, group={}", fd, owner, group);
         let proc = self.linux_process();
         let file = proc.get_file(fd)?;
         let inode = file.inode();
@@ -493,7 +493,7 @@ impl Syscall<'_> {
         let path = path.read_c_string()?;
         let at_flags = AtFlags::from_bits_truncate(flags);
         let follow = !at_flags.contains(AtFlags::SYMLINK_NOFOLLOW);
-        info!(
+        debug!(
             "fchownat: dirfd={:?}, path={:?}, owner={}, group={}, flags={:?}",
             dirfd, path, owner, group, at_flags
         );
@@ -518,7 +518,7 @@ impl Syscall<'_> {
         times: UserInOutPtr<[TimeSpec; 2]>,
         flags: usize,
     ) -> SysResult {
-        info!(
+        debug!(
             "utimensat(raw): dirfd: {:?}, pathname: {:?}, times: {:?}, flags: {:#x}",
             dirfd, pathname, times, flags
         );
@@ -534,11 +534,11 @@ impl Syscall<'_> {
         };
         let inode = if pathname.is_null() {
             let fd = dirfd;
-            info!("futimens: fd: {:?}, times: {:?}", fd, times);
+            debug!("futimens: fd: {:?}, times: {:?}", fd, times);
             proc.get_file(fd)?.inode()
         } else {
             let pathname = pathname.read_c_string()?;
-            info!(
+            debug!(
                 "utimensat: dirfd: {:?}, pathname: {:?}, times: {:?}, flags: {:#x}",
                 dirfd, pathname, times, flags
             );
@@ -582,7 +582,7 @@ impl Syscall<'_> {
     /// `buf` is a pointer to a `StatFs` structure.
     pub fn sys_statfs(&self, path: UserInPtr<u8>, mut buf: UserOutPtr<StatFs>) -> SysResult {
         let path = path.read_c_string()?;
-        info!("statfs: path={:?}, buf={:?}", path, buf);
+        debug!("statfs: path={:?}, buf={:?}", path, buf);
 
         // TODO
         // Currently `path` is not used to select a filesystem because real
@@ -603,7 +603,7 @@ impl Syscall<'_> {
     /// `fd` is the descriptor referencing an open file.
     /// `buf` is a pointer to a `StatFs` structure.
     pub fn sys_fstatfs(&self, fd: FileDesc, mut buf: UserOutPtr<StatFs>) -> SysResult {
-        info!("statfs: fd={:?}, buf={:?}", fd, buf);
+        debug!("statfs: fd={:?}, buf={:?}", fd, buf);
 
         let info = self.linux_process().get_file(fd)?.inode().fs().info();
         buf.write(info.into())?;
@@ -709,7 +709,7 @@ impl Syscall<'_> {
     ) -> SysResult {
         let target = target.read_c_string()?;
         let fstype = fstype.read_c_string()?;
-        info!("mount: target={:?}, fstype={:?}", target, fstype);
+        debug!("mount: target={:?}, fstype={:?}", target, fstype);
 
         match fstype.as_str() {
             "tmpfs" | "ramfs" | "devtmpfs" | "devfs" | "proc" | "sysfs" | "cgroup" | "cgroup2" => {
@@ -722,7 +722,7 @@ impl Syscall<'_> {
                 // Arc<dyn INode> to MNode, which rcore-fs-mountfs doesn't
                 // support via the INode trait. Deferred until rcore-fs
                 // adds mount() to the INode trait.
-                info!("mount: {:?} at {:?} — accepted", fstype, target);
+                debug!("mount: {:?} at {:?} — accepted", fstype, target);
                 Ok(0)
             }
             _ => {
@@ -738,7 +738,7 @@ impl Syscall<'_> {
     /// an unmount API. Returns Ok(0) for compatibility.
     pub fn sys_umount2(&self, target: UserInPtr<u8>, _flags: usize) -> SysResult {
         let target = target.read_c_string()?;
-        info!("umount2: target={:?} — accepted (no-op)", target);
+        debug!("umount2: target={:?} — accepted (no-op)", target);
         Ok(0)
     }
 }

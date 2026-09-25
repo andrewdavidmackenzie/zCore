@@ -29,7 +29,7 @@ impl Syscall<'_> {
         timeout_msecs: isize,
     ) -> SysResult {
         let mut polls = ufds.read_array(nfds)?;
-        info!(
+        debug!(
             "poll: ufds: {:?}, nfds: {:?}, timeout_msecs: {}",
             polls, nfds, timeout_msecs
         );
@@ -139,7 +139,7 @@ impl Syscall<'_> {
                         );
                     }
                     _ => {
-                        info!("No waker. timeout: {:?}", self.timeout_msecs);
+                        debug!("No waker. timeout: {:?}", self.timeout_msecs);
                     }
                 }
 
@@ -155,7 +155,7 @@ impl Syscall<'_> {
         };
         let result = future.await;
         ufds.write_array(&polls)?;
-        info!("return ufds: {:?}", polls);
+        debug!("return ufds: {:?}", polls);
         result
     }
 
@@ -172,7 +172,7 @@ impl Syscall<'_> {
             -1
         } else {
             let timeout = timeout.read().unwrap();
-            info!("sys_ppoll: timeout: {:?}", timeout);
+            debug!("sys_ppoll: timeout: {:?}", timeout);
             timeout.to_msec() as isize
         };
 
@@ -204,7 +204,7 @@ impl Syscall<'_> {
         err: UserInOutPtr<u32>,
         timeout: UserInPtr<TimeVal>,
     ) -> SysResult {
-        info!(
+        debug!(
             "select: nfds: {}, read: {:?}, write: {:?}, err: {:?}, timeout: {:?}",
             nfds, read, write, err, timeout
         );
@@ -317,17 +317,17 @@ impl Syscall<'_> {
 
     /// Create an epoll instance. `flags` can include `EPOLL_CLOEXEC`.
     pub fn sys_epoll_create1(&self, flags: usize) -> SysResult {
-        info!("epoll_create1: flags={:#x}", flags);
+        debug!("epoll_create1: flags={:#x}", flags);
         let open_flags = OpenFlags::from_bits_truncate(flags);
         let epoll = EpollFile::new(open_flags);
         let fd = self.linux_process().add_file(epoll)?;
-        info!("epoll_create1: fd={:?}", fd);
+        debug!("epoll_create1: fd={:?}", fd);
         Ok(fd.into())
     }
 
     /// Create an epoll instance (legacy interface, `size` is ignored but must be > 0).
     pub fn sys_epoll_create(&self, size: usize) -> SysResult {
-        info!("epoll_create: size={}", size);
+        debug!("epoll_create: size={}", size);
         if size == 0 {
             return Err(LxError::EINVAL);
         }
@@ -342,7 +342,7 @@ impl Syscall<'_> {
         fd: usize,
         event: UserInPtr<EpollEvent>,
     ) -> SysResult {
-        info!("epoll_ctl: epfd={}, op={}, fd={}", epfd, op, fd);
+        debug!("epoll_ctl: epfd={}, op={}, fd={}", epfd, op, fd);
         let proc = self.linux_process();
         let epoll_like = proc.get_file_like(epfd.into())?;
         let epoll = epoll_like
@@ -388,7 +388,7 @@ impl Syscall<'_> {
         maxevents: usize,
         timeout: isize,
     ) -> SysResult {
-        info!(
+        debug!(
             "epoll_wait: epfd={}, maxevents={}, timeout={}",
             epfd, maxevents, timeout
         );

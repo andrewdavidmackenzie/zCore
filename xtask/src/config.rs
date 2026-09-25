@@ -41,6 +41,11 @@ pub struct TargetConfig {
     /// Additional cargo features beyond those implied by drivers.
     #[serde(default)]
     pub features: Vec<String>,
+    /// Features for the UEFI stub build (e.g. "uefi-console", "board-raspi400").
+    /// Only used when `uefi-boot` is in features. If empty, the stub is built
+    /// with no features.
+    #[serde(rename = "stub-features", default)]
+    pub stub_features: Vec<String>,
     /// QEMU configuration (absent for real-hardware-only targets).
     #[allow(dead_code)]
     pub qemu: Option<QemuConfig>,

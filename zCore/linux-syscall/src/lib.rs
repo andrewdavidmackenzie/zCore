@@ -360,7 +360,7 @@ impl Syscall<'_> {
             #[cfg(target_arch = "aarch64")]
             _ => self.aarch64_syscall(sys_type, args).await,
         };
-        info!("<= {:?}", ret);
+        debug!("<= {:?}", ret);
         match ret {
             Ok(value) => value as isize,
             Err(err) => -(err as isize),

@@ -25,7 +25,7 @@ impl Syscall<'_> {
     /// - `fd` – file descriptor
     /// - `stat_ptr` – pointer to stat buffer
     pub fn sys_fstat(&self, fd: FileDesc, mut stat_ptr: UserOutPtr<Stat>) -> SysResult {
-        info!("fstat: fd={:?}, stat_ptr={:?}", fd, stat_ptr);
+        debug!("fstat: fd={:?}, stat_ptr={:?}", fd, stat_ptr);
 
         let meta = self.linux_process().get_file(fd)?.metadata()?;
         stat_ptr.write(meta.into())?;
@@ -42,7 +42,7 @@ impl Syscall<'_> {
     ) -> SysResult {
         let path = path.read_c_string()?;
         let flags = AtFlags::from_bits_truncate(flags);
-        info!(
+        debug!(
             "fstatat: dirfd={:?}, path={:?}, stat_ptr={:?}, flags={:?}",
             dirfd, path, stat_ptr, flags
         );
@@ -75,7 +75,7 @@ impl Syscall<'_> {
         mut statxbuf: UserOutPtr<u8>,
     ) -> SysResult {
         let path = path.read_c_string()?;
-        info!(
+        debug!(
             "statx: dirfd={:?}, path={:?}, flags={:#x}",
             dirfd, path, flags
         );

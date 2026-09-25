@@ -291,7 +291,9 @@ async fn run_user(thread: CurrentThread) {
         ctx.enter_uspace();
 
         // Back from the userspace
-        let time = hal_impl::timer::timer_now().as_nanos() - tmp_time;
+        let time = hal_impl::timer::timer_now()
+            .as_nanos()
+            .saturating_sub(tmp_time);
         thread.time_add(time);
         trace!("back from user: {:#x?}", ctx);
         EXCEPTIONS_USER.add(1);

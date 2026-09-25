@@ -21,7 +21,7 @@ impl Syscall<'_> {
     /// - `buf` – pointer to buffer to receive path
     /// - `len` – size of buf
     pub fn sys_getcwd(&self, mut buf: UserOutPtr<u8>, len: usize) -> SysResult {
-        info!("getcwd: buf={:?}, len={:#x}", buf, len);
+        debug!("getcwd: buf={:?}, len={:#x}", buf, len);
         let proc = self.linux_process();
         let cwd = proc.current_working_directory();
         if cwd.len() + 1 > len {
@@ -35,7 +35,7 @@ impl Syscall<'_> {
     /// - `path` – pointer to string with name of path
     pub fn sys_chdir(&self, path: UserInPtr<u8>) -> SysResult {
         let path = path.read_c_string()?;
-        info!("chdir: path={:?}", path);
+        debug!("chdir: path={:?}", path);
 
         let proc = self.linux_process();
         let inode = proc.lookup_inode(&path)?;
@@ -49,7 +49,7 @@ impl Syscall<'_> {
 
     /// Change the current working directory by file descriptor.
     pub fn sys_fchdir(&self, fd: FileDesc) -> SysResult {
-        info!("fchdir: fd={:?}", fd);
+        debug!("fchdir: fd={:?}", fd);
         let proc = self.linux_process();
         let file = proc.get_file(fd)?;
         let path = file.path();
@@ -75,7 +75,7 @@ impl Syscall<'_> {
         if path.len() >= 4096 {
             return Err(LxError::ENAMETOOLONG);
         }
-        info!(
+        debug!(
             "mkdirat: dirfd={:?}, path={:?}, mode={:#o}",
             dirfd, path, mode
         );
@@ -94,7 +94,7 @@ impl Syscall<'_> {
     /// - path – pointer to string with directory name
     pub fn sys_rmdir(&self, path: UserInPtr<u8>) -> SysResult {
         let path = path.read_c_string()?;
-        info!("rmdir: path={:?}", path);
+        debug!("rmdir: path={:?}", path);
 
         let (dir_path, file_name) = split_path(&path);
         let proc = self.linux_process();
@@ -115,7 +115,7 @@ impl Syscall<'_> {
         mut buf: UserOutPtr<u8>,
         buf_size: usize,
     ) -> SysResult {
-        info!(
+        debug!(
             "getdents64: fd={:?}, ptr={:?}, buf_size={}",
             fd, buf, buf_size
         );
@@ -167,7 +167,7 @@ impl Syscall<'_> {
         let oldpath = oldpath.read_c_string()?;
         let newpath = newpath.read_c_string()?;
         let flags = AtFlags::from_bits_truncate(flags);
-        info!(
+        debug!(
             "linkat: olddirfd={:?}, oldpath={:?}, newdirfd={:?}, newpath={:?}, flags={:?}",
             olddirfd, oldpath, newdirfd, newpath, flags
         );
@@ -197,7 +197,7 @@ impl Syscall<'_> {
             path = "/testshm".into();
         }
         let flags = AtFlags::from_bits_truncate(flags);
-        info!(
+        debug!(
             "unlinkat: dirfd={:?}, path={:?}, flags={:?}",
             dirfd, path, flags
         );
@@ -232,7 +232,7 @@ impl Syscall<'_> {
         newpath: UserInPtr<u8>,
         flags: usize,
     ) -> SysResult {
-        info!("renameat2: flags={:#x}", flags);
+        debug!("renameat2: flags={:#x}", flags);
         if flags != 0 {
             return Err(LxError::EINVAL);
         }
@@ -249,7 +249,7 @@ impl Syscall<'_> {
     ) -> SysResult {
         let oldpath = oldpath.read_c_string()?;
         let newpath = newpath.read_c_string()?;
-        info!(
+        debug!(
             "renameat: olddirfd={:?}, oldpath={:?}, newdirfd={:?}, newpath={:?}",
             olddirfd, oldpath, newdirfd, newpath
         );
@@ -280,7 +280,7 @@ impl Syscall<'_> {
     ) -> SysResult {
         let target = target.read_c_string()?;
         let linkpath = linkpath.read_c_string()?;
-        info!(
+        debug!(
             "symlinkat: target={:?}, newdirfd={:?}, linkpath={:?}",
             target, newdirfd, linkpath
         );
@@ -307,7 +307,7 @@ impl Syscall<'_> {
         len: usize,
     ) -> SysResult {
         let path = path.read_c_string()?;
-        info!(
+        debug!(
             "readlinkat: dirfd={:?}, path={:?}, base={:?}, len={}",
             dirfd, path, base, len
         );

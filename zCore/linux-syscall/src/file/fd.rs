@@ -29,7 +29,7 @@ impl Syscall<'_> {
             path = "/testshm".into();
         }
         let flags = OpenFlags::from_bits_truncate(flags);
-        info!(
+        debug!(
             "openat: dir_fd={:?}, path={:?}, flags={:?}, mode={:#o}",
             dir_fd, path, flags, mode
         );
@@ -61,7 +61,7 @@ impl Syscall<'_> {
 
     /// Closes a file descriptor, so that it no longer refers to any file and may be reused.
     pub fn sys_close(&self, fd: FileDesc) -> SysResult {
-        info!("close: fd={:?}", fd);
+        debug!("close: fd={:?}", fd);
         let proc = self.linux_process();
         proc.close_file(fd)?;
         Ok(0)
@@ -69,7 +69,7 @@ impl Syscall<'_> {
 
     /// create a copy of the file descriptor oldfd.
     pub fn sys_dup2(&self, fd1: FileDesc, fd2: FileDesc) -> SysResult {
-        info!("dup2: from {:?} to {:?}", fd1, fd2);
+        debug!("dup2: from {:?} to {:?}", fd1, fd2);
         let proc = self.linux_process();
         // close fd2 first if it is opened
         let _ = proc.close_file(fd2);
@@ -82,7 +82,7 @@ impl Syscall<'_> {
     /// specified file descriptor number `newfd`. Unlike `dup2`, `dup3`
     /// supports a `flags` argument: only `O_CLOEXEC` (0x80000) is valid.
     pub fn sys_dup3(&self, fd1: FileDesc, fd2: FileDesc, flags: usize) -> SysResult {
-        info!("dup3: from {:?} to {:?}, flags={:#x}", fd1, fd2, flags);
+        debug!("dup3: from {:?} to {:?}, flags={:#x}", fd1, fd2, flags);
         if fd1 == fd2 {
             return Err(LxError::EINVAL);
         }
@@ -107,7 +107,7 @@ impl Syscall<'_> {
 
     /// create a copy of the file descriptor fd, and uses the lowest-numbered unused descriptor for the new descriptor.
     pub fn sys_dup(&self, fd1: FileDesc) -> SysResult {
-        info!("dup: from {:?}", fd1);
+        debug!("dup: from {:?}", fd1);
         let proc = self.linux_process();
         let file_like = proc.get_file_like(fd1)?.dup()?;
         let fd2 = proc.add_file(file_like)?;
@@ -121,7 +121,7 @@ impl Syscall<'_> {
 
     /// Creates a pipe, a unidirectional data channel that can be used for interprocess communication.
     pub fn sys_pipe2(&self, mut fds: UserOutPtr<[i32; 2]>, flags: usize) -> SysResult {
-        info!("pipe2: fds={:?}, flags: {:#x}", fds, flags);
+        debug!("pipe2: fds={:?}, flags: {:#x}", fds, flags);
 
         let proc = self.linux_process();
         let (read, write) = Pipe::create_pair();
@@ -141,7 +141,7 @@ impl Syscall<'_> {
         ))?;
         fds.write([read_fd.into(), write_fd.into()])?;
 
-        info!(
+        debug!(
             "pipe2: created rfd={:?} wfd={:?} fds={:?}",
             read_fd, write_fd, fds
         );
@@ -155,10 +155,10 @@ impl Syscall<'_> {
     /// `EFD_CLOEXEC` (0x80000), `EFD_NONBLOCK` (0x800), and
     /// `EFD_SEMAPHORE` (0x1).
     pub fn sys_eventfd2(&self, initval: usize, flags: usize) -> SysResult {
-        info!("eventfd2: initval={}, flags={:#x}", initval, flags);
+        debug!("eventfd2: initval={}, flags={:#x}", initval, flags);
         let eventfd = EventFd::new(initval as u64, flags);
         let fd = self.linux_process().add_file(Arc::new(eventfd))?;
-        info!("eventfd2: fd={:?}", fd);
+        debug!("eventfd2: fd={:?}", fd);
         Ok(fd.into())
     }
 
@@ -174,7 +174,7 @@ impl Syscall<'_> {
             }
         }
         let operation = Operation::from_bits(operation as u8).unwrap();
-        info!("flock: fd: {:?}, operation: {:?}", fd, operation);
+        debug!("flock: fd: {:?}, operation: {:?}", fd, operation);
         let proc = self.linux_process();
 
         proc.get_file(fd)?;

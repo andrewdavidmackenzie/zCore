@@ -34,8 +34,8 @@ set -euo pipefail
 BOOT_DIR="${1:?Usage: $0 <mount-point-of-SD-FAT32-partition>}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-PFTF_CACHE="$PROJECT_DIR/target/pftf-firmware-${PFTF_VERSION}"
 PFTF_VERSION="v1.53"  # Stable pftf release (2026-08-31)
+PFTF_CACHE="$PROJECT_DIR/target/pftf-firmware-${PFTF_VERSION}"
 
 if [ ! -d "$BOOT_DIR" ]; then
     echo "ERROR: $BOOT_DIR does not exist"
@@ -74,7 +74,10 @@ fi
 # --- Step 2: Build the UEFI stub ---
 echo "==> Building UEFI stub for Pi 400..."
 cd "$PROJECT_DIR/tools/aarch64-uefi-stub"
-cargo build --release --target aarch64-unknown-uefi --features board-raspi400
+# Stub features are configured in targets/raspi400-uefi.toml (stub-features).
+# The xtask build handles this automatically via 'cargo xtask zcore-build'.
+# For the SD card script we build the stub directly with the same features.
+cargo build --release --target aarch64-unknown-uefi --features board-raspi400,uefi-console
 
 STUB_EFI="$PROJECT_DIR/tools/aarch64-uefi-stub/target/aarch64-unknown-uefi/release/aarch64-uefi-stub.efi"
 if [ ! -f "$STUB_EFI" ]; then
