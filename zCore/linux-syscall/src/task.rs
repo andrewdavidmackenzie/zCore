@@ -62,14 +62,14 @@ impl Syscall<'_> {
     ///   as the corresponding file descriptor in the parent.
     ///   This means that the two file descriptors share open file status flags and file offset.
     pub fn sys_fork(&self) -> SysResult {
-        info!("fork:");
+        debug!("fork:");
         let new_proc = Process::fork_from(self.zircon_process(), false)?; // old pt NULL here
         let new_thread = Thread::create_linux(&new_proc)?;
         let mut new_ctx = self.thread.context_cloned()?;
         new_ctx.set_field(UserContextField::ReturnValue, 0);
         new_thread.with_context(|ctx| *ctx = new_ctx)?;
         new_thread.start(self.thread_fn)?;
-        info!("fork: {} -> {}", self.zircon_process().id(), new_proc.id());
+        debug!("fork: {} -> {}", self.zircon_process().id(), new_proc.id());
         Ok(new_proc.id() as usize)
     }
 
@@ -81,7 +81,7 @@ impl Syscall<'_> {
     /// (either normally, by calling [`Self::sys_exit`], or abnormally, after delivery of a fatal signal),
     /// or it makes a call to [`Self::sys_execve`].
     pub async fn sys_vfork(&self) -> SysResult {
-        info!("vfork:");
+        debug!("vfork:");
         let new_proc = Process::fork_from(self.zircon_process(), true)?;
         let new_thread = Thread::create_linux(&new_proc)?;
         let mut new_ctx = self.thread.context_cloned()?;
@@ -90,7 +90,7 @@ impl Syscall<'_> {
         new_thread.start(self.thread_fn)?;
 
         let new_proc: Arc<dyn KernelObject> = new_proc;
-        info!(
+        debug!(
             "vfork: {} -> {}. Waiting for execve or exit",
             self.zircon_process().id(),
             new_proc.id()
@@ -125,7 +125,7 @@ impl Syscall<'_> {
         mut child_tid: UserOutPtr<i32>,
     ) -> SysResult {
         let clone_flags = CloneFlags::from_bits_truncate(flags);
-        info!(
+        debug!(
             "clone: flags={:#x}, newsp={:#x}, parent_tid={:?}, child_tid={:?}, newtls={:#x}",
             flags, newsp, parent_tid, child_tid, newtls
         );
@@ -135,7 +135,7 @@ impl Syscall<'_> {
             || clone_flags.contains(CloneFlags::VFORK)
             || !clone_flags.contains(CloneFlags::THREAD)
         {
-            info!(
+            debug!(
                 "sys_clone: fork-like flags {:#x}, falling back to fork",
                 flags
             );
@@ -158,7 +158,7 @@ impl Syscall<'_> {
         new_thread.start(self.thread_fn)?;
 
         let tid = new_thread.id();
-        info!("clone: {} -> {}", self.thread.id(), tid);
+        debug!("clone: {} -> {}", self.thread.id(), tid);
         if clone_flags.contains(CloneFlags::PARENT_SETTID) {
             parent_tid.write(tid as i32)?;
         }
@@ -244,7 +244,7 @@ impl Syscall<'_> {
         };
         let flags = WaitFlags::from_bits_truncate(options);
         let nohang = flags.contains(WaitFlags::NOHANG);
-        info!(
+        debug!(
             "wait4: target={:?}, wstatus={:?}, options={:?}",
             target, wstatus, flags,
         );
@@ -303,7 +303,7 @@ impl Syscall<'_> {
         if !envp.is_null() {
             envs = envp.read_cstring_array()?;
         }
-        info!(
+        debug!(
             "execve: path: {:?}, argv: {:?}, envs: {:?}",
             path, argv, envs
         );
@@ -326,7 +326,7 @@ impl Syscall<'_> {
         // Detect flavour from ELF header.
         let flavour = zircon_object::task::Flavour::from_elf(&data);
         if flavour == zircon_object::task::Flavour::Zircon {
-            info!(
+            debug!(
                 "execve: {:?} is a Zircon binary — cross-flavour spawn",
                 path
             );
@@ -334,7 +334,7 @@ impl Syscall<'_> {
             let job = self.zircon_process().job();
             match zircon_object::task::spawn::spawn_zircon(&job, &path, &data) {
                 Some(Ok(zircon_proc)) => {
-                    info!("Zircon process '{}' spawned successfully", path);
+                    debug!("Zircon process '{}' spawned successfully", path);
                     // Wait for the Zircon process to finish before
                     // exiting the Linux child. Use timed sleeps to
                     // yield the executor and let the Zircon thread run.
@@ -397,7 +397,7 @@ impl Syscall<'_> {
     ///
     /// Always succeeds and returns 0.
     pub async fn sys_sched_yield(&self) -> SysResult {
-        info!("sched_yield:");
+        debug!("sched_yield:");
         hal_impl::thread::yield_now().await;
         Ok(0)
     }
@@ -407,7 +407,7 @@ impl Syscall<'_> {
     /// In a single-threaded process, the thread ID is equal to the process ID (PID, as returned by [`Self::sys_getpid`]).
     /// In a multithreaded process, all threads have the same PID, but each one has a unique TID.
     pub fn sys_gettid(&self) -> SysResult {
-        info!("gettid:");
+        debug!("gettid:");
         let tid = self.thread.id();
         Ok(tid as usize)
     }
@@ -415,7 +415,7 @@ impl Syscall<'_> {
     /// `sys_getpid` returns the process ID (PID) of the calling process
     /// (see [linux man getpid(2)](https://www.man7.org/linux/man-pages/man2/getpid.2.html)).
     pub fn sys_getpid(&self) -> SysResult {
-        info!("getpid:");
+        debug!("getpid:");
         let proc = self.zircon_process();
         let pid = proc.id();
         Ok(pid as usize)
@@ -426,7 +426,7 @@ impl Syscall<'_> {
     /// This will be either the ID of the process that created this process using fork(),
     /// or, if that process has already terminated, 0.
     pub fn sys_getppid(&self) -> SysResult {
-        info!("getppid:");
+        debug!("getppid:");
         let proc = self.linux_process();
         let ppid = proc.parent().map(|p| p.id()).unwrap_or(0);
         Ok(ppid as usize)
@@ -439,7 +439,7 @@ impl Syscall<'_> {
     /// SIGCHLD to the parent process are performed only if this is the
     /// last thread in the thread group.
     pub fn sys_exit(&mut self, exit_code: i32) -> SysResult {
-        info!("exit: code={}", exit_code);
+        debug!("exit: code={}", exit_code);
         self.thread.exit_linux(exit_code);
         Err(LxError::ENOSYS)
     }
@@ -450,7 +450,7 @@ impl Syscall<'_> {
     /// but all threads in the calling process's thread group.
     /// As a result, the entire calling process will exit.
     pub fn sys_exit_group(&mut self, exit_code: i32) -> SysResult {
-        info!("exit_group: code={}", exit_code);
+        debug!("exit_group: code={}", exit_code);
         let proc = self.zircon_process();
         proc.exit(exit_code as i64);
         Err(LxError::ENOSYS)
@@ -467,7 +467,7 @@ impl Syscall<'_> {
     ///
     /// To represent a duration, see TimeSpec.
     pub async fn sys_nanosleep(&self, req: UserInPtr<TimeSpec>) -> SysResult {
-        info!("nanosleep: deadline={:?}", req);
+        debug!("nanosleep: deadline={:?}", req);
         let duration = req.read()?.into();
         use hal_impl::thread::SleepFuture;
         use hal_impl::timer;
@@ -483,7 +483,7 @@ impl Syscall<'_> {
     /// and return the caller's thread ID
     /// (see [linux man set_tid_address(2)](https://www.man7.org/linux/man-pages/man2/set_tid_address.2.html).
     pub fn sys_set_tid_address(&self, tidptr: UserOutPtr<i32>) -> SysResult {
-        info!("set_tid_address: {:?}", tidptr);
+        debug!("set_tid_address: {:?}", tidptr);
         self.thread.set_tid_address(tidptr);
         let tid = self.thread.id();
         Ok(tid as usize)

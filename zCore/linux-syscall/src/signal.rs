@@ -24,7 +24,7 @@ impl Syscall<'_> {
         sigsetsize: usize,
     ) -> SysResult {
         let signal = Signal::try_from(signum as u8).map_err(|_| LxError::EINVAL)?;
-        info!(
+        debug!(
             "rt_sigaction: signal={:?}, act={:?}, oldact={:?}, sigsetsize={}, thread={}",
             signal,
             act,
@@ -41,7 +41,7 @@ impl Syscall<'_> {
         let proc = self.linux_process();
         oldact.write_if_not_null(proc.signal_action(signal))?;
         if let Some(act) = act.read_if_not_null()? {
-            info!("new action: {:?} -> {:x?}", signal, act);
+            debug!("new action: {:?} -> {:x?}", signal, act);
             proc.set_signal_action(signal, act);
         }
         Ok(0)
@@ -65,7 +65,7 @@ impl Syscall<'_> {
             }
         }
         let how = How::try_from(how).map_err(|_| LxError::EINVAL)?;
-        info!(
+        debug!(
             "rt_sigprocmask: how={:?}, set={:?}, oldset={:?}, sigsetsize={}, thread={}",
             how,
             set,
@@ -116,7 +116,7 @@ impl Syscall<'_> {
         ss: UserInPtr<SignalStack>,
         mut old_ss: UserOutPtr<SignalStack>,
     ) -> SysResult {
-        info!("sigaltstack: ss={:?}, old_ss={:?}", ss, old_ss);
+        debug!("sigaltstack: ss={:?}, old_ss={:?}", ss, old_ss);
         let mut thread = self.thread.lock_linux();
         old_ss.write_if_not_null(thread.signal_alternate_stack)?;
         if ss.is_null() {
@@ -158,7 +158,7 @@ impl Syscall<'_> {
     ///   (zCore: not implemented, returns ESRCH)
     pub fn sys_kill(&self, pid: isize, signum: usize) -> SysResult {
         let signal = Signal::try_from(signum as u8).map_err(|_| LxError::EINVAL)?;
-        info!(
+        debug!(
             "kill: thread {} kill process {} with signal {:?}",
             self.thread.id(),
             pid,
@@ -232,7 +232,7 @@ impl Syscall<'_> {
     /// Send a signal to a thread specified by tid
     pub fn sys_tkill(&mut self, tid: usize, signum: usize) -> SysResult {
         let signal = Signal::try_from(signum as u8).map_err(|_| LxError::EINVAL)?;
-        info!(
+        debug!(
             "tkill: thread {} kill thread {} with signal {:?}",
             self.thread.id(),
             tid,
@@ -266,7 +266,7 @@ impl Syscall<'_> {
     /// Note: the job of the target process should be the same as the calling thread
     pub fn sys_tgkill(&mut self, tgid: usize, tid: usize, signum: usize) -> SysResult {
         let signal = Signal::try_from(signum as u8).map_err(|_| LxError::EINVAL)?;
-        info!(
+        debug!(
             "tgkill: thread {} kill thread {} in process {} with signal {:?}",
             self.thread.id(),
             tid,
@@ -303,7 +303,7 @@ impl Syscall<'_> {
 
     /// Return from handling some signal
     pub fn sys_rt_sigreturn(&mut self) -> SysResult {
-        info!(
+        debug!(
             "sigreturn: thread {} returns from handling the signal",
             self.thread.id()
         );
@@ -343,7 +343,7 @@ impl Syscall<'_> {
         }
         let sig_u8 = u8::try_from(sig).map_err(|_| LxError::EINVAL)?;
         let signal = Signal::try_from(sig_u8).map_err(|_| LxError::EINVAL)?;
-        info!(
+        debug!(
             "rt_sigqueueinfo: pid={}, sig={:?}, uinfo={:?}",
             pid, signal, _uinfo
         );
@@ -384,7 +384,7 @@ impl Syscall<'_> {
 
     /// Return the set of signals pending for the calling thread/process.
     pub fn sys_rt_sigpending(&self, mut set: UserOutPtr<u64>, sigsetsize: usize) -> SysResult {
-        info!("rt_sigpending: sigsetsize={}", sigsetsize);
+        debug!("rt_sigpending: sigsetsize={}", sigsetsize);
         if sigsetsize != 8 {
             return Err(LxError::EINVAL);
         }
@@ -404,7 +404,7 @@ impl Syscall<'_> {
         timeout: UserInPtr<u8>,
         sigsetsize: usize,
     ) -> SysResult {
-        info!("rt_sigtimedwait: sigsetsize={}", sigsetsize);
+        debug!("rt_sigtimedwait: sigsetsize={}", sigsetsize);
         if sigsetsize != 8 {
             return Err(LxError::EINVAL);
         }
@@ -475,7 +475,7 @@ impl Syscall<'_> {
     ///
     /// Always returns EINTR (woken by signal) or blocks forever.
     pub async fn sys_rt_sigsuspend(&self, mask: UserInPtr<u64>, sigsetsize: usize) -> SysResult {
-        info!("rt_sigsuspend: sigsetsize={}", sigsetsize);
+        debug!("rt_sigsuspend: sigsetsize={}", sigsetsize);
         if sigsetsize != 8 {
             return Err(LxError::EINVAL);
         }
@@ -508,7 +508,7 @@ impl Syscall<'_> {
     /// Wait for any signal (x86_64 legacy).
     /// Equivalent to sigsuspend with the current mask.
     pub async fn sys_pause(&self) -> SysResult {
-        info!("pause");
+        debug!("pause");
         for _ in 0..1000 {
             hal_impl::thread::yield_now().await;
             let proc = self.linux_process();

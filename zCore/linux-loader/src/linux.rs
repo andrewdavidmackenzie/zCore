@@ -64,7 +64,7 @@ fn spawn_linux_process(elf_data: &[u8], args: &[&str]) -> ZxResult<Arc<Process>>
 
 /// Create and run main Linux process
 pub fn run(args: Vec<String>, envs: Vec<String>, rootfs: Arc<dyn FileSystem>) -> Arc<Process> {
-    info!("Run Linux process: args={:?}, envs={:?}", args, envs);
+    debug!("Run Linux process: args={:?}, envs={:?}", args, envs);
 
     // Register spawn function so Zircon can cross-spawn Linux processes.
     init_spawn(rootfs.clone());

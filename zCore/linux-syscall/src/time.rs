@@ -19,7 +19,7 @@ impl Syscall<'_> {
     /// pointed to by `buf`. The resolution is 1 nanosecond for all supported clocks.
     /// Returns `EINVAL` for unknown clock IDs.
     pub fn sys_clock_getres(&self, clock: usize, mut buf: UserOutPtr<TimeSpec>) -> SysResult {
-        info!("clock_getres: id={}, buf={:?}", clock, buf);
+        debug!("clock_getres: id={}, buf={:?}", clock, buf);
         // Validate clock ID (0..=9 are the supported ClockId variants)
         if clock > 9 {
             return Err(LxError::EINVAL);
@@ -34,7 +34,7 @@ impl Syscall<'_> {
     /// Get the time of the specified clock
     /// (see [linux man clock_gettime(2)](https://www.man7.org/linux/man-pages/man2/clock_gettime.2.html)).
     pub fn sys_clock_gettime(&self, clock: usize, mut buf: UserOutPtr<TimeSpec>) -> SysResult {
-        info!("clock_gettime: id={:?} buf={:?}", clock, buf);
+        debug!("clock_gettime: id={:?} buf={:?}", clock, buf);
         if buf.is_null() {
             return Err(LxError::EINVAL);
         }
@@ -62,7 +62,7 @@ impl Syscall<'_> {
             nsec: (duration.as_nanos() % 1_000_000_000) as usize,
         };
         buf.write(ts)?;
-        info!("TimeSpec: {:?}", ts);
+        debug!("TimeSpec: {:?}", ts);
         Ok(0)
     }
 
@@ -72,7 +72,7 @@ impl Syscall<'_> {
     /// Since zCore always runs as root but does not support clock
     /// modification, this always returns `EPERM`.
     pub fn sys_clock_settime(&self, clock: usize, buf: UserInPtr<TimeSpec>) -> SysResult {
-        info!("clock_settime: id={}, buf={:?}", clock, buf);
+        debug!("clock_settime: id={}, buf={:?}", clock, buf);
         Err(LxError::EPERM)
     }
 
@@ -82,7 +82,7 @@ impl Syscall<'_> {
         mut tv: UserOutPtr<TimeVal>,
         tz: UserInPtr<u8>,
     ) -> SysResult {
-        info!("gettimeofday: tv: {:?}, tz: {:?}", tv, tz);
+        debug!("gettimeofday: tv: {:?}, tz: {:?}", tv, tz);
         // don't support tz
         if !tz.is_null() {
             return Err(LxError::EINVAL);
@@ -91,7 +91,7 @@ impl Syscall<'_> {
         let timeval = TimeVal::now_realtime();
         tv.write(timeval)?;
 
-        info!("TimeVal: {:?}", timeval);
+        debug!("TimeVal: {:?}", timeval);
 
         Ok(0)
     }
@@ -99,7 +99,7 @@ impl Syscall<'_> {
     /// get time in seconds (wall-clock)
     #[cfg(target_arch = "x86_64")]
     pub fn sys_time(&mut self, mut time: UserOutPtr<u64>) -> SysResult {
-        info!("time: time: {:?}", time);
+        debug!("time: time: {:?}", time);
         if time.is_null() {
             return Err(LxError::EINVAL);
         }
@@ -127,7 +127,7 @@ impl Syscall<'_> {
     /// Get resource usage statistics
     /// (see [linux man getrusage(2)](https://www.man7.org/linux/man-pages/man2/getrusage.2.html)).
     pub fn sys_getrusage(&mut self, who: usize, mut rusage: UserOutPtr<RUsage>) -> SysResult {
-        info!("getrusage: who: {}, rusage: {:?}", who, rusage);
+        debug!("getrusage: who: {}, rusage: {:?}", who, rusage);
         if rusage.is_null() {
             return Err(LxError::EINVAL);
         }
@@ -164,7 +164,7 @@ impl Syscall<'_> {
         new_value: UserInPtr<ITimerVal>,
         mut old_value: UserOutPtr<ITimerVal>,
     ) -> SysResult {
-        info!(
+        debug!(
             "setitimer: which={}, new={:?}, old={:?}",
             which, new_value, old_value
         );
@@ -190,7 +190,7 @@ impl Syscall<'_> {
 
     /// Get the current value of an interval timer.
     pub fn sys_getitimer(&self, which: usize, mut curr_value: UserOutPtr<ITimerVal>) -> SysResult {
-        info!("getitimer: which={}, curr={:?}", which, curr_value);
+        debug!("getitimer: which={}, curr={:?}", which, curr_value);
         if which != 0 {
             warn!("getitimer: which={} not supported", which);
             return Err(LxError::EINVAL);
@@ -207,7 +207,7 @@ impl Syscall<'_> {
         sevp: UserInPtr<SigEvent>,
         mut timerid: UserOutPtr<usize>,
     ) -> SysResult {
-        info!(
+        debug!(
             "timer_create: clock_id={}, sevp={:?}, timerid={:?}",
             clock_id, sevp, timerid
         );
@@ -252,7 +252,7 @@ impl Syscall<'_> {
         new_value: UserInPtr<ITimerSpec>,
         mut old_value: UserOutPtr<ITimerSpec>,
     ) -> SysResult {
-        info!(
+        debug!(
             "timer_settime: id={}, flags={}, new={:?}, old={:?}",
             timer_id, flags, new_value, old_value
         );
@@ -271,7 +271,7 @@ impl Syscall<'_> {
         timer_id: usize,
         mut curr_value: UserOutPtr<ITimerSpec>,
     ) -> SysResult {
-        info!("timer_gettime: id={}, curr={:?}", timer_id, curr_value);
+        debug!("timer_gettime: id={}, curr={:?}", timer_id, curr_value);
         let val = self.linux_process().get_posix_timer(timer_id)?;
         curr_value.write(val)?;
         Ok(0)
@@ -279,14 +279,14 @@ impl Syscall<'_> {
 
     /// Delete a POSIX per-process timer.
     pub fn sys_timer_delete(&self, timer_id: usize) -> SysResult {
-        info!("timer_delete: id={}", timer_id);
+        debug!("timer_delete: id={}", timer_id);
         self.linux_process().delete_posix_timer(timer_id)?;
         Ok(0)
     }
 
     /// Get the overrun count of a POSIX timer.
     pub fn sys_timer_getoverrun(&self, timer_id: usize) -> SysResult {
-        info!("timer_getoverrun: id={}", timer_id);
+        debug!("timer_getoverrun: id={}", timer_id);
         // Overrun tracking is not implemented; verify timer exists then return 0.
         self.linux_process().get_posix_timer(timer_id)?;
         Ok(0)
@@ -298,7 +298,7 @@ impl Syscall<'_> {
     /// Returns clock ticks since boot. The `Tms` struct contains per-process
     /// user and system CPU time, plus accumulated children times.
     pub fn sys_times(&mut self, mut buf: UserOutPtr<Tms>) -> SysResult {
-        info!("times: buf: {:?}", buf);
+        debug!("times: buf: {:?}", buf);
 
         let tv = TimeVal::now();
         let tick = (tv.sec * 1_000_000 + tv.usec) / USEC_PER_TICK;
@@ -326,7 +326,7 @@ impl Syscall<'_> {
             warn!("sys_times: Invalid buf {:x?}", buf);
         }
 
-        info!("tick: {:?}", tick);
+        debug!("tick: {:?}", tick);
         Ok(tick)
     }
 
@@ -338,7 +338,7 @@ impl Syscall<'_> {
         req: UserInPtr<TimeSpec>,
         rem: UserOutPtr<TimeSpec>,
     ) -> SysResult {
-        info!(
+        debug!(
             "clock_nanosleep: clockid={:?}, flags={:?}, req={:?}, rem={:?}",
             clockid,
             flags,
@@ -352,7 +352,7 @@ impl Syscall<'_> {
         let duration: Duration = req.read()?.into();
         let clockid = ClockId::from(clockid);
         let flags = ClockFlags::from(flags);
-        info!("clockid={:?}, flags={:?}", clockid, flags,);
+        debug!("clockid={:?}, flags={:?}", clockid, flags,);
         // Get the current time for the requested clock domain.
         let clock_now = match clockid {
             ClockId::ClockRealTime => timer::timer_clock_realtime(),

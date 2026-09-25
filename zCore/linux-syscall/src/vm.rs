@@ -21,7 +21,7 @@ impl Syscall<'_> {
     pub fn sys_brk(&self, addr: usize) -> SysResult {
         let proc = self.linux_process();
         let current_brk = proc.get_brk();
-        info!("brk: addr={:#x}, current={:#x}", addr, current_brk);
+        debug!("brk: addr={:#x}, current={:#x}", addr, current_brk);
 
         if addr == 0 {
             return Ok(current_brk);
@@ -77,7 +77,7 @@ impl Syscall<'_> {
         const MREMAP_MAYMOVE: usize = 1;
         const MREMAP_FIXED: usize = 2;
 
-        info!(
+        debug!(
             "mremap: old_addr={:#x}, old_size={:#x}, new_size={:#x}, flags={:#x}, new_addr={:#x}",
             old_addr, old_size, new_size, flags, new_addr
         );
@@ -257,7 +257,7 @@ impl Syscall<'_> {
     ) -> SysResult {
         let prot = MmapProt::from_bits_truncate(prot);
         let flags = MmapFlags::from_bits_truncate(flags);
-        info!(
+        debug!(
             "mmap: addr={:#x}, size={:#x}, prot={:?}, flags={:?}, fd={:?}, offset={:#x}",
             addr, len, prot, flags, fd, offset
         );
@@ -313,7 +313,7 @@ impl Syscall<'_> {
     /// If `prot` is 0, the memory cannot be accessed at all.
     pub fn sys_mprotect(&self, addr: usize, len: usize, prot: usize) -> SysResult {
         let prot = MmapProt::from_bits_truncate(prot);
-        info!(
+        debug!(
             "mprotect: addr={:#x}, size={:#x}, prot={:?}",
             addr, len, prot
         );
@@ -343,7 +343,7 @@ impl Syscall<'_> {
     /// should ideally decommit pages, but that requires VmMapping
     /// API extensions. For now, all advice is accepted as a no-op.
     pub fn sys_madvise(&self, addr: usize, len: usize, advice: usize) -> SysResult {
-        info!(
+        debug!(
             "madvise: addr={:#x}, len={:#x}, advice={}",
             addr, len, advice
         );
@@ -356,7 +356,7 @@ impl Syscall<'_> {
     /// Since SFS writes are synchronous and there is no page cache,
     /// this is effectively a no-op. Validates flags only.
     pub fn sys_msync(&self, addr: usize, len: usize, flags: usize) -> SysResult {
-        info!(
+        debug!(
             "msync: addr={:#x}, len={:#x}, flags={:#x}",
             addr, len, flags
         );
@@ -379,7 +379,7 @@ impl Syscall<'_> {
     /// Since zCore has no swap, all mapped pages are resident.
     /// Fills the output vector with all 1s.
     pub fn sys_mincore(&self, addr: usize, len: usize, mut vec: UserOutPtr<u8>) -> SysResult {
-        info!("mincore: addr={:#x}, len={:#x}", addr, len);
+        debug!("mincore: addr={:#x}, len={:#x}", addr, len);
         if addr & 0xFFF != 0 || len == 0 {
             return Err(LxError::EINVAL);
         }
@@ -407,7 +407,7 @@ impl Syscall<'_> {
     /// Both `addr` and `len` must be aligned to the page size, additionally, `len` must greater than 0.
     /// Otherwise, an [`EINVAL`](LxError::EINVAL) is returned.
     pub fn sys_munmap(&self, addr: usize, len: usize) -> SysResult {
-        info!("munmap: addr={:#x}, size={:#x}", addr, len);
+        debug!("munmap: addr={:#x}, size={:#x}", addr, len);
         let proc = self.thread.proc();
         let vmar = proc.vmar();
         vmar.unmap(addr, len)?;

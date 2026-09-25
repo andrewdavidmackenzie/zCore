@@ -34,8 +34,8 @@ set -euo pipefail
 BOOT_DIR="${1:?Usage: $0 <mount-point-of-SD-FAT32-partition>}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-PFTF_CACHE="$PROJECT_DIR/target/pftf-firmware-${PFTF_VERSION}"
 PFTF_VERSION="v1.53"  # Stable pftf release (2026-08-31)
+PFTF_CACHE="$PROJECT_DIR/target/pftf-firmware-${PFTF_VERSION}"
 
 if [ ! -d "$BOOT_DIR" ]; then
     echo "ERROR: $BOOT_DIR does not exist"

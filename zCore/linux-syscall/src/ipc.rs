@@ -56,7 +56,7 @@ impl Syscall<'_> {
     ///
     /// If the semaphore set already exists, the permissions are verified.
     pub fn sys_semget(&self, key: usize, nsems: usize, flags: usize) -> SysResult {
-        info!("semget: key: {} nsems: {} flags: {:#x}", key, nsems, flags);
+        debug!("semget: key: {} nsems: {} flags: {:#x}", key, nsems, flags);
 
         /// The maximum semaphores per semaphore set
         const SEMMSL: usize = 256;
@@ -95,7 +95,7 @@ impl Syscall<'_> {
     /// - If `op` is +1, see [`acquire`](linux_object::sync::Semaphore::acquire).
     /// - If `op` is -1, see [`release`](linux_object::sync::Semaphore::release).
     pub async fn sys_semop(&self, id: usize, ops: UserInPtr<SemBuf>, num_ops: usize) -> SysResult {
-        info!("semop: id: {}", id);
+        debug!("semop: id: {}", id);
         let ops = ops.read_array(num_ops)?;
 
         let sem_array = self
@@ -140,7 +140,7 @@ impl Syscall<'_> {
     ///
     /// TODO
     pub fn sys_semctl(&self, id: usize, num: usize, cmd: usize, arg: usize) -> SysResult {
-        info!(
+        debug!(
             "semctl: id: {}, num: {}, cmd: {} arg: {:#x}",
             id, num, cmd, arg
         );
@@ -238,7 +238,7 @@ impl Syscall<'_> {
     /// associated with the value of the argument key.
     /// Differ from linux, this syscall always create a new set.
     pub fn sys_shmget(&self, key: usize, size: usize, shmflg: usize) -> SysResult {
-        info!(
+        debug!(
             "shmget: key: {}, size: {}, shmflg: {:#x}",
             key, size, shmflg
         );
@@ -273,7 +273,7 @@ impl Syscall<'_> {
         }
         let shm_guard = shm_identifier.guard.lock();
         let vmo = shm_guard.shared_guard.clone();
-        info!(
+        debug!(
             "shmat: id: {}, addr = {:#x}, size = {}, flags = {:#x}",
             id,
             addr,
@@ -302,7 +302,7 @@ impl Syscall<'_> {
     /// The to-be-detached segment must be currently attached with `addr`
     /// equal to the value returned by the attaching [`sys_shmat`](Self::sys_shmat) call.
     pub fn sys_shmdt(&self, id: usize, addr: VirtAddr, shmflg: usize) -> SysResult {
-        info!(
+        debug!(
             "shmdt: id = {}, addr = {:#x}, flag = {:#x}",
             id, addr, shmflg
         );
@@ -324,7 +324,7 @@ impl Syscall<'_> {
     ///
     /// performs the control operation specified by cmd on the shared memory segment whose identifier is given in id
     pub fn sys_shmctl(&self, id: usize, cmd: usize, buffer: usize) -> SysResult {
-        info!("shmctl: id: {}, cmd: {} buffer: {:#x}", id, cmd, buffer);
+        debug!("shmctl: id: {}, cmd: {} buffer: {:#x}", id, cmd, buffer);
         let shm_identifier = self.linux_process().shm_get(id).ok_or(LxError::EINVAL)?;
         let shm_guard = shm_identifier.guard.lock();
         let cmd = match ShmctlCmds::try_from(cmd) {
@@ -369,7 +369,7 @@ impl Syscall<'_> {
 
     /// Create or access a message queue by key.
     pub fn sys_msgget(&self, key: usize, flags: usize) -> SysResult {
-        info!("msgget: key={}, flags={:#x}", key, flags);
+        debug!("msgget: key={}, flags={:#x}", key, flags);
         let proc = self.linux_process();
         let queue = MsgQueue::get_or_create(key as u32, flags, proc.euid(), proc.egid())?;
         let id = proc.msg_add(queue);
@@ -384,7 +384,7 @@ impl Syscall<'_> {
         msgsz: usize,
         _msgflg: usize,
     ) -> SysResult {
-        info!("msgsnd: msqid={}, msgsz={}", msqid, msgsz);
+        debug!("msgsnd: msqid={}, msgsz={}", msqid, msgsz);
         let proc = self.linux_process();
         let queue = proc.msg_get(msqid).ok_or(LxError::EINVAL)?;
         // Read msgbuf: first 8 bytes are mtype (long), rest is mtext
@@ -405,7 +405,7 @@ impl Syscall<'_> {
         msgtyp: isize,
         msgflg: usize,
     ) -> SysResult {
-        info!(
+        debug!(
             "msgrcv: msqid={}, msgsz={}, msgtyp={}",
             msqid, msgsz, msgtyp
         );
@@ -425,7 +425,7 @@ impl Syscall<'_> {
 
     /// Control operations on a message queue.
     pub fn sys_msgctl(&self, msqid: usize, cmd: usize, buf: usize) -> SysResult {
-        info!("msgctl: msqid={}, cmd={}", msqid, cmd);
+        debug!("msgctl: msqid={}, cmd={}", msqid, cmd);
         const IPC_RMID: usize = 0;
         const IPC_SET: usize = 1;
         const IPC_STAT: usize = 2;

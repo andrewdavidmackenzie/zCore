@@ -15,7 +15,7 @@ const PR_GET_NAME: usize = 16;
 impl Syscall<'_> {
     /// Process control operations.
     pub fn sys_prctl(&self, option: usize, arg: usize) -> SysResult {
-        info!("prctl: option={}, arg={:#x}", option, arg);
+        debug!("prctl: option={}, arg={:#x}", option, arg);
         match option {
             PR_SET_NAME => {
                 let name_ptr: UserInPtr<u8> = arg.into();
@@ -51,7 +51,7 @@ impl Syscall<'_> {
         cpusetsize: usize,
         mut mask: UserOutPtr<u8>,
     ) -> SysResult {
-        info!("sched_getaffinity: pid={}, cpusetsize={}", _pid, cpusetsize);
+        debug!("sched_getaffinity: pid={}, cpusetsize={}", _pid, cpusetsize);
         if cpusetsize == 0 {
             return Err(LxError::EINVAL);
         }
@@ -70,7 +70,7 @@ impl Syscall<'_> {
         const ARCH_SET_FS: i32 = 0x1002;
         match code {
             ARCH_SET_FS => {
-                info!("sys_arch_prctl: set FSBASE to {:#x}", addr);
+                debug!("sys_arch_prctl: set FSBASE to {:#x}", addr);
                 self.thread.with_context(|ctx| {
                     ctx.set_field(hal_impl::context::UserContextField::ThreadPointer, addr)
                 })?;
@@ -82,7 +82,7 @@ impl Syscall<'_> {
 
     /// get name and information about current kernel
     pub fn sys_uname(&self, buf: UserOutPtr<u8>) -> SysResult {
-        info!("uname: buf={:?}", buf);
+        debug!("uname: buf={:?}", buf);
 
         let release = alloc::string::String::from(concat!(env!("CARGO_PKG_VERSION"), "-zcore"));
         #[cfg(not(target_os = "none"))]
@@ -297,7 +297,7 @@ impl Syscall<'_> {
         new_limit: UserInPtr<RLimit>,
         mut old_limit: UserOutPtr<RLimit>,
     ) -> SysResult {
-        info!(
+        debug!(
             "prlimit64: pid: {}, resource: {}, new_limit: {:x?}, old_limit: {:x?}",
             pid, resource, new_limit, old_limit
         );
@@ -332,7 +332,7 @@ impl Syscall<'_> {
     /// otherwise `EINVAL` is returned. The `cmd` argument selects the action:
     /// power off, restart, or halt.
     pub fn sys_reboot(&self, magic1: u32, magic2: u32, cmd: u32) -> SysResult {
-        info!(
+        debug!(
             "reboot: magic1={:#x}, magic2={:#x}, cmd={:#x}",
             magic1, magic2, cmd
         );
@@ -382,7 +382,7 @@ impl Syscall<'_> {
     ///   - GRND_NONBLOCK
     /// - returns the number of bytes that were copied to the buffer buf.
     pub fn sys_getrandom(&mut self, mut buf: UserOutPtr<u8>, len: usize, flag: u32) -> SysResult {
-        info!("getrandom: buf: {:?}, len: {:?}, flag {:?}", buf, len, flag);
+        debug!("getrandom: buf: {:?}, len: {:?}, flag {:?}", buf, len, flag);
         let mut buffer = vec![0u8; len];
         hal_impl::rand::fill_random(&mut buffer);
         buf.write_array(&buffer[..len])?;
@@ -394,28 +394,28 @@ impl Syscall<'_> {
     /// Get the real user ID of the calling process.
     pub fn sys_getuid(&self) -> SysResult {
         let uid = self.linux_process().uid();
-        info!("getuid => {}", uid);
+        debug!("getuid => {}", uid);
         Ok(uid as usize)
     }
 
     /// Get the real group ID of the calling process.
     pub fn sys_getgid(&self) -> SysResult {
         let gid = self.linux_process().gid();
-        info!("getgid => {}", gid);
+        debug!("getgid => {}", gid);
         Ok(gid as usize)
     }
 
     /// Get the effective user ID of the calling process.
     pub fn sys_geteuid(&self) -> SysResult {
         let euid = self.linux_process().euid();
-        info!("geteuid => {}", euid);
+        debug!("geteuid => {}", euid);
         Ok(euid as usize)
     }
 
     /// Get the effective group ID of the calling process.
     pub fn sys_getegid(&self) -> SysResult {
         let egid = self.linux_process().egid();
-        info!("getegid => {}", egid);
+        debug!("getegid => {}", egid);
         Ok(egid as usize)
     }
 
@@ -424,7 +424,7 @@ impl Syscall<'_> {
     /// Otherwise, only sets effective UID if it matches the
     /// real UID.
     pub fn sys_setuid(&self, uid: u32) -> SysResult {
-        info!("setuid: uid={}", uid);
+        debug!("setuid: uid={}", uid);
         self.linux_process()
             .set_uid(uid)
             .map(|_| 0)
@@ -433,7 +433,7 @@ impl Syscall<'_> {
 
     /// Set the real group ID.
     pub fn sys_setgid(&self, gid: u32) -> SysResult {
-        info!("setgid: gid={}", gid);
+        debug!("setgid: gid={}", gid);
         self.linux_process()
             .set_gid(gid)
             .map(|_| 0)
@@ -442,7 +442,7 @@ impl Syscall<'_> {
 
     /// Set real and effective user IDs.
     pub fn sys_setreuid(&self, ruid: i32, euid: i32) -> SysResult {
-        info!("setreuid: ruid={}, euid={}", ruid, euid);
+        debug!("setreuid: ruid={}, euid={}", ruid, euid);
         self.linux_process()
             .set_reuid(ruid, euid)
             .map(|_| 0)
@@ -451,7 +451,7 @@ impl Syscall<'_> {
 
     /// Set real and effective group IDs.
     pub fn sys_setregid(&self, rgid: i32, egid: i32) -> SysResult {
-        info!("setregid: rgid={}, egid={}", rgid, egid);
+        debug!("setregid: rgid={}, egid={}", rgid, egid);
         self.linux_process()
             .set_regid(rgid, egid)
             .map(|_| 0)
@@ -460,7 +460,7 @@ impl Syscall<'_> {
 
     /// Set real, effective, and saved user IDs.
     pub fn sys_setresuid(&self, ruid: i32, euid: i32, suid: i32) -> SysResult {
-        info!("setresuid: ruid={}, euid={}, suid={}", ruid, euid, suid);
+        debug!("setresuid: ruid={}, euid={}, suid={}", ruid, euid, suid);
         self.linux_process()
             .set_resuid(ruid, euid, suid)
             .map(|_| 0)
@@ -475,7 +475,7 @@ impl Syscall<'_> {
         mut suid: UserOutPtr<u32>,
     ) -> SysResult {
         let (r, e, s) = self.linux_process().get_resuid();
-        info!("getresuid: ruid={}, euid={}, suid={}", r, e, s);
+        debug!("getresuid: ruid={}, euid={}, suid={}", r, e, s);
         ruid.write(r)?;
         euid.write(e)?;
         suid.write(s)?;
@@ -484,7 +484,7 @@ impl Syscall<'_> {
 
     /// Set real, effective, and saved group IDs.
     pub fn sys_setresgid(&self, rgid: i32, egid: i32, sgid: i32) -> SysResult {
-        info!("setresgid: rgid={}, egid={}, sgid={}", rgid, egid, sgid);
+        debug!("setresgid: rgid={}, egid={}, sgid={}", rgid, egid, sgid);
         self.linux_process()
             .set_resgid(rgid, egid, sgid)
             .map(|_| 0)
@@ -499,7 +499,7 @@ impl Syscall<'_> {
         mut sgid: UserOutPtr<u32>,
     ) -> SysResult {
         let (r, e, s) = self.linux_process().get_resgid();
-        info!("getresgid: rgid={}, egid={}, sgid={}", r, e, s);
+        debug!("getresgid: rgid={}, egid={}, sgid={}", r, e, s);
         rgid.write(r)?;
         egid.write(e)?;
         sgid.write(s)?;
@@ -509,14 +509,14 @@ impl Syscall<'_> {
     /// Set filesystem UID (for access checks). Returns previous fsuid.
     pub fn sys_setfsuid(&self, fsuid: u32) -> SysResult {
         let old = self.linux_process().set_fsuid(fsuid);
-        info!("setfsuid: fsuid={} => old={}", fsuid, old);
+        debug!("setfsuid: fsuid={} => old={}", fsuid, old);
         Ok(old as usize)
     }
 
     /// Set filesystem GID (for access checks). Returns previous fsgid.
     pub fn sys_setfsgid(&self, fsgid: u32) -> SysResult {
         let old = self.linux_process().set_fsgid(fsgid);
-        info!("setfsgid: fsgid={} => old={}", fsgid, old);
+        debug!("setfsgid: fsgid={} => old={}", fsgid, old);
         Ok(old as usize)
     }
 
@@ -532,7 +532,7 @@ impl Syscall<'_> {
         // Read header to get version
         let hdr = hdrp.read_array(8)?;
         let version = u32::from_ne_bytes(hdr[0..4].try_into().unwrap());
-        info!("capget: version={:#x}", version);
+        debug!("capget: version={:#x}", version);
 
         if datap.is_null() {
             return Ok(0); // just checking version support
@@ -584,7 +584,7 @@ impl Syscall<'_> {
     pub fn sys_capset(&self, hdrp: UserInPtr<u8>, _datap: UserInPtr<u8>) -> SysResult {
         let hdr = hdrp.read_array(8)?;
         let version = u32::from_ne_bytes(hdr[0..4].try_into().unwrap());
-        info!("capset: version={:#x}", version);
+        debug!("capset: version={:#x}", version);
         // Accept silently — all processes have full capabilities
         Ok(0)
     }
@@ -594,7 +594,7 @@ impl Syscall<'_> {
     /// Set a SIGALRM timer. Returns seconds remaining on previous alarm.
     pub fn sys_alarm(&self, seconds: u32) -> SysResult {
         use linux_object::time::{ITimerVal, TimeVal};
-        info!("alarm: seconds={}", seconds);
+        debug!("alarm: seconds={}", seconds);
         let new_val = ITimerVal {
             it_interval: TimeVal { sec: 0, usec: 0 }, // one-shot
             it_value: TimeVal {
@@ -615,7 +615,7 @@ impl Syscall<'_> {
     /// Returns a file descriptor. Currently a minimal stub — the fd
     /// exists but timerfd_settime is needed to arm it.
     pub fn sys_timerfd_create(&self, clockid: i32, flags: i32) -> SysResult {
-        info!("timerfd_create: clockid={}, flags={:#x}", clockid, flags);
+        debug!("timerfd_create: clockid={}, flags={:#x}", clockid, flags);
         // Return ENOSYS — full implementation requires a new FileLike type
         Err(LxError::ENOSYS)
     }
@@ -628,13 +628,13 @@ impl Syscall<'_> {
         _new_value: UserInPtr<u8>,
         _old_value: UserOutPtr<u8>,
     ) -> SysResult {
-        info!("timerfd_settime");
+        debug!("timerfd_settime");
         Err(LxError::ENOSYS)
     }
 
     /// Get remaining time on a timer fd.
     pub fn sys_timerfd_gettime(&self, _fd: FileDesc, _curr_value: UserOutPtr<u8>) -> SysResult {
-        info!("timerfd_gettime");
+        debug!("timerfd_gettime");
         Err(LxError::ENOSYS)
     }
 
@@ -646,7 +646,7 @@ impl Syscall<'_> {
         _sizemask: usize,
         _flags: i32,
     ) -> SysResult {
-        info!("signalfd4");
+        debug!("signalfd4");
         Err(LxError::ENOSYS)
     }
 
@@ -654,7 +654,7 @@ impl Syscall<'_> {
     /// previous value.
     pub fn sys_umask(&self, mask: u32) -> SysResult {
         let old = self.linux_process().set_umask(mask);
-        info!("umask: mask={:#o} => old={:#o}", mask, old);
+        debug!("umask: mask={:#o} => old={:#o}", mask, old);
         Ok(old as usize)
     }
 
@@ -662,7 +662,7 @@ impl Syscall<'_> {
 
     /// Set process/user priority (nice value).
     pub fn sys_setpriority(&self, which: usize, who: usize, prio: i32) -> SysResult {
-        info!("setpriority: which={}, who={}, prio={}", which, who, prio);
+        debug!("setpriority: which={}, who={}, prio={}", which, who, prio);
         // Accept silently — single-priority system
         Ok(0)
     }
@@ -670,21 +670,21 @@ impl Syscall<'_> {
     /// Get process/user priority.
     /// Linux encodes nice as 20-nice, so default nice 0 returns 20.
     pub fn sys_getpriority(&self, which: usize, who: usize) -> SysResult {
-        info!("getpriority: which={}, who={}", which, who);
+        debug!("getpriority: which={}, who={}", which, who);
         // Return default nice value (20 = nice 0, per Linux convention)
         Ok(20)
     }
 
     /// Set scheduling parameters (priority).
     pub fn sys_sched_setparam(&self, pid: usize, _param: UserInPtr<u8>) -> SysResult {
-        info!("sched_setparam: pid={}", pid);
+        debug!("sched_setparam: pid={}", pid);
         // Only priority 0 is valid for SCHED_OTHER
         Ok(0)
     }
 
     /// Get scheduling parameters.
     pub fn sys_sched_getparam(&self, pid: usize, mut param: UserOutPtr<u32>) -> SysResult {
-        info!("sched_getparam: pid={}", pid);
+        debug!("sched_getparam: pid={}", pid);
         // Return sched_priority = 0 (only valid for SCHED_OTHER)
         param.write(0)?;
         Ok(0)
@@ -697,7 +697,7 @@ impl Syscall<'_> {
         policy: usize,
         _param: UserInPtr<u8>,
     ) -> SysResult {
-        info!("sched_setscheduler: pid={}, policy={}", pid, policy);
+        debug!("sched_setscheduler: pid={}, policy={}", pid, policy);
         const SCHED_OTHER: usize = 0;
         if policy != SCHED_OTHER {
             // Only SCHED_OTHER is supported
@@ -708,14 +708,14 @@ impl Syscall<'_> {
 
     /// Get scheduling policy.
     pub fn sys_sched_getscheduler(&self, pid: usize) -> SysResult {
-        info!("sched_getscheduler: pid={}", pid);
+        debug!("sched_getscheduler: pid={}", pid);
         // Always SCHED_OTHER (0)
         Ok(0)
     }
 
     /// Get maximum priority for a scheduling policy.
     pub fn sys_sched_get_priority_max(&self, policy: usize) -> SysResult {
-        info!("sched_get_priority_max: policy={}", policy);
+        debug!("sched_get_priority_max: policy={}", policy);
         const SCHED_OTHER: usize = 0;
         const SCHED_FIFO: usize = 1;
         const SCHED_RR: usize = 2;
@@ -728,7 +728,7 @@ impl Syscall<'_> {
 
     /// Get minimum priority for a scheduling policy.
     pub fn sys_sched_get_priority_min(&self, policy: usize) -> SysResult {
-        info!("sched_get_priority_min: policy={}", policy);
+        debug!("sched_get_priority_min: policy={}", policy);
         const SCHED_OTHER: usize = 0;
         const SCHED_FIFO: usize = 1;
         const SCHED_RR: usize = 2;
@@ -745,7 +745,7 @@ impl Syscall<'_> {
         pid: usize,
         mut interval: UserOutPtr<[u64; 2]>,
     ) -> SysResult {
-        info!("sched_rr_get_interval: pid={}", pid);
+        debug!("sched_rr_get_interval: pid={}", pid);
         // Return 100ms quantum (timespec: sec=0, nsec=100_000_000)
         interval.write([0, 100_000_000])?;
         Ok(0)
@@ -761,7 +761,7 @@ impl Syscall<'_> {
         let proc = self.zircon_process();
         let target_pid = if pid == 0 { proc.id() } else { pid as u64 };
         let new_pgid = if pgid == 0 { target_pid } else { pgid as u64 };
-        info!(
+        debug!(
             "setpgid: pid={} pgid={} => target_pid={} new_pgid={}",
             pid, pgid, target_pid, new_pgid
         );
@@ -784,7 +784,7 @@ impl Syscall<'_> {
             return Err(LxError::ENOSYS);
         }
         let pgid = self.linux_process().pgid();
-        info!("getpgid: pid={} => {}", pid, pgid);
+        debug!("getpgid: pid={} => {}", pid, pgid);
         Ok(pgid as usize)
     }
 
@@ -793,7 +793,7 @@ impl Syscall<'_> {
     pub fn sys_setsid(&self) -> SysResult {
         let pid = self.zircon_process().id();
         self.linux_process().setsid(pid);
-        info!("setsid: pid={} => sid={}", pid, pid);
+        debug!("setsid: pid={} => sid={}", pid, pid);
         Ok(pid as usize)
     }
 
@@ -806,7 +806,7 @@ impl Syscall<'_> {
             return Err(LxError::ENOSYS);
         }
         let sid = self.linux_process().session_id();
-        info!("getsid: pid={} => {}", pid, sid);
+        debug!("getsid: pid={} => {}", pid, sid);
         Ok(sid as usize)
     }
 
@@ -815,7 +815,7 @@ impl Syscall<'_> {
     /// group IDs to the user buffer.
     pub fn sys_getgroups(&self, size: i32, mut list: UserOutPtr<u32>) -> SysResult {
         let groups = self.linux_process().groups();
-        info!("getgroups: size={} ngroups={}", size, groups.len());
+        debug!("getgroups: size={} ngroups={}", size, groups.len());
         if size == 0 {
             return Ok(groups.len());
         }
@@ -832,7 +832,7 @@ impl Syscall<'_> {
     /// Set the supplementary group IDs. Requires privilege
     /// (euid == 0).
     pub fn sys_setgroups(&self, size: usize, list: UserInPtr<u32>) -> SysResult {
-        info!("setgroups: size={}", size);
+        debug!("setgroups: size={}", size);
         if self.linux_process().euid() != 0 {
             return Err(LxError::EPERM);
         }
@@ -890,7 +890,7 @@ impl Syscall<'_> {
         const SOCK_CLOEXEC: usize = 0o2000000;
         const SOCK_NONBLOCK: usize = 0o4000;
 
-        info!(
+        debug!(
             "socketpair: domain={}, type={:#x}, protocol={}",
             domain, socket_type, _protocol
         );
@@ -920,7 +920,7 @@ impl Syscall<'_> {
         let fd_a: i32 = proc.add_file(a)?.into();
         let fd_b: i32 = proc.add_file(b)?.into();
 
-        info!("socketpair: fd_a={}, fd_b={}", fd_a, fd_b);
+        debug!("socketpair: fd_a={}, fd_b={}", fd_a, fd_b);
         sv.write([fd_a, fd_b])?;
         Ok(0)
     }
@@ -935,7 +935,7 @@ impl Syscall<'_> {
         const SOCK_DGRAM: usize = 2;
         const SOCK_NONBLOCK: usize = 0o4000;
 
-        info!(
+        debug!(
             "socket: domain={}, type={:#x}, protocol={}",
             domain, socket_type, protocol
         );
@@ -963,13 +963,13 @@ impl Syscall<'_> {
 
         let proc = self.linux_process();
         let fd: i32 = proc.add_file(a)?.into();
-        info!("socket: fd={}", fd);
+        debug!("socket: fd={}", fd);
         Ok(fd as usize)
     }
 
     /// Shut down part of a full-duplex connection.
     pub fn sys_shutdown(&self, fd: FileDesc, how: usize) -> SysResult {
-        info!("shutdown: fd={:?}, how={}", fd, how);
+        debug!("shutdown: fd={:?}, how={}", fd, how);
         let proc = self.linux_process();
         // Just close the fd — full shutdown semantics not implemented.
         proc.close_file(fd)?;
@@ -983,7 +983,7 @@ impl Syscall<'_> {
         mut addr: UserOutPtr<u8>,
         mut addrlen: UserOutPtr<u32>,
     ) -> SysResult {
-        info!("getsockname: fd={:?}", fd);
+        debug!("getsockname: fd={:?}", fd);
         // Return AF_UNIX with empty path (unnamed socket).
         let sa_family: u16 = 1; // AF_UNIX
         addr.write_array(&sa_family.to_ne_bytes())?;
@@ -998,7 +998,7 @@ impl Syscall<'_> {
         mut addr: UserOutPtr<u8>,
         mut addrlen: UserOutPtr<u32>,
     ) -> SysResult {
-        info!("getpeername: fd={:?}", fd);
+        debug!("getpeername: fd={:?}", fd);
         let sa_family: u16 = 1; // AF_UNIX
         addr.write_array(&sa_family.to_ne_bytes())?;
         addrlen.write(2)?;
@@ -1014,7 +1014,7 @@ impl Syscall<'_> {
         _optval: UserInPtr<u8>,
         _optlen: usize,
     ) -> SysResult {
-        info!(
+        debug!(
             "setsockopt: fd={:?}, level={}, optname={}",
             fd, level, optname
         );
@@ -1031,7 +1031,7 @@ impl Syscall<'_> {
         mut optval: UserOutPtr<u32>,
         mut optlen: UserOutPtr<u32>,
     ) -> SysResult {
-        info!(
+        debug!(
             "getsockopt: fd={:?}, level={}, optname={}",
             fd, level, optname
         );
@@ -1077,7 +1077,7 @@ impl Syscall<'_> {
             .position(|&b| b == 0)
             .unwrap_or(path_bytes.len());
         let path = core::str::from_utf8(&path_bytes[..path_len]).map_err(|_| LxError::EINVAL)?;
-        info!("bind: fd={:?}, path={:?}", fd, path);
+        debug!("bind: fd={:?}, path={:?}", fd, path);
 
         // Verify fd is a socket
         let proc = self.linux_process();
@@ -1094,7 +1094,7 @@ impl Syscall<'_> {
 
     /// Mark a socket as passive (willing to accept connections).
     pub fn sys_listen(&self, fd: FileDesc, backlog: usize) -> SysResult {
-        info!("listen: fd={:?}, backlog={}", fd, backlog);
+        debug!("listen: fd={:?}, backlog={}", fd, backlog);
         // The listener was already created in bind(). listen() is a no-op.
         let proc = self.linux_process();
         let _file = proc.get_file_like(fd)?;
@@ -1110,7 +1110,7 @@ impl Syscall<'_> {
         mut addr: UserOutPtr<u8>,
         mut addrlen: UserOutPtr<u32>,
     ) -> SysResult {
-        info!("accept: fd={:?}", fd);
+        debug!("accept: fd={:?}", fd);
         let proc = self.linux_process();
         let _file = proc.get_file_like(fd)?;
 
@@ -1128,7 +1128,7 @@ impl Syscall<'_> {
                         let _ = addrlen.write(2);
                     }
                 }
-                info!("accept: new_fd={}", new_fd);
+                debug!("accept: new_fd={}", new_fd);
                 return Ok(new_fd as usize);
             }
         }
@@ -1150,7 +1150,7 @@ impl Syscall<'_> {
             .position(|&b| b == 0)
             .unwrap_or(path_bytes.len());
         let path = core::str::from_utf8(&path_bytes[..path_len]).map_err(|_| LxError::EINVAL)?;
-        info!("connect: fd={:?}, path={:?}", fd, path);
+        debug!("connect: fd={:?}, path={:?}", fd, path);
 
         let proc = self.linux_process();
         // Close the old unconnected socket end
@@ -1177,7 +1177,7 @@ impl Syscall<'_> {
         _dest_addr: UserInPtr<u8>,
         _addrlen: usize,
     ) -> SysResult {
-        info!("sendto: fd={:?}, len={}, flags={:#x}", fd, len, flags);
+        debug!("sendto: fd={:?}, len={}, flags={:#x}", fd, len, flags);
         let proc = self.linux_process();
         let file = proc.get_file_like(fd)?;
         let data = buf.read_array(len)?;
@@ -1198,7 +1198,7 @@ impl Syscall<'_> {
         mut src_addr: UserOutPtr<u8>,
         mut addrlen: UserOutPtr<u32>,
     ) -> SysResult {
-        info!("recvfrom: fd={:?}, len={}, flags={:#x}", fd, len, flags);
+        debug!("recvfrom: fd={:?}, len={}, flags={:#x}", fd, len, flags);
         let proc = self.linux_process();
         let file = proc.get_file_like(fd)?;
 
@@ -1226,7 +1226,7 @@ impl Syscall<'_> {
     ///
     /// Supports SCM_RIGHTS for passing file descriptors over AF_UNIX.
     pub fn sys_sendmsg(&self, fd: FileDesc, msg_ptr: UserInPtr<u8>, flags: usize) -> SysResult {
-        info!("sendmsg: fd={:?}, flags={:#x}", fd, flags);
+        debug!("sendmsg: fd={:?}, flags={:#x}", fd, flags);
 
         // Read the msghdr structure from userspace.
         // Layout (LP64): msg_name(8) + msg_namelen(4) + pad(4) +
@@ -1270,7 +1270,7 @@ impl Syscall<'_> {
         msg_ptr: UserInPtr<u8>,
         flags: usize,
     ) -> SysResult {
-        info!("recvmsg: fd={:?}, flags={:#x}", fd, flags);
+        debug!("recvmsg: fd={:?}, flags={:#x}", fd, flags);
 
         // Read the msghdr structure from userspace
         let hdr_bytes = msg_ptr.read_array(56)?;
