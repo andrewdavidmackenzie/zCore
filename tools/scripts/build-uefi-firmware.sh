@@ -151,7 +151,8 @@ build_native() {
     # shellcheck source=/dev/null
     source edk2/edksetup.sh
 
-    # Build RELEASE firmware -- match pftf CI flags, skip boot menu timeout
+    # Build RELEASE firmware -- match pftf CI flags, skip boot menu timeout,
+    # disable iSCSI (not needed for SD/PXE boot, saves enumeration time)
     build -a AARCH64 -t GCC -b RELEASE \
         -p edk2-platforms/Platform/RaspberryPi/RPi4/RPi4.dsc \
         --pcd "gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVendor=L\"${FW_VENDOR}\"" \
@@ -159,7 +160,7 @@ build_native() {
         --pcd "gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut=0" \
         -D SECURE_BOOT_ENABLE=TRUE \
         -D INCLUDE_TFTP_COMMAND=TRUE \
-        -D NETWORK_ISCSI_ENABLE=TRUE \
+        -D NETWORK_ISCSI_ENABLE=FALSE \
         -D SMC_PCI_SUPPORT=1
 
     # Copy result
@@ -200,7 +201,8 @@ make -C edk2/BaseTools -j"$(nproc)" >/dev/null 2>&1
 # Set up environment (edksetup.sh uses PYTHON_COMMAND)
 source edk2/edksetup.sh
 
-# Build firmware -- match pftf CI flags, skip boot menu timeout
+# Build firmware -- match pftf CI flags, skip boot menu timeout,
+# disable iSCSI (not needed for SD/PXE boot, saves enumeration time)
 echo "==> Building AARCH64 RELEASE firmware..."
 build -a AARCH64 -t GCC -b RELEASE \
     -p edk2-platforms/Platform/RaspberryPi/RPi4/RPi4.dsc \
@@ -209,7 +211,7 @@ build -a AARCH64 -t GCC -b RELEASE \
     --pcd gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut=0 \
     -D SECURE_BOOT_ENABLE=TRUE \
     -D INCLUDE_TFTP_COMMAND=TRUE \
-    -D NETWORK_ISCSI_ENABLE=TRUE \
+    -D NETWORK_ISCSI_ENABLE=FALSE \
     -D SMC_PCI_SUPPORT=1
 
 # Copy result
