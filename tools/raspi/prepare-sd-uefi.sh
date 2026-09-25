@@ -146,12 +146,7 @@ else
 fi
 
 # Suppress the GPU rainbow splash screen (shows before UEFI starts)
-if ! grep -q 'disable_splash' "$BOOT_DIR/config.txt"; then
-    echo "" >> "$BOOT_DIR/config.txt"
-    echo "# Suppress GPU rainbow splash screen" >> "$BOOT_DIR/config.txt"
-    echo "disable_splash=1" >> "$BOOT_DIR/config.txt"
-    echo "  Added disable_splash=1 to config.txt"
-fi
+echo "disable_splash=1" >> "$BOOT_DIR/config.txt"
 
 # Copy overlays directory if present
 if [ -d "$PFTF_CACHE/overlays" ]; then

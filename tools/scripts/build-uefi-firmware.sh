@@ -151,20 +151,15 @@ build_native() {
     # shellcheck source=/dev/null
     source edk2/edksetup.sh
 
-    # Build RELEASE firmware
-    # - Boot timeout 0: skip "ESC/F1/ENTER" prompt, boot immediately
-    # - Keep network stack for future PXE boot support
-    # - Disable iSCSI, TLS, Secure Boot (not needed, saves boot time)
+    # Build RELEASE firmware -- match pftf CI flags, skip boot menu timeout
     build -a AARCH64 -t GCC -b RELEASE \
         -p edk2-platforms/Platform/RaspberryPi/RPi4/RPi4.dsc \
         --pcd "gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVendor=L\"${FW_VENDOR}\"" \
         --pcd "gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVersionString=L\"${FW_VERSION}\"" \
         --pcd "gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut=0" \
-        -D SECURE_BOOT_ENABLE=FALSE \
+        -D SECURE_BOOT_ENABLE=TRUE \
         -D INCLUDE_TFTP_COMMAND=TRUE \
-        -D NETWORK_ISCSI_ENABLE=FALSE \
-        -D NETWORK_TLS_ENABLE=FALSE \
-        -D NETWORK_ALLOW_HTTP_CONNECTIONS=TRUE \
+        -D NETWORK_ISCSI_ENABLE=TRUE \
         -D SMC_PCI_SUPPORT=1
 
     # Copy result
@@ -205,21 +200,16 @@ make -C edk2/BaseTools -j"$(nproc)" >/dev/null 2>&1
 # Set up environment (edksetup.sh uses PYTHON_COMMAND)
 source edk2/edksetup.sh
 
-# Build firmware
-# - Boot timeout 0: skip "ESC/F1/ENTER" prompt, boot immediately
-# - Keep network stack for future PXE boot support
-# - Disable iSCSI, TLS, Secure Boot (not needed, saves boot time)
+# Build firmware -- match pftf CI flags, skip boot menu timeout
 echo "==> Building AARCH64 RELEASE firmware..."
 build -a AARCH64 -t GCC -b RELEASE \
     -p edk2-platforms/Platform/RaspberryPi/RPi4/RPi4.dsc \
     --pcd gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVendor=L"$FW_VENDOR" \
     --pcd gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVersionString=L"$FW_VERSION" \
     --pcd gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut=0 \
-    -D SECURE_BOOT_ENABLE=FALSE \
+    -D SECURE_BOOT_ENABLE=TRUE \
     -D INCLUDE_TFTP_COMMAND=TRUE \
-    -D NETWORK_ISCSI_ENABLE=FALSE \
-    -D NETWORK_TLS_ENABLE=FALSE \
-    -D NETWORK_ALLOW_HTTP_CONNECTIONS=TRUE \
+    -D NETWORK_ISCSI_ENABLE=TRUE \
     -D SMC_PCI_SUPPORT=1
 
 # Copy result
