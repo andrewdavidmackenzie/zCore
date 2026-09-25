@@ -74,6 +74,9 @@ fi
 # --- Step 2: Build the UEFI stub ---
 echo "==> Building UEFI stub for Pi 400..."
 cd "$PROJECT_DIR/tools/aarch64-uefi-stub"
+# Stub features are configured in targets/raspi400-uefi.toml (stub-features).
+# The xtask build handles this automatically via 'cargo xtask zcore-build'.
+# For the SD card script we build the stub directly with the same features.
 cargo build --release --target aarch64-unknown-uefi --features board-raspi400,uefi-console
 
 STUB_EFI="$PROJECT_DIR/tools/aarch64-uefi-stub/target/aarch64-unknown-uefi/release/aarch64-uefi-stub.efi"

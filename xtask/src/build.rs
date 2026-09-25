@@ -82,6 +82,8 @@ pub(crate) struct BuildConfig {
     target_json: PathBuf,
     /// Number of CPU cores from target config.
     cores: u8,
+    /// Features for the UEFI stub build (from target config stub-features).
+    stub_features: Vec<String>,
 }
 
 impl BuildConfig {
@@ -182,6 +184,7 @@ impl BuildConfig {
             features,
             target_json,
             cores: target.cores,
+            stub_features: target.stub_features,
         }
     }
 
@@ -427,14 +430,19 @@ impl QemuArgs {
                 let stub_efi = PROJECT_DIR
                     .join("tools/aarch64-uefi-stub/target/aarch64-unknown-uefi/release/aarch64-uefi-stub.efi");
                 println!("Building aarch64 UEFI stub...");
-                let status = std::process::Command::new("cargo")
+                let mut stub_cmd = std::process::Command::new("cargo");
+                stub_cmd
                     .args(["build", "--release"])
                     .arg("--manifest-path")
                     .arg(PROJECT_DIR.join("tools/aarch64-uefi-stub/Cargo.toml"))
                     .arg("--target")
-                    .arg("aarch64-unknown-uefi")
-                    .status()
-                    .expect("failed to build UEFI stub");
+                    .arg("aarch64-unknown-uefi");
+                if !build_config.stub_features.is_empty() {
+                    stub_cmd
+                        .arg("--features")
+                        .arg(build_config.stub_features.join(","));
+                }
+                let status = stub_cmd.status().expect("failed to build UEFI stub");
                 if !status.success() {
                     panic!("UEFI stub build failed");
                 }
