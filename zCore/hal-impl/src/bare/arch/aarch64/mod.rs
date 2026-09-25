@@ -138,15 +138,15 @@ fn parse_dtb(dtb_paddr: usize) {
     let dtb_vaddr = phys_to_virt(dtb_paddr);
     let dtb = unsafe {
         Dtb::from_raw_parts_filtered(dtb_vaddr as _, |e| {
-            log::warn!("DTB parse error: {:?}", e);
+            log::error!("DTB parse error: {:?}", e);
             false
         })
     };
     let dtb = match dtb {
         Ok(dtb) => dtb,
         Err(e) => {
-            log::warn!("DTB parse failed: {:?}", e);
-            log::warn!("Failed to parse DTB at {:#x}", dtb_paddr);
+            log::error!("DTB parse failed: {:?}", e);
+            log::error!("Failed to parse DTB at {:#x}", dtb_paddr);
             CMDLINE.init_once_by(KCONFIG.cmdline.to_string());
             return;
         }

@@ -10,6 +10,7 @@
 arch = "aarch64"
 linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker-uefi.ld"
 drivers = ["pl011-uart", "gic-400"]
+default-flavour = "linux"
 features = ["uefi-boot", "board-raspi400"]
 
 # No [qemu] section -- this is real hardware only.

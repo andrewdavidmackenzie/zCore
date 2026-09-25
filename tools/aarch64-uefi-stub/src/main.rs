@@ -542,18 +542,32 @@ fn load_initrd() -> (u64, u64) {
 
 fn build_page_tables() {
     unsafe {
-        // L1 identity: 0-1G device, 1-2G normal, 2-3G normal, 3-4G device
-        // The 4th GiB maps Pi 400 peripherals (0xFE201000 UART, 0xFF840000 GIC).
-        // Harmless on QEMU where the 4th GiB is unused.
-        PT_L1_ID.0[0] = block_desc(0x0000_0000, true);
-        PT_L1_ID.0[1] = block_desc(0x4000_0000, false);
-        PT_L1_ID.0[2] = block_desc(0x8000_0000, false);
-        PT_L1_ID.0[3] = block_desc(0xC000_0000, true);
-        // L1 high: same
-        PT_L1_HI.0[0] = block_desc(0x0000_0000, true);
-        PT_L1_HI.0[1] = block_desc(0x4000_0000, false);
-        PT_L1_HI.0[2] = block_desc(0x8000_0000, false);
-        PT_L1_HI.0[3] = block_desc(0xC000_0000, true);
+        // L1 identity and high mappings.
+        // QEMU virt: 0-1G has UART/GIC (device), 1-3G is RAM (normal).
+        // Pi 400:    0-3G is RAM (normal), 3-4G has peripherals (device).
+        // Use board feature to select the correct layout.
+        #[cfg(not(feature = "board-raspi400"))]
+        {
+            // QEMU: 0-1G device, 1-3G normal
+            PT_L1_ID.0[0] = block_desc(0x0000_0000, true);
+            PT_L1_ID.0[1] = block_desc(0x4000_0000, false);
+            PT_L1_ID.0[2] = block_desc(0x8000_0000, false);
+            PT_L1_HI.0[0] = block_desc(0x0000_0000, true);
+            PT_L1_HI.0[1] = block_desc(0x4000_0000, false);
+            PT_L1_HI.0[2] = block_desc(0x8000_0000, false);
+        }
+        #[cfg(feature = "board-raspi400")]
+        {
+            // Pi 400: 0-3G normal (RAM), 3-4G device (peripherals)
+            PT_L1_ID.0[0] = block_desc(0x0000_0000, false);
+            PT_L1_ID.0[1] = block_desc(0x4000_0000, false);
+            PT_L1_ID.0[2] = block_desc(0x8000_0000, false);
+            PT_L1_ID.0[3] = block_desc(0xC000_0000, true);
+            PT_L1_HI.0[0] = block_desc(0x0000_0000, false);
+            PT_L1_HI.0[1] = block_desc(0x4000_0000, false);
+            PT_L1_HI.0[2] = block_desc(0x8000_0000, false);
+            PT_L1_HI.0[3] = block_desc(0xC000_0000, true);
+        }
         // L0 tables
         PT_L0_LO.0[0] = table_desc(core::ptr::addr_of!(PT_L1_ID) as u64);
         PT_L0_HI.0[0] = table_desc(core::ptr::addr_of!(PT_L1_HI) as u64);
@@ -647,15 +661,52 @@ unsafe fn install_page_tables_and_jump(
     }
     asm!("dsb ish", "isb");
 
-    uart_puts("Jumping to kernel\n");
+    // Print current exception level (critical diagnostic)
+    let mut current_el: u64;
+    asm!("mrs {}, CurrentEL", out(reg) current_el);
+    let el = (current_el >> 2) & 3;
+    uart_puts("EL=");
+    uart_put_hex(el);
+    uart_puts(" TTBR0=0x");
+    uart_put_hex(ttbr0);
+    uart_puts(" TTBR1=0x");
+    uart_put_hex(ttbr1);
+    uart_puts("\nJump to 0x");
+    uart_put_hex(entry);
+    uart_puts("\n");
 
-    // Jump to kernel. rust_main_uefi(boot_info_addr) in x0.
-    asm!(
-        "br x1",
-        in("x0") boot_info_addr,
-        in("x1") entry,
-        options(noreturn),
-    );
+    // Drain UART FIFO before jumping
+    for _ in 0..1000 {
+        core::hint::spin_loop();
+    }
+
+    if el == 2 {
+        // Running at EL2 — must drop to EL1 to use TTBR1_EL1.
+        // Set up HCR_EL2 for EL1 Aarch64, then ERET to EL1.
+        asm!(
+            // HCR_EL2: RW bit (31) = 1 for AArch64 EL1
+            "mov x2, #(1 << 31)",
+            "msr hcr_el2, x2",
+            // SPSR_EL2: M[3:0] = 0b0101 = EL1h (EL1, SP_EL1)
+            "mov x2, #0x3C5",
+            "msr spsr_el2, x2",
+            // ELR_EL2 = kernel entry
+            "msr elr_el2, x1",
+            "isb",
+            "eret",
+            in("x0") boot_info_addr,
+            in("x1") entry,
+            options(noreturn),
+        );
+    } else {
+        // Already at EL1 — jump directly
+        asm!(
+            "br x1",
+            in("x0") boot_info_addr,
+            in("x1") entry,
+            options(noreturn),
+        );
+    }
 }
 
 // ── File loading ─────────────────────────────────────────────────────

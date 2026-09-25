@@ -85,7 +85,7 @@ fi
 # --- Step 3: Build the kernel ---
 echo "==> Building zCore kernel for Pi 400 UEFI..."
 cd "$PROJECT_DIR"
-cargo xtask zcore-build -m raspi400-uefi
+ZCORE_CMDLINE="LOG=info ROOTPROC=/bin/busybox?sh" cargo xtask zcore-build -m raspi400-uefi
 
 KERNEL_ELF="$PROJECT_DIR/target/raspi400-uefi/release/kernel"
 if [ ! -f "$KERNEL_ELF" ]; then
