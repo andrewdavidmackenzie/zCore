@@ -152,13 +152,19 @@ build_native() {
     source edk2/edksetup.sh
 
     # Build RELEASE firmware
+    # - Boot timeout 0: skip "ESC/F1/ENTER" prompt, boot immediately
+    # - Keep network stack for future PXE boot support
+    # - Disable iSCSI, TLS, Secure Boot (not needed, saves boot time)
     build -a AARCH64 -t GCC -b RELEASE \
         -p edk2-platforms/Platform/RaspberryPi/RPi4/RPi4.dsc \
         --pcd "gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVendor=L\"${FW_VENDOR}\"" \
         --pcd "gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVersionString=L\"${FW_VERSION}\"" \
-        -D SECURE_BOOT_ENABLE=TRUE \
+        --pcd "gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut=0" \
+        -D SECURE_BOOT_ENABLE=FALSE \
         -D INCLUDE_TFTP_COMMAND=TRUE \
-        -D NETWORK_ISCSI_ENABLE=TRUE \
+        -D NETWORK_ISCSI_ENABLE=FALSE \
+        -D NETWORK_TLS_ENABLE=FALSE \
+        -D NETWORK_ALLOW_HTTP_CONNECTIONS=TRUE \
         -D SMC_PCI_SUPPORT=1
 
     # Copy result
@@ -200,14 +206,20 @@ make -C edk2/BaseTools -j"$(nproc)" >/dev/null 2>&1
 source edk2/edksetup.sh
 
 # Build firmware
+# - Boot timeout 0: skip "ESC/F1/ENTER" prompt, boot immediately
+# - Keep network stack for future PXE boot support
+# - Disable iSCSI, TLS, Secure Boot (not needed, saves boot time)
 echo "==> Building AARCH64 RELEASE firmware..."
 build -a AARCH64 -t GCC -b RELEASE \
     -p edk2-platforms/Platform/RaspberryPi/RPi4/RPi4.dsc \
     --pcd gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVendor=L"$FW_VENDOR" \
     --pcd gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVersionString=L"$FW_VERSION" \
-    -D SECURE_BOOT_ENABLE=TRUE \
+    --pcd gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut=0 \
+    -D SECURE_BOOT_ENABLE=FALSE \
     -D INCLUDE_TFTP_COMMAND=TRUE \
-    -D NETWORK_ISCSI_ENABLE=TRUE \
+    -D NETWORK_ISCSI_ENABLE=FALSE \
+    -D NETWORK_TLS_ENABLE=FALSE \
+    -D NETWORK_ALLOW_HTTP_CONNECTIONS=TRUE \
     -D SMC_PCI_SUPPORT=1
 
 # Copy result
