@@ -55,6 +55,7 @@ magick "$TMPDIR/logo.png" \
 # ── Verify size ────────────────────────────────────────────────────────
 BMP_SIZE=$(wc -c < "$BMP_OUT" | tr -d ' ')
 if [ "$BMP_SIZE" -gt "$MAX_BMP_SIZE" ]; then
+    rm -f "$BMP_OUT"
     echo "ERROR: BMP is $BMP_SIZE bytes (max $MAX_BMP_SIZE). Reduce render width."
     exit 1
 fi

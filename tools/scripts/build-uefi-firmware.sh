@@ -206,9 +206,9 @@ source edk2/edksetup.sh
 echo "==> Building AARCH64 RELEASE firmware..."
 build -a AARCH64 -t GCC -b RELEASE \
     -p edk2-platforms/Platform/RaspberryPi/RPi4/RPi4.dsc \
-    --pcd gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVendor=L"$FW_VENDOR" \
-    --pcd gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVersionString=L"$FW_VERSION" \
-    --pcd gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut=0 \
+    --pcd "gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVendor=L\"${FW_VENDOR}\"" \
+    --pcd "gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVersionString=L\"${FW_VERSION}\"" \
+    --pcd "gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut=0" \
     -D SECURE_BOOT_ENABLE=TRUE \
     -D INCLUDE_TFTP_COMMAND=TRUE \
     -D NETWORK_ISCSI_ENABLE=FALSE \
