@@ -484,7 +484,13 @@ mod tests {
             });
         }
 
-        async_std::task::sleep(Duration::from_millis(20)).await;
+        // Poll until both waiters have entered the queue (bounded to avoid hanging).
+        for _ in 0..200 {
+            if futex.inner.lock().waiter_queue.len() == 2 {
+                break;
+            }
+            async_std::task::sleep(Duration::from_millis(1)).await;
+        }
         assert_eq!(futex.inner.lock().waiter_queue.len(), 2);
 
         // Requeue: wake 1, move 1 to requeue_futex, set new_requeue_owner

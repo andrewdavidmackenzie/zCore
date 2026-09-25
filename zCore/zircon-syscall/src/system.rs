@@ -63,16 +63,24 @@ impl Syscall<'_> {
         info!("system.powerctl: resource={:#x}, cmd={}", resource, cmd);
         let proc = self.thread.proc();
         // Validate: require root resource
-        proc.get_object_with_rights::<zircon_object::dev::Resource>(resource, Rights::empty())?;
+        let resource =
+            proc.get_object_with_rights::<zircon_object::dev::Resource>(resource, Rights::empty())?;
+        resource.validate(zircon_object::dev::ResourceKind::ROOT)?;
 
         match cmd {
-            POWERCTL_REBOOT | POWERCTL_REBOOT_BOOTLOADER | POWERCTL_REBOOT_RECOVERY => {
-                warn!("system.powerctl: reboot requested (cmd={})", cmd);
+            POWERCTL_REBOOT => {
+                warn!("system.powerctl: reboot requested");
+                hal_impl::cpu::reset();
+            }
+            POWERCTL_REBOOT_BOOTLOADER | POWERCTL_REBOOT_RECOVERY => {
+                warn!(
+                    "system.powerctl: bootloader/recovery reboot not distinct from normal reboot"
+                );
                 hal_impl::cpu::reset();
             }
             POWERCTL_SHUTDOWN => {
-                warn!("system.powerctl: shutdown requested");
-                hal_impl::cpu::reset();
+                warn!("system.powerctl: shutdown not yet implemented (no HAL shutdown)");
+                Err(ZxError::NOT_SUPPORTED)
             }
             _ => {
                 warn!("system.powerctl: unrecognized cmd {}", cmd);

@@ -390,10 +390,16 @@ impl VmAddressRegion {
         if !page_aligned(addr) || len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let len = roundup_pages(len);
+        let len = len
+            .checked_add(PAGE_SIZE - 1)
+            .ok_or(ZxError::OUT_OF_RANGE)?
+            & !(PAGE_SIZE - 1);
         let guard = self.inner.lock();
         let inner = guard.as_ref().ok_or(ZxError::BAD_STATE)?;
-        let end_addr = addr + len;
+        let end_addr = addr.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
+        if addr < self.addr || end_addr > self.end_addr() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
 
         // Verify the full range is covered by mappings (no gaps)
         let length: usize = inner
@@ -418,9 +424,13 @@ impl VmAddressRegion {
             }
             let map_start = addr.max(map.addr());
             let map_end = end_addr.min(map.end_addr());
-            let map_inner = map.inner.lock();
-            let vmo_offset = map_inner.vmo_offset + (map_start - map_inner.addr);
-            let op_len = map_end - map_start;
+            let (vmo_offset, op_len) = {
+                let map_inner = map.inner.lock();
+                (
+                    map_inner.vmo_offset + (map_start - map_inner.addr),
+                    map_end - map_start,
+                )
+            };
             match op {
                 VmarOpType::Commit => {
                     map.vmo.commit(vmo_offset, op_len)?;

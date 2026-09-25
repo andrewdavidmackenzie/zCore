@@ -390,7 +390,8 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         // Validate: require root resource
-        proc.get_object_with_rights::<zircon_object::dev::Resource>(resource, Rights::empty())?;
+        proc.get_object_with_rights::<zircon_object::dev::Resource>(resource, Rights::empty())?
+            .validate(zircon_object::dev::ResourceKind::ROOT)?;
         // Check job policy
         proc.check_policy(PolicyCondition::NewProfile)?;
         // Read and validate profile info
@@ -416,6 +417,9 @@ impl Syscall<'_> {
             "object.set_profile: target={:#x}, profile={:#x}, options={}",
             target, profile, options,
         );
+        if options != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         // Validate target is a thread with MANAGE_THREAD
         let _thread = proc.get_object_with_rights::<Thread>(target, Rights::MANAGE_THREAD)?;

@@ -23,7 +23,7 @@ impl Profile {
     ///
     /// Validates the flags and scheduling parameters.
     pub fn create(info: ProfileInfo) -> ZxResult<Arc<Self>> {
-        let flags = info.flags();
+        let flags = ProfileInfoFlags::from_bits(info.flags_raw).ok_or(ZxError::INVALID_ARGS)?;
         let has_priority = flags.contains(ProfileInfoFlags::PRIORITY);
         let has_deadline = flags.contains(ProfileInfoFlags::DEADLINE);
         let has_memory = flags.contains(ProfileInfoFlags::MEMORY_PRIORITY);
