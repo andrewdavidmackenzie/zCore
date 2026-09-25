@@ -12,9 +12,9 @@
 extern crate alloc;
 extern crate petal;
 use zx::sys::{
-    zx_channel_read, zx_handle_close, zx_object_wait_one, zx_process_create, zx_process_start,
-    zx_task_create_exception_channel, zx_thread_create, zx_vmar_map, zx_vmo_create,
-    zx_vmo_replace_as_executable, zx_vmo_write, HandleValue,
+    zx_channel_read, zx_handle_close, zx_nanosleep, zx_object_wait_one, zx_process_create,
+    zx_process_start, zx_task_create_exception_channel, zx_thread_create, zx_vmar_map,
+    zx_vmo_create, zx_vmo_replace_as_executable, zx_vmo_write, HandleValue,
 };
 
 const PAGE_SIZE: usize = 4096;
@@ -231,6 +231,11 @@ pub fn main() {
                     unsafe { zx_handle_close(h) };
                 }
             }
+            // Yield to let the child thread resume and execute.
+            // Closing the exception handle unblocks the child, but the
+            // cooperative scheduler may not poll the child's task until
+            // the parent yields.
+            unsafe { zx_nanosleep(0) };
             continue;
         }
 
