@@ -9,7 +9,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 
 .PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
-	petal-shell raspi400-build raspi400-run raspi400-sd \
+	petal-shell raspi400-build raspi400-run raspi400-sd raspi400-uefi-sd \
 	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon \
 	debug-qemu debug-gdb \
 	pre-push pre-push-quick demo-busybox demo-petal demo-zircon
@@ -146,6 +146,18 @@ raspi400-run: raspi400-build
 #   SD= is the mount point of the SD card's FAT32 partition.
 raspi400-sd: raspi400-build
 	@tools/raspi/prepare-sd.sh $(SD)
+ifeq ($(shell uname),Darwin)
+	@echo "==> Ejecting SD card..."
+	@disk=$$(diskutil info "$(SD)" 2>/dev/null | grep "Part of Whole" | awk '{print $$NF}'); \
+	 if [ -n "$$disk" ]; then diskutil eject "/dev/$$disk"; \
+	 else echo "Warning: could not determine disk for $(SD)"; fi
+endif
+
+# Prepare SD card for Pi 400 UEFI boot (pftf firmware + zCore UEFI stub).
+# Usage: make raspi400-uefi-sd SD=/Volumes/boot
+#   SD= is the mount point of the SD card's FAT32 partition.
+raspi400-uefi-sd:
+	@tools/raspi/prepare-sd-uefi.sh $(SD)
 ifeq ($(shell uname),Darwin)
 	@echo "==> Ejecting SD card..."
 	@disk=$$(diskutil info "$(SD)" 2>/dev/null | grep "Part of Whole" | awk '{print $$NF}'); \
