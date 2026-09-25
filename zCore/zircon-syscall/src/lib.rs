@@ -441,10 +441,7 @@ impl Syscall<'_> {
                 warn!("system.mexec_payload_get: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::SYSTEM_POWERCTL => {
-                warn!("system.powerctl: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::SYSTEM_POWERCTL => self.sys_system_powerctl(a0 as _, a1 as _, a2),
             Sys::FRAMEBUFFER_GET_INFO => {
                 warn!("framebuffer.get_info: deprecated and not implemented");
                 Err(ZxError::NOT_SUPPORTED)
