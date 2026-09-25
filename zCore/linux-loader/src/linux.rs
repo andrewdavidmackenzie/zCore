@@ -133,7 +133,7 @@ async fn run_user(thread: CurrentThread) {
         );
         let user_start = hal_impl::timer::timer_now();
         ctx.enter_uspace();
-        let user_time = hal_impl::timer::timer_now() - user_start;
+        let user_time = hal_impl::timer::timer_now().saturating_sub(user_start);
         debug!(
             "back from user: tid = {} pc = {:x} sp = {:x} trap = {:?}",
             thread.id(),
@@ -144,7 +144,7 @@ async fn run_user(thread: CurrentThread) {
         // handle trap/interrupt/syscall
         let sys_start = hal_impl::timer::timer_now();
         let trap_result = handle_user_trap(&thread, ctx).await;
-        let sys_time = hal_impl::timer::timer_now() - sys_start;
+        let sys_time = hal_impl::timer::timer_now().saturating_sub(sys_start);
 
         // Accumulate CPU time on the thread.
         {

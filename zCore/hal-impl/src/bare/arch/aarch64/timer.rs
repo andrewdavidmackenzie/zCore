@@ -11,9 +11,14 @@ use tock_registers::interfaces::{Readable, Writeable};
 
 pub fn timer_now() -> Duration {
     unsafe { barrier::isb(barrier::SY) }
-    let cur_cnt = CNTPCT_EL0.get() * 1_000_000_000;
+    let cnt = CNTPCT_EL0.get();
     let freq = CNTFRQ_EL0.get();
-    Duration::from_nanos(cur_cnt / freq)
+    // Divide first to avoid u64 overflow (cnt * 1_000_000_000 overflows
+    // after ~341s at 54 MHz). Compute the remainder separately to
+    // preserve nanosecond precision.
+    let secs = cnt / freq;
+    let rem = cnt % freq;
+    Duration::new(secs, (rem * 1_000_000_000 / freq) as u32)
 }
 
 pub fn set_next_trigger() {
