@@ -8,6 +8,30 @@ use {
     lock::Mutex,
 };
 
+/// Operations for `vmar_op_range`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum VmarOpType {
+    /// Commit memory pages (allocate physical frames) for mapped VMOs.
+    Commit = 1,
+    /// Decommit memory pages (release physical frames) for mapped VMOs.
+    Decommit = 2,
+    /// Populate page table entries for committed pages (performance hint).
+    MapRange = 4,
+}
+
+impl VmarOpType {
+    /// Convert from raw u32 op code to `VmarOpType`.
+    pub fn try_from_raw(op: u32) -> ZxResult<Self> {
+        match op {
+            1 => Ok(Self::Commit),
+            2 => Ok(Self::Decommit),
+            4 => Ok(Self::MapRange),
+            _ => Err(ZxError::INVALID_ARGS),
+        }
+    }
+}
+
 bitflags! {
     /// Creation flags for VmAddressRegion.
     pub struct VmarFlags: u32 {
@@ -353,6 +377,65 @@ impl VmAddressRegion {
                 let end_index = pages(end_addr.min(map.end_addr()) - map.addr());
                 map.protect(flags, start_index, end_index);
             });
+        Ok(())
+    }
+
+    /// Perform an operation on VMOs mapped within the given address range.
+    ///
+    /// Supported operations:
+    /// - `Commit`: commit pages (allocate physical memory)
+    /// - `Decommit`: decommit pages (release physical memory)
+    /// - `MapRange`: populate page table entries for committed pages
+    pub fn op_range(&self, op: VmarOpType, addr: usize, len: usize) -> ZxResult {
+        if !page_aligned(addr) || len == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let len = roundup_pages(len);
+        let guard = self.inner.lock();
+        let inner = guard.as_ref().ok_or(ZxError::BAD_STATE)?;
+        let end_addr = addr + len;
+
+        // Verify the full range is covered by mappings (no gaps)
+        let length: usize = inner
+            .mappings
+            .iter()
+            .filter_map(|map| {
+                if map.end_addr() > addr && map.addr() < end_addr {
+                    Some(end_addr.min(map.end_addr()) - addr.max(map.addr()))
+                } else {
+                    None
+                }
+            })
+            .sum();
+        if length != len {
+            return Err(ZxError::BAD_STATE);
+        }
+
+        // Apply the operation to each overlapping mapping's VMO
+        for map in inner.mappings.iter() {
+            if map.end_addr() <= addr || map.addr() >= end_addr {
+                continue;
+            }
+            let map_start = addr.max(map.addr());
+            let map_end = end_addr.min(map.end_addr());
+            let map_inner = map.inner.lock();
+            let vmo_offset = map_inner.vmo_offset + (map_start - map_inner.addr);
+            let op_len = map_end - map_start;
+            match op {
+                VmarOpType::Commit => {
+                    map.vmo.commit(vmo_offset, op_len)?;
+                }
+                VmarOpType::Decommit => {
+                    map.vmo.decommit(vmo_offset, op_len)?;
+                }
+                VmarOpType::MapRange => {
+                    // Populate page table entries for committed pages.
+                    // This is a hint to the kernel to pre-populate PTEs.
+                    // For simplicity, commit the pages (which maps them).
+                    map.vmo.commit(vmo_offset, op_len)?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1435,5 +1518,56 @@ mod tests {
         let bad_addr = addr + 0x10000;
         let mut bad_buf = [0u8; 4];
         assert!(root_vmar.read_memory(bad_addr, &mut bad_buf).is_err());
+    }
+
+    #[test]
+    fn op_range_validation() {
+        let vmar = VmAddressRegion::new_root();
+
+        // Zero size should fail with INVALID_ARGS
+        assert_eq!(
+            vmar.op_range(VmarOpType::Commit, vmar.addr(), 0),
+            Err(ZxError::INVALID_ARGS)
+        );
+
+        // Unaligned address should fail with INVALID_ARGS
+        assert_eq!(
+            vmar.op_range(VmarOpType::Commit, vmar.addr() + 1, PAGE_SIZE),
+            Err(ZxError::INVALID_ARGS)
+        );
+
+        // Op on unmapped range should fail with BAD_STATE
+        assert_eq!(
+            vmar.op_range(VmarOpType::Commit, vmar.addr(), PAGE_SIZE),
+            Err(ZxError::BAD_STATE)
+        );
+    }
+
+    #[test]
+    #[ignore] // Requires working page table (fails in libos test mode on macOS)
+    fn op_range_commit_decommit() {
+        let vmar = VmAddressRegion::new_root();
+        let vmo = VmObject::new_paged(4);
+        let flags = MMUFlags::READ | MMUFlags::WRITE;
+
+        // Map VMO at offset 0 (same pattern as the existing `map` test)
+        vmar.map_at(0, vmo, 0, PAGE_SIZE * 4, flags)
+            .expect("failed to map");
+        let mapped_addr = vmar.addr();
+
+        // Commit should succeed
+        assert!(vmar
+            .op_range(VmarOpType::Commit, mapped_addr, PAGE_SIZE * 2)
+            .is_ok());
+
+        // Decommit should succeed
+        assert!(vmar
+            .op_range(VmarOpType::Decommit, mapped_addr, PAGE_SIZE * 2)
+            .is_ok());
+
+        // MapRange should succeed
+        assert!(vmar
+            .op_range(VmarOpType::MapRange, mapped_addr, PAGE_SIZE)
+            .is_ok());
     }
 }

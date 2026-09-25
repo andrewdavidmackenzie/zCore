@@ -211,6 +211,34 @@ impl Syscall<'_> {
         Ok(())
     }
 
+    /// Perform an operation on VMOs mapped within the given address range.
+    pub fn sys_vmar_op_range(
+        &self,
+        handle_value: HandleValue,
+        op: u32,
+        addr: u64,
+        size: u64,
+        _buffer: usize,
+        buffer_size: usize,
+    ) -> ZxResult {
+        let op = VmarOpType::try_from_raw(op)?;
+        info!(
+            "vmar.op_range: handle={:#x}, op={:?}, addr={:#x}, size={:#x}",
+            handle_value, op, addr, size,
+        );
+        if buffer_size != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let proc = self.thread.proc();
+        let required_rights = match op {
+            VmarOpType::Commit | VmarOpType::Decommit => Rights::WRITE,
+            VmarOpType::MapRange => Rights::READ,
+        };
+        let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, required_rights)?;
+        vmar.op_range(op, addr as usize, size as usize)?;
+        Ok(())
+    }
+
     /// Unmap virtual memory pages.
     pub fn sys_vmar_unmap(&self, handle_value: HandleValue, addr: usize, len: usize) -> ZxResult {
         info!(

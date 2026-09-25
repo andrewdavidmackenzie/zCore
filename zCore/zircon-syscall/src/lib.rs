@@ -407,8 +407,7 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::VMAR_OP_RANGE => {
-                warn!("vmar.op_range: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+                self.sys_vmar_op_range(a0 as _, a1 as _, a2 as _, a3 as _, a4, a5)
             }
             Sys::PCI_RESET_DEVICE => {
                 warn!("pci.reset_device: not yet implemented");
