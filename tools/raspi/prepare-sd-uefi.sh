@@ -129,12 +129,16 @@ rm -f "$BOOT_DIR/start4.elf.old" "$BOOT_DIR/fixup4.dat.old"
 # --- Step 5: Copy pftf firmware to SD card ---
 echo "==> Copying pftf UEFI firmware to $BOOT_DIR..."
 
-# Core pftf files that replace Pi's native boot chain
-for f in config.txt fixup4.dat start4.elf bcm2711-rpi-400.dtb; do
+# Pi GPU firmware and DTB from pftf release
+for f in fixup4.dat start4.elf bcm2711-rpi-400.dtb; do
     if [ -f "$PFTF_CACHE/$f" ]; then
         cp "$PFTF_CACHE/$f" "$BOOT_DIR/"
     fi
 done
+
+# Use our own config.txt (includes disable_splash, fixed core_freq, etc.)
+cp "$SCRIPT_DIR/config-uefi.txt" "$BOOT_DIR/config.txt"
+echo "  Installed Zirconia config.txt"
 
 # Copy RPI_EFI.fd: prefer custom-built (Zirconia logo) over stock pftf
 if [ "$USE_CUSTOM_FW" = "1" ]; then
@@ -143,14 +147,6 @@ if [ "$USE_CUSTOM_FW" = "1" ]; then
 else
     cp "$PFTF_CACHE/RPI_EFI.fd" "$BOOT_DIR/RPI_EFI.fd"
     echo "  Installed stock RPI_EFI.fd (RPi boot logo)"
-fi
-
-# Suppress the GPU rainbow splash screen (shows before UEFI starts)
-if ! grep -q 'disable_splash' "$BOOT_DIR/config.txt"; then
-    echo "" >> "$BOOT_DIR/config.txt"
-    echo "# Suppress GPU rainbow splash screen" >> "$BOOT_DIR/config.txt"
-    echo "disable_splash=1" >> "$BOOT_DIR/config.txt"
-    echo "  Added disable_splash=1 to config.txt"
 fi
 
 # Copy overlays directory if present
