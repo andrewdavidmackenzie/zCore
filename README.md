@@ -1,12 +1,16 @@
-# zCore
+<p align="center">
+  <img src="docs/img/zirconia-logo.svg" alt="Zirconia logo" width="480">
+</p>
 
-[![CI](https://github.com/rcore-os/zCore/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/rcore-os/zCore/actions)
-[![Docs](https://img.shields.io/badge/docs-pages-green)](https://andrewdavidmackenzie.github.io/zCore/)
-[![Coverage Status](https://coveralls.io/repos/github/rcore-os/zCore/badge.svg?branch=master)](https://coveralls.io/github/rcore-os/zCore?branch=master)
-[![issue](https://img.shields.io/github/issues/rcore-os/zCore)](https://github.com/rcore-os/zCore/issues)
-[![forks](https://img.shields.io/github/forks/rcore-os/zCore)](https://github.com/rcore-os/zCore/fork)
-![stars](https://img.shields.io/github/stars/rcore-os/zCore)
-![license](https://img.shields.io/github/license/rcore-os/zCore)
+<p align="center">
+  <a href="https://github.com/rcore-os/zCore/actions"><img src="https://github.com/rcore-os/zCore/actions/workflows/build.yml/badge.svg?branch=master" alt="CI"></a>
+  <a href="https://andrewdavidmackenzie.github.io/zCore/"><img src="https://img.shields.io/badge/docs-pages-green" alt="Docs"></a>
+  <a href="https://coveralls.io/github/rcore-os/zCore?branch=master"><img src="https://coveralls.io/repos/github/rcore-os/zCore/badge.svg?branch=master" alt="Coverage Status"></a>
+  <a href="https://github.com/rcore-os/zCore/issues"><img src="https://img.shields.io/github/issues/rcore-os/zCore" alt="Issues"></a>
+  <a href="https://github.com/rcore-os/zCore/fork"><img src="https://img.shields.io/github/forks/rcore-os/zCore" alt="Forks"></a>
+  <img src="https://img.shields.io/github/stars/rcore-os/zCore" alt="Stars">
+  <img src="https://img.shields.io/github/license/rcore-os/zCore" alt="License">
+</p>
 
 An OS kernel based on Zircon with Linux compatibility.
 

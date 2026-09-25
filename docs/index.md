@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="img/zirconia-logo.svg" alt="Zirconia logo" width="480">
+</p>
+
 # zCore Documentation Index
 
 ## Overview

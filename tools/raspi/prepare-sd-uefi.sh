@@ -28,6 +28,11 @@
 # a standard UEFI implementation (EDK2). The Pi GPU loads the pftf
 # RPI_EFI.fd as the "kernel", which then provides UEFI services.
 # Our UEFI stub is installed as the default UEFI boot application.
+#
+# Firmware selection (RPI_EFI.fd):
+#   1. Custom-built firmware with Zirconia logo (target/pftf-firmware/RPI_EFI.fd)
+#      Built via: make uefi-firmware (or tools/scripts/build-uefi-firmware.sh)
+#   2. Fallback: stock pftf release download (RPi logo)
 
 set -euo pipefail
 
@@ -36,6 +41,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PFTF_VERSION="v1.53"  # Stable pftf release (2026-08-31)
 PFTF_CACHE="$PROJECT_DIR/target/pftf-firmware-${PFTF_VERSION}"
+CUSTOM_FW="$PROJECT_DIR/target/pftf-firmware/RPI_EFI.fd"
 
 if [ ! -d "$BOOT_DIR" ]; then
     echo "ERROR: $BOOT_DIR does not exist"
@@ -57,7 +63,18 @@ fi
 
 echo "==> Preparing Pi 400 UEFI SD card at: $BOOT_DIR"
 
-# --- Step 1: Download pftf/RPi4 UEFI firmware ---
+# --- Step 1: Obtain pftf/RPi4 UEFI firmware ---
+# Prefer custom-built firmware (with Zirconia boot logo) if available.
+# Fall back to downloading the stock pftf release (with RPi logo).
+if [ -f "$CUSTOM_FW" ]; then
+    echo "==> Using custom UEFI firmware (Zirconia logo): $CUSTOM_FW"
+    USE_CUSTOM_FW=1
+else
+    echo "==> Custom firmware not found. Using stock pftf release (RPi logo)."
+    echo "    To build custom firmware: make uefi-firmware"
+    USE_CUSTOM_FW=0
+fi
+
 if [ ! -f "$PFTF_CACHE/RPI_EFI.fd" ]; then
     echo "==> Downloading pftf/RPi4 UEFI firmware ($PFTF_VERSION)..."
     mkdir -p "$PFTF_CACHE"
@@ -113,11 +130,20 @@ rm -f "$BOOT_DIR/start4.elf.old" "$BOOT_DIR/fixup4.dat.old"
 echo "==> Copying pftf UEFI firmware to $BOOT_DIR..."
 
 # Core pftf files that replace Pi's native boot chain
-for f in RPI_EFI.fd config.txt fixup4.dat start4.elf bcm2711-rpi-400.dtb; do
+for f in config.txt fixup4.dat start4.elf bcm2711-rpi-400.dtb; do
     if [ -f "$PFTF_CACHE/$f" ]; then
         cp "$PFTF_CACHE/$f" "$BOOT_DIR/"
     fi
 done
+
+# Copy RPI_EFI.fd: prefer custom-built (Zirconia logo) over stock pftf
+if [ "$USE_CUSTOM_FW" = "1" ]; then
+    cp "$CUSTOM_FW" "$BOOT_DIR/RPI_EFI.fd"
+    echo "  Installed custom RPI_EFI.fd (Zirconia boot logo)"
+else
+    cp "$PFTF_CACHE/RPI_EFI.fd" "$BOOT_DIR/RPI_EFI.fd"
+    echo "  Installed stock RPI_EFI.fd (RPi boot logo)"
+fi
 
 # Copy overlays directory if present
 if [ -d "$PFTF_CACHE/overlays" ]; then
@@ -155,7 +181,11 @@ echo "Files on $BOOT_DIR:"
 ls -la "$BOOT_DIR/"
 echo ""
 echo "SD card layout:"
-echo "  /RPI_EFI.fd              -- pftf UEFI firmware"
+if [ "$USE_CUSTOM_FW" = "1" ]; then
+    echo "  /RPI_EFI.fd              -- custom UEFI firmware (Zirconia logo)"
+else
+    echo "  /RPI_EFI.fd              -- pftf UEFI firmware (RPi logo)"
+fi
 echo "  /config.txt              -- Pi GPU boot config (loads RPI_EFI.fd)"
 echo "  /start4.elf, fixup4.dat  -- Pi GPU firmware"
 echo "  /EFI/BOOT/BOOTAA64.EFI  -- zCore UEFI stub"
@@ -166,7 +196,7 @@ echo "Next steps:"
 echo "  1. Eject the SD card safely"
 echo "  2. Insert into Pi 400"
 echo "  3. Connect serial console (GPIO 14/15 or USB-serial)"
-echo "  4. Power on -- pftf UEFI will start, then auto-boot zCore"
+echo "  4. Power on -- UEFI will start, then auto-boot zCore"
 echo ""
-echo "To enter UEFI setup: press ESC during the Pi logo splash screen."
+echo "To enter UEFI setup: press ESC during the boot logo splash screen."
 echo "UEFI boot order can be configured from the setup menu."
