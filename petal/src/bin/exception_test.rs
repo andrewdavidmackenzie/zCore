@@ -12,9 +12,9 @@
 extern crate alloc;
 extern crate petal;
 use zx::sys::{
-    zx_channel_read, zx_handle_close, zx_nanosleep, zx_object_wait_one, zx_process_create,
-    zx_process_start, zx_task_create_exception_channel, zx_thread_create, zx_vmar_map,
-    zx_vmo_create, zx_vmo_replace_as_executable, zx_vmo_write, HandleValue,
+    zx_channel_read, zx_clock_get, zx_handle_close, zx_nanosleep, zx_object_wait_one,
+    zx_process_create, zx_process_start, zx_task_create_exception_channel, zx_thread_create,
+    zx_vmar_map, zx_vmo_create, zx_vmo_replace_as_executable, zx_vmo_write, HandleValue,
 };
 
 const PAGE_SIZE: usize = 4096;
@@ -231,11 +231,14 @@ pub fn main() {
                     unsafe { zx_handle_close(h) };
                 }
             }
-            // Yield to let the child thread resume and execute.
+            // Sleep briefly to let the child thread resume and execute.
             // Closing the exception handle unblocks the child, but the
-            // cooperative scheduler may not poll the child's task until
-            // the parent yields.
-            unsafe { zx_nanosleep(0) };
+            // cooperative scheduler needs a timer interrupt to switch
+            // tasks. nanosleep(0) may not trigger one on all QEMU
+            // versions; use a short real sleep to ensure a timer tick.
+            let mut now: i64 = 0;
+            unsafe { zx_clock_get(0, &mut now) };
+            unsafe { zx_nanosleep(now + 50_000_000) }; // +50ms
             continue;
         }
 
