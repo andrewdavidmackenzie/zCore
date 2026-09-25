@@ -145,7 +145,7 @@ raspi400-run: raspi400-build
 # Usage: make raspi400-sd SD=/Volumes/boot
 #   SD= is the mount point of the SD card's FAT32 partition.
 raspi400-sd: raspi400-build
-	@tools/raspi/prepare-sd.sh $(SD)
+	@tools/raspi/prepare-sd.sh "$(SD)"
 ifeq ($(shell uname),Darwin)
 	@echo "==> Ejecting SD card..."
 	@disk=$$(diskutil info "$(SD)" 2>/dev/null | grep "Part of Whole" | awk '{print $$NF}'); \
@@ -157,7 +157,7 @@ endif
 # Usage: make raspi400-uefi-sd SD=/Volumes/boot
 #   SD= is the mount point of the SD card's FAT32 partition.
 raspi400-uefi-sd:
-	@tools/raspi/prepare-sd-uefi.sh $(SD)
+	@tools/raspi/prepare-sd-uefi.sh "$(SD)"
 ifeq ($(shell uname),Darwin)
 	@echo "==> Ejecting SD card..."
 	@disk=$$(diskutil info "$(SD)" 2>/dev/null | grep "Part of Whole" | awk '{print $$NF}'); \

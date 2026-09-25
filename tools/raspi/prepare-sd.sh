@@ -70,9 +70,9 @@ for f in RPI_EFI.fd kernel; do
         rm -f "$BOOT_DIR/$f"
     fi
 done
-if [ -d "$BOOT_DIR/EFI" ]; then
-    echo "  Removing EFI/ directory (UEFI boot leftover)"
-    rm -rf "$BOOT_DIR/EFI"
+if [ -f "$BOOT_DIR/EFI/BOOT/BOOTAA64.EFI" ]; then
+    echo "  Removing EFI/BOOT/BOOTAA64.EFI (UEFI boot leftover)"
+    rm -f "$BOOT_DIR/EFI/BOOT/BOOTAA64.EFI"
 fi
 
 # --- Step 4: Copy files to SD card ---
