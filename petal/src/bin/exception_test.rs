@@ -94,11 +94,15 @@ pub fn main() {
     // Write breakpoint instruction to the VMO before making executable
     // aarch64: brk #0 = 0xd4200000
     // x86_64: int3 = 0xcc
+    // riscv64: ebreak = 0x00100073
     #[cfg(target_arch = "aarch64")]
     let brk_instr: [u8; 4] = [0x00, 0x00, 0x20, 0xd4]; // brk #0
 
     #[cfg(target_arch = "x86_64")]
     let brk_instr: [u8; 1] = [0xcc]; // int3
+
+    #[cfg(target_arch = "riscv64")]
+    let brk_instr: [u8; 4] = [0x73, 0x00, 0x10, 0x00]; // ebreak
 
     let status = unsafe { zx_vmo_write(code_vmo, brk_instr.as_ptr(), 0, brk_instr.len()) };
     check(status, b"vmo_write brk");

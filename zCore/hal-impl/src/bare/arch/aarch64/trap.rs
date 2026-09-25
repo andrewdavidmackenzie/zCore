@@ -7,7 +7,7 @@ use trapframe::TrapFrame;
 
 /// Get [`TrapReason`] from aarch64 ESR value.
 pub fn trap_reason_from(esr: usize) -> TrapReason {
-    use crate::Syndrome;
+    use crate::{Fault, Syndrome};
     use cortex_a::registers::ESR_EL1;
 
     let info = Info {
@@ -30,9 +30,11 @@ pub fn trap_reason_from(esr: usize) -> TrapReason {
                 }
                 TrapReason::PageFault(FAR_EL1.get() as _, flags)
             }
-            Syndrome::InstructionAbort { kind: _, level: _ } => {
-                TrapReason::PageFault(FAR_EL1.get() as _, MMUFlags::EXECUTE | MMUFlags::USER)
-            }
+            Syndrome::InstructionAbort {
+                kind: Fault::Translation | Fault::AccessFlag | Fault::Permission,
+                level: _,
+            } => TrapReason::PageFault(FAR_EL1.get() as _, MMUFlags::EXECUTE | MMUFlags::USER),
+            Syndrome::InstructionAbort { .. } => TrapReason::GeneralFault(esr as usize),
             Syndrome::PCAlignmentFault | Syndrome::SpAlignmentFault => TrapReason::UnalignedAccess,
             _ => TrapReason::GeneralFault(esr as usize),
         },
