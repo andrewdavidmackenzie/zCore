@@ -101,41 +101,41 @@ mod tests {
     use super::*;
     use hal_impl::timer::timer_now;
 
-    #[test]
-    fn one_shot() {
+    #[async_std::test]
+    async fn one_shot() {
         let timer = Timer::one_shot(timer_now() + Duration::from_millis(15));
-        std::thread::sleep(Duration::from_millis(10));
+        async_std::task::sleep(Duration::from_millis(10)).await;
         assert_eq!(timer.signal(), Signal::empty());
 
-        std::thread::sleep(Duration::from_millis(20));
+        async_std::task::sleep(Duration::from_millis(20)).await;
         assert_eq!(timer.signal(), Signal::SIGNALED);
     }
 
-    #[test]
-    fn set() {
+    #[async_std::test]
+    async fn set() {
         let timer = Timer::new();
         timer.set(timer_now() + Duration::from_millis(10), Duration::default());
         timer.set(timer_now() + Duration::from_millis(20), Duration::default());
 
-        std::thread::sleep(Duration::from_millis(10));
+        async_std::task::sleep(Duration::from_millis(10)).await;
         assert_eq!(timer.signal(), Signal::empty());
 
-        std::thread::sleep(Duration::from_millis(15));
+        async_std::task::sleep(Duration::from_millis(15)).await;
         assert_eq!(timer.signal(), Signal::SIGNALED);
 
         timer.set(timer_now() + Duration::from_millis(10), Duration::default());
         assert_eq!(timer.signal(), Signal::empty());
     }
 
-    #[test]
-    fn cancel() {
+    #[async_std::test]
+    async fn cancel() {
         let timer = Timer::new();
         timer.set(timer_now() + Duration::from_millis(10), Duration::default());
 
-        std::thread::sleep(Duration::from_millis(5));
+        async_std::task::sleep(Duration::from_millis(5)).await;
         timer.cancel();
 
-        std::thread::sleep(Duration::from_millis(50));
+        async_std::task::sleep(Duration::from_millis(50)).await;
         assert_eq!(timer.signal(), Signal::empty());
     }
 }

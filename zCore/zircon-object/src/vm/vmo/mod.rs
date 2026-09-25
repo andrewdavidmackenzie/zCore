@@ -563,4 +563,22 @@ mod tests {
         vmo.read(0, &mut buf).unwrap();
         assert_eq!(&buf, &[0, 1, 2, 3]);
     }
+
+    #[test]
+    fn create_contiguous() {
+        // Create a 2-page contiguous VMO
+        let vmo = VmObject::new_contiguous(2, PAGE_SIZE_LOG2).unwrap();
+        assert!(!vmo.resizable);
+
+        // Should be readable/writable like any VMO
+        read_write(&vmo);
+
+        // Size should be 2 pages
+        assert_eq!(vmo.len(), PAGE_SIZE * 2);
+
+        // get_info should report the VMO as contiguous
+        let info = vmo.get_info();
+        assert!(info.flags.contains(VmoInfoFlags::CONTIGUOUS));
+        assert!(!info.flags.contains(VmoInfoFlags::RESIZABLE));
+    }
 }

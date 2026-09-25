@@ -627,7 +627,7 @@ impl DummyObject {
 mod tests {
     use super::*;
     use async_std::sync::Barrier;
-    use std::time::Duration;
+    use core::time::Duration;
 
     #[async_std::test]
     async fn wait() {

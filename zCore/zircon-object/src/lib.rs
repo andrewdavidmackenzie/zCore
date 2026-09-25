@@ -5,7 +5,7 @@
 //! - `elf`: Enables `zircon_object::util::elf_loader`.
 //! - `hypervisor`: Enables `zircon_object::hypervisor` (`Guest` and `Vcpu`).
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![deny(warnings)]
 // The `impl_downcast!` macro from `downcast-rs` triggers this lint; we cannot fix upstream.
 #![allow(clippy::multiple_bound_locations)]
