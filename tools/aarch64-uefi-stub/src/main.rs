@@ -67,6 +67,75 @@ fn uart_put_hex(val: u64) {
         uart_putc(hex[((val >> (i * 4)) & 0xf) as usize]);
     }
 }
+
+// ── UEFI keyboard prompt ────────────────────────────────────────────
+
+/// Display a prompt and read keyboard input via UEFI ConIn.
+/// This works with the Pi 400's built-in keyboard (or any USB keyboard)
+/// because the UEFI firmware provides USB HID support via boot services.
+/// Must be called BEFORE exit_boot_services().
+#[cfg(feature = "uefi-console")]
+fn keyboard_prompt() {
+    use uefi::proto::console::text::Key;
+
+    uart_puts("\n[UEFI keyboard] Press Enter to boot (or type to test input):\n> ");
+
+    // Also print to UEFI console (HDMI output)
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.output_string(
+            uefi::cstr16!("\r\n[zCore] Press Enter to boot (or type to test input):\r\n> "),
+        );
+    });
+
+    uefi::system::with_stdin(|stdin| {
+        let _ = stdin.reset(false);
+        loop {
+            // Wait for a key event
+            if let Ok(event) = stdin.wait_for_key_event() {
+                let events = [event];
+                let _ = uefi::boot::wait_for_event(&events);
+            }
+
+            // Read the key
+            match stdin.read_key() {
+                Ok(Some(Key::Printable(ch))) => {
+                    let c = u16::from(ch);
+                    if c == b'\r' as u16 || c == b'\n' as u16 {
+                        uart_puts("\n");
+                        // Echo newline on HDMI
+                        uefi::system::with_stdout(|stdout| {
+                            let _ = stdout.output_string(uefi::cstr16!("\r\n"));
+                        });
+                        break;
+                    }
+                    // Echo to UART
+                    if c < 128 {
+                        uart_putc(c as u8);
+                    }
+                    // Echo to HDMI console
+                    let buf = [ch.into(), 0u16];
+                    if let Ok(s) = uefi::CStr16::from_u16_with_nul(&buf) {
+                        uefi::system::with_stdout(|stdout| {
+                            let _ = stdout.output_string(s);
+                        });
+                    }
+                }
+                Ok(Some(Key::Special(_scan))) => {
+                    // Ignore special keys (arrows, function keys, etc.)
+                }
+                Ok(None) => {
+                    // No key ready — continue waiting
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    uart_puts("Booting...\n");
+    uefi::system::with_stdout(|stdout| {
+        let _ = stdout.output_string(uefi::cstr16!("Booting...\r\n"));
+    });
+}
 fn uart_put_dec(mut val: u64) {
     if val == 0 {
         uart_putc(b'0');
@@ -295,6 +364,14 @@ fn main() -> Status {
     boot_info.dtb_size = if dtb_paddr != 0 { 1048576 } else { 0 }; // 1 MiB
     boot_info.initrd_start = initrd_start;
     boot_info.initrd_size = initrd_size;
+
+    // 6b. Interactive keyboard prompt (UEFI ConIn).
+    //     Reads from the Pi 400's built-in keyboard (or any USB keyboard)
+    //     via the UEFI console input protocol. This only works before
+    //     ExitBootServices — after that, keyboard access requires a
+    //     native USB driver.
+    #[cfg(feature = "uefi-console")]
+    keyboard_prompt();
 
     // Disable UEFI watchdog timer before exiting boot services.
     // The watchdog might reboot the machine if not disabled.

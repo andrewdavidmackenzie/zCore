@@ -74,7 +74,7 @@ fi
 # --- Step 2: Build the UEFI stub ---
 echo "==> Building UEFI stub for Pi 400..."
 cd "$PROJECT_DIR/tools/aarch64-uefi-stub"
-cargo build --release --target aarch64-unknown-uefi --features board-raspi400
+cargo build --release --target aarch64-unknown-uefi --features board-raspi400,uefi-console
 
 STUB_EFI="$PROJECT_DIR/tools/aarch64-uefi-stub/target/aarch64-unknown-uefi/release/aarch64-uefi-stub.efi"
 if [ ! -f "$STUB_EFI" ]; then

@@ -8,6 +8,7 @@ description = "UEFI boot stub for zCore aarch64 — collects boot info and loads
 
 [features]
 board-raspi400 = []
+uefi-console = []
 
 [dependencies]
 uefi = { version = "0.41", features = ["global_allocator", "panic_handler"] }
