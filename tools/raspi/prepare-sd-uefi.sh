@@ -74,10 +74,7 @@ fi
 # --- Step 2: Build the UEFI stub ---
 echo "==> Building UEFI stub for Pi 400..."
 cd "$PROJECT_DIR/tools/aarch64-uefi-stub"
-# Build with board-raspi400. Add ',uefi-console' to enable pre-boot
-# keyboard input from the Pi 400's built-in USB keyboard.
-STUB_FEATURES="${STUB_FEATURES:-board-raspi400}"
-cargo build --release --target aarch64-unknown-uefi --features "$STUB_FEATURES"
+cargo build --release --target aarch64-unknown-uefi --features board-raspi400,uefi-console
 
 STUB_EFI="$PROJECT_DIR/tools/aarch64-uefi-stub/target/aarch64-unknown-uefi/release/aarch64-uefi-stub.efi"
 if [ ! -f "$STUB_EFI" ]; then
