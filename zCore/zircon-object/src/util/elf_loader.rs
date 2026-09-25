@@ -25,7 +25,7 @@ impl VmarExt for VmAddressRegion {
             if ph.get_type().unwrap() != Type::Load {
                 continue;
             }
-            info!(
+            trace!(
                 "load_from_elf: seg {} vaddr={:#x} memsz={:#x} filesz={:#x}",
                 seg_idx,
                 ph.virtual_addr(),
@@ -33,7 +33,7 @@ impl VmarExt for VmAddressRegion {
                 ph.file_size()
             );
             let vmo = make_vmo(elf, ph)?;
-            info!(
+            trace!(
                 "load_from_elf: seg {} vmo created, len={:#x}",
                 seg_idx,
                 vmo.len()
@@ -41,9 +41,10 @@ impl VmarExt for VmAddressRegion {
             let offset = ph.virtual_addr() as usize / PAGE_SIZE * PAGE_SIZE;
             let flags = ph.flags().to_mmu_flags();
             self.map_at(offset, vmo.clone(), 0, vmo.len(), flags)?;
-            info!(
+            trace!(
                 "load_from_elf: seg {} mapped at offset {:#x}",
-                seg_idx, offset
+                seg_idx,
+                offset
             );
             first_vmo.get_or_insert(vmo);
             seg_idx += 1;
@@ -89,20 +90,20 @@ fn make_vmo(elf: &ElfFile, ph: ProgramHeader) -> ZxResult<Arc<VmObject>> {
     assert_eq!(ph.get_type().unwrap(), Type::Load);
     let page_offset = ph.virtual_addr() as usize % PAGE_SIZE;
     let pages = pages(ph.mem_size() as usize + page_offset);
-    info!("make_vmo: pages={}, page_offset={:#x}", pages, page_offset);
+    trace!("make_vmo: pages={}, page_offset={:#x}", pages, page_offset);
     let vmo = VmObject::new_paged(pages);
-    info!("make_vmo: vmo created");
+    trace!("make_vmo: vmo created");
     let data = match ph.get_data(elf).unwrap() {
         SegmentData::Undefined(data) => data,
         _ => return Err(ZxError::INVALID_ARGS),
     };
-    info!(
+    trace!(
         "make_vmo: writing {} bytes at offset {:#x}",
         data.len(),
         page_offset
     );
     vmo.write(page_offset, data)?;
-    info!("make_vmo: done");
+    trace!("make_vmo: done");
     Ok(vmo)
 }
 

@@ -62,7 +62,20 @@ if [ ! -f "$KERNEL_BIN" ]; then
     exit 1
 fi
 
-# --- Step 3: Copy files to SD card ---
+# --- Step 3: Remove UEFI boot files that conflict with raw boot ---
+echo "==> Removing UEFI boot files (if any)..."
+for f in RPI_EFI.fd kernel; do
+    if [ -f "$BOOT_DIR/$f" ]; then
+        echo "  Removing $f (UEFI boot leftover)"
+        rm -f "$BOOT_DIR/$f"
+    fi
+done
+if [ -f "$BOOT_DIR/EFI/BOOT/BOOTAA64.EFI" ]; then
+    echo "  Removing EFI/BOOT/BOOTAA64.EFI (UEFI boot leftover)"
+    rm -f "$BOOT_DIR/EFI/BOOT/BOOTAA64.EFI"
+fi
+
+# --- Step 4: Copy files to SD card ---
 echo "==> Copying files to $BOOT_DIR..."
 
 # Firmware

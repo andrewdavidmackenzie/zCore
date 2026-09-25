@@ -1,0 +1,25 @@
+# Raspberry Pi 400 -- UEFI boot via pftf/RPi4 firmware
+#
+# Uses EDK2 UEFI firmware (https://github.com/pftf/RPi4) to provide
+# a standard UEFI boot environment. The kernel is loaded by the UEFI
+# stub from the ESP partition on the SD card.
+#
+# The kernel is linked at 0x80200000 (same as QEMU UEFI), which is
+# in the Pi 400's 4GB RAM range.
+
+arch = "aarch64"
+linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker-uefi.ld"
+drivers = ["pl011-uart", "gic-400"]
+default-flavour = "linux"
+features = ["uefi-boot", "board-raspi400"]
+
+# No [qemu] section -- this is real hardware only.
+
+[rustc-target]
+llvm-target = "aarch64-unknown-linux-gnu"
+data-layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"
+features = "+strict-align,+neon,+fp-armv8"
+max-atomic-width = 128
+relocation-model = "static"
+target-pointer-width = 64
+disable-redzone = true
