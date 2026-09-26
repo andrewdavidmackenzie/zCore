@@ -100,6 +100,28 @@ impl Port {
         }
     }
 
+    /// Cancel all async waits matching the given key, regardless of source.
+    pub fn cancel_by_key(&self, key: u64) -> ZxResult {
+        let mut inner = self.inner.lock();
+        let matching: alloc::vec::Vec<_> = inner
+            .async_subscriptions
+            .keys()
+            .filter(|(_, k)| *k == key)
+            .cloned()
+            .collect();
+        if matching.is_empty() {
+            return Err(ZxError::NOT_FOUND);
+        }
+        for compound_key in matching {
+            if let Some(flags) = inner.async_subscriptions.remove(&compound_key) {
+                for flag in flags {
+                    flag.store(true, core::sync::atomic::Ordering::Relaxed);
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Push a `packet` into the port.
     pub fn push(&self, packet: impl Into<PortPacket>) {
         let mut inner = self.inner.lock();

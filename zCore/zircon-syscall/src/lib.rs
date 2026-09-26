@@ -511,12 +511,11 @@ impl Syscall<'_> {
                 warn!("process.create_shared: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::PORT_CANCEL_KEY => {
-                warn!("port.cancel_key: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
-            Sys::VMO_GET_STREAM_SIZE | Sys::VMO_SET_STREAM_SIZE | Sys::VMO_TRANSFER_DATA => {
-                warn!("vmo: {:?} not yet implemented", sys_type);
+            Sys::PORT_CANCEL_KEY => self.sys_port_cancel_key(a0 as _, a1 as _, a2 as _),
+            Sys::VMO_GET_STREAM_SIZE => self.sys_vmo_get_stream_size(a0 as _, a1.into()),
+            Sys::VMO_SET_STREAM_SIZE => self.sys_vmo_set_stream_size(a0 as _, a1),
+            Sys::VMO_TRANSFER_DATA => {
+                warn!("vmo.transfer_data: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::VMAR_MAP_CLOCK | Sys::VMAR_MAP_IOB => {
