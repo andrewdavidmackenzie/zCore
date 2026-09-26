@@ -168,7 +168,7 @@ mod tests {
     use crate::vm::VmObject;
 
     fn test_port() -> Arc<Port> {
-        Port::new()
+        Port::new(0).unwrap()
     }
 
     #[test]

@@ -453,4 +453,54 @@ mod tests {
         assert!(Arc::ptr_eq(&futex.owner().unwrap(), &thread));
         assert_eq!(futex.wake(1), 0);
     }
+
+    #[async_std::test]
+    async fn requeue_single_owner() {
+        // Test requeue with ownership transfer: wake exactly 1 waiter and
+        // move others to the requeue target, setting the new owner.
+        let root_job = Job::root();
+        let proc = Process::create(&root_job, "proc").expect("failed to create process");
+        let thread1 = Thread::create(&proc, "t1").expect("failed to create thread");
+        let thread2 = Thread::create(&proc, "t2").expect("failed to create thread");
+
+        static VALUE: AtomicI32 = AtomicI32::new(1);
+        let futex = proc.get_futex(&VALUE as *const AtomicI32 as usize);
+        static REQUEUE_VALUE: AtomicI32 = AtomicI32::new(0);
+        let requeue_futex = proc.get_futex(&REQUEUE_VALUE as *const AtomicI32 as usize);
+
+        // Two waiters on the main futex
+        {
+            let futex = futex.clone();
+            let thread1 = thread1.clone();
+            async_std::task::spawn(async move {
+                let _ = futex.wait_with_owner(1, Some(thread1), None).await;
+            });
+        }
+        {
+            let futex = futex.clone();
+            let thread2 = thread2.clone();
+            async_std::task::spawn(async move {
+                let _ = futex.wait_with_owner(1, Some(thread2), None).await;
+            });
+        }
+
+        async_std::task::sleep(Duration::from_millis(20)).await;
+        assert_eq!(futex.inner.lock().waiter_queue.len(), 2);
+
+        // Requeue: wake 1, move 1 to requeue_futex, set new_requeue_owner
+        futex
+            .requeue(1, 1, 1, &requeue_futex, Some(thread1.clone()), true)
+            .unwrap();
+
+        // 1 woken, 1 requeued
+        assert_eq!(futex.inner.lock().waiter_queue.len(), 0);
+        assert_eq!(requeue_futex.inner.lock().waiter_queue.len(), 1);
+
+        // The requeue futex should have the new owner set
+        assert!(requeue_futex.owner().is_some());
+        assert!(Arc::ptr_eq(&requeue_futex.owner().unwrap(), &thread1));
+
+        // Wake the requeued waiter to clean up
+        requeue_futex.wake(1);
+    }
 }

@@ -448,7 +448,7 @@ mod tests {
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
         thread
             .start(|thread| {
-                std::boxed::Box::pin(async {
+                Box::pin(async {
                     println!("should not be killed");
                     async_std::task::sleep(Duration::from_millis(1000)).await;
                     {
