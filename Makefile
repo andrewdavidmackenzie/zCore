@@ -211,18 +211,22 @@ x86-zircon-run: x86-zircon-build
 		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img
 
 # Create a UEFI-bootable disk image for x86_64 real hardware.
+# Uses the x86-laptop target (no PCI, no UART -- uses framebuffer console).
 # The image can be written to a USB drive with dd.
 # Usage: make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img
 #        make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img MODE=zircon
 MODE ?= linux
-OUTPUT ?= target/qemu-x86_64/release/kernel-uefi.img
+OUTPUT ?= target/x86-laptop/release/kernel-uefi.img
 x86-uefi-image:
 ifeq ($(MODE),zircon)
-	$(MAKE) x86-zircon-build
-	@tools/scripts/x86-uefi-image.sh $(OUTPUT) none
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" cargo zcore-build -m x86-laptop
+	@KERNEL_ELF=target/x86-laptop/release/kernel tools/scripts/x86-uefi-image.sh $(OUTPUT) none
 else
-	$(MAKE) build ARCH=x86_64
-	@tools/scripts/x86-uefi-image.sh $(OUTPUT)
+	cargo image --arch x86_64
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m x86-laptop --flavour linux
+	@KERNEL_ELF=target/x86-laptop/release/kernel \
+		ROOTFS_IMG=target/qemu-x86_64/release/x86_64-linux.img \
+		tools/scripts/x86-uefi-image.sh $(OUTPUT)
 endif
 
 # Write a UEFI boot image to a USB drive.
