@@ -3,38 +3,24 @@ use alloc::vec::Vec;
 
 const REASON_SIZE: usize = 16;
 
-static mut IPI_REASON0: [IpiEntry; REASON_SIZE] = [0; REASON_SIZE];
-static mut IPI_REASON1: [IpiEntry; REASON_SIZE] = [0; REASON_SIZE];
-static mut IPI_REASON2: [IpiEntry; REASON_SIZE] = [0; REASON_SIZE];
-static mut IPI_REASON3: [IpiEntry; REASON_SIZE] = [0; REASON_SIZE];
-static mut IPI_REASON4: [IpiEntry; REASON_SIZE] = [0; REASON_SIZE];
-static mut IPI_REASON5: [IpiEntry; REASON_SIZE] = [0; REASON_SIZE];
-static mut IPI_REASON6: [IpiEntry; REASON_SIZE] = [0; REASON_SIZE];
-static mut IPI_REASON7: [IpiEntry; REASON_SIZE] = [0; REASON_SIZE];
-
 pub type IpiEntry = usize;
 type IRQueue = MpscQueue<'static, IpiEntry>;
 
-static IPI_QUEUE: spin::Lazy<[IRQueue; MAX_CORE_NUM]> = spin::Lazy::new(|| {
-    [
-        IRQueue::new(unsafe { &mut IPI_REASON0 }),
-        IRQueue::new(unsafe { &mut IPI_REASON1 }),
-        IRQueue::new(unsafe { &mut IPI_REASON2 }),
-        IRQueue::new(unsafe { &mut IPI_REASON3 }),
-        IRQueue::new(unsafe { &mut IPI_REASON4 }),
-        IRQueue::new(unsafe { &mut IPI_REASON5 }),
-        IRQueue::new(unsafe { &mut IPI_REASON6 }),
-        IRQueue::new(unsafe { &mut IPI_REASON7 }),
-    ]
-});
+/// Static buffer pool for per-CPU IPI queues.
+/// Sized by `MAX_CORE_NUM` (from target config's `cores` field).
+static mut IPI_REASON_POOL: [[IpiEntry; REASON_SIZE]; MAX_CORE_NUM] =
+    [[0; REASON_SIZE]; MAX_CORE_NUM];
+
+static IPI_QUEUE: spin::Lazy<[IRQueue; MAX_CORE_NUM]> =
+    spin::Lazy::new(|| core::array::from_fn(|i| IRQueue::new(unsafe { &mut IPI_REASON_POOL[i] })));
 
 pub(crate) fn ipi_queue(cpuid: usize) -> &'static IRQueue {
     &IPI_QUEUE[cpuid]
 }
 
 pub(crate) fn ipi_reason() -> Vec<usize> {
-    let cpu_id = crate::cpu::cpu_id() as usize;
-    let queue = ipi_queue(cpu_id);
+    let idx = crate::cpu::cpu_index();
+    let queue = ipi_queue(idx);
     queue.consume_entrys().iter().map(|entry| entry.1).collect()
 }
 

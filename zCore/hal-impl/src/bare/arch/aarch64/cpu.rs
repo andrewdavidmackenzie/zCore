@@ -10,6 +10,11 @@ hal_fn_impl! {
             id as u8
         }
 
+        fn cpu_index() -> usize {
+            // On aarch64, MPIDR Aff0 gives 0..N (contiguous).
+            (MPIDR_EL1.get() & 0x3) as usize
+        }
+
         fn cpu_frequency() -> u16 {
             0
         }

@@ -12,6 +12,11 @@ extern "C" {
     pub fn executor_entry();
 }
 
+/// Return the CPU ID (APIC ID on x86_64).
+///
+/// This is the hardware CPU identifier, which may be non-contiguous
+/// (e.g. 0,1,2,3,4,6,8,10 with hyperthreading). It is used as a
+/// HashMap key in the executor's runtime map, NOT as an array index.
 pub(crate) fn cpu_id() -> u8 {
     raw_cpuid::CpuId::new()
         .get_feature_info()

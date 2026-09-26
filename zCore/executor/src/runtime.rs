@@ -106,23 +106,36 @@ impl Drop for ExecutorRuntime {
 unsafe impl Send for ExecutorRuntime {}
 unsafe impl Sync for ExecutorRuntime {}
 
-// TODO: more elegent?
-pub static GLOBAL_RUNTIME: spin::Lazy<[Mutex<ExecutorRuntime>; 5]> = spin::Lazy::new(|| {
-    [
-        Mutex::new(ExecutorRuntime::new(0)),
-        Mutex::new(ExecutorRuntime::new(1)),
-        Mutex::new(ExecutorRuntime::new(2)),
-        Mutex::new(ExecutorRuntime::new(3)),
-        Mutex::new(ExecutorRuntime::new(4)),
-    ]
-});
+/// Per-CPU executor runtimes, keyed by CPU ID.
+/// CPU IDs can be non-contiguous (e.g. APIC IDs 0,1,2,3,4,6,8,10).
+///
+/// Populated once during SMP boot by `init_runtimes()`, read-only after.
+static CPU_RUNTIMES: spin::Once<hashbrown::HashMap<u8, Mutex<ExecutorRuntime>>> = spin::Once::new();
+
+/// Initialize executor runtimes for a set of CPU IDs.
+/// Called once by the BSP during boot, before any AP starts using the executor.
+pub fn init_runtimes(cpu_ids: &[u8]) {
+    CPU_RUNTIMES.call_once(|| {
+        let mut map = hashbrown::HashMap::with_capacity(cpu_ids.len());
+        for &id in cpu_ids {
+            map.insert(id, Mutex::new(ExecutorRuntime::new(id)));
+        }
+        map
+    });
+}
+
+fn get_runtime_map() -> &'static hashbrown::HashMap<u8, Mutex<ExecutorRuntime>> {
+    CPU_RUNTIMES
+        .get()
+        .expect("executor runtimes not initialized -- call init_runtimes() first")
+}
 
 // obtain a task from other cpu.
 pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {
-    let runtime = GLOBAL_RUNTIME
-        .iter()
-        .max_by_key(|runtime| runtime.lock().task_num())
-        .unwrap();
+    let map = get_runtime_map();
+    let runtime = map
+        .values()
+        .max_by_key(|runtime| runtime.lock().task_num())?;
     let runtime = runtime.lock();
     if runtime.task_num() > 0 {
         runtime.task_collection.take_task()
@@ -133,7 +146,7 @@ pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, D
 
 // per-cpu scheduler.
 pub fn run_until_idle() -> bool {
-    debug!("GLOBAL_RUNTIME.run()");
+    debug!("CPU_RUNTIMES.run()");
     loop {
         let mut runtime = get_current_runtime();
         let runtime_cx = runtime.get_context();
@@ -196,27 +209,34 @@ pub fn run_until_idle() -> bool {
 
 pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
     super::run_with_intr_saved_off! {
-        spawn_task(future, None, Some(crate::arch::cpu_id() as _))
+        let cpu_id = crate::arch::cpu_id();
+        spawn_task(future, None, Some(cpu_id))
     }
 }
 
-/// Spawn a coroutine with `priority` and `cpu_id`
+/// Spawn a coroutine with `priority` on a specific CPU (by ID).
 /// Default priority: DEFAULT_PRIORITY
-/// Default cpu_id: the cpu with fewest number of tasks
+/// Default CPU: the one with fewest tasks
 pub fn spawn_task(
     future: impl Future<Output = ()> + Send + 'static,
     priority: Option<usize>,
-    cpu_id: Option<usize>,
+    cpu_id: Option<u8>,
 ) {
-    debug!("try to spawn {:?} {:?}", priority, cpu_id);
+    debug!("try to spawn {:?} cpu_id={:?}", priority, cpu_id);
     let priority = priority.unwrap_or(DEFAULT_PRIORITY);
-    let runtime = if let Some(cpu_id) = cpu_id {
-        &GLOBAL_RUNTIME[cpu_id]
+    let map = get_runtime_map();
+    let runtime = if let Some(id) = cpu_id {
+        map.get(&id).unwrap_or_else(|| {
+            panic!(
+                "spawn_task: no runtime for cpu_id {} (registered: {:?})",
+                id,
+                map.keys().collect::<alloc::vec::Vec<_>>()
+            )
+        })
     } else {
-        GLOBAL_RUNTIME
-            .iter()
+        map.values()
             .min_by_key(|runtime| runtime.lock().task_num())
-            .unwrap()
+            .expect("no CPUs registered in executor")
     };
     runtime.lock().add_task(priority, future);
 }
@@ -266,7 +286,16 @@ pub(crate) fn switch(from_ctx: usize, to_ctx: usize) {
 
 /// return runtime `MutexGuard` of current cpu.
 pub(crate) fn get_current_runtime() -> MutexGuard<'static, ExecutorRuntime> {
-    GLOBAL_RUNTIME[crate::arch::cpu_id() as usize].lock()
+    let id = crate::arch::cpu_id();
+    let map = get_runtime_map();
+    let runtime = map.get(&id).unwrap_or_else(|| {
+        panic!(
+            "no executor runtime for cpu_id {} (registered: {:?})",
+            id,
+            map.keys().collect::<alloc::vec::Vec<_>>()
+        )
+    });
+    runtime.lock()
 }
 
 #[allow(dead_code)]

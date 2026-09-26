@@ -4,6 +4,7 @@
 # no VirtIO, no PCI. Boots from SD card.
 
 arch = "aarch64"
+cores = 4
 linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker_raspi400.ld"
 drivers = ["pl011-uart", "gic-400"]
 features = ["board-raspi400"]
