@@ -10,8 +10,8 @@ set -euo pipefail
 
 OUTPUT="${1:?Usage: $0 <output-image>}"
 ROOTFS="${2:-auto}"  # "auto" = include if exists, "none" = skip
-KERNEL_ELF="${KERNEL_ELF:-target/qemu-x86_64/release/kernel}"
-ROOTFS_IMG="target/qemu-x86_64/release/x86_64-linux.img"
+KERNEL_ELF="${KERNEL_ELF:-target/x86-laptop/release/kernel}"
+ROOTFS_IMG="${ROOTFS_IMG:-target/qemu-x86_64/release/x86_64-linux.img}"
 BOOTIMAGE_DIR="tools/x86-bootimage"
 BOOTIMAGE_TOOL="$BOOTIMAGE_DIR/target/release/x86-bootimage"
 

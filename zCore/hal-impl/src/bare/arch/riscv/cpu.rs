@@ -11,6 +11,13 @@ hal_fn_impl! {
             cpu_id
         }
 
+        fn cpu_index() -> usize {
+            // On riscv, hart ID from tp register is contiguous.
+            let mut hart_id: usize;
+            unsafe { core::arch::asm!("mv {0}, tp", out(reg) hart_id) };
+            hart_id
+        }
+
         fn cpu_frequency() -> u16 {
             *CPU_FREQ_MHZ
         }

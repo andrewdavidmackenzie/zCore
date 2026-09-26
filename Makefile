@@ -211,19 +211,53 @@ x86-zircon-run: x86-zircon-build
 		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img
 
 # Create a UEFI-bootable disk image for x86_64 real hardware.
+# Uses the x86-laptop target (no PCI, no UART -- uses framebuffer console).
 # The image can be written to a USB drive with dd.
 # Usage: make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img
 #        make x86-uefi-image OUTPUT=/tmp/zcore-uefi.img MODE=zircon
 MODE ?= linux
-OUTPUT ?= target/qemu-x86_64/release/kernel-uefi.img
+OUTPUT ?= target/x86-laptop/release/kernel-uefi.img
 x86-uefi-image:
 ifeq ($(MODE),zircon)
-	$(MAKE) x86-zircon-build
-	@tools/scripts/x86-uefi-image.sh $(OUTPUT) none
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" cargo zcore-build -m x86-laptop
+	@KERNEL_ELF=target/x86-laptop/release/kernel tools/scripts/x86-uefi-image.sh $(OUTPUT) none
 else
-	$(MAKE) build ARCH=x86_64
-	@tools/scripts/x86-uefi-image.sh $(OUTPUT)
+	cargo image --arch x86_64
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m x86-laptop --flavour linux
+	@KERNEL_ELF=target/x86-laptop/release/kernel \
+		ROOTFS_IMG=target/qemu-x86_64/release/x86_64-linux.img \
+		tools/scripts/x86-uefi-image.sh $(OUTPUT)
 endif
+
+# Create a PXE TFTP directory for x86_64 network boot.
+# Usage: make x86-pxe
+# Then run dnsmasq: sudo dnsmasq --no-daemon -C target/x86-laptop/pxe/dnsmasq.conf
+PXE_DIR ?= target/x86-laptop/pxe/tftpboot
+x86-pxe:
+	cargo image --arch x86_64
+	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m x86-laptop --flavour linux
+	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
+	@rm -rf $(PXE_DIR)
+	@tools/x86-bootimage/target/release/x86-bootimage \
+		target/x86-laptop/release/kernel \
+		$(PXE_DIR) \
+		--ramdisk target/qemu-x86_64/release/x86_64-linux.img \
+		--pxe
+	@mkdir -p target/x86-laptop/pxe
+	@echo "port=0" > target/x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-range=192.168.1.0,proxy" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-no-override" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo "enable-tftp" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo "tftp-root=$(CURDIR)/$(PXE_DIR)" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-match=set:efi-x86_64,option:client-arch,7" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-match=set:efi-x86_64,option:client-arch,9" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-boot=tag:efi-x86_64,bootloader" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo "log-dhcp" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo ""
+	@echo "==> PXE TFTP directory ready at $(PXE_DIR)"
+	@echo "==> Start PXE server:"
+	@echo "    sudo /opt/homebrew/opt/dnsmasq/sbin/dnsmasq --no-daemon -C target/x86-laptop/pxe/dnsmasq.conf"
+	@echo "==> On laptop: F12 -> PXE Network Boot"
 
 # Write a UEFI boot image to a USB drive.
 # WARNING: This erases all data on the USB drive!

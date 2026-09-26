@@ -5,6 +5,7 @@
 
 default-flavour = "linux"
 arch = "riscv64"
+cores = 1
 linker-script = "zCore/hal-impl/src/bare/arch/riscv/platform/linker.ld"
 drivers = ["uart-16550", "riscv-intc", "riscv-plic", "pci"]
 
