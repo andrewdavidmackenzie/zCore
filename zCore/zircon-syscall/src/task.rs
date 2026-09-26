@@ -369,6 +369,67 @@ impl Syscall<'_> {
             Ok(())
         }
     }
+
+    /// Create a scheduling/affinity profile.
+    ///
+    /// The `resource` handle must be the root resource.
+    /// `options` must be 0.
+    pub fn sys_profile_create(
+        &self,
+        resource: HandleValue,
+        options: u32,
+        profile_info: UserInPtr<ProfileInfo>,
+        mut out: UserOutPtr<HandleValue>,
+    ) -> ZxResult {
+        info!(
+            "profile.create: resource={:#x}, options={}",
+            resource, options,
+        );
+        if options != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let proc = self.thread.proc();
+        // Validate: require root resource
+        proc.get_object_with_rights::<zircon_object::dev::Resource>(resource, Rights::empty())?
+            .validate(zircon_object::dev::ResourceKind::ROOT)?;
+        // Check job policy
+        proc.check_policy(PolicyCondition::NewProfile)?;
+        // Read and validate profile info
+        let info = profile_info.read()?;
+        let profile = Profile::create(info)?;
+        let handle = proc.add_handle(Handle::new(profile, Rights::DEFAULT_PROFILE));
+        out.write(handle)?;
+        Ok(())
+    }
+
+    /// Apply a profile to a thread.
+    ///
+    /// Currently a stub: validates handles and rights but does not
+    /// change the thread's scheduling parameters (the kernel does
+    /// not yet support runtime priority changes).
+    pub fn sys_object_set_profile(
+        &self,
+        target: HandleValue,
+        profile: HandleValue,
+        options: u32,
+    ) -> ZxResult {
+        info!(
+            "object.set_profile: target={:#x}, profile={:#x}, options={}",
+            target, profile, options,
+        );
+        if options != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let proc = self.thread.proc();
+        // Validate target is a thread with MANAGE_THREAD
+        let _thread = proc.get_object_with_rights::<Thread>(target, Rights::MANAGE_THREAD)?;
+        // Validate profile handle with APPLY_PROFILE
+        let _profile = proc.get_object_with_rights::<Profile>(profile, Rights::APPLY_PROFILE)?;
+        // TODO: actually apply scheduling parameters to the thread.
+        // For now, accept the call without error (the profile is valid
+        // but runtime priority changes are not implemented).
+        Ok(())
+    }
 }
 
 const JOB_POL_BASE_V1: u32 = 0;

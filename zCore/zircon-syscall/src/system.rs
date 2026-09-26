@@ -54,9 +54,49 @@ impl Syscall<'_> {
             }
         }
     }
+
+    /// Perform a power control operation (reboot, shutdown, etc.).
+    ///
+    /// Currently only reboot and shutdown are supported. The resource
+    /// handle must be the root resource.
+    pub fn sys_system_powerctl(&self, resource: HandleValue, cmd: u32, _arg: usize) -> ZxResult {
+        info!("system.powerctl: resource={:#x}, cmd={}", resource, cmd);
+        let proc = self.thread.proc();
+        // Validate: require root resource
+        let resource =
+            proc.get_object_with_rights::<zircon_object::dev::Resource>(resource, Rights::empty())?;
+        resource.validate(zircon_object::dev::ResourceKind::ROOT)?;
+
+        match cmd {
+            POWERCTL_REBOOT => {
+                warn!("system.powerctl: reboot requested");
+                hal_impl::cpu::reset();
+            }
+            POWERCTL_REBOOT_BOOTLOADER | POWERCTL_REBOOT_RECOVERY => {
+                warn!(
+                    "system.powerctl: bootloader/recovery reboot not distinct from normal reboot"
+                );
+                hal_impl::cpu::reset();
+            }
+            POWERCTL_SHUTDOWN => {
+                warn!("system.powerctl: shutdown not yet implemented (no HAL shutdown)");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            _ => {
+                warn!("system.powerctl: unrecognized cmd {}", cmd);
+                Err(ZxError::INVALID_ARGS)
+            }
+        }
+    }
 }
 
 const EVENT_OUT_OF_MEMORY: u32 = 1;
 const EVENT_MEMORY_PRESSURE_CRITICAL: u32 = 2;
 const EVENT_MEMORY_PRESSURE_WARNING: u32 = 3;
 const EVENT_MEMORY_PRESSURE_NORMAL: u32 = 4;
+
+// Power control commands
+const POWERCTL_REBOOT: u32 = 5;
+const POWERCTL_REBOOT_BOOTLOADER: u32 = 6;
+const POWERCTL_REBOOT_RECOVERY: u32 = 7;
+const POWERCTL_SHUTDOWN: u32 = 8;

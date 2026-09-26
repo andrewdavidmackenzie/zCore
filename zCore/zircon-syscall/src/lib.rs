@@ -398,17 +398,10 @@ impl Syscall<'_> {
             #[cfg(feature = "hypervisor")]
             Sys::VCPU_WRITE_STATE => self.sys_vcpu_write_state(a0 as _, a1 as _, a2, a3 as _),
             // Stubs for known but unimplemented syscalls
-            Sys::OBJECT_SET_PROFILE => {
-                warn!("object.set_profile: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
-            Sys::PROFILE_CREATE => {
-                warn!("profile.create: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::OBJECT_SET_PROFILE => self.sys_object_set_profile(a0 as _, a1 as _, a2 as _),
+            Sys::PROFILE_CREATE => self.sys_profile_create(a0 as _, a1 as _, a2.into(), a3.into()),
             Sys::VMAR_OP_RANGE => {
-                warn!("vmar.op_range: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+                self.sys_vmar_op_range(a0 as _, a1 as _, a2 as _, a3 as _, a4, a5)
             }
             Sys::PCI_RESET_DEVICE => {
                 warn!("pci.reset_device: not yet implemented");
@@ -442,10 +435,7 @@ impl Syscall<'_> {
                 warn!("system.mexec_payload_get: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::SYSTEM_POWERCTL => {
-                warn!("system.powerctl: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::SYSTEM_POWERCTL => self.sys_system_powerctl(a0 as _, a1 as _, a2),
             Sys::FRAMEBUFFER_GET_INFO => {
                 warn!("framebuffer.get_info: deprecated and not implemented");
                 Err(ZxError::NOT_SUPPORTED)
