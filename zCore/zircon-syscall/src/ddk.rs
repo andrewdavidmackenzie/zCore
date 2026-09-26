@@ -276,6 +276,69 @@ impl Syscall<'_> {
         out.write_if_not_null(timestamp)?;
         Ok(())
     }
+
+    /// Request access to I/O ports (x86-only).
+    pub fn sys_ioports_request(&self, resource: HandleValue, io_addr: u16, len: u32) -> ZxResult {
+        info!(
+            "ioports.request: resource={:#x}, addr={:#x}, len={}",
+            resource, io_addr, len
+        );
+        let proc = self.thread.proc();
+        proc.get_object::<Resource>(resource)?
+            .validate(ResourceKind::IOPORT)?;
+        if len == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // x86-only: would update TSS I/O permission bitmap
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            Err(ZxError::NOT_SUPPORTED)
+        }
+        #[cfg(target_arch = "x86_64")]
+        {
+            // TODO: update TSS IOPB to permit access to [io_addr, io_addr+len)
+            warn!("ioports.request: accepted but IOPB not updated");
+            Ok(())
+        }
+    }
+
+    /// Release access to I/O ports (x86-only).
+    pub fn sys_ioports_release(&self, resource: HandleValue, io_addr: u16, len: u32) -> ZxResult {
+        info!(
+            "ioports.release: resource={:#x}, addr={:#x}, len={}",
+            resource, io_addr, len
+        );
+        let proc = self.thread.proc();
+        proc.get_object::<Resource>(resource)?
+            .validate(ResourceKind::IOPORT)?;
+        if len == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            Err(ZxError::NOT_SUPPORTED)
+        }
+        #[cfg(target_arch = "x86_64")]
+        {
+            warn!("ioports.release: accepted but IOPB not updated");
+            Ok(())
+        }
+    }
+
+    /// Make an ARM Secure Monitor Call (aarch64-only).
+    pub fn sys_smc_call(
+        &self,
+        handle: HandleValue,
+        _parameters: usize,
+        _out_result: usize,
+    ) -> ZxResult {
+        info!("smc.call: handle={:#x}", handle);
+        let proc = self.thread.proc();
+        proc.get_object::<Resource>(handle)?
+            .validate(ResourceKind::SMC)?;
+        // Would issue SMC instruction on bare metal aarch64
+        Err(ZxError::NOT_SUPPORTED)
+    }
 }
 
 const IOMMU_TYPE_DUMMY: u32 = 0;

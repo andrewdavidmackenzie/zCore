@@ -372,15 +372,8 @@ impl Syscall<'_> {
             Sys::INTERRUPT_WAIT => self.sys_interrupt_wait(a0 as _, a1.into()).await,
             Sys::EXCEPTION_GET_THREAD => self.sys_exception_get_thread(a0 as _, a1.into()),
             Sys::EXCEPTION_GET_PROCESS => self.sys_exception_get_process(a0 as _, a1.into()),
-            Sys::IOPORTS_REQUEST => {
-                // TODO: implement ioports_request (or return NOT_SUPPORTED on non-x86)
-                warn!("ioports.request: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
-            Sys::IOPORTS_RELEASE => {
-                warn!("ioports.release: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::IOPORTS_REQUEST => self.sys_ioports_request(a0 as _, a1 as _, a2 as _),
+            Sys::IOPORTS_RELEASE => self.sys_ioports_release(a0 as _, a1 as _, a2 as _),
             #[cfg(feature = "hypervisor")]
             Sys::GUEST_CREATE => self.sys_guest_create(a0 as _, a1 as _, a2.into(), a3.into()),
             #[cfg(feature = "hypervisor")]
@@ -419,10 +412,7 @@ impl Syscall<'_> {
                 // Removed upstream.
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::SMC_CALL => {
-                warn!("smc.call: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::SMC_CALL => self.sys_smc_call(a0 as _, a1, a2),
             Sys::DEBUG_SEND_COMMAND => {
                 warn!("debug.send_command: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
