@@ -5,6 +5,7 @@
 
 default-flavour = "linux"
 arch = "x86_64"
+cores = 4
 linker-script = "zCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
 drivers = ["uart-16550", "apic", "pci"]
 

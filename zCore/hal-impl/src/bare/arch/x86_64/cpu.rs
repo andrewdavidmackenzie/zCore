@@ -11,6 +11,14 @@ hal_fn_impl! {
                 .initial_local_apic_id()
         }
 
+        fn cpu_index() -> usize {
+            let apic_id = CpuId::new()
+                .get_feature_info()
+                .unwrap()
+                .initial_local_apic_id();
+            super::smp::apic_id_to_logical(apic_id) as usize
+        }
+
         fn cpu_frequency() -> u16 {
             static CPU_FREQ_MHZ: spin::Once<u16> = spin::Once::new();
             *CPU_FREQ_MHZ.call_once(|| {

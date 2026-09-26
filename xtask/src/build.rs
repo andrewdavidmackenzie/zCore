@@ -135,6 +135,10 @@ impl BuildConfig {
             env.insert("ZCORE_CMDLINE".into(), cmdline.into());
         }
 
+        // Pass the core count from the target config to the kernel build.
+        // Used by hal-impl and executor to size per-CPU data structures.
+        env.insert("ZCORE_MAX_CPUS".into(), target.cores.to_string().into());
+
         // Generate the rustc target spec JSON (not needed for libos).
         let target_json = if is_libos {
             // LibOS uses the host's native target -- no JSON needed.

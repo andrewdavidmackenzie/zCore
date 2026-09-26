@@ -7,7 +7,56 @@
 
 use crate::mem::phys_to_virt;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
+
+/// Mapping from APIC ID to logical core index (0..N).
+/// APIC IDs can be non-contiguous (e.g., 0, 2, 4, 6, 8, 10 with HT).
+/// The BSP is always logical core 0. APs get indices 1, 2, ... in boot order.
+/// Index 255 means "not mapped" (APIC ID not seen yet).
+#[allow(clippy::declare_interior_mutable_const)]
+static APIC_TO_LOGICAL: [AtomicU8; 256] = {
+    const UNMAPPED: AtomicU8 = AtomicU8::new(255);
+    [UNMAPPED; 256]
+};
+static NEXT_LOGICAL_ID: AtomicU8 = AtomicU8::new(0);
+
+/// Register the BSP's APIC ID as core index 0.
+pub fn register_bsp() {
+    let apic_id = raw_cpuid::CpuId::new()
+        .get_feature_info()
+        .map(|f| f.initial_local_apic_id())
+        .unwrap_or(0) as usize;
+    APIC_TO_LOGICAL[apic_id].store(0, Ordering::SeqCst);
+    NEXT_LOGICAL_ID.store(1, Ordering::SeqCst);
+}
+
+/// Map an AP's APIC ID to the next core index.
+fn register_ap(apic_id: u32) -> u8 {
+    let logical = NEXT_LOGICAL_ID.fetch_add(1, Ordering::SeqCst);
+    APIC_TO_LOGICAL[apic_id as usize].store(logical, Ordering::SeqCst);
+    logical
+}
+
+/// Initialize executor runtimes for the BSP and all APs.
+/// Called after ACPI enumeration, before APs start using the executor.
+pub fn init_executor_runtimes(bsp_id: u8, ap_ids: &[u32]) {
+    let mut cpu_ids = alloc::vec![bsp_id];
+    for &id in ap_ids {
+        cpu_ids.push(id as u8);
+    }
+    executor::init_runtimes(&cpu_ids);
+}
+
+/// Look up the logical core index for the current CPU's APIC ID.
+pub fn apic_id_to_logical(apic_id: u8) -> u8 {
+    let logical = APIC_TO_LOGICAL[apic_id as usize].load(Ordering::SeqCst);
+    if logical == 255 {
+        // Fallback: unmapped APIC ID, return 0 (BSP)
+        0
+    } else {
+        logical
+    }
+}
 
 /// Physical address where the AP trampoline code is copied.
 /// Must be page-aligned and below 1MB (SIPI vector = phys_addr >> 12).
@@ -165,6 +214,14 @@ extern "C" fn ap_entry() -> ! {
         use x86_64::registers::control::{Cr0, Cr0Flags};
         Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
     }
+    // Register this AP's APIC ID → logical core index mapping.
+    // Must happen before anything calls cpu_id().
+    let apic_id = raw_cpuid::CpuId::new()
+        .get_feature_info()
+        .map(|f| f.initial_local_apic_id())
+        .unwrap_or(0) as u32;
+    register_ap(apic_id);
+
     // Call the kernel's secondary_main (stored in arch-specific static)
     if let Some(f) = *super::config::AP_FN {
         f()
@@ -179,9 +236,15 @@ extern "C" fn ap_entry() -> ! {
 /// Enumerates CPUs via ACPI MADT, allocates per-AP stacks, copies the
 /// trampoline to low memory, and sends INIT-SIPI-SIPI to each AP.
 pub fn boot_application_processors() {
+    let bsp_id = raw_cpuid::CpuId::new()
+        .get_feature_info()
+        .map(|f| f.initial_local_apic_id())
+        .unwrap_or(0);
+
     let rsdp = crate::KCONFIG.acpi_rsdp;
     if rsdp == 0 {
         warn!("No ACPI RSDP -- cannot enumerate APs, skipping SMP boot");
+        init_executor_runtimes(bsp_id, &[]);
         return;
     }
 
@@ -189,6 +252,7 @@ pub fn boot_application_processors() {
     let ap_ids = enumerate_aps(rsdp as usize);
     if ap_ids.is_empty() {
         info!("No application processors found");
+        init_executor_runtimes(bsp_id, &[]);
         return;
     }
     info!(
@@ -196,6 +260,9 @@ pub fn boot_application_processors() {
         ap_ids.len(),
         ap_ids
     );
+
+    // Initialize executor runtimes for BSP + all APs before any AP starts.
+    init_executor_runtimes(bsp_id, &ap_ids);
 
     // Copy pre-assembled trampoline binary to low physical memory
     assert!(
@@ -289,12 +356,16 @@ pub fn boot_application_processors() {
         );
 
         // Send directed INIT-SIPI-SIPI to this specific AP.
-        // Broadcast IPIs would reset already-started APs on later iterations.
-        // For xAPIC mode, the APIC ID must be in ICR bits 56-63 (shifted << 24).
-        let dest = apic_id << 24;
+        // The x2apic crate places `dest` into ICR bits 32..64.
+        // - x2APIC mode: bits 32..63 = full 32-bit APIC ID → pass raw ID
+        // - xAPIC mode:  bits 56..63 of 64-bit value = 8-bit APIC ID
+        //   (bits 24..31 of the ICR high 32-bit register) → pass ID << 24
+        let is_x2apic = raw_cpuid::CpuId::new()
+            .get_feature_info()
+            .is_some_and(|f| f.has_x2apic());
+        let dest = if is_x2apic { apic_id } else { apic_id << 24 };
         lapic.send_init_ipi(dest);
         spin_delay_ms(10);
-
         lapic.send_sipi(SIPI_VECTOR, dest);
         spin_delay_us(200);
 
@@ -302,8 +373,6 @@ pub fn boot_application_processors() {
             lapic.send_sipi(SIPI_VECTOR, dest);
             spin_delay_us(200);
         }
-
-        // Wait for AP to signal it's alive (up to 100ms)
         let mut waited = 0u32;
         while data.ap_ready.load(Ordering::SeqCst) == 0 && waited < 100_000 {
             spin_delay_us(100);

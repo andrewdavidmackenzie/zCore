@@ -13,6 +13,7 @@ baremetal-test = []
 unicycle = { git = "https://github.com/pleasewhy/unicycle", rev = "904f1c061d4784a5642e092d308cf523a9270c6e", default-features = false }
 bit-iter = "1.0.0"
 spin = "0.9"
+hashbrown = "0.14"
 woke = "0.0.2"
 log = "0.4"
 cfg-if = "1.0"

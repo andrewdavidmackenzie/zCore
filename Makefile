@@ -191,10 +191,20 @@ x86-zircon-build:
 	@echo "==> Building zCore kernel (Zircon, x86_64)..."
 	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" cargo zcore-build -m qemu-x86_64
 
-# Build and run x86_64 Linux in QEMU.
+# Build and run x86_64 Linux in QEMU (UEFI boot, same as real hardware).
 # Ctrl-A X to exit QEMU.
 x86-linux-run: x86-linux-build
-	cargo qemu -m qemu-x86_64 --log $(LOG)
+	@tools/x86-bootimage/target/release/x86-bootimage \
+		target/qemu-x86_64/release/kernel \
+		target/qemu-x86_64/release/boot.img \
+		--ramdisk target/qemu-x86_64/release/x86_64-linux.img
+	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
+	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
+		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
+		-smp $$(grep '^cores' targets/qemu-x86_64.toml 2>/dev/null | awk '{print $$NF}' || echo 1) \
+		-serial mon:stdio \
+		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
+		-drive format=raw,file=target/qemu-x86_64/release/boot.img
 
 # Build and run x86_64 Zircon with petal shell in QEMU.
 # Ctrl-A X to exit QEMU.

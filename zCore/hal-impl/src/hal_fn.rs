@@ -30,8 +30,11 @@ hal_fn_def! {
 
     /// CPU information.
     pub mod cpu {
-        /// Current CPU ID.
+        /// Current CPU ID (hardware identifier, may be non-contiguous).
         pub fn cpu_id() -> u8 { 0 }
+
+        /// Current CPU index (dense 0..N, safe for array indexing).
+        pub fn cpu_index() -> usize { 0 }
 
         /// Current CPU frequency in MHz.
         pub fn cpu_frequency() -> u16 { 3000 }

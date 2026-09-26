@@ -8,6 +8,7 @@
 # in the Pi 400's 4GB RAM range.
 
 arch = "aarch64"
+cores = 4
 linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker-uefi.ld"
 drivers = ["pl011-uart", "gic-400"]
 default-flavour = "linux"

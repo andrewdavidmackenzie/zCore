@@ -9,6 +9,7 @@
 # fully implemented, add "fb-console" here.
 
 arch = "x86_64"
+cores = 8
 linker-script = "zCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
 drivers = ["apic", "ps2-keyboard", "fb-console"]
 

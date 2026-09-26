@@ -396,6 +396,12 @@ fn parse_node_addr(name: &[u8]) -> Option<usize> {
 pub fn primary_init() {
     vm::init();
     drivers::init();
+
+    // Initialize executor runtimes for all CPUs.
+    // On aarch64, CPU IDs are contiguous 0..N.
+    let cpu_ids: alloc::vec::Vec<u8> = (0..crate::config::MAX_CORE_NUM as u8).collect();
+    executor::init_runtimes(&cpu_ids);
+
     // Start secondary cores (QEMU virt uses PSCI).
     // UEFI boot: SMP not yet implemented (single-core for now).
     #[cfg(all(not(feature = "board-raspi400"), not(feature = "uefi-boot")))]

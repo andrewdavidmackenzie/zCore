@@ -18,13 +18,13 @@ hal_fn_impl! {
         }
 
         fn set_current_thread(thread: Option<Arc<dyn Any + Send + Sync>>) {
-            let cpu_id = super::cpu::cpu_id() as usize;
-            *CURRENT_THREAD[cpu_id].get_mut() = thread;
+            let idx = super::cpu::cpu_index();
+            *CURRENT_THREAD[idx].get_mut() = thread;
         }
 
         fn get_current_thread() -> Option<Arc<dyn Any + Send + Sync>> {
-            let cpu_id = super::cpu::cpu_id() as usize;
-            if let Some(arc_thread) = CURRENT_THREAD[cpu_id].get().as_ref() {
+            let idx = super::cpu::cpu_index();
+            if let Some(arc_thread) = CURRENT_THREAD[idx].get().as_ref() {
                 Some(arc_thread.clone())
             } else {
                 None

@@ -55,6 +55,8 @@ pub fn init_ram_disk() -> Option<&'static mut [u8]> {
 }
 
 pub fn primary_init_early() {
+    // Register BSP's APIC ID as logical core 0 (must be first).
+    smp::register_bsp();
     // init serial output first
     drivers::init_early().unwrap();
     // init framebuffer console (if available)
