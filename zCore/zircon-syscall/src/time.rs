@@ -48,13 +48,14 @@ impl Syscall<'_> {
     }
 
     /// Read the hardware tick counter (vDSO fallback path).
-    pub fn sys_ticks_get_via_kernel(&self, _out: UserOutPtr<i64>) -> ZxResult {
-        // TODO: add a HAL raw-counter accessor and return raw ticks
-        // with a matching ticks_per_second rate. timer_now() returns
-        // nanoseconds which would give incorrect results when divided
-        // by zx_ticks_per_second().
-        info!("ticks.get_via_kernel: not yet implemented");
-        Err(ZxError::NOT_SUPPORTED)
+    ///
+    /// Returns the current monotonic time in nanoseconds as the tick value.
+    /// This treats 1 tick = 1 nanosecond, which matches how zCore's vDSO
+    /// reports `zx_ticks_per_second()` as 1_000_000_000.
+    pub fn sys_ticks_get_via_kernel(&self, mut out: UserOutPtr<i64>) -> ZxResult {
+        let ticks = hal_impl::timer::timer_now().as_nanos() as i64;
+        out.write(ticks)?;
+        Ok(())
     }
 
     /// Acquire the current time.

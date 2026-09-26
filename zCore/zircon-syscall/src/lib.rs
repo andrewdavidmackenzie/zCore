@@ -475,6 +475,37 @@ impl Syscall<'_> {
                 warn!("ktrace.write: not yet implemented (removed upstream)");
                 Err(ZxError::NOT_SUPPORTED)
             }
+            // --- Newer upstream Fuchsia syscalls (stubs) ---
+            Sys::IOB_CREATE
+            | Sys::IOB_WRITEV
+            | Sys::IOB_ALLOCATE_ID
+            | Sys::IOB_CREATE_SHARED_REGION => {
+                warn!("iob: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::COUNTER_CREATE | Sys::COUNTER_READ | Sys::COUNTER_WRITE | Sys::COUNTER_ADD => {
+                warn!("counter: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::SAMPLER_CREATE | Sys::SAMPLER_READ | Sys::SAMPLER_START | Sys::SAMPLER_STOP => {
+                warn!("sampler: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::MEMBARRIER_SYNC_PROCESS_DATA | Sys::MEMBARRIER_SYNC_PROCESS_INSN => {
+                warn!("membarrier: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::RESTRICTED_ENTER
+            | Sys::RESTRICTED_BIND_STATE
+            | Sys::RESTRICTED_KICK
+            | Sys::RESTRICTED_UNBIND_STATE => {
+                warn!("restricted: not yet implemented (needed for #409)");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::CACHE_FLUSH => {
+                warn!("cache.flush: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
             _ => {
                 error!("syscall unimplemented: {:?}", sys_type);
                 Err(ZxError::NOT_SUPPORTED)
