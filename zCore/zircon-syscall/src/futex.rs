@@ -127,13 +127,27 @@ impl Syscall<'_> {
     }
 
     /// Query the owner of a futex.
+    ///
+    /// Returns the koid of the thread that owns the futex, or
+    /// `ZX_KOID_INVALID` (0) if the futex has no owner.
+    ///
+    /// Note: like other futex syscalls, this only validates pointer
+    /// alignment and nullness. A full mapping check would require
+    /// address space lookup (tracked as a broader futex hardening issue).
     pub fn sys_futex_get_owner(
         &self,
-        _value_ptr: UserInPtr<AtomicI32>,
-        _koid: UserOutPtr<u64>,
+        value_ptr: UserInPtr<AtomicI32>,
+        mut koid: UserOutPtr<u64>,
     ) -> ZxResult {
-        warn!("futex.get_owner: not yet implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        info!("futex.get_owner: value_ptr={:?}", value_ptr);
+        if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let proc = self.thread.proc();
+        let futex = proc.get_futex(value_ptr.as_addr());
+        let owner_koid = futex.owner().map_or(0u64, |t| t.id());
+        koid.write(owner_koid)?;
+        Ok(())
     }
 
     /// Wake one waiter and transfer ownership of the futex to it.

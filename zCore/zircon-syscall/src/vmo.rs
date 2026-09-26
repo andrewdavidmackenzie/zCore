@@ -253,6 +253,30 @@ impl Syscall<'_> {
         vmo.set_len(size)
     }
 
+    /// Get the stream content size of a VMO.
+    pub fn sys_vmo_get_stream_size(
+        &self,
+        handle: HandleValue,
+        mut size: UserOutPtr<usize>,
+    ) -> ZxResult {
+        info!("vmo.get_stream_size: handle={:#x}", handle);
+        let proc = self.thread.proc();
+        let vmo = proc.get_object_with_rights::<VmObject>(handle, Rights::READ)?;
+        size.write(vmo.content_size())?;
+        Ok(())
+    }
+
+    /// Set the stream content size of a VMO.
+    pub fn sys_vmo_set_stream_size(&self, handle: HandleValue, size: usize) -> ZxResult {
+        info!(
+            "vmo.set_stream_size: handle={:#x}, size={:#x}",
+            handle, size
+        );
+        let proc = self.thread.proc();
+        let vmo = proc.get_object_with_rights::<VmObject>(handle, Rights::WRITE)?;
+        vmo.set_content_size(size)
+    }
+
     /// Perform an operation on a range of a VMO.
     ///
     /// Performs cache and memory operations against pages held by the VMO.

@@ -372,15 +372,8 @@ impl Syscall<'_> {
             Sys::INTERRUPT_WAIT => self.sys_interrupt_wait(a0 as _, a1.into()).await,
             Sys::EXCEPTION_GET_THREAD => self.sys_exception_get_thread(a0 as _, a1.into()),
             Sys::EXCEPTION_GET_PROCESS => self.sys_exception_get_process(a0 as _, a1.into()),
-            Sys::IOPORTS_REQUEST => {
-                // TODO: implement ioports_request (or return NOT_SUPPORTED on non-x86)
-                warn!("ioports.request: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
-            Sys::IOPORTS_RELEASE => {
-                warn!("ioports.release: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::IOPORTS_REQUEST => self.sys_ioports_request(a0 as _, a1 as _, a2 as _),
+            Sys::IOPORTS_RELEASE => self.sys_ioports_release(a0 as _, a1 as _, a2 as _),
             #[cfg(feature = "hypervisor")]
             Sys::GUEST_CREATE => self.sys_guest_create(a0 as _, a1 as _, a2.into(), a3.into()),
             #[cfg(feature = "hypervisor")]
@@ -416,13 +409,10 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::MTRACE_CONTROL => {
-                warn!("mtrace.control: not yet implemented");
+                // Removed upstream.
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::SMC_CALL => {
-                warn!("smc.call: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::SMC_CALL => self.sys_smc_call(a0 as _, a1, a2),
             Sys::DEBUG_SEND_COMMAND => {
                 warn!("debug.send_command: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
@@ -436,12 +426,8 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::SYSTEM_POWERCTL => self.sys_system_powerctl(a0 as _, a1 as _, a2),
-            Sys::FRAMEBUFFER_GET_INFO => {
-                warn!("framebuffer.get_info: deprecated and not implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
-            Sys::FRAMEBUFFER_SET_RANGE => {
-                warn!("framebuffer.set_range: deprecated and not implemented");
+            Sys::FRAMEBUFFER_GET_INFO | Sys::FRAMEBUFFER_SET_RANGE => {
+                // Removed upstream -- replaced by display driver protocols.
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::INTERRUPT_BIND_VCPU => {
@@ -472,7 +458,76 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::KTRACE_WRITE => {
-                warn!("ktrace.write: not yet implemented (removed upstream)");
+                // Removed upstream.
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            // --- Newer upstream Fuchsia syscalls (stubs) ---
+            Sys::IOB_CREATE
+            | Sys::IOB_WRITEV
+            | Sys::IOB_ALLOCATE_ID
+            | Sys::IOB_CREATE_SHARED_REGION => {
+                warn!("iob: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::COUNTER_CREATE => self.sys_counter_create(a0 as _, a1.into()),
+            Sys::COUNTER_READ => self.sys_counter_read(a0 as _, a1.into()),
+            Sys::COUNTER_WRITE => self.sys_counter_write(a0 as _, a1 as _),
+            Sys::COUNTER_ADD => self.sys_counter_add(a0 as _, a1 as _),
+            Sys::SAMPLER_CREATE | Sys::SAMPLER_READ | Sys::SAMPLER_START | Sys::SAMPLER_STOP => {
+                warn!("sampler: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::MEMBARRIER_SYNC_PROCESS_DATA => self.sys_membarrier_sync_process_data(),
+            Sys::MEMBARRIER_SYNC_PROCESS_INSN => self.sys_membarrier_sync_process_insn(),
+            Sys::RESTRICTED_ENTER
+            | Sys::RESTRICTED_BIND_STATE
+            | Sys::RESTRICTED_KICK
+            | Sys::RESTRICTED_UNBIND_STATE => {
+                warn!("restricted: not yet implemented (needed for #409)");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::CACHE_FLUSH => self.sys_cache_flush(a0, a1, a2 as _),
+            // --- Additional upstream syscalls (stubs) ---
+            Sys::THREAD_LEGACY_YIELD => {
+                // Yield CPU. In Fuchsia this is a hint to the scheduler.
+                // We treat it as a no-op (correct behavior per Zircon docs).
+                Ok(())
+            }
+            Sys::THREAD_RAISE_EXCEPTION | Sys::THREAD_SET_RSEQ => {
+                warn!("thread: {:?} not yet implemented", sys_type);
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PROCESS_CREATE_SHARED => {
+                warn!("process.create_shared: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PORT_CANCEL_KEY => self.sys_port_cancel_key(a0 as _, a1 as _, a2 as _),
+            Sys::VMO_GET_STREAM_SIZE => self.sys_vmo_get_stream_size(a0 as _, a1.into()),
+            Sys::VMO_SET_STREAM_SIZE => self.sys_vmo_set_stream_size(a0 as _, a1),
+            Sys::VMO_TRANSFER_DATA => {
+                warn!("vmo.transfer_data: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::VMAR_MAP_CLOCK | Sys::VMAR_MAP_IOB => {
+                warn!("vmar: {:?} not yet implemented", sys_type);
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PAGER_QUERY_DIRTY_RANGES => self.sys_pager_query_dirty_ranges(
+                a0 as _,
+                a1 as _,
+                a2 as _,
+                a3 as _,
+                a4,
+                a5,
+                a6.into(),
+                a7.into(),
+            ),
+            Sys::PAGER_QUERY_VMO_STATS => self.sys_pager_query_vmo_stats(a0 as _, a1 as _, a2, a3),
+            Sys::SYSTEM_GET_PERFORMANCE_INFO
+            | Sys::SYSTEM_SET_PERFORMANCE_INFO
+            | Sys::SYSTEM_SUSPEND_ENTER
+            | Sys::SYSTEM_WATCH_MEMORY_STALL => {
+                warn!("system: {:?} not yet implemented", sys_type);
                 Err(ZxError::NOT_SUPPORTED)
             }
             _ => {

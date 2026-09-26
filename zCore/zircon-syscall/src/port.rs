@@ -70,4 +70,26 @@ impl Syscall<'_> {
         let source = proc.get_dyn_object_with_rights(source_handle, Rights::empty())?;
         port.cancel_async(source.id(), key)
     }
+
+    /// Cancel all pending async waits on a port matching the given key.
+    ///
+    /// Unlike `port_cancel`, this does not require a source handle --
+    /// it cancels all subscriptions with the matching key.
+    pub fn sys_port_cancel_key(
+        &self,
+        port_handle: HandleValue,
+        options: u32,
+        key: u64,
+    ) -> ZxResult {
+        info!(
+            "port.cancel_key: port={:#x}, options={}, key={:#x}",
+            port_handle, options, key
+        );
+        if options != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let proc = self.thread.proc();
+        let port = proc.get_object_with_rights::<Port>(port_handle, Rights::WRITE)?;
+        port.cancel_by_key(key)
+    }
 }

@@ -97,4 +97,54 @@ impl Syscall<'_> {
         let vmo = proc.get_object::<VmObject>(vmo_handle)?;
         pager.op_range(op, &vmo, offset, length, data)
     }
+
+    /// Query dirty page ranges of a pager-backed VMO.
+    ///
+    /// Returns ranges of pages that have been modified since the last
+    /// writeback. Currently returns NOT_SUPPORTED as dirty page tracking
+    /// is not yet implemented in the VMO subsystem.
+    #[allow(clippy::too_many_arguments)]
+    pub fn sys_pager_query_dirty_ranges(
+        &self,
+        pager_handle: HandleValue,
+        vmo_handle: HandleValue,
+        offset: u64,
+        length: u64,
+        _buffer: usize,
+        _buffer_size: usize,
+        _actual: UserOutPtr<usize>,
+        _avail: UserOutPtr<usize>,
+    ) -> ZxResult {
+        info!(
+            "pager.query_dirty_ranges: pager={:#x}, vmo={:#x}, offset={:#x}, len={:#x}",
+            pager_handle, vmo_handle, offset, length
+        );
+        let proc = self.thread.proc();
+        let _pager = proc.get_object::<Pager>(pager_handle)?;
+        let _vmo = proc.get_object::<VmObject>(vmo_handle)?;
+        // TODO: implement dirty page tracking in VMO subsystem
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Query statistics about a pager-backed VMO.
+    ///
+    /// Returns statistics like committed bytes and populated bytes.
+    /// Currently returns NOT_SUPPORTED as VMO statistics tracking
+    /// is not yet implemented.
+    pub fn sys_pager_query_vmo_stats(
+        &self,
+        pager_handle: HandleValue,
+        options: u32,
+        _buffer: usize,
+        _buffer_size: usize,
+    ) -> ZxResult {
+        info!(
+            "pager.query_vmo_stats: pager={:#x}, options={}",
+            pager_handle, options
+        );
+        let proc = self.thread.proc();
+        let _pager = proc.get_object::<Pager>(pager_handle)?;
+        // TODO: implement VMO statistics tracking
+        Err(ZxError::NOT_SUPPORTED)
+    }
 }
