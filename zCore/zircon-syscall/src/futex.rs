@@ -130,6 +130,10 @@ impl Syscall<'_> {
     ///
     /// Returns the koid of the thread that owns the futex, or
     /// `ZX_KOID_INVALID` (0) if the futex has no owner.
+    ///
+    /// Note: like other futex syscalls, this only validates pointer
+    /// alignment and nullness. A full mapping check would require
+    /// address space lookup (tracked as a broader futex hardening issue).
     pub fn sys_futex_get_owner(
         &self,
         value_ptr: UserInPtr<AtomicI32>,

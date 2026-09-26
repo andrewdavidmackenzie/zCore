@@ -171,7 +171,44 @@
 #define ZX_SYS_vmo_replace_as_executable 164
 #define ZX_SYS_vmo_create_contiguous 165
 #define ZX_SYS_vmo_create_physical 166
-#define ZX_SYS_COUNT 167
+// Newer upstream Fuchsia syscalls
+#define ZX_SYS_iob_create 167
+#define ZX_SYS_iob_writev 168
+#define ZX_SYS_iob_allocate_id 169
+#define ZX_SYS_iob_create_shared_region 170
+#define ZX_SYS_counter_create 171
+#define ZX_SYS_counter_read 172
+#define ZX_SYS_counter_write 173
+#define ZX_SYS_counter_add 174
+#define ZX_SYS_sampler_create 175
+#define ZX_SYS_sampler_read 176
+#define ZX_SYS_sampler_start 177
+#define ZX_SYS_sampler_stop 178
+#define ZX_SYS_membarrier_sync_process_data 179
+#define ZX_SYS_membarrier_sync_process_insn 180
+#define ZX_SYS_restricted_enter 181
+#define ZX_SYS_restricted_bind_state 182
+#define ZX_SYS_restricted_kick 183
+#define ZX_SYS_restricted_unbind_state 184
+#define ZX_SYS_cache_flush 185
+#define ZX_SYS_thread_legacy_yield 186
+#define ZX_SYS_thread_raise_exception 187
+#define ZX_SYS_thread_set_rseq 188
+#define ZX_SYS_process_create_shared 189
+#define ZX_SYS_port_cancel_key 190
+#define ZX_SYS_vmo_get_stream_size 191
+#define ZX_SYS_vmo_set_stream_size 192
+#define ZX_SYS_vmo_transfer_data 193
+#define ZX_SYS_vmar_map_clock 194
+#define ZX_SYS_vmar_map_iob 195
+#define ZX_SYS_pager_query_dirty_ranges 196
+#define ZX_SYS_pager_query_vmo_stats 197
+#define ZX_SYS_system_get_performance_info 198
+#define ZX_SYS_system_set_performance_info 199
+// 200-202 reserved for compound/special syscalls below
+#define ZX_SYS_system_suspend_enter 203
+#define ZX_SYS_system_watch_memory_stall 204
+#define ZX_SYS_COUNT 205
 
 #define ZX_SYS_futex_wake_handle_close_thread_exit 200
 #define ZX_SYS_vmar_unmap_handle_close_thread_exit 201

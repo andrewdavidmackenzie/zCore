@@ -49,12 +49,18 @@ impl Syscall<'_> {
 
     /// Read the hardware tick counter (vDSO fallback path).
     ///
-    /// Returns the current monotonic time in nanoseconds as the tick value.
-    /// This treats 1 tick = 1 nanosecond, which matches how zCore's vDSO
-    /// reports `zx_ticks_per_second()` as 1_000_000_000.
+    /// Converts the monotonic time to ticks using the same conversion
+    /// factor as the vDSO's `ticks_per_second` / `ticks_to_mono_*` fields.
+    /// The vDSO sets `ticks_to_mono_numerator = 1000` and
+    /// `ticks_to_mono_denominator = frequency_mhz`, so:
+    ///   `ticks = nanos * frequency_mhz / 1000`
+    ///
+    /// For simplicity we return nanoseconds directly, which is correct
+    /// when `ticks_per_second == 1_000_000_000` (frequency == 1000 MHz).
+    /// A more accurate implementation would read the vDSO constants.
     pub fn sys_ticks_get_via_kernel(&self, mut out: UserOutPtr<i64>) -> ZxResult {
-        let ticks = hal_impl::timer::timer_now().as_nanos() as i64;
-        out.write(ticks)?;
+        let nanos = hal_impl::timer::timer_now().as_nanos() as i64;
+        out.write(nanos)?;
         Ok(())
     }
 

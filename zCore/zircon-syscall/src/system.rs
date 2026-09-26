@@ -145,7 +145,7 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let counter = Counter::new();
-        let handle = proc.add_handle(Handle::new(counter, Rights::DEFAULT_EVENT));
+        let handle = proc.add_handle(Handle::new(counter, Rights::DEFAULT_COUNTER));
         out.write(handle)?;
         Ok(())
     }

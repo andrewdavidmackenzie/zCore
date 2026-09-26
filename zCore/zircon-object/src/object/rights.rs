@@ -126,6 +126,9 @@ bitflags! {
         /// BASIC | SIGNAL
         const DEFAULT_EVENT = Self::BASIC.bits | Self::SIGNAL.bits;
 
+        /// BASIC | SIGNAL | READ | WRITE
+        const DEFAULT_COUNTER = Self::BASIC.bits | Self::SIGNAL.bits | Self::READ.bits | Self::WRITE.bits;
+
         /// DUPLICATE | TRANSFER | APPLY_PROFILE
         const DEFAULT_PROFILE = Self::DUPLICATE.bits | Self::TRANSFER.bits | Self::APPLY_PROFILE.bits;
 

@@ -522,10 +522,17 @@ impl Syscall<'_> {
                 warn!("vmar: {:?} not yet implemented", sys_type);
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::PAGER_QUERY_DIRTY_RANGES | Sys::PAGER_QUERY_VMO_STATS => {
-                warn!("pager: {:?} not yet implemented", sys_type);
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::PAGER_QUERY_DIRTY_RANGES => self.sys_pager_query_dirty_ranges(
+                a0 as _,
+                a1 as _,
+                a2 as _,
+                a3 as _,
+                a4,
+                a5,
+                a6.into(),
+                a7.into(),
+            ),
+            Sys::PAGER_QUERY_VMO_STATS => self.sys_pager_query_vmo_stats(a0 as _, a1 as _, a2, a3),
             Sys::SYSTEM_GET_PERFORMANCE_INFO
             | Sys::SYSTEM_SET_PERFORMANCE_INFO
             | Sys::SYSTEM_SUSPEND_ENTER

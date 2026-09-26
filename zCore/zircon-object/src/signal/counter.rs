@@ -6,18 +6,21 @@
 
 use crate::object::*;
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicI64, Ordering};
+use lock::Mutex;
 
 /// Signal asserted when the counter value is > 0.
 const COUNTER_POSITIVE: Signal = Signal::USER_SIGNAL_0;
 /// Signal asserted when the counter value is <= 0.
 const COUNTER_NON_POSITIVE: Signal = Signal::USER_SIGNAL_1;
 
-/// A Counter kernel object wrapping an atomic signed 64-bit integer.
+/// A Counter kernel object wrapping a signed 64-bit integer.
+///
+/// The value and signals are updated atomically under a lock
+/// to prevent signal/value disagreement under concurrent access.
 pub struct Counter {
     base: KObjectBase,
     _counter: CountHelper,
-    value: AtomicI64,
+    value: Mutex<i64>,
 }
 
 impl_kobject!(Counter
@@ -33,26 +36,32 @@ impl Counter {
         Arc::new(Counter {
             base: KObjectBase::with_signal(COUNTER_NON_POSITIVE),
             _counter: CountHelper::new(),
-            value: AtomicI64::new(0),
+            value: Mutex::new(0),
         })
     }
 
     /// Read the current value.
     pub fn read(&self) -> i64 {
-        self.value.load(Ordering::SeqCst)
+        *self.value.lock()
     }
 
     /// Write a new value and update signals.
     pub fn write(&self, value: i64) {
-        self.value.store(value, Ordering::SeqCst);
+        let mut guard = self.value.lock();
+        *guard = value;
         self.update_signals(value);
     }
 
     /// Atomically add `delta` to the value and update signals.
     ///
+    /// Uses wrapping addition to avoid overflow panics from
+    /// user-supplied delta values.
+    ///
     /// Returns the value after the addition.
     pub fn add(&self, delta: i64) -> i64 {
-        let new = self.value.fetch_add(delta, Ordering::SeqCst) + delta;
+        let mut guard = self.value.lock();
+        let new = (*guard).wrapping_add(delta);
+        *guard = new;
         self.update_signals(new);
         new
     }
