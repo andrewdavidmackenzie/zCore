@@ -416,7 +416,7 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::MTRACE_CONTROL => {
-                warn!("mtrace.control: not yet implemented");
+                // Removed upstream.
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::SMC_CALL => {
@@ -436,12 +436,8 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::SYSTEM_POWERCTL => self.sys_system_powerctl(a0 as _, a1 as _, a2),
-            Sys::FRAMEBUFFER_GET_INFO => {
-                warn!("framebuffer.get_info: deprecated and not implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
-            Sys::FRAMEBUFFER_SET_RANGE => {
-                warn!("framebuffer.set_range: deprecated and not implemented");
+            Sys::FRAMEBUFFER_GET_INFO | Sys::FRAMEBUFFER_SET_RANGE => {
+                // Removed upstream -- replaced by display driver protocols.
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::INTERRUPT_BIND_VCPU => {
@@ -472,7 +468,7 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::KTRACE_WRITE => {
-                warn!("ktrace.write: not yet implemented (removed upstream)");
+                // Removed upstream.
                 Err(ZxError::NOT_SUPPORTED)
             }
             // --- Newer upstream Fuchsia syscalls (stubs) ---
@@ -501,6 +497,43 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::CACHE_FLUSH => self.sys_cache_flush(a0, a1, a2 as _),
+            // --- Additional upstream syscalls (stubs) ---
+            Sys::THREAD_LEGACY_YIELD => {
+                // Yield CPU. In Fuchsia this is a hint to the scheduler.
+                // We treat it as a no-op (correct behavior per Zircon docs).
+                Ok(())
+            }
+            Sys::THREAD_RAISE_EXCEPTION | Sys::THREAD_SET_RSEQ => {
+                warn!("thread: {:?} not yet implemented", sys_type);
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PROCESS_CREATE_SHARED => {
+                warn!("process.create_shared: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PORT_CANCEL_KEY => {
+                warn!("port.cancel_key: not yet implemented");
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::VMO_GET_STREAM_SIZE | Sys::VMO_SET_STREAM_SIZE | Sys::VMO_TRANSFER_DATA => {
+                warn!("vmo: {:?} not yet implemented", sys_type);
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::VMAR_MAP_CLOCK | Sys::VMAR_MAP_IOB => {
+                warn!("vmar: {:?} not yet implemented", sys_type);
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::PAGER_QUERY_DIRTY_RANGES | Sys::PAGER_QUERY_VMO_STATS => {
+                warn!("pager: {:?} not yet implemented", sys_type);
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::SYSTEM_GET_PERFORMANCE_INFO
+            | Sys::SYSTEM_SET_PERFORMANCE_INFO
+            | Sys::SYSTEM_SUSPEND_ENTER
+            | Sys::SYSTEM_WATCH_MEMORY_STALL => {
+                warn!("system: {:?} not yet implemented", sys_type);
+                Err(ZxError::NOT_SUPPORTED)
+            }
             _ => {
                 error!("syscall unimplemented: {:?}", sys_type);
                 Err(ZxError::NOT_SUPPORTED)

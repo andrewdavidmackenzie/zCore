@@ -15,6 +15,8 @@ numeric_enum! {
         VMEX = 5,
         SMC = 6,
         COUNT = 7,
+        /// System resource kind (used for power, debug, mexec, etc.)
+        SYSTEM = 0x3F,
     }
 }
 
@@ -109,6 +111,22 @@ impl Resource {
         }
     }
 }
+
+// System resource sub-resource base IDs (for validate_ranged_resource).
+// These match zircon/system/public/zircon/syscalls/resource.h.
+
+/// Base for power control (reboot, shutdown).
+pub const ZX_RSRC_SYSTEM_POWER_BASE: usize = 0;
+/// Base for mexec (soft reboot / kexec).
+pub const ZX_RSRC_SYSTEM_MEXEC_BASE: usize = 1;
+/// Base for debug operations (debug_send_command, mtrace).
+pub const ZX_RSRC_SYSTEM_DEBUG_BASE: usize = 2;
+/// Base for MSI interrupt allocation.
+pub const ZX_RSRC_SYSTEM_MSI_BASE: usize = 3;
+/// Base for profile creation.
+pub const ZX_RSRC_SYSTEM_PROFILE_BASE: usize = 4;
+/// Base for kernel tracing (ktrace).
+pub const ZX_RSRC_SYSTEM_TRACING_BASE: usize = 5;
 
 /// Information of a resource.
 #[repr(C)]
