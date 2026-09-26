@@ -1,4 +1,5 @@
 mod drivers;
+#[cfg(feature = "fb-console")]
 pub(crate) mod fb_console;
 mod smp;
 pub(crate) mod trap;
@@ -15,7 +16,8 @@ pub mod special;
 hal_fn_impl! {
     impl mod crate::hal_fn::console {
         fn console_write_early(s: &str) {
-            // COM1 (0x3F8): direct register writes, always available on x86.
+            // COM1 serial output (only when uart-16550 driver is enabled).
+            #[cfg(feature = "uart-16550")]
             for b in s.bytes() {
                 unsafe {
                     // Wait for THR empty (LSR bit 5)
@@ -23,7 +25,8 @@ hal_fn_impl! {
                     x86::io::outb(0x3F8, b);
                 }
             }
-            // Framebuffer: visible output on real hardware without serial.
+            // Framebuffer console output.
+            #[cfg(feature = "fb-console")]
             fb_console::write_str(s);
         }
     }
@@ -55,6 +58,7 @@ pub fn primary_init_early() {
     // init serial output first
     drivers::init_early().unwrap();
     // init framebuffer console (if available)
+    #[cfg(feature = "fb-console")]
     fb_console::init();
     // Log key boot values for diagnostics
     info!(

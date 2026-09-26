@@ -10,7 +10,7 @@
 
 arch = "x86_64"
 linker-script = "zCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
-drivers = ["apic", "ps2-keyboard"]
+drivers = ["apic", "ps2-keyboard", "fb-console"]
 
 # No [qemu] section -- this is real hardware.
 # Use `make x86-uefi-usb-linux` or `make x86-uefi-usb-zircon` to
