@@ -483,18 +483,16 @@ impl Syscall<'_> {
                 warn!("iob: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::COUNTER_CREATE | Sys::COUNTER_READ | Sys::COUNTER_WRITE | Sys::COUNTER_ADD => {
-                warn!("counter: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::COUNTER_CREATE => self.sys_counter_create(a0 as _, a1.into()),
+            Sys::COUNTER_READ => self.sys_counter_read(a0 as _, a1.into()),
+            Sys::COUNTER_WRITE => self.sys_counter_write(a0 as _, a1 as _),
+            Sys::COUNTER_ADD => self.sys_counter_add(a0 as _, a1 as _),
             Sys::SAMPLER_CREATE | Sys::SAMPLER_READ | Sys::SAMPLER_START | Sys::SAMPLER_STOP => {
                 warn!("sampler: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::MEMBARRIER_SYNC_PROCESS_DATA | Sys::MEMBARRIER_SYNC_PROCESS_INSN => {
-                warn!("membarrier: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::MEMBARRIER_SYNC_PROCESS_DATA => self.sys_membarrier_sync_process_data(),
+            Sys::MEMBARRIER_SYNC_PROCESS_INSN => self.sys_membarrier_sync_process_insn(),
             Sys::RESTRICTED_ENTER
             | Sys::RESTRICTED_BIND_STATE
             | Sys::RESTRICTED_KICK
@@ -502,10 +500,7 @@ impl Syscall<'_> {
                 warn!("restricted: not yet implemented (needed for #409)");
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::CACHE_FLUSH => {
-                warn!("cache.flush: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::CACHE_FLUSH => self.sys_cache_flush(a0, a1, a2 as _),
             _ => {
                 error!("syscall unimplemented: {:?}", sys_type);
                 Err(ZxError::NOT_SUPPORTED)
