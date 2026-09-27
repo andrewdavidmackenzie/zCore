@@ -164,6 +164,11 @@ bitflags! {
 
         /// BASIC | IO | EXECUTE | SIGNAL
         const DEFAULT_VCPU = Self::BASIC.bits | Self::IO.bits | Self::EXECUTE.bits | Self::SIGNAL.bits;
+
+        /// BASIC | IO | MAP | SIGNAL | SIGNAL_PEER | PROPERTY
+        /// Per Fuchsia spec: TRANSFER, DUPLICATE, WAIT, INSPECT, READ, WRITE,
+        /// MAP, SIGNAL, SIGNAL_PEER, GET_PROPERTY, SET_PROPERTY
+        const DEFAULT_IOB = Self::BASIC.bits | Self::IO.bits | Self::MAP.bits | Self::SIGNAL.bits | Self::SIGNAL_PEER.bits | Self::PROPERTY.bits;
     }
 }
 

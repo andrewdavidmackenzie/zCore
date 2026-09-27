@@ -36,6 +36,7 @@ mod futex;
 mod handle;
 #[cfg(feature = "hypervisor")]
 mod hypervisor;
+mod iob;
 mod object;
 mod pager;
 mod pci;
@@ -449,13 +450,12 @@ impl Syscall<'_> {
                 // Removed upstream.
                 Err(ZxError::NOT_SUPPORTED)
             }
-            // --- Newer upstream Fuchsia syscalls (stubs) ---
-            Sys::IOB_CREATE
-            | Sys::IOB_WRITEV
-            | Sys::IOB_ALLOCATE_ID
-            | Sys::IOB_CREATE_SHARED_REGION => {
-                warn!("iob: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+            // --- Newer upstream Fuchsia syscalls ---
+            Sys::IOB_CREATE => self.sys_iob_create(a0 as _, a1, a2 as _, a3.into(), a4.into()),
+            Sys::IOB_WRITEV => self.sys_iob_writev(a0 as _, a1 as _, a2 as _, a3, a4 as _),
+            Sys::IOB_ALLOCATE_ID => self.sys_iob_allocate_id(a0 as _, a1 as _, a2 as _),
+            Sys::IOB_CREATE_SHARED_REGION => {
+                self.sys_iob_create_shared_region(a0 as _, a1 as _, a2.into())
             }
             Sys::COUNTER_CREATE => self.sys_counter_create(a0 as _, a1.into()),
             Sys::COUNTER_READ => self.sys_counter_read(a0 as _, a1.into()),
