@@ -412,11 +412,27 @@ impl QemuArgs {
                     panic!("boot image creation failed");
                 }
 
-                // The bootimage tool creates a BIOS disk image.
-                // UEFI is blocked by upstream bootloader#579, tracked in #151.
+                // The bootimage tool creates a UEFI disk image.
+                // Boot via OVMF (edk2) firmware.
+                let edk2_paths = [
+                    "/opt/homebrew/share/qemu/edk2-x86_64-code.fd",
+                    "/usr/share/qemu/edk2-x86_64-code.fd",
+                    "/usr/share/OVMF/OVMF_CODE.fd",
+                ];
+                let edk2 = edk2_paths
+                    .iter()
+                    .find(|p| std::path::Path::new(p).exists())
+                    .expect(
+                        "edk2-x86_64-code.fd not found. Install QEMU UEFI firmware \
+                         (e.g., `brew install qemu` on macOS or `apt install ovmf` on Ubuntu).",
+                    );
                 qemu.args(["-machine", "q35"])
                     .args(["-cpu", "qemu64,+fsgsbase,+rdrand"])
                     .args(["-serial", "mon:stdio"])
+                    .args([
+                        "-drive",
+                        &format!("if=pflash,format=raw,readonly=on,file={}", edk2),
+                    ])
                     .args([
                         "-drive",
                         &format!("format=raw,file={}", disk_image.display()),

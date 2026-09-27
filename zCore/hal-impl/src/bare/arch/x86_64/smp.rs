@@ -39,6 +39,11 @@ fn register_ap(apic_id: u32) -> u8 {
 
 /// Initialize executor runtimes for the BSP and all APs.
 /// Called after ACPI enumeration, before APs start using the executor.
+///
+/// NOTE: AP APIC IDs (u32) are truncated to u8 here because the executor
+/// runtime map is keyed by u8. This is safe for systems with APIC IDs < 256
+/// (our target hardware). For x2APIC systems with IDs >= 256, the executor
+/// would need to use u32 keys instead.
 pub fn init_executor_runtimes(bsp_id: u8, ap_ids: &[u32]) {
     let mut cpu_ids = alloc::vec![bsp_id];
     for &id in ap_ids {
@@ -68,8 +73,8 @@ const SIPI_VECTOR: u8 = (TRAMPOLINE_PHYS >> 12) as u8;
 /// Size of per-AP kernel stack (128 KiB).
 const AP_STACK_SIZE: usize = 128 * 1024;
 
-/// Maximum number of APs supported.
-const MAX_APS: usize = 7; // 8 cores total, 1 BSP
+/// Maximum number of APs supported (cores - 1 from target config).
+const MAX_APS: usize = crate::config::MAX_CORE_NUM - 1;
 
 /// Shared data between BSP and AP trampoline, placed right after the
 /// trampoline code at a known offset. The trampoline assembly reads
@@ -216,6 +221,11 @@ extern "C" fn ap_entry() -> ! {
     }
     // Register this AP's APIC ID → logical core index mapping.
     // Must happen before anything calls cpu_id().
+    //
+    // NOTE: `initial_local_apic_id()` returns a u8 (bits 31:24 of CPUID.01H:EBX).
+    // On x2APIC systems with APIC IDs > 255, this would need CPUID leaf 0x0B
+    // (extended topology) to read the full 32-bit ID. This is a known limitation;
+    // our target hardware (ThinkPad T480 with 6 cores, APIC IDs 0-10) fits in 8 bits.
     let apic_id = raw_cpuid::CpuId::new()
         .get_feature_info()
         .map(|f| f.initial_local_apic_id())

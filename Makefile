@@ -181,8 +181,12 @@ ifeq ($(shell uname),Darwin)
 	 else echo "Warning: could not determine disk for $(SD)"; fi
 endif
 
-# Build x86_64 kernel in Linux mode.
+# Build x86_64 kernel in Linux mode (plus rootfs and boot-image tool).
 x86-linux-build:
+	@echo "==> Building rootfs image..."
+	cargo image --arch x86_64
+	@echo "==> Building x86-bootimage tool..."
+	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
 	@echo "==> Building zCore kernel (Linux, x86_64)..."
 	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m qemu-x86_64 --flavour linux
 
@@ -243,25 +247,27 @@ endif
 # Usage: make x86-pxe
 # Then run dnsmasq: sudo dnsmasq --no-daemon -C target/x86-laptop/pxe/dnsmasq.conf
 PXE_DIR ?= target/x86-laptop/pxe/tftpboot
+PXE_SUBNET ?= 192.168.1
 x86-pxe:
 	cargo image --arch x86_64
 	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m x86-laptop --flavour linux
 	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
-	@rm -rf $(PXE_DIR)
+	@rm -rf $(PXE_DIR)/zcore
+	@mkdir -p $(PXE_DIR)/zcore
 	@tools/x86-bootimage/target/release/x86-bootimage \
 		target/x86-laptop/release/kernel \
-		$(PXE_DIR) \
+		$(PXE_DIR)/zcore \
 		--ramdisk target/qemu-x86_64/release/x86_64-linux.img \
 		--pxe
 	@mkdir -p target/x86-laptop/pxe
 	@echo "port=0" > target/x86-laptop/pxe/dnsmasq.conf
-	@echo "dhcp-range=192.168.1.0,proxy" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-range=$(PXE_SUBNET).0,proxy" >> target/x86-laptop/pxe/dnsmasq.conf
 	@echo "dhcp-no-override" >> target/x86-laptop/pxe/dnsmasq.conf
 	@echo "enable-tftp" >> target/x86-laptop/pxe/dnsmasq.conf
-	@echo "tftp-root=$(CURDIR)/$(PXE_DIR)" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo "tftp-root=$(abspath $(PXE_DIR))" >> target/x86-laptop/pxe/dnsmasq.conf
 	@echo "dhcp-match=set:efi-x86_64,option:client-arch,7" >> target/x86-laptop/pxe/dnsmasq.conf
 	@echo "dhcp-match=set:efi-x86_64,option:client-arch,9" >> target/x86-laptop/pxe/dnsmasq.conf
-	@echo "dhcp-boot=tag:efi-x86_64,bootloader" >> target/x86-laptop/pxe/dnsmasq.conf
+	@echo "dhcp-boot=tag:efi-x86_64,zcore/bootloader" >> target/x86-laptop/pxe/dnsmasq.conf
 	@echo "log-dhcp" >> target/x86-laptop/pxe/dnsmasq.conf
 	@echo ""
 	@echo "==> PXE TFTP directory ready at $(PXE_DIR)"

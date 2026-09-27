@@ -19,7 +19,7 @@ BOOTIMAGE_TOOL="$BOOTIMAGE_DIR/target/release/x86-bootimage"
 if [ ! -f "$KERNEL_ELF" ]; then
     echo "Building x86_64 kernel..."
     cargo image --arch x86_64
-    cargo bin -m qemu-x86_64
+    ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/busybox?sh" cargo zcore-build -m x86-laptop --flavour linux
 fi
 
 if [ ! -f "$KERNEL_ELF" ]; then
