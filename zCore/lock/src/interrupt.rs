@@ -1,35 +1,31 @@
-use core::cell::{RefCell, RefMut};
+//! Interrupt management for spin locks.
+//!
+//! Provides `push_off`/`pop_off` to disable/restore interrupts around
+//! critical sections. Each `push_off` returns a `bool` indicating whether
+//! interrupts were enabled before the call. The corresponding `pop_off`
+//! restores that state.
+//!
+//! **Guards must be dropped in LIFO (stack) order.** Dropping an outer
+//! guard before an inner guard would re-enable interrupts while a lock
+//! is still held, allowing interrupt handlers to deadlock. This is
+//! enforced by a debug assertion in `pop_off`.
 
 cfg_if::cfg_if! {
     if #[cfg(all(target_os = "none", any(target_arch = "riscv32", target_arch = "riscv64")))] {
         mod interrupts {
-            use riscv::register::sstatus;
-            pub(crate) fn cpu_id() -> u8 {
-                let mut cpu_id;
-                unsafe {
-                    core::arch::asm!("mv {0}, tp", out(reg) cpu_id);
-                }
-                cpu_id
-            }
             pub(crate) fn intr_on() {
-                unsafe { sstatus::set_sie() };
+                unsafe { riscv::register::sstatus::set_sie() };
             }
             pub(crate) fn intr_off() {
-                unsafe { sstatus::clear_sie() };
+                unsafe { riscv::register::sstatus::clear_sie() };
             }
             pub(crate) fn intr_get() -> bool {
-                sstatus::read().sie()
+                riscv::register::sstatus::read().sie()
             }
         }
     } else if #[cfg(all(target_os = "none", any(target_arch = "x86", target_arch = "x86_64")))] {
         mod interrupts {
             use x86_64::instructions::interrupts;
-            pub(crate) fn cpu_id() -> u8 {
-                raw_cpuid::CpuId::new()
-                    .get_feature_info()
-                    .unwrap()
-                    .initial_local_apic_id() as u8
-            }
             pub(crate) fn intr_on() {
                 interrupts::enable();
             }
@@ -42,11 +38,6 @@ cfg_if::cfg_if! {
         }
     } else if #[cfg(all(target_os = "none", target_arch = "aarch64"))] {
         mod interrupts {
-            pub(crate) fn cpu_id() -> u8 {
-                use cortex_a::registers::MPIDR_EL1;
-                use tock_registers::interfaces::Readable;
-                (MPIDR_EL1.get() & 0xf) as u8
-            }
             pub(crate) fn intr_on() {
                 unsafe {
                     core::arch::asm!("msr daifclr, #2");
@@ -65,82 +56,49 @@ cfg_if::cfg_if! {
         }
     } else {
         mod interrupts {
-            pub(crate) fn cpu_id() -> u8 {
-                unimplemented!();
-            }
             pub(crate) fn intr_on() { unimplemented!(); }
             pub(crate) fn intr_off() { unimplemented!(); }
-            pub(crate) fn intr_get() -> bool {
-                unimplemented!();
-            }
+            pub(crate) fn intr_get() -> bool { unimplemented!(); }
         }
     }
 }
 
 use interrupts::*;
 
-#[derive(Debug, Default, Clone, Copy)]
-#[repr(align(64))]
-pub struct Cpu {
-    pub noff: i32,              // Depth of push_off() nesting.
-    pub interrupt_enable: bool, // Were interrupts enabled before push_off()?
-}
-
-impl Cpu {
-    const fn new() -> Self {
-        Self {
-            noff: 0,
-            interrupt_enable: false,
-        }
-    }
-}
-
-pub struct SafeRefCell<T>(RefCell<T>);
-
-// #Safety: Only the corresponding cpu will access it.
-unsafe impl<Cpu> Sync for SafeRefCell<Cpu> {}
-
-impl<T> SafeRefCell<T> {
-    const fn new(t: T) -> Self {
-        Self(RefCell::new(t))
-    }
-}
-
-// Avoid hard code
-#[allow(clippy::declare_interior_mutable_const)]
-const DEFAULT_CPU: SafeRefCell<Cpu> = SafeRefCell::new(Cpu::new());
-
-const MAX_CORE_NUM: usize = 16;
-
-static CPUS: [SafeRefCell<Cpu>; MAX_CORE_NUM] = [DEFAULT_CPU; MAX_CORE_NUM];
-
-pub fn mycpu() -> RefMut<'static, Cpu> {
-    CPUS[cpu_id() as usize].0.borrow_mut()
-}
-
-// push_off/pop_off are like intr_off()/intr_on() except that they are matched:
-// it takes two pop_off()s to undo two push_off()s.  Also, if interrupts
-// are initially off, then push_off, pop_off leaves them off.
-pub(crate) fn push_off() {
-    let old = intr_get();
+/// Disable interrupts and return whether they were previously enabled.
+///
+/// Each lock guard stores this return value and passes it to `pop_off`
+/// on drop. Nesting is handled naturally: inner locks see
+/// `was_enabled = false` (already off) and their `pop_off` is a no-op.
+///
+/// Guards must be dropped in LIFO order. Dropping an outer guard first
+/// would re-enable interrupts while an inner lock is still held.
+#[inline(always)]
+pub(crate) fn push_off() -> bool {
+    let was_enabled = intr_get();
     intr_off();
-    let mut cpu = mycpu();
-    if cpu.noff == 0 {
-        cpu.interrupt_enable = old;
-    }
-    cpu.noff += 1;
+    was_enabled
 }
 
-pub(crate) fn pop_off() {
-    let mut cpu = mycpu();
-    if intr_get() || cpu.noff < 1 {
-        panic!("pop_off");
-    }
-    cpu.noff -= 1;
-    let should_enable = cpu.noff == 0 && cpu.interrupt_enable;
-    drop(cpu);
-    // NOTICE: intr_on() may lead to an immediate inerrupt, so we *MUST* drop(cpu) in advance.
-    if should_enable {
+/// Restore the interrupt state saved by a previous `push_off`.
+///
+/// # Safety invariant
+///
+/// If `was_enabled` is true, interrupts must actually be safe to
+/// re-enable (i.e., no other interrupt-disabling lock is held).
+/// This is guaranteed when guards are dropped in LIFO order.
+#[inline(always)]
+pub(crate) fn pop_off(was_enabled: bool) {
+    // If was_enabled is true, we're about to turn interrupts on.
+    // At this point interrupts should still be off (we haven't
+    // re-enabled yet). If they're already on, a guard was dropped
+    // out of order — an inner lock re-enabled interrupts before
+    // the outer lock was released.
+    debug_assert!(
+        !was_enabled || !intr_get(),
+        "pop_off: interrupts already enabled — guards dropped out of LIFO order"
+    );
+    if was_enabled {
         intr_on();
     }
 }

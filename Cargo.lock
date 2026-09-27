@@ -1230,7 +1230,6 @@ version = "0.1.0"
 dependencies = [
  "cfg-if",
  "cortex-a",
- "raw-cpuid 11.6.0",
  "riscv 0.7.0",
  "spin 0.9.4",
  "tock-registers",
