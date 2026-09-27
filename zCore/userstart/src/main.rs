@@ -540,7 +540,19 @@ fn load_flat(data: &[u8], vmar: HandleValue) -> (usize, usize) {
 /// pointers for the file path, causing a kernel GPF when passed to
 /// `zx_debug_write`.
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    debug_write(b"userstart: PANIC!\n");
+fn panic(info: &PanicInfo) -> ! {
+    debug_write(b"userstart: PANIC: ");
+    // Use a fmt::Write adapter to capture formatted panic messages
+    // (as_str() returns None for messages with format placeholders).
+    struct DebugWriter;
+    impl core::fmt::Write for DebugWriter {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            debug_write(s.as_bytes());
+            Ok(())
+        }
+    }
+    use core::fmt::Write;
+    let _ = write!(DebugWriter, "{}", info.message());
+    debug_write(b"\n");
     process_exit(1);
 }
