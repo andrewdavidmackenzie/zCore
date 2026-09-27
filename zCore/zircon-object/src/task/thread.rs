@@ -131,6 +131,11 @@ struct ThreadInner {
     /// The time this thread has run on cpu
     time: u128,
     flags: ThreadFlag,
+    /// VMO bound for restricted mode state (zx_restricted_state_t).
+    /// Set by restricted_bind_state, cleared by restricted_unbind_state.
+    restricted_state_vmo: Option<Arc<crate::vm::VmObject>>,
+    /// Whether a kick is pending (forces exit from restricted mode).
+    restricted_kick_pending: bool,
 }
 
 impl ThreadInner {
@@ -414,6 +419,54 @@ impl Thread {
     /// Apply `f` to the thread's flags.
     pub fn update_flags(&self, f: impl FnOnce(&mut ThreadFlag)) {
         f(&mut self.inner.lock().flags)
+    }
+
+    /// Bind a restricted mode state VMO to this thread.
+    ///
+    /// Creates a new VMO to hold `zx_restricted_state_t` and binds it
+    /// to the calling thread. Only one VMO can be bound at a time;
+    /// calling again replaces the previous binding.
+    pub fn restricted_bind_state(&self, vmo: Arc<crate::vm::VmObject>) -> ZxResult {
+        let mut inner = self.inner.lock();
+        inner.restricted_state_vmo = Some(vmo);
+        inner.restricted_kick_pending = false;
+        Ok(())
+    }
+
+    /// Unbind any restricted mode state VMO from this thread.
+    pub fn restricted_unbind_state(&self) {
+        let mut inner = self.inner.lock();
+        inner.restricted_state_vmo = None;
+        inner.restricted_kick_pending = false;
+    }
+
+    /// Check whether a restricted mode state VMO is bound.
+    pub fn has_restricted_state(&self) -> bool {
+        self.inner.lock().restricted_state_vmo.is_some()
+    }
+
+    /// Set the kick-pending flag. When the thread next enters (or is
+    /// currently in) restricted mode, it will exit with
+    /// `ZX_RESTRICTED_REASON_KICK`.
+    pub fn restricted_kick(&self) -> ZxResult {
+        let mut inner = self.inner.lock();
+        if inner.state == ThreadState::Dead || inner.state == ThreadState::Dying {
+            return Err(ZxError::BAD_STATE);
+        }
+        inner.restricted_kick_pending = true;
+        // TODO: if the thread is currently in restricted mode, force
+        // an exit by sending an IPI or setting a pending interrupt.
+        Ok(())
+    }
+
+    /// Check and clear the kick-pending flag.
+    pub fn check_restricted_kick(&self) -> bool {
+        let mut inner = self.inner.lock();
+        let pending = inner.restricted_kick_pending;
+        if pending {
+            inner.restricted_kick_pending = false;
+        }
+        pending
     }
 
     /// Terminate the current running thread.

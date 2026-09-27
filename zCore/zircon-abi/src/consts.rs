@@ -293,11 +293,16 @@ pub const SYS_SAMPLER_STOP: u32 = 178;
 pub const SYS_MEMBARRIER_SYNC_PROCESS_DATA: u32 = 179;
 pub const SYS_MEMBARRIER_SYNC_PROCESS_INSN: u32 = 180;
 
-// Restricted mode (secure execution)
+// Restricted mode (secure execution for Starnix)
 pub const SYS_RESTRICTED_ENTER: u32 = 181;
 pub const SYS_RESTRICTED_BIND_STATE: u32 = 182;
 pub const SYS_RESTRICTED_KICK: u32 = 183;
 pub const SYS_RESTRICTED_UNBIND_STATE: u32 = 184;
+
+/// Reason codes returned when exiting restricted mode.
+pub const ZX_RESTRICTED_REASON_SYSCALL: u64 = 0;
+pub const ZX_RESTRICTED_REASON_EXCEPTION: u64 = 1;
+pub const ZX_RESTRICTED_REASON_KICK: u64 = 2;
 
 // Cache operations
 pub const SYS_CACHE_FLUSH: u32 = 185;
