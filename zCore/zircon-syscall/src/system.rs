@@ -1,4 +1,7 @@
 use super::*;
+use zircon_object::dev::{
+    Resource, ResourceKind, ZX_RSRC_SYSTEM_MEXEC_BASE, ZX_RSRC_SYSTEM_TRACING_BASE,
+};
 use zircon_object::signal::{Counter, Event};
 use zircon_object::task::Job;
 
@@ -187,6 +190,198 @@ impl Syscall<'_> {
         core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
+
+    /// Soft reboot the system (kexec-like).
+    ///
+    /// Loads a new kernel image and boot image from VMOs and transfers
+    /// control. Requires a SYSTEM resource with `ZX_RSRC_SYSTEM_MEXEC_BASE`.
+    /// This syscall does not return on success.
+    pub fn sys_system_mexec(
+        &self,
+        resource: HandleValue,
+        _kernel_vmo: HandleValue,
+        _bootimage_vmo: HandleValue,
+    ) -> ZxResult {
+        info!("system.mexec: resource={:#x}", resource);
+        let proc = self.thread.proc();
+        let res = proc.get_object::<Resource>(resource)?;
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_MEXEC_BASE, 1)?;
+        }
+        // TODO: implement soft reboot (kexec) when HAL supports it.
+        warn!("system.mexec: validated but kexec not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Get the ZBI payload data needed for a subsequent `zx_system_mexec` call.
+    ///
+    /// Returns ZBI entries that should be appended to the boot image before
+    /// calling `zx_system_mexec`. Buffer must not exceed 16 KiB.
+    pub fn sys_system_mexec_payload_get(
+        &self,
+        resource: HandleValue,
+        _buf: UserOutPtr<u8>,
+        buf_size: usize,
+    ) -> ZxResult {
+        info!(
+            "system.mexec_payload_get: resource={:#x}, buf_size={}",
+            resource, buf_size
+        );
+        let proc = self.thread.proc();
+        let res = proc.get_object::<Resource>(resource)?;
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_MEXEC_BASE, 1)?;
+        }
+        if buf_size > MEXEC_PAYLOAD_MAX_SIZE {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // TODO: generate ZBI payload when mexec is supported.
+        warn!("system.mexec_payload_get: validated but no payload available");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Get CPU performance info for the system.
+    ///
+    /// Returns performance scale info per CPU. The resource handle must be
+    /// a system resource with appropriate access.
+    pub fn sys_system_get_performance_info(
+        &self,
+        resource: HandleValue,
+        topic: u32,
+        _count: usize,
+        _info: usize,
+        _output_count: UserOutPtr<usize>,
+    ) -> ZxResult {
+        info!(
+            "system.get_performance_info: resource={:#x}, topic={}",
+            resource, topic
+        );
+        let proc = self.thread.proc();
+        let res = proc.get_object::<Resource>(resource)?;
+        res.validate(ResourceKind::ROOT)?;
+        // Topics: 0 = CPU_PERF_SCALE, 1 = CPU_DEFAULT_PERF_SCALE
+        if topic > 1 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // TODO: implement CPU performance scaling info.
+        warn!("system.get_performance_info: validated but not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Set CPU performance info for the system.
+    ///
+    /// Sets performance scale values per CPU. Requires root resource.
+    pub fn sys_system_set_performance_info(
+        &self,
+        resource: HandleValue,
+        topic: u32,
+        _info: usize,
+        _count: usize,
+    ) -> ZxResult {
+        info!(
+            "system.set_performance_info: resource={:#x}, topic={}",
+            resource, topic
+        );
+        let proc = self.thread.proc();
+        let res = proc.get_object::<Resource>(resource)?;
+        res.validate(ResourceKind::ROOT)?;
+        if topic > 1 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // TODO: implement CPU performance scaling.
+        warn!("system.set_performance_info: validated but not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Enter system suspend (sleep) state.
+    ///
+    /// Suspends task execution until the resume deadline expires or a
+    /// wake source triggers. Requires a system resource.
+    #[allow(clippy::too_many_arguments)]
+    pub fn sys_system_suspend_enter(
+        &self,
+        resource: HandleValue,
+        _resume_deadline: u64,
+        _options: u64,
+        _out_header: usize,
+        _out_entries: usize,
+        _num_entries: u32,
+        _actual_entries: UserOutPtr<u32>,
+    ) -> ZxResult {
+        info!("system.suspend_enter: resource={:#x}", resource);
+        let proc = self.thread.proc();
+        let res = proc.get_object::<Resource>(resource)?;
+        res.validate(ResourceKind::ROOT)?;
+        // TODO: implement system suspend when power management is supported.
+        warn!("system.suspend_enter: validated but not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Watch for memory stall events.
+    ///
+    /// Registers for notification when memory pressure causes stalls.
+    /// This is an experimental/newer upstream syscall.
+    pub fn sys_system_watch_memory_stall(&self, resource: HandleValue, _options: u32) -> ZxResult {
+        info!("system.watch_memory_stall: resource={:#x}", resource);
+        let proc = self.thread.proc();
+        let res = proc.get_object::<Resource>(resource)?;
+        res.validate(ResourceKind::ROOT)?;
+        // TODO: implement memory stall monitoring.
+        warn!("system.watch_memory_stall: validated but not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Read from the kernel trace buffer.
+    ///
+    /// Reads trace data from the kernel ring buffer. The resource handle
+    /// must be a system resource with `ZX_RSRC_SYSTEM_TRACING_BASE`.
+    pub fn sys_ktrace_read(
+        &self,
+        resource: HandleValue,
+        _data: UserOutPtr<u8>,
+        _offset: u32,
+        _data_size: usize,
+        _actual: UserOutPtr<usize>,
+    ) -> ZxResult {
+        info!("ktrace.read: resource={:#x}", resource);
+        let proc = self.thread.proc();
+        let res = proc.get_object::<Resource>(resource)?;
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_TRACING_BASE, 1)?;
+        }
+        // TODO: implement kernel trace ring buffer.
+        warn!("ktrace.read: validated but no trace buffer implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Control kernel tracing (start, stop, rewind).
+    ///
+    /// The resource handle must be a system resource with
+    /// `ZX_RSRC_SYSTEM_TRACING_BASE`.
+    pub fn sys_ktrace_control(
+        &self,
+        resource: HandleValue,
+        action: u32,
+        _options: u32,
+        _ptr: usize,
+    ) -> ZxResult {
+        info!(
+            "ktrace.control: resource={:#x}, action={}",
+            resource, action
+        );
+        let proc = self.thread.proc();
+        let res = proc.get_object::<Resource>(resource)?;
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_TRACING_BASE, 1)?;
+        }
+        // Actions: 0=start, 1=stop, 2=rewind
+        if action > 2 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // TODO: implement kernel tracing control.
+        warn!("ktrace.control: validated but no trace backend implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
 }
 
 const EVENT_OUT_OF_MEMORY: u32 = 1;
@@ -199,6 +394,9 @@ const POWERCTL_REBOOT: u32 = 5;
 const POWERCTL_REBOOT_BOOTLOADER: u32 = 6;
 const POWERCTL_REBOOT_RECOVERY: u32 = 7;
 const POWERCTL_SHUTDOWN: u32 = 8;
+
+// Maximum size for mexec payload buffer (16 KiB, per Fuchsia spec).
+const MEXEC_PAYLOAD_MAX_SIZE: usize = 16 * 1024;
 
 // Cache flush option flags
 const ZX_CACHE_FLUSH_DATA: u32 = 1 << 0;
