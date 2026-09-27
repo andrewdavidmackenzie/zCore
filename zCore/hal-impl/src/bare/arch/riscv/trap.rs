@@ -64,7 +64,17 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
     );
     match trap_reason_from(scause) {
         TrapReason::SoftwareBreakpoint => breakpoint(&mut tf.sepc),
-        TrapReason::PageFault(vaddr, flags) => crate::KHANDLER.handle_page_fault(vaddr, flags),
+        TrapReason::PageFault(vaddr, flags) => {
+            // If we are inside a guarded user-copy region, the fault
+            // is from kernel code reading/writing a bad user pointer.
+            // Redirect execution to the recovery point instead of
+            // forwarding to KHANDLER (which would panic).
+            if let Some(recovery_pc) = crate::thread::user_copy_check_fault(vaddr) {
+                tf.sepc = recovery_pc;
+                return;
+            }
+            crate::KHANDLER.handle_page_fault(vaddr, flags);
+        }
         TrapReason::Interrupt(vector) => {
             crate::interrupt::handle_irq(vector);
             if vector == SUPERVISOR_TIMER_INT_VEC {
