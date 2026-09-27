@@ -47,8 +47,8 @@ struct IoBufferInner {
 pub struct IoBuffer {
     base: KObjectBase,
     _counter: CountHelper,
-    /// Weak reference to the peer endpoint.
-    peer: Weak<IoBuffer>,
+    /// Weak reference to the peer endpoint (interior mutable for init).
+    peer: Mutex<Weak<IoBuffer>>,
     /// Which endpoint this is (0 or 1).
     endpoint_index: u32,
     /// Shared state (regions are shared between endpoints).
@@ -57,11 +57,11 @@ pub struct IoBuffer {
 
 impl_kobject!(IoBuffer
     fn peer(&self) -> ZxResult<Arc<dyn KernelObject>> {
-        let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
+        let peer = self.peer.lock().upgrade().ok_or(ZxError::PEER_CLOSED)?;
         Ok(peer)
     }
     fn related_koid(&self) -> KoID {
-        self.peer.upgrade().map(|p| p.id()).unwrap_or(0)
+        self.peer.lock().upgrade().map(|p| p.id()).unwrap_or(0)
     }
 );
 define_count_helper!(IoBuffer);
@@ -71,21 +71,10 @@ impl IoBuffer {
     ///
     /// Returns `(ep0, ep1)`. Both endpoints share the same set of
     /// memory regions, with access controlled by per-region flags.
-    #[allow(unsafe_code)]
     pub fn create(regions: Vec<IoBufferRegion>) -> ZxResult<(Arc<Self>, Arc<Self>)> {
         if regions.len() > IOB_MAX_REGIONS {
             return Err(ZxError::OUT_OF_RANGE);
         }
-
-        let ep0 = Arc::new(IoBuffer {
-            base: KObjectBase::with_signal(Signal::WRITABLE),
-            _counter: CountHelper::new(),
-            peer: Weak::default(),
-            endpoint_index: 0,
-            inner: Mutex::new(IoBufferInner {
-                regions: Vec::new(),
-            }),
-        });
 
         // Build region list for ep1 (shares the same VMOs).
         let shared_regions: Vec<IoBufferRegion> = regions
@@ -97,23 +86,26 @@ impl IoBuffer {
             })
             .collect();
 
+        let ep0 = Arc::new(IoBuffer {
+            base: KObjectBase::with_signal(Signal::WRITABLE),
+            _counter: CountHelper::new(),
+            peer: Mutex::new(Weak::default()),
+            endpoint_index: 0,
+            inner: Mutex::new(IoBufferInner { regions }),
+        });
+
         let ep1 = Arc::new(IoBuffer {
             base: KObjectBase::with_signal(Signal::WRITABLE),
             _counter: CountHelper::new(),
-            peer: Arc::downgrade(&ep0),
+            peer: Mutex::new(Arc::downgrade(&ep0)),
             endpoint_index: 1,
             inner: Mutex::new(IoBufferInner {
                 regions: shared_regions,
             }),
         });
 
-        // Set ep0's peer to ep1 and store the original regions.
-        // Safety: no other reference to ep0 exists yet.
-        unsafe {
-            let ep0_mut = &mut *(Arc::as_ptr(&ep0) as *mut IoBuffer);
-            ep0_mut.peer = Arc::downgrade(&ep1);
-            ep0_mut.inner.lock().regions = regions;
-        }
+        // Set ep0's peer to ep1 via interior mutability.
+        *ep0.peer.lock() = Arc::downgrade(&ep1);
 
         Ok((ep0, ep1))
     }
@@ -137,13 +129,13 @@ impl IoBuffer {
 
     /// Check if the peer endpoint is closed.
     pub fn peer_closed(&self) -> bool {
-        self.peer.upgrade().is_none()
+        self.peer.lock().upgrade().is_none()
     }
 }
 
 impl Drop for IoBuffer {
     fn drop(&mut self) {
-        if let Some(peer) = self.peer.upgrade() {
+        if let Some(peer) = self.peer.lock().upgrade() {
             peer.base
                 .signal_change(Signal::WRITABLE, Signal::PEER_CLOSED);
         }

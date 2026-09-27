@@ -266,10 +266,16 @@ pub const ZX_IOB_REGION_TYPE_PRIVATE: u32 = 0;
 pub const ZX_IOB_DISCIPLINE_TYPE_NONE: u32 = 0;
 
 /// IOB access flags (bitfield).
+/// Bits 0-1: EP0 map rights, bits 2-3: EP0 mediated rights,
+/// bits 4-5: EP1 map rights, bits 6-7: EP1 mediated rights.
 pub const ZX_IOB_ACCESS_EP0_CAN_MAP_READ: u64 = 1 << 0;
 pub const ZX_IOB_ACCESS_EP0_CAN_MAP_WRITE: u64 = 1 << 1;
-pub const ZX_IOB_ACCESS_EP1_CAN_MAP_READ: u64 = 1 << 2;
-pub const ZX_IOB_ACCESS_EP1_CAN_MAP_WRITE: u64 = 1 << 3;
+pub const ZX_IOB_ACCESS_EP0_CAN_MEDIATED_READ: u64 = 1 << 2;
+pub const ZX_IOB_ACCESS_EP0_CAN_MEDIATED_WRITE: u64 = 1 << 3;
+pub const ZX_IOB_ACCESS_EP1_CAN_MAP_READ: u64 = 1 << 4;
+pub const ZX_IOB_ACCESS_EP1_CAN_MAP_WRITE: u64 = 1 << 5;
+pub const ZX_IOB_ACCESS_EP1_CAN_MEDIATED_READ: u64 = 1 << 6;
+pub const ZX_IOB_ACCESS_EP1_CAN_MEDIATED_WRITE: u64 = 1 << 7;
 
 // Counter (atomic counter object, ObjType 34)
 pub const SYS_COUNTER_CREATE: u32 = 171;
