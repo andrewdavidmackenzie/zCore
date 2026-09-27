@@ -94,9 +94,11 @@ impl Syscall<'_> {
         buf: UserInPtr<u8>,
         buf_size: usize,
     ) -> ZxResult {
-        info!(
+        trace!(
             "debug.send_command: resource={:#x}, buf=({:?}; {:#x})",
-            resource, buf, buf_size
+            resource,
+            buf,
+            buf_size
         );
         if buf_size == 0 || buf_size > 1024 {
             return Err(ZxError::INVALID_ARGS);

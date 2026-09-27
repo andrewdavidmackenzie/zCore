@@ -413,7 +413,16 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::SMC_CALL => self.sys_smc_call(a0 as _, a1, a2),
-            Sys::DEBUG_SEND_COMMAND => self.sys_debug_send_command(a0 as _, a1.into(), a2 as _),
+            Sys::DEBUG_SEND_COMMAND => {
+                if !hal_impl::boot::cmdline()
+                    .split_whitespace()
+                    .any(|arg| arg == "kernel.enable-debugging-syscalls=true")
+                {
+                    Err(ZxError::NOT_SUPPORTED)
+                } else {
+                    self.sys_debug_send_command(a0 as _, a1.into(), a2 as _)
+                }
+            }
             Sys::SYSTEM_MEXEC => {
                 warn!("system.mexec: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
