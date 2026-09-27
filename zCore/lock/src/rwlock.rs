@@ -28,6 +28,7 @@ const WRITER: usize = 1;
 pub struct RwLockReadGuard<'a, T: 'a + ?Sized> {
     lock: &'a AtomicUsize,
     data: &'a T,
+    irq_was_enabled: bool,
 }
 
 /// A guard that provides mutable data access.
@@ -37,6 +38,7 @@ pub struct RwLockWriteGuard<'a, T: 'a + ?Sized> {
     // phantom: PhantomData<R>,
     inner: &'a RwLock<T>,
     data: &'a mut T,
+    irq_was_enabled: bool,
 }
 
 /// A guard that provides immutable data access but can be upgraded to [`RwLockWriteGuard`].
@@ -50,6 +52,7 @@ pub struct RwLockUpgradableGuard<'a, T: 'a + ?Sized> {
     // phantom: PhantomData<R>,
     inner: &'a RwLock<T>,
     data: &'a T,
+    irq_was_enabled: bool,
 }
 
 // Same unsafe impls as `std::sync::RwLock`
@@ -215,7 +218,7 @@ impl<T: ?Sized> RwLock<T> {
     /// ```
     #[inline]
     pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>> {
-        push_off();
+        let irq_was_enabled = push_off();
         let value = self.lock.fetch_add(READER, Ordering::Acquire);
 
         // We check the UPGRADED bit here so that new readers are prevented when an UPGRADED lock is held.
@@ -223,12 +226,13 @@ impl<T: ?Sized> RwLock<T> {
         if value & (WRITER | UPGRADED) != 0 {
             // Lock is taken, undo.
             self.lock.fetch_sub(READER, Ordering::Release);
-            pop_off();
+            pop_off(irq_was_enabled);
             None
         } else {
             Some(RwLockReadGuard {
                 lock: &self.lock,
                 data: unsafe { &*self.data.get() },
+                irq_was_enabled,
             })
         }
     }
@@ -286,7 +290,7 @@ impl<T: ?Sized> RwLock<T> {
 
     #[inline(always)]
     fn try_write_internal(&self, strong: bool) -> Option<RwLockWriteGuard<'_, T>> {
-        push_off();
+        let irq_was_enabled = push_off();
         if compare_exchange(
             &self.lock,
             0,
@@ -301,9 +305,10 @@ impl<T: ?Sized> RwLock<T> {
                 // phantom: PhantomData,
                 inner: self,
                 data: unsafe { &mut *self.data.get() },
+                irq_was_enabled,
             })
         } else {
-            pop_off();
+            pop_off(irq_was_enabled);
             None
         }
     }
@@ -335,17 +340,18 @@ impl<T: ?Sized> RwLock<T> {
     /// Tries to obtain an upgradeable lock guard.
     #[inline]
     pub fn try_upgradeable_read(&self) -> Option<RwLockUpgradableGuard<'_, T>> {
-        push_off();
+        let irq_was_enabled = push_off();
         if self.lock.fetch_or(UPGRADED, Ordering::Acquire) & (WRITER | UPGRADED) == 0 {
             Some(RwLockUpgradableGuard {
                 // phantom: PhantomData,
                 inner: self,
                 data: unsafe { &*self.data.get() },
+                irq_was_enabled,
             })
         } else {
             // We can't unflip the UPGRADED bit back just yet as there is another upgradeable or write lock.
             // When they unlock, they will clear the bit.
-            pop_off();
+            pop_off(irq_was_enabled);
             None
         }
     }
@@ -406,8 +412,10 @@ impl<'rwlock, T: ?Sized> RwLockReadGuard<'rwlock, T> {
     /// ```
     #[inline]
     pub fn leak(this: Self) -> &'rwlock T {
-        pop_off();
+        let irq_was_enabled = this.irq_was_enabled;
+        // Destructure without running Drop (which would call pop_off)
         let Self { data, .. } = this;
+        pop_off(irq_was_enabled);
         data
     }
 }
@@ -460,6 +468,7 @@ impl<'rwlock, T: ?Sized> RwLockUpgradableGuard<'rwlock, T> {
         .is_ok()
         {
             let inner = self.inner;
+            let irq_was_enabled = self.irq_was_enabled;
 
             // Forget the old guard so its destructor doesn't run (before mutably aliasing data below)
             mem::forget(self);
@@ -469,6 +478,7 @@ impl<'rwlock, T: ?Sized> RwLockUpgradableGuard<'rwlock, T> {
                 // phantom: PhantomData,
                 inner,
                 data: unsafe { &mut *inner.data.get() },
+                irq_was_enabled,
             })
         } else {
             Err(self)
@@ -510,13 +520,17 @@ impl<'rwlock, T: ?Sized> RwLockUpgradableGuard<'rwlock, T> {
         self.inner.lock.fetch_add(READER, Ordering::Acquire);
 
         let inner = self.inner;
+        let irq_was_enabled = self.irq_was_enabled;
 
-        // Dropping self removes the UPGRADED bit
-        mem::drop(self);
+        // Clear the UPGRADED bit manually, then forget self to prevent
+        // its Drop from calling pop_off (the new guard owns the interrupt state).
+        inner.lock.fetch_sub(UPGRADED, Ordering::AcqRel);
+        mem::forget(self);
 
         RwLockReadGuard {
             lock: &inner.lock,
             data: unsafe { &*inner.data.get() },
+            irq_was_enabled,
         }
     }
 
@@ -533,7 +547,9 @@ impl<'rwlock, T: ?Sized> RwLockUpgradableGuard<'rwlock, T> {
     /// ```
     #[inline]
     pub fn leak(this: Self) -> &'rwlock T {
+        let irq_was_enabled = this.irq_was_enabled;
         let Self { data, .. } = this;
+        pop_off(irq_was_enabled);
         data
     }
 }
@@ -569,13 +585,19 @@ impl<'rwlock, T: ?Sized> RwLockWriteGuard<'rwlock, T> {
         self.inner.lock.fetch_add(READER, Ordering::Acquire);
 
         let inner = self.inner;
+        let irq_was_enabled = self.irq_was_enabled;
 
-        // Dropping self removes the UPGRADED bit
-        mem::drop(self);
+        // Clear WRITER|UPGRADED bits manually, then forget self to prevent
+        // its Drop from calling pop_off (the new guard owns the interrupt state).
+        inner
+            .lock
+            .fetch_and(!(WRITER | UPGRADED), Ordering::Release);
+        mem::forget(self);
 
         RwLockReadGuard {
             lock: &inner.lock,
             data: unsafe { &*inner.data.get() },
+            irq_was_enabled,
         }
     }
 
@@ -601,14 +623,17 @@ impl<'rwlock, T: ?Sized> RwLockWriteGuard<'rwlock, T> {
         self.inner.lock.store(UPGRADED, Ordering::Release);
 
         let inner = self.inner;
+        let irq_was_enabled = self.irq_was_enabled;
 
-        // Dropping self removes the UPGRADED bit
+        // Forget self to prevent its Drop from calling pop_off
+        // (the new guard takes ownership of the interrupt state).
         mem::forget(self);
 
         RwLockUpgradableGuard {
             // phantom: PhantomData,
             inner,
             data: unsafe { &*inner.data.get() },
+            irq_was_enabled,
         }
     }
 
@@ -626,9 +651,10 @@ impl<'rwlock, T: ?Sized> RwLockWriteGuard<'rwlock, T> {
     /// ```
     #[inline]
     pub fn leak(this: Self) -> &'rwlock mut T {
-        pop_off();
+        let irq_was_enabled = this.irq_was_enabled;
         let data = this.data as *mut _; // Keep it in pointer form temporarily to avoid double-aliasing
         core::mem::forget(this);
+        pop_off(irq_was_enabled);
         unsafe { &mut *data }
     }
 }
@@ -679,7 +705,7 @@ impl<'rwlock, T: ?Sized> Drop for RwLockReadGuard<'rwlock, T> {
     fn drop(&mut self) {
         debug_assert!(self.lock.load(Ordering::Relaxed) & !(WRITER | UPGRADED) > 0);
         self.lock.fetch_sub(READER, Ordering::Release);
-        pop_off();
+        pop_off(self.irq_was_enabled);
     }
 }
 
@@ -690,7 +716,7 @@ impl<'rwlock, T: ?Sized> Drop for RwLockUpgradableGuard<'rwlock, T> {
             UPGRADED
         );
         self.inner.lock.fetch_sub(UPGRADED, Ordering::AcqRel);
-        pop_off();
+        pop_off(self.irq_was_enabled);
     }
 }
 
@@ -703,7 +729,7 @@ impl<'rwlock, T: ?Sized> Drop for RwLockWriteGuard<'rwlock, T> {
         self.inner
             .lock
             .fetch_and(!(WRITER | UPGRADED), Ordering::Release);
-        pop_off();
+        pop_off(self.irq_was_enabled);
     }
 }
 

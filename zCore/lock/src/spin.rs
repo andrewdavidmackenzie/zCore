@@ -13,13 +13,14 @@ pub struct SpinMutex<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
-/// An RAII implementation of a “scoped lock” of a mutex.
+/// An RAII implementation of a "scoped lock" of a mutex.
 /// When this structure is dropped (falls out of scope),
-/// the lock will be unlocked.
-///
+/// the lock will be unlocked and the interrupt state restored.
 pub struct SpinMutexGuard<'a, T: ?Sized + 'a> {
     lock: &'a AtomicBool,
     data: &'a mut T,
+    /// Whether interrupts were enabled before this lock was acquired.
+    irq_was_enabled: bool,
 }
 
 unsafe impl<T: ?Sized + Send> Sync for SpinMutex<T> {}
@@ -36,8 +37,6 @@ impl<T> SpinMutex<T> {
 
     #[inline(always)]
     pub fn into_inner(self) -> T {
-        // We know statically that there are no outstanding references to
-        // `self` so there's no need to lock.
         self.data.into_inner()
     }
 
@@ -50,13 +49,12 @@ impl<T> SpinMutex<T> {
 impl<T: ?Sized> SpinMutex<T> {
     #[inline(always)]
     pub fn lock(&self) -> SpinMutexGuard<T> {
-        push_off();
+        let irq_was_enabled = push_off();
         while self
             .locked
             .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
-            // Wait until the lock looks unlocked before retrying
             while self.is_locked() {
                 core::hint::spin_loop();
             }
@@ -64,12 +62,13 @@ impl<T: ?Sized> SpinMutex<T> {
         SpinMutexGuard {
             lock: &self.locked,
             data: unsafe { &mut *self.data.get() },
+            irq_was_enabled,
         }
     }
 
     #[inline(always)]
     pub fn try_lock(&self) -> Option<SpinMutexGuard<T>> {
-        push_off();
+        let irq_was_enabled = push_off();
         if self
             .locked
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -78,17 +77,16 @@ impl<T: ?Sized> SpinMutex<T> {
             Some(SpinMutexGuard {
                 lock: &self.locked,
                 data: unsafe { &mut *self.data.get() },
+                irq_was_enabled,
             })
         } else {
-            pop_off();
+            pop_off(irq_was_enabled);
             None
         }
     }
 
     #[inline(always)]
     pub fn get_mut(&mut self) -> &mut T {
-        // We know statically that there are no other references to `self`, so
-        // there's no need to lock the inner mutex.
         unsafe { &mut *self.data.get() }
     }
 
@@ -122,10 +120,9 @@ impl<T> From<T> for SpinMutex<T> {
 }
 
 impl<'a, T: ?Sized> Drop for SpinMutexGuard<'a, T> {
-    /// The dropping of the SpinMutexGuard will release the lock it was created from.
     fn drop(&mut self) {
         self.lock.store(false, Ordering::Release);
-        pop_off();
+        pop_off(self.irq_was_enabled);
     }
 }
 
