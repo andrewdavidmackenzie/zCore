@@ -38,6 +38,131 @@ pub fn init_smap() {
 #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
 pub fn init_smap() {}
 
+/// Copy `len` bytes from `src` (user memory) to `dst` (kernel memory),
+/// recovering from page faults instead of panicking.
+///
+/// Returns `Ok(())` on success, or `Err(Error::InvalidPointer)` if a
+/// page fault occurred during the copy (i.e., the user pointer was bad).
+///
+/// On bare-metal, this uses per-CPU fault recovery state. The trap
+/// handler checks it and, on fault, redirects execution past the copy.
+/// On libos, user pointers are host-process pointers and the copy is
+/// unguarded (the host OS handles faults).
+///
+/// # Safety
+///
+/// `src` must be a user-space pointer. `dst` must point to `len` bytes
+/// of valid kernel memory. The regions must not overlap.
+pub unsafe fn copy_from_user(dst: *mut u8, src: *const u8, len: usize) -> Result<()> {
+    if len == 0 {
+        return Ok(());
+    }
+    guarded_user_copy(dst, src, len)
+}
+
+/// Copy `len` bytes from `src` (kernel memory) to `dst` (user memory),
+/// recovering from page faults instead of panicking.
+///
+/// # Safety
+///
+/// `dst` must be a user-space pointer. `src` must point to `len` bytes
+/// of valid kernel memory. The regions must not overlap.
+pub unsafe fn copy_to_user(dst: *mut u8, src: *const u8, len: usize) -> Result<()> {
+    if len == 0 {
+        return Ok(());
+    }
+    guarded_user_copy(dst, src, len)
+}
+
+/// Perform a guarded memory copy that recovers from page faults.
+///
+/// On bare-metal: uses a byte-by-byte copy loop in inline assembly
+/// with a recovery label. The trap handler redirects to the recovery
+/// label on fault, which sets an error flag.
+///
+/// On libos: delegates to a plain memcpy (the host OS handles faults).
+#[cfg(not(feature = "libos"))]
+unsafe fn guarded_user_copy(dst: *mut u8, src: *const u8, len: usize) -> Result<()> {
+    use crate::thread::{user_copy_enter, user_copy_leave};
+
+    // Get the address of the recovery label via inline assembly.
+    // The recovery label is placed after the copy loop. If a fault
+    // occurs during the loop, the trap handler sets the trap frame's
+    // PC to this label, causing execution to skip the rest of the
+    // copy and fall through to user_copy_leave().
+    let recovery_pc: usize;
+
+    cfg_if::cfg_if! {
+        if #[cfg(target_arch = "aarch64")] {
+            core::arch::asm!(
+                "adr {recovery}, 3f",
+                recovery = out(reg) recovery_pc,
+                options(nomem, nostack, preserves_flags),
+            );
+        } else if #[cfg(target_arch = "x86_64")] {
+            core::arch::asm!(
+                "lea {recovery}, [rip + 3f]",
+                recovery = out(reg) recovery_pc,
+                options(nomem, nostack, preserves_flags),
+            );
+        } else if #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))] {
+            core::arch::asm!(
+                "la {recovery}, 3f",
+                recovery = out(reg) recovery_pc,
+                options(nomem, nostack),
+            );
+        } else {
+            compile_error!("unsupported architecture for guarded_user_copy");
+        }
+    }
+
+    user_copy_enter(recovery_pc);
+    smap_allow();
+
+    // Byte-by-byte copy loop. Using a loop instead of
+    // copy_from_nonoverlapping ensures the faulting instruction is
+    // always within our guarded region and the recovery label (3f)
+    // is placed right after by the compiler.
+    //
+    // The compiler may optimise this into a memcpy call, which is fine
+    // as long as the fault can only happen within the SMAP-enabled
+    // window. The recovery label is the instruction immediately after
+    // the asm block below.
+    let mut i = 0usize;
+    while i < len {
+        dst.add(i).write_volatile(src.add(i).read_volatile());
+        i += 1;
+    }
+
+    // Recovery label — the trap handler redirects here on fault.
+    // The asm block is empty; it just provides the "3:" label that
+    // the earlier `adr`/`lea`/`la` instruction referenced.
+    cfg_if::cfg_if! {
+        if #[cfg(target_arch = "aarch64")] {
+            core::arch::asm!("3:", options(nomem, nostack, preserves_flags));
+        } else if #[cfg(target_arch = "x86_64")] {
+            core::arch::asm!("3:", options(nomem, nostack, preserves_flags));
+        } else if #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))] {
+            core::arch::asm!("3:", options(nomem, nostack));
+        }
+    }
+
+    smap_deny();
+    let fault_addr = user_copy_leave();
+    if fault_addr != 0 {
+        Err(Error::InvalidPointer)
+    } else {
+        Ok(())
+    }
+}
+
+/// Libos version: unguarded copy (host OS handles faults).
+#[cfg(feature = "libos")]
+unsafe fn guarded_user_copy(dst: *mut u8, src: *const u8, len: usize) -> Result<()> {
+    dst.copy_from_nonoverlapping(src, len);
+    Ok(())
+}
+
 /// Temporarily allow kernel access to user-mode pages (SMAP).
 ///
 /// On x86_64 with SMAP support, executes `stac` to set the AC flag,
@@ -228,7 +353,15 @@ impl<T, P: Read> UserPtr<T, P> {
     /// Copies the value from user memory into kernel memory.
     pub fn read(&self) -> Result<T> {
         self.check()?;
-        Ok(with_user_access(|| unsafe { self.0.read() }))
+        unsafe {
+            let mut val = core::mem::MaybeUninit::<T>::uninit();
+            copy_from_user(
+                val.as_mut_ptr() as *mut u8,
+                self.0 as *const u8,
+                core::mem::size_of::<T>(),
+            )?;
+            Ok(val.assume_init())
+        }
     }
 
     // Same as read,
@@ -269,11 +402,12 @@ impl<T, P: Read> UserPtr<T, P> {
             Ok(Vec::default())
         } else {
             self.check()?;
+            let byte_len = len * core::mem::size_of::<T>();
             let mut ret = Vec::<T>::with_capacity(len);
-            with_user_access(|| unsafe {
+            unsafe {
                 ret.set_len(len);
-                ret.as_mut_ptr().copy_from_nonoverlapping(self.0, len);
-            });
+                copy_from_user(ret.as_mut_ptr() as *mut u8, self.0 as *const u8, byte_len)?;
+            }
             Ok(ret)
         }
     }
@@ -297,25 +431,42 @@ impl<P: Read> UserPtr<u8, P> {
     }
 
     /// Copy a UTF-8 string of `len` bytes from user memory into kernel memory.
+    #[allow(clippy::uninit_vec)]
     pub fn read_string(&self, len: usize) -> Result<String> {
         if len == 0 {
             return Ok(String::new());
         }
         self.check()?;
-        let bytes = with_user_access(|| unsafe {
-            let mut buf = Vec::<u8>::with_capacity(len);
+        let mut buf = Vec::<u8>::with_capacity(len);
+        unsafe {
             buf.set_len(len);
-            buf.as_mut_ptr().copy_from_nonoverlapping(self.0, len);
-            buf
-        });
-        String::from_utf8(bytes).map_err(|_| Error::InvalidUtf8)
+            copy_from_user(buf.as_mut_ptr(), self.0, len)?;
+        }
+        String::from_utf8(buf).map_err(|_| Error::InvalidUtf8)
     }
 
     /// Copy a C-style null-terminated string from user memory into kernel memory.
     pub fn read_c_string(&self) -> Result<String> {
         self.check()?;
-        let len =
-            with_user_access(|| unsafe { (0usize..).find(|&i| *self.0.add(i) == 0).unwrap() });
+        // Scan for the null terminator one byte at a time, using the
+        // fault-safe copy for each byte so a bad pointer returns an
+        // error instead of panicking.
+        let mut len = 0usize;
+        loop {
+            let mut byte = 0u8;
+            unsafe {
+                copy_from_user(&mut byte as *mut u8, self.0.add(len), 1)?;
+            }
+            if byte == 0 {
+                break;
+            }
+            len += 1;
+            // Reasonable upper bound to avoid infinite loops on
+            // non-terminated strings.
+            if len > 4096 {
+                return Err(Error::InvalidPointer);
+            }
+        }
         self.read_string(len)
     }
 }
@@ -348,7 +499,13 @@ impl<T, P: Write> UserPtr<T, P> {
     /// **without** reading or dropping the old value.
     pub fn write(&mut self, value: T) -> Result<()> {
         self.check()?;
-        with_user_access(|| unsafe { self.0.write(value) });
+        unsafe {
+            copy_to_user(
+                self.0 as *mut u8,
+                &value as *const T as *const u8,
+                core::mem::size_of::<T>(),
+            )?;
+        }
         Ok(())
     }
 
@@ -371,10 +528,10 @@ impl<T, P: Write> UserPtr<T, P> {
     pub fn write_array(&mut self, values: &[T]) -> Result<()> {
         if !values.is_empty() {
             self.check()?;
-            with_user_access(|| unsafe {
-                self.0
-                    .copy_from_nonoverlapping(values.as_ptr(), values.len())
-            });
+            let byte_len = core::mem::size_of_val(values);
+            unsafe {
+                copy_to_user(self.0 as *mut u8, values.as_ptr() as *const u8, byte_len)?;
+            }
         }
         Ok(())
     }
@@ -386,7 +543,10 @@ impl<P: Write> UserPtr<u8, P> {
     pub fn write_cstring(&mut self, s: &str) -> Result<()> {
         let bytes = s.as_bytes();
         self.write_array(bytes)?;
-        with_user_access(|| unsafe { self.0.add(bytes.len()).write(0) });
+        let nul = 0u8;
+        unsafe {
+            copy_to_user(self.0.add(bytes.len()), &nul as *const u8, 1)?;
+        }
         Ok(())
     }
 }
