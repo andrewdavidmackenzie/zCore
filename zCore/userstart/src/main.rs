@@ -542,11 +542,17 @@ fn load_flat(data: &[u8], vmar: HandleValue) -> (usize, usize) {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     debug_write(b"userstart: PANIC: ");
-    if let Some(msg) = info.message().as_str() {
-        debug_write(msg.as_bytes());
-    } else {
-        debug_write(b"(no message)");
+    // Use a fmt::Write adapter to capture formatted panic messages
+    // (as_str() returns None for messages with format placeholders).
+    struct DebugWriter;
+    impl core::fmt::Write for DebugWriter {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            debug_write(s.as_bytes());
+            Ok(())
+        }
     }
+    use core::fmt::Write;
+    let _ = write!(DebugWriter, "{}", info.message());
     debug_write(b"\n");
     process_exit(1);
 }
