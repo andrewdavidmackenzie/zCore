@@ -98,6 +98,8 @@ fn driver_to_feature(driver: &str) -> &'static str {
         "uart-16550" => "uart-16550",
         // Keyboard input
         "ps2-keyboard" => "ps2-keyboard",
+        // Display
+        "fb-console" => "fb-console",
         // Mock (LibOS)
         "mock-uart" => "mock-uart",
         // Block / bus

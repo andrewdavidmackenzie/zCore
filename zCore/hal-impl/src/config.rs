@@ -9,7 +9,22 @@ pub(crate) static KCONFIG: InitOnce<KernelConfig> = InitOnce::new_with_default(K
 #[cfg(not(feature = "libos"))]
 pub(crate) static KCONFIG: InitOnce<KernelConfig> = InitOnce::new();
 
-pub const MAX_CORE_NUM: usize = 8;
+/// Maximum number of CPU cores, set by the target config's `cores` field
+/// via the `ZCORE_MAX_CPUS` environment variable at build time.
+pub const MAX_CORE_NUM: usize = {
+    // Parse the build-time constant from build.rs
+    // env! is evaluated at compile time from cargo:rustc-env
+    const VAL: &str = env!("MAX_CPUS");
+    // const-parse a decimal string to usize
+    let bytes = VAL.as_bytes();
+    let mut result: usize = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        result = result * 10 + (bytes[i] - b'0') as usize;
+        i += 1;
+    }
+    result
+};
 
 // Re-export arch-specific config types and functions so that
 // `hal_impl::config::FramebufferInfo` etc. work from entry points.

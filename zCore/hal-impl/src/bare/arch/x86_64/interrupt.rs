@@ -76,15 +76,27 @@ hal_fn_impl! {
 
         fn send_ipi(cpuid: usize, reason: usize) -> DeviceResult {
             trace!("ipi [{}] => [{}]: {:x}", super::cpu::cpu_id(), cpuid, reason);
-            // Push the reason into the target CPU's IPI queue
-            let queue = crate::common::ipi::ipi_queue(cpuid);
+            // Push the reason into the target CPU's IPI queue.
+            // The queue is indexed by core index (dense 0..N), not CPU ID.
+            let target_index = super::smp::apic_id_to_logical(cpuid as u8) as usize;
+            let queue = crate::common::ipi::ipi_queue(target_index);
             if let Some(idx) = queue.alloc_entry() {
                 *queue.entry_at(idx) = reason;
                 queue.commit_entry(idx);
             }
-            // Send a fixed IPI via the local APIC to the target CPU
+            // Send a fixed IPI via the local APIC to the target CPU.
+            // In x2APIC mode, dest is the raw APIC ID.
+            // In xAPIC mode, dest is APIC ID << 24.
+            let is_x2apic = raw_cpuid::CpuId::new()
+                .get_feature_info()
+                .is_some_and(|f| f.has_x2apic());
+            let dest = if is_x2apic {
+                cpuid as u32
+            } else {
+                (cpuid as u32) << 24
+            };
             let lapic = ::drivers::irq::x86::Apic::local_apic();
-            lapic.send_ipi(0xFE, (cpuid as u32) << 24); // Vector 0xFE = IPI
+            lapic.send_ipi(0xFE, dest);
             Ok(())
         }
 

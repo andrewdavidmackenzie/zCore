@@ -40,9 +40,13 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) {
     info!("Boot options: {:#?}", options);
     hal_impl::memory::insert_regions(&hal_impl::mem::free_pmem_regions());
     hal_impl::primary_init();
-    STARTED.store(true, Ordering::SeqCst);
 
     let proc = boot_init(options);
+    // Release secondary cores AFTER the init process is created.
+    // If released earlier, idle APs enter the executor loop and
+    // steal the BSP's init task via work-stealing before the BSP
+    // can run it.
+    STARTED.store(true, Ordering::SeqCst);
     utils::wait_for_exit(Some(proc))
 }
 
