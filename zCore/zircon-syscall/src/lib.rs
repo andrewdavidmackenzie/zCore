@@ -396,17 +396,10 @@ impl Syscall<'_> {
             Sys::VMAR_OP_RANGE => {
                 self.sys_vmar_op_range(a0 as _, a1 as _, a2 as _, a3 as _, a4, a5)
             }
-            Sys::PCI_RESET_DEVICE => {
-                warn!("pci.reset_device: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
-            Sys::MSI_ALLOCATE => {
-                warn!("msi.allocate: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::PCI_RESET_DEVICE => self.sys_pci_reset_device(a0 as _),
+            Sys::MSI_ALLOCATE => self.sys_msi_allocate(a0 as _, a1 as _, a2.into()),
             Sys::MSI_CREATE => {
-                warn!("msi.create: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+                self.sys_msi_create(a0 as _, a1 as _, a2 as _, a3 as _, a4 as _, a5.into())
             }
             Sys::MTRACE_CONTROL => {
                 // Removed upstream.
@@ -417,23 +410,16 @@ impl Syscall<'_> {
                 warn!("debug.send_command: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::SYSTEM_MEXEC => {
-                warn!("system.mexec: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::SYSTEM_MEXEC => self.sys_system_mexec(a0 as _, a1 as _, a2 as _),
             Sys::SYSTEM_MEXEC_PAYLOAD_GET => {
-                warn!("system.mexec_payload_get: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+                self.sys_system_mexec_payload_get(a0 as _, a1.into(), a2 as _)
             }
             Sys::SYSTEM_POWERCTL => self.sys_system_powerctl(a0 as _, a1 as _, a2),
             Sys::FRAMEBUFFER_GET_INFO | Sys::FRAMEBUFFER_SET_RANGE => {
                 // Removed upstream -- replaced by display driver protocols.
                 Err(ZxError::NOT_SUPPORTED)
             }
-            Sys::INTERRUPT_BIND_VCPU => {
-                warn!("interrupt.bind_vcpu: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::INTERRUPT_BIND_VCPU => self.sys_interrupt_bind_vcpu(a0 as _, a1 as _, a2 as _),
             // Pager subsystem (demand paging)
             Sys::PAGER_CREATE => self.sys_pager_create(a0 as _, a1.into()),
             Sys::PAGER_CREATE_VMO => {
@@ -450,13 +436,9 @@ impl Syscall<'_> {
             // TODO: implement kernel trace ring buffer for syscall
             // entry/exit, context switches, and IRQ events
             Sys::KTRACE_READ => {
-                warn!("ktrace.read: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+                self.sys_ktrace_read(a0 as _, a1.into(), a2 as _, a3 as _, a4.into())
             }
-            Sys::KTRACE_CONTROL => {
-                warn!("ktrace.control: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::KTRACE_CONTROL => self.sys_ktrace_control(a0 as _, a1 as _, a2 as _, a3),
             Sys::KTRACE_WRITE => {
                 // Removed upstream.
                 Err(ZxError::NOT_SUPPORTED)
@@ -505,8 +487,7 @@ impl Syscall<'_> {
             Sys::VMO_GET_STREAM_SIZE => self.sys_vmo_get_stream_size(a0 as _, a1.into()),
             Sys::VMO_SET_STREAM_SIZE => self.sys_vmo_set_stream_size(a0 as _, a1),
             Sys::VMO_TRANSFER_DATA => {
-                warn!("vmo.transfer_data: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+                self.sys_vmo_transfer_data(a0 as _, a1 as _, a2 as _, a3 as _, a4 as _, a5 as _)
             }
             Sys::VMAR_MAP_CLOCK | Sys::VMAR_MAP_IOB => {
                 warn!("vmar: {:?} not yet implemented", sys_type);
@@ -523,13 +504,16 @@ impl Syscall<'_> {
                 a7.into(),
             ),
             Sys::PAGER_QUERY_VMO_STATS => self.sys_pager_query_vmo_stats(a0 as _, a1 as _, a2, a3),
-            Sys::SYSTEM_GET_PERFORMANCE_INFO
-            | Sys::SYSTEM_SET_PERFORMANCE_INFO
-            | Sys::SYSTEM_SUSPEND_ENTER
-            | Sys::SYSTEM_WATCH_MEMORY_STALL => {
-                warn!("system: {:?} not yet implemented", sys_type);
-                Err(ZxError::NOT_SUPPORTED)
+            Sys::SYSTEM_GET_PERFORMANCE_INFO => {
+                self.sys_system_get_performance_info(a0 as _, a1 as _, a2 as _, a3, a4.into())
             }
+            Sys::SYSTEM_SET_PERFORMANCE_INFO => {
+                self.sys_system_set_performance_info(a0 as _, a1 as _, a2, a3 as _)
+            }
+            Sys::SYSTEM_SUSPEND_ENTER => {
+                self.sys_system_suspend_enter(a0 as _, a1 as _, a2 as _, a3, a4, a5 as _, a6.into())
+            }
+            Sys::SYSTEM_WATCH_MEMORY_STALL => self.sys_system_watch_memory_stall(a0 as _, a1 as _),
             _ => {
                 error!("syscall unimplemented: {:?}", sys_type);
                 Err(ZxError::NOT_SUPPORTED)

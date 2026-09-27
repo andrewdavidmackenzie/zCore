@@ -359,6 +359,52 @@ impl Syscall<'_> {
         let policy = CachePolicy::try_from(policy).or(Err(ZxError::INVALID_ARGS))?;
         (*vmo).set_cache_policy(policy)
     }
+
+    /// Transfer data (pages) between two VMOs.
+    ///
+    /// Moves physical pages from `src_vmo` to `dst_vmo` (zero-copy transfer).
+    /// Both offset values and the length must be page-aligned.
+    /// `options` must be 0.
+    pub fn sys_vmo_transfer_data(
+        &self,
+        dst_vmo: HandleValue,
+        options: u32,
+        offset: u64,
+        length: u64,
+        src_vmo: HandleValue,
+        src_offset: u64,
+    ) -> ZxResult {
+        info!(
+            "vmo.transfer_data: dst={:#x}, options={}, offset={:#x}, len={:#x}, src={:#x}, src_off={:#x}",
+            dst_vmo, options, offset, length, src_vmo, src_offset
+        );
+        if options != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // All offsets/length must be page-aligned.
+        if !page_aligned(offset as usize)
+            || !page_aligned(length as usize)
+            || !page_aligned(src_offset as usize)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if length == 0 {
+            return Ok(());
+        }
+        let proc = self.thread.proc();
+        let dst = proc.get_object_with_rights::<VmObject>(dst_vmo, Rights::WRITE)?;
+        // Source needs both READ and WRITE (pages are moved, not copied).
+        let src = proc.get_object_with_rights::<VmObject>(src_vmo, Rights::READ | Rights::WRITE)?;
+        // Range validation.
+        if offset as usize + length as usize > dst.len()
+            || src_offset as usize + length as usize > src.len()
+        {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        // TODO: implement zero-copy page transfer between VMOs.
+        warn!("vmo.transfer_data: validated but page transfer not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
 }
 
 bitflags! {
