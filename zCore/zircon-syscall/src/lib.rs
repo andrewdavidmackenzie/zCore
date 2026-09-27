@@ -413,10 +413,7 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::SMC_CALL => self.sys_smc_call(a0 as _, a1, a2),
-            Sys::DEBUG_SEND_COMMAND => {
-                warn!("debug.send_command: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::DEBUG_SEND_COMMAND => self.sys_debug_send_command(a0 as _, a1.into(), a2 as _),
             Sys::SYSTEM_MEXEC => {
                 warn!("system.mexec: not yet implemented");
                 Err(ZxError::NOT_SUPPORTED)
