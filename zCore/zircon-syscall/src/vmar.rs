@@ -288,6 +288,11 @@ impl Syscall<'_> {
     ///
     /// Maps the VMO backing a specific IOB region into the process's
     /// address space, subject to the endpoint's per-region access flags.
+    /// Map an IOBuffer region into user address space.
+    ///
+    /// Extracts the VMO backing the specified IOB region and maps it
+    /// into the VMAR, subject to the endpoint's per-region access
+    /// flags and the requested VM options.
     #[allow(clippy::too_many_arguments)]
     pub fn sys_vmar_map_iob(
         &self,
@@ -296,23 +301,84 @@ impl Syscall<'_> {
         vmar_offset: usize,
         iob_handle: HandleValue,
         region_index: u32,
-        _region_len: usize,
-        _addr_out: UserOutPtr<usize>,
+        region_len: usize,
+        mut addr_out: UserOutPtr<usize>,
     ) -> ZxResult {
         info!(
             "vmar.map_iob: vmar={:#x}, options={:#x}, iob={:#x}, region={}, offset={:#x}",
             handle, options, iob_handle, region_index, vmar_offset
         );
+        let options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
         let proc = self.thread.proc();
-        let _vmar = proc.get_object::<VmAddressRegion>(handle)?;
+        let vmar = proc.get_object::<VmAddressRegion>(handle)?;
         let iob =
             proc.get_object_with_rights::<zircon_object::ipc::IoBuffer>(iob_handle, Rights::MAP)?;
-        if region_index as usize >= iob.region_count() {
-            return Err(ZxError::OUT_OF_RANGE);
+
+        // Get the region's VMO, size, and access flags.
+        let (vmo, region_size, access) = iob.get_region(region_index as usize)?;
+        let ep_idx = iob.endpoint_index();
+
+        // Check endpoint access permissions against requested options.
+        let can_read = if ep_idx == 0 {
+            access & 0x01 != 0 // EP0_CAN_MAP_READ
+        } else {
+            access & 0x10 != 0 // EP1_CAN_MAP_READ
+        };
+        let can_write = if ep_idx == 0 {
+            access & 0x02 != 0 // EP0_CAN_MAP_WRITE
+        } else {
+            access & 0x20 != 0 // EP1_CAN_MAP_WRITE
+        };
+        if options.contains(VmOptions::PERM_READ) && !can_read {
+            return Err(ZxError::ACCESS_DENIED);
         }
-        // TODO: map the region's VMO into the VMAR with endpoint access checks.
-        warn!("vmar.map_iob: validated but IOB region mapping not implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        if options.contains(VmOptions::PERM_WRITE) && !can_write {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        // Execute permission is never allowed on IOB regions.
+        if options.contains(VmOptions::PERM_EXECUTE) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+
+        // Determine the mapping length.
+        let len = if region_len > 0 {
+            roundup_pages(region_len)
+        } else {
+            roundup_pages(region_size)
+        };
+        if len == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+
+        // Build MMU flags from the requested options.
+        let mut mapping_flags = MMUFlags::USER;
+        mapping_flags.set(MMUFlags::READ, options.contains(VmOptions::PERM_READ));
+        mapping_flags.set(MMUFlags::WRITE, options.contains(VmOptions::PERM_WRITE));
+
+        // Determine if specific placement is requested.
+        let is_specific = options.contains(VmOptions::SPECIFIC)
+            || options.contains(VmOptions::SPECIFIC_OVERWRITE);
+        let vmar_offset = if is_specific { Some(vmar_offset) } else { None };
+        let overwrite = options.contains(VmOptions::SPECIFIC_OVERWRITE);
+
+        // Map the region's VMO into the VMAR.
+        let permissions = mapping_flags;
+        let vaddr = vmar.map_ext(
+            vmar_offset,
+            vmo,
+            0, // vmo_offset: always map from the start of the region VMO
+            len,
+            permissions,
+            mapping_flags,
+            overwrite,
+            true, // map_range: commit pages immediately
+        )?;
+        info!(
+            "vmar.map_iob: mapped region {} at {:#x}",
+            region_index, vaddr
+        );
+        addr_out.write(vaddr)?;
+        Ok(())
     }
 }
 
