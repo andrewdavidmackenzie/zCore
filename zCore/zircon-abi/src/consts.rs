@@ -256,6 +256,27 @@ pub const SYS_IOB_WRITEV: u32 = 168;
 pub const SYS_IOB_ALLOCATE_ID: u32 = 169;
 pub const SYS_IOB_CREATE_SHARED_REGION: u32 = 170;
 
+/// Maximum number of regions per IOBuffer.
+pub const ZX_IOB_MAX_REGIONS: usize = 64;
+
+/// IOB region types.
+pub const ZX_IOB_REGION_TYPE_PRIVATE: u32 = 0;
+
+/// IOB discipline types.
+pub const ZX_IOB_DISCIPLINE_TYPE_NONE: u32 = 0;
+
+/// IOB access flags (bitfield).
+/// Bits 0-1: EP0 map rights, bits 2-3: EP0 mediated rights,
+/// bits 4-5: EP1 map rights, bits 6-7: EP1 mediated rights.
+pub const ZX_IOB_ACCESS_EP0_CAN_MAP_READ: u64 = 1 << 0;
+pub const ZX_IOB_ACCESS_EP0_CAN_MAP_WRITE: u64 = 1 << 1;
+pub const ZX_IOB_ACCESS_EP0_CAN_MEDIATED_READ: u64 = 1 << 2;
+pub const ZX_IOB_ACCESS_EP0_CAN_MEDIATED_WRITE: u64 = 1 << 3;
+pub const ZX_IOB_ACCESS_EP1_CAN_MAP_READ: u64 = 1 << 4;
+pub const ZX_IOB_ACCESS_EP1_CAN_MAP_WRITE: u64 = 1 << 5;
+pub const ZX_IOB_ACCESS_EP1_CAN_MEDIATED_READ: u64 = 1 << 6;
+pub const ZX_IOB_ACCESS_EP1_CAN_MEDIATED_WRITE: u64 = 1 << 7;
+
 // Counter (atomic counter object, ObjType 34)
 pub const SYS_COUNTER_CREATE: u32 = 171;
 pub const SYS_COUNTER_READ: u32 = 172;
