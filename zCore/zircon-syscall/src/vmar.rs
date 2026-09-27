@@ -275,8 +275,10 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let _vmar = proc.get_object::<VmAddressRegion>(handle)?;
-        let _clock = proc
-            .get_object_with_rights::<zircon_object::signal::Clock>(clock_handle, Rights::READ)?;
+        let _clock = proc.get_object_with_rights::<zircon_object::signal::Clock>(
+            clock_handle,
+            Rights::READ | Rights::MAP,
+        )?;
         // TODO: map clock transformation state into the VMAR as a read-only page.
         warn!("vmar.map_clock: validated but clock mapping not implemented");
         Err(ZxError::NOT_SUPPORTED)

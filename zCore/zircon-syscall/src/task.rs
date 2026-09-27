@@ -473,8 +473,10 @@ impl Syscall<'_> {
             return Ok(());
         }
         let proc = self.thread.proc();
-        let _vmo =
-            proc.get_object_with_rights::<zircon_object::vm::VmObject>(vmo_handle, Rights::READ)?;
+        let _vmo = proc.get_object_with_rights::<zircon_object::vm::VmObject>(
+            vmo_handle,
+            Rights::READ | Rights::WRITE | Rights::DUPLICATE,
+        )?;
         if size == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
