@@ -43,6 +43,7 @@ mod pci;
 mod port;
 mod resource;
 mod restricted;
+mod sampler;
 mod signal;
 mod socket;
 mod stream;
@@ -466,10 +467,12 @@ impl Syscall<'_> {
             Sys::COUNTER_READ => self.sys_counter_read(a0 as _, a1.into()),
             Sys::COUNTER_WRITE => self.sys_counter_write(a0 as _, a1 as _),
             Sys::COUNTER_ADD => self.sys_counter_add(a0 as _, a1 as _),
-            Sys::SAMPLER_CREATE | Sys::SAMPLER_READ | Sys::SAMPLER_START | Sys::SAMPLER_STOP => {
-                warn!("sampler: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+            Sys::SAMPLER_CREATE => {
+                self.sys_sampler_create(a0 as _, a1 as _, a2, a3 as _, a4.into())
             }
+            Sys::SAMPLER_START => self.sys_sampler_start(a0 as _),
+            Sys::SAMPLER_STOP => self.sys_sampler_stop(a0 as _),
+            Sys::SAMPLER_READ => self.sys_sampler_read(a0 as _, a1.into(), a2 as _, a3.into()),
             Sys::MEMBARRIER_SYNC_PROCESS_DATA => self.sys_membarrier_sync_process_data(),
             Sys::MEMBARRIER_SYNC_PROCESS_INSN => self.sys_membarrier_sync_process_insn(),
             Sys::RESTRICTED_ENTER => self.sys_restricted_enter(a0 as _, a1, a2),
@@ -483,24 +486,34 @@ impl Syscall<'_> {
                 // We treat it as a no-op (correct behavior per Zircon docs).
                 Ok(())
             }
-            Sys::THREAD_RAISE_EXCEPTION | Sys::THREAD_SET_RSEQ => {
-                warn!("thread: {:?} not yet implemented", sys_type);
-                Err(ZxError::NOT_SUPPORTED)
-            }
-            Sys::PROCESS_CREATE_SHARED => {
-                warn!("process.create_shared: not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::THREAD_RAISE_EXCEPTION => self.sys_thread_raise_exception(a0 as _, a1 as _, a2),
+            Sys::THREAD_SET_RSEQ => self.sys_thread_set_rseq(a0 as _, a1 as _, a2 as _),
+            Sys::PROCESS_CREATE_SHARED => self.sys_process_create_shared(
+                a0 as _,
+                a1 as _,
+                a2.into(),
+                a3 as _,
+                a4.into(),
+                a5.into(),
+            ),
             Sys::PORT_CANCEL_KEY => self.sys_port_cancel_key(a0 as _, a1 as _, a2 as _),
             Sys::VMO_GET_STREAM_SIZE => self.sys_vmo_get_stream_size(a0 as _, a1.into()),
             Sys::VMO_SET_STREAM_SIZE => self.sys_vmo_set_stream_size(a0 as _, a1),
             Sys::VMO_TRANSFER_DATA => {
                 self.sys_vmo_transfer_data(a0 as _, a1 as _, a2 as _, a3 as _, a4 as _, a5 as _)
             }
-            Sys::VMAR_MAP_CLOCK | Sys::VMAR_MAP_IOB => {
-                warn!("vmar: {:?} not yet implemented", sys_type);
-                Err(ZxError::NOT_SUPPORTED)
+            Sys::VMAR_MAP_CLOCK => {
+                self.sys_vmar_map_clock(a0 as _, a1 as _, a2 as _, a3 as _, a4 as _, a5.into())
             }
+            Sys::VMAR_MAP_IOB => self.sys_vmar_map_iob(
+                a0 as _,
+                a1 as _,
+                a2 as _,
+                a3 as _,
+                a4 as _,
+                a5 as _,
+                a6.into(),
+            ),
             Sys::PAGER_QUERY_DIRTY_RANGES => self.sys_pager_query_dirty_ranges(
                 a0 as _,
                 a1 as _,
