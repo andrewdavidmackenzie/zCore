@@ -250,6 +250,70 @@ impl Syscall<'_> {
         vmar.unmap(addr, pages(len) * PAGE_SIZE)?;
         Ok(())
     }
+
+    /// Map a kernel clock object's transformation state into user address space.
+    ///
+    /// The mapping is read-only (PERM_WRITE and PERM_EXECUTE are rejected).
+    /// This allows userspace to read the clock without a syscall.
+    #[allow(clippy::too_many_arguments)]
+    pub fn sys_vmar_map_clock(
+        &self,
+        handle: HandleValue,
+        options: u32,
+        _vmar_offset: u64,
+        clock_handle: HandleValue,
+        _len: u64,
+        _mapped_addr: UserOutPtr<usize>,
+    ) -> ZxResult {
+        info!(
+            "vmar.map_clock: vmar={:#x}, options={:#x}, clock={:#x}",
+            handle, options, clock_handle
+        );
+        // Reject write/execute permissions — clock mapping is read-only.
+        if options & 0x2 != 0 || options & 0x4 != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let proc = self.thread.proc();
+        let _vmar = proc.get_object::<VmAddressRegion>(handle)?;
+        let _clock = proc.get_object_with_rights::<zircon_object::signal::Clock>(
+            clock_handle,
+            Rights::READ | Rights::MAP,
+        )?;
+        // TODO: map clock transformation state into the VMAR as a read-only page.
+        warn!("vmar.map_clock: validated but clock mapping not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Map an IOBuffer region into user address space.
+    ///
+    /// Maps the VMO backing a specific IOB region into the process's
+    /// address space, subject to the endpoint's per-region access flags.
+    #[allow(clippy::too_many_arguments)]
+    pub fn sys_vmar_map_iob(
+        &self,
+        handle: HandleValue,
+        options: u32,
+        vmar_offset: usize,
+        iob_handle: HandleValue,
+        region_index: u32,
+        _region_len: usize,
+        _addr_out: UserOutPtr<usize>,
+    ) -> ZxResult {
+        info!(
+            "vmar.map_iob: vmar={:#x}, options={:#x}, iob={:#x}, region={}, offset={:#x}",
+            handle, options, iob_handle, region_index, vmar_offset
+        );
+        let proc = self.thread.proc();
+        let _vmar = proc.get_object::<VmAddressRegion>(handle)?;
+        let iob =
+            proc.get_object_with_rights::<zircon_object::ipc::IoBuffer>(iob_handle, Rights::MAP)?;
+        if region_index as usize >= iob.region_count() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        // TODO: map the region's VMO into the VMAR with endpoint access checks.
+        warn!("vmar.map_iob: validated but IOB region mapping not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
 }
 
 bitflags! {

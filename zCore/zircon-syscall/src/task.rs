@@ -430,6 +430,96 @@ impl Syscall<'_> {
         // but runtime priority changes are not implemented).
         Ok(())
     }
+
+    /// Programmatically raise an exception on the calling thread.
+    ///
+    /// The exception is delivered through the thread's exception channel.
+    /// `options` must be `ZX_EXCEPTION_TARGET_JOB_DEBUGGER` (1).
+    /// `excp_type` must be `ZX_EXCP_USER` (0x924).
+    pub fn sys_thread_raise_exception(
+        &self,
+        options: u32,
+        excp_type: u32,
+        _context: usize,
+    ) -> ZxResult {
+        info!(
+            "thread.raise_exception: options={}, type={:#x}",
+            options, excp_type
+        );
+        // options must be ZX_EXCEPTION_TARGET_JOB_DEBUGGER (1)
+        if options != 1 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // excp_type must be ZX_EXCP_USER (0x924)
+        if excp_type != 0x924 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // TODO: inject exception into the calling thread's exception channel.
+        warn!("thread.raise_exception: validated but exception injection not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Register a restartable sequence (rseq) area for the calling thread.
+    ///
+    /// The VMO contains the `zx_rseq_t` structure. Pass `ZX_HANDLE_INVALID`
+    /// to unregister. Offset and size specify the region within the VMO.
+    pub fn sys_thread_set_rseq(&self, vmo_handle: HandleValue, offset: u64, size: u64) -> ZxResult {
+        info!(
+            "thread.set_rseq: vmo={:#x}, offset={:#x}, size={:#x}",
+            vmo_handle, offset, size
+        );
+        if vmo_handle == INVALID_HANDLE {
+            // Unregister rseq — always succeeds.
+            return Ok(());
+        }
+        let proc = self.thread.proc();
+        let _vmo = proc.get_object_with_rights::<zircon_object::vm::VmObject>(
+            vmo_handle,
+            Rights::READ | Rights::WRITE | Rights::DUPLICATE,
+        )?;
+        if size == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // TODO: store rseq area in thread state for preemption restart logic.
+        warn!("thread.set_rseq: validated but rseq not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
+
+    /// Create a process that shares its address space with an existing process.
+    ///
+    /// The new process uses the same VMAR root as `shared_proc`, enabling
+    /// shared memory without explicit mapping. Used by Starnix for lightweight
+    /// Linux process creation.
+    #[allow(clippy::too_many_arguments)]
+    pub fn sys_process_create_shared(
+        &self,
+        shared_proc: HandleValue,
+        options: u32,
+        name: UserInPtr<u8>,
+        name_size: usize,
+        _proc_handle: UserOutPtr<HandleValue>,
+        _restricted_vmar_handle: UserOutPtr<HandleValue>,
+    ) -> ZxResult {
+        info!(
+            "process.create_shared: shared_proc={:#x}, options={}",
+            shared_proc, options
+        );
+        if options != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if name_size > 32 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let proc = self.thread.proc();
+        let _source = proc.get_object_with_rights::<Process>(
+            shared_proc,
+            Rights::MANAGE_PROCESS | Rights::GET_PROPERTY,
+        )?;
+        let _name = name.read_string(name_size)?;
+        // TODO: create process sharing the source process's VMAR root.
+        warn!("process.create_shared: validated but shared address space not implemented");
+        Err(ZxError::NOT_SUPPORTED)
+    }
 }
 
 const JOB_POL_BASE_V1: u32 = 0;
