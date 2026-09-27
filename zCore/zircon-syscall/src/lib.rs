@@ -41,6 +41,7 @@ mod pager;
 mod pci;
 mod port;
 mod resource;
+mod restricted;
 mod signal;
 mod socket;
 mod stream;
@@ -467,13 +468,10 @@ impl Syscall<'_> {
             }
             Sys::MEMBARRIER_SYNC_PROCESS_DATA => self.sys_membarrier_sync_process_data(),
             Sys::MEMBARRIER_SYNC_PROCESS_INSN => self.sys_membarrier_sync_process_insn(),
-            Sys::RESTRICTED_ENTER
-            | Sys::RESTRICTED_BIND_STATE
-            | Sys::RESTRICTED_KICK
-            | Sys::RESTRICTED_UNBIND_STATE => {
-                warn!("restricted: not yet implemented (needed for #409)");
-                Err(ZxError::NOT_SUPPORTED)
-            }
+            Sys::RESTRICTED_ENTER => self.sys_restricted_enter(a0 as _, a1, a2),
+            Sys::RESTRICTED_BIND_STATE => self.sys_restricted_bind_state(a0 as _, a1.into()),
+            Sys::RESTRICTED_KICK => self.sys_restricted_kick(a0 as _, a1 as _),
+            Sys::RESTRICTED_UNBIND_STATE => self.sys_restricted_unbind_state(a0 as _),
             Sys::CACHE_FLUSH => self.sys_cache_flush(a0, a1, a2 as _),
             // --- Additional upstream syscalls (stubs) ---
             Sys::THREAD_LEGACY_YIELD => {
