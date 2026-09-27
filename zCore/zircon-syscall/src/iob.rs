@@ -99,31 +99,75 @@ impl Syscall<'_> {
 
     /// Write data to an IOBuffer region.
     ///
-    /// Writes an iovec-style scatter/gather list to the specified
-    /// region of an IOBuffer endpoint.
+    /// Reads an iovec-style scatter/gather list from userspace and
+    /// writes the gathered data sequentially into the region's VMO.
     pub fn sys_iob_writev(
         &self,
         handle: HandleValue,
         options: u32,
         region_index: u32,
-        _iovecs: usize,
-        _iovec_count: usize,
+        iovecs_ptr: UserInPtr<u8>,
+        iovec_count: usize,
     ) -> ZxResult {
         info!(
-            "iob.writev: handle={:#x}, options={}, region={}",
-            handle, options, region_index
+            "iob.writev: handle={:#x}, options={}, region={}, count={}",
+            handle, options, region_index, iovec_count
         );
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        if iovec_count == 0 {
+            return Ok(());
+        }
         let proc = self.thread.proc();
         let iob = proc.get_object_with_rights::<IoBuffer>(handle, Rights::WRITE)?;
-        if region_index as usize >= iob.region_count() {
-            return Err(ZxError::OUT_OF_RANGE);
+        let (vmo, region_size, access) = iob.get_region(region_index as usize)?;
+
+        // Check write permission for this endpoint.
+        let ep_idx = iob.endpoint_index();
+        let can_write = if ep_idx == 0 {
+            access & 0x02 != 0 // EP0_CAN_MAP_WRITE
+        } else {
+            access & 0x20 != 0 // EP1_CAN_MAP_WRITE
+        };
+        if !can_write {
+            return Err(ZxError::ACCESS_DENIED);
         }
-        // TODO: implement scatter/gather write into the region's VMO.
-        warn!("iob.writev: validated but write not yet implemented");
-        Err(ZxError::NOT_SUPPORTED)
+
+        // Read iovec descriptors from userspace.
+        // Each iovec is 16 bytes: [ptr: u64, len: u64] on 64-bit.
+        let iovec_size = 16usize;
+        let total_bytes = iovec_count * iovec_size;
+        let raw = iovecs_ptr.read_array(total_bytes)?;
+
+        // Gather data from iovecs and write sequentially into the VMO.
+        let mut offset = 0usize;
+        for i in 0..iovec_count {
+            let b = i * iovec_size;
+            let ptr = usize::from_ne_bytes(
+                raw[b..b + core::mem::size_of::<usize>()]
+                    .try_into()
+                    .map_err(|_| ZxError::INVALID_ARGS)?,
+            );
+            let len = usize::from_ne_bytes(
+                raw[b + core::mem::size_of::<usize>()..b + iovec_size]
+                    .try_into()
+                    .map_err(|_| ZxError::INVALID_ARGS)?,
+            );
+            if len == 0 {
+                continue;
+            }
+            if offset + len > region_size {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            // Read data from the user buffer.
+            let user_buf: UserInPtr<u8> = ptr.into();
+            let data = user_buf.read_array(len)?;
+            // Write into the region's VMO.
+            vmo.write(offset, &data)?;
+            offset += len;
+        }
+        Ok(())
     }
 
     /// Allocate a unique ID from an IOBuffer region with ID allocator

@@ -456,7 +456,7 @@ impl Syscall<'_> {
             Sys::IOB_CREATE => {
                 self.sys_iob_create(a0 as _, a1.into(), a2 as _, a3.into(), a4.into())
             }
-            Sys::IOB_WRITEV => self.sys_iob_writev(a0 as _, a1 as _, a2 as _, a3, a4 as _),
+            Sys::IOB_WRITEV => self.sys_iob_writev(a0 as _, a1 as _, a2 as _, a3.into(), a4 as _),
             Sys::IOB_ALLOCATE_ID => {
                 self.sys_iob_allocate_id(a0 as _, a1 as _, a2 as _, a3, a4 as _, a5.into())
             }
