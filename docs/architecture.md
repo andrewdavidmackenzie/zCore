@@ -681,12 +681,12 @@ runtime link.
 **Status:** Actively used for Zircon mode. Less active than Linux mode
 currently.
 
-**Currently cannot boot Zircon mode.** It requires prebuilt binaries
-(userboot.so, libzircon.so, bringup.zbi) at `prebuilt/zircon/{arch}/` which are
-NOT present in the repo. To generate them: run `tools/scripts/gen-prebuilt.sh` inside
-a Fuchsia source tree. The Zircon integration test (`loader/tests/zircon.rs`)
-is x86_64-only and expects `prebuilt/zircon/x64/bringup.zbi`.
-See [#86](https://github.com/andrewdavidmackenzie/zCore/issues/86).
+Zircon mode boots via the userboot/petal path: the kernel launches
+`userboot` (zCore's equivalent of Fuchsia's `userboot`), which loads
+petal programs from a ZBI. The old prebuilt path (requiring `userboot.so`,
+`libzircon.so`, `bringup.zbi` from a Fuchsia build) was removed in PR #18.
+See [#21](https://github.com/andrewdavidmackenzie/zCore/issues/21) for
+ongoing work to run stock Fuchsia binaries.
 
 
 ---

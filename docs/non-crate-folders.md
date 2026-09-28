@@ -106,23 +106,20 @@ and what Fuschia source is used from where?
   > Fuchsia binaries, just patched to work with
   > zCore's slightly different syscall ABI.
 
-The ABI difference: real Zircon uses hardware trap instructions for syscalls
-(`syscall` on x86_64, `svc` on aarch64). zCore instead uses an indirect jump
-through a function pointer (`zcore_syscall_entry`) that zCore patches at load
-time to point to its own syscall handler. This allows the same userspace
-binaries to work with a different kernel implementation.
+zCore's bare-metal mode uses the same hardware trap instructions as real
+Zircon (`syscall` on x86_64, `svc #0` on aarch64). The old prebuilt path
+(removed in PR #18) used an indirect function pointer (`zcore_syscall_entry`)
+instead, requiring patched Fuchsia binaries. This is no longer the case --
+standard Fuchsia binaries can run unmodified on bare-metal zCore.
 
-- `zcore.patch` / `zircon-libos.patch` -- Fuchsia source patches for zCore
-  compatibility
+- `zcore.patch` / `zircon-libos.patch` -- Historical Fuchsia source patches
+  for the old prebuilt path (no longer used)
 
-zCore reimplements the Zircon kernel but reuses real Fuchsia userspace
-binaries. The patches: (1) Replace x86_64 `syscall` instruction with an
-indirect jump through `zcore_syscall_entry` (a function pointer zCore patches
-at load time). Same for aarch64 `svc #0` -> indirect `blr`. (2) Fix VMAR
-address reservation calculations that assume non-zero base (zCore's VMAR has
-base=0, causing underflow). (3) The libos patch additionally modifies Zircon
-libos syscall stubs for function-call convention. Without these patches,
-Fuchsia userspace would use the wrong syscall mechanism.
+These patches were needed for the removed prebuilt approach: (1) replaced
+hardware trap instructions with indirect jumps through `zcore_syscall_entry`,
+and (2) fixed VMAR address calculations. The libos patch modified syscall
+stubs for function-call convention. None of these patches are needed for the
+current bare-metal boot path.
 
 
 **Status:** Actively used in CI (`boot-test.sh`, `libc-test.sh`).
