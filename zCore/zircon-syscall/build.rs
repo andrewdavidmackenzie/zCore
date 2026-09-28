@@ -15,13 +15,16 @@ fn main() {
 
     let data = std::fs::read_to_string("src/zx-syscall-numbers.h").unwrap();
     for line in data.lines() {
-        if !line.starts_with("#define") {
+        if !line.starts_with("#define ZX_SYS_") {
             continue;
         }
         let mut iter = line.split(' ');
-        let _ = iter.next().unwrap();
-        let name = iter.next().unwrap();
-        let id = iter.next().unwrap();
+        let _ = iter.next().unwrap(); // #define
+        let name = iter.next().unwrap(); // ZX_SYS_xxx
+        let id = match iter.next() {
+            Some(id) => id,
+            None => continue,
+        };
 
         let name = &name[7..].to_uppercase();
         writeln!(fout, "    {} = {},", name, id).unwrap();
