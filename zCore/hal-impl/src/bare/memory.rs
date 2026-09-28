@@ -128,7 +128,7 @@ mod bitmap {
     /// Physical page reserved for the SMP AP trampoline.
     const SMP_TRAMPOLINE_PAGE: usize = 0x8000 >> PAGE_BITS;
 
-    const KERNEL_HEAP_SIZE: usize = 16 * 1024 * 1024; // 16 MB
+    const KERNEL_HEAP_SIZE: usize = 64 * 1024 * 1024; // 64 MB (needed for large Fuchsia test binaries)
     const ORDER: usize = 32;
 
     #[global_allocator]
