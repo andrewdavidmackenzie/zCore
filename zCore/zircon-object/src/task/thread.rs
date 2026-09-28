@@ -646,6 +646,22 @@ impl CurrentThread {
             inner.exception = Some(exception.clone());
             exception
         };
+        self.handle_exception_dispatch(type_, exception).await;
+    }
+
+    /// Raise a user exception with synthetic code and data fields.
+    pub async fn handle_exception_user(&self, synth_code: u32, synth_data: u32) {
+        let exception = {
+            let mut inner = self.inner.lock();
+            let exception = Exception::new_user(&self.0, synth_code, synth_data);
+            inner.exception = Some(exception.clone());
+            exception
+        };
+        self.handle_exception_dispatch(ExceptionType::User, exception)
+            .await;
+    }
+
+    async fn handle_exception_dispatch(&self, type_: ExceptionType, exception: Arc<Exception>) {
         if type_ == ExceptionType::ThreadExiting {
             let handled = self
                 .0

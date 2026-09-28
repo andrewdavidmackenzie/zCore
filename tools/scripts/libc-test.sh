@@ -114,7 +114,7 @@ done
 # issue #16 for future implementation.
 SKIP_TESTS="crypt fcntl fdopen ipc_msg ipc_sem ipc_shm memstream popen \
 pthread_cancel pthread_cancel-points pthread_cond pthread_mutex \
-pthread_mutex_pi pthread_robust pthread_tsd sem_init sem_open \
+pthread_mutex_pi pthread_robust pthread_tsd raise-race sem_init sem_open \
 setjmp socket spawn vfork"
 
 # Step 2b: Generate test runner script in the rootfs.

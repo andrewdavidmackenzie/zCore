@@ -433,30 +433,53 @@ impl Syscall<'_> {
 
     /// Programmatically raise an exception on the calling thread.
     ///
-    /// The exception is delivered through the thread's exception channel.
+    /// The exception is delivered through the thread's exception channel
+    /// using the standard exception handler chain (process debugger →
+    /// thread → process → job chain). The calling thread blocks until
+    /// the exception is handled or the thread is killed.
+    ///
     /// `options` must be `ZX_EXCEPTION_TARGET_JOB_DEBUGGER` (1).
-    /// `excp_type` must be `ZX_EXCP_USER` (0x924).
-    pub fn sys_thread_raise_exception(
+    /// `excp_type` must be `ZX_EXCP_USER` (0x8309).
+    pub async fn sys_thread_raise_exception(
         &self,
         options: u32,
         excp_type: u32,
-        _context: usize,
+        context_ptr: usize,
     ) -> ZxResult {
         info!(
-            "thread.raise_exception: options={}, type={:#x}",
-            options, excp_type
+            "thread.raise_exception: options={}, type={:#x}, context={:#x}",
+            options, excp_type, context_ptr
         );
-        // options must be ZX_EXCEPTION_TARGET_JOB_DEBUGGER (1)
         if options != 1 {
             return Err(ZxError::INVALID_ARGS);
         }
-        // excp_type must be ZX_EXCP_USER (0x924)
-        if excp_type != 0x924 {
+        if excp_type != 0x8309 {
             return Err(ZxError::INVALID_ARGS);
         }
-        // TODO: inject exception into the calling thread's exception channel.
-        warn!("thread.raise_exception: validated but exception injection not implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        // The context pointer must be non-null and point to a valid
+        // zx_exception_context_t. Layout: arch (24 bytes) + synth_code
+        // (u32) + synth_data (u32) = 32 bytes total on all arches.
+        if context_ptr == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        const ARCH_SIZE: usize = 24;
+        const CTX_SIZE: usize = ARCH_SIZE + 8; // + synth_code + synth_data
+        let ctx_buf: UserInPtr<u8> = context_ptr.into();
+        let context_data = ctx_buf.read_array(CTX_SIZE)?;
+        // synth_code and synth_data are after the arch-specific payload.
+        let synth_code =
+            u32::from_ne_bytes(context_data[ARCH_SIZE..ARCH_SIZE + 4].try_into().unwrap());
+        let synth_data = u32::from_ne_bytes(
+            context_data[ARCH_SIZE + 4..ARCH_SIZE + 8]
+                .try_into()
+                .unwrap(),
+        );
+        // Deliver a User exception with synth fields through the
+        // exception handler chain. Blocks until handled.
+        self.thread
+            .handle_exception_user(synth_code, synth_data)
+            .await;
+        Ok(())
     }
 
     /// Register a restartable sequence (rseq) area for the calling thread.
