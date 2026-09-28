@@ -93,6 +93,11 @@ pub trait VMObjectTrait: Sync + Send {
         Err(ZxError::NOT_SUPPORTED)
     }
 
+    /// Check whether any page in [offset, offset+len) is pinned.
+    fn has_pinned_pages(&self, _offset: usize, _len: usize) -> bool {
+        false
+    }
+
     /// Returns true if the object is backed by a contiguous range of physical memory.
     fn is_contiguous(&self) -> bool {
         false

@@ -495,7 +495,9 @@ impl Syscall<'_> {
                 // We treat it as a no-op (correct behavior per Zircon docs).
                 Ok(())
             }
-            Sys::THREAD_RAISE_EXCEPTION => self.sys_thread_raise_exception(a0 as _, a1 as _, a2),
+            Sys::THREAD_RAISE_EXCEPTION => {
+                self.sys_thread_raise_exception(a0 as _, a1 as _, a2).await
+            }
             Sys::THREAD_SET_RSEQ => self.sys_thread_set_rseq(a0 as _, a1 as _, a2 as _),
             Sys::PROCESS_CREATE_SHARED => self.sys_process_create_shared(
                 a0 as _,

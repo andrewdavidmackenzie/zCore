@@ -417,6 +417,23 @@ impl VMObjectTrait for VMObjectPaged {
         Ok(())
     }
 
+    fn has_pinned_pages(&self, offset: usize, len: usize) -> bool {
+        let (_guard, inner) = self.get_inner();
+        if len == 0 || offset + len > inner.size {
+            return false;
+        }
+        let start_page = offset / PAGE_SIZE;
+        let end_page = pages(offset + len);
+        for i in start_page..end_page {
+            if let Some(frame) = inner.frames.get(&i) {
+                if frame.pin_count > 0 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     fn unpin(&self, offset: usize, len: usize) -> ZxResult {
         let (_guard, mut inner) = self.get_inner_mut();
         if offset + len > inner.size {
