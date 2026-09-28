@@ -151,6 +151,18 @@ impl Clock {
         Ok(())
     }
 
+    /// Create a VMO containing the clock's transformation state.
+    ///
+    /// The VMO holds a `zx_clock_details_v1_t` struct (64 bytes)
+    /// that userspace can read to compute clock time without a syscall.
+    pub fn create_state_vmo(&self) -> ZxResult<alloc::sync::Arc<crate::vm::VmObject>> {
+        let details = self.get_details()?;
+        let vmo = crate::vm::VmObject::new_paged(1);
+        vmo.write(0, &details)?;
+        vmo.set_name("clock-state");
+        Ok(vmo)
+    }
+
     /// Get detailed clock information.
     ///
     /// Returns a `zx_clock_details_v1_t` struct (64 bytes).
