@@ -90,6 +90,9 @@ struct ProcessInner {
     debug_addr: usize,
     dyn_break_on_load: usize,
     critical_to_job: Option<(Arc<Job>, bool)>,
+    /// Whether this process was created via create_shared (eligible
+    /// as a source for further create_shared calls).
+    is_shared: bool,
 }
 
 /// Status of a process.
@@ -166,15 +169,21 @@ impl Process {
             inner: Mutex::new(ProcessInner::default()),
         });
 
-        // Copy initial properties from source.
+        // Copy initial properties from source and mark as shared.
         {
             let source_inner = source.inner.lock();
             let mut new_inner = proc.inner.lock();
             new_inner.debug_addr = source_inner.debug_addr;
             new_inner.dyn_break_on_load = source_inner.dyn_break_on_load;
+            new_inner.is_shared = true;
         }
 
-        job.add_process(proc.clone())?;
+        if let Err(e) = job.add_process(proc.clone()) {
+            // Release the restricted VMAR from the source's children
+            // to avoid leaking it.
+            restricted_vmar.destroy()?;
+            return Err(e);
+        }
         Ok((proc, restricted_vmar))
     }
 
@@ -344,6 +353,11 @@ impl Process {
     }
 
     /// Get the job of the process.
+    /// Whether this process is eligible as a source for create_shared.
+    pub fn is_shared(&self) -> bool {
+        self.inner.lock().is_shared
+    }
+
     pub fn job(&self) -> Arc<Job> {
         self.job.clone()
     }

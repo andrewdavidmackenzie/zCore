@@ -500,11 +500,18 @@ impl Syscall<'_> {
             vmo_handle,
             Rights::READ | Rights::WRITE | Rights::DUPLICATE,
         )?;
-        if size == 0 {
+        // zx_rseq_t is 32 bytes (4 fields * 8 bytes each).
+        const RSEQ_STRUCT_SIZE: u64 = 32;
+        if size != RSEQ_STRUCT_SIZE {
             return Err(ZxError::INVALID_ARGS);
         }
-        // Verify the offset + size fits within the VMO.
-        if offset as usize + size as usize > vmo.len() {
+        // Offset must be aligned to 8 bytes (natural alignment of u64 fields).
+        if !offset.is_multiple_of(8) {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Check range without overflow.
+        let end = offset.checked_add(size).ok_or(ZxError::OUT_OF_RANGE)?;
+        if end as usize > vmo.len() {
             return Err(ZxError::OUT_OF_RANGE);
         }
         self.thread.set_rseq(vmo, offset)?;
@@ -541,6 +548,11 @@ impl Syscall<'_> {
             shared_proc,
             Rights::MANAGE_PROCESS | Rights::GET_PROPERTY,
         )?;
+        // Source must itself be a shared process (created via
+        // create_shared or with ZX_PROCESS_SHARED).
+        if !source.is_shared() {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let name_str = name.read_string(name_size)?;
 
         let (new_proc, restricted_vmar) = Process::create_shared(&source, &name_str)?;
