@@ -218,8 +218,16 @@ pub fn spawn_process(
     let vmar = proc.vmar();
 
     // Load the ELF segments (interpreter if PT_INTERP, main program otherwise).
+    // Avoid allocating at vaddr 0: PIE binaries like ld.so.1 have PT_LOAD
+    // starting at vaddr 0, and loading at base 0 causes fsbase=0 to alias
+    // the ELF header, corrupting TLS accesses via %fs:0.
     let size = elf.load_segment_size();
-    let image_vmar = vmar.allocate(None, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)?;
+    let min_offset = if elf.header.pt2.entry_point() < size as u64 {
+        Some(0x10_0000) // 1 MiB minimum offset for PIE/shared objects
+    } else {
+        None // Statically-linked at a fixed address
+    };
+    let image_vmar = vmar.allocate(min_offset, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)?;
     let _vmo = image_vmar.load_from_elf(&elf)?;
     let base = image_vmar.addr();
     let entry = base + elf.header.pt2.entry_point() as usize;
@@ -282,6 +290,7 @@ pub fn spawn_process(
     const PA_JOB_DEFAULT: u32 = 0x03;
     const PA_VMAR_ROOT: u32 = 0x04;
     const PA_VMAR_LOADED: u32 = 0x05;
+    const PA_LDSVC_LOADER: u32 = 0x10;
     const PA_VMO_VDSO: u32 = 0x11;
     const PA_VMO_EXECUTABLE: u32 = 0x14;
     const PA_RESOURCE: u32 = 0x3F;
@@ -313,14 +322,24 @@ pub fn spawn_process(
         pa_hnd(PA_VMAR_LOADED, 0),
     ];
 
-    // If dynamically linked, pass the original program as a VMO.
-    if has_interp {
+    // If dynamically linked, pass the original program as a VMO
+    // and a loader service channel for resolving shared libraries.
+    let ldsvc_kernel_end = if has_interp {
         let prog_vmo = VmObject::new_paged(crate::vm::pages(elf_data.len()));
         prog_vmo.write(0, elf_data)?;
         prog_vmo.set_name(name);
         bootstrap_handles.push(Handle::new(prog_vmo, Rights::DEFAULT_VMO | Rights::EXECUTE));
         handle_info.push(pa_hnd(PA_VMO_EXECUTABLE, 0));
-    }
+
+        // Loader service: ld.so.1 sends library name requests on this
+        // channel, and the kernel responds with VMO handles.
+        let (ldsvc_kernel, ldsvc_user) = Channel::create();
+        bootstrap_handles.push(Handle::new(ldsvc_user, Rights::DEFAULT_CHANNEL));
+        handle_info.push(pa_hnd(PA_LDSVC_LOADER, 0));
+        Some(ldsvc_kernel)
+    } else {
+        None
+    };
 
     let handle_count = bootstrap_handles.len();
 
@@ -378,5 +397,131 @@ pub fn spawn_process(
         config.thread_fn,
     )?;
 
+    // Spawn the loader service if this is a dynamically linked binary.
+    if let Some(ldsvc) = ldsvc_kernel_end {
+        spawn_loader_service(ldsvc);
+    }
+
     Ok(proc)
+}
+
+/// Spawn a kernel task that serves the Fuchsia loader service protocol.
+///
+/// `ld.so.1` sends `LOADER_SVC_OP_LOAD_OBJECT` (opcode 2) requests
+/// on the channel with a library name. We look up the library in
+/// the rootfs at `/lib/<name>`, create a VMO from the file data,
+/// and send it back as a handle.
+fn spawn_loader_service(channel: Arc<Channel>) {
+    use alloc::sync::Arc;
+
+    // The loader service runs as a synchronous loop on a kernel task.
+    // It exits when the channel is closed (ld.so.1 drops its end
+    // after finishing loading).
+    hal_impl::thread::spawn(async move {
+        info!("loader_service: started");
+        loop {
+            // Wait for a message from ld.so.1.
+            let object: Arc<dyn crate::object::KernelObject> = channel.clone();
+            object
+                .wait_signal(crate::object::Signal::READABLE | crate::object::Signal::PEER_CLOSED)
+                .await;
+
+            // Check if the channel was closed.
+            if channel
+                .signal()
+                .contains(crate::object::Signal::PEER_CLOSED)
+            {
+                info!("loader_service: channel closed, exiting");
+                break;
+            }
+
+            // Read the request.
+            let msg = match channel.read() {
+                Ok(msg) => msg,
+                Err(e) => {
+                    warn!("loader_service: read failed: {:?}", e);
+                    break;
+                }
+            };
+
+            // Parse: first 4 bytes = opcode, rest = library name.
+            if msg.data.len() < 4 {
+                warn!("loader_service: message too short");
+                continue;
+            }
+            let opcode = u32::from_le_bytes(msg.data[0..4].try_into().unwrap());
+
+            match opcode {
+                // LOADER_SVC_OP_LOAD_OBJECT = 2
+                2 => {
+                    let name_bytes = &msg.data[4..];
+                    // Trim trailing NUL if present.
+                    let name_end = name_bytes
+                        .iter()
+                        .position(|&b| b == 0)
+                        .unwrap_or(name_bytes.len());
+                    let name = core::str::from_utf8(&name_bytes[..name_end]).unwrap_or("?");
+                    info!("loader_service: LOAD_OBJECT '{}'", name);
+
+                    // Look up the library in the rootfs.
+                    let lib_path = format!("/lib/{}", name);
+                    let response = if let Some(data) = read_rootfs_file(&lib_path) {
+                        info!(
+                            "loader_service: found '{}' ({} bytes)",
+                            lib_path,
+                            data.len()
+                        );
+                        let vmo = VmObject::new_paged(crate::vm::pages(data.len()));
+                        if let Err(e) = vmo.write(0, &data) {
+                            warn!("loader_service: VMO write failed: {:?}", e);
+                            // Send error response (no handles, status in data).
+                            crate::ipc::MessagePacket {
+                                data: alloc::vec![0xFF; 4], // error
+                                handles: alloc::vec![],
+                            }
+                        } else {
+                            vmo.set_name(name);
+                            // Send success: status 0 + VMO handle.
+                            crate::ipc::MessagePacket {
+                                data: alloc::vec![0u8; 4], // ZX_OK
+                                handles: alloc::vec![Handle::new(
+                                    vmo,
+                                    Rights::DEFAULT_VMO | Rights::EXECUTE,
+                                )],
+                            }
+                        }
+                    } else {
+                        warn!("loader_service: '{}' not found in rootfs", lib_path);
+                        crate::ipc::MessagePacket {
+                            data: alloc::vec![0xFF; 4], // error
+                            handles: alloc::vec![],
+                        }
+                    };
+
+                    if let Err(e) = channel.write(response) {
+                        warn!("loader_service: write response failed: {:?}", e);
+                        break;
+                    }
+                }
+                // LOADER_SVC_OP_CONFIG = 3 (set library search path prefix)
+                3 => {
+                    info!("loader_service: CONFIG (ignored)");
+                    let response = crate::ipc::MessagePacket {
+                        data: alloc::vec![0u8; 4], // ZX_OK
+                        handles: alloc::vec![],
+                    };
+                    channel.write(response).ok();
+                }
+                _ => {
+                    warn!("loader_service: unknown opcode {}", opcode);
+                    let response = crate::ipc::MessagePacket {
+                        data: alloc::vec![0xFF; 4], // error
+                        handles: alloc::vec![],
+                    };
+                    channel.write(response).ok();
+                }
+            }
+        }
+        info!("loader_service: done");
+    });
 }
