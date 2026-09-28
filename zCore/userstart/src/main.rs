@@ -1,4 +1,4 @@
-//! userstart: The first userspace process in zCore's Zircon mode.
+//! userboot: The first userspace process in zCore's Zircon mode.
 //!
 //! This is zCore's equivalent of Fuchsia's `userboot`. It:
 //! 1. Receives bootstrap handles from the kernel via a channel
@@ -40,7 +40,7 @@ fn debug_print(msg: &[u8]) {
 /// Check a syscall result, panic on error.
 fn check(name: &str, status: ZxStatus) {
     if status != ZX_OK {
-        debug_print(b"userstart: syscall failed: ");
+        debug_print(b"userboot: syscall failed: ");
         debug_print(name.as_bytes());
         debug_print(b"\n");
         process_exit(1);
@@ -53,7 +53,7 @@ fn check(name: &str, status: ZxStatus) {
 /// The second argument (x1/rsi) is 0.
 #[no_mangle]
 pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
-    debug_print(b"userstart: starting\n");
+    debug_print(b"userboot: starting\n");
 
     // Step 1: Read bootstrap handles from the channel
     let mut data_buf = [0u8; 1024]; // for cmdline
@@ -74,7 +74,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         )
     });
 
-    debug_print(b"userstart: received bootstrap handles\n");
+    debug_print(b"userboot: received bootstrap handles\n");
 
     // Close the bootstrap channel -- we've read all the handles
     unsafe { zx_handle_close(bootstrap_handle) };
@@ -93,7 +93,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     });
 
     if zbi_size == 0 || zbi_size > 16 * 1024 * 1024 {
-        debug_print(b"userstart: ZBI size invalid\n");
+        debug_print(b"userboot: ZBI size invalid\n");
         unsafe { zx_process_exit(1) };
     }
 
@@ -117,12 +117,12 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     let (name, program_data) = match zbi::find_first_bootfs_entry(zbi_data) {
         Some(entry) => entry,
         None => {
-            debug_print(b"userstart: no program found in ZBI bootfs\n");
+            debug_print(b"userboot: no program found in ZBI bootfs\n");
             unsafe { zx_process_exit(1) };
         }
     };
 
-    debug_print(b"userstart: loading '");
+    debug_print(b"userboot: loading '");
     debug_print(name);
     debug_print(b"'\n");
 
@@ -194,7 +194,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     let mut vdso_vmo_size: usize = 0;
     let s = unsafe { zx_vmo_get_size(vdso_vmo, &mut vdso_vmo_size as *mut usize) };
     if s != ZX_OK || vdso_vmo_size == 0 {
-        debug_print(b"userstart: vDSO VMO get_size failed, skipping map\n");
+        debug_print(b"userboot: vDSO VMO get_size failed, skipping map\n");
     } else {
         let s = unsafe {
             zx_vmar_map(
@@ -208,10 +208,10 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
             )
         };
         if s != ZX_OK {
-            debug_print(b"userstart: vDSO map failed\n");
+            debug_print(b"userboot: vDSO map failed\n");
             vdso_code_addr = 0;
         } else {
-            debug_print(b"userstart: vDSO mapped\n");
+            debug_print(b"userboot: vDSO mapped\n");
         }
     }
 
@@ -236,7 +236,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         )
     });
 
-    debug_print(b"userstart: starting init process\n");
+    debug_print(b"userboot: starting init process\n");
     check("process_start", unsafe {
         zx_process_start(
             init_proc,
@@ -248,7 +248,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         )
     });
 
-    debug_print(b"userstart: init process started, waiting for it to exit\n");
+    debug_print(b"userboot: init process started, waiting for it to exit\n");
 
     // Wait for the init process to terminate
     let mut observed: u32 = 0;
@@ -261,7 +261,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         )
     });
 
-    debug_print(b"userstart: init process exited, shutting down\n");
+    debug_print(b"userboot: init process exited, shutting down\n");
 
     // Small delay to let any pending UART output from init drain
     for _ in 0..100_000 {
@@ -387,7 +387,7 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
     // Check magic
     if data.len() < 64 || &data[0..4] != b"\x7fELF" {
         // Not an ELF -- fall back to flat binary loading
-        debug_print(b"userstart: not ELF, loading as flat binary\n");
+        debug_print(b"userboot: not ELF, loading as flat binary\n");
         return load_flat(data, vmar);
     }
 
@@ -484,7 +484,7 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
 
     let map_end = base + vmo_size;
     let entry = base + e_entry;
-    debug_print(b"userstart: ELF loaded\n");
+    debug_print(b"userboot: ELF loaded\n");
     (entry, map_end)
 }
 
@@ -526,13 +526,13 @@ fn load_flat(data: &[u8], vmar: HandleValue) -> (usize, usize) {
 /// Panic handler.
 ///
 /// Prints a fixed message and exits. We intentionally avoid accessing
-/// `PanicInfo::location()` because userstart is built with
+/// `PanicInfo::location()` because userboot is built with
 /// `debug = false` in release mode, which can produce invalid string
 /// pointers for the file path, causing a kernel GPF when passed to
 /// `zx_debug_write`.
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    debug_write(b"userstart: PANIC: ");
+    debug_write(b"userboot: PANIC: ");
     // Use a fmt::Write adapter to capture formatted panic messages
     // (as_str() returns None for messages with format placeholders).
     struct DebugWriter;

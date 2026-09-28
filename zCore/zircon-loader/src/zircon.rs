@@ -1,7 +1,7 @@
-//! Run Zircon userspace programs (userstart) and manage trap/interrupt/syscall.
+//! Run Zircon userspace programs (userboot) and manage trap/interrupt/syscall.
 //!
 //! This module implements the kernel side of the Zircon boot protocol.
-//! `userstart` is zCore's Rust replacement for Fuchsia's `userboot` -- the
+//! `userboot` is zCore's Rust replacement for Fuchsia's `userboot` -- the
 //! first userspace process launched by the kernel.
 //!
 //! The boot sequence:
@@ -35,7 +35,7 @@ use zircon_object::ZxError;
 static VDSO_ELF: &[u8] = include_bytes!(env!("VDSO_BIN"));
 
 // Handle indices in the bootstrap channel message.
-// These describe userstart itself.
+// These describe userboot itself.
 const K_PROC_SELF: usize = 0;
 const K_VMARROOT_SELF: usize = 1;
 // Essential job and resource handles
@@ -52,11 +52,11 @@ const K_HANDLECOUNT: usize = 15;
 
 // Note: ZBI parsing (userstart_code, extract_program_from_zbi,
 // extract_first_file_from_bootfs) was removed. ZBI parsing is now
-// done by the userstart userspace program.
+// done by the userboot userspace program.
 
 fn kcounter_vmos() -> (Arc<VmObject>, Arc<VmObject>) {
     // Provide dummy kcounter VMOs. Real kcounter data requires linker-
-    // provided symbols that are only available on x86_64. For petal/userstart
+    // provided symbols that are only available on x86_64. For petal/userboot
     // testing, dummy VMOs are sufficient.
     use zircon_object::util::kcounter::DescriptorVmoHeader;
     const HEADER_SIZE: usize = core::mem::size_of::<DescriptorVmoHeader>();
@@ -71,9 +71,9 @@ fn kcounter_vmos() -> (Arc<VmObject>, Arc<VmObject>) {
     (desc_vmo, arena_vmo)
 }
 
-/// Run Zircon `userstart` process and load the ZBI file as the bootfs.
+/// Run Zircon `userboot` process and load the ZBI file as the bootfs.
 ///
-/// `userstart` is zCore's Rust replacement for Fuchsia's `userboot`. Instead
+/// `userboot` is zCore's Rust replacement for Fuchsia's `userboot`. Instead
 /// of loading prebuilt Fuchsia binaries, it generates a minimal userspace
 /// program directly in memory that:
 /// 1. Writes a debug message via `zx_debug_write`
@@ -82,8 +82,8 @@ fn kcounter_vmos() -> (Arc<VmObject>, Arc<VmObject>) {
 /// This function is also available as `run_userboot()` for backward compatibility.
 pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     let job = Job::root();
-    let proc = Process::create(&job, "userstart").unwrap();
-    let thread = Thread::create(&proc, "userstart").unwrap();
+    let proc = Process::create(&job, "userboot").unwrap();
+    let thread = Thread::create(&proc, "userboot").unwrap();
     let resource = Resource::create(
         "root",
         ResourceKind::ROOT,
@@ -93,7 +93,7 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     );
     let vmar = proc.vmar();
 
-    // Load the userstart ELF binary (embedded at compile time).
+    // Load the userboot ELF binary (embedded at compile time).
     // If USERSTART_ELF was not set, build.rs provides an empty stub.
     let userstart_elf_bytes: &[u8] = include_bytes!(env!("USERSTART_ELF"));
     assert!(
@@ -131,7 +131,7 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
         .unwrap()
         + elf.header.pt2.entry_point() as usize;
     info!(
-        "userstart: loaded ELF ({} bytes, entry={:#x})",
+        "userboot: loaded ELF ({} bytes, entry={:#x})",
         userstart_elf_bytes.len(),
         entry
     );
@@ -147,7 +147,7 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
             "dsb ish",  // ensure I-cache invalidation completes
             "isb",      // synchronize instruction stream
         );
-        info!("I-cache invalidated after loading userstart");
+        info!("I-cache invalidated after loading userboot");
     }
 
     // Create the vDSO VMO with syscall trampolines and constants.
@@ -293,10 +293,10 @@ async fn run_user(thread: CurrentThread) {
     }
     thread.handle_exception(ExceptionType::ThreadExiting).await;
 
-    // In Zircon mode, when the root process (userstart) exits, shut down.
-    // Only shut down for the "userstart" process, not child processes like "init".
-    if thread.is_first_thread() && thread.proc().name() == "userstart" {
-        info!("Zircon root process (userstart) exited, shutting down");
+    // In Zircon mode, when the root process (userboot) exits, shut down.
+    // Only shut down for the "userboot" process, not child processes like "init".
+    if thread.is_first_thread() && thread.proc().name() == "userboot" {
+        info!("Zircon root process (userboot) exited, shutting down");
         info!("(if QEMU does not exit, press Ctrl-A then X to quit)");
         if !hal_impl::platform::is_hosted() {
             hal_impl::cpu::reset();
@@ -413,7 +413,7 @@ fn syscall_args(ctx: &UserContext) -> [usize; 8] {
 /// binary (not ELF) loaded at a fixed address.
 ///
 /// This path does NOT use userstart or ZBI -- the kernel loads the program
-/// directly, creating a process with the same handle protocol that userstart
+/// directly, creating a process with the same handle protocol that userboot
 /// would provide.
 /// Create a `SpawnConfig` for Zircon processes.
 ///
