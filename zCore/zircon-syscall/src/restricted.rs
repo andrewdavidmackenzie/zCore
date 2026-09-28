@@ -81,7 +81,7 @@ impl Syscall<'_> {
 
         // Check for pending kick before entering.
         if self.thread.check_restricted_kick() {
-            self.setup_normal_return(vector_table_ptr, ZX_RESTRICTED_REASON_KICK)?;
+            self.setup_normal_return(vector_table_ptr, context, ZX_RESTRICTED_REASON_KICK)?;
             return Ok(());
         }
 
@@ -95,6 +95,8 @@ impl Syscall<'_> {
 
         #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
         {
+            use zircon_object::task::ThreadState;
+
             let vmo = self
                 .thread
                 .restricted_state_vmo()
@@ -102,13 +104,27 @@ impl Syscall<'_> {
             let mut restricted_ctx = UserContext::new();
             Self::load_restricted_state(&vmo, &mut restricted_ctx)?;
 
+            // Copy vector/FPU state from the normal context so restricted
+            // code inherits valid FPU settings (x86_64 only).
+            #[cfg(target_arch = "x86_64")]
+            {
+                if let Ok(()) = self.thread.with_context(|normal_ctx| {
+                    restricted_ctx.vector_regs = normal_ctx.vector_regs;
+                }) {}
+            }
+
             // Enter restricted userspace in a loop. Interrupts and
             // page faults are handled transparently and we re-enter.
             // Only syscalls, unhandled exceptions, and kicks cause
             // an exit back to normal mode.
             let exit_reason = loop {
-                // Check for pending kick before (re-)entering.
+                // Check for pending kick, kill, or suspend before (re-)entering.
                 if self.thread.check_restricted_kick() {
+                    break ZX_RESTRICTED_REASON_KICK;
+                }
+                if self.thread.state() == ThreadState::Dying
+                    || self.thread.state() == ThreadState::Dead
+                {
                     break ZX_RESTRICTED_REASON_KICK;
                 }
 
@@ -118,8 +134,14 @@ impl Syscall<'_> {
                 match reason {
                     TrapReason::Syscall => break ZX_RESTRICTED_REASON_SYSCALL,
                     TrapReason::Interrupt(vector) => {
-                        // Handle the interrupt and re-enter restricted mode.
+                        // Handle the interrupt, yield to let other tasks
+                        // run, then re-enter restricted mode.
                         hal_impl::interrupt::handle_irq(vector);
+                        // Yield on timer interrupts to prevent starving
+                        // other tasks on the same CPU.
+                        if vector == hal_impl::context::TIMER_INTERRUPT_VEC {
+                            core::hint::spin_loop();
+                        }
                         continue;
                     }
                     TrapReason::PageFault(vaddr, flags) => {
@@ -130,7 +152,6 @@ impl Syscall<'_> {
                         if vmar.handle_page_fault(vaddr, flags).is_err() {
                             break ZX_RESTRICTED_REASON_EXCEPTION;
                         }
-                        // Page fault resolved — re-enter restricted mode.
                         continue;
                     }
                     _ => break ZX_RESTRICTED_REASON_EXCEPTION,
@@ -140,30 +161,49 @@ impl Syscall<'_> {
             // Save the restricted register state back to the VMO.
             Self::save_restricted_state(&vmo, &mut restricted_ctx)?;
 
+            // Copy vector/FPU state back to normal context (x86_64 only).
+            #[cfg(target_arch = "x86_64")]
+            {
+                let vr = restricted_ctx.vector_regs;
+                let _ = self.thread.with_context(|normal_ctx| {
+                    normal_ctx.vector_regs = vr;
+                });
+            }
+
             // Set up normal context to resume at vector_table_ptr.
-            self.setup_normal_return(vector_table_ptr, exit_reason)?;
+            self.setup_normal_return(vector_table_ptr, context, exit_reason)?;
 
             Ok(())
         }
     }
 
-    /// Set up the thread's normal context to resume at vector_table_ptr.
+    /// Set up the thread's normal context to resume at vector_table_ptr
+    /// with (context, reason) as the first two arguments.
     ///
-    /// Sets the PC to vector_table_ptr and the second argument register
-    /// to the exit reason. The first argument (context) is delivered via
-    /// the syscall return value (see the RESTRICTED_ENTER dispatch in
-    /// lib.rs), so we don't set it here.
-    fn setup_normal_return(&self, vector_table_ptr: usize, reason: u64) -> ZxResult {
+    /// On aarch64/riscv, the return value register IS the first arg
+    /// register (x0/a0), so `context` is delivered via the syscall
+    /// return value in the dispatcher. On x86_64, the return value
+    /// goes to rax but the first SysV arg is rdi, so we must set
+    /// rdi explicitly here.
+    fn setup_normal_return(
+        &self,
+        vector_table_ptr: usize,
+        #[allow(unused_variables)] context: usize,
+        reason: u64,
+    ) -> ZxResult {
         self.thread.with_context(|ctx| {
             ctx.set_field(UserContextField::InstrPointer, vector_table_ptr);
-            // Arg1 = reason (arch-specific second argument register).
-            // Arg0 (context) is set by the dispatcher via the return value.
             cfg_if::cfg_if! {
                 if #[cfg(target_arch = "aarch64")] {
+                    // x0 = context (set by dispatcher return value)
                     ctx.general_mut().x1 = reason as usize;
                 } else if #[cfg(target_arch = "x86_64")] {
+                    // rax = context (set by dispatcher return value)
+                    // but first SysV arg is rdi, so set it explicitly.
+                    ctx.general_mut().rdi = context;
                     ctx.general_mut().rsi = reason as usize;
                 } else if #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))] {
+                    // a0 = context (set by dispatcher return value)
                     ctx.general_mut().a1 = reason as usize;
                 }
             }
@@ -226,10 +266,11 @@ impl Syscall<'_> {
                         _ => {}
                     }
                 }
+                // Upstream field order after x[31]: sp, pc, tpidr_el0, cpsr
                 let sp = u64::from_le_bytes(buf[248..256].try_into().unwrap());
                 let pc = u64::from_le_bytes(buf[256..264].try_into().unwrap());
-                let cpsr = u64::from_le_bytes(buf[264..272].try_into().unwrap());
-                let tpidr = u64::from_le_bytes(buf[272..280].try_into().unwrap());
+                let tpidr = u64::from_le_bytes(buf[264..272].try_into().unwrap());
+                let cpsr = u64::from_le_bytes(buf[272..280].try_into().unwrap());
                 ctx.set_field(UserContextField::StackPointer, sp as usize);
                 ctx.set_field(UserContextField::InstrPointer, pc as usize);
                 ctx.set_field(UserContextField::ThreadPointer, tpidr as usize);
@@ -238,24 +279,20 @@ impl Syscall<'_> {
                 let spsr = (cpsr & 0xF000_0000) | (1 << 8); // NZCV flags + mask SError
                 ctx.set_spsr(spsr as usize);
             } else if #[cfg(target_arch = "x86_64")] {
-                // zx_restricted_state_t for x86_64:
-                // rax,rbx,rcx,rdx,rsi,rdi,rbp,rsp: 8 GPRs (64 bytes)
-                // r8..r15: 8 extended GPRs (64 bytes)
-                // rip: 8 bytes
-                // rflags: 8 bytes
-                // fs_base: 8 bytes
-                // gs_base: 8 bytes
+                // zx_restricted_state_t for x86_64 (upstream field order):
+                // rdi, rsi, rbp, rbx, rdx, rcx, rax, rsp,
+                // r8-r15, ip, flags, fs_base, gs_base
                 // Total: 160 bytes
                 let mut buf = [0u8; 160];
                 vmo.read(0, &mut buf)?;
                 let regs = ctx.general_mut();
-                regs.rax = u64::from_le_bytes(buf[0..8].try_into().unwrap()) as usize;
-                regs.rbx = u64::from_le_bytes(buf[8..16].try_into().unwrap()) as usize;
-                regs.rcx = u64::from_le_bytes(buf[16..24].try_into().unwrap()) as usize;
-                regs.rdx = u64::from_le_bytes(buf[24..32].try_into().unwrap()) as usize;
-                regs.rsi = u64::from_le_bytes(buf[32..40].try_into().unwrap()) as usize;
-                regs.rdi = u64::from_le_bytes(buf[40..48].try_into().unwrap()) as usize;
-                regs.rbp = u64::from_le_bytes(buf[48..56].try_into().unwrap()) as usize;
+                regs.rdi = u64::from_le_bytes(buf[0..8].try_into().unwrap()) as usize;
+                regs.rsi = u64::from_le_bytes(buf[8..16].try_into().unwrap()) as usize;
+                regs.rbp = u64::from_le_bytes(buf[16..24].try_into().unwrap()) as usize;
+                regs.rbx = u64::from_le_bytes(buf[24..32].try_into().unwrap()) as usize;
+                regs.rdx = u64::from_le_bytes(buf[32..40].try_into().unwrap()) as usize;
+                regs.rcx = u64::from_le_bytes(buf[40..48].try_into().unwrap()) as usize;
+                regs.rax = u64::from_le_bytes(buf[48..56].try_into().unwrap()) as usize;
                 regs.rsp = u64::from_le_bytes(buf[56..64].try_into().unwrap()) as usize;
                 regs.r8 = u64::from_le_bytes(buf[64..72].try_into().unwrap()) as usize;
                 regs.r9 = u64::from_le_bytes(buf[72..80].try_into().unwrap()) as usize;
@@ -305,21 +342,23 @@ impl Syscall<'_> {
                 let pc = ctx.get_field(UserContextField::InstrPointer);
                 let tpidr = ctx.get_field(UserContextField::ThreadPointer);
                 let cpsr = ctx.get_spsr();
+                // Upstream field order: sp, pc, tpidr_el0, cpsr
                 buf[248..256].copy_from_slice(&(sp as u64).to_le_bytes());
                 buf[256..264].copy_from_slice(&(pc as u64).to_le_bytes());
-                buf[264..272].copy_from_slice(&(cpsr as u64).to_le_bytes());
-                buf[272..280].copy_from_slice(&(tpidr as u64).to_le_bytes());
+                buf[264..272].copy_from_slice(&(tpidr as u64).to_le_bytes());
+                buf[272..280].copy_from_slice(&(cpsr as u64).to_le_bytes());
                 vmo.write(0, &buf)?;
             } else if #[cfg(target_arch = "x86_64")] {
+                // Upstream field order: rdi, rsi, rbp, rbx, rdx, rcx, rax, rsp
                 let mut buf = [0u8; 160];
                 let regs = ctx.general();
-                buf[0..8].copy_from_slice(&(regs.rax as u64).to_le_bytes());
-                buf[8..16].copy_from_slice(&(regs.rbx as u64).to_le_bytes());
-                buf[16..24].copy_from_slice(&(regs.rcx as u64).to_le_bytes());
-                buf[24..32].copy_from_slice(&(regs.rdx as u64).to_le_bytes());
-                buf[32..40].copy_from_slice(&(regs.rsi as u64).to_le_bytes());
-                buf[40..48].copy_from_slice(&(regs.rdi as u64).to_le_bytes());
-                buf[48..56].copy_from_slice(&(regs.rbp as u64).to_le_bytes());
+                buf[0..8].copy_from_slice(&(regs.rdi as u64).to_le_bytes());
+                buf[8..16].copy_from_slice(&(regs.rsi as u64).to_le_bytes());
+                buf[16..24].copy_from_slice(&(regs.rbp as u64).to_le_bytes());
+                buf[24..32].copy_from_slice(&(regs.rbx as u64).to_le_bytes());
+                buf[32..40].copy_from_slice(&(regs.rdx as u64).to_le_bytes());
+                buf[40..48].copy_from_slice(&(regs.rcx as u64).to_le_bytes());
+                buf[48..56].copy_from_slice(&(regs.rax as u64).to_le_bytes());
                 buf[56..64].copy_from_slice(&(regs.rsp as u64).to_le_bytes());
                 buf[64..72].copy_from_slice(&(regs.r8 as u64).to_le_bytes());
                 buf[72..80].copy_from_slice(&(regs.r9 as u64).to_le_bytes());
