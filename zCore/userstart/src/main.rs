@@ -28,7 +28,6 @@ const K_FIRSTVDSO: usize = 5;
 const K_HANDLECOUNT: usize = 15;
 
 // vDSO data page offset (matches Fuchsia's ELF layout)
-const VDSO_DATA_OFFSET: usize = 0x7000;
 
 // Page size (4 KiB)
 const PAGE_SIZE: usize = 4096;
@@ -184,44 +183,36 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     let stack_top = stack_base + stack_size;
 
-    // Step 7b: Map vDSO into the init process at a high address
-    // to avoid interfering with code/stack regions.
-    // Map code pages (0-6) as RX and data page (7) as R.
+    // Step 7b: Map vDSO into the init process.
+    // The vDSO is an ELF .so — map the entire VMO as a single contiguous
+    // RX block so dynamic linkers can parse the ELF headers at the base.
     let vdso_base_addr = stack_top + 0x10000;
     let mut vdso_code_addr: usize = 0;
-    let mut vdso_data_addr: usize = 0;
-    // Map code pages (read + execute)
+
+    // Query VMO size to know how much to map
+    let mut vdso_vmo_size: usize = 0;
+    let s = unsafe { zx_vmo_get_size(vdso_vmo, &mut vdso_vmo_size as *mut usize) };
+    if s != ZX_OK {
+        debug_print(b"userstart: vDSO VMO get_size failed\n");
+        vdso_vmo_size = 0x8000; // fallback: 8 pages
+    }
+
     let s = unsafe {
         zx_vmar_map(
             init_vmar,
             ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE | ZX_VM_SPECIFIC,
             vdso_base_addr,
             vdso_vmo,
-            0,                // offset 0 in VMO
-            VDSO_DATA_OFFSET, // pages 0-6
+            0,
+            vdso_vmo_size,
             &mut vdso_code_addr,
         )
     };
     if s != ZX_OK {
-        debug_print(b"userstart: vDSO code map failed\n");
+        debug_print(b"userstart: vDSO map failed\n");
         vdso_code_addr = 0;
     } else {
-        debug_print(b"userstart: vDSO code mapped\n");
-    }
-    // Map data page (read-only) right after code
-    let s = unsafe {
-        zx_vmar_map(
-            init_vmar,
-            ZX_VM_PERM_READ | ZX_VM_SPECIFIC,
-            vdso_base_addr + VDSO_DATA_OFFSET,
-            vdso_vmo,
-            VDSO_DATA_OFFSET, // offset 0x7000
-            PAGE_SIZE,
-            &mut vdso_data_addr,
-        )
-    };
-    if s != ZX_OK {
-        debug_print(b"userstart: warning: failed to map vDSO data\n");
+        debug_print(b"userstart: vDSO mapped\n");
     }
 
     // Step 8: Create a channel to forward bootstrap handles to init

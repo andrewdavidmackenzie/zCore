@@ -163,6 +163,14 @@ impl BuildConfig {
                 let zbi_path = crate::petal::build_petal_zbi(arch, "shell");
                 env.insert("PETAL_ZBI".into(), zbi_path.into_os_string());
             }
+            // Build the vDSO as a proper ELF .so and pass it to the
+            // kernel build so it gets embedded via include_bytes!().
+            if let Ok(val) = std::env::var("VDSO_BIN") {
+                env.insert("VDSO_BIN".into(), val.into());
+            } else {
+                let vdso_path = crate::petal::build_vdso(arch);
+                env.insert("VDSO_BIN".into(), vdso_path.into_os_string());
+            }
         }
 
         // The `riscv` crate gates CSR access behind `cfg(riscv)`.

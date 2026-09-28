@@ -191,6 +191,117 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
     elf_path
 }
 
+/// Build the vDSO as a proper ELF shared library (`.so`).
+///
+/// Generates syscall trampoline assembly from `zx-syscall-numbers.h`,
+/// assembles it, and links it into an ELF `.so` with `.dynsym`, `.hash`,
+/// and `.dynamic` sections. This allows Fuchsia's `ld.so.1` to resolve
+/// `_zx_channel_read` etc. by parsing the vDSO's ELF symbol table.
+///
+/// Returns the path to the built `.so` file.
+pub fn build_vdso(arch: Arch) -> PathBuf {
+    let out_dir = PROJECT_DIR.join("target").join("vdso").join(arch.name());
+    std::fs::create_dir_all(&out_dir).unwrap();
+
+    let header_path = PROJECT_DIR.join("zCore/zircon-syscall/src/zx-syscall-numbers.h");
+    let header = std::fs::read_to_string(&header_path).expect("cannot read zx-syscall-numbers.h");
+
+    // Generate architecture-specific assembly trampolines
+    let mut asm = String::from(".text\n\n");
+    for line in header.lines() {
+        if !line.starts_with("#define ZX_SYS_") {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let name = &parts[1][7..]; // strip "ZX_SYS_"
+        if name == "COUNT" || name.starts_with("syscall_test") {
+            continue;
+        }
+        let num = parts[2];
+
+        match arch {
+            Arch::X86_64 => {
+                asm.push_str(&format!(
+                    ".globl zx_{name}\n\
+                     .globl _zx_{name}\n\
+                     .type zx_{name}, @function\n\
+                     .type _zx_{name}, @function\n\
+                     zx_{name}:\n\
+                     _zx_{name}:\n\
+                     \tmov ${num}, %eax\n\
+                     \tsyscall\n\
+                     \tret\n\n"
+                ));
+            }
+            Arch::Aarch64 => {
+                asm.push_str(&format!(
+                    ".globl zx_{name}\n\
+                     .globl _zx_{name}\n\
+                     .type zx_{name}, %function\n\
+                     .type _zx_{name}, %function\n\
+                     zx_{name}:\n\
+                     _zx_{name}:\n\
+                     \tmov x16, #{num}\n\
+                     \tsvc #0\n\
+                     \tret\n\n"
+                ));
+            }
+            Arch::Riscv64 => {
+                asm.push_str(&format!(
+                    ".globl zx_{name}\n\
+                     .globl _zx_{name}\n\
+                     .type zx_{name}, @function\n\
+                     .type _zx_{name}, @function\n\
+                     zx_{name}:\n\
+                     _zx_{name}:\n\
+                     \tli a7, {num}\n\
+                     \tecall\n\
+                     \tret\n\n"
+                ));
+            }
+        }
+    }
+
+    let asm_path = out_dir.join("vdso_trampolines.S");
+    std::fs::write(&asm_path, &asm).unwrap();
+
+    let so_path = out_dir.join("libzircon.so");
+
+    // Cross-compiler prefix for each arch
+    let cc = match arch {
+        Arch::X86_64 => "x86_64-linux-musl-gcc",
+        Arch::Aarch64 => "aarch64-linux-musl-gcc",
+        Arch::Riscv64 => "riscv64-linux-musl-gcc",
+    };
+
+    println!("Building vDSO for {} using {cc}", arch.name());
+
+    let status = Command::new(cc)
+        .args(["-shared", "-nostdlib", "-nostartfiles"])
+        .args(["-Wl,-soname,libzircon.so"])
+        .args(["-Wl,--hash-style=sysv"])
+        .arg("-o")
+        .arg(&so_path)
+        .arg(&asm_path)
+        .status()
+        .unwrap_or_else(|e| panic!("failed to run {cc}: {e}"));
+
+    if !status.success() {
+        panic!("vDSO build failed for {}", arch.name());
+    }
+
+    println!(
+        "vDSO built: {} ({} bytes)",
+        so_path.display(),
+        std::fs::metadata(&so_path).unwrap().len()
+    );
+
+    so_path
+}
+
 /// Copy petal hello binary into the Linux rootfs so Zircon binaries
 /// can be tested from the Linux busybox shell.
 /// Copy demo binaries into the Linux rootfs for cross-flavour testing.

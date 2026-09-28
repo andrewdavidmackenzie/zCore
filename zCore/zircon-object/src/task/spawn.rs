@@ -200,22 +200,16 @@ pub fn spawn_process(
     let stack_base = vmar.map(None, stack_vmo, 0, stack_size, stack_flags)?;
     let sp = stack_base + stack_size;
 
-    // vDSO: code pages (RX) + data page (R)
-    let vdso_code_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
+    // vDSO: map entire ELF .so + data page as a single contiguous block.
+    // This allows ld.so.1 to parse the ELF headers at the base address
+    // and find .dynsym to resolve _zx_channel_read etc.
+    let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
     let vdso_code_addr = vmar.map(
         None,
         config.vdso_vmo.clone(),
         0,
         config.vdso_code_size,
-        vdso_code_flags,
-    )?;
-    let vdso_data_flags = MMUFlags::READ | MMUFlags::USER;
-    let _vdso_data_addr = vmar.map(
-        None,
-        config.vdso_vmo.clone(),
-        config.vdso_code_size,
-        PAGE_SIZE,
-        vdso_data_flags,
+        vdso_flags,
     )?;
 
     // Bootstrap channel — send root job and root resource handles

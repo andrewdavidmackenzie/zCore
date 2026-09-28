@@ -636,11 +636,14 @@ impl VmAddressRegion {
     }
 
     /// Get base address of vdso.
+    ///
+    /// Returns the virtual address where the vDSO ELF is mapped (offset 0).
+    /// The Fuchsia property `ZX_PROP_PROCESS_VDSO_BASE_ADDRESS` returns this.
     pub fn vdso_base_addr(&self) -> Option<usize> {
         let guard = self.inner.lock();
         let inner = guard.as_ref().unwrap();
         for map in inner.mappings.iter() {
-            if map.vmo.name().starts_with("vdso") && map.inner.lock().vmo_offset == 0x7000 {
+            if map.vmo.name().starts_with("vdso") && map.inner.lock().vmo_offset == 0 {
                 return Some(map.addr());
             }
         }
