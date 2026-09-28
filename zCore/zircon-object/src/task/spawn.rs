@@ -224,6 +224,12 @@ pub fn spawn_process(
     let base = image_vmar.addr();
     let entry = base + elf.header.pt2.entry_point() as usize;
 
+    // Apply ELF relocations (R_X86_64_RELATIVE etc.) for PIE/shared
+    // objects like ld.so.1 which are loaded at a non-zero base.
+    if let Err(e) = elf.relocate(image_vmar.clone()) {
+        warn!("spawn_process: ELF relocation failed: {}", e);
+    }
+
     // Stack
     let stack_size = config.stack_pages * PAGE_SIZE;
     let stack_vmo = VmObject::new_paged(config.stack_pages);

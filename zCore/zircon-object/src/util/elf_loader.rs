@@ -216,56 +216,138 @@ impl ElfExt for ElfFile<'_> {
 
     #[allow(unsafe_code)]
     fn relocate(&self, vmar: Arc<VmAddressRegion>) -> Result<(), &'static str> {
-        let data = self
-            .find_section_by_name(".rela.dyn")
-            .ok_or(".rela.dyn not found")?
-            .get_data(self)
-            .map_err(|_| "corrupted .rela.dyn")?;
-        let entries = match data {
-            SectionData::Rela64(entries) => entries,
-            _ => return Err("bad .rela.dyn"),
+        // Try section-based lookup first (works for unstripped ELFs).
+        // Fall back to PT_DYNAMIC-based lookup for stripped binaries.
+        let rela_data = if let Some(section) = self.find_section_by_name(".rela.dyn") {
+            match section.get_data(self) {
+                Ok(SectionData::Rela64(entries)) => Some(entries),
+                _ => None,
+            }
+        } else {
+            None
         };
-        let base = vmar.addr();
-        let dynsym = self.dynsym()?;
-        for entry in entries.iter() {
-            // x86_64
-            const REL_GOT: u32 = 6;
-            const REL_PLT: u32 = 7;
-            const REL_RELATIVE: u32 = 8;
-            // riscv64
-            const R_RISCV_64: u32 = 2;
-            const R_RISCV_RELATIVE: u32 = 3;
-            // aarch64
-            const R_AARCH64_RELATIVE: u32 = 0x403;
-            const R_AARCH64_GLOBAL_DATA: u32 = 0x401;
 
-            match entry.get_type() {
-                REL_GOT | REL_PLT | R_RISCV_64 | R_AARCH64_GLOBAL_DATA => {
-                    let dynsym = &dynsym[entry.get_symbol_table_index() as usize];
-                    let symval = if dynsym.shndx() == 0 {
-                        let name = dynsym.get_name(self)?;
-                        panic!("need to find symbol: {:?}", name);
-                    } else {
-                        base + dynsym.value() as usize
-                    };
-                    let value = symval + entry.get_addend() as usize;
-                    let addr = base + entry.get_offset() as usize;
-                    trace!("GOT write: {:#x} @ {:#x}", value, addr);
-                    vmar.write_memory(addr, &value.to_ne_bytes())
-                        .map_err(|_| "Invalid Vmar")?;
+        let base = vmar.addr();
+
+        if let Some(entries) = rela_data {
+            // Section-based relocation (unstripped ELF).
+            let dynsym = self.dynsym()?;
+            apply_rela_entries(entries, base, &dynsym, self, &vmar)?;
+        } else {
+            // Stripped binary: find DT_RELA/DT_RELASZ via PT_DYNAMIC.
+            let (rela_off, rela_sz, relent) = find_rela_from_dynamic(self)?;
+            if rela_sz > 0 && relent > 0 {
+                let entry_size = relent as usize;
+                let count = rela_sz as usize / entry_size;
+                // Read raw relocation data from the VMAR (already mapped).
+                for i in 0..count {
+                    let addr = base + rela_off as usize + i * entry_size;
+                    let mut buf = [0u8; 24]; // sizeof(Elf64_Rela)
+                    vmar.read_memory(addr, &mut buf)
+                        .map_err(|_| "failed to read rela entry")?;
+                    let r_offset = u64::from_le_bytes(buf[0..8].try_into().unwrap());
+                    let r_info = u64::from_le_bytes(buf[8..16].try_into().unwrap());
+                    let r_addend = i64::from_le_bytes(buf[16..24].try_into().unwrap());
+                    let r_type = (r_info & 0xFFFF_FFFF) as u32;
+
+                    // Only handle RELATIVE relocations for stripped binaries
+                    // (the dynamic linker self-relocates, no symbol lookup needed).
+                    const REL_RELATIVE: u32 = 8; // R_X86_64_RELATIVE
+                    const R_AARCH64_RELATIVE: u32 = 0x403;
+                    const R_RISCV_RELATIVE: u32 = 3;
+                    match r_type {
+                        REL_RELATIVE | R_AARCH64_RELATIVE | R_RISCV_RELATIVE => {
+                            let value = base + r_addend as usize;
+                            let target = base + r_offset as usize;
+                            vmar.write_memory(target, &value.to_ne_bytes())
+                                .map_err(|_| "failed to write relocation")?;
+                        }
+                        0 => {} // R_X86_64_NONE — skip
+                        _ => {
+                            // Skip non-RELATIVE relocations for now.
+                            // The dynamic linker handles these itself.
+                        }
+                    }
                 }
-                REL_RELATIVE | R_RISCV_RELATIVE | R_AARCH64_RELATIVE => {
-                    let value = base + entry.get_addend() as usize;
-                    let addr = base + entry.get_offset() as usize;
-                    trace!("RELATIVE write: {:#x} @ {:#x}", value, addr);
-                    vmar.write_memory(addr, &value.to_ne_bytes())
-                        .map_err(|_| "Invalid Vmar")?;
-                }
-                // TODO: handle additional ELF relocation types as needed
-                t => unimplemented!("unknown type: {}", t),
             }
         }
-        // panic!("STOP");
         Ok(())
     }
+}
+
+/// Apply relocation entries from a parsed Rela64 slice.
+fn apply_rela_entries(
+    entries: &[xmas_elf::sections::Rela<u64>],
+    base: usize,
+    dynsym: &[xmas_elf::symbol_table::DynEntry64],
+    elf: &ElfFile,
+    vmar: &Arc<VmAddressRegion>,
+) -> Result<(), &'static str> {
+    for entry in entries.iter() {
+        const REL_GOT: u32 = 6;
+        const REL_PLT: u32 = 7;
+        const REL_RELATIVE: u32 = 8;
+        const R_RISCV_64: u32 = 2;
+        const R_RISCV_RELATIVE: u32 = 3;
+        const R_AARCH64_RELATIVE: u32 = 0x403;
+        const R_AARCH64_GLOBAL_DATA: u32 = 0x401;
+
+        match entry.get_type() {
+            REL_GOT | REL_PLT | R_RISCV_64 | R_AARCH64_GLOBAL_DATA => {
+                let sym = &dynsym[entry.get_symbol_table_index() as usize];
+                let symval = if sym.shndx() == 0 {
+                    let name = sym.get_name(elf)?;
+                    panic!("need to find symbol: {:?}", name);
+                } else {
+                    base + sym.value() as usize
+                };
+                let value = symval + entry.get_addend() as usize;
+                let addr = base + entry.get_offset() as usize;
+                vmar.write_memory(addr, &value.to_ne_bytes())
+                    .map_err(|_| "Invalid Vmar")?;
+            }
+            REL_RELATIVE | R_RISCV_RELATIVE | R_AARCH64_RELATIVE => {
+                let value = base + entry.get_addend() as usize;
+                let addr = base + entry.get_offset() as usize;
+                vmar.write_memory(addr, &value.to_ne_bytes())
+                    .map_err(|_| "Invalid Vmar")?;
+            }
+            0 => {} // R_*_NONE
+            t => {
+                warn!("unknown relocation type: {}", t);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Find DT_RELA, DT_RELASZ, DT_RELAENT from PT_DYNAMIC.
+fn find_rela_from_dynamic(elf: &ElfFile) -> Result<(u64, u64, u64), &'static str> {
+    use xmas_elf::program::Type;
+    let dyn_ph = elf
+        .program_iter()
+        .find(|ph| ph.get_type() == Ok(Type::Dynamic))
+        .ok_or("no PT_DYNAMIC")?;
+    let dyn_offset = dyn_ph.offset() as usize;
+    let dyn_size = dyn_ph.file_size() as usize;
+    let raw = &elf.input[dyn_offset..dyn_offset + dyn_size];
+
+    let mut rela_off = 0u64;
+    let mut rela_sz = 0u64;
+    let mut relent = 0u64;
+
+    let mut i = 0;
+    while i + 16 <= raw.len() {
+        let tag = i64::from_le_bytes(raw[i..i + 8].try_into().unwrap());
+        let val = u64::from_le_bytes(raw[i + 8..i + 16].try_into().unwrap());
+        match tag {
+            0 => break,          // DT_NULL
+            7 => rela_off = val, // DT_RELA
+            8 => rela_sz = val,  // DT_RELASZ
+            9 => relent = val,   // DT_RELAENT
+            _ => {}
+        }
+        i += 16;
+    }
+    Ok((rela_off, rela_sz, relent))
 }
