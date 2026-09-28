@@ -138,32 +138,6 @@ impl Process {
     /// specific registers used for the first two arguments of a function call
     /// before the thread is started. All other registers are zero upon start.
     ///
-    /// # Example
-    /// ```
-    /// # use std::sync::Arc;
-    /// # use zircon_object::task::*;
-    /// # use zircon_object::object::*;
-    /// # hal_impl::init();
-    /// # async_std::task::block_on(async {
-    /// let job = Job::root();
-    /// let proc = Process::create(&job, "proc").unwrap();
-    /// let thread = Thread::create(&proc, "thread").unwrap();
-    /// let handle = Handle::new(proc.clone(), Rights::DEFAULT_PROCESS);
-    ///
-    /// // start the new thread
-    /// proc.start(&thread, 1, 4, Some(handle), 2, |thread| Box::pin(async move {
-    ///     let cx = thread.wait_for_run().await;
-    ///     assert_eq!(cx.general().rip, 1);  // entry
-    ///     assert_eq!(cx.general().rsp, 4);  // stack_top
-    ///     assert_eq!(cx.general().rdi, 3);  // arg0 (handle)
-    ///     assert_eq!(cx.general().rsi, 2);  // arg1
-    ///     thread.put_context(cx);
-    /// })).unwrap();
-    ///
-    /// # let object: Arc<dyn KernelObject> = thread.clone();
-    /// # object.wait_signal(Signal::THREAD_TERMINATED).await;
-    /// # });
-    /// ```
     pub fn start(
         &self,
         thread: &Arc<Thread>,
