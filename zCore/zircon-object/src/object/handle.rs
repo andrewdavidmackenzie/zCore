@@ -95,6 +95,7 @@ pub fn obj_type(object: &Arc<dyn KernelObject>) -> u32 {
         "IoBuffer" => 33,
         "Counter" => 34,
         "IoBufferSharedRegion" => 35,
+        "MsiAllocation" => 36,
         _ => unimplemented!("unknown type"),
     }
 }

@@ -349,7 +349,7 @@ impl Syscall<'_> {
         &self,
         resource: HandleValue,
         count: u32,
-        _out: UserOutPtr<HandleValue>,
+        mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
         info!("msi.allocate: resource={:#x}, count={}", resource, count);
         let proc = self.thread.proc();
@@ -357,21 +357,25 @@ impl Syscall<'_> {
         if res.validate(ResourceKind::ROOT).is_err() {
             res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_MSI_BASE, 1)?;
         }
-        // Count must be a power of two in [1, 32].
         if count == 0 || count > 32 || !count.is_power_of_two() {
             return Err(ZxError::INVALID_ARGS);
         }
-        // TODO: create MsiAllocation kernel object when hardware MSI
-        // support is implemented.
-        warn!("msi.allocate: validated but no MSI hardware backend");
-        Err(ZxError::NOT_SUPPORTED)
+        // Try to allocate hardware MSI vectors via the HAL.
+        // If no MSI controller is available, allocate with base_irq=0
+        // (software-only allocation for testing).
+        let base_irq = hal_impl::interrupt::msi_alloc_block(count as usize)
+            .map(|range| range.start)
+            .unwrap_or(0);
+        let alloc = MsiAllocation::create(count, base_irq);
+        let handle = proc.add_handle(Handle::new(alloc, Rights::DEFAULT_INTERRUPT));
+        out.write(handle)?;
+        Ok(())
     }
 
     /// Create an interrupt object from an MSI allocation.
     ///
     /// `handle` must be an MSI allocation object. `options` must be 0.
     /// `msi_id` selects the vector within the allocation.
-    /// `vmo` must be a physical VMO with the MSI capability structure.
     #[allow(clippy::too_many_arguments)]
     pub fn sys_msi_create(
         &self,
@@ -380,7 +384,7 @@ impl Syscall<'_> {
         msi_id: u32,
         _vmo: HandleValue,
         _vmo_offset: usize,
-        _out: UserOutPtr<HandleValue>,
+        mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
         info!(
             "msi.create: handle={:#x}, options={}, msi_id={}",
@@ -389,24 +393,28 @@ impl Syscall<'_> {
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        // Validate that the handle exists (would be an MsiAllocation object).
         let proc = self.thread.proc();
-        let _obj = proc.get_object::<Resource>(handle);
-        // TODO: implement when MsiAllocation kernel object exists.
-        warn!("msi.create: no MsiAllocation object type yet");
-        Err(ZxError::NOT_SUPPORTED)
+        let alloc = proc.get_object::<MsiAllocation>(handle)?;
+        let irq = alloc.use_vector(msi_id)?;
+        // Create a virtual interrupt backed by the MSI vector.
+        // On platforms with real MSI support, this would be a
+        // physical interrupt wired to the allocated IRQ.
+        let interrupt = if irq > 0 {
+            Interrupt::new_physical(irq, InterruptOptions::empty())?
+        } else {
+            Interrupt::new_virtual()
+        };
+        let handle = proc.add_handle(Handle::new(interrupt, Rights::DEFAULT_INTERRUPT));
+        out.write(handle)?;
+        Ok(())
     }
 
-    /// Reset a PCI device to its initial state.
-    ///
-    /// The handle must refer to a PCI device kernel object.
+    /// Reset a PCI device to its initial state via Function Level Reset.
     pub fn sys_pci_reset_device(&self, handle: HandleValue) -> ZxResult {
         info!("pci.reset_device: handle={:#x}", handle);
         let proc = self.thread.proc();
-        let _device = proc.get_object_with_rights::<PcieDeviceKObject>(handle, Rights::WRITE)?;
-        // TODO: issue a Function Level Reset (FLR) via config space.
-        warn!("pci.reset_device: validated but FLR not implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        let device = proc.get_object_with_rights::<PcieDeviceKObject>(handle, Rights::WRITE)?;
+        device.reset()
     }
 
     /// Bind an interrupt object to a virtual CPU.

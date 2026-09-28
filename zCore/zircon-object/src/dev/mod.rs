@@ -5,8 +5,10 @@ mod interrupt;
 mod iommu;
 /// Kernel trace ring buffer.
 pub mod ktrace;
+/// MSI allocation kernel object.
+pub mod msi;
 pub mod pci;
 mod pmt;
 mod resource;
 
-pub use self::{bti::*, interrupt::*, iommu::*, pmt::*, resource::*};
+pub use self::{bti::*, interrupt::*, iommu::*, msi::*, pmt::*, resource::*};
