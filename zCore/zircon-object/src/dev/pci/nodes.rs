@@ -426,6 +426,16 @@ impl PcieDeviceInner {
         }
         None
     }
+    pub fn adv_features(&self) -> Option<(&PciCapabilityStd, &PciCapAdvFeatures)> {
+        for c in self.caps.iter() {
+            if let PciCapability::AdvFeatures(std, af) = c {
+                if std.is_valid() {
+                    return Some((std, af));
+                }
+            }
+        }
+        None
+    }
 }
 
 impl PcieDevice {
@@ -1193,6 +1203,39 @@ impl PcieDevice {
             _ => return Err(ZxError::INVALID_ARGS),
         };
         Ok(())
+    }
+
+    /// Reset the device via Function Level Reset (FLR).
+    ///
+    /// Checks PCIe capability and Advanced Features capability for
+    /// FLR support. Issues the reset by writing to the appropriate
+    /// config space register.
+    pub fn reset(&self) -> ZxResult {
+        let inner = self.inner.lock();
+        let cfg = self.cfg.as_ref().ok_or(ZxError::BAD_STATE)?;
+
+        // Try PCIe capability FLR first (Device Control register bit 15).
+        if let Some((std, pcie)) = inner.pcie() {
+            if pcie.has_flr {
+                let dev_ctrl_offset = std.base as usize + 0x8;
+                let ctrl = cfg.read16_(dev_ctrl_offset);
+                cfg.write16_(dev_ctrl_offset, ctrl | (1 << 15));
+                return Ok(());
+            }
+        }
+
+        // Try Advanced Features capability FLR (AF Control register bit 0).
+        if let Some((std, af)) = inner.adv_features() {
+            if af.has_flr {
+                let af_ctrl_addr = cfg.base + std.base as usize + 0x4;
+                let ctrl = cfg.read8_offset(af_ctrl_addr);
+                cfg.write8_offset(af_ctrl_addr, ctrl | 1);
+                return Ok(());
+            }
+        }
+
+        // Device doesn't support FLR.
+        Err(ZxError::NOT_SUPPORTED)
     }
 }
 

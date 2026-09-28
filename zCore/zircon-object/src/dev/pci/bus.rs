@@ -550,4 +550,12 @@ impl PcieDeviceKObject {
     pub fn config_write(&self, offset: usize, width: usize, val: u32) -> ZxResult {
         self.device.device().config_write(offset, width, val)
     }
+
+    /// Reset the device via Function Level Reset (FLR).
+    ///
+    /// Checks PCIe capability and Advanced Features capability for
+    /// FLR support. Issues the reset via config space write.
+    pub fn reset(&self) -> ZxResult {
+        self.device.device().reset()
+    }
 }
