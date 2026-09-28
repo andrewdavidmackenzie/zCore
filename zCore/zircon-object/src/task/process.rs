@@ -10,6 +10,7 @@ use super::job_policy::{JobPolicy, PolicyAction, PolicyCondition};
 use super::{Job, Task, Thread, ThreadFn};
 use crate::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
 use crate::object::{KObjectBase, KernelObject, KoID, Rights, Signal};
+use crate::vm::{VmarFlags, PAGE_SIZE};
 use crate::{define_count_helper, impl_kobject};
 use crate::{signal::Futex, vm::VmAddressRegion, ZxError, ZxResult};
 
@@ -89,6 +90,9 @@ struct ProcessInner {
     debug_addr: usize,
     dyn_break_on_load: usize,
     critical_to_job: Option<(Arc<Job>, bool)>,
+    /// Whether this process was created via create_shared (eligible
+    /// as a source for further create_shared calls).
+    is_shared: bool,
 }
 
 /// Status of a process.
@@ -128,6 +132,59 @@ impl Process {
         });
         job.add_process(proc.clone())?;
         Ok(proc)
+    }
+
+    /// Create a new process sharing the address space of `source`.
+    ///
+    /// The new process uses the same root VMAR (and page table) as
+    /// `source`. A restricted child VMAR is allocated within the
+    /// shared space for the new process's private mappings.
+    /// Returns `(new_process, restricted_vmar)`.
+    pub fn create_shared(
+        source: &Arc<Process>,
+        name: &str,
+    ) -> ZxResult<(Arc<Self>, Arc<VmAddressRegion>)> {
+        let job = source.job();
+        let shared_vmar = source.vmar();
+
+        // Allocate a restricted (private) child VMAR within the shared space.
+        // Use a reasonable default size — 256 MiB for private mappings.
+        const RESTRICTED_VMAR_SIZE: usize = 256 * 1024 * 1024;
+        let restricted_vmar = shared_vmar.allocate(
+            None,
+            RESTRICTED_VMAR_SIZE,
+            VmarFlags::CAN_MAP_RXW | VmarFlags::CAN_MAP_SPECIFIC,
+            PAGE_SIZE,
+        )?;
+
+        let proc = Arc::new(Process {
+            base: KObjectBase::with_name(name),
+            _counter: CountHelper::new(),
+            job: job.clone(),
+            policy: job.policy(),
+            vmar: shared_vmar,
+            ext: Box::new(()),
+            exceptionate: Exceptionate::new(ExceptionChannelType::Process),
+            debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
+            inner: Mutex::new(ProcessInner::default()),
+        });
+
+        // Copy initial properties from source and mark as shared.
+        {
+            let source_inner = source.inner.lock();
+            let mut new_inner = proc.inner.lock();
+            new_inner.debug_addr = source_inner.debug_addr;
+            new_inner.dyn_break_on_load = source_inner.dyn_break_on_load;
+            new_inner.is_shared = true;
+        }
+
+        if let Err(e) = job.add_process(proc.clone()) {
+            // Release the restricted VMAR from the source's children
+            // to avoid leaking it.
+            restricted_vmar.destroy()?;
+            return Err(e);
+        }
+        Ok((proc, restricted_vmar))
     }
 
     /// Start the first thread in the process.
@@ -296,6 +353,11 @@ impl Process {
     }
 
     /// Get the job of the process.
+    /// Whether this process is eligible as a source for create_shared.
+    pub fn is_shared(&self) -> bool {
+        self.inner.lock().is_shared
+    }
+
     pub fn job(&self) -> Arc<Job> {
         self.job.clone()
     }

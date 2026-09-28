@@ -492,20 +492,30 @@ impl Syscall<'_> {
             vmo_handle, offset, size
         );
         if vmo_handle == INVALID_HANDLE {
-            // Unregister rseq — always succeeds.
+            self.thread.clear_rseq();
             return Ok(());
         }
         let proc = self.thread.proc();
-        let _vmo = proc.get_object_with_rights::<zircon_object::vm::VmObject>(
+        let vmo = proc.get_object_with_rights::<zircon_object::vm::VmObject>(
             vmo_handle,
             Rights::READ | Rights::WRITE | Rights::DUPLICATE,
         )?;
-        if size == 0 {
+        // zx_rseq_t is 32 bytes (4 fields * 8 bytes each).
+        const RSEQ_STRUCT_SIZE: u64 = 32;
+        if size != RSEQ_STRUCT_SIZE {
             return Err(ZxError::INVALID_ARGS);
         }
-        // TODO: store rseq area in thread state for preemption restart logic.
-        warn!("thread.set_rseq: validated but rseq not implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        // Offset must be aligned to 8 bytes (natural alignment of u64 fields).
+        if !offset.is_multiple_of(8) {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Check range without overflow.
+        let end = offset.checked_add(size).ok_or(ZxError::OUT_OF_RANGE)?;
+        if end as usize > vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        self.thread.set_rseq(vmo, offset)?;
+        Ok(())
     }
 
     /// Create a process that shares its address space with an existing process.
@@ -520,8 +530,8 @@ impl Syscall<'_> {
         options: u32,
         name: UserInPtr<u8>,
         name_size: usize,
-        _proc_handle: UserOutPtr<HandleValue>,
-        _restricted_vmar_handle: UserOutPtr<HandleValue>,
+        mut proc_handle: UserOutPtr<HandleValue>,
+        mut restricted_vmar_handle: UserOutPtr<HandleValue>,
     ) -> ZxResult {
         info!(
             "process.create_shared: shared_proc={:#x}, options={}",
@@ -534,14 +544,33 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        let _source = proc.get_object_with_rights::<Process>(
+        let source = proc.get_object_with_rights::<Process>(
             shared_proc,
             Rights::MANAGE_PROCESS | Rights::GET_PROPERTY,
         )?;
-        let _name = name.read_string(name_size)?;
-        // TODO: create process sharing the source process's VMAR root.
-        warn!("process.create_shared: validated but shared address space not implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        // Source must itself be a shared process (created via
+        // create_shared or with ZX_PROCESS_SHARED).
+        if !source.is_shared() {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let name_str = name.read_string(name_size)?;
+
+        let (new_proc, restricted_vmar) = Process::create_shared(&source, &name_str)?;
+
+        let proc_hv = proc.add_handle(Handle::new(new_proc, Rights::DEFAULT_PROCESS));
+        let vmar_hv = proc.add_handle(Handle::new(restricted_vmar, Rights::DEFAULT_VMAR));
+
+        if proc_handle.write(proc_hv).is_err() {
+            proc.remove_handle(proc_hv).ok();
+            proc.remove_handle(vmar_hv).ok();
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if restricted_vmar_handle.write(vmar_hv).is_err() {
+            proc.remove_handle(proc_hv).ok();
+            proc.remove_handle(vmar_hv).ok();
+            return Err(ZxError::INVALID_ARGS);
+        }
+        Ok(())
     }
 }
 

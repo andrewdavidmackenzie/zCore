@@ -131,6 +131,8 @@ struct ThreadInner {
     /// The time this thread has run on cpu
     time: u128,
     flags: ThreadFlag,
+    /// Restartable sequence registration.
+    rseq: Option<RseqRegistration>,
     /// VMO bound for restricted mode state (zx_restricted_state_t).
     /// Set by restricted_bind_state, cleared by restricted_unbind_state.
     restricted_state_vmo: Option<Arc<crate::vm::VmObject>>,
@@ -179,6 +181,14 @@ impl ThreadInner {
     fn backup_context(&mut self, context: UserContext, siginfo: usize, uctx: usize) {
         self.context_before = Some((context, siginfo, uctx));
     }
+}
+
+/// Per-thread restartable sequence registration.
+pub struct RseqRegistration {
+    /// VMO containing the zx_rseq_t structure.
+    pub vmo: Arc<crate::vm::VmObject>,
+    /// Byte offset of zx_rseq_t within the VMO.
+    pub offset: u64,
 }
 
 bitflags! {
@@ -419,6 +429,30 @@ impl Thread {
     /// Apply `f` to the thread's flags.
     pub fn update_flags(&self, f: impl FnOnce(&mut ThreadFlag)) {
         f(&mut self.inner.lock().flags)
+    }
+
+    /// Register a restartable sequence for this thread.
+    ///
+    /// Only one rseq can be registered at a time; returns
+    /// ALREADY_EXISTS if one is already set.
+    pub fn set_rseq(&self, vmo: Arc<crate::vm::VmObject>, offset: u64) -> ZxResult {
+        let mut inner = self.inner.lock();
+        if inner.rseq.is_some() {
+            return Err(ZxError::ALREADY_EXISTS);
+        }
+        inner.rseq = Some(RseqRegistration { vmo, offset });
+        Ok(())
+    }
+
+    /// Unregister the restartable sequence for this thread.
+    pub fn clear_rseq(&self) {
+        self.inner.lock().rseq = None;
+    }
+
+    /// Get the rseq registration, if any.
+    pub fn rseq_registration(&self) -> Option<(Arc<crate::vm::VmObject>, u64)> {
+        let inner = self.inner.lock();
+        inner.rseq.as_ref().map(|r| (r.vmo.clone(), r.offset))
     }
 
     /// Bind a restricted mode state VMO to this thread.
