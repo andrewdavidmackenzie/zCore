@@ -234,41 +234,89 @@ impl ElfExt for ElfFile<'_> {
             let dynsym = self.dynsym()?;
             apply_rela_entries(entries, base, &dynsym, self, &vmar)?;
         } else {
-            // Stripped binary: find DT_RELA/DT_RELASZ via PT_DYNAMIC.
-            let (rela_off, rela_sz, relent) = find_rela_from_dynamic(self)?;
-            if rela_sz > 0 && relent > 0 {
-                let entry_size = relent as usize;
-                let count = rela_sz as usize / entry_size;
-                // Read raw relocation data from the VMAR (already mapped).
+            // Stripped binary: find relocations via PT_DYNAMIC.
+            let info = find_reloc_from_dynamic(self)?;
+            warn!(
+                "relocate: PT_DYNAMIC: rela={:#x}/{:#x}, rel={:#x}/{:#x}, relr={:#x}/{:#x}, base={:#x}",
+                info.rela_off, info.rela_sz, info.rel_off, info.rel_sz,
+                info.relr_off, info.relr_sz, base
+            );
+
+            // Apply RELA entries (24-byte, explicit addend).
+            if info.rela_sz > 0 && info.rela_ent > 0 {
+                let count = info.rela_sz as usize / info.rela_ent as usize;
                 for i in 0..count {
-                    let addr = base + rela_off as usize + i * entry_size;
-                    let mut buf = [0u8; 24]; // sizeof(Elf64_Rela)
+                    let addr = base + info.rela_off as usize + i * info.rela_ent as usize;
+                    let mut buf = [0u8; 24];
                     vmar.read_memory(addr, &mut buf)
                         .map_err(|_| "failed to read rela entry")?;
                     let r_offset = u64::from_le_bytes(buf[0..8].try_into().unwrap());
-                    let r_info = u64::from_le_bytes(buf[8..16].try_into().unwrap());
                     let r_addend = i64::from_le_bytes(buf[16..24].try_into().unwrap());
+                    let r_info = u64::from_le_bytes(buf[8..16].try_into().unwrap());
                     let r_type = (r_info & 0xFFFF_FFFF) as u32;
-
-                    // Only handle RELATIVE relocations for stripped binaries
-                    // (the dynamic linker self-relocates, no symbol lookup needed).
-                    const REL_RELATIVE: u32 = 8; // R_X86_64_RELATIVE
-                    const R_AARCH64_RELATIVE: u32 = 0x403;
-                    const R_RISCV_RELATIVE: u32 = 3;
-                    match r_type {
-                        REL_RELATIVE | R_AARCH64_RELATIVE | R_RISCV_RELATIVE => {
-                            let value = base + r_addend as usize;
-                            let target = base + r_offset as usize;
-                            vmar.write_memory(target, &value.to_ne_bytes())
-                                .map_err(|_| "failed to write relocation")?;
-                        }
-                        0 => {} // R_X86_64_NONE — skip
-                        _ => {
-                            // Skip non-RELATIVE relocations for now.
-                            // The dynamic linker handles these itself.
-                        }
+                    if r_type == 8 || r_type == 0x403 || r_type == 3 {
+                        // RELATIVE
+                        let value = base + r_addend as usize;
+                        let target = base + r_offset as usize;
+                        vmar.write_memory(target, &value.to_ne_bytes())
+                            .map_err(|_| "RELA write failed")?;
                     }
                 }
+                warn!("relocate: applied {} RELA entries", count);
+            }
+
+            // Apply RELR entries (compact relative-only format).
+            if info.relr_sz > 0 {
+                warn!(
+                    "relocate: RELR at file offset {:#x}, sz={:#x}, ent={:#x}",
+                    info.relr_off, info.relr_sz, info.relr_ent
+                );
+                let applied = apply_relr(
+                    self.input,
+                    info.relr_off,
+                    info.relr_sz,
+                    info.relr_ent,
+                    base,
+                    &vmar,
+                )?;
+                warn!("relocate: applied {} RELR entries", applied);
+            }
+
+            // Also apply REL entries (needed for GOT/PLT on ld.so.1).
+            if info.rel_sz > 0 && info.rel_ent > 0 {
+                let count = info.rel_sz as usize / info.rel_ent as usize;
+                let mut rel_applied = 0usize;
+                for i in 0..count {
+                    let off = info.rel_off as usize + i * info.rel_ent as usize;
+                    if off + 16 > self.input.len() {
+                        break;
+                    }
+                    let r_offset = u64::from_le_bytes(self.input[off..off + 8].try_into().unwrap());
+                    let r_info =
+                        u64::from_le_bytes(self.input[off + 8..off + 16].try_into().unwrap());
+                    let r_type = (r_info & 0xFFFF_FFFF) as u32;
+                    // R_X86_64_RELATIVE = 8 (but REL has implicit addend)
+                    if r_type == 8 {
+                        // Read addend from the current value at offset
+                        let vaddr = r_offset as usize;
+                        if vaddr + 8 <= self.input.len() {
+                            let addend = usize::from_le_bytes(
+                                self.input[vaddr..vaddr + 8].try_into().unwrap(),
+                            );
+                            let value = base + addend;
+                            let target = base + vaddr;
+                            vmar.write_memory(target, &value.to_ne_bytes())
+                                .map_err(|_| "REL write failed")?;
+                            rel_applied += 1;
+                        }
+                    }
+                    // Skip non-RELATIVE REL entries — ld.so.1 resolves
+                    // those itself after self-relocation.
+                }
+                warn!(
+                    "relocate: applied {} REL RELATIVE entries out of {}",
+                    rel_applied, count
+                );
             }
         }
         Ok(())
@@ -321,8 +369,27 @@ fn apply_rela_entries(
     Ok(())
 }
 
-/// Find DT_RELA, DT_RELASZ, DT_RELAENT from PT_DYNAMIC.
-fn find_rela_from_dynamic(elf: &ElfFile) -> Result<(u64, u64, u64), &'static str> {
+/// Dynamic relocation info parsed from PT_DYNAMIC.
+struct DynRelocInfo {
+    /// DT_RELA offset and size (24-byte entries with explicit addend).
+    rela_off: u64,
+    rela_sz: u64,
+    rela_ent: u64,
+    /// DT_REL offset and size (16-byte entries, implicit addend).
+    rel_off: u64,
+    rel_sz: u64,
+    rel_ent: u64,
+    /// DT_RELR offset and size (compact relative-only format).
+    relr_off: u64,
+    relr_sz: u64,
+    relr_ent: u64,
+    /// DT_JMPREL (PLT relocations).
+    jmprel_off: u64,
+    jmprel_sz: u64,
+}
+
+/// Parse dynamic relocation info from PT_DYNAMIC.
+fn find_reloc_from_dynamic(elf: &ElfFile) -> Result<DynRelocInfo, &'static str> {
     use xmas_elf::program::Type;
     let dyn_ph = elf
         .program_iter()
@@ -332,22 +399,113 @@ fn find_rela_from_dynamic(elf: &ElfFile) -> Result<(u64, u64, u64), &'static str
     let dyn_size = dyn_ph.file_size() as usize;
     let raw = &elf.input[dyn_offset..dyn_offset + dyn_size];
 
-    let mut rela_off = 0u64;
-    let mut rela_sz = 0u64;
-    let mut relent = 0u64;
+    let mut info = DynRelocInfo {
+        rela_off: 0,
+        rela_sz: 0,
+        rela_ent: 0,
+        rel_off: 0,
+        rel_sz: 0,
+        rel_ent: 0,
+        relr_off: 0,
+        relr_sz: 0,
+        relr_ent: 0,
+        jmprel_off: 0,
+        jmprel_sz: 0,
+    };
 
     let mut i = 0;
     while i + 16 <= raw.len() {
         let tag = i64::from_le_bytes(raw[i..i + 8].try_into().unwrap());
         let val = u64::from_le_bytes(raw[i + 8..i + 16].try_into().unwrap());
         match tag {
-            0 => break,          // DT_NULL
-            7 => rela_off = val, // DT_RELA
-            8 => rela_sz = val,  // DT_RELASZ
-            9 => relent = val,   // DT_RELAENT
+            0 => break,                  // DT_NULL
+            7 => info.rela_off = val,    // DT_RELA
+            8 => info.rela_sz = val,     // DT_RELASZ
+            9 => info.rela_ent = val,    // DT_RELAENT
+            17 => info.rel_off = val,    // DT_REL
+            18 => info.rel_sz = val,     // DT_RELSZ
+            19 => info.rel_ent = val,    // DT_RELENT
+            23 => info.jmprel_off = val, // DT_JMPREL
+            2 => info.jmprel_sz = val,   // DT_PLTRELSZ
+            36 => info.relr_off = val,   // DT_RELR
+            35 => info.relr_sz = val,    // DT_RELRSZ
+            37 => info.relr_ent = val,   // DT_RELRENT
             _ => {}
         }
         i += 16;
     }
-    Ok((rela_off, rela_sz, relent))
+    Ok(info)
+}
+
+/// Apply RELR (compact relative relocations).
+///
+/// RELR is a packed format where each entry is either:
+/// - A base address (even value): apply a RELATIVE relocation at that address
+/// - A bitmap (odd value): apply relocations at offsets from the last base,
+///   one per set bit
+fn apply_relr(
+    elf_data: &[u8],
+    relr_off: u64,
+    relr_sz: u64,
+    relr_ent: u64,
+    base: usize,
+    vmar: &Arc<VmAddressRegion>,
+) -> Result<usize, &'static str> {
+    if relr_sz == 0 || relr_ent == 0 {
+        return Ok(0);
+    }
+    let entry_size = relr_ent as usize;
+    let count = relr_sz as usize / entry_size;
+    let mut applied = 0usize;
+    let mut where_addr = 0usize;
+
+    for i in 0..count {
+        let off = relr_off as usize + i * entry_size;
+        if off + 8 > elf_data.len() {
+            break;
+        }
+        let entry = u64::from_le_bytes(elf_data[off..off + 8].try_into().unwrap());
+
+        if entry & 1 == 0 {
+            // Even: absolute address — apply one relocation here.
+            where_addr = entry as usize;
+            let value = base + read_usize_at(elf_data, where_addr);
+            let target = base + where_addr;
+            vmar.write_memory(target, &value.to_ne_bytes())
+                .map_err(|_| "RELR write failed")?;
+            where_addr += core::mem::size_of::<usize>();
+            applied += 1;
+        } else {
+            // Odd: bitmap — each set bit is a relocation at
+            // where_addr + bit_index * sizeof(usize).
+            let mut bitmap = entry >> 1;
+            let mut addr = where_addr;
+            while bitmap != 0 {
+                if bitmap & 1 != 0 {
+                    let value = base + read_usize_at(elf_data, addr);
+                    let target = base + addr;
+                    vmar.write_memory(target, &value.to_ne_bytes())
+                        .map_err(|_| "RELR bitmap write failed")?;
+                    applied += 1;
+                }
+                bitmap >>= 1;
+                addr += core::mem::size_of::<usize>();
+            }
+            where_addr = addr;
+        }
+    }
+    Ok(applied)
+}
+
+/// Read a usize from ELF file data at a virtual address offset.
+fn read_usize_at(data: &[u8], vaddr: usize) -> usize {
+    if vaddr + core::mem::size_of::<usize>() <= data.len() {
+        usize::from_le_bytes(
+            data[vaddr..vaddr + core::mem::size_of::<usize>()]
+                .try_into()
+                .unwrap_or([0; core::mem::size_of::<usize>()]),
+        )
+    } else {
+        0
+    }
 }

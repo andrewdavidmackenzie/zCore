@@ -69,7 +69,9 @@ impl Syscall<'_> {
                 return ZxError::INVALID_ARGS as _;
             }
         };
-        debug!(
+        // Temporarily log all syscalls at warn level for debugging
+        // the Fuchsia ld.so.1 dynamic linker bootstrap.
+        warn!(
             "{}|{} {:?} => args={:x?}",
             proc_name, thread_name, sys_type, args
         );
@@ -554,17 +556,8 @@ impl Syscall<'_> {
         // Log debug I/O syscalls at trace level to avoid flooding the
         // serial console during interactive shell sessions.
         // Log errors at error level, success at info/trace.
-        match (&ret, &sys_type) {
-            (_, Sys::DEBUG_WRITE | Sys::DEBUG_READ) => {
-                trace!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
-            }
-            (Err(_), _) => {
-                error!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
-            }
-            _ => {
-                info!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
-            }
-        }
+        // Temporarily log all results at warn level for debugging.
+        warn!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
         match ret {
             Ok(_) => 0,
             Err(err) => err as isize,
