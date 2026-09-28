@@ -333,54 +333,53 @@ impl Syscall<'_> {
 
     /// Read from the kernel trace buffer.
     ///
-    /// Reads trace data from the kernel ring buffer. The resource handle
-    /// must be a system resource with `ZX_RSRC_SYSTEM_TRACING_BASE`.
+    /// Copies trace data from the kernel ring buffer to userspace.
+    /// Returns the number of bytes read via `actual`.
     pub fn sys_ktrace_read(
         &self,
         resource: HandleValue,
-        _data: UserOutPtr<u8>,
-        _offset: u32,
-        _data_size: usize,
-        _actual: UserOutPtr<usize>,
-    ) -> ZxResult {
-        info!("ktrace.read: resource={:#x}", resource);
-        let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
-        if res.validate(ResourceKind::ROOT).is_err() {
-            res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_TRACING_BASE, 1)?;
-        }
-        // TODO: implement kernel trace ring buffer.
-        warn!("ktrace.read: validated but no trace buffer implemented");
-        Err(ZxError::NOT_SUPPORTED)
-    }
-
-    /// Control kernel tracing (start, stop, rewind).
-    ///
-    /// The resource handle must be a system resource with
-    /// `ZX_RSRC_SYSTEM_TRACING_BASE`.
-    pub fn sys_ktrace_control(
-        &self,
-        resource: HandleValue,
-        action: u32,
-        _options: u32,
-        _ptr: usize,
+        mut data: UserOutPtr<u8>,
+        offset: u32,
+        data_size: usize,
+        mut actual: UserOutPtr<usize>,
     ) -> ZxResult {
         info!(
-            "ktrace.control: resource={:#x}, action={}",
-            resource, action
+            "ktrace.read: resource={:#x}, offset={}, size={}",
+            resource, offset, data_size
         );
         let proc = self.thread.proc();
         let res = proc.get_object::<Resource>(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
             res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_TRACING_BASE, 1)?;
         }
-        // Actions: 0=start, 1=stop, 2=rewind
-        if action > 2 {
-            return Err(ZxError::INVALID_ARGS);
+        let (bytes_read, buf) = zircon_object::dev::ktrace::ktrace_read(offset as usize, data_size);
+        if !buf.is_empty() {
+            data.write_array(&buf)?;
         }
-        // TODO: implement kernel tracing control.
-        warn!("ktrace.control: validated but no trace backend implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        actual.write(bytes_read)?;
+        Ok(())
+    }
+
+    /// Control kernel tracing (start, stop, rewind).
+    ///
+    /// Actions: 0=start (with group mask in options), 1=stop, 2=rewind.
+    pub fn sys_ktrace_control(
+        &self,
+        resource: HandleValue,
+        action: u32,
+        options: u32,
+        _ptr: usize,
+    ) -> ZxResult {
+        info!(
+            "ktrace.control: resource={:#x}, action={}, options={:#x}",
+            resource, action, options
+        );
+        let proc = self.thread.proc();
+        let res = proc.get_object::<Resource>(resource)?;
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_TRACING_BASE, 1)?;
+        }
+        zircon_object::dev::ktrace::ktrace_control(action, options)
     }
 }
 

@@ -3,6 +3,8 @@
 mod bti;
 mod interrupt;
 mod iommu;
+/// Kernel trace ring buffer.
+pub mod ktrace;
 pub mod pci;
 mod pmt;
 mod resource;
