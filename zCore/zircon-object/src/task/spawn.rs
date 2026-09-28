@@ -169,6 +169,11 @@ pub struct SpawnConfig {
 /// allocates a stack, creates a bootstrap channel, and starts
 /// execution. Returns the new process.
 ///
+/// If the ELF has a `PT_INTERP` header (dynamically linked), the
+/// interpreter (e.g., `ld.so.1`) is loaded from the rootfs instead.
+/// The original program is passed as a VMO handle on the bootstrap
+/// channel so the dynamic linker can load it.
+///
 /// The process entry point receives `(startup_handle, vdso_base)`
 /// per the Zircon process startup protocol.
 pub fn spawn_process(
@@ -180,12 +185,39 @@ pub fn spawn_process(
     use crate::util::elf_loader::*;
     use xmas_elf::ElfFile;
 
+    // Check for PT_INTERP (dynamic linking).
+    let elf_check = ElfFile::new(elf_data).map_err(|_| crate::ZxError::INVALID_ARGS)?;
+    let interp_path = elf_check
+        .get_interpreter()
+        .ok()
+        .map(alloc::string::String::from);
+
+    // If there's an interpreter, load it from rootfs.
+    let interp_data = if let Some(ref path) = interp_path {
+        info!(
+            "spawn_process: ELF has PT_INTERP '{}', loading interpreter",
+            path
+        );
+        let data = read_rootfs_file(path)
+            .or_else(|| read_rootfs_file(&format!("/lib/{}", path)))
+            .ok_or_else(|| {
+                warn!("spawn_process: interpreter '{}' not found in rootfs", path);
+                crate::ZxError::NOT_FOUND
+            })?;
+        Some(data)
+    } else {
+        None
+    };
+
+    let has_interp = interp_data.is_some();
+    let load_data = interp_data.as_deref().unwrap_or(elf_data);
+    let elf = ElfFile::new(load_data).map_err(|_| crate::ZxError::INVALID_ARGS)?;
+
     let proc = Process::create(job, name)?;
     let thread = Thread::create(&proc, &format!("{}-main", name))?;
     let vmar = proc.vmar();
 
-    // Load ELF segments
-    let elf = ElfFile::new(elf_data).map_err(|_| crate::ZxError::INVALID_ARGS)?;
+    // Load the ELF segments (interpreter if PT_INTERP, main program otherwise).
     let size = elf.load_segment_size();
     let image_vmar = vmar.allocate(None, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)?;
     let _vmo = image_vmar.load_from_elf(&elf)?;
@@ -218,11 +250,9 @@ pub fn spawn_process(
         vdso_data_flags,
     )?;
 
-    // Bootstrap channel — send root job and root resource handles
-    // so petal programs can access kernel services.
+    // Bootstrap channel — send handles for kernel services.
     let (ch0, ch1) = Channel::create();
 
-    // Create handles for the root job and a root resource.
     let root_job = job.clone();
     use crate::dev::Resource;
     let root_resource = Resource::create(
@@ -232,12 +262,23 @@ pub fn spawn_process(
         0,
         crate::dev::ResourceFlags::empty(),
     );
-    let bootstrap_handles = alloc::vec![
+    let mut bootstrap_handles = alloc::vec![
         Handle::new(root_job, Rights::DEFAULT_CHANNEL),
         Handle::new(root_resource, Rights::DEFAULT_CHANNEL),
     ];
+
+    // If dynamically linked, pass the original program as a VMO
+    // so the dynamic linker can load it.
+    if has_interp {
+        let prog_vmo = VmObject::new_paged(crate::vm::pages(elf_data.len()));
+        prog_vmo.write(0, elf_data)?;
+        prog_vmo.set_name(name);
+        // Make executable so the linker can map code segments.
+        bootstrap_handles.push(Handle::new(prog_vmo, Rights::DEFAULT_VMO | Rights::EXECUTE));
+    }
+
     let msg = crate::ipc::MessagePacket {
-        data: alloc::vec![0u8; 4], // minimal data
+        data: alloc::vec![0u8; 4],
         handles: bootstrap_handles,
     };
     ch0.write(msg).map_err(|_| crate::ZxError::INTERNAL)?;
