@@ -492,20 +492,23 @@ impl Syscall<'_> {
             vmo_handle, offset, size
         );
         if vmo_handle == INVALID_HANDLE {
-            // Unregister rseq — always succeeds.
+            self.thread.clear_rseq();
             return Ok(());
         }
         let proc = self.thread.proc();
-        let _vmo = proc.get_object_with_rights::<zircon_object::vm::VmObject>(
+        let vmo = proc.get_object_with_rights::<zircon_object::vm::VmObject>(
             vmo_handle,
             Rights::READ | Rights::WRITE | Rights::DUPLICATE,
         )?;
         if size == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        // TODO: store rseq area in thread state for preemption restart logic.
-        warn!("thread.set_rseq: validated but rseq not implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        // Verify the offset + size fits within the VMO.
+        if offset as usize + size as usize > vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        self.thread.set_rseq(vmo, offset)?;
+        Ok(())
     }
 
     /// Create a process that shares its address space with an existing process.
@@ -520,8 +523,8 @@ impl Syscall<'_> {
         options: u32,
         name: UserInPtr<u8>,
         name_size: usize,
-        _proc_handle: UserOutPtr<HandleValue>,
-        _restricted_vmar_handle: UserOutPtr<HandleValue>,
+        mut proc_handle: UserOutPtr<HandleValue>,
+        mut restricted_vmar_handle: UserOutPtr<HandleValue>,
     ) -> ZxResult {
         info!(
             "process.create_shared: shared_proc={:#x}, options={}",
@@ -534,14 +537,28 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        let _source = proc.get_object_with_rights::<Process>(
+        let source = proc.get_object_with_rights::<Process>(
             shared_proc,
             Rights::MANAGE_PROCESS | Rights::GET_PROPERTY,
         )?;
-        let _name = name.read_string(name_size)?;
-        // TODO: create process sharing the source process's VMAR root.
-        warn!("process.create_shared: validated but shared address space not implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        let name_str = name.read_string(name_size)?;
+
+        let (new_proc, restricted_vmar) = Process::create_shared(&source, &name_str)?;
+
+        let proc_hv = proc.add_handle(Handle::new(new_proc, Rights::DEFAULT_PROCESS));
+        let vmar_hv = proc.add_handle(Handle::new(restricted_vmar, Rights::DEFAULT_VMAR));
+
+        if proc_handle.write(proc_hv).is_err() {
+            proc.remove_handle(proc_hv).ok();
+            proc.remove_handle(vmar_hv).ok();
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if restricted_vmar_handle.write(vmar_hv).is_err() {
+            proc.remove_handle(proc_hv).ok();
+            proc.remove_handle(vmar_hv).ok();
+            return Err(ZxError::INVALID_ARGS);
+        }
+        Ok(())
     }
 }
 
