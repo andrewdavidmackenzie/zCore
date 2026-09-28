@@ -246,6 +246,18 @@ impl UserContext {
         *self.field_ref(which) = value;
     }
 
+    /// Get the saved program status register (aarch64: SPSR_EL1).
+    #[cfg(target_arch = "aarch64")]
+    pub fn get_spsr(&self) -> usize {
+        self.inner.spsr
+    }
+
+    /// Set the saved program status register (aarch64: SPSR_EL1).
+    #[cfg(target_arch = "aarch64")]
+    pub fn set_spsr(&mut self, val: usize) {
+        self.inner.spsr = val;
+    }
+
     /// Advance the instruction pointer in trap handler on some architecture.
     pub fn advance_pc(&mut self, reason: TrapReason) {
         cfg_if! {

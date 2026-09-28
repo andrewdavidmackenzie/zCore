@@ -445,6 +445,11 @@ impl Thread {
         self.inner.lock().restricted_state_vmo.is_some()
     }
 
+    /// Get the restricted mode state VMO, if bound.
+    pub fn restricted_state_vmo(&self) -> Option<Arc<crate::vm::VmObject>> {
+        self.inner.lock().restricted_state_vmo.clone()
+    }
+
     /// Set the kick-pending flag. When the thread next enters (or is
     /// currently in) restricted mode, it will exit with
     /// `ZX_RESTRICTED_REASON_KICK`.
