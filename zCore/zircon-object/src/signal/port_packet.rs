@@ -450,9 +450,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "not implemented")]
     fn page_request() {
-        let data: PacketUser = [0u8; 32];
-        PayloadRepr::decode(PacketType::PageRequest, &Payload { user: data });
+        let pr = PacketPageRequest {
+            command: 0,
+            flags: 0,
+            _reserved0: 0,
+            offset: 0x1000,
+            length: 0x2000,
+            _reserved1: 0,
+        };
+        test_encdec(PayloadRepr::PageRequest(pr));
     }
 }

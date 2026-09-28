@@ -188,20 +188,19 @@ mod tests {
 
     #[test]
     fn create_and_read() {
-        // Create a monotonic clock (options = 0)
-        let clock = Clock::new(0).expect("failed to create clock");
-        // Read should succeed and return a non-negative timestamp
+        // Create an auto-start clock so it is readable immediately.
+        let clock = Clock::new(ZX_CLOCK_OPT_AUTO_START).expect("failed to create clock");
         let val = clock.read().expect("failed to read clock");
         assert!(val >= 0, "clock value should be non-negative: {}", val);
     }
 
     #[test]
-    fn read_before_update_fails_for_non_monotonic() {
-        // A non-monotonic, non-continuous clock (options = 0 but
-        // without ZX_CLOCK_OPT_MONOTONIC) should be readable
-        // immediately since the backstop is 0.
+    fn read_before_start_fails() {
+        // A clock created without AUTO_START must be started via
+        // update() before read(). Per the Fuchsia spec, read()
+        // returns BAD_STATE until the clock is started.
         let clock = Clock::new(0).unwrap();
-        assert!(clock.read().is_ok());
+        assert_eq!(clock.read().unwrap_err(), ZxError::BAD_STATE);
     }
 
     #[test]

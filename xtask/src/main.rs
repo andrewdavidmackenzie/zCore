@@ -494,22 +494,29 @@ fn check_style() {
 
     println!("==> Tests: host-buildable crates...");
     // region-alloc and zircon-abi have no special feature requirements.
-    let status = std::process::Command::new("cargo")
+    let output = std::process::Command::new("cargo")
         .args(["test", "-p", "region-alloc", "-p", "zircon-abi"])
-        .status()
+        .output()
         .expect("failed to run cargo test");
-    if !status.success() {
+    if !output.status.success() {
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
         panic!("Tests failed (region-alloc, zircon-abi)");
     }
-    // zircon-object depends on hal-impl which needs libos features
-    // to build on the host. Some tests are known to fail (pre-existing,
-    // tracked separately). Report but don't block.
-    let status = std::process::Command::new("cargo")
-        .args(["test", "-p", "zircon-object", "--features", "libos"])
-        .status()
+    let output = std::process::Command::new("cargo")
+        .args([
+            "test",
+            "-p",
+            "zircon-object",
+            "--features",
+            "libos,aspace-separate",
+        ])
+        .output()
         .expect("failed to run cargo test");
-    if !status.success() {
-        println!("WARNING: zircon-object tests had failures (pre-existing, non-blocking)");
+    if !output.status.success() {
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        panic!("zircon-object tests failed");
     }
 }
 
