@@ -396,7 +396,7 @@ pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
         .truncate(true)
         .open(&image)
         .expect("failed to open zircon rootfs image");
-    const MAX_SPACE: usize = 16 * 1024 * 1024; // 16 MiB (much smaller than Linux)
+    const MAX_SPACE: usize = 32 * 1024 * 1024; // 32 MiB (needs space for Fuchsia test binaries)
     let fs = SimpleFileSystem::create(Arc::new(Mutex::new(file)), MAX_SPACE)
         .expect("failed to create sfs");
     zip_dir(&rootfs_dir, fs.root_inode()).expect("failed to zip zircon rootfs");
