@@ -255,33 +255,68 @@ impl Syscall<'_> {
     ///
     /// The mapping is read-only (PERM_WRITE and PERM_EXECUTE are rejected).
     /// This allows userspace to read the clock without a syscall.
+    /// Map a kernel clock object's transformation state into user address space.
+    ///
+    /// Creates a VMO from the clock's state and maps it read-only
+    /// into the VMAR. Userspace can then read the clock without a
+    /// syscall by computing: `clock = (mono - ref) * rate + offset`.
     #[allow(clippy::too_many_arguments)]
     pub fn sys_vmar_map_clock(
         &self,
         handle: HandleValue,
         options: u32,
-        _vmar_offset: u64,
+        vmar_offset: u64,
         clock_handle: HandleValue,
-        _len: u64,
-        _mapped_addr: UserOutPtr<usize>,
+        len: u64,
+        mut mapped_addr: UserOutPtr<usize>,
     ) -> ZxResult {
         info!(
             "vmar.map_clock: vmar={:#x}, options={:#x}, clock={:#x}",
             handle, options, clock_handle
         );
+        let options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
         // Reject write/execute permissions — clock mapping is read-only.
-        if options & 0x2 != 0 || options & 0x4 != 0 {
+        if options.contains(VmOptions::PERM_WRITE) || options.contains(VmOptions::PERM_EXECUTE) {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        let _vmar = proc.get_object::<VmAddressRegion>(handle)?;
-        let _clock = proc.get_object_with_rights::<zircon_object::signal::Clock>(
+        let vmar = proc.get_object::<VmAddressRegion>(handle)?;
+        let clock = proc.get_object_with_rights::<zircon_object::signal::Clock>(
             clock_handle,
             Rights::READ | Rights::MAP,
         )?;
-        // TODO: map clock transformation state into the VMAR as a read-only page.
-        warn!("vmar.map_clock: validated but clock mapping not implemented");
-        Err(ZxError::NOT_SUPPORTED)
+
+        // Create a VMO with the clock's transformation state.
+        let vmo = clock.create_state_vmo()?;
+        let map_len = if len > 0 {
+            roundup_pages(len as usize)
+        } else {
+            PAGE_SIZE
+        };
+
+        // Map read-only into the VMAR.
+        let mapping_flags = MMUFlags::USER | MMUFlags::READ;
+        let is_specific = options.contains(VmOptions::SPECIFIC)
+            || options.contains(VmOptions::SPECIFIC_OVERWRITE);
+        let vmar_off = if is_specific {
+            Some(vmar_offset as usize)
+        } else {
+            None
+        };
+        let overwrite = options.contains(VmOptions::SPECIFIC_OVERWRITE);
+        let vaddr = vmar.map_ext(
+            vmar_off,
+            vmo,
+            0,
+            map_len,
+            mapping_flags,
+            mapping_flags,
+            overwrite,
+            true,
+        )?;
+        info!("vmar.map_clock: mapped at {:#x}", vaddr);
+        mapped_addr.write(vaddr)?;
+        Ok(())
     }
 
     /// Map an IOBuffer region into user address space.
