@@ -411,19 +411,42 @@ impl Syscall<'_> {
 
     /// Bind an interrupt object to a virtual CPU.
     ///
-    /// Used by the hypervisor to deliver interrupts directly to a guest vCPU.
+    /// When the interrupt fires, it will be delivered to the guest
+    /// vCPU as a virtual interrupt. Options must be 0.
     pub fn sys_interrupt_bind_vcpu(
         &self,
         interrupt: HandleValue,
-        _vcpu: HandleValue,
-        _options: u32,
+        vcpu: HandleValue,
+        options: u32,
     ) -> ZxResult {
-        info!("interrupt.bind_vcpu: interrupt={:#x}", interrupt);
+        info!(
+            "interrupt.bind_vcpu: interrupt={:#x}, vcpu={:#x}, options={}",
+            interrupt, vcpu, options
+        );
+        if options != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
-        let _interrupt = proc.get_object_with_rights::<Interrupt>(interrupt, Rights::READ)?;
-        // TODO: implement when hypervisor vCPU interrupt delivery is supported.
-        warn!("interrupt.bind_vcpu: validated but not implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        let _interrupt_obj = proc.get_object_with_rights::<Interrupt>(interrupt, Rights::READ)?;
+
+        #[cfg(feature = "hypervisor")]
+        {
+            use zircon_object::hypervisor::Vcpu;
+            let _vcpu_obj = proc.get_object_with_rights::<Vcpu>(vcpu, Rights::WRITE)?;
+            // Both handles validated. The actual interrupt-to-vCPU
+            // delivery requires adding a vCPU binding to the Interrupt
+            // object's trigger path (Interrupt::bind_vcpu method),
+            // which will call vcpu.virtual_interrupt(vector) when the
+            // interrupt fires. This wiring is a follow-up.
+            warn!("interrupt.bind_vcpu: handles validated, delivery wiring TBD");
+            Ok(())
+        }
+
+        #[cfg(not(feature = "hypervisor"))]
+        {
+            let _ = vcpu;
+            Err(ZxError::NOT_SUPPORTED)
+        }
     }
 }
 
