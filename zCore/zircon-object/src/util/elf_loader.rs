@@ -232,7 +232,7 @@ impl ElfExt for ElfFile<'_> {
         if let Some(entries) = rela_data {
             // Section-based relocation (unstripped ELF).
             let dynsym = self.dynsym()?;
-            apply_rela_entries(entries, base, &dynsym, self, &vmar)?;
+            apply_rela_entries(entries, base, dynsym, self, &vmar)?;
         } else {
             // Stripped binary: find relocations via PT_DYNAMIC.
             let info = find_reloc_from_dynamic(self)?;
