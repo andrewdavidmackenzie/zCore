@@ -475,7 +475,16 @@ impl Syscall<'_> {
             Sys::SAMPLER_READ => self.sys_sampler_read(a0 as _, a1.into(), a2 as _, a3.into()),
             Sys::MEMBARRIER_SYNC_PROCESS_DATA => self.sys_membarrier_sync_process_data(),
             Sys::MEMBARRIER_SYNC_PROCESS_INSN => self.sys_membarrier_sync_process_insn(),
-            Sys::RESTRICTED_ENTER => self.sys_restricted_enter(a0 as _, a1, a2),
+            Sys::RESTRICTED_ENTER => {
+                // restricted_enter does not return normally on success.
+                // On success, it returns the `context` argument as the
+                // raw return value (placed in x0/rdi/a0), which the
+                // normal-mode handler reads as its first argument.
+                return match self.sys_restricted_enter(a0 as _, a1, a2) {
+                    Ok(()) => a2 as isize, // context arg
+                    Err(err) => err as isize,
+                };
+            }
             Sys::RESTRICTED_BIND_STATE => self.sys_restricted_bind_state(a0 as _, a1.into()),
             Sys::RESTRICTED_KICK => self.sys_restricted_kick(a0 as _, a1 as _),
             Sys::RESTRICTED_UNBIND_STATE => self.sys_restricted_unbind_state(a0 as _),
