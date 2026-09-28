@@ -11,7 +11,7 @@ drivers = ["uart-16550", "apic", "pci"]
 
 [qemu]
 machine = "q35"
-cpu = "qemu64,+fsgsbase,+rdrand"
+cpu = "qemu64,+fsgsbase,+rdrand,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16"
 memory = "2G"
 
 [rustc-target]

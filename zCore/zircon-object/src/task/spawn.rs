@@ -250,7 +250,7 @@ pub fn spawn_process(
         vdso_data_flags,
     )?;
 
-    // Bootstrap channel — send handles for kernel services.
+    // Bootstrap channel — construct a Fuchsia processargs message.
     let (ch0, ch1) = Channel::create();
 
     let root_job = job.clone();
@@ -262,23 +262,99 @@ pub fn spawn_process(
         0,
         crate::dev::ResourceFlags::empty(),
     );
+
+    // Build the handle list and corresponding handle_info entries.
+    // The handle_info array tells the receiver what each handle is.
+    // Fuchsia processargs protocol constants.
+    const ZX_PROCARGS_PROTOCOL: u32 = 0x4150_585a; // "ZXPA"
+    const ZX_PROCARGS_VERSION: u32 = 0x0001_0000;
+    const fn pa_hnd(t: u32, a: u32) -> u32 {
+        (t & 0xFFFF) | ((a & 0xFFFF) << 16)
+    }
+    const PA_PROC_SELF: u32 = 0x01;
+    const PA_THREAD_SELF: u32 = 0x02;
+    const PA_JOB_DEFAULT: u32 = 0x03;
+    const PA_VMAR_ROOT: u32 = 0x04;
+    const PA_VMAR_LOADED: u32 = 0x05;
+    const PA_VMO_VDSO: u32 = 0x11;
+    const PA_VMO_EXECUTABLE: u32 = 0x14;
+    const PA_RESOURCE: u32 = 0x3F;
+
+    let proc_handle = Handle::new(proc.clone(), Rights::DEFAULT_PROCESS);
+    let thread_handle = Handle::new(thread.clone(), Rights::DEFAULT_THREAD);
+    let vmar_handle = Handle::new(proc.vmar(), Rights::DEFAULT_VMAR);
+    let job_handle = Handle::new(root_job, Rights::DEFAULT_CHANNEL);
+    let vdso_handle = Handle::new(config.vdso_vmo.clone(), Rights::DEFAULT_VMO);
+    let resource_handle = Handle::new(root_resource, Rights::DEFAULT_CHANNEL);
+    let image_vmar_handle = Handle::new(image_vmar.clone(), Rights::DEFAULT_VMAR);
+
     let mut bootstrap_handles = alloc::vec![
-        Handle::new(root_job, Rights::DEFAULT_CHANNEL),
-        Handle::new(root_resource, Rights::DEFAULT_CHANNEL),
+        proc_handle,       // 0: PA_PROC_SELF
+        thread_handle,     // 1: PA_THREAD_SELF
+        vmar_handle,       // 2: PA_VMAR_ROOT
+        job_handle,        // 3: PA_JOB_DEFAULT
+        vdso_handle,       // 4: PA_VMO_VDSO
+        resource_handle,   // 5: PA_RESOURCE
+        image_vmar_handle, // 6: PA_VMAR_LOADED
+    ];
+    let mut handle_info = alloc::vec![
+        pa_hnd(PA_PROC_SELF, 0),
+        pa_hnd(PA_THREAD_SELF, 0),
+        pa_hnd(PA_VMAR_ROOT, 0),
+        pa_hnd(PA_JOB_DEFAULT, 0),
+        pa_hnd(PA_VMO_VDSO, 0),
+        pa_hnd(PA_RESOURCE, 0),
+        pa_hnd(PA_VMAR_LOADED, 0),
     ];
 
-    // If dynamically linked, pass the original program as a VMO
-    // so the dynamic linker can load it.
+    // If dynamically linked, pass the original program as a VMO.
     if has_interp {
         let prog_vmo = VmObject::new_paged(crate::vm::pages(elf_data.len()));
         prog_vmo.write(0, elf_data)?;
         prog_vmo.set_name(name);
-        // Make executable so the linker can map code segments.
         bootstrap_handles.push(Handle::new(prog_vmo, Rights::DEFAULT_VMO | Rights::EXECUTE));
+        handle_info.push(pa_hnd(PA_VMO_EXECUTABLE, 0));
     }
 
+    let handle_count = bootstrap_handles.len();
+
+    // Construct the processargs message data:
+    // [zx_proc_args_t header (36 bytes)]
+    // [handle_info array (4 * N bytes)]
+    // [argv strings (NUL-separated)]
+    let header_size = 36usize;
+    let handle_info_off = header_size;
+    let handle_info_size = handle_count * 4;
+    let args_off = handle_info_off + handle_info_size;
+
+    // argv: just the program name
+    let argv = format!("{}\0", name);
+    let total_size = args_off + argv.len();
+
+    let mut data = alloc::vec![0u8; total_size];
+
+    // Write header
+    data[0..4].copy_from_slice(&ZX_PROCARGS_PROTOCOL.to_le_bytes());
+    data[4..8].copy_from_slice(&ZX_PROCARGS_VERSION.to_le_bytes());
+    data[8..12].copy_from_slice(&(handle_info_off as u32).to_le_bytes());
+    data[12..16].copy_from_slice(&(args_off as u32).to_le_bytes());
+    data[16..20].copy_from_slice(&1u32.to_le_bytes()); // args_num = 1
+    data[20..24].copy_from_slice(&(total_size as u32).to_le_bytes()); // environ_off (end = no envs)
+    data[24..28].copy_from_slice(&0u32.to_le_bytes()); // environ_num = 0
+    data[28..32].copy_from_slice(&(total_size as u32).to_le_bytes()); // names_off (end = no names)
+    data[32..36].copy_from_slice(&0u32.to_le_bytes()); // names_num = 0
+
+    // Write handle_info array
+    for (i, &info) in handle_info.iter().enumerate() {
+        let off = handle_info_off + i * 4;
+        data[off..off + 4].copy_from_slice(&info.to_le_bytes());
+    }
+
+    // Write argv string
+    data[args_off..args_off + argv.len()].copy_from_slice(argv.as_bytes());
+
     let msg = crate::ipc::MessagePacket {
-        data: alloc::vec![0u8; 4],
+        data,
         handles: bootstrap_handles,
     };
     ch0.write(msg).map_err(|_| crate::ZxError::INTERNAL)?;
