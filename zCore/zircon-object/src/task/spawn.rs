@@ -246,7 +246,8 @@ pub fn spawn_process(
     let stack_base = vmar.map(None, stack_vmo, 0, stack_size, stack_flags)?;
     let sp = stack_base + stack_size;
 
-    // vDSO: code pages (RX) + data page (R)
+    // vDSO: map syscall trampoline code (RX) + data page (R).
+    // Uses Fuchsia syscall numbering for both petal and Fuchsia binaries.
     let vdso_code_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
     let vdso_code_addr = vmar.map(
         None,
