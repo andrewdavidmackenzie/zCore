@@ -172,46 +172,77 @@ impl Syscall<'_> {
 
     /// Allocate a unique ID from an IOBuffer region with ID allocator
     /// discipline.
+    ///
+    /// The region must have `ZX_IOB_DISCIPLINE_TYPE_ID_ALLOCATOR` and
+    /// the endpoint must have mediated write access. The blob data is
+    /// stored alongside the allocated ID.
     #[allow(clippy::too_many_arguments)]
     pub fn sys_iob_allocate_id(
         &self,
         handle: HandleValue,
         options: u32,
         region_index: u32,
-        _blob: usize,
-        _blob_size: usize,
-        _out_id: UserOutPtr<u64>,
+        blob_ptr: usize,
+        blob_size: usize,
+        mut out_id: UserOutPtr<u32>,
     ) -> ZxResult {
         info!(
-            "iob.allocate_id: handle={:#x}, options={}, region={}",
-            handle, options, region_index
+            "iob.allocate_id: handle={:#x}, options={}, region={}, blob_size={}",
+            handle, options, region_index, blob_size
         );
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
         let iob = proc.get_object_with_rights::<IoBuffer>(handle, Rights::WRITE)?;
-        if region_index as usize >= iob.region_count() {
-            return Err(ZxError::OUT_OF_RANGE);
+
+        // Check mediated write access for this endpoint.
+        let (_, _, access) = iob.get_region(region_index as usize)?;
+        let ep_idx = iob.endpoint_index();
+        let can_mediated_write = if ep_idx == 0 {
+            access & 0x08 != 0 // EP0_CAN_MEDIATED_WRITE
+        } else {
+            access & 0x80 != 0 // EP1_CAN_MEDIATED_WRITE
+        };
+        if !can_mediated_write {
+            return Err(ZxError::ACCESS_DENIED);
         }
-        // TODO: implement ID allocator discipline.
-        warn!("iob.allocate_id: validated but not yet implemented");
-        Err(ZxError::NOT_SUPPORTED)
+
+        // Read blob data from userspace.
+        let blob = if blob_size > 0 {
+            let buf: UserInPtr<u8> = blob_ptr.into();
+            buf.read_array(blob_size)?
+        } else {
+            alloc::vec::Vec::new()
+        };
+
+        // Allocate the ID.
+        let id = iob.allocate_id(region_index as usize, blob)?;
+        out_id.write(id)?;
+        Ok(())
     }
 
-    /// Create a shared region for cross-IOB sharing.
+    /// Create a shared memory region for cross-IOB sharing.
     ///
-    /// This is an experimental upstream syscall that creates a shared
-    /// memory region referenced by multiple IOBuffer pairs. Not yet
-    /// implemented — returns NOT_SUPPORTED.
+    /// Creates a standalone shared region backed by a VMO that can be
+    /// referenced by multiple IOBuffer pairs via `ZX_IOB_REGION_TYPE_SHARED`.
     pub fn sys_iob_create_shared_region(
         &self,
-        _options: u64,
-        _size: u64,
-        _out: UserOutPtr<HandleValue>,
+        options: u64,
+        size: u64,
+        mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        info!("iob.create_shared_region");
-        warn!("iob.create_shared_region: experimental, not yet implemented");
-        Err(ZxError::NOT_SUPPORTED)
+        info!(
+            "iob.create_shared_region: options={}, size={:#x}",
+            options, size
+        );
+        if options != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let region = zircon_object::ipc::IoBufferSharedRegion::create(size as usize)?;
+        let proc = self.thread.proc();
+        let handle = proc.add_handle(Handle::new(region, Rights::DEFAULT_VMO));
+        out.write(handle)?;
+        Ok(())
     }
 }

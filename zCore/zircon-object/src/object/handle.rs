@@ -94,6 +94,7 @@ pub fn obj_type(object: &Arc<dyn KernelObject>) -> u32 {
         "PcieDeviceKObject" => 32,
         "IoBuffer" => 33,
         "Counter" => 34,
+        "IoBufferSharedRegion" => 35,
         _ => unimplemented!("unknown type"),
     }
 }
