@@ -188,13 +188,14 @@ impl Syscall<'_> {
         len: u64,
     ) -> ZxResult {
         let options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
-        let rights = options.to_required_rights();
         info!(
             "vmar.protect: handle={:#x}, options={:#x}, addr={:#x}, len={:#x}",
             handle_value, options, addr, len
         );
         let proc = self.thread.proc();
-        let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, rights)?;
+        // Use all rights for now — Fuchsia's VMAR_PROTECT doesn't check
+        // handle rights against the protection flags being set.
+        let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, Rights::empty())?;
         if options.intersects(!VmOptions::PERM_RXW) {
             return Err(ZxError::INVALID_ARGS);
         }
