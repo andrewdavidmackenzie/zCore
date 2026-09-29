@@ -242,17 +242,10 @@ impl VmAddressRegion {
         // When map_range is false (lazy/demand-paged mapping), allow the
         // mapping to extend past the VMO's current size. Pages are committed
         // on demand via page faults. This is standard behavior in Fuchsia
-        // Eagerly commit named VMOs UNLESS this is already a lazy mapping
-        // (caller passed map_range=false, e.g., ALLOW_FAULTS). Scudo names
-        // its VMOs ("scudo:reserved") but needs lazy commit.
-        let map_range = if map_range {
-            true // caller already requested eager
-        } else if flags.intersects(MMUFlags::RXW) {
-            // Has explicit permissions — check if VMO should be eager
-            vmo.name() != ""
-        } else {
-            false // no permissions = lazy/ALLOW_FAULTS, stay lazy
-        };
+        // Respect the caller's map_range preference. The old workaround
+        // `map_range || vmo.name() != ""` forced eager commit for named VMOs,
+        // but Fuchsia's Scudo allocator names its VMOs and requires lazy commit.
+        // Page faults on uncommitted pages are handled by handle_page_fault.
         // When eager (map_range), the VMO must cover the mapped range.
         // When lazy (ALLOW_FAULTS), the mapping can extend past the VMO.
         if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
@@ -1317,7 +1310,8 @@ cfg_if::cfg_if! {
         pub const USER_ASPACE_BASE: u64 = 0x4_0000_0000; // 16 GB
     } else {
         /// The base of user address space.
-        pub const USER_ASPACE_BASE: u64 = 0;
+        /// Non-zero to match Fuchsia's convention — Scudo asserts base != 0.
+        pub const USER_ASPACE_BASE: u64 = 0x20_0000; // 2 MB (matches Fuchsia x86_64)
     }
 }
 /// The size of user address space

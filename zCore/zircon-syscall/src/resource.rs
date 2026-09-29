@@ -13,10 +13,10 @@ impl Syscall<'_> {
         name_size: u64,
         mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        info!(
-            "resource.create: parent={:#x}, options={:#x}, base={:#X}, size={:#x}",
+        hal_impl::console::console_write_fmt(format_args!(
+            "resource.create: parent={:#x} options={:#x} base={:#x} size={:#x}\n",
             parent_rsrc, options, base, size
-        );
+        ));
         let name = name.read_string(name_size as usize)?;
         info!("name={:?}", name);
         let proc = self.thread.proc();
