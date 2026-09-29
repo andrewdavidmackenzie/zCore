@@ -350,8 +350,8 @@ pub fn spawn_process(
         Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF (dup)
         Handle::new(thread.clone(), Rights::DEFAULT_THREAD), // PA_THREAD_SELF (dup)
         Handle::new(proc.vmar(), Rights::all()),            // PA_VMAR_ROOT (dup)
-        Handle::new(root_job, Rights::DEFAULT_CHANNEL),     // PA_JOB_DEFAULT
-        Handle::new(root_resource, Rights::DEFAULT_CHANNEL), // PA_RESOURCE
+        Handle::new(root_job, Rights::DEFAULT_JOB),         // PA_JOB_DEFAULT
+        Handle::new(root_resource, Rights::DEFAULT_RESOURCE), // PA_RESOURCE
     ];
     let msg2_info = alloc::vec![
         pa_hnd(PA_PROC_SELF, 0),

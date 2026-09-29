@@ -297,14 +297,15 @@ impl ElfExt for ElfFile<'_> {
                     let r_type = (r_info & 0xFFFF_FFFF) as u32;
                     // R_X86_64_RELATIVE = 8 (but REL has implicit addend)
                     if r_type == 8 {
-                        // Read addend from the current value at offset
+                        // Read addend from mapped memory (via vmar), not from
+                        // the file, because earlier relocations may have already
+                        // modified the in-memory content.
                         let vaddr = r_offset as usize;
-                        if vaddr + 8 <= self.input.len() {
-                            let addend = usize::from_le_bytes(
-                                self.input[vaddr..vaddr + 8].try_into().unwrap(),
-                            );
+                        let target = base + vaddr;
+                        let mut buf = [0u8; 8];
+                        if vmar.read_memory(target, &mut buf).is_ok() {
+                            let addend = usize::from_le_bytes(buf);
                             let value = base + addend;
-                            let target = base + vaddr;
                             vmar.write_memory(target, &value.to_ne_bytes())
                                 .map_err(|_| "REL write failed")?;
                             rel_applied += 1;
@@ -437,6 +438,9 @@ fn find_reloc_from_dynamic(elf: &ElfFile) -> Result<DynRelocInfo, &'static str> 
         .ok_or("no PT_DYNAMIC")?;
     let dyn_offset = dyn_ph.offset() as usize;
     let dyn_size = dyn_ph.file_size() as usize;
+    if dyn_offset + dyn_size > elf.input.len() {
+        return Err("PT_DYNAMIC segment exceeds ELF file bounds");
+    }
     let raw = &elf.input[dyn_offset..dyn_offset + dyn_size];
 
     let mut info = DynRelocInfo {

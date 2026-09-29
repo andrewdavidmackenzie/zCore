@@ -95,8 +95,8 @@ while [ "$W" -lt "$SESSION_TIMEOUT" ]; do
         completed=true
         break
     fi
-    # Check for test completion markers
-    if grep -q "PASSED\|FAILED\|tests passed" "$OUTPUT" 2>/dev/null; then
+    # Check for the final suite summary line that marks all tests done
+    if grep -q '^\[==========\]' "$OUTPUT" 2>/dev/null; then
         # Give it a moment to finish output
         sleep 5
         completed=true
@@ -107,11 +107,14 @@ while [ "$W" -lt "$SESSION_TIMEOUT" ]; do
     W=$((W + 2))
 done
 
+timed_out=false
 if ! $completed && kill -0 "$PID" 2>/dev/null; then
     echo "WARNING: QEMU session timed out after ${SESSION_TIMEOUT}s"
     kill "$PID" 2>/dev/null || true
+    timed_out=true
 fi
-wait "$PID" 2>/dev/null || true
+wait "$PID" 2>/dev/null
+qemu_status=$?
 
 # Step 5: Parse and report results
 echo ""
@@ -121,7 +124,27 @@ echo "========================================"
 
 # Show the raw output (last 50 lines)
 tail -50 "$OUTPUT"
+echo ""
+
+# Check for failures before cleaning up temp files
+test_failed=false
+if grep -q 'FAILED' "$OUTPUT" 2>/dev/null; then
+    test_failed=true
+fi
 
 rm -rf "$TMPDIR_QEMU"
-echo ""
+
+# Exit with failure if tests failed or timed out
+if $timed_out; then
+    echo "FAILED: test session timed out."
+    exit 1
+fi
+if $test_failed; then
+    echo "FAILED: some tests did not pass."
+    exit 1
+fi
+if [ "$qemu_status" -ne 0 ]; then
+    echo "FAILED: QEMU exited with status $qemu_status."
+    exit "$qemu_status"
+fi
 echo "Done."

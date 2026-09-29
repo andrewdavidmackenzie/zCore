@@ -193,8 +193,12 @@ impl Syscall<'_> {
             handle_value, options, addr, len
         );
         let proc = self.thread.proc();
-        // Use all rights for now — Fuchsia's VMAR_PROTECT doesn't check
-        // handle rights against the protection flags being set.
+        // TODO: Rights::empty() is too permissive. Fuchsia's VMAR protection
+        // model requires checking that the handle carries rights matching the
+        // requested protection flags (e.g., ZX_RIGHT_READ for PERM_READ,
+        // ZX_RIGHT_WRITE for PERM_WRITE, ZX_RIGHT_EXECUTE for PERM_EXECUTE).
+        // Implement proper rights validation to match Fuchsia's zx_vmar_protect
+        // semantics.
         let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, Rights::empty())?;
         if options.intersects(!VmOptions::PERM_RXW) {
             return Err(ZxError::INVALID_ARGS);
