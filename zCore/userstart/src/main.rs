@@ -189,30 +189,30 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     let vdso_base_addr = stack_top + 0x10000;
     let mut vdso_code_addr: usize = 0;
 
-    // Query VMO size to know how much to map
+    // Query VMO size to know how much to map.
+    // On failure, skip the mapping rather than guessing a size.
     let mut vdso_vmo_size: usize = 0;
     let s = unsafe { zx_vmo_get_size(vdso_vmo, &mut vdso_vmo_size as *mut usize) };
-    if s != ZX_OK {
-        debug_print(b"userstart: vDSO VMO get_size failed\n");
-        vdso_vmo_size = 0x8000; // fallback: 8 pages
-    }
-
-    let s = unsafe {
-        zx_vmar_map(
-            init_vmar,
-            ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE | ZX_VM_SPECIFIC,
-            vdso_base_addr,
-            vdso_vmo,
-            0,
-            vdso_vmo_size,
-            &mut vdso_code_addr,
-        )
-    };
-    if s != ZX_OK {
-        debug_print(b"userstart: vDSO map failed\n");
-        vdso_code_addr = 0;
+    if s != ZX_OK || vdso_vmo_size == 0 {
+        debug_print(b"userstart: vDSO VMO get_size failed, skipping map\n");
     } else {
-        debug_print(b"userstart: vDSO mapped\n");
+        let s = unsafe {
+            zx_vmar_map(
+                init_vmar,
+                ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE | ZX_VM_SPECIFIC,
+                vdso_base_addr,
+                vdso_vmo,
+                0,
+                vdso_vmo_size,
+                &mut vdso_code_addr,
+            )
+        };
+        if s != ZX_OK {
+            debug_print(b"userstart: vDSO map failed\n");
+            vdso_code_addr = 0;
+        } else {
+            debug_print(b"userstart: vDSO mapped\n");
+        }
     }
 
     // Step 8: Create a channel to forward bootstrap handles to init

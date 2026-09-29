@@ -270,16 +270,13 @@ pub fn build_vdso(arch: Arch) -> PathBuf {
 
     let so_path = out_dir.join("libzircon.so");
 
-    // Cross-compiler prefix for each arch
-    let cc = match arch {
-        Arch::X86_64 => "x86_64-linux-musl-gcc",
-        Arch::Aarch64 => "aarch64-linux-musl-gcc",
-        Arch::Riscv64 => "riscv64-linux-musl-gcc",
-    };
+    // Resolve cross-compiler from the managed toolchain path
+    let gcc_name = format!("{}-linux-musl-gcc", arch.name());
+    let cc = arch.linux_musl_cross().join("bin").join(&gcc_name);
 
-    println!("Building vDSO for {} using {cc}", arch.name());
+    println!("Building vDSO for {} using {}", arch.name(), cc.display());
 
-    let result = Command::new(cc)
+    let result = Command::new(&cc)
         .args(["-shared", "-nostdlib", "-nostartfiles"])
         .args(["-Wl,-soname,libzircon.so"])
         .args(["-Wl,--hash-style=sysv"])
@@ -292,12 +289,21 @@ pub fn build_vdso(arch: Arch) -> PathBuf {
         Ok(status) if status.success() => {}
         Ok(status) => {
             eprintln!("WARNING: vDSO build failed (exit {status}), using empty stub");
-            eprintln!("  Install {cc} to build the vDSO (needed for Fuchsia binary compat)");
+            eprintln!(
+                "  Install {} to build the vDSO (needed for Fuchsia binary compat)",
+                cc.display()
+            );
             std::fs::write(&so_path, b"").unwrap();
         }
         Err(e) => {
-            eprintln!("WARNING: cross-compiler {cc} not found ({e}), using empty vDSO stub");
-            eprintln!("  Install {cc} to build the vDSO (needed for Fuchsia binary compat)");
+            eprintln!(
+                "WARNING: cross-compiler {} not found ({e}), using empty vDSO stub",
+                cc.display()
+            );
+            eprintln!(
+                "  Install {} to build the vDSO (needed for Fuchsia binary compat)",
+                cc.display()
+            );
             std::fs::write(&so_path, b"").unwrap();
         }
     }
