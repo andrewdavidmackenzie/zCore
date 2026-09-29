@@ -8,10 +8,10 @@ use crate::object::*;
 use alloc::sync::Arc;
 use lock::Mutex;
 
-/// Signal asserted when the counter value is > 0.
-const COUNTER_POSITIVE: Signal = Signal::USER_SIGNAL_0;
-/// Signal asserted when the counter value is <= 0.
-const COUNTER_NON_POSITIVE: Signal = Signal::USER_SIGNAL_1;
+/// Signal asserted when the counter value is > 0 (bit 4 = 0x10).
+const COUNTER_POSITIVE: Signal = Signal::COUNTER_POSITIVE;
+/// Signal asserted when the counter value is <= 0 (bit 5 = 0x20).
+const COUNTER_NON_POSITIVE: Signal = Signal::COUNTER_NON_POSITIVE;
 
 /// A Counter kernel object wrapping a signed 64-bit integer.
 ///

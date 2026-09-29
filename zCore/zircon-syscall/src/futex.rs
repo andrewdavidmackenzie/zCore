@@ -2,11 +2,11 @@ use {super::*, zircon_object::task::ThreadState};
 
 impl Syscall<'_> {
     /// Validate that a futex address is mapped in the process address space.
-    /// Returns `INVALID_ARGS` if the address is unmapped (preventing a
-    /// kernel page fault in `Futex::load_user_value`).
+    /// Returns `NOT_FOUND` if the address is unmapped, matching Fuchsia's
+    /// behavior (preventing a kernel page fault in `Futex::load_user_value`).
     fn validate_futex_addr(&self, addr: usize) -> ZxResult {
         if self.thread.proc().vmar().get_mapping_flags(addr).is_err() {
-            Err(ZxError::INVALID_ARGS)
+            Err(ZxError::NOT_FOUND)
         } else {
             Ok(())
         }
@@ -38,6 +38,14 @@ impl Syscall<'_> {
             if owner.state() == ThreadState::New {
                 return Err(ZxError::INVALID_ARGS);
             }
+            // NOTE: Fuchsia also rejects the calling thread as the new owner
+            // (a thread may not own itself). We cannot implement this check yet
+            // because our _zx_thread_self() vDSO stub returns the same
+            // pseudo-handle (0xFFFF0001) for ALL threads. When thread B passes
+            // thread A's stored "handle" (0xFFFF0001) as new_futex_owner, the
+            // kernel resolves it to thread B (not A), making every cross-thread
+            // futex_wait look like self-ownership. Implementing this check
+            // requires proper per-thread handles via TLS (Phase 10).
             Some(owner)
         };
         let future = futex.wait_with_owner(current_value, Some(self.thread.inner()), new_owner);

@@ -443,8 +443,16 @@ impl Process {
         handle_value: HandleValue,
         desired_rights: Rights,
     ) -> ZxResult<Arc<T>> {
-        self.get_dyn_object_with_rights(handle_value, desired_rights)
-            .and_then(|obj| obj.downcast_arc::<T>().map_err(|_| ZxError::WRONG_TYPE))
+        let handle = self.get_handle(handle_value)?;
+        // Check type before rights (Fuchsia returns WRONG_TYPE before ACCESS_DENIED).
+        let obj = handle
+            .object
+            .downcast_arc::<T>()
+            .map_err(|_| ZxError::WRONG_TYPE)?;
+        if !handle.rights.contains(desired_rights) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        Ok(obj)
     }
 
     /// Get the kernel object corresponding to this `handle_value` and this handle's rights.

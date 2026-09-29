@@ -15,9 +15,9 @@ impl Syscall<'_> {
             elem_count, elem_size, options,
         );
         if options != 0 {
-            return Err(ZxError::OUT_OF_RANGE);
+            return Err(ZxError::INVALID_ARGS);
         }
-        if !elem_count.is_power_of_two() || elem_size == 0 || elem_count * elem_size > 4096 {
+        if elem_count == 0 || elem_size == 0 || elem_count * elem_size > 4096 {
             return Err(ZxError::OUT_OF_RANGE);
         }
         let (end0, end1) = Fifo::create(elem_count, elem_size);

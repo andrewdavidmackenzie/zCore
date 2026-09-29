@@ -310,9 +310,9 @@ impl Syscall<'_> {
         if options != 0 && !use_iovec {
             return Err(ZxError::INVALID_ARGS);
         }
-        if args.rd_num_bytes < 4 {
-            return Err(ZxError::INVALID_ARGS);
-        }
+        // Validate write-side args first (including iovec limits) before
+        // checking read-side args, so that OUT_OF_RANGE from iovec
+        // validation is returned before INVALID_ARGS from rd_num_bytes.
         if !use_iovec && args.wr_num_bytes < 4 {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -325,6 +325,9 @@ impl Syscall<'_> {
             args.wr_bytes.read_array(args.wr_num_bytes as usize)?
         };
         if data.len() < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if args.rd_num_bytes < 4 {
             return Err(ZxError::INVALID_ARGS);
         }
         let handles = if args.wr_num_handles > 0 {
