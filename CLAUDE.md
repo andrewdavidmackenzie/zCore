@@ -79,7 +79,7 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
 ### Current status (phase 9)
-- 199/1776 tests pass, 16 suites complete
+- 204/1776 tests pass, 16 suites complete, 8 failing
 - Hangs at `FutexTest.WaitInvalidOwner` — test calls `futex_wait`
   with `new_futex_owner = ZX_HANDLE_THREAD_SELF` and nobody wakes
   the futex. Fuchsia rejects self-ownership, but we can't implement
