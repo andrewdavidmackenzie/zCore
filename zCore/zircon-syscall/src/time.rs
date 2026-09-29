@@ -41,27 +41,23 @@ impl Syscall<'_> {
     /// `zx_clock_get_monotonic`. In a full Fuchsia system this is
     /// served by the vDSO directly; this path is used when the vDSO
     /// is not available.
-    pub fn sys_clock_get_monotonic_via_kernel(&self, mut out: UserOutPtr<i64>) -> ZxResult {
-        info!("clock.get_monotonic_via_kernel");
-        out.write(timer_now().as_nanos() as i64)?;
-        Ok(())
+    /// Return the current monotonic time in nanoseconds.
+    ///
+    /// Unlike most syscalls, this returns the time value directly (in rax),
+    /// not a `zx_status_t`.  The dispatch layer must handle this specially.
+    pub fn sys_clock_get_monotonic_via_kernel(&self) -> i64 {
+        timer_now().as_nanos() as i64
     }
 
-    /// Read the hardware tick counter (vDSO fallback path).
+    /// Return the current tick count.
     ///
-    /// Converts the monotonic time to ticks using the same conversion
-    /// factor as the vDSO's `ticks_per_second` / `ticks_to_mono_*` fields.
-    /// The vDSO sets `ticks_to_mono_numerator = 1000` and
-    /// `ticks_to_mono_denominator = frequency_mhz`, so:
-    ///   `ticks = nanos * frequency_mhz / 1000`
+    /// Like `clock_get_monotonic_via_kernel`, this returns the value directly
+    /// in rax, not a `zx_status_t`.
     ///
     /// For simplicity we return nanoseconds directly, which is correct
-    /// when `ticks_per_second == 1_000_000_000` (frequency == 1000 MHz).
-    /// A more accurate implementation would read the vDSO constants.
-    pub fn sys_ticks_get_via_kernel(&self, mut out: UserOutPtr<i64>) -> ZxResult {
-        let nanos = hal_impl::timer::timer_now().as_nanos() as i64;
-        out.write(nanos)?;
-        Ok(())
+    /// when `ticks_per_second == 1_000_000_000`.
+    pub fn sys_ticks_get_via_kernel(&self) -> i64 {
+        hal_impl::timer::timer_now().as_nanos() as i64
     }
 
     /// Acquire the current time.
