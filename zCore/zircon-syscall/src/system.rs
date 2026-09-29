@@ -176,7 +176,7 @@ impl Syscall<'_> {
         info!("counter.add: handle={:#x}, delta={}", handle, delta);
         let proc = self.thread.proc();
         let counter = proc.get_object_with_rights::<Counter>(handle, Rights::WRITE)?;
-        counter.add(delta);
+        counter.add(delta)?;
         Ok(())
     }
 
