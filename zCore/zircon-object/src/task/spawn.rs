@@ -296,6 +296,11 @@ pub fn spawn_process(
     const PA_VMO_EXECUTABLE: u32 = 0x14;
     const PA_VMAR_LOADED: u32 = 0x05;
     const PA_RESOURCE: u32 = 0x3F;
+    const PA_MMIO_RESOURCE: u32 = 0x50;
+    const PA_IRQ_RESOURCE: u32 = 0x51;
+    // PA_IOPORT_RESOURCE = 0x52 (x86 only, not sent currently)
+    // PA_SMC_RESOURCE = 0x53 (ARM only, not sent currently)
+    const PA_SYSTEM_RESOURCE: u32 = 0x54;
 
     // TWO processargs messages on the bootstrap channel:
     // Message 1 (read by ld.so.1): loader handles + process identity
@@ -367,6 +372,28 @@ pub fn spawn_process(
     .map_err(|_| crate::ZxError::INTERNAL)?;
 
     // --- Message 2: For libc's _zx_startup_get_handles ---
+    // Include sub-resource handles required by standalone tests.
+    let mmio_resource = Resource::create(
+        "mmio",
+        crate::dev::ResourceKind::MMIO,
+        0,
+        0,
+        crate::dev::ResourceFlags::empty(),
+    );
+    let irq_resource = Resource::create(
+        "irq",
+        crate::dev::ResourceKind::IRQ,
+        0,
+        0,
+        crate::dev::ResourceFlags::empty(),
+    );
+    let system_resource = Resource::create(
+        "system",
+        crate::dev::ResourceKind::SYSTEM,
+        0,
+        0,
+        crate::dev::ResourceFlags::empty(),
+    );
     let argv = format!("{}\0", name);
     let msg2_handles = alloc::vec![
         Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF
@@ -376,6 +403,9 @@ pub fn spawn_process(
         Handle::new(config.vdso_vmo.clone(), Rights::DEFAULT_VMO), // PA_VMO_VDSO
         Handle::new(root_resource, Rights::DEFAULT_RESOURCE), // PA_RESOURCE
         Handle::new(image_vmar.clone(), Rights::DEFAULT_VMAR), // PA_VMAR_LOADED
+        Handle::new(mmio_resource, Rights::DEFAULT_RESOURCE), // PA_MMIO_RESOURCE
+        Handle::new(irq_resource, Rights::DEFAULT_RESOURCE), // PA_IRQ_RESOURCE
+        Handle::new(system_resource, Rights::DEFAULT_RESOURCE), // PA_SYSTEM_RESOURCE
     ];
     let msg2_info = alloc::vec![
         pa_hnd(PA_PROC_SELF, 0),
@@ -385,6 +415,9 @@ pub fn spawn_process(
         pa_hnd(PA_VMO_VDSO, 0),
         pa_hnd(PA_RESOURCE, 0),
         pa_hnd(PA_VMAR_LOADED, 0),
+        pa_hnd(PA_MMIO_RESOURCE, 0),
+        pa_hnd(PA_IRQ_RESOURCE, 0),
+        pa_hnd(PA_SYSTEM_RESOURCE, 0),
     ];
     let msg2_data = build_processargs_data(
         ZX_PROCARGS_PROTOCOL,
