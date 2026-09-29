@@ -4,7 +4,7 @@ use {
     zircon_object::{
         ipc::{Channel, MessagePacket},
         object::{obj_type, HandleInfo},
-        task::ThreadState,
+        task::{Process, ThreadState},
     },
 };
 
@@ -154,7 +154,10 @@ impl Syscall<'_> {
         if options != 0 && !use_iovec {
             return Err(ZxError::INVALID_ARGS);
         }
-        if args.rd_num_bytes < 4 || args.wr_num_bytes < 4 {
+        if args.rd_num_bytes < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if !use_iovec && args.wr_num_bytes < 4 {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
@@ -165,6 +168,10 @@ impl Syscall<'_> {
         } else {
             args.wr_bytes.read_array(args.wr_num_bytes as usize)?
         };
+        // Channel call requires at least 4 bytes for the txid header
+        if wr_data.len() < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let wr_msg = MessagePacket {
             data: wr_data,
             handles: {
@@ -303,7 +310,10 @@ impl Syscall<'_> {
         if options != 0 && !use_iovec {
             return Err(ZxError::INVALID_ARGS);
         }
-        if args.rd_num_bytes < 4 || args.wr_num_bytes < 4 {
+        if args.rd_num_bytes < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if !use_iovec && args.wr_num_bytes < 4 {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
@@ -314,33 +324,12 @@ impl Syscall<'_> {
         } else {
             args.wr_bytes.read_array(args.wr_num_bytes as usize)?
         };
+        if data.len() < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let handles = if args.wr_num_handles > 0 {
             let dispositions = args.wr_handles.read_array(args.wr_num_handles as usize)?;
-            let mut handles = Vec::with_capacity(dispositions.len());
-            for disp in dispositions.iter() {
-                let (object, src_rights) = proc.get_dyn_object_and_rights(disp.handle)?;
-                let new_rights = if disp.rights == 0xFFFF_FFFF {
-                    src_rights
-                } else {
-                    Rights::from_bits(disp.rights).ok_or(ZxError::INVALID_ARGS)?
-                };
-                if !src_rights.contains(new_rights) {
-                    return Err(ZxError::INVALID_ARGS);
-                }
-                match disp.op {
-                    ZX_HANDLE_OP_MOVE => {
-                        proc.remove_handle(disp.handle)?;
-                    }
-                    ZX_HANDLE_OP_DUP => {
-                        if !src_rights.contains(Rights::DUPLICATE) {
-                            return Err(ZxError::ACCESS_DENIED);
-                        }
-                    }
-                    _ => return Err(ZxError::INVALID_ARGS),
-                }
-                handles.push(Handle::new(object, new_rights));
-            }
-            handles
+            process_dispositions(proc, &dispositions, handle_value)?
         } else {
             Vec::new()
         };
@@ -440,6 +429,33 @@ fn read_iovec_data(ptr: UserInPtr<u8>, count: u32) -> ZxResult<Vec<u8>> {
         }
     }
     Ok(data)
+}
+
+/// Process handle dispositions into a vector of Handles (fail-fast).
+///
+/// Used by `channel_call_etc_noretry`. Validates each disposition using
+/// `handle_check`, resolves rights, and removes/duplicates handles.
+/// Returns `Err` on the first invalid disposition.
+fn process_dispositions(
+    proc: &Process,
+    dispositions: &[HandleDisposition],
+    channel_handle: HandleValue,
+) -> ZxResult<Vec<Handle>> {
+    let mut handles = Vec::with_capacity(dispositions.len());
+    for disp in dispositions.iter() {
+        let (object, src_rights) = proc.get_dyn_object_and_rights(disp.handle)?;
+        handle_check(disp, &object, src_rights, channel_handle)?;
+        let new_rights = if disp.rights == Rights::SAME_RIGHTS.bits() {
+            src_rights
+        } else {
+            Rights::from_bits(disp.rights).ok_or(ZxError::INVALID_ARGS)?
+        };
+        if disp.op != ZX_HANDLE_OP_DUP {
+            proc.remove_handle(disp.handle)?;
+        }
+        handles.push(Handle::new(object, new_rights));
+    }
+    Ok(handles)
 }
 
 const ZX_HANDLE_OP_MOVE: u32 = 0;
