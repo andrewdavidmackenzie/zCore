@@ -48,6 +48,38 @@ impl Syscall<'_> {
             channel.read()?
         };
 
+        // Debug: decode processargs messages to verify wire format
+        if msg.data.len() >= 36 {
+            let proto = u32::from_le_bytes(msg.data[0..4].try_into().unwrap());
+            if proto == 0x4150_585d {
+                // This is a processargs message — dump the header
+                let ver = u32::from_le_bytes(msg.data[4..8].try_into().unwrap());
+                let hi_off = u32::from_le_bytes(msg.data[8..12].try_into().unwrap());
+                let a_off = u32::from_le_bytes(msg.data[12..16].try_into().unwrap());
+                let a_num = u32::from_le_bytes(msg.data[16..20].try_into().unwrap());
+                error!(
+                    "processargs: proto={:#x} ver={:#x} hi_off={} args_off={} args_num={} \
+                     data_len={} handles={}",
+                    proto,
+                    ver,
+                    hi_off,
+                    a_off,
+                    a_num,
+                    msg.data.len(),
+                    msg.handles.len()
+                );
+                // Dump handle_info entries
+                let n = msg.handles.len().min(16);
+                for i in 0..n {
+                    let off = hi_off as usize + i * 4;
+                    if off + 4 <= msg.data.len() {
+                        let info = u32::from_le_bytes(msg.data[off..off + 4].try_into().unwrap());
+                        error!("  handle[{}] info={:#x} (type={:#x})", i, info, info & 0xFF);
+                    }
+                }
+            }
+        }
+
         actual_bytes.write_if_not_null(msg.data.len() as u32)?;
         actual_handles.write_if_not_null(msg.handles.len() as u32)?;
         if num_bytes < msg.data.len() as u32 || num_handles < msg.handles.len() as u32 {

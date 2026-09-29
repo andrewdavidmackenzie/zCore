@@ -345,8 +345,23 @@ pub fn spawn_process(
         None
     };
 
+    let msg1_data =
+        build_processargs_data(ZX_PROCARGS_PROTOCOL, ZX_PROCARGS_VERSION, &msg1_info, &[]);
+    hal_impl::console::console_write_str("=== processargs msg1 ===\n");
+    if let Some(hdr) = ZxProcArgs::from_bytes(&msg1_data) {
+        hal_impl::console::console_write_fmt(format_args!(
+            "  proto={:#x} ver={:#x} hi_off={} args_off={} args_num={} len={} handles={}\n",
+            hdr.protocol,
+            hdr.version,
+            hdr.handle_info_off,
+            hdr.args_off,
+            hdr.args_num,
+            msg1_data.len(),
+            msg1_handles.len()
+        ));
+    }
     ch0.write(crate::ipc::MessagePacket {
-        data: build_processargs_data(ZX_PROCARGS_PROTOCOL, ZX_PROCARGS_VERSION, &msg1_info, &[]),
+        data: msg1_data,
         handles: msg1_handles,
     })
     .map_err(|_| crate::ZxError::INTERNAL)?;
@@ -371,13 +386,27 @@ pub fn spawn_process(
         pa_hnd(PA_RESOURCE, 0),
         pa_hnd(PA_VMAR_LOADED, 0),
     ];
+    let msg2_data = build_processargs_data(
+        ZX_PROCARGS_PROTOCOL,
+        ZX_PROCARGS_VERSION,
+        &msg2_info,
+        argv.as_bytes(),
+    );
+    hal_impl::console::console_write_str("=== processargs msg2 ===\n");
+    if let Some(hdr) = ZxProcArgs::from_bytes(&msg2_data) {
+        hal_impl::console::console_write_fmt(format_args!(
+            "  proto={:#x} ver={:#x} hi_off={} args_off={} args_num={} len={} handles={}\n",
+            hdr.protocol,
+            hdr.version,
+            hdr.handle_info_off,
+            hdr.args_off,
+            hdr.args_num,
+            msg2_data.len(),
+            msg2_handles.len()
+        ));
+    }
     ch0.write(crate::ipc::MessagePacket {
-        data: build_processargs_data(
-            ZX_PROCARGS_PROTOCOL,
-            ZX_PROCARGS_VERSION,
-            &msg2_info,
-            argv.as_bytes(),
-        ),
+        data: msg2_data,
         handles: msg2_handles,
     })
     .map_err(|_| crate::ZxError::INTERNAL)?;
@@ -553,49 +582,68 @@ struct ZxProcArgs {
 // Compile-time check: must be exactly 36 bytes with no padding.
 const _: () = assert!(core::mem::size_of::<ZxProcArgs>() == 36);
 
+impl ZxProcArgs {
+    /// View the struct as raw bytes for direct wire-format serialization.
+    fn as_bytes(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const Self as *const u8,
+                core::mem::size_of::<Self>(),
+            )
+        }
+    }
+
+    /// Parse from a byte slice (channel message data).
+    fn from_bytes(data: &[u8]) -> Option<&Self> {
+        if data.len() < core::mem::size_of::<Self>() {
+            return None;
+        }
+        // Check alignment (channel data is typically aligned)
+        let ptr = data.as_ptr();
+        if (ptr as usize) % core::mem::align_of::<Self>() != 0 {
+            return None;
+        }
+        Some(unsafe { &*(ptr as *const Self) })
+    }
+}
+
 /// Build a processargs message data buffer.
 ///
-/// Wire format: `[zx_proc_args_t header][handle_info u32 array][argv strings]`
-/// All integers are little-endian (matching x86_64/aarch64 Fuchsia targets).
+/// Wire format: `[ZxProcArgs header][handle_info u32 array][argv strings]`
+/// The header struct IS the wire format — written directly as bytes.
 fn build_processargs_data(
     protocol: u32,
     version: u32,
     handle_info: &[u32],
     argv: &[u8],
 ) -> alloc::vec::Vec<u8> {
-    let handle_info_off = core::mem::size_of::<ZxProcArgs>() as u32;
+    let header_size = core::mem::size_of::<ZxProcArgs>();
+    let handle_info_off = header_size as u32;
     let args_off = handle_info_off + (handle_info.len() as u32) * 4;
     let args_num = if argv.is_empty() {
         0u32
     } else {
         argv.iter().filter(|&&b| b == 0).count() as u32
     };
-    let total_size = args_off + argv.len() as u32;
+    let total_size = (args_off as usize) + argv.len();
 
-    let mut data = alloc::vec::Vec::with_capacity(total_size as usize);
+    let header = ZxProcArgs {
+        protocol,
+        version,
+        handle_info_off,
+        args_off,
+        args_num,
+        environ_off: total_size as u32,
+        environ_num: 0,
+        names_off: total_size as u32,
+        names_num: 0,
+    };
 
-    // Header: each field as little-endian u32
-    data.extend_from_slice(&protocol.to_le_bytes());
-    data.extend_from_slice(&version.to_le_bytes());
-    data.extend_from_slice(&handle_info_off.to_le_bytes());
-    data.extend_from_slice(&args_off.to_le_bytes());
-    data.extend_from_slice(&args_num.to_le_bytes());
-    data.extend_from_slice(&total_size.to_le_bytes()); // environ_off (= end, no envs)
-    data.extend_from_slice(&0u32.to_le_bytes()); // environ_num
-    data.extend_from_slice(&total_size.to_le_bytes()); // names_off (= end, no names)
-    data.extend_from_slice(&0u32.to_le_bytes()); // names_num
-    debug_assert_eq!(data.len(), core::mem::size_of::<ZxProcArgs>());
-
-    // Handle info array
-    for &info in handle_info {
-        data.extend_from_slice(&info.to_le_bytes());
-    }
-
-    // Argv strings (NUL-separated)
-    data.extend_from_slice(argv);
-
-    debug_assert_eq!(data.len(), total_size as usize);
-    data
+    // Contiguous wire format: header + handle_info + argv — all native endian.
+    let handle_info_bytes = unsafe {
+        core::slice::from_raw_parts(handle_info.as_ptr().cast::<u8>(), handle_info.len() * 4)
+    };
+    [header.as_bytes(), handle_info_bytes, argv].concat()
 }
 
 /// FIDL message header. Must match `fidl_message_header_t` from `zircon/fidl.h`.

@@ -560,6 +560,12 @@ impl Syscall<'_> {
             (_, Sys::DEBUG_WRITE | Sys::DEBUG_READ) => {
                 trace!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
             }
+            (Err(e), Sys::VMAR_MAP) => {
+                error!(
+                    "{}|{} VMAR_MAP({:#x},{:#x},{:#x},{:#x},{:#x},{:#x}) <= {:?}",
+                    proc_name, thread_name, a0, a1, a2, a3, a4, a5, e
+                );
+            }
             (Err(_), _) => {
                 error!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
             }
