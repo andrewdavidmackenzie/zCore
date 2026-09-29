@@ -69,7 +69,7 @@ impl Syscall<'_> {
                 return ZxError::INVALID_ARGS as _;
             }
         };
-        
+
         debug!(
             "{}|{} {:?} => args={:x?}",
             proc_name, thread_name, sys_type, args

@@ -554,51 +554,47 @@ struct ZxProcArgs {
 const _: () = assert!(core::mem::size_of::<ZxProcArgs>() == 36);
 
 /// Build a processargs message data buffer.
+///
+/// Wire format: `[zx_proc_args_t header][handle_info u32 array][argv strings]`
+/// All integers are little-endian (matching x86_64/aarch64 Fuchsia targets).
 fn build_processargs_data(
     protocol: u32,
     version: u32,
     handle_info: &[u32],
     argv: &[u8],
 ) -> alloc::vec::Vec<u8> {
-    let header_size = core::mem::size_of::<ZxProcArgs>();
-    let handle_info_off = header_size;
-    let handle_info_size = handle_info.len() * 4;
-    let args_off = handle_info_off + handle_info_size;
+    let handle_info_off = core::mem::size_of::<ZxProcArgs>() as u32;
+    let args_off = handle_info_off + (handle_info.len() as u32) * 4;
     let args_num = if argv.is_empty() {
         0u32
     } else {
         argv.iter().filter(|&&b| b == 0).count() as u32
     };
-    let total_size = args_off + argv.len();
+    let total_size = args_off + argv.len() as u32;
 
-    let header = ZxProcArgs {
-        protocol,
-        version,
-        handle_info_off: handle_info_off as u32,
-        args_off: args_off as u32,
-        args_num,
-        environ_off: total_size as u32,
-        environ_num: 0,
-        names_off: total_size as u32,
-        names_num: 0,
-    };
+    let mut data = alloc::vec::Vec::with_capacity(total_size as usize);
 
-    let mut data = alloc::vec![0u8; total_size];
-    // Safety: ZxProcArgs is #[repr(C)] with all u32 fields, no padding.
-    let header_bytes = unsafe {
-        core::slice::from_raw_parts(&header as *const ZxProcArgs as *const u8, header_size)
-    };
-    data[..header_size].copy_from_slice(header_bytes);
+    // Header: each field as little-endian u32
+    data.extend_from_slice(&protocol.to_le_bytes());
+    data.extend_from_slice(&version.to_le_bytes());
+    data.extend_from_slice(&handle_info_off.to_le_bytes());
+    data.extend_from_slice(&args_off.to_le_bytes());
+    data.extend_from_slice(&args_num.to_le_bytes());
+    data.extend_from_slice(&total_size.to_le_bytes()); // environ_off (= end, no envs)
+    data.extend_from_slice(&0u32.to_le_bytes()); // environ_num
+    data.extend_from_slice(&total_size.to_le_bytes()); // names_off (= end, no names)
+    data.extend_from_slice(&0u32.to_le_bytes()); // names_num
+    debug_assert_eq!(data.len(), core::mem::size_of::<ZxProcArgs>());
 
-    for (i, &info) in handle_info.iter().enumerate() {
-        let off = handle_info_off + i * 4;
-        data[off..off + 4].copy_from_slice(&info.to_le_bytes());
+    // Handle info array
+    for &info in handle_info {
+        data.extend_from_slice(&info.to_le_bytes());
     }
 
-    if !argv.is_empty() {
-        data[args_off..args_off + argv.len()].copy_from_slice(argv);
-    }
+    // Argv strings (NUL-separated)
+    data.extend_from_slice(argv);
 
+    debug_assert_eq!(data.len(), total_size as usize);
     data
 }
 
@@ -634,27 +630,20 @@ fn make_ldmsg_response(
     status: i32,
     handles: alloc::vec::Vec<Handle>,
 ) -> crate::ipc::MessagePacket {
-    let rsp = LdmsgResponse {
-        header: FidlMessageHeader {
-            txid,
-            at_rest_flags: [0x02, 0x00], // USE_VERSION_V2
-            dynamic_flags: 0,
-            magic_number: 0x01, // kFidlWireFormatMagicNumberInitial
-            ordinal,
-        },
-        rv: status,
-        object: if handles.is_empty() { 0 } else { 0xFFFF_FFFF },
-    };
-    let data = unsafe {
-        core::slice::from_raw_parts(
-            &rsp as *const LdmsgResponse as *const u8,
-            core::mem::size_of::<LdmsgResponse>(),
-        )
-    };
-    crate::ipc::MessagePacket {
-        data: data.to_vec(),
-        handles,
-    }
+    let mut data = alloc::vec::Vec::with_capacity(core::mem::size_of::<LdmsgResponse>());
+    // fidl_message_header_t
+    data.extend_from_slice(&txid.to_le_bytes());
+    data.extend_from_slice(&[0x02, 0x00]); // at_rest_flags (USE_VERSION_V2)
+    data.push(0x00); // dynamic_flags
+    data.push(0x01); // magic_number (kFidlWireFormatMagicNumberInitial)
+    data.extend_from_slice(&ordinal.to_le_bytes());
+    // rv (status)
+    data.extend_from_slice(&status.to_le_bytes());
+    // handle present/absent marker
+    let marker: u32 = if handles.is_empty() { 0 } else { 0xFFFF_FFFF };
+    data.extend_from_slice(&marker.to_le_bytes());
+    debug_assert_eq!(data.len(), core::mem::size_of::<LdmsgResponse>());
+    crate::ipc::MessagePacket { data, handles }
 }
 
 /// Eagerly resolve vDSO symbols in an ELF's PLT GOT.
