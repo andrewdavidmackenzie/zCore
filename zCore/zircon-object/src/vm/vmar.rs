@@ -173,11 +173,16 @@ impl VmAddressRegion {
         let mut guard = self.inner.lock();
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         let offset = self.determine_offset(inner, offset, len, align)?;
+        // Clear any stale page table entries in the allocated range.
+        // Previous mappings may have left page table entries that would
+        // cause lazy mappings to read stale physical page content.
+        let alloc_addr = self.addr + offset;
+        self.page_table.lock().unmap_cont(alloc_addr, len).ok(); // ignore errors for already-unmapped pages
         let child = Arc::new(VmAddressRegion {
             flags,
             base: KObjectBase::new(),
             _counter: CountHelper::new(),
-            addr: self.addr + offset,
+            addr: alloc_addr,
             size: len,
             parent: Some(self.clone()),
             page_table: self.page_table.clone(),
