@@ -242,6 +242,20 @@ impl Syscall<'_> {
             Sys::CHANNEL_CALL_FINISH => {
                 self.sys_channel_call_finish(a0.into(), a1.into(), a2.into(), a3.into())
             }
+            Sys::CHANNEL_CALL_ETC_NORETRY => {
+                self.sys_channel_call_etc_noretry(
+                    a0 as _,
+                    a1 as _,
+                    a2.into(),
+                    a3.into(),
+                    a4.into(),
+                    a5.into(),
+                )
+                .await
+            }
+            Sys::CHANNEL_CALL_ETC_FINISH => {
+                self.sys_channel_call_etc_finish(a0.into(), a1.into(), a2.into(), a3.into())
+            }
             Sys::SOCKET_CREATE => self.sys_socket_create(a0 as _, a1.into(), a2.into()),
             Sys::SOCKET_WRITE => {
                 self.sys_socket_write(a0 as _, a1 as _, a2.into(), a3 as _, a4.into())

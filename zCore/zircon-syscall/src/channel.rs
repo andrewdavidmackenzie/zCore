@@ -270,6 +270,110 @@ impl Syscall<'_> {
         channel.write(MessagePacket { data, handles })?;
         Ok(())
     }
+
+    /// Send a message to a channel and await a reply (extended version).
+    ///
+    /// Like `channel_call_noretry` but uses handle dispositions for writes
+    /// and returns `HandleInfo` (handle + type + rights) for reads.
+    pub async fn sys_channel_call_etc_noretry(
+        &self,
+        handle_value: HandleValue,
+        options: u32,
+        deadline: Deadline,
+        user_args: UserInPtr<ChannelCallEtcArgs>,
+        mut actual_bytes: UserOutPtr<u32>,
+        mut actual_handles: UserOutPtr<u32>,
+    ) -> ZxResult {
+        let mut args = user_args.read()?;
+        info!(
+            "channel.call_etc_noretry: handle={:#x}, options={:#x}, deadline={:?}",
+            handle_value, options, deadline
+        );
+        if options != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if args.rd_num_bytes < 4 || args.wr_num_bytes < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let proc = self.thread.proc();
+        let channel =
+            proc.get_object_with_rights::<Channel>(handle_value, Rights::READ | Rights::WRITE)?;
+        let data = args.wr_bytes.read_array(args.wr_num_bytes as usize)?;
+        let handles = if args.wr_num_handles > 0 {
+            let dispositions = args.wr_handles.read_array(args.wr_num_handles as usize)?;
+            let mut handles = Vec::with_capacity(dispositions.len());
+            for disp in dispositions.iter() {
+                let (object, src_rights) = proc.get_dyn_object_and_rights(disp.handle)?;
+                let new_rights = if disp.rights == 0xFFFF_FFFF {
+                    src_rights
+                } else {
+                    Rights::from_bits(disp.rights).ok_or(ZxError::INVALID_ARGS)?
+                };
+                if !src_rights.contains(new_rights) {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                match disp.op {
+                    ZX_HANDLE_OP_MOVE => {
+                        proc.remove_handle(disp.handle)?;
+                    }
+                    ZX_HANDLE_OP_DUP => {
+                        if !src_rights.contains(Rights::DUPLICATE) {
+                            return Err(ZxError::ACCESS_DENIED);
+                        }
+                    }
+                    _ => return Err(ZxError::INVALID_ARGS),
+                }
+                handles.push(Handle::new(object, new_rights));
+            }
+            handles
+        } else {
+            Vec::new()
+        };
+        let wr_msg = MessagePacket { data, handles };
+        let future = channel.call(wr_msg);
+        pin_mut!(future);
+        let rd_msg: MessagePacket = self
+            .thread
+            .blocking_run(future, ThreadState::BlockedChannel, deadline.into(), None)
+            .await?;
+        actual_bytes.write(rd_msg.data.len() as u32)?;
+        actual_handles.write(rd_msg.handles.len() as u32)?;
+        if args.rd_num_bytes < rd_msg.data.len() as u32
+            || args.rd_num_handles < rd_msg.handles.len() as u32
+        {
+            return Err(ZxError::BUFFER_TOO_SMALL);
+        }
+        args.rd_bytes.write_array(rd_msg.data.as_slice())?;
+        let handle_infos: Vec<HandleInfo> = rd_msg
+            .handles
+            .into_iter()
+            .map(|h| {
+                let mut info = h.get_handle_info();
+                info.handle = proc.add_handle(h);
+                info
+            })
+            .collect();
+        args.rd_handles.write_array(&handle_infos)?;
+        Ok(())
+    }
+
+    /// Finish a channel call (extended version).
+    pub fn sys_channel_call_etc_finish(
+        &self,
+        deadline: Deadline,
+        _user_args: UserInPtr<ChannelCallEtcArgs>,
+        _actual_bytes: UserOutPtr<u32>,
+        _actual_handles: UserOutPtr<u32>,
+    ) -> ZxResult {
+        info!("channel.call_etc_finish: deadline={:?}", deadline);
+        let thread_state = self.thread.state();
+        if thread_state == ThreadState::BlockedChannel {
+            warn!("channel.call_etc_finish: thread still in BlockedChannel, returning TIMED_OUT");
+            Err(ZxError::TIMED_OUT)
+        } else {
+            Err(ZxError::BAD_STATE)
+        }
+    }
 }
 
 fn handle_check(
@@ -306,6 +410,19 @@ pub struct ChannelCallArgs {
     wr_handles: UserInPtr<HandleValue>,
     rd_bytes: UserOutPtr<u8>,
     rd_handles: UserOutPtr<HandleValue>,
+    wr_num_bytes: u32,
+    wr_num_handles: u32,
+    rd_num_bytes: u32,
+    rd_num_handles: u32,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct ChannelCallEtcArgs {
+    wr_bytes: UserInPtr<u8>,
+    wr_handles: UserInPtr<HandleDisposition>,
+    rd_bytes: UserOutPtr<u8>,
+    rd_handles: UserOutPtr<HandleInfo>,
     wr_num_bytes: u32,
     wr_num_handles: u32,
     rd_num_bytes: u32,
