@@ -95,8 +95,9 @@ while [ "$W" -lt "$SESSION_TIMEOUT" ]; do
         completed=true
         break
     fi
-    # Check for the final suite summary line that marks all tests done
-    if grep -q '^\[==========\]' "$OUTPUT" 2>/dev/null; then
+    # Check for the final suite summary line that marks all tests done.
+    # Match "N tests from M test suites ran" to avoid matching the header.
+    if grep -q '\[==========\].*test.*ran' "$OUTPUT" 2>/dev/null; then
         # Give it a moment to finish output
         sleep 5
         completed=true
@@ -143,8 +144,10 @@ if $test_failed; then
     echo "FAILED: some tests did not pass."
     exit 1
 fi
-if [ "$qemu_status" -ne 0 ]; then
-    echo "FAILED: QEMU exited with status $qemu_status."
+# Don't treat our own kill of QEMU as a test failure.
+# QEMU exits non-zero when killed by signal (128+signal).
+if [ "$qemu_status" -ne 0 ] && ! $completed && ! $timed_out; then
+    echo "FAILED: QEMU exited unexpectedly with status $qemu_status."
     exit "$qemu_status"
 fi
 echo "Done."
