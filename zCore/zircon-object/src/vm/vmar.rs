@@ -242,9 +242,11 @@ impl VmAddressRegion {
         // When map_range is false (lazy/demand-paged mapping), allow the
         // mapping to extend past the VMO's current size. Pages are committed
         // on demand via page faults. This is standard behavior in Fuchsia
-        // (ZX_VM_ALLOW_FAULTS) used by memory allocators like Scudo that
-        // reserve large virtual address ranges upfront.
-        // When map_range is true (eager), the VMO must be large enough.
+        // Eagerly commit named VMOs (workaround for page fault handling).
+        // Lazy (unnamed, no permissions) mappings like Scudo's arena skip this.
+        let map_range = map_range || vmo.name() != "";
+        // When eager (map_range), the VMO must cover the mapped range.
+        // When lazy (ALLOW_FAULTS), the mapping can extend past the VMO.
         if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -265,9 +267,6 @@ impl VmAddressRegion {
                 return Err(ZxError::NO_MEMORY);
             }
         }
-        // Eagerly commit named VMOs (workaround for page fault handling).
-        // Lazy (unnamed, no permissions) mappings like Scudo's arena skip this.
-        let map_range = map_range || vmo.name() != "";
         let mapping = VmMapping::new(
             addr,
             len,
@@ -784,8 +783,7 @@ impl VmAddressRegion {
         #[cfg(not(target_os = "none"))]
         if hal_impl::platform::needs_user_write_flush() {
             let page_idx = (vaddr - map_inner.addr) / PAGE_SIZE;
-            let is_exec = page_idx < map_inner.flags.len()
-                && map_inner.page_flags(page_idx).contains(MMUFlags::EXECUTE);
+            let is_exec = map_inner.page_flags(page_idx).contains(MMUFlags::EXECUTE);
             if is_exec {
                 hal_impl::mem::pmem_mprotect(vaddr, actual_size, MMUFlags::READ | MMUFlags::WRITE);
             }
@@ -1116,7 +1114,7 @@ impl VmMapping {
     pub fn get_flags(&self, vaddr: usize) -> ZxResult<MMUFlags> {
         if self.contains(vaddr) {
             let page_id = (vaddr - self.addr()) / PAGE_SIZE;
-            Ok(self.inner.lock().flags[page_id])
+            Ok(self.inner.lock().page_flags(page_id))
         } else {
             Err(ZxError::NO_MEMORY)
         }
