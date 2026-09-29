@@ -1059,6 +1059,7 @@ impl VmMapping {
                 page_table: self.page_table.clone(),
                 inner: Mutex::new(VmMappingInner {
                     flags: inner.flags.drain(new_flags_range).collect(),
+                    default_flags: inner.default_flags,
                     addr: end,
                     size: new_len2,
                     vmo_offset: inner.vmo_offset + (end - inner.addr),
