@@ -357,6 +357,27 @@ async fn handler_user_trap(
                     } else {
                         error!("  NO mapping at fault addr {:#x}", vaddr);
                     }
+                    // Dump TLS info for debugging unsafe stack pointer issues
+                    #[cfg(target_arch = "x86_64")]
+                    {
+                        let regs2 = ctx.as_ref().unwrap().general();
+                        if regs2.fsbase != 0 {
+                            let mut tls_buf = [0u8; 32];
+                            if thread
+                                .proc()
+                                .vmar()
+                                .read_memory(regs2.fsbase, &mut tls_buf)
+                                .is_ok()
+                            {
+                                error!(
+                                    "  fsbase={:#x} TLS[0x10]={:#x} TLS[0x18]={:#x}",
+                                    regs2.fsbase,
+                                    usize::from_le_bytes(tls_buf[0x10..0x18].try_into().unwrap()),
+                                    usize::from_le_bytes(tls_buf[0x18..0x20].try_into().unwrap()),
+                                );
+                            }
+                        }
+                    }
                     // Dump user registers and stack backtrace
                     #[cfg(target_arch = "x86_64")]
                     {
