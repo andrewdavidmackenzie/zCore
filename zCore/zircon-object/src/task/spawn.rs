@@ -297,23 +297,25 @@ pub fn spawn_process(
     const PA_VMAR_LOADED: u32 = 0x05;
     const PA_RESOURCE: u32 = 0x3F;
 
-    // Fuchsia's bootstrap protocol sends TWO processargs messages:
-    // Message 1 (for ld.so.1): process capabilities + loader handles
-    // Message 2 (for the app via __libc_start_main): system handles + argv
-
-    // --- Message 1: Process capabilities (read by ld.so.1) ---
-    let mut msg1_handles = alloc::vec![
+    // Send a single processargs message with ALL handles.
+    // The new Fuchsia libc (_zx_startup_get_handles) reads exactly one
+    // message and processes all handles from it.
+    let mut bootstrap_handles = alloc::vec![
         Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF
         Handle::new(thread.clone(), Rights::DEFAULT_THREAD), // PA_THREAD_SELF
         Handle::new(proc.vmar(), Rights::all()),            // PA_VMAR_ROOT
+        Handle::new(root_job, Rights::DEFAULT_JOB),         // PA_JOB_DEFAULT
         Handle::new(config.vdso_vmo.clone(), Rights::DEFAULT_VMO), // PA_VMO_VDSO
+        Handle::new(root_resource, Rights::DEFAULT_RESOURCE), // PA_RESOURCE
         Handle::new(image_vmar.clone(), Rights::DEFAULT_VMAR), // PA_VMAR_LOADED
     ];
-    let mut msg1_info = alloc::vec![
+    let mut handle_info = alloc::vec![
         pa_hnd(PA_PROC_SELF, 0),
         pa_hnd(PA_THREAD_SELF, 0),
         pa_hnd(PA_VMAR_ROOT, 0),
+        pa_hnd(PA_JOB_DEFAULT, 0),
         pa_hnd(PA_VMO_VDSO, 0),
+        pa_hnd(PA_RESOURCE, 0),
         pa_hnd(PA_VMAR_LOADED, 0),
     ];
 
@@ -322,54 +324,27 @@ pub fn spawn_process(
         let prog_vmo = VmObject::new_paged(crate::vm::pages(elf_data.len()));
         prog_vmo.write(0, elf_data)?;
         prog_vmo.set_name(name);
-        msg1_handles.push(Handle::new(prog_vmo, Rights::DEFAULT_VMO | Rights::EXECUTE));
-        msg1_info.push(pa_hnd(PA_VMO_EXECUTABLE, 0));
+        bootstrap_handles.push(Handle::new(prog_vmo, Rights::DEFAULT_VMO | Rights::EXECUTE));
+        handle_info.push(pa_hnd(PA_VMO_EXECUTABLE, 0));
 
         let (ldsvc_kernel, ldsvc_user) = Channel::create();
-        msg1_handles.push(Handle::new(ldsvc_user, Rights::DEFAULT_CHANNEL));
-        msg1_info.push(pa_hnd(PA_LDSVC_LOADER, 0));
+        bootstrap_handles.push(Handle::new(ldsvc_user, Rights::DEFAULT_CHANNEL));
+        handle_info.push(pa_hnd(PA_LDSVC_LOADER, 0));
         Some(ldsvc_kernel)
     } else {
         None
     };
 
-    let msg1_data = build_processargs_data(
-        ZX_PROCARGS_PROTOCOL,
-        ZX_PROCARGS_VERSION,
-        &msg1_info,
-        &[], // no argv in message 1
-    );
-    ch0.write(crate::ipc::MessagePacket {
-        data: msg1_data,
-        handles: msg1_handles,
-    })
-    .map_err(|_| crate::ZxError::INTERNAL)?;
-
-    // --- Message 2: System capabilities (read by __libc_start_main) ---
-    let msg2_handles = alloc::vec![
-        Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF (dup)
-        Handle::new(thread.clone(), Rights::DEFAULT_THREAD), // PA_THREAD_SELF (dup)
-        Handle::new(proc.vmar(), Rights::all()),            // PA_VMAR_ROOT (dup)
-        Handle::new(root_job, Rights::DEFAULT_JOB),         // PA_JOB_DEFAULT
-        Handle::new(root_resource, Rights::DEFAULT_RESOURCE), // PA_RESOURCE
-    ];
-    let msg2_info = alloc::vec![
-        pa_hnd(PA_PROC_SELF, 0),
-        pa_hnd(PA_THREAD_SELF, 0),
-        pa_hnd(PA_VMAR_ROOT, 0),
-        pa_hnd(PA_JOB_DEFAULT, 0),
-        pa_hnd(PA_RESOURCE, 0),
-    ];
     let argv = format!("{}\0", name);
-    let msg2_data = build_processargs_data(
+    let msg_data = build_processargs_data(
         ZX_PROCARGS_PROTOCOL,
         ZX_PROCARGS_VERSION,
-        &msg2_info,
+        &handle_info,
         argv.as_bytes(),
     );
     ch0.write(crate::ipc::MessagePacket {
-        data: msg2_data,
-        handles: msg2_handles,
+        data: msg_data,
+        handles: bootstrap_handles,
     })
     .map_err(|_| crate::ZxError::INTERNAL)?;
 
