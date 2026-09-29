@@ -1,6 +1,17 @@
 use {super::*, zircon_object::task::ThreadState};
 
 impl Syscall<'_> {
+    /// Validate that a futex address is mapped in the process address space.
+    /// Returns `INVALID_ARGS` if the address is unmapped (preventing a
+    /// kernel page fault in `Futex::load_user_value`).
+    fn validate_futex_addr(&self, addr: usize) -> ZxResult {
+        if self.thread.proc().vmar().get_mapping_flags(addr).is_err() {
+            Err(ZxError::INVALID_ARGS)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Wait on a futex.
     pub async fn sys_futex_wait(
         &self,
@@ -16,6 +27,7 @@ impl Syscall<'_> {
         if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.validate_futex_addr(value_ptr.as_addr())?;
         let proc = self.thread.proc();
         let futex = proc.get_futex(value_ptr.as_addr());
         let new_owner = if new_futex_owner == INVALID_HANDLE {
@@ -50,6 +62,7 @@ impl Syscall<'_> {
         if value_ptr.as_addr() == requeue_ptr.as_addr() {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.validate_futex_addr(value_ptr.as_addr())?;
         let proc = self.thread.proc();
         let new_requeue_owner = if new_requeue_owner == INVALID_HANDLE {
             None
@@ -75,6 +88,7 @@ impl Syscall<'_> {
         if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.validate_futex_addr(value_ptr.as_addr())?;
         let proc = self.thread.proc();
         let futex = proc.get_futex(value_ptr.as_addr());
         futex.wake(count as usize);
@@ -104,6 +118,7 @@ impl Syscall<'_> {
         if value_ptr.as_addr() == requeue_ptr.as_addr() {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.validate_futex_addr(value_ptr.as_addr())?;
         let proc = self.thread.proc();
         let new_requeue_owner = if new_requeue_owner == INVALID_HANDLE {
             None
