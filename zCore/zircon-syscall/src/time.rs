@@ -43,21 +43,35 @@ impl Syscall<'_> {
     /// is not available.
     /// Return the current monotonic time in nanoseconds.
     ///
-    /// Unlike most syscalls, this returns the time value directly (in rax),
-    /// not a `zx_status_t`.  The dispatch layer must handle this specially.
-    pub fn sys_clock_get_monotonic_via_kernel(&self) -> i64 {
-        timer_now().as_nanos() as i64
+    /// On Fuchsia, this returns the time value directly (in rax), not a
+    /// `zx_status_t`.  The dispatch layer handles this by early-returning
+    /// the i64 value.
+    ///
+    /// For backward compatibility with petal tests (which may pass an
+    /// output pointer as arg0), we also write the value to the pointer
+    /// if it is non-null.
+    pub fn sys_clock_get_monotonic_via_kernel(&self, mut out: UserOutPtr<i64>) -> i64 {
+        let now = timer_now().as_nanos() as i64;
+        if !out.is_null() {
+            out.write(now).ok();
+        }
+        now
     }
 
     /// Return the current tick count.
     ///
     /// Like `clock_get_monotonic_via_kernel`, this returns the value directly
-    /// in rax, not a `zx_status_t`.
+    /// in rax, not a `zx_status_t`.  Also writes to output pointer for
+    /// backward compatibility with petal.
     ///
     /// For simplicity we return nanoseconds directly, which is correct
     /// when `ticks_per_second == 1_000_000_000`.
-    pub fn sys_ticks_get_via_kernel(&self) -> i64 {
-        hal_impl::timer::timer_now().as_nanos() as i64
+    pub fn sys_ticks_get_via_kernel(&self, mut out: UserOutPtr<i64>) -> i64 {
+        let now = hal_impl::timer::timer_now().as_nanos() as i64;
+        if !out.is_null() {
+            out.write(now).ok();
+        }
+        now
     }
 
     /// Acquire the current time.

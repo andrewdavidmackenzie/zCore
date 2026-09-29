@@ -345,16 +345,18 @@ impl Syscall<'_> {
             Sys::CLOCK_GET => self.sys_clock_get(a0 as _, a1.into()),
             // clock_get_monotonic_via_kernel returns the time value directly
             // in rax, not a zx_status_t.  Return early to bypass Ok→0 conversion.
+            // Also writes to output pointer (a0) for backward compatibility with petal.
             Sys::CLOCK_GET_MONOTONIC_VIA_KERNEL => {
-                return self.sys_clock_get_monotonic_via_kernel() as isize;
+                return self.sys_clock_get_monotonic_via_kernel(a0.into()) as isize;
             }
             Sys::CLOCK_READ => self.sys_clock_read(a0 as _, a1.into()),
             Sys::CLOCK_GET_DETAILS => self.sys_clock_get_details(a0 as _, a1 as _, a2.into()),
             Sys::CLOCK_ADJUST => self.sys_clock_adjust(a0 as _, a1 as _, a2 as _),
             Sys::CLOCK_UPDATE => self.sys_clock_update(a0 as _, a1 as _, a2.into()),
             // ticks_get_via_kernel returns the tick count directly in rax.
+            // Also writes to output pointer (a0) for backward compatibility with petal.
             Sys::TICKS_GET_VIA_KERNEL => {
-                return self.sys_ticks_get_via_kernel() as isize;
+                return self.sys_ticks_get_via_kernel(a0.into()) as isize;
             }
             Sys::TIMER_CREATE => self.sys_timer_create(a0 as _, a1 as _, a2.into()),
             Sys::DEBUG_WRITE => self.sys_debug_write(a0.into(), a1 as _),
