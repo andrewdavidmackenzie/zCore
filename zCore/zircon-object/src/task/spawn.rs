@@ -232,10 +232,15 @@ pub fn spawn_process(
     let base = image_vmar.addr();
     let entry = base + elf.header.pt2.entry_point() as usize;
 
-    // Apply ELF relocations (R_X86_64_RELATIVE etc.) for PIE/shared
-    // objects like ld.so.1 which are loaded at a non-zero base.
-    if let Err(e) = elf.relocate(image_vmar.clone()) {
-        warn!("spawn_process: ELF relocation failed: {}", e);
+    // Apply ELF relocations only for statically-linked executables.
+    // When has_interp is true, we loaded the dynamic linker (ld.so.1),
+    // which self-relocates via its rcrt1 entry code.  Applying relocations
+    // here too would double-relocate all RELR entries, corrupting data
+    // pointers (e.g. stdout's FILE struct gets base added twice).
+    if !has_interp {
+        if let Err(e) = elf.relocate(image_vmar.clone()) {
+            warn!("spawn_process: ELF relocation failed: {}", e);
+        }
     }
 
     // Stack
@@ -353,19 +358,6 @@ pub fn spawn_process(
 
     let msg1_data =
         build_processargs_data(ZX_PROCARGS_PROTOCOL, ZX_PROCARGS_VERSION, &msg1_info, &[]);
-    hal_impl::console::console_write_str("=== processargs msg1 ===\n");
-    if let Some(hdr) = ZxProcArgs::from_bytes(&msg1_data) {
-        hal_impl::console::console_write_fmt(format_args!(
-            "  proto={:#x} ver={:#x} hi_off={} args_off={} args_num={} len={} handles={}\n",
-            hdr.protocol,
-            hdr.version,
-            hdr.handle_info_off,
-            hdr.args_off,
-            hdr.args_num,
-            msg1_data.len(),
-            msg1_handles.len()
-        ));
-    }
     ch0.write(crate::ipc::MessagePacket {
         data: msg1_data,
         handles: msg1_handles,
@@ -458,19 +450,6 @@ pub fn spawn_process(
         &msg2_info,
         argv.as_bytes(),
     );
-    hal_impl::console::console_write_str("=== processargs msg2 ===\n");
-    if let Some(hdr) = ZxProcArgs::from_bytes(&msg2_data) {
-        hal_impl::console::console_write_fmt(format_args!(
-            "  proto={:#x} ver={:#x} hi_off={} args_off={} args_num={} len={} handles={}\n",
-            hdr.protocol,
-            hdr.version,
-            hdr.handle_info_off,
-            hdr.args_off,
-            hdr.args_num,
-            msg2_data.len(),
-            msg2_handles.len()
-        ));
-    }
     ch0.write(crate::ipc::MessagePacket {
         data: msg2_data,
         handles: msg2_handles,
@@ -657,19 +636,6 @@ impl ZxProcArgs {
                 core::mem::size_of::<Self>(),
             )
         }
-    }
-
-    /// Parse from a byte slice (channel message data).
-    fn from_bytes(data: &[u8]) -> Option<&Self> {
-        if data.len() < core::mem::size_of::<Self>() {
-            return None;
-        }
-        // Check alignment (channel data is typically aligned)
-        let ptr = data.as_ptr();
-        if !(ptr as usize).is_multiple_of(core::mem::align_of::<Self>()) {
-            return None;
-        }
-        Some(unsafe { &*(ptr as *const Self) })
     }
 }
 

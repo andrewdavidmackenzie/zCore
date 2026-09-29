@@ -73,10 +73,6 @@ impl Syscall<'_> {
         let child = parent.allocate(offset, size, vmar_flags, align)?;
         let child_addr = child.addr();
         let child_handle = proc.add_handle(Handle::new(child, Rights::DEFAULT_VMAR | perm_rights));
-        hal_impl::console::console_write_fmt(format_args!(
-            "ALLOC p={:#x} sz={:#x} -> h={:#x} addr={:#x}\n",
-            parent_vmar, size, child_handle, child_addr
-        ));
         out_child_vmar.write(child_handle)?;
         out_child_addr.write(child_addr)?;
         Ok(())
@@ -96,19 +92,9 @@ impl Syscall<'_> {
         len: usize,
         mut mapped_addr: UserOutPtr<VirtAddr>,
     ) -> ZxResult {
-        if len > 0x1_0000_0000 {
-            hal_impl::console::console_write_fmt(format_args!(
-                "VMAR_MAP: h={:#x} opts={:#x} voff={:#x} vmo={:#x} vmo_off={:#x} len={:#x}\n",
-                vmar_handle, options, vmar_offset, vmo_handle, vmo_offset, len
-            ));
-        }
         let options = match VmOptions::from_bits(options) {
             Some(o) => o,
             None => {
-                hal_impl::console::console_write_fmt(format_args!(
-                    "VMAR_MAP: unknown options {:#x}\n",
-                    options
-                ));
                 return Err(ZxError::INVALID_ARGS);
             }
         };
@@ -116,17 +102,11 @@ impl Syscall<'_> {
         let (vmar, vmar_rights) = proc.get_object_and_rights::<VmAddressRegion>(vmar_handle)?;
         let (vmo, vmo_rights) = proc.get_object_and_rights::<VmObject>(vmo_handle)?;
         if !vmo_rights.contains(Rights::MAP) {
-            if len > 0x1_0000_0000 {
-                hal_impl::console::console_write_str("VMAR_MAP fail: no MAP right\n");
-            }
             return Err(ZxError::ACCESS_DENIED);
         };
         if options
             .intersects(VmOptions::CAN_MAP_RXW | VmOptions::CAN_MAP_SPECIFIC | VmOptions::COMPACT)
         {
-            if len > 0x1_0000_0000 {
-                hal_impl::console::console_write_str("VMAR_MAP fail: CAN_MAP flags\n");
-            }
             return Err(ZxError::INVALID_ARGS);
         }
         if options.contains(VmOptions::REQUIRE_NON_RESIZABLE) && vmo.is_resizable() {
@@ -176,37 +156,16 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let vmar_offset = if is_specific { Some(vmar_offset) } else { None };
-        if len > 0x1_0000_0000 {
-            hal_impl::console::console_write_fmt(format_args!(
-                "  vmar: addr={:#x} size={:#x}\n",
-                vmar.addr(),
-                0
-            ));
-        }
-        let vaddr = vmar
-            .map_ext(
-                vmar_offset,
-                vmo.clone(),
-                vmo_offset,
-                len,
-                permissions,
-                mapping_flags,
-                overwrite,
-                map_range,
-            )
-            .map_err(|e| {
-                if len > 0x1_0000_0000 {
-                    hal_impl::console::console_write_fmt(format_args!(
-                        "VMAR_MAP map_ext fail: {:?} vmar_addr={:#x} vmar_size={:#x} map_range={} vmo_len={:#x}\n",
-                        e, vmar.addr(), 0, map_range, vmo.len()
-                    ));
-                }
-                e
-            })?;
-        hal_impl::console::console_write_fmt(format_args!(
-            "MAP v={:#x} o={:#x} l={:#x} -> {:#x}\n",
-            vmar_handle, options, len, vaddr
-        ));
+        let vaddr = vmar.map_ext(
+            vmar_offset,
+            vmo.clone(),
+            vmo_offset,
+            len,
+            permissions,
+            mapping_flags,
+            overwrite,
+            map_range,
+        )?;
         mapped_addr.write(vaddr)?;
         Ok(())
     }
