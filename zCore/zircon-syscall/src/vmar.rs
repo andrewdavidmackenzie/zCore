@@ -433,6 +433,8 @@ bitflags! {
         const MAP_RANGE             = 1 << 10;
         const REQUIRE_NON_RESIZABLE = 1 << 11;
         const ALLOW_FAULTS          = 1 << 12;
+        const OFFSET_IS_UPPER_LIMIT = 1 << 13;
+        const PERM_READ_IF_XOM_UNSUPPORTED = 1 << 14;
         const CAN_MAP_RXW           = Self::CAN_MAP_READ.bits | Self::CAN_MAP_EXECUTE.bits | Self::CAN_MAP_WRITE.bits;
         const PERM_RXW           = Self::PERM_READ.bits | Self::PERM_WRITE.bits | Self::PERM_EXECUTE.bits;
     }

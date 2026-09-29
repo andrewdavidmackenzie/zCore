@@ -465,17 +465,35 @@ fn spawn_loader_service(channel: Arc<Channel>) {
                 }
             };
 
-            // Parse: first 4 bytes = opcode, rest = library name.
-            if msg.data.len() < 4 {
-                warn!("loader_service: message too short");
+            // Parse FIDL loader service message.
+            // Header: txid(u32) + flags(3 bytes) + magic(1 byte) + ordinal(u64) = 16 bytes
+            // Payload for LOAD_OBJECT: fidl_string_t(size:u64, data:u64) + string bytes
+            if msg.data.len() < 16 {
+                warn!("loader_service: message too short ({})", msg.data.len());
                 continue;
             }
-            let opcode = u32::from_le_bytes(msg.data[0..4].try_into().unwrap());
+            let txid = u32::from_le_bytes(msg.data[0..4].try_into().unwrap());
+            let ordinal = u64::from_le_bytes(msg.data[8..16].try_into().unwrap());
 
-            match opcode {
-                // LOADER_SVC_OP_LOAD_OBJECT = 2
-                2 => {
-                    let name_bytes = &msg.data[4..];
+            const LDMSG_OP_LOAD_OBJECT: u64 = 0x48C5_A151_D6DF_2853;
+            const LDMSG_OP_DONE: u64 = 0x63BA_6B76_D367_1001;
+            const LDMSG_OP_CONFIG: u64 = 0x6A8A_1A14_6463_2841;
+
+            match ordinal {
+                LDMSG_OP_LOAD_OBJECT => {
+                    // Payload: fidl_string_t at offset 16
+                    if msg.data.len() < 32 {
+                        warn!("loader_service: LOAD_OBJECT too short");
+                        continue;
+                    }
+                    let str_size =
+                        u64::from_le_bytes(msg.data[16..24].try_into().unwrap()) as usize;
+                    // String data starts at offset 32 (after fidl_string_t)
+                    let name_bytes = if msg.data.len() >= 32 + str_size {
+                        &msg.data[32..32 + str_size]
+                    } else {
+                        &msg.data[32..]
+                    };
                     // Trim trailing NUL if present.
                     let name_end = name_bytes
                         .iter()
@@ -486,37 +504,31 @@ fn spawn_loader_service(channel: Arc<Channel>) {
 
                     // Look up the library in the rootfs.
                     let lib_path = format!("/lib/{}", name);
-                    let response = if let Some(data) = read_rootfs_file(&lib_path) {
+                    let response = if let Some(file_data) = read_rootfs_file(&lib_path) {
                         info!(
                             "loader_service: found '{}' ({} bytes)",
                             lib_path,
-                            data.len()
+                            file_data.len()
                         );
-                        let vmo = VmObject::new_paged(crate::vm::pages(data.len()));
-                        if let Err(e) = vmo.write(0, &data) {
+                        let vmo = VmObject::new_paged(crate::vm::pages(file_data.len()));
+                        if let Err(e) = vmo.write(0, &file_data) {
                             warn!("loader_service: VMO write failed: {:?}", e);
-                            // Send error response (no handles, status in data).
-                            crate::ipc::MessagePacket {
-                                data: alloc::vec![0xFF; 4], // error
-                                handles: alloc::vec![],
-                            }
+                            make_ldmsg_response(txid, ordinal, -1i32, alloc::vec![])
                         } else {
                             vmo.set_name(name);
-                            // Send success: status 0 + VMO handle.
-                            crate::ipc::MessagePacket {
-                                data: alloc::vec![0u8; 4], // ZX_OK
-                                handles: alloc::vec![Handle::new(
+                            make_ldmsg_response(
+                                txid,
+                                ordinal,
+                                0i32, // ZX_OK
+                                alloc::vec![Handle::new(
                                     vmo,
                                     Rights::DEFAULT_VMO | Rights::EXECUTE,
                                 )],
-                            }
+                            )
                         }
                     } else {
                         warn!("loader_service: '{}' not found in rootfs", lib_path);
-                        crate::ipc::MessagePacket {
-                            data: alloc::vec![0xFF; 4], // error
-                            handles: alloc::vec![],
-                        }
+                        make_ldmsg_response(txid, ordinal, -1i32, alloc::vec![])
                     };
 
                     if let Err(e) = channel.write(response) {
@@ -524,27 +536,50 @@ fn spawn_loader_service(channel: Arc<Channel>) {
                         break;
                     }
                 }
-                // LOADER_SVC_OP_CONFIG = 3 (set library search path prefix)
-                3 => {
+                LDMSG_OP_CONFIG => {
                     info!("loader_service: CONFIG (ignored)");
-                    let response = crate::ipc::MessagePacket {
-                        data: alloc::vec![0u8; 4], // ZX_OK
-                        handles: alloc::vec![],
-                    };
+                    let response = make_ldmsg_response(txid, ordinal, 0i32, alloc::vec![]);
                     channel.write(response).ok();
                 }
+                LDMSG_OP_DONE => {
+                    info!("loader_service: DONE");
+                    break;
+                }
                 _ => {
-                    warn!("loader_service: unknown opcode {}", opcode);
-                    let response = crate::ipc::MessagePacket {
-                        data: alloc::vec![0xFF; 4], // error
-                        handles: alloc::vec![],
-                    };
+                    warn!("loader_service: unknown ordinal {:#x}", ordinal);
+                    let response = make_ldmsg_response(txid, ordinal, -2i32, alloc::vec![]); // NOT_SUPPORTED
                     channel.write(response).ok();
                 }
             }
         }
         info!("loader_service: done");
     });
+}
+
+/// Construct a FIDL loader service response message.
+///
+/// Format: fidl_message_header_t (16 bytes) + status (i32) + handle_present (u32)
+fn make_ldmsg_response(
+    txid: u32,
+    ordinal: u64,
+    status: i32,
+    handles: alloc::vec::Vec<Handle>,
+) -> crate::ipc::MessagePacket {
+    let mut data = alloc::vec![0u8; 24];
+    // fidl_message_header_t
+    data[0..4].copy_from_slice(&txid.to_le_bytes());
+    // at_rest_flags[0] = 0x02 (USE_VERSION_V2), rest = 0
+    data[4] = 0x02;
+    // magic_number = 0x01 (FIDL magic)
+    data[7] = 0x01;
+    data[8..16].copy_from_slice(&ordinal.to_le_bytes());
+    // rv (status)
+    data[16..20].copy_from_slice(&status.to_le_bytes());
+    // handle present/absent marker
+    if !handles.is_empty() {
+        data[20..24].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // FIDL_HANDLE_PRESENT
+    }
+    crate::ipc::MessagePacket { data, handles }
 }
 
 /// Eagerly resolve vDSO symbols in an ELF's PLT GOT.
