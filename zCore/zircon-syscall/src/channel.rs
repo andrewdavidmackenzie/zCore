@@ -82,17 +82,21 @@ impl Syscall<'_> {
         num_handles: u32,
     ) -> ZxResult {
         info!(
-            "channel.write: handle_value={:#x}, num_bytes={:#x}, num_handles={:#x}",
-            handle_value, num_bytes, num_handles,
+            "channel.write: handle_value={:#x}, options={:#x}, num_bytes={:#x}, num_handles={:#x}",
+            handle_value, options, num_bytes, num_handles,
         );
-        if options != 0 {
+        if options != 0 && options != ZX_CHANNEL_WRITE_USE_IOVEC {
             return Err(ZxError::INVALID_ARGS);
         }
-        if num_bytes > 65536 {
-            return Err(ZxError::OUT_OF_RANGE);
-        }
         let proc = self.thread.proc();
-        let data = user_bytes.read_array(num_bytes as usize)?;
+        let data = if options == ZX_CHANNEL_WRITE_USE_IOVEC {
+            read_iovec_data(user_bytes, num_bytes)?
+        } else {
+            if num_bytes as usize > ZX_CHANNEL_MAX_MSG_BYTES {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            user_bytes.read_array(num_bytes as usize)?
+        };
         let handles = user_handles.read_array(num_handles as usize)?;
         let transfer_self = handles.contains(&handle_value);
         let handles = proc.remove_handles(&handles)?;
@@ -146,7 +150,8 @@ impl Syscall<'_> {
             "channel.call_noretry: handle={:#x}, deadline={:?}, args={:#x?}",
             handle_value, deadline, args
         );
-        if options != 0 {
+        let use_iovec = options == ZX_CHANNEL_WRITE_USE_IOVEC;
+        if options != 0 && !use_iovec {
             return Err(ZxError::INVALID_ARGS);
         }
         if args.rd_num_bytes < 4 || args.wr_num_bytes < 4 {
@@ -155,8 +160,13 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let channel =
             proc.get_object_with_rights::<Channel>(handle_value, Rights::READ | Rights::WRITE)?;
+        let wr_data = if use_iovec {
+            read_iovec_data(args.wr_bytes, args.wr_num_bytes)?
+        } else {
+            args.wr_bytes.read_array(args.wr_num_bytes as usize)?
+        };
         let wr_msg = MessagePacket {
-            data: args.wr_bytes.read_array(args.wr_num_bytes as usize)?,
+            data: wr_data,
             handles: {
                 let handles = args.wr_handles.read_array(args.wr_num_handles as usize)?;
                 let handles = proc.remove_handles(&handles)?;
@@ -289,7 +299,8 @@ impl Syscall<'_> {
             "channel.call_etc_noretry: handle={:#x}, options={:#x}, deadline={:?}",
             handle_value, options, deadline
         );
-        if options != 0 {
+        let use_iovec = options == ZX_CHANNEL_WRITE_USE_IOVEC;
+        if options != 0 && !use_iovec {
             return Err(ZxError::INVALID_ARGS);
         }
         if args.rd_num_bytes < 4 || args.wr_num_bytes < 4 {
@@ -298,7 +309,11 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let channel =
             proc.get_object_with_rights::<Channel>(handle_value, Rights::READ | Rights::WRITE)?;
-        let data = args.wr_bytes.read_array(args.wr_num_bytes as usize)?;
+        let data = if use_iovec {
+            read_iovec_data(args.wr_bytes, args.wr_num_bytes)?
+        } else {
+            args.wr_bytes.read_array(args.wr_num_bytes as usize)?
+        };
         let handles = if args.wr_num_handles > 0 {
             let dispositions = args.wr_handles.read_array(args.wr_num_handles as usize)?;
             let mut handles = Vec::with_capacity(dispositions.len());
@@ -400,8 +415,46 @@ fn handle_check(
     }
 }
 
+/// Read data from an iovec array. `ptr` points to the iovec array,
+/// `count` is the number of iovecs.
+/// Read data from an iovec array. `ptr` points to the iovec array,
+/// `count` is the number of iovecs.
+fn read_iovec_data(ptr: UserInPtr<u8>, count: u32) -> ZxResult<Vec<u8>> {
+    if count as usize > ZX_CHANNEL_MAX_MSG_IOVECS {
+        return Err(ZxError::OUT_OF_RANGE);
+    }
+    let iovecs_ptr: UserInPtr<ChannelIovec> = ptr.as_addr().into();
+    let iovecs = iovecs_ptr.read_array(count as usize)?;
+    let total: usize = iovecs.iter().map(|v| v.capacity as usize).sum();
+    if total > ZX_CHANNEL_MAX_MSG_BYTES {
+        return Err(ZxError::OUT_OF_RANGE);
+    }
+    let mut data = Vec::with_capacity(total);
+    for iov in iovecs.iter() {
+        if iov.reserved != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if iov.capacity > 0 {
+            let p: UserInPtr<u8> = iov.buffer.into();
+            data.extend_from_slice(&p.read_array(iov.capacity as usize)?);
+        }
+    }
+    Ok(data)
+}
+
 const ZX_HANDLE_OP_MOVE: u32 = 0;
 const ZX_HANDLE_OP_DUP: u32 = 1;
+const ZX_CHANNEL_WRITE_USE_IOVEC: u32 = 2;
+const ZX_CHANNEL_MAX_MSG_BYTES: usize = 65536;
+const ZX_CHANNEL_MAX_MSG_IOVECS: usize = 8192;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+struct ChannelIovec {
+    buffer: usize,
+    capacity: u32,
+    reserved: u32,
+}
 
 #[repr(C)]
 #[derive(Debug)]

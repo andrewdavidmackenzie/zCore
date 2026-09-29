@@ -205,6 +205,7 @@ impl Syscall<'_> {
     /// Start execution on a thread, with explicit thread pointer and ABI register.
     ///
     /// This is the newer form of `zx_thread_start` (Fuchsia API level 31+).
+    #[allow(clippy::too_many_arguments)]
     /// The extra `tp` argument sets the thread pointer (fsbase on x86_64,
     /// tpidr_el0 on aarch64) before the thread begins executing.
     /// `abi_reg` is reserved for ABI-specific use (e.g. shadow call stack on aarch64).
