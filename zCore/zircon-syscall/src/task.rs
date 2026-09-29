@@ -1,4 +1,5 @@
 use core::convert::TryFrom;
+use hal_impl::context::UserContextField;
 use {super::*, zircon_object::task::*};
 
 impl Syscall<'_> {
@@ -198,6 +199,42 @@ impl Syscall<'_> {
             return Err(ZxError::BAD_STATE);
         }
         thread.start_with_entry(entry, stack, arg1, arg2, self.thread_fn)?;
+        Ok(())
+    }
+
+    /// Start execution on a thread, with explicit thread pointer and ABI register.
+    ///
+    /// This is the newer form of `zx_thread_start` (Fuchsia API level 31+).
+    /// The extra `tp` argument sets the thread pointer (fsbase on x86_64,
+    /// tpidr_el0 on aarch64) before the thread begins executing.
+    /// `abi_reg` is reserved for ABI-specific use (e.g. shadow call stack on aarch64).
+    pub fn sys_thread_start_regs(
+        &self,
+        handle_value: HandleValue,
+        entry: usize,
+        stack: usize,
+        arg1: usize,
+        arg2: usize,
+        tp: usize,
+        _abi_reg: usize,
+    ) -> ZxResult {
+        info!(
+            "thread.start_regs: handle={:#x?}, entry={:#x}, stack={:#x}, arg1={:#x}, arg2={:#x}, tp={:#x}",
+            handle_value, entry, stack, arg1, arg2, tp
+        );
+        let proc = self.thread.proc();
+        let thread = proc.get_object_with_rights::<Thread>(handle_value, Rights::MANAGE_THREAD)?;
+        if thread.proc().status() != Status::Running {
+            return Err(ZxError::BAD_STATE);
+        }
+        // Set up entry, stack, and args, then set the thread pointer.
+        thread.with_context(|ctx| {
+            ctx.setup_uspace(entry, stack, &[arg1, arg2, 0]);
+            if tp != 0 {
+                ctx.set_field(UserContextField::ThreadPointer, tp);
+            }
+        })?;
+        thread.start(self.thread_fn)?;
         Ok(())
     }
 
