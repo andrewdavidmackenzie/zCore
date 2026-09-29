@@ -242,9 +242,17 @@ impl VmAddressRegion {
         // When map_range is false (lazy/demand-paged mapping), allow the
         // mapping to extend past the VMO's current size. Pages are committed
         // on demand via page faults. This is standard behavior in Fuchsia
-        // Eagerly commit named VMOs (workaround for page fault handling).
-        // Lazy (unnamed, no permissions) mappings like Scudo's arena skip this.
-        let map_range = map_range || vmo.name() != "";
+        // Eagerly commit named VMOs UNLESS this is already a lazy mapping
+        // (caller passed map_range=false, e.g., ALLOW_FAULTS). Scudo names
+        // its VMOs ("scudo:reserved") but needs lazy commit.
+        let map_range = if map_range {
+            true // caller already requested eager
+        } else if flags.intersects(MMUFlags::RXW) {
+            // Has explicit permissions — check if VMO should be eager
+            vmo.name() != ""
+        } else {
+            false // no permissions = lazy/ALLOW_FAULTS, stay lazy
+        };
         // When eager (map_range), the VMO must cover the mapped range.
         // When lazy (ALLOW_FAULTS), the mapping can extend past the VMO.
         if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
@@ -552,6 +560,12 @@ impl VmAddressRegion {
                 Err(ZxError::INVALID_ARGS)
             }
         } else if len > self.size {
+            if len > 0x1_0000_0000 {
+                hal_impl::console::console_write_fmt(format_args!(
+                    "determine_offset: len={:#x} > vmar.size={:#x}\n",
+                    len, self.size
+                ));
+            }
             Err(ZxError::INVALID_ARGS)
         } else {
             match self.find_free_area(inner, 0, len, align) {

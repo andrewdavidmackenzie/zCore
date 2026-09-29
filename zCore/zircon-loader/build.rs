@@ -279,9 +279,10 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
         ("thread_self", VdsoFunc::ReturnConst(0xFFFF_0001)),
         // vmar_root_self and process_self are libc globals set by
         // ld.so.1 during processargs handling. NOT vDSO functions.
-        // NOTE: status_get_string is NOT a vDSO function.
-        // It's implemented in libc with a static string table.
-        // Do NOT put it in the vDSO or it will shadow libc's version.
+        // status_get_string: returns a pointer to a status string.
+        // Stub returns NULL — callers must handle NULL. This is needed
+        // because ld.so.1 calls it via PLT before lazy binding works.
+        ("status_get_string", VdsoFunc::ReturnConst(0)),
         ("utc_reference_swap", VdsoFunc::ReturnConst(0)),
         ("utc_reference_get", VdsoFunc::ReturnConst(0)),
         ("system_get_dcache_line_size", VdsoFunc::ReturnConst(64)),
