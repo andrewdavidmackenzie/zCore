@@ -4,7 +4,7 @@ use {
     zircon_object::{
         ipc::{Channel, MessagePacket},
         object::{obj_type, HandleInfo},
-        task::{Process, ThreadState},
+        task::ThreadState,
     },
 };
 
@@ -331,8 +331,51 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let handles = if args.wr_num_handles > 0 {
-            let dispositions = args.wr_handles.read_array(args.wr_num_handles as usize)?;
-            process_dispositions(proc, &dispositions, handle_value)?
+            // Process dispositions with per-handle result tracking,
+            // matching the Fuchsia ABI: each disposition's result field
+            // is set to OK or the specific error, and the entire array
+            // is written back to userspace.
+            let mut dispositions = args.wr_handles.read_array(args.wr_num_handles as usize)?;
+            let mut handles: Vec<Handle> = Vec::new();
+            let mut first_err: ZxResult = Ok(());
+            for disposition in dispositions.iter_mut() {
+                if let Ok((object, src_rights)) = proc.get_dyn_object_and_rights(disposition.handle)
+                {
+                    if let Err(e) = handle_check(disposition, &object, src_rights, handle_value) {
+                        disposition.result = e as _;
+                        if first_err.is_ok() {
+                            first_err = Err(e);
+                        }
+                    }
+                    let new_rights = if disposition.rights != Rights::SAME_RIGHTS.bits() {
+                        match Rights::from_bits(disposition.rights) {
+                            Some(r) => r,
+                            None => {
+                                disposition.result = ZxError::INVALID_ARGS as _;
+                                if first_err.is_ok() {
+                                    first_err = Err(ZxError::INVALID_ARGS);
+                                }
+                                src_rights
+                            }
+                        }
+                    } else {
+                        src_rights
+                    };
+                    let new_handle = Handle::new(object, new_rights);
+                    if disposition.op != ZX_HANDLE_OP_DUP {
+                        proc.remove_handle(disposition.handle).ok();
+                    }
+                    handles.push(new_handle);
+                } else {
+                    disposition.result = ZxError::BAD_HANDLE as _;
+                    if first_err.is_ok() {
+                        first_err = Err(ZxError::BAD_HANDLE);
+                    }
+                }
+            }
+            args.wr_handles.write_array(&dispositions)?;
+            first_err?;
+            handles
         } else {
             Vec::new()
         };
@@ -434,33 +477,6 @@ fn read_iovec_data(ptr: UserInPtr<u8>, count: u32) -> ZxResult<Vec<u8>> {
     Ok(data)
 }
 
-/// Process handle dispositions into a vector of Handles (fail-fast).
-///
-/// Used by `channel_call_etc_noretry`. Validates each disposition using
-/// `handle_check`, resolves rights, and removes/duplicates handles.
-/// Returns `Err` on the first invalid disposition.
-fn process_dispositions(
-    proc: &Process,
-    dispositions: &[HandleDisposition],
-    channel_handle: HandleValue,
-) -> ZxResult<Vec<Handle>> {
-    let mut handles = Vec::with_capacity(dispositions.len());
-    for disp in dispositions.iter() {
-        let (object, src_rights) = proc.get_dyn_object_and_rights(disp.handle)?;
-        handle_check(disp, &object, src_rights, channel_handle)?;
-        let new_rights = if disp.rights == Rights::SAME_RIGHTS.bits() {
-            src_rights
-        } else {
-            Rights::from_bits(disp.rights).ok_or(ZxError::INVALID_ARGS)?
-        };
-        if disp.op != ZX_HANDLE_OP_DUP {
-            proc.remove_handle(disp.handle)?;
-        }
-        handles.push(Handle::new(object, new_rights));
-    }
-    Ok(handles)
-}
-
 const ZX_HANDLE_OP_MOVE: u32 = 0;
 const ZX_HANDLE_OP_DUP: u32 = 1;
 const ZX_CHANNEL_WRITE_USE_IOVEC: u32 = 2;
@@ -492,7 +508,7 @@ pub struct ChannelCallArgs {
 #[derive(Debug)]
 pub struct ChannelCallEtcArgs {
     wr_bytes: UserInPtr<u8>,
-    wr_handles: UserInPtr<HandleDisposition>,
+    wr_handles: UserInOutPtr<HandleDisposition>,
     rd_bytes: UserOutPtr<u8>,
     rd_handles: UserOutPtr<HandleInfo>,
     wr_num_bytes: u32,
