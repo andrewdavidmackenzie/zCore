@@ -90,6 +90,7 @@ PID=$!
 # Wait for completion or timeout
 W=0
 completed=false
+saw_summary=false
 while [ "$W" -lt "$SESSION_TIMEOUT" ]; do
     if ! kill -0 "$PID" 2>/dev/null; then
         completed=true
@@ -101,6 +102,7 @@ while [ "$W" -lt "$SESSION_TIMEOUT" ]; do
         # Give it a moment to finish output
         sleep 5
         completed=true
+        saw_summary=true
         kill "$PID" 2>/dev/null || true
         break
     fi
@@ -142,6 +144,11 @@ if $timed_out; then
 fi
 if $test_failed; then
     echo "FAILED: some tests did not pass."
+    exit 1
+fi
+# Detect QEMU crashing before the test suite finishes.
+if $completed && ! $saw_summary && ! $timed_out; then
+    echo "FAILED: QEMU exited before test suite summary appeared (status $qemu_status)."
     exit 1
 fi
 # Don't treat our own kill of QEMU as a test failure.

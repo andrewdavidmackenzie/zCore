@@ -1327,6 +1327,11 @@ impl VmMappingInner {
         if index < self.flags.len() {
             self.flags[index] = flags;
         }
+        // TODO: For large lazy mappings (empty flags vec), protection changes
+        // are applied to the page table but not persisted here.  A later page
+        // fault will re-commit with `default_flags`, losing the change.
+        // Fix: track per-range overrides or update `default_flags` when the
+        // entire mapping is protected uniformly.
     }
 }
 

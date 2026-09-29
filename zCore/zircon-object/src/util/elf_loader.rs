@@ -438,10 +438,13 @@ fn find_reloc_from_dynamic(elf: &ElfFile) -> Result<DynRelocInfo, &'static str> 
         .ok_or("no PT_DYNAMIC")?;
     let dyn_offset = dyn_ph.offset() as usize;
     let dyn_size = dyn_ph.file_size() as usize;
-    if dyn_offset + dyn_size > elf.input.len() {
+    let dyn_end = dyn_offset
+        .checked_add(dyn_size)
+        .ok_or("PT_DYNAMIC offset+size overflow")?;
+    if dyn_end > elf.input.len() {
         return Err("PT_DYNAMIC segment exceeds ELF file bounds");
     }
-    let raw = &elf.input[dyn_offset..dyn_offset + dyn_size];
+    let raw = &elf.input[dyn_offset..dyn_end];
 
     let mut info = DynRelocInfo {
         rela_off: 0,
