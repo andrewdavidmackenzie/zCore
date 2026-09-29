@@ -347,6 +347,7 @@ async fn handler_user_trap(
                     Ok(())
                 }
                 Err(err) => {
+                    #[cfg_attr(not(target_arch = "x86_64"), allow(unused_variables))]
                     let ctx = thread.context_cloned();
                     error!(
                         "failed to handle page fault from user mode @ {:#x}({:?}): {:?}",
