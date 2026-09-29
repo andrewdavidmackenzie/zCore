@@ -265,7 +265,8 @@ impl VmAddressRegion {
                 return Err(ZxError::NO_MEMORY);
             }
         }
-        // TODO: Fix map_range bugs and remove this line
+        // Eagerly commit named VMOs (workaround for page fault handling).
+        // Lazy (unnamed, no permissions) mappings like Scudo's arena skip this.
         let map_range = map_range || vmo.name() != "";
         let mapping = VmMapping::new(
             addr,
@@ -563,11 +564,30 @@ impl VmAddressRegion {
             return false;
         }
         // brute force
-        if inner.children.iter().any(|vmar| vmar.overlap(begin, end)) {
-            return false;
+        for vmar in inner.children.iter() {
+            if vmar.overlap(begin, end) {
+                if len > 0x1_0000_0000 {
+                    warn!(
+                        "test_map: offset={:#x} rejected by child vmar addr={:#x} end={:#x}",
+                        offset,
+                        vmar.addr,
+                        vmar.end_addr()
+                    );
+                }
+                return false;
+            }
         }
-        if inner.mappings.iter().any(|map| map.overlap(begin, end)) {
-            return false;
+        for map in inner.mappings.iter() {
+            if map.overlap(begin, end) {
+                if len > 0x1_0000_0000 {
+                    let mi = map.inner.lock();
+                    warn!(
+                        "test_map: offset={:#x} rejected by mapping addr={:#x} size={:#x}",
+                        offset, mi.addr, mi.size
+                    );
+                }
+                return false;
+            }
         }
         true
     }
@@ -585,9 +605,32 @@ impl VmAddressRegion {
         debug_assert!(check_aligned(len, align));
         // brute force:
         // try each area's end address as the start
-        core::iter::once(offset_hint)
+        let candidates: alloc::vec::Vec<usize> = core::iter::once(offset_hint)
             .chain(inner.children.iter().map(|map| map.end_addr() - self.addr))
             .chain(inner.mappings.iter().map(|map| map.end_addr() - self.addr))
+            .collect();
+        if len > 0x1_0000_0000 {
+            warn!(
+                "find_free_area: vmar addr={:#x} size={:#x}, looking for {:#x}, {} candidates",
+                self.addr,
+                self.size,
+                len,
+                candidates.len()
+            );
+            for &c in &candidates {
+                let end = self.addr + c + len;
+                let vmar_end = self.addr + self.size;
+                let fits = end <= vmar_end;
+                let child_overlap = inner.children.iter().any(|v| v.overlap(self.addr + c, end));
+                let map_overlap = inner.mappings.iter().any(|m| m.overlap(self.addr + c, end));
+                warn!(
+                    "  candidate offset={:#x} end={:#x}: fits={} child_overlap={} map_overlap={}",
+                    c, end, fits, child_overlap, map_overlap
+                );
+            }
+        }
+        candidates
+            .into_iter()
             .find(|&offset| self.test_map(inner, offset, len, align))
     }
 
@@ -841,8 +884,11 @@ pub struct VmMapping {
 
 #[derive(Debug, Clone)]
 struct VmMappingInner {
-    /// The actual flags used in the mapping of each page
+    /// The actual flags used in the mapping of each page.
+    /// Empty for large lazy mappings (>256 MB) — use `default_flags` instead.
     flags: Vec<MMUFlags>,
+    /// Default flags for pages when per-page tracking isn't available.
+    default_flags: MMUFlags,
     addr: VirtAddr,
     size: usize,
     vmo_offset: usize,
@@ -896,6 +942,7 @@ impl VmMapping {
         let mapping = Arc::new(VmMapping {
             inner: Mutex::new(VmMappingInner {
                 flags: per_page_flags,
+                default_flags: flags,
                 addr,
                 size,
                 vmo_offset,
@@ -1116,12 +1163,16 @@ impl VmMapping {
         let (vmo_offset, mut flags) = {
             let inner = self.inner.lock();
             let offset = vaddr - inner.addr;
-            (
-                offset + inner.vmo_offset,
-                inner.page_flags(offset / PAGE_SIZE),
-            )
+            let pf = inner.page_flags(offset / PAGE_SIZE);
+            // For lazy mappings (ALLOW_FAULTS), the per-page flags may only
+            // be USER. Use the mapping's permissions to determine access.
+            let effective = if pf == MMUFlags::USER {
+                self.permissions | MMUFlags::USER
+            } else {
+                pf
+            };
+            (offset + inner.vmo_offset, effective)
         };
-        // error!("page fault: addr = {:x}, access_flag = {:?}, flags = {:?}", vaddr, access_flags, flags);
         if !flags.contains(access_flags) {
             return Err(ZxError::ACCESS_DENIED);
         }
@@ -1208,12 +1259,12 @@ impl VmMappingInner {
 
     /// Get the flags for a page at the given index.
     /// For large lazy mappings where per-page flags aren't allocated,
-    /// returns USER flags (the default for lazy mappings).
+    /// returns the mapping's default flags.
     fn page_flags(&self, index: usize) -> MMUFlags {
         if index < self.flags.len() {
             self.flags[index]
         } else {
-            MMUFlags::USER
+            self.default_flags
         }
     }
 
