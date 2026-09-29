@@ -50,12 +50,8 @@ impl Syscall<'_> {
     /// For backward compatibility with petal tests (which may pass an
     /// output pointer as arg0), we also write the value to the pointer
     /// if it is non-null.
-    pub fn sys_clock_get_monotonic_via_kernel(&self, mut out: UserOutPtr<i64>) -> i64 {
-        let now = timer_now().as_nanos() as i64;
-        if !out.is_null() {
-            out.write(now).ok();
-        }
-        now
+    pub fn sys_clock_get_monotonic_via_kernel(&self) -> i64 {
+        timer_now().as_nanos() as i64
     }
 
     /// Return the current tick count.
@@ -66,12 +62,8 @@ impl Syscall<'_> {
     ///
     /// For simplicity we return nanoseconds directly, which is correct
     /// when `ticks_per_second == 1_000_000_000`.
-    pub fn sys_ticks_get_via_kernel(&self, mut out: UserOutPtr<i64>) -> i64 {
-        let now = hal_impl::timer::timer_now().as_nanos() as i64;
-        if !out.is_null() {
-            out.write(now).ok();
-        }
-        now
+    pub fn sys_ticks_get_via_kernel(&self) -> i64 {
+        hal_impl::timer::timer_now().as_nanos() as i64
     }
 
     /// Acquire the current time.
