@@ -79,9 +79,10 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
 ### Current status (phase 9)
-- 177/1776 tests pass, 14 suites complete
-- Hangs at `FutexTest.RequeueUnqueuedOnTimeout` (futex timeout after
-  requeue doesn't fire — async executor scheduling issue)
+- 183/1776 tests pass, 16 suites complete
+- Hangs at `FutexTest.WaitInvalidOwner` — test calls `futex_wait`
+  with `new_futex_owner = ZX_HANDLE_THREAD_SELF` and nobody wakes
+  the futex. Need to determine whether Fuchsia rejects self-ownership.
 - All tests run sequentially; a hang blocks everything after it
 
 ### Key notes
