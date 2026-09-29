@@ -285,15 +285,17 @@ pub fn spawn_process(
     const fn pa_hnd(t: u32, a: u32) -> u32 {
         (t & 0xFFFF) | ((a & 0xFFFF) << 16)
     }
+    // Fuchsia processargs handle type constants.
+    // These must match the version of ld.so.1 in prebuilt/.
     const PA_PROC_SELF: u32 = 0x01;
     const PA_THREAD_SELF: u32 = 0x02;
     const PA_JOB_DEFAULT: u32 = 0x03;
-    const PA_VMAR_ROOT: u32 = 0x04;
-    const PA_VMAR_LOADED: u32 = 0x05;
     const PA_LDSVC_LOADER: u32 = 0x10;
     const PA_VMO_VDSO: u32 = 0x11;
     const PA_VMO_EXECUTABLE: u32 = 0x14;
-    const PA_RESOURCE: u32 = 0x3F;
+    const PA_RESOURCE: u32 = 0x15;
+    const PA_VMAR_ROOT: u32 = 0x25;
+    const PA_VMAR_LOADED: u32 = 0x26;
 
     let proc_handle = Handle::new(proc.clone(), Rights::DEFAULT_PROCESS);
     let thread_handle = Handle::new(thread.clone(), Rights::DEFAULT_THREAD);
