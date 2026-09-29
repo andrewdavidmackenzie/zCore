@@ -246,23 +246,15 @@ pub fn spawn_process(
     let stack_base = vmar.map(None, stack_vmo, 0, stack_size, stack_flags)?;
     let sp = stack_base + stack_size;
 
-    // vDSO: map syscall trampoline code (RX) + data page (R).
-    // Uses Fuchsia syscall numbering for both petal and Fuchsia binaries.
-    let vdso_code_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
+    // vDSO: map entire ELF .so + data page as a single contiguous RX block.
+    // This allows ld.so.1 to parse ELF headers at the base address.
+    let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
     let vdso_code_addr = vmar.map(
         None,
         config.vdso_vmo.clone(),
         0,
         config.vdso_code_size,
-        vdso_code_flags,
-    )?;
-    let vdso_data_flags = MMUFlags::READ | MMUFlags::USER;
-    let _vdso_data_addr = vmar.map(
-        None,
-        config.vdso_vmo.clone(),
-        config.vdso_code_size,
-        PAGE_SIZE,
-        vdso_data_flags,
+        vdso_flags,
     )?;
 
     // Bootstrap channel — construct a Fuchsia processargs message.
