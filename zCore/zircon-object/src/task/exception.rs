@@ -501,6 +501,7 @@ enum ExceptionateIteratorState {
     Debug(bool),
     Thread,
     Process,
+    JobDebug(Arc<Job>),
     Job(Arc<Job>),
     Finished,
 }
@@ -522,12 +523,12 @@ impl<'a> Iterator for ExceptionateIterator<'a> {
                 ExceptionateIteratorState::Debug(second_chance) => {
                     if *second_chance && !self.exception.inner.lock().second_chance {
                         self.state =
-                            ExceptionateIteratorState::Job(self.exception.thread.proc().job());
+                            ExceptionateIteratorState::JobDebug(self.exception.thread.proc().job());
                         continue;
                     }
                     let proc = self.exception.thread.proc();
                     self.state = if *second_chance {
-                        ExceptionateIteratorState::Job(self.exception.thread.proc().job())
+                        ExceptionateIteratorState::JobDebug(self.exception.thread.proc().job())
                     } else {
                         ExceptionateIteratorState::Thread
                     };
@@ -542,12 +543,18 @@ impl<'a> Iterator for ExceptionateIterator<'a> {
                     self.state = ExceptionateIteratorState::Debug(true);
                     return Some(proc.exceptionate());
                 }
-                ExceptionateIteratorState::Job(job) => {
+                ExceptionateIteratorState::JobDebug(ref job) => {
+                    let job = job.clone();
+                    self.state = ExceptionateIteratorState::Job(job.clone());
+                    return Some(job.debug_exceptionate());
+                }
+                ExceptionateIteratorState::Job(ref job) => {
+                    let job = job.clone();
                     let parent = job.parent();
                     let result = job.exceptionate();
                     self.state = parent.map_or(
                         ExceptionateIteratorState::Finished,
-                        ExceptionateIteratorState::Job,
+                        ExceptionateIteratorState::JobDebug,
                     );
                     return Some(result);
                 }
@@ -596,7 +603,9 @@ mod tests {
             proc.debug_exceptionate(),
             thread.exceptionate(),
             proc.exceptionate(),
+            job.debug_exceptionate(),
             job.exceptionate(),
+            parent_job.debug_exceptionate(),
             parent_job.exceptionate(),
         ];
         assert_eq!(actual.len(), expected.len());
@@ -620,7 +629,9 @@ mod tests {
             thread.exceptionate(),
             proc.exceptionate(),
             proc.debug_exceptionate(),
+            job.debug_exceptionate(),
             job.exceptionate(),
+            parent_job.debug_exceptionate(),
             parent_job.exceptionate(),
         ];
         assert_eq!(actual.len(), expected.len());
