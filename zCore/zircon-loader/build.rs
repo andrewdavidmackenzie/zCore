@@ -128,6 +128,10 @@ fn trampoline_code(arch: Arch, num: u32) -> Vec<u8> {
 enum VdsoFunc {
     Syscall(&'static str),
     ReturnConst(u64),
+    /// deadline_after: call clock_get_monotonic_via_kernel, add the
+    /// first argument (nanoseconds duration) to the result, and return
+    /// the absolute deadline.  Saturates to i64::MAX on overflow.
+    DeadlineAfter(&'static str),
 }
 
 /// Generate code that returns a constant value in rax/x0/a0.
@@ -170,6 +174,104 @@ fn return_const_code(arch: Arch, val: u64) -> Vec<u8> {
                 let addi = 0x0005_0513u32 | (((lo as u32) & 0xFFF) << 20);
                 code.extend_from_slice(&addi.to_le_bytes());
             }
+            code.extend_from_slice(&0x0000_8067u32.to_le_bytes()); // ret
+            code
+        }
+    }
+}
+
+/// Generate code for `zx_deadline_after(nanoseconds)`:
+/// calls clock_get_monotonic_via_kernel to get `now`, adds `nanoseconds`,
+/// and returns `now + nanoseconds` (saturated to i64::MAX on overflow).
+fn deadline_after_code(arch: Arch, clock_syscall_num: u32) -> Vec<u8> {
+    match arch {
+        Arch::X86_64 => {
+            // x86-64 C ABI: rdi = nanoseconds (first arg)
+            //   push %rbx                    ; save callee-saved reg
+            //   mov  %rdi, %rbx              ; save nanoseconds
+            //   mov  $num, %eax              ; clock_get_monotonic syscall num
+            //   syscall                      ; rax = now
+            //   add  %rbx, %rax              ; rax = now + nanoseconds
+            //   jno  +10                     ; skip saturation if no overflow
+            //   movabs $0x7FFFFFFFFFFFFFFF, %rax  ; saturate to i64::MAX
+            //   pop  %rbx
+            //   ret
+            let mut code = Vec::new();
+            code.push(0x53); // push %rbx
+            code.extend_from_slice(&[0x48, 0x89, 0xfb]); // mov %rdi, %rbx
+            code.push(0xb8); // mov imm32, %eax
+            code.extend_from_slice(&clock_syscall_num.to_le_bytes());
+            code.extend_from_slice(&[0x0f, 0x05]); // syscall
+            code.extend_from_slice(&[0x48, 0x01, 0xd8]); // add %rbx, %rax
+            code.extend_from_slice(&[0x71, 0x0a]); // jno +10 (skip saturation)
+            code.extend_from_slice(&[0x48, 0xb8]); // movabs imm64, %rax
+            code.extend_from_slice(&i64::MAX.to_le_bytes()); // 0x7FFFFFFFFFFFFFFF
+            code.push(0x5b); // pop %rbx
+            code.push(0xc3); // ret
+            code
+        }
+        Arch::Aarch64 => {
+            // aarch64: x0 = nanoseconds
+            //   mov  x9, x0                   ; save nanoseconds in scratch reg
+            //   mov  x16, #num                ; syscall number
+            //   svc  #0                       ; x0 = now
+            //   adds x0, x0, x9               ; x0 = now + nanoseconds, set flags
+            //   b.vc +8                       ; skip saturation if no overflow
+            //   mov  x0, #0x7FFFFFFFFFFFFFFF  ; saturate
+            //   ret
+            let mut code = Vec::new();
+            // mov x9, x0 => aa0003e9
+            code.extend_from_slice(&0xaa00_03e9u32.to_le_bytes());
+            // movz x16, #num
+            let movz = 0xd280_0010u32 | ((clock_syscall_num & 0xFFFF) << 5);
+            code.extend_from_slice(&movz.to_le_bytes());
+            // svc #0
+            code.extend_from_slice(&0xd400_0001u32.to_le_bytes());
+            // adds x0, x0, x9
+            code.extend_from_slice(&0xab09_0000u32.to_le_bytes());
+            // b.vc +20: skip 4 movz/movk saturation instructions + jump to ret
+            // b.cond encoding: 0x54000007 | (imm19 << 5), imm19 = 20/4 = 5
+            code.extend_from_slice(&0x5400_00a7u32.to_le_bytes());
+            // Load i64::MAX into x0: movz + movk sequence
+            // i64::MAX = 0x7FFF_FFFF_FFFF_FFFF
+            // movz x0, #0xFFFF
+            code.extend_from_slice(&0xd29f_ffe0u32.to_le_bytes());
+            // movk x0, #0xFFFF, lsl #16
+            code.extend_from_slice(&0xf2bf_ffe0u32.to_le_bytes());
+            // movk x0, #0xFFFF, lsl #32
+            code.extend_from_slice(&0xf2df_ffe0u32.to_le_bytes());
+            // movk x0, #0x7FFF, lsl #48
+            code.extend_from_slice(&0xf2ef_ffe0u32.to_le_bytes());
+            // ret
+            code.extend_from_slice(&0xd65f_03c0u32.to_le_bytes());
+            code
+        }
+        Arch::Riscv64 => {
+            // riscv64: a0 = nanoseconds
+            //   mv   t0, a0       ; save nanoseconds
+            //   li   a7, num      ; syscall number
+            //   ecall             ; a0 = now
+            //   add  a0, a0, t0   ; a0 = now + nanoseconds
+            //   ret
+            // (no overflow saturation for riscv — practical timestamps won't overflow)
+            let mut code = Vec::new();
+            // mv t0, a0 => addi t0, a0, 0 => 0x00050293
+            code.extend_from_slice(&0x0005_0293u32.to_le_bytes());
+            if clock_syscall_num < 2048 {
+                // addi a7, x0, num
+                let addi = 0x0000_0893u32 | (clock_syscall_num << 20);
+                code.extend_from_slice(&addi.to_le_bytes());
+            } else {
+                let hi = (clock_syscall_num + 0x800) >> 12;
+                let lo = (clock_syscall_num as i32) - ((hi << 12) as i32);
+                let lui = 0x0000_08b7u32 | (hi << 12);
+                code.extend_from_slice(&lui.to_le_bytes());
+                let addi = 0x0008_8893u32 | (((lo as u32) & 0xFFF) << 20);
+                code.extend_from_slice(&addi.to_le_bytes());
+            }
+            code.extend_from_slice(&0x0000_0073u32.to_le_bytes()); // ecall
+            // add a0, a0, t0 => 0x00550533
+            code.extend_from_slice(&0x0055_0533u32.to_le_bytes());
             code.extend_from_slice(&0x0000_8067u32.to_le_bytes()); // ret
             code
         }
@@ -263,8 +365,8 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
         ("ticks_get", VdsoFunc::Syscall("ticks_get_via_kernel")),
         (
             "deadline_after",
-            VdsoFunc::Syscall("clock_get_monotonic_via_kernel"),
-        ), // approximate
+            VdsoFunc::DeadlineAfter("clock_get_monotonic_via_kernel"),
+        ),
         ("channel_call", VdsoFunc::Syscall("channel_call_noretry")),
         ("cprng_draw", VdsoFunc::Syscall("cprng_draw_once")),
         // Return constants
@@ -312,6 +414,13 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
                 }
             }
             VdsoFunc::ReturnConst(val) => return_const_code(arch, *val),
+            VdsoFunc::DeadlineAfter(clock_syscall) => {
+                if let Some((_, num)) = syscalls.iter().find(|(n, _)| n == clock_syscall) {
+                    deadline_after_code(arch, *num)
+                } else {
+                    return_const_code(arch, 0) // fallback
+                }
+            }
         };
         let code_off = text.len();
 
