@@ -164,3 +164,37 @@ As of PR #467:
 - Standalone test init: `src/zircon/testing/standalone-test/standalone-init.cc`
 - Test harness: `src/zircon/testing/standalone-test/zxtest-main.cc`
 - Scudo on Fuchsia: `third_party/scudo/src/mem_map_fuchsia.cpp`
+
+## Known issues being debugged
+
+### Page fault writing to executable rx segment (0x6de1e0)
+
+After Scudo initializes and the test framework starts, a page fault occurs
+writing to `0x6de1e0`. The address appears to be in the executable's rx
+(read-execute) segment. The write is from libc code (rip in ld.so.1).
+
+This may be caused by:
+1. Scudo's `SPECIFIC_OVERWRITE` mapping not properly replacing the old
+   mapping's page table permissions
+2. The `VmMapping::cut` split creating a fragment with wrong permissions
+3. An address space layout issue from `USER_ASPACE_BASE = 0x200000`
+
+The backtrace shows:
+```
+rip=0x3bcbd2 (libc offset 0xbcbd2)
+ret=0x6241d9 (executable)
+ret=0x57b552 (executable)
+ret=0x57aa15 (executable)
+```
+
+### What the test framework needs
+
+The standalone test framework (`zxtest-main.cc`) requires:
+- [x] `PA_RESOURCE` (0x3F) — root resource handle
+- [x] `PA_SYSTEM_RESOURCE` (0x54) — system resource handle
+- [x] `PA_MMIO_RESOURCE` (0x50) — MMIO resource handle
+- [x] `PA_IRQ_RESOURCE` (0x51) — IRQ resource handle
+- [x] `PA_VMO_BOOTDATA` — ZBI VMO named "zbi" (for kernel cmdline / test options)
+- [ ] `PA_VMO_BOOTDATA` — VMO named "boot-options.txt" (for boot options)
+- [ ] Working `RESOURCE_CREATE` for creating sub-resources
+- [ ] Working Scudo allocator (VMAR_MAP with SPECIFIC_OVERWRITE + ALLOW_FAULTS)
