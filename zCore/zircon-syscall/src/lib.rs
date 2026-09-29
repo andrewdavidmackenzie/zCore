@@ -18,7 +18,7 @@ use futures::pin_mut;
 use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use zircon_object::object::{wait_signal_many, KernelObject, KoID, Rights, Signal};
 use zircon_object::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
-use zircon_object::task::{CurrentThread, ThreadFn};
+use zircon_object::task::{CurrentThread, Thread, ThreadFn};
 use zircon_object::{ZxError, ZxResult};
 
 use self::consts::SyscallType as Sys;
@@ -53,9 +53,72 @@ mod time;
 mod vmar;
 mod vmo;
 
+/// Zircon pseudo-handle for the current thread (`zx_thread_self()`).
+const ZX_PSEUDO_HANDLE_THREAD_SELF: HandleValue = 0xFFFF_0001;
+/// Zircon pseudo-handle for the current process (`zx_process_self()`).
+const ZX_PSEUDO_HANDLE_PROCESS_SELF: HandleValue = 0xFFFF_0002;
+/// Zircon pseudo-handle for the root VMAR (`zx_vmar_root_self()`).
+const ZX_PSEUDO_HANDLE_VMAR_ROOT_SELF: HandleValue = 0xFFFF_0003;
+
 pub struct Syscall<'a> {
     pub thread: &'a CurrentThread,
     pub thread_fn: ThreadFn,
+}
+
+impl Syscall<'_> {
+    /// Resolve a handle value that may be a pseudo-handle.
+    ///
+    /// Fuchsia defines pseudo-handles for the current thread, process, and
+    /// root VMAR.  These are NOT in the process handle table — they are
+    /// well-known constants that the kernel maps to the caller's objects.
+    /// Returns `None` if the handle is not a pseudo-handle (use normal lookup).
+    /// Resolve a handle value that may be a pseudo-handle, returning the
+    /// kernel object as a trait object.
+    fn resolve_pseudo_handle(&self, handle_value: HandleValue) -> Option<Arc<dyn KernelObject>> {
+        match handle_value {
+            ZX_PSEUDO_HANDLE_THREAD_SELF => Some(self.thread.inner()),
+            ZX_PSEUDO_HANDLE_PROCESS_SELF => Some(self.thread.proc().clone()),
+            ZX_PSEUDO_HANDLE_VMAR_ROOT_SELF => Some(self.thread.proc().vmar()),
+            _ => None,
+        }
+    }
+
+    /// Like `proc.get_dyn_object_with_rights`, but also handles pseudo-handles.
+    fn get_object_with_pseudo(
+        &self,
+        handle_value: HandleValue,
+        rights: Rights,
+    ) -> ZxResult<Arc<dyn KernelObject>> {
+        if let Some(obj) = self.resolve_pseudo_handle(handle_value) {
+            let _ = rights; // Pseudo-handles have all rights.
+            Ok(obj)
+        } else {
+            self.thread
+                .proc()
+                .get_dyn_object_with_rights(handle_value, rights)
+        }
+    }
+
+    /// Like `proc.get_dyn_object_and_rights`, but also handles pseudo-handles.
+    fn get_object_and_rights_with_pseudo(
+        &self,
+        handle_value: HandleValue,
+    ) -> ZxResult<(Arc<dyn KernelObject>, Rights)> {
+        if let Some(obj) = self.resolve_pseudo_handle(handle_value) {
+            Ok((obj, Rights::all()))
+        } else {
+            self.thread.proc().get_dyn_object_and_rights(handle_value)
+        }
+    }
+
+    /// Resolve a thread handle that may be the pseudo-handle for the current thread.
+    fn get_thread_with_pseudo(&self, handle_value: HandleValue) -> ZxResult<Arc<Thread>> {
+        if handle_value == ZX_PSEUDO_HANDLE_THREAD_SELF {
+            Ok(self.thread.inner())
+        } else {
+            self.thread.proc().get_object::<Thread>(handle_value)
+        }
+    }
 }
 
 impl Syscall<'_> {

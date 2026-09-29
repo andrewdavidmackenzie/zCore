@@ -1,7 +1,4 @@
-use {
-    super::*,
-    zircon_object::task::{Thread, ThreadState},
-};
+use {super::*, zircon_object::task::ThreadState};
 
 impl Syscall<'_> {
     /// Wait on a futex.
@@ -24,7 +21,7 @@ impl Syscall<'_> {
         let new_owner = if new_futex_owner == INVALID_HANDLE {
             None
         } else {
-            Some(proc.get_object::<Thread>(new_futex_owner)?)
+            Some(self.get_thread_with_pseudo(new_futex_owner)?)
         };
         let future = futex.wait_with_owner(current_value, Some(self.thread.inner()), new_owner);
         self.thread
@@ -44,7 +41,7 @@ impl Syscall<'_> {
         new_requeue_owner: HandleValue,
     ) -> ZxResult {
         info!(
-            "futex.requeue: value_ptr={:?}, wake_count={:#x}, current_value={:#x}, requeue_ptr={:?}, requeue_count={:#x}, new_requeue_owner={:?}",
+            "futex.requeue: value_ptr={:?}, wake_count={:#x}, current_value={:#x}, requeue_ptr={:?}, requeue_count={:#x}, new_requeue_owner={:#x}",
             value_ptr, wake_count, current_value, requeue_ptr, requeue_count, new_requeue_owner
         );
         if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {
@@ -57,7 +54,7 @@ impl Syscall<'_> {
         let new_requeue_owner = if new_requeue_owner == INVALID_HANDLE {
             None
         } else {
-            Some(proc.get_object::<Thread>(new_requeue_owner)?)
+            Some(self.get_thread_with_pseudo(new_requeue_owner)?)
         };
         let wake_futex = proc.get_futex(value_ptr.as_addr());
         let requeue_futex = proc.get_futex(requeue_ptr.as_addr());
@@ -111,7 +108,7 @@ impl Syscall<'_> {
         let new_requeue_owner = if new_requeue_owner == INVALID_HANDLE {
             None
         } else {
-            Some(proc.get_object::<Thread>(new_requeue_owner)?)
+            Some(self.get_thread_with_pseudo(new_requeue_owner)?)
         };
         let wake_futex = proc.get_futex(value_ptr.as_addr());
         let requeue_futex = proc.get_futex(requeue_ptr.as_addr());

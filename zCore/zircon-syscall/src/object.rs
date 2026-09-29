@@ -41,7 +41,7 @@ impl Syscall<'_> {
             info_ptr.write(vdso_base)?;
             return Ok(());
         }
-        let object = proc.get_dyn_object_with_rights(handle_value, Rights::GET_PROPERTY)?;
+        let object = self.get_object_with_pseudo(handle_value, Rights::GET_PROPERTY)?;
         match property {
             Property::Name => {
                 if buffer_size < MAX_NAME_LEN {
@@ -133,7 +133,7 @@ impl Syscall<'_> {
             handle_value, property, buffer, buffer_size
         );
         let proc = self.thread.proc();
-        let object = proc.get_dyn_object_with_rights(handle_value, Rights::SET_PROPERTY)?;
+        let object = self.get_object_with_pseudo(handle_value, Rights::SET_PROPERTY)?;
         match property {
             Property::Name => {
                 let length = buffer_size.min(MAX_NAME_LEN);
@@ -215,7 +215,7 @@ impl Syscall<'_> {
             handle, signals, deadline, observed
         );
         let proc = self.thread.proc();
-        let object = proc.get_dyn_object_with_rights(handle, Rights::WAIT)?;
+        let object = self.get_object_with_pseudo(handle, Rights::WAIT)?;
         let cancel_token = proc.get_cancel_token(handle)?;
         let future = object.wait_signal(signals);
         let signal = self
@@ -258,7 +258,7 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         match topic {
             Topic::HandleValid => {
-                let _ = proc.get_dyn_object_with_rights(handle, Rights::empty())?;
+                let _ = self.get_object_with_pseudo(handle, Rights::empty())?;
             }
             Topic::Process => {
                 let mut info_ptr = UserOutPtr::<ProcessInfo>::from_addr_size(buffer, buffer_size)?;
@@ -292,7 +292,7 @@ impl Syscall<'_> {
             }
             Topic::HandleCount => {
                 let mut info_ptr = UserOutPtr::<u32>::from_addr_size(buffer, buffer_size)?;
-                let object = proc.get_dyn_object_with_rights(handle, Rights::INSPECT)?;
+                let object = self.get_object_with_pseudo(handle, Rights::INSPECT)?;
                 info_ptr.write(object.handle_count())?;
             }
             Topic::Job => {
@@ -418,7 +418,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        let object = proc.get_dyn_object_with_rights(handle_value, Rights::WAIT)?;
+        let object = self.get_object_with_pseudo(handle_value, Rights::WAIT)?;
         let port = proc.get_object_with_rights::<Port>(port_handle_value, Rights::WRITE)?;
         if options & ZX_WAIT_ASYNC_EDGE != 0 {
             object.send_signal_to_port_async_edge(signals, &port, key);
@@ -441,8 +441,7 @@ impl Syscall<'_> {
             "object.signal: handle_value={:#x}, clear_mask={:#x}, set_mask={:#x}",
             handle_value, clear_mask, set_mask
         );
-        let proc = self.thread.proc();
-        let object = proc.get_dyn_object_with_rights(handle_value, Rights::SIGNAL)?;
+        let object = self.get_object_with_pseudo(handle_value, Rights::SIGNAL)?;
         let allowed_signals = object.allowed_signals();
         info!("{:?} allowed: {:?}", object, allowed_signals);
         let clear_signal = Signal::verify_user_signal(allowed_signals, clear_mask)?;
@@ -463,10 +462,9 @@ impl Syscall<'_> {
         }
         let mut items = user_items.read_array(count as usize)?;
         info!("user_items: {:#x?}, deadline: {:?}", user_items, deadline);
-        let proc = self.thread.proc();
         let mut waiters = Vec::with_capacity(count as usize);
         for item in items.iter() {
-            let object = proc.get_dyn_object_with_rights(item.handle, Rights::WAIT)?;
+            let object = self.get_object_with_pseudo(item.handle, Rights::WAIT)?;
             waiters.push((object, item.wait_for));
         }
         let future = wait_signal_many(&waiters);

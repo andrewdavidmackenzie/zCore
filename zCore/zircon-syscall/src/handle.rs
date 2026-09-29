@@ -16,6 +16,17 @@ impl Syscall<'_> {
             handle_value, rights
         );
         let proc = self.thread.proc();
+        // Handle pseudo-handles: create a real handle from the pseudo-handle object.
+        if let Some(obj) = self.resolve_pseudo_handle(handle_value) {
+            let dup_rights = if rights.contains(Rights::SAME_RIGHTS) {
+                Rights::all()
+            } else {
+                rights
+            };
+            let new_value = proc.add_handle(Handle::new(obj, dup_rights));
+            new_handle_value.write(new_value)?;
+            return Ok(());
+        }
         let new_value = proc.dup_handle_operating_rights(handle_value, |handle_rights| {
             if !handle_rights.contains(Rights::DUPLICATE) {
                 return Err(ZxError::ACCESS_DENIED);
@@ -38,6 +49,10 @@ impl Syscall<'_> {
         info!("handle.close: handle={:?}", handle);
         if handle == INVALID_HANDLE {
             return Ok(());
+        }
+        // Pseudo-handles cannot be closed (Fuchsia returns BAD_HANDLE).
+        if self.resolve_pseudo_handle(handle).is_some() {
+            return Err(ZxError::BAD_HANDLE);
         }
         let proc = self.thread.proc();
         proc.remove_handle(handle)?;

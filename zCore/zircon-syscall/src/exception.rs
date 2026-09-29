@@ -13,7 +13,7 @@ impl Syscall<'_> {
             task, option, out
         );
         let proc = self.thread.proc();
-        let (task, rights) = proc.get_dyn_object_and_rights(task)?;
+        let (task, rights) = self.get_object_and_rights_with_pseudo(task)?;
         if !rights.contains(
             Rights::INSPECT | Rights::DUPLICATE | Rights::TRANSFER | Rights::MANAGE_THREAD,
         ) {
