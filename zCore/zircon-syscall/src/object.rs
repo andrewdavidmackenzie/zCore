@@ -250,7 +250,10 @@ impl Syscall<'_> {
         mut actual: UserOutPtr<usize>,
         mut avail: UserOutPtr<usize>,
     ) -> ZxResult {
-        let topic = Topic::try_from(topic).map_err(|_| ZxError::INVALID_ARGS)?;
+        // Fuchsia info topics use low bits for the topic ID and upper bits
+        // for flags (e.g. bit 28 = requires specific object state).  Strip
+        // the flags before converting to the Topic enum.
+        let topic = Topic::try_from(topic & 0xFFFF).map_err(|_| ZxError::INVALID_ARGS)?;
         info!(
             "object.get_info: handle={:#x?}, topic={:?}, buffer=({:#x}; {:#x})",
             handle, topic, buffer, buffer_size,
