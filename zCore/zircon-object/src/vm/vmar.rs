@@ -261,7 +261,16 @@ impl VmAddressRegion {
         }
         let mut guard = self.inner.lock();
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
-        let offset = self.determine_offset(inner, vmar_offset, len, PAGE_SIZE)?;
+        let offset = if overwrite {
+            // SPECIFIC_OVERWRITE: skip test_map, overlaps will be unmapped below
+            match vmar_offset {
+                Some(off) if check_aligned(off, PAGE_SIZE) => off,
+                Some(_) => return Err(ZxError::INVALID_ARGS),
+                None => return Err(ZxError::INVALID_ARGS),
+            }
+        } else {
+            self.determine_offset(inner, vmar_offset, len, PAGE_SIZE)?
+        };
         let addr = self.addr + offset;
         let mut flags = flags;
         // if vmo != 0
