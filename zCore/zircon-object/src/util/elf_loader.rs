@@ -318,6 +318,46 @@ impl ElfExt for ElfFile<'_> {
                     rel_applied, count
                 );
             }
+
+            // Apply JMPREL (PLT) relocations.
+            // For the dynamic linker (ld.so.1), PLT GOT entries contain
+            // unrelocated stub addresses that need base adjustment.
+            // Without this, PLT calls jump to unmapped addresses.
+            if info.jmprel_sz > 0 && info.rel_ent > 0 {
+                let count = info.jmprel_sz as usize / info.rel_ent as usize;
+                let mut plt_applied = 0usize;
+                for i in 0..count {
+                    let off = info.jmprel_off as usize + i * info.rel_ent as usize;
+                    if off + 16 > self.input.len() {
+                        break;
+                    }
+                    let r_offset = u64::from_le_bytes(self.input[off..off + 8].try_into().unwrap());
+                    let r_info =
+                        u64::from_le_bytes(self.input[off + 8..off + 16].try_into().unwrap());
+                    let r_type = (r_info & 0xFFFF_FFFF) as u32;
+                    // R_X86_64_JUMP_SLOT = 7, R_AARCH64_JUMP_SLOT = 1026
+                    if r_type == 7 || r_type == 1026 {
+                        let vaddr = r_offset as usize;
+                        // Read the current GOT value (unrelocated PLT stub addr)
+                        let mut buf = [0u8; 8];
+                        if vmar.read_memory(base + vaddr, &mut buf).is_ok() {
+                            let cur = usize::from_le_bytes(buf);
+                            // Only adjust if it looks like an unrelocated address
+                            // (below the base, pointing into the ELF's virtual range)
+                            if cur < base && cur > 0 {
+                                let value = base + cur;
+                                vmar.write_memory(base + vaddr, &value.to_ne_bytes())
+                                    .map_err(|_| "JMPREL write failed")?;
+                                plt_applied += 1;
+                            }
+                        }
+                    }
+                }
+                warn!(
+                    "relocate: applied {} PLT GOT fixups out of {}",
+                    plt_applied, count
+                );
+            }
         }
         Ok(())
     }

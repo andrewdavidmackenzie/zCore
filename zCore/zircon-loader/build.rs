@@ -119,6 +119,57 @@ fn trampoline_code(arch: Arch, num: u32) -> Vec<u8> {
     }
 }
 
+enum VdsoFunc {
+    Syscall(&'static str),
+    ReturnConst(u64),
+}
+
+/// Generate code that returns a constant value in rax/x0/a0.
+fn return_const_code(arch: Arch, val: u64) -> Vec<u8> {
+    match arch {
+        Arch::X86_64 => {
+            // mov $val, %rax; ret
+            let mut code = vec![0x48, 0xb8]; // movabs imm64, %rax
+            code.extend_from_slice(&val.to_le_bytes());
+            code.push(0xc3); // ret
+            code
+        }
+        Arch::Aarch64 => {
+            // movz x0, #lo16; movk x0, #hi16, lsl #16; ret
+            let lo = (val & 0xFFFF) as u32;
+            let hi = ((val >> 16) & 0xFFFF) as u32;
+            let movz = 0xd280_0000u32 | (lo << 5); // movz x0, #lo
+            let ret = 0xd65f_03c0u32;
+            let mut code = Vec::new();
+            code.extend_from_slice(&movz.to_le_bytes());
+            if hi != 0 {
+                let movk = 0xf2a0_0000u32 | (hi << 5); // movk x0, #hi, lsl #16
+                code.extend_from_slice(&movk.to_le_bytes());
+            }
+            code.extend_from_slice(&ret.to_le_bytes());
+            code
+        }
+        Arch::Riscv64 => {
+            // li a0, val; ret
+            let mut code = Vec::new();
+            if val < 2048 {
+                let addi = 0x0000_0513u32 | ((val as u32) << 20);
+                code.extend_from_slice(&addi.to_le_bytes());
+            } else {
+                // lui + addi for larger values
+                let hi = ((val as u32) + 0x800) >> 12;
+                let lo = (val as i32) - ((hi << 12) as i32);
+                let lui = 0x0000_0537u32 | (hi << 12);
+                code.extend_from_slice(&lui.to_le_bytes());
+                let addi = 0x0005_0513u32 | (((lo as u32) & 0xFFF) << 20);
+                code.extend_from_slice(&addi.to_le_bytes());
+            }
+            code.extend_from_slice(&0x0000_8067u32.to_le_bytes()); // ret
+            code
+        }
+    }
+}
+
 /// ELF constants
 const ET_DYN: u16 = 3;
 const PT_LOAD: u32 = 1;
@@ -167,6 +218,91 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
         let code_off = text.len();
 
         let name1 = format!("_zx_{name}\0");
+        let name1_off = dynstr.len();
+        dynstr.extend_from_slice(name1.as_bytes());
+        sym_entries.push(SymEntry {
+            name_off: name1_off as u32,
+            code_offset: code_off,
+        });
+
+        let name2 = format!("zx_{name}\0");
+        let name2_off = dynstr.len();
+        dynstr.extend_from_slice(name2.as_bytes());
+        sym_entries.push(SymEntry {
+            name_off: name2_off as u32,
+            code_offset: code_off,
+        });
+
+        text.extend_from_slice(&code);
+    }
+
+    // Add vDSO-only wrapper functions.
+    // These are userspace functions in Fuchsia's vDSO that either:
+    // - Return constants (page_size, num_cpus, physmem)
+    // - Wrap kernel syscalls (clock_get_monotonic, deadline_after)
+    // - Provide convenience APIs (channel_call, cprng_draw)
+    //
+    // For now, map them to their underlying syscalls or return constants.
+    // This is sufficient for ld.so.1 to bootstrap.
+    let vdso_wrappers: &[(&str, VdsoFunc)] = &[
+        // Map to underlying kernel syscalls
+        (
+            "clock_get_monotonic",
+            VdsoFunc::Syscall("clock_get_monotonic_via_kernel"),
+        ),
+        (
+            "clock_get_boot",
+            VdsoFunc::Syscall("clock_get_boot_via_kernel"),
+        ),
+        ("ticks_get", VdsoFunc::Syscall("ticks_get_via_kernel")),
+        (
+            "deadline_after",
+            VdsoFunc::Syscall("clock_get_monotonic_via_kernel"),
+        ), // approximate
+        ("channel_call", VdsoFunc::Syscall("channel_call_noretry")),
+        ("cprng_draw", VdsoFunc::Syscall("cprng_draw_once")),
+        // Return constants
+        ("system_get_page_size", VdsoFunc::ReturnConst(4096)),
+        ("system_get_num_cpus", VdsoFunc::ReturnConst(1)),
+        ("system_get_physmem", VdsoFunc::ReturnConst(0)),
+        ("ticks_per_second", VdsoFunc::ReturnConst(1_000_000_000)),
+        // Return handles (use object_get_child as stub)
+        ("thread_self", VdsoFunc::ReturnConst(0)),
+        ("vmar_root_self", VdsoFunc::ReturnConst(0)),
+        ("process_self", VdsoFunc::ReturnConst(0)),
+        // Misc stubs
+        ("status_get_string", VdsoFunc::ReturnConst(0)),
+        ("utc_reference_swap", VdsoFunc::ReturnConst(0)),
+        ("utc_reference_get", VdsoFunc::ReturnConst(0)),
+        ("system_get_dcache_line_size", VdsoFunc::ReturnConst(64)),
+        ("system_get_features", VdsoFunc::ReturnConst(0)),
+    ];
+
+    for (name, func) in vdso_wrappers {
+        let code = match func {
+            VdsoFunc::Syscall(target) => {
+                // Find the syscall number for the target
+                if let Some((_, num)) = syscalls.iter().find(|(n, _)| n == target) {
+                    trampoline_code(arch, *num)
+                } else {
+                    return_const_code(arch, 0) // fallback
+                }
+            }
+            VdsoFunc::ReturnConst(val) => return_const_code(arch, *val),
+        };
+        let code_off = text.len();
+
+        // Check if symbol already exists (some might overlap with syscalls)
+        let name1 = format!("_zx_{name}\0");
+        let already_exists = sym_entries.iter().any(|e| {
+            let existing = &dynstr[e.name_off as usize..];
+            let end = existing.iter().position(|&b| b == 0).unwrap_or(0);
+            &existing[..end] == name1[..name1.len() - 1].as_bytes()
+        });
+        if already_exists {
+            continue;
+        }
+
         let name1_off = dynstr.len();
         dynstr.extend_from_slice(name1.as_bytes());
         sym_entries.push(SymEntry {
