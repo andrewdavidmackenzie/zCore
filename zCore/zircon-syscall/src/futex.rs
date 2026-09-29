@@ -33,7 +33,12 @@ impl Syscall<'_> {
         let new_owner = if new_futex_owner == INVALID_HANDLE {
             None
         } else {
-            Some(self.get_thread_with_pseudo(new_futex_owner)?)
+            let owner = self.get_thread_with_pseudo(new_futex_owner)?;
+            // Fuchsia rejects an owner thread that has not been started yet.
+            if owner.state() == ThreadState::New {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            Some(owner)
         };
         let future = futex.wait_with_owner(current_value, Some(self.thread.inner()), new_owner);
         self.thread

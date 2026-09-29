@@ -270,7 +270,7 @@ fn deadline_after_code(arch: Arch, clock_syscall_num: u32) -> Vec<u8> {
                 code.extend_from_slice(&addi.to_le_bytes());
             }
             code.extend_from_slice(&0x0000_0073u32.to_le_bytes()); // ecall
-            // add a0, a0, t0 => 0x00550533
+                                                                   // add a0, a0, t0 => 0x00550533
             code.extend_from_slice(&0x0055_0533u32.to_le_bytes());
             code.extend_from_slice(&0x0000_8067u32.to_le_bytes()); // ret
             code

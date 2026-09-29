@@ -286,8 +286,8 @@ impl Futex {
 
 impl FutexInner {
     fn is_valid_new_owner(&self, new_owner: &Option<Arc<Thread>>) -> bool {
-        // TODO: check whether the thread has been started yet
         if let Some(new_owner) = &new_owner {
+            // Reject if the new owner is already waiting on this futex.
             if self
                 .waiter_queue
                 .iter()
