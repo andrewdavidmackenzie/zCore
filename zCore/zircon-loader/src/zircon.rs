@@ -347,13 +347,36 @@ async fn handler_user_trap(
                     Ok(())
                 }
                 Err(err) => {
+                    let ctx = thread.context_cloned();
                     error!(
-                        "failed to handle page fault from user mode @ {:#x}({:?}): {:?}\n{:#x?}",
-                        vaddr,
-                        flags,
-                        err,
-                        thread.context_cloned()
+                        "failed to handle page fault from user mode @ {:#x}({:?}): {:?}",
+                        vaddr, flags, err,
                     );
+                    // Dump user stack for backtrace (read return addresses)
+                    let regs = ctx.general();
+                    #[cfg(target_arch = "x86_64")]
+                    {
+                        error!(
+                            "  rip={:#x} rsp={:#x} rbp={:#x} rdi={:#x} rsi={:#x}",
+                            regs.rip, regs.rsp, regs.rbp, regs.rdi, regs.rsi
+                        );
+                        // Walk frame pointer chain for backtrace
+                        let mut fp = regs.rbp;
+                        for depth in 0..8 {
+                            if fp == 0 || fp > 0x8000_0000_0000 {
+                                break;
+                            }
+                            let mut buf = [0u8; 16];
+                            if proc.vmar().read_memory(fp, &mut buf).is_ok() {
+                                let next_fp = usize::from_le_bytes(buf[0..8].try_into().unwrap());
+                                let ret_addr = usize::from_le_bytes(buf[8..16].try_into().unwrap());
+                                error!("  frame[{}]: fp={:#x} ret={:#x}", depth, next_fp, ret_addr);
+                                fp = next_fp;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
                     Err(ExceptionType::FatalPageFault)
                 }
             }
