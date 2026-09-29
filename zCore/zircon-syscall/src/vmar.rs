@@ -93,9 +93,9 @@ impl Syscall<'_> {
         len: usize,
         mut mapped_addr: UserOutPtr<VirtAddr>,
     ) -> ZxResult {
-        warn!(
-            "vmar.map: vmar_handle={:#x?}, options={:#x?}, vmar_offset={:#x?}, vmo_handle={:#x?}, vmo_offset={:#x?}, len={:#x?}",
-            vmar_handle, options, vmar_offset, vmo_handle, vmo_offset, len
+        error!(
+            "VMAR_MAP_ENTRY: h={:#x} o={:#x} l={:#x}",
+            vmar_handle, options, len
         );
         let options = match VmOptions::from_bits(options) {
             Some(o) => o,
