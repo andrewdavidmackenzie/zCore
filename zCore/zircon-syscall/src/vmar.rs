@@ -73,7 +73,10 @@ impl Syscall<'_> {
         let child = parent.allocate(offset, size, vmar_flags, align)?;
         let child_addr = child.addr();
         let child_handle = proc.add_handle(Handle::new(child, Rights::DEFAULT_VMAR | perm_rights));
-        info!("vmar.allocate: at {:#x?}", child_addr);
+        hal_impl::console::console_write_fmt(format_args!(
+            "ALLOC p={:#x} sz={:#x} -> h={:#x} addr={:#x}\n",
+            parent_vmar, size, child_handle, child_addr
+        ));
         out_child_vmar.write(child_handle)?;
         out_child_addr.write(child_addr)?;
         Ok(())
@@ -149,8 +152,12 @@ impl Syscall<'_> {
         let overwrite = options.contains(VmOptions::SPECIFIC_OVERWRITE);
         let map_range = if cfg!(any(feature = "deny-page-fault", not(target_os = "none"))) {
             true
+        } else if options.contains(VmOptions::ALLOW_FAULTS) {
+            // ALLOW_FAULTS: lazy commit, pages faulted in on demand
+            false
         } else {
-            options.contains(VmOptions::MAP_RANGE)
+            // Default: eagerly commit pages to avoid stale page table issues
+            true
         };
 
         info!(
@@ -196,7 +203,10 @@ impl Syscall<'_> {
                 }
                 e
             })?;
-        info!("vmar.map: at {:#x?}", vaddr);
+        hal_impl::console::console_write_fmt(format_args!(
+            "MAP v={:#x} o={:#x} l={:#x} -> {:#x}\n",
+            vmar_handle, options, len, vaddr
+        ));
         mapped_addr.write(vaddr)?;
         Ok(())
     }
