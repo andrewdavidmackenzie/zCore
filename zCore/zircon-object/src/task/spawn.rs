@@ -600,7 +600,7 @@ impl ZxProcArgs {
         }
         // Check alignment (channel data is typically aligned)
         let ptr = data.as_ptr();
-        if (ptr as usize) % core::mem::align_of::<Self>() != 0 {
+        if !(ptr as usize).is_multiple_of(core::mem::align_of::<Self>()) {
             return None;
         }
         Some(unsafe { &*(ptr as *const Self) })
