@@ -280,26 +280,28 @@ pub fn spawn_process(
     // Build the handle list and corresponding handle_info entries.
     // The handle_info array tells the receiver what each handle is.
     // Fuchsia processargs protocol constants.
-    const ZX_PROCARGS_PROTOCOL: u32 = 0x4150_585a; // "ZXPA"
-    const ZX_PROCARGS_VERSION: u32 = 0x0001_0000;
+    const ZX_PROCARGS_PROTOCOL: u32 = 0x4150_585d; // from processargs.h
+    const ZX_PROCARGS_VERSION: u32 = 0x0000_1000;
     const fn pa_hnd(t: u32, a: u32) -> u32 {
         (t & 0xFFFF) | ((a & 0xFFFF) << 16)
     }
     // Fuchsia processargs handle type constants.
-    // These must match the version of ld.so.1 in prebuilt/.
+    // From zircon/system/public/zircon/processargs.h
     const PA_PROC_SELF: u32 = 0x01;
     const PA_THREAD_SELF: u32 = 0x02;
     const PA_JOB_DEFAULT: u32 = 0x03;
+    const PA_VMAR_ROOT: u32 = 0x04;
     const PA_LDSVC_LOADER: u32 = 0x10;
     const PA_VMO_VDSO: u32 = 0x11;
     const PA_VMO_EXECUTABLE: u32 = 0x14;
-    const PA_RESOURCE: u32 = 0x15;
-    const PA_VMAR_ROOT: u32 = 0x25;
-    const PA_VMAR_LOADED: u32 = 0x26;
+    const PA_VMAR_LOADED: u32 = 0x05;
+    const PA_RESOURCE: u32 = 0x3F;
 
     let proc_handle = Handle::new(proc.clone(), Rights::DEFAULT_PROCESS);
     let thread_handle = Handle::new(thread.clone(), Rights::DEFAULT_THREAD);
-    let vmar_handle = Handle::new(proc.vmar(), Rights::DEFAULT_VMAR);
+    // Root VMAR needs all rights so ld.so.1 can allocate sub-VMARs
+    // for mapping shared libraries. DEFAULT_VMAR is too restrictive.
+    let vmar_handle = Handle::new(proc.vmar(), Rights::all());
     let job_handle = Handle::new(root_job, Rights::DEFAULT_CHANNEL);
     let vdso_handle = Handle::new(config.vdso_vmo.clone(), Rights::DEFAULT_VMO);
     let resource_handle = Handle::new(root_resource, Rights::DEFAULT_CHANNEL);
@@ -379,6 +381,23 @@ pub fn spawn_process(
 
     // Write argv string
     data[args_off..args_off + argv.len()].copy_from_slice(argv.as_bytes());
+
+    // Debug: dump processargs message
+    warn!(
+        "processargs: total={} bytes, handle_info_off={}, args_off={}, handles={}",
+        data.len(),
+        handle_info_off,
+        args_off,
+        handle_count
+    );
+    warn!(
+        "processargs header: {:02x?}",
+        &data[..core::cmp::min(36, data.len())]
+    );
+    warn!(
+        "processargs handle_info: {:02x?}",
+        &data[handle_info_off..handle_info_off + handle_info_size]
+    );
 
     let msg = crate::ipc::MessagePacket {
         data,
