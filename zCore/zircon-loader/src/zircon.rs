@@ -352,6 +352,11 @@ async fn handler_user_trap(
                         "failed to handle page fault from user mode @ {:#x}({:?}): {:?}",
                         vaddr, flags, err,
                     );
+                    if let Ok(mf) = thread.proc().vmar().get_mapping_flags(vaddr) {
+                        error!("  mapping at fault addr: {:?}", mf);
+                    } else {
+                        error!("  NO mapping at fault addr {:#x}", vaddr);
+                    }
                     // Dump user registers and stack backtrace
                     #[cfg(target_arch = "x86_64")]
                     {

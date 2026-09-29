@@ -694,6 +694,23 @@ impl VmAddressRegion {
         self.flags
     }
 
+    /// Get the mapping flags for a virtual address, searching all mappings.
+    pub fn get_mapping_flags(&self, vaddr: VirtAddr) -> ZxResult<MMUFlags> {
+        let guard = self.inner.lock();
+        let inner = guard.as_ref().ok_or(ZxError::BAD_STATE)?;
+        for map in inner.mappings.iter() {
+            if map.contains(vaddr) {
+                return map.get_flags(vaddr);
+            }
+        }
+        for child in inner.children.iter() {
+            if child.contains(vaddr) {
+                return child.get_mapping_flags(vaddr);
+            }
+        }
+        Err(ZxError::NOT_FOUND)
+    }
+
     /// Dump all mappings recursively.
     pub fn dump(&self) {
         let mut guard = self.inner.lock();
