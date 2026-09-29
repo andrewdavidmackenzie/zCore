@@ -382,23 +382,6 @@ pub fn spawn_process(
     // Write argv string
     data[args_off..args_off + argv.len()].copy_from_slice(argv.as_bytes());
 
-    // Debug: dump processargs message
-    warn!(
-        "processargs: total={} bytes, handle_info_off={}, args_off={}, handles={}",
-        data.len(),
-        handle_info_off,
-        args_off,
-        handle_count
-    );
-    warn!(
-        "processargs header: {:02x?}",
-        &data[..core::cmp::min(36, data.len())]
-    );
-    warn!(
-        "processargs handle_info: {:02x?}",
-        &data[handle_info_off..handle_info_off + handle_info_size]
-    );
-
     let msg = crate::ipc::MessagePacket {
         data,
         handles: bootstrap_handles,
