@@ -239,8 +239,13 @@ impl VmAddressRegion {
         if !permissions.contains(flags & MMUFlags::RXW) {
             return Err(ZxError::ACCESS_DENIED);
         }
-        // TODO: allow the mapping extends past the end of vmo
-        if vmo_offset > vmo.len() || len > vmo.len() - vmo_offset {
+        // When map_range is false (lazy/demand-paged mapping), allow the
+        // mapping to extend past the VMO's current size. Pages are committed
+        // on demand via page faults. This is standard behavior in Fuchsia
+        // (ZX_VM_ALLOW_FAULTS) used by memory allocators like Scudo that
+        // reserve large virtual address ranges upfront.
+        // When map_range is true (eager), the VMO must be large enough.
+        if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
             return Err(ZxError::INVALID_ARGS);
         }
         let mut guard = self.inner.lock();
@@ -737,7 +742,7 @@ impl VmAddressRegion {
         if hal_impl::platform::needs_user_write_flush() {
             let page_idx = (vaddr - map_inner.addr) / PAGE_SIZE;
             let is_exec = page_idx < map_inner.flags.len()
-                && map_inner.flags[page_idx].contains(MMUFlags::EXECUTE);
+                && map_inner.page_flags(page_idx).contains(MMUFlags::EXECUTE);
             if is_exec {
                 hal_impl::mem::pmem_mprotect(vaddr, actual_size, MMUFlags::READ | MMUFlags::WRITE);
             }
@@ -877,9 +882,20 @@ impl VmMapping {
         flags: MMUFlags,
         page_table: Arc<Mutex<dyn GenericPageTable>>,
     ) -> Arc<Self> {
+        // For large lazy mappings (e.g., Scudo's 11 GB arena), don't
+        // allocate per-page flags upfront. Use an empty vec and fall
+        // back to the mapping-level flags when per-page flags aren't set.
+        let page_count = pages(size);
+        let per_page_flags = if page_count > 65536 {
+            // Large mapping: defer per-page tracking to avoid OOM.
+            // 65536 pages = 256 MB threshold.
+            Vec::new()
+        } else {
+            vec![flags; page_count]
+        };
         let mapping = Arc::new(VmMapping {
             inner: Mutex::new(VmMappingInner {
-                flags: vec![flags; pages(size)],
+                flags: per_page_flags,
                 addr,
                 size,
                 vmo_offset,
@@ -903,13 +919,13 @@ impl VmMapping {
             let page_num = inner.size / PAGE_SIZE;
             let vmo_offset = inner.vmo_offset / PAGE_SIZE;
             for i in 0..page_num {
-                let paddr = commit(vmo_offset + i, inner.flags[i])?;
+                let paddr = commit(vmo_offset + i, inner.page_flags(i))?;
                 // Perform page table mapping via GenericPageTable's hal_pt_map
                 page_table
                     .map(
                         Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::Size4K),
                         paddr,
-                        inner.flags[i],
+                        inner.page_flags(i),
                     )
                     .expect("failed to map");
             }
@@ -1025,10 +1041,10 @@ impl VmMapping {
         let mut inner = self.inner.lock();
         let mut pg_table = self.page_table.lock();
         for i in start_index..end_index {
-            let mut new_flags = inner.flags[i];
+            let mut new_flags = inner.page_flags(i);
             new_flags.remove(MMUFlags::RXW);
             new_flags.insert(flags & MMUFlags::RXW);
-            inner.flags[i] = new_flags;
+            inner.set_page_flags(i, new_flags);
             pg_table
                 .update(inner.addr + i * PAGE_SIZE, None, Some(new_flags))
                 .ignore()
@@ -1078,7 +1094,7 @@ impl VmMapping {
                 for i in (start - vmo_offset_pages)..(end - vmo_offset_pages) {
                     match op {
                         RangeChangeOp::RemoveWrite => {
-                            let mut new_flag = inner.flags[i];
+                            let mut new_flag = inner.page_flags(i);
                             new_flag.remove(MMUFlags::WRITE);
                             pg_table
                                 .update(inner.addr + i * PAGE_SIZE, None, Some(new_flag))
@@ -1100,7 +1116,10 @@ impl VmMapping {
         let (vmo_offset, mut flags) = {
             let inner = self.inner.lock();
             let offset = vaddr - inner.addr;
-            (offset + inner.vmo_offset, inner.flags[offset / PAGE_SIZE])
+            (
+                offset + inner.vmo_offset,
+                inner.page_flags(offset / PAGE_SIZE),
+            )
         };
         // error!("page fault: addr = {:x}, access_flag = {:?}, flags = {:?}", vaddr, access_flags, flags);
         if !flags.contains(access_flags) {
@@ -1166,7 +1185,7 @@ impl VmMapping {
             let vmo_offset = inner.vmo_offset / PAGE_SIZE;
             for i in 0..page_num {
                 // Remove WRITE from the PTE flags so writes trigger COW faults.
-                let mut pte_flags = inner.flags[i];
+                let mut pte_flags = inner.page_flags(i);
                 pte_flags.remove(MMUFlags::WRITE);
                 let paddr = commit(vmo_offset + i, pte_flags)?;
                 page_table
@@ -1185,6 +1204,25 @@ impl VmMapping {
 impl VmMappingInner {
     fn end_addr(&self) -> VirtAddr {
         self.addr + self.size
+    }
+
+    /// Get the flags for a page at the given index.
+    /// For large lazy mappings where per-page flags aren't allocated,
+    /// returns USER flags (the default for lazy mappings).
+    fn page_flags(&self, index: usize) -> MMUFlags {
+        if index < self.flags.len() {
+            self.flags[index]
+        } else {
+            MMUFlags::USER
+        }
+    }
+
+    /// Set the flags for a page at the given index.
+    /// For large lazy mappings, this is a no-op (flags aren't tracked per-page).
+    fn set_page_flags(&mut self, index: usize, flags: MMUFlags) {
+        if index < self.flags.len() {
+            self.flags[index] = flags;
+        }
     }
 }
 

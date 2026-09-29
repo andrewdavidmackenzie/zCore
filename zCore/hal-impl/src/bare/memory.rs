@@ -128,7 +128,7 @@ mod bitmap {
     /// Physical page reserved for the SMP AP trampoline.
     const SMP_TRAMPOLINE_PAGE: usize = 0x8000 >> PAGE_BITS;
 
-    const KERNEL_HEAP_SIZE: usize = 64 * 1024 * 1024; // 64 MB (needed for large Fuchsia test binaries)
+    const KERNEL_HEAP_SIZE: usize = 128 * 1024 * 1024; // 128 MB (Scudo maps ~11 GB virtual, needs metadata)
     const ORDER: usize = 32;
 
     #[global_allocator]
