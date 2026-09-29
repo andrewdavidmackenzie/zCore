@@ -386,13 +386,16 @@ fn syscall_args(ctx: &UserContext) -> [usize; 8] {
     let regs = ctx.general();
     cfg_if! {
         if #[cfg(target_arch = "x86_64")] {
-            if hal_impl::platform::syscall_args_from_stack() {
-                let arg7 = unsafe{ (regs.rsp as *const usize).read() };
-                let arg8 = unsafe{ (regs.rsp as *const usize).add(1).read() };
-                [regs.rdi, regs.rsi, regs.rdx, regs.rcx, regs.r8, regs.r9, arg7, arg8]
-            } else {
-                [regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9, regs.r12, regs.r13]
-            }
+            // x86_64 syscall ABI: first 6 args in registers (rdi, rsi, rdx,
+            // r10, r8, r9), 7th and 8th on the user stack.
+            //
+            // Stack layout at syscall entry (both Fuchsia vDSO and petal):
+            //   rsp+0:  return address (from `call` or dummy push)
+            //   rsp+8:  arg7
+            //   rsp+16: arg8
+            let arg7 = unsafe { (regs.rsp as *const usize).add(1).read() };
+            let arg8 = unsafe { (regs.rsp as *const usize).add(2).read() };
+            [regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9, arg7, arg8]
         } else if #[cfg(target_arch = "aarch64")] {
             [regs.x0, regs.x1, regs.x2, regs.x3, regs.x4, regs.x5, regs.x6, regs.x7]
         } else if #[cfg(target_arch = "riscv64")] {
