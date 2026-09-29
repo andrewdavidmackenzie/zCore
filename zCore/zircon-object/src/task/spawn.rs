@@ -294,6 +294,7 @@ pub fn spawn_process(
     const PA_LDSVC_LOADER: u32 = 0x10;
     const PA_VMO_VDSO: u32 = 0x11;
     const PA_VMO_EXECUTABLE: u32 = 0x14;
+    const PA_VMO_BOOTDATA: u32 = 0x1A;
     const PA_VMAR_LOADED: u32 = 0x05;
     const PA_RESOURCE: u32 = 0x3F;
     const PA_MMIO_RESOURCE: u32 = 0x50;
@@ -394,6 +395,34 @@ pub fn spawn_process(
         0,
         crate::dev::ResourceFlags::empty(),
     );
+    // Create a minimal ZBI VMO for standalone test's GetOptions/GetBootOptions.
+    // The VMO name must be "zbi" — standalone-init.cc looks it up by name.
+    let zbi_vmo = VmObject::new_paged(1);
+    // Write a minimal ZBI container header (empty, no items)
+    let zbi_header: [u8; 32] = {
+        let mut h = [0u8; 32];
+        // ZBI_TYPE_CONTAINER = 0x544f4f42 ("BOOT")
+        h[0..4].copy_from_slice(&0x544f4f42u32.to_le_bytes());
+        // length = 0 (no items after header)
+        h[4..8].copy_from_slice(&0u32.to_le_bytes());
+        // extra = ZBI_CONTAINER_MAGIC = 0x868cf7e6
+        h[8..12].copy_from_slice(&0x868cf7e6u32.to_le_bytes());
+        // flags = ZBI_FLAGS_VERSION = 0x00010000
+        h[12..16].copy_from_slice(&0x00010000u32.to_le_bytes());
+        // reserved0, reserved1 = 0
+        // magic = ZBI_ITEM_MAGIC = 0xb5781729
+        h[24..28].copy_from_slice(&0xb5781729u32.to_le_bytes());
+        // crc32 = ZBI_ITEM_NO_CRC32 = 0x4a87e8d6
+        h[28..32].copy_from_slice(&0x4a87e8d6u32.to_le_bytes());
+        h
+    };
+    zbi_vmo.write(0, &zbi_header).ok();
+    zbi_vmo.set_name("zbi");
+
+    // Create boot-options.txt VMO (empty, no boot options)
+    let boot_opts_vmo = VmObject::new_paged(1);
+    boot_opts_vmo.set_name("boot-options.txt");
+
     let argv = format!("{}\0", name);
     let msg2_handles = alloc::vec![
         Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF
@@ -406,6 +435,8 @@ pub fn spawn_process(
         Handle::new(mmio_resource, Rights::DEFAULT_RESOURCE), // PA_MMIO_RESOURCE
         Handle::new(irq_resource, Rights::DEFAULT_RESOURCE), // PA_IRQ_RESOURCE
         Handle::new(system_resource, Rights::DEFAULT_RESOURCE), // PA_SYSTEM_RESOURCE
+        Handle::new(zbi_vmo, Rights::DEFAULT_VMO),          // PA_VMO_BOOTDATA
+        Handle::new(boot_opts_vmo, Rights::DEFAULT_VMO),    // PA_VMO_BOOTDATA (boot-options.txt)
     ];
     let msg2_info = alloc::vec![
         pa_hnd(PA_PROC_SELF, 0),
@@ -418,6 +449,8 @@ pub fn spawn_process(
         pa_hnd(PA_MMIO_RESOURCE, 0),
         pa_hnd(PA_IRQ_RESOURCE, 0),
         pa_hnd(PA_SYSTEM_RESOURCE, 0),
+        pa_hnd(PA_VMO_BOOTDATA, 0),
+        pa_hnd(PA_VMO_BOOTDATA, 1), // arg=1 distinguishes boot-options.txt
     ];
     let msg2_data = build_processargs_data(
         ZX_PROCARGS_PROTOCOL,

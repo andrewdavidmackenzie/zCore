@@ -1054,7 +1054,9 @@ impl VmMapping {
             inner.addr = end;
             inner.size -= cut_len;
             inner.vmo_offset += cut_len;
-            inner.flags.drain(0..pages(cut_len));
+            if !inner.flags.is_empty() {
+                inner.flags.drain(0..pages(cut_len));
+            }
             None
         } else if inner.end_addr() <= end && inner.end_addr() > begin {
             // postfix: [------xxxx]
@@ -1074,7 +1076,13 @@ impl VmMapping {
             page_table
                 .unmap_cont(begin, cut_len)
                 .expect("failed to unmap");
-            let new_flags_range = (pages(inner.size) - pages(new_len2))..pages(inner.size);
+            // For large lazy mappings with deferred per-page flags (empty vec),
+            // drain returns empty and the new mapping also gets empty flags.
+            let new_flags_range = if inner.flags.is_empty() {
+                0..0 // empty range for empty flags vec
+            } else {
+                (pages(inner.size) - pages(new_len2))..pages(inner.size)
+            };
             let new_mapping = Arc::new(VmMapping {
                 permissions: self.permissions,
                 vmo: self.vmo.clone(),
