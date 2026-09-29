@@ -297,96 +297,81 @@ pub fn spawn_process(
     const PA_VMAR_LOADED: u32 = 0x05;
     const PA_RESOURCE: u32 = 0x3F;
 
-    let proc_handle = Handle::new(proc.clone(), Rights::DEFAULT_PROCESS);
-    let thread_handle = Handle::new(thread.clone(), Rights::DEFAULT_THREAD);
-    // Root VMAR needs all rights so ld.so.1 can allocate sub-VMARs
-    // for mapping shared libraries. DEFAULT_VMAR is too restrictive.
-    let vmar_handle = Handle::new(proc.vmar(), Rights::all());
-    let job_handle = Handle::new(root_job, Rights::DEFAULT_CHANNEL);
-    let vdso_handle = Handle::new(config.vdso_vmo.clone(), Rights::DEFAULT_VMO);
-    let resource_handle = Handle::new(root_resource, Rights::DEFAULT_CHANNEL);
-    let image_vmar_handle = Handle::new(image_vmar.clone(), Rights::DEFAULT_VMAR);
+    // Fuchsia's bootstrap protocol sends TWO processargs messages:
+    // Message 1 (for ld.so.1): process capabilities + loader handles
+    // Message 2 (for the app via __libc_start_main): system handles + argv
 
-    let mut bootstrap_handles = alloc::vec![
-        proc_handle,       // 0: PA_PROC_SELF
-        thread_handle,     // 1: PA_THREAD_SELF
-        vmar_handle,       // 2: PA_VMAR_ROOT
-        job_handle,        // 3: PA_JOB_DEFAULT
-        vdso_handle,       // 4: PA_VMO_VDSO
-        resource_handle,   // 5: PA_RESOURCE
-        image_vmar_handle, // 6: PA_VMAR_LOADED
+    // --- Message 1: Process capabilities (read by ld.so.1) ---
+    let mut msg1_handles = alloc::vec![
+        Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF
+        Handle::new(thread.clone(), Rights::DEFAULT_THREAD), // PA_THREAD_SELF
+        Handle::new(proc.vmar(), Rights::all()),            // PA_VMAR_ROOT
+        Handle::new(config.vdso_vmo.clone(), Rights::DEFAULT_VMO), // PA_VMO_VDSO
+        Handle::new(image_vmar.clone(), Rights::DEFAULT_VMAR), // PA_VMAR_LOADED
     ];
-    let mut handle_info = alloc::vec![
+    let mut msg1_info = alloc::vec![
         pa_hnd(PA_PROC_SELF, 0),
         pa_hnd(PA_THREAD_SELF, 0),
         pa_hnd(PA_VMAR_ROOT, 0),
-        pa_hnd(PA_JOB_DEFAULT, 0),
         pa_hnd(PA_VMO_VDSO, 0),
-        pa_hnd(PA_RESOURCE, 0),
         pa_hnd(PA_VMAR_LOADED, 0),
     ];
 
-    // If dynamically linked, pass the original program as a VMO
-    // and a loader service channel for resolving shared libraries.
+    // If dynamically linked, add executable VMO and loader service
     let ldsvc_kernel_end = if has_interp {
         let prog_vmo = VmObject::new_paged(crate::vm::pages(elf_data.len()));
         prog_vmo.write(0, elf_data)?;
         prog_vmo.set_name(name);
-        bootstrap_handles.push(Handle::new(prog_vmo, Rights::DEFAULT_VMO | Rights::EXECUTE));
-        handle_info.push(pa_hnd(PA_VMO_EXECUTABLE, 0));
+        msg1_handles.push(Handle::new(prog_vmo, Rights::DEFAULT_VMO | Rights::EXECUTE));
+        msg1_info.push(pa_hnd(PA_VMO_EXECUTABLE, 0));
 
-        // Loader service: ld.so.1 sends library name requests on this
-        // channel, and the kernel responds with VMO handles.
         let (ldsvc_kernel, ldsvc_user) = Channel::create();
-        bootstrap_handles.push(Handle::new(ldsvc_user, Rights::DEFAULT_CHANNEL));
-        handle_info.push(pa_hnd(PA_LDSVC_LOADER, 0));
+        msg1_handles.push(Handle::new(ldsvc_user, Rights::DEFAULT_CHANNEL));
+        msg1_info.push(pa_hnd(PA_LDSVC_LOADER, 0));
         Some(ldsvc_kernel)
     } else {
         None
     };
 
-    let handle_count = bootstrap_handles.len();
+    let msg1_data = build_processargs_data(
+        ZX_PROCARGS_PROTOCOL,
+        ZX_PROCARGS_VERSION,
+        &msg1_info,
+        &[], // no argv in message 1
+    );
+    ch0.write(crate::ipc::MessagePacket {
+        data: msg1_data,
+        handles: msg1_handles,
+    })
+    .map_err(|_| crate::ZxError::INTERNAL)?;
 
-    // Construct the processargs message data:
-    // [zx_proc_args_t header (36 bytes)]
-    // [handle_info array (4 * N bytes)]
-    // [argv strings (NUL-separated)]
-    let header_size = 36usize;
-    let handle_info_off = header_size;
-    let handle_info_size = handle_count * 4;
-    let args_off = handle_info_off + handle_info_size;
-
-    // argv: just the program name
+    // --- Message 2: System capabilities (read by __libc_start_main) ---
+    let msg2_handles = alloc::vec![
+        Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF (dup)
+        Handle::new(thread.clone(), Rights::DEFAULT_THREAD), // PA_THREAD_SELF (dup)
+        Handle::new(proc.vmar(), Rights::all()),            // PA_VMAR_ROOT (dup)
+        Handle::new(root_job, Rights::DEFAULT_CHANNEL),     // PA_JOB_DEFAULT
+        Handle::new(root_resource, Rights::DEFAULT_CHANNEL), // PA_RESOURCE
+    ];
+    let msg2_info = alloc::vec![
+        pa_hnd(PA_PROC_SELF, 0),
+        pa_hnd(PA_THREAD_SELF, 0),
+        pa_hnd(PA_VMAR_ROOT, 0),
+        pa_hnd(PA_JOB_DEFAULT, 0),
+        pa_hnd(PA_RESOURCE, 0),
+    ];
     let argv = format!("{}\0", name);
-    let total_size = args_off + argv.len();
-
-    let mut data = alloc::vec![0u8; total_size];
-
-    // Write header
-    data[0..4].copy_from_slice(&ZX_PROCARGS_PROTOCOL.to_le_bytes());
-    data[4..8].copy_from_slice(&ZX_PROCARGS_VERSION.to_le_bytes());
-    data[8..12].copy_from_slice(&(handle_info_off as u32).to_le_bytes());
-    data[12..16].copy_from_slice(&(args_off as u32).to_le_bytes());
-    data[16..20].copy_from_slice(&1u32.to_le_bytes()); // args_num = 1
-    data[20..24].copy_from_slice(&(total_size as u32).to_le_bytes()); // environ_off (end = no envs)
-    data[24..28].copy_from_slice(&0u32.to_le_bytes()); // environ_num = 0
-    data[28..32].copy_from_slice(&(total_size as u32).to_le_bytes()); // names_off (end = no names)
-    data[32..36].copy_from_slice(&0u32.to_le_bytes()); // names_num = 0
-
-    // Write handle_info array
-    for (i, &info) in handle_info.iter().enumerate() {
-        let off = handle_info_off + i * 4;
-        data[off..off + 4].copy_from_slice(&info.to_le_bytes());
-    }
-
-    // Write argv string
-    data[args_off..args_off + argv.len()].copy_from_slice(argv.as_bytes());
-
-    let msg = crate::ipc::MessagePacket {
-        data,
-        handles: bootstrap_handles,
-    };
-    ch0.write(msg).map_err(|_| crate::ZxError::INTERNAL)?;
+    let msg2_data = build_processargs_data(
+        ZX_PROCARGS_PROTOCOL,
+        ZX_PROCARGS_VERSION,
+        &msg2_info,
+        argv.as_bytes(),
+    );
+    ch0.write(crate::ipc::MessagePacket {
+        data: msg2_data,
+        handles: msg2_handles,
+    })
+    .map_err(|_| crate::ZxError::INTERNAL)?;
 
     proc.add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
     let handle = Handle::new(ch1, Rights::DEFAULT_CHANNEL);
@@ -537,6 +522,47 @@ fn spawn_loader_service(channel: Arc<Channel>) {
         }
         info!("loader_service: done");
     });
+}
+
+/// Build a processargs message data buffer.
+fn build_processargs_data(
+    protocol: u32,
+    version: u32,
+    handle_info: &[u32],
+    argv: &[u8],
+) -> alloc::vec::Vec<u8> {
+    let header_size = 36usize;
+    let handle_info_off = header_size;
+    let handle_info_size = handle_info.len() * 4;
+    let args_off = handle_info_off + handle_info_size;
+    let args_num = if argv.is_empty() {
+        0u32
+    } else {
+        argv.iter().filter(|&&b| b == 0).count() as u32
+    };
+    let total_size = args_off + argv.len();
+
+    let mut data = alloc::vec![0u8; total_size];
+    data[0..4].copy_from_slice(&protocol.to_le_bytes());
+    data[4..8].copy_from_slice(&version.to_le_bytes());
+    data[8..12].copy_from_slice(&(handle_info_off as u32).to_le_bytes());
+    data[12..16].copy_from_slice(&(args_off as u32).to_le_bytes());
+    data[16..20].copy_from_slice(&args_num.to_le_bytes());
+    data[20..24].copy_from_slice(&(total_size as u32).to_le_bytes()); // environ_off
+    data[24..28].copy_from_slice(&0u32.to_le_bytes()); // environ_num
+    data[28..32].copy_from_slice(&(total_size as u32).to_le_bytes()); // names_off
+    data[32..36].copy_from_slice(&0u32.to_le_bytes()); // names_num
+
+    for (i, &info) in handle_info.iter().enumerate() {
+        let off = handle_info_off + i * 4;
+        data[off..off + 4].copy_from_slice(&info.to_le_bytes());
+    }
+
+    if !argv.is_empty() {
+        data[args_off..args_off + argv.len()].copy_from_slice(argv);
+    }
+
+    data
 }
 
 /// Construct a FIDL loader service response message.
