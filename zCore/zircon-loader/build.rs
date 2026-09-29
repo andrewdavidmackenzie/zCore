@@ -78,8 +78,14 @@ fn parse_syscalls(header: &std::path::Path) -> Vec<(String, u32)> {
 fn trampoline_code(arch: Arch, num: u32) -> Vec<u8> {
     match arch {
         Arch::X86_64 => {
-            // mov $num, %eax; syscall; ret
-            let mut code = vec![0xb8]; // mov imm32, %eax
+            // mov %rcx, %r10; mov $num, %eax; syscall; ret
+            // The C calling convention puts arg4 in rcx, but the
+            // `syscall` instruction clobbers rcx (saves RIP there).
+            // We save rcx to r10 before syscall.
+            let mut code = vec![
+                0x49, 0x89, 0xca, // mov %rcx, %r10
+                0xb8, // mov imm32, %eax
+            ];
             code.extend_from_slice(&num.to_le_bytes());
             code.extend_from_slice(&[0x0f, 0x05]); // syscall
             code.push(0xc3); // ret
