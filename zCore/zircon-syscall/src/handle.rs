@@ -44,6 +44,34 @@ impl Syscall<'_> {
         Ok(())
     }
 
+    /// Check that a handle is valid (exists in the process's handle table).
+    ///
+    /// In Fuchsia this is a vDSO-only function that checks the handle table
+    /// directly. In zCore we implement it as a lightweight syscall since
+    /// userspace cannot access the handle table.
+    /// Check that a handle is valid (exists in the process's handle table).
+    ///
+    /// In Fuchsia this is a vDSO-only function that checks the handle table
+    /// directly. In zCore we implement it as a lightweight syscall since
+    /// userspace cannot access the handle table.
+    ///
+    /// Returns `NOT_FOUND` for handles that don't exist in the table
+    /// (matching the error code used by the Fuchsia test suite).
+    pub fn sys_handle_check_valid(&self, handle: HandleValue) -> ZxResult {
+        info!("handle.check_valid: handle={:#x}", handle);
+        if handle == INVALID_HANDLE {
+            return Err(ZxError::BAD_HANDLE);
+        }
+        // Pseudo-handles are always valid.
+        if self.resolve_pseudo_handle(handle).is_some() {
+            return Ok(());
+        }
+        let proc = self.thread.proc();
+        proc.get_handle_info(handle)
+            .map(|_| ())
+            .map_err(|_| ZxError::NOT_FOUND)
+    }
+
     /// Close a handle and reclaim the underlying object if no other handles to it exist.
     pub fn sys_handle_close(&self, handle: HandleValue) -> ZxResult {
         info!("handle.close: handle={:?}", handle);

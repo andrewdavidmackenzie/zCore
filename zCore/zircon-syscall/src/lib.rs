@@ -632,6 +632,7 @@ impl Syscall<'_> {
                 self.sys_system_suspend_enter(a0 as _, a1 as _, a2 as _, a3, a4, a5 as _, a6.into())
             }
             Sys::SYSTEM_WATCH_MEMORY_STALL => self.sys_system_watch_memory_stall(a0 as _, a1 as _),
+            Sys::HANDLE_CHECK_VALID => self.sys_handle_check_valid(a0 as _),
             _ => {
                 error!("syscall unimplemented: {:?}", sys_type);
                 Err(ZxError::NOT_SUPPORTED)

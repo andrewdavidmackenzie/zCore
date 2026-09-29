@@ -394,9 +394,12 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
             "channel_call_etc",
             VdsoFunc::Syscall("channel_call_etc_noretry"),
         ),
-        ("handle_check_valid", VdsoFunc::ReturnConst(0)), // stub: always valid
+        (
+            "handle_check_valid",
+            VdsoFunc::Syscall("handle_check_valid"),
+        ),
         ("system_get_version_string", VdsoFunc::ReturnConst(0)), // stub: null
-        ("exception_get_string", VdsoFunc::ReturnConst(0)), // stub: null
+        ("exception_get_string", VdsoFunc::ReturnConst(0)),      // stub: null
         (
             "ticks_get_boot",
             VdsoFunc::Syscall("clock_get_boot_via_kernel"),
