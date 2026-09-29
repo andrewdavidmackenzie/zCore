@@ -272,13 +272,13 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
         ("system_get_num_cpus", VdsoFunc::ReturnConst(1)),
         ("system_get_physmem", VdsoFunc::ReturnConst(0)),
         ("ticks_per_second", VdsoFunc::ReturnConst(1_000_000_000)),
-        // Return pseudo-handle values (non-zero, used as mutex owner IDs).
-        // In Fuchsia these read from TLS set by SetStartHandles, but that
-        // runs after the first mutex lock. Returning non-zero constants
-        // prevents the mutex owner==0 crash.
+        // thread_self must return non-zero for mutex owner tracking.
+        // In Fuchsia this reads TLS, but ld.so.1 calls it before TLS
+        // is set up. Any non-zero value works as a mutex owner ID.
+        // After SetStartHandles, libc's own _zx_thread_self replaces this.
         ("thread_self", VdsoFunc::ReturnConst(0xFFFF_0001)),
-        ("vmar_root_self", VdsoFunc::ReturnConst(0xFFFF_0002)),
-        ("process_self", VdsoFunc::ReturnConst(0xFFFF_0003)),
+        // vmar_root_self and process_self are libc globals set by
+        // ld.so.1 during processargs handling. NOT vDSO functions.
         // Misc stubs
         ("status_get_string", VdsoFunc::ReturnConst(0)),
         ("utc_reference_swap", VdsoFunc::ReturnConst(0)),
