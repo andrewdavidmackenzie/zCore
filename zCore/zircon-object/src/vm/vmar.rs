@@ -248,6 +248,14 @@ impl VmAddressRegion {
         // When eager (map_range), the VMO must cover the mapped range.
         // When lazy (ALLOW_FAULTS), the mapping can extend past the VMO.
         if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
+            warn!(
+                "map_ext: INVALID_ARGS: vmo '{}' len={:#x} < offset={:#x}+len={:#x}, map_range={}",
+                vmo.name(),
+                vmo.len(),
+                vmo_offset,
+                len,
+                map_range
+            );
             return Err(ZxError::INVALID_ARGS);
         }
         let mut guard = self.inner.lock();

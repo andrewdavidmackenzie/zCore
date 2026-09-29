@@ -93,11 +93,17 @@ impl Syscall<'_> {
         len: usize,
         mut mapped_addr: UserOutPtr<VirtAddr>,
     ) -> ZxResult {
-        info!(
+        warn!(
             "vmar.map: vmar_handle={:#x?}, options={:#x?}, vmar_offset={:#x?}, vmo_handle={:#x?}, vmo_offset={:#x?}, len={:#x?}",
             vmar_handle, options, vmar_offset, vmo_handle, vmo_offset, len
         );
-        let options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
+        let options = match VmOptions::from_bits(options) {
+            Some(o) => o,
+            None => {
+                warn!("vmar.map: unknown options bits {:#x}", options);
+                return Err(ZxError::INVALID_ARGS);
+            }
+        };
         let proc = self.thread.proc();
         let (vmar, vmar_rights) = proc.get_object_and_rights::<VmAddressRegion>(vmar_handle)?;
         let (vmo, vmo_rights) = proc.get_object_and_rights::<VmObject>(vmo_handle)?;

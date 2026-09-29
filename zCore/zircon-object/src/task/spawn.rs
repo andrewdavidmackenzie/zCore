@@ -534,13 +534,33 @@ fn spawn_loader_service(channel: Arc<Channel>) {
 }
 
 /// Build a processargs message data buffer.
+/// Fuchsia processargs message header.
+/// Must match `zx_proc_args_t` from `zircon/processargs.h` exactly.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct ZxProcArgs {
+    protocol: u32,
+    version: u32,
+    handle_info_off: u32,
+    args_off: u32,
+    args_num: u32,
+    environ_off: u32,
+    environ_num: u32,
+    names_off: u32,
+    names_num: u32,
+}
+
+// Compile-time check: must be exactly 36 bytes with no padding.
+const _: () = assert!(core::mem::size_of::<ZxProcArgs>() == 36);
+
+/// Build a processargs message data buffer.
 fn build_processargs_data(
     protocol: u32,
     version: u32,
     handle_info: &[u32],
     argv: &[u8],
 ) -> alloc::vec::Vec<u8> {
-    let header_size = 36usize;
+    let header_size = core::mem::size_of::<ZxProcArgs>();
     let handle_info_off = header_size;
     let handle_info_size = handle_info.len() * 4;
     let args_off = handle_info_off + handle_info_size;
@@ -551,16 +571,24 @@ fn build_processargs_data(
     };
     let total_size = args_off + argv.len();
 
+    let header = ZxProcArgs {
+        protocol,
+        version,
+        handle_info_off: handle_info_off as u32,
+        args_off: args_off as u32,
+        args_num,
+        environ_off: total_size as u32,
+        environ_num: 0,
+        names_off: total_size as u32,
+        names_num: 0,
+    };
+
     let mut data = alloc::vec![0u8; total_size];
-    data[0..4].copy_from_slice(&protocol.to_le_bytes());
-    data[4..8].copy_from_slice(&version.to_le_bytes());
-    data[8..12].copy_from_slice(&(handle_info_off as u32).to_le_bytes());
-    data[12..16].copy_from_slice(&(args_off as u32).to_le_bytes());
-    data[16..20].copy_from_slice(&args_num.to_le_bytes());
-    data[20..24].copy_from_slice(&(total_size as u32).to_le_bytes()); // environ_off
-    data[24..28].copy_from_slice(&0u32.to_le_bytes()); // environ_num
-    data[28..32].copy_from_slice(&(total_size as u32).to_le_bytes()); // names_off
-    data[32..36].copy_from_slice(&0u32.to_le_bytes()); // names_num
+    // Safety: ZxProcArgs is #[repr(C)] with all u32 fields, no padding.
+    let header_bytes = unsafe {
+        core::slice::from_raw_parts(&header as *const ZxProcArgs as *const u8, header_size)
+    };
+    data[..header_size].copy_from_slice(header_bytes);
 
     for (i, &info) in handle_info.iter().enumerate() {
         let off = handle_info_off + i * 4;
@@ -574,30 +602,59 @@ fn build_processargs_data(
     data
 }
 
+/// FIDL message header. Must match `fidl_message_header_t` from `zircon/fidl.h`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct FidlMessageHeader {
+    txid: u32,
+    at_rest_flags: [u8; 2],
+    dynamic_flags: u8,
+    magic_number: u8,
+    ordinal: u64,
+}
+
+const _: () = assert!(core::mem::size_of::<FidlMessageHeader>() == 16);
+
+/// FIDL loader service response. Must match `ldmsg_rsp_t` from `ldmsg/ldmsg.h`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct LdmsgResponse {
+    header: FidlMessageHeader,
+    rv: i32,
+    /// FIDL_HANDLE_PRESENT (0xFFFFFFFF) or FIDL_HANDLE_ABSENT (0)
+    object: u32,
+}
+
+const _: () = assert!(core::mem::size_of::<LdmsgResponse>() == 24);
+
 /// Construct a FIDL loader service response message.
-///
-/// Format: fidl_message_header_t (16 bytes) + status (i32) + handle_present (u32)
 fn make_ldmsg_response(
     txid: u32,
     ordinal: u64,
     status: i32,
     handles: alloc::vec::Vec<Handle>,
 ) -> crate::ipc::MessagePacket {
-    let mut data = alloc::vec![0u8; 24];
-    // fidl_message_header_t
-    data[0..4].copy_from_slice(&txid.to_le_bytes());
-    // at_rest_flags[0] = 0x02 (USE_VERSION_V2), rest = 0
-    data[4] = 0x02;
-    // magic_number = 0x01 (FIDL magic)
-    data[7] = 0x01;
-    data[8..16].copy_from_slice(&ordinal.to_le_bytes());
-    // rv (status)
-    data[16..20].copy_from_slice(&status.to_le_bytes());
-    // handle present/absent marker
-    if !handles.is_empty() {
-        data[20..24].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // FIDL_HANDLE_PRESENT
+    let rsp = LdmsgResponse {
+        header: FidlMessageHeader {
+            txid,
+            at_rest_flags: [0x02, 0x00], // USE_VERSION_V2
+            dynamic_flags: 0,
+            magic_number: 0x01, // kFidlWireFormatMagicNumberInitial
+            ordinal,
+        },
+        rv: status,
+        object: if handles.is_empty() { 0 } else { 0xFFFF_FFFF },
+    };
+    let data = unsafe {
+        core::slice::from_raw_parts(
+            &rsp as *const LdmsgResponse as *const u8,
+            core::mem::size_of::<LdmsgResponse>(),
+        )
+    };
+    crate::ipc::MessagePacket {
+        data: data.to_vec(),
+        handles,
     }
-    crate::ipc::MessagePacket { data, handles }
 }
 
 /// Eagerly resolve vDSO symbols in an ELF's PLT GOT.
