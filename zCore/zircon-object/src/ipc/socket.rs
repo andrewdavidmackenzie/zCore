@@ -26,6 +26,9 @@ struct SocketInner {
     read_threshold: usize,
     write_threshold: usize,
     read_disabled: bool,
+    /// True if writes were disabled via `shutdown` (permanent, cannot
+    /// be re-enabled via `set_disposition`).
+    write_shutdown: bool,
 }
 
 const SOCKET_SIZE: usize = 128 * 2048;
@@ -310,6 +313,7 @@ impl Socket {
         if write {
             clear |= Signal::WRITABLE;
             set |= Signal::SOCKET_WRITE_DISABLED;
+            inner.write_shutdown = true;
         }
         self.base.signal_change(clear, set);
         Ok(())
@@ -402,8 +406,8 @@ impl Socket {
             }
             WRITE_ENABLED => {
                 // Can only re-enable writes disabled via set_disposition,
-                // not via shutdown. Check if currently disabled.
-                if !self.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
+                // not via shutdown.
+                if self.inner.lock().write_shutdown {
                     return Err(ZxError::BAD_STATE);
                 }
                 self.base
@@ -427,7 +431,7 @@ impl Socket {
                     self.base.signal_set(Signal::SOCKET_PEER_WRITE_DISABLED);
                 }
                 WRITE_ENABLED => {
-                    if !peer.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
+                    if peer.inner.lock().write_shutdown {
                         return Err(ZxError::BAD_STATE);
                     }
                     peer.base
