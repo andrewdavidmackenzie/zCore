@@ -44,7 +44,11 @@ pub trait ProcessExt {
 impl ProcessExt for Process {
     fn create_linux(job: &Arc<Job>, rootfs: Arc<dyn FileSystem>) -> ZxResult<Arc<Self>> {
         let linux_proc = LinuxProcess::new(rootfs);
-        Process::create_with_ext(job, "root", linux_proc)
+        // Linux processes need a VMAR starting at address 0 so non-PIE
+        // ELF binaries are loaded at their intended virtual addresses.
+        // Fuchsia processes use USER_ASPACE_BASE (0x200000) for Scudo.
+        let vmar = zircon_object::vm::VmAddressRegion::new_root_at(0, (1usize << 47) - 4096);
+        Process::create_with_vmar(job, "root", linux_proc, vmar)
     }
 
     fn linux(&self) -> &LinuxProcess {
@@ -81,7 +85,9 @@ impl ProcessExt for Process {
                 ..Default::default()
             }),
         };
-        let new_proc = Process::create_with_ext(&parent.job(), "", new_linux_proc)?;
+        // Linux child processes need a VMAR at address 0 (same as parent).
+        let vmar = zircon_object::vm::VmAddressRegion::new_root_at(0, (1usize << 47) - 4096);
+        let new_proc = Process::create_with_vmar(&parent.job(), "", new_linux_proc, vmar)?;
         linux_parent_inner
             .children
             .insert(new_proc.id(), new_proc.clone());

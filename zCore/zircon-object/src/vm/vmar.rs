@@ -118,6 +118,23 @@ impl VmAddressRegion {
         })
     }
 
+    /// Create a root VMAR with a custom base address and size.
+    ///
+    /// Used by the Linux process spawner to create an address space
+    /// starting at 0 (required for non-PIE ELF binaries).
+    pub fn new_root_at(addr: usize, size: usize) -> Arc<Self> {
+        Arc::new(VmAddressRegion {
+            flags: VmarFlags::ROOT_FLAGS,
+            base: KObjectBase::new(),
+            _counter: CountHelper::new(),
+            addr,
+            size,
+            parent: None,
+            page_table: Arc::new(Mutex::new(PageTable::from_current().clone_kernel())),
+            inner: Mutex::new(Some(VmarInner::default())),
+        })
+    }
+
     /// Create a kernel root VMAR.
     pub fn new_kernel() -> Arc<Self> {
         let kernel_vmar_base = KERNEL_ASPACE_BASE as usize; // Sorry i hard code because i'm lazy
@@ -1355,6 +1372,9 @@ cfg_if::cfg_if! {
     } else {
         /// The base of user address space.
         /// Non-zero to match Fuchsia's convention — Scudo asserts base != 0.
+        /// Linux non-PIE binaries are handled by the ELF loader subtracting
+        /// this offset from the child VMAR allocation to place segments at
+        /// their intended absolute virtual addresses.
         pub const USER_ASPACE_BASE: u64 = 0x20_0000; // 2 MB (matches Fuchsia x86_64)
     }
 }

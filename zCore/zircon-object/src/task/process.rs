@@ -119,12 +119,26 @@ impl Process {
         name: &str,
         ext: impl Any + Send + Sync,
     ) -> ZxResult<Arc<Self>> {
+        Self::create_with_vmar(job, name, ext, VmAddressRegion::new_root())
+    }
+
+    /// Create a new process with a custom root VMAR.
+    ///
+    /// Used by the Linux process spawner which needs a VMAR starting
+    /// at address 0 (for non-PIE ELF binaries), while the default
+    /// VMAR starts at `USER_ASPACE_BASE` (non-zero for Fuchsia Scudo).
+    pub fn create_with_vmar(
+        job: &Arc<Job>,
+        name: &str,
+        ext: impl Any + Send + Sync,
+        vmar: Arc<VmAddressRegion>,
+    ) -> ZxResult<Arc<Self>> {
         let proc = Arc::new(Process {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),
             job: job.clone(),
             policy: job.policy(),
-            vmar: VmAddressRegion::new_root(),
+            vmar,
             ext: Box::new(ext),
             exceptionate: Exceptionate::new(ExceptionChannelType::Process),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
