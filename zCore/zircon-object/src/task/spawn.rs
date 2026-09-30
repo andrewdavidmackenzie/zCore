@@ -583,7 +583,8 @@ fn spawn_loader_service(channel: Arc<Channel>) {
                         let vmo = VmObject::new_paged(crate::vm::pages(file_data.len()));
                         if let Err(e) = vmo.write(0, &file_data) {
                             warn!("loader_service: VMO write failed: {:?}", e);
-                            make_ldmsg_response(txid, ordinal, -1i32, alloc::vec![])
+                            // ZX_ERR_NO_MEMORY (-4)
+                            make_ldmsg_response(txid, ordinal, -4i32, alloc::vec![])
                         } else {
                             vmo.set_name(name);
                             make_ldmsg_response(
@@ -598,7 +599,8 @@ fn spawn_loader_service(channel: Arc<Channel>) {
                         }
                     } else {
                         warn!("loader_service: '{}' not found in rootfs", lib_path);
-                        make_ldmsg_response(txid, ordinal, -1i32, alloc::vec![])
+                        // ZX_ERR_NOT_FOUND (-25)
+                        make_ldmsg_response(txid, ordinal, -25i32, alloc::vec![])
                     };
 
                     if let Err(e) = channel.write(response) {

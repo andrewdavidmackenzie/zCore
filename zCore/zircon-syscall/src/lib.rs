@@ -137,6 +137,7 @@ impl Syscall<'_> {
             "{}|{} {:?} => args={:x?}",
             proc_name, thread_name, sys_type, args
         );
+
         let [a0, a1, a2, a3, a4, a5, a6, a7] = args;
         let ret = match sys_type {
             Sys::HANDLE_CLOSE => self.sys_handle_close(a0 as _),
