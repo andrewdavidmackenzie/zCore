@@ -125,7 +125,10 @@ pub fn main() {
     zx::debug_write(b"shell: self-test PASS\n");
 
     // --- Try to enter interactive mode ---
-    let bootstrap = petal::Bootstrap::read();
+    let bootstrap = match petal::Bootstrap::read() {
+        Some(b) => b,
+        None => return,
+    };
     let root_job = bootstrap.find(PA_JOB_DEFAULT);
     let root_resource = bootstrap.find(PA_RESOURCE);
     if root_job == 0 || root_resource == 0 {

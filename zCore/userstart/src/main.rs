@@ -97,12 +97,12 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         }
     }
 
-    let _proc_self = find_handle(header, msg_data, &handles, num_handles, PA_PROC_SELF);
-    let vmar_self = find_handle(header, msg_data, &handles, num_handles, PA_VMAR_ROOT);
-    let root_job = find_handle(header, msg_data, &handles, num_handles, PA_JOB_DEFAULT);
-    let root_resource = find_handle(header, msg_data, &handles, num_handles, PA_RESOURCE);
-    let zbi_vmo = find_handle(header, msg_data, &handles, num_handles, PA_VMO_BOOTDATA);
-    let vdso_vmo = find_handle(header, msg_data, &handles, num_handles, PA_VMO_VDSO);
+    let _proc_self = find_handle(&header, msg_data, &handles, num_handles, PA_PROC_SELF);
+    let vmar_self = find_handle(&header, msg_data, &handles, num_handles, PA_VMAR_ROOT);
+    let root_job = find_handle(&header, msg_data, &handles, num_handles, PA_JOB_DEFAULT);
+    let root_resource = find_handle(&header, msg_data, &handles, num_handles, PA_RESOURCE);
+    let zbi_vmo = find_handle(&header, msg_data, &handles, num_handles, PA_VMO_BOOTDATA);
+    let vdso_vmo = find_handle(&header, msg_data, &handles, num_handles, PA_VMO_VDSO);
 
     // Step 2: Read the ZBI VMO to find the init program
     let mut zbi_size: usize = 0;

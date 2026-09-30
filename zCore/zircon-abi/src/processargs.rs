@@ -110,44 +110,66 @@ impl ZxProcArgs {
 
     /// Parse a `ZxProcArgs` header from raw message bytes.
     ///
+    /// Copies the header from the byte buffer to avoid unaligned access.
     /// Returns `None` if the buffer is too small or the protocol/version
     /// magic doesn't match.
-    pub fn from_bytes(data: &[u8]) -> Option<&Self> {
-        if data.len() < core::mem::size_of::<Self>() {
+    pub fn from_bytes(data: &[u8]) -> Option<Self> {
+        let size = core::mem::size_of::<Self>();
+        if data.len() < size {
             return None;
         }
-        let header = unsafe { &*(data.as_ptr() as *const Self) };
+        // Copy to a properly aligned local to avoid unaligned reads.
+        let mut header = Self {
+            protocol: 0,
+            version: 0,
+            handle_info_off: 0,
+            args_off: 0,
+            args_num: 0,
+            environ_off: 0,
+            environ_num: 0,
+            names_off: 0,
+            names_num: 0,
+        };
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                &mut header as *mut Self as *mut u8,
+                size,
+            );
+        }
         if header.protocol != ZX_PROCARGS_PROTOCOL || header.version != ZX_PROCARGS_VERSION {
             return None;
         }
         Some(header)
     }
 
-    /// Return the handle_info slice from a message data buffer.
+    /// Read a single `handle_info` entry from the message data.
     ///
-    /// Each entry is a `u32` produced by [`pa_hnd`].  The number of
-    /// entries equals the number of handles in the message.
-    pub fn handle_info<'a>(&self, data: &'a [u8], num_handles: usize) -> Option<&'a [u32]> {
-        let off = self.handle_info_off as usize;
-        let end = off + num_handles * 4;
+    /// Returns the `u32` entry at position `index`, decoded from raw
+    /// bytes to avoid alignment issues.
+    fn read_handle_info_entry(&self, data: &[u8], index: usize) -> Option<u32> {
+        let off = (self.handle_info_off as usize).checked_add(index.checked_mul(4)?)?;
+        let end = off.checked_add(4)?;
         if end > data.len() {
             return None;
         }
-        // Safety: u32 alignment is guaranteed by the 4-byte-aligned offset
-        // in the processargs spec, and we verified bounds above.
-        let ptr = unsafe { data.as_ptr().add(off) as *const u32 };
-        Some(unsafe { core::slice::from_raw_parts(ptr, num_handles) })
+        Some(u32::from_ne_bytes(data[off..end].try_into().ok()?))
     }
 
     /// Find the handle index for a given type tag.
     ///
-    /// Scans the `handle_info` array for the first entry whose type
+    /// Scans the `handle_info` entries for the first one whose type
     /// matches `handle_type` (ignoring the argument field).  Returns
     /// the index into the handles array.
     pub fn find_handle(&self, data: &[u8], num_handles: usize, handle_type: u32) -> Option<usize> {
-        let info = self.handle_info(data, num_handles)?;
-        info.iter()
-            .position(|&entry| pa_hnd_type(entry) == handle_type)
+        for i in 0..num_handles {
+            if let Some(entry) = self.read_handle_info_entry(data, i) {
+                if pa_hnd_type(entry) == handle_type {
+                    return Some(i);
+                }
+            }
+        }
+        None
     }
 }
 

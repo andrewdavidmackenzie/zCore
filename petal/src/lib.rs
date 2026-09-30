@@ -40,9 +40,15 @@ pub struct Bootstrap {
 
 impl Bootstrap {
     /// Read the startup channel and parse the processargs message.
-    pub fn read() -> Self {
+    /// Read the startup channel and parse the processargs message.
+    ///
+    /// Returns `None` if no startup handle is available or the
+    /// channel read fails.
+    pub fn read() -> Option<Self> {
         let ch = take_startup_handle();
-        assert!(ch != 0, "no startup handle");
+        if ch == 0 {
+            return None;
+        }
 
         let mut b = Bootstrap {
             data: [0u8; 256],
@@ -64,11 +70,13 @@ impl Bootstrap {
                 &mut ah,
             )
         };
-        assert!(s == 0, "channel_read failed");
         unsafe { zx::sys::zx_handle_close(ch) };
+        if s != 0 {
+            return None;
+        }
         b.data_len = ab as usize;
         b.num_handles = ah as usize;
-        b
+        Some(b)
     }
 
     /// Look up a handle by PA_* type tag.

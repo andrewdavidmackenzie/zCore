@@ -32,7 +32,13 @@ pub fn main() {
     zx::debug_write(b"process_mem_test: starting\r\n");
 
     // Read the bootstrap channel (processargs format)
-    let bootstrap = petal::Bootstrap::read();
+    let bootstrap = match petal::Bootstrap::read() {
+        Some(b) => b,
+        None => {
+            zx::debug_write(b"process_mem_test: FAIL - no bootstrap\r\n");
+            zx::Process::exit(1);
+        }
+    };
     let job_handle = bootstrap.find(zircon_abi::processargs::PA_JOB_DEFAULT);
     if job_handle == 0 {
         zx::debug_write(b"process_mem_test: FAIL - no job handle\r\n");
