@@ -109,12 +109,22 @@ impl Syscall<'_> {
             handles, num_handles,
         );
         let proc = self.thread.proc();
+        let mut first_err = None;
         for handle in handles.read_array(num_handles)? {
             if handle != INVALID_HANDLE {
-                proc.remove_handle(handle)?;
+                if let Err(e) = proc.remove_handle(handle) {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
             }
         }
-        Ok(())
+        // Close all handles even if some are invalid.
+        // Return the first error encountered (Fuchsia behavior).
+        match first_err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 
     /// Creates a replacement for handle.

@@ -390,16 +390,24 @@ impl Socket {
         }
 
         // Apply local disposition: controls writes to THIS endpoint.
-        // When disabled: set WRITE_DISABLED on self, PEER_WRITE_DISABLED on peer.
+        // When disabled: set WRITE_DISABLED and clear WRITABLE on self,
+        // set PEER_WRITE_DISABLED on peer.
         match disposition {
             WRITE_DISABLED => {
-                self.base.signal_set(Signal::SOCKET_WRITE_DISABLED);
+                self.base
+                    .signal_change(Signal::WRITABLE, Signal::SOCKET_WRITE_DISABLED);
                 if let Some(ref peer) = peer {
                     peer.base.signal_set(Signal::SOCKET_PEER_WRITE_DISABLED);
                 }
             }
             WRITE_ENABLED => {
-                self.base.signal_clear(Signal::SOCKET_WRITE_DISABLED);
+                // Can only re-enable writes disabled via set_disposition,
+                // not via shutdown. Check if currently disabled.
+                if !self.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
+                    return Err(ZxError::BAD_STATE);
+                }
+                self.base
+                    .signal_change(Signal::SOCKET_WRITE_DISABLED, Signal::WRITABLE);
                 if let Some(ref peer) = peer {
                     peer.base.signal_clear(Signal::SOCKET_PEER_WRITE_DISABLED);
                 }
@@ -409,15 +417,21 @@ impl Socket {
         }
 
         // Apply peer disposition: controls writes to the PEER endpoint.
-        // When disabled: set WRITE_DISABLED on peer, PEER_WRITE_DISABLED on self.
+        // When disabled: set WRITE_DISABLED and clear WRITABLE on peer,
+        // set PEER_WRITE_DISABLED on self.
         if let Some(ref peer) = peer {
             match disposition_peer {
                 WRITE_DISABLED => {
-                    peer.base.signal_set(Signal::SOCKET_WRITE_DISABLED);
+                    peer.base
+                        .signal_change(Signal::WRITABLE, Signal::SOCKET_WRITE_DISABLED);
                     self.base.signal_set(Signal::SOCKET_PEER_WRITE_DISABLED);
                 }
                 WRITE_ENABLED => {
-                    peer.base.signal_clear(Signal::SOCKET_WRITE_DISABLED);
+                    if !peer.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
+                        return Err(ZxError::BAD_STATE);
+                    }
+                    peer.base
+                        .signal_change(Signal::SOCKET_WRITE_DISABLED, Signal::WRITABLE);
                     self.base.signal_clear(Signal::SOCKET_PEER_WRITE_DISABLED);
                 }
                 0 => {}
