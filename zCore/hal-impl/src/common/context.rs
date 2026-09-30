@@ -188,7 +188,7 @@ impl UserContext {
             if #[cfg(target_arch = "x86_64")] {
                 self.inner.trap_num
             } else if #[cfg(target_arch = "aarch64")] {
-                unimplemented!() // ESR_EL1
+                self.inner.trap_num // ESR_EL1 stored by trap handler
             } else if #[cfg(target_arch = "riscv64")] {
                 riscv::register::scause::read().bits()
             } else {
