@@ -78,15 +78,16 @@ grep '\[       OK \]' /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
-### Current status (phase 9)
-- 340/1776 tests pass, 15 failing, 1421 not yet reached
+### Current status (phase 10)
+- 348/1776 tests pass, 24 failing, 1404 not yet reached
 - FutexTest hang resolved — TLS-based `_zx_thread_self` enables
   proper futex self-ownership check. FutexTest suite: 24/24 pass.
 - All tests run sequentially; newly-reached suites have new failures
   to triage
-- Current blocker: `StandaloneElfLoadTests.Load` crashes — requests
-  `.arm64.so` module instead of `.x64.so` (wrong arch detection),
-  null pointer dereference kills the process
+- StreamTestCase suite partially implemented: 9/33 pass, remaining
+  failures need content_size tracking and partial write refinement
+- Current blocker: timeout — StreamTestCase runs but suites after
+  it (SysInfoTest, ThreadTest, TimerTest, etc.) not reached in 180s
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in
@@ -96,6 +97,7 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
   (not yet implemented, would require modifying processargs argv).
 - Test binary: `prebuilt/zircon-test/x86_64/core-tests-standalone`
 - Issue #21 tracks overall progress, issue #468 tracks missing syscalls.
+- Issue #471 tracks the user-buffer copy architecture gap.
 
 ## PR workflow
 After pushing commits to a PR:
