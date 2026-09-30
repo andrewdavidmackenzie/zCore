@@ -74,11 +74,16 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let fifo = proc.get_object_with_rights::<Fifo>(handle_value, Rights::READ)?;
-        // TODO: uninit buffer
         let mut data = vec![0; elem_size * count];
         let actual_count = fifo.read(elem_size, &mut data, count)?;
+        let actual_bytes = actual_count * elem_size;
+        // Try writing to user buffer. If this fails (e.g. bad pointer),
+        // roll back the FIFO read so data is not lost.
+        if user_bytes.write_array(&data[..actual_bytes]).is_err() {
+            fifo.rollback_read(&data[..actual_bytes]);
+            return Err(ZxError::INVALID_ARGS);
+        }
         actual_count_ptr.write_if_not_null(actual_count)?;
-        user_bytes.write_array(&data)?;
         Ok(())
     }
 }

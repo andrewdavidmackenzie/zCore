@@ -27,9 +27,17 @@ impl Syscall<'_> {
         info!("clock.create: options={:#x}", options);
         let clock = Clock::new(options)?;
         let proc = self.thread.proc();
+        // Fuchsia's default clock rights include MAP for vmar_map_clock.
         let handle = proc.add_handle(Handle::new(
             Arc::new(clock),
-            Rights::READ | Rights::WRITE | Rights::DUPLICATE | Rights::TRANSFER | Rights::INSPECT,
+            Rights::DUPLICATE
+                | Rights::TRANSFER
+                | Rights::READ
+                | Rights::WRITE
+                | Rights::WAIT
+                | Rights::INSPECT
+                | Rights::SIGNAL
+                | Rights::MAP,
         ));
         out.write(handle)?;
         Ok(())

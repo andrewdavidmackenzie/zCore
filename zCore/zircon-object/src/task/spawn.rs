@@ -307,6 +307,7 @@ pub fn spawn_process(
     // PA_IOPORT_RESOURCE = 0x52 (x86 only, not sent currently)
     // PA_SMC_RESOURCE = 0x53 (ARM only, not sent currently)
     const PA_SYSTEM_RESOURCE: u32 = 0x54;
+    const PA_CLOCK_UTC: u32 = 0x56;
 
     // TWO processargs messages on the bootstrap channel:
     // Message 1 (read by ld.so.1): loader handles + process identity
@@ -415,6 +416,13 @@ pub fn spawn_process(
     let boot_opts_vmo = VmObject::new_paged(1);
     boot_opts_vmo.set_name("boot-options.txt");
 
+    // Create a UTC clock for libc's clock_gettime(CLOCK_REALTIME).
+    // Auto-started so it's immediately readable.
+    use crate::signal::Clock;
+    const ZX_CLOCK_OPT_AUTO_START: u64 = 1 << 0;
+    let utc_clock = Clock::new(ZX_CLOCK_OPT_AUTO_START)?;
+    let utc_clock = alloc::sync::Arc::new(utc_clock);
+
     let argv = format!("{}\0", name);
     let msg2_handles = alloc::vec![
         Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF
@@ -429,6 +437,16 @@ pub fn spawn_process(
         Handle::new(system_resource, Rights::DEFAULT_RESOURCE), // PA_SYSTEM_RESOURCE
         Handle::new(zbi_vmo, Rights::DEFAULT_VMO),          // PA_VMO_BOOTDATA
         Handle::new(boot_opts_vmo, Rights::DEFAULT_VMO),    // PA_VMO_BOOTDATA (boot-options.txt)
+        Handle::new(
+            utc_clock,
+            Rights::DUPLICATE
+                | Rights::TRANSFER
+                | Rights::READ
+                | Rights::WAIT
+                | Rights::INSPECT
+                | Rights::SIGNAL
+                | Rights::MAP
+        ), // PA_CLOCK_UTC
     ];
     let msg2_info = alloc::vec![
         pa_hnd(PA_PROC_SELF, 0),
@@ -443,6 +461,7 @@ pub fn spawn_process(
         pa_hnd(PA_SYSTEM_RESOURCE, 0),
         pa_hnd(PA_VMO_BOOTDATA, 0),
         pa_hnd(PA_VMO_BOOTDATA, 1), // arg=1 distinguishes boot-options.txt
+        pa_hnd(PA_CLOCK_UTC, 0),
     ];
     let msg2_data = build_processargs_data(
         ZX_PROCARGS_PROTOCOL,

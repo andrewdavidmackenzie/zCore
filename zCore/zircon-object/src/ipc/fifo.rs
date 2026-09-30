@@ -134,6 +134,27 @@ impl Fifo {
         Ok(read_size / elem_size)
     }
 
+    /// Roll back a previously read chunk by pushing data back to the
+    /// front of the receive queue. Used when the user buffer write fails
+    /// after data was already drained from the FIFO.
+    pub fn rollback_read(&self, data: &[u8]) {
+        let mut recv_queue = self.recv_queue.lock();
+        // Push data back in reverse order so the original order is preserved.
+        for &byte in data.iter().rev() {
+            recv_queue.push_front(byte);
+        }
+        // Restore READABLE signal since we put data back.
+        if !recv_queue.is_empty() {
+            self.base.signal_set(Signal::READABLE);
+        }
+        // If the queue is now full, clear WRITABLE on peer.
+        if recv_queue.len() == self.capacity() {
+            if let Some(peer) = self.peer.upgrade() {
+                peer.base.signal_clear(Signal::WRITABLE);
+            }
+        }
+    }
+
     /// Get capacity in bytes.
     fn capacity(&self) -> usize {
         self.elem_size * self.elem_count
