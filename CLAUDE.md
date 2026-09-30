@@ -79,13 +79,15 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
 ### Current status (phase 9)
-- 204/1776 tests pass, 16 suites complete, 8 failing
+- 206/1776 tests pass, 16 suites complete, 6 failing
 - Hangs at `FutexTest.WaitInvalidOwner` — test calls `futex_wait`
   with `new_futex_owner = ZX_HANDLE_THREAD_SELF` and nobody wakes
   the futex. Fuchsia rejects self-ownership, but we can't implement
   that check because all threads share pseudo-handle 0xFFFF0001.
   Blocked on Phase 10 (proper `_zx_thread_self` via TLS).
 - All tests run sequentially; a hang blocks everything after it
+- Remaining 6 failures: UTC clock missing (2), ZX_INFO_CLOCK_MAPPED_SIZE
+  unimplemented (2), FIFO buffer validation (1), FIFO read rollback (1)
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in
