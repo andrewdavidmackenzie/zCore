@@ -143,8 +143,6 @@ impl Futex {
                 let mut inner = self.waiter.inner.lock();
                 // check wakeup
                 if inner.woken {
-                    // set new owner on success
-                    inner.futex.inner.lock().set_owner(self.new_owner.clone());
                     return Poll::Ready(Ok(()));
                 }
                 // first time?
@@ -159,6 +157,11 @@ impl Futex {
                     if !futex.is_valid_new_owner(&self.new_owner) {
                         return Poll::Ready(Err(ZxError::INVALID_ARGS));
                     }
+                    // Set the new owner immediately when the wait begins,
+                    // not when the waiter wakes. This matches Fuchsia's
+                    // behavior where get_owner reflects the owner set by
+                    // the most recent successful futex_wait.
+                    futex.set_owner(self.new_owner.clone());
                     futex.waiter_queue.push_back(self.waiter.clone());
                     drop(futex);
                     inner.waker.replace(cx.waker().clone());
