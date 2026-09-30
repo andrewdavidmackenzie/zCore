@@ -695,11 +695,10 @@ impl<P: Policy> IoVec<P> {
         }
         self.ptr.check()?;
         let mut buf = Vec::<u8>::with_capacity(self.len);
-        with_user_access(|| unsafe {
+        unsafe {
             buf.set_len(self.len);
-            buf.as_mut_ptr()
-                .copy_from_nonoverlapping(self.ptr.0, self.len);
-        });
+            copy_from_user(buf.as_mut_ptr(), self.ptr.0, self.len)?;
+        }
         Ok(buf)
     }
 
@@ -710,9 +709,9 @@ impl<P: Policy> IoVec<P> {
         }
         self.ptr.check()?;
         let len = core::cmp::min(data.len(), self.len);
-        with_user_access(|| unsafe {
-            self.ptr.0.copy_from_nonoverlapping(data.as_ptr(), len);
-        });
+        unsafe {
+            copy_to_user(self.ptr.0, data.as_ptr(), len)?;
+        }
         Ok(len)
     }
 }
