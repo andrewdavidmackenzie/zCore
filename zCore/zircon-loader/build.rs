@@ -128,6 +128,10 @@ fn trampoline_code(arch: Arch, num: u32) -> Vec<u8> {
 enum VdsoFunc {
     Syscall(&'static str),
     ReturnConst(u64),
+    /// thread_self: read the thread handle from TLS (fs:[0x20] on x86_64,
+    /// [tpidr_el0, #0x20] on aarch64). Falls back to pseudo-handle
+    /// 0xFFFF0001 if TLS is not yet initialized (value is 0).
+    ThreadSelf,
     /// deadline_after: call clock_get_monotonic_via_kernel, add the
     /// first argument (nanoseconds duration) to the result, and return
     /// the absolute deadline.  Saturates to i64::MAX on overflow.
@@ -278,6 +282,83 @@ fn deadline_after_code(arch: Arch, clock_syscall_num: u32) -> Vec<u8> {
     }
 }
 
+/// Generate code for `_zx_thread_self()`:
+/// Reads the thread handle from TLS at offset 0x20.
+/// If the value is 0 (TLS not yet initialized by libc), returns the
+/// pseudo-handle 0xFFFF0001 as a fallback for the bootstrap period.
+fn thread_self_code(arch: Arch) -> Vec<u8> {
+    match arch {
+        Arch::X86_64 => {
+            // mov eax, dword ptr fs:[0x20]   ; read TLS thread handle
+            // test eax, eax                   ; is it zero?
+            // jnz done                        ; if not, return it
+            // mov eax, 0xFFFF0001             ; fallback pseudo-handle
+            // done: ret
+            let mut code = Vec::new();
+            code.extend_from_slice(&[0x64, 0x8b, 0x04, 0x25]); // mov eax, fs:[imm32]
+            code.extend_from_slice(&0x20u32.to_le_bytes()); // offset 0x20
+            code.extend_from_slice(&[0x85, 0xc0]); // test eax, eax
+            code.extend_from_slice(&[0x75, 0x05]); // jnz +5 (skip mov)
+            code.push(0xb8); // mov eax, imm32
+            code.extend_from_slice(&0xFFFF_0001u32.to_le_bytes());
+            code.push(0xc3); // ret
+            code
+        }
+        Arch::Aarch64 => {
+            // mrs x0, tpidr_el0              ; read TLS base
+            // ldr w0, [x0, #0x20]            ; load handle at offset 0x20
+            // cbnz w0, done                  ; if non-zero, return it
+            // mov w0, #0x0001                ; fallback pseudo-handle
+            // movk w0, #0xFFFF, lsl #16
+            // done: ret
+            let mut code = Vec::new();
+            // mrs x0, tpidr_el0 = 0xd53bd040
+            code.extend_from_slice(&0xd53b_d040u32.to_le_bytes());
+            // ldr w0, [x0, #0x20] = 0xb9402000
+            code.extend_from_slice(&0xb940_2000u32.to_le_bytes());
+            // cbnz w0, +8 (skip 2 instructions) = 0x35000040
+            code.extend_from_slice(&0x3500_0060u32.to_le_bytes());
+            // movz w0, #0x0001 = 0x52800020
+            code.extend_from_slice(&0x5280_0020u32.to_le_bytes());
+            // movk w0, #0xFFFF, lsl #16 = 0x72bfffe0
+            code.extend_from_slice(&0x72bf_ffe0u32.to_le_bytes());
+            // ret = 0xd65f03c0
+            code.extend_from_slice(&0xd65f_03c0u32.to_le_bytes());
+            code
+        }
+        Arch::Riscv64 => {
+            // Read thread pointer register (tp) and load handle at offset 0x20
+            // lw a0, 0x20(tp)               ; load handle from TLS
+            // bnez a0, done                  ; if non-zero, return
+            // li a0, 0xFFFF0001              ; fallback
+            // done: ret
+            let mut code = Vec::new();
+            // lw a0, 0x20(tp) => 0x02042503
+            code.extend_from_slice(&0x0204_2503u32.to_le_bytes());
+            // bnez a0, +8 => 0x00051463
+            code.extend_from_slice(&0x0005_1463u32.to_le_bytes());
+            // lui a0, 0x00010 (upper 20 bits of 0xFFFF0001)
+            // This is tricky for riscv. Just use the pseudo-handle as a simple constant.
+            // lui a0, 0xFFFF0 => split into lui + addi
+            let val = 0xFFFF_0001u32;
+            let hi = ((val as i32 + 0x800) >> 12) as u32;
+            let lo = (val as i32 - ((hi << 12) as i32)) as u32;
+            let lui = 0x0000_0537u32 | (hi << 12);
+            code.extend_from_slice(&lui.to_le_bytes());
+            let addi = 0x0005_0513u32 | ((lo & 0xFFF) << 20);
+            code.extend_from_slice(&addi.to_le_bytes());
+            // fix bnez offset: now need to skip lui+addi = 8 bytes = 2 instrs
+            // bnez a0, +12 (skip lui+addi+ret? no, skip to ret after them)
+            // Actually bnez should jump to ret which is after the fallback.
+            // Let me restructure: bnez jumps past lui+addi to ret.
+            // bnez a0, +12 => 0x00051663
+            code[4..8].copy_from_slice(&0x0005_1663u32.to_le_bytes());
+            code.extend_from_slice(&0x0000_8067u32.to_le_bytes()); // ret
+            code
+        }
+    }
+}
+
 /// ELF constants
 const ET_DYN: u16 = 3;
 const PT_LOAD: u32 = 1;
@@ -374,11 +455,10 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
         ("system_get_num_cpus", VdsoFunc::ReturnConst(1)),
         ("system_get_physmem", VdsoFunc::ReturnConst(0)),
         ("ticks_per_second", VdsoFunc::ReturnConst(1_000_000_000)),
-        // thread_self must return non-zero for mutex owner tracking.
-        // In Fuchsia this reads TLS, but ld.so.1 calls it before TLS
-        // is set up. Any non-zero value works as a mutex owner ID.
-        // After SetStartHandles, libc's own _zx_thread_self replaces this.
-        ("thread_self", VdsoFunc::ReturnConst(0xFFFF_0001)),
+        // thread_self reads the real per-thread handle from TLS
+        // (fs:[0x20] on x86_64). Falls back to pseudo-handle 0xFFFF0001
+        // during early bootstrap before libc's SetStartHandles runs.
+        ("thread_self", VdsoFunc::ThreadSelf),
         // vmar_root_self and process_self are libc globals set by
         // ld.so.1 during processargs handling. NOT vDSO functions.
         // status_get_string: returns a pointer to a status string.
@@ -427,6 +507,7 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
                     return_const_code(arch, 0) // fallback
                 }
             }
+            VdsoFunc::ThreadSelf => thread_self_code(arch),
         };
         let code_off = text.len();
 

@@ -38,14 +38,15 @@ impl Syscall<'_> {
             if owner.state() == ThreadState::New {
                 return Err(ZxError::INVALID_ARGS);
             }
-            // NOTE: Fuchsia also rejects the calling thread as the new owner
-            // (a thread may not own itself). We cannot implement this check yet
-            // because our _zx_thread_self() vDSO stub returns the same
-            // pseudo-handle (0xFFFF0001) for ALL threads. When thread B passes
-            // thread A's stored "handle" (0xFFFF0001) as new_futex_owner, the
-            // kernel resolves it to thread B (not A), making every cross-thread
-            // futex_wait look like self-ownership. Implementing this check
-            // requires proper per-thread handles via TLS (Phase 10).
+            // Fuchsia rejects the calling thread as the new owner — a
+            // thread can't own the futex it's about to sleep on.
+            // This check is safe now that _zx_thread_self reads a real
+            // per-thread handle from TLS (fs:[0x20]), not a shared
+            // pseudo-handle. Cross-thread futex_wait works because real
+            // handles resolve to the correct thread via the handle table.
+            if owner.id() == self.thread.inner().id() {
+                return Err(ZxError::INVALID_ARGS);
+            }
             Some(owner)
         };
         let future = futex.wait_with_owner(current_value, Some(self.thread.inner()), new_owner);
