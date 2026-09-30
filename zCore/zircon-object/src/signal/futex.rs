@@ -280,6 +280,19 @@ impl Futex {
             waiter.reset_futex(requeue_futex.clone());
             new_inner.waiter_queue.push_back(waiter);
         }
+        // Check new_requeue_owner is not a waiter on EITHER futex
+        // (checked AFTER wake/requeue so woken threads are already removed).
+        if let Some(ref owner) = new_requeue_owner {
+            let is_waiter = inner
+                .waiter_queue
+                .iter()
+                .chain(new_inner.waiter_queue.iter())
+                .filter_map(|w| w.thread.as_ref())
+                .any(|t| Arc::ptr_eq(t, owner));
+            if is_waiter {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        }
         // set owner
         inner.set_owner(None);
         new_inner.set_owner(new_requeue_owner);
