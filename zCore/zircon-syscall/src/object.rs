@@ -49,7 +49,6 @@ impl Syscall<'_> {
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
                 let s = object.name();
-                info!("name={:?}", s);
                 // Write the full buffer zero-padded. Fuchsia guarantees
                 // all bytes after the name are zero.
                 let mut buf = [0u8; MAX_NAME_LEN];
@@ -165,7 +164,12 @@ impl Syscall<'_> {
         match property {
             Property::Name => {
                 let length = buffer_size.min(MAX_NAME_LEN);
-                object.set_name(&UserInPtr::<u8>::from(buffer).read_string(length)?);
+                let raw = UserInPtr::<u8>::from(buffer).read_array(length)?;
+                // Truncate at first null byte — Fuchsia names are
+                // null-terminated C strings, any bytes after null are ignored.
+                let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+                let name = core::str::from_utf8(&raw[..end]).map_err(|_| ZxError::INVALID_ARGS)?;
+                object.set_name(name);
                 Ok(())
             }
             Property::ProcessDebugAddr => {
