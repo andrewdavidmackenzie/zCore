@@ -3,7 +3,7 @@ use {
     alloc::vec::Vec,
     core::convert::TryFrom,
     numeric_enum_macro::numeric_enum,
-    zircon_object::{dev::*, ipc::*, signal::Port, task::*, vm::*},
+    zircon_object::{dev::*, ipc::*, signal::Clock, signal::Port, task::*, vm::*},
 };
 
 impl Syscall<'_> {
@@ -373,6 +373,14 @@ impl Syscall<'_> {
                 let stream = proc.get_object_with_rights::<Stream>(handle, Rights::INSPECT)?;
                 info_ptr.write(stream.get_info())?;
             }
+            Topic::ClockMappedSize => {
+                // Returns the size needed to map a clock's state VMO.
+                // The clock state is a single page containing the
+                // zx_clock_details_v1_t structure.
+                let mut size_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
+                let _clock = proc.get_object_with_rights::<Clock>(handle, Rights::INSPECT)?;
+                size_ptr.write(0x1000)?; // PAGE_SIZE
+            }
             _ => {
                 error!("not supported info topic: {:?}", topic);
                 return Err(ZxError::NOT_SUPPORTED);
@@ -543,6 +551,7 @@ numeric_enum! {
         Job = 24,
         Timer = 25,
         Stream = 26,
+        ClockMappedSize = 40,
     }
 }
 

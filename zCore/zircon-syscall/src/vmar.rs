@@ -288,7 +288,13 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        let vmar = proc.get_object::<VmAddressRegion>(handle)?;
+        // Handle pseudo-handle for root VMAR (ZX_HANDLE_VMAR_ROOT_SELF).
+        let vmar = if let Some(obj) = self.resolve_pseudo_handle(handle) {
+            obj.downcast_arc::<VmAddressRegion>()
+                .map_err(|_| ZxError::WRONG_TYPE)?
+        } else {
+            proc.get_object::<VmAddressRegion>(handle)?
+        };
         let clock = proc.get_object_with_rights::<zircon_object::signal::Clock>(
             clock_handle,
             Rights::READ | Rights::MAP,
