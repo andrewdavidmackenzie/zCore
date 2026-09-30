@@ -368,6 +368,11 @@ impl VmObject {
         Ok(())
     }
 
+    /// Zero a range of bytes within the VMO.
+    pub fn zero(&self, offset: usize, len: usize) -> ZxResult {
+        self.trait_.zero(offset, len)
+    }
+
     /// Get information of this VMO.
     pub fn get_info(&self) -> VmoInfo {
         let inner = self.inner.lock();

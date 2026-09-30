@@ -20,6 +20,7 @@ impl Syscall<'_> {
                 #[allow(clippy::identity_op)]
                 const MODE_READ     = 1 << 0;
                 const MODE_WRITE    = 1 << 1;
+                const MODE_APPEND   = 1 << 2;
             }
         }
         let options = CreateOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
@@ -29,7 +30,9 @@ impl Syscall<'_> {
             rights |= Rights::READ;
             vmo_rights |= Rights::READ;
         }
-        if options.contains(CreateOptions::MODE_WRITE) {
+        if options.contains(CreateOptions::MODE_WRITE)
+            || options.contains(CreateOptions::MODE_APPEND)
+        {
             rights |= Rights::WRITE;
             vmo_rights |= Rights::WRITE;
         }

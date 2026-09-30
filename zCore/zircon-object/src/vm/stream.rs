@@ -6,11 +6,19 @@ use {super::*, crate::object::*, alloc::sync::Arc, lock::Mutex, numeric_enum_mac
 ///
 /// A stream is an interface for reading and writing data to some underlying
 /// storage, typically a VMO.
+/// Bit flag for append mode (matches `ZX_STREAM_MODE_APPEND`).
+const MODE_APPEND: u32 = 1 << 2;
+
 pub struct Stream {
     base: KObjectBase,
-    options: u32,
     vmo: Arc<VmObject>,
-    seek: Mutex<usize>,
+    /// Mutable state: (options, seek_offset).
+    inner: Mutex<StreamInner>,
+}
+
+struct StreamInner {
+    options: u32,
+    seek: usize,
 }
 
 impl_kobject!(Stream);
@@ -34,17 +42,16 @@ impl Stream {
     pub fn create(vmo: Arc<VmObject>, seek: usize, options: u32) -> Arc<Self> {
         Arc::new(Stream {
             base: KObjectBase::default(),
-            options,
             vmo,
-            seek: Mutex::new(seek),
+            inner: Mutex::new(StreamInner { options, seek }),
         })
     }
 
     /// Read data from the stream at the current seek offset
     pub fn read(&self, data: &mut [u8]) -> ZxResult<usize> {
-        let mut seek = self.seek.lock();
-        let length = self.read_at(data, *seek)?;
-        *seek += length;
+        let mut inner = self.inner.lock();
+        let length = self.read_at(data, inner.seek)?;
+        inner.seek += length;
         Ok(length)
     }
 
@@ -60,42 +67,68 @@ impl Stream {
         Ok(length)
     }
 
-    /// write data to the stream at the current seek offset or append data at the end of content
+    /// Write data to the stream at the current seek offset or append data at the end of content.
+    ///
+    /// `append` is true when `ZX_STREAM_APPEND` is passed to `stream_writev`.
+    /// The stream also appends when `MODE_APPEND` is set in the options
+    /// (via `ZX_PROP_STREAM_MODE_APPEND`).
     pub fn write(&self, data: &[u8], append: bool) -> ZxResult<usize> {
-        let mut seek = self.seek.lock();
-        if append {
-            *seek = self.vmo.content_size();
+        let mut inner = self.inner.lock();
+        let do_append = append || (inner.options & MODE_APPEND) != 0;
+        if do_append {
+            inner.seek = self.vmo.content_size();
         }
-        let length = self.write_at(data, *seek)?;
-        *seek += length;
+        let length = self.write_at(data, inner.seek)?;
+        inner.seek += length;
         Ok(length)
     }
 
-    /// Write data to the stream at a given offset
+    /// Write data to the stream at a given offset.
+    ///
+    /// Streams never resize their backing VMO.  Writes are clamped to the
+    /// VMO's current storage size.  Content-size is extended up to the
+    /// high-water mark of written data.  Any gap between the old
+    /// content-size and the write offset is zero-filled.
     pub fn write_at(&self, data: &[u8], offset: usize) -> ZxResult<usize> {
         let count = data.len();
-        let mut content_size = self.vmo.content_size();
-        let (target_size, overflow) = offset.overflowing_add(count);
-        if overflow {
+        let vmo_len = self.vmo.len();
+        // Check for offset + count overflow.
+        if offset.checked_add(count).is_none() {
             return Err(ZxError::FILE_BIG);
         }
-        if target_size > content_size {
-            content_size = self.vmo.set_content_size_and_resize(target_size, offset)?;
+        // If offset is at or past the VMO boundary, no bytes can be written.
+        if offset >= vmo_len {
+            return Err(ZxError::OUT_OF_RANGE);
         }
-        if offset >= content_size {
-            return Err(ZxError::NO_SPACE);
+        // Clamp to the VMO boundary.
+        let length = count.min(vmo_len - offset);
+        if length == 0 {
+            return Ok(0);
         }
-        let length = count.min(content_size - offset);
+        // Zero the gap between old content_size and write offset.
+        let old_content_size = self.vmo.content_size();
+        if offset > old_content_size {
+            let zero_end = offset.min(vmo_len);
+            if zero_end > old_content_size {
+                self.vmo
+                    .zero(old_content_size, zero_end - old_content_size)?;
+            }
+        }
         self.vmo.write(offset, &data[..length])?;
+        // Extend content_size if we wrote past the old high-water mark.
+        let new_end = offset + length;
+        if new_end > old_content_size {
+            self.vmo.set_content_size(new_end)?;
+        }
         Ok(length)
     }
 
     /// Modify the current seek offset of the stream
     pub fn seek(&self, whence: SeekOrigin, offset: isize) -> ZxResult<usize> {
-        let mut seek = self.seek.lock();
+        let mut inner = self.inner.lock();
         let origin: usize = match whence {
             SeekOrigin::Start => 0,
-            SeekOrigin::Current => *seek,
+            SeekOrigin::Current => inner.seek,
             SeekOrigin::End => self.vmo.content_size(),
         };
         if offset >= 0 {
@@ -103,25 +136,42 @@ impl Stream {
             if overflow {
                 return Err(ZxError::INVALID_ARGS);
             }
-            *seek = target;
+            inner.seek = target;
         } else {
-            let target = origin as isize + offset;
-            if origin as isize >= 0 && target < 0 {
-                return Err(ZxError::INVALID_ARGS);
+            // Check for underflow: origin + negative offset < 0.
+            let target = (origin as i64).checked_add(offset as i64);
+            match target {
+                Some(t) if t >= 0 => inner.seek = t as usize,
+                _ => return Err(ZxError::INVALID_ARGS),
             }
-            *seek = target as usize;
         }
-        Ok(*seek)
+        Ok(inner.seek)
     }
 
-    /// Get information of the socket.
+    /// Get information about the stream.
     pub fn get_info(&self) -> StreamInfo {
-        let seek = self.seek.lock();
+        let inner = self.inner.lock();
         StreamInfo {
-            options: self.options,
+            options: inner.options,
             padding1: 0,
-            seek: *seek as u64,
+            seek: inner.seek as u64,
             content_size: self.vmo.content_size() as u64,
+        }
+    }
+
+    /// Get whether append mode is enabled.
+    pub fn get_mode_append(&self) -> bool {
+        let inner = self.inner.lock();
+        (inner.options & MODE_APPEND) != 0
+    }
+
+    /// Set or clear append mode.
+    pub fn set_mode_append(&self, enable: bool) {
+        let mut inner = self.inner.lock();
+        if enable {
+            inner.options |= MODE_APPEND;
+        } else {
+            inner.options &= !MODE_APPEND;
         }
     }
 }

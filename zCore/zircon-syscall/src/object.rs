@@ -143,6 +143,15 @@ impl Syscall<'_> {
                 #[cfg(not(target_arch = "x86_64"))]
                 Err(ZxError::NOT_SUPPORTED)
             }
+            Property::StreamModeAppend => {
+                let mut info_ptr = UserOutPtr::<u8>::from_addr_size(buffer, buffer_size)?;
+                let stream = proc.get_object_with_rights::<zircon_object::vm::Stream>(
+                    handle_value,
+                    Rights::GET_PROPERTY,
+                )?;
+                info_ptr.write(stream.get_mode_append() as u8)?;
+                Ok(())
+            }
         }
     }
 
@@ -211,6 +220,11 @@ impl Syscall<'_> {
             Property::VmoContentSize => {
                 let content_size =
                     UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
+                // Fuchsia rejects content_size values > INT64_MAX because seek
+                // offsets are signed.
+                if content_size > isize::MAX as usize {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
                 proc.get_object::<VmObject>(handle_value)?
                     .set_content_size(content_size)
             }
@@ -224,6 +238,15 @@ impl Syscall<'_> {
                 let strategy = UserInPtr::<u32>::from_addr_size(buffer, buffer_size)?.read()?;
                 proc.get_object_with_rights::<ExceptionObject>(handle_value, Rights::SET_PROPERTY)?
                     .set_strategy(strategy)?;
+                Ok(())
+            }
+            Property::StreamModeAppend => {
+                let value = UserInPtr::<u8>::from_addr_size(buffer, buffer_size)?.read()?;
+                let stream = proc.get_object_with_rights::<zircon_object::vm::Stream>(
+                    handle_value,
+                    Rights::SET_PROPERTY,
+                )?;
+                stream.set_mode_append(value != 0);
                 Ok(())
             }
             _ => {
@@ -602,6 +625,7 @@ numeric_enum! {
         ExceptionState = 16,
         VmoContentSize = 17,
         ExceptionStrategy = 18,
+        StreamModeAppend = 19,
     }
 }
 
