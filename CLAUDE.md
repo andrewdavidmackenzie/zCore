@@ -93,7 +93,7 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
   diagnostics that must survive LTO.
 - GTest filter: pass `--gtest_filter=Pattern*` via argv in spawn.rs
   (not yet implemented, would require modifying processargs argv).
-- Test binary: `prebuilt/zircon/x86_64/core-tests-standalone`
+- Test binary: `prebuilt/zircon-test/x86_64/core-tests-standalone`
 - Issue #21 tracks overall progress, issue #468 tracks missing syscalls.
 
 ## PR workflow

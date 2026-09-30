@@ -49,7 +49,7 @@ ifeq ($(LINUX), 1)
 else ifeq ($(USER), 1)
   user_img := ../petal/target/petal.zbi
 else
-  user_img := ../prebuilt/zircon/x64/$(ZBI).zbi
+  user_img := ../prebuilt/zircon-test/x64/$(ZBI).zbi
 endif
 
 ifeq ($(PLATFORM), libos)
@@ -256,7 +256,7 @@ else
 build: $(kernel_img)
 ifeq ($(PLATFORM), fu740)
 	gzip -9 -cvf $(build_path)/kernel.bin > ./kernel.bin.gz
-	mkimage -f ../firmware/riscv/fu740_fdt.its ./kernel-fu740.itb
+	mkimage -f ../prebuilt/firmware/riscv/fu740_fdt.its ./kernel-fu740.itb
 	@echo 'Build kernel-fu740.itb FIT-uImage done'
 else ifeq ($(PLATFORM), c910light)
 	mkimage -A riscv -O linux -C none -T kernel -a 0x200000 -e 0x200000 \
@@ -277,7 +277,7 @@ ifeq ($(ARCH), aarch64)
 	$(sed) 's#\"cmdline\":.*#\"cmdline\": \"$(CMDLINE)\",#' disk/EFI/Boot/Boot.json
 endif
 ifeq ($(PLATFORM), d1)
-	$(OBJCOPY) ../firmware/riscv/d1_fw_payload.elf --strip-all -O binary ./kernel_d1.bin
+	$(OBJCOPY) ../prebuilt/firmware/riscv/d1_fw_payload.elf --strip-all -O binary ./kernel_d1.bin
 	dd if=$(kernel_img) of=kernel_d1.bin bs=512 seek=2048
 	xfel ddr ddr3
 	xfel write 0x40000000 kernel_d1.bin
@@ -367,7 +367,7 @@ VMDISK := $(build_path)/boot.vdi
 vbox: build
 ifneq "$(VMDISK)" "$(wildcard $(VMDISK))"
 	vboxmanage createvm --name zCoreVM --basefolder $(build_path) --register
-	cp ../prebuilt/zircon/empty.vdi $(VMDISK)
+	cp ../prebuilt/zircon-test/empty.vdi $(VMDISK)
 	vboxmanage storagectl zCoreVM --name DiskCtrlr --controller IntelAhci --add sata
 	vboxmanage storageattach zCoreVM --storagectl DiskCtrlr --port 0 --type hdd --medium $(VMDISK)
 	vboxmanage modifyvm zCoreVM --memory 1024 --firmware efi

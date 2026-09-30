@@ -57,10 +57,19 @@ impl Syscall<'_> {
     ///
     /// Returns `NOT_FOUND` for handles that don't exist in the table
     /// (matching the error code used by the Fuchsia test suite).
+    /// Check that a handle is valid.
+    ///
+    /// Fuchsia's error codes:
+    /// - `INVALID_ARGS` for `ZX_HANDLE_INVALID` (0)
+    /// - `OUT_OF_RANGE` for odd handle values (invalid format)
+    /// - `NOT_FOUND` for even non-zero handles not in the table
     pub fn sys_handle_check_valid(&self, handle: HandleValue) -> ZxResult {
         info!("handle.check_valid: handle={:#x}", handle);
         if handle == INVALID_HANDLE {
-            return Err(ZxError::BAD_HANDLE);
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if handle & 1 != 0 {
+            return Err(ZxError::OUT_OF_RANGE);
         }
         // Pseudo-handles are always valid.
         if self.resolve_pseudo_handle(handle).is_some() {

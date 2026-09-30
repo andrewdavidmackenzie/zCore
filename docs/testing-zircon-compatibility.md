@@ -15,7 +15,7 @@ with stock Fuchsia userspace.
 
 ### Prebuilt binaries
 
-The following Fuchsia binaries are needed in `prebuilt/zircon/x86_64/`:
+The following Fuchsia binaries are needed in `prebuilt/zircon-test/x86_64/`:
 
 | Binary | Purpose |
 |--------|---------|

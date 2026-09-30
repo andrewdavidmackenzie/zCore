@@ -2,6 +2,7 @@ use {
     super::*,
     alloc::vec::Vec,
     core::convert::TryFrom,
+    hal::UserContextField,
     numeric_enum_macro::numeric_enum,
     zircon_object::{dev::*, ipc::*, signal::Clock, signal::Port, task::*, vm::*},
 };
@@ -112,9 +113,30 @@ impl Syscall<'_> {
                 info_ptr.write(strategy)?;
                 Ok(())
             }
-            _ => {
-                warn!("unknown property {:?}", property);
-                Err(ZxError::INVALID_ARGS)
+            Property::RegisterFs => {
+                let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
+                let thread =
+                    proc.get_object_with_rights::<Thread>(handle_value, Rights::GET_PROPERTY)?;
+                let value = thread
+                    .with_context(|ctx| ctx.get_field(UserContextField::ThreadPointer))
+                    .map_err(|_| ZxError::BAD_STATE)?;
+                info_ptr.write(value)?;
+                Ok(())
+            }
+            Property::RegisterGs => {
+                #[cfg(target_arch = "x86_64")]
+                {
+                    let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
+                    let thread =
+                        proc.get_object_with_rights::<Thread>(handle_value, Rights::GET_PROPERTY)?;
+                    let value = thread
+                        .with_context(|ctx| ctx.general().gsbase)
+                        .map_err(|_| ZxError::BAD_STATE)?;
+                    info_ptr.write(value)?;
+                    Ok(())
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Err(ZxError::NOT_SUPPORTED)
             }
         }
     }

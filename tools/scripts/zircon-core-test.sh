@@ -15,7 +15,7 @@
 set -euo pipefail
 
 ARCH="x86_64"
-PREBUILT_DIR="prebuilt/zircon/x86_64"
+PREBUILT_DIR="prebuilt/zircon-test/x86_64"
 ROOTFS_DIR="target/rootfs/zircon/$ARCH"
 SESSION_TIMEOUT=300  # 5 minutes for the full test suite
 

@@ -81,7 +81,11 @@ impl Syscall<'_> {
         let new_requeue_owner = if new_requeue_owner == INVALID_HANDLE {
             None
         } else {
-            Some(self.get_thread_with_pseudo(new_requeue_owner)?)
+            let owner = self.get_thread_with_pseudo(new_requeue_owner)?;
+            if owner.state() == ThreadState::New {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            Some(owner)
         };
         let wake_futex = proc.get_futex(value_ptr.as_addr());
         let requeue_futex = proc.get_futex(requeue_ptr.as_addr());
@@ -137,7 +141,11 @@ impl Syscall<'_> {
         let new_requeue_owner = if new_requeue_owner == INVALID_HANDLE {
             None
         } else {
-            Some(self.get_thread_with_pseudo(new_requeue_owner)?)
+            let owner = self.get_thread_with_pseudo(new_requeue_owner)?;
+            if owner.state() == ThreadState::New {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            Some(owner)
         };
         let wake_futex = proc.get_futex(value_ptr.as_addr());
         let requeue_futex = proc.get_futex(requeue_ptr.as_addr());
