@@ -38,31 +38,13 @@ fn check(status: i32, msg: &[u8]) {
 pub fn main() {
     zx::debug_write(b"exception_test: starting\r\n");
 
-    // Read bootstrap channel for root job handle
-    let startup = petal::take_startup_handle();
-    if startup == 0 {
-        zx::debug_write(b"exception_test: FAIL - no startup handle\r\n");
+    // Read bootstrap channel (processargs format)
+    let bootstrap = petal::Bootstrap::read();
+    let job_handle = bootstrap.find(zircon_abi::processargs::PA_JOB_DEFAULT);
+    if job_handle == 0 {
+        zx::debug_write(b"exception_test: FAIL - no job handle\r\n");
         zx::Process::exit(1);
     }
-    let mut handles = [0u32; 4];
-    let mut data = [0u8; 4];
-    let mut ab: u32 = 0;
-    let mut ah: u32 = 0;
-    let status = unsafe {
-        zx_channel_read(
-            startup,
-            0,
-            data.as_mut_ptr(),
-            handles.as_mut_ptr(),
-            data.len() as u32,
-            handles.len() as u32,
-            &mut ab,
-            &mut ah,
-        )
-    };
-    check(status, b"channel_read bootstrap");
-    unsafe { zx_handle_close(startup) };
-    let job_handle = handles[0];
 
     // Create child process
     let mut proc_handle: HandleValue = 0;

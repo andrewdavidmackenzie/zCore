@@ -334,8 +334,7 @@ pub fn spawn_process(
         None
     };
 
-    let msg1_data =
-        build_processargs_data(ZX_PROCARGS_PROTOCOL, ZX_PROCARGS_VERSION, &msg1_info, &[]);
+    let msg1_data = build_message(&msg1_info, &[]);
     ch0.write(crate::ipc::MessagePacket {
         data: msg1_data,
         handles: msg1_handles,
@@ -440,12 +439,7 @@ pub fn spawn_process(
         pa_hnd(PA_VMO_BOOTDATA, 1), // arg=1 distinguishes boot-options.txt
         pa_hnd(PA_CLOCK_UTC, 0),
     ];
-    let msg2_data = build_processargs_data(
-        ZX_PROCARGS_PROTOCOL,
-        ZX_PROCARGS_VERSION,
-        &msg2_info,
-        argv.as_bytes(),
-    );
+    let msg2_data = build_message(&msg2_info, argv.as_bytes());
     ch0.write(crate::ipc::MessagePacket {
         data: msg2_data,
         handles: msg2_handles,
@@ -608,46 +602,6 @@ fn spawn_loader_service(channel: Arc<Channel>) {
 /// Build a processargs message data buffer.
 /// Fuchsia processargs message header.
 /// Must match `zx_proc_args_t` from `zircon/processargs.h` exactly.
-/// Build a processargs message data buffer.
-///
-/// Wire format: `[ZxProcArgs header][handle_info u32 array][argv strings]`
-/// The header struct IS the wire format — written directly as bytes.
-fn build_processargs_data(
-    protocol: u32,
-    version: u32,
-    handle_info: &[u32],
-    argv: &[u8],
-) -> alloc::vec::Vec<u8> {
-    use zircon_abi::processargs::ZxProcArgs;
-    let header_size = core::mem::size_of::<ZxProcArgs>();
-    let handle_info_off = header_size as u32;
-    let args_off = handle_info_off + (handle_info.len() as u32) * 4;
-    let args_num = if argv.is_empty() {
-        0u32
-    } else {
-        argv.iter().filter(|&&b| b == 0).count() as u32
-    };
-    let total_size = (args_off as usize) + argv.len();
-
-    let header = ZxProcArgs {
-        protocol,
-        version,
-        handle_info_off,
-        args_off,
-        args_num,
-        environ_off: total_size as u32,
-        environ_num: 0,
-        names_off: total_size as u32,
-        names_num: 0,
-    };
-
-    // Contiguous wire format: header + handle_info + argv — all native endian.
-    let handle_info_bytes = unsafe {
-        core::slice::from_raw_parts(handle_info.as_ptr().cast::<u8>(), handle_info.len() * 4)
-    };
-    [header.as_bytes(), handle_info_bytes, argv].concat()
-}
-
 /// FIDL message header. Must match `fidl_message_header_t` from `zircon/fidl.h`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]

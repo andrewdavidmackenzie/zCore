@@ -15,17 +15,12 @@
 use core::panic::PanicInfo;
 use zircon_abi::consts::*;
 use zircon_abi::errors::*;
+use zircon_abi::processargs::*;
 use zircon_abi::syscall::*;
 use zircon_abi::zbi;
 
-// Bootstrap handle indices (must match kernel's K_* constants)
-const K_PROC_SELF: usize = 0;
-const K_VMARROOT_SELF: usize = 1;
-const K_ROOTJOB: usize = 2;
-const K_ROOTRESOURCE: usize = 3;
-const K_ZBI: usize = 4;
-const K_FIRSTVDSO: usize = 5;
-const K_HANDLECOUNT: usize = 15;
+/// Maximum number of handles we expect from the bootstrap message.
+const MAX_HANDLES: usize = 16;
 
 // vDSO data page offset (matches Fuchsia's ELF layout)
 const VDSO_DATA_OFFSET: usize = 0x7000;
@@ -56,9 +51,9 @@ fn check(name: &str, status: ZxStatus) {
 pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     debug_print(b"userstart: starting\n");
 
-    // Step 1: Read bootstrap handles from the channel
-    let mut data_buf = [0u8; 1024]; // for cmdline
-    let mut handles = [ZX_HANDLE_INVALID; K_HANDLECOUNT];
+    // Step 1: Read bootstrap handles from the channel (processargs format)
+    let mut data_buf = [0u8; 1024]; // for processargs header + handle_info + argv
+    let mut handles = [ZX_HANDLE_INVALID; MAX_HANDLES];
     let mut actual_bytes: u32 = 0;
     let mut actual_handles: u32 = 0;
 
@@ -69,7 +64,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
             data_buf.as_mut_ptr(),
             handles.as_mut_ptr(),
             data_buf.len() as u32,
-            K_HANDLECOUNT as u32,
+            MAX_HANDLES as u32,
             &mut actual_bytes,
             &mut actual_handles,
         )
@@ -80,12 +75,34 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     // Close the bootstrap channel -- we've read all the handles
     unsafe { zx_handle_close(bootstrap_handle) };
 
-    let _proc_self = handles[K_PROC_SELF];
-    let vmar_self = handles[K_VMARROOT_SELF];
-    let root_job = handles[K_ROOTJOB];
-    let root_resource = handles[K_ROOTRESOURCE];
-    let zbi_vmo = handles[K_ZBI];
-    let vdso_vmo = handles[K_FIRSTVDSO];
+    // Parse the processargs header to find handles by type tag.
+    let msg_data = &data_buf[..actual_bytes as usize];
+    let num_handles = actual_handles as usize;
+    let header = ZxProcArgs::from_bytes(msg_data).expect("bad processargs header");
+
+    /// Look up a handle by PA_* type. Panics if not found.
+    fn find_handle(
+        header: &ZxProcArgs,
+        data: &[u8],
+        handles: &[HandleValue],
+        num: usize,
+        pa_type: u32,
+    ) -> HandleValue {
+        match header.find_handle(data, num, pa_type) {
+            Some(idx) if idx < handles.len() => handles[idx],
+            _ => {
+                debug_write(b"userstart: missing bootstrap handle\n");
+                process_exit(1);
+            }
+        }
+    }
+
+    let _proc_self = find_handle(header, msg_data, &handles, num_handles, PA_PROC_SELF);
+    let vmar_self = find_handle(header, msg_data, &handles, num_handles, PA_VMAR_ROOT);
+    let root_job = find_handle(header, msg_data, &handles, num_handles, PA_JOB_DEFAULT);
+    let root_resource = find_handle(header, msg_data, &handles, num_handles, PA_RESOURCE);
+    let zbi_vmo = find_handle(header, msg_data, &handles, num_handles, PA_VMO_BOOTDATA);
+    let vdso_vmo = find_handle(header, msg_data, &handles, num_handles, PA_VMO_VDSO);
 
     // Step 2: Read the ZBI VMO to find the init program
     let mut zbi_size: usize = 0;
@@ -231,15 +248,21 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         zx_channel_create(0, &mut init_channel_local, &mut init_channel_remote)
     });
 
-    // Forward the remaining bootstrap handles to init via the channel.
-    // We pass: root job, root resource, and the ZBI VMO.
+    // Forward bootstrap handles to init using processargs format.
     let forward_handles = [root_job, root_resource, zbi_vmo];
+    let forward_info: [u32; 3] = [
+        pa_hnd(PA_JOB_DEFAULT, 0),
+        pa_hnd(PA_RESOURCE, 0),
+        pa_hnd(PA_VMO_BOOTDATA, 0),
+    ];
+    let mut fwd_buf = [0u8; 128];
+    let fwd_len = write_processargs_header(&forward_info, &mut fwd_buf);
     check("channel_write", unsafe {
         zx_channel_write(
             init_channel_local,
             0,
-            core::ptr::null(), // no data bytes
-            0,
+            fwd_buf.as_ptr(),
+            fwd_len as u32,
             forward_handles.as_ptr(),
             forward_handles.len() as u32,
         )
@@ -286,13 +309,37 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         zx_handle_close(stack_vmo);
         zx_handle_close(zbi_vmo);
         // Close remaining bootstrap handles
-        for &h in &handles {
+        for &h in &handles[..num_handles] {
             if h != ZX_HANDLE_INVALID {
                 zx_handle_close(h);
             }
         }
         zx_process_exit(0);
     }
+}
+
+/// Write a processargs header + handle_info into a buffer.
+/// Returns the number of bytes written.
+fn write_processargs_header(handle_info: &[u32], buf: &mut [u8]) -> usize {
+    let header_size = core::mem::size_of::<ZxProcArgs>();
+    let total = header_size + handle_info.len() * 4;
+    let header = ZxProcArgs {
+        protocol: ZX_PROCARGS_PROTOCOL,
+        version: ZX_PROCARGS_VERSION,
+        handle_info_off: header_size as u32,
+        args_off: total as u32,
+        args_num: 0,
+        environ_off: total as u32,
+        environ_num: 0,
+        names_off: total as u32,
+        names_num: 0,
+    };
+    buf[..header_size].copy_from_slice(header.as_bytes());
+    let info_bytes = unsafe {
+        core::slice::from_raw_parts(handle_info.as_ptr().cast::<u8>(), handle_info.len() * 4)
+    };
+    buf[header_size..total].copy_from_slice(info_bytes);
+    total
 }
 
 /// Apply ELF dynamic relocations from the PT_DYNAMIC segment.

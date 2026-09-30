@@ -42,6 +42,7 @@ skip_package = true
 
 [dependencies]
 zx = { path = "../zCore/zx" }
+zircon-abi = { path = "../zCore/zircon-abi", default-features = false }
 embedded-io = "0.6"
 
 # Profile settings are in the workspace root Cargo.toml

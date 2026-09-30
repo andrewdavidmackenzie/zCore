@@ -18,7 +18,7 @@
 #![no_std]
 #![deny(warnings)]
 
-#[cfg(feature = "zbi")]
+#[cfg(any(feature = "zbi", feature = "alloc"))]
 extern crate alloc;
 
 pub mod consts;

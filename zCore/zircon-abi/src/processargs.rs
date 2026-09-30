@@ -150,3 +150,39 @@ impl ZxProcArgs {
             .position(|&entry| pa_hnd_type(entry) == handle_type)
     }
 }
+
+/// Build a processargs message data buffer (requires alloc).
+///
+/// Wire format: `[ZxProcArgs header (36 bytes)][handle_info u32 array][argv]`
+///
+/// `argv` is NUL-separated and NUL-terminated (e.g. `"arg1\0arg2\0"`).
+/// Pass an empty slice if there are no arguments.
+#[cfg(feature = "alloc")]
+pub fn build_message(handle_info: &[u32], argv: &[u8]) -> alloc::vec::Vec<u8> {
+    let header_size = core::mem::size_of::<ZxProcArgs>();
+    let handle_info_off = header_size as u32;
+    let args_off = handle_info_off + (handle_info.len() as u32) * 4;
+    let args_num = if argv.is_empty() {
+        0u32
+    } else {
+        argv.iter().filter(|&&b| b == 0).count() as u32
+    };
+    let total_size = (args_off as usize) + argv.len();
+
+    let header = ZxProcArgs {
+        protocol: ZX_PROCARGS_PROTOCOL,
+        version: ZX_PROCARGS_VERSION,
+        handle_info_off,
+        args_off,
+        args_num,
+        environ_off: total_size as u32,
+        environ_num: 0,
+        names_off: total_size as u32,
+        names_num: 0,
+    };
+
+    let handle_info_bytes = unsafe {
+        core::slice::from_raw_parts(handle_info.as_ptr().cast::<u8>(), handle_info.len() * 4)
+    };
+    [header.as_bytes(), handle_info_bytes, argv].concat()
+}
