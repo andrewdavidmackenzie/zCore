@@ -2,8 +2,9 @@ use {
     super::*,
     alloc::vec::Vec,
     core::convert::TryFrom,
+    hal::UserContextField,
     numeric_enum_macro::numeric_enum,
-    zircon_object::{dev::*, ipc::*, signal::Port, task::*, vm::*},
+    zircon_object::{dev::*, ipc::*, signal::Clock, signal::Port, task::*, vm::*},
 };
 
 impl Syscall<'_> {
@@ -41,15 +42,20 @@ impl Syscall<'_> {
             info_ptr.write(vdso_base)?;
             return Ok(());
         }
-        let object = proc.get_dyn_object_with_rights(handle_value, Rights::GET_PROPERTY)?;
+        let object = self.get_object_with_pseudo(handle_value, Rights::GET_PROPERTY)?;
         match property {
             Property::Name => {
                 if buffer_size < MAX_NAME_LEN {
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
                 let s = object.name();
-                info!("name={:?}", s);
-                UserOutPtr::<u8>::from(buffer).write_cstring(s.as_str())?;
+                // Write the full buffer zero-padded. Fuchsia guarantees
+                // all bytes after the name are zero.
+                let mut buf = [0u8; MAX_NAME_LEN];
+                let name_bytes = s.as_bytes();
+                let copy_len = name_bytes.len().min(MAX_NAME_LEN - 1);
+                buf[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+                UserOutPtr::<u8>::from(buffer).write_array(&buf)?;
                 Ok(())
             }
             Property::ProcessDebugAddr => {
@@ -112,9 +118,39 @@ impl Syscall<'_> {
                 info_ptr.write(strategy)?;
                 Ok(())
             }
-            _ => {
-                warn!("unknown property {:?}", property);
-                Err(ZxError::INVALID_ARGS)
+            Property::RegisterFs => {
+                let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
+                let thread =
+                    proc.get_object_with_rights::<Thread>(handle_value, Rights::GET_PROPERTY)?;
+                let value = thread
+                    .with_context(|ctx| ctx.get_field(UserContextField::ThreadPointer))
+                    .map_err(|_| ZxError::BAD_STATE)?;
+                info_ptr.write(value)?;
+                Ok(())
+            }
+            Property::RegisterGs => {
+                #[cfg(target_arch = "x86_64")]
+                {
+                    let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
+                    let thread =
+                        proc.get_object_with_rights::<Thread>(handle_value, Rights::GET_PROPERTY)?;
+                    let value = thread
+                        .with_context(|ctx| ctx.general().gsbase)
+                        .map_err(|_| ZxError::BAD_STATE)?;
+                    info_ptr.write(value)?;
+                    Ok(())
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Property::StreamModeAppend => {
+                let mut info_ptr = UserOutPtr::<u8>::from_addr_size(buffer, buffer_size)?;
+                let stream = proc.get_object_with_rights::<zircon_object::vm::Stream>(
+                    handle_value,
+                    Rights::GET_PROPERTY,
+                )?;
+                info_ptr.write(stream.get_mode_append() as u8)?;
+                Ok(())
             }
         }
     }
@@ -133,11 +169,16 @@ impl Syscall<'_> {
             handle_value, property, buffer, buffer_size
         );
         let proc = self.thread.proc();
-        let object = proc.get_dyn_object_with_rights(handle_value, Rights::SET_PROPERTY)?;
+        let object = self.get_object_with_pseudo(handle_value, Rights::SET_PROPERTY)?;
         match property {
             Property::Name => {
                 let length = buffer_size.min(MAX_NAME_LEN);
-                object.set_name(&UserInPtr::<u8>::from(buffer).read_string(length)?);
+                let raw = UserInPtr::<u8>::from(buffer).read_array(length)?;
+                // Truncate at first null byte — Fuchsia names are
+                // null-terminated C strings, any bytes after null are ignored.
+                let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+                let name = core::str::from_utf8(&raw[..end]).map_err(|_| ZxError::INVALID_ARGS)?;
+                object.set_name(name);
                 Ok(())
             }
             Property::ProcessDebugAddr => {
@@ -179,6 +220,11 @@ impl Syscall<'_> {
             Property::VmoContentSize => {
                 let content_size =
                     UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
+                // Fuchsia rejects content_size values > INT64_MAX because seek
+                // offsets are signed.
+                if content_size > isize::MAX as usize {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
                 proc.get_object::<VmObject>(handle_value)?
                     .set_content_size(content_size)
             }
@@ -192,6 +238,15 @@ impl Syscall<'_> {
                 let strategy = UserInPtr::<u32>::from_addr_size(buffer, buffer_size)?.read()?;
                 proc.get_object_with_rights::<ExceptionObject>(handle_value, Rights::SET_PROPERTY)?
                     .set_strategy(strategy)?;
+                Ok(())
+            }
+            Property::StreamModeAppend => {
+                let value = UserInPtr::<u8>::from_addr_size(buffer, buffer_size)?.read()?;
+                let stream = proc.get_object_with_rights::<zircon_object::vm::Stream>(
+                    handle_value,
+                    Rights::SET_PROPERTY,
+                )?;
+                stream.set_mode_append(value != 0);
                 Ok(())
             }
             _ => {
@@ -215,7 +270,7 @@ impl Syscall<'_> {
             handle, signals, deadline, observed
         );
         let proc = self.thread.proc();
-        let object = proc.get_dyn_object_with_rights(handle, Rights::WAIT)?;
+        let object = self.get_object_with_pseudo(handle, Rights::WAIT)?;
         let cancel_token = proc.get_cancel_token(handle)?;
         let future = object.wait_signal(signals);
         let signal = self
@@ -250,7 +305,10 @@ impl Syscall<'_> {
         mut actual: UserOutPtr<usize>,
         mut avail: UserOutPtr<usize>,
     ) -> ZxResult {
-        let topic = Topic::try_from(topic).map_err(|_| ZxError::INVALID_ARGS)?;
+        // Fuchsia info topics use low bits for the topic ID and upper bits
+        // for flags (e.g. bit 28 = requires specific object state).  Strip
+        // the flags before converting to the Topic enum.
+        let topic = Topic::try_from(topic & 0xFFFF).map_err(|_| ZxError::INVALID_ARGS)?;
         info!(
             "object.get_info: handle={:#x?}, topic={:?}, buffer=({:#x}; {:#x})",
             handle, topic, buffer, buffer_size,
@@ -258,7 +316,7 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         match topic {
             Topic::HandleValid => {
-                let _ = proc.get_dyn_object_with_rights(handle, Rights::empty())?;
+                let _ = self.get_object_with_pseudo(handle, Rights::empty())?;
             }
             Topic::Process => {
                 let mut info_ptr = UserOutPtr::<ProcessInfo>::from_addr_size(buffer, buffer_size)?;
@@ -292,7 +350,7 @@ impl Syscall<'_> {
             }
             Topic::HandleCount => {
                 let mut info_ptr = UserOutPtr::<u32>::from_addr_size(buffer, buffer_size)?;
-                let object = proc.get_dyn_object_with_rights(handle, Rights::INSPECT)?;
+                let object = self.get_object_with_pseudo(handle, Rights::INSPECT)?;
                 info_ptr.write(object.handle_count())?;
             }
             Topic::Job => {
@@ -370,6 +428,14 @@ impl Syscall<'_> {
                 let stream = proc.get_object_with_rights::<Stream>(handle, Rights::INSPECT)?;
                 info_ptr.write(stream.get_info())?;
             }
+            Topic::ClockMappedSize => {
+                // Returns the size needed to map a clock's state VMO.
+                // The clock state is a single page containing the
+                // zx_clock_details_v1_t structure.
+                let mut size_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
+                let _clock = proc.get_object_with_rights::<Clock>(handle, Rights::INSPECT)?;
+                size_ptr.write(0x1000)?; // PAGE_SIZE
+            }
             _ => {
                 error!("not supported info topic: {:?}", topic);
                 return Err(ZxError::NOT_SUPPORTED);
@@ -418,7 +484,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        let object = proc.get_dyn_object_with_rights(handle_value, Rights::WAIT)?;
+        let object = self.get_object_with_pseudo(handle_value, Rights::WAIT)?;
         let port = proc.get_object_with_rights::<Port>(port_handle_value, Rights::WRITE)?;
         if options & ZX_WAIT_ASYNC_EDGE != 0 {
             object.send_signal_to_port_async_edge(signals, &port, key);
@@ -441,8 +507,7 @@ impl Syscall<'_> {
             "object.signal: handle_value={:#x}, clear_mask={:#x}, set_mask={:#x}",
             handle_value, clear_mask, set_mask
         );
-        let proc = self.thread.proc();
-        let object = proc.get_dyn_object_with_rights(handle_value, Rights::SIGNAL)?;
+        let object = self.get_object_with_pseudo(handle_value, Rights::SIGNAL)?;
         let allowed_signals = object.allowed_signals();
         info!("{:?} allowed: {:?}", object, allowed_signals);
         let clear_signal = Signal::verify_user_signal(allowed_signals, clear_mask)?;
@@ -463,10 +528,9 @@ impl Syscall<'_> {
         }
         let mut items = user_items.read_array(count as usize)?;
         info!("user_items: {:#x?}, deadline: {:?}", user_items, deadline);
-        let proc = self.thread.proc();
         let mut waiters = Vec::with_capacity(count as usize);
         for item in items.iter() {
-            let object = proc.get_dyn_object_with_rights(item.handle, Rights::WAIT)?;
+            let object = self.get_object_with_pseudo(item.handle, Rights::WAIT)?;
             waiters.push((object, item.wait_for));
         }
         let future = wait_signal_many(&waiters);
@@ -542,6 +606,7 @@ numeric_enum! {
         Job = 24,
         Timer = 25,
         Stream = 26,
+        ClockMappedSize = 40,
     }
 }
 
@@ -560,6 +625,7 @@ numeric_enum! {
         ExceptionState = 16,
         VmoContentSize = 17,
         ExceptionStrategy = 18,
+        StreamModeAppend = 19,
     }
 }
 

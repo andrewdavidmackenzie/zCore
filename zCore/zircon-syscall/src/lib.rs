@@ -18,7 +18,7 @@ use futures::pin_mut;
 use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use zircon_object::object::{wait_signal_many, KernelObject, KoID, Rights, Signal};
 use zircon_object::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
-use zircon_object::task::{CurrentThread, ThreadFn};
+use zircon_object::task::{CurrentThread, Thread, ThreadFn};
 use zircon_object::{ZxError, ZxResult};
 
 use self::consts::SyscallType as Sys;
@@ -53,9 +53,72 @@ mod time;
 mod vmar;
 mod vmo;
 
+/// Zircon pseudo-handle for the current thread (`zx_thread_self()`).
+const ZX_PSEUDO_HANDLE_THREAD_SELF: HandleValue = 0xFFFF_0001;
+/// Zircon pseudo-handle for the current process (`zx_process_self()`).
+const ZX_PSEUDO_HANDLE_PROCESS_SELF: HandleValue = 0xFFFF_0002;
+/// Zircon pseudo-handle for the root VMAR (`zx_vmar_root_self()`).
+const ZX_PSEUDO_HANDLE_VMAR_ROOT_SELF: HandleValue = 0xFFFF_0003;
+
 pub struct Syscall<'a> {
     pub thread: &'a CurrentThread,
     pub thread_fn: ThreadFn,
+}
+
+impl Syscall<'_> {
+    /// Resolve a handle value that may be a pseudo-handle.
+    ///
+    /// Fuchsia defines pseudo-handles for the current thread, process, and
+    /// root VMAR.  These are NOT in the process handle table — they are
+    /// well-known constants that the kernel maps to the caller's objects.
+    /// Returns `None` if the handle is not a pseudo-handle (use normal lookup).
+    /// Resolve a handle value that may be a pseudo-handle, returning the
+    /// kernel object as a trait object.
+    fn resolve_pseudo_handle(&self, handle_value: HandleValue) -> Option<Arc<dyn KernelObject>> {
+        match handle_value {
+            ZX_PSEUDO_HANDLE_THREAD_SELF => Some(self.thread.inner()),
+            ZX_PSEUDO_HANDLE_PROCESS_SELF => Some(self.thread.proc().clone()),
+            ZX_PSEUDO_HANDLE_VMAR_ROOT_SELF => Some(self.thread.proc().vmar()),
+            _ => None,
+        }
+    }
+
+    /// Like `proc.get_dyn_object_with_rights`, but also handles pseudo-handles.
+    fn get_object_with_pseudo(
+        &self,
+        handle_value: HandleValue,
+        rights: Rights,
+    ) -> ZxResult<Arc<dyn KernelObject>> {
+        if let Some(obj) = self.resolve_pseudo_handle(handle_value) {
+            let _ = rights; // Pseudo-handles have all rights.
+            Ok(obj)
+        } else {
+            self.thread
+                .proc()
+                .get_dyn_object_with_rights(handle_value, rights)
+        }
+    }
+
+    /// Like `proc.get_dyn_object_and_rights`, but also handles pseudo-handles.
+    fn get_object_and_rights_with_pseudo(
+        &self,
+        handle_value: HandleValue,
+    ) -> ZxResult<(Arc<dyn KernelObject>, Rights)> {
+        if let Some(obj) = self.resolve_pseudo_handle(handle_value) {
+            Ok((obj, Rights::all()))
+        } else {
+            self.thread.proc().get_dyn_object_and_rights(handle_value)
+        }
+    }
+
+    /// Resolve a thread handle that may be the pseudo-handle for the current thread.
+    fn get_thread_with_pseudo(&self, handle_value: HandleValue) -> ZxResult<Arc<Thread>> {
+        if handle_value == ZX_PSEUDO_HANDLE_THREAD_SELF {
+            Ok(self.thread.inner())
+        } else {
+            self.thread.proc().get_object::<Thread>(handle_value)
+        }
+    }
 }
 
 impl Syscall<'_> {
@@ -69,10 +132,12 @@ impl Syscall<'_> {
                 return ZxError::INVALID_ARGS as _;
             }
         };
+
         debug!(
             "{}|{} {:?} => args={:x?}",
             proc_name, thread_name, sys_type, args
         );
+
         let [a0, a1, a2, a3, a4, a5, a6, a7] = args;
         let ret = match sys_type {
             Sys::HANDLE_CLOSE => self.sys_handle_close(a0 as _),
@@ -105,6 +170,9 @@ impl Syscall<'_> {
                 self.sys_thread_create(a0 as _, a1.into(), a2 as _, a3 as _, a4.into())
             }
             Sys::THREAD_START => self.sys_thread_start(a0 as _, a1 as _, a2 as _, a3 as _, a4 as _),
+            Sys::THREAD_START_REGS => self.sys_thread_start_regs(
+                a0 as _, a1 as _, a2 as _, a3 as _, a4 as _, a5 as _, a6 as _,
+            ),
             Sys::THREAD_WRITE_STATE => {
                 self.sys_thread_write_state(a0 as _, a1 as _, a2.into(), a3 as _)
             }
@@ -175,6 +243,20 @@ impl Syscall<'_> {
             Sys::CHANNEL_CALL_FINISH => {
                 self.sys_channel_call_finish(a0.into(), a1.into(), a2.into(), a3.into())
             }
+            Sys::CHANNEL_CALL_ETC_NORETRY => {
+                self.sys_channel_call_etc_noretry(
+                    a0 as _,
+                    a1 as _,
+                    a2.into(),
+                    a3.into(),
+                    a4.into(),
+                    a5.into(),
+                )
+                .await
+            }
+            Sys::CHANNEL_CALL_ETC_FINISH => {
+                self.sys_channel_call_etc_finish(a0.into(), a1.into(), a2.into(), a3.into())
+            }
             Sys::SOCKET_CREATE => self.sys_socket_create(a0 as _, a1.into(), a2.into()),
             Sys::SOCKET_WRITE => {
                 self.sys_socket_write(a0 as _, a1 as _, a2.into(), a3 as _, a4.into())
@@ -183,6 +265,9 @@ impl Syscall<'_> {
                 self.sys_socket_read(a0 as _, a1 as _, a2.into(), a3 as _, a4.into())
             }
             Sys::SOCKET_SHUTDOWN => self.sys_socket_shutdown(a0 as _, a1 as _),
+            Sys::SOCKET_SET_DISPOSITION => {
+                self.sys_socket_set_disposition(a0 as _, a1 as _, a2 as _)
+            }
             Sys::STREAM_CREATE => self.sys_stream_create(a0 as _, a1 as _, a2 as _, a3.into()),
             Sys::STREAM_WRITEV => {
                 self.sys_stream_writev(a0 as _, a1 as _, a2.into(), a3 as _, a4.into())
@@ -262,14 +347,19 @@ impl Syscall<'_> {
             Sys::NANOSLEEP => self.sys_nanosleep(a0.into()).await,
             Sys::CLOCK_CREATE => self.sys_clock_create(a0 as _, a1.into(), a2.into()),
             Sys::CLOCK_GET => self.sys_clock_get(a0 as _, a1.into()),
+            // clock_get_monotonic_via_kernel returns the time value directly
+            // in rax, not a zx_status_t.  Return early to bypass Ok→0 conversion.
             Sys::CLOCK_GET_MONOTONIC_VIA_KERNEL => {
-                self.sys_clock_get_monotonic_via_kernel(a0.into())
+                return self.sys_clock_get_monotonic_via_kernel() as isize;
             }
             Sys::CLOCK_READ => self.sys_clock_read(a0 as _, a1.into()),
             Sys::CLOCK_GET_DETAILS => self.sys_clock_get_details(a0 as _, a1 as _, a2.into()),
             Sys::CLOCK_ADJUST => self.sys_clock_adjust(a0 as _, a1 as _, a2 as _),
             Sys::CLOCK_UPDATE => self.sys_clock_update(a0 as _, a1 as _, a2.into()),
-            Sys::TICKS_GET_VIA_KERNEL => self.sys_ticks_get_via_kernel(a0.into()),
+            // ticks_get_via_kernel returns the tick count directly in rax.
+            Sys::TICKS_GET_VIA_KERNEL => {
+                return self.sys_ticks_get_via_kernel() as isize;
+            }
             Sys::TIMER_CREATE => self.sys_timer_create(a0 as _, a1 as _, a2.into()),
             Sys::DEBUG_WRITE => self.sys_debug_write(a0.into(), a1 as _),
             Sys::DEBUG_EXEC => self.sys_debug_exec(a0.into(), a1 as _).await,
@@ -546,17 +636,29 @@ impl Syscall<'_> {
                 self.sys_system_suspend_enter(a0 as _, a1 as _, a2 as _, a3, a4, a5 as _, a6.into())
             }
             Sys::SYSTEM_WATCH_MEMORY_STALL => self.sys_system_watch_memory_stall(a0 as _, a1 as _),
+            Sys::HANDLE_CHECK_VALID => self.sys_handle_check_valid(a0 as _),
+            Sys::UTC_REFERENCE_SWAP => self.sys_utc_reference_swap(a0 as _, a1.into()),
+            Sys::UTC_REFERENCE_GET => {
+                return self.thread.proc().utc_reference_get() as isize;
+            }
             _ => {
                 error!("syscall unimplemented: {:?}", sys_type);
                 Err(ZxError::NOT_SUPPORTED)
             }
         };
         // Log debug I/O syscalls at trace level to avoid flooding the
+        // Log debug I/O syscalls at trace level to avoid flooding the
         // serial console during interactive shell sessions.
         // Log errors at error level, success at info/trace.
         match (&ret, &sys_type) {
             (_, Sys::DEBUG_WRITE | Sys::DEBUG_READ) => {
                 trace!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);
+            }
+            (Err(e), Sys::VMAR_MAP) => {
+                error!(
+                    "{}|{} VMAR_MAP({:#x},{:#x},{:#x},{:#x},{:#x},{:#x}) <= {:?}",
+                    proc_name, thread_name, a0, a1, a2, a3, a4, a5, e
+                );
             }
             (Err(_), _) => {
                 error!("{}|{} {:?} <= {:?}", proc_name, thread_name, sys_type, ret);

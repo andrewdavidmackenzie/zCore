@@ -44,7 +44,7 @@ in Fuchsia's boot sequence. zCore does NOT include Zircon userspace source; it
 uses **prebuilt binaries** generated from the real Fuchsia source tree (via
 `tools/scripts/gen-prebuilt.sh`). The binaries are: `userboot.so` (initial process),
 `libzircon.so` (vDSO), and `bringup.zbi` (boot image with bootfs). These are
-expected at `prebuilt/zircon/{arch}/` but are NOT currently present in the
+expected at `prebuilt/zircon-test/{arch}/` but are NOT currently present in the
 repo. Without them, Zircon mode cannot boot. The loader code is at
 `loader/src/zircon.rs`.
 
@@ -682,10 +682,10 @@ runtime link.
 currently.
 
 **Currently cannot boot Zircon mode.** It requires prebuilt binaries
-(userboot.so, libzircon.so, bringup.zbi) at `prebuilt/zircon/{arch}/` which are
+(userboot.so, libzircon.so, bringup.zbi) at `prebuilt/zircon-test/{arch}/` which are
 NOT present in the repo. To generate them: run `tools/scripts/gen-prebuilt.sh` inside
 a Fuchsia source tree. The Zircon integration test (`loader/tests/zircon.rs`)
-is x86_64-only and expects `prebuilt/zircon/x64/bringup.zbi`.
+is x86_64-only and expects `prebuilt/zircon-test/x64/bringup.zbi`.
 See [#86](https://github.com/andrewdavidmackenzie/zCore/issues/86).
 
 

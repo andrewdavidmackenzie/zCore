@@ -26,6 +26,9 @@ struct SocketInner {
     read_threshold: usize,
     write_threshold: usize,
     read_disabled: bool,
+    /// True if writes were disabled via `shutdown` (permanent, cannot
+    /// be re-enabled via `set_disposition`).
+    write_shutdown: bool,
 }
 
 const SOCKET_SIZE: usize = 128 * 2048;
@@ -310,6 +313,7 @@ impl Socket {
         if write {
             clear |= Signal::WRITABLE;
             set |= Signal::SOCKET_WRITE_DISABLED;
+            inner.write_shutdown = true;
         }
         self.base.signal_change(clear, set);
         Ok(())
@@ -363,6 +367,83 @@ impl Socket {
     pub fn get_rx_tx_threshold(&self) -> (usize, usize) {
         let inner = self.inner.lock();
         (inner.read_threshold, inner.write_threshold)
+    }
+
+    /// Set the write disposition of the socket and/or its peer.
+    ///
+    /// `disposition` controls writes to THIS socket endpoint.
+    /// `disposition_peer` controls writes to the PEER socket endpoint.
+    ///
+    /// Values:
+    /// - 0 = no change
+    /// - `ZX_SOCKET_DISPOSITION_WRITE_DISABLED` (1) = disable writes
+    /// - `ZX_SOCKET_DISPOSITION_WRITE_ENABLED` (2) = re-enable writes
+    pub fn set_disposition(&self, disposition: u32, disposition_peer: u32) -> ZxResult {
+        const WRITE_DISABLED: u32 = 1;
+        const WRITE_ENABLED: u32 = 2;
+
+        if disposition > 2 || disposition_peer > 2 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+
+        // disposition_peer requires the peer to be alive.
+        // Local disposition changes work even when peer is closed.
+        let peer = self.peer.upgrade();
+        if disposition_peer != 0 && peer.is_none() {
+            return Err(ZxError::PEER_CLOSED);
+        }
+
+        // Apply local disposition: controls writes to THIS endpoint.
+        // When disabled: set WRITE_DISABLED and clear WRITABLE on self,
+        // set PEER_WRITE_DISABLED on peer.
+        match disposition {
+            WRITE_DISABLED => {
+                self.base
+                    .signal_change(Signal::WRITABLE, Signal::SOCKET_WRITE_DISABLED);
+                if let Some(ref peer) = peer {
+                    peer.base.signal_set(Signal::SOCKET_PEER_WRITE_DISABLED);
+                }
+            }
+            WRITE_ENABLED => {
+                // Can only re-enable writes disabled via set_disposition,
+                // not via shutdown.
+                if self.inner.lock().write_shutdown {
+                    return Err(ZxError::BAD_STATE);
+                }
+                self.base
+                    .signal_change(Signal::SOCKET_WRITE_DISABLED, Signal::WRITABLE);
+                if let Some(ref peer) = peer {
+                    peer.base.signal_clear(Signal::SOCKET_PEER_WRITE_DISABLED);
+                }
+            }
+            0 => {}
+            _ => return Err(ZxError::INVALID_ARGS),
+        }
+
+        // Apply peer disposition: controls writes to the PEER endpoint.
+        // When disabled: set WRITE_DISABLED and clear WRITABLE on peer,
+        // set PEER_WRITE_DISABLED on self.
+        if let Some(ref peer) = peer {
+            match disposition_peer {
+                WRITE_DISABLED => {
+                    peer.base
+                        .signal_change(Signal::WRITABLE, Signal::SOCKET_WRITE_DISABLED);
+                    self.base.signal_set(Signal::SOCKET_PEER_WRITE_DISABLED);
+                }
+                WRITE_ENABLED => {
+                    if peer.inner.lock().write_shutdown {
+                        return Err(ZxError::BAD_STATE);
+                    }
+                    peer.base
+                        .signal_change(Signal::SOCKET_WRITE_DISABLED, Signal::WRITABLE);
+                    self.base.signal_clear(Signal::SOCKET_PEER_WRITE_DISABLED);
+                }
+                0 => {}
+                _ => return Err(ZxError::INVALID_ARGS),
+            }
+        }
+
+        Ok(())
     }
 }
 

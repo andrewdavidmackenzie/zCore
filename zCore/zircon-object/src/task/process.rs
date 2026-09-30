@@ -93,6 +93,9 @@ struct ProcessInner {
     /// Whether this process was created via create_shared (eligible
     /// as a source for further create_shared calls).
     is_shared: bool,
+    /// UTC clock handle installed by _zx_utc_reference_swap.
+    /// Used by libc's clock_gettime(CLOCK_REALTIME).
+    utc_clock: HandleValue,
 }
 
 /// Status of a process.
@@ -119,12 +122,26 @@ impl Process {
         name: &str,
         ext: impl Any + Send + Sync,
     ) -> ZxResult<Arc<Self>> {
+        Self::create_with_vmar(job, name, ext, VmAddressRegion::new_root())
+    }
+
+    /// Create a new process with a custom root VMAR.
+    ///
+    /// Used by the Linux process spawner which needs a VMAR starting
+    /// at address 0 (for non-PIE ELF binaries), while the default
+    /// VMAR starts at `USER_ASPACE_BASE` (non-zero for Fuchsia Scudo).
+    pub fn create_with_vmar(
+        job: &Arc<Job>,
+        name: &str,
+        ext: impl Any + Send + Sync,
+        vmar: Arc<VmAddressRegion>,
+    ) -> ZxResult<Arc<Self>> {
         let proc = Arc::new(Process {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),
             job: job.clone(),
             policy: job.policy(),
-            vmar: VmAddressRegion::new_root(),
+            vmar,
             ext: Box::new(ext),
             exceptionate: Exceptionate::new(ExceptionChannelType::Process),
             debug_exceptionate: Exceptionate::new(ExceptionChannelType::Debugger),
@@ -352,6 +369,21 @@ impl Process {
         self.vmar.clone()
     }
 
+    /// Swap the UTC clock handle. Returns the old handle value.
+    /// Called by the _zx_utc_reference_swap vDSO function.
+    pub fn utc_reference_swap(&self, new_handle: HandleValue) -> HandleValue {
+        let mut inner = self.inner.lock();
+        let old = inner.utc_clock;
+        inner.utc_clock = new_handle;
+        old
+    }
+
+    /// Get the current UTC clock handle.
+    /// Called by the _zx_utc_reference_get vDSO function.
+    pub fn utc_reference_get(&self) -> HandleValue {
+        self.inner.lock().utc_clock
+    }
+
     /// Get the job of the process.
     /// Whether this process is eligible as a source for create_shared.
     pub fn is_shared(&self) -> bool {
@@ -443,8 +475,16 @@ impl Process {
         handle_value: HandleValue,
         desired_rights: Rights,
     ) -> ZxResult<Arc<T>> {
-        self.get_dyn_object_with_rights(handle_value, desired_rights)
-            .and_then(|obj| obj.downcast_arc::<T>().map_err(|_| ZxError::WRONG_TYPE))
+        let handle = self.get_handle(handle_value)?;
+        // Check type before rights (Fuchsia returns WRONG_TYPE before ACCESS_DENIED).
+        let obj = handle
+            .object
+            .downcast_arc::<T>()
+            .map_err(|_| ZxError::WRONG_TYPE)?;
+        if !handle.rights.contains(desired_rights) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        Ok(obj)
     }
 
     /// Get the kernel object corresponding to this `handle_value` and this handle's rights.

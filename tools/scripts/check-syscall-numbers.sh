@@ -91,6 +91,29 @@ else
     echo "OK: total $build_count syscall definitions ($fuchsia_count Fuchsia + $zcore_count zCore)"
 fi
 
+# ── Check 6: every Fuchsia syscall has a dispatch handler ────────────
+# Extract the Sys:: variant names from the match in lib.rs.
+LIBRS="zCore/zircon-syscall/src/lib.rs"
+if [ -f "$LIBRS" ]; then
+    # Get all Sys::FOO entries from the dispatch match (including _ => fallthrough)
+    dispatched=$(grep -o 'Sys::[A-Z_0-9]*' "$LIBRS" | sed 's/^Sys:://' | sort -u)
+    # Get all Fuchsia syscall names from the header (convert to UPPER_CASE)
+    all_syscalls=$(echo "$fuchsia_lines" | awk '{print $2}' | sed 's/^ZX_SYS_//' | tr 'a-z' 'A-Z' | sort -u)
+    # Find syscalls with numbers but no dispatch handler
+    missing=$(comm -23 <(echo "$all_syscalls") <(echo "$dispatched"))
+    missing_count=$(echo "$missing" | grep -c "." 2>/dev/null || true)
+    if [ "$missing_count" -gt 0 ]; then
+        echo "WARN: $missing_count Fuchsia syscall(s) have numbers but no dispatch handler in lib.rs:"
+        echo "$missing" | sed 's/^/  /'
+        # Don't fail the check — some syscalls are intentionally unimplemented.
+        # This is informational to catch accidental omissions.
+    else
+        echo "OK: all Fuchsia syscalls have dispatch handlers"
+    fi
+else
+    echo "WARN: $LIBRS not found, skipping dispatch check"
+fi
+
 # ── Optional: fetch upstream and diff ────────────────────────────────
 if [ "${1:-}" = "--fetch" ]; then
     echo ""

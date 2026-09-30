@@ -13,10 +13,6 @@ impl Syscall<'_> {
         name_size: u64,
         mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        info!(
-            "resource.create: parent={:#x}, options={:#x}, base={:#X}, size={:#x}",
-            parent_rsrc, options, base, size
-        );
         let name = name.read_string(name_size as usize)?;
         info!("name={:?}", name);
         let proc = self.thread.proc();

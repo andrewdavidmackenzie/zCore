@@ -44,7 +44,7 @@ make run LINUX=1 ARCH=riscv64 \
 1. Download the D1 board's
    [OpenSBI](https://github.com/elliott10/opensbi)
    source and compile the image
-   `build/platform/thead/c910/firmware/fw_payload.elf`:
+   `build/platform/thead/c910/prebuilt/firmware/fw_payload.elf`:
 
     ```sh
     git clone \
@@ -59,7 +59,7 @@ make run LINUX=1 ARCH=riscv64 \
     ```
 
     Or use the precompiled image:
-    [firmware/riscv/d1_fw_payload.elf](../firmware/riscv/d1_fw_payload.elf)
+    [prebuilt/firmware/riscv/d1_fw_payload.elf](../prebuilt/firmware/riscv/d1_fw_payload.elf)
 
 2. Generate the combined firmware containing OpenSBI,
    DTB, and zCore:
@@ -67,7 +67,7 @@ make run LINUX=1 ARCH=riscv64 \
     ```sh
     rust-objcopy \
         --binary-architecture=riscv64 \
-        ../firmware/riscv/d1_fw_payload.elf \
+        ../prebuilt/firmware/riscv/d1_fw_payload.elf \
         --strip-all -O binary ./zcore_d1.bin
     dd if=../target/riscv64/release/zcore.bin \
         of=zcore_d1.bin bs=512 seek=2048

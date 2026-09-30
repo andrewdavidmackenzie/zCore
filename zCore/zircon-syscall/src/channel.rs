@@ -1,7 +1,6 @@
 use {
     super::*,
-    alloc::{string::String, vec::Vec},
-    lock::Mutex,
+    alloc::vec::Vec,
     zircon_object::{
         ipc::{Channel, MessagePacket},
         object::{obj_type, HandleInfo},
@@ -33,13 +32,12 @@ impl Syscall<'_> {
         const MAY_DISCARD: u32 = 1;
         let never_discard = options & MAY_DISCARD == 0;
 
-        let mut msg = if never_discard {
+        let msg = if never_discard {
             channel.check_and_read(|front_msg| {
                 if num_bytes < front_msg.data.len() as u32
                     || num_handles < front_msg.handles.len() as u32
                 {
-                    let bytes = front_msg.data.len() + TESTS_ARGS.lock().len();
-                    actual_bytes.write_if_not_null(bytes as u32)?;
+                    actual_bytes.write_if_not_null(front_msg.data.len() as u32)?;
                     actual_handles.write_if_not_null(front_msg.handles.len() as u32)?;
                     Err(ZxError::BUFFER_TOO_SMALL)
                 } else {
@@ -49,8 +47,6 @@ impl Syscall<'_> {
         } else {
             channel.read()?
         };
-
-        hack_core_tests(handle_value, &self.thread.proc().name(), &mut msg.data);
 
         actual_bytes.write_if_not_null(msg.data.len() as u32)?;
         actual_handles.write_if_not_null(msg.handles.len() as u32)?;
@@ -86,17 +82,21 @@ impl Syscall<'_> {
         num_handles: u32,
     ) -> ZxResult {
         info!(
-            "channel.write: handle_value={:#x}, num_bytes={:#x}, num_handles={:#x}",
-            handle_value, num_bytes, num_handles,
+            "channel.write: handle_value={:#x}, options={:#x}, num_bytes={:#x}, num_handles={:#x}",
+            handle_value, options, num_bytes, num_handles,
         );
-        if options != 0 {
+        if options != 0 && options != ZX_CHANNEL_WRITE_USE_IOVEC {
             return Err(ZxError::INVALID_ARGS);
         }
-        if num_bytes > 65536 {
-            return Err(ZxError::OUT_OF_RANGE);
-        }
         let proc = self.thread.proc();
-        let data = user_bytes.read_array(num_bytes as usize)?;
+        let data = if options == ZX_CHANNEL_WRITE_USE_IOVEC {
+            read_iovec_data(user_bytes, num_bytes)?
+        } else {
+            if num_bytes as usize > ZX_CHANNEL_MAX_MSG_BYTES {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            user_bytes.read_array(num_bytes as usize)?
+        };
         let handles = user_handles.read_array(num_handles as usize)?;
         let transfer_self = handles.contains(&handle_value);
         let handles = proc.remove_handles(&handles)?;
@@ -150,17 +150,30 @@ impl Syscall<'_> {
             "channel.call_noretry: handle={:#x}, deadline={:?}, args={:#x?}",
             handle_value, deadline, args
         );
-        if options != 0 {
+        let use_iovec = options == ZX_CHANNEL_WRITE_USE_IOVEC;
+        if options != 0 && !use_iovec {
             return Err(ZxError::INVALID_ARGS);
         }
-        if args.rd_num_bytes < 4 || args.wr_num_bytes < 4 {
+        if args.rd_num_bytes < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if !use_iovec && args.wr_num_bytes < 4 {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
         let channel =
             proc.get_object_with_rights::<Channel>(handle_value, Rights::READ | Rights::WRITE)?;
+        let wr_data = if use_iovec {
+            read_iovec_data(args.wr_bytes, args.wr_num_bytes)?
+        } else {
+            args.wr_bytes.read_array(args.wr_num_bytes as usize)?
+        };
+        // Channel call requires at least 4 bytes for the txid header
+        if wr_data.len() < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let wr_msg = MessagePacket {
-            data: args.wr_bytes.read_array(args.wr_num_bytes as usize)?,
+            data: wr_data,
             handles: {
                 let handles = args.wr_handles.read_array(args.wr_num_handles as usize)?;
                 let handles = proc.remove_handles(&handles)?;
@@ -234,8 +247,11 @@ impl Syscall<'_> {
             "channel.write_etc: handle={:#x}, options={:#x}, user_bytes={:#x?}, num_bytes={:#x}, user_handles={:#x?}, num_handles={:#x}",
             handle, options, user_bytes, num_bytes, user_handles, num_handles
         );
+        let use_iovec = options == ZX_CHANNEL_WRITE_USE_IOVEC;
         let proc = self.thread.proc();
-        let data = user_bytes.read_array(num_bytes as usize)?;
+        // Process dispositions FIRST (consuming MOVE handles) before
+        // checking options or data, matching Fuchsia's behavior where
+        // MOVE handles are always consumed regardless of other errors.
         let mut dispositions = user_handles.read_array(num_handles as usize)?;
         let mut handles: Vec<Handle> = Vec::new();
         let mut ret: ZxResult = Ok(());
@@ -263,16 +279,162 @@ impl Syscall<'_> {
             }
         }
         user_handles.write_array(&dispositions)?;
-        if options != 0 {
+        // Check options after processing dispositions.
+        if options != 0 && !use_iovec {
             return Err(ZxError::INVALID_ARGS);
         }
-        if num_handles > 64 || num_bytes > 65536 {
+        let data = if use_iovec {
+            read_iovec_data(user_bytes, num_bytes)?
+        } else {
+            if num_bytes as usize > ZX_CHANNEL_MAX_MSG_BYTES {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            user_bytes.read_array(num_bytes as usize)?
+        };
+        if num_handles > 64 || data.len() > ZX_CHANNEL_MAX_MSG_BYTES {
             return Err(ZxError::OUT_OF_RANGE);
         }
         ret?;
         let channel = proc.get_object_with_rights::<Channel>(handle, Rights::WRITE)?;
         channel.write(MessagePacket { data, handles })?;
         Ok(())
+    }
+
+    /// Send a message to a channel and await a reply (extended version).
+    ///
+    /// Like `channel_call_noretry` but uses handle dispositions for writes
+    /// and returns `HandleInfo` (handle + type + rights) for reads.
+    pub async fn sys_channel_call_etc_noretry(
+        &self,
+        handle_value: HandleValue,
+        options: u32,
+        deadline: Deadline,
+        user_args: UserInPtr<ChannelCallEtcArgs>,
+        mut actual_bytes: UserOutPtr<u32>,
+        mut actual_handles: UserOutPtr<u32>,
+    ) -> ZxResult {
+        let mut args = user_args.read()?;
+        info!(
+            "channel.call_etc_noretry: handle={:#x}, options={:#x}, deadline={:?}",
+            handle_value, options, deadline
+        );
+        let use_iovec = options == ZX_CHANNEL_WRITE_USE_IOVEC;
+        if options != 0 && !use_iovec {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Validate write-side args first (including iovec limits) before
+        // checking read-side args, so that OUT_OF_RANGE from iovec
+        // validation is returned before INVALID_ARGS from rd_num_bytes.
+        if !use_iovec && args.wr_num_bytes < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let proc = self.thread.proc();
+        let channel =
+            proc.get_object_with_rights::<Channel>(handle_value, Rights::READ | Rights::WRITE)?;
+        let data = if use_iovec {
+            read_iovec_data(args.wr_bytes, args.wr_num_bytes)?
+        } else {
+            args.wr_bytes.read_array(args.wr_num_bytes as usize)?
+        };
+        if data.len() < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if args.rd_num_bytes < 4 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let handles = if args.wr_num_handles > 0 {
+            // Process dispositions with per-handle result tracking,
+            // matching the Fuchsia ABI: each disposition's result field
+            // is set to OK or the specific error, and the entire array
+            // is written back to userspace.
+            let mut dispositions = args.wr_handles.read_array(args.wr_num_handles as usize)?;
+            let mut handles: Vec<Handle> = Vec::new();
+            let mut first_err: ZxResult = Ok(());
+            for disposition in dispositions.iter_mut() {
+                if let Ok((object, src_rights)) = proc.get_dyn_object_and_rights(disposition.handle)
+                {
+                    if let Err(e) = handle_check(disposition, &object, src_rights, handle_value) {
+                        disposition.result = e as _;
+                        if first_err.is_ok() {
+                            first_err = Err(e);
+                        }
+                    }
+                    let new_rights = if disposition.rights != Rights::SAME_RIGHTS.bits() {
+                        match Rights::from_bits(disposition.rights) {
+                            Some(r) => r,
+                            None => {
+                                disposition.result = ZxError::INVALID_ARGS as _;
+                                if first_err.is_ok() {
+                                    first_err = Err(ZxError::INVALID_ARGS);
+                                }
+                                src_rights
+                            }
+                        }
+                    } else {
+                        src_rights
+                    };
+                    let new_handle = Handle::new(object, new_rights);
+                    if disposition.op != ZX_HANDLE_OP_DUP {
+                        proc.remove_handle(disposition.handle).ok();
+                    }
+                    handles.push(new_handle);
+                } else {
+                    disposition.result = ZxError::BAD_HANDLE as _;
+                    if first_err.is_ok() {
+                        first_err = Err(ZxError::BAD_HANDLE);
+                    }
+                }
+            }
+            args.wr_handles.write_array(&dispositions)?;
+            first_err?;
+            handles
+        } else {
+            Vec::new()
+        };
+        let wr_msg = MessagePacket { data, handles };
+        let future = channel.call(wr_msg);
+        pin_mut!(future);
+        let rd_msg: MessagePacket = self
+            .thread
+            .blocking_run(future, ThreadState::BlockedChannel, deadline.into(), None)
+            .await?;
+        actual_bytes.write(rd_msg.data.len() as u32)?;
+        actual_handles.write(rd_msg.handles.len() as u32)?;
+        if args.rd_num_bytes < rd_msg.data.len() as u32
+            || args.rd_num_handles < rd_msg.handles.len() as u32
+        {
+            return Err(ZxError::BUFFER_TOO_SMALL);
+        }
+        args.rd_bytes.write_array(rd_msg.data.as_slice())?;
+        let handle_infos: Vec<HandleInfo> = rd_msg
+            .handles
+            .into_iter()
+            .map(|h| {
+                let mut info = h.get_handle_info();
+                info.handle = proc.add_handle(h);
+                info
+            })
+            .collect();
+        args.rd_handles.write_array(&handle_infos)?;
+        Ok(())
+    }
+
+    /// Finish a channel call (extended version).
+    pub fn sys_channel_call_etc_finish(
+        &self,
+        deadline: Deadline,
+        _user_args: UserInPtr<ChannelCallEtcArgs>,
+        _actual_bytes: UserOutPtr<u32>,
+        _actual_handles: UserOutPtr<u32>,
+    ) -> ZxResult {
+        info!("channel.call_etc_finish: deadline={:?}", deadline);
+        let thread_state = self.thread.state();
+        if thread_state == ThreadState::BlockedChannel {
+            warn!("channel.call_etc_finish: thread still in BlockedChannel, returning TIMED_OUT");
+            Err(ZxError::TIMED_OUT)
+        } else {
+            Err(ZxError::BAD_STATE)
+        }
     }
 }
 
@@ -300,8 +462,46 @@ fn handle_check(
     }
 }
 
+/// Read data from an iovec array. `ptr` points to the iovec array,
+/// `count` is the number of iovecs.
+/// Read data from an iovec array. `ptr` points to the iovec array,
+/// `count` is the number of iovecs.
+fn read_iovec_data(ptr: UserInPtr<u8>, count: u32) -> ZxResult<Vec<u8>> {
+    if count as usize > ZX_CHANNEL_MAX_MSG_IOVECS {
+        return Err(ZxError::OUT_OF_RANGE);
+    }
+    let iovecs_ptr: UserInPtr<ChannelIovec> = ptr.as_addr().into();
+    let iovecs = iovecs_ptr.read_array(count as usize)?;
+    let total: usize = iovecs.iter().map(|v| v.capacity as usize).sum();
+    if total > ZX_CHANNEL_MAX_MSG_BYTES {
+        return Err(ZxError::OUT_OF_RANGE);
+    }
+    let mut data = Vec::with_capacity(total);
+    for iov in iovecs.iter() {
+        if iov.reserved != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if iov.capacity > 0 {
+            let p: UserInPtr<u8> = iov.buffer.into();
+            data.extend_from_slice(&p.read_array(iov.capacity as usize)?);
+        }
+    }
+    Ok(data)
+}
+
 const ZX_HANDLE_OP_MOVE: u32 = 0;
 const ZX_HANDLE_OP_DUP: u32 = 1;
+const ZX_CHANNEL_WRITE_USE_IOVEC: u32 = 2;
+const ZX_CHANNEL_MAX_MSG_BYTES: usize = 65536;
+const ZX_CHANNEL_MAX_MSG_IOVECS: usize = 8192;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+struct ChannelIovec {
+    buffer: usize,
+    capacity: u32,
+    reserved: u32,
+}
 
 #[repr(C)]
 #[derive(Debug)]
@@ -318,46 +518,23 @@ pub struct ChannelCallArgs {
 
 #[repr(C)]
 #[derive(Debug)]
+pub struct ChannelCallEtcArgs {
+    wr_bytes: UserInPtr<u8>,
+    wr_handles: UserInOutPtr<HandleDisposition>,
+    rd_bytes: UserOutPtr<u8>,
+    rd_handles: UserOutPtr<HandleInfo>,
+    wr_num_bytes: u32,
+    wr_num_handles: u32,
+    rd_num_bytes: u32,
+    rd_num_handles: u32,
+}
+
+#[repr(C)]
+#[derive(Debug)]
 pub struct HandleDisposition {
     op: u32,
     handle: HandleValue,
     type_: u32,
     rights: u32,
     result: i32,
-}
-
-static TESTS_ARGS: Mutex<String> = Mutex::new(String::new());
-
-/// HACK: pass arguments to standalone-test
-#[allow(clippy::naive_bytecount)]
-fn hack_core_tests(handle: HandleValue, thread_name: &str, data: &mut Vec<u8>) {
-    if handle == 3 && thread_name == "userboot" {
-        let cmdline = core::str::from_utf8(data).unwrap();
-        for kv in cmdline.split('\0') {
-            if let Some(v) = kv.strip_prefix("core-tests=") {
-                *TESTS_ARGS.lock() = format!("test\0-f\0{}\0", v.replace(',', ":"));
-            }
-        }
-    } else if handle == 3 && thread_name == "test/core-standalone-test" {
-        let test_args = &*TESTS_ARGS.lock();
-        let len = data.len();
-        data.extend(test_args.bytes());
-        #[repr(C)]
-        #[derive(Debug)]
-        struct ProcArgs {
-            protocol: u32,
-            version: u32,
-            handle_info_off: u32,
-            args_off: u32,
-            args_num: u32,
-            environ_off: u32,
-            environ_num: u32,
-        }
-        #[allow(unsafe_code)]
-        #[allow(clippy::cast_ptr_alignment)]
-        let header = unsafe { &mut *(data.as_mut_ptr() as *mut ProcArgs) };
-        header.args_off = len as u32;
-        header.args_num = test_args.as_bytes().iter().filter(|&&b| b == 0).count() as u32;
-        warn!("HACKED: test args = {:?}", test_args);
-    }
 }

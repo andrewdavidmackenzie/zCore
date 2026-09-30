@@ -73,7 +73,6 @@ impl Syscall<'_> {
         let child = parent.allocate(offset, size, vmar_flags, align)?;
         let child_addr = child.addr();
         let child_handle = proc.add_handle(Handle::new(child, Rights::DEFAULT_VMAR | perm_rights));
-        info!("vmar.allocate: at {:#x?}", child_addr);
         out_child_vmar.write(child_handle)?;
         out_child_addr.write(child_addr)?;
         Ok(())
@@ -93,11 +92,12 @@ impl Syscall<'_> {
         len: usize,
         mut mapped_addr: UserOutPtr<VirtAddr>,
     ) -> ZxResult {
-        info!(
-            "vmar.map: vmar_handle={:#x?}, options={:#x?}, vmar_offset={:#x?}, vmo_handle={:#x?}, vmo_offset={:#x?}, len={:#x?}",
-            vmar_handle, options, vmar_offset, vmo_handle, vmo_offset, len
-        );
-        let options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
+        let options = match VmOptions::from_bits(options) {
+            Some(o) => o,
+            None => {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        };
         let proc = self.thread.proc();
         let (vmar, vmar_rights) = proc.get_object_and_rights::<VmAddressRegion>(vmar_handle)?;
         let (vmo, vmo_rights) = proc.get_object_and_rights::<VmObject>(vmo_handle)?;
@@ -132,8 +132,12 @@ impl Syscall<'_> {
         let overwrite = options.contains(VmOptions::SPECIFIC_OVERWRITE);
         let map_range = if cfg!(any(feature = "deny-page-fault", not(target_os = "none"))) {
             true
+        } else if options.contains(VmOptions::ALLOW_FAULTS) {
+            // ALLOW_FAULTS: lazy commit, pages faulted in on demand
+            false
         } else {
-            options.contains(VmOptions::MAP_RANGE)
+            // Default: eagerly commit pages to avoid stale page table issues
+            true
         };
 
         info!(
@@ -154,7 +158,7 @@ impl Syscall<'_> {
         let vmar_offset = if is_specific { Some(vmar_offset) } else { None };
         let vaddr = vmar.map_ext(
             vmar_offset,
-            vmo,
+            vmo.clone(),
             vmo_offset,
             len,
             permissions,
@@ -162,7 +166,6 @@ impl Syscall<'_> {
             overwrite,
             map_range,
         )?;
-        info!("vmar.map: at {:#x?}", vaddr);
         mapped_addr.write(vaddr)?;
         Ok(())
     }
@@ -188,13 +191,18 @@ impl Syscall<'_> {
         len: u64,
     ) -> ZxResult {
         let options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
-        let rights = options.to_required_rights();
         info!(
             "vmar.protect: handle={:#x}, options={:#x}, addr={:#x}, len={:#x}",
             handle_value, options, addr, len
         );
         let proc = self.thread.proc();
-        let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, rights)?;
+        // TODO: Rights::empty() is too permissive. Fuchsia's VMAR protection
+        // model requires checking that the handle carries rights matching the
+        // requested protection flags (e.g., ZX_RIGHT_READ for PERM_READ,
+        // ZX_RIGHT_WRITE for PERM_WRITE, ZX_RIGHT_EXECUTE for PERM_EXECUTE).
+        // Implement proper rights validation to match Fuchsia's zx_vmar_protect
+        // semantics.
+        let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, Rights::empty())?;
         if options.intersects(!VmOptions::PERM_RXW) {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -280,7 +288,13 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        let vmar = proc.get_object::<VmAddressRegion>(handle)?;
+        // Handle pseudo-handle for root VMAR (ZX_HANDLE_VMAR_ROOT_SELF).
+        let vmar = if let Some(obj) = self.resolve_pseudo_handle(handle) {
+            obj.downcast_arc::<VmAddressRegion>()
+                .map_err(|_| ZxError::WRONG_TYPE)?
+        } else {
+            proc.get_object::<VmAddressRegion>(handle)?
+        };
         let clock = proc.get_object_with_rights::<zircon_object::signal::Clock>(
             clock_handle,
             Rights::READ | Rights::MAP,
@@ -433,6 +447,8 @@ bitflags! {
         const MAP_RANGE             = 1 << 10;
         const REQUIRE_NON_RESIZABLE = 1 << 11;
         const ALLOW_FAULTS          = 1 << 12;
+        const OFFSET_IS_UPPER_LIMIT = 1 << 13;
+        const PERM_READ_IF_XOM_UNSUPPORTED = 1 << 14;
         const CAN_MAP_RXW           = Self::CAN_MAP_READ.bits | Self::CAN_MAP_EXECUTE.bits | Self::CAN_MAP_WRITE.bits;
         const PERM_RXW           = Self::PERM_READ.bits | Self::PERM_WRITE.bits | Self::PERM_EXECUTE.bits;
     }

@@ -335,11 +335,25 @@ impl ExceptionObject {
 
     /// Set whether closing the exception handle will
     /// finish exception processing and resume the underlying thread.
+    /// Set the exception handling state.
+    ///
+    /// - 0 = `ZX_EXCEPTION_STATE_TRY_NEXT` — pass to next handler
+    /// - 1 = `ZX_EXCEPTION_STATE_HANDLED` — exception was handled, resume
+    /// - 2 = `ZX_EXCEPTION_STATE_THREAD_EXIT` — kill the faulting thread
     pub fn set_state(&self, state: u32) -> ZxResult {
-        if state > 1 {
+        if state > 2 {
             return Err(ZxError::INVALID_ARGS);
         }
-        self.exception.inner.lock().handled = state == 1;
+        let mut inner = self.exception.inner.lock();
+        // Both HANDLED (1) and THREAD_EXIT (2) count as "handled" from the
+        // exception delivery perspective — the exception won't propagate
+        // to the next handler. THREAD_EXIT additionally kills the thread.
+        inner.handled = state >= 1;
+        if state == 2 {
+            // THREAD_EXIT: kill the faulting thread
+            use super::Task;
+            self.exception.thread.kill();
+        }
         Ok(())
     }
 
@@ -501,6 +515,7 @@ enum ExceptionateIteratorState {
     Debug(bool),
     Thread,
     Process,
+    JobDebug(Arc<Job>),
     Job(Arc<Job>),
     Finished,
 }
@@ -522,12 +537,12 @@ impl<'a> Iterator for ExceptionateIterator<'a> {
                 ExceptionateIteratorState::Debug(second_chance) => {
                     if *second_chance && !self.exception.inner.lock().second_chance {
                         self.state =
-                            ExceptionateIteratorState::Job(self.exception.thread.proc().job());
+                            ExceptionateIteratorState::JobDebug(self.exception.thread.proc().job());
                         continue;
                     }
                     let proc = self.exception.thread.proc();
                     self.state = if *second_chance {
-                        ExceptionateIteratorState::Job(self.exception.thread.proc().job())
+                        ExceptionateIteratorState::JobDebug(self.exception.thread.proc().job())
                     } else {
                         ExceptionateIteratorState::Thread
                     };
@@ -542,12 +557,18 @@ impl<'a> Iterator for ExceptionateIterator<'a> {
                     self.state = ExceptionateIteratorState::Debug(true);
                     return Some(proc.exceptionate());
                 }
-                ExceptionateIteratorState::Job(job) => {
+                ExceptionateIteratorState::JobDebug(ref job) => {
+                    let job = job.clone();
+                    self.state = ExceptionateIteratorState::Job(job.clone());
+                    return Some(job.debug_exceptionate());
+                }
+                ExceptionateIteratorState::Job(ref job) => {
+                    let job = job.clone();
                     let parent = job.parent();
                     let result = job.exceptionate();
                     self.state = parent.map_or(
                         ExceptionateIteratorState::Finished,
-                        ExceptionateIteratorState::Job,
+                        ExceptionateIteratorState::JobDebug,
                     );
                     return Some(result);
                 }
@@ -596,7 +617,9 @@ mod tests {
             proc.debug_exceptionate(),
             thread.exceptionate(),
             proc.exceptionate(),
+            job.debug_exceptionate(),
             job.exceptionate(),
+            parent_job.debug_exceptionate(),
             parent_job.exceptionate(),
         ];
         assert_eq!(actual.len(), expected.len());
@@ -620,7 +643,9 @@ mod tests {
             thread.exceptionate(),
             proc.exceptionate(),
             proc.debug_exceptionate(),
+            job.debug_exceptionate(),
             job.exceptionate(),
+            parent_job.debug_exceptionate(),
             parent_job.exceptionate(),
         ];
         assert_eq!(actual.len(), expected.len());

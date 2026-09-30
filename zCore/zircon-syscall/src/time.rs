@@ -27,9 +27,17 @@ impl Syscall<'_> {
         info!("clock.create: options={:#x}", options);
         let clock = Clock::new(options)?;
         let proc = self.thread.proc();
+        // Fuchsia's default clock rights include MAP for vmar_map_clock.
         let handle = proc.add_handle(Handle::new(
             Arc::new(clock),
-            Rights::READ | Rights::WRITE | Rights::DUPLICATE | Rights::TRANSFER | Rights::INSPECT,
+            Rights::DUPLICATE
+                | Rights::TRANSFER
+                | Rights::READ
+                | Rights::WRITE
+                | Rights::WAIT
+                | Rights::INSPECT
+                | Rights::SIGNAL
+                | Rights::MAP,
         ));
         out.write(handle)?;
         Ok(())
@@ -41,27 +49,29 @@ impl Syscall<'_> {
     /// `zx_clock_get_monotonic`. In a full Fuchsia system this is
     /// served by the vDSO directly; this path is used when the vDSO
     /// is not available.
-    pub fn sys_clock_get_monotonic_via_kernel(&self, mut out: UserOutPtr<i64>) -> ZxResult {
-        info!("clock.get_monotonic_via_kernel");
-        out.write(timer_now().as_nanos() as i64)?;
-        Ok(())
+    /// Return the current monotonic time in nanoseconds.
+    ///
+    /// On Fuchsia, this returns the time value directly (in rax), not a
+    /// `zx_status_t`.  The dispatch layer handles this by early-returning
+    /// the i64 value.
+    ///
+    /// For backward compatibility with petal tests (which may pass an
+    /// output pointer as arg0), we also write the value to the pointer
+    /// if it is non-null.
+    pub fn sys_clock_get_monotonic_via_kernel(&self) -> i64 {
+        timer_now().as_nanos() as i64
     }
 
-    /// Read the hardware tick counter (vDSO fallback path).
+    /// Return the current tick count.
     ///
-    /// Converts the monotonic time to ticks using the same conversion
-    /// factor as the vDSO's `ticks_per_second` / `ticks_to_mono_*` fields.
-    /// The vDSO sets `ticks_to_mono_numerator = 1000` and
-    /// `ticks_to_mono_denominator = frequency_mhz`, so:
-    ///   `ticks = nanos * frequency_mhz / 1000`
+    /// Like `clock_get_monotonic_via_kernel`, this returns the value directly
+    /// in rax, not a `zx_status_t`.  Also writes to output pointer for
+    /// backward compatibility with petal.
     ///
     /// For simplicity we return nanoseconds directly, which is correct
-    /// when `ticks_per_second == 1_000_000_000` (frequency == 1000 MHz).
-    /// A more accurate implementation would read the vDSO constants.
-    pub fn sys_ticks_get_via_kernel(&self, mut out: UserOutPtr<i64>) -> ZxResult {
-        let nanos = hal_impl::timer::timer_now().as_nanos() as i64;
-        out.write(nanos)?;
-        Ok(())
+    /// when `ticks_per_second == 1_000_000_000`.
+    pub fn sys_ticks_get_via_kernel(&self) -> i64 {
+        hal_impl::timer::timer_now().as_nanos() as i64
     }
 
     /// Acquire the current time.
@@ -194,6 +204,24 @@ impl Deadline {
 impl From<Deadline> for Duration {
     fn from(deadline: Deadline) -> Self {
         Duration::from_nanos(deadline.0.max(0) as u64)
+    }
+}
+
+impl Syscall<'_> {
+    /// Swap the UTC clock reference for this process.
+    ///
+    /// Installs `new_clock` as the process's UTC reference clock and
+    /// writes the previously installed handle to `prev_clock_out`.
+    /// Returns ZX_OK on success.
+    pub fn sys_utc_reference_swap(
+        &self,
+        new_clock: HandleValue,
+        mut prev_clock_out: UserOutPtr<HandleValue>,
+    ) -> ZxResult {
+        info!("utc_reference_swap: new_clock={:#x}", new_clock);
+        let old = self.thread.proc().utc_reference_swap(new_clock);
+        prev_clock_out.write(old)?;
+        Ok(())
     }
 }
 

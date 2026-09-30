@@ -20,6 +20,7 @@ impl Syscall<'_> {
                 #[allow(clippy::identity_op)]
                 const MODE_READ     = 1 << 0;
                 const MODE_WRITE    = 1 << 1;
+                const MODE_APPEND   = 1 << 2;
             }
         }
         let options = CreateOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
@@ -29,7 +30,9 @@ impl Syscall<'_> {
             rights |= Rights::READ;
             vmo_rights |= Rights::READ;
         }
-        if options.contains(CreateOptions::MODE_WRITE) {
+        if options.contains(CreateOptions::MODE_WRITE)
+            || options.contains(CreateOptions::MODE_APPEND)
+        {
             rights |= Rights::WRITE;
             vmo_rights |= Rights::WRITE;
         }
@@ -123,7 +126,13 @@ impl Syscall<'_> {
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::READ)?;
         let mut actual_count = 0usize;
         for io_vec in data.iter() {
-            let mut buf = vec![0u8; io_vec.len()];
+            let mut buf = {
+                let mut v = alloc::vec::Vec::new();
+                v.try_reserve(io_vec.len())
+                    .map_err(|_| ZxError::INVALID_ARGS)?;
+                v.resize(io_vec.len(), 0u8);
+                v
+            };
             actual_count += stream.read(&mut buf)?;
             io_vec.write_from_slice(&buf)?;
         }
@@ -153,7 +162,13 @@ impl Syscall<'_> {
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::READ)?;
         let mut actual_count = 0usize;
         for io_vec in data.iter() {
-            let mut buf = vec![0u8; io_vec.len()];
+            let mut buf = {
+                let mut v = alloc::vec::Vec::new();
+                v.try_reserve(io_vec.len())
+                    .map_err(|_| ZxError::INVALID_ARGS)?;
+                v.resize(io_vec.len(), 0u8);
+                v
+            };
             actual_count += stream.read_at(&mut buf, offset)?;
             io_vec.write_from_slice(&buf)?;
             offset += actual_count;

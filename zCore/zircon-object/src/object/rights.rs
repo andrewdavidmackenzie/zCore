@@ -72,6 +72,9 @@ bitflags! {
         /// Not used.
         const APPLY_PROFILE = 1 << 19;
 
+        /// Allows socket disposition changes.
+        const MANAGE_SOCKET = 1 << 20;
+
         /// Used to duplicate a handle with the same rights.
         const SAME_RIGHTS = 1 << 31;
 
@@ -139,7 +142,7 @@ bitflags! {
         const DEFAULT_FIFO = Self::BASIC.bits | Self::IO.bits | Self::SIGNAL.bits | Self::SIGNAL_PEER.bits;
 
         /// BASIC | IO | PROPERTY | SIGNAL | SIGNAL_PEER
-        const DEFAULT_SOCKET = Self::BASIC.bits | Self::IO.bits | Self::PROPERTY.bits | Self::SIGNAL.bits | Self::SIGNAL_PEER.bits;
+        const DEFAULT_SOCKET = Self::BASIC.bits | Self::IO.bits | Self::PROPERTY.bits | Self::SIGNAL.bits | Self::SIGNAL_PEER.bits | Self::MANAGE_SOCKET.bits;
 
         /// BASIC | PROPERTY | SIGNAL
         const DEFAULT_STREAM = Self::BASIC.bits | Self::PROPERTY.bits | Self::SIGNAL.bits;

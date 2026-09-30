@@ -35,6 +35,70 @@ Run the full `make pre-push` before the final push.
   "how do I hide this?" Trace the code path, understand the failure
   mode, then fix it properly.
 
+## Running Fuchsia core-tests
+
+The `core-tests-standalone` binary (1776 tests, 110 suites) validates
+Zircon syscall compatibility. Always use `-smp 1` to eliminate
+multi-core timing issues.
+
+### Build and run
+```bash
+# Build kernel
+ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/core-tests-standalone" cargo bin -m qemu-x86_64
+
+# Create boot image
+tools/x86-bootimage/target/release/x86-bootimage \
+  target/qemu-x86_64/release/kernel \
+  target/qemu-x86_64/release/boot.img \
+  --ramdisk target/qemu-x86_64/release/x86_64-zircon.img
+
+# Run in QEMU (1 CPU, kill after timeout)
+source tools/scripts/find-ovmf.sh && OVMF=$(find_ovmf)
+qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
+  -machine q35 -smp 1 \
+  -cpu qemu64,+fsgsbase,+rdrand,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+  -serial mon:stdio \
+  -drive if=pflash,format=raw,readonly=on,file="$OVMF" \
+  -drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
+  2>&1 > /tmp/qemu-test.log &
+PID=$!; sleep 120; kill $PID 2>/dev/null; wait $PID 2>/dev/null
+```
+
+### Check results
+```bash
+# Summary
+P=$(grep -c '\[       OK \]' /tmp/qemu-test.log)
+F=$(grep -c '\[  FAILED  \]' /tmp/qemu-test.log)
+echo "Passed: $P  Failed: $F  Not reached: $((1776 - P - F))"
+
+# Passing tests
+grep '\[       OK \]' /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
+
+# Where it stopped
+tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
+```
+
+### Current status (phase 10)
+- 348/1776 tests pass, 24 failing, 1404 not yet reached
+- FutexTest hang resolved — TLS-based `_zx_thread_self` enables
+  proper futex self-ownership check. FutexTest suite: 24/24 pass.
+- All tests run sequentially; newly-reached suites have new failures
+  to triage
+- StreamTestCase suite partially implemented: 9/33 pass, remaining
+  failures need content_size tracking and partial write refinement
+- Current blocker: timeout — StreamTestCase runs but suites after
+  it (SysInfoTest, ThreadTest, TimerTest, etc.) not reached in 180s
+
+### Key notes
+- `LOG=warn` required — `LOG=info` messages get stripped by LTO in
+  release builds. Use `hal_impl::console::console_write_fmt` for
+  diagnostics that must survive LTO.
+- GTest filter: pass `--gtest_filter=Pattern*` via argv in spawn.rs
+  (not yet implemented, would require modifying processargs argv).
+- Test binary: `prebuilt/zircon-test/x86_64/core-tests-standalone`
+- Issue #21 tracks overall progress, issue #468 tracks missing syscalls.
+- Issue #471 tracks the user-buffer copy architecture gap.
+
 ## PR workflow
 After pushing commits to a PR:
 1. Wait for CI checks to complete

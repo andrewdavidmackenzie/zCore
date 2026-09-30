@@ -129,7 +129,7 @@ Fuchsia userspace would use the wrong syscall mechanism.
 
 ---
 
-### `firmware/` -- Platform Firmware
+### `prebuilt/firmware/` -- Platform Firmware
 
 **Purpose:** Pre-built firmware binaries for booting on various platforms.
 

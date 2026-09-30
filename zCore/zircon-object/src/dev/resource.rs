@@ -60,7 +60,10 @@ impl Resource {
 
     /// Validate the resource is the given kind or it is the root resource.
     pub fn validate(&self, kind: ResourceKind) -> ZxResult {
-        if self.kind == kind || self.kind == ResourceKind::ROOT {
+        // ROOT and SYSTEM resources can create sub-resources of any kind.
+        // Other resources can only create children of the same kind.
+        if self.kind == kind || self.kind == ResourceKind::ROOT || self.kind == ResourceKind::SYSTEM
+        {
             Ok(())
         } else {
             Err(ZxError::WRONG_TYPE)
@@ -76,6 +79,10 @@ impl Resource {
         len: usize,
     ) -> ZxResult {
         self.validate(kind)?;
+        // ROOT and SYSTEM resources with zero range allow any sub-range.
+        if self.kind == ResourceKind::ROOT || self.kind == ResourceKind::SYSTEM {
+            return Ok(());
+        }
         if addr >= self.addr && (addr + len) <= (self.addr + self.len) {
             Ok(())
         } else {

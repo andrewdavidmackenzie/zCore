@@ -8,10 +8,10 @@ use crate::object::*;
 use alloc::sync::Arc;
 use lock::Mutex;
 
-/// Signal asserted when the counter value is > 0.
-const COUNTER_POSITIVE: Signal = Signal::USER_SIGNAL_0;
-/// Signal asserted when the counter value is <= 0.
-const COUNTER_NON_POSITIVE: Signal = Signal::USER_SIGNAL_1;
+/// Signal asserted when the counter value is > 0 (bit 4 = 0x10).
+const COUNTER_POSITIVE: Signal = Signal::COUNTER_POSITIVE;
+/// Signal asserted when the counter value is <= 0 (bit 5 = 0x20).
+const COUNTER_NON_POSITIVE: Signal = Signal::COUNTER_NON_POSITIVE;
 
 /// A Counter kernel object wrapping a signed 64-bit integer.
 ///
@@ -25,7 +25,7 @@ pub struct Counter {
 
 impl_kobject!(Counter
     fn allowed_signals(&self) -> Signal {
-        COUNTER_POSITIVE | COUNTER_NON_POSITIVE
+        COUNTER_POSITIVE | COUNTER_NON_POSITIVE | Signal::SIGNALED | Signal::USER_ALL
     }
 );
 define_count_helper!(Counter);
@@ -54,16 +54,14 @@ impl Counter {
 
     /// Atomically add `delta` to the value and update signals.
     ///
-    /// Uses wrapping addition to avoid overflow panics from
-    /// user-supplied delta values.
-    ///
-    /// Returns the value after the addition.
-    pub fn add(&self, delta: i64) -> i64 {
+    /// Returns the value after the addition, or `OUT_OF_RANGE` if the
+    /// result would overflow or underflow i64.
+    pub fn add(&self, delta: i64) -> ZxResult<i64> {
         let mut guard = self.value.lock();
-        let new = (*guard).wrapping_add(delta);
+        let new = (*guard).checked_add(delta).ok_or(ZxError::OUT_OF_RANGE)?;
         *guard = new;
         self.update_signals(new);
-        new
+        Ok(new)
     }
 
     fn update_signals(&self, value: i64) {
@@ -113,17 +111,17 @@ mod tests {
     fn add_atomically() {
         let counter = Counter::new();
 
-        let result = counter.add(10);
+        let result = counter.add(10).unwrap();
         assert_eq!(result, 10);
         assert_eq!(counter.read(), 10);
         assert!(counter.signal().contains(COUNTER_POSITIVE));
 
-        let result = counter.add(-15);
+        let result = counter.add(-15).unwrap();
         assert_eq!(result, -5);
         assert_eq!(counter.read(), -5);
         assert!(counter.signal().contains(COUNTER_NON_POSITIVE));
 
-        let result = counter.add(5);
+        let result = counter.add(5).unwrap();
         assert_eq!(result, 0);
         assert_eq!(counter.read(), 0);
         assert!(counter.signal().contains(COUNTER_NON_POSITIVE));

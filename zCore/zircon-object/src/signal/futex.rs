@@ -143,8 +143,6 @@ impl Futex {
                 let mut inner = self.waiter.inner.lock();
                 // check wakeup
                 if inner.woken {
-                    // set new owner on success
-                    inner.futex.inner.lock().set_owner(self.new_owner.clone());
                     return Poll::Ready(Ok(()));
                 }
                 // first time?
@@ -159,6 +157,11 @@ impl Futex {
                     if !futex.is_valid_new_owner(&self.new_owner) {
                         return Poll::Ready(Err(ZxError::INVALID_ARGS));
                     }
+                    // Set the new owner immediately when the wait begins,
+                    // not when the waiter wakes. This matches Fuchsia's
+                    // behavior where get_owner reflects the owner set by
+                    // the most recent successful futex_wait.
+                    futex.set_owner(self.new_owner.clone());
                     futex.waiter_queue.push_back(self.waiter.clone());
                     drop(futex);
                     inner.waker.replace(cx.waker().clone());
@@ -277,6 +280,19 @@ impl Futex {
             waiter.reset_futex(requeue_futex.clone());
             new_inner.waiter_queue.push_back(waiter);
         }
+        // Check new_requeue_owner is not a waiter on EITHER futex
+        // (checked AFTER wake/requeue so woken threads are already removed).
+        if let Some(ref owner) = new_requeue_owner {
+            let is_waiter = inner
+                .waiter_queue
+                .iter()
+                .chain(new_inner.waiter_queue.iter())
+                .filter_map(|w| w.thread.as_ref())
+                .any(|t| Arc::ptr_eq(t, owner));
+            if is_waiter {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        }
         // set owner
         inner.set_owner(None);
         new_inner.set_owner(new_requeue_owner);
@@ -286,8 +302,8 @@ impl Futex {
 
 impl FutexInner {
     fn is_valid_new_owner(&self, new_owner: &Option<Arc<Thread>>) -> bool {
-        // TODO: check whether the thread has been started yet
         if let Some(new_owner) = &new_owner {
+            // Reject if the new owner is already waiting on this futex.
             if self
                 .waiter_queue
                 .iter()

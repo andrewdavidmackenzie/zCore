@@ -1,9 +1,17 @@
-use {
-    super::*,
-    zircon_object::task::{Thread, ThreadState},
-};
+use {super::*, zircon_object::task::ThreadState};
 
 impl Syscall<'_> {
+    /// Validate that a futex address is mapped in the process address space.
+    /// Returns `NOT_FOUND` if the address is unmapped, matching Fuchsia's
+    /// behavior (preventing a kernel page fault in `Futex::load_user_value`).
+    fn validate_futex_addr(&self, addr: usize) -> ZxResult {
+        if self.thread.proc().vmar().get_mapping_flags(addr).is_err() {
+            Err(ZxError::NOT_FOUND)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Wait on a futex.
     pub async fn sys_futex_wait(
         &self,
@@ -19,12 +27,27 @@ impl Syscall<'_> {
         if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.validate_futex_addr(value_ptr.as_addr())?;
         let proc = self.thread.proc();
         let futex = proc.get_futex(value_ptr.as_addr());
         let new_owner = if new_futex_owner == INVALID_HANDLE {
             None
         } else {
-            Some(proc.get_object::<Thread>(new_futex_owner)?)
+            let owner = self.get_thread_with_pseudo(new_futex_owner)?;
+            // Fuchsia rejects an owner thread that has not been started yet.
+            if owner.state() == ThreadState::New {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Fuchsia rejects the calling thread as the new owner — a
+            // thread can't own the futex it's about to sleep on.
+            // This check is safe now that _zx_thread_self reads a real
+            // per-thread handle from TLS (fs:[0x20]), not a shared
+            // pseudo-handle. Cross-thread futex_wait works because real
+            // handles resolve to the correct thread via the handle table.
+            if owner.id() == self.thread.inner().id() {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            Some(owner)
         };
         let future = futex.wait_with_owner(current_value, Some(self.thread.inner()), new_owner);
         self.thread
@@ -44,7 +67,7 @@ impl Syscall<'_> {
         new_requeue_owner: HandleValue,
     ) -> ZxResult {
         info!(
-            "futex.requeue: value_ptr={:?}, wake_count={:#x}, current_value={:#x}, requeue_ptr={:?}, requeue_count={:#x}, new_requeue_owner={:?}",
+            "futex.requeue: value_ptr={:?}, wake_count={:#x}, current_value={:#x}, requeue_ptr={:?}, requeue_count={:#x}, new_requeue_owner={:#x}",
             value_ptr, wake_count, current_value, requeue_ptr, requeue_count, new_requeue_owner
         );
         if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {
@@ -53,11 +76,16 @@ impl Syscall<'_> {
         if value_ptr.as_addr() == requeue_ptr.as_addr() {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.validate_futex_addr(value_ptr.as_addr())?;
         let proc = self.thread.proc();
         let new_requeue_owner = if new_requeue_owner == INVALID_HANDLE {
             None
         } else {
-            Some(proc.get_object::<Thread>(new_requeue_owner)?)
+            let owner = self.get_thread_with_pseudo(new_requeue_owner)?;
+            if owner.state() == ThreadState::New {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            Some(owner)
         };
         let wake_futex = proc.get_futex(value_ptr.as_addr());
         let requeue_futex = proc.get_futex(requeue_ptr.as_addr());
@@ -78,6 +106,7 @@ impl Syscall<'_> {
         if value_ptr.is_null() || !value_ptr.as_addr().is_multiple_of(4) {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.validate_futex_addr(value_ptr.as_addr())?;
         let proc = self.thread.proc();
         let futex = proc.get_futex(value_ptr.as_addr());
         futex.wake(count as usize);
@@ -107,11 +136,16 @@ impl Syscall<'_> {
         if value_ptr.as_addr() == requeue_ptr.as_addr() {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.validate_futex_addr(value_ptr.as_addr())?;
         let proc = self.thread.proc();
         let new_requeue_owner = if new_requeue_owner == INVALID_HANDLE {
             None
         } else {
-            Some(proc.get_object::<Thread>(new_requeue_owner)?)
+            let owner = self.get_thread_with_pseudo(new_requeue_owner)?;
+            if owner.state() == ThreadState::New {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            Some(owner)
         };
         let wake_futex = proc.get_futex(value_ptr.as_addr());
         let requeue_futex = proc.get_futex(requeue_ptr.as_addr());

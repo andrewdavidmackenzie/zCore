@@ -407,8 +407,10 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
 
     const PT_LOAD: u32 = 1;
 
-    // The ELF is linked at 0x10000 (set in petal.ld), so no additional
-    // base offset is needed -- the segment vaddrs are already correct.
+    // VMAR offset for the mapping. Use 0 so the code is mapped at the
+    // start of the child process's VMAR. The actual mapped address
+    // (VMAR base + offset) is returned by vmar_map and used as the
+    // relocation base.
     let base: usize = 0;
 
     // Create a single VMO large enough for all segments.
@@ -459,12 +461,7 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
         }
     }
 
-    // Apply ELF relocations (PT_DYNAMIC -> DT_RELA entries).
-    // Petal binaries are PIE (ET_DYN) and have R_X86_64_RELATIVE
-    // relocations that must be applied before the code runs.
-    apply_elf_relocations(data, e_phoff, e_phentsize, e_phnum, code_vmo, base);
-
-    // Make executable so code segments can be mapped with PERM_EXECUTE.
+    // Make executable before mapping so PERM_EXECUTE is allowed.
     let mut exec_vmo: HandleValue = ZX_HANDLE_INVALID;
     check("vmo_replace_as_executable", unsafe {
         zx_vmo_replace_as_executable(code_vmo, ZX_HANDLE_INVALID, &mut exec_vmo)
@@ -472,9 +469,6 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
     code_vmo = exec_vmo;
 
     // Map the entire VMO as a single RWX region at the load base.
-    // Individual per-segment permissions would require splitting
-    // overlapping page-aligned ranges, which is complex for small
-    // petal binaries. A single RWX mapping is simpler and sufficient.
     let vm_flags =
         ZX_VM_SPECIFIC | ZX_VM_MAP_RANGE | ZX_VM_PERM_READ | ZX_VM_PERM_WRITE | ZX_VM_PERM_EXECUTE;
 
@@ -491,8 +485,14 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
         )
     });
 
-    let map_end = base + vmo_size;
-    let entry = base + e_entry;
+    // Apply ELF relocations using the actual mapped address as base.
+    // The VMAR base may be non-zero (e.g. USER_ASPACE_BASE = 0x200000),
+    // so mapped_addr differs from the raw ELF vaddr.
+    // Relocations write to the VMO which is shared with the mapping.
+    apply_elf_relocations(data, e_phoff, e_phentsize, e_phnum, code_vmo, mapped_addr);
+
+    let map_end = mapped_addr + vmo_size;
+    let entry = mapped_addr + e_entry;
     debug_print(b"userstart: ELF loaded\n");
     (entry, map_end)
 }

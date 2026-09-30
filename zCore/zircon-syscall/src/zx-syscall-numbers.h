@@ -459,3 +459,6 @@ inline constexpr const char* kSyscallNames[] = {
 #define ZX_SYS_pci_reset_device 233
 #define ZX_SYS_futex_wake_handle_close_thread_exit 234
 #define ZX_SYS_vmar_unmap_handle_close_thread_exit 235
+#define ZX_SYS_handle_check_valid 236
+#define ZX_SYS_utc_reference_swap 237
+#define ZX_SYS_utc_reference_get 238

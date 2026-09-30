@@ -70,7 +70,12 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let socket = proc.get_object_with_rights::<Socket>(handle_value, Rights::READ)?;
-        let mut data = vec![0; count];
+        let mut data = {
+            let mut v = alloc::vec::Vec::new();
+            v.try_reserve(count).map_err(|_| ZxError::INVALID_ARGS)?;
+            v.resize(count, 0u8);
+            v
+        };
         let peek = options.contains(SocketFlags::SOCKET_PEEK);
         let actual_count = socket.read(peek, &mut data)?;
         user_bytes.write_array(&data)?;
@@ -91,5 +96,21 @@ impl Syscall<'_> {
         let write = options.contains(SocketFlags::SHUTDOWN_WRITE);
         socket.shutdown(read, write)?;
         Ok(())
+    }
+
+    /// Set the write disposition of a socket and/or its peer.
+    pub fn sys_socket_set_disposition(
+        &self,
+        handle_value: HandleValue,
+        disposition: u32,
+        disposition_peer: u32,
+    ) -> ZxResult {
+        info!(
+            "socket.set_disposition: handle={:#x}, disposition={}, peer={}",
+            handle_value, disposition, disposition_peer
+        );
+        let proc = self.thread.proc();
+        let socket = proc.get_object_with_rights::<Socket>(handle_value, Rights::MANAGE_SOCKET)?;
+        socket.set_disposition(disposition, disposition_peer)
     }
 }

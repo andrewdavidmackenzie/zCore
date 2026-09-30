@@ -402,8 +402,16 @@ impl<T, P: Read> UserPtr<T, P> {
             Ok(Vec::default())
         } else {
             self.check()?;
-            let byte_len = len * core::mem::size_of::<T>();
-            let mut ret = Vec::<T>::with_capacity(len);
+            let byte_len = len
+                .checked_mul(core::mem::size_of::<T>())
+                .ok_or(Error::InvalidLength)?;
+            // Verify ptr + byte_len doesn't overflow the address space.
+            (self.0 as usize)
+                .checked_add(byte_len)
+                .ok_or(Error::InvalidLength)?;
+            // Use try_reserve to avoid panicking on large allocations.
+            let mut ret = Vec::<T>::new();
+            ret.try_reserve(len).map_err(|_| Error::InvalidLength)?;
             unsafe {
                 ret.set_len(len);
                 copy_from_user(ret.as_mut_ptr() as *mut u8, self.0 as *const u8, byte_len)?;
@@ -694,12 +702,17 @@ impl<P: Policy> IoVec<P> {
             return Err(Error::InvalidVectorAddress);
         }
         self.ptr.check()?;
-        let mut buf = Vec::<u8>::with_capacity(self.len);
-        with_user_access(|| unsafe {
+        // Verify ptr + len doesn't overflow.
+        (self.ptr.0 as usize)
+            .checked_add(self.len)
+            .ok_or(Error::InvalidLength)?;
+        let mut buf = Vec::<u8>::new();
+        buf.try_reserve(self.len)
+            .map_err(|_| Error::InvalidLength)?;
+        unsafe {
             buf.set_len(self.len);
-            buf.as_mut_ptr()
-                .copy_from_nonoverlapping(self.ptr.0, self.len);
-        });
+            copy_from_user(buf.as_mut_ptr(), self.ptr.0, self.len)?;
+        }
         Ok(buf)
     }
 
@@ -710,9 +723,9 @@ impl<P: Policy> IoVec<P> {
         }
         self.ptr.check()?;
         let len = core::cmp::min(data.len(), self.len);
-        with_user_access(|| unsafe {
-            self.ptr.0.copy_from_nonoverlapping(data.as_ptr(), len);
-        });
+        unsafe {
+            copy_to_user(self.ptr.0, data.as_ptr(), len)?;
+        }
         Ok(len)
     }
 }

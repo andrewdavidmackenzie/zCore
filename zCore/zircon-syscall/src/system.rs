@@ -172,11 +172,16 @@ impl Syscall<'_> {
     }
 
     /// Atomically add a value to a Counter.
+    ///
+    /// Requires both READ and WRITE rights. Because a counter's value
+    /// could be determined by checking for OUT_OF_RANGE on a series of
+    /// crafted add() calls, there is no way to create a write-only counter.
     pub fn sys_counter_add(&self, handle: HandleValue, delta: i64) -> ZxResult {
         info!("counter.add: handle={:#x}, delta={}", handle, delta);
         let proc = self.thread.proc();
-        let counter = proc.get_object_with_rights::<Counter>(handle, Rights::WRITE)?;
-        counter.add(delta);
+        let counter =
+            proc.get_object_with_rights::<Counter>(handle, Rights::READ | Rights::WRITE)?;
+        counter.add(delta)?;
         Ok(())
     }
 

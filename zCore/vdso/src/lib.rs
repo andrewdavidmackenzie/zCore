@@ -132,11 +132,9 @@ pub extern "C" fn zx_system_get_version_string() -> *const u8 {
 #[no_mangle]
 pub unsafe extern "C" fn zx_clock_get_monotonic() -> i64 {
     extern "C" {
-        fn zx_clock_get_monotonic_via_kernel(out: *mut i64) -> i32;
+        fn zx_clock_get_monotonic_via_kernel() -> i64;
     }
-    let mut now: i64 = 0;
-    unsafe { zx_clock_get_monotonic_via_kernel(&mut now) };
-    now
+    unsafe { zx_clock_get_monotonic_via_kernel() }
 }
 
 /// Read the hardware tick counter.
@@ -147,11 +145,9 @@ pub unsafe extern "C" fn zx_clock_get_monotonic() -> i64 {
 #[no_mangle]
 pub unsafe extern "C" fn zx_ticks_get() -> i64 {
     extern "C" {
-        fn zx_ticks_get_via_kernel(out: *mut i64) -> i32;
+        fn zx_ticks_get_via_kernel() -> i64;
     }
-    let mut ticks: i64 = 0;
-    unsafe { zx_ticks_get_via_kernel(&mut ticks) };
-    ticks
+    unsafe { zx_ticks_get_via_kernel() }
 }
 
 /// Get CPU feature flags.

@@ -88,7 +88,7 @@ a rootfs to run userspace programs.
 Physical boards require platform-specific firmware to initialize hardware
 and load the kernel. The firmware brings the CPU to a known state and
 jumps to the kernel entry point. Board-specific firmware files are in
-`firmware/`.
+`prebuilt/firmware/`.
 
 Each architecture has a different firmware convention:
 - **aarch64:** GPU firmware (Raspberry Pi) or UEFI (server boards)
@@ -104,10 +104,10 @@ Supervisor Binary Interface. The kernel runs at S-mode.
 
 | Board             | Firmware                                            | Feature flag      |
 |-------------------|-----------------------------------------------------|-------------------|
-| Allwinner D1      | `firmware/riscv/d1_fw_payload.elf`                  | `board-d1`        |
-| T-HEAD C910 Light | `firmware/riscv/c910_fw_dynamic.bin`                | `board-c910light` |
-| SiFive FU740      | OpenSBI + `firmware/riscv/hifive-unmatched-a00.dtb` | `board-fu740`     |
-| StarFive          | OpenSBI + `firmware/riscv/starfive.dtb`             | --                |
+| Allwinner D1      | `prebuilt/firmware/riscv/d1_fw_payload.elf`                  | `board-d1`        |
+| T-HEAD C910 Light | `prebuilt/firmware/riscv/c910_fw_dynamic.bin`                | `board-c910light` |
+| SiFive FU740      | OpenSBI + `prebuilt/firmware/riscv/hifive-unmatched-a00.dtb` | `board-fu740`     |
+| StarFive          | OpenSBI + `prebuilt/firmware/riscv/starfive.dtb`             | --                |
 
 #### aarch64 boards
 
