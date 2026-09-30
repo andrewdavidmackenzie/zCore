@@ -364,6 +364,65 @@ impl Socket {
         let inner = self.inner.lock();
         (inner.read_threshold, inner.write_threshold)
     }
+
+    /// Set the write disposition of the socket and/or its peer.
+    ///
+    /// `disposition` controls writes to THIS socket endpoint.
+    /// `disposition_peer` controls writes to the PEER socket endpoint.
+    ///
+    /// Values:
+    /// - 0 = no change
+    /// - `ZX_SOCKET_DISPOSITION_WRITE_DISABLED` (1) = disable writes
+    /// - `ZX_SOCKET_DISPOSITION_WRITE_ENABLED` (2) = re-enable writes
+    pub fn set_disposition(&self, disposition: u32, disposition_peer: u32) -> ZxResult {
+        const WRITE_DISABLED: u32 = 1;
+        const WRITE_ENABLED: u32 = 2;
+
+        // Validate: can't set both disabled and enabled at once
+        if disposition > 2 || disposition_peer > 2 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+
+        let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
+
+        // Apply local disposition
+        match disposition {
+            WRITE_DISABLED => {
+                self.base.signal_set(Signal::SOCKET_WRITE_DISABLED);
+            }
+            WRITE_ENABLED => {
+                if !self.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
+                    // Already enabled, no-op
+                } else {
+                    self.base.signal_clear(Signal::SOCKET_WRITE_DISABLED);
+                }
+            }
+            0 => {} // no change
+            _ => return Err(ZxError::INVALID_ARGS),
+        }
+
+        // Apply peer disposition
+        match disposition_peer {
+            WRITE_DISABLED => {
+                peer.base.signal_set(Signal::SOCKET_PEER_WRITE_DISABLED);
+            }
+            WRITE_ENABLED => {
+                if !peer
+                    .base
+                    .signal()
+                    .contains(Signal::SOCKET_PEER_WRITE_DISABLED)
+                {
+                    // Already enabled, no-op
+                } else {
+                    peer.base.signal_clear(Signal::SOCKET_PEER_WRITE_DISABLED);
+                }
+            }
+            0 => {} // no change
+            _ => return Err(ZxError::INVALID_ARGS),
+        }
+
+        Ok(())
+    }
 }
 
 impl Drop for Socket {

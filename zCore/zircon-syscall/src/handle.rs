@@ -68,7 +68,9 @@ impl Syscall<'_> {
         if handle == INVALID_HANDLE {
             return Err(ZxError::INVALID_ARGS);
         }
-        if handle & 1 != 0 {
+        // Handle values always have bits 0-1 = 0b11 (from add_handle).
+        // Any other pattern is an invalid format.
+        if handle & 0x3 != 0x3 {
             return Err(ZxError::OUT_OF_RANGE);
         }
         // Pseudo-handles are always valid.

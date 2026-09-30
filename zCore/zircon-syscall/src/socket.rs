@@ -102,4 +102,20 @@ impl Syscall<'_> {
         socket.shutdown(read, write)?;
         Ok(())
     }
+
+    /// Set the write disposition of a socket and/or its peer.
+    pub fn sys_socket_set_disposition(
+        &self,
+        handle_value: HandleValue,
+        disposition: u32,
+        disposition_peer: u32,
+    ) -> ZxResult {
+        info!(
+            "socket.set_disposition: handle={:#x}, disposition={}, peer={}",
+            handle_value, disposition, disposition_peer
+        );
+        let proc = self.thread.proc();
+        let socket = proc.get_object_with_rights::<Socket>(handle_value, Rights::MANAGE_SOCKET)?;
+        socket.set_disposition(disposition, disposition_peer)
+    }
 }

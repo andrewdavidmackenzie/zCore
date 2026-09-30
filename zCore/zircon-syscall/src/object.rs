@@ -50,7 +50,13 @@ impl Syscall<'_> {
                 }
                 let s = object.name();
                 info!("name={:?}", s);
-                UserOutPtr::<u8>::from(buffer).write_cstring(s.as_str())?;
+                // Write the full buffer zero-padded. Fuchsia guarantees
+                // all bytes after the name are zero.
+                let mut buf = [0u8; MAX_NAME_LEN];
+                let name_bytes = s.as_bytes();
+                let copy_len = name_bytes.len().min(MAX_NAME_LEN - 1);
+                buf[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+                UserOutPtr::<u8>::from(buffer).write_array(&buf)?;
                 Ok(())
             }
             Property::ProcessDebugAddr => {
