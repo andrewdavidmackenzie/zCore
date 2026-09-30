@@ -79,13 +79,14 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
 ### Current status (phase 9)
-- 251/1776 tests pass, 11 failing, 1514 not yet reached
+- 321/1776 tests pass, 34 failing, 1421 not yet reached
 - FutexTest hang resolved — TLS-based `_zx_thread_self` enables
   proper futex self-ownership check. FutexTest suite: 24/24 pass.
 - All tests run sequentially; newly-reached suites have new failures
   to triage
-- Remaining known failures: clock mapped page format (1), FIFO user
-  buffer validation (1), plus new failures in newly-reached suites
+- Current blocker: `StandaloneElfLoadTests.Load` crashes — requests
+  `.arm64.so` module instead of `.x64.so` (wrong arch detection),
+  null pointer dereference kills the process
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in
