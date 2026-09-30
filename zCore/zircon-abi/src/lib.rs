@@ -23,6 +23,7 @@ extern crate alloc;
 
 pub mod consts;
 pub mod errors;
+pub mod processargs;
 pub mod types;
 pub mod zbi;
 

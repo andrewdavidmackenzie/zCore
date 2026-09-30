@@ -284,30 +284,7 @@ pub fn spawn_process(
 
     // Build the handle list and corresponding handle_info entries.
     // The handle_info array tells the receiver what each handle is.
-    // Fuchsia processargs protocol constants.
-    const ZX_PROCARGS_PROTOCOL: u32 = 0x4150_585d; // from processargs.h
-    const ZX_PROCARGS_VERSION: u32 = 0x0000_1000;
-    const fn pa_hnd(t: u32, a: u32) -> u32 {
-        (t & 0xFFFF) | ((a & 0xFFFF) << 16)
-    }
-    // Fuchsia processargs handle type constants.
-    // From zircon/system/public/zircon/processargs.h
-    const PA_PROC_SELF: u32 = 0x01;
-    const PA_THREAD_SELF: u32 = 0x02;
-    const PA_JOB_DEFAULT: u32 = 0x03;
-    const PA_VMAR_ROOT: u32 = 0x04;
-    const PA_LDSVC_LOADER: u32 = 0x10;
-    const PA_VMO_VDSO: u32 = 0x11;
-    const PA_VMO_EXECUTABLE: u32 = 0x14;
-    const PA_VMO_BOOTDATA: u32 = 0x1A;
-    const PA_VMAR_LOADED: u32 = 0x05;
-    const PA_RESOURCE: u32 = 0x3F;
-    const PA_MMIO_RESOURCE: u32 = 0x50;
-    const PA_IRQ_RESOURCE: u32 = 0x51;
-    // PA_IOPORT_RESOURCE = 0x52 (x86 only, not sent currently)
-    // PA_SMC_RESOURCE = 0x53 (ARM only, not sent currently)
-    const PA_SYSTEM_RESOURCE: u32 = 0x54;
-    const PA_CLOCK_UTC: u32 = 0x56;
+    use zircon_abi::processargs::*;
 
     // TWO processargs messages on the bootstrap channel:
     // Message 1 (read by ld.so.1): loader handles + process identity
@@ -631,35 +608,6 @@ fn spawn_loader_service(channel: Arc<Channel>) {
 /// Build a processargs message data buffer.
 /// Fuchsia processargs message header.
 /// Must match `zx_proc_args_t` from `zircon/processargs.h` exactly.
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-struct ZxProcArgs {
-    protocol: u32,
-    version: u32,
-    handle_info_off: u32,
-    args_off: u32,
-    args_num: u32,
-    environ_off: u32,
-    environ_num: u32,
-    names_off: u32,
-    names_num: u32,
-}
-
-// Compile-time check: must be exactly 36 bytes with no padding.
-const _: () = assert!(core::mem::size_of::<ZxProcArgs>() == 36);
-
-impl ZxProcArgs {
-    /// View the struct as raw bytes for direct wire-format serialization.
-    fn as_bytes(&self) -> &[u8] {
-        unsafe {
-            core::slice::from_raw_parts(
-                self as *const Self as *const u8,
-                core::mem::size_of::<Self>(),
-            )
-        }
-    }
-}
-
 /// Build a processargs message data buffer.
 ///
 /// Wire format: `[ZxProcArgs header][handle_info u32 array][argv strings]`
@@ -670,6 +618,7 @@ fn build_processargs_data(
     handle_info: &[u32],
     argv: &[u8],
 ) -> alloc::vec::Vec<u8> {
+    use zircon_abi::processargs::ZxProcArgs;
     let header_size = core::mem::size_of::<ZxProcArgs>();
     let handle_info_off = header_size as u32;
     let args_off = handle_info_off + (handle_info.len() as u32) * 4;

@@ -2578,6 +2578,7 @@ dependencies = [
  "region-alloc",
  "spin 0.9.4",
  "xmas-elf",
+ "zircon-abi",
 ]
 
 [[package]]
