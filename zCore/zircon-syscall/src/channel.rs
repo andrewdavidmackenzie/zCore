@@ -247,8 +247,11 @@ impl Syscall<'_> {
             "channel.write_etc: handle={:#x}, options={:#x}, user_bytes={:#x?}, num_bytes={:#x}, user_handles={:#x?}, num_handles={:#x}",
             handle, options, user_bytes, num_bytes, user_handles, num_handles
         );
+        let use_iovec = options == ZX_CHANNEL_WRITE_USE_IOVEC;
         let proc = self.thread.proc();
-        let data = user_bytes.read_array(num_bytes as usize)?;
+        // Process dispositions FIRST (consuming MOVE handles) before
+        // checking options or data, matching Fuchsia's behavior where
+        // MOVE handles are always consumed regardless of other errors.
         let mut dispositions = user_handles.read_array(num_handles as usize)?;
         let mut handles: Vec<Handle> = Vec::new();
         let mut ret: ZxResult = Ok(());
@@ -276,10 +279,19 @@ impl Syscall<'_> {
             }
         }
         user_handles.write_array(&dispositions)?;
-        if options != 0 {
+        // Check options after processing dispositions.
+        if options != 0 && !use_iovec {
             return Err(ZxError::INVALID_ARGS);
         }
-        if num_handles > 64 || num_bytes > 65536 {
+        let data = if use_iovec {
+            read_iovec_data(user_bytes, num_bytes)?
+        } else {
+            if num_bytes as usize > ZX_CHANNEL_MAX_MSG_BYTES {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            user_bytes.read_array(num_bytes as usize)?
+        };
+        if num_handles > 64 || data.len() > ZX_CHANNEL_MAX_MSG_BYTES {
             return Err(ZxError::OUT_OF_RANGE);
         }
         ret?;
