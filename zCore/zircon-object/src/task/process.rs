@@ -93,6 +93,9 @@ struct ProcessInner {
     /// Whether this process was created via create_shared (eligible
     /// as a source for further create_shared calls).
     is_shared: bool,
+    /// UTC clock handle installed by _zx_utc_reference_swap.
+    /// Used by libc's clock_gettime(CLOCK_REALTIME).
+    utc_clock: HandleValue,
 }
 
 /// Status of a process.
@@ -364,6 +367,21 @@ impl Process {
     /// Get the `VmAddressRegion` of the process.
     pub fn vmar(&self) -> Arc<VmAddressRegion> {
         self.vmar.clone()
+    }
+
+    /// Swap the UTC clock handle. Returns the old handle value.
+    /// Called by the _zx_utc_reference_swap vDSO function.
+    pub fn utc_reference_swap(&self, new_handle: HandleValue) -> HandleValue {
+        let mut inner = self.inner.lock();
+        let old = inner.utc_clock;
+        inner.utc_clock = new_handle;
+        old
+    }
+
+    /// Get the current UTC clock handle.
+    /// Called by the _zx_utc_reference_get vDSO function.
+    pub fn utc_reference_get(&self) -> HandleValue {
+        self.inner.lock().utc_clock
     }
 
     /// Get the job of the process.

@@ -385,8 +385,11 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
         // Stub returns NULL — callers must handle NULL. This is needed
         // because ld.so.1 calls it via PLT before lazy binding works.
         ("status_get_string", VdsoFunc::ReturnConst(0)),
-        ("utc_reference_swap", VdsoFunc::ReturnConst(0)),
-        ("utc_reference_get", VdsoFunc::ReturnConst(0)),
+        (
+            "utc_reference_swap",
+            VdsoFunc::Syscall("utc_reference_swap"),
+        ),
+        ("utc_reference_get", VdsoFunc::Syscall("utc_reference_get")),
         ("system_get_dcache_line_size", VdsoFunc::ReturnConst(64)),
         ("system_get_features", VdsoFunc::ReturnConst(0)),
         // Newer Fuchsia symbols needed by core-tests-standalone

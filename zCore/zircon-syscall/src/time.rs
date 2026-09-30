@@ -207,6 +207,24 @@ impl From<Deadline> for Duration {
     }
 }
 
+impl Syscall<'_> {
+    /// Swap the UTC clock reference for this process.
+    ///
+    /// Installs `new_clock` as the process's UTC reference clock and
+    /// writes the previously installed handle to `prev_clock_out`.
+    /// Returns ZX_OK on success.
+    pub fn sys_utc_reference_swap(
+        &self,
+        new_clock: HandleValue,
+        mut prev_clock_out: UserOutPtr<HandleValue>,
+    ) -> ZxResult {
+        info!("utc_reference_swap: new_clock={:#x}", new_clock);
+        let old = self.thread.proc().utc_reference_swap(new_clock);
+        prev_clock_out.write(old)?;
+        Ok(())
+    }
+}
+
 impl Debug for Deadline {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         if self.0 <= 0 {

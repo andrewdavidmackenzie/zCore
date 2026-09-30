@@ -633,6 +633,10 @@ impl Syscall<'_> {
             }
             Sys::SYSTEM_WATCH_MEMORY_STALL => self.sys_system_watch_memory_stall(a0 as _, a1 as _),
             Sys::HANDLE_CHECK_VALID => self.sys_handle_check_valid(a0 as _),
+            Sys::UTC_REFERENCE_SWAP => self.sys_utc_reference_swap(a0 as _, a1.into()),
+            Sys::UTC_REFERENCE_GET => {
+                return self.thread.proc().utc_reference_get() as isize;
+            }
             _ => {
                 error!("syscall unimplemented: {:?}", sys_type);
                 Err(ZxError::NOT_SUPPORTED)
