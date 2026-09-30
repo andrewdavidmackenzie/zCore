@@ -378,47 +378,51 @@ impl Socket {
         const WRITE_DISABLED: u32 = 1;
         const WRITE_ENABLED: u32 = 2;
 
-        // Validate: can't set both disabled and enabled at once
         if disposition > 2 || disposition_peer > 2 {
             return Err(ZxError::INVALID_ARGS);
         }
 
-        let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
+        // disposition_peer requires the peer to be alive.
+        // Local disposition changes work even when peer is closed.
+        let peer = self.peer.upgrade();
+        if disposition_peer != 0 && peer.is_none() {
+            return Err(ZxError::PEER_CLOSED);
+        }
 
-        // Apply local disposition
+        // Apply local disposition: controls writes to THIS endpoint.
+        // When disabled: set WRITE_DISABLED on self, PEER_WRITE_DISABLED on peer.
         match disposition {
             WRITE_DISABLED => {
                 self.base.signal_set(Signal::SOCKET_WRITE_DISABLED);
-            }
-            WRITE_ENABLED => {
-                if !self.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
-                    // Already enabled, no-op
-                } else {
-                    self.base.signal_clear(Signal::SOCKET_WRITE_DISABLED);
+                if let Some(ref peer) = peer {
+                    peer.base.signal_set(Signal::SOCKET_PEER_WRITE_DISABLED);
                 }
             }
-            0 => {} // no change
-            _ => return Err(ZxError::INVALID_ARGS),
-        }
-
-        // Apply peer disposition
-        match disposition_peer {
-            WRITE_DISABLED => {
-                peer.base.signal_set(Signal::SOCKET_PEER_WRITE_DISABLED);
-            }
             WRITE_ENABLED => {
-                if !peer
-                    .base
-                    .signal()
-                    .contains(Signal::SOCKET_PEER_WRITE_DISABLED)
-                {
-                    // Already enabled, no-op
-                } else {
+                self.base.signal_clear(Signal::SOCKET_WRITE_DISABLED);
+                if let Some(ref peer) = peer {
                     peer.base.signal_clear(Signal::SOCKET_PEER_WRITE_DISABLED);
                 }
             }
-            0 => {} // no change
+            0 => {}
             _ => return Err(ZxError::INVALID_ARGS),
+        }
+
+        // Apply peer disposition: controls writes to the PEER endpoint.
+        // When disabled: set WRITE_DISABLED on peer, PEER_WRITE_DISABLED on self.
+        if let Some(ref peer) = peer {
+            match disposition_peer {
+                WRITE_DISABLED => {
+                    peer.base.signal_set(Signal::SOCKET_WRITE_DISABLED);
+                    self.base.signal_set(Signal::SOCKET_PEER_WRITE_DISABLED);
+                }
+                WRITE_ENABLED => {
+                    peer.base.signal_clear(Signal::SOCKET_WRITE_DISABLED);
+                    self.base.signal_clear(Signal::SOCKET_PEER_WRITE_DISABLED);
+                }
+                0 => {}
+                _ => return Err(ZxError::INVALID_ARGS),
+            }
         }
 
         Ok(())
