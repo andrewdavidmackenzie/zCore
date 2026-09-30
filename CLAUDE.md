@@ -79,7 +79,7 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
 ### Current status (phase 9)
-- 321/1776 tests pass, 34 failing, 1421 not yet reached
+- 340/1776 tests pass, 15 failing, 1421 not yet reached
 - FutexTest hang resolved — TLS-based `_zx_thread_self` enables
   proper futex self-ownership check. FutexTest suite: 24/24 pass.
 - All tests run sequentially; newly-reached suites have new failures
