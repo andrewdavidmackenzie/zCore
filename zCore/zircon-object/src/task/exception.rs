@@ -335,11 +335,25 @@ impl ExceptionObject {
 
     /// Set whether closing the exception handle will
     /// finish exception processing and resume the underlying thread.
+    /// Set the exception handling state.
+    ///
+    /// - 0 = `ZX_EXCEPTION_STATE_TRY_NEXT` — pass to next handler
+    /// - 1 = `ZX_EXCEPTION_STATE_HANDLED` — exception was handled, resume
+    /// - 2 = `ZX_EXCEPTION_STATE_THREAD_EXIT` — kill the faulting thread
     pub fn set_state(&self, state: u32) -> ZxResult {
-        if state > 1 {
+        if state > 2 {
             return Err(ZxError::INVALID_ARGS);
         }
-        self.exception.inner.lock().handled = state == 1;
+        let mut inner = self.exception.inner.lock();
+        // Both HANDLED (1) and THREAD_EXIT (2) count as "handled" from the
+        // exception delivery perspective — the exception won't propagate
+        // to the next handler. THREAD_EXIT additionally kills the thread.
+        inner.handled = state >= 1;
+        if state == 2 {
+            // THREAD_EXIT: kill the faulting thread
+            use super::Task;
+            self.exception.thread.kill();
+        }
         Ok(())
     }
 
