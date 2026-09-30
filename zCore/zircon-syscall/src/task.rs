@@ -126,7 +126,13 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let thread = proc.get_object_with_rights::<Thread>(handle, Rights::READ)?;
         //TODO: Remove allocation
-        let mut buf = vec![0; buffer_size];
+        let mut buf = {
+            let mut v = alloc::vec::Vec::new();
+            v.try_reserve(buffer_size)
+                .map_err(|_| ZxError::INVALID_ARGS)?;
+            v.resize(buffer_size, 0u8);
+            v
+        };
         thread.read_state(kind, &mut buf)?;
         buffer.write_array(&buf[..])?;
         Ok(())

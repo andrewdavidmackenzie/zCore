@@ -35,12 +35,6 @@ impl Syscall<'_> {
             "socket.write: socket={:#x?}, options={:#x?}, buffer={:#x?}, size={:#x?}",
             handle_value, options, user_bytes, count,
         );
-        // Reject absurdly large counts that would panic on allocation.
-        // Fuchsia's socket buffer is at most 256KB; anything beyond that
-        // will be a partial write at best.
-        if count > 256 * 1024 * 1024 {
-            return Err(ZxError::INVALID_ARGS);
-        }
         if (count == 0 || !user_bytes.is_null()) && options == 0 {
             let actual_count = self
                 .thread
@@ -70,17 +64,18 @@ impl Syscall<'_> {
         if count > 0 && user_bytes.is_null() {
             return Err(ZxError::INVALID_ARGS);
         }
-        // Reject absurdly large counts that would panic on allocation.
-        if count > 256 * 1024 * 1024 {
-            return Err(ZxError::INVALID_ARGS);
-        }
         let options = SocketFlags::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
         if !(options - SocketFlags::SOCKET_PEEK).is_empty() {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
         let socket = proc.get_object_with_rights::<Socket>(handle_value, Rights::READ)?;
-        let mut data = vec![0; count];
+        let mut data = {
+            let mut v = alloc::vec::Vec::new();
+            v.try_reserve(count).map_err(|_| ZxError::INVALID_ARGS)?;
+            v.resize(count, 0u8);
+            v
+        };
         let peek = options.contains(SocketFlags::SOCKET_PEEK);
         let actual_count = socket.read(peek, &mut data)?;
         user_bytes.write_array(&data)?;

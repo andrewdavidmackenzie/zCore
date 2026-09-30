@@ -74,7 +74,13 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let fifo = proc.get_object_with_rights::<Fifo>(handle_value, Rights::READ)?;
-        let mut data = vec![0; elem_size * count];
+        let total = elem_size.checked_mul(count).ok_or(ZxError::INVALID_ARGS)?;
+        let mut data = {
+            let mut v = alloc::vec::Vec::new();
+            v.try_reserve(total).map_err(|_| ZxError::INVALID_ARGS)?;
+            v.resize(total, 0u8);
+            v
+        };
         let actual_count = fifo.read(elem_size, &mut data, count)?;
         let actual_bytes = actual_count * elem_size;
         // Try writing to user buffer. If this fails (e.g. bad pointer),

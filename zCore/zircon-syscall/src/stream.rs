@@ -123,7 +123,13 @@ impl Syscall<'_> {
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::READ)?;
         let mut actual_count = 0usize;
         for io_vec in data.iter() {
-            let mut buf = vec![0u8; io_vec.len()];
+            let mut buf = {
+                let mut v = alloc::vec::Vec::new();
+                v.try_reserve(io_vec.len())
+                    .map_err(|_| ZxError::INVALID_ARGS)?;
+                v.resize(io_vec.len(), 0u8);
+                v
+            };
             actual_count += stream.read(&mut buf)?;
             io_vec.write_from_slice(&buf)?;
         }
@@ -153,7 +159,13 @@ impl Syscall<'_> {
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::READ)?;
         let mut actual_count = 0usize;
         for io_vec in data.iter() {
-            let mut buf = vec![0u8; io_vec.len()];
+            let mut buf = {
+                let mut v = alloc::vec::Vec::new();
+                v.try_reserve(io_vec.len())
+                    .map_err(|_| ZxError::INVALID_ARGS)?;
+                v.resize(io_vec.len(), 0u8);
+                v
+            };
             actual_count += stream.read_at(&mut buf, offset)?;
             io_vec.write_from_slice(&buf)?;
             offset += actual_count;
