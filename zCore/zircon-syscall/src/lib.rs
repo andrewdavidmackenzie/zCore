@@ -49,6 +49,7 @@ mod socket;
 mod stream;
 mod system;
 mod task;
+mod test_syscalls;
 mod time;
 mod vmar;
 mod vmo;
@@ -640,6 +641,85 @@ impl Syscall<'_> {
             Sys::UTC_REFERENCE_SWAP => self.sys_utc_reference_swap(a0 as _, a1.into()),
             Sys::UTC_REFERENCE_GET => {
                 return self.thread.proc().utc_reference_get() as isize;
+            }
+            // Test-only syscalls.
+            Sys::SYSCALL_TEST_HANDLE_CREATE => {
+                return self.sys_syscall_test_handle_create(a0 as i32, a1.into());
+            }
+            Sys::SYSCALL_TEST_RUST_HANDLE => self.sys_syscall_test_rust_handle(a0 as _, a1.into()),
+            Sys::SYSCALL_TEST_RUST_INPTR => self.sys_syscall_test_rust_inptr(a0.into(), a1.into()),
+            Sys::SYSCALL_TEST_RUST_OUTPTR => self.sys_syscall_test_rust_outptr(a0 as _, a1.into()),
+            Sys::SYSCALL_TEST_RUST_INOUTPTR => self.sys_syscall_test_rust_inoutptr(a0.into()),
+            // Test-only syscalls: return the sum of their arguments.
+            // Used by SyscallGenerationTest to verify the syscall ABI.
+            Sys::SYSCALL_TEST_0 | Sys::SYSCALL_TEST_RUST_0 => {
+                return 0;
+            }
+            Sys::SYSCALL_TEST_1
+            | Sys::SYSCALL_TEST_2
+            | Sys::SYSCALL_TEST_3
+            | Sys::SYSCALL_TEST_4
+            | Sys::SYSCALL_TEST_5
+            | Sys::SYSCALL_TEST_6
+            | Sys::SYSCALL_TEST_7
+            | Sys::SYSCALL_TEST_8
+            | Sys::SYSCALL_TEST_WRAPPER
+            | Sys::SYSCALL_TEST_RUST_1
+            | Sys::SYSCALL_TEST_RUST_2
+            | Sys::SYSCALL_TEST_RUST_3
+            | Sys::SYSCALL_TEST_RUST_4
+            | Sys::SYSCALL_TEST_RUST_5
+            | Sys::SYSCALL_TEST_RUST_6
+            | Sys::SYSCALL_TEST_RUST_7
+            | Sys::SYSCALL_TEST_RUST_8
+            | Sys::SYSCALL_TEST_RUST_WRAPPER => {
+                let args: [isize; 8] = [
+                    a0 as isize,
+                    a1 as isize,
+                    a2 as isize,
+                    a3 as isize,
+                    a4 as isize,
+                    a5 as isize,
+                    a6 as isize,
+                    a7 as isize,
+                ];
+                let n = match sys_type {
+                    Sys::SYSCALL_TEST_1 | Sys::SYSCALL_TEST_RUST_1 => 1,
+                    Sys::SYSCALL_TEST_2 | Sys::SYSCALL_TEST_RUST_2 => 2,
+                    Sys::SYSCALL_TEST_3
+                    | Sys::SYSCALL_TEST_RUST_3
+                    | Sys::SYSCALL_TEST_WRAPPER
+                    | Sys::SYSCALL_TEST_RUST_WRAPPER => 3,
+                    Sys::SYSCALL_TEST_4 | Sys::SYSCALL_TEST_RUST_4 => 4,
+                    Sys::SYSCALL_TEST_5 | Sys::SYSCALL_TEST_RUST_5 => 5,
+                    Sys::SYSCALL_TEST_6 | Sys::SYSCALL_TEST_RUST_6 => 6,
+                    Sys::SYSCALL_TEST_7 | Sys::SYSCALL_TEST_RUST_7 => 7,
+                    Sys::SYSCALL_TEST_8 | Sys::SYSCALL_TEST_RUST_8 => 8,
+                    _ => unreachable!(),
+                };
+                return args[..n].iter().sum();
+            }
+            // Widening test syscalls: sum args with type truncation.
+            // The "wide" variant receives full 64-bit args; the kernel
+            // truncates to the declared types before summing.
+            // The "narrow" variant is truncated by the vDSO before the
+            // kernel call, so the kernel sees already-truncated values.
+            Sys::SYSCALL_TEST_WIDENING_UNSIGNED_NARROW
+            | Sys::SYSCALL_TEST_WIDENING_UNSIGNED_WIDE => {
+                // Args: u64, u32, u16, u8 (kernel truncates for _WIDE)
+                let sum = (a0 as u64)
+                    .wrapping_add(a1 as u32 as u64)
+                    .wrapping_add(a2 as u16 as u64)
+                    .wrapping_add(a3 as u8 as u64);
+                return sum as isize;
+            }
+            Sys::SYSCALL_TEST_WIDENING_SIGNED_NARROW | Sys::SYSCALL_TEST_WIDENING_SIGNED_WIDE => {
+                // Args: i64, i32, i16, i8 (kernel truncates for _WIDE)
+                let sum = (a0 as i64)
+                    .wrapping_add(a1 as i32 as i64)
+                    .wrapping_add(a2 as i16 as i64)
+                    .wrapping_add(a3 as i8 as i64);
+                return sum as isize;
             }
             _ => {
                 error!("syscall unimplemented: {:?}", sys_type);
