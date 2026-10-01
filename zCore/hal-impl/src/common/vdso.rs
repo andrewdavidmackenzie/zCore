@@ -5,6 +5,11 @@ use git_version::git_version;
 /// once at boot time.  From the vDSO code's perspective, they are
 /// read-only data that can never change.  Hence, no synchronization is
 /// required to read them.
+/// Matches Fuchsia's `struct vdso_constants` from
+/// `zircon/kernel/lib/userabi/include/lib/userabi/vdso-constants.h`.
+///
+/// The Fuchsia vDSO has a `DATA_CONSTANTS` page at a fixed offset
+/// (typically `0x8000`) that the kernel populates at boot time.
 #[repr(C)]
 #[derive(Debug)]
 pub struct VdsoConstants {
@@ -17,13 +22,10 @@ pub struct VdsoConstants {
     pub dcache_line_size: u32,
     /// Number of bytes in an instruction cache line.
     pub icache_line_size: u32,
-    /// Conversion factor for zx_ticks_get return values to seconds.
-    pub ticks_per_second: u64,
-    /// Ratio which relates ticks (zx_ticks_get) to clock monotonic.
-    ///
-    /// Specifically: ClockMono(ticks) = (ticks * N) / D
-    pub ticks_to_mono_numerator: u32,
-    pub ticks_to_mono_denominator: u32,
+    /// System page size in bytes.
+    pub page_size: u32,
+    /// Padding for alignment.
+    pub padding: u32,
     /// Total amount of physical memory in the system, in bytes.
     pub physmem: u64,
     /// Actual length of `version_string`, not including the NUL terminator.
@@ -42,6 +44,10 @@ pub struct Features {
     /// Total amount of debug registers available in the system.
     pub hw_breakpoint_count: u32,
     pub hw_watchpoint_count: u32,
+    /// Address tagging features bitmask.
+    pub address_tagging: u32,
+    /// VM related features bitmask.
+    pub vm: u32,
 }
 
 impl VdsoConstants {
@@ -79,19 +85,19 @@ impl Debug for VersionString {
 }
 
 pub(crate) fn vdso_constants_template() -> VdsoConstants {
-    let frequency = crate::cpu::cpu_frequency();
     let mut constants = VdsoConstants {
         max_num_cpus: 1,
         features: Features {
             cpu: 0,
             hw_breakpoint_count: 0,
             hw_watchpoint_count: 0,
+            address_tagging: 0,
+            vm: 0,
         },
-        dcache_line_size: 0,
-        icache_line_size: 0,
-        ticks_per_second: frequency as u64 * 1_000_000,
-        ticks_to_mono_numerator: 1000,
-        ticks_to_mono_denominator: frequency as u32,
+        dcache_line_size: 64,
+        icache_line_size: 64,
+        page_size: 4096,
+        padding: 0,
         physmem: 0,
         version_string_len: 0,
         version_string: Default::default(),

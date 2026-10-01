@@ -56,7 +56,7 @@ tools/x86-bootimage/target/release/x86-bootimage \
 source tools/scripts/find-ovmf.sh && OVMF=$(find_ovmf)
 qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
   -machine q35 -smp 1 \
-  -cpu qemu64,+fsgsbase,+rdrand,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+  -cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
   -serial mon:stdio \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF" \
   -drive "format=raw,file=target/qemu-x86_64/release/boot.img" \

@@ -21,24 +21,30 @@ fn main() {
     if let Ok(vdso_path) = std::env::var("VDSO_BIN") {
         println!("cargo:rerun-if-changed={}", vdso_path);
     } else {
-        // Generate vDSO ELF from syscall numbers header
-        let header_path = PathBuf::from("../zircon-syscall/src/zx-syscall-numbers.h");
-        println!("cargo:rerun-if-changed={}", header_path.display());
-
         let target = std::env::var("TARGET").unwrap_or_default();
-        let vdso_path = out.join("vdso.so");
 
-        if target.contains("x86_64") {
-            generate_vdso_elf(&header_path, &vdso_path, Arch::X86_64);
-        } else if target.contains("aarch64") {
-            generate_vdso_elf(&header_path, &vdso_path, Arch::Aarch64);
-        } else if target.contains("riscv64") {
-            generate_vdso_elf(&header_path, &vdso_path, Arch::Riscv64);
+        // Use prebuilt Fuchsia vDSO for x86_64 if available.
+        let prebuilt_vdso = PathBuf::from("../../prebuilt/zircon-test/x86_64/libzircon-vdso.so");
+        if target.contains("x86_64") && prebuilt_vdso.exists() {
+            let vdso_path = prebuilt_vdso.canonicalize().unwrap();
+            println!("cargo:rerun-if-changed={}", vdso_path.display());
+            println!("cargo:rustc-env=VDSO_BIN={}", vdso_path.display());
         } else {
-            // Unknown arch or host build — empty stub
-            std::fs::write(&vdso_path, b"").unwrap();
+            // Generate vDSO ELF from syscall numbers header for other archs.
+            let header_path = PathBuf::from("../zircon-syscall/src/zx-syscall-numbers.h");
+            println!("cargo:rerun-if-changed={}", header_path.display());
+
+            let vdso_path = out.join("vdso.so");
+            if target.contains("aarch64") {
+                generate_vdso_elf(&header_path, &vdso_path, Arch::Aarch64);
+            } else if target.contains("riscv64") {
+                generate_vdso_elf(&header_path, &vdso_path, Arch::Riscv64);
+            } else {
+                // Unknown arch or host build — empty stub
+                std::fs::write(&vdso_path, b"").unwrap();
+            }
+            println!("cargo:rustc-env=VDSO_BIN={}", vdso_path.display());
         }
-        println!("cargo:rustc-env=VDSO_BIN={}", vdso_path.display());
     }
 }
 

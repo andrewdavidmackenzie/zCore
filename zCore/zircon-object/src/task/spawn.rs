@@ -253,8 +253,7 @@ pub fn spawn_process(
     let stack_base = vmar.map(None, stack_vmo, 0, stack_size, stack_flags)?;
     let sp = stack_base + stack_size;
 
-    // vDSO: map entire ELF .so + data page as a single contiguous RX block.
-    // This allows ld.so.1 to parse ELF headers at the base address.
+    // vDSO: map the entire ELF into the process address space.
     let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
     let vdso_code_addr = vmar.map(
         None,
@@ -722,6 +721,7 @@ fn resolve_vdso_plt(
     let mut vdso_symtab = 0usize;
     let mut vdso_strtab = 0usize;
     let mut vdso_hash = 0usize;
+    let mut vdso_gnu_hash = 0usize;
     let mut vdso_syment = 24usize;
     for i in (0..vdso_dynamic_sz).step_by(16) {
         let mut dyn_entry = [0u8; 16];
@@ -734,28 +734,40 @@ fn resolve_vdso_plt(
         let tag = i64::from_le_bytes(dyn_entry[0..8].try_into().unwrap());
         let val = u64::from_le_bytes(dyn_entry[8..16].try_into().unwrap()) as usize;
         match tag {
-            0 => break,              // DT_NULL
-            4 => vdso_hash = val,    // DT_HASH
-            5 => vdso_strtab = val,  // DT_STRTAB
-            6 => vdso_symtab = val,  // DT_SYMTAB
-            11 => vdso_syment = val, // DT_SYMENT
+            0 => break,                        // DT_NULL
+            4 => vdso_hash = val,              // DT_HASH
+            5 => vdso_strtab = val,            // DT_STRTAB
+            6 => vdso_symtab = val,            // DT_SYMTAB
+            11 => vdso_syment = val,           // DT_SYMENT
+            0x6ffffef5 => vdso_gnu_hash = val, // DT_GNU_HASH
             _ => {}
         }
     }
-    if vdso_symtab == 0 || vdso_strtab == 0 || vdso_hash == 0 {
+    if vdso_symtab == 0 || vdso_strtab == 0 || (vdso_hash == 0 && vdso_gnu_hash == 0) {
         warn!("resolve_vdso_plt: incomplete vDSO dynamic section");
         return;
     }
 
-    // Read vDSO hash table to get nsyms
-    let mut hash_hdr = [0u8; 8];
-    if vmar
-        .read_memory(vdso_base + vdso_hash, &mut hash_hdr)
-        .is_err()
-    {
-        return;
-    }
-    let vdso_nchain = u32::from_le_bytes(hash_hdr[4..8].try_into().unwrap()) as usize;
+    // Determine the number of dynamic symbols.
+    let vdso_nchain = if vdso_hash != 0 {
+        // SysV hash: nchain field at offset 4
+        let mut hash_hdr = [0u8; 8];
+        if vmar
+            .read_memory(vdso_base + vdso_hash, &mut hash_hdr)
+            .is_err()
+        {
+            return;
+        }
+        u32::from_le_bytes(hash_hdr[4..8].try_into().unwrap()) as usize
+    } else {
+        // GNU hash: nsyms = (gnu_hash_off - symtab) / syment
+        if vdso_gnu_hash > vdso_symtab && vdso_syment > 0 {
+            (vdso_gnu_hash - vdso_symtab) / vdso_syment
+        } else {
+            warn!("resolve_vdso_plt: cannot determine vDSO symbol count");
+            return;
+        }
+    };
 
     // Now parse ld.so.1's dynamic section to find its JMPREL entries
     // We need: DT_JMPREL, DT_PLTRELSZ, DT_SYMTAB, DT_STRTAB
