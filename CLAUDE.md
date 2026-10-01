@@ -61,7 +61,7 @@ qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF" \
   -drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
   2>&1 > /tmp/qemu-test.log &
-PID=$!; sleep 120; kill $PID 2>/dev/null; wait $PID 2>/dev/null
+PID=$!; sleep 900; kill $PID 2>/dev/null; wait $PID 2>/dev/null
 ```
 
 ### Check results
@@ -78,23 +78,23 @@ grep '\[       OK \]' /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
-### Current status (phase 11)
-- 401/1776 tests pass, 40 failing, 1335 not yet reached
-- FutexTest hang resolved — TLS-based `_zx_thread_self` enables
-  proper futex self-ownership check. FutexTest suite: 24/24 pass.
-- All tests run sequentially; newly-reached suites have new failures
-  to triage
-- StreamTestCase suite partially implemented: 9/33 pass, remaining
-  failures need content_size tracking and partial write refinement
-- StreamTestCase hang resolved — ZX_VMO_TRAP_DIRTY rejected in
-  pager_create_vmo, preventing infinite port_wait
-- Test-only syscalls implemented (SYSCALL_TEST_*, widening, handle_create)
-- Handle-leak policy exception delivered via handle_exception_user
-- vDSO system_get_version_string returns "zcore-0.1.0" via StringView
-- Current blocker: ChannelInternalTest.TransferChannelWithPendingCall
-  hangs — observed symptom is waker notification set but executor
-  goes idle without finding it. Root cause under investigation.
-  See issue #21 comment for detailed investigation notes.
+### Current status (phase 12)
+- 479/1776 tests pass, 42 failing, 1255 not yet reached
+- TransferChannelWithPendingCall hang resolved — channel_call now
+  passes a cancel_token so handle transfer cancels the blocking call
+- Executor `take_notified` fixed — notifications masked by `borrowed`
+  or `dropped` bits are now restored (deferred) instead of lost
+- channel_read options validation added (rejects invalid options
+  with NOT_SUPPORTED)
+- write_etc first-error latching fixed for BAD_HANDLE dispositions
+- New suites reached: ChannelTest (75/88 pass), ChannelWriteEtcTest,
+  IOVecTest, ChannelCallEtcTest, ChannelInternalTest
+- Current blocker: ChannelTest.NoSpuriousReadableSignalWhenRacing
+  hangs due to cooperative scheduling overhead — 10000 iterations
+  of busy-wait + channel read/write takes ~150s+ in QEMU
+- NOTE: increasing timer frequency above 100 Hz makes things worse
+  in QEMU due to VM exit/enter overhead per interrupt. Use 900s+
+  timeout to let slow tests complete.
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in

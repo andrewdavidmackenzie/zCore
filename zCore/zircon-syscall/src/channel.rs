@@ -27,9 +27,12 @@ impl Syscall<'_> {
             "channel.read: handle={:#x?}, options={:?}, bytes=({:#x?}; {:#x?}), handles=({:#x?}; {:#x?})",
             handle_value, options, bytes, num_bytes, handles, num_handles,
         );
+        const MAY_DISCARD: u32 = 1;
+        if options & !MAY_DISCARD != 0 {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         let proc = self.thread.proc();
         let channel = proc.get_object_with_rights::<Channel>(handle_value, Rights::READ)?;
-        const MAY_DISCARD: u32 = 1;
         let never_discard = options & MAY_DISCARD == 0;
 
         let msg = if never_discard {
@@ -186,11 +189,17 @@ impl Syscall<'_> {
             },
         };
 
+        let cancel_token = proc.get_cancel_token(handle_value)?;
         let future = channel.call(wr_msg);
         pin_mut!(future);
         let rd_msg: MessagePacket = self
             .thread
-            .blocking_run(future, ThreadState::BlockedChannel, deadline.into(), None)
+            .blocking_run(
+                future,
+                ThreadState::BlockedChannel,
+                deadline.into(),
+                Some(cancel_token),
+            )
             .await?;
 
         actual_bytes.write(rd_msg.data.len() as u32)?;
@@ -275,7 +284,9 @@ impl Syscall<'_> {
                 handles.push(new_handle);
             } else {
                 disposition.result = ZxError::BAD_HANDLE as _;
-                ret = Err(ZxError::BAD_HANDLE);
+                if ret.is_ok() {
+                    ret = Err(ZxError::BAD_HANDLE);
+                }
             }
         }
         user_handles.write_array(&dispositions)?;
@@ -392,11 +403,17 @@ impl Syscall<'_> {
             Vec::new()
         };
         let wr_msg = MessagePacket { data, handles };
+        let cancel_token = proc.get_cancel_token(handle_value)?;
         let future = channel.call(wr_msg);
         pin_mut!(future);
         let rd_msg: MessagePacket = self
             .thread
-            .blocking_run(future, ThreadState::BlockedChannel, deadline.into(), None)
+            .blocking_run(
+                future,
+                ThreadState::BlockedChannel,
+                deadline.into(),
+                Some(cancel_token),
+            )
             .await?;
         actual_bytes.write(rd_msg.data.len() as u32)?;
         actual_handles.write(rd_msg.handles.len() as u32)?;
