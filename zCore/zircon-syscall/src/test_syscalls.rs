@@ -11,8 +11,12 @@ impl Syscall<'_> {
     ///
     /// If `retval` is `ZX_OK` (0), creates an event and writes the
     /// handle to `*out`.  Otherwise returns `retval` without creating
-    /// anything.  Returns the raw isize result directly.
-    pub fn sys_syscall_test_handle_create(
+    /// anything.
+    ///
+    /// If the handle is created but the copyout fails (e.g. null
+    /// pointer), the handle leaks and a
+    /// `ZX_EXCP_POLICY_CODE_HANDLE_LEAK` exception is delivered.
+    pub async fn sys_syscall_test_handle_create(
         &self,
         retval: i32,
         mut out: UserOutPtr<HandleValue>,
@@ -20,18 +24,21 @@ impl Syscall<'_> {
         if retval != 0 {
             return retval as isize;
         }
-        // Validate output pointer before creating the handle to avoid
-        // a handle leak (we don't yet implement policy exceptions for
-        // ZX_EXCP_POLICY_CODE_HANDLE_LEAK).
-        if out.is_null() {
-            return ZxError::INVALID_ARGS as isize;
-        }
         let event = Event::new();
         let proc = self.thread.proc();
         let handle = proc.add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
         match out.write(handle) {
             Ok(()) => 0,
-            Err(e) => ZxError::from(e) as isize,
+            Err(_e) => {
+                // Handle leak: the handle was created but couldn't be
+                // delivered to userspace.  Deliver a policy exception
+                // so the test's exception handler can observe it.
+                const ZX_EXCP_POLICY_CODE_HANDLE_LEAK: u32 = 20;
+                self.thread
+                    .handle_exception_user(ZX_EXCP_POLICY_CODE_HANDLE_LEAK, 0)
+                    .await;
+                ZxError::INVALID_ARGS as isize
+            }
         }
     }
 

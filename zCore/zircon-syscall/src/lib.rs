@@ -644,7 +644,9 @@ impl Syscall<'_> {
             }
             // Test-only syscalls.
             Sys::SYSCALL_TEST_HANDLE_CREATE => {
-                return self.sys_syscall_test_handle_create(a0 as i32, a1.into());
+                return self
+                    .sys_syscall_test_handle_create(a0 as i32, a1.into())
+                    .await;
             }
             Sys::SYSCALL_TEST_RUST_HANDLE => self.sys_syscall_test_rust_handle(a0 as _, a1.into()),
             Sys::SYSCALL_TEST_RUST_INPTR => self.sys_syscall_test_rust_inptr(a0.into(), a1.into()),
