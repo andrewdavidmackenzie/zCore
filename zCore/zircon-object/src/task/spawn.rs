@@ -161,6 +161,8 @@ pub struct SpawnConfig {
     pub stack_pages: usize,
     /// Thread function for the new process's threads.
     pub thread_fn: crate::task::thread::ThreadFn,
+    /// Extra argv entries (appended after argv[0] = program name).
+    pub extra_args: alloc::vec::Vec<alloc::string::String>,
 }
 
 /// Spawn a new Zircon process from raw ELF data.
@@ -399,7 +401,12 @@ pub fn spawn_process(
     let utc_clock = Clock::new(ZX_CLOCK_OPT_AUTO_START)?;
     let utc_clock = alloc::sync::Arc::new(utc_clock);
 
-    let argv = format!("{}\0", name);
+    // Build argv: program name followed by any extra arguments.
+    let mut argv = format!("{}\0", name);
+    for arg in &config.extra_args {
+        argv.push_str(arg);
+        argv.push('\0');
+    }
     let msg2_handles = alloc::vec![
         Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF
         Handle::new(thread.clone(), Rights::DEFAULT_THREAD), // PA_THREAD_SELF

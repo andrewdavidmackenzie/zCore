@@ -480,13 +480,17 @@ pub fn zircon_spawn_config() -> zircon_object::task::spawn::SpawnConfig {
         vdso_code_size: vdso_size,
         stack_pages: 8,
         thread_fn,
+        extra_args: alloc::vec::Vec::new(),
     }
 }
 
 /// Boot a Zircon process from a rootfs filesystem.
+///
+/// `extra_args` are appended to argv after the program name.
 pub fn run_from_rootfs(
     rootfs: Arc<dyn rcore_fs::vfs::FileSystem>,
     init_path: &str,
+    extra_args: alloc::vec::Vec<alloc::string::String>,
 ) -> Arc<Process> {
     info!("Zircon rootfs boot: loading '{}'", init_path);
 
@@ -507,7 +511,8 @@ pub fn run_from_rootfs(
     );
 
     let job = Job::root();
-    let config = zircon_spawn_config();
+    let mut config = zircon_spawn_config();
+    config.extra_args = extra_args;
     zircon_object::task::spawn::spawn_process(&job, "init", &program_data, &config)
         .expect("failed to spawn init process")
 }
