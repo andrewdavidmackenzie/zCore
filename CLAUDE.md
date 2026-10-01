@@ -79,7 +79,7 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
 ### Current status (phase 11)
-- 399/1776 tests pass, 39 failing, 1338 not yet reached
+- 401/1776 tests pass, 40 failing, 1335 not yet reached
 - FutexTest hang resolved — TLS-based `_zx_thread_self` enables
   proper futex self-ownership check. FutexTest suite: 24/24 pass.
 - All tests run sequentially; newly-reached suites have new failures
@@ -91,8 +91,10 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 - Test-only syscalls implemented (SYSCALL_TEST_*, widening, handle_create)
 - Handle-leak policy exception delivered via handle_exception_user
 - vDSO system_get_version_string returns "zcore-0.1.0" via StringView
-- Current blocker: ChannelInternalTest.CallFinishWithoutPreviously...
-  crashes with garbage in rax after syscall return — needs investigation
+- Current blocker: ChannelInternalTest.TransferChannelWithPendingCall
+  hangs due to executor scheduling bug — waker notification is set
+  but executor goes idle without finding it. See issue #21 comment
+  for detailed investigation notes.
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in
