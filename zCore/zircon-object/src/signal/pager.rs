@@ -49,11 +49,19 @@ impl Pager {
     /// `key` is sent to the `port`.
     pub fn create_vmo(
         self: &Arc<Self>,
-        _options: u32,
+        options: u32,
         port: &Arc<Port>,
         key: u64,
         size: u64,
     ) -> ZxResult<Arc<VmObject>> {
+        // ZX_VMO_TRAP_DIRTY (0x8) requires dirty-page notification
+        // support that is not yet implemented. Accepting it silently
+        // causes tests to hang waiting for pager packets that never
+        // arrive.  Reject it explicitly.
+        const ZX_VMO_TRAP_DIRTY: u32 = 1 << 3;
+        if options & ZX_VMO_TRAP_DIRTY != 0 {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         let pages = (size as usize).div_ceil(PAGE_SIZE);
         let vmo = VmObject::new_paged(pages);
         vmo.set_name("pager-vmo");
