@@ -18,6 +18,7 @@ rcore-fs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
 
 [features]
 default = []
+dynamic-linking = ["zircon-object/dynamic-linking"]
 libos = ["hal-impl/libos", "zircon-object/aspace-separate", "zircon-object/libos"]
 
 [package.metadata.cargo-all-features]
