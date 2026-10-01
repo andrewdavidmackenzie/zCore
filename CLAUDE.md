@@ -56,7 +56,7 @@ tools/x86-bootimage/target/release/x86-bootimage \
 source tools/scripts/find-ovmf.sh && OVMF=$(find_ovmf)
 qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
   -machine q35 -smp 1 \
-  -cpu qemu64,+fsgsbase,+rdrand,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+  -cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
   -serial mon:stdio \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF" \
   -drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
@@ -78,16 +78,21 @@ grep '\[       OK \]' /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
-### Current status (phase 10)
-- 348/1776 tests pass, 24 failing, 1404 not yet reached
+### Current status (phase 11)
+- 399/1776 tests pass, 39 failing, 1338 not yet reached
 - FutexTest hang resolved — TLS-based `_zx_thread_self` enables
   proper futex self-ownership check. FutexTest suite: 24/24 pass.
 - All tests run sequentially; newly-reached suites have new failures
   to triage
 - StreamTestCase suite partially implemented: 9/33 pass, remaining
   failures need content_size tracking and partial write refinement
-- Current blocker: timeout — StreamTestCase runs but suites after
-  it (SysInfoTest, ThreadTest, TimerTest, etc.) not reached in 180s
+- StreamTestCase hang resolved — ZX_VMO_TRAP_DIRTY rejected in
+  pager_create_vmo, preventing infinite port_wait
+- Test-only syscalls implemented (SYSCALL_TEST_*, widening, handle_create)
+- Handle-leak policy exception delivered via handle_exception_user
+- vDSO system_get_version_string returns "zcore-0.1.0" via StringView
+- Current blocker: ChannelInternalTest.CallFinishWithoutPreviously...
+  crashes with garbage in rax after syscall return — needs investigation
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in

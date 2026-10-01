@@ -440,16 +440,13 @@ fn syscall_args(ctx: &UserContext) -> [usize; 8] {
     let regs = ctx.general();
     cfg_if! {
         if #[cfg(target_arch = "x86_64")] {
-            // x86_64 syscall ABI: first 6 args in registers (rdi, rsi, rdx,
-            // r10, r8, r9), 7th and 8th on the user stack.
+            // x86_64 Zircon syscall ABI: first 6 args in registers
+            // (rdi, rsi, rdx, r10, r8, r9), 7th and 8th in r12, r13.
             //
-            // Stack layout at syscall entry (both Fuchsia vDSO and petal):
-            //   rsp+0:  return address (from `call` or dummy push)
-            //   rsp+8:  arg7
-            //   rsp+16: arg8
-            let arg7 = unsafe { (regs.rsp as *const usize).add(1).read() };
-            let arg8 = unsafe { (regs.rsp as *const usize).add(2).read() };
-            [regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9, arg7, arg8]
+            // The Fuchsia vDSO wrapper loads args 7-8 from the C stack
+            // into r12/r13 before the `syscall` instruction, because
+            // `syscall` only supports 6 register arguments.
+            [regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9, regs.r12, regs.r13]
         } else if #[cfg(target_arch = "aarch64")] {
             [regs.x0, regs.x1, regs.x2, regs.x3, regs.x4, regs.x5, regs.x6, regs.x7]
         } else if #[cfg(target_arch = "riscv64")] {
@@ -480,13 +477,17 @@ pub fn zircon_spawn_config() -> zircon_object::task::spawn::SpawnConfig {
         vdso_code_size: vdso_size,
         stack_pages: 8,
         thread_fn,
+        extra_args: alloc::vec::Vec::new(),
     }
 }
 
 /// Boot a Zircon process from a rootfs filesystem.
+///
+/// `extra_args` are appended to argv after the program name.
 pub fn run_from_rootfs(
     rootfs: Arc<dyn rcore_fs::vfs::FileSystem>,
     init_path: &str,
+    extra_args: alloc::vec::Vec<alloc::string::String>,
 ) -> Arc<Process> {
     info!("Zircon rootfs boot: loading '{}'", init_path);
 
@@ -507,43 +508,105 @@ pub fn run_from_rootfs(
     );
 
     let job = Job::root();
-    let config = zircon_spawn_config();
+    let mut config = zircon_spawn_config();
+    config.extra_args = extra_args;
     zircon_object::task::spawn::spawn_process(&job, "init", &program_data, &config)
         .expect("failed to spawn init process")
 }
 
-/// Create a vDSO VMO with the ELF shared library and VdsoConstants.
+/// Create a vDSO VMO from the ELF binary and populate data pages.
 ///
-/// Layout:
-///   Pages 0..N-1: vDSO ELF binary (headers + .dynsym + .text)
-///   Page N:       VdsoConstants data
+/// For the prebuilt Fuchsia vDSO (x86_64), the ELF has two data pages:
+///   `DATA_TIME_VALUES` at offset `0x7000`
+///   `DATA_CONSTANTS` at offset `0x8000`
+/// These are pre-filled with `0xdeadbeef` and overwritten here.
+///
+/// For the generated vDSO (aarch64/riscv64), the data page is appended
+/// after the ELF content.
 fn create_vdso_vmo() -> Arc<VmObject> {
-    let elf_pages = VDSO_ELF.len().div_ceil(PAGE_SIZE);
-    let data_offset = elf_pages * PAGE_SIZE;
-    let total_pages = elf_pages + 1;
+    // Determine the virtual memory size from ELF LOAD segments.
+    let vdso_memsize = if VDSO_ELF.len() >= 64 && &VDSO_ELF[0..4] == b"\x7fELF" {
+        let e_phoff = u64::from_le_bytes(VDSO_ELF[32..40].try_into().unwrap()) as usize;
+        let e_phentsize = u16::from_le_bytes(VDSO_ELF[54..56].try_into().unwrap()) as usize;
+        let e_phnum = u16::from_le_bytes(VDSO_ELF[56..58].try_into().unwrap()) as usize;
+        let mut max_addr = 0usize;
+        for i in 0..e_phnum {
+            let ph = &VDSO_ELF[e_phoff + i * e_phentsize..];
+            let p_type = u32::from_le_bytes(ph[0..4].try_into().unwrap());
+            if p_type == 1 {
+                // PT_LOAD
+                let p_vaddr = u64::from_le_bytes(ph[16..24].try_into().unwrap()) as usize;
+                let p_memsz = u64::from_le_bytes(ph[40..48].try_into().unwrap()) as usize;
+                let end = p_vaddr + p_memsz;
+                if end > max_addr {
+                    max_addr = end;
+                }
+            }
+        }
+        max_addr
+    } else {
+        VDSO_ELF.len()
+    };
 
+    let total_pages = vdso_memsize.div_ceil(PAGE_SIZE);
     let vdso_vmo = VmObject::new_paged(total_pages);
     vdso_vmo.set_name("vdso/full");
 
     if !VDSO_ELF.is_empty() {
-        vdso_vmo.write(0, VDSO_ELF).unwrap();
+        // Write only the loadable portion (up to vdso_memsize or file size,
+        // whichever is smaller) to avoid writing debug sections.
+        let write_len = VDSO_ELF.len().min(total_pages * PAGE_SIZE);
+        vdso_vmo.write(0, &VDSO_ELF[..write_len]).unwrap();
         info!(
-            "vDSO: loaded {} bytes of ELF ({} pages, data at {:#x})",
+            "vDSO: loaded {} bytes of ELF ({} pages, memsize={:#x})",
             VDSO_ELF.len(),
-            elf_pages,
-            data_offset
+            total_pages,
+            vdso_memsize,
         );
     }
 
-    // Write VdsoConstants into the data page after the ELF content.
-    let vdso_constants = hal_impl::vdso::vdso_constants();
-    let constants_bytes = unsafe {
-        core::slice::from_raw_parts(
-            &vdso_constants as *const _ as *const u8,
-            core::mem::size_of_val(&vdso_constants),
-        )
-    };
-    vdso_vmo.write(data_offset, constants_bytes).unwrap();
+    // Populate vDSO data pages.
+    if vdso_memsize > 0x8000 {
+        // Fuchsia vDSO: DATA_TIME_VALUES at 0x7000, DATA_CONSTANTS at 0x8000.
+        // Both are pre-filled with 0xdeadbeef and must be overwritten.
+
+        // DATA_TIME_VALUES (fasttime::internal::TimeValues):
+        //   u64 version, i64 ticks_per_second, i64 boot_ticks_offset,
+        //   atomic<i64> mono_ticks_offset, u32 numerator, u32 denominator,
+        //   u8 usermode_can_access_ticks, u8 a73_errata, u8 use_pct, u8[5] pad
+        let mut tv = [0u8; PAGE_SIZE];
+        let freq = hal_impl::cpu::cpu_frequency() as u64;
+        let tps = freq * 1_000_000;
+        // version = 0 (fast-path check uses kFasttimeVersion; 0 ≠ match → returns INFINITE_PAST
+        // for kNormal mode, but clock_get_monotonic uses kSkip which bypasses version check)
+        tv[8..16].copy_from_slice(&(tps as i64).to_ne_bytes()); // ticks_per_second
+                                                                // boot_ticks_offset = 0, mono_ticks_offset = 0 (already zero)
+        tv[32..36].copy_from_slice(&1000u32.to_ne_bytes()); // ticks_to_time_numerator
+        tv[36..40].copy_from_slice(&(freq as u32).to_ne_bytes()); // ticks_to_time_denominator
+        tv[40] = 1; // usermode_can_access_ticks = true
+        vdso_vmo.write(0x7000, &tv).unwrap();
+
+        // DATA_CONSTANTS (vdso_constants)
+        let vdso_constants = hal_impl::vdso::vdso_constants();
+        let constants_bytes = unsafe {
+            core::slice::from_raw_parts(
+                &vdso_constants as *const _ as *const u8,
+                core::mem::size_of_val(&vdso_constants),
+            )
+        };
+        vdso_vmo.write(0x8000, constants_bytes).unwrap();
+    } else {
+        // Generated vDSO: data page appended after ELF content.
+        let data_offset = VDSO_ELF.len().div_ceil(PAGE_SIZE) * PAGE_SIZE;
+        let vdso_constants = hal_impl::vdso::vdso_constants();
+        let constants_bytes = unsafe {
+            core::slice::from_raw_parts(
+                &vdso_constants as *const _ as *const u8,
+                core::mem::size_of_val(&vdso_constants),
+            )
+        };
+        vdso_vmo.write(data_offset, constants_bytes).unwrap();
+    }
 
     vdso_vmo
 }

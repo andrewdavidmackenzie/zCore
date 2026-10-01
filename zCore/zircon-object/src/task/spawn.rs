@@ -161,6 +161,8 @@ pub struct SpawnConfig {
     pub stack_pages: usize,
     /// Thread function for the new process's threads.
     pub thread_fn: crate::task::thread::ThreadFn,
+    /// Extra argv entries (appended after argv[0] = program name).
+    pub extra_args: alloc::vec::Vec<alloc::string::String>,
 }
 
 /// Spawn a new Zircon process from raw ELF data.
@@ -251,8 +253,7 @@ pub fn spawn_process(
     let stack_base = vmar.map(None, stack_vmo, 0, stack_size, stack_flags)?;
     let sp = stack_base + stack_size;
 
-    // vDSO: map entire ELF .so + data page as a single contiguous RX block.
-    // This allows ld.so.1 to parse ELF headers at the base address.
+    // vDSO: map the entire ELF into the process address space.
     let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
     let vdso_code_addr = vmar.map(
         None,
@@ -286,10 +287,18 @@ pub fn spawn_process(
     // The handle_info array tells the receiver what each handle is.
     use zircon_abi::processargs::*;
 
+    // Build argv early — it's included in message 1 for the new-style
+    // libc startup (StartCompilerAbi + _zx_startup_get_handles).
+    let mut argv = format!("{}\0", name);
+    for arg in &config.extra_args {
+        argv.push_str(arg);
+        argv.push('\0');
+    }
+
     // TWO processargs messages on the bootstrap channel:
-    // Message 1 (read by ld.so.1): loader handles + process identity
-    // Message 2 (read by libc's _zx_startup_get_handles via StartCompilerAbi):
-    //   process identity + system handles + argv
+    // Message 1 (read by libc's _zx_startup_get_handles): loader
+    //   handles + process identity + argv
+    // Message 2 (read by old-style libc): duplicate handles + argv
 
     // --- Message 1: For ld.so.1 (old-style processargs_read) ---
     // Include ALL handles so ld.so.1 can process them.
@@ -334,7 +343,7 @@ pub fn spawn_process(
         None
     };
 
-    let msg1_data = build_message(&msg1_info, &[]);
+    let msg1_data = build_message(&msg1_info, argv.as_bytes());
     ch0.write(crate::ipc::MessagePacket {
         data: msg1_data,
         handles: msg1_handles,
@@ -399,7 +408,6 @@ pub fn spawn_process(
     let utc_clock = Clock::new(ZX_CLOCK_OPT_AUTO_START)?;
     let utc_clock = alloc::sync::Arc::new(utc_clock);
 
-    let argv = format!("{}\0", name);
     let msg2_handles = alloc::vec![
         Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF
         Handle::new(thread.clone(), Rights::DEFAULT_THREAD), // PA_THREAD_SELF
@@ -440,6 +448,7 @@ pub fn spawn_process(
         pa_hnd(PA_CLOCK_UTC, 0),
     ];
     let msg2_data = build_message(&msg2_info, argv.as_bytes());
+
     ch0.write(crate::ipc::MessagePacket {
         data: msg2_data,
         handles: msg2_handles,
@@ -712,6 +721,7 @@ fn resolve_vdso_plt(
     let mut vdso_symtab = 0usize;
     let mut vdso_strtab = 0usize;
     let mut vdso_hash = 0usize;
+    let mut vdso_gnu_hash = 0usize;
     let mut vdso_syment = 24usize;
     for i in (0..vdso_dynamic_sz).step_by(16) {
         let mut dyn_entry = [0u8; 16];
@@ -724,28 +734,91 @@ fn resolve_vdso_plt(
         let tag = i64::from_le_bytes(dyn_entry[0..8].try_into().unwrap());
         let val = u64::from_le_bytes(dyn_entry[8..16].try_into().unwrap()) as usize;
         match tag {
-            0 => break,              // DT_NULL
-            4 => vdso_hash = val,    // DT_HASH
-            5 => vdso_strtab = val,  // DT_STRTAB
-            6 => vdso_symtab = val,  // DT_SYMTAB
-            11 => vdso_syment = val, // DT_SYMENT
+            0 => break,                        // DT_NULL
+            4 => vdso_hash = val,              // DT_HASH
+            5 => vdso_strtab = val,            // DT_STRTAB
+            6 => vdso_symtab = val,            // DT_SYMTAB
+            11 => vdso_syment = val,           // DT_SYMENT
+            0x6ffffef5 => vdso_gnu_hash = val, // DT_GNU_HASH
             _ => {}
         }
     }
-    if vdso_symtab == 0 || vdso_strtab == 0 || vdso_hash == 0 {
+    if vdso_symtab == 0 || vdso_strtab == 0 || (vdso_hash == 0 && vdso_gnu_hash == 0) {
         warn!("resolve_vdso_plt: incomplete vDSO dynamic section");
         return;
     }
 
-    // Read vDSO hash table to get nsyms
-    let mut hash_hdr = [0u8; 8];
-    if vmar
-        .read_memory(vdso_base + vdso_hash, &mut hash_hdr)
-        .is_err()
-    {
-        return;
-    }
-    let vdso_nchain = u32::from_le_bytes(hash_hdr[4..8].try_into().unwrap()) as usize;
+    // Determine the number of dynamic symbols.
+    let vdso_nchain = if vdso_hash != 0 {
+        // SysV hash: nchain field at offset 4
+        let mut hash_hdr = [0u8; 8];
+        if vmar
+            .read_memory(vdso_base + vdso_hash, &mut hash_hdr)
+            .is_err()
+        {
+            return;
+        }
+        u32::from_le_bytes(hash_hdr[4..8].try_into().unwrap()) as usize
+    } else {
+        // GNU hash: parse the header to find the highest symbol index.
+        // Layout: nbuckets(u32), symoffset(u32), bloom_size(u32), bloom_shift(u32),
+        //         bloom[bloom_size] (u64 each), buckets[nbuckets] (u32 each),
+        //         chains[] (u32 each, one per symbol starting from symoffset)
+        let mut gh_hdr = [0u8; 16];
+        if vmar
+            .read_memory(vdso_base + vdso_gnu_hash, &mut gh_hdr)
+            .is_err()
+        {
+            warn!("resolve_vdso_plt: cannot read GNU hash header");
+            return;
+        }
+        let nbuckets = u32::from_le_bytes(gh_hdr[0..4].try_into().unwrap()) as usize;
+        let symoffset = u32::from_le_bytes(gh_hdr[4..8].try_into().unwrap()) as usize;
+        let bloom_size = u32::from_le_bytes(gh_hdr[8..12].try_into().unwrap()) as usize;
+        // Buckets start after: header(16) + bloom(bloom_size * 8)
+        let buckets_off = vdso_gnu_hash + 16 + bloom_size * 8;
+
+        // Find the maximum bucket value (= maximum first chain index).
+        let mut max_chain_idx = 0usize;
+        for i in 0..nbuckets {
+            let mut bucket = [0u8; 4];
+            if vmar
+                .read_memory(vdso_base + buckets_off + i * 4, &mut bucket)
+                .is_err()
+            {
+                break;
+            }
+            let val = u32::from_le_bytes(bucket) as usize;
+            if val > max_chain_idx {
+                max_chain_idx = val;
+            }
+        }
+        if max_chain_idx == 0 {
+            warn!("resolve_vdso_plt: GNU hash has no symbols");
+            return;
+        }
+
+        // Follow the chain from max_chain_idx until we find the end
+        // (a chain entry with bit 0 set marks the last entry in that bucket).
+        let chains_off = buckets_off + nbuckets * 4;
+        let mut sym_idx = max_chain_idx;
+        loop {
+            let chain_entry_off = chains_off + (sym_idx - symoffset) * 4;
+            let mut entry = [0u8; 4];
+            if vmar
+                .read_memory(vdso_base + chain_entry_off, &mut entry)
+                .is_err()
+            {
+                break;
+            }
+            let val = u32::from_le_bytes(entry);
+            sym_idx += 1;
+            if val & 1 != 0 {
+                break; // Last entry in this chain
+            }
+        }
+        sym_idx // Total number of symbols
+    };
 
     // Now parse ld.so.1's dynamic section to find its JMPREL entries
     // We need: DT_JMPREL, DT_PLTRELSZ, DT_SYMTAB, DT_STRTAB

@@ -91,7 +91,15 @@ fn boot_init(options: utils::BootOptions) -> alloc::sync::Arc<zircon_object::tas
 
                 match flavour {
                     zircon_object::task::Flavour::Zircon => {
-                        return zircon_loader::zircon::run_from_rootfs(rootfs, init_path);
+                        let extra_args: alloc::vec::Vec<alloc::string::String> = options
+                            .root_proc
+                            .split('?')
+                            .skip(1)
+                            .map(Into::into)
+                            .collect();
+                        return zircon_loader::zircon::run_from_rootfs(
+                            rootfs, init_path, extra_args,
+                        );
                     }
                     #[cfg(feature = "linux")]
                     zircon_object::task::Flavour::Linux => {

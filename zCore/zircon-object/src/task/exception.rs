@@ -234,6 +234,19 @@ impl ExceptionReport {
             synth_data,
         }
     }
+
+    /// Create a policy-error exception report.
+    pub fn new_policy(synth_code: u32, synth_data: u32) -> Self {
+        ExceptionReport {
+            header: ExceptionHeader {
+                type_: ExceptionType::PolicyError,
+                size: core::mem::size_of::<ExceptionReport>() as u32,
+            },
+            context: ExceptionContext::default(),
+            synth_code,
+            synth_data,
+        }
+    }
 }
 
 /// Type of exception
@@ -421,6 +434,20 @@ impl Exception {
             thread: thread.clone(),
             type_: ExceptionType::User,
             report: ExceptionReport::new_user(synth_code, synth_data),
+            inner: Mutex::new(ExceptionInner {
+                current_channel_type: ExceptionChannelType::None,
+                handled: false,
+                second_chance: false,
+            }),
+        })
+    }
+
+    /// Create an `Exception` for a policy error (e.g. handle leak).
+    pub fn new_policy(thread: &Arc<Thread>, synth_code: u32, synth_data: u32) -> Arc<Self> {
+        Arc::new(Exception {
+            thread: thread.clone(),
+            type_: ExceptionType::PolicyError,
+            report: ExceptionReport::new_policy(synth_code, synth_data),
             inner: Mutex::new(ExceptionInner {
                 current_channel_type: ExceptionChannelType::None,
                 handled: false,
