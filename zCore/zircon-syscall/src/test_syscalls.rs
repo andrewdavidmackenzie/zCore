@@ -32,10 +32,11 @@ impl Syscall<'_> {
             Err(_e) => {
                 // Handle leak: the handle was created but couldn't be
                 // delivered to userspace.  Deliver a policy exception
+                // (ExceptionType::PolicyError with synth_code=HANDLE_LEAK)
                 // so the test's exception handler can observe it.
                 const ZX_EXCP_POLICY_CODE_HANDLE_LEAK: u32 = 20;
                 self.thread
-                    .handle_exception_user(ZX_EXCP_POLICY_CODE_HANDLE_LEAK, 0)
+                    .handle_exception_policy(ZX_EXCP_POLICY_CODE_HANDLE_LEAK, 0)
                     .await;
                 ZxError::INVALID_ARGS as isize
             }

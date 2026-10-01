@@ -695,6 +695,18 @@ impl CurrentThread {
             .await;
     }
 
+    /// Raise a policy error exception (e.g. handle leak).
+    pub async fn handle_exception_policy(&self, synth_code: u32, synth_data: u32) {
+        let exception = {
+            let mut inner = self.inner.lock();
+            let exception = Exception::new_policy(&self.0, synth_code, synth_data);
+            inner.exception = Some(exception.clone());
+            exception
+        };
+        self.handle_exception_dispatch(ExceptionType::PolicyError, exception)
+            .await;
+    }
+
     async fn handle_exception_dispatch(&self, type_: ExceptionType, exception: Arc<Exception>) {
         if type_ == ExceptionType::ThreadExiting {
             let handled = self
