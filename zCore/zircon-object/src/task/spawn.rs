@@ -288,10 +288,18 @@ pub fn spawn_process(
     // The handle_info array tells the receiver what each handle is.
     use zircon_abi::processargs::*;
 
+    // Build argv early — it's included in message 1 for the new-style
+    // libc startup (StartCompilerAbi + _zx_startup_get_handles).
+    let mut argv = format!("{}\0", name);
+    for arg in &config.extra_args {
+        argv.push_str(arg);
+        argv.push('\0');
+    }
+
     // TWO processargs messages on the bootstrap channel:
-    // Message 1 (read by ld.so.1): loader handles + process identity
-    // Message 2 (read by libc's _zx_startup_get_handles via StartCompilerAbi):
-    //   process identity + system handles + argv
+    // Message 1 (read by libc's _zx_startup_get_handles): loader
+    //   handles + process identity + argv
+    // Message 2 (read by old-style libc): duplicate handles + argv
 
     // --- Message 1: For ld.so.1 (old-style processargs_read) ---
     // Include ALL handles so ld.so.1 can process them.
@@ -336,7 +344,7 @@ pub fn spawn_process(
         None
     };
 
-    let msg1_data = build_message(&msg1_info, &[]);
+    let msg1_data = build_message(&msg1_info, argv.as_bytes());
     ch0.write(crate::ipc::MessagePacket {
         data: msg1_data,
         handles: msg1_handles,
@@ -401,12 +409,6 @@ pub fn spawn_process(
     let utc_clock = Clock::new(ZX_CLOCK_OPT_AUTO_START)?;
     let utc_clock = alloc::sync::Arc::new(utc_clock);
 
-    // Build argv: program name followed by any extra arguments.
-    let mut argv = format!("{}\0", name);
-    for arg in &config.extra_args {
-        argv.push_str(arg);
-        argv.push('\0');
-    }
     let msg2_handles = alloc::vec![
         Handle::new(proc.clone(), Rights::DEFAULT_PROCESS), // PA_PROC_SELF
         Handle::new(thread.clone(), Rights::DEFAULT_THREAD), // PA_THREAD_SELF
@@ -447,6 +449,7 @@ pub fn spawn_process(
         pa_hnd(PA_CLOCK_UTC, 0),
     ];
     let msg2_data = build_message(&msg2_info, argv.as_bytes());
+
     ch0.write(crate::ipc::MessagePacket {
         data: msg2_data,
         handles: msg2_handles,
