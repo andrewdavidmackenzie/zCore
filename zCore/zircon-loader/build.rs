@@ -136,6 +136,101 @@ enum VdsoFunc {
     /// first argument (nanoseconds duration) to the result, and return
     /// the absolute deadline.  Saturates to i64::MAX on overflow.
     DeadlineAfter(&'static str),
+    /// Return a zx_string_view_t {data, length} pointing to an
+    /// embedded NUL-terminated string.
+    StringView(&'static str),
+}
+
+/// Generate code that returns a `zx_string_view_t` `{data, length}`
+/// pointing to an embedded NUL-terminated string.
+///
+/// On x86_64: `rax` = data pointer, `rdx` = length.
+/// On aarch64: `x0` = data pointer, `x1` = length.
+fn string_view_code(arch: Arch, s: &str) -> Vec<u8> {
+    let len = s.len();
+    match arch {
+        Arch::X86_64 => {
+            // lea rax, [rip + <disp>]  ; 7 bytes: 48 8d 05 <disp32>
+            // mov rdx, <len>           ; 10 bytes: 48 ba <imm64>
+            // ret                      ; 1 byte: c3
+            // <string bytes>\0
+            let lea_size = 7usize;
+            let mov_size = 10usize;
+            let ret_size = 1usize;
+            let code_size = lea_size + mov_size + ret_size;
+            // RIP-relative displacement: from end of LEA instruction to string data
+            let disp = (mov_size + ret_size) as i32;
+            let mut code = Vec::new();
+            // lea rax, [rip + disp]
+            code.extend_from_slice(&[0x48, 0x8d, 0x05]);
+            code.extend_from_slice(&disp.to_le_bytes());
+            // mov rdx, len
+            code.extend_from_slice(&[0x48, 0xba]);
+            code.extend_from_slice(&(len as u64).to_le_bytes());
+            // ret
+            code.push(0xc3);
+            assert_eq!(code.len(), code_size);
+            // string data (NUL-terminated)
+            code.extend_from_slice(s.as_bytes());
+            code.push(0);
+            code
+        }
+        Arch::Aarch64 => {
+            // adr x0, #<offset>   ; PC-relative load of string address
+            // mov x1, #<len>      ; string length
+            // ret
+            // <string bytes>\0
+            let instr_size = 4usize;
+            let num_instrs = 3usize; // adr, mov, ret
+            let code_size = num_instrs * instr_size;
+            let str_offset = code_size as i32; // offset from adr to string
+
+            let mut code = Vec::new();
+            // adr x0, #str_offset: 0x10000000 | (immlo << 29) | (immhi << 5) | Rd
+            let immlo = (str_offset & 0x3) as u32;
+            let immhi = ((str_offset >> 2) & 0x7FFFF) as u32;
+            let adr = 0x10000000u32 | (immlo << 29) | (immhi << 5) | 0; // x0
+            code.extend_from_slice(&adr.to_le_bytes());
+            // movz x1, #len
+            let movz = 0xD2800001u32 | ((len as u32 & 0xFFFF) << 5);
+            code.extend_from_slice(&movz.to_le_bytes());
+            // ret
+            code.extend_from_slice(&0xD65F03C0u32.to_le_bytes());
+            assert_eq!(code.len(), code_size);
+            // string data
+            code.extend_from_slice(s.as_bytes());
+            code.push(0);
+            code
+        }
+        Arch::Riscv64 => {
+            // auipc a0, 0          ; load PC
+            // addi a0, a0, <off>   ; add offset to string
+            // li a1, <len>         ; length
+            // ret
+            // <string bytes>\0
+            let instr_size = 4usize;
+            let num_instrs = 4usize;
+            let code_size = num_instrs * instr_size;
+            let str_offset = code_size as i32;
+
+            let mut code = Vec::new();
+            // auipc a0, 0: 0x00000517
+            code.extend_from_slice(&0x00000517u32.to_le_bytes());
+            // addi a0, a0, str_offset: imm[11:0] | rs1 | funct3=000 | rd | 0010011
+            let addi =
+                ((str_offset as u32 & 0xFFF) << 20) | (10 << 15) | (0 << 12) | (10 << 7) | 0x13;
+            code.extend_from_slice(&addi.to_le_bytes());
+            // li a1, len: addi a1, x0, len
+            let li = ((len as u32 & 0xFFF) << 20) | (0 << 15) | (0 << 12) | (11 << 7) | 0x13;
+            code.extend_from_slice(&li.to_le_bytes());
+            // ret: jalr x0, x1, 0
+            code.extend_from_slice(&0x00008067u32.to_le_bytes());
+            assert_eq!(code.len(), code_size);
+            code.extend_from_slice(s.as_bytes());
+            code.push(0);
+            code
+        }
+    }
 }
 
 /// Generate code that returns a constant value in rax/x0/a0.
@@ -481,8 +576,11 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
             "handle_check_valid",
             VdsoFunc::Syscall("handle_check_valid"),
         ),
-        ("system_get_version_string", VdsoFunc::ReturnConst(0)), // stub: null
-        ("exception_get_string", VdsoFunc::ReturnConst(0)),      // stub: null
+        (
+            "system_get_version_string",
+            VdsoFunc::StringView("zcore-0.1.0"),
+        ),
+        ("exception_get_string", VdsoFunc::ReturnConst(0)), // stub: null
         (
             "ticks_get_boot",
             VdsoFunc::Syscall("clock_get_boot_via_kernel"),
@@ -508,6 +606,7 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
                 }
             }
             VdsoFunc::ThreadSelf => thread_self_code(arch),
+            VdsoFunc::StringView(s) => string_view_code(arch, s),
         };
         let code_off = text.len();
 
