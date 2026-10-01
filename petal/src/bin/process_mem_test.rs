@@ -12,8 +12,8 @@ extern crate alloc;
 extern crate petal;
 
 use zx::sys::{
-    zx_channel_read, zx_handle_close, zx_process_create, zx_process_read_memory,
-    zx_process_write_memory, zx_vmar_map, zx_vmo_create, HandleValue,
+    zx_handle_close, zx_process_create, zx_process_read_memory, zx_process_write_memory,
+    zx_vmar_map, zx_vmo_create, HandleValue,
 };
 
 const PAGE_SIZE: usize = 4096;
@@ -31,33 +31,15 @@ fn check(status: i32, msg: &[u8]) {
 pub fn main() {
     zx::debug_write(b"process_mem_test: starting\r\n");
 
-    // Read the bootstrap channel to get the root job handle
-    let startup = petal::take_startup_handle();
-    if startup == 0 {
-        zx::debug_write(b"process_mem_test: FAIL - no startup handle\r\n");
-        zx::Process::exit(1);
-    }
-
-    let mut handles = [0u32; 4];
-    let mut data = [0u8; 4];
-    let mut actual_bytes: u32 = 0;
-    let mut actual_handles: u32 = 0;
-    let status = unsafe {
-        zx_channel_read(
-            startup,
-            0,
-            data.as_mut_ptr(),
-            handles.as_mut_ptr(),
-            data.len() as u32,
-            handles.len() as u32,
-            &mut actual_bytes,
-            &mut actual_handles,
-        )
+    // Read the bootstrap channel (processargs format)
+    let bootstrap = match petal::Bootstrap::read() {
+        Some(b) => b,
+        None => {
+            zx::debug_write(b"process_mem_test: FAIL - no bootstrap\r\n");
+            zx::Process::exit(1);
+        }
     };
-    check(status, b"channel_read bootstrap");
-    unsafe { zx_handle_close(startup) };
-
-    let job_handle = handles[0];
+    let job_handle = bootstrap.find(zircon_abi::processargs::PA_JOB_DEFAULT);
     if job_handle == 0 {
         zx::debug_write(b"process_mem_test: FAIL - no job handle\r\n");
         zx::Process::exit(1);

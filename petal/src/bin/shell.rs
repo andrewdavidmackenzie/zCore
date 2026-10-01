@@ -15,8 +15,7 @@ extern crate petal;
 use alloc::vec::Vec;
 
 /// Bootstrap handle indices (must match userstart's forward order).
-const H_ROOT_JOB: usize = 0;
-const H_ROOT_RESOURCE: usize = 1;
+use zircon_abi::processargs::{PA_JOB_DEFAULT, PA_RESOURCE};
 #[allow(dead_code)]
 const H_ZBI_VMO: usize = 2;
 
@@ -126,35 +125,19 @@ pub fn main() {
     zx::debug_write(b"shell: self-test PASS\n");
 
     // --- Try to enter interactive mode ---
-    let startup = petal::take_startup_handle();
-    if startup == 0 {
-        return;
-    }
-
-    let mut handles = [0u32; 4];
-    let mut data = [0u8; 4];
-    let mut actual_bytes: u32 = 0;
-    let mut actual_handles: u32 = 0;
-    let status = unsafe {
-        zx::sys::zx_channel_read(
-            startup,
-            0,
-            data.as_mut_ptr(),
-            handles.as_mut_ptr(),
-            data.len() as u32,
-            handles.len() as u32,
-            &mut actual_bytes,
-            &mut actual_handles,
-        )
+    let bootstrap = match petal::Bootstrap::read() {
+        Some(b) => b,
+        None => return,
     };
-
-    if status != 0 || actual_handles < 2 {
+    let root_job = bootstrap.find(PA_JOB_DEFAULT);
+    let root_resource = bootstrap.find(PA_RESOURCE);
+    if root_job == 0 || root_resource == 0 {
         return;
     }
 
     let ctx = Ctx {
-        root_job: handles[H_ROOT_JOB],
-        root_resource: handles[H_ROOT_RESOURCE],
+        root_job,
+        root_resource,
     };
 
     // Interactive mode: simple line reader over serial console.
