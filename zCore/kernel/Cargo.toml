@@ -26,6 +26,10 @@ baremetal-test = ["executor/baremetal-test"]
 # Zircon is the base flavour (always enabled).
 # Linux is additive — adds Linux syscall emulation on top of Zircon.
 linux = ["linux-loader", "linux-object", "zircon-object/linux"]
+# Dynamic linking — enables Fuchsia-style dynamic linking via ld.so.1.
+# Needed for running dynamically-linked binaries like core-tests-standalone.
+# Without this, all binaries are treated as statically linked.
+dynamic-linking = ["zircon-loader/dynamic-linking"]
 libos = [
   "hal-impl/libos",
   "linux-loader?/libos",

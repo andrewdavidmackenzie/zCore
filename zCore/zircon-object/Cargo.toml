@@ -12,6 +12,7 @@ description = "Zircon kernel objects"
 
 [features]
 aspace-separate = []
+dynamic-linking = ["elf"]
 elf = ["xmas-elf"]
 linux = []
 #hypervisor = ["rvm"]
