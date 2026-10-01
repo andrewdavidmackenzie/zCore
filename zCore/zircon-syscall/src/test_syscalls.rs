@@ -20,12 +20,18 @@ impl Syscall<'_> {
         if retval != 0 {
             return retval as isize;
         }
+        // Validate output pointer before creating the handle to avoid
+        // a handle leak (we don't yet implement policy exceptions for
+        // ZX_EXCP_POLICY_CODE_HANDLE_LEAK).
+        if out.is_null() {
+            return ZxError::INVALID_ARGS as isize;
+        }
         let event = Event::new();
         let proc = self.thread.proc();
         let handle = proc.add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
         match out.write(handle) {
             Ok(()) => 0,
-            Err(e) => e as isize,
+            Err(e) => ZxError::from(e) as isize,
         }
     }
 
