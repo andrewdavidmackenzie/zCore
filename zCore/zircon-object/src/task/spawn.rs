@@ -760,13 +760,64 @@ fn resolve_vdso_plt(
         }
         u32::from_le_bytes(hash_hdr[4..8].try_into().unwrap()) as usize
     } else {
-        // GNU hash: nsyms = (gnu_hash_off - symtab) / syment
-        if vdso_gnu_hash > vdso_symtab && vdso_syment > 0 {
-            (vdso_gnu_hash - vdso_symtab) / vdso_syment
-        } else {
-            warn!("resolve_vdso_plt: cannot determine vDSO symbol count");
+        // GNU hash: parse the header to find the highest symbol index.
+        // Layout: nbuckets(u32), symoffset(u32), bloom_size(u32), bloom_shift(u32),
+        //         bloom[bloom_size] (u64 each), buckets[nbuckets] (u32 each),
+        //         chains[] (u32 each, one per symbol starting from symoffset)
+        let mut gh_hdr = [0u8; 16];
+        if vmar
+            .read_memory(vdso_base + vdso_gnu_hash, &mut gh_hdr)
+            .is_err()
+        {
+            warn!("resolve_vdso_plt: cannot read GNU hash header");
             return;
         }
+        let nbuckets = u32::from_le_bytes(gh_hdr[0..4].try_into().unwrap()) as usize;
+        let symoffset = u32::from_le_bytes(gh_hdr[4..8].try_into().unwrap()) as usize;
+        let bloom_size = u32::from_le_bytes(gh_hdr[8..12].try_into().unwrap()) as usize;
+        // Buckets start after: header(16) + bloom(bloom_size * 8)
+        let buckets_off = vdso_gnu_hash + 16 + bloom_size * 8;
+
+        // Find the maximum bucket value (= maximum first chain index).
+        let mut max_chain_idx = 0usize;
+        for i in 0..nbuckets {
+            let mut bucket = [0u8; 4];
+            if vmar
+                .read_memory(vdso_base + buckets_off + i * 4, &mut bucket)
+                .is_err()
+            {
+                break;
+            }
+            let val = u32::from_le_bytes(bucket) as usize;
+            if val > max_chain_idx {
+                max_chain_idx = val;
+            }
+        }
+        if max_chain_idx == 0 {
+            warn!("resolve_vdso_plt: GNU hash has no symbols");
+            return;
+        }
+
+        // Follow the chain from max_chain_idx until we find the end
+        // (a chain entry with bit 0 set marks the last entry in that bucket).
+        let chains_off = buckets_off + nbuckets * 4;
+        let mut sym_idx = max_chain_idx;
+        loop {
+            let chain_entry_off = chains_off + (sym_idx - symoffset) * 4;
+            let mut entry = [0u8; 4];
+            if vmar
+                .read_memory(vdso_base + chain_entry_off, &mut entry)
+                .is_err()
+            {
+                break;
+            }
+            let val = u32::from_le_bytes(entry);
+            sym_idx += 1;
+            if val & 1 != 0 {
+                break; // Last entry in this chain
+            }
+        }
+        sym_idx // Total number of symbols
     };
 
     // Now parse ld.so.1's dynamic section to find its JMPREL entries

@@ -29,6 +29,12 @@ fn main() {
             let vdso_path = prebuilt_vdso.canonicalize().unwrap();
             println!("cargo:rerun-if-changed={}", vdso_path.display());
             println!("cargo:rustc-env=VDSO_BIN={}", vdso_path.display());
+        } else if target.contains("x86_64") {
+            panic!(
+                "Prebuilt Fuchsia vDSO not found at {}. \
+                 x86_64 requires prebuilt/zircon-test/x86_64/libzircon-vdso.so",
+                prebuilt_vdso.display()
+            );
         } else {
             // Generate vDSO ELF from syscall numbers header for other archs.
             let header_path = PathBuf::from("../zircon-syscall/src/zx-syscall-numbers.h");
@@ -40,7 +46,7 @@ fn main() {
             } else if target.contains("riscv64") {
                 generate_vdso_elf(&header_path, &vdso_path, Arch::Riscv64);
             } else {
-                // Unknown arch or host build — empty stub
+                // Host build or unknown arch — empty stub
                 std::fs::write(&vdso_path, b"").unwrap();
             }
             println!("cargo:rustc-env=VDSO_BIN={}", vdso_path.display());
