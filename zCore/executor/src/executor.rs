@@ -133,19 +133,40 @@ impl Executor {
                     return;
                 }
             } else {
+                // Before going idle, do one more take_task() to catch
+                // notifications that arrived during the previous task's
+                // poll (the generator's page scan may have passed the
+                // notified page before the notification arrived).
+                let retry = self.task_collection.take_task();
+                if retry.is_some() {
+                    // Found a task — process it instead of going idle.
+                    let (_key, task, waker_ref, droper) = retry.unwrap();
+                    let waker_ref = Arc::new(waker_ref);
+                    let waker = woke::waker_ref(&waker_ref);
+                    let mut cx = Context::from_waker(&waker);
+                    waker_ref.mark_borrowed(true);
+                    self.task_id = task.id();
+                    let ret = task.poll(&mut cx);
+                    self.task_id = 0;
+                    waker_ref.mark_borrowed(false);
+                    match ret {
+                        Poll::Ready(()) => {
+                            droper.drop_by_ref();
+                        }
+                        Poll::Pending => {}
+                    };
+                    continue;
+                }
+
                 let runtime = crate::runtime::get_current_runtime();
                 let task_num = runtime.task_num();
                 let weak_executor = runtime.weak_executor_num();
                 drop(runtime);
-                // TODO: some cores may exit by mistake when we have multi-cores
                 if cfg!(feature = "baremetal-test") && task_num == 0 {
-                    debug!("all done! exit and reboot");
                     crate::runtime::sched_yield();
                 } else if weak_executor != 0 {
-                    debug!("return to runtime and run weak executor");
                     crate::runtime::sched_yield();
                 } else {
-                    debug!("no other tasks, wait for interrupt");
                     crate::arch::wait_for_interrupt();
                 }
             }
