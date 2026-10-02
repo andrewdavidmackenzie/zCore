@@ -29,9 +29,10 @@ impl Syscall<'_> {
         // created on a new VMO should see content_size == vmo.size().
         vmo.set_content_size(vmo.len())?;
         // Grant EXECUTE right when the job's AMBIENT_MARK_VMO_EXEC policy
-        // allows it. The prebuilt Fuchsia libc needs VMO handles with
-        // EXECUTE at vmar_map time so that mprotect(PROT_EXEC) can later
-        // add execute permission to the mapping.
+        // allows it. The prebuilt Fuchsia libc's mmap path calls
+        // zx_vmo_replace_as_executable before zx_vmar_map, but the
+        // mapping's permissions must include EXECUTE at map time for
+        // later mprotect(PROT_EXEC) to succeed.
         let mut rights = Rights::DEFAULT_VMO;
         if proc
             .check_policy(PolicyCondition::AmbientMarkVMOExec)

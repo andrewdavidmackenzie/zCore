@@ -11,7 +11,8 @@ use lock::Mutex;
 mod port_packet;
 
 const MAX_ALLOCATED_PACKET_COUNT: usize = 16 * 1024;
-const MAX_ALLOCATED_PACKET_COUNT_PER_PORT: usize = MAX_ALLOCATED_PACKET_COUNT / 8;
+/// Per-port packet limit. Fuchsia uses 4096 (kMaxAllocatedPacketCountPerPort).
+const MAX_ALLOCATED_PACKET_COUNT_PER_PORT: usize = MAX_ALLOCATED_PACKET_COUNT / 4;
 
 /// Signaling and mailbox primitive
 ///
@@ -204,10 +205,14 @@ impl Port {
     }
 
     /// Push a `User` type `packet` into the port.
+    ///
+    /// Returns `SHOULD_WAIT` when the per-port packet limit is exceeded.
+    /// In Fuchsia, exceeding this limit also generates a policy exception
+    /// (`ZX_EXCP_POLICY_CODE_PORT_TOO_MANY_PACKETS`).
     pub fn push_user(&self, packet: impl Into<PortPacket>) -> ZxResult<()> {
         let mut packet = packet.into();
         packet.type_ = PacketType::User;
-        if self.inner.lock().queue.len() > MAX_ALLOCATED_PACKET_COUNT_PER_PORT {
+        if self.inner.lock().queue.len() >= MAX_ALLOCATED_PACKET_COUNT_PER_PORT {
             return Err(ZxError::SHOULD_WAIT);
         }
         self.push(packet);
