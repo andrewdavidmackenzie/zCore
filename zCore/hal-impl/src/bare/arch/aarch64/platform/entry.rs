@@ -3,14 +3,20 @@ use hal::KernelConfig;
 
 // Include the boot assembly (page table setup + MMU enable + stack setup).
 // Skipped for UEFI boot — the UEFI stub handles this.
-#[cfg(all(not(feature = "board-raspi400"), not(feature = "uefi-boot")))]
+#[cfg(all(
+    not(feature = "board-raspi400"),
+    not(feature = "board-jollac2"),
+    not(feature = "uefi-boot")
+))]
 core::arch::global_asm!(include_str!("boot.s"));
 #[cfg(all(feature = "board-raspi400", not(feature = "uefi-boot")))]
 core::arch::global_asm!(include_str!("boot_raspi400.s"));
+#[cfg(all(feature = "board-jollac2", not(feature = "uefi-boot")))]
+core::arch::global_asm!(include_str!("boot_jollac2.s"));
 
 // --- Board constants ---
 
-#[cfg(not(feature = "board-raspi400"))]
+#[cfg(all(not(feature = "board-raspi400"), not(feature = "board-jollac2")))]
 mod board {
     pub const PHYS_TO_VIRT_OFFSET: usize = 0xffff_0000_0000_0000;
     pub const UART_BASE: usize = 0x0900_0000;
@@ -22,6 +28,15 @@ mod board {
     pub const PHYS_TO_VIRT_OFFSET: usize = 0xffff_0000_0000_0000;
     pub const UART_BASE: usize = 0xFE20_1000;
     pub const GIC_BASE: usize = 0xFF84_0000;
+}
+
+#[cfg(feature = "board-jollac2")]
+mod board {
+    pub const PHYS_TO_VIRT_OFFSET: usize = 0xffff_0000_0000_0000;
+    /// Unisoc SPRD UART1 (not PL011 — but address needed for set_board_bases)
+    pub const UART_BASE: usize = 0x200b_0000;
+    /// GICv3 distributor base (not GIC-400 — stub only, no driver yet)
+    pub const GIC_BASE: usize = 0x1000_0000;
 }
 
 // --- UEFI boot entry ---
@@ -91,7 +106,9 @@ extern "C" fn rust_main_from_uefi(boot_info_ptr: usize) -> ! {
 extern "C" fn rust_main(dtb_paddr: usize) -> ! {
     #[cfg(feature = "board-raspi400")]
     let default_cmdline = "LOG=info:ROOTPROC=/bin/sh";
-    #[cfg(not(feature = "board-raspi400"))]
+    #[cfg(feature = "board-jollac2")]
+    let default_cmdline = "LOG=info";
+    #[cfg(all(not(feature = "board-raspi400"), not(feature = "board-jollac2")))]
     let default_cmdline = "LOG=warn:ROOTPROC=/bin/busybox?sh";
 
     super::super::set_board_bases(board::UART_BASE, board::GIC_BASE);

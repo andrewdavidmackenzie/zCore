@@ -3,7 +3,7 @@ use crate::PAGE_SIZE;
 
 // --- Board-specific constants ---
 
-#[cfg(not(feature = "board-raspi400"))]
+#[cfg(all(not(feature = "board-raspi400"), not(feature = "board-jollac2")))]
 mod board_config {
     /// QEMU virt: RAM starts at 1 GiB
     pub const PHYS_MEMORY_BASE: usize = 0x4000_0000;
@@ -21,6 +21,20 @@ mod board_config {
     pub const PHYS_MEMORY_BASE: usize = 0x0000_0000;
     pub const PHYS_MEMORY_END: usize = 0xFC00_0000; // ~4 GiB fallback (below peripherals)
     /// RPi 400 has no VirtIO -- use dummy values (never mapped)
+    pub const VIRTIO_BASE: usize = 0;
+    pub const VIRTIO_SIZE: usize = 0;
+}
+
+#[cfg(feature = "board-jollac2")]
+mod board_config {
+    /// Jolla C2 / UMS9230: RAM starts at 0x80000000, 6 GiB total.
+    /// Kernel loaded at 0x80080000.
+    /// Cap below first reserved-memory region (WCNSS SIPC at 0x87240000).
+    /// DTB reserved-memory parsing is not yet implemented, so we use a
+    /// conservative static limit to avoid allocating over firmware regions.
+    pub const PHYS_MEMORY_BASE: usize = 0x8000_0000;
+    pub const PHYS_MEMORY_END: usize = 0x8700_0000;
+    /// No VirtIO on Jolla C2
     pub const VIRTIO_BASE: usize = 0;
     pub const VIRTIO_SIZE: usize = 0;
 }

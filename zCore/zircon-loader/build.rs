@@ -55,6 +55,7 @@ fn main() {
 }
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 enum Arch {
     X86_64,
     Aarch64,

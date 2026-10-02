@@ -58,6 +58,7 @@ fu740-drivers = ["hal-impl/fu740-drivers"]
 board-d1 = ["link-user-img", "allwinner-drivers"]
 board-c910light = ["link-user-img", "hal-impl/board-c910light"]
 board-fu740 = ["link-user-img", "fu740-drivers", "hal-impl/board-fu740"]
+board-jollac2 = ["hal-impl/board-jollac2"]
 board-raspi400 = ["hal-impl/board-raspi400"]
 
 [dependencies]

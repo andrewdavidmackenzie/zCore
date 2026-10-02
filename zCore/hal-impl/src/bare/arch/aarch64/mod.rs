@@ -29,24 +29,36 @@ pub fn set_board_bases(uart_base: usize, gic_base: usize) {
 hal_fn_impl! {
     impl mod crate::hal_fn::console {
         fn console_write_early(s: &str) {
-            // Write directly to PL011 UART data register at virtual address.
-            #[cfg(feature = "board-raspi400")]
-            const UART_VIRT: usize = 0xFFFF_0000_FE20_1000;
-            #[cfg(not(feature = "board-raspi400"))]
-            const UART_VIRT: usize = 0xFFFF_0000_0900_0000;
+            #[cfg(feature = "board-jollac2")]
+            {
+                // Jolla C2: no UART driver yet. Write to framebuffer as
+                // visual indicator that early console is being called.
+                // For now this is a no-op — the boot assembly already
+                // paints a red bar to confirm boot.
+                let _ = s;
+            }
 
-            let uart = UART_VIRT as *mut u32;
-            let fr = (UART_VIRT + 0x18) as *const u32;
-            for c in s.bytes() {
-                unsafe {
-                    #[cfg(feature = "board-raspi400")]
-                    if c == b'\n' {
+            #[cfg(not(feature = "board-jollac2"))]
+            {
+                // Write directly to PL011 UART data register at virtual address.
+                #[cfg(feature = "board-raspi400")]
+                const UART_VIRT: usize = 0xFFFF_0000_FE20_1000;
+                #[cfg(not(feature = "board-raspi400"))]
+                const UART_VIRT: usize = 0xFFFF_0000_0900_0000;
+
+                let uart = UART_VIRT as *mut u32;
+                let fr = (UART_VIRT + 0x18) as *const u32;
+                for c in s.bytes() {
+                    unsafe {
+                        #[cfg(feature = "board-raspi400")]
+                        if c == b'\n' {
+                            while core::ptr::read_volatile(fr) & (1 << 5) != 0 {}
+                            core::ptr::write_volatile(uart, b'\r' as u32);
+                        }
+                        // Wait for TX FIFO not full (UARTFR bit 5 = TXFF)
                         while core::ptr::read_volatile(fr) & (1 << 5) != 0 {}
-                        core::ptr::write_volatile(uart, b'\r' as u32);
+                        core::ptr::write_volatile(uart, c as u32);
                     }
-                    // Wait for TX FIFO not full (UARTFR bit 5 = TXFF)
-                    while core::ptr::read_volatile(fr) & (1 << 5) != 0 {}
-                    core::ptr::write_volatile(uart, c as u32);
                 }
             }
         }
@@ -403,8 +415,12 @@ pub fn primary_init() {
     executor::init_runtimes(&cpu_ids);
 
     // Start secondary cores (QEMU virt uses PSCI).
-    // UEFI boot: SMP not yet implemented (single-core for now).
-    #[cfg(all(not(feature = "board-raspi400"), not(feature = "uefi-boot")))]
+    // UEFI boot and Jolla C2: SMP not yet implemented (single-core for now).
+    #[cfg(all(
+        not(feature = "board-raspi400"),
+        not(feature = "board-jollac2"),
+        not(feature = "uefi-boot")
+    ))]
     start_secondary_cores();
 }
 
@@ -414,7 +430,11 @@ pub fn primary_init() {
 /// PSCI CPU_ON to start each one at the `_secondary_entry` physical
 /// address. The secondary entry assembly enables the MMU and jumps
 /// to `secondary_core_init` in Rust.
-#[cfg(all(not(feature = "board-raspi400"), not(feature = "uefi-boot")))]
+#[cfg(all(
+    not(feature = "board-raspi400"),
+    not(feature = "board-jollac2"),
+    not(feature = "uefi-boot")
+))]
 fn start_secondary_cores() {
     extern "C" {
         fn _secondary_entry();
@@ -458,7 +478,12 @@ pub const fn timer_interrupt_vector() -> usize {
     {
         27
     }
-    #[cfg(not(feature = "board-raspi400"))]
+    #[cfg(feature = "board-jollac2")]
+    {
+        // Virtual timer PPI 11 = IRQ 27 (same as Pi 400)
+        27
+    }
+    #[cfg(all(not(feature = "board-raspi400"), not(feature = "board-jollac2")))]
     {
         30
     }

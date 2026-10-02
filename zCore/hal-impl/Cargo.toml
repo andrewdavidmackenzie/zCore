@@ -21,6 +21,7 @@ libos = [
 ]
 board-c910light = []
 board-fu740 = []
+board-jollac2 = []
 board-raspi400 = []
 link-user-img = []
 # Enable extra page table flags for T-Head CPU with MAEE on
