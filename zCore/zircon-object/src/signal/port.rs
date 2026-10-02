@@ -167,7 +167,8 @@ impl Port {
                 }
             }
         }
-        // Also remove queued packets matching the key.
+        // Remove ALL queued packets matching the key, including user packets.
+        // Fuchsia's port_cancel_key removes both async-wait and user packets.
         let before = inner.queue.len();
         inner.queue.retain(|qp| qp.packet.key != key);
         if inner.queue.len() < before {
