@@ -10,6 +10,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 .PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
 	petal-shell raspi400-build raspi400-run raspi400-sd raspi400-uefi-sd \
+	jollac2-build jollac2-sd \
 	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon \
 	debug-qemu debug-gdb \
 	pre-push pre-push-quick demo-busybox demo-petal demo-zircon \
@@ -153,6 +154,25 @@ ifeq ($(shell uname),Darwin)
 	 if [ -n "$$disk" ]; then diskutil eject "/dev/$$disk"; \
 	 else echo "Warning: could not determine disk for $(SD)"; fi
 endif
+
+# --- Jolla C2 (Unisoc UMS9230) ----------------------------------------
+
+# Build zCore for the Jolla C2 phone.
+# Produces target/jolla-c2/release/kernel.bin (ARM64 Image with header).
+jollac2-build:
+	@echo "==> Building zCore kernel for Jolla C2..."
+	ZCORE_CMDLINE="LOG=$(LOG)" cargo bin -m jolla-c2
+
+# Build zCore and write it to an SD card for the Jolla C2.
+# Usage: make jollac2-sd DISK=/dev/disk6
+#   DISK= is the raw disk device of the SD card (NOT a partition).
+#   The boot partition (partition 1) will be overwritten with a fresh
+#   ext4 image containing the kernel, DTB, and extlinux.conf.
+#   Requires: mkfs.ext4, debugfs (brew install e2fsprogs).
+DISK ?= /dev/disk6
+jollac2-sd: jollac2-build
+	@echo "==> Preparing SD card boot image for Jolla C2..."
+	@tools/jolla-c2/make-sdcard-image.sh $(DISK)
 
 # ── UEFI boot logo and firmware ─────────────────────────────────────────
 

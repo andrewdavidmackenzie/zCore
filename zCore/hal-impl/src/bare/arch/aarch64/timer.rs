@@ -22,21 +22,21 @@ pub fn timer_now() -> Duration {
 }
 
 pub fn set_next_trigger() {
-    #[cfg(feature = "board-raspi400")]
+    #[cfg(any(feature = "board-raspi400", feature = "board-jollac2"))]
     CNTV_TVAL_EL0.set(CNTFRQ_EL0.get() / TICKS_PER_SEC);
-    #[cfg(not(feature = "board-raspi400"))]
+    #[cfg(not(any(feature = "board-raspi400", feature = "board-jollac2")))]
     CNTP_TVAL_EL0.set(CNTFRQ_EL0.get() / TICKS_PER_SEC);
 }
 
 pub fn init() {
-    #[cfg(feature = "board-raspi400")]
+    #[cfg(any(feature = "board-raspi400", feature = "board-jollac2"))]
     {
         CNTV_CTL_EL0.write(CNTV_CTL_EL0::ENABLE::SET);
         set_next_trigger();
         info!("timer: virtual timer enabled, CNTFRQ={}", CNTFRQ_EL0.get());
     }
 
-    #[cfg(not(feature = "board-raspi400"))]
+    #[cfg(not(any(feature = "board-raspi400", feature = "board-jollac2")))]
     {
         CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::SET);
         set_next_trigger();

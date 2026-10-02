@@ -3,7 +3,16 @@ use crate::imp::config::*;
 use crate::utils::page_table::{GenericPTE, PageTableImpl, PageTableLevel4};
 use crate::MMUFlags;
 use crate::{PhysAddr, VirtAddr, KCONFIG};
+#[cfg(not(feature = "board-jollac2"))]
 use ::drivers::irq::gic_400::{GICC_SIZE, GICD_SIZE};
+
+// Jolla C2: GICv3 uses system registers, not MMIO GICC.
+// Provide stub sizes so the kernel page table init compiles.
+// The GICv3 distributor is 0x20000, redistributor is 0x100000.
+#[cfg(feature = "board-jollac2")]
+const GICC_SIZE: usize = 0x10_0000; // redistributor region size
+#[cfg(feature = "board-jollac2")]
+const GICD_SIZE: usize = 0x2_0000; // distributor region size
 use core::fmt::{Debug, Formatter, Result};
 use cortex_a::registers::*;
 use lock::Mutex;

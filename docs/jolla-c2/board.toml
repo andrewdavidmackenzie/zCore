@@ -1,0 +1,87 @@
+[board]
+name = "jolla-c2"
+soc = "unisoc-ums9230"
+arch = "aarch64"
+description = "Jolla C2 / Reeder S19 Max Pro S"
+
+[cpu]
+boot_core = "cortex-a55"
+cores = [
+    { id = 0, mpidr = 0x000, type = "cortex-a55" },
+    { id = 1, mpidr = 0x100, type = "cortex-a55" },
+    { id = 2, mpidr = 0x200, type = "cortex-a55" },
+    { id = 3, mpidr = 0x300, type = "cortex-a55" },
+    { id = 4, mpidr = 0x400, type = "cortex-a55" },
+    { id = 5, mpidr = 0x500, type = "cortex-a55" },
+    { id = 6, mpidr = 0x600, type = "cortex-a75" },
+    { id = 7, mpidr = 0x700, type = "cortex-a75" },
+]
+smp_method = "psci-smc"
+
+[memory]
+ram_base = 0x80000000
+# ram_size determined at runtime from DTB
+
+[watchdog]
+base = 0x644e0000
+size = 0x1000
+timeout_sec = 12
+compatible = "sprd,ums9230-wdt"
+
+[watchdog.regs]
+load_low   = 0x00
+load_high  = 0x04
+ctrl       = 0x08
+int_clr    = 0x0C
+int_raw    = 0x10
+int_msk    = 0x14
+cnt_low    = 0x18
+cnt_high   = 0x1C
+lock       = 0x20
+
+[watchdog.ctrl_bits]
+int_en  = 0  # bit 0
+cnt_en  = 1  # bit 1
+rst_en  = 3  # bit 3
+
+[watchdog.lock]
+unlock_key = 0x00E551
+
+[framebuffer]
+base = 0x9E000000
+size = 0x465000
+width = 720
+height = 1600
+stride = 2880
+format = "argb8888"
+bytes_per_pixel = 4
+pre_initialized = true
+
+[uart]
+base = 0x200b0000
+size = 0x100
+baudrate = 115200
+compatible = "sprd,ums9230-uart"
+irq_spi = 3
+pre_initialized = true
+
+[gic]
+distributor = 0x10000000
+redistributor = 0x10040000
+redistributor_stride = 0x20000
+version = 3
+
+[timer]
+compatible = "arm,armv8-timer"
+# PPI IRQs: secure=13, non-secure=14, virtual=11, hypervisor=10
+
+[dpu]
+base = 0x31000000
+size = 0x800
+
+[boot]
+# U-Boot passes DTB address in x0
+# Entry at EL2 or EL1, MMU off, interrupts disabled
+# Framebuffer and UART already initialized by stock bootloader
+kernel_load_address = 0x80080000  # typical U-Boot load addr for Image
+dtb_register = "x0"

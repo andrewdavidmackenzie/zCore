@@ -1,19 +1,31 @@
+#[cfg(not(feature = "board-jollac2"))]
 use crate::arch::timer::set_next_trigger;
+#[cfg(not(feature = "board-jollac2"))]
 use crate::hal_fn::mem::phys_to_virt;
+#[cfg(not(feature = "board-jollac2"))]
 use ::drivers::irq::gic_400;
+#[cfg(not(feature = "board-jollac2"))]
 use ::drivers::scheme::{EventScheme, IrqScheme, UartScheme};
+#[cfg(not(feature = "board-jollac2"))]
 use ::drivers::uart::Pl011Uart;
+#[cfg(not(feature = "board-jollac2"))]
 use ::drivers::Device;
+#[cfg(not(feature = "board-jollac2"))]
 use alloc::boxed::Box;
+#[cfg(not(feature = "board-jollac2"))]
 use alloc::sync::Arc;
 
 /// GIC register offsets from gic_base.
 ///
 /// QEMU virt:  GICD at base+0x0,     GICC at base+0x10000
 /// RPi 400:    GICD at base+0x1000,  GICC at base+0x2000
-#[cfg(not(feature = "board-raspi400"))]
+/// Jolla C2:   GICv3 — distributor at base+0x0, redistributor at base+0x40000.
+///             No GICC (GICv3 uses system registers). Provide dummy GICC offset
+///             so that trap.rs/vm.rs compile — the values are not used at runtime
+///             because the GIC-400 driver is not included.
+#[cfg(all(not(feature = "board-raspi400"), not(feature = "board-jollac2")))]
 pub const GIC_GICC_OFFSET: usize = 0x1_0000;
-#[cfg(not(feature = "board-raspi400"))]
+#[cfg(all(not(feature = "board-raspi400"), not(feature = "board-jollac2")))]
 pub const GIC_GICD_OFFSET: usize = 0x0;
 
 #[cfg(feature = "board-raspi400")]
@@ -21,23 +33,32 @@ pub const GIC_GICC_OFFSET: usize = 0x2000;
 #[cfg(feature = "board-raspi400")]
 pub const GIC_GICD_OFFSET: usize = 0x1000;
 
+#[cfg(feature = "board-jollac2")]
+pub const GIC_GICC_OFFSET: usize = 0x4_0000; // redistributor (stub — not used)
+#[cfg(feature = "board-jollac2")]
+pub const GIC_GICD_OFFSET: usize = 0x0; // distributor
+
 /// UART IRQ number.
-/// QEMU virt: SPI 1 (GIC INTID 33).
-/// RPi 400: GIC_SPI_INTERRUPT_UART0 = 121 (PL011).
-#[cfg(not(feature = "board-raspi400"))]
+#[cfg(all(not(feature = "board-raspi400"), not(feature = "board-jollac2")))]
 const UART_IRQ: u32 = 33;
-// DTB: interrupts = <0x00 0x79 0x04> => SPI 121 => GIC INTID 121+32 = 153
 #[cfg(feature = "board-raspi400")]
 const UART_IRQ: u32 = 153;
 
 /// Timer IRQ number.
-/// QEMU virt: physical timer PPI 14 = IRQ 30.
-/// RPi 400: virtual timer PPI 11 = IRQ 27 (matching Linux).
-#[cfg(not(feature = "board-raspi400"))]
+#[cfg(all(not(feature = "board-raspi400"), not(feature = "board-jollac2")))]
 const TIMER_IRQ: u32 = 30;
 #[cfg(feature = "board-raspi400")]
 const TIMER_IRQ: u32 = 27;
 
+#[cfg(feature = "board-jollac2")]
+pub fn init_early() {
+    // Jolla C2 minimal boot: no UART driver, no GIC driver.
+    // The watchdog was already disabled in boot assembly.
+    // The framebuffer is pre-initialized by the stock bootloader.
+    log::info!("Jolla C2: minimal init (no UART/GIC drivers)");
+}
+
+#[cfg(not(feature = "board-jollac2"))]
 pub fn init_early() {
     let uart_base = super::uart_base();
     let gic_base = super::gic_base();
@@ -87,6 +108,12 @@ pub fn init_early() {
     crate::device_registry::add_device(Device::Uart(uart));
 }
 
+#[cfg(feature = "board-jollac2")]
+pub fn init() {
+    log::info!("Jolla C2: no block devices to init");
+}
+
+#[cfg(not(feature = "board-jollac2"))]
 pub fn init() {
     #[cfg(feature = "board-raspi400")]
     {
@@ -124,6 +151,7 @@ pub fn init() {
     }
 }
 
+#[cfg(not(feature = "board-jollac2"))]
 fn handle_uart_irq() {
     crate::device_registry::all_uart()
         .first_unwrap()
@@ -135,6 +163,13 @@ fn handle_uart_irq() {
 /// The GIC Distributor (GICD) is global and already initialized by
 /// the primary core. Each secondary core only needs to enable its
 /// own banked CPU Interface (GICC_CTLR, GICC_PMR).
+#[cfg(feature = "board-jollac2")]
+pub fn init_secondary_gic() {
+    // No GIC driver yet — stub
+    log::info!("Jolla C2: secondary GIC init stub");
+}
+
+#[cfg(not(feature = "board-jollac2"))]
 pub fn init_secondary_gic() {
     let gic_base = super::gic_base();
     let gicc_base = phys_to_virt(gic_base + GIC_GICC_OFFSET);

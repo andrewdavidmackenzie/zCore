@@ -1,0 +1,25 @@
+# Jolla C2 phone -- Unisoc UMS9230 (Tiger T606)
+#
+# Real hardware: 6x Cortex-A55 + 2x Cortex-A75, GICv3, Unisoc SPRD UART,
+# 720x1600 ARGB8888 framebuffer at 0x9e000000 (pre-initialized by bootloader).
+# Boots from SD card via U-Boot (extlinux.conf).
+#
+# Minimal initial target: no UART driver, no GIC driver, no interrupts.
+# Just boot, disable watchdog, fill framebuffer with color.
+
+arch = "aarch64"
+cores = 8
+linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker_jollac2.ld"
+drivers = []
+features = ["board-jollac2"]
+
+# No [qemu] section -- this is real hardware only.
+
+[rustc-target]
+llvm-target = "aarch64-unknown-linux-gnu"
+data-layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"
+features = "+strict-align,+neon,+fp-armv8"
+max-atomic-width = 128
+relocation-model = "static"
+target-pointer-width = 64
+disable-redzone = true
