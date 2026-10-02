@@ -30,10 +30,14 @@ impl Syscall<'_> {
             rights |= Rights::READ;
             vmo_rights |= Rights::READ;
         }
-        if options.contains(CreateOptions::MODE_WRITE)
-            || options.contains(CreateOptions::MODE_APPEND)
-        {
+        if options.contains(CreateOptions::MODE_WRITE) {
             rights |= Rights::WRITE;
+            vmo_rights |= Rights::WRITE;
+        }
+        if options.contains(CreateOptions::MODE_APPEND) {
+            // APPEND requires the VMO to be writable but does not grant
+            // the WRITE right on the stream handle unless MODE_WRITE is
+            // also specified.
             vmo_rights |= Rights::WRITE;
         }
         let proc = self.thread.proc();

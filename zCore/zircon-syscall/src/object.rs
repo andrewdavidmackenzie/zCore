@@ -226,7 +226,7 @@ impl Syscall<'_> {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
                 proc.get_object::<VmObject>(handle_value)?
-                    .set_content_size(content_size)
+                    .set_content_size_with_zero(content_size)
             }
             Property::ExceptionState => {
                 let state = UserInPtr::<u32>::from_addr_size(buffer, buffer_size)?.read()?;
