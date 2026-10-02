@@ -79,7 +79,7 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
 ### Current status (phase 12)
-- 479/1776 tests pass, 42 failing, 1255 not yet reached
+- 531/1776 tests pass, 49 failing, 1196 not yet reached
 - TransferChannelWithPendingCall hang resolved — channel_call now
   passes a cancel_token so handle transfer cancels the blocking call
 - Executor `take_notified` fixed — notifications masked by `borrowed`
@@ -95,6 +95,13 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 - NOTE: increasing timer frequency above 100 Hz makes things worse
   in QEMU due to VM exit/enter overhead per interrupt. Use 900s+
   timeout to let slow tests complete.
+- VMO ambient exec: zx_vmo_create grants EXECUTE right when job
+  policy allows AMBIENT_MARK_VMO_EXEC (fixes MmapProtExecTest)
+- Port cancel now drains queued packets and checks source WAIT rights
+- Signal callbacks fire in LIFO order (matching Fuchsia kernel)
+- wait_async supports TIMESTAMP/BOOT_TIMESTAMP options
+- New suites: MemoryMappingTest (6/8 pass), PortTest (36/40 pass),
+  PortStressTest (1/12 reached)
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in
