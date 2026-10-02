@@ -155,6 +155,10 @@ impl Executor {
                         }
                         Poll::Pending => {}
                     };
+                    if let ExecutorState::WEAK = self.state {
+                        self.state = ExecutorState::KILLED;
+                        return;
+                    }
                     continue;
                 }
 
