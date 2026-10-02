@@ -43,6 +43,7 @@ impl Syscall<'_> {
             handle_value, elem_size, count
         );
         if count != 0 {
+            self.check_user_buffer_read(user_bytes.as_addr(), count * elem_size)?;
             let data = user_bytes.read_array(count * elem_size)?;
             let actual_count = self
                 .thread

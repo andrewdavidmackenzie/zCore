@@ -425,6 +425,55 @@ impl VmAddressRegion {
         Ok(())
     }
 
+    /// Check whether all pages in [addr, addr+len) are covered by mappings
+    /// whose permissions include `required_flags`.
+    ///
+    /// Used by `copy_from_user` to verify the user buffer is readable
+    /// at the VMAR mapping level (since x86_64 hardware page tables
+    /// don't have a read-disable bit).
+    pub fn check_user_access(&self, addr: usize, len: usize, required_flags: MMUFlags) -> bool {
+        if len == 0 {
+            return true;
+        }
+        let guard = self.inner.lock();
+        let inner = match guard.as_ref() {
+            Some(inner) => inner,
+            None => return false,
+        };
+        let end_addr = match addr.checked_add(len) {
+            Some(end) => end,
+            None => return false,
+        };
+        // Check each mapping that overlaps the range.
+        let mut covered = 0usize;
+        for map in inner.mappings.iter() {
+            if map.addr() >= end_addr || map.end_addr() <= addr {
+                continue;
+            }
+            // Check that the mapping's per-page flags include the required flags.
+            let overlap_start = addr.max(map.addr());
+            let overlap_end = end_addr.min(map.end_addr());
+            if !map.check_access(overlap_start, overlap_end, required_flags) {
+                return false;
+            }
+            covered += overlap_end - overlap_start;
+        }
+        // Also recurse into child VMARs.
+        for child in inner.children.iter() {
+            if child.addr() >= end_addr || child.end_addr() <= addr {
+                continue;
+            }
+            let overlap_start = addr.max(child.addr());
+            let overlap_end = end_addr.min(child.end_addr());
+            let overlap_len = overlap_end - overlap_start;
+            if !child.check_user_access(overlap_start, overlap_len, required_flags) {
+                return false;
+            }
+            covered += overlap_len;
+        }
+        covered >= len
+    }
+
     /// Perform an operation on VMOs mapped within the given address range.
     ///
     /// Supported operations:
@@ -1152,6 +1201,21 @@ impl VmMapping {
 
     fn is_valid_mapping_flags(&self, flags: MMUFlags) -> bool {
         self.permissions.contains(flags & MMUFlags::RXW)
+    }
+
+    /// Check that per-page flags in [start, end) include `required`.
+    fn check_access(&self, start: usize, end: usize, required: MMUFlags) -> bool {
+        let inner = self.inner.lock();
+        let base = inner.addr;
+        let start_idx = (start - base) / PAGE_SIZE;
+        let end_idx = (end - base).div_ceil(PAGE_SIZE);
+        for i in start_idx..end_idx {
+            let flags = inner.page_flags(i);
+            if !flags.contains(required) {
+                return false;
+            }
+        }
+        true
     }
 
     fn protect(&self, flags: MMUFlags, start_index: usize, end_index: usize) {

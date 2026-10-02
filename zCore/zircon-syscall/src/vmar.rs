@@ -112,6 +112,12 @@ impl Syscall<'_> {
         if options.contains(VmOptions::REQUIRE_NON_RESIZABLE) && vmo.is_resizable() {
             return Err(ZxError::NOT_SUPPORTED);
         }
+        // FAULT_BEYOND_STREAM_SIZE requires ALLOW_FAULTS.
+        if options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE)
+            && !options.contains(VmOptions::ALLOW_FAULTS)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
         // check SPECIFIC options with offset
         let is_specific = options.contains(VmOptions::SPECIFIC)
             || options.contains(VmOptions::SPECIFIC_OVERWRITE);

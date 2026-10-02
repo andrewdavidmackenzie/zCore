@@ -36,6 +36,7 @@ impl Syscall<'_> {
             handle_value, options, user_bytes, count,
         );
         if (count == 0 || !user_bytes.is_null()) && options == 0 {
+            self.check_user_buffer_read(user_bytes.as_addr(), count)?;
             let actual_count = self
                 .thread
                 .proc()
