@@ -531,7 +531,7 @@ impl Drop for VmObject {
     }
 }
 
-/// Describes a VMO.
+/// Describes a VMO. Matches Fuchsia's `zx_info_vmo_t` layout (168 bytes).
 #[repr(C)]
 #[derive(Default)]
 pub struct VmoInfo {
@@ -557,12 +557,31 @@ pub struct VmoInfo {
     /// If the type is `PAGED`, the amount of
     /// memory currently allocated to this VMO; i.e., the amount of physical
     /// memory it consumes. Undefined otherwise.
-    committed_bytes: u64,
+    pub committed_bytes: u64,
     /// If `flags & ZX_INFO_VMO_VIA_HANDLE`, the handle rights.
     /// Undefined otherwise.
     pub rights: Rights,
     /// VMO mapping cache policy.
     cache_policy: u32,
+    /// Kernel memory used to track metadata for this VMO.
+    metadata_bytes: u64,
+    /// Running counter of committed-state change events.
+    committed_change_events: u64,
+    /// Content populated and tracked by this VMO (including shared pages).
+    pub populated_bytes: u64,
+    /// Physical memory allocated to only this VMO (not shared with clones).
+    committed_private_bytes: u64,
+    /// Content populated and tracked by only this VMO (not shared).
+    populated_private_bytes: u64,
+    /// `committed_bytes` scaled by sharing count (fractional bytes truncated).
+    committed_scaled_bytes: u64,
+    /// `populated_bytes` scaled by sharing count (fractional bytes truncated).
+    populated_scaled_bytes: u64,
+    /// Fractional remainder of `committed_scaled_bytes` (fixed-point, 63-bit precision).
+    committed_fractional_scaled_bytes: u64,
+    /// Fractional remainder of `populated_scaled_bytes` (fixed-point, 63-bit precision).
+    /// Set to `u64::MAX` when fractional scaling is not supported.
+    pub populated_fractional_scaled_bytes: u64,
 }
 
 bitflags! {
