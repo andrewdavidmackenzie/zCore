@@ -125,6 +125,10 @@ impl Syscall<'_> {
                 let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
                 let thread =
                     proc.get_object_with_rights::<Thread>(handle_value, Rights::GET_PROPERTY)?;
+                // FS/GS register properties only work on the calling thread.
+                if thread.id() != self.thread.id() {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
                 let value = thread
                     .with_context(|ctx| ctx.get_field(UserContextField::ThreadPointer))
                     .map_err(|_| ZxError::BAD_STATE)?;
@@ -137,6 +141,9 @@ impl Syscall<'_> {
                     let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
                     let thread =
                         proc.get_object_with_rights::<Thread>(handle_value, Rights::GET_PROPERTY)?;
+                    if thread.id() != self.thread.id() {
+                        return Err(ZxError::ACCESS_DENIED);
+                    }
                     let value = thread
                         .with_context(|ctx| ctx.general().gsbase)
                         .map_err(|_| ZxError::BAD_STATE)?;
@@ -196,6 +203,9 @@ impl Syscall<'_> {
             #[cfg(target_arch = "x86_64")]
             Property::RegisterFs => {
                 let thread = proc.get_object::<Thread>(handle_value)?;
+                if thread.id() != self.thread.id() {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
                 let fsbase = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
                 thread.with_context(|ctx| ctx.general_mut().fsbase = fsbase)?;
                 Ok(())
@@ -203,6 +213,9 @@ impl Syscall<'_> {
             #[cfg(target_arch = "x86_64")]
             Property::RegisterGs => {
                 let thread = proc.get_object::<Thread>(handle_value)?;
+                if thread.id() != self.thread.id() {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
                 let gsbase = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
                 thread.with_context(|ctx| ctx.general_mut().gsbase = gsbase)?;
                 Ok(())
