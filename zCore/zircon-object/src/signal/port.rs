@@ -29,9 +29,18 @@ pub struct Port {
 
 impl_kobject!(Port);
 
+/// A queued packet with optional source-tracking for signal packets.
+/// The `source_koid` allows `port_cancel` to remove already-queued
+/// packets that match a `(source, key)` pair.
+struct QueuedPacket {
+    packet: PortPacket,
+    /// Source object koid for signal packets; 0 for user packets.
+    source_koid: KoID,
+}
+
 #[derive(Default)]
 struct PortInner {
-    queue: VecDeque<PortPacket>,
+    queue: VecDeque<QueuedPacket>,
     interrupt_queue: VecDeque<PortInterruptPacket>,
     interrupt_grave: BTreeSet<u64>,
     interrupt_pid: u64,
@@ -84,10 +93,10 @@ impl Port {
         flag
     }
 
-    /// Cancel all async signal subscriptions matching the given source and key.
+    /// Cancel async signal subscriptions only (no queue drain).
     ///
-    /// Returns `Ok(())` if any subscriptions were found and cancelled,
-    /// `Err(NOT_FOUND)` if no matching subscriptions exist.
+    /// Used internally after one-shot signal delivery to clean up the
+    /// subscription entry without removing the just-queued packet.
     pub fn cancel_async(&self, source_koid: KoID, key: u64) -> ZxResult {
         let mut inner = self.inner.lock();
         if let Some(flags) = inner.async_subscriptions.remove(&(source_koid, key)) {
@@ -100,17 +109,53 @@ impl Port {
         }
     }
 
+    /// Cancel async signal subscriptions AND drain queued signal packets.
+    ///
+    /// This is the full cancel used by `zx_port_cancel` — it removes
+    /// pending callbacks AND already-queued packets matching `(source, key)`.
+    ///
+    /// Returns `Ok(())` if anything matched, `Err(NOT_FOUND)` otherwise.
+    pub fn cancel_async_and_drain(&self, source_koid: KoID, key: u64) -> ZxResult {
+        let mut inner = self.inner.lock();
+        let mut found = false;
+        // Cancel pending subscription callbacks.
+        if let Some(flags) = inner.async_subscriptions.remove(&(source_koid, key)) {
+            for flag in flags {
+                flag.store(true, core::sync::atomic::Ordering::Relaxed);
+            }
+            found = true;
+        }
+        // Remove already-queued signal packets matching (source, key).
+        let before = inner.queue.len();
+        inner
+            .queue
+            .retain(|qp| !(qp.source_koid == source_koid && qp.packet.key == key));
+        if inner.queue.len() < before {
+            found = true;
+        }
+        if inner.queue.is_empty() {
+            drop(inner);
+            self.base.signal_clear(Signal::READABLE);
+        }
+        if found {
+            Ok(())
+        } else {
+            Err(ZxError::NOT_FOUND)
+        }
+    }
+
     /// Cancel all async waits matching the given key, regardless of source.
     pub fn cancel_by_key(&self, key: u64) -> ZxResult {
         let mut inner = self.inner.lock();
+        let mut found = false;
         let matching: alloc::vec::Vec<_> = inner
             .async_subscriptions
             .keys()
             .filter(|(_, k)| *k == key)
             .cloned()
             .collect();
-        if matching.is_empty() {
-            return Err(ZxError::NOT_FOUND);
+        if !matching.is_empty() {
+            found = true;
         }
         for compound_key in matching {
             if let Some(flags) = inner.async_subscriptions.remove(&compound_key) {
@@ -119,13 +164,35 @@ impl Port {
                 }
             }
         }
-        Ok(())
+        // Also remove queued packets matching the key.
+        let before = inner.queue.len();
+        inner.queue.retain(|qp| qp.packet.key != key);
+        if inner.queue.len() < before {
+            found = true;
+        }
+        if inner.queue.is_empty() {
+            drop(inner);
+            self.base.signal_clear(Signal::READABLE);
+        }
+        if found {
+            Ok(())
+        } else {
+            Err(ZxError::NOT_FOUND)
+        }
     }
 
     /// Push a `packet` into the port.
     pub fn push(&self, packet: impl Into<PortPacket>) {
+        self.push_with_source(packet, 0);
+    }
+
+    /// Push a signal packet with source tracking for cancellation.
+    pub fn push_with_source(&self, packet: impl Into<PortPacket>, source_koid: KoID) {
         let mut inner = self.inner.lock();
-        inner.queue.push_back(packet.into());
+        inner.queue.push_back(QueuedPacket {
+            packet: packet.into(),
+            source_koid,
+        });
         drop(inner);
         self.base.signal_set(Signal::READABLE);
     }
@@ -188,13 +255,13 @@ impl Port {
                     .into();
                 }
             }
-            if let Some(packet) = inner.queue.pop_front() {
+            if let Some(qp) = inner.queue.pop_front() {
                 if inner.queue.is_empty()
                     && (inner.interrupt_queue.is_empty() || !self.can_bind_to_interrupt())
                 {
                     self.base.signal_clear(Signal::READABLE);
                 }
-                return packet;
+                return qp.packet;
             }
         }
     }

@@ -478,9 +478,10 @@ impl Syscall<'_> {
             "object.wait_async: handle={:#x}, port={:#x}, key={:#x}, signal={:?}, options={:#X}",
             handle_value, port_handle_value, key, signals, options
         );
-        // Zircon only defines ZX_WAIT_ASYNC_EDGE (bit 1); reject anything else.
         const ZX_WAIT_ASYNC_EDGE: u32 = 1 << 1;
-        if options & !ZX_WAIT_ASYNC_EDGE != 0 {
+        const ZX_WAIT_ASYNC_BOOT_TIMESTAMP: u32 = 1 << 2;
+        const VALID_OPTIONS: u32 = ZX_WAIT_ASYNC_EDGE | ZX_WAIT_ASYNC_BOOT_TIMESTAMP;
+        if options & !VALID_OPTIONS != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();

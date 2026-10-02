@@ -290,7 +290,16 @@ impl KObjectBase {
         if new_signal == old_signal {
             return;
         }
-        inner.signal_callbacks.retain(|f| !f(new_signal));
+        // Fire callbacks in reverse (LIFO) order, matching Fuchsia's
+        // kernel behavior where the most recently registered observer
+        // is notified first.
+        let mut i = inner.signal_callbacks.len();
+        while i > 0 {
+            i -= 1;
+            if inner.signal_callbacks[i](new_signal) {
+                drop(inner.signal_callbacks.swap_remove(i));
+            }
+        }
     }
 
     /// Assert `signal`.
@@ -410,17 +419,20 @@ impl dyn KernelObject {
         if !edge_triggered {
             let current_signal = self.signal();
             if !(current_signal & signal).is_empty() {
-                port.push(PortPacketRepr {
-                    key,
-                    status: ZxError::OK,
-                    data: PayloadRepr::Signal(PacketSignal {
-                        trigger: signal,
-                        observed: current_signal,
-                        count: 1,
-                        timestamp: 0,
-                        _reserved1: 0,
-                    }),
-                });
+                port.push_with_source(
+                    PortPacketRepr {
+                        key,
+                        status: ZxError::OK,
+                        data: PayloadRepr::Signal(PacketSignal {
+                            trigger: signal,
+                            observed: current_signal,
+                            count: 1,
+                            timestamp: 0,
+                            _reserved1: 0,
+                        }),
+                    },
+                    self.id(),
+                );
                 // Remove the subscription since we already fired.
                 port.cancel_async(self.id(), key).ok();
                 return;
@@ -440,17 +452,20 @@ impl dyn KernelObject {
                 if (s & signal).is_empty() {
                     return false;
                 }
-                port.push(PortPacketRepr {
-                    key,
-                    status: ZxError::OK,
-                    data: PayloadRepr::Signal(PacketSignal {
-                        trigger: signal,
-                        observed: s,
-                        count: 1,
-                        timestamp: 0,
-                        _reserved1: 0,
-                    }),
-                });
+                port.push_with_source(
+                    PortPacketRepr {
+                        key,
+                        status: ZxError::OK,
+                        data: PayloadRepr::Signal(PacketSignal {
+                            trigger: signal,
+                            observed: s,
+                            count: 1,
+                            timestamp: 0,
+                            _reserved1: 0,
+                        }),
+                    },
+                    source_koid,
+                );
                 // Clean up subscription after one-shot delivery.
                 port.cancel_async(source_koid, key).ok();
                 true
