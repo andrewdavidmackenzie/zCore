@@ -74,16 +74,18 @@ impl Syscall<'_> {
     /// PRESENT page is readable by the CPU. This check validates the VMAR
     /// mapping's logical permissions to reject reads from pages mapped
     /// without PERM_READ (e.g., `mmap(PROT_NONE)`).
+    ///
+    /// Returns:
+    /// - `Ok(())` if the buffer is fully mapped with read permissions.
+    /// - `Err(NOT_FOUND)` if part of the buffer is not mapped.
+    /// - `Err(ACCESS_DENIED)` if a mapping lacks read permissions.
     #[allow(dead_code)]
     fn check_user_buffer_read(&self, addr: usize, len: usize) -> ZxResult {
         if len == 0 {
             return Ok(());
         }
         let vmar = self.thread.proc().vmar();
-        if !vmar.check_user_access(addr, len, MMUFlags::READ) {
-            return Err(ZxError::INVALID_ARGS);
-        }
-        Ok(())
+        vmar.check_user_access(addr, len, MMUFlags::READ)
     }
 
     /// Resolve a handle value that may be a pseudo-handle.
