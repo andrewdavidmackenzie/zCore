@@ -478,9 +478,9 @@ impl Syscall<'_> {
             "object.wait_async: handle={:#x}, port={:#x}, key={:#x}, signal={:?}, options={:#X}",
             handle_value, port_handle_value, key, signals, options
         );
+        const ZX_WAIT_ASYNC_TIMESTAMP: u32 = 1 << 0;
         const ZX_WAIT_ASYNC_EDGE: u32 = 1 << 1;
         const ZX_WAIT_ASYNC_BOOT_TIMESTAMP: u32 = 1 << 2;
-        const ZX_WAIT_ASYNC_TIMESTAMP: u32 = 1 << 3;
         const VALID_OPTIONS: u32 =
             ZX_WAIT_ASYNC_EDGE | ZX_WAIT_ASYNC_BOOT_TIMESTAMP | ZX_WAIT_ASYNC_TIMESTAMP;
         if options & !VALID_OPTIONS != 0 {

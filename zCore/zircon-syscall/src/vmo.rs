@@ -25,10 +25,10 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let vmo = VmObject::new_paged_with_resizable(resizable, pages(size as usize));
         // Grant EXECUTE right when the job's AMBIENT_MARK_VMO_EXEC policy
-        // allows it. The prebuilt Fuchsia libc's mmap(MAP_JIT) relies on
-        // the VMO having EXECUTE rights at creation time (it maps the VMO
-        // with vmar_map before calling vmo_replace_as_executable, so the
-        // mapping's max permissions must already include EXECUTE).
+        // allows it. The prebuilt Fuchsia libc's mmap(MAP_JIT) calls
+        // vmo_replace_as_executable before vmar_map, but the mapping's
+        // permissions must include EXECUTE at map time for later
+        // mprotect(PROT_EXEC) to succeed.
         let mut rights = Rights::DEFAULT_VMO;
         if proc
             .check_policy(PolicyCondition::AmbientMarkVMOExec)
@@ -93,10 +93,6 @@ impl Syscall<'_> {
         vmex: HandleValue,
         mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        info!(
-            "vmo.replace_as_executable: handle={:#x?}, vmex={:#x?}",
-            handle, vmex
-        );
         let proc = self.thread.proc();
         if vmex != INVALID_HANDLE {
             proc.get_object::<Resource>(vmex)?
@@ -108,7 +104,6 @@ impl Syscall<'_> {
         let new_handle = proc.dup_handle_operating_rights(handle, |handle_rights| {
             Ok(handle_rights | Rights::EXECUTE)
         })?;
-        proc.remove_handle(handle)?;
         out.write(new_handle)?;
         Ok(())
     }
