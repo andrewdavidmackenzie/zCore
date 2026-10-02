@@ -28,7 +28,18 @@ impl Syscall<'_> {
         // initial VMO size. This is important for streams — a stream
         // created on a new VMO should see content_size == vmo.size().
         vmo.set_content_size(vmo.len())?;
-        let handle_value = proc.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO));
+        // Grant EXECUTE right when the job's AMBIENT_MARK_VMO_EXEC policy
+        // allows it. The prebuilt Fuchsia libc needs VMO handles with
+        // EXECUTE at vmar_map time so that mprotect(PROT_EXEC) can later
+        // add execute permission to the mapping.
+        let mut rights = Rights::DEFAULT_VMO;
+        if proc
+            .check_policy(PolicyCondition::AmbientMarkVMOExec)
+            .is_ok()
+        {
+            rights |= Rights::EXECUTE;
+        }
+        let handle_value = proc.add_handle(Handle::new(vmo, rights));
         out.write(handle_value)?;
         Ok(())
     }

@@ -63,7 +63,9 @@ impl Pager {
             return Err(ZxError::NOT_SUPPORTED);
         }
         let pages = (size as usize).div_ceil(PAGE_SIZE);
-        let vmo = VmObject::new_paged(pages);
+        // Pager-backed VMOs are always resizable in Fuchsia.
+        let vmo = VmObject::new_paged_with_resizable(true, pages);
+        vmo.set_content_size(vmo.len())?;
         vmo.set_name("pager-vmo");
         // Associate the pager's port and key with the VMO for
         // demand-paging notifications.
