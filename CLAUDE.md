@@ -79,7 +79,7 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
 ### Current status (phase 12)
-- 531/1776 tests pass, 49 failing, 1196 not yet reached
+- 551/1776 tests pass, 29 failing, 1196 not yet reached
 - TransferChannelWithPendingCall hang resolved — channel_call now
   passes a cancel_token so handle transfer cancels the blocking call
 - Executor `take_notified` fixed — notifications masked by `borrowed`
@@ -102,6 +102,14 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 - wait_async supports TIMESTAMP/BOOT_TIMESTAMP options
 - New suites: MemoryMappingTest (6/8 pass), PortTest (36/40 pass),
   PortStressTest (1/12 reached)
+- Socket disposition write-disable signal model implemented
+- Stream content_size zeroing, write error handling (FILE_BIG/OUT_OF_RANGE)
+- VMO content_size set on create and updated on resize
+- Stream objects don't support ZX_PROP_NAME (returns WRONG_TYPE)
+- Datagram socket all-or-nothing write semantics
+- VMO immutable flag for SNAPSHOT + NO_WRITE children
+- gtest_filter support via ZBI CMDLINE items for fast test iteration
+- VmoCloneTestCase (9 tests) reached when skipping PortStressTest
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in
