@@ -24,7 +24,18 @@ impl Syscall<'_> {
         let resizable = options != 0;
         let proc = self.thread.proc();
         let vmo = VmObject::new_paged_with_resizable(resizable, pages(size as usize));
-        let handle_value = proc.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO));
+        // Fuchsia grants EXECUTE right on newly created VMOs when the
+        // job's AMBIENT_MARK_VMO_EXEC policy allows it.  This lets
+        // mmap(MAP_JIT) + mprotect(PROT_EXEC) work without an explicit
+        // zx_vmo_replace_as_executable call.
+        let mut rights = Rights::DEFAULT_VMO;
+        if proc
+            .check_policy(PolicyCondition::AmbientMarkVMOExec)
+            .is_ok()
+        {
+            rights |= Rights::EXECUTE;
+        }
+        let handle_value = proc.add_handle(Handle::new(vmo, rights));
         out.write(handle_value)?;
         Ok(())
     }
