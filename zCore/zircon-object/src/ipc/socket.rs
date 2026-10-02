@@ -396,8 +396,17 @@ impl Socket {
 
         // When trying to re-enable peer writes, check if local has
         // buffered data first — this takes priority over PEER_CLOSED.
-        if disposition_peer == WRITE_ENABLED && !self.inner.lock().data.is_empty() {
-            return Err(ZxError::BAD_STATE);
+        // Validate disposition_peer BEFORE applying any changes,
+        // so local signals aren't modified if the peer check would fail.
+        if disposition_peer == WRITE_ENABLED {
+            if !self.inner.lock().data.is_empty() {
+                return Err(ZxError::BAD_STATE);
+            }
+            if let Some(ref peer) = peer {
+                if peer.inner.lock().write_shutdown {
+                    return Err(ZxError::BAD_STATE);
+                }
+            }
         }
 
         // disposition_peer requires the peer to be alive.
