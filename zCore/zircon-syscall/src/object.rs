@@ -480,17 +480,24 @@ impl Syscall<'_> {
         );
         const ZX_WAIT_ASYNC_EDGE: u32 = 1 << 1;
         const ZX_WAIT_ASYNC_BOOT_TIMESTAMP: u32 = 1 << 2;
-        const VALID_OPTIONS: u32 = ZX_WAIT_ASYNC_EDGE | ZX_WAIT_ASYNC_BOOT_TIMESTAMP;
+        const ZX_WAIT_ASYNC_TIMESTAMP: u32 = 1 << 3;
+        const VALID_OPTIONS: u32 =
+            ZX_WAIT_ASYNC_EDGE | ZX_WAIT_ASYNC_BOOT_TIMESTAMP | ZX_WAIT_ASYNC_TIMESTAMP;
         if options & !VALID_OPTIONS != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        // TIMESTAMP and BOOT_TIMESTAMP are mutually exclusive.
+        if options & ZX_WAIT_ASYNC_TIMESTAMP != 0 && options & ZX_WAIT_ASYNC_BOOT_TIMESTAMP != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let use_timestamp = options & (ZX_WAIT_ASYNC_TIMESTAMP | ZX_WAIT_ASYNC_BOOT_TIMESTAMP) != 0;
         let proc = self.thread.proc();
         let object = self.get_object_with_pseudo(handle_value, Rights::WAIT)?;
         let port = proc.get_object_with_rights::<Port>(port_handle_value, Rights::WRITE)?;
         if options & ZX_WAIT_ASYNC_EDGE != 0 {
-            object.send_signal_to_port_async_edge(signals, &port, key);
+            object.send_signal_to_port_async_edge(signals, &port, key, use_timestamp);
         } else {
-            object.send_signal_to_port_async(signals, &port, key);
+            object.send_signal_to_port_async(signals, &port, key, use_timestamp);
         }
         Ok(())
     }

@@ -385,9 +385,16 @@ impl dyn KernelObject {
     /// Used to implement `sys_object_wait_async`. Level-triggered (one-shot):
     /// fires immediately if signal already asserted, otherwise registers a
     /// callback that fires on the next matching signal change.
+    /// If `timestamp` is true, the packet includes the current monotonic time.
     #[allow(unsafe_code)]
-    pub fn send_signal_to_port_async(self: &Arc<Self>, signal: Signal, port: &Arc<Port>, key: u64) {
-        self.send_signal_to_port_async_inner(signal, port, key, false);
+    pub fn send_signal_to_port_async(
+        self: &Arc<Self>,
+        signal: Signal,
+        port: &Arc<Port>,
+        key: u64,
+        timestamp: bool,
+    ) {
+        self.send_signal_to_port_async_inner(signal, port, key, false, timestamp);
     }
 
     /// Edge-triggered variant: only fires when signal transitions from
@@ -398,8 +405,9 @@ impl dyn KernelObject {
         signal: Signal,
         port: &Arc<Port>,
         key: u64,
+        timestamp: bool,
     ) {
-        self.send_signal_to_port_async_inner(signal, port, key, true);
+        self.send_signal_to_port_async_inner(signal, port, key, true, timestamp);
     }
 
     #[allow(unsafe_code)]
@@ -409,6 +417,7 @@ impl dyn KernelObject {
         port: &Arc<Port>,
         key: u64,
         edge_triggered: bool,
+        timestamp: bool,
     ) {
         // Register cancellation tracking BEFORE the immediate check,
         // so cancel_async can find it even for level-triggered waits
@@ -419,6 +428,11 @@ impl dyn KernelObject {
         if !edge_triggered {
             let current_signal = self.signal();
             if !(current_signal & signal).is_empty() {
+                let ts = if timestamp {
+                    hal_impl::timer::timer_now().as_nanos() as u64
+                } else {
+                    0
+                };
                 port.push_with_source(
                     PortPacketRepr {
                         key,
@@ -427,7 +441,7 @@ impl dyn KernelObject {
                             trigger: signal,
                             observed: current_signal,
                             count: 1,
-                            timestamp: 0,
+                            timestamp: ts,
                             _reserved1: 0,
                         }),
                     },
@@ -452,6 +466,11 @@ impl dyn KernelObject {
                 if (s & signal).is_empty() {
                     return false;
                 }
+                let ts = if timestamp {
+                    hal_impl::timer::timer_now().as_nanos() as u64
+                } else {
+                    0
+                };
                 port.push_with_source(
                     PortPacketRepr {
                         key,
@@ -460,7 +479,7 @@ impl dyn KernelObject {
                             trigger: signal,
                             observed: s,
                             count: 1,
-                            timestamp: 0,
+                            timestamp: ts,
                             _reserved1: 0,
                         }),
                     },
