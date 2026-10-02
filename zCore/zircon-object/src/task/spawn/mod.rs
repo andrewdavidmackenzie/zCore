@@ -418,27 +418,58 @@ pub fn spawn_process(
     // The VMO name must be "zbi" -- standalone-init.cc looks it up by name.
     let zbi_vmo = VmObject::new_paged(1);
     // Write a minimal ZBI container header (empty, no items)
-    let zbi_header: [u8; 32] = {
-        let mut h = [0u8; 32];
-        // ZBI_TYPE_CONTAINER = 0x544f4f42 ("BOOT")
-        h[0..4].copy_from_slice(&0x544f4f42u32.to_le_bytes());
-        // length = 0 (no items after header)
-        h[4..8].copy_from_slice(&0u32.to_le_bytes());
-        // extra = ZBI_CONTAINER_MAGIC = 0x868cf7e6
-        h[8..12].copy_from_slice(&0x868cf7e6u32.to_le_bytes());
-        // flags = ZBI_FLAGS_VERSION = 0x00010000
-        h[12..16].copy_from_slice(&0x00010000u32.to_le_bytes());
-        // reserved0, reserved1 = 0
-        // magic = ZBI_ITEM_MAGIC = 0xb5781729
-        h[24..28].copy_from_slice(&0xb5781729u32.to_le_bytes());
-        // crc32 = ZBI_ITEM_NO_CRC32 = 0x4a87e8d6
-        h[28..32].copy_from_slice(&0x4a87e8d6u32.to_le_bytes());
-        h
-    };
-    zbi_vmo.write(0, &zbi_header).ok();
+    // Build a ZBI cmdline string from extra_args (for gtest_filter etc.)
+    // The standalone test framework reads options from ZBI_TYPE_CMDLINE items.
+    let mut cmdline = alloc::string::String::new();
+    for arg in &config.extra_args {
+        if !cmdline.is_empty() {
+            cmdline.push(' ');
+        }
+        cmdline.push_str(arg);
+    }
+
+    if cmdline.is_empty() {
+        // Minimal ZBI: container header only, no items.
+        let zbi_header: [u8; 32] = {
+            let mut h = [0u8; 32];
+            h[0..4].copy_from_slice(&0x544f4f42u32.to_le_bytes()); // ZBI_TYPE_CONTAINER
+            h[4..8].copy_from_slice(&0u32.to_le_bytes()); // length = 0
+            h[8..12].copy_from_slice(&0x868cf7e6u32.to_le_bytes()); // ZBI_CONTAINER_MAGIC
+            h[12..16].copy_from_slice(&0x00010000u32.to_le_bytes()); // ZBI_FLAGS_VERSION
+            h[24..28].copy_from_slice(&0xb5781729u32.to_le_bytes()); // ZBI_ITEM_MAGIC
+            h[28..32].copy_from_slice(&0x4a87e8d6u32.to_le_bytes()); // ZBI_ITEM_NO_CRC32
+            h
+        };
+        zbi_vmo.write(0, &zbi_header).ok();
+    } else {
+        // ZBI with a CMDLINE item containing the extra args.
+        let payload = cmdline.as_bytes();
+        let item_len = payload.len() as u32;
+        // ZBI items are 8-byte aligned; pad payload.
+        let padded = (payload.len() + 7) & !7;
+        let total_items_size = (32 + padded) as u32; // item header + padded payload
+                                                     // Container header
+        let mut zbi = alloc::vec![0u8; 32 + 32 + padded];
+        zbi[0..4].copy_from_slice(&0x544f4f42u32.to_le_bytes()); // ZBI_TYPE_CONTAINER
+        zbi[4..8].copy_from_slice(&total_items_size.to_le_bytes()); // length = items size
+        zbi[8..12].copy_from_slice(&0x868cf7e6u32.to_le_bytes()); // ZBI_CONTAINER_MAGIC
+        zbi[12..16].copy_from_slice(&0x00010000u32.to_le_bytes()); // ZBI_FLAGS_VERSION
+        zbi[24..28].copy_from_slice(&0xb5781729u32.to_le_bytes()); // ZBI_ITEM_MAGIC
+        zbi[28..32].copy_from_slice(&0x4a87e8d6u32.to_le_bytes()); // ZBI_ITEM_NO_CRC32
+                                                                   // CMDLINE item header (at offset 32)
+        zbi[32..36].copy_from_slice(&0x4c444d43u32.to_le_bytes()); // ZBI_TYPE_CMDLINE
+        zbi[36..40].copy_from_slice(&item_len.to_le_bytes()); // length
+                                                              // extra = 0, flags = ZBI_FLAGS_VERSION
+        zbi[44..48].copy_from_slice(&0x00010000u32.to_le_bytes()); // flags
+        zbi[56..60].copy_from_slice(&0xb5781729u32.to_le_bytes()); // ZBI_ITEM_MAGIC
+        zbi[60..64].copy_from_slice(&0x4a87e8d6u32.to_le_bytes()); // ZBI_ITEM_NO_CRC32
+                                                                   // Payload (at offset 64)
+        zbi[64..64 + payload.len()].copy_from_slice(payload);
+        zbi_vmo.write(0, &zbi).ok();
+    }
     zbi_vmo.set_name("zbi");
 
-    // Create boot-options.txt VMO (empty, no boot options)
+    // Create boot-options.txt VMO (empty, no boot options).
     let boot_opts_vmo = VmObject::new_paged(1);
     boot_opts_vmo.set_name("boot-options.txt");
 
