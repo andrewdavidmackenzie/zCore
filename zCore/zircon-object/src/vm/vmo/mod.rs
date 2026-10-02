@@ -127,6 +127,8 @@ pub struct VmObject {
     base: KObjectBase,
     _counter: CountHelper,
     resizable: bool,
+    /// True if the VMO was created with SNAPSHOT + NO_WRITE.
+    immutable: core::sync::atomic::AtomicBool,
     trait_: Arc<dyn VMObjectTrait>,
     inner: Mutex<VmObjectInner>,
 }
@@ -158,6 +160,7 @@ impl VmObject {
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         Arc::new(VmObject {
             resizable,
+            immutable: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new(pages),
             inner: Mutex::new(VmObjectInner::default()),
@@ -170,6 +173,7 @@ impl VmObject {
         Arc::new(VmObject {
             base: KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN),
             resizable: false,
+            immutable: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPhysical::new(paddr, pages),
             inner: Mutex::new(VmObjectInner::default()),
@@ -181,6 +185,7 @@ impl VmObject {
         let vmo = Arc::new(VmObject {
             base: KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN),
             resizable: false,
+            immutable: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new_contiguous(pages, align_log2)?,
             inner: Mutex::new(VmObjectInner::default()),
@@ -259,6 +264,7 @@ impl VmObject {
         let child = Arc::new(VmObject {
             base,
             resizable,
+            immutable: core::sync::atomic::AtomicBool::new(false), // Caller sets this after creation if needed
             _counter: CountHelper::new(),
             trait_,
             inner: Mutex::new(VmObjectInner {
@@ -294,6 +300,7 @@ impl VmObject {
         let child = Arc::new(VmObject {
             base: KObjectBase::with(&self.base.name(), Signal::VMO_ZERO_CHILDREN),
             resizable: false,
+            immutable: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectSlice::new(self.trait_.clone(), offset, size),
             inner: Mutex::new(VmObjectInner {
@@ -366,6 +373,12 @@ impl VmObject {
     ///
     /// Used internally by stream write to extend the high-water mark.
     /// The caller is responsible for ensuring data beyond the new
+    /// Mark this VMO as immutable (SNAPSHOT + NO_WRITE child).
+    pub fn set_immutable(&self) {
+        self.immutable
+            .store(true, core::sync::atomic::Ordering::Relaxed);
+    }
+
     /// content_size is properly initialized.
     pub fn set_content_size(&self, size: usize) -> ZxResult {
         let mut inner = self.inner.lock();
@@ -419,10 +432,15 @@ impl VmObject {
             size: self.trait_.len() as u64,
             parent_koid: inner.parent.upgrade().map(|p| p.id()).unwrap_or(0),
             num_children: inner.children.len() as u64,
-            flags: if self.resizable {
-                VmoInfoFlags::RESIZABLE
-            } else {
-                VmoInfoFlags::empty()
+            flags: {
+                let mut f = VmoInfoFlags::empty();
+                if self.resizable {
+                    f |= VmoInfoFlags::RESIZABLE;
+                }
+                if self.immutable.load(core::sync::atomic::Ordering::Relaxed) {
+                    f |= VmoInfoFlags::IMMUTABLE;
+                }
+                f
             },
             cache_policy: self.trait_.cache_policy() as u32,
             share_count: inner.mapping_count as u64,
@@ -583,6 +601,12 @@ bitflags! {
 
         /// The VMO is contiguous.
         const CONTIGUOUS    = 1 << 6;
+
+        /// The VMO is discardable.
+        const DISCARDABLE   = 1 << 7;
+
+        /// The VMO is immutable (created with NO_WRITE + SNAPSHOT).
+        const IMMUTABLE     = 1 << 8;
     }
 }
 

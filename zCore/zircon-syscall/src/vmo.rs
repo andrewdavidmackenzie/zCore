@@ -171,6 +171,10 @@ impl Syscall<'_> {
             }
             vmo.create_child(resizable, offset, child_size)
         }?;
+        // Mark as immutable if SNAPSHOT + NO_WRITE.
+        if no_write && options.contains(VmoCloneFlags::SNAPSHOT) {
+            child_vmo.set_immutable();
+        }
         // generate rights
         let mut child_rights = parent_rights;
         child_rights.insert(Rights::GET_PROPERTY | Rights::SET_PROPERTY);
