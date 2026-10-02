@@ -78,48 +78,48 @@ grep '\[       OK \]' /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
-### Current status (phase 12)
-- 551/1776 tests pass, 29 failing, 1196 not yet reached
-- TransferChannelWithPendingCall hang resolved — channel_call now
-  passes a cancel_token so handle transfer cancels the blocking call
-- Executor `take_notified` fixed — notifications masked by `borrowed`
-  or `dropped` bits are now restored (deferred) instead of lost
-- channel_read options validation added (rejects invalid options
-  with NOT_SUPPORTED)
-- write_etc first-error latching fixed for BAD_HANDLE dispositions
-- New suites reached: ChannelTest (75/88 pass), ChannelWriteEtcTest,
-  IOVecTest, ChannelCallEtcTest, ChannelInternalTest
-- Current blocker: ChannelTest.NoSpuriousReadableSignalWhenRacing
-  hangs due to cooperative scheduling overhead — 10000 iterations
-  of busy-wait + channel read/write takes ~150s+ in QEMU
-- NOTE: increasing timer frequency above 100 Hz makes things worse
-  in QEMU due to VM exit/enter overhead per interrupt. Use 900s+
-  timeout to let slow tests complete.
+### Current status (phase 15)
+- 583/1776 tests pass, 54 failing, 1139 not yet reached
+- VmoInfo struct expanded to 168 bytes matching Fuchsia's zx_info_vmo_t
+  (was 104 bytes, causing garbage reads and infinite polling hangs)
+- Per-port packet limit corrected to 4096 (was 2048)
+- New suites reached: VmoCloneTestCase (9/9 pass),
+  VmoCloneDisjointClonesTests (2/2), VmoSignalTestCase (3/3),
+  VmoSliceTestCase (14/19), VmoReference (4/17),
+  ProgressiveCloneDiscardTests, VmoTransferDataTestCase
+- gtest_filter working: use `?--gtest_filter=-Suite.*:Test.Name` in
+  ROOTPROC to skip tests. Both argv and ZBI CMDLINE delivery work.
+- Known hangs requiring gtest_filter skip:
+  - PortStressTest.* (multi-threaded stress, cooperative scheduler)
+  - ChannelTest.NoSpuriousReadableSignalWhenRacing (10K iterations)
+  - VmoClone2TestCase.* (populated_bytes fractional attribution)
+  - VmoCloneResizeTests.* (populated_bytes after resize/decommit)
+  - PortTest.QueuePacketLimitExceededGeneratesPolicyException
+    (std::latch + std::thread synchronization)
 - VMO ambient exec: zx_vmo_create grants EXECUTE right when job
-  policy allows AMBIENT_MARK_VMO_EXEC (fixes MmapProtExecTest)
+  policy allows AMBIENT_MARK_VMO_EXEC (required by prebuilt libc)
 - Port cancel now drains queued packets and checks source WAIT rights
 - Signal callbacks fire in LIFO order (matching Fuchsia kernel)
 - wait_async supports TIMESTAMP/BOOT_TIMESTAMP options
-- New suites: MemoryMappingTest (6/8 pass), PortTest (36/40 pass),
-  PortStressTest (1/12 reached)
 - Socket disposition write-disable signal model implemented
 - Stream content_size zeroing, write error handling (FILE_BIG/OUT_OF_RANGE)
 - VMO content_size set on create and updated on resize
-- Stream objects don't support ZX_PROP_NAME (returns WRONG_TYPE)
 - Datagram socket all-or-nothing write semantics
 - VMO immutable flag for SNAPSHOT + NO_WRITE children
-- gtest_filter support via ZBI CMDLINE items for fast test iteration
-- VmoCloneTestCase (9 tests) reached when skipping PortStressTest
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in
   release builds. Use `hal_impl::console::console_write_fmt` for
   diagnostics that must survive LTO.
-- GTest filter: pass `--gtest_filter=Pattern*` via argv in spawn.rs
-  (not yet implemented, would require modifying processargs argv).
+- GTest filter: pass `--gtest_filter=Pattern*` via `?` separator in
+  ROOTPROC cmdline (e.g., `ROOTPROC=/bin/core-tests-standalone?--gtest_filter=PortTest.*`).
+  Delivered via both argv and ZBI CMDLINE items.
 - Test binary: `prebuilt/zircon-test/x86_64/core-tests-standalone`
 - Issue #21 tracks overall progress, issue #468 tracks missing syscalls.
 - Issue #471 tracks the user-buffer copy architecture gap.
+- VmoClone2/VmoCloneResize tests hang on `populated_bytes` polling
+  because COW page attribution doesn't implement fractional scaling.
+  Use gtest_filter to skip these suites when running the full suite.
 
 ## PR workflow
 After pushing commits to a PR:
