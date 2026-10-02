@@ -70,10 +70,48 @@ impl Syscall<'_> {
         let options = WriteOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
         let proc = self.thread.proc();
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::WRITE)?;
+        let append = options.contains(WriteOptions::APPEND);
+        let vmo_len = stream.vmo_len();
         let mut actual_count = 0;
         for io_vec in data.iter() {
-            let buf = io_vec.read_to_vec()?;
-            actual_count += stream.write(&buf, options.contains(WriteOptions::APPEND))?;
+            let capacity = io_vec.len();
+            // Check write feasibility before copying user data.
+            // Error priority depends on write mode:
+            // - Append: OUT_OF_RANGE first (no room), then FILE_BIG
+            // - Regular: FILE_BIG first (overflow), then OUT_OF_RANGE
+            let offset = stream.write_offset(append);
+            let remaining = vmo_len.saturating_sub(offset);
+            if append {
+                if remaining == 0 && capacity > 0 {
+                    if actual_count > 0 {
+                        break;
+                    }
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                if capacity as u64 > i64::MAX as u64 {
+                    if actual_count > 0 {
+                        break;
+                    }
+                    return Err(ZxError::FILE_BIG);
+                }
+            } else {
+                if capacity as u64 > i64::MAX as u64 {
+                    if actual_count > 0 {
+                        break;
+                    }
+                    return Err(ZxError::FILE_BIG);
+                }
+                if remaining == 0 && capacity > 0 {
+                    if actual_count > 0 {
+                        break;
+                    }
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+            }
+            // Cap read to VMO size to avoid unbounded allocation.
+            let read_len = capacity.min(vmo_len);
+            let buf = io_vec.read_bytes(read_len)?;
+            actual_count += stream.write(&buf, append)?;
         }
         actual_count_ptr.write_if_not_null(actual_count)?;
         Ok(())
@@ -99,9 +137,25 @@ impl Syscall<'_> {
         let data = vector.read_iovecs(vector_size)?;
         let proc = self.thread.proc();
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::WRITE)?;
+        let vmo_len = stream.vmo_len();
         let mut actual_count = 0;
         for io_vec in data.iter() {
-            let buf = io_vec.read_to_vec()?;
+            let capacity = io_vec.len();
+            let remaining = vmo_len.saturating_sub(offset);
+            if remaining == 0 && capacity > 0 {
+                if actual_count > 0 {
+                    break;
+                }
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            if capacity as u64 > i64::MAX as u64 {
+                if actual_count > 0 {
+                    break;
+                }
+                return Err(ZxError::FILE_BIG);
+            }
+            let read_len = capacity.min(vmo_len);
+            let buf = io_vec.read_bytes(read_len)?;
             actual_count += stream.write_at(&buf, offset)?;
             offset += actual_count;
         }

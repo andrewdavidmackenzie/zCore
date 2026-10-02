@@ -695,7 +695,15 @@ impl<P: Policy> IoVec<P> {
 
     /// Copy data from user memory into a kernel Vec.
     pub fn read_to_vec(&self) -> Result<Vec<u8>> {
-        if self.len == 0 {
+        self.read_bytes(self.len)
+    }
+
+    /// Copy up to `max_len` bytes from user memory into a kernel Vec.
+    ///
+    /// Reads `min(self.len, max_len)` bytes from the user pointer.
+    pub fn read_bytes(&self, max_len: usize) -> Result<Vec<u8>> {
+        let len = self.len.min(max_len);
+        if len == 0 {
             return Ok(Vec::new());
         }
         if self.ptr.is_null() {
@@ -704,14 +712,13 @@ impl<P: Policy> IoVec<P> {
         self.ptr.check()?;
         // Verify ptr + len doesn't overflow.
         (self.ptr.0 as usize)
-            .checked_add(self.len)
+            .checked_add(len)
             .ok_or(Error::InvalidLength)?;
         let mut buf = Vec::<u8>::new();
-        buf.try_reserve(self.len)
-            .map_err(|_| Error::InvalidLength)?;
+        buf.try_reserve(len).map_err(|_| Error::InvalidLength)?;
         unsafe {
-            buf.set_len(self.len);
-            copy_from_user(buf.as_mut_ptr(), self.ptr.0, self.len)?;
+            buf.set_len(len);
+            copy_from_user(buf.as_mut_ptr(), self.ptr.0, len)?;
         }
         Ok(buf)
     }

@@ -47,6 +47,24 @@ impl Stream {
         })
     }
 
+    /// Get the VMO's current size in bytes.
+    pub fn vmo_len(&self) -> usize {
+        self.vmo.len()
+    }
+
+    /// Get the offset where the next write would occur.
+    ///
+    /// If `append` is true, returns the current content_size.
+    /// Otherwise returns the current seek offset.
+    pub fn write_offset(&self, append: bool) -> usize {
+        let inner = self.inner.lock();
+        if append || (inner.options & MODE_APPEND) != 0 {
+            self.vmo.content_size()
+        } else {
+            inner.seek
+        }
+    }
+
     /// Read data from the stream at the current seek offset
     pub fn read(&self, data: &mut [u8]) -> ZxResult<usize> {
         let mut inner = self.inner.lock();
