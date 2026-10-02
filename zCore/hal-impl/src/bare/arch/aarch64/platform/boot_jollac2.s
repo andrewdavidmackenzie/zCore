@@ -16,9 +16,10 @@
  *                             Framebuffer at 0x9e000000 (within RAM range)
  *
  * Boot sequence:
- *   1. Disable watchdog (must happen within 12 seconds!)
- *   2. Write to framebuffer to confirm alive (red bar at top)
- *   3. Drop from EL2 to EL1 if needed
+ *   1. Write to framebuffer to confirm alive (red bar at top)
+ *      NOTE: SPRD watchdog is TrustZone-protected and cannot be disabled
+ *      from EL1. Hardware reset occurs ~12 s after boot.
+ *   2. Drop from EL2 to EL1 if needed
  *   4. Set up identity + high page tables (2-level: L0 -> L1 1GB blocks)
  *   5. Enable MMU (without caches — U-Boot may leave D-cache dirty)
  *   6. Jump to virtual address, enable caches, set up stack, enter Rust
@@ -37,9 +38,9 @@ _boot:
     /* === ARM64 Image header (64 bytes) for U-Boot booti === */
     nop                         /* code0: NOP (PE/COFF compat, like Linux) */
     b       _real_entry         /* code1: branch past header */
-    .quad   0                   /* text_offset: 0 = position independent */
-    .quad   0                   /* image_size: 0 = no limit */
-    .quad   0x0a                /* flags: LE, 4K pages, anywhere in phys */
+    .quad   0x80000             /* text_offset: kernel at DRAM base + 512K */
+    .quad   _kernel_image_size  /* image_size: set by linker script */
+    .quad   0x02                /* flags: LE, 4K pages, place at DRAM base + text_offset */
     .quad   0                   /* res2 */
     .quad   0                   /* res3 */
     .quad   0                   /* res4 */

@@ -3,7 +3,7 @@
 # Deploy zCore kernel to the SD card for Jolla C2 boot.
 #
 # Usage:
-#   ./deploy-sdcard.sh /dev/disk6 /path/to/zcore.bin
+#   ./deploy-sdcard.sh /dev/diskN /path/to/zcore.bin
 #
 # This formats the SD card with a single ext4 partition, copies the
 # kernel binary, DTB, and extlinux.conf. The SD card can then be
@@ -14,7 +14,7 @@ set -e
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <disk-device> <zcore-binary>" >&2
-    echo "Example: $0 /dev/disk6 ../../zcore.bin" >&2
+    echo "Example: $0 /dev/disk6 ../../target/jolla-c2/release/kernel.bin" >&2
     exit 1
 fi
 
@@ -35,14 +35,26 @@ if [ ! -f "$DTB" ]; then
     exit 1
 fi
 
+# Reject internal disks
+if diskutil info "$DISK" 2>/dev/null | grep -q "Internal:.*Yes"; then
+    echo "Error: $DISK is an internal disk. Refusing to write." >&2
+    exit 1
+fi
+
 echo "=== Deploy zCore to SD card ==="
 echo "Disk:    $DISK"
 echo "Kernel:  $KERNEL"
 echo "DTB:     $DTB"
 echo ""
+diskutil info "$DISK" 2>/dev/null | grep -E "Device|Media Name|Total Size|Internal" || true
+echo ""
 echo "WARNING: This will erase all data on $DISK"
-echo "Press Enter to continue or Ctrl-C to abort..."
-read
+echo "Type 'yes' to continue or Ctrl-C to abort:"
+read -r answer
+if [ "$answer" != "yes" ]; then
+    echo "Aborting." >&2
+    exit 1
+fi
 
 # Unmount
 diskutil unmountDisk "$DISK" 2>/dev/null || true
@@ -60,7 +72,6 @@ sudo sgdisk \
 sleep 2
 
 # Format as ext4
-# macOS doesn't have mkfs.ext4 by default — use the one from e2fsprogs
 MKFS=$(which mkfs.ext4 2>/dev/null || which mke2fs 2>/dev/null)
 if [ -z "$MKFS" ]; then
     echo "Error: mkfs.ext4 not found. Install with: brew install e2fsprogs" >&2
@@ -70,49 +81,29 @@ fi
 echo "Formatting as ext4..."
 sudo "$MKFS" -t ext4 -L zcore-boot "${DISK}s1"
 
-# Mount
-MOUNT_DIR=$(mktemp -d)
-echo "Mounting at $MOUNT_DIR..."
+# Create ext4 image with files using debugfs, then dd to partition
+echo "Creating boot image with kernel, DTB, and extlinux.conf..."
+IMG=$(mktemp /tmp/zcore-deploy.XXXXXX.img)
+dd if=/dev/zero of="$IMG" bs=1M count=32 2>/dev/null
+"$MKFS" -q -t ext4 -L zcore-boot "$IMG"
 
-# On macOS, ext4 mounting requires ext4fuse or similar
-# Fallback: use debugfs to write files, or write a raw image
-if command -v ext4fuse &>/dev/null; then
-    ext4fuse "${DISK}s1" "$MOUNT_DIR"
-    MOUNTED=1
-else
-    echo ""
-    echo "Cannot mount ext4 on macOS without ext4fuse."
-    echo "Alternative: create an ext4 image file and dd it."
-    echo ""
-    echo "Creating ext4 image with embedded files..."
+debugfs -w "$IMG" <<EOF
+mkdir extlinux
+write "$EXTLINUX" extlinux/extlinux.conf
+write "$KERNEL" zcore.bin
+write "$DTB" ums9230-reeder-s19mps.dtb
+EOF
 
-    IMG=$(mktemp /tmp/zcore-boot.XXXXXX.img)
-    # 32 MB image is plenty for kernel + DTB + extlinux.conf
-    dd if=/dev/zero of="$IMG" bs=1M count=32
-    "$MKFS" -t ext4 -L zcore-boot "$IMG"
-
-    # Use debugfs to copy files into the image
-    debugfs -w -R "mkdir extlinux" "$IMG"
-    debugfs -w -R "write $EXTLINUX extlinux/extlinux.conf" "$IMG"
-    debugfs -w -R "write $KERNEL zcore.bin" "$IMG"
-    debugfs -w -R "write $DTB ums9230-reeder-s19mps.dtb" "$IMG"
-
-    echo "Writing image to ${DISK}s1..."
-    sudo dd if="$IMG" of="${DISK}s1" bs=4096
+# Verify DTB was written
+debugfs -R "stat ums9230-reeder-s19mps.dtb" "$IMG" >/dev/null 2>&1 || {
+    echo "Error: DTB not written to image" >&2
     rm "$IMG"
+    exit 1
+}
 
-    MOUNTED=0
-fi
-
-if [ "$MOUNTED" = 1 ]; then
-    mkdir -p "$MOUNT_DIR/extlinux"
-    cp "$EXTLINUX" "$MOUNT_DIR/extlinux/extlinux.conf"
-    cp "$KERNEL" "$MOUNT_DIR/zcore.bin"
-    cp "$DTB" "$MOUNT_DIR/ums9230-reeder-s19mps.dtb"
-    umount "$MOUNT_DIR"
-fi
-
-rmdir "$MOUNT_DIR" 2>/dev/null || true
+echo "Writing image to ${DISK}s1..."
+sudo dd if="$IMG" of="${DISK}s1" bs=4096 2>&1
+rm "$IMG"
 
 echo ""
 echo "Done. Eject the SD card:"

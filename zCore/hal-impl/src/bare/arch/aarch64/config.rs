@@ -28,9 +28,12 @@ mod board_config {
 #[cfg(feature = "board-jollac2")]
 mod board_config {
     /// Jolla C2 / UMS9230: RAM starts at 0x80000000, 6 GiB total.
-    /// Kernel loaded at 0x80080000. Framebuffer at 0x9e000000 (within RAM).
+    /// Kernel loaded at 0x80080000.
+    /// Cap below first reserved-memory region (WCNSS SIPC at 0x87240000).
+    /// DTB reserved-memory parsing is not yet implemented, so we use a
+    /// conservative static limit to avoid allocating over firmware regions.
     pub const PHYS_MEMORY_BASE: usize = 0x8000_0000;
-    pub const PHYS_MEMORY_END: usize = 0x9E00_0000; // below framebuffer initially
+    pub const PHYS_MEMORY_END: usize = 0x8700_0000;
     /// No VirtIO on Jolla C2
     pub const VIRTIO_BASE: usize = 0;
     pub const VIRTIO_SIZE: usize = 0;

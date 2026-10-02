@@ -53,6 +53,7 @@ SECTIONS
     }
 
     ekernel = .;
+    _kernel_image_size = ekernel - skernel;
 
     /DISCARD/ : {
         *(.eh_frame) *(.eh_frame_hdr)

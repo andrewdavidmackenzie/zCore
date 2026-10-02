@@ -53,9 +53,10 @@ const TIMER_IRQ: u32 = 27;
 #[cfg(feature = "board-jollac2")]
 pub fn init_early() {
     // Jolla C2 minimal boot: no UART driver, no GIC driver.
-    // The watchdog was already disabled in boot assembly.
+    // The SPRD watchdog is still running (TrustZone-protected; cannot be
+    // disabled from EL1). Expect a hardware reset ~12 s after boot.
     // The framebuffer is pre-initialized by the stock bootloader.
-    log::info!("Jolla C2: minimal init (no UART/GIC drivers)");
+    log::info!("Jolla C2: minimal init (no UART/GIC drivers, WDT still running)");
 }
 
 #[cfg(not(feature = "board-jollac2"))]

@@ -29,7 +29,18 @@ pub fn set_next_trigger() {
 }
 
 pub fn init() {
-    #[cfg(any(feature = "board-raspi400", feature = "board-jollac2"))]
+    #[cfg(feature = "board-jollac2")]
+    {
+        // No GICv3 driver: keep the timer running but masked to avoid an IRQ storm.
+        CNTV_CTL_EL0.write(CNTV_CTL_EL0::ENABLE::SET + CNTV_CTL_EL0::IMASK::SET);
+        set_next_trigger();
+        info!(
+            "timer: virtual timer enabled (masked), CNTFRQ={}",
+            CNTFRQ_EL0.get()
+        );
+    }
+
+    #[cfg(feature = "board-raspi400")]
     {
         CNTV_CTL_EL0.write(CNTV_CTL_EL0::ENABLE::SET);
         set_next_trigger();

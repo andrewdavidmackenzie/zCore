@@ -164,15 +164,16 @@ jollac2-build:
 	ZCORE_CMDLINE="LOG=$(LOG)" cargo bin -m jolla-c2
 
 # Build zCore and write it to an SD card for the Jolla C2.
-# Usage: make jollac2-sd DISK=/dev/disk6
+# Usage: make jollac2-sd DISK=/dev/diskN
 #   DISK= is the raw disk device of the SD card (NOT a partition).
-#   The boot partition (partition 1) will be overwritten with a fresh
-#   ext4 image containing the kernel, DTB, and extlinux.conf.
+#   DISK is required — no default to avoid overwriting the wrong device.
 #   Requires: mkfs.ext4, debugfs (brew install e2fsprogs).
-DISK ?= /dev/disk6
 jollac2-sd: jollac2-build
+ifndef DISK
+	$(error DISK is required. Usage: make jollac2-sd DISK=/dev/diskN)
+endif
 	@echo "==> Preparing SD card boot image for Jolla C2..."
-	@tools/jolla-c2/make-sdcard-image.sh $(DISK)
+	@tools/jolla-c2/make-sdcard-image.sh "$(DISK)"
 
 # ── UEFI boot logo and firmware ─────────────────────────────────────────
 
