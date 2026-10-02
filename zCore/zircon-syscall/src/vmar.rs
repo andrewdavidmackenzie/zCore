@@ -210,6 +210,13 @@ impl Syscall<'_> {
         mapping_flags.set(MMUFlags::READ, options.contains(VmOptions::PERM_READ));
         mapping_flags.set(MMUFlags::WRITE, options.contains(VmOptions::PERM_WRITE));
         mapping_flags.set(MMUFlags::EXECUTE, options.contains(VmOptions::PERM_EXECUTE));
+        // Hardware page tables don't support write-only or execute-only
+        // pages (x86_64, aarch64, riscv64 all require READ for WRITE/EXECUTE).
+        if (mapping_flags.contains(MMUFlags::WRITE) || mapping_flags.contains(MMUFlags::EXECUTE))
+            && !mapping_flags.contains(MMUFlags::READ)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
         info!("mmuflags: {:?}", mapping_flags);
         let len = roundup_pages(len as usize);
         if len == 0 {

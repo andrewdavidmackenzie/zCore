@@ -24,6 +24,10 @@ impl Syscall<'_> {
         let resizable = options != 0;
         let proc = self.thread.proc();
         let vmo = VmObject::new_paged_with_resizable(resizable, pages(size as usize));
+        // Fuchsia's vmo_create sets content_size (stream size) to the
+        // initial VMO size. This is important for streams — a stream
+        // created on a new VMO should see content_size == vmo.size().
+        vmo.set_content_size(vmo.len())?;
         // Grant EXECUTE right when the job's AMBIENT_MARK_VMO_EXEC policy
         // allows it. The prebuilt Fuchsia libc's mmap(MAP_JIT) calls
         // vmo_replace_as_executable before vmar_map, but the mapping's
@@ -167,6 +171,10 @@ impl Syscall<'_> {
             }
             vmo.create_child(resizable, offset, child_size)
         }?;
+        // Mark as immutable if SNAPSHOT + NO_WRITE.
+        if no_write && options.contains(VmoCloneFlags::SNAPSHOT) {
+            child_vmo.set_immutable();
+        }
         // generate rights
         let mut child_rights = parent_rights;
         child_rights.insert(Rights::GET_PROPERTY | Rights::SET_PROPERTY);
@@ -257,7 +265,18 @@ impl Syscall<'_> {
             size,
             vmo.len(),
         );
-        vmo.set_len(size)
+        vmo.set_len(size)?;
+        // Fuchsia's SetSize updates content_size:
+        // - Growing: content_size = new_size (pages beyond old size are zero)
+        // - Shrinking: content_size = min(content_size, new_size)
+        let content_size = vmo.content_size();
+        if size > content_size {
+            vmo.set_content_size(size)?;
+        } else if vmo.len() < content_size {
+            // VMO shrank below content_size — clamp it.
+            vmo.set_content_size(vmo.len())?;
+        }
+        Ok(())
     }
 
     /// Get the stream content size of a VMO.

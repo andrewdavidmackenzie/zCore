@@ -45,6 +45,9 @@ impl Syscall<'_> {
         let object = self.get_object_with_pseudo(handle_value, Rights::GET_PROPERTY)?;
         match property {
             Property::Name => {
+                if !object.supports_name() {
+                    return Err(ZxError::WRONG_TYPE);
+                }
                 if buffer_size < MAX_NAME_LEN {
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
@@ -172,6 +175,9 @@ impl Syscall<'_> {
         let object = self.get_object_with_pseudo(handle_value, Rights::SET_PROPERTY)?;
         match property {
             Property::Name => {
+                if !object.supports_name() {
+                    return Err(ZxError::WRONG_TYPE);
+                }
                 let length = buffer_size.min(MAX_NAME_LEN);
                 let raw = UserInPtr::<u8>::from(buffer).read_array(length)?;
                 // Truncate at first null byte — Fuchsia names are

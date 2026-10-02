@@ -138,13 +138,18 @@ impl Socket {
         if rest_size == 0 {
             return Err(ZxError::SHOULD_WAIT);
         }
-        let write_size = data.len().min(rest_size);
         let actual_count = if self.flags.contains(SocketFlags::DATAGRAM) {
             if data.len() > SOCKET_SIZE {
                 return Err(ZxError::OUT_OF_RANGE);
             }
-            self.write_datagram(&data[..write_size])?
+            // Datagrams are all-or-nothing: if the full datagram doesn't
+            // fit in the remaining capacity, return SHOULD_WAIT.
+            if data.len() > rest_size {
+                return Err(ZxError::SHOULD_WAIT);
+            }
+            self.write_datagram(data)?
         } else {
+            let write_size = data.len().min(rest_size);
             self.write_stream(&data[..write_size])?
         };
         if actual_count > 0 {
@@ -190,9 +195,15 @@ impl Socket {
     pub fn read(&self, peek: bool, data: &mut [u8]) -> ZxResult<usize> {
         let curr_size = self.inner.lock().data.len();
         if curr_size == 0 {
-            let _peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
+            let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
             let inner = self.inner.lock();
             if inner.read_disabled {
+                return Err(ZxError::BAD_STATE);
+            }
+            // If the peer has disabled writes (via set_disposition),
+            // no more data will arrive — return BAD_STATE instead of
+            // SHOULD_WAIT so the caller doesn't wait indefinitely.
+            if peer.base.signal().contains(Signal::SOCKET_WRITE_DISABLED) {
                 return Err(ZxError::BAD_STATE);
             }
             return Err(ZxError::SHOULD_WAIT);
@@ -386,9 +397,25 @@ impl Socket {
             return Err(ZxError::INVALID_ARGS);
         }
 
+        let peer = self.peer.upgrade();
+
+        // When trying to re-enable peer writes, check if local has
+        // buffered data first — this takes priority over PEER_CLOSED.
+        // Validate disposition_peer BEFORE applying any changes,
+        // so local signals aren't modified if the peer check would fail.
+        if disposition_peer == WRITE_ENABLED {
+            if !self.inner.lock().data.is_empty() {
+                return Err(ZxError::BAD_STATE);
+            }
+            if let Some(ref peer) = peer {
+                if peer.inner.lock().write_shutdown {
+                    return Err(ZxError::BAD_STATE);
+                }
+            }
+        }
+
         // disposition_peer requires the peer to be alive.
         // Local disposition changes work even when peer is closed.
-        let peer = self.peer.upgrade();
         if disposition_peer != 0 && peer.is_none() {
             return Err(ZxError::PEER_CLOSED);
         }
@@ -405,16 +432,21 @@ impl Socket {
                 }
             }
             WRITE_ENABLED => {
-                // Can only re-enable writes disabled via set_disposition,
-                // not via shutdown.
+                // Can only re-enable writes if:
+                // 1. Not shut down permanently via shutdown()
+                // 2. The peer has no buffered data from us (data we wrote
+                //    before the disable must be consumed before re-enabling)
                 if self.inner.lock().write_shutdown {
                     return Err(ZxError::BAD_STATE);
                 }
-                self.base
-                    .signal_change(Signal::SOCKET_WRITE_DISABLED, Signal::WRITABLE);
                 if let Some(ref peer) = peer {
+                    if !peer.inner.lock().data.is_empty() {
+                        return Err(ZxError::BAD_STATE);
+                    }
                     peer.base.signal_clear(Signal::SOCKET_PEER_WRITE_DISABLED);
                 }
+                self.base
+                    .signal_change(Signal::SOCKET_WRITE_DISABLED, Signal::WRITABLE);
             }
             0 => {}
             _ => return Err(ZxError::INVALID_ARGS),
@@ -432,6 +464,11 @@ impl Socket {
                 }
                 WRITE_ENABLED => {
                     if peer.inner.lock().write_shutdown {
+                        return Err(ZxError::BAD_STATE);
+                    }
+                    // Can't re-enable peer writes if local has buffered
+                    // data (written by peer before disable).
+                    if !self.inner.lock().data.is_empty() {
                         return Err(ZxError::BAD_STATE);
                     }
                     peer.base
