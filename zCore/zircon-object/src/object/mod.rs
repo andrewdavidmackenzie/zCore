@@ -292,12 +292,14 @@ impl KObjectBase {
         }
         // Fire callbacks in reverse (LIFO) order, matching Fuchsia's
         // kernel behavior where the most recently registered observer
-        // is notified first.
+        // is notified first. Use order-preserving `remove` so that
+        // surviving callbacks retain their relative order for future
+        // signal changes.
         let mut i = inner.signal_callbacks.len();
         while i > 0 {
             i -= 1;
             if inner.signal_callbacks[i](new_signal) {
-                drop(inner.signal_callbacks.swap_remove(i));
+                drop(inner.signal_callbacks.remove(i));
             }
         }
     }

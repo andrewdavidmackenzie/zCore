@@ -133,10 +133,13 @@ impl Port {
         if inner.queue.len() < before {
             found = true;
         }
-        if inner.queue.is_empty() {
-            drop(inner);
+        // Clear READABLE while still holding the inner lock to prevent
+        // a race with concurrent push_with_source.
+        let has_interrupt = self.can_bind_to_interrupt() && !inner.interrupt_queue.is_empty();
+        if inner.queue.is_empty() && !has_interrupt {
             self.base.signal_clear(Signal::READABLE);
         }
+        drop(inner);
         if found {
             Ok(())
         } else {
@@ -170,10 +173,12 @@ impl Port {
         if inner.queue.len() < before {
             found = true;
         }
-        if inner.queue.is_empty() {
-            drop(inner);
+        // Clear READABLE while still holding the inner lock.
+        let has_interrupt = self.can_bind_to_interrupt() && !inner.interrupt_queue.is_empty();
+        if inner.queue.is_empty() && !has_interrupt {
             self.base.signal_clear(Signal::READABLE);
         }
+        drop(inner);
         if found {
             Ok(())
         } else {
