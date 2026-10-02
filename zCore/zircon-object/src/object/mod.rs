@@ -128,6 +128,13 @@ pub trait KernelObject: DowncastSync + Debug {
     fn name(&self) -> alloc::string::String;
     /// Set object's name.
     fn set_name(&self, name: &str);
+    /// Whether this object supports the ZX_PROP_NAME property.
+    ///
+    /// Most kernel objects support names, but some (e.g. Stream) do not.
+    /// Returns true by default; override to false for unsupported types.
+    fn supports_name(&self) -> bool {
+        true
+    }
     /// Get the signal status.
     fn signal(&self) -> Signal;
     /// Assert `signal`.

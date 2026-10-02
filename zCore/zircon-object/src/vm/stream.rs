@@ -21,7 +21,11 @@ struct StreamInner {
     seek: usize,
 }
 
-impl_kobject!(Stream);
+impl_kobject!(Stream
+    fn supports_name(&self) -> bool {
+        false
+    }
+);
 
 numeric_enum! {
     #[repr(usize)]

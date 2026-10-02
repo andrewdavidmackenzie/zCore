@@ -138,13 +138,18 @@ impl Socket {
         if rest_size == 0 {
             return Err(ZxError::SHOULD_WAIT);
         }
-        let write_size = data.len().min(rest_size);
         let actual_count = if self.flags.contains(SocketFlags::DATAGRAM) {
             if data.len() > SOCKET_SIZE {
                 return Err(ZxError::OUT_OF_RANGE);
             }
-            self.write_datagram(&data[..write_size])?
+            // Datagrams are all-or-nothing: if the full datagram doesn't
+            // fit in the remaining capacity, return SHOULD_WAIT.
+            if data.len() > rest_size {
+                return Err(ZxError::SHOULD_WAIT);
+            }
+            self.write_datagram(data)?
         } else {
+            let write_size = data.len().min(rest_size);
             self.write_stream(&data[..write_size])?
         };
         if actual_count > 0 {
