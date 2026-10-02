@@ -150,10 +150,7 @@ unsafe fn guarded_user_copy(dst: *mut u8, src: *const u8, len: usize) -> Result<
     smap_deny();
     let fault_addr = user_copy_leave();
     if fault_addr != 0 {
-        // Page fault during user copy — the address wasn't mapped
-        // or lacked the required permissions. Fuchsia returns
-        // ZX_ERR_NOT_FOUND for this case.
-        Err(Error::InvalidVectorAddress)
+        Err(Error::InvalidPointer)
     } else {
         Ok(())
     }
