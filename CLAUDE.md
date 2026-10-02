@@ -92,9 +92,9 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 - Handle-leak policy exception delivered via handle_exception_user
 - vDSO system_get_version_string returns "zcore-0.1.0" via StringView
 - Current blocker: ChannelInternalTest.TransferChannelWithPendingCall
-  hangs due to executor scheduling bug — waker notification is set
-  but executor goes idle without finding it. See issue #21 comment
-  for detailed investigation notes.
+  hangs — observed symptom is waker notification set but executor
+  goes idle without finding it. Root cause under investigation.
+  See issue #21 comment for detailed investigation notes.
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in
