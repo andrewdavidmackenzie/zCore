@@ -362,9 +362,40 @@ impl VmObject {
     }
 
     /// Get the size of the content stored in the VMO in bytes.
+    /// Set content_size without zeroing.
+    ///
+    /// Used internally by stream write to extend the high-water mark.
+    /// The caller is responsible for ensuring data beyond the new
+    /// content_size is properly initialized.
     pub fn set_content_size(&self, size: usize) -> ZxResult {
         let mut inner = self.inner.lock();
         inner.content_size = size;
+        Ok(())
+    }
+
+    /// Set content_size and zero data beyond it.
+    ///
+    /// Used by `ZX_PROP_VMO_CONTENT_SIZE` set_property to maintain the
+    /// invariant that data beyond content_size reads as zero. Zeros from
+    /// the new content_size to the old content_size (or page boundary).
+    pub fn set_content_size_with_zero(&self, size: usize) -> ZxResult {
+        let mut inner = self.inner.lock();
+        let old = inner.content_size;
+        inner.content_size = size;
+        drop(inner);
+        let vmo_len = self.len();
+        // Zero from the new content_size to the page-rounded old content_size
+        // (or vmo boundary). This covers both shrinking and the case where
+        // raw vmo.write() placed data beyond the old content_size.
+        let zero_start = size.min(vmo_len);
+        let old_page_end = ((old + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)).min(vmo_len);
+        // Always zero at least to the page boundary of the new content_size
+        // to handle the "raw write then set_property" pattern.
+        let new_page_end = ((size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)).min(vmo_len);
+        let zero_end = old_page_end.max(new_page_end);
+        if zero_end > zero_start {
+            self.zero(zero_start, zero_end - zero_start)?;
+        }
         Ok(())
     }
 

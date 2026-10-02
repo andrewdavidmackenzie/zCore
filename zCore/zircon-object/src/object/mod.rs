@@ -290,7 +290,18 @@ impl KObjectBase {
         if new_signal == old_signal {
             return;
         }
-        inner.signal_callbacks.retain(|f| !f(new_signal));
+        // Fire callbacks in reverse (LIFO) order, matching Fuchsia's
+        // kernel behavior where the most recently registered observer
+        // is notified first. Use order-preserving `remove` so that
+        // surviving callbacks retain their relative order for future
+        // signal changes.
+        let mut i = inner.signal_callbacks.len();
+        while i > 0 {
+            i -= 1;
+            if inner.signal_callbacks[i](new_signal) {
+                drop(inner.signal_callbacks.remove(i));
+            }
+        }
     }
 
     /// Assert `signal`.
@@ -376,9 +387,16 @@ impl dyn KernelObject {
     /// Used to implement `sys_object_wait_async`. Level-triggered (one-shot):
     /// fires immediately if signal already asserted, otherwise registers a
     /// callback that fires on the next matching signal change.
+    /// If `timestamp` is true, the packet includes the current monotonic time.
     #[allow(unsafe_code)]
-    pub fn send_signal_to_port_async(self: &Arc<Self>, signal: Signal, port: &Arc<Port>, key: u64) {
-        self.send_signal_to_port_async_inner(signal, port, key, false);
+    pub fn send_signal_to_port_async(
+        self: &Arc<Self>,
+        signal: Signal,
+        port: &Arc<Port>,
+        key: u64,
+        timestamp: bool,
+    ) {
+        self.send_signal_to_port_async_inner(signal, port, key, false, timestamp);
     }
 
     /// Edge-triggered variant: only fires when signal transitions from
@@ -389,8 +407,9 @@ impl dyn KernelObject {
         signal: Signal,
         port: &Arc<Port>,
         key: u64,
+        timestamp: bool,
     ) {
-        self.send_signal_to_port_async_inner(signal, port, key, true);
+        self.send_signal_to_port_async_inner(signal, port, key, true, timestamp);
     }
 
     #[allow(unsafe_code)]
@@ -400,6 +419,7 @@ impl dyn KernelObject {
         port: &Arc<Port>,
         key: u64,
         edge_triggered: bool,
+        timestamp: bool,
     ) {
         // Register cancellation tracking BEFORE the immediate check,
         // so cancel_async can find it even for level-triggered waits
@@ -410,17 +430,25 @@ impl dyn KernelObject {
         if !edge_triggered {
             let current_signal = self.signal();
             if !(current_signal & signal).is_empty() {
-                port.push(PortPacketRepr {
-                    key,
-                    status: ZxError::OK,
-                    data: PayloadRepr::Signal(PacketSignal {
-                        trigger: signal,
-                        observed: current_signal,
-                        count: 1,
-                        timestamp: 0,
-                        _reserved1: 0,
-                    }),
-                });
+                let ts = if timestamp {
+                    hal_impl::timer::timer_now().as_nanos() as u64
+                } else {
+                    0
+                };
+                port.push_with_source(
+                    PortPacketRepr {
+                        key,
+                        status: ZxError::OK,
+                        data: PayloadRepr::Signal(PacketSignal {
+                            trigger: signal,
+                            observed: current_signal,
+                            count: 1,
+                            timestamp: ts,
+                            _reserved1: 0,
+                        }),
+                    },
+                    self.id(),
+                );
                 // Remove the subscription since we already fired.
                 port.cancel_async(self.id(), key).ok();
                 return;
@@ -440,17 +468,25 @@ impl dyn KernelObject {
                 if (s & signal).is_empty() {
                     return false;
                 }
-                port.push(PortPacketRepr {
-                    key,
-                    status: ZxError::OK,
-                    data: PayloadRepr::Signal(PacketSignal {
-                        trigger: signal,
-                        observed: s,
-                        count: 1,
-                        timestamp: 0,
-                        _reserved1: 0,
-                    }),
-                });
+                let ts = if timestamp {
+                    hal_impl::timer::timer_now().as_nanos() as u64
+                } else {
+                    0
+                };
+                port.push_with_source(
+                    PortPacketRepr {
+                        key,
+                        status: ZxError::OK,
+                        data: PayloadRepr::Signal(PacketSignal {
+                            trigger: signal,
+                            observed: s,
+                            count: 1,
+                            timestamp: ts,
+                            _reserved1: 0,
+                        }),
+                    },
+                    source_koid,
+                );
                 // Clean up subscription after one-shot delivery.
                 port.cancel_async(source_koid, key).ok();
                 true

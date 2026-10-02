@@ -126,14 +126,22 @@ impl WakerPage {
 
     /// Return a bit vector representing the futures in this page which are ready to be
     /// polled again.
+    ///
+    /// Atomically takes all notified bits, then masks out futures that are currently
+    /// borrowed (being polled) or dropped (completed). Any notifications that arrive
+    /// while a future is borrowed would be lost by the `swap(0)`, so we restore
+    /// those masked-out bits back into `notified` to ensure they are seen on the
+    /// next call.
     pub fn take_notified(&self) -> u64 {
-        // Unset all ready bits, since spurious notifications for completed futures would lead
-        // us to poll them after completion.
-        let mut notified = self.notified.swap(0);
-        // notified &= !self.completed.load();
-        notified &= !self.dropped.load();
-        notified &= !self.borrowed.load();
-        notified
+        let raw = self.notified.swap(0);
+        let mask = !self.dropped.load() & !self.borrowed.load();
+        let actionable = raw & mask;
+        // Restore notifications we couldn't act on so they aren't lost.
+        let deferred = raw & !mask;
+        if deferred != 0 {
+            self.notified.fetch_or(deferred);
+        }
+        actionable
     }
 
     pub fn take_dropped(&self) -> u64 {

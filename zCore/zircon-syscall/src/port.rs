@@ -67,8 +67,8 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let port = proc.get_object_with_rights::<Port>(port_handle, Rights::WRITE)?;
-        let source = proc.get_dyn_object_with_rights(source_handle, Rights::empty())?;
-        port.cancel_async(source.id(), key)
+        let source = proc.get_dyn_object_with_rights(source_handle, Rights::WAIT)?;
+        port.cancel_async_and_drain(source.id(), key)
     }
 
     /// Cancel all pending async waits on a port matching the given key.

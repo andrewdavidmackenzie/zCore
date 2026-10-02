@@ -47,6 +47,32 @@ impl Stream {
         })
     }
 
+    /// Get the VMO's current size in bytes.
+    pub fn vmo_len(&self) -> usize {
+        self.vmo.len()
+    }
+
+    /// Check if this stream is effectively in append mode.
+    ///
+    /// True if either the per-call `append` flag is set or the stream
+    /// was created with `MODE_APPEND`.
+    pub fn is_append(&self, per_call_append: bool) -> bool {
+        per_call_append || (self.inner.lock().options & MODE_APPEND) != 0
+    }
+
+    /// Get the offset where the next write would occur.
+    ///
+    /// If `append` is true (or stream has MODE_APPEND), returns content_size.
+    /// Otherwise returns the current seek offset.
+    pub fn write_offset(&self, append: bool) -> usize {
+        let inner = self.inner.lock();
+        if append || (inner.options & MODE_APPEND) != 0 {
+            self.vmo.content_size()
+        } else {
+            inner.seek
+        }
+    }
+
     /// Read data from the stream at the current seek offset
     pub fn read(&self, data: &mut [u8]) -> ZxResult<usize> {
         let mut inner = self.inner.lock();
@@ -73,6 +99,10 @@ impl Stream {
     /// The stream also appends when `MODE_APPEND` is set in the options
     /// (via `ZX_PROP_STREAM_MODE_APPEND`).
     pub fn write(&self, data: &[u8], append: bool) -> ZxResult<usize> {
+        // Zero-length writes are no-ops — don't update seek position.
+        if data.is_empty() {
+            return Ok(0);
+        }
         let mut inner = self.inner.lock();
         let do_append = append || (inner.options & MODE_APPEND) != 0;
         if do_append {

@@ -8,7 +8,7 @@ use naive_timer::Timer;
 
 /// Timer tick rate. 100 Hz matches the default Linux HZ on most configs.
 /// Higher values give better interactive responsiveness at the cost of
-/// more timer interrupt overhead.
+/// more timer interrupt overhead (especially severe in QEMU).
 pub(super) const TICKS_PER_SEC: u64 = 100;
 
 static NAIVE_TIMER: spin::Lazy<Mutex<Timer>> = spin::Lazy::new(|| Mutex::new(Timer::default()));
