@@ -363,9 +363,16 @@ impl Syscall<'_> {
                 let _ = self.get_object_with_pseudo(handle, Rights::empty())?;
             }
             Topic::Process => {
+                // ZX_INFO_PROCESS = __ZX_INFO_TOPIC(3u, 1u) — only V1 (24-byte)
+                // layout exists in Fuchsia. No V0 16-byte variant.
+                let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<ProcessInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
                 let mut info_ptr = UserOutPtr::<ProcessInfo>::from_addr_size(buffer, buffer_size)?;
-                let proc = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
-                info_ptr.write(proc.get_info())?;
+                info_ptr.write(target.get_info())?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }
@@ -397,8 +404,13 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::Thread => {
-                let mut info_ptr = UserOutPtr::<ThreadInfo>::from_addr_size(buffer, buffer_size)?;
                 let thread = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<ThreadInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr = UserOutPtr::<ThreadInfo>::from_addr_size(buffer, buffer_size)?;
                 info_ptr.write(thread.get_thread_info())?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
@@ -424,16 +436,47 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::Job => {
-                let mut info_ptr = UserOutPtr::<JobInfo>::from_addr_size(buffer, buffer_size)?;
                 let job = proc.get_object_with_rights::<Job>(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<JobInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr = UserOutPtr::<JobInfo>::from_addr_size(buffer, buffer_size)?;
                 info_ptr.write(job.get_info())?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }
+            Topic::HandleTable => {
+                let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
+                let raw_entries = target.get_handle_table_entries();
+                let entries: Vec<HandleExtendedInfo> = raw_entries
+                    .iter()
+                    .map(
+                        |&(obj_type, hv, rights, koid, related)| HandleExtendedInfo {
+                            obj_type,
+                            handle_value: hv,
+                            rights,
+                            reserved: 0,
+                            koid,
+                            related_koid: related,
+                            peer_owner_koid: 0,
+                        },
+                    )
+                    .collect();
+                let entry_size = core::mem::size_of::<HandleExtendedInfo>();
+                let count = (buffer_size / entry_size).min(entries.len());
+                if count > 0 {
+                    UserOutPtr::<HandleExtendedInfo>::from(buffer)
+                        .write_array(&entries[..count])?;
+                }
+                actual.write_if_not_null(count)?;
+                avail.write_if_not_null(entries.len())?;
+            }
             Topic::ProcessVmos => {
                 warn!("A dummy implementation for utest Bti.NoDelayedUnpin, it does not check the reture value");
-                actual.write(0)?;
-                avail.write(0)?;
+                actual.write_if_not_null(0)?;
+                avail.write_if_not_null(0)?;
             }
             Topic::Vmo => {
                 let mut info_ptr = UserOutPtr::<VmoInfo>::from_addr_size(buffer, buffer_size)?;
@@ -456,7 +499,7 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::ThreadStats => {
-                let _thread = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)?;
+                let thread = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)?;
                 if buffer_size < core::mem::size_of::<ThreadStatsInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -464,8 +507,18 @@ impl Syscall<'_> {
                 }
                 let mut info_ptr =
                     UserOutPtr::<ThreadStatsInfo>::from_addr_size(buffer, buffer_size)?;
-                // Stub: return zeroed stats (no CPU accounting yet).
-                info_ptr.write(ThreadStatsInfo::default())?;
+                // Report ZX_INFO_INVALID_CPU (0xFFFFFFFF) for threads that
+                // have never been scheduled.
+                let last_cpu = if thread.state() == ThreadState::New {
+                    0xFFFF_FFFFu32
+                } else {
+                    0 // stub: report CPU 0 until real tracking is added
+                };
+                info_ptr.write(ThreadStatsInfo {
+                    total_runtime: 0,
+                    last_scheduled_cpu: last_cpu,
+                    padding1: [0; 4],
+                })?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }
@@ -752,6 +805,7 @@ numeric_enum! {
         Job = 24,
         Timer = 25,
         Stream = 26,
+        HandleTable = 27,
         TaskRuntime = 30,
         ClockMappedSize = 40,
     }
@@ -786,6 +840,19 @@ pub struct UserWaitItem {
     handle: HandleValue,
     wait_for: Signal,
     observed: Signal,
+}
+
+/// `zx_info_handle_extended_t` — per-handle information for ZX_INFO_HANDLE_TABLE.
+#[repr(C)]
+#[derive(Default, Clone, Copy)]
+pub struct HandleExtendedInfo {
+    pub obj_type: u32,
+    pub handle_value: u32,
+    pub rights: u32,
+    pub reserved: u32,
+    pub koid: u64,
+    pub related_koid: u64,
+    pub peer_owner_koid: u64,
 }
 
 /// `zx_info_thread_stats_t` — per-thread runtime statistics.

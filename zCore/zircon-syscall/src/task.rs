@@ -99,16 +99,13 @@ impl Syscall<'_> {
         info!("process.start: proc_handle={:?}, thread_handle={:?}, entry={:?}, stack={:?}, arg1_handle={:?}, arg2={:?}",
             proc_handle, thread_handle, entry, stack, arg1_handle, arg2
         );
-        // Reject non-userspace entry points and stack pointers.
-        if !is_user_address(entry) || !is_user_address(stack) {
-            return Err(ZxError::INVALID_ARGS);
-        }
         let proc = self.thread.proc();
         let process = proc.get_object_with_rights::<Process>(proc_handle, Rights::WRITE)?;
         let thread = proc.get_object_with_rights::<Thread>(thread_handle, Rights::WRITE)?;
         if !Arc::ptr_eq(thread.proc(), &process) {
             return Err(ZxError::ACCESS_DENIED);
         }
+        // Consume arg1_handle (Fuchsia closes it on both success and failure).
         let arg1 = if arg1_handle != INVALID_HANDLE {
             let arg1 = proc.remove_handle(arg1_handle)?;
             if !arg1.rights.contains(Rights::TRANSFER) {
@@ -118,6 +115,11 @@ impl Syscall<'_> {
         } else {
             None
         };
+        // Reject non-userspace entry points and stack pointers.
+        // Validation is after handle consumption so arg1 is properly closed.
+        if !is_user_address(entry) || !is_user_address(stack) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         process.start(&thread, entry, stack, arg1, arg2, self.thread_fn)?;
         Ok(())
     }

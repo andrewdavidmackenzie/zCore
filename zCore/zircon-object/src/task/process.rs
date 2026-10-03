@@ -542,6 +542,23 @@ impl Process {
         Ok(handle.get_info())
     }
 
+    /// Get handle table entries for ZX_INFO_HANDLE_TABLE.
+    /// Returns (obj_type, handle_value, rights, koid, related_koid) for each handle.
+    pub fn get_handle_table_entries(&self) -> Vec<(u32, HandleValue, u32, KoID, KoID)> {
+        let inner = self.inner.lock();
+        inner
+            .handles
+            .iter()
+            .map(|(&hv, (handle, _))| {
+                let obj = &handle.object;
+                let type_num = obj_type_num(obj.type_name());
+                let koid = obj.id();
+                let related = obj.related_koid();
+                (type_num, hv, handle.rights.bits(), koid, related)
+            })
+            .collect()
+    }
+
     /// Add a thread to the process.
     pub(super) fn add_thread(&self, thread: Arc<Thread>) -> ZxResult {
         let mut inner = self.inner.lock();
@@ -721,6 +738,32 @@ impl ProcessInner {
 
 // ProcessInfo is defined in zircon-abi and re-exported via task mod.rs.
 pub use zircon_abi::types::ProcessInfo;
+
+/// Map kernel object type name to Fuchsia `zx_obj_type_t` numeric value.
+fn obj_type_num(type_name: &str) -> u32 {
+    match type_name {
+        "Process" => 1,
+        "Thread" => 2,
+        "VmObject" => 3,
+        "Channel" => 4,
+        "Event" => 5,
+        "Port" => 6,
+        "Interrupt" => 9,
+        "Log" | "DebugLog" => 12,
+        "Socket" => 14,
+        "Resource" => 15,
+        "EventPair" => 16,
+        "Job" => 17,
+        "VmAddressRegion" => 18,
+        "Fifo" => 19,
+        "BusTransactionInitiator" => 24,
+        "Timer" => 22,
+        "Stream" => 31,
+        "Clock" => 30,
+        "ExceptionObject" => 29,
+        _ => 0, // ZX_OBJ_TYPE_NONE
+    }
+}
 
 #[cfg(test)]
 mod tests {
