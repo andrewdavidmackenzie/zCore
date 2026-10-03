@@ -39,7 +39,10 @@ pub trait Task: Sync + Send {
 }
 
 /// The return code set when a task is killed via zx_task_kill().
-pub const TASK_RETCODE_SYSCALL_KILL: i64 = -1028;
+pub const TASK_RETCODE_SYSCALL_KILL: i64 = -1024;
+
+/// The return code set when a critical process exits and its job is killed.
+pub const TASK_RETCODE_CRITICAL_PROCESS_KILL: i64 = -1029;
 
 /// Process flavour — determines syscall ABI and process model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

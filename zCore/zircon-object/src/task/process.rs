@@ -280,7 +280,7 @@ impl Process {
         // If we are critical to a job, we need to take action.
         if let Some((job, retcode_nonzero)) = &inner.critical_to_job {
             if !retcode_nonzero || retcode != 0 {
-                job.kill();
+                job.kill_with_code(super::TASK_RETCODE_CRITICAL_PROCESS_KILL);
             }
         }
     }

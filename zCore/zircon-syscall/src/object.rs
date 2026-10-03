@@ -79,6 +79,14 @@ impl Syscall<'_> {
                 info_ptr.write(break_on_load)?;
                 Ok(())
             }
+            Property::JobKillOnOom => {
+                let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
+                let value = proc
+                    .get_object_with_rights::<Job>(handle_value, Rights::GET_PROPERTY)?
+                    .get_kill_on_oom();
+                info_ptr.write(value as usize)?;
+                Ok(())
+            }
             Property::SocketRxThreshold => {
                 let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
                 let rx = proc
@@ -226,6 +234,16 @@ impl Syscall<'_> {
                     .set_dyn_break_on_load(addr);
                 Ok(())
             }
+            Property::JobKillOnOom => {
+                let value = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
+                // Only 0 (disable) and 1 (enable) are valid values.
+                if value > 1 {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                proc.get_object_with_rights::<Job>(handle_value, Rights::SET_PROPERTY)?
+                    .set_kill_on_oom(value != 0);
+                Ok(())
+            }
             Property::SocketRxThreshold => {
                 let threshold = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
                 proc.get_object::<Socket>(handle_value)?
@@ -327,7 +345,14 @@ impl Syscall<'_> {
         // Fuchsia info topics use low bits for the topic ID and upper bits
         // for flags (e.g. bit 28 = requires specific object state).  Strip
         // the flags before converting to the Topic enum.
-        let topic = Topic::try_from(topic & 0xFFFF).map_err(|_| ZxError::INVALID_ARGS)?;
+        let masked_topic = topic & 0xFFFF;
+        let topic = Topic::try_from(masked_topic).map_err(|_| {
+            warn!(
+                "object.get_info: unknown topic {:#x} (masked {:#x})",
+                topic, masked_topic
+            );
+            ZxError::INVALID_ARGS
+        })?;
         info!(
             "object.get_info: handle={:#x?}, topic={:?}, buffer=({:#x}; {:#x})",
             handle, topic, buffer, buffer_size,
@@ -423,8 +448,8 @@ impl Syscall<'_> {
                 };
                 let count = (buffer_size / core::mem::size_of::<KoID>()).min(ids.len());
                 UserOutPtr::<KoID>::from(buffer).write_array(&ids[..count])?;
-                actual.write(count)?;
-                avail.write(ids.len())?;
+                actual.write_if_not_null(count)?;
+                avail.write_if_not_null(ids.len())?;
             }
             Topic::Bti => {
                 let mut info_ptr = UserOutPtr::<BtiInfo>::from_addr_size(buffer, buffer_size)?;
@@ -446,6 +471,36 @@ impl Syscall<'_> {
                 let mut info_ptr = UserOutPtr::<StreamInfo>::from_addr_size(buffer, buffer_size)?;
                 let stream = proc.get_object_with_rights::<Stream>(handle, Rights::INSPECT)?;
                 info_ptr.write(stream.get_info())?;
+            }
+            Topic::TaskRuntime => {
+                // ZX_INFO_TASK_RUNTIME — applies to Job, Process, and Thread.
+                // Return a zeroed struct as a stub (no real CPU accounting yet).
+                // Verify the handle is a valid task (Job, Process, or Thread)
+                // with INSPECT rights.
+                if proc
+                    .get_object_with_rights::<Job>(handle, Rights::INSPECT)
+                    .is_err()
+                    && proc
+                        .get_object_with_rights::<Process>(handle, Rights::INSPECT)
+                        .is_err()
+                    && proc
+                        .get_object_with_rights::<Thread>(handle, Rights::INSPECT)
+                        .is_err()
+                {
+                    return Err(ZxError::WRONG_TYPE);
+                }
+                // Write as many bytes of the runtime info as the buffer can
+                // hold (supports V1 = 16 bytes and V2 = 32 bytes).
+                // All fields are zero (no real CPU accounting), so just write
+                // zeroed bytes. Max size is TaskRuntimeInfo = 32 bytes.
+                let info_size = core::mem::size_of::<TaskRuntimeInfo>();
+                let copy_len = buffer_size.min(info_size);
+                if copy_len > 0 {
+                    let zeroes = [0u8; 32]; // TaskRuntimeInfo is 32 bytes
+                    UserOutPtr::<u8>::from(buffer).write_array(&zeroes[..copy_len])?;
+                }
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::ClockMappedSize => {
                 // Returns the size needed to map a clock's state VMO.
@@ -633,6 +688,7 @@ numeric_enum! {
         Job = 24,
         Timer = 25,
         Stream = 26,
+        TaskRuntime = 30,
         ClockMappedSize = 40,
     }
 }
@@ -649,6 +705,7 @@ numeric_enum! {
         ProcessBreakOnLoad = 7,
         SocketRxThreshold = 12,
         SocketTxThreshold = 13,
+        JobKillOnOom = 15,
         ExceptionState = 16,
         VmoContentSize = 17,
         ExceptionStrategy = 18,
@@ -665,6 +722,16 @@ pub struct UserWaitItem {
     handle: HandleValue,
     wait_for: Signal,
     observed: Signal,
+}
+
+/// `zx_info_task_runtime_t` — CPU and scheduling time for a task.
+#[repr(C)]
+#[derive(Default)]
+struct TaskRuntimeInfo {
+    cpu_time: i64,
+    queue_time: i64,
+    page_fault_time: i64,
+    lock_contention_time: i64,
 }
 
 #[repr(C)]

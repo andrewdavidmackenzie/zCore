@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::convert::TryFrom;
 use hal_impl::context::UserContextField;
 use {super::*, zircon_object::task::*};
@@ -350,7 +351,7 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let job = proc.get_object_with_rights::<Job>(handle, Rights::SET_POLICY)?;
         match topic {
-            JOB_POL_BASE_V1 | JOB_POL_BASE_V2 => {
+            JOB_POL_BASE_V1 => {
                 let policy_option = match options {
                     JOB_POL_RELATIVE => SetPolicyOptions::Relative,
                     JOB_POL_ABSOLUTE => SetPolicyOptions::Absolute,
@@ -361,7 +362,14 @@ impl Syscall<'_> {
                     &UserInPtr::from(policy).read_array(count as usize)?,
                 )
             }
-            //JOB_POL_BASE_V2 => unimplemented!(),
+            JOB_POL_BASE_V2 => {
+                // V2 policies are 12 bytes (condition, action, flags).
+                // The flags field controls override behavior, so use
+                // the dedicated V2 handler.
+                let v2_policies: Vec<BasicPolicyV2> =
+                    UserInPtr::from(policy).read_array(count as usize)?;
+                job.set_policy_basic_v2(&v2_policies)
+            }
             JOB_POL_TIMER_SLACK => {
                 if options != JOB_POL_RELATIVE {
                     return Err(ZxError::INVALID_ARGS);
