@@ -15,13 +15,20 @@ impl Syscall<'_> {
             "debuglog.create: resource_handle={:#x?}, options={:#x?}",
             rsrc, options,
         );
+        const FLAG_READABLE: u32 = 0x4000_0000u32;
+        // Validate options — only FLAG_READABLE is allowed.
+        if options & !FLAG_READABLE != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         if rsrc != 0 {
             // Any valid resource handle is accepted (not just ROOT).
             proc.get_object::<Resource>(rsrc)?;
+        } else if options & FLAG_READABLE != 0 {
+            // ZX_HANDLE_INVALID is only allowed for write-only debuglogs.
+            return Err(ZxError::BAD_HANDLE);
         }
         let dlog = DebugLog::create(options);
-        const FLAG_READABLE: u32 = 0x4000_0000u32;
         let dlog_right = if options & FLAG_READABLE == 0 {
             Rights::DEFAULT_DEBUGLOG
         } else {

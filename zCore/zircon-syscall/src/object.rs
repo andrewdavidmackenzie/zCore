@@ -368,15 +368,26 @@ impl Syscall<'_> {
                 info_ptr.write(proc.get_info())?;
             }
             Topic::Vmar => {
-                let mut info_ptr = UserOutPtr::<VmarInfo>::from_addr_size(buffer, buffer_size)?;
                 let vmar =
                     proc.get_object_with_rights::<VmAddressRegion>(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<VmarInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr = UserOutPtr::<VmarInfo>::from_addr_size(buffer, buffer_size)?;
                 info_ptr.write(vmar.get_info())?;
             }
             Topic::HandleBasic => {
+                let info = proc.get_handle_info(handle)?;
+                if buffer_size < core::mem::size_of::<HandleBasicInfo>() {
+                    // Buffer too small — still write actual=0, avail=1 per Fuchsia ABI.
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
                 let mut info_ptr =
                     UserOutPtr::<HandleBasicInfo>::from_addr_size(buffer, buffer_size)?;
-                let info = proc.get_handle_info(handle)?;
                 info_ptr.write(info)?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
