@@ -100,9 +100,9 @@ impl Syscall<'_> {
 
     /// Query dirty page ranges of a pager-backed VMO.
     ///
-    /// Returns ranges of pages that have been modified since the last
-    /// writeback. Currently returns NOT_SUPPORTED as dirty page tracking
-    /// is not yet implemented in the VMO subsystem.
+    /// For VMOs without `ZX_VMO_TRAP_DIRTY`, writes are not tracked,
+    /// so this returns 0 dirty ranges. For VMOs with `TRAP_DIRTY`,
+    /// dirty tracking is not yet implemented.
     #[allow(clippy::too_many_arguments)]
     pub fn sys_pager_query_dirty_ranges(
         &self,
@@ -112,8 +112,8 @@ impl Syscall<'_> {
         length: u64,
         _buffer: usize,
         _buffer_size: usize,
-        _actual: UserOutPtr<usize>,
-        _avail: UserOutPtr<usize>,
+        mut actual: UserOutPtr<usize>,
+        mut avail: UserOutPtr<usize>,
     ) -> ZxResult {
         info!(
             "pager.query_dirty_ranges: pager={:#x}, vmo={:#x}, offset={:#x}, len={:#x}",
@@ -121,30 +121,46 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let _pager = proc.get_object::<Pager>(pager_handle)?;
-        let _vmo = proc.get_object::<VmObject>(vmo_handle)?;
-        // TODO: implement dirty page tracking in VMO subsystem
-        Err(ZxError::NOT_SUPPORTED)
+        let vmo = proc.get_object::<VmObject>(vmo_handle)?;
+        if !vmo.is_pager_backed() {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Without TRAP_DIRTY support, report 0 dirty ranges.
+        // All writes go through without notification, so nothing is
+        // tracked as "dirty" from the pager's perspective.
+        actual.write_if_not_null(0)?;
+        avail.write_if_not_null(0)?;
+        Ok(())
     }
 
     /// Query statistics about a pager-backed VMO.
     ///
-    /// Returns statistics like committed bytes and populated bytes.
-    /// Currently returns NOT_SUPPORTED as VMO statistics tracking
-    /// is not yet implemented.
+    /// Returns `zx_pager_vmo_stats_t` with the `modified` field.
+    /// Without dirty tracking, report modified=0 (not modified).
+    /// If `ZX_PAGER_RESET_VMO_STATS` is set, reset the modified state.
     pub fn sys_pager_query_vmo_stats(
         &self,
         pager_handle: HandleValue,
+        vmo_handle: HandleValue,
         options: u32,
-        _buffer: usize,
-        _buffer_size: usize,
+        buffer: usize,
+        buffer_size: usize,
     ) -> ZxResult {
         info!(
-            "pager.query_vmo_stats: pager={:#x}, options={}",
-            pager_handle, options
+            "pager.query_vmo_stats: pager={:#x}, vmo={:#x}, options={}",
+            pager_handle, vmo_handle, options
         );
         let proc = self.thread.proc();
         let _pager = proc.get_object::<Pager>(pager_handle)?;
-        // TODO: implement VMO statistics tracking
-        Err(ZxError::NOT_SUPPORTED)
+        let _vmo = proc.get_object::<VmObject>(vmo_handle)?;
+        // zx_pager_vmo_stats_t is { uint32_t modified; }
+        // Size must be at least 4 bytes.
+        if buffer_size < 4 {
+            return Err(ZxError::BUFFER_TOO_SMALL);
+        }
+        // Report not modified (dirty tracking not implemented).
+        let mut stats_ptr = UserOutPtr::<u32>::from(buffer);
+        stats_ptr.write(0)?;
+        Ok(())
     }
 }

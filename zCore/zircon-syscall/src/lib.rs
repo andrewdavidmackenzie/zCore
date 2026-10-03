@@ -647,7 +647,9 @@ impl Syscall<'_> {
                 a6.into(),
                 a7.into(),
             ),
-            Sys::PAGER_QUERY_VMO_STATS => self.sys_pager_query_vmo_stats(a0 as _, a1 as _, a2, a3),
+            Sys::PAGER_QUERY_VMO_STATS => {
+                self.sys_pager_query_vmo_stats(a0 as _, a1 as _, a2 as _, a3, a4)
+            }
             Sys::SYSTEM_GET_PERFORMANCE_INFO => {
                 self.sys_system_get_performance_info(a0 as _, a1 as _, a2 as _, a3, a4.into())
             }
