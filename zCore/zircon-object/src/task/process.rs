@@ -89,6 +89,8 @@ struct ProcessInner {
     // special info
     debug_addr: usize,
     dyn_break_on_load: usize,
+    /// Monotonic time at which process_start was called.
+    start_time: i64,
     critical_to_job: Option<(Arc<Job>, bool)>,
     /// Whether this process was created via create_shared (eligible
     /// as a source for further create_shared calls).
@@ -231,6 +233,7 @@ impl Process {
                 return Err(ZxError::BAD_STATE);
             }
             inner.status = Status::Running;
+            inner.start_time = hal_impl::timer::timer_now().as_nanos() as i64;
             handle_value = arg1.map_or(INVALID_HANDLE, |handle| inner.add_handle(handle));
         }
         thread.set_first_thread();
@@ -571,14 +574,17 @@ impl Process {
         if self.debug_exceptionate.has_channel() {
             info.flags |= ZX_INFO_PROCESS_FLAG_DEBUGGER_ATTACHED;
         }
-        match self.inner.lock().status {
+        let inner = self.inner.lock();
+        match inner.status {
             Status::Init => {}
             Status::Running => {
                 info.flags |= ZX_INFO_PROCESS_FLAG_STARTED;
+                info.start_time = inner.start_time;
             }
             Status::Exited(ret) => {
                 info.return_code = ret;
                 info.flags |= ZX_INFO_PROCESS_FLAG_STARTED | ZX_INFO_PROCESS_FLAG_EXITED;
+                info.start_time = inner.start_time;
             }
         }
         info
