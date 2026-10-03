@@ -34,7 +34,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PFTF_VERSION="v1.53"
 PFTF_BUILD_DIR="$PROJECT_DIR/target/pftf-build"
 OUTPUT_DIR="$PROJECT_DIR/target/pftf-firmware"
-LOGO_BMP="$PROJECT_DIR/assets/images/zirconia-boot-logo.bmp"
+LOGO_BMP="$PROJECT_DIR/prebuilt/images/zirconia-boot-logo.bmp"
 
 # Firmware vendor and version strings shown in UEFI setup menu
 FW_VENDOR="https://github.com/andrewdavidmackenzie/zCore"
