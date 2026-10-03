@@ -1,6 +1,8 @@
 pub mod config;
 pub mod cpu;
 pub mod drivers;
+#[cfg(feature = "board-jollac2")]
+pub(crate) mod fb_console;
 pub mod interrupt;
 pub mod mem;
 pub mod timer;
@@ -31,11 +33,7 @@ hal_fn_impl! {
         fn console_write_early(s: &str) {
             #[cfg(feature = "board-jollac2")]
             {
-                // Jolla C2: no UART driver yet. Write to framebuffer as
-                // visual indicator that early console is being called.
-                // For now this is a no-op — the boot assembly already
-                // paints a red bar to confirm boot.
-                let _ = s;
+                fb_console::write_str(s);
             }
 
             #[cfg(not(feature = "board-jollac2"))]

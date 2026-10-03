@@ -52,10 +52,12 @@ const TIMER_IRQ: u32 = 27;
 
 #[cfg(feature = "board-jollac2")]
 pub fn init_early() {
+    // Initialize framebuffer console first — it's our only output device.
+    super::fb_console::init();
+
     // Jolla C2 minimal boot: no UART driver, no GIC driver.
     // The SPRD watchdog is still running (TrustZone-protected; cannot be
     // disabled from EL1). Expect a hardware reset ~12 s after boot.
-    // The framebuffer is pre-initialized by the stock bootloader.
     log::info!("Jolla C2: minimal init (no UART/GIC drivers, WDT still running)");
 }
 
