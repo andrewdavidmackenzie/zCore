@@ -212,10 +212,18 @@ impl Port {
     pub fn push_user(&self, packet: impl Into<PortPacket>) -> ZxResult<()> {
         let mut packet = packet.into();
         packet.type_ = PacketType::User;
-        if self.inner.lock().queue.len() >= MAX_ALLOCATED_PACKET_COUNT_PER_PORT {
+        // Hold the lock across the limit check and enqueue to prevent
+        // concurrent calls from exceeding the per-port limit.
+        let mut inner = self.inner.lock();
+        if inner.queue.len() >= MAX_ALLOCATED_PACKET_COUNT_PER_PORT {
             return Err(ZxError::SHOULD_WAIT);
         }
-        self.push(packet);
+        inner.queue.push_back(QueuedPacket {
+            packet,
+            source_koid: 0,
+        });
+        drop(inner);
+        self.base.signal_set(Signal::READABLE);
         Ok(())
     }
 
