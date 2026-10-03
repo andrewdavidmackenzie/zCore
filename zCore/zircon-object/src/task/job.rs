@@ -70,6 +70,8 @@ struct JobInner {
     kill_on_oom: bool,
     /// Return code set when the job is killed or a critical process exits.
     return_code: i64,
+    /// Accumulated CPU time from processes/jobs that have exited and been removed.
+    exited_cpu_time: u64,
 }
 
 impl Job {
@@ -343,16 +345,26 @@ impl Job {
     }
 
     /// Get total accumulated CPU time across all processes and child jobs (nanoseconds).
+    /// Includes time from exited processes/jobs that have been removed.
     pub fn total_cpu_time(&self) -> u64 {
-        let inner = self.inner.lock();
-        let proc_time: u64 = inner.processes.iter().map(|p| p.total_cpu_time()).sum();
-        let child_time: u64 = inner
-            .children
+        // Clone collections and read exited_cpu_time under lock, then
+        // release lock before calling into Process/Job (avoids deadlock
+        // with Process::terminate → Job::remove_process lock order).
+        let (processes, children, exited_time) = {
+            let inner = self.inner.lock();
+            (
+                inner.processes.clone(),
+                inner.children.clone(),
+                inner.exited_cpu_time,
+            )
+        };
+        let proc_time: u64 = processes.iter().map(|p| p.total_cpu_time()).sum();
+        let child_time: u64 = children
             .iter()
             .filter_map(|j| j.upgrade())
             .map(|j| j.total_cpu_time())
             .sum();
-        proc_time + child_time
+        proc_time + child_time + exited_time
     }
 
     /// The job finally terminates.

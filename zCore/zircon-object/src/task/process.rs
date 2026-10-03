@@ -91,6 +91,8 @@ struct ProcessInner {
     dyn_break_on_load: usize,
     /// Monotonic time at which process_start was called.
     start_time: i64,
+    /// Accumulated CPU time from threads that have exited and been removed.
+    exited_cpu_time: u64,
     critical_to_job: Option<(Arc<Job>, bool)>,
     /// Whether this process was created via create_shared (eligible
     /// as a source for further create_shared calls).
@@ -641,13 +643,20 @@ impl Process {
     }
 
     /// Get total accumulated CPU time across all threads (nanoseconds).
-    /// On a cooperative scheduler, threads may have state=Running but
-    /// haven't entered userspace yet. Returns at least 1ns when the
-    /// process has been started (has running/blocked threads).
+    /// Includes time from exited threads that have been removed.
+    /// On a cooperative scheduler, returns at least 1ns when the
+    /// process has been started (threads may not have run yet).
     pub fn total_cpu_time(&self) -> u64 {
-        let inner = self.inner.lock();
-        let total: u64 = inner.threads.iter().map(|t| t.get_time()).sum();
-        if total == 0 && inner.status == Status::Running {
+        // Clone threads and read exited_cpu_time under lock, then release
+        // lock before calling Thread::get_time (avoids deadlock with
+        // CurrentThread::drop → remove_thread lock order).
+        let (threads, exited_time, status) = {
+            let inner = self.inner.lock();
+            (inner.threads.clone(), inner.exited_cpu_time, inner.status)
+        };
+        let live_time: u64 = threads.iter().map(|t| t.get_time()).sum();
+        let total = live_time + exited_time;
+        if total == 0 && status == Status::Running {
             // Process has been started but threads haven't accumulated
             // measurable CPU time yet (cooperative scheduler artifact).
             1

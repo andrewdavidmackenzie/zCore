@@ -634,7 +634,7 @@ impl Syscall<'_> {
                 out.write(cpu_time)?;
                 // queue_time is at offset 8
                 let mut out2 = UserOutPtr::<i64>::from(buffer + core::mem::size_of::<i64>());
-                out2.write(cpu_time)?; // approximate: queue_time ≈ cpu_time
+                out2.write(0i64)?; // queue_time: 0 until ready-but-not-running tracking exists
                 if info_size > 16 {
                     // V2: write page_fault_time and lock_contention_time (zeros)
                     let mut out3 =
