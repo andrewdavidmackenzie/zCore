@@ -642,12 +642,14 @@ impl Process {
 
     /// Get total accumulated CPU time across all threads (nanoseconds).
     /// On a cooperative scheduler, threads may have state=Running but
-    /// haven't entered userspace yet. Returns at least 1ns per started
-    /// thread so that TaskRuntime reports nonzero after process_start.
+    /// haven't entered userspace yet. Returns at least 1ns when the
+    /// process has been started (has running/blocked threads).
     pub fn total_cpu_time(&self) -> u64 {
         let inner = self.inner.lock();
         let total: u64 = inner.threads.iter().map(|t| t.get_time()).sum();
-        if total == 0 && !inner.threads.is_empty() {
+        if total == 0 && inner.status == Status::Running {
+            // Process has been started but threads haven't accumulated
+            // measurable CPU time yet (cooperative scheduler artifact).
             1
         } else {
             total

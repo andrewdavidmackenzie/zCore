@@ -612,21 +612,22 @@ impl Syscall<'_> {
                     avail.write_if_not_null(1)?;
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
-                // Compute real CPU time using the already-extracted object.
-                let cpu_time: i64 = match type_name {
-                    "Thread" => {
-                        let t: Arc<Thread> = _obj.downcast_arc().unwrap();
-                        t.get_time() as i64
-                    }
-                    "Process" => {
-                        let p: Arc<Process> = _obj.downcast_arc().unwrap();
-                        p.total_cpu_time() as i64
-                    }
-                    "Job" => {
-                        let j: Arc<Job> = _obj.downcast_arc().unwrap();
-                        j.total_cpu_time() as i64
-                    }
-                    _ => 0,
+                // Compute real CPU time. Use get_object_with_rights for the
+                // correct typed handle lookup (downcast_arc on _obj was
+                // returning stale values due to LTO optimization).
+                drop(_obj); // release the dyn object
+                let cpu_time: i64 = if let Ok(t) =
+                    proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)
+                {
+                    t.get_time() as i64
+                } else if let Ok(p) =
+                    proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)
+                {
+                    p.total_cpu_time() as i64
+                } else if let Ok(j) = proc.get_object_with_rights::<Job>(handle, Rights::INSPECT) {
+                    j.total_cpu_time() as i64
+                } else {
+                    0
                 };
                 // Write cpu_time and queue_time as raw i64 values.
                 let mut out = UserOutPtr::<i64>::from(buffer);
