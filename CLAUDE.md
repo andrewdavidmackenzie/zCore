@@ -97,9 +97,20 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 - ProcessTest (12/30 pass), DefaultExceptionHandlerTest (1/2 pass),
   JobGetInfoTest (39/39+1 BUFFER_TOO_SMALL), VmarGetInfoTest (18/21),
   JobTest (26/29)
-- V2 policy: ZX_POL_OVERRIDE_DENY/ALLOW, atomic batch application
-- ZX_INFO_TASK_RUNTIME (topic 30) stub, ZX_PROP_JOB_KILL_ON_OOM
+- ProcessInfo ABI fixed: 24-byte V1 layout with flags bitfield and
+  start_time (was 16-byte with booleans at wrong offsets)
+- VMO committed_pages_in_range: clamp to bounds instead of panicking
+  on zero-size VMO (was kernel crash)
+- V2 policy: ZX_POL_OVERRIDE_DENY/ALLOW, atomic batch application,
+  raw ABI validation of condition/action discriminants
+- ZX_INFO_TASK_RUNTIME (topic 30): version-aware V1 (16B) / V2 (32B)
+- ZX_INFO_THREAD_STATS (topic 15): new handler with ZX_INFO_INVALID_CPU
+- ZX_INFO_HANDLE_TABLE (topic 27): enumerate process handles
+- ZX_PROP_JOB_KILL_ON_OOM (property 15): get/set with value validation
 - Job max height (32), return code tracking, TASK_RETCODE fix (-1024)
+- process_start: reject kernel-space entry/stack addresses
+- BUFFER_TOO_SMALL: write actual=0, avail=1 for all info topics
+- All single-record info topics write actual=1, avail=1 on success
 - gtest_filter working: use `?--gtest_filter=-Suite.*:Test.Name` in
   ROOTPROC to skip tests. Both argv and ZBI CMDLINE delivery work.
 - Known hangs/crashes requiring gtest_filter skip:
@@ -128,6 +139,10 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
     map failures causing infinite waits; only 1/58 passes)
   - PagerProcess.* (thread blocked on pager fault not woken on
     process kill — multiple tests hang, blocks 50+ later suites)
+  - ProcessTest.ProcessWaitAsyncCancelSelf (race condition stress
+    test — mini-process WAIT_ASYNC_CANCEL loop hangs)
+  - ProcessTest.ProcessHwTraceContextIdProperty (hw trace not
+    implemented — hangs on thread wait)
 - All 1776 tests have been extracted to /tmp/all_tests.txt via
   `--gtest_list_tests`. Individual suites can be tested with
   `--gtest_filter=SuiteName.*` for fast iteration.
