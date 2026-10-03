@@ -113,8 +113,10 @@ impl Job {
         if inner.killed {
             return Err(ZxError::BAD_STATE);
         }
-        // Enforce maximum job nesting depth. The child would be at depth+1.
-        if self.depth() + 1 >= Self::MAX_HEIGHT {
+        // Enforce maximum job nesting depth. Fuchsia permits depth up to
+        // MAX_HEIGHT (root=0, max child=MAX_HEIGHT-1). Reject only when
+        // the parent has no height remaining.
+        if self.depth() >= Self::MAX_HEIGHT {
             return Err(ZxError::OUT_OF_RANGE);
         }
         let child = Arc::new(Job {

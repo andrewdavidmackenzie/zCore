@@ -60,7 +60,25 @@ pub enum SetPolicyOptions {
     Relative,
 }
 
-/// The policy type (V1 format, 8 bytes).
+/// The policy type (V1 format, 8 bytes) as read from userspace.
+/// Uses raw u32 fields to avoid UB from invalid enum discriminants.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct BasicPolicyRaw {
+    pub condition: u32,
+    pub action: u32,
+}
+
+impl BasicPolicyRaw {
+    /// Validate and convert raw ABI fields to typed policy.
+    pub fn validate(&self) -> ZxResult<BasicPolicy> {
+        let condition = PolicyCondition::try_from(self.condition)?;
+        let action = PolicyAction::try_from(self.action)?;
+        Ok(BasicPolicy { condition, action })
+    }
+}
+
+/// Validated V1 policy entry.
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct BasicPolicy {
@@ -70,17 +88,36 @@ pub struct BasicPolicy {
     pub action: PolicyAction,
 }
 
-/// The policy type (V2 format, 12 bytes).
-/// V2 adds a `flags` field: ZX_POL_OVERRIDE_DENY (0) or ZX_POL_OVERRIDE_ALLOW (1).
+/// The policy type (V2 format, 12 bytes) as read from userspace.
+/// Uses raw u32 fields to avoid UB from invalid enum discriminants.
 #[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct BasicPolicyV2Raw {
+    pub condition: u32,
+    pub action: u32,
+    pub flags: u32,
+}
+
+/// Validated V2 policy entry.
 #[derive(Debug, Copy, Clone)]
 pub struct BasicPolicyV2 {
     /// Condition when the policy is applied.
     pub condition: PolicyCondition,
     /// Action to take when the policy is applied.
     pub action: PolicyAction,
-    /// Override flags: 0 = OVERRIDE_DENY, 1 = OVERRIDE_ALLOW.
+    /// Override flags: 0 = OVERRIDE_ALLOW, 1 = OVERRIDE_DENY.
     pub flags: u32,
+}
+
+impl BasicPolicyV2Raw {
+    /// Validate and convert raw ABI fields to typed policy.
+    pub fn validate(&self) -> ZxResult<BasicPolicyV2> {
+        Ok(BasicPolicyV2 {
+            condition: PolicyCondition::try_from(self.condition)?,
+            action: PolicyAction::try_from(self.action)?,
+            flags: self.flags,
+        })
+    }
 }
 
 /// The condition when a policy is applied.
@@ -140,6 +177,44 @@ pub enum PolicyAction {
     DenyException = 3,
     /// Terminate the process.
     Kill = 4,
+}
+
+impl core::convert::TryFrom<u32> for PolicyCondition {
+    type Error = ZxError;
+    fn try_from(v: u32) -> ZxResult<Self> {
+        match v {
+            0 => Ok(Self::BadHandle),
+            1 => Ok(Self::WrongObject),
+            2 => Ok(Self::VmarWx),
+            3 => Ok(Self::NewAny),
+            4 => Ok(Self::NewVMO),
+            5 => Ok(Self::NewChannel),
+            6 => Ok(Self::NewEvent),
+            7 => Ok(Self::NewEventPair),
+            8 => Ok(Self::NewPort),
+            9 => Ok(Self::NewSocket),
+            10 => Ok(Self::NewFIFO),
+            11 => Ok(Self::NewTimer),
+            12 => Ok(Self::NewProcess),
+            13 => Ok(Self::NewProfile),
+            14 => Ok(Self::AmbientMarkVMOExec),
+            _ => Err(ZxError::INVALID_ARGS),
+        }
+    }
+}
+
+impl core::convert::TryFrom<u32> for PolicyAction {
+    type Error = ZxError;
+    fn try_from(v: u32) -> ZxResult<Self> {
+        match v {
+            0 => Ok(Self::Allow),
+            1 => Ok(Self::Deny),
+            2 => Ok(Self::AllowException),
+            3 => Ok(Self::DenyException),
+            4 => Ok(Self::Kill),
+            _ => Err(ZxError::INVALID_ARGS),
+        }
+    }
 }
 
 /// Timer slack policy.

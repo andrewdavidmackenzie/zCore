@@ -357,10 +357,14 @@ impl Syscall<'_> {
                     JOB_POL_ABSOLUTE => SetPolicyOptions::Absolute,
                     _ => return Err(ZxError::INVALID_ARGS),
                 };
-                job.set_policy_basic(
-                    policy_option,
-                    &UserInPtr::from(policy).read_array(count as usize)?,
-                )
+                // Read raw 8-byte records and validate discriminants.
+                let raw_policies: Vec<BasicPolicyRaw> =
+                    UserInPtr::from(policy).read_array(count as usize)?;
+                let mut v1_policies = Vec::with_capacity(raw_policies.len());
+                for raw in &raw_policies {
+                    v1_policies.push(raw.validate()?);
+                }
+                job.set_policy_basic(policy_option, &v1_policies)
             }
             JOB_POL_BASE_V2 => {
                 let policy_option = match options {
@@ -368,11 +372,16 @@ impl Syscall<'_> {
                     JOB_POL_ABSOLUTE => SetPolicyOptions::Absolute,
                     _ => return Err(ZxError::INVALID_ARGS),
                 };
-                // V2 policies are 12 bytes (condition, action, flags).
-                // The flags field controls override behavior, so use
-                // the dedicated V2 handler.
-                let v2_policies: Vec<BasicPolicyV2> =
+                if count == 0 {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                // Read raw 12-byte records and validate discriminants.
+                let raw_policies: Vec<BasicPolicyV2Raw> =
                     UserInPtr::from(policy).read_array(count as usize)?;
+                let mut v2_policies = Vec::with_capacity(raw_policies.len());
+                for raw in &raw_policies {
+                    v2_policies.push(raw.validate()?);
+                }
                 job.set_policy_basic_v2(policy_option, &v2_policies)
             }
             JOB_POL_TIMER_SLACK => {
