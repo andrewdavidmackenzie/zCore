@@ -103,12 +103,12 @@ fn breakpoint(elr: &mut usize) {
 fn sync_handler(tf: &mut TrapFrame) {
     match trap_reason_from(tf.trap_num) {
         TrapReason::PageFault(vaddr, flags) => {
-            // If we are inside a guarded user-copy region, the fault
-            // is from kernel code reading/writing a bad user pointer.
-            // Redirect execution to the recovery point instead of
-            // forwarding to KHANDLER (which would panic).
             if let Some(recovery_pc) = crate::thread::user_copy_check_fault(vaddr) {
-                tf.elr = recovery_pc;
+                if crate::KHANDLER.try_handle_page_fault(vaddr, flags) {
+                    crate::thread::user_copy_rearm(recovery_pc);
+                } else {
+                    tf.elr = recovery_pc;
+                }
                 return;
             }
             crate::KHANDLER.handle_page_fault(vaddr, flags);

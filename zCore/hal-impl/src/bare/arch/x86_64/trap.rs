@@ -93,11 +93,15 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
                 // Inside a guarded user-copy. Try to resolve the fault
                 // first (e.g., demand-page the user data). Only redirect
                 // to recovery if the page fault handler fails.
-                if !crate::KHANDLER.try_handle_page_fault(vaddr, flags) {
-                    // Unresolvable fault — redirect to recovery.
+                if crate::KHANDLER.try_handle_page_fault(vaddr, flags) {
+                    // Fault resolved — re-arm the guard for subsequent
+                    // faults in the same multi-page copy, then resume.
+                    crate::thread::user_copy_rearm(recovery_pc);
+                } else {
+                    // Unresolvable fault — recovery PC is already set
+                    // by user_copy_check_fault; redirect execution.
                     tf.rip = recovery_pc;
                 }
-                // Fault resolved (or recovery set) — resume execution.
                 return;
             }
             crate::KHANDLER.handle_page_fault(vaddr, flags);
