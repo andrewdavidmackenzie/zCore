@@ -363,17 +363,17 @@ impl Syscall<'_> {
                 )
             }
             JOB_POL_BASE_V2 => {
-                // Validate options — only RELATIVE and ABSOLUTE are valid.
-                match options {
-                    JOB_POL_RELATIVE | JOB_POL_ABSOLUTE => {}
+                let policy_option = match options {
+                    JOB_POL_RELATIVE => SetPolicyOptions::Relative,
+                    JOB_POL_ABSOLUTE => SetPolicyOptions::Absolute,
                     _ => return Err(ZxError::INVALID_ARGS),
-                }
+                };
                 // V2 policies are 12 bytes (condition, action, flags).
                 // The flags field controls override behavior, so use
                 // the dedicated V2 handler.
                 let v2_policies: Vec<BasicPolicyV2> =
                     UserInPtr::from(policy).read_array(count as usize)?;
-                job.set_policy_basic_v2(&v2_policies)
+                job.set_policy_basic_v2(policy_option, &v2_policies)
             }
             JOB_POL_TIMER_SLACK => {
                 if options != JOB_POL_RELATIVE {

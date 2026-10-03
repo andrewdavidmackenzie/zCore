@@ -200,7 +200,11 @@ impl Job {
 
     /// Sets one or more V2 security policies to an empty job.
     /// V2 policies include an override flag per condition.
-    pub fn set_policy_basic_v2(&self, policies: &[BasicPolicyV2]) -> ZxResult {
+    pub fn set_policy_basic_v2(
+        &self,
+        options: SetPolicyOptions,
+        policies: &[BasicPolicyV2],
+    ) -> ZxResult {
         let mut inner = self.inner.lock();
         if !inner.is_empty() {
             return Err(ZxError::BAD_STATE);
@@ -213,7 +217,14 @@ impl Job {
             if policy.flags > 1 {
                 return Err(ZxError::INVALID_ARGS);
             }
-            // Check if the condition is already set and whether
+            // Check parent's inherited policy — ABSOLUTE rejects conflicts.
+            if self.parent_policy.get_action(policy.condition).is_some() {
+                match options {
+                    SetPolicyOptions::Absolute => return Err(ZxError::ALREADY_EXISTS),
+                    SetPolicyOptions::Relative => {}
+                }
+            }
+            // Check if the condition is already set on this job and whether
             // the override flag allows changing it.
             if let Some(existing_action) = new_policy.get_action(policy.condition) {
                 if !new_policy.is_override_allowed(policy.condition) {

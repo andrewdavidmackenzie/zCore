@@ -343,8 +343,8 @@ impl Syscall<'_> {
         mut avail: UserOutPtr<usize>,
     ) -> ZxResult {
         // Fuchsia info topics use low bits for the topic ID and upper bits
-        // for flags (e.g. bit 28 = requires specific object state).  Strip
-        // the flags before converting to the Topic enum.
+        // for version (bits 28+). Preserve the version before stripping.
+        let topic_version = topic >> 28;
         let masked_topic = topic & 0xFFFF;
         let topic = Topic::try_from(masked_topic).map_err(|_| {
             warn!(
@@ -501,16 +501,23 @@ impl Syscall<'_> {
                 if !rights.contains(Rights::INSPECT) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
-                // Write as many bytes of the runtime info as the buffer can
-                // hold (supports V1 = 16 bytes and V2 = 32 bytes).
-                // All fields are zero (no real CPU accounting), so just write
-                // zeroed bytes. Max size is TaskRuntimeInfo = 32 bytes.
-                let info_size = core::mem::size_of::<TaskRuntimeInfo>();
-                let copy_len = buffer_size.min(info_size);
-                if copy_len > 0 {
-                    let zeroes = [0u8; 32]; // TaskRuntimeInfo is 32 bytes
-                    UserOutPtr::<u8>::from(buffer).write_array(&zeroes[..copy_len])?;
+                // Determine required record size from topic version:
+                // V1 (version 0) = 16 bytes (cpu_time + queue_time)
+                // V2 (version 1) = 32 bytes (+ page_fault_time + lock_contention_time)
+                let info_size = match topic_version {
+                    0 => 2 * core::mem::size_of::<i64>(),         // V1: 16 bytes
+                    1 => core::mem::size_of::<TaskRuntimeInfo>(), // V2: 32 bytes
+                    _ => return Err(ZxError::INVALID_ARGS),
+                };
+                if buffer_size < info_size {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
                 }
+                // All fields are zero (no real CPU accounting), so write
+                // zeroed bytes of the appropriate version size.
+                let zeroes = [0u8; 32];
+                UserOutPtr::<u8>::from(buffer).write_array(&zeroes[..info_size])?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }
