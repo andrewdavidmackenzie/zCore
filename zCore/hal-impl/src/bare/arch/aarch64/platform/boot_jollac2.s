@@ -396,6 +396,24 @@ _start_virtual:
     sub     x10, x10, #1
     cbnz    x10, 106b
 
+    /* Clear screen to black before entering Rust.
+       FB: 720x1600 ARGB8888 at 0x9e000000 = 1,152,000 pixels.
+       Flush each cache line so pixels reach the display controller. */
+    mov     x8, #0x0000
+    movk    x8, #0x9e00, lsl #16        /* x8 = 0x9e000000 */
+    mov     w9, #0x0000
+    movk    w9, #0xFF00, lsl #16        /* 0xFF000000 = opaque black */
+    mov     x12, #0x9800
+    movk    x12, #0x0011, lsl #16       /* x12 = 1152000 (720*1600) */
+107:str     w9, [x8], #4
+    sub     x12, x12, #1
+    /* Flush cache line every 16 pixels (64 bytes) */
+    tst     x12, #0xF
+    b.ne    108f
+    dc      cvac, x8
+108:cbnz    x12, 107b
+    dsb     sy
+
     /* Restore DTB pointer as first argument */
     mov     x0, x20
 
