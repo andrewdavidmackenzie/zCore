@@ -15,7 +15,16 @@ impl Syscall<'_> {
         mut proc_handle: UserOutPtr<HandleValue>,
         mut vmar_handle: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        let name = name.read_string(name_size)?;
+        let name = match name.read_string(name_size) {
+            Ok(n) => n,
+            Err(e) => {
+                warn!(
+                    "proc.create: read_string failed: {:?}, name_size={}, name_ptr={:?}",
+                    e, name_size, name
+                );
+                return Err(e.into());
+            }
+        };
         info!(
             "proc.create: job={:#x?}, name={:?}, options={:#x?}",
             job, name, options,
