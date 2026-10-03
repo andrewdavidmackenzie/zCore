@@ -120,40 +120,18 @@ impl Syscall<'_> {
             pager_handle, vmo_handle, offset, length
         );
         let proc = self.thread.proc();
-        let _pager = proc.get_object::<Pager>(pager_handle)?;
-        let vmo = proc.get_object::<VmObject>(vmo_handle)?;
+        let _pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::default())?;
+        let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::default())?;
         if !vmo.is_pager_backed() {
             return Err(ZxError::INVALID_ARGS);
         }
-        // Without TRAP_DIRTY, conservatively report the entire queried
-        // range as a single dirty range. Every write goes through
-        // without pager notification, so all committed pages are dirty.
-        //
-        // zx_vmo_dirty_range_t = { u64 offset, u64 length, u64 options }
-        let range_size = 24usize; // sizeof(zx_vmo_dirty_range_t)
-        let vmo_size = vmo.len() as u64;
-        let query_end = core::cmp::min(offset + length, vmo_size);
-        if offset >= query_end {
-            // Empty query range — no dirty ranges.
-            actual.write_if_not_null(0)?;
-            avail.write_if_not_null(0)?;
-            return Ok(());
-        }
-        // Report one range covering [offset, query_end).
-        let dirty_offset = offset;
-        let dirty_length = query_end - offset;
-        avail.write_if_not_null(1)?;
-        if _buffer_size >= range_size {
-            let mut buf = UserOutPtr::<u64>::from(_buffer);
-            buf.write(dirty_offset)?;
-            let mut buf2 = UserOutPtr::<u64>::from(_buffer + 8);
-            buf2.write(dirty_length)?;
-            let mut buf3 = UserOutPtr::<u64>::from(_buffer + 16);
-            buf3.write(0)?; // options = 0 (not zero-range)
-            actual.write_if_not_null(1)?;
-        } else {
-            actual.write_if_not_null(0)?;
-        }
+        // Validate range doesn't overflow.
+        let query_end = offset.checked_add(length).ok_or(ZxError::OUT_OF_RANGE)?;
+        let _ = query_end; // used for validation only
+                           // Without TRAP_DIRTY, report 0 dirty ranges.  A VMO that was
+                           // never opted into dirty tracking has no dirty state to report.
+        actual.write_if_not_null(0)?;
+        avail.write_if_not_null(0)?;
         Ok(())
     }
 
@@ -161,7 +139,6 @@ impl Syscall<'_> {
     ///
     /// Returns `zx_pager_vmo_stats_t` with the `modified` field.
     /// Without dirty tracking, report modified=0 (not modified).
-    /// If `ZX_PAGER_RESET_VMO_STATS` is set, reset the modified state.
     pub fn sys_pager_query_vmo_stats(
         &self,
         pager_handle: HandleValue,
@@ -174,15 +151,20 @@ impl Syscall<'_> {
             "pager.query_vmo_stats: pager={:#x}, vmo={:#x}, options={}",
             pager_handle, vmo_handle, options
         );
+        const ZX_PAGER_RESET_VMO_STATS: u32 = 1;
+        if options & !ZX_PAGER_RESET_VMO_STATS != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         let _pager = proc.get_object::<Pager>(pager_handle)?;
         let _vmo = proc.get_object::<VmObject>(vmo_handle)?;
         // zx_pager_vmo_stats_t is { uint32_t modified; }
-        // Size must be at least 4 bytes.
         if buffer_size < 4 {
             return Err(ZxError::BUFFER_TOO_SMALL);
         }
-        // Report not modified (dirty tracking not implemented).
+        // Without dirty tracking, report not modified.
+        // TODO: track per-VMO modified state and report
+        // ZX_PAGER_VMO_STATS_MODIFIED (1) after writes.
         let mut stats_ptr = UserOutPtr::<u32>::from(buffer);
         stats_ptr.write(0)?;
         Ok(())

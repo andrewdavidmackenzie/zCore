@@ -345,7 +345,10 @@ pub fn spawn_process(
         Handle::new(thread.clone(), Rights::DEFAULT_THREAD), // PA_THREAD_SELF
         Handle::new(proc.vmar(), Rights::all()),            // PA_VMAR_ROOT
         Handle::new(job.clone(), Rights::DEFAULT_JOB),      // PA_JOB_DEFAULT
-        Handle::new(config.vdso_vmo.clone(), Rights::DEFAULT_VMO), // PA_VMO_VDSO
+        Handle::new(
+            config.vdso_vmo.clone(),
+            Rights::DEFAULT_VMO | Rights::EXECUTE
+        ), // PA_VMO_VDSO
         Handle::new(root_resource2, Rights::DEFAULT_RESOURCE), // PA_RESOURCE
         Handle::new(image_vmar.clone(), Rights::DEFAULT_VMAR), // PA_VMAR_LOADED
     ];
@@ -485,7 +488,10 @@ pub fn spawn_process(
         Handle::new(thread.clone(), Rights::DEFAULT_THREAD), // PA_THREAD_SELF
         Handle::new(proc.vmar(), Rights::all()),            // PA_VMAR_ROOT
         Handle::new(root_job, Rights::DEFAULT_JOB),         // PA_JOB_DEFAULT
-        Handle::new(config.vdso_vmo.clone(), Rights::DEFAULT_VMO), // PA_VMO_VDSO
+        Handle::new(
+            config.vdso_vmo.clone(),
+            Rights::DEFAULT_VMO | Rights::EXECUTE
+        ), // PA_VMO_VDSO
         Handle::new(root_resource, Rights::DEFAULT_RESOURCE), // PA_RESOURCE
         Handle::new(image_vmar.clone(), Rights::DEFAULT_VMAR), // PA_VMAR_LOADED
         Handle::new(mmio_resource, Rights::DEFAULT_RESOURCE), // PA_MMIO_RESOURCE

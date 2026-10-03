@@ -119,17 +119,17 @@ impl Job {
         inner.children.retain(|child| !to_remove.ptr_eq(child));
         let no_children = inner.children.is_empty();
         let no_processes = inner.processes.is_empty();
-        if inner.killed && no_processes && no_children {
-            drop(inner);
-            self.terminate()
-        } else {
-            drop(inner);
-            if no_children {
-                self.base.signal_set(Signal::JOB_NO_JOBS);
-                if no_processes {
-                    self.base.signal_set(Signal::JOB_NO_CHILDREN);
-                }
+        let killed = inner.killed;
+        drop(inner);
+        if no_children {
+            let mut set = Signal::JOB_NO_JOBS;
+            if no_processes {
+                set |= Signal::JOB_NO_CHILDREN;
             }
+            self.base.signal_set(set);
+        }
+        if killed && no_processes && no_children {
+            self.terminate()
         }
     }
 
@@ -203,17 +203,17 @@ impl Job {
         inner.processes.retain(|proc| proc.id() != id);
         let no_children = inner.children.is_empty();
         let no_processes = inner.processes.is_empty();
-        if inner.killed && no_processes && no_children {
-            drop(inner);
-            self.terminate()
-        } else {
-            drop(inner);
-            if no_processes {
-                self.base.signal_set(Signal::JOB_NO_PROCESSES);
-                if no_children {
-                    self.base.signal_set(Signal::JOB_NO_CHILDREN);
-                }
+        let killed = inner.killed;
+        drop(inner);
+        if no_processes {
+            let mut set = Signal::JOB_NO_PROCESSES;
+            if no_children {
+                set |= Signal::JOB_NO_CHILDREN;
             }
+            self.base.signal_set(set);
+        }
+        if killed && no_processes && no_children {
+            self.terminate()
         }
     }
 
