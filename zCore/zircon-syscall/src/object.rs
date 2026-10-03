@@ -515,7 +515,7 @@ impl Syscall<'_> {
                     0 // stub: report CPU 0 until real tracking is added
                 };
                 info_ptr.write(ThreadStatsInfo {
-                    total_runtime: 0,
+                    total_runtime: thread.get_time() as i64,
                     last_scheduled_cpu: last_cpu,
                     padding1: [0; 4],
                 })?;
@@ -612,10 +612,38 @@ impl Syscall<'_> {
                     avail.write_if_not_null(1)?;
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
-                // All fields are zero (no real CPU accounting), so write
-                // zeroed bytes of the appropriate version size.
-                let zeroes = [0u8; 32];
-                UserOutPtr::<u8>::from(buffer).write_array(&zeroes[..info_size])?;
+                // Compute real CPU time. Use get_object_with_rights for the
+                // correct typed handle lookup (downcast_arc on _obj was
+                // returning stale values due to LTO optimization).
+                drop(_obj); // release the dyn object
+                let cpu_time: i64 = if let Ok(t) =
+                    proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)
+                {
+                    t.get_time() as i64
+                } else if let Ok(p) =
+                    proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)
+                {
+                    p.total_cpu_time() as i64
+                } else if let Ok(j) = proc.get_object_with_rights::<Job>(handle, Rights::INSPECT) {
+                    j.total_cpu_time() as i64
+                } else {
+                    0
+                };
+                // Write cpu_time and queue_time as raw i64 values.
+                let mut out = UserOutPtr::<i64>::from(buffer);
+                out.write(cpu_time)?;
+                // queue_time is at offset 8
+                let mut out2 = UserOutPtr::<i64>::from(buffer + core::mem::size_of::<i64>());
+                out2.write(0i64)?; // queue_time: 0 until ready-but-not-running tracking exists
+                if info_size > 16 {
+                    // V2: write page_fault_time and lock_contention_time (zeros)
+                    let mut out3 =
+                        UserOutPtr::<i64>::from(buffer + 2 * core::mem::size_of::<i64>());
+                    out3.write(0)?;
+                    let mut out4 =
+                        UserOutPtr::<i64>::from(buffer + 3 * core::mem::size_of::<i64>());
+                    out4.write(0)?;
+                }
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }
