@@ -412,8 +412,13 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::HandleCount => {
-                let mut info_ptr = UserOutPtr::<u32>::from_addr_size(buffer, buffer_size)?;
                 let object = self.get_object_with_pseudo(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<u32>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr = UserOutPtr::<u32>::from_addr_size(buffer, buffer_size)?;
                 info_ptr.write(object.handle_count())?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
@@ -447,6 +452,20 @@ impl Syscall<'_> {
                     ..Default::default()
                 };
                 info_ptr.write(kmem)?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
+            }
+            Topic::ThreadStats => {
+                let _thread = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<ThreadStatsInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr =
+                    UserOutPtr::<ThreadStatsInfo>::from_addr_size(buffer, buffer_size)?;
+                // Stub: return zeroed stats (no CPU accounting yet).
+                info_ptr.write(ThreadStatsInfo::default())?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }
@@ -767,6 +786,15 @@ pub struct UserWaitItem {
     handle: HandleValue,
     wait_for: Signal,
     observed: Signal,
+}
+
+/// `zx_info_thread_stats_t` — per-thread runtime statistics.
+#[repr(C)]
+#[derive(Default)]
+struct ThreadStatsInfo {
+    total_runtime: i64,
+    last_scheduled_cpu: u32,
+    padding1: [u8; 4],
 }
 
 /// `zx_info_task_runtime_t` — CPU and scheduling time for a task.
