@@ -113,6 +113,13 @@ extern "C" fn rust_main(dtb_paddr: usize) -> ! {
 
     super::super::set_board_bases(board::UART_BASE, board::GIC_BASE);
 
+    // Initialize fb-console before anything else so we get crash output.
+    #[cfg(feature = "board-jollac2")]
+    {
+        super::super::fb_console::init();
+        super::super::fb_console::write_str("zCore: rust_main entered\n");
+    }
+
     let config = KernelConfig {
         cmdline: option_env!("ZCORE_CMDLINE").unwrap_or(default_cmdline),
         phys_to_virt_offset: board::PHYS_TO_VIRT_OFFSET,

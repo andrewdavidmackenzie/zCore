@@ -51,27 +51,25 @@ _real_entry:
     /* === SKIP watchdog for now — may be TrustZone-protected === */
     /* TODO: re-enable once we confirm basic boot works */
 
-    /* === Early visual feedback: write red pixels to framebuffer === */
-    /* FB at 0x9e000000, ARGB8888, 720 wide, stride 2880 bytes */
-    /* Fill first 8 rows red (0xFFFF0000) = 8 * 720 = 5760 pixels */
+    /* === Early visual feedback: write colored bars to framebuffer === */
+    /* FB at 0x9e000000, ARGB8888, 720 wide, stride 2880 bytes.
+       Each bar is 40 rows tall (40 * 720 = 28800 pixels) for easy
+       visibility in photos. Bar N starts at row N*40. */
+
+    /* Bar 0 (rows 0-39): RED = boot assembly entered */
     mov     x8, #0x0000
     movk    x8, #0x9e00, lsl #16        /* x8 = 0x9e000000 */
     mov     w9, #0x0000
-    movk    w9, #0xFFFF, lsl #16        /* w9 = 0xFFFF0000 (red, ARGB) */
-    mov     x10, #5760                  /* 8 rows * 720 pixels */
-95:
-    str     w9, [x8], #4
+    movk    w9, #0xFFFF, lsl #16        /* 0xFFFF0000 = red */
+    mov     x10, #(40 * 720)
+95: str     w9, [x8], #4
     sub     x10, x10, #1
     cbnz    x10, 95b
 
-    /* === Debug: green bar = about to check EL (row 8) === */
-    mov     x8, #0x0000
-    movk    x8, #0x9e00, lsl #16
-    mov     x11, #(2880 * 8)
-    add     x8, x8, x11
+    /* Bar 1 (rows 40-79): GREEN = about to check EL */
     mov     w9, #0xFF00
-    movk    w9, #0xFF00, lsl #16            /* 0xFF00FF00 = green */
-    mov     x10, #720
+    movk    w9, #0xFF00, lsl #16        /* 0xFF00FF00 = green */
+    mov     x10, #(40 * 720)
 96: str     w9, [x8], #4
     sub     x10, x10, #1
     cbnz    x10, 96b
@@ -98,14 +96,12 @@ _real_entry:
     eret
 
 1:
-    /* === Debug: cyan bar = EL drop done (row 9) === */
-    mov     x8, #0x0000
-    movk    x8, #0x9e00, lsl #16
-    mov     x11, #(2880 * 9)
-    add     x8, x8, x11
+    /* Bar 2 (rows 80-119): CYAN = EL drop done */
+    mov     x8, #0x8400
+    movk    x8, #0x9e03, lsl #16        /* 0x9e000000 + 0x38400 */
     mov     w9, #0xFF00
-    movk    w9, #0xFFFF, lsl #16            /* 0xFFFFFF00 = cyan */
-    mov     x10, #720
+    movk    w9, #0xFFFF, lsl #16        /* 0xFFFFFF00 = cyan */
+    mov     x10, #(40 * 720)
 97: str     w9, [x8], #4
     sub     x10, x10, #1
     cbnz    x10, 97b
@@ -124,18 +120,14 @@ _real_entry:
     isb
 
     /* ====== Set up boot page tables ====== */
+    /* Each debug bar is 40 rows tall for visibility in photos. */
 
-    /* Zero out the 4 page tables.
-       Debug bars between each call to identify which one hangs. */
-
-    /* --- Debug: row 10 = starting L0_LO zero --- */
-    mov     x8, #0x0000
-    movk    x8, #0x9e00, lsl #16
-    mov     x11, #(2880 * 10)
-    add     x8, x8, x11
-    mov     w9, #0x8000
-    movk    w9, #0xFF80, lsl #16        /* 0xFF808000 = dark magenta */
-    mov     x10, #720
+    /* Bar 3 (rows 120-159): MAGENTA = starting L0_LO zero */
+    mov     x8, #0x4600
+    movk    x8, #0x9e05, lsl #16        /* 0x9e000000 + 0x54600 */
+    mov     w9, #0x00FF
+    movk    w9, #0xFFFF, lsl #16        /* 0xFFFF00FF = magenta */
+    mov     x10, #(40 * 720)
 98: str     w9, [x8], #4
     sub     x10, x10, #1
     cbnz    x10, 98b
@@ -145,14 +137,12 @@ _real_entry:
     mov     x1, #4096
     bl      _zero_mem
 
-    /* --- Debug: row 11 = L0_LO done, starting L0_HI --- */
-    mov     x8, #0x0000
-    movk    x8, #0x9e00, lsl #16
-    mov     x11, #(2880 * 11)
-    add     x8, x8, x11
-    mov     w9, #0x0080
-    movk    w9, #0xFF00, lsl #16        /* 0xFF000080 = dark blue */
-    mov     x10, #720
+    /* Bar 4 (rows 160-199): BLUE = L0_LO done, starting L0_HI */
+    mov     x8, #0x0800
+    movk    x8, #0x9e07, lsl #16        /* 0x9e000000 + 0x70800 */
+    mov     w9, #0x00FF
+    movk    w9, #0xFF00, lsl #16        /* 0xFF0000FF = blue */
+    mov     x10, #(40 * 720)
 99: str     w9, [x8], #4
     sub     x10, x10, #1
     cbnz    x10, 99b
@@ -162,14 +152,12 @@ _real_entry:
     mov     x1, #4096
     bl      _zero_mem
 
-    /* --- Debug: row 12 = L0_HI done, starting L1_ID --- */
-    mov     x8, #0x0000
-    movk    x8, #0x9e00, lsl #16
-    mov     x11, #(2880 * 12)
-    add     x8, x8, x11
-    mov     w9, #0x8080
-    movk    w9, #0xFF00, lsl #16        /* 0xFF008080 = teal */
-    mov     x10, #720
+    /* Bar 5 (rows 200-239): TEAL = L0_HI done, starting L1_ID */
+    mov     x8, #0xca00
+    movk    x8, #0x9e08, lsl #16        /* 0x9e000000 + 0x8ca00 */
+    mov     w9, #0xFFFF
+    movk    w9, #0xFF00, lsl #16        /* 0xFF00FFFF = teal/aqua */
+    mov     x10, #(40 * 720)
 100:str     w9, [x8], #4
     sub     x10, x10, #1
     cbnz    x10, 100b
@@ -179,14 +167,12 @@ _real_entry:
     mov     x1, #4096
     bl      _zero_mem
 
-    /* --- Debug: row 13 = L1_ID done, starting L1_HI --- */
-    mov     x8, #0x0000
-    movk    x8, #0x9e00, lsl #16
-    mov     x11, #(2880 * 13)
-    add     x8, x8, x11
-    mov     w9, #0x80FF
-    movk    w9, #0xFF00, lsl #16        /* 0xFF0080FF = orange */
-    mov     x10, #720
+    /* Bar 6 (rows 240-279): ORANGE = L1_ID done, starting L1_HI */
+    mov     x8, #0x8c00
+    movk    x8, #0x9e0a, lsl #16        /* 0x9e000000 + 0xa8c00 */
+    mov     w9, #0x00FF                     /* low half: B=0xFF, G=0x00 */
+    movk    w9, #0xFFA5, lsl #16            /* 0xFFA500FF = orange */
+    mov     x10, #(40 * 720)
 101:str     w9, [x8], #4
     sub     x10, x10, #1
     cbnz    x10, 101b
@@ -271,14 +257,12 @@ _real_entry:
     str     x4, [x0, #16]
     str     x5, [x0, #24]
 
-    /* === Debug: yellow bar = page tables filled (row 14) === */
-    mov     x8, #0x0000
-    movk    x8, #0x9e00, lsl #16
-    mov     x11, #(2880 * 14)
-    add     x8, x8, x11
+    /* Bar 7 (rows 280-319): YELLOW = page tables filled */
+    mov     x8, #0x4e00
+    movk    x8, #0x9e0c, lsl #16        /* 0x9e000000 + 0xc4e00 */
     mov     w9, #0x00FF
-    movk    w9, #0xFFFF, lsl #16            /* 0xFFFF00FF = yellow */
-    mov     x10, #720
+    movk    w9, #0xFFFF, lsl #16        /* 0xFFFF00FF = yellow */
+    mov     x10, #(40 * 720)
 102:str     w9, [x8], #4
     sub     x10, x10, #1
     cbnz    x10, 102b
@@ -331,17 +315,25 @@ _real_entry:
     dsb     sy
     isb
 
-    /* === Debug: white bar = MMU enabled (row 15) === */
-    mov     x8, #0x0000
-    movk    x8, #0x9e00, lsl #16
-    mov     x11, #(2880 * 15)
-    add     x8, x8, x11
+    /* Bar 8 (rows 320-359): WHITE = MMU enabled */
+    mov     x8, #0x1000
+    movk    x8, #0x9e0e, lsl #16        /* 0x9e000000 + 0xe1000 */
     mov     w9, #0xFFFF
-    movk    w9, #0xFFFF, lsl #16            /* 0xFFFFFFFF = white */
-    mov     x10, #720
+    movk    w9, #0xFFFF, lsl #16        /* 0xFFFFFFFF = white */
+    mov     x10, #(40 * 720)
 103:str     w9, [x8], #4
     sub     x10, x10, #1
     cbnz    x10, 103b
+
+    /* Bar 9 (rows 360-399): GREY = about to jump to virtual */
+    mov     x8, #0xd200
+    movk    x8, #0x9e0f, lsl #16        /* 0x9e000000 + 0xfd200 */
+    mov     w9, #0x8080
+    movk    w9, #0xFF80, lsl #16        /* 0xFF808080 = grey */
+    mov     x10, #(40 * 720)
+104:str     w9, [x8], #4
+    sub     x10, x10, #1
+    cbnz    x10, 104b
 
     /* ====== Jump to virtual address space ====== */
     ldr     x0, =_start_virtual
@@ -358,7 +350,18 @@ _zero_mem:
 .section .text.entry, "ax"
 .global _start_virtual
 _start_virtual:
-    /* Now executing at virtual addresses */
+    /* Now executing at virtual addresses.
+       Write debug bar via identity map (TTBR0 still active). */
+
+    /* Bar 10 (rows 400-439): PINK = virtual jump succeeded */
+    mov     x8, #0x9400
+    movk    x8, #0x9e11, lsl #16        /* 0x9e000000 + 0x119400 = row 400 */
+    mov     w9, #0x80FF
+    movk    w9, #0xFFFF, lsl #16        /* 0xFFFF80FF = pink */
+    mov     x10, #(40 * 720)
+105:str     w9, [x8], #4
+    sub     x10, x10, #1
+    cbnz    x10, 105b
 
     /* Zero BSS */
     adrp    x0, boot_stack
@@ -382,6 +385,16 @@ _start_virtual:
     orr     x0, x0, #(1 << 12)    /* I: Enable I-cache */
     msr     sctlr_el1, x0
     isb
+
+    /* Bar 11 (rows 440-479): DARK GREEN = BSS zeroed, stack set, caches on */
+    mov     x8, #0x5600
+    movk    x8, #0x9e13, lsl #16        /* 0x9e000000 + 0x135600 = row 440 */
+    mov     w9, #0x8000
+    movk    w9, #0xFF00, lsl #16        /* 0xFF008000 = dark green */
+    mov     x10, #(40 * 720)
+106:str     w9, [x8], #4
+    sub     x10, x10, #1
+    cbnz    x10, 106b
 
     /* Restore DTB pointer as first argument */
     mov     x0, x20
