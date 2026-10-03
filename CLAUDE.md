@@ -113,6 +113,20 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
     failure instead of returning ZX_ERR_NO_MEMORY)
   - ChannelCallMutexTest.* (std::thread synchronization)
   - ChannelTest.ChannelFullException (policy exception infrastructure)
+  - VmoTransferDataTestCase.InvalidInputs (hangs on
+    boot_options->test_ram_reserve — uninitialized struct)
+  - VmoZeroTestCase.WriteCowParent (populated_bytes polling hang)
+  - VmoZeroTestCase.AllocateAfterMergeMultipleChildren (populated_bytes)
+  - VmoZeroTestCase.AllocateAfterMerge (populated_bytes)
+  - VmoZeroTestCase.DecommitMiddle (populated_bytes)
+  - VmoZeroTestCase.Contiguous (populated_bytes)
+  - VmoZeroTestCase.Nested (populated_bytes)
+  - VmoZeroTestCase.ChildZeroThenWrite (populated_bytes)
+  - VmoZeroTestCase.MergeZeroChildren (populated_bytes)
+  - VmoZeroTestCase.EmptyCowChildren (populated_bytes)
+- All 1776 tests have been extracted to /tmp/all_tests.txt via
+  `--gtest_list_tests`. Individual suites can be tested with
+  `--gtest_filter=SuiteName.*` for fast iteration.
 - VMO ambient exec: zx_vmo_create grants EXECUTE right when job
   policy allows AMBIENT_MARK_VMO_EXEC (required by prebuilt libc)
 - Port cancel now drains queued packets and checks source WAIT rights
