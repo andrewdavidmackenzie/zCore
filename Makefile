@@ -7,7 +7,7 @@ STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
 
-.PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc clean \
+.PHONY: help build linux-run zircon-run test boot-test busybox-test config config-macos update rootfs libc-test other-test image clippy-all check doc docs clean \
 	libos-build-linux libos-build-zircon libos-run-linux libos-run-zircon \
 	petal-shell raspi400-build raspi400-run raspi400-sd raspi400-uefi-sd \
 	jollac2-build jollac2-sd \
@@ -124,8 +124,11 @@ demo-zircon: rootfs
 
 # ── Documentation ──────────────────────────────────────────────────────
 # Build the mdbook documentation site into target/book/.
-book:
+docs:
 	mdbook build
+
+# Alias for backwards compatibility.
+book: docs
 
 # Build the kernel for Raspberry Pi 400 in Zircon mode.
 # Userstart, petal ZBI, features, and target spec all come from

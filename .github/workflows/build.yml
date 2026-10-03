@@ -128,3 +128,19 @@ jobs:
 
       - name: Build with Linux emulation (aarch64)
         run: cargo bin -m qemu-aarch64 --flavour linux
+
+  docs:
+    name: Documentation build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mdbook
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          LATEST=$(curl -sSL https://api.github.com/repos/rust-lang/mdBook/releases/latest | grep tag_name | cut -d'"' -f4)
+          curl -sSL "https://github.com/rust-lang/mdBook/releases/download/${LATEST}/mdbook-${LATEST}-x86_64-unknown-linux-gnu.tar.gz" | tar -xz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build docs
+        run: mdbook build
