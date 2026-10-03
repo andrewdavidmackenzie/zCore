@@ -78,8 +78,11 @@ grep '\[       OK \]' /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
-### Current status (phase 16)
-- ~720/1776 tests pass (individual suite runs), ~583 in full sequential run
+### Current status (phase 17)
+- ~750/1776 tests pass (individual suite runs), ~583 in full sequential run
+- Phase 17: JobTest 15→26/29, JobGetInfoTest 32→39/39,
+  ProcessTest.GetRuntimeNoPermission fixed, DebugLogTest +2,
+  VmarGetInfoTest +1
 - Mini-process infrastructure working — child processes can now be
   spawned via start_mini_process_etc (vDSO EXECUTE rights fix)
 - Demand-paging in guarded kernel copies — copy_from_user/copy_to_user
@@ -92,16 +95,24 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
   VmoSliceTestCase (14/19), VmoReference (4/17),
   ProgressiveCloneDiscardTests, VmoTransferDataTestCase
 - ProcessTest (12/30 pass), DefaultExceptionHandlerTest (1/2 pass),
-  JobGetInfoTest (32/39), VmarGetInfoTest (17/21), JobTest (11/29)
+  JobGetInfoTest (39/39+1 BUFFER_TOO_SMALL), VmarGetInfoTest (18/21),
+  JobTest (26/29)
+- V2 policy: ZX_POL_OVERRIDE_DENY/ALLOW, atomic batch application
+- ZX_INFO_TASK_RUNTIME (topic 30) stub, ZX_PROP_JOB_KILL_ON_OOM
+- Job max height (32), return code tracking, TASK_RETCODE fix (-1024)
 - gtest_filter working: use `?--gtest_filter=-Suite.*:Test.Name` in
   ROOTPROC to skip tests. Both argv and ZBI CMDLINE delivery work.
-- Known hangs requiring gtest_filter skip:
+- Known hangs/crashes requiring gtest_filter skip:
   - PortStressTest.* (multi-threaded stress, cooperative scheduler)
   - ChannelTest.NoSpuriousReadableSignalWhenRacing (10K iterations)
   - VmoClone2TestCase.* (populated_bytes fractional attribution)
   - VmoCloneResizeTests.* (populated_bytes after resize/decommit)
   - PortTest.QueuePacketLimitExceededGeneratesPolicyException
     (std::latch + std::thread synchronization)
+  - PortTest.TooManyObservers (OOM crash — kernel panics on alloc
+    failure instead of returning ZX_ERR_NO_MEMORY)
+  - ChannelCallMutexTest.* (std::thread synchronization)
+  - ChannelTest.ChannelFullException (policy exception infrastructure)
 - VMO ambient exec: zx_vmo_create grants EXECUTE right when job
   policy allows AMBIENT_MARK_VMO_EXEC (required by prebuilt libc)
 - Port cancel now drains queued packets and checks source WAIT rights
