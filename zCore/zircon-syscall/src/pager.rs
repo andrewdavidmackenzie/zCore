@@ -125,11 +125,35 @@ impl Syscall<'_> {
         if !vmo.is_pager_backed() {
             return Err(ZxError::INVALID_ARGS);
         }
-        // Without TRAP_DIRTY support, report 0 dirty ranges.
-        // All writes go through without notification, so nothing is
-        // tracked as "dirty" from the pager's perspective.
-        actual.write_if_not_null(0)?;
-        avail.write_if_not_null(0)?;
+        // Without TRAP_DIRTY, conservatively report the entire queried
+        // range as a single dirty range. Every write goes through
+        // without pager notification, so all committed pages are dirty.
+        //
+        // zx_vmo_dirty_range_t = { u64 offset, u64 length, u64 options }
+        let range_size = 24usize; // sizeof(zx_vmo_dirty_range_t)
+        let vmo_size = vmo.len() as u64;
+        let query_end = core::cmp::min(offset + length, vmo_size);
+        if offset >= query_end {
+            // Empty query range — no dirty ranges.
+            actual.write_if_not_null(0)?;
+            avail.write_if_not_null(0)?;
+            return Ok(());
+        }
+        // Report one range covering [offset, query_end).
+        let dirty_offset = offset;
+        let dirty_length = query_end - offset;
+        avail.write_if_not_null(1)?;
+        if _buffer_size >= range_size {
+            let mut buf = UserOutPtr::<u64>::from(_buffer);
+            buf.write(dirty_offset)?;
+            let mut buf2 = UserOutPtr::<u64>::from(_buffer + 8);
+            buf2.write(dirty_length)?;
+            let mut buf3 = UserOutPtr::<u64>::from(_buffer + 16);
+            buf3.write(0)?; // options = 0 (not zero-range)
+            actual.write_if_not_null(1)?;
+        } else {
+            actual.write_if_not_null(0)?;
+        }
         Ok(())
     }
 
