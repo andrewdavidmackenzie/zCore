@@ -64,6 +64,10 @@ pub fn user_copy_leave() -> usize {
 /// Called by the page fault handler. If a user-copy is active,
 /// records the fault and returns `Some(recovery_pc)` so the trap
 /// handler can redirect execution. Otherwise returns `None`.
+///
+/// This clears `USER_COPY_ACTIVE`. If the fault is resolved (demand-
+/// paged), the caller must call `user_copy_rearm` to re-enable the
+/// guard for subsequent faults in the same multi-page copy.
 pub fn user_copy_check_fault(fault_vaddr: usize) -> Option<usize> {
     let idx = super::cpu::cpu_index();
     if *USER_COPY_ACTIVE[idx].get() {
@@ -73,6 +77,18 @@ pub fn user_copy_check_fault(fault_vaddr: usize) -> Option<usize> {
     } else {
         None
     }
+}
+
+/// Re-arm the user-copy guard after a resolved page fault.
+///
+/// Called when `try_handle_page_fault` successfully resolves a fault
+/// during a guarded copy, so that subsequent faults in the same copy
+/// are still caught by the guard.
+pub fn user_copy_rearm(recovery_pc: usize) {
+    let idx = super::cpu::cpu_index();
+    *USER_COPY_ACTIVE[idx].get_mut() = true;
+    *USER_COPY_RECOVERY_PC[idx].get_mut() = recovery_pc;
+    *USER_COPY_FAULT_ADDR[idx].get_mut() = 0;
 }
 
 hal_fn_impl! {

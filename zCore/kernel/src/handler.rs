@@ -60,4 +60,14 @@ impl KernelHandler for ZcoreKernelHandler {
             );
         }
     }
+
+    fn try_handle_page_fault(&self, fault_vaddr: usize, access_flags: MMUFlags) -> bool {
+        if let Some(thread) = hal_impl::thread::get_current_thread() {
+            let thread = thread.downcast::<Thread>().unwrap();
+            let vmar = thread.proc().vmar();
+            vmar.handle_page_fault(fault_vaddr, access_flags).is_ok()
+        } else {
+            false
+        }
+    }
 }

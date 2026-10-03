@@ -27,6 +27,15 @@ pub trait KernelHandler: Send + Sync + 'static {
         // do nothing
     }
 
+    /// Try to handle a page fault, returning true if resolved.
+    ///
+    /// Unlike `handle_page_fault`, this does not panic on failure.
+    /// Used by the guarded user-copy path to attempt demand-paging
+    /// before falling back to the recovery label.
+    fn try_handle_page_fault(&self, _fault_vaddr: VirtAddr, _access_flags: MMUFlags) -> bool {
+        false
+    }
+
     /// Handle a user-mode trap that isn't a page fault or syscall.
     ///
     /// Called for #GP, #UD, and other exceptions from user code.

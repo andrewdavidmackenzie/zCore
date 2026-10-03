@@ -153,7 +153,32 @@ impl Syscall<'_> {
         if !parent_rights.contains(Rights::DUPLICATE | Rights::READ) {
             return Err(ZxError::ACCESS_DENIED);
         }
-        let child_vmo = if options.contains(VmoCloneFlags::SLICE) {
+        let child_vmo = if options.contains(VmoCloneFlags::REFERENCE) {
+            // A reference child is a transparent alias that shares
+            // pages with the parent. offset and size must both be 0.
+            if offset != 0 || size != 0 {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Resizable references are not yet supported: create_slice
+            // builds a non-resizable child and does not support resizable
+            // parents. Reject RESIZABLE for now to avoid kernel panics
+            // (VMObjectSlice::set_len is unimplemented).
+            if resizable {
+                return Err(ZxError::NOT_SUPPORTED);
+            }
+            let remaining = options
+                - VmoCloneFlags::REFERENCE
+                - if no_write {
+                    VmoCloneFlags::NO_WRITE
+                } else {
+                    VmoCloneFlags::empty()
+                };
+            if !remaining.is_empty() {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Implement as a slice over the entire VMO.
+            vmo.create_slice(0, vmo.len())
+        } else if options.contains(VmoCloneFlags::SLICE) {
             if options != VmoCloneFlags::SLICE {
                 Err(ZxError::INVALID_ARGS)
             } else {
@@ -180,6 +205,8 @@ impl Syscall<'_> {
         child_rights.insert(Rights::GET_PROPERTY | Rights::SET_PROPERTY);
         if no_write {
             child_rights.remove(Rights::WRITE);
+        } else if options.contains(VmoCloneFlags::REFERENCE) {
+            // Reference children inherit parent rights.
         } else if options.contains(VmoCloneFlags::SNAPSHOT)
             || options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
         {
@@ -427,6 +454,10 @@ impl Syscall<'_> {
         {
             return Err(ZxError::OUT_OF_RANGE);
         }
+        // Pager-backed VMOs cannot participate in transfer_data.
+        if src.is_pager_backed() || dst.is_pager_backed() {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         // Reject pinned pages in either transfer range.
         if src.has_pinned_pages(src_offset as usize, length as usize)
             || dst.has_pinned_pages(offset as usize, length as usize)
@@ -434,40 +465,57 @@ impl Syscall<'_> {
             return Err(ZxError::BAD_STATE);
         }
 
-        // Reject same-VMO overlapping transfers (copy direction
-        // handling is not yet implemented).
-        if Arc::ptr_eq(&src, &dst) {
-            let src_end = src_offset as usize + length as usize;
-            let dst_end = offset as usize + length as usize;
-            if (src_offset as usize) < dst_end && (offset as usize) < src_end {
-                warn!("vmo.transfer_data: same-VMO overlapping transfer not supported");
-                return Err(ZxError::NOT_SUPPORTED);
-            }
-        }
-
         // Transfer data page-by-page via read/write.
         // Known limitations (follow-up work):
         // - Not zero-copy (copies through a kernel buffer)
-        // - Source decommit fails on child VMOs (ignored, data still copied)
-        // - Same-VMO overlapping transfers rejected above
+        // - Source decommit fails on child VMOs (ignored below)
         // - No pin-count check (pinned pages should return BAD_STATE;
         //   requires adding a VMObjectTrait::is_pinned_in_range method)
-        let mut buf = vec![0u8; PAGE_SIZE];
-        let mut remaining = length as usize;
-        let mut s_off = src_offset as usize;
-        let mut d_off = offset as usize;
-        while remaining > 0 {
-            let chunk = core::cmp::min(remaining, PAGE_SIZE);
-            src.read(s_off, &mut buf[..chunk])?;
-            dst.write(d_off, &buf[..chunk])?;
-            // Decommit the source page to release its physical frame,
-            // matching the Fuchsia "move, not copy" semantics. If
-            // decommit fails (e.g., child VMOs), return the error —
-            // partial progress may have occurred.
-            src.decommit(s_off, chunk)?;
-            s_off += chunk;
-            d_off += chunk;
-            remaining -= chunk;
+        // - Aliasing via slice/reference children is not detected:
+        //   Arc::ptr_eq only catches the exact same VmObject, not
+        //   slice/reference children that share underlying pages.
+        //   A complete fix needs VmObject::root_vmo_id() comparison.
+        let same_vmo = Arc::ptr_eq(&src, &dst);
+        if same_vmo {
+            // Same-VMO transfer: read all source data first, then write
+            // to the destination and decommit. This handles overlapping
+            // ranges correctly.
+            let len = length as usize;
+            let mut buf = vec![0u8; len];
+            src.read(src_offset as usize, &mut buf)?;
+            dst.write(offset as usize, &buf)?;
+            // Decommit source pages. For same-VMO, only decommit pages
+            // that don't overlap with the destination range.
+            let s_start = src_offset as usize;
+            let s_end = s_start + len;
+            let d_start = offset as usize;
+            let d_end = d_start + len;
+            // Non-overlapping part before destination range.
+            if s_start < d_start {
+                let _ = src.decommit(s_start, core::cmp::min(d_start, s_end) - s_start);
+            }
+            // Non-overlapping part after destination range.
+            if s_end > d_end {
+                let decommit_start = core::cmp::max(d_end, s_start);
+                let _ = src.decommit(decommit_start, s_end - decommit_start);
+            }
+        } else {
+            let mut buf = vec![0u8; PAGE_SIZE];
+            let mut remaining = length as usize;
+            let mut s_off = src_offset as usize;
+            let mut d_off = offset as usize;
+            while remaining > 0 {
+                let chunk = core::cmp::min(remaining, PAGE_SIZE);
+                src.read(s_off, &mut buf[..chunk])?;
+                dst.write(d_off, &buf[..chunk])?;
+                // Decommit the source page to release its physical frame,
+                // matching the Fuchsia "move, not copy" semantics.
+                // Ignore decommit errors for child VMOs.
+                let _ = src.decommit(s_off, chunk);
+                s_off += chunk;
+                d_off += chunk;
+                remaining -= chunk;
+            }
         }
         Ok(())
     }
@@ -481,6 +529,8 @@ bitflags! {
         const SLICE                      = 1 << 3;
         const SNAPSHOT_AT_LEAST_ON_WRITE = 1 << 4;
         const NO_WRITE                   = 1 << 5;
+        const REFERENCE                  = 1 << 6;
+        const SNAPSHOT_MODIFIED          = 1 << 7;
     }
 }
 

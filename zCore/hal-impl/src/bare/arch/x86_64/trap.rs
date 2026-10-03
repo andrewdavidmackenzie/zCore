@@ -89,12 +89,19 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
     match trap_reason_from(tf.trap_num, tf.error_code) {
         TrapReason::HardwareBreakpoint | TrapReason::SoftwareBreakpoint => breakpoint(),
         TrapReason::PageFault(vaddr, flags) => {
-            // If we are inside a guarded user-copy region, the fault
-            // is from kernel code reading/writing a bad user pointer.
-            // Redirect execution to the recovery point instead of
-            // forwarding to KHANDLER (which would panic).
             if let Some(recovery_pc) = crate::thread::user_copy_check_fault(vaddr) {
-                tf.rip = recovery_pc;
+                // Inside a guarded user-copy. Try to resolve the fault
+                // first (e.g., demand-page the user data). Only redirect
+                // to recovery if the page fault handler fails.
+                if crate::KHANDLER.try_handle_page_fault(vaddr, flags) {
+                    // Fault resolved — re-arm the guard for subsequent
+                    // faults in the same multi-page copy, then resume.
+                    crate::thread::user_copy_rearm(recovery_pc);
+                } else {
+                    // Unresolvable fault — recovery PC is already set
+                    // by user_copy_check_fault; redirect execution.
+                    tf.rip = recovery_pc;
+                }
                 return;
             }
             crate::KHANDLER.handle_page_fault(vaddr, flags);
