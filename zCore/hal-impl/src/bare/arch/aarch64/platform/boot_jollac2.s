@@ -113,23 +113,83 @@ _real_entry:
     /* Save DTB pointer */
     mov     x20, x0
 
+    /* Ensure SCTLR_EL1 is in a known state: MMU off, caches off,
+       alignment check off. U-Boot may leave arbitrary values here. */
+    mrs     x9, sctlr_el1
+    bic     x9, x9, #(1 << 0)      /* M: MMU off */
+    bic     x9, x9, #(1 << 1)      /* A: Alignment check off */
+    bic     x9, x9, #(1 << 2)      /* C: D-cache off */
+    bic     x9, x9, #(1 << 12)     /* I: I-cache off */
+    msr     sctlr_el1, x9
+    isb
+
     /* ====== Set up boot page tables ====== */
 
-    /* Zero out the 4 page tables */
+    /* Zero out the 4 page tables.
+       Debug bars between each call to identify which one hangs. */
+
+    /* --- Debug: row 10 = starting L0_LO zero --- */
+    mov     x8, #0x0000
+    movk    x8, #0x9e00, lsl #16
+    mov     x11, #(2880 * 10)
+    add     x8, x8, x11
+    mov     w9, #0x8000
+    movk    w9, #0xFF80, lsl #16        /* 0xFF808000 = dark magenta */
+    mov     x10, #720
+98: str     w9, [x8], #4
+    sub     x10, x10, #1
+    cbnz    x10, 98b
+
     adrp    x0, BOOT_PT_L0_LO
     add     x0, x0, :lo12:BOOT_PT_L0_LO
     mov     x1, #4096
     bl      _zero_mem
+
+    /* --- Debug: row 11 = L0_LO done, starting L0_HI --- */
+    mov     x8, #0x0000
+    movk    x8, #0x9e00, lsl #16
+    mov     x11, #(2880 * 11)
+    add     x8, x8, x11
+    mov     w9, #0x0080
+    movk    w9, #0xFF00, lsl #16        /* 0xFF000080 = dark blue */
+    mov     x10, #720
+99: str     w9, [x8], #4
+    sub     x10, x10, #1
+    cbnz    x10, 99b
 
     adrp    x0, BOOT_PT_L0_HI
     add     x0, x0, :lo12:BOOT_PT_L0_HI
     mov     x1, #4096
     bl      _zero_mem
 
+    /* --- Debug: row 12 = L0_HI done, starting L1_ID --- */
+    mov     x8, #0x0000
+    movk    x8, #0x9e00, lsl #16
+    mov     x11, #(2880 * 12)
+    add     x8, x8, x11
+    mov     w9, #0x8080
+    movk    w9, #0xFF00, lsl #16        /* 0xFF008080 = teal */
+    mov     x10, #720
+100:str     w9, [x8], #4
+    sub     x10, x10, #1
+    cbnz    x10, 100b
+
     adrp    x0, BOOT_PT_L1_ID
     add     x0, x0, :lo12:BOOT_PT_L1_ID
     mov     x1, #4096
     bl      _zero_mem
+
+    /* --- Debug: row 13 = L1_ID done, starting L1_HI --- */
+    mov     x8, #0x0000
+    movk    x8, #0x9e00, lsl #16
+    mov     x11, #(2880 * 13)
+    add     x8, x8, x11
+    mov     w9, #0x80FF
+    movk    w9, #0xFF00, lsl #16        /* 0xFF0080FF = orange */
+    mov     x10, #720
+101:str     w9, [x8], #4
+    sub     x10, x10, #1
+    cbnz    x10, 101b
 
     adrp    x0, BOOT_PT_L1_HI
     add     x0, x0, :lo12:BOOT_PT_L1_HI
@@ -211,17 +271,17 @@ _real_entry:
     str     x4, [x0, #16]
     str     x5, [x0, #24]
 
-    /* === Debug: yellow bar = page tables filled (row 10) === */
+    /* === Debug: yellow bar = page tables filled (row 14) === */
     mov     x8, #0x0000
     movk    x8, #0x9e00, lsl #16
-    mov     x11, #(2880 * 10)
+    mov     x11, #(2880 * 14)
     add     x8, x8, x11
     mov     w9, #0x00FF
     movk    w9, #0xFFFF, lsl #16            /* 0xFFFF00FF = yellow */
     mov     x10, #720
-98: str     w9, [x8], #4
+102:str     w9, [x8], #4
     sub     x10, x10, #1
-    cbnz    x10, 98b
+    cbnz    x10, 102b
 
     /* ====== Enable FP/SIMD ====== */
     mov     x0, #(3 << 20)
@@ -271,17 +331,17 @@ _real_entry:
     dsb     sy
     isb
 
-    /* === Debug: white bar = MMU enabled (row 11) === */
+    /* === Debug: white bar = MMU enabled (row 15) === */
     mov     x8, #0x0000
     movk    x8, #0x9e00, lsl #16
-    mov     x11, #(2880 * 11)
+    mov     x11, #(2880 * 15)
     add     x8, x8, x11
     mov     w9, #0xFFFF
     movk    w9, #0xFFFF, lsl #16            /* 0xFFFFFFFF = white */
     mov     x10, #720
-99: str     w9, [x8], #4
+103:str     w9, [x8], #4
     sub     x10, x10, #1
-    cbnz    x10, 99b
+    cbnz    x10, 103b
 
     /* ====== Jump to virtual address space ====== */
     ldr     x0, =_start_virtual
