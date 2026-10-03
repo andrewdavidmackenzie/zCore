@@ -153,7 +153,35 @@ impl Syscall<'_> {
         if !parent_rights.contains(Rights::DUPLICATE | Rights::READ) {
             return Err(ZxError::ACCESS_DENIED);
         }
-        let child_vmo = if options.contains(VmoCloneFlags::SLICE) {
+        let child_vmo = if options.contains(VmoCloneFlags::REFERENCE) {
+            // A reference child is a transparent alias that shares
+            // pages with the parent. offset and size must both be 0.
+            if offset != 0 || size != 0 {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            let remaining = options
+                - VmoCloneFlags::REFERENCE
+                - if no_write {
+                    VmoCloneFlags::NO_WRITE
+                } else {
+                    VmoCloneFlags::empty()
+                }
+                - if resizable {
+                    VmoCloneFlags::RESIZABLE
+                } else {
+                    VmoCloneFlags::empty()
+                };
+            if !remaining.is_empty() {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Resizable reference requires WRITE right on the parent
+            // (resizing is a write operation on the VMO).
+            if resizable && !parent_rights.contains(Rights::WRITE) {
+                return Err(ZxError::ACCESS_DENIED);
+            }
+            // Implement as a slice over the entire VMO.
+            vmo.create_slice(0, vmo.len())
+        } else if options.contains(VmoCloneFlags::SLICE) {
             if options != VmoCloneFlags::SLICE {
                 Err(ZxError::INVALID_ARGS)
             } else {
@@ -180,6 +208,8 @@ impl Syscall<'_> {
         child_rights.insert(Rights::GET_PROPERTY | Rights::SET_PROPERTY);
         if no_write {
             child_rights.remove(Rights::WRITE);
+        } else if options.contains(VmoCloneFlags::REFERENCE) {
+            // Reference children inherit parent rights.
         } else if options.contains(VmoCloneFlags::SNAPSHOT)
             || options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
         {
@@ -498,6 +528,8 @@ bitflags! {
         const SLICE                      = 1 << 3;
         const SNAPSHOT_AT_LEAST_ON_WRITE = 1 << 4;
         const NO_WRITE                   = 1 << 5;
+        const REFERENCE                  = 1 << 6;
+        const SNAPSHOT_MODIFIED          = 1 << 7;
     }
 }
 
