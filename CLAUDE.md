@@ -78,8 +78,12 @@ grep '\[       OK \]' /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
-### Current status (phase 15)
-- 583/1776 tests pass, 54 failing, 1139 not yet reached
+### Current status (phase 16)
+- ~720/1776 tests pass (individual suite runs), ~583 in full sequential run
+- Mini-process infrastructure working — child processes can now be
+  spawned via start_mini_process_etc (vDSO EXECUTE rights fix)
+- Demand-paging in guarded kernel copies — copy_from_user/copy_to_user
+  now demand-page user data instead of failing on unmapped pages
 - VmoInfo struct expanded to 168 bytes matching Fuchsia's zx_info_vmo_t
   (was 104 bytes, causing garbage reads and infinite polling hangs)
 - Per-port packet limit corrected to 4096 (was 2048)
@@ -87,6 +91,8 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
   VmoCloneDisjointClonesTests (2/2), VmoSignalTestCase (3/3),
   VmoSliceTestCase (14/19), VmoReference (4/17),
   ProgressiveCloneDiscardTests, VmoTransferDataTestCase
+- ProcessTest (12/30 pass), DefaultExceptionHandlerTest (1/2 pass),
+  JobGetInfoTest (32/39), VmarGetInfoTest (17/21), JobTest (11/29)
 - gtest_filter working: use `?--gtest_filter=-Suite.*:Test.Name` in
   ROOTPROC to skip tests. Both argv and ZBI CMDLINE delivery work.
 - Known hangs requiring gtest_filter skip:
@@ -106,6 +112,10 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 - VMO content_size set on create and updated on resize
 - Datagram socket all-or-nothing write semantics
 - VMO immutable flag for SNAPSHOT + NO_WRITE children
+- Job signals: JOB_NO_JOBS, JOB_NO_PROCESSES, JOB_NO_CHILDREN managed
+  on child/process add/remove
+- VMO REFERENCE child type (ZX_VMO_CHILD_REFERENCE) via full-VMO slice
+- Pager query_dirty_ranges and query_vmo_stats stubs implemented
 
 ### Key notes
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in
@@ -117,9 +127,14 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 - Test binary: `prebuilt/zircon-test/x86_64/core-tests-standalone`
 - Issue #21 tracks overall progress, issue #468 tracks missing syscalls.
 - Issue #471 tracks the user-buffer copy architecture gap.
+- Issue #21 has a master list of all 1776 tests with pass/fail/hang
+  status and a categorized root cause analysis of all failures.
 - VmoClone2/VmoCloneResize tests hang on `populated_bytes` polling
   because COW page attribution doesn't implement fractional scaling.
   Use gtest_filter to skip these suites when running the full suite.
+- All 1776 tests have been extracted to /tmp/all_tests.txt via
+  `--gtest_list_tests`. Individual suites can be tested with
+  `--gtest_filter=SuiteName.*` for fast iteration.
 
 ## PR workflow
 After pushing commits to a PR:
