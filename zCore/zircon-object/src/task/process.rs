@@ -563,23 +563,22 @@ impl Process {
 
     /// Get information of this process.
     pub fn get_info(&self) -> ProcessInfo {
-        let mut info = ProcessInfo {
-            debugger_attached: self.debug_exceptionate.has_channel(),
-            ..Default::default()
+        use zircon_abi::types::{
+            ZX_INFO_PROCESS_FLAG_DEBUGGER_ATTACHED, ZX_INFO_PROCESS_FLAG_EXITED,
+            ZX_INFO_PROCESS_FLAG_STARTED,
         };
+        let mut info = ProcessInfo::default();
+        if self.debug_exceptionate.has_channel() {
+            info.flags |= ZX_INFO_PROCESS_FLAG_DEBUGGER_ATTACHED;
+        }
         match self.inner.lock().status {
-            Status::Init => {
-                info.started = false;
-                info.has_exited = false;
-            }
+            Status::Init => {}
             Status::Running => {
-                info.started = true;
-                info.has_exited = false;
+                info.flags |= ZX_INFO_PROCESS_FLAG_STARTED;
             }
             Status::Exited(ret) => {
                 info.return_code = ret;
-                info.has_exited = true;
-                info.started = true;
+                info.flags |= ZX_INFO_PROCESS_FLAG_STARTED | ZX_INFO_PROCESS_FLAG_EXITED;
             }
         }
         info
@@ -714,17 +713,8 @@ impl ProcessInner {
     }
 }
 
-/// Information of a process.
-#[allow(missing_docs)]
-#[repr(C)]
-#[derive(Default)]
-pub struct ProcessInfo {
-    pub return_code: i64,
-    pub started: bool,
-    pub has_exited: bool,
-    pub debugger_attached: bool,
-    pub padding1: [u8; 5],
-}
+// ProcessInfo is defined in zircon-abi and re-exported via task mod.rs.
+pub use zircon_abi::types::ProcessInfo;
 
 #[cfg(test)]
 mod tests {
@@ -917,11 +907,17 @@ mod tests {
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
         let info = proc.get_info();
-        assert!(!info.has_exited && !info.started && info.return_code == 0);
+        assert_eq!(info.flags, 0);
+        assert_eq!(info.return_code, 0);
 
         proc.exit(666);
         let info = proc.get_info();
-        assert!(info.has_exited && info.started && info.return_code == 666);
+        assert_eq!(
+            info.flags,
+            zircon_abi::types::ZX_INFO_PROCESS_FLAG_STARTED
+                | zircon_abi::types::ZX_INFO_PROCESS_FLAG_EXITED
+        );
+        assert_eq!(info.return_code, 666);
         assert_eq!(thread.state(), ThreadState::Dying);
         // TODO: when is the thread dead?
 
