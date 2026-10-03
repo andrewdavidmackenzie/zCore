@@ -99,6 +99,10 @@ impl Syscall<'_> {
         info!("process.start: proc_handle={:?}, thread_handle={:?}, entry={:?}, stack={:?}, arg1_handle={:?}, arg2={:?}",
             proc_handle, thread_handle, entry, stack, arg1_handle, arg2
         );
+        // Reject non-userspace entry points and stack pointers.
+        if !is_user_address(entry) || !is_user_address(stack) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         let process = proc.get_object_with_rights::<Process>(proc_handle, Rights::WRITE)?;
         let thread = proc.get_object_with_rights::<Thread>(thread_handle, Rights::WRITE)?;
@@ -646,6 +650,24 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         Ok(())
+    }
+}
+
+/// Check if an address is in the user-space range (canonical lower half).
+/// Fuchsia rejects addresses in the kernel half for process_start entry/stack.
+fn is_user_address(addr: usize) -> bool {
+    #[cfg(target_arch = "x86_64")]
+    {
+        addr < 0x0000_8000_0000_0000
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        addr < 0x0001_0000_0000_0000
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    {
+        let _ = addr;
+        true // permissive on other architectures
     }
 }
 
