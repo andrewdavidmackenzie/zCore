@@ -475,19 +475,16 @@ impl Syscall<'_> {
             Topic::TaskRuntime => {
                 // ZX_INFO_TASK_RUNTIME — applies to Job, Process, and Thread.
                 // Return a zeroed struct as a stub (no real CPU accounting yet).
-                // Verify the handle is a valid task (Job, Process, or Thread)
-                // with INSPECT rights.
-                if proc
-                    .get_object_with_rights::<Job>(handle, Rights::INSPECT)
-                    .is_err()
-                    && proc
-                        .get_object_with_rights::<Process>(handle, Rights::INSPECT)
-                        .is_err()
-                    && proc
-                        .get_object_with_rights::<Thread>(handle, Rights::INSPECT)
-                        .is_err()
-                {
+                // First check the handle is a valid task type, then check rights.
+                // This ensures we return ACCESS_DENIED (not WRONG_TYPE) when
+                // the handle is a valid task but lacks INSPECT rights.
+                let (_obj, rights) = proc.get_dyn_object_and_rights(handle)?;
+                let type_name = _obj.type_name();
+                if type_name != "Job" && type_name != "Process" && type_name != "Thread" {
                     return Err(ZxError::WRONG_TYPE);
+                }
+                if !rights.contains(Rights::INSPECT) {
+                    return Err(ZxError::ACCESS_DENIED);
                 }
                 // Write as many bytes of the runtime info as the buffer can
                 // hold (supports V1 = 16 bytes and V2 = 32 bytes).
