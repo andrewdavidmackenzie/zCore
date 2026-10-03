@@ -1,11 +1,18 @@
 use crate::error::*;
 use crate::signal::Slack;
 
+/// V2 override flags for policy conditions.
+pub const POL_OVERRIDE_ALLOW: u32 = 0;
+pub const POL_OVERRIDE_DENY: u32 = 1;
+
 /// Security and resource policies of a job.
 #[derive(Default, Copy, Clone)]
 pub struct JobPolicy {
     // TODO: use bitset
     action: [Option<PolicyAction>; 15],
+    /// Per-condition override flag. `true` means override is allowed (V2).
+    /// For V1 policies (no flags field), defaults to `false` (deny override).
+    override_allow: [bool; 15],
 }
 
 impl JobPolicy {
@@ -14,9 +21,21 @@ impl JobPolicy {
         self.action[condition as usize]
     }
 
-    /// Apply a basic policy.
+    /// Check if the override flag allows changing this condition.
+    pub fn is_override_allowed(&self, condition: PolicyCondition) -> bool {
+        self.override_allow[condition as usize]
+    }
+
+    /// Apply a basic V1 policy (override defaults to deny).
     pub fn apply(&mut self, policy: BasicPolicy) {
         self.action[policy.condition as usize] = Some(policy.action);
+    }
+
+    /// Apply a basic V2 policy with override flag.
+    pub fn apply_v2(&mut self, policy: BasicPolicyV2) {
+        let idx = policy.condition as usize;
+        self.action[idx] = Some(policy.action);
+        self.override_allow[idx] = policy.flags == POL_OVERRIDE_ALLOW;
     }
 
     /// Merge the policy with `parent`'s.
@@ -41,7 +60,25 @@ pub enum SetPolicyOptions {
     Relative,
 }
 
-/// The policy type.
+/// The policy type (V1 format, 8 bytes) as read from userspace.
+/// Uses raw u32 fields to avoid UB from invalid enum discriminants.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct BasicPolicyRaw {
+    pub condition: u32,
+    pub action: u32,
+}
+
+impl BasicPolicyRaw {
+    /// Validate and convert raw ABI fields to typed policy.
+    pub fn validate(&self) -> ZxResult<BasicPolicy> {
+        let condition = PolicyCondition::try_from(self.condition)?;
+        let action = PolicyAction::try_from(self.action)?;
+        Ok(BasicPolicy { condition, action })
+    }
+}
+
+/// Validated V1 policy entry.
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct BasicPolicy {
@@ -49,6 +86,38 @@ pub struct BasicPolicy {
     pub condition: PolicyCondition,
     /// Action to take when the policy is applied.
     pub action: PolicyAction,
+}
+
+/// The policy type (V2 format, 12 bytes) as read from userspace.
+/// Uses raw u32 fields to avoid UB from invalid enum discriminants.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct BasicPolicyV2Raw {
+    pub condition: u32,
+    pub action: u32,
+    pub flags: u32,
+}
+
+/// Validated V2 policy entry.
+#[derive(Debug, Copy, Clone)]
+pub struct BasicPolicyV2 {
+    /// Condition when the policy is applied.
+    pub condition: PolicyCondition,
+    /// Action to take when the policy is applied.
+    pub action: PolicyAction,
+    /// Override flags: 0 = OVERRIDE_ALLOW, 1 = OVERRIDE_DENY.
+    pub flags: u32,
+}
+
+impl BasicPolicyV2Raw {
+    /// Validate and convert raw ABI fields to typed policy.
+    pub fn validate(&self) -> ZxResult<BasicPolicyV2> {
+        Ok(BasicPolicyV2 {
+            condition: PolicyCondition::try_from(self.condition)?,
+            action: PolicyAction::try_from(self.action)?,
+            flags: self.flags,
+        })
+    }
 }
 
 /// The condition when a policy is applied.
@@ -110,6 +179,44 @@ pub enum PolicyAction {
     Kill = 4,
 }
 
+impl core::convert::TryFrom<u32> for PolicyCondition {
+    type Error = ZxError;
+    fn try_from(v: u32) -> ZxResult<Self> {
+        match v {
+            0 => Ok(Self::BadHandle),
+            1 => Ok(Self::WrongObject),
+            2 => Ok(Self::VmarWx),
+            3 => Ok(Self::NewAny),
+            4 => Ok(Self::NewVMO),
+            5 => Ok(Self::NewChannel),
+            6 => Ok(Self::NewEvent),
+            7 => Ok(Self::NewEventPair),
+            8 => Ok(Self::NewPort),
+            9 => Ok(Self::NewSocket),
+            10 => Ok(Self::NewFIFO),
+            11 => Ok(Self::NewTimer),
+            12 => Ok(Self::NewProcess),
+            13 => Ok(Self::NewProfile),
+            14 => Ok(Self::AmbientMarkVMOExec),
+            _ => Err(ZxError::INVALID_ARGS),
+        }
+    }
+}
+
+impl core::convert::TryFrom<u32> for PolicyAction {
+    type Error = ZxError;
+    fn try_from(v: u32) -> ZxResult<Self> {
+        match v {
+            0 => Ok(Self::Allow),
+            1 => Ok(Self::Deny),
+            2 => Ok(Self::AllowException),
+            3 => Ok(Self::DenyException),
+            4 => Ok(Self::Kill),
+            _ => Err(ZxError::INVALID_ARGS),
+        }
+    }
+}
+
 /// Timer slack policy.
 ///
 /// See [timer slack](../../signal/timer/enum.Slack.html) for more information.
@@ -117,7 +224,20 @@ pub enum PolicyAction {
 #[derive(Debug, Copy, Clone)]
 pub struct TimerSlackPolicy {
     min_slack: i64,
-    default_mode: Slack,
+    /// Raw u32 from userspace — must be validated as a valid Slack variant.
+    default_mode: u32,
+}
+
+impl TimerSlackPolicy {
+    /// Get the default_mode as a validated Slack enum.
+    pub fn slack_mode(&self) -> ZxResult<Slack> {
+        match self.default_mode {
+            0 => Ok(Slack::Center),
+            1 => Ok(Slack::Early),
+            2 => Ok(Slack::Late),
+            _ => Err(ZxError::INVALID_ARGS),
+        }
+    }
 }
 
 /// Check whether the policy is valid.
@@ -125,6 +245,8 @@ pub fn check_timer_policy(policy: &TimerSlackPolicy) -> ZxResult {
     if policy.min_slack.is_negative() {
         return Err(ZxError::INVALID_ARGS);
     }
+    // Validate that default_mode is a known Slack variant (0=Center, 1=Early, 2=Late).
+    let _ = policy.slack_mode()?;
     Ok(())
 }
 
@@ -136,9 +258,10 @@ pub(super) struct TimerSlack {
 
 impl TimerSlack {
     pub(super) fn generate_new(&self, policy: TimerSlackPolicy) -> TimerSlack {
+        // slack_mode() was already validated by check_timer_policy, so unwrap is safe.
         TimerSlack {
             amount: self.amount.max(policy.min_slack),
-            mode: policy.default_mode,
+            mode: policy.slack_mode().unwrap_or(Slack::Center),
         }
     }
 }

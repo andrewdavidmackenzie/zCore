@@ -66,6 +66,10 @@ struct JobInner {
     killed: bool,
     timer_policy: TimerSlack,
     self_ref: Weak<Job>,
+    /// Whether this job should be killed when the system is out of memory.
+    kill_on_oom: bool,
+    /// Return code set when the job is killed or a critical process exits.
+    return_code: i64,
 }
 
 impl Job {
@@ -89,11 +93,31 @@ impl Job {
         job
     }
 
+    /// Maximum allowed job nesting depth (matches Fuchsia's kMaxJobHeight = 32).
+    const MAX_HEIGHT: usize = 32;
+
+    /// Get the depth of this job from the root.
+    fn depth(&self) -> usize {
+        let mut depth = 0;
+        let mut current = self.parent.clone();
+        while let Some(parent) = current {
+            depth += 1;
+            current = parent.parent.clone();
+        }
+        depth
+    }
+
     /// Create a new child job object.
     pub fn create_child(self: &Arc<Self>) -> ZxResult<Arc<Self>> {
         let mut inner = self.inner.lock();
         if inner.killed {
             return Err(ZxError::BAD_STATE);
+        }
+        // Enforce maximum job nesting depth. Fuchsia permits depth up to
+        // MAX_HEIGHT (root=0, max child=MAX_HEIGHT-1). Reject only when
+        // the parent has no height remaining.
+        if self.depth() >= Self::MAX_HEIGHT {
+            return Err(ZxError::OUT_OF_RANGE);
         }
         let child = Arc::new(Job {
             base: KObjectBase::with_signal(Self::empty_signals()),
@@ -160,15 +184,64 @@ impl Job {
             return Err(ZxError::BAD_STATE);
         }
         for policy in policies {
+            // In Fuchsia, ABSOLUTE fails with ALREADY_EXISTS if the parent's
+            // effective policy already overrides this condition. The child can
+            // always set/change its own policy freely.
             if self.parent_policy.get_action(policy.condition).is_some() {
                 match options {
                     SetPolicyOptions::Absolute => return Err(ZxError::ALREADY_EXISTS),
                     SetPolicyOptions::Relative => {}
                 }
-            } else {
-                inner.policy.apply(*policy);
             }
+            // Always apply the policy to the child's own local policy.
+            // This overrides any previous set_policy call on this job.
+            inner.policy.apply(*policy);
         }
+        Ok(())
+    }
+
+    /// Sets one or more V2 security policies to an empty job.
+    /// V2 policies include an override flag per condition.
+    pub fn set_policy_basic_v2(
+        &self,
+        options: SetPolicyOptions,
+        policies: &[BasicPolicyV2],
+    ) -> ZxResult {
+        let mut inner = self.inner.lock();
+        if !inner.is_empty() {
+            return Err(ZxError::BAD_STATE);
+        }
+        // Apply to a temporary copy for atomicity — if any entry fails,
+        // the original policy remains unchanged.
+        let mut new_policy = inner.policy;
+        for policy in policies {
+            // Validate flags: only OVERRIDE_ALLOW (0) and OVERRIDE_DENY (1).
+            if policy.flags > 1 {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Check parent's inherited policy — ABSOLUTE rejects conflicts.
+            if self.parent_policy.get_action(policy.condition).is_some() {
+                match options {
+                    SetPolicyOptions::Absolute => return Err(ZxError::ALREADY_EXISTS),
+                    SetPolicyOptions::Relative => {}
+                }
+            }
+            // Check if the condition is already set on this job and whether
+            // the override flag allows changing it.
+            if let Some(existing_action) = new_policy.get_action(policy.condition) {
+                if !new_policy.is_override_allowed(policy.condition) {
+                    // Override is denied — only the exact same action succeeds.
+                    // Keep the existing entry unchanged (preserve the deny flag).
+                    if existing_action != policy.action {
+                        return Err(ZxError::ALREADY_EXISTS);
+                    }
+                    continue;
+                }
+            }
+            new_policy.apply_v2(*policy);
+        }
+        // Commit atomically — all entries succeeded.
+        inner.policy = new_policy;
         Ok(())
     }
 
@@ -219,7 +292,24 @@ impl Job {
 
     /// Get information of this job.
     pub fn get_info(&self) -> JobInfo {
-        JobInfo::default()
+        let inner = self.inner.lock();
+        JobInfo {
+            return_code: inner.return_code,
+            exited: inner.killed && inner.is_empty(),
+            kill_on_oom: inner.kill_on_oom,
+            debugger_attached: false,
+            padding: [0; 5],
+        }
+    }
+
+    /// Get the kill_on_oom flag.
+    pub fn get_kill_on_oom(&self) -> bool {
+        self.inner.lock().kill_on_oom
+    }
+
+    /// Set the kill_on_oom flag.
+    pub fn set_kill_on_oom(&self, value: bool) {
+        self.inner.lock().kill_on_oom = value;
     }
 
     /// Check whether this job is root job.
@@ -263,16 +353,18 @@ impl Job {
     }
 }
 
-impl Task for Job {
-    /// Kill the job. The job do not terminate immediately when killed.
-    /// It will terminate after all its children and processes are terminated.
-    fn kill(&self) {
+impl Job {
+    /// Kill the job with a specific return code. The job does not terminate
+    /// immediately when killed — it will terminate after all its children
+    /// and processes are terminated.
+    pub fn kill_with_code(&self, return_code: i64) {
         let (children, processes) = {
             let mut inner = self.inner.lock();
             if inner.killed {
                 return;
             }
             inner.killed = true;
+            inner.return_code = return_code;
             (inner.children.clone(), inner.processes.clone())
         };
         if children.is_empty() && processes.is_empty() {
@@ -281,12 +373,20 @@ impl Task for Job {
         }
         for child in children {
             if let Some(child) = child.upgrade() {
-                child.kill();
+                child.kill_with_code(return_code);
             }
         }
         for proc in processes {
-            proc.kill();
+            proc.exit(return_code);
         }
+    }
+}
+
+impl Task for Job {
+    /// Kill the job. The job do not terminate immediately when killed.
+    /// It will terminate after all its children and processes are terminated.
+    fn kill(&self) {
+        self.kill_with_code(super::TASK_RETCODE_SYSCALL_KILL);
     }
 
     fn suspend(&self) {

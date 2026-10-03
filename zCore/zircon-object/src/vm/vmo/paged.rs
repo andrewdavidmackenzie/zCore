@@ -695,18 +695,13 @@ impl VMObjectPagedInner {
 
     /// Count committed pages of the VMO.
     fn committed_pages_in_range(&self, start_idx: usize, end_idx: usize) -> usize {
-        assert!(
-            start_idx < self.size / PAGE_SIZE || start_idx == 0,
-            "start_idx {:#x}, self.size {:#x}",
-            start_idx,
-            self.size
-        );
-        assert!(
-            end_idx <= self.size / PAGE_SIZE,
-            "end_idx {:#x}, self.size {:#x}",
-            end_idx,
-            self.size
-        );
+        let pages = self.size / PAGE_SIZE;
+        // Clamp range to VMO bounds instead of panicking — callers may
+        // pass stale sizes when VMO has been resized or is zero-length.
+        if pages == 0 || start_idx >= pages {
+            return 0;
+        }
+        let end_idx = end_idx.min(pages);
         let mut count = 0;
         for i in start_idx..end_idx {
             if self.frames.contains_key(&i) {

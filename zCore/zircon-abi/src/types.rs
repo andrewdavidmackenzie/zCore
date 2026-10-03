@@ -118,20 +118,25 @@ pub struct PortPacket {
 
 // ── Info structs ────────────────────────────────────────────────────
 
+/// Process information flags (`zx_info_process_flags_t`).
+pub const ZX_INFO_PROCESS_FLAG_STARTED: u32 = 1 << 0;
+pub const ZX_INFO_PROCESS_FLAG_EXITED: u32 = 1 << 1;
+pub const ZX_INFO_PROCESS_FLAG_DEBUGGER_ATTACHED: u32 = 1 << 2;
+
 /// Process information (`zx_info_process_t`).
+///
+/// Matches Fuchsia ABI: return_code (i64), start_time (i64), flags (u32), padding (4 bytes) = 24 bytes.
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
 pub struct ProcessInfo {
-    /// The return code of the process (valid if `has_exited` is true).
+    /// The return code of the process (valid if FLAG_EXITED is set).
     pub return_code: i64,
-    /// Whether the process has been started.
-    pub started: bool,
-    /// Whether the process has exited.
-    pub has_exited: bool,
-    /// Whether a debugger is attached.
-    pub debugger_attached: bool,
-    /// Padding to 16 bytes.
-    pub padding1: [u8; 5],
+    /// Monotonic time at which zx_process_start() was called.
+    pub start_time: i64,
+    /// Bitwise OR of ZX_INFO_PROCESS_FLAG_* values.
+    pub flags: u32,
+    /// Padding to 24 bytes.
+    pub padding1: [u8; 4],
 }
 
 /// Thread information (`zx_info_thread_t`).

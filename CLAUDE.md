@@ -78,8 +78,11 @@ grep '\[       OK \]' /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
-### Current status (phase 16)
-- ~720/1776 tests pass (individual suite runs), ~583 in full sequential run
+### Current status (phase 17)
+- ~750/1776 tests pass (individual suite runs), ~583 in full sequential run
+- Phase 17: JobTest 15→26/29, JobGetInfoTest 32→39/39,
+  ProcessTest.GetRuntimeNoPermission fixed, DebugLogTest +2,
+  VmarGetInfoTest +1
 - Mini-process infrastructure working — child processes can now be
   spawned via start_mini_process_etc (vDSO EXECUTE rights fix)
 - Demand-paging in guarded kernel copies — copy_from_user/copy_to_user
@@ -92,16 +95,57 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
   VmoSliceTestCase (14/19), VmoReference (4/17),
   ProgressiveCloneDiscardTests, VmoTransferDataTestCase
 - ProcessTest (12/30 pass), DefaultExceptionHandlerTest (1/2 pass),
-  JobGetInfoTest (32/39), VmarGetInfoTest (17/21), JobTest (11/29)
+  JobGetInfoTest (39/39+1 BUFFER_TOO_SMALL), VmarGetInfoTest (18/21),
+  JobTest (26/29)
+- ProcessInfo ABI fixed: 24-byte V1 layout with flags bitfield and
+  start_time (was 16-byte with booleans at wrong offsets)
+- VMO committed_pages_in_range: clamp to bounds instead of panicking
+  on zero-size VMO (was kernel crash)
+- V2 policy: ZX_POL_OVERRIDE_DENY/ALLOW, atomic batch application,
+  raw ABI validation of condition/action discriminants
+- ZX_INFO_TASK_RUNTIME (topic 30): version-aware V1 (16B) / V2 (32B)
+- ZX_INFO_THREAD_STATS (topic 15): new handler with ZX_INFO_INVALID_CPU
+- ZX_INFO_HANDLE_TABLE (topic 27): enumerate process handles
+- ZX_PROP_JOB_KILL_ON_OOM (property 15): get/set with value validation
+- Job max height (32), return code tracking, TASK_RETCODE fix (-1024)
+- process_start: reject kernel-space entry/stack addresses
+- BUFFER_TOO_SMALL: write actual=0, avail=1 for all info topics
+- All single-record info topics write actual=1, avail=1 on success
 - gtest_filter working: use `?--gtest_filter=-Suite.*:Test.Name` in
   ROOTPROC to skip tests. Both argv and ZBI CMDLINE delivery work.
-- Known hangs requiring gtest_filter skip:
+- Known hangs/crashes requiring gtest_filter skip:
   - PortStressTest.* (multi-threaded stress, cooperative scheduler)
   - ChannelTest.NoSpuriousReadableSignalWhenRacing (10K iterations)
   - VmoClone2TestCase.* (populated_bytes fractional attribution)
   - VmoCloneResizeTests.* (populated_bytes after resize/decommit)
   - PortTest.QueuePacketLimitExceededGeneratesPolicyException
     (std::latch + std::thread synchronization)
+  - PortTest.TooManyObservers (OOM crash — kernel panics on alloc
+    failure instead of returning ZX_ERR_NO_MEMORY)
+  - ChannelCallMutexTest.* (std::thread synchronization)
+  - ChannelTest.ChannelFullException (policy exception infrastructure)
+  - VmoTransferDataTestCase.InvalidInputs (hangs on
+    boot_options->test_ram_reserve — uninitialized struct)
+  - VmoZeroTestCase.WriteCowParent (populated_bytes polling hang)
+  - VmoZeroTestCase.AllocateAfterMergeMultipleChildren (populated_bytes)
+  - VmoZeroTestCase.AllocateAfterMerge (populated_bytes)
+  - VmoZeroTestCase.DecommitMiddle (populated_bytes)
+  - VmoZeroTestCase.Contiguous (populated_bytes)
+  - VmoZeroTestCase.Nested (populated_bytes)
+  - VmoZeroTestCase.ChildZeroThenWrite (populated_bytes)
+  - VmoZeroTestCase.MergeZeroChildren (populated_bytes)
+  - VmoZeroTestCase.EmptyCowChildren (populated_bytes)
+  - VmoTestCase.* (multiple hangs: boot_options uninitialized, VMAR
+    map failures causing infinite waits; only 1/58 passes)
+  - PagerProcess.* (thread blocked on pager fault not woken on
+    process kill — multiple tests hang, blocks 50+ later suites)
+  - ProcessTest.ProcessWaitAsyncCancelSelf (race condition stress
+    test — mini-process WAIT_ASYNC_CANCEL loop hangs)
+  - ProcessTest.ProcessHwTraceContextIdProperty (hw trace not
+    implemented — hangs on thread wait)
+- All 1776 tests have been extracted to /tmp/all_tests.txt via
+  `--gtest_list_tests`. Individual suites can be tested with
+  `--gtest_filter=SuiteName.*` for fast iteration.
 - VMO ambient exec: zx_vmo_create grants EXECUTE right when job
   policy allows AMBIENT_MARK_VMO_EXEC (required by prebuilt libc)
 - Port cancel now drains queued packets and checks source WAIT rights

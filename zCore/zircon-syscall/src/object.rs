@@ -79,6 +79,14 @@ impl Syscall<'_> {
                 info_ptr.write(break_on_load)?;
                 Ok(())
             }
+            Property::JobKillOnOom => {
+                let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
+                let value = proc
+                    .get_object_with_rights::<Job>(handle_value, Rights::GET_PROPERTY)?
+                    .get_kill_on_oom();
+                info_ptr.write(value as usize)?;
+                Ok(())
+            }
             Property::SocketRxThreshold => {
                 let mut info_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
                 let rx = proc
@@ -226,6 +234,16 @@ impl Syscall<'_> {
                     .set_dyn_break_on_load(addr);
                 Ok(())
             }
+            Property::JobKillOnOom => {
+                let value = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
+                // Only 0 (disable) and 1 (enable) are valid values.
+                if value > 1 {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                proc.get_object_with_rights::<Job>(handle_value, Rights::SET_PROPERTY)?
+                    .set_kill_on_oom(value != 0);
+                Ok(())
+            }
             Property::SocketRxThreshold => {
                 let threshold = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
                 proc.get_object::<Socket>(handle_value)?
@@ -325,9 +343,16 @@ impl Syscall<'_> {
         mut avail: UserOutPtr<usize>,
     ) -> ZxResult {
         // Fuchsia info topics use low bits for the topic ID and upper bits
-        // for flags (e.g. bit 28 = requires specific object state).  Strip
-        // the flags before converting to the Topic enum.
-        let topic = Topic::try_from(topic & 0xFFFF).map_err(|_| ZxError::INVALID_ARGS)?;
+        // for version (bits 28+). Preserve the version before stripping.
+        let topic_version = topic >> 28;
+        let masked_topic = topic & 0xFFFF;
+        let topic = Topic::try_from(masked_topic).map_err(|_| {
+            warn!(
+                "object.get_info: unknown topic {:#x} (masked {:#x})",
+                topic, masked_topic
+            );
+            ZxError::INVALID_ARGS
+        })?;
         info!(
             "object.get_info: handle={:#x?}, topic={:?}, buffer=({:#x}; {:#x})",
             handle, topic, buffer, buffer_size,
@@ -338,49 +363,120 @@ impl Syscall<'_> {
                 let _ = self.get_object_with_pseudo(handle, Rights::empty())?;
             }
             Topic::Process => {
+                // ZX_INFO_PROCESS = __ZX_INFO_TOPIC(3u, 1u) — only V1 (24-byte)
+                // layout exists in Fuchsia. No V0 16-byte variant.
+                let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<ProcessInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
                 let mut info_ptr = UserOutPtr::<ProcessInfo>::from_addr_size(buffer, buffer_size)?;
-                let proc = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
-                info_ptr.write(proc.get_info())?;
+                info_ptr.write(target.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::Vmar => {
-                let mut info_ptr = UserOutPtr::<VmarInfo>::from_addr_size(buffer, buffer_size)?;
                 let vmar =
                     proc.get_object_with_rights::<VmAddressRegion>(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<VmarInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr = UserOutPtr::<VmarInfo>::from_addr_size(buffer, buffer_size)?;
                 info_ptr.write(vmar.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::HandleBasic => {
+                let info = proc.get_handle_info(handle)?;
+                if buffer_size < core::mem::size_of::<HandleBasicInfo>() {
+                    // Buffer too small — still write actual=0, avail=1 per Fuchsia ABI.
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
                 let mut info_ptr =
                     UserOutPtr::<HandleBasicInfo>::from_addr_size(buffer, buffer_size)?;
-                let info = proc.get_handle_info(handle)?;
                 info_ptr.write(info)?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }
             Topic::Thread => {
-                let mut info_ptr = UserOutPtr::<ThreadInfo>::from_addr_size(buffer, buffer_size)?;
                 let thread = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<ThreadInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr = UserOutPtr::<ThreadInfo>::from_addr_size(buffer, buffer_size)?;
                 info_ptr.write(thread.get_thread_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::ThreadExceptionReport => {
                 let mut info_ptr =
                     UserOutPtr::<ExceptionReport>::from_addr_size(buffer, buffer_size)?;
                 let thread = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)?;
                 info_ptr.write(thread.get_thread_exception_info()?)?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::HandleCount => {
-                let mut info_ptr = UserOutPtr::<u32>::from_addr_size(buffer, buffer_size)?;
                 let object = self.get_object_with_pseudo(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<u32>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr = UserOutPtr::<u32>::from_addr_size(buffer, buffer_size)?;
                 info_ptr.write(object.handle_count())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::Job => {
-                let mut info_ptr = UserOutPtr::<JobInfo>::from_addr_size(buffer, buffer_size)?;
                 let job = proc.get_object_with_rights::<Job>(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<JobInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr = UserOutPtr::<JobInfo>::from_addr_size(buffer, buffer_size)?;
                 info_ptr.write(job.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
+            }
+            Topic::HandleTable => {
+                let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
+                let raw_entries = target.get_handle_table_entries();
+                let entries: Vec<HandleExtendedInfo> = raw_entries
+                    .iter()
+                    .map(
+                        |&(obj_type, hv, rights, koid, related)| HandleExtendedInfo {
+                            obj_type,
+                            handle_value: hv,
+                            rights,
+                            reserved: 0,
+                            koid,
+                            related_koid: related,
+                            peer_owner_koid: 0,
+                        },
+                    )
+                    .collect();
+                let entry_size = core::mem::size_of::<HandleExtendedInfo>();
+                let count = (buffer_size / entry_size).min(entries.len());
+                if count > 0 {
+                    UserOutPtr::<HandleExtendedInfo>::from(buffer)
+                        .write_array(&entries[..count])?;
+                }
+                actual.write_if_not_null(count)?;
+                avail.write_if_not_null(entries.len())?;
             }
             Topic::ProcessVmos => {
                 warn!("A dummy implementation for utest Bti.NoDelayedUnpin, it does not check the reture value");
-                actual.write(0)?;
-                avail.write(0)?;
+                actual.write_if_not_null(0)?;
+                avail.write_if_not_null(0)?;
             }
             Topic::Vmo => {
                 let mut info_ptr = UserOutPtr::<VmoInfo>::from_addr_size(buffer, buffer_size)?;
@@ -389,6 +485,8 @@ impl Syscall<'_> {
                 info.flags |= VmoInfoFlags::VIA_HANDLE;
                 info.rights |= rights;
                 info_ptr.write(info)?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::KmemStats => {
                 let mut info_ptr = UserOutPtr::<KmemInfo>::from_addr_size(buffer, buffer_size)?;
@@ -397,16 +495,48 @@ impl Syscall<'_> {
                     ..Default::default()
                 };
                 info_ptr.write(kmem)?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
+            }
+            Topic::ThreadStats => {
+                let thread = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)?;
+                if buffer_size < core::mem::size_of::<ThreadStatsInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr =
+                    UserOutPtr::<ThreadStatsInfo>::from_addr_size(buffer, buffer_size)?;
+                // Report ZX_INFO_INVALID_CPU (0xFFFFFFFF) for threads that
+                // have never been scheduled.
+                let last_cpu = if thread.state() == ThreadState::New {
+                    0xFFFF_FFFFu32
+                } else {
+                    0 // stub: report CPU 0 until real tracking is added
+                };
+                info_ptr.write(ThreadStatsInfo {
+                    total_runtime: 0,
+                    last_scheduled_cpu: last_cpu,
+                    padding1: [0; 4],
+                })?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::TaskStats => {
-                let mut info_ptr =
-                    UserOutPtr::<TaskStatsInfo>::from_addr_size(buffer, buffer_size)?;
                 let vmar = proc
                     .get_object_with_rights::<Process>(handle, Rights::INSPECT)?
                     .vmar();
-                //let mut task_stats = ZxInfoTaskStats::default();
+                if buffer_size < core::mem::size_of::<TaskStatsInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr =
+                    UserOutPtr::<TaskStatsInfo>::from_addr_size(buffer, buffer_size)?;
                 let task_stats = vmar.get_task_stats();
                 info_ptr.write(task_stats)?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::JobChildren | Topic::JobProcess | Topic::ProcessThreads => {
                 let ids = match topic {
@@ -423,29 +553,71 @@ impl Syscall<'_> {
                 };
                 let count = (buffer_size / core::mem::size_of::<KoID>()).min(ids.len());
                 UserOutPtr::<KoID>::from(buffer).write_array(&ids[..count])?;
-                actual.write(count)?;
-                avail.write(ids.len())?;
+                actual.write_if_not_null(count)?;
+                avail.write_if_not_null(ids.len())?;
             }
             Topic::Bti => {
                 let mut info_ptr = UserOutPtr::<BtiInfo>::from_addr_size(buffer, buffer_size)?;
                 let bti = proc
                     .get_object_with_rights::<BusTransactionInitiator>(handle, Rights::INSPECT)?;
                 info_ptr.write(bti.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::Resource => {
                 let mut info_ptr = UserOutPtr::<ResourceInfo>::from_addr_size(buffer, buffer_size)?;
                 let resource = proc.get_object_with_rights::<Resource>(handle, Rights::INSPECT)?;
                 info_ptr.write(resource.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::Socket => {
                 let mut info_ptr = UserOutPtr::<SocketInfo>::from_addr_size(buffer, buffer_size)?;
                 let socket = proc.get_object_with_rights::<Socket>(handle, Rights::INSPECT)?;
                 info_ptr.write(socket.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::Stream => {
                 let mut info_ptr = UserOutPtr::<StreamInfo>::from_addr_size(buffer, buffer_size)?;
                 let stream = proc.get_object_with_rights::<Stream>(handle, Rights::INSPECT)?;
                 info_ptr.write(stream.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
+            }
+            Topic::TaskRuntime => {
+                // ZX_INFO_TASK_RUNTIME — applies to Job, Process, and Thread.
+                // Return a zeroed struct as a stub (no real CPU accounting yet).
+                // First check the handle is a valid task type, then check rights.
+                // This ensures we return ACCESS_DENIED (not WRONG_TYPE) when
+                // the handle is a valid task but lacks INSPECT rights.
+                let (_obj, rights) = proc.get_dyn_object_and_rights(handle)?;
+                let type_name = _obj.type_name();
+                if type_name != "Job" && type_name != "Process" && type_name != "Thread" {
+                    return Err(ZxError::WRONG_TYPE);
+                }
+                if !rights.contains(Rights::INSPECT) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                // Determine required record size from topic version:
+                // V1 (version 0) = 16 bytes (cpu_time + queue_time)
+                // V2 (version 1) = 32 bytes (+ page_fault_time + lock_contention_time)
+                let info_size = match topic_version {
+                    0 => 2 * core::mem::size_of::<i64>(),         // V1: 16 bytes
+                    1 => core::mem::size_of::<TaskRuntimeInfo>(), // V2: 32 bytes
+                    _ => return Err(ZxError::INVALID_ARGS),
+                };
+                if buffer_size < info_size {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                // All fields are zero (no real CPU accounting), so write
+                // zeroed bytes of the appropriate version size.
+                let zeroes = [0u8; 32];
+                UserOutPtr::<u8>::from(buffer).write_array(&zeroes[..info_size])?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::ClockMappedSize => {
                 // Returns the size needed to map a clock's state VMO.
@@ -633,6 +805,8 @@ numeric_enum! {
         Job = 24,
         Timer = 25,
         Stream = 26,
+        HandleTable = 27,
+        TaskRuntime = 30,
         ClockMappedSize = 40,
     }
 }
@@ -649,6 +823,7 @@ numeric_enum! {
         ProcessBreakOnLoad = 7,
         SocketRxThreshold = 12,
         SocketTxThreshold = 13,
+        JobKillOnOom = 15,
         ExceptionState = 16,
         VmoContentSize = 17,
         ExceptionStrategy = 18,
@@ -665,6 +840,38 @@ pub struct UserWaitItem {
     handle: HandleValue,
     wait_for: Signal,
     observed: Signal,
+}
+
+/// `zx_info_handle_extended_t` — per-handle information for ZX_INFO_HANDLE_TABLE.
+#[repr(C)]
+#[derive(Default, Clone, Copy)]
+pub struct HandleExtendedInfo {
+    pub obj_type: u32,
+    pub handle_value: u32,
+    pub rights: u32,
+    pub reserved: u32,
+    pub koid: u64,
+    pub related_koid: u64,
+    pub peer_owner_koid: u64,
+}
+
+/// `zx_info_thread_stats_t` — per-thread runtime statistics.
+#[repr(C)]
+#[derive(Default)]
+struct ThreadStatsInfo {
+    total_runtime: i64,
+    last_scheduled_cpu: u32,
+    padding1: [u8; 4],
+}
+
+/// `zx_info_task_runtime_t` — CPU and scheduling time for a task.
+#[repr(C)]
+#[derive(Default)]
+struct TaskRuntimeInfo {
+    cpu_time: i64,
+    queue_time: i64,
+    page_fault_time: i64,
+    lock_contention_time: i64,
 }
 
 #[repr(C)]

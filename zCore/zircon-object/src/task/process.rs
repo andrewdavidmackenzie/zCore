@@ -89,6 +89,8 @@ struct ProcessInner {
     // special info
     debug_addr: usize,
     dyn_break_on_load: usize,
+    /// Monotonic time at which process_start was called.
+    start_time: i64,
     critical_to_job: Option<(Arc<Job>, bool)>,
     /// Whether this process was created via create_shared (eligible
     /// as a source for further create_shared calls).
@@ -231,6 +233,7 @@ impl Process {
                 return Err(ZxError::BAD_STATE);
             }
             inner.status = Status::Running;
+            inner.start_time = hal_impl::timer::timer_now().as_nanos() as i64;
             handle_value = arg1.map_or(INVALID_HANDLE, |handle| inner.add_handle(handle));
         }
         thread.set_first_thread();
@@ -280,7 +283,7 @@ impl Process {
         // If we are critical to a job, we need to take action.
         if let Some((job, retcode_nonzero)) = &inner.critical_to_job {
             if !retcode_nonzero || retcode != 0 {
-                job.kill();
+                job.kill_with_code(super::TASK_RETCODE_CRITICAL_PROCESS_KILL);
             }
         }
     }
@@ -539,6 +542,23 @@ impl Process {
         Ok(handle.get_info())
     }
 
+    /// Get handle table entries for ZX_INFO_HANDLE_TABLE.
+    /// Returns (obj_type, handle_value, rights, koid, related_koid) for each handle.
+    pub fn get_handle_table_entries(&self) -> Vec<(u32, HandleValue, u32, KoID, KoID)> {
+        let inner = self.inner.lock();
+        inner
+            .handles
+            .iter()
+            .map(|(&hv, (handle, _))| {
+                let obj = &handle.object;
+                let type_num = obj_type_num(obj.type_name());
+                let koid = obj.id();
+                let related = obj.related_koid();
+                (type_num, hv, handle.rights.bits(), koid, related)
+            })
+            .collect()
+    }
+
     /// Add a thread to the process.
     pub(super) fn add_thread(&self, thread: Arc<Thread>) -> ZxResult {
         let mut inner = self.inner.lock();
@@ -563,23 +583,25 @@ impl Process {
 
     /// Get information of this process.
     pub fn get_info(&self) -> ProcessInfo {
-        let mut info = ProcessInfo {
-            debugger_attached: self.debug_exceptionate.has_channel(),
-            ..Default::default()
+        use zircon_abi::types::{
+            ZX_INFO_PROCESS_FLAG_DEBUGGER_ATTACHED, ZX_INFO_PROCESS_FLAG_EXITED,
+            ZX_INFO_PROCESS_FLAG_STARTED,
         };
-        match self.inner.lock().status {
-            Status::Init => {
-                info.started = false;
-                info.has_exited = false;
-            }
+        let mut info = ProcessInfo::default();
+        if self.debug_exceptionate.has_channel() {
+            info.flags |= ZX_INFO_PROCESS_FLAG_DEBUGGER_ATTACHED;
+        }
+        let inner = self.inner.lock();
+        match inner.status {
+            Status::Init => {}
             Status::Running => {
-                info.started = true;
-                info.has_exited = false;
+                info.flags |= ZX_INFO_PROCESS_FLAG_STARTED;
+                info.start_time = inner.start_time;
             }
             Status::Exited(ret) => {
                 info.return_code = ret;
-                info.has_exited = true;
-                info.started = true;
+                info.flags |= ZX_INFO_PROCESS_FLAG_STARTED | ZX_INFO_PROCESS_FLAG_EXITED;
+                info.start_time = inner.start_time;
             }
         }
         info
@@ -714,16 +736,33 @@ impl ProcessInner {
     }
 }
 
-/// Information of a process.
-#[allow(missing_docs)]
-#[repr(C)]
-#[derive(Default)]
-pub struct ProcessInfo {
-    pub return_code: i64,
-    pub started: bool,
-    pub has_exited: bool,
-    pub debugger_attached: bool,
-    pub padding1: [u8; 5],
+// ProcessInfo is defined in zircon-abi and re-exported via task mod.rs.
+pub use zircon_abi::types::ProcessInfo;
+
+/// Map kernel object type name to Fuchsia `zx_obj_type_t` numeric value.
+fn obj_type_num(type_name: &str) -> u32 {
+    match type_name {
+        "Process" => 1,
+        "Thread" => 2,
+        "VmObject" => 3,
+        "Channel" => 4,
+        "Event" => 5,
+        "Port" => 6,
+        "Interrupt" => 9,
+        "Log" | "DebugLog" => 12,
+        "Socket" => 14,
+        "Resource" => 15,
+        "EventPair" => 16,
+        "Job" => 17,
+        "VmAddressRegion" => 18,
+        "Fifo" => 19,
+        "BusTransactionInitiator" => 24,
+        "Timer" => 22,
+        "Stream" => 31,
+        "Clock" => 30,
+        "ExceptionObject" => 29,
+        _ => 0, // ZX_OBJ_TYPE_NONE
+    }
 }
 
 #[cfg(test)]
@@ -917,11 +956,17 @@ mod tests {
         let thread = Thread::create(&proc, "thread").expect("failed to create thread");
 
         let info = proc.get_info();
-        assert!(!info.has_exited && !info.started && info.return_code == 0);
+        assert_eq!(info.flags, 0);
+        assert_eq!(info.return_code, 0);
 
         proc.exit(666);
         let info = proc.get_info();
-        assert!(info.has_exited && info.started && info.return_code == 666);
+        assert_eq!(
+            info.flags,
+            zircon_abi::types::ZX_INFO_PROCESS_FLAG_STARTED
+                | zircon_abi::types::ZX_INFO_PROCESS_FLAG_EXITED
+        );
+        assert_eq!(info.return_code, 666);
         assert_eq!(thread.state(), ThreadState::Dying);
         // TODO: when is the thread dead?
 

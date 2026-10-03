@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::convert::TryFrom;
 use hal_impl::context::UserContextField;
 use {super::*, zircon_object::task::*};
@@ -104,6 +105,7 @@ impl Syscall<'_> {
         if !Arc::ptr_eq(thread.proc(), &process) {
             return Err(ZxError::ACCESS_DENIED);
         }
+        // Consume arg1_handle (Fuchsia closes it on both success and failure).
         let arg1 = if arg1_handle != INVALID_HANDLE {
             let arg1 = proc.remove_handle(arg1_handle)?;
             if !arg1.rights.contains(Rights::TRANSFER) {
@@ -113,6 +115,11 @@ impl Syscall<'_> {
         } else {
             None
         };
+        // Reject non-userspace entry points and stack pointers.
+        // Validation is after handle consumption so arg1 is properly closed.
+        if !is_user_address(entry) || !is_user_address(stack) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         process.start(&thread, entry, stack, arg1, arg2, self.thread_fn)?;
         Ok(())
     }
@@ -350,18 +357,39 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let job = proc.get_object_with_rights::<Job>(handle, Rights::SET_POLICY)?;
         match topic {
-            JOB_POL_BASE_V1 | JOB_POL_BASE_V2 => {
+            JOB_POL_BASE_V1 => {
                 let policy_option = match options {
                     JOB_POL_RELATIVE => SetPolicyOptions::Relative,
                     JOB_POL_ABSOLUTE => SetPolicyOptions::Absolute,
                     _ => return Err(ZxError::INVALID_ARGS),
                 };
-                job.set_policy_basic(
-                    policy_option,
-                    &UserInPtr::from(policy).read_array(count as usize)?,
-                )
+                // Read raw 8-byte records and validate discriminants.
+                let raw_policies: Vec<BasicPolicyRaw> =
+                    UserInPtr::from(policy).read_array(count as usize)?;
+                let mut v1_policies = Vec::with_capacity(raw_policies.len());
+                for raw in &raw_policies {
+                    v1_policies.push(raw.validate()?);
+                }
+                job.set_policy_basic(policy_option, &v1_policies)
             }
-            //JOB_POL_BASE_V2 => unimplemented!(),
+            JOB_POL_BASE_V2 => {
+                let policy_option = match options {
+                    JOB_POL_RELATIVE => SetPolicyOptions::Relative,
+                    JOB_POL_ABSOLUTE => SetPolicyOptions::Absolute,
+                    _ => return Err(ZxError::INVALID_ARGS),
+                };
+                if count == 0 {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                // Read raw 12-byte records and validate discriminants.
+                let raw_policies: Vec<BasicPolicyV2Raw> =
+                    UserInPtr::from(policy).read_array(count as usize)?;
+                let mut v2_policies = Vec::with_capacity(raw_policies.len());
+                for raw in &raw_policies {
+                    v2_policies.push(raw.validate()?);
+                }
+                job.set_policy_basic_v2(policy_option, &v2_policies)
+            }
             JOB_POL_TIMER_SLACK => {
                 if options != JOB_POL_RELATIVE {
                     return Err(ZxError::INVALID_ARGS);
@@ -624,6 +652,24 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         Ok(())
+    }
+}
+
+/// Check if an address is in the user-space range (canonical lower half).
+/// Fuchsia rejects addresses in the kernel half for process_start entry/stack.
+fn is_user_address(addr: usize) -> bool {
+    #[cfg(target_arch = "x86_64")]
+    {
+        addr < 0x0000_8000_0000_0000
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        addr < 0x0001_0000_0000_0000
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    {
+        let _ = addr;
+        true // permissive on other architectures
     }
 }
 

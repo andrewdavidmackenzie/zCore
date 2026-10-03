@@ -915,7 +915,8 @@ mod tests {
 
         // check info and state
         let info = proc.get_info();
-        assert!(info.started && !info.has_exited && info.return_code == 0);
+        assert_eq!(info.flags, zircon_abi::types::ZX_INFO_PROCESS_FLAG_STARTED);
+        assert_eq!(info.return_code, 0);
         assert_eq!(proc.status(), Status::Running);
         assert_eq!(thread.state(), ThreadState::Running);
 
