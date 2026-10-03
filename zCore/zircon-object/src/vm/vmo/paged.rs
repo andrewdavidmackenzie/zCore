@@ -965,8 +965,21 @@ impl VMObjectPagedInner {
         // info.num_children = if self.type_.is_hidden() { 2 } else { 0 };
         info.num_mappings = self.mappings.len() as u64; // FIXME remove weak ptr
         info.share_count = self.mappings.len() as u64; // FIXME share_count should be the count of unique aspace
-        info.committed_bytes =
+        let committed =
             (self.committed_pages_in_range(0, self.size / PAGE_SIZE) * PAGE_SIZE) as u64;
+        info.committed_bytes = committed;
+        // We don't track compressed/deduplicated pages, so populated == committed.
+        info.populated_bytes = committed;
+        // Private bytes: same as committed for now (no sharing tracking).
+        info.committed_private_bytes = committed;
+        info.populated_private_bytes = committed;
+        // Scaled bytes: same as committed (no fractional attribution implemented).
+        info.committed_scaled_bytes = committed;
+        info.populated_scaled_bytes = committed;
+        // Signal that fractional scaling is not supported — the test helper
+        // PollVmoPopulatedBytes checks this and falls back to populated_bytes.
+        info.committed_fractional_scaled_bytes = u64::MAX;
+        info.populated_fractional_scaled_bytes = u64::MAX;
     }
 
     fn release_unwanted_pages_in_parent(&mut self, mut unwanted: VecDeque<usize>) {
