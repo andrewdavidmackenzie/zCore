@@ -363,6 +363,11 @@ impl Syscall<'_> {
                 )
             }
             JOB_POL_BASE_V2 => {
+                // Validate options — only RELATIVE and ABSOLUTE are valid.
+                match options {
+                    JOB_POL_RELATIVE | JOB_POL_ABSOLUTE => {}
+                    _ => return Err(ZxError::INVALID_ARGS),
+                }
                 // V2 policies are 12 bytes (condition, action, flags).
                 // The flags field controls override behavior, so use
                 // the dedicated V2 handler.

@@ -205,19 +205,30 @@ impl Job {
         if !inner.is_empty() {
             return Err(ZxError::BAD_STATE);
         }
+        // Apply to a temporary copy for atomicity — if any entry fails,
+        // the original policy remains unchanged.
+        let mut new_policy = inner.policy;
         for policy in policies {
-            // For V2, check if the condition is already set and whether
+            // Validate flags: only OVERRIDE_ALLOW (0) and OVERRIDE_DENY (1).
+            if policy.flags > 1 {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Check if the condition is already set and whether
             // the override flag allows changing it.
-            if let Some(existing_action) = inner.policy.get_action(policy.condition) {
-                if !inner.policy.is_override_allowed(policy.condition) {
+            if let Some(existing_action) = new_policy.get_action(policy.condition) {
+                if !new_policy.is_override_allowed(policy.condition) {
                     // Override is denied — only the exact same action succeeds.
+                    // Keep the existing entry unchanged (preserve the deny flag).
                     if existing_action != policy.action {
                         return Err(ZxError::ALREADY_EXISTS);
                     }
+                    continue;
                 }
             }
-            inner.policy.apply_v2(*policy);
+            new_policy.apply_v2(*policy);
         }
+        // Commit atomically — all entries succeeded.
+        inner.policy = new_policy;
         Ok(())
     }
 
@@ -349,11 +360,11 @@ impl Job {
         }
         for child in children {
             if let Some(child) = child.upgrade() {
-                child.kill();
+                child.kill_with_code(return_code);
             }
         }
         for proc in processes {
-            proc.kill();
+            proc.exit(return_code);
         }
     }
 }
