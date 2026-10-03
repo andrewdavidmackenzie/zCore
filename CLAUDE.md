@@ -126,8 +126,8 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
   - VmoZeroTestCase.EmptyCowChildren (populated_bytes)
   - VmoTestCase.* (multiple hangs: boot_options uninitialized, VMAR
     map failures causing infinite waits; only 1/58 passes)
-  - PagerProcess.KillBlockedUserVmoRead (thread blocked on pager
-    fault not woken on process kill — blocks 50+ later suites)
+  - PagerProcess.* (thread blocked on pager fault not woken on
+    process kill — multiple tests hang, blocks 50+ later suites)
 - All 1776 tests have been extracted to /tmp/all_tests.txt via
   `--gtest_list_tests`. Individual suites can be tested with
   `--gtest_filter=SuiteName.*` for fast iteration.
