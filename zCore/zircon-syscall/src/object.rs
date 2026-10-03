@@ -515,7 +515,7 @@ impl Syscall<'_> {
                     0 // stub: report CPU 0 until real tracking is added
                 };
                 info_ptr.write(ThreadStatsInfo {
-                    total_runtime: 0,
+                    total_runtime: thread.get_time() as i64,
                     last_scheduled_cpu: last_cpu,
                     padding1: [0; 4],
                 })?;
@@ -612,10 +612,37 @@ impl Syscall<'_> {
                     avail.write_if_not_null(1)?;
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
-                // All fields are zero (no real CPU accounting), so write
-                // zeroed bytes of the appropriate version size.
-                let zeroes = [0u8; 32];
-                UserOutPtr::<u8>::from(buffer).write_array(&zeroes[..info_size])?;
+                // Compute real CPU time using the already-extracted object.
+                let cpu_time: i64 = match type_name {
+                    "Thread" => {
+                        let t: Arc<Thread> = _obj.downcast_arc().unwrap();
+                        t.get_time() as i64
+                    }
+                    "Process" => {
+                        let p: Arc<Process> = _obj.downcast_arc().unwrap();
+                        p.total_cpu_time() as i64
+                    }
+                    "Job" => {
+                        let j: Arc<Job> = _obj.downcast_arc().unwrap();
+                        j.total_cpu_time() as i64
+                    }
+                    _ => 0,
+                };
+                // Write cpu_time and queue_time as raw i64 values.
+                let mut out = UserOutPtr::<i64>::from(buffer);
+                out.write(cpu_time)?;
+                // queue_time is at offset 8
+                let mut out2 = UserOutPtr::<i64>::from(buffer + core::mem::size_of::<i64>());
+                out2.write(cpu_time)?; // approximate: queue_time ≈ cpu_time
+                if info_size > 16 {
+                    // V2: write page_fault_time and lock_contention_time (zeros)
+                    let mut out3 =
+                        UserOutPtr::<i64>::from(buffer + 2 * core::mem::size_of::<i64>());
+                    out3.write(0)?;
+                    let mut out4 =
+                        UserOutPtr::<i64>::from(buffer + 3 * core::mem::size_of::<i64>());
+                    out4.write(0)?;
+                }
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }

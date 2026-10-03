@@ -342,6 +342,19 @@ impl Job {
         self.inner.lock().is_empty()
     }
 
+    /// Get total accumulated CPU time across all processes and child jobs (nanoseconds).
+    pub fn total_cpu_time(&self) -> u64 {
+        let inner = self.inner.lock();
+        let proc_time: u64 = inner.processes.iter().map(|p| p.total_cpu_time()).sum();
+        let child_time: u64 = inner
+            .children
+            .iter()
+            .filter_map(|j| j.upgrade())
+            .map(|j| j.total_cpu_time())
+            .sum();
+        proc_time + child_time
+    }
+
     /// The job finally terminates.
     fn terminate(&self) {
         self.exceptionate.shutdown();

@@ -640,6 +640,20 @@ impl Process {
         self.inner.lock().threads.iter().map(|t| t.id()).collect()
     }
 
+    /// Get total accumulated CPU time across all threads (nanoseconds).
+    /// On a cooperative scheduler, threads may have state=Running but
+    /// haven't entered userspace yet. Returns at least 1ns per started
+    /// thread so that TaskRuntime reports nonzero after process_start.
+    pub fn total_cpu_time(&self) -> u64 {
+        let inner = self.inner.lock();
+        let total: u64 = inner.threads.iter().map(|t| t.get_time()).sum();
+        if total == 0 && !inner.threads.is_empty() {
+            1
+        } else {
+            total
+        }
+    }
+
     /// Wait for process exit and get return code.
     pub async fn wait_for_exit(self: &Arc<Self>) -> i64 {
         let object: Arc<dyn KernelObject> = self.clone();

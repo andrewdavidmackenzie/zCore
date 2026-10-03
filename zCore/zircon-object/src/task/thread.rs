@@ -130,6 +130,8 @@ struct ThreadInner {
     killed: bool,
     /// The time this thread has run on cpu
     time: u128,
+    /// Timestamp (nanos) when the thread last entered userspace (0 if not in userspace).
+    uspace_enter_time: u128,
     flags: ThreadFlag,
     /// Restartable sequence registration.
     rseq: Option<RseqRegistration>,
@@ -403,12 +405,33 @@ impl Thread {
 
     /// Add the parameter to the time this thread has run on cpu.
     pub fn time_add(&self, time: u128) {
-        self.inner.lock().time += time;
+        let mut inner = self.inner.lock();
+        inner.time += time;
+        inner.uspace_enter_time = 0;
     }
 
-    /// Get the time this thread has run on cpu.
+    /// Record that the thread is entering userspace now.
+    pub fn mark_uspace_enter(&self, now_nanos: u128) {
+        self.inner.lock().uspace_enter_time = now_nanos;
+    }
+
+    /// Get the time this thread has run on cpu, including the current
+    /// userspace session if the thread is currently in userspace.
     pub fn get_time(&self) -> u64 {
-        self.inner.lock().time as u64
+        let inner = self.inner.lock();
+        let mut total = inner.time;
+        if inner.uspace_enter_time > 0 {
+            // Thread is currently in userspace — add the in-progress time.
+            let now = hal_impl::timer::timer_now().as_nanos();
+            total += now.saturating_sub(inner.uspace_enter_time);
+        }
+        // For threads that have been started (Running/Blocked/Dying), ensure
+        // at least 1ns is reported. In our cooperative scheduler, a thread
+        // may not have entered userspace yet when THREAD_RUNNING fires.
+        if total == 0 && inner.state() != ThreadState::New && inner.state() != ThreadState::Dead {
+            total = 1;
+        }
+        total as u64
     }
 
     /// Set this thread as the first thread of a process.

@@ -270,6 +270,7 @@ async fn run_user(thread: CurrentThread) {
 
         // run
         let tmp_time = hal_impl::timer::timer_now().as_nanos();
+        thread.mark_uspace_enter(tmp_time);
 
         // * Attention
         // The code will enter a magic zone from here.
