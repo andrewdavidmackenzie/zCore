@@ -69,10 +69,15 @@ struct JobInner {
 }
 
 impl Job {
+    /// Initial signals for an empty job: no children, no processes.
+    fn empty_signals() -> Signal {
+        Signal::JOB_NO_JOBS | Signal::JOB_NO_PROCESSES | Signal::JOB_NO_CHILDREN
+    }
+
     /// Create the root job.
     pub fn root() -> Arc<Self> {
         let job = Arc::new(Job {
-            base: KObjectBase::new(),
+            base: KObjectBase::with_signal(Self::empty_signals()),
             _counter: CountHelper::new(),
             parent: None,
             parent_policy: JobPolicy::default(),
@@ -91,7 +96,7 @@ impl Job {
             return Err(ZxError::BAD_STATE);
         }
         let child = Arc::new(Job {
-            base: KObjectBase::new(),
+            base: KObjectBase::with_signal(Self::empty_signals()),
             _counter: CountHelper::new(),
             parent: Some(self.clone()),
             parent_policy: inner.policy.merge(&self.parent_policy),
@@ -102,15 +107,29 @@ impl Job {
         let child_weak = Arc::downgrade(&child);
         child.inner.lock().self_ref = child_weak.clone();
         inner.children.push(child_weak);
+        drop(inner);
+        // Parent now has a child job — clear JOB_NO_JOBS and JOB_NO_CHILDREN.
+        self.base
+            .signal_clear(Signal::JOB_NO_JOBS | Signal::JOB_NO_CHILDREN);
         Ok(child)
     }
 
     fn remove_child(&self, to_remove: &Weak<Job>) {
         let mut inner = self.inner.lock();
         inner.children.retain(|child| !to_remove.ptr_eq(child));
-        if inner.killed && inner.processes.is_empty() && inner.children.is_empty() {
+        let no_children = inner.children.is_empty();
+        let no_processes = inner.processes.is_empty();
+        if inner.killed && no_processes && no_children {
             drop(inner);
             self.terminate()
+        } else {
+            drop(inner);
+            if no_children {
+                self.base.signal_set(Signal::JOB_NO_JOBS);
+                if no_processes {
+                    self.base.signal_set(Signal::JOB_NO_CHILDREN);
+                }
+            }
         }
     }
 
@@ -171,6 +190,10 @@ impl Job {
             return Err(ZxError::BAD_STATE);
         }
         inner.processes.push(process);
+        drop(inner);
+        // Parent now has a process — clear JOB_NO_PROCESSES and JOB_NO_CHILDREN.
+        self.base
+            .signal_clear(Signal::JOB_NO_PROCESSES | Signal::JOB_NO_CHILDREN);
         Ok(())
     }
 
@@ -178,9 +201,19 @@ impl Job {
     pub(super) fn remove_process(&self, id: KoID) {
         let mut inner = self.inner.lock();
         inner.processes.retain(|proc| proc.id() != id);
-        if inner.killed && inner.processes.is_empty() && inner.children.is_empty() {
+        let no_children = inner.children.is_empty();
+        let no_processes = inner.processes.is_empty();
+        if inner.killed && no_processes && no_children {
             drop(inner);
             self.terminate()
+        } else {
+            drop(inner);
+            if no_processes {
+                self.base.signal_set(Signal::JOB_NO_PROCESSES);
+                if no_children {
+                    self.base.signal_set(Signal::JOB_NO_CHILDREN);
+                }
+            }
         }
     }
 

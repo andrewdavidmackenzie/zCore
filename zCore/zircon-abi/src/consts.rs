@@ -92,6 +92,7 @@ pub const ZX_THREAD_SUSPENDED: ZxSignals = 1 << 5;
 pub const ZX_JOB_TERMINATED: ZxSignals = 1 << 3;
 pub const ZX_JOB_NO_JOBS: ZxSignals = 1 << 4;
 pub const ZX_JOB_NO_PROCESSES: ZxSignals = 1 << 5;
+pub const ZX_JOB_NO_CHILDREN: ZxSignals = 1 << 6;
 
 // Task signals (shared by Job, Process, Thread)
 pub const ZX_TASK_TERMINATED: ZxSignals = 1 << 3;

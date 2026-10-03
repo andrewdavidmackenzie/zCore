@@ -32,6 +32,7 @@ bitflags! {
         const JOB_TERMINATED                = Self::SIGNALED.bits;
         const JOB_NO_JOBS                   = 1 << 4;
         const JOB_NO_PROCESSES              = 1 << 5;
+        const JOB_NO_CHILDREN               = 1 << 6;
 
         const PROCESS_TERMINATED            = Self::SIGNALED.bits;
 
