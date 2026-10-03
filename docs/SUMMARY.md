@@ -21,11 +21,3 @@
 # Board-Specific Guides
 
 - [Raspberry Pi 400](README-raspi400.md)
-- [Allwinner D1](README-D1.md)
-- [T-HEAD C910](README-C910.md)
-- [SiFive FU740](README-fu740.md)
-- [StarFive VisionFive](README-visionfive.md)
-
-# Other
-
-- [RISC-V 64 Porting Notes](porting-rv64.md)

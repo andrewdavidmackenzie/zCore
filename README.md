@@ -347,7 +347,7 @@ cargo bin -m nezha -o z.bin
 
 然后使用 [rustsbi-d1](https://github.com/rustsbi/rustsbi-d1) 将镜像部署到 Flash 或 DRAM。
 
-另: 可以查看[README for D1 文档](docs/README-D1.md)获知更多D1开发板有关的操作指导。
+详细D1开发板操作指导请参考 [Allwinner D1 wiki](https://linux-sunxi.org/D1)。
 
 ### 赛昉/星光
 
@@ -357,7 +357,7 @@ cargo bin -m nezha -o z.bin
 cargo bin -m visionfive -o z.bin
 ```
 
-然后根据[此文档](docs/README-visionfive.md)的详细说明通过 u-boot 网络启动系统。
+然后通过 u-boot 网络启动系统。
 
 ### 晶视/cr1825
 

@@ -58,20 +58,15 @@ directory no longer exists.
 The main `README.md` IS now in English (confirmed: "An OS kernel based on
 Zircon with Linux compatibility"). The `docs/README_EN.md` is the older legacy
 English version. Its link label calling README.md "Chinese" is stale. The
-board- specific docs (D1, C910, fu740, visionfive) and `for-developers.md` are
-still in Chinese.
+`for-developers.md` is still in Chinese.
 See [#92](https://github.com/andrewdavidmackenzie/zCore/issues/92).
 
-
-developer guidelines, and hardware-specific deployment guides (primarily in
-Chinese).
+Developer guidelines and hardware-specific deployment guides.
 
 **Key files:**
 - `README_EN.md` -- Authoritative user-facing guide
 - `for-developers.md` -- Developer conventions and policies
-- `porting-rv64.md` -- RISC-V porting log
-- `README-D1.md`, `README-C910.md`, `README-fu740.md`, `README-visionfive.md`
-  -- Board-specific deployment
+- `README-raspi400.md` -- Raspberry Pi 400 deployment guide
 - `structure.svg` -- Architecture diagram
 
 **Status:** Actively used as reference documentation.

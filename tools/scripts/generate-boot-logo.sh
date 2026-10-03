@@ -14,15 +14,15 @@
 #   tools/scripts/generate-boot-logo.sh
 #
 # Outputs:
-#   assets/images/zirconia-boot-logo.bmp  (crystal-only, 640x287, ~180 KB)
+#   prebuilt/images/zirconia-boot-logo.bmp  (crystal-only, 640x287, ~180 KB)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-SVG_SRC="$PROJECT_DIR/assets/images/zirconia-boot-logo.svg"
-BMP_OUT="$PROJECT_DIR/assets/images/zirconia-boot-logo.bmp"
+SVG_SRC="$PROJECT_DIR/docs/img/zirconia-boot-logo.svg"
+BMP_OUT="$PROJECT_DIR/prebuilt/images/zirconia-boot-logo.bmp"
 
 # Maximum BMP file size (bytes).  The original RPi Logo.bmp is 185012 bytes.
 MAX_BMP_SIZE=185012

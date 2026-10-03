@@ -41,14 +41,9 @@ member crates plus 2 excluded standalone projects and
 | Document                                     | Board                           | Architecture |
 |----------------------------------------------|---------------------------------|--------------|
 | [README-raspi400.md](README-raspi400.md)     | Raspberry Pi 400 (BCM2711)      | aarch64      |
-| [README-D1.md](README-D1.md)                 | Allwinner D1 (C906)             | riscv64      |
-| [README-C910.md](README-C910.md)             | T-HEAD C910 Light               | riscv64      |
-| [README-fu740.md](README-fu740.md)           | SiFive FU740 (HiFive Unmatched) | riscv64      |
-| [README-visionfive.md](README-visionfive.md) | StarFive VisionFive             | riscv64      |
 
 ## Other Resources
 
-| Resource                           | Description                     |
-|------------------------------------|---------------------------------|
-| [porting-rv64.md](porting-rv64.md) | RISC-V 64 porting log and notes |
-| [structure.svg](structure.svg)     | Architecture diagram            |
+| Resource                       | Description            |
+|--------------------------------|------------------------|
+| [structure.svg](structure.svg) | Architecture diagram   |
