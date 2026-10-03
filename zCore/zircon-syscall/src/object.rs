@@ -366,6 +366,8 @@ impl Syscall<'_> {
                 let mut info_ptr = UserOutPtr::<ProcessInfo>::from_addr_size(buffer, buffer_size)?;
                 let proc = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
                 info_ptr.write(proc.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::Vmar => {
                 let vmar =
@@ -377,6 +379,8 @@ impl Syscall<'_> {
                 }
                 let mut info_ptr = UserOutPtr::<VmarInfo>::from_addr_size(buffer, buffer_size)?;
                 info_ptr.write(vmar.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::HandleBasic => {
                 let info = proc.get_handle_info(handle)?;
@@ -396,22 +400,30 @@ impl Syscall<'_> {
                 let mut info_ptr = UserOutPtr::<ThreadInfo>::from_addr_size(buffer, buffer_size)?;
                 let thread = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)?;
                 info_ptr.write(thread.get_thread_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::ThreadExceptionReport => {
                 let mut info_ptr =
                     UserOutPtr::<ExceptionReport>::from_addr_size(buffer, buffer_size)?;
                 let thread = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)?;
                 info_ptr.write(thread.get_thread_exception_info()?)?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::HandleCount => {
                 let mut info_ptr = UserOutPtr::<u32>::from_addr_size(buffer, buffer_size)?;
                 let object = self.get_object_with_pseudo(handle, Rights::INSPECT)?;
                 info_ptr.write(object.handle_count())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::Job => {
                 let mut info_ptr = UserOutPtr::<JobInfo>::from_addr_size(buffer, buffer_size)?;
                 let job = proc.get_object_with_rights::<Job>(handle, Rights::INSPECT)?;
                 info_ptr.write(job.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::ProcessVmos => {
                 warn!("A dummy implementation for utest Bti.NoDelayedUnpin, it does not check the reture value");
@@ -425,6 +437,8 @@ impl Syscall<'_> {
                 info.flags |= VmoInfoFlags::VIA_HANDLE;
                 info.rights |= rights;
                 info_ptr.write(info)?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::KmemStats => {
                 let mut info_ptr = UserOutPtr::<KmemInfo>::from_addr_size(buffer, buffer_size)?;
@@ -433,6 +447,8 @@ impl Syscall<'_> {
                     ..Default::default()
                 };
                 info_ptr.write(kmem)?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::TaskStats => {
                 let vmar = proc
@@ -447,6 +463,8 @@ impl Syscall<'_> {
                     UserOutPtr::<TaskStatsInfo>::from_addr_size(buffer, buffer_size)?;
                 let task_stats = vmar.get_task_stats();
                 info_ptr.write(task_stats)?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::JobChildren | Topic::JobProcess | Topic::ProcessThreads => {
                 let ids = match topic {
@@ -471,21 +489,29 @@ impl Syscall<'_> {
                 let bti = proc
                     .get_object_with_rights::<BusTransactionInitiator>(handle, Rights::INSPECT)?;
                 info_ptr.write(bti.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::Resource => {
                 let mut info_ptr = UserOutPtr::<ResourceInfo>::from_addr_size(buffer, buffer_size)?;
                 let resource = proc.get_object_with_rights::<Resource>(handle, Rights::INSPECT)?;
                 info_ptr.write(resource.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::Socket => {
                 let mut info_ptr = UserOutPtr::<SocketInfo>::from_addr_size(buffer, buffer_size)?;
                 let socket = proc.get_object_with_rights::<Socket>(handle, Rights::INSPECT)?;
                 info_ptr.write(socket.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::Stream => {
                 let mut info_ptr = UserOutPtr::<StreamInfo>::from_addr_size(buffer, buffer_size)?;
                 let stream = proc.get_object_with_rights::<Stream>(handle, Rights::INSPECT)?;
                 info_ptr.write(stream.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::TaskRuntime => {
                 // ZX_INFO_TASK_RUNTIME — applies to Job, Process, and Thread.
