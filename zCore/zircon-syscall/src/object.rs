@@ -435,12 +435,16 @@ impl Syscall<'_> {
                 info_ptr.write(kmem)?;
             }
             Topic::TaskStats => {
-                let mut info_ptr =
-                    UserOutPtr::<TaskStatsInfo>::from_addr_size(buffer, buffer_size)?;
                 let vmar = proc
                     .get_object_with_rights::<Process>(handle, Rights::INSPECT)?
                     .vmar();
-                //let mut task_stats = ZxInfoTaskStats::default();
+                if buffer_size < core::mem::size_of::<TaskStatsInfo>() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut info_ptr =
+                    UserOutPtr::<TaskStatsInfo>::from_addr_size(buffer, buffer_size)?;
                 let task_stats = vmar.get_task_stats();
                 info_ptr.write(task_stats)?;
             }
