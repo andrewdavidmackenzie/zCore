@@ -159,25 +159,22 @@ impl Syscall<'_> {
             if offset != 0 || size != 0 {
                 return Err(ZxError::INVALID_ARGS);
             }
+            // Resizable references are not yet supported: create_slice
+            // builds a non-resizable child and does not support resizable
+            // parents. Reject RESIZABLE for now to avoid kernel panics
+            // (VMObjectSlice::set_len is unimplemented).
+            if resizable {
+                return Err(ZxError::NOT_SUPPORTED);
+            }
             let remaining = options
                 - VmoCloneFlags::REFERENCE
                 - if no_write {
                     VmoCloneFlags::NO_WRITE
                 } else {
                     VmoCloneFlags::empty()
-                }
-                - if resizable {
-                    VmoCloneFlags::RESIZABLE
-                } else {
-                    VmoCloneFlags::empty()
                 };
             if !remaining.is_empty() {
                 return Err(ZxError::INVALID_ARGS);
-            }
-            // Resizable reference requires WRITE right on the parent
-            // (resizing is a write operation on the VMO).
-            if resizable && !parent_rights.contains(Rights::WRITE) {
-                return Err(ZxError::ACCESS_DENIED);
             }
             // Implement as a slice over the entire VMO.
             vmo.create_slice(0, vmo.len())
@@ -474,6 +471,10 @@ impl Syscall<'_> {
         // - Source decommit fails on child VMOs (ignored below)
         // - No pin-count check (pinned pages should return BAD_STATE;
         //   requires adding a VMObjectTrait::is_pinned_in_range method)
+        // - Aliasing via slice/reference children is not detected:
+        //   Arc::ptr_eq only catches the exact same VmObject, not
+        //   slice/reference children that share underlying pages.
+        //   A complete fix needs VmObject::root_vmo_id() comparison.
         let same_vmo = Arc::ptr_eq(&src, &dst);
         if same_vmo {
             // Same-VMO transfer: read all source data first, then write
