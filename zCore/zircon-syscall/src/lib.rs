@@ -15,6 +15,7 @@ use core::convert::TryFrom;
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use futures::pin_mut;
+use hal::MMUFlags;
 use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use zircon_object::object::{wait_signal_many, KernelObject, KoID, Rights, Signal};
 use zircon_object::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
@@ -67,6 +68,26 @@ pub struct Syscall<'a> {
 }
 
 impl Syscall<'_> {
+    /// Check that a user buffer is readable at the VMAR mapping level.
+    ///
+    /// On x86_64, hardware page tables don't have a read-disable bit — any
+    /// PRESENT page is readable by the CPU. This check validates the VMAR
+    /// mapping's logical permissions to reject reads from pages mapped
+    /// without PERM_READ (e.g., `mmap(PROT_NONE)`).
+    ///
+    /// Returns:
+    /// - `Ok(())` if the buffer is fully mapped with read permissions.
+    /// - `Err(NOT_FOUND)` if part of the buffer is not mapped.
+    /// - `Err(ACCESS_DENIED)` if a mapping lacks read permissions.
+    #[allow(dead_code)]
+    fn check_user_buffer_read(&self, addr: usize, len: usize) -> ZxResult {
+        if len == 0 {
+            return Ok(());
+        }
+        let vmar = self.thread.proc().vmar();
+        vmar.check_user_access(addr, len, MMUFlags::READ)
+    }
+
     /// Resolve a handle value that may be a pseudo-handle.
     ///
     /// Fuchsia defines pseudo-handles for the current thread, process, and

@@ -111,7 +111,11 @@ impl Syscall<'_> {
             }
             // Cap read to VMO size to avoid unbounded allocation.
             let read_len = capacity.min(vmo_len);
-            let buf = io_vec.read_bytes(read_len)?;
+            let buf = io_vec.read_bytes(read_len).map_err(|_| {
+                // A page fault during user buffer copy means the
+                // address wasn't found. Fuchsia returns NOT_FOUND.
+                ZxError::NOT_FOUND
+            })?;
             actual_count += stream.write(&buf, append)?;
         }
         actual_count_ptr.write_if_not_null(actual_count)?;
@@ -157,7 +161,9 @@ impl Syscall<'_> {
                 return Err(ZxError::OUT_OF_RANGE);
             }
             let read_len = capacity.min(vmo_len);
-            let buf = io_vec.read_bytes(read_len)?;
+            let buf = io_vec
+                .read_bytes(read_len)
+                .map_err(|_| ZxError::NOT_FOUND)?;
             actual_count += stream.write_at(&buf, offset)?;
             offset += actual_count;
         }

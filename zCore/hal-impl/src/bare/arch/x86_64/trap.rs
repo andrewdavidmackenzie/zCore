@@ -105,6 +105,15 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
                 executor::handle_timeout();
             }
         }
-        other => panic!("Unhandled trap {:x?} {:#x?}", other, tf),
+        other => {
+            // If the trap came from user mode (RPL=3 in CS), forward
+            // it to the kernel handler for Zircon exception delivery.
+            // Only panic for kernel-mode traps.
+            if tf.cs & 3 == 3 {
+                crate::KHANDLER.handle_user_trap(tf.trap_num, tf.error_code);
+            } else {
+                panic!("Unhandled kernel trap {:x?} {:#x?}", other, tf);
+            }
+        }
     }
 }

@@ -112,6 +112,12 @@ impl Syscall<'_> {
         if options.contains(VmOptions::REQUIRE_NON_RESIZABLE) && vmo.is_resizable() {
             return Err(ZxError::NOT_SUPPORTED);
         }
+        // FAULT_BEYOND_STREAM_SIZE requires ALLOW_FAULTS.
+        if options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE)
+            && !options.contains(VmOptions::ALLOW_FAULTS)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
         // check SPECIFIC options with offset
         let is_specific = options.contains(VmOptions::SPECIFIC)
             || options.contains(VmOptions::SPECIFIC_OVERWRITE);
@@ -456,6 +462,8 @@ bitflags! {
         const ALLOW_FAULTS          = 1 << 12;
         const OFFSET_IS_UPPER_LIMIT = 1 << 13;
         const PERM_READ_IF_XOM_UNSUPPORTED = 1 << 14;
+        /// Allow page faults beyond the stream content size.
+        const FAULT_BEYOND_STREAM_SIZE = 1 << 15;
         const CAN_MAP_RXW           = Self::CAN_MAP_READ.bits | Self::CAN_MAP_EXECUTE.bits | Self::CAN_MAP_WRITE.bits;
         const PERM_RXW           = Self::PERM_READ.bits | Self::PERM_WRITE.bits | Self::PERM_EXECUTE.bits;
     }

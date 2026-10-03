@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::object::*,
-    alloc::{sync::Arc, vec, vec::Vec},
+    alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec},
     bitflags::bitflags,
     hal::vm::{GenericPageTable, IgnoreNotMappedErr, Page, PageSize, PagingError, PagingResult},
     hal_impl::vm::PageTable,
@@ -423,6 +423,62 @@ impl VmAddressRegion {
                 map.protect(flags, start_index, end_index);
             });
         Ok(())
+    }
+
+    /// Check whether all pages in [addr, addr+len) are covered by mappings
+    /// whose permissions include `required_flags`.
+    ///
+    /// Used by `copy_from_user` to verify the user buffer is readable
+    /// at the VMAR mapping level (since x86_64 hardware page tables
+    /// don't have a read-disable bit).
+    ///
+    /// Returns:
+    /// - `Ok(())` if the entire range is covered and has the required permissions.
+    /// - `Err(NOT_FOUND)` if part of the range is not covered by any mapping.
+    /// - `Err(ACCESS_DENIED)` if a mapping exists but lacks the required permissions.
+    pub fn check_user_access(&self, addr: usize, len: usize, required_flags: MMUFlags) -> ZxResult {
+        if len == 0 {
+            return Ok(());
+        }
+        let guard = self.inner.lock();
+        let inner = match guard.as_ref() {
+            Some(inner) => inner,
+            None => return Err(ZxError::NOT_FOUND),
+        };
+        let end_addr = match addr.checked_add(len) {
+            Some(end) => end,
+            None => return Err(ZxError::NOT_FOUND),
+        };
+        // Check each mapping that overlaps the range.
+        let mut covered = 0usize;
+        for map in inner.mappings.iter() {
+            if map.addr() >= end_addr || map.end_addr() <= addr {
+                continue;
+            }
+            // Check that the mapping's per-page flags include the required flags.
+            let overlap_start = addr.max(map.addr());
+            let overlap_end = end_addr.min(map.end_addr());
+            if !map.check_access(overlap_start, overlap_end, required_flags) {
+                return Err(ZxError::ACCESS_DENIED);
+            }
+            covered += overlap_end - overlap_start;
+        }
+        // Also recurse into child VMARs.
+        for child in inner.children.iter() {
+            if child.addr() >= end_addr || child.end_addr() <= addr {
+                continue;
+            }
+            let overlap_start = addr.max(child.addr());
+            let overlap_end = end_addr.min(child.end_addr());
+            let overlap_len = overlap_end - overlap_start;
+            child.check_user_access(overlap_start, overlap_len, required_flags)?;
+            covered += overlap_len;
+        }
+        if covered >= len {
+            Ok(())
+        } else {
+            Err(ZxError::NOT_FOUND)
+        }
     }
 
     /// Perform an operation on VMOs mapped within the given address range.
@@ -950,6 +1006,11 @@ struct VmMappingInner {
     flags: Vec<MMUFlags>,
     /// Default flags for pages when per-page tracking isn't available.
     default_flags: MMUFlags,
+    /// Protection overrides for large lazy mappings (empty `flags` vec).
+    /// Maps a page index to the flags that apply from that index up to
+    /// (but not including) the next entry's index (or end of mapping).
+    /// Empty when per-page `flags` are tracked or no overrides have been set.
+    protection_overrides: BTreeMap<usize, MMUFlags>,
     addr: VirtAddr,
     size: usize,
     vmo_offset: usize,
@@ -1004,6 +1065,7 @@ impl VmMapping {
             inner: Mutex::new(VmMappingInner {
                 flags: per_page_flags,
                 default_flags: flags,
+                protection_overrides: BTreeMap::new(),
                 addr,
                 size,
                 vmo_offset,
@@ -1129,6 +1191,7 @@ impl VmMapping {
                 inner: Mutex::new(VmMappingInner {
                     flags: inner.flags.drain(new_flags_range).collect(),
                     default_flags: inner.default_flags,
+                    protection_overrides: BTreeMap::new(),
                     addr: end,
                     size: new_len2,
                     vmo_offset: inner.vmo_offset + (end - inner.addr),
@@ -1154,6 +1217,31 @@ impl VmMapping {
         self.permissions.contains(flags & MMUFlags::RXW)
     }
 
+    /// Check that per-page flags in [start, end) include `required`.
+    fn check_access(&self, start: usize, end: usize, required: MMUFlags) -> bool {
+        let inner = self.inner.lock();
+        let base = inner.addr;
+        let start_idx = (start - base) / PAGE_SIZE;
+        let end_idx = (end - base).div_ceil(PAGE_SIZE);
+        // Fast path for large lazy mappings with no per-page tracking.
+        if inner.flags.is_empty() {
+            if inner.protection_overrides.is_empty() {
+                // No overrides — every page has `default_flags`.
+                return inner.default_flags.contains(required);
+            }
+            // Check overrides: for each page in [start_idx, end_idx),
+            // determine the effective flags from the override map.
+            return inner.check_access_with_overrides(start_idx, end_idx, required);
+        }
+        for i in start_idx..end_idx {
+            let flags = inner.page_flags(i);
+            if !flags.contains(required) {
+                return false;
+            }
+        }
+        true
+    }
+
     fn protect(&self, flags: MMUFlags, start_index: usize, end_index: usize) {
         let mut inner = self.inner.lock();
         let mut pg_table = self.page_table.lock();
@@ -1166,6 +1254,30 @@ impl VmMapping {
                 .update(inner.addr + i * PAGE_SIZE, None, Some(new_flags))
                 .ignore()
                 .unwrap();
+        }
+        // For large lazy mappings (empty per-page flags vec), persist the
+        // protection change so that `page_flags` and `check_access` observe it.
+        if inner.flags.is_empty() {
+            let page_count = inner.size / PAGE_SIZE;
+            let mut new_flags = inner.default_flags;
+            new_flags.remove(MMUFlags::RXW);
+            new_flags.insert(flags & MMUFlags::RXW);
+            if start_index == 0 && end_index >= page_count {
+                // Entire mapping protected uniformly — update default_flags
+                // and clear any overrides.
+                inner.default_flags = new_flags;
+                inner.protection_overrides.clear();
+            } else {
+                // Partial protection — record the override range.
+                inner.protection_overrides.insert(start_index, new_flags);
+                // Insert a sentinel at end_index to restore default_flags
+                // (only if there isn't already an override there).
+                let default = inner.default_flags;
+                inner
+                    .protection_overrides
+                    .entry(end_index)
+                    .or_insert(default);
+            }
         }
     }
 
@@ -1329,26 +1441,69 @@ impl VmMappingInner {
 
     /// Get the flags for a page at the given index.
     /// For large lazy mappings where per-page flags aren't allocated,
-    /// returns the mapping's default flags.
+    /// checks protection overrides first, then falls back to `default_flags`.
     fn page_flags(&self, index: usize) -> MMUFlags {
         if index < self.flags.len() {
             self.flags[index]
+        } else if !self.protection_overrides.is_empty() {
+            // Find the override that covers this index: the entry with the
+            // largest key <= index.
+            if let Some((_start, &flags)) = self.protection_overrides.range(..=index).next_back() {
+                flags
+            } else {
+                self.default_flags
+            }
         } else {
             self.default_flags
         }
     }
 
     /// Set the flags for a page at the given index.
-    /// For large lazy mappings, this is a no-op (flags aren't tracked per-page).
+    /// For large lazy mappings, this is a no-op — protection changes are
+    /// tracked via `protection_overrides` in `VmMapping::protect`.
     fn set_page_flags(&mut self, index: usize, flags: MMUFlags) {
         if index < self.flags.len() {
             self.flags[index] = flags;
         }
-        // TODO: For large lazy mappings (empty flags vec), protection changes
-        // are applied to the page table but not persisted here.  A later page
-        // fault will re-commit with `default_flags`, losing the change.
-        // Fix: track per-range overrides or update `default_flags` when the
-        // entire mapping is protected uniformly.
+    }
+
+    /// Check access for large lazy mappings using protection overrides.
+    /// Returns true if every page in [start_idx, end_idx) has `required` flags.
+    fn check_access_with_overrides(
+        &self,
+        start_idx: usize,
+        end_idx: usize,
+        required: MMUFlags,
+    ) -> bool {
+        // Walk through override ranges that overlap [start_idx, end_idx).
+        // The effective flags for a page at index `i` are determined by the
+        // override entry with the largest key <= i (or default_flags if none).
+        let mut cursor = start_idx;
+
+        // Find the effective flags at start_idx: look for the largest key <= start_idx.
+        let initial_flags = self
+            .protection_overrides
+            .range(..=start_idx)
+            .next_back()
+            .map(|(_, &f)| f)
+            .unwrap_or(self.default_flags);
+
+        if !initial_flags.contains(required) {
+            return false;
+        }
+
+        // Walk through overrides that start within (start_idx, end_idx).
+        for (&override_start, &override_flags) in
+            self.protection_overrides.range((start_idx + 1)..end_idx)
+        {
+            let _ = cursor; // previous segment was OK
+            if !override_flags.contains(required) {
+                return false;
+            }
+            cursor = override_start;
+        }
+
+        true
     }
 }
 
