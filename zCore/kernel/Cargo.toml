@@ -41,6 +41,7 @@ libos = [
 # --- Driver features (forwarded to hal-impl -> drivers) ---
 apic = ["hal-impl/apic"]
 gic-400 = ["hal-impl/gic-400"]
+gic-v3 = ["hal-impl/gic-v3"]
 riscv-plic = ["hal-impl/riscv-plic"]
 riscv-intc = ["hal-impl/riscv-intc"]
 pl011-uart = ["hal-impl/pl011-uart"]

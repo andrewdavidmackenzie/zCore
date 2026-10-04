@@ -12,6 +12,7 @@ description = "Boot-essential device drivers for zCore kernel"
 # Interrupt controllers
 apic = ["dep:acpi", "dep:x2apic", "dep:x86_64"]
 gic-400 = []
+gic-v3 = []
 riscv-plic = ["dep:riscv"]
 riscv-intc = ["dep:riscv"]
 
