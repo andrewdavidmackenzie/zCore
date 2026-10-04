@@ -20,8 +20,9 @@ hal_fn_impl! {
         }
 
         fn primary_init() {
-            info!("Primary CPU {} init...", crate::cpu::cpu_id());
+            info!("Primary CPU {} init: calling trapframe::init()...", crate::cpu::cpu_id());
             unsafe { trapframe::init() };
+            info!("trapframe::init() completed");
             // Verify GDT selectors were initialized
             #[cfg(target_arch = "x86_64")]
             {

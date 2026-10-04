@@ -404,7 +404,9 @@ fn parse_node_addr(name: &[u8]) -> Option<usize> {
 }
 
 pub fn primary_init() {
+    info!("primary_init: calling vm::init()...");
     vm::init();
+    info!("primary_init: vm::init() done, calling drivers::init()...");
     drivers::init();
 
     // Initialize executor runtimes for all CPUs.

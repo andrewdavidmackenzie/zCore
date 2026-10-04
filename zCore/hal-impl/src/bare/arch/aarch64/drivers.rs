@@ -54,25 +54,32 @@ const TIMER_IRQ: u32 = 27;
 pub fn init_early() {
     use crate::device_registry;
     use crate::mem::phys_to_virt;
+    use ::drivers::scheme::IrqScheme;
+    use alloc::boxed::Box;
     use alloc::sync::Arc;
 
     // Initialize framebuffer console first — it's our only output device.
     super::fb_console::init();
 
-    log::info!("Jolla C2: init with GICv3, WDT still running");
+    log::info!("Jolla C2: init_early, GICv3 + fb-console");
 
     let gic_base = super::gic_base();
-    // GICv3: GICD at base+0, GICR at base+0x40000
     let gicd_vaddr = phys_to_virt(gic_base);
     let gicr_vaddr = phys_to_virt(gic_base + 0x4_0000);
 
     let gic = drivers::irq::gic_v3::init(gicd_vaddr, gicr_vaddr);
 
-    // Enable virtual timer PPI (IRQ 27 = virtual timer)
     const TIMER_IRQ_NUM: u32 = 27;
     gic.irq_enable(TIMER_IRQ_NUM);
 
+    gic.register_handler(
+        TIMER_IRQ_NUM as usize,
+        Box::new(super::timer::set_next_trigger),
+    )
+    .ok();
+
     device_registry::add_device(::drivers::Device::Irq(Arc::new(gic)));
+    super::fb_console::write_str("init_early: done\n");
 }
 
 #[cfg(not(feature = "board-jollac2"))]

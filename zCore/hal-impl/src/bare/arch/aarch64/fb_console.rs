@@ -78,6 +78,18 @@ pub fn init() {
     *FB_CONSOLE.lock() = Some(console);
 }
 
+/// Switch the framebuffer console from the identity-mapped physical address
+/// (via TTBR0) to the high virtual address (via TTBR1). Must be called
+/// after the kernel page table maps the FB region as device memory and
+/// before TTBR0 is zeroed.
+pub fn remap() {
+    let mut guard = FB_CONSOLE.lock();
+    if let Some(console) = guard.as_mut() {
+        let virt_base = crate::mem::phys_to_virt(FB_PHYS) as *mut u8;
+        console.base = virt_base;
+    }
+}
+
 /// Write a string to the framebuffer console.
 pub fn write_str(s: &str) {
     let mut guard = FB_CONSOLE.lock();

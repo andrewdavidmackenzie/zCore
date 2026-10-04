@@ -107,7 +107,7 @@ extern "C" fn rust_main(dtb_paddr: usize) -> ! {
     #[cfg(feature = "board-raspi400")]
     let default_cmdline = "LOG=info:ROOTPROC=/bin/sh";
     #[cfg(feature = "board-jollac2")]
-    let default_cmdline = "LOG=info";
+    let default_cmdline = "LOG=info:ROOTPROC=/bin/sh";
     #[cfg(all(not(feature = "board-raspi400"), not(feature = "board-jollac2")))]
     let default_cmdline = "LOG=warn:ROOTPROC=/bin/busybox?sh";
 

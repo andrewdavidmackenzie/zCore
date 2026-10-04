@@ -89,6 +89,16 @@ _real_entry:
     msr     cnthctl_el2, x9
     msr     cntvoff_el2, xzr       /* Virtual offset = 0 */
 
+    /* Enable GICv3 system register interface at EL2.
+       ICC_SRE_EL2.SRE (bit 0) = 1: enable system registers
+       ICC_SRE_EL2.Enable (bit 3) = 1: allow EL1 to set ICC_SRE_EL1.SRE
+       Without this, accessing ICC_SRE_EL1 from EL1 traps to EL2. */
+    mrs     x9, icc_sre_el2
+    orr     x9, x9, #0x1           /* SRE (bit 0) */
+    orr     x9, x9, #0x8           /* Enable (bit 3) */
+    msr     icc_sre_el2, x9
+    isb
+
     mov     x9, #0x3c5              /* SPSR_EL2: D/A/I/F masked, EL1h */
     msr     spsr_el2, x9
     adr     x9, 1f

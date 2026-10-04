@@ -64,15 +64,23 @@ impl IntController {
         }
     }
 
-    /// Initialize the GICv3 distributor, redistributor, and CPU interface.
-    fn init(&mut self) {
-        unsafe {
-            // --- Enable system register interface ---
-            let sre = Self::read_icc_sre_el1();
-            Self::write_icc_sre_el1(sre | 0x1); // SRE bit
-            core::arch::asm!("isb", options(nostack, preserves_flags));
+    /// Return the number of supported IRQ lines.
+    pub fn nirqs(&self) -> u32 {
+        self.nirqs
+    }
 
-            // --- Distributor init ---
+    /// Phase 1: Enable system register interface at EL1.
+    pub fn init_sre(&self) {
+        unsafe {
+            let sre = Self::read_icc_sre_el1();
+            Self::write_icc_sre_el1(sre | 0x1);
+            core::arch::asm!("isb", options(nostack, preserves_flags));
+        }
+    }
+
+    /// Phase 2: Initialize the distributor (GICD).
+    pub fn init_gicd(&mut self) {
+        unsafe {
             // Disable distributor
             self.gicd_write(GICD_CTLR, 0);
 
@@ -118,8 +126,12 @@ impl IntController {
                 GICD_CTLR,
                 GICD_CTLR_ARE_NS | GICD_CTLR_ENABLE_G1A | GICD_CTLR_ENABLE_G1NS,
             );
+        }
+    }
 
-            // --- Redistributor init ---
+    /// Phase 3: Initialize the redistributor (GICR).
+    pub fn init_gicr(&self) {
+        unsafe {
             // Wake up the redistributor
             let waker = self.gicr_read(GICR_WAKER);
             self.gicr_write(GICR_WAKER, waker & !GICR_WAKER_PROCESSOR_SLEEP);
@@ -140,19 +152,25 @@ impl IntController {
             for i in (0..32).step_by(4) {
                 self.gicr_write(GICR_IPRIORITYR0 + i * 4 / 4, 0xA0A0_A0A0);
             }
+        }
+    }
 
-            // --- CPU interface init (system registers) ---
-            // Set priority mask to allow all
+    /// Phase 4: Initialize the CPU interface (system registers).
+    pub fn init_cpu_interface(&self) {
+        unsafe {
             Self::write_icc_pmr_el1(0xFF);
-
-            // Enable Group 1 interrupts
             Self::write_icc_igrpen1_el1(1);
-
-            // Binary point register = 0 (no preemption grouping)
             Self::write_icc_bpr1_el1(0);
-
             core::arch::asm!("isb", options(nostack, preserves_flags));
         }
+    }
+
+    /// Initialize all phases in sequence.
+    fn init(&mut self) {
+        self.init_sre();
+        self.init_gicd();
+        self.init_gicr();
+        self.init_cpu_interface();
     }
 
     pub fn irq_enable(&self, irq: u32) {

@@ -164,7 +164,7 @@ endif
 # Produces target/jolla-c2/release/kernel.bin (ARM64 Image with header).
 jollac2-build:
 	@echo "==> Building zCore kernel for Jolla C2..."
-	ZCORE_CMDLINE="LOG=$(LOG)" cargo bin -m jolla-c2
+	ZCORE_CMDLINE="LOG=$(or $(LOG),info) ROOTPROC=/bin/sh" cargo bin -m jolla-c2
 
 # Build zCore and write it to an SD card for the Jolla C2.
 # Usage: make jollac2-sd DISK=/dev/diskN
