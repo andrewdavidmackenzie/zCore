@@ -100,6 +100,9 @@ struct ProcessInner {
     /// UTC clock handle installed by _zx_utc_reference_swap.
     /// Used by libc's clock_gettime(CLOCK_REALTIME).
     utc_clock: HandleValue,
+    /// Number of active process-level suspensions. Threads added while
+    /// this is non-zero inherit the suspension count.
+    suspend_count: usize,
 }
 
 /// Status of a process.
@@ -585,6 +588,11 @@ impl Process {
         if let Status::Exited(_) = inner.status {
             return Err(ZxError::BAD_STATE);
         }
+        // If the process is currently suspended, apply the suspension
+        // count to the new thread so it starts suspended.
+        for _ in 0..inner.suspend_count {
+            thread.suspend();
+        }
         inner.threads.push(thread);
         Ok(())
     }
@@ -704,14 +712,17 @@ impl Task for Process {
     }
 
     fn suspend(&self) {
-        let inner = self.inner.lock();
+        let mut inner = self.inner.lock();
+        inner.suspend_count += 1;
         for thread in inner.threads.iter() {
             thread.suspend();
         }
     }
 
     fn resume(&self) {
-        let inner = self.inner.lock();
+        let mut inner = self.inner.lock();
+        assert_ne!(inner.suspend_count, 0, "resume without matching suspend");
+        inner.suspend_count -= 1;
         for thread in inner.threads.iter() {
             thread.resume();
         }

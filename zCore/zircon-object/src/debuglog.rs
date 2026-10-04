@@ -111,7 +111,6 @@ pub const DLOG_MAX_LEN: usize = 256;
 /// `ZX_LOG_RECORD_DATA_MAX = ZX_LOG_RECORD_MAX - sizeof(zx_log_record_t)`.
 pub const DLOG_MAX_DATA: usize = DLOG_MAX_LEN - HEADER_SIZE;
 
-#[allow(unsafe_code)]
 impl DlogBuffer {
     /// Read one record at offset. Copies the header and data payload into
     /// `buf` (which must be at least `DLOG_MAX_LEN` bytes), zero-filling the
@@ -126,8 +125,9 @@ impl DlogBuffer {
         // Read the header.
         let header_end = offset + HEADER_SIZE;
         buf[..HEADER_SIZE].copy_from_slice(&self.buf[offset..header_end]);
-        let header = unsafe { &*(buf.as_ptr() as *const DlogHeader) };
-        let datalen = header.datalen as usize;
+        // Read datalen from the copied header bytes at offset 12 (u16 LE).
+        // Avoids an unsafe misaligned cast to DlogHeader.
+        let datalen = u16::from_ne_bytes([buf[12], buf[13]]) as usize;
         let wire_size = HEADER_SIZE + align_up_4(datalen);
         // Copy data payload.
         let data_end = (offset + HEADER_SIZE + datalen).min(self.buf.len());
@@ -155,8 +155,15 @@ impl DlogBuffer {
             pid,
             tid,
         };
-        let header_buf: [u8; HEADER_SIZE] = unsafe { core::mem::transmute(header) };
-        self.buf.extend_from_slice(&header_buf);
+        // Serialize header fields to bytes in native byte order.
+        self.buf.extend_from_slice(&header.sequence.to_ne_bytes());
+        self.buf.extend_from_slice(&header.padding1);
+        self.buf.extend_from_slice(&header.datalen.to_ne_bytes());
+        self.buf.push(header.severity as u8);
+        self.buf.push(header.flags);
+        self.buf.extend_from_slice(&header.timestamp.to_ne_bytes());
+        self.buf.extend_from_slice(&header.pid.to_ne_bytes());
+        self.buf.extend_from_slice(&header.tid.to_ne_bytes());
         self.buf.extend_from_slice(&data[..datalen]);
         // Pad to 4-byte alignment.
         let padding = wire_size - HEADER_SIZE - datalen;

@@ -20,6 +20,10 @@ impl Syscall<'_> {
         buffer: usize,
         buffer_size: usize,
     ) -> ZxResult {
+        // Fuchsia rejects null value pointers before handle/rights checks.
+        if buffer == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let property = Property::try_from(property).map_err(|_| ZxError::INVALID_ARGS)?;
         info!(
             "object.get_property: handle={:#x?}, property={:?}, buffer=({:#x}; {:#x?})",
@@ -185,6 +189,10 @@ impl Syscall<'_> {
         buffer: usize,
         buffer_size: usize,
     ) -> ZxResult {
+        // Fuchsia rejects null value pointers before handle/rights checks.
+        if buffer == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let property = Property::try_from(property).map_err(|_| ZxError::INVALID_ARGS)?;
         info!(
             "object.set_property: handle={:#x?}, property={:?}, buffer=({:#x}; {:#x?})",
