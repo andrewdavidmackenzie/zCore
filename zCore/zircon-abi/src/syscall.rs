@@ -342,24 +342,18 @@ pub unsafe fn syscall8(
     );
     #[cfg(target_arch = "x86_64")]
     {
-        // x86_64 syscall ABI: first 6 args in registers (rdi, rsi, rdx,
-        // r10, r8, r9), 7th and 8th on the stack. Matches Fuchsia's
-        // vDSO calling convention: C code pushes args, then `call` pushes
-        // the return address. The kernel reads args at rsp+8, rsp+16.
+        // x86_64 Zircon syscall ABI: first 6 args in registers
+        // (rdi, rsi, rdx, r10, r8, r9), 7th and 8th in r12, r13.
         //
-        // We push a8, a7, then a dummy return address (0) to match the
-        // Fuchsia stack layout: [ret_addr, arg7, arg8].
+        // The Fuchsia vDSO loads args 7-8 from the C stack into
+        // r12/r13 before the `syscall` instruction. The kernel
+        // reads r12 and r13 from the saved trap frame.
         core::arch::asm!(
-            "push {a8}",
-            "push {a7}",
-            "push 0",
             "syscall",
-            "add rsp, 24",
-            a7 = in(reg) a6,
-            a8 = in(reg) a7,
             in("eax") num,
             in("rdi") a0, in("rsi") a1, in("rdx") a2,
             in("r10") a3, in("r8") a4, in("r9") a5,
+            in("r12") a6, in("r13") a7,
             lateout("rax") ret,
             out("rcx") _, out("r11") _,
         );

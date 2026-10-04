@@ -90,12 +90,11 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     let elf = ElfFile::new(userstart_elf_bytes).expect("failed to parse userstart ELF");
     let size = elf.load_segment_size();
     // Map the userstart ELF as a single RWX region.
-    // (The binary is small enough that all segments fit in one page.)
     let code_pages = size;
     let code_vmo = VmObject::new_paged(code_pages);
-    // Write the raw ELF content -- load_from_elf would fail for small binaries
-    // where multiple PT_LOAD segments share a page. Instead, copy segment data
-    // directly to the correct offsets.
+    // Write each PT_LOAD segment's data into the VMO at its virtual
+    // address offset. The ELF is linked at base 0, so p_vaddr values
+    // are direct VMO offsets.
     for ph in elf.program_iter() {
         if ph.get_type().unwrap() != xmas_elf::program::Type::Load {
             continue;
@@ -113,17 +112,30 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
         }
     }
     let code_flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::EXECUTE | MMUFlags::USER;
-    let entry = vmar
-        .map(None, code_vmo, 0, code_pages * PAGE_SIZE, code_flags)
-        .unwrap()
-        + elf.header.pt2.entry_point() as usize;
+    let load_base = vmar
+        .map(
+            None,
+            code_vmo.clone(),
+            0,
+            code_pages * PAGE_SIZE,
+            code_flags,
+        )
+        .unwrap();
+
+    // Apply ELF relocations. The binary is a static PIE linked at
+    // base 0 with RELA entries for absolute addresses (GOT, vtables).
+    // The load bias equals the VMAR mapping address.
+    apply_userstart_relocations(userstart_elf_bytes, &elf, &code_vmo, load_base);
+
+    let entry = load_base + elf.header.pt2.entry_point() as usize;
     info!(
-        "userstart: loaded ELF ({} bytes, entry={:#x})",
+        "userstart: loaded ELF ({} bytes, base={:#x}, entry={:#x})",
         userstart_elf_bytes.len(),
+        load_base,
         entry
     );
 
-    // Flush I-cache after loading executable code.
+    // Flush I-cache after loading executable code and applying relocations.
     // On real hardware (Pi 400), the I-cache and D-cache are not coherent.
     // Without this, the CPU may execute stale/zero data from I-cache.
     #[cfg(target_arch = "aarch64")]
@@ -513,6 +525,140 @@ pub fn run_from_rootfs(
     config.extra_args = extra_args;
     zircon_object::task::spawn::spawn_process(&job, "init", &program_data, &config)
         .expect("failed to spawn init process")
+}
+
+/// Apply ELF relocations for the userstart binary.
+///
+/// Userstart is built as a static PIE linked at base 0. The linker emits
+/// RELA entries (via PT_DYNAMIC) for all absolute addresses: GOT entries,
+/// vtable function pointers, etc. These entries use R_*_RELATIVE type,
+/// meaning each target location should be patched to `load_base + addend`.
+///
+/// We apply relocations by writing directly to the VMO (which is shared
+/// with the VMAR mapping), so changes are immediately visible to userspace.
+fn apply_userstart_relocations(
+    elf_bytes: &[u8],
+    elf: &ElfFile,
+    vmo: &Arc<VmObject>,
+    load_base: usize,
+) {
+    use xmas_elf::program::Type;
+
+    // Find PT_DYNAMIC to locate DT_RELA, DT_RELASZ, DT_RELAENT.
+    let dyn_ph = match elf
+        .program_iter()
+        .find(|ph| ph.get_type() == Ok(Type::Dynamic))
+    {
+        Some(ph) => ph,
+        None => {
+            // No DYNAMIC segment — static non-PIE binary, no relocations needed.
+            // This can happen with older toolchains that don't emit GOT entries.
+            info!("userstart: no PT_DYNAMIC, skipping relocations");
+            return;
+        }
+    };
+
+    let dyn_offset = dyn_ph.offset() as usize;
+    let dyn_size = dyn_ph.file_size() as usize;
+
+    // Parse DYNAMIC entries to find DT_RELA/DT_RELASZ/DT_RELAENT.
+    const DT_NULL: u64 = 0;
+    const DT_RELA: u64 = 7;
+    const DT_RELASZ: u64 = 8;
+    const DT_RELAENT: u64 = 9;
+
+    let mut rela_vaddr: usize = 0;
+    let mut rela_size: usize = 0;
+    let mut rela_ent: usize = 24; // default Elf64_Rela size
+
+    let mut pos = dyn_offset;
+    while pos + 16 <= dyn_offset + dyn_size && pos + 16 <= elf_bytes.len() {
+        let d_tag = u64::from_le_bytes(elf_bytes[pos..pos + 8].try_into().unwrap());
+        let d_val = u64::from_le_bytes(elf_bytes[pos + 8..pos + 16].try_into().unwrap());
+        match d_tag {
+            DT_NULL => break,
+            DT_RELA => rela_vaddr = d_val as usize,
+            DT_RELASZ => rela_size = d_val as usize,
+            DT_RELAENT => rela_ent = d_val as usize,
+            _ => {}
+        }
+        pos += 16;
+    }
+
+    if rela_size == 0 || rela_ent == 0 {
+        info!("userstart: no RELA entries found");
+        return;
+    }
+
+    // DT_RELA is a virtual address. Since the ELF is linked at base 0,
+    // the vaddr equals the file offset for content within PT_LOAD segments.
+    // However, DT_RELA might point into a LOAD segment whose p_offset
+    // differs from p_vaddr. Convert vaddr to file offset by scanning
+    // PT_LOAD segments.
+    let rela_file_offset = vaddr_to_file_offset(elf, rela_vaddr).unwrap_or(rela_vaddr); // fallback: assume vaddr == file offset
+
+    // R_*_RELATIVE type values per architecture.
+    #[cfg(target_arch = "x86_64")]
+    const R_RELATIVE: u32 = 8; // R_X86_64_RELATIVE
+    #[cfg(target_arch = "aarch64")]
+    const R_RELATIVE: u32 = 0x403; // R_AARCH64_RELATIVE
+    #[cfg(target_arch = "riscv64")]
+    const R_RELATIVE: u32 = 3; // R_RISCV_RELATIVE
+
+    let count = rela_size / rela_ent;
+    let mut applied = 0usize;
+
+    for i in 0..count {
+        let entry_off = rela_file_offset + i * rela_ent;
+        if entry_off + 24 > elf_bytes.len() {
+            break;
+        }
+        let r_offset =
+            u64::from_le_bytes(elf_bytes[entry_off..entry_off + 8].try_into().unwrap()) as usize;
+        let r_info =
+            u64::from_le_bytes(elf_bytes[entry_off + 8..entry_off + 16].try_into().unwrap());
+        let r_addend = i64::from_le_bytes(
+            elf_bytes[entry_off + 16..entry_off + 24]
+                .try_into()
+                .unwrap(),
+        );
+        let r_type = (r_info & 0xFFFF_FFFF) as u32;
+
+        if r_type == R_RELATIVE {
+            // R_*_RELATIVE: write (load_base + addend) at (r_offset in VMO).
+            // r_offset is the vaddr in the ELF (== VMO offset since base is 0).
+            let value = (load_base as i64 + r_addend) as u64;
+            vmo.write(r_offset, &value.to_le_bytes()).unwrap();
+            applied += 1;
+        } else if r_type != 0 {
+            warn!(
+                "userstart: unsupported relocation type {} at offset {:#x}",
+                r_type, r_offset
+            );
+        }
+    }
+
+    info!(
+        "userstart: applied {}/{} RELA relocations (load_base={:#x})",
+        applied, count, load_base
+    );
+}
+
+/// Convert an ELF virtual address to a file offset by scanning PT_LOAD segments.
+fn vaddr_to_file_offset(elf: &ElfFile, vaddr: usize) -> Option<usize> {
+    use xmas_elf::program::Type;
+    for ph in elf.program_iter() {
+        if ph.get_type() != Ok(Type::Load) {
+            continue;
+        }
+        let seg_vaddr = ph.virtual_addr() as usize;
+        let seg_filesz = ph.file_size() as usize;
+        let seg_offset = ph.offset() as usize;
+        if vaddr >= seg_vaddr && vaddr < seg_vaddr + seg_filesz {
+            return Some(seg_offset + (vaddr - seg_vaddr));
+        }
+    }
+    None
 }
 
 /// Create a vDSO VMO from the ELF binary and populate data pages.
