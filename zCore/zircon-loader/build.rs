@@ -11,7 +11,12 @@ fn main() {
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
     println!("cargo:rerun-if-env-changed=USERSTART_ELF");
-    if std::env::var("USERSTART_ELF").is_err() {
+    if let Ok(path) = std::env::var("USERSTART_ELF") {
+        // Rebuild zircon-loader when the userstart binary changes.
+        // Without this, cargo would re-use a cached build even after
+        // userstart is recompiled, embedding a stale binary.
+        println!("cargo:rerun-if-changed={path}");
+    } else {
         let stub = out.join("empty_userstart.elf");
         std::fs::write(stub.as_path(), b"").unwrap();
         println!("cargo:rustc-env=USERSTART_ELF={}", stub.display());

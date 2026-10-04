@@ -70,7 +70,10 @@ fn main() {
     // so include_bytes! doesn't fail. The rootfs-based boot path doesn't
     // need the embedded ZBI.
     println!("cargo:rerun-if-env-changed=PETAL_ZBI");
-    if std::env::var("PETAL_ZBI").is_err() {
+    if let Ok(path) = std::env::var("PETAL_ZBI") {
+        // Rebuild kernel when the ZBI file changes.
+        println!("cargo:rerun-if-changed={path}");
+    } else {
         let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
         let stub = out.join("empty.zbi");
         std::fs::write(stub.as_path(), b"").unwrap();
@@ -82,7 +85,11 @@ fn main() {
     }
 
     // For Zircon mode: if USERSTART_ELF is not set, generate an empty stub.
-    if std::env::var("USERSTART_ELF").is_err() {
+    println!("cargo:rerun-if-env-changed=USERSTART_ELF");
+    if let Ok(path) = std::env::var("USERSTART_ELF") {
+        // Rebuild kernel when the userstart binary changes.
+        println!("cargo:rerun-if-changed={path}");
+    } else {
         let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
         let stub = out.join("empty.elf");
         std::fs::write(stub.as_path(), b"").unwrap();
