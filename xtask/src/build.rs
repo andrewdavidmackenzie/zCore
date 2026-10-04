@@ -129,9 +129,13 @@ impl BuildConfig {
             }
         }
 
-        // Pass through ZCORE_CMDLINE from the environment if set,
-        // allowing `make build LOG=info` to flow through to the kernel.
+        // Build ZCORE_CMDLINE from target config.
+        // Environment override (e.g. from Makefile `LOG=info`) takes precedence.
+        let is_linux = features.contains("linux");
         if let Ok(cmdline) = std::env::var("ZCORE_CMDLINE") {
+            env.insert("ZCORE_CMDLINE".into(), cmdline.into());
+        } else {
+            let cmdline = target.build_cmdline(None, is_linux);
             env.insert("ZCORE_CMDLINE".into(), cmdline.into());
         }
 
@@ -310,20 +314,13 @@ impl QemuArgs {
         };
 
         let obj = build_config.target_file_path();
-        // Set the kernel command line via compile-time env var.
-        // If ZCORE_CMDLINE was passed through from the environment
-        // (e.g. by the Makefile demo targets), use that instead.
-        if !build_config
-            .env
-            .contains_key(&OsString::from("ZCORE_CMDLINE"))
-        {
-            let cmdline = if is_linux {
-                // With Linux: default to busybox shell
-                format!("LOG={} ROOTPROC=/bin/busybox?sh", self.log)
-            } else {
-                // Without Linux: default to petal shell
-                format!("LOG={} ROOTPROC=/bin/shell", self.log)
-            };
+        // Override the cmdline with --log if specified (QemuArgs has a --log flag).
+        // The ZCORE_CMDLINE was already set by BuildConfig::from_args() using
+        // the target config. If --log was explicitly passed, rebuild with that
+        // log level. If ZCORE_CMDLINE came from the environment, don't override.
+        if std::env::var("ZCORE_CMDLINE").is_err() {
+            let target = TargetConfig::load(&target_name);
+            let cmdline = target.build_cmdline(Some(&self.log), is_linux);
             build_config
                 .env
                 .insert("ZCORE_CMDLINE".into(), cmdline.into());

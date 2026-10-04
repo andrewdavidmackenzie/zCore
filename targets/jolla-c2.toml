@@ -12,6 +12,10 @@ linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker_jollac2.ld
 drivers = ["gic-v3"]
 features = ["board-jollac2"]
 
+[cmdline]
+log = "info"
+root-proc = "/bin/sh"
+
 # No [qemu] section -- this is real hardware only.
 
 [rustc-target]
