@@ -159,10 +159,7 @@ impl Syscall<'_> {
             if offset != 0 || size != 0 {
                 return Err(ZxError::INVALID_ARGS);
             }
-            // Resizable references are not yet supported: create_slice
-            // builds a non-resizable child and does not support resizable
-            // parents. Reject RESIZABLE for now to avoid kernel panics
-            // (VMObjectSlice::set_len is unimplemented).
+            // Resizable REFERENCE children are not supported by Fuchsia.
             if resizable {
                 return Err(ZxError::NOT_SUPPORTED);
             }
@@ -177,7 +174,10 @@ impl Syscall<'_> {
                 return Err(ZxError::INVALID_ARGS);
             }
             // Implement as a slice over the entire VMO.
-            vmo.create_slice(0, vmo.len())
+            // Use create_reference_slice to allow resizable parents
+            // (REFERENCE children are allowed on resizable VMOs in
+            // Fuchsia, unlike regular slices).
+            vmo.create_reference_slice(0, vmo.len())
         } else if options.contains(VmoCloneFlags::SLICE) {
             if options != VmoCloneFlags::SLICE {
                 Err(ZxError::INVALID_ARGS)

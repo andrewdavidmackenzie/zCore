@@ -291,7 +291,21 @@ impl VmAddressRegion {
                 None => return Err(ZxError::INVALID_ARGS),
             }
         } else {
-            self.determine_offset(inner, vmar_offset, len, PAGE_SIZE)?
+            self.determine_offset(inner, vmar_offset, len, PAGE_SIZE)
+                .map_err(|e| {
+                    // For SPECIFIC maps (offset is Some), convert overlap errors
+                    // to ALREADY_EXISTS per Fuchsia's zx_vmar_map semantics.
+                    if e == ZxError::INVALID_ARGS && vmar_offset.is_some() {
+                        if let Some(off) = vmar_offset {
+                            if check_aligned(off, PAGE_SIZE)
+                                && !self.test_map(inner, off, len, PAGE_SIZE)
+                            {
+                                return ZxError::ALREADY_EXISTS;
+                            }
+                        }
+                    }
+                    e
+                })?
         };
         let addr = self.addr + offset;
         let mut flags = flags;

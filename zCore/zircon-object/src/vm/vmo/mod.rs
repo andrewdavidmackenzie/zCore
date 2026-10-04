@@ -277,7 +277,30 @@ impl VmObject {
     }
 
     /// Create a child slice as an VMO
+    /// Create a slice (sub-VMO) of this VMO.
+    ///
+    /// If `allow_resizable_parent` is true, the resizable-parent check
+    /// is skipped. This is used for ZX_VMO_CHILD_REFERENCE which creates
+    /// a full-VMO alias that is allowed on resizable VMOs.
     pub fn create_slice(self: &Arc<Self>, offset: usize, p_size: usize) -> ZxResult<Arc<Self>> {
+        self.create_slice_inner(offset, p_size, false)
+    }
+
+    /// Create a slice that is allowed on resizable parents (REFERENCE child).
+    pub fn create_reference_slice(
+        self: &Arc<Self>,
+        offset: usize,
+        p_size: usize,
+    ) -> ZxResult<Arc<Self>> {
+        self.create_slice_inner(offset, p_size, true)
+    }
+
+    fn create_slice_inner(
+        self: &Arc<Self>,
+        offset: usize,
+        p_size: usize,
+        allow_resizable_parent: bool,
+    ) -> ZxResult<Arc<Self>> {
         let size = roundup_pages(p_size);
         // why 32 * PAGE_SIZE? Refered to zircon source codes
         if size < p_size || size > usize::MAX & !(32 * PAGE_SIZE) {
@@ -291,7 +314,7 @@ impl VmObject {
         if offset > parent_size || size > parent_size - offset {
             return Err(ZxError::INVALID_ARGS);
         }
-        if self.resizable {
+        if self.resizable && !allow_resizable_parent {
             return Err(ZxError::NOT_SUPPORTED);
         }
         if self.trait_.cache_policy() != CachePolicy::Cached && !self.trait_.is_contiguous() {
