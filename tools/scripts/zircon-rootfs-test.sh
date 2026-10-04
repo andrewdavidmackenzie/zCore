@@ -17,6 +17,7 @@ TIMEOUT=30
 
 case "$ARCH" in
   aarch64)
+    RUST_TARGET="aarch64-unknown-none-softfloat"
     KERNEL="target/qemu-aarch64/release/kernel.bin"
     ROOTFS_IMG="target/qemu-${ARCH}/release/${ARCH}-zircon.img"
     QEMU_BASE_CMD=(
@@ -45,11 +46,11 @@ echo "==> Building kernel (Zircon mode)..."
 # Must match xtask/src/petal.rs build_userstart() flags.
 CARGO_ENCODED_RUSTFLAGS="-Crelocation-model=pic" \
   cargo build -p userstart \
-  --target "aarch64-unknown-none-softfloat" \
+  --target "$RUST_TARGET" \
   --release --target-dir target/userstart \
   -Z build-std=core,alloc
 
-USERSTART="target/userstart/aarch64-unknown-none-softfloat/release/userstart"
+USERSTART="target/userstart/${RUST_TARGET}/release/userstart"
 
 cargo petal-zbi --arch "$ARCH" --bin hello 2>&1 | tail -1
 

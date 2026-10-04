@@ -631,7 +631,7 @@ fn apply_userstart_relocations(
             vmo.write(r_offset, &value.to_le_bytes()).unwrap();
             applied += 1;
         } else if r_type != 0 {
-            warn!(
+            panic!(
                 "userstart: unsupported relocation type {} at offset {:#x}",
                 r_type, r_offset
             );
