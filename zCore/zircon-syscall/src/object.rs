@@ -770,19 +770,53 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::ProcessMaps => {
-                // Validate handle type and rights before returning
-                // NOT_SUPPORTED.  This ensures error-path tests
-                // (invalid handle, wrong type, missing rights) still
-                // return the correct errors.
-                let _target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
-                // TODO: implement full VMAR tree walk.
-                return Err(ZxError::NOT_SUPPORTED);
+                let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
+                // Cannot inspect own maps (would deadlock on VMAR lock).
+                if target.id() == proc.id() {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(0)?;
+                    return Ok(());
+                }
+                let vmar = target.vmar();
+                // Build the entries: aspace (depth 0) + VMAR tree (depth 1+).
+                let mut entries = Vec::new();
+                // Aspace entry (depth 0) — represents the full address space.
+                let mut aspace_name = [0u8; 32];
+                let pname = target.name();
+                let pb = pname.as_bytes();
+                let pcopy = pb.len().min(31);
+                aspace_name[..pcopy].copy_from_slice(&pb[..pcopy]);
+                entries.push(InfoMapsEntry {
+                    name: aspace_name,
+                    base: vmar.addr() as u64,
+                    size: vmar.get_info().len as u64,
+                    depth: 0,
+                    r#type: 1, // ZX_INFO_MAPS_TYPE_ASPACE
+                    padding: 0,
+                    mapping: InfoMapsMapping::default(),
+                });
+                // VMAR tree walk (depth 1+).
+                let vmar_entries = vmar.get_info_maps(1);
+                entries.extend(vmar_entries);
+                let entry_size = core::mem::size_of::<InfoMapsEntry>();
+                let count = (buffer_size / entry_size).min(entries.len());
+                if count > 0 {
+                    UserOutPtr::<InfoMapsEntry>::from(buffer).write_array(&entries[..count])?;
+                }
+                actual.write_if_not_null(count)?;
+                avail.write_if_not_null(entries.len())?;
             }
             Topic::VmarMaps => {
-                let _vmar =
+                let vmar =
                     proc.get_object_with_rights::<VmAddressRegion>(handle, Rights::INSPECT)?;
-                // TODO: implement VMAR mapping enumeration.
-                return Err(ZxError::NOT_SUPPORTED);
+                let entries = vmar.get_info_maps(0);
+                let entry_size = core::mem::size_of::<InfoMapsEntry>();
+                let count = (buffer_size / entry_size).min(entries.len());
+                if count > 0 {
+                    UserOutPtr::<InfoMapsEntry>::from(buffer).write_array(&entries[..count])?;
+                }
+                actual.write_if_not_null(count)?;
+                avail.write_if_not_null(entries.len())?;
             }
             _ => {
                 error!("not supported info topic: {:?}", topic);
