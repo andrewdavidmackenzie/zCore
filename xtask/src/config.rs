@@ -91,6 +91,7 @@ fn driver_to_feature(driver: &str) -> &'static str {
         // Interrupt controllers
         "apic" => "apic",
         "gic-400" => "gic-400",
+        "gic-v3" => "gic-v3",
         "riscv-plic" => "riscv-plic",
         "riscv-intc" => "riscv-intc",
         // UART serial
