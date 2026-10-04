@@ -82,7 +82,12 @@ impl Syscall<'_> {
             None
         } else {
             let owner = self.get_thread_with_pseudo(new_requeue_owner)?;
-            if owner.state() == ThreadState::New {
+            // Reject unstarted, dead, or dying threads as futex owners.
+            let state = owner.state();
+            if state == ThreadState::New
+                || state == ThreadState::Dead
+                || state == ThreadState::Dying
+            {
                 return Err(ZxError::INVALID_ARGS);
             }
             Some(owner)
@@ -142,7 +147,11 @@ impl Syscall<'_> {
             None
         } else {
             let owner = self.get_thread_with_pseudo(new_requeue_owner)?;
-            if owner.state() == ThreadState::New {
+            let state = owner.state();
+            if state == ThreadState::New
+                || state == ThreadState::Dead
+                || state == ThreadState::Dying
+            {
                 return Err(ZxError::INVALID_ARGS);
             }
             Some(owner)
