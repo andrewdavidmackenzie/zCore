@@ -501,9 +501,31 @@ impl Syscall<'_> {
                 avail.write_if_not_null(entries.len())?;
             }
             Topic::ProcessVmos => {
-                warn!("A dummy implementation for utest Bti.NoDelayedUnpin, it does not check the reture value");
-                actual.write_if_not_null(0)?;
-                avail.write_if_not_null(0)?;
+                let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
+                // Collect VMO info from all handles that reference VMOs.
+                let raw_entries = target.get_handle_table_entries();
+                let mut vmo_infos: Vec<VmoInfo> = Vec::new();
+                // Iterate process handles looking for VMO-typed objects.
+                let inner_handles = target.get_handle_table_entries();
+                for &(obj_type, hv, rights_bits, _koid, _related) in &inner_handles {
+                    // obj_type 3 = VmObject
+                    if obj_type == 3 {
+                        if let Ok(vmo) = target.get_object::<VmObject>(hv) {
+                            let mut info = vmo.get_info();
+                            info.flags |= VmoInfoFlags::VIA_HANDLE;
+                            info.rights |= Rights::from_bits_truncate(rights_bits);
+                            vmo_infos.push(info);
+                        }
+                    }
+                }
+                drop(raw_entries);
+                let entry_size = core::mem::size_of::<VmoInfo>();
+                let count = (buffer_size / entry_size).min(vmo_infos.len());
+                if count > 0 {
+                    UserOutPtr::<VmoInfo>::from(buffer).write_array(&vmo_infos[..count])?;
+                }
+                actual.write_if_not_null(count)?;
+                avail.write_if_not_null(vmo_infos.len())?;
             }
             Topic::Vmo => {
                 let mut info_ptr = UserOutPtr::<VmoInfo>::from_addr_size(buffer, buffer_size)?;
