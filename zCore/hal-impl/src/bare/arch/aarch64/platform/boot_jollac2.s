@@ -403,14 +403,16 @@ _start_virtual:
     movk    x8, #0x9e00, lsl #16        /* x8 = 0x9e000000 */
     mov     w9, #0x0000
     movk    w9, #0xFF00, lsl #16        /* 0xFF000000 = opaque black */
-    mov     x12, #0x9800
-    movk    x12, #0x0011, lsl #16       /* x12 = 1152000 (720*1600) */
+    mov     x12, #0x9400
+    movk    x12, #0x0011, lsl #16       /* x12 = 0x119400 = 1152000 (720*1600) */
 107:str     w9, [x8], #4
     sub     x12, x12, #1
-    /* Flush cache line every 16 pixels (64 bytes) */
+    /* Flush cache line every 16 pixels (64 bytes).
+       Use x8-4 to target the line just written (str post-incremented x8). */
     tst     x12, #0xF
     b.ne    108f
-    dc      cvac, x8
+    sub     x13, x8, #4
+    dc      cvac, x13
 108:cbnz    x12, 107b
     dsb     sy
 
