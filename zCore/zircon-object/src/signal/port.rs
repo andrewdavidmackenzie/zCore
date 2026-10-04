@@ -323,7 +323,9 @@ mod tests {
     async fn wait() {
         let port = Port::new(0).unwrap();
         let object = DummyObject::new() as Arc<dyn KernelObject>;
-        object.send_signal_to_port_async(Signal::READABLE, &port, 1, false);
+        object
+            .send_signal_to_port_async(Signal::READABLE, &port, 1, false)
+            .unwrap();
 
         let packet_repr2 = PortPacketRepr {
             key: 2,
@@ -371,7 +373,9 @@ mod tests {
         let port = Port::new(0).unwrap();
         let object = DummyObject::new() as Arc<dyn KernelObject>;
         object.signal_set(Signal::READABLE);
-        object.send_signal_to_port_async(Signal::READABLE, &port, 1, false);
+        object
+            .send_signal_to_port_async(Signal::READABLE, &port, 1, false)
+            .unwrap();
         let packet = port.wait().await;
         assert_eq!(PortPacketRepr::from(&packet), packet_repr);
     }

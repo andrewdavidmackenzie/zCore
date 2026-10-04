@@ -834,9 +834,9 @@ impl Syscall<'_> {
         let object = self.get_object_with_pseudo(handle_value, Rights::WAIT)?;
         let port = proc.get_object_with_rights::<Port>(port_handle_value, Rights::WRITE)?;
         if options & ZX_WAIT_ASYNC_EDGE != 0 {
-            object.send_signal_to_port_async_edge(signals, &port, key, use_timestamp);
+            object.send_signal_to_port_async_edge(signals, &port, key, use_timestamp)?;
         } else {
-            object.send_signal_to_port_async(signals, &port, key, use_timestamp);
+            object.send_signal_to_port_async(signals, &port, key, use_timestamp)?;
         }
         Ok(())
     }

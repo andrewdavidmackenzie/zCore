@@ -155,6 +155,10 @@ pub trait KernelObject: DowncastSync + Debug {
     fn add_signal_callback_deferred(&self, callback: SignalHandler) {
         self.add_signal_callback(callback);
     }
+    /// Return the current number of registered signal callbacks.
+    fn signal_callback_count(&self) -> usize {
+        0
+    }
     /// Attempt to find a child of the object with given KoID.
     ///
     /// If the object is a *Process*, the *Threads* it contains may be obtained.
@@ -321,17 +325,27 @@ impl KObjectBase {
         self.signal_change(signal, Signal::empty());
     }
 
+    /// Maximum number of signal callbacks (observers) per object.
+    /// Prevents OOM when creating many observers. Fuchsia handles
+    /// OOM gracefully; we use a fixed limit since our allocator
+    /// panics on OOM.
+    const MAX_SIGNAL_CALLBACKS: usize = 16384;
+
     /// Add `callback` for signal status changes.
     ///
     /// The `callback` is a function of `Fn(Signal) -> bool`.
     /// It returns a bool indicating whether the handle process is over.
     /// If true, the function will never be called again.
+    ///
+    /// Enforces `MAX_SIGNAL_CALLBACKS` — silently drops the callback
+    /// if the limit is reached. Used by internal `wait_signal` paths
+    /// where the caller cannot propagate errors.
     pub fn add_signal_callback(&self, callback: SignalHandler) {
         let mut inner = self.inner.lock();
         // Check the callback immediately, in case that a signal arrives just before the call of
         // `add_signal_callback` (since lock is acquired inside it) and the callback is not triggered
         // in time.
-        if !callback(inner.signal) {
+        if !callback(inner.signal) && inner.signal_callbacks.len() < Self::MAX_SIGNAL_CALLBACKS {
             inner.signal_callbacks.push(callback);
         }
     }
@@ -340,9 +354,32 @@ impl KObjectBase {
     ///
     /// Unlike `add_signal_callback`, this does NOT check the current signal
     /// state. The callback will only fire on future signal changes.
-    /// Used for edge-triggered wait_async.
+    /// Used for edge-triggered wait_async. Enforces the callback limit.
     pub fn add_signal_callback_deferred(&self, callback: SignalHandler) {
-        self.inner.lock().signal_callbacks.push(callback);
+        let mut inner = self.inner.lock();
+        if inner.signal_callbacks.len() < Self::MAX_SIGNAL_CALLBACKS {
+            inner.signal_callbacks.push(callback);
+        }
+    }
+
+    /// Return the current number of registered signal callbacks.
+    pub fn signal_callback_count(&self) -> usize {
+        self.inner.lock().signal_callbacks.len()
+    }
+
+    /// Like `add_signal_callback` but returns `NO_MEMORY` when the
+    /// observer limit is reached. Atomically checks count and inserts
+    /// under the same lock to prevent TOCTOU races. Used by
+    /// `send_signal_to_port_async` (wait_async syscall).
+    pub fn try_add_signal_callback(&self, callback: SignalHandler) -> ZxResult {
+        let mut inner = self.inner.lock();
+        if !callback(inner.signal) {
+            if inner.signal_callbacks.len() >= Self::MAX_SIGNAL_CALLBACKS {
+                return Err(ZxError::NO_MEMORY);
+            }
+            inner.signal_callbacks.push(callback);
+        }
+        Ok(())
     }
 }
 
@@ -402,8 +439,8 @@ impl dyn KernelObject {
         port: &Arc<Port>,
         key: u64,
         timestamp: bool,
-    ) {
-        self.send_signal_to_port_async_inner(signal, port, key, false, timestamp);
+    ) -> ZxResult {
+        self.send_signal_to_port_async_inner(signal, port, key, false, timestamp)
     }
 
     /// Edge-triggered variant: only fires when signal transitions from
@@ -415,8 +452,8 @@ impl dyn KernelObject {
         port: &Arc<Port>,
         key: u64,
         timestamp: bool,
-    ) {
-        self.send_signal_to_port_async_inner(signal, port, key, true, timestamp);
+    ) -> ZxResult {
+        self.send_signal_to_port_async_inner(signal, port, key, true, timestamp)
     }
 
     #[allow(unsafe_code)]
@@ -427,7 +464,7 @@ impl dyn KernelObject {
         key: u64,
         edge_triggered: bool,
         timestamp: bool,
-    ) {
+    ) -> ZxResult {
         // Register cancellation tracking BEFORE the immediate check,
         // so cancel_async can find it even for level-triggered waits
         // that fire immediately.
@@ -458,12 +495,13 @@ impl dyn KernelObject {
                 );
                 // Remove the subscription since we already fired.
                 port.cancel_async(self.id(), key).ok();
-                return;
+                return Ok(());
             }
         }
         // Register the callback. For edge mode, use deferred registration
         // (skip immediate signal check) so the callback only fires on
         // future signal transitions.
+        let cancelled_for_error = cancelled.clone();
         let callback: SignalHandler = Box::new({
             let port = port.clone();
             let source_koid = self.id();
@@ -499,11 +537,24 @@ impl dyn KernelObject {
                 true
             }
         });
+        // Check observer limit before registering. The limit is
+        // enforced inside add_signal_callback/add_signal_callback_deferred
+        // as well, but we check here to return an error to the caller.
+        // The trait's signal_callback_count() and add_signal_callback()
+        // each acquire the lock separately, so there is a small TOCTOU
+        // window. The inner enforcement ensures we never exceed the limit
+        // even if two calls race.
+        if self.signal_callback_count() >= KObjectBase::MAX_SIGNAL_CALLBACKS {
+            // Cancel only our own subscription.
+            cancelled_for_error.store(true, core::sync::atomic::Ordering::Relaxed);
+            return Err(ZxError::NO_MEMORY);
+        }
         if edge_triggered {
             self.add_signal_callback_deferred(callback);
         } else {
             self.add_signal_callback(callback);
         }
+        Ok(())
     }
 }
 
@@ -592,6 +643,9 @@ macro_rules! impl_kobject {
             }
             fn add_signal_callback(&self, callback: $crate::object::SignalHandler) {
                 self.base.add_signal_callback(callback);
+            }
+            fn signal_callback_count(&self) -> usize {
+                self.base.signal_callback_count()
             }
             fn add_signal_callback_deferred(&self, callback: $crate::object::SignalHandler) {
                 self.base.add_signal_callback_deferred(callback);
