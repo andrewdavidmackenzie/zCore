@@ -113,6 +113,25 @@ extern "C" fn rust_main(dtb_paddr: usize) -> ! {
 
     super::super::set_board_bases(board::UART_BASE, board::GIC_BASE);
 
+    // Initialize fb-console before anything else so we get crash output.
+    #[cfg(feature = "board-jollac2")]
+    {
+        super::super::fb_console::init();
+        super::super::fb_console::write_str("zCore: rust_main entered\n");
+    }
+
+    // The DTB address from U-Boot may be above 4GB (e.g. 0x27c416000),
+    // which is outside our boot page table mapping (0-4GB only).
+    // Skip DTB parsing if the address is unmapped.
+    #[cfg(feature = "board-jollac2")]
+    let dtb_paddr = if dtb_paddr >= 0x1_0000_0000 {
+        // DTB is above 4GB — can't access with current page tables.
+        // Use 0 to skip DTB parsing and fall back to default cmdline.
+        0
+    } else {
+        dtb_paddr
+    };
+
     let config = KernelConfig {
         cmdline: option_env!("ZCORE_CMDLINE").unwrap_or(default_cmdline),
         phys_to_virt_offset: board::PHYS_TO_VIRT_OFFSET,

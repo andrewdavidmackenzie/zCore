@@ -1,14 +1,9 @@
 use crate::{Info, Kind, MMUFlags, Source};
-#[cfg(not(feature = "board-jollac2"))]
+#[cfg(feature = "gic-400")]
 use ::drivers::irq::gic_400::get_irq_num;
+#[cfg(feature = "gic-v3")]
+use ::drivers::irq::gic_v3::get_irq_num;
 use cortex_a::registers::FAR_EL1;
-
-/// Stub IRQ number reader for boards without GIC-400 (e.g., Jolla C2 with GICv3).
-/// Returns 0 (spurious) since no interrupt controller driver is loaded.
-#[cfg(feature = "board-jollac2")]
-fn get_irq_num(_gicc: usize, _gicd: usize) -> usize {
-    0 // spurious — no GIC driver
-}
 use hal::TrapReason;
 use tock_registers::interfaces::Readable;
 use trapframe::TrapFrame;
