@@ -476,8 +476,9 @@ impl Exception {
             }
         };
         if result == Err(ZxError::NEXT) && !self.type_.is_synth() {
-            // Nobody handled the exception, kill myself
-            self.thread.proc().exit(super::TASK_RETCODE_SYSCALL_KILL);
+            // Nobody handled the exception, kill the process with the
+            // exception-specific return code.
+            self.thread.proc().exit(super::TASK_RETCODE_EXCEPTION_KILL);
         }
     }
 
