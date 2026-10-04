@@ -329,8 +329,9 @@ impl IrqScheme for IntController {
         Ok(())
     }
 
-    fn unregister(&self, _irq_num: usize) -> DeviceResult {
-        todo!()
+    fn unregister(&self, irq_num: usize) -> DeviceResult {
+        self.irq_disable(irq_num as u32);
+        self.manager.lock().unregister_handler(irq_num)
     }
 }
 
