@@ -76,6 +76,12 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let fifo = proc.get_object_with_rights::<Fifo>(handle_value, Rights::READ)?;
         let total = elem_size.checked_mul(count).ok_or(ZxError::INVALID_ARGS)?;
+        // Validate the output buffer before reading from the FIFO.
+        // Without this check, writes to kernel-accessible addresses
+        // succeed silently (no SMAP fault in QEMU).
+        if count > 0 {
+            self.check_user_buffer_write(user_bytes.as_addr(), total)?;
+        }
         let mut data = {
             let mut v = alloc::vec::Vec::new();
             v.try_reserve(total).map_err(|_| ZxError::INVALID_ARGS)?;

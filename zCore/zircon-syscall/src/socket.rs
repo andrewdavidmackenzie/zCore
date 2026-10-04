@@ -65,6 +65,12 @@ impl Syscall<'_> {
         if count > 0 && user_bytes.is_null() {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Validate the output buffer before reading from the socket.
+        // Without this check, writes to kernel-accessible addresses
+        // succeed silently (no SMAP fault in QEMU).
+        if count > 0 {
+            self.check_user_buffer_write(user_bytes.as_addr(), count)?;
+        }
         let options = SocketFlags::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
         if !(options - SocketFlags::SOCKET_PEEK).is_empty() {
             return Err(ZxError::INVALID_ARGS);

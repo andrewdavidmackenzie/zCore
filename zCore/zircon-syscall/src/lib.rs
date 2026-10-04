@@ -90,6 +90,18 @@ impl Syscall<'_> {
             .map_err(|_| ZxError::INVALID_ARGS)
     }
 
+    /// Validate that a user-space buffer is fully mapped with write
+    /// permissions. Returns `INVALID_ARGS` for bad pointers.
+    #[allow(dead_code)]
+    fn check_user_buffer_write(&self, addr: usize, len: usize) -> ZxResult {
+        if len == 0 {
+            return Ok(());
+        }
+        let vmar = self.thread.proc().vmar();
+        vmar.check_user_access(addr, len, MMUFlags::WRITE)
+            .map_err(|_| ZxError::INVALID_ARGS)
+    }
+
     /// Resolve a handle value that may be a pseudo-handle.
     ///
     /// Fuchsia defines pseudo-handles for the current thread, process, and
