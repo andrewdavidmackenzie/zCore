@@ -148,9 +148,11 @@ impl Job {
         let killed = inner.killed;
         drop(inner);
         if no_children {
+            // Always re-assert JOB_NO_JOBS when the last child is gone.
             let mut set = Signal::JOB_NO_JOBS;
             if no_processes {
-                set |= Signal::JOB_NO_CHILDREN;
+                // Both children and processes are gone — re-assert all three.
+                set |= Signal::JOB_NO_CHILDREN | Signal::JOB_NO_PROCESSES;
             }
             self.base.signal_set(set);
         }
@@ -281,9 +283,11 @@ impl Job {
         let killed = inner.killed;
         drop(inner);
         if no_processes {
+            // Always re-assert JOB_NO_PROCESSES when the last process is gone.
             let mut set = Signal::JOB_NO_PROCESSES;
             if no_children {
-                set |= Signal::JOB_NO_CHILDREN;
+                // Both processes and children are gone — re-assert all three.
+                set |= Signal::JOB_NO_CHILDREN | Signal::JOB_NO_JOBS;
             }
             self.base.signal_set(set);
         }

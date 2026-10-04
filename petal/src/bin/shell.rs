@@ -344,13 +344,13 @@ fn cmd_dmesg(ctx: &Ctx) {
             break; // ZX_ERR_SHOULD_WAIT (-22) means no more records
         }
         let len = result as usize;
-        if len < 32 {
+        if len < 40 {
             break; // record too short for header
         }
-        // DlogHeader is 32 bytes, data follows.
-        // datalen is at offset 4 (u16).
-        let datalen = u16::from_le_bytes([buf[4], buf[5]]) as usize;
-        let data_start = 32; // sizeof(DlogHeader)
+        // zx_log_record_t is 40 bytes, data follows.
+        // datalen is at offset 12 (u16).
+        let datalen = u16::from_le_bytes([buf[12], buf[13]]) as usize;
+        let data_start = 40; // sizeof(zx_log_record_t)
         let data_end = (data_start + datalen).min(len);
         if data_end > data_start {
             zx::debug_write(&buf[data_start..data_end]);

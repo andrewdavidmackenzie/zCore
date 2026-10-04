@@ -170,6 +170,10 @@ impl Syscall<'_> {
                 info_ptr.write(stream.get_mode_append() as u8)?;
                 Ok(())
             }
+            Property::ProcessHwTraceContextId => {
+                // HW tracing is not supported by zCore.
+                Err(ZxError::NOT_SUPPORTED)
+            }
         }
     }
 
@@ -285,6 +289,10 @@ impl Syscall<'_> {
                 )?;
                 stream.set_mode_append(value != 0);
                 Ok(())
+            }
+            Property::ProcessHwTraceContextId => {
+                // HW tracing is not supported by zCore.
+                Err(ZxError::NOT_SUPPORTED)
             }
             _ => {
                 warn!("unknown property {:?}", property);
@@ -849,6 +857,7 @@ numeric_enum! {
         ProcessDebugAddr = 5,
         ProcessVdsoBaseAddress = 6,
         ProcessBreakOnLoad = 7,
+        ProcessHwTraceContextId = 8,
         SocketRxThreshold = 12,
         SocketTxThreshold = 13,
         JobKillOnOom = 15,

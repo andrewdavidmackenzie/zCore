@@ -41,6 +41,21 @@ pub trait Task: Sync + Send {
 /// The return code set when a task is killed via zx_task_kill().
 pub const TASK_RETCODE_SYSCALL_KILL: i64 = -1024;
 
+/// The return code set when a task is killed by a policy violation.
+pub const TASK_RETCODE_POLICY_KILL: i64 = -1025;
+
+/// The return code set when a task is killed by the vDSO for using a
+/// deprecated or forbidden syscall.
+#[allow(dead_code)]
+pub const TASK_RETCODE_VDSO_KILL: i64 = -1026;
+
+/// The return code set when a task is killed by the OOM killer.
+#[allow(dead_code)]
+pub const TASK_RETCODE_OOM_KILL: i64 = -1027;
+
+/// The return code set when a task is killed due to an unhandled exception.
+pub const TASK_RETCODE_EXCEPTION_KILL: i64 = -1028;
+
 /// The return code set when a critical process exits and its job is killed.
 pub const TASK_RETCODE_CRITICAL_PROCESS_KILL: i64 = -1029;
 
