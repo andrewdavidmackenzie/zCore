@@ -108,7 +108,7 @@ impl Channel {
                 return Ok(());
             }
         }
-        peer.push_general(msg);
+        peer.push_general(msg)?;
         Ok(())
     }
 
@@ -124,20 +124,29 @@ impl Channel {
         let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
         let txid = self.new_txid();
         msg.set_txid(txid);
-        peer.push_general(msg);
+        peer.push_general(msg)?;
         let (sender, receiver) = oneshot::channel();
         self.call_reply.lock().insert(txid, sender);
         drop(peer);
         receiver.await.unwrap()
     }
 
+    /// Maximum number of pending messages per channel endpoint.
+    /// Matches Fuchsia's `kMaxPendingMessageCount`.
+    const MAX_PENDING_MSG_COUNT: usize = 63488;
+
     /// Push a message to general queue, called from peer.
-    fn push_general(&self, msg: T) {
+    /// Returns `SHOULD_WAIT` if the queue is full.
+    fn push_general(&self, msg: T) -> ZxResult {
         let mut send_queue = self.recv_queue.lock();
+        if send_queue.len() >= Self::MAX_PENDING_MSG_COUNT {
+            return Err(ZxError::SHOULD_WAIT);
+        }
         send_queue.push_back(msg);
         if send_queue.len() == 1 {
             self.base.signal_set(Signal::READABLE);
         }
+        Ok(())
     }
 
     /// Generate a new transaction ID for `call`.
