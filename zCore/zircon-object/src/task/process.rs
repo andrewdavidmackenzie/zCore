@@ -299,8 +299,26 @@ impl Process {
         {
             PolicyAction::Allow => Ok(()),
             PolicyAction::Deny => Err(ZxError::ACCESS_DENIED),
-            // TODO: handle other PolicyAction variants (AllowException, DenyException, Kill)
-            _ => unimplemented!(),
+            PolicyAction::AllowException => {
+                // Allow the operation but a policy exception should be
+                // generated.  We don't yet deliver exceptions here (it
+                // would require async), so just allow the operation.
+                // TODO: deliver policy exception asynchronously
+                Ok(())
+            }
+            PolicyAction::DenyException => {
+                // Deny and generate a policy exception.  If there is no
+                // exception handler the process is killed.  Since we
+                // can't deliver exceptions synchronously, kill
+                // immediately — same end result when no handler exists.
+                self.exit(super::TASK_RETCODE_POLICY_KILL);
+                Err(ZxError::ACCESS_DENIED)
+            }
+            PolicyAction::Kill => {
+                // Kill the process outright.
+                self.exit(super::TASK_RETCODE_POLICY_KILL);
+                Err(ZxError::ACCESS_DENIED)
+            }
         }
     }
 
