@@ -507,9 +507,9 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::KmemStats => {
-                // Fuchsia requires a root resource handle for kernel stats.
-                // Accept any resource handle for compatibility.
-                proc.get_object::<Resource>(handle)?;
+                // Fuchsia requires a root resource or system-info resource.
+                proc.get_object::<Resource>(handle)?
+                    .validate(ResourceKind::ROOT)?;
                 if buffer_size < core::mem::size_of::<KmemInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -525,7 +525,8 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::KmemStatsExtended => {
-                proc.get_object::<Resource>(handle)?;
+                proc.get_object::<Resource>(handle)?
+                    .validate(ResourceKind::ROOT)?;
                 if buffer_size < core::mem::size_of::<KmemStatsExtendedInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -695,10 +696,14 @@ impl Syscall<'_> {
                 size_ptr.write(0x1000)?; // PAGE_SIZE
             }
             Topic::CpuStats => {
-                // Requires a resource handle.
-                proc.get_object::<Resource>(handle)?;
+                // Requires a root or system-info resource handle.
+                proc.get_object::<Resource>(handle)?
+                    .validate(ResourceKind::ROOT)?;
                 // Return one CPU stats record (single-CPU system).
-                let entry = CpuStatsInfo::default();
+                let entry = CpuStatsInfo {
+                    flags: 1, // ZX_INFO_CPU_STATS_FLAG_ONLINE
+                    ..Default::default()
+                };
                 let entry_size = core::mem::size_of::<CpuStatsInfo>();
                 let count = (buffer_size / entry_size).min(1);
                 if count > 0 {
@@ -708,8 +713,9 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::MemoryStall => {
-                // Requires a resource handle.
-                proc.get_object::<Resource>(handle)?;
+                // Requires a root or system-stall resource handle.
+                proc.get_object::<Resource>(handle)?
+                    .validate(ResourceKind::ROOT)?;
                 if buffer_size < core::mem::size_of::<MemoryStallInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -722,11 +728,18 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::GuestStats => {
-                // Requires a resource handle.
-                proc.get_object::<Resource>(handle)?;
-                // Return empty array (no guests).
-                actual.write_if_not_null(0)?;
-                avail.write_if_not_null(0)?;
+                // Requires a root or system-info resource handle.
+                proc.get_object::<Resource>(handle)?
+                    .validate(ResourceKind::ROOT)?;
+                // Return one record per CPU with zeroed guest counters.
+                // GuestStats is per-CPU like CpuStats.
+                let entry_size = core::mem::size_of::<GuestStatsInfo>();
+                let count = (buffer_size / entry_size).min(1);
+                if count > 0 {
+                    UserOutPtr::<GuestStatsInfo>::from(buffer).write(GuestStatsInfo::default())?;
+                }
+                actual.write_if_not_null(count)?;
+                avail.write_if_not_null(1)?;
             }
             Topic::ProcessHandleStats => {
                 let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
@@ -748,21 +761,19 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::ProcessMaps => {
+                // Validate handle type and rights before returning
+                // NOT_SUPPORTED.  This ensures error-path tests
+                // (invalid handle, wrong type, missing rights) still
+                // return the correct errors.
                 let _target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
                 // TODO: implement full VMAR tree walk.
-                // For now, return empty results (tests that only check
-                // error paths will pass; smoke tests will see 0 entries).
-                let count = 0usize;
-                actual.write_if_not_null(count)?;
-                avail.write_if_not_null(count)?;
+                return Err(ZxError::NOT_SUPPORTED);
             }
             Topic::VmarMaps => {
                 let _vmar =
                     proc.get_object_with_rights::<VmAddressRegion>(handle, Rights::INSPECT)?;
                 // TODO: implement VMAR mapping enumeration.
-                let count = 0usize;
-                actual.write_if_not_null(count)?;
-                avail.write_if_not_null(count)?;
+                return Err(ZxError::NOT_SUPPORTED);
             }
             _ => {
                 error!("not supported info topic: {:?}", topic);
@@ -1041,24 +1052,36 @@ struct KmemInfo {
     vmo_discardable_unlocked_bytes: u64,
 }
 
-/// `zx_info_kmem_stats_extended_t` — stub with zeroed fields.
+/// `zx_info_kmem_stats_extended_t` — includes all base kmem fields
+/// plus pager-specific extended fields.
 #[repr(C)]
 #[derive(Default)]
 struct KmemStatsExtendedInfo {
+    // Base kmem stats (same as KmemInfo, 19 fields, 152 bytes)
     total_bytes: u64,
     free_bytes: u64,
+    free_loaned_bytes: u64,
     wired_bytes: u64,
     total_heap_bytes: u64,
     free_heap_bytes: u64,
     vmo_bytes: u64,
+    mmu_overhead_bytes: u64,
+    ipc_bytes: u64,
+    cache_bytes: u64,
+    slab_bytes: u64,
+    zram_bytes: u64,
+    other_bytes: u64,
+    vmo_reclaim_total_bytes: u64,
+    vmo_reclaim_newest_bytes: u64,
+    vmo_reclaim_oldest_bytes: u64,
+    vmo_reclaim_disabled_bytes: u64,
+    vmo_discardable_locked_bytes: u64,
+    vmo_discardable_unlocked_bytes: u64,
+    // Extended pager fields
     vmo_pager_total_bytes: u64,
     vmo_pager_newest_bytes: u64,
     vmo_pager_oldest_bytes: u64,
-    vmo_discardable_locked_bytes: u64,
-    vmo_discardable_unlocked_bytes: u64,
-    mmu_overhead_bytes: u64,
-    other_bytes: u64,
-    ipc_bytes: u64,
+    vmo_pager_writeback_bytes: u64,
 }
 
 /// `zx_info_cpu_stats_t` — 120 bytes per CPU.
@@ -1082,6 +1105,12 @@ struct CpuStatsInfo {
     reschedule_ipis: u64,
     generic_ipis: u64,
 }
+
+/// `zx_info_guest_stats_t` — per-CPU guest stats (x86_64).
+/// On x86_64 Fuchsia uses 120 bytes per entry (same layout as CpuStatsInfo
+/// but with guest-specific fields). For zCore we reuse the CpuStatsInfo
+/// layout with zeroed counters.
+type GuestStatsInfo = CpuStatsInfo;
 
 /// `zx_info_memory_stall_t` — 16 bytes.
 #[repr(C)]
