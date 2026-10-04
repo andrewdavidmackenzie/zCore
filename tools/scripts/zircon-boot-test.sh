@@ -30,11 +30,15 @@ case "$ARCH" in
     ;;
 esac
 
-# Build userstart
+# Build userstart as a static PIE with PIC codegen.
+# Must match xtask/src/petal.rs build_userstart() flags:
+#   --pie (from build.rs), -Crelocation-model=pic, -Z build-std=core,alloc
 echo "Building userstart for $ARCH..."
-if ! cargo build -p userstart \
+if ! CARGO_ENCODED_RUSTFLAGS="-Crelocation-model=pic" \
+  cargo build -p userstart \
   --target "aarch64-unknown-none-softfloat" \
-  --release --target-dir target/userstart; then
+  --release --target-dir target/userstart \
+  -Z build-std=core,alloc; then
   echo "ERROR: userstart build failed."
   exit 1
 fi

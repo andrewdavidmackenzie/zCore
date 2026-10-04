@@ -41,10 +41,13 @@ if [ ! -f "$ROOTFS_IMG" ]; then
 fi
 
 echo "==> Building kernel (Zircon mode)..."
-# Build userstart and ZBI (still needed for the embedded fallback)
-cargo build -p userstart \
+# Build userstart as a static PIE with PIC codegen.
+# Must match xtask/src/petal.rs build_userstart() flags.
+CARGO_ENCODED_RUSTFLAGS="-Crelocation-model=pic" \
+  cargo build -p userstart \
   --target "aarch64-unknown-none-softfloat" \
-  --release --target-dir target/userstart
+  --release --target-dir target/userstart \
+  -Z build-std=core,alloc
 
 USERSTART="target/userstart/aarch64-unknown-none-softfloat/release/userstart"
 
