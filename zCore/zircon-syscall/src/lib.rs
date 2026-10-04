@@ -374,6 +374,11 @@ impl Syscall<'_> {
             Sys::CLOCK_GET_MONOTONIC_VIA_KERNEL => {
                 return self.sys_clock_get_monotonic_via_kernel() as isize;
             }
+            // clock_get_boot_via_kernel returns the boot time directly in rax.
+            // Boot time equals monotonic time because zCore does not support suspend.
+            Sys::CLOCK_GET_BOOT_VIA_KERNEL => {
+                return self.sys_clock_get_boot_via_kernel() as isize;
+            }
             Sys::CLOCK_READ => self.sys_clock_read(a0 as _, a1.into()),
             Sys::CLOCK_GET_DETAILS => self.sys_clock_get_details(a0 as _, a1 as _, a2.into()),
             Sys::CLOCK_ADJUST => self.sys_clock_adjust(a0 as _, a1 as _, a2 as _),
@@ -381,6 +386,11 @@ impl Syscall<'_> {
             // ticks_get_via_kernel returns the tick count directly in rax.
             Sys::TICKS_GET_VIA_KERNEL => {
                 return self.sys_ticks_get_via_kernel() as isize;
+            }
+            // ticks_get_boot_via_kernel returns the boot tick count directly in rax.
+            // Boot ticks equal monotonic ticks because zCore does not support suspend.
+            Sys::TICKS_GET_BOOT_VIA_KERNEL => {
+                return self.sys_ticks_get_boot_via_kernel() as isize;
             }
             Sys::TIMER_CREATE => self.sys_timer_create(a0 as _, a1 as _, a2.into()),
             Sys::DEBUG_WRITE => self.sys_debug_write(a0.into(), a1 as _),
@@ -498,9 +508,11 @@ impl Syscall<'_> {
             #[cfg(feature = "hypervisor")]
             Sys::VCPU_CREATE => self.sys_vcpu_create(a0 as _, a1 as _, a2 as _, a3.into()),
             #[cfg(feature = "hypervisor")]
-            Sys::VCPU_RESUME => self.sys_vcpu_resume(a0 as _, a1.into()),
+            Sys::VCPU_ENTER => self.sys_vcpu_enter(a0 as _, a1.into()),
             #[cfg(feature = "hypervisor")]
             Sys::VCPU_INTERRUPT => self.sys_vcpu_interrupt(a0 as _, a1 as _),
+            #[cfg(feature = "hypervisor")]
+            Sys::VCPU_KICK => self.sys_vcpu_kick(a0 as _),
             #[cfg(feature = "hypervisor")]
             Sys::VCPU_READ_STATE => self.sys_vcpu_read_state(a0 as _, a1 as _, a2.into(), a3 as _),
             #[cfg(feature = "hypervisor")]
@@ -562,6 +574,10 @@ impl Syscall<'_> {
             Sys::KTRACE_CONTROL => self.sys_ktrace_control(a0 as _, a1 as _, a2 as _, a3),
             Sys::KTRACE_WRITE => {
                 // Removed upstream.
+                Err(ZxError::NOT_SUPPORTED)
+            }
+            Sys::SYSCALL_NEXT_1 => {
+                // Reserved syscall slot — intentionally unimplemented upstream.
                 Err(ZxError::NOT_SUPPORTED)
             }
             // --- Newer upstream Fuchsia syscalls ---

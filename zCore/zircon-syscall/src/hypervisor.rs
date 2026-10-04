@@ -104,8 +104,11 @@ impl Syscall<'_> {
         Ok(())
     }
 
-    /// Resume execution of a VCPU.  
-    pub fn sys_vcpu_resume(
+    /// Enter (resume execution of) a VCPU.
+    ///
+    /// Fuchsia renamed `vcpu_resume` to `vcpu_enter`; this handler
+    /// matches the current upstream syscall name.
+    pub fn sys_vcpu_enter(
         &self,
         handle: HandleValue,
         mut user_packet: UserOutPtr<PortPacket>,
@@ -119,6 +122,18 @@ impl Syscall<'_> {
         let packet = vcpu.resume()?;
         user_packet.write(packet)?;
         Ok(())
+    }
+
+    /// Kick a VCPU, causing it to exit from `vcpu_enter`.
+    ///
+    /// This is a newer Fuchsia syscall. The underlying RVM hypervisor
+    /// does not yet support kick, so we return `NOT_SUPPORTED` for now.
+    pub fn sys_vcpu_kick(&self, handle: HandleValue) -> ZxResult {
+        info!("hypervisor.vcpu_kick: handle={:#x?}", handle);
+        let proc = self.thread.proc();
+        let _vcpu = proc.get_object_with_rights::<Vcpu>(handle, Rights::EXECUTE)?;
+        warn!("vcpu_kick: not yet implemented in RVM backend");
+        Err(ZxError::NOT_SUPPORTED)
     }
 
     /// Raise an interrupt on a VCPU and may be called from any thread.  
