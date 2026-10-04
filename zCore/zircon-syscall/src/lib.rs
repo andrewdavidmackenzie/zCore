@@ -19,7 +19,7 @@ use hal::MMUFlags;
 use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use zircon_object::object::{wait_signal_many, KernelObject, KoID, Rights, Signal};
 use zircon_object::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
-use zircon_object::task::{CurrentThread, Thread, ThreadFn};
+use zircon_object::task::{CurrentThread, PolicyCondition, Thread, ThreadFn};
 use zircon_object::{ZxError, ZxResult};
 
 use self::consts::SyscallType as Sys;
@@ -77,8 +77,9 @@ impl Syscall<'_> {
     ///
     /// Returns:
     /// - `Ok(())` if the buffer is fully mapped with read permissions.
-    /// - `Err(NOT_FOUND)` if part of the buffer is not mapped.
-    /// - `Err(ACCESS_DENIED)` if a mapping lacks read permissions.
+    /// - `Err(INVALID_ARGS)` if any part of the buffer is not mapped or
+    ///   lacks read permissions. Fuchsia returns INVALID_ARGS for all
+    ///   bad user pointer errors at the syscall boundary.
     #[allow(dead_code)]
     fn check_user_buffer_read(&self, addr: usize, len: usize) -> ZxResult {
         if len == 0 {
@@ -86,6 +87,19 @@ impl Syscall<'_> {
         }
         let vmar = self.thread.proc().vmar();
         vmar.check_user_access(addr, len, MMUFlags::READ)
+            .map_err(|_| ZxError::INVALID_ARGS)
+    }
+
+    /// Validate that a user-space buffer is fully mapped with write
+    /// permissions. Returns `INVALID_ARGS` for bad pointers.
+    #[allow(dead_code)]
+    fn check_user_buffer_write(&self, addr: usize, len: usize) -> ZxResult {
+        if len == 0 {
+            return Ok(());
+        }
+        let vmar = self.thread.proc().vmar();
+        vmar.check_user_access(addr, len, MMUFlags::WRITE)
+            .map_err(|_| ZxError::INVALID_ARGS)
     }
 
     /// Resolve a handle value that may be a pseudo-handle.

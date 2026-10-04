@@ -55,7 +55,7 @@ impl Syscall<'_> {
         if options & !LOG_FLAGS_MASK != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let datalen = len.min(224);
+        let datalen = len.min(DLOG_MAX_DATA);
         let data = buf.read_string(datalen)?;
         let proc = self.thread.proc();
         let dlog = proc.get_object_with_rights::<DebugLog>(handle_value, Rights::WRITE)?;

@@ -238,7 +238,7 @@ impl From<Error> for ZxError {
             Error::InvalidPointer => ZxError::INVALID_ARGS,
             Error::BufferTooSmall => ZxError::BUFFER_TOO_SMALL,
             Error::InvalidLength => ZxError::INVALID_ARGS,
-            Error::InvalidVectorAddress => ZxError::NOT_FOUND,
+            Error::InvalidVectorAddress => ZxError::INVALID_ARGS,
         }
     }
 }

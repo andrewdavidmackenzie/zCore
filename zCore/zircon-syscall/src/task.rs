@@ -37,6 +37,7 @@ impl Syscall<'_> {
         let job = proc
             .get_object_with_rights::<Job>(job, Rights::MANAGE_PROCESS)
             .or_else(|_| proc.get_object_with_rights::<Job>(job, Rights::WRITE))?;
+        proc.check_policy(PolicyCondition::NewProcess)?;
         let new_proc = Process::create(&job, &name)?;
         let new_vmar = new_proc.vmar();
         let proc_handle_value = proc.add_handle(Handle::new(new_proc, Rights::DEFAULT_PROCESS));
@@ -293,10 +294,16 @@ impl Syscall<'_> {
             token.write(proc.add_handle(token_handle))?;
             return Ok(());
         }
-        if let Ok(_process) = proc.get_object_with_rights::<Process>(handle, Rights::WRITE) {
-            return Err(ZxError::NOT_SUPPORTED);
+        if let Ok(process) = proc.get_object_with_rights::<Process>(handle, Rights::WRITE) {
+            let process: Arc<dyn Task> = process;
+            let token_handle = Handle::new(
+                SuspendToken::create(&process),
+                Rights::DEFAULT_SUSPEND_TOKEN,
+            );
+            token.write(proc.add_handle(token_handle))?;
+            return Ok(());
         }
-        Ok(())
+        Err(ZxError::WRONG_TYPE)
     }
 
     /// Kill the provided task (job, process, or thread).

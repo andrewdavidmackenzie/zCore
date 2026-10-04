@@ -20,8 +20,9 @@ impl Syscall<'_> {
         if elem_count == 0 || elem_size == 0 || elem_count * elem_size > 4096 {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        let (end0, end1) = Fifo::create(elem_count, elem_size);
         let proc = self.thread.proc();
+        proc.check_policy(PolicyCondition::NewFIFO)?;
+        let (end0, end1) = Fifo::create(elem_count, elem_size);
         let handle0 = proc.add_handle(Handle::new(end0, Rights::DEFAULT_FIFO));
         let handle1 = proc.add_handle(Handle::new(end1, Rights::DEFAULT_FIFO));
         out0.write(handle0)?;
@@ -76,6 +77,12 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let fifo = proc.get_object_with_rights::<Fifo>(handle_value, Rights::READ)?;
         let total = elem_size.checked_mul(count).ok_or(ZxError::INVALID_ARGS)?;
+        // Validate the output buffer before reading from the FIFO.
+        // Without this check, writes to kernel-accessible addresses
+        // succeed silently (no SMAP fault in QEMU).
+        if count > 0 {
+            self.check_user_buffer_write(user_bytes.as_addr(), total)?;
+        }
         let mut data = {
             let mut v = alloc::vec::Vec::new();
             v.try_reserve(total).map_err(|_| ZxError::INVALID_ARGS)?;

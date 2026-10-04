@@ -7,6 +7,7 @@ impl Syscall<'_> {
     /// Create an IO port.  
     pub fn sys_port_create(&self, options: u32, mut out: UserOutPtr<HandleValue>) -> ZxResult {
         info!("port.create: options={:#x}", options);
+        self.thread.proc().check_policy(PolicyCondition::NewPort)?;
         let port_handle = Handle::new(Port::new(options)?, Rights::DEFAULT_PORT);
         let handle_value = self.thread.proc().add_handle(port_handle);
         out.write(handle_value)?;
