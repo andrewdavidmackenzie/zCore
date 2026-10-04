@@ -19,7 +19,7 @@ use hal::MMUFlags;
 use hal_impl::user::{IoVecIn, IoVecOut, UserInOutPtr, UserInPtr, UserOutPtr};
 use zircon_object::object::{wait_signal_many, KernelObject, KoID, Rights, Signal};
 use zircon_object::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
-use zircon_object::task::{CurrentThread, Thread, ThreadFn};
+use zircon_object::task::{CurrentThread, PolicyCondition, Thread, ThreadFn};
 use zircon_object::{ZxError, ZxResult};
 
 use self::consts::SyscallType as Sys;

@@ -11,8 +11,9 @@ impl Syscall<'_> {
         mut out1: UserOutPtr<HandleValue>,
     ) -> ZxResult {
         info!("socket.create: options={:#x?}", options);
-        let (end0, end1) = Socket::create(options)?;
         let proc = self.thread.proc();
+        proc.check_policy(PolicyCondition::NewSocket)?;
+        let (end0, end1) = Socket::create(options)?;
         let handle0 = proc.add_handle(Handle::new(end0, Rights::DEFAULT_SOCKET));
         let handle1 = proc.add_handle(Handle::new(end1, Rights::DEFAULT_SOCKET));
         out0.write(handle0)?;
