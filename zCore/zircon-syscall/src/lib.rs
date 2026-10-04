@@ -77,8 +77,9 @@ impl Syscall<'_> {
     ///
     /// Returns:
     /// - `Ok(())` if the buffer is fully mapped with read permissions.
-    /// - `Err(NOT_FOUND)` if part of the buffer is not mapped.
-    /// - `Err(ACCESS_DENIED)` if a mapping lacks read permissions.
+    /// - `Err(INVALID_ARGS)` if any part of the buffer is not mapped or
+    ///   lacks read permissions. Fuchsia returns INVALID_ARGS for all
+    ///   bad user pointer errors at the syscall boundary.
     #[allow(dead_code)]
     fn check_user_buffer_read(&self, addr: usize, len: usize) -> ZxResult {
         if len == 0 {
@@ -86,6 +87,7 @@ impl Syscall<'_> {
         }
         let vmar = self.thread.proc().vmar();
         vmar.check_user_access(addr, len, MMUFlags::READ)
+            .map_err(|_| ZxError::INVALID_ARGS)
     }
 
     /// Resolve a handle value that may be a pseudo-handle.
