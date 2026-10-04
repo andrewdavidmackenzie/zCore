@@ -20,7 +20,7 @@ const GICD_ISENABLER: u32 = 0x100;
 const GICD_ICENABLER: u32 = 0x180;
 const GICD_IPRIORITYR: u32 = 0x400;
 const GICD_ICFGR: u32 = 0xC00;
-const GICD_IROUTER: u32 = 0x6100;
+const GICD_IROUTER: u32 = 0x6000; // GICD_IROUTER<n> at 0x6000 + 8*n (n = INTID)
 
 // GICD_CTLR bits (affinity routing enabled)
 const GICD_CTLR_ARE_NS: u32 = 1 << 4;
@@ -361,6 +361,15 @@ pub fn init(gicd_base: usize, gicr_base: usize) -> IntController {
 }
 
 /// Read the pending IRQ number from ICC_IAR1_EL1.
+///
+/// This is called from the IRQ trap handler on every interrupt.
+/// It reads the system register directly without allocating — no
+/// IntController needed since IAR is a CPU-local system register.
 pub fn get_irq_num(_gicd_base: usize, _gicr_base: usize) -> usize {
-    IntController::new(_gicd_base, _gicr_base).pending_irq()
+    let iar = IntController::read_icc_iar1_el1();
+    if iar >= 1020 {
+        usize::MAX // spurious
+    } else {
+        iar as usize
+    }
 }
