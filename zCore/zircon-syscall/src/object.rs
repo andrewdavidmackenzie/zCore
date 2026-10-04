@@ -227,6 +227,10 @@ impl Syscall<'_> {
                     return Err(ZxError::ACCESS_DENIED);
                 }
                 let fsbase = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
+                // On x86_64, reject non-canonical addresses.
+                if !is_canonical_address(fsbase) {
+                    return Err(ZxError::INVALID_ARGS);
+                }
                 thread.with_context(|ctx| ctx.general_mut().fsbase = fsbase)?;
                 Ok(())
             }
@@ -237,6 +241,9 @@ impl Syscall<'_> {
                     return Err(ZxError::ACCESS_DENIED);
                 }
                 let gsbase = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
+                if !is_canonical_address(gsbase) {
+                    return Err(ZxError::INVALID_ARGS);
+                }
                 thread.with_context(|ctx| ctx.general_mut().gsbase = gsbase)?;
                 Ok(())
             }
@@ -468,7 +475,7 @@ impl Syscall<'_> {
                 let target =
                     proc.get_object_with_rights::<Process>(handle, Rights::MANAGE_PROCESS)?;
                 let raw_entries = target.get_handle_table_entries();
-                let entries: Vec<HandleExtendedInfo> = raw_entries
+                let mut entries: Vec<HandleExtendedInfo> = raw_entries
                     .iter()
                     .map(
                         |&(obj_type, hv, rights, koid, related)| HandleExtendedInfo {
@@ -482,6 +489,8 @@ impl Syscall<'_> {
                         },
                     )
                     .collect();
+                // Sort by handle value to match Fuchsia's handle table ordering.
+                entries.sort_by_key(|e| e.handle_value);
                 let entry_size = core::mem::size_of::<HandleExtendedInfo>();
                 let count = (buffer_size / entry_size).min(entries.len());
                 if count > 0 {
@@ -986,6 +995,16 @@ numeric_enum! {
 
 const MAX_NAME_LEN: usize = 32;
 const MAX_WAIT_MANY_ITEMS: u32 = 32;
+
+/// Check whether an address is canonical on x86_64.
+/// Bits 48-63 must be copies of bit 47 (sign extension).
+#[cfg(target_arch = "x86_64")]
+fn is_canonical_address(addr: usize) -> bool {
+    // Canonical addresses: 0x0000_0000_0000_0000..=0x0000_7FFF_FFFF_FFFF
+    //                   or 0xFFFF_8000_0000_0000..=0xFFFF_FFFF_FFFF_FFFF
+    let shifted = (addr as i64) >> 47;
+    shifted == 0 || shifted == -1
+}
 
 #[derive(Debug)]
 #[repr(C)]
