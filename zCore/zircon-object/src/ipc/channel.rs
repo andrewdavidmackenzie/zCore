@@ -97,6 +97,17 @@ impl Channel {
         self.check_and_read(|_| Ok(()))
     }
 
+    /// Check whether the peer's queue has room for another message.
+    /// Returns `SHOULD_WAIT` if full, `PEER_CLOSED` if peer is gone.
+    pub fn check_write_capacity(&self) -> ZxResult {
+        let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
+        let queue = peer.recv_queue.lock();
+        if queue.len() >= Self::MAX_PENDING_MSG_COUNT {
+            return Err(ZxError::SHOULD_WAIT);
+        }
+        Ok(())
+    }
+
     /// Write a packet to the channel
     pub fn write(&self, msg: T) -> ZxResult {
         let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
