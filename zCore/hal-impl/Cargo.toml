@@ -30,6 +30,7 @@ thead-maee = []
 # --- Driver features (forwarded to drivers) ---
 apic = ["drivers/apic"]
 gic-400 = ["drivers/gic-400"]
+gic-v3 = ["drivers/gic-v3"]
 riscv-plic = ["drivers/riscv-plic"]
 riscv-intc = ["drivers/riscv-intc"]
 pl011-uart = ["drivers/pl011-uart"]

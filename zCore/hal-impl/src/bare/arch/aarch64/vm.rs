@@ -3,16 +3,10 @@ use crate::imp::config::*;
 use crate::utils::page_table::{GenericPTE, PageTableImpl, PageTableLevel4};
 use crate::MMUFlags;
 use crate::{PhysAddr, VirtAddr, KCONFIG};
-#[cfg(not(feature = "board-jollac2"))]
+#[cfg(feature = "gic-400")]
 use ::drivers::irq::gic_400::{GICC_SIZE, GICD_SIZE};
-
-// Jolla C2: GICv3 uses system registers, not MMIO GICC.
-// Provide stub sizes so the kernel page table init compiles.
-// The GICv3 distributor is 0x20000, redistributor is 0x100000.
-#[cfg(feature = "board-jollac2")]
-const GICC_SIZE: usize = 0x10_0000; // redistributor region size
-#[cfg(feature = "board-jollac2")]
-const GICD_SIZE: usize = 0x2_0000; // distributor region size
+#[cfg(feature = "gic-v3")]
+use ::drivers::irq::gic_v3::{GICD_SIZE, GICR_SIZE as GICC_SIZE};
 use core::fmt::{Debug, Formatter, Result};
 use cortex_a::registers::*;
 use lock::Mutex;
@@ -104,6 +98,17 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
             MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
         )?;
     }
+    // Framebuffer (Jolla C2: display controller DMA buffer at 0x9e000000).
+    // Map as device memory so writes are visible without cache flushes.
+    #[cfg(feature = "board-jollac2")]
+    {
+        use crate::imp::config::{FB_PHYS, FB_SIZE};
+        map_range(
+            phys_to_virt(FB_PHYS),
+            phys_to_virt(FB_PHYS) + FB_SIZE,
+            MMUFlags::READ | MMUFlags::WRITE | MMUFlags::DEVICE,
+        )?;
+    }
     // initrd (if DTB provided initrd location)
     if let Some(initrd) = super::INITRD_REGION.as_ref() {
         map_range(
@@ -129,9 +134,15 @@ pub fn init() {
     info!("initialized kernel page table @ {:#x}", pt.table_phys());
     unsafe {
         pt.activate();
+        // Switch fb_console to the high virtual mapping BEFORE zeroing
+        // TTBR0, because the console currently writes via the identity
+        // map which is about to be destroyed.
+        #[cfg(feature = "board-jollac2")]
+        super::fb_console::remap();
         TTBR0_EL1.set(0);
         flush_tlb_all();
     }
+    info!("kernel page table activated, TTBR0 cleared");
 }
 
 pub fn flush_tlb_all() {

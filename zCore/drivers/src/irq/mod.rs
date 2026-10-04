@@ -27,3 +27,6 @@ pub mod x86 {
 /// ARM Generic Interrupt Controller (GIC-400).
 #[cfg(feature = "gic-400")]
 pub mod gic_400;
+
+#[cfg(feature = "gic-v3")]
+pub mod gic_v3;

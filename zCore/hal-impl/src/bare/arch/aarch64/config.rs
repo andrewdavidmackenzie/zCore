@@ -37,6 +37,11 @@ mod board_config {
     /// No VirtIO on Jolla C2
     pub const VIRTIO_BASE: usize = 0;
     pub const VIRTIO_SIZE: usize = 0;
+    /// Framebuffer physical base (display controller DMA buffer).
+    pub const FB_PHYS: usize = 0x9e00_0000;
+    /// Framebuffer size: 720 * 1600 * 4 (ARGB8888) = 4,608,000 bytes.
+    /// Round up to page boundary (1126 pages = 0x466000).
+    pub const FB_SIZE: usize = 720 * 1600 * 4;
 }
 
 pub use board_config::*;

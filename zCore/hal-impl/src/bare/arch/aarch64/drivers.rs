@@ -52,11 +52,34 @@ const TIMER_IRQ: u32 = 27;
 
 #[cfg(feature = "board-jollac2")]
 pub fn init_early() {
-    // Jolla C2 minimal boot: no UART driver, no GIC driver.
-    // The SPRD watchdog is still running (TrustZone-protected; cannot be
-    // disabled from EL1). Expect a hardware reset ~12 s after boot.
-    // The framebuffer is pre-initialized by the stock bootloader.
-    log::info!("Jolla C2: minimal init (no UART/GIC drivers, WDT still running)");
+    use crate::device_registry;
+    use crate::mem::phys_to_virt;
+    use ::drivers::scheme::IrqScheme;
+    use alloc::boxed::Box;
+    use alloc::sync::Arc;
+
+    // Initialize framebuffer console first — it's our only output device.
+    super::fb_console::init();
+
+    log::info!("Jolla C2: init_early, GICv3 + fb-console");
+
+    let gic_base = super::gic_base();
+    let gicd_vaddr = phys_to_virt(gic_base);
+    let gicr_vaddr = phys_to_virt(gic_base + 0x4_0000);
+
+    let gic = drivers::irq::gic_v3::init(gicd_vaddr, gicr_vaddr);
+
+    const TIMER_IRQ_NUM: u32 = 27;
+    gic.irq_enable(TIMER_IRQ_NUM);
+
+    gic.register_handler(
+        TIMER_IRQ_NUM as usize,
+        Box::new(super::timer::set_next_trigger),
+    )
+    .ok();
+
+    device_registry::add_device(::drivers::Device::Irq(Arc::new(gic)));
+    super::fb_console::write_str("init_early: done\n");
 }
 
 #[cfg(not(feature = "board-jollac2"))]
