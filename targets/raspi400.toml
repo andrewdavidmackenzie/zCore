@@ -9,6 +9,10 @@ linker-script = "zCore/hal-impl/src/bare/arch/aarch64/platform/linker_raspi400.l
 drivers = ["pl011-uart", "gic-400"]
 features = ["board-raspi400"]
 
+[cmdline]
+log = "info"
+root-proc = "/bin/sh"
+
 # No [qemu] section -- this is real hardware only.
 # Use `make raspi400-run` for QEMU emulation with raspi4b machine.
 

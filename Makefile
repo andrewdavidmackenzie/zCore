@@ -21,7 +21,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 # cargo bin:   compiles the kernel ELF (for riscv64, also objcopy to .bin)
 build:
 	cargo image --arch $(ARCH)
-	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo bin -m qemu-$(ARCH)
+	cargo bin -m qemu-$(ARCH)
 
 # Build (if needed) and run zCore in Linux mode interactively in QEMU.
 # cargo qemu does: build rootfs image, build kernel, launch QEMU.
@@ -63,7 +63,7 @@ zircon-run:
 # Boots zCore in Zircon mode with the shell as the init program.
 # Type 'help', 'echo hello', 'version', 'exit'. Ctrl-A X to kill QEMU.
 petal-shell:
-	ZCORE_CMDLINE="LOG=$(LOG)" cargo qemu -m qemu-$(ARCH) --log $(LOG)
+	cargo qemu -m qemu-$(ARCH) --log $(LOG)
 
 # ── Mixed rootfs ───────────────────────────────────────────────────────
 # Build the rootfs image containing ALL binaries (busybox, linux-hello,
@@ -135,7 +135,7 @@ book: docs
 # targets/raspi400.toml via xtask.
 raspi400-build:
 	@echo "==> Building zCore kernel for Raspberry Pi 400..."
-	ZCORE_CMDLINE="LOG=$(LOG)" cargo bin -m raspi400
+	cargo bin -m raspi400
 
 # Build and run zCore on QEMU raspi400 interactively with petal shell.
 # Ctrl-A X to exit QEMU.
@@ -164,7 +164,7 @@ endif
 # Produces target/jolla-c2/release/kernel.bin (ARM64 Image with header).
 jollac2-build:
 	@echo "==> Building zCore kernel for Jolla C2..."
-	ZCORE_CMDLINE="LOG=$(or $(LOG),info) ROOTPROC=/bin/sh" cargo bin -m jolla-c2
+	cargo bin -m jolla-c2
 
 # Build zCore and write it to an SD card for the Jolla C2.
 # Usage: make jollac2-sd DISK=/dev/diskN
@@ -212,12 +212,12 @@ x86-linux-build:
 	@echo "==> Building x86-bootimage tool..."
 	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
 	@echo "==> Building zCore kernel (Linux, x86_64)..."
-	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m qemu-x86_64 --flavour linux
+	cargo zcore-build -m qemu-x86_64 --flavour linux
 
 # Build x86_64 kernel in Zircon mode with petal shell.
 x86-zircon-build:
 	@echo "==> Building zCore kernel (Zircon, x86_64)..."
-	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" cargo zcore-build -m qemu-x86_64
+	cargo zcore-build -m qemu-x86_64
 
 # Build and run x86_64 Linux in QEMU (UEFI boot, same as real hardware).
 # Ctrl-A X to exit QEMU.
@@ -257,11 +257,11 @@ MODE ?= linux
 OUTPUT ?= target/x86-laptop/release/kernel-uefi.img
 x86-uefi-image:
 ifeq ($(MODE),zircon)
-	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/shell" cargo zcore-build -m x86-laptop
+	cargo zcore-build -m x86-laptop
 	@KERNEL_ELF=target/x86-laptop/release/kernel tools/scripts/x86-uefi-image.sh $(OUTPUT) none
 else
 	cargo image --arch x86_64
-	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m x86-laptop --flavour linux
+	cargo zcore-build -m x86-laptop --flavour linux
 	@KERNEL_ELF=target/x86-laptop/release/kernel \
 		ROOTFS_IMG=target/qemu-x86_64/release/x86_64-linux.img \
 		tools/scripts/x86-uefi-image.sh $(OUTPUT)
@@ -274,7 +274,7 @@ PXE_DIR ?= target/x86-laptop/pxe/tftpboot
 PXE_SUBNET ?= 192.168.1
 x86-pxe:
 	cargo image --arch x86_64
-	ZCORE_CMDLINE="LOG=$(LOG) ROOTPROC=/bin/busybox?sh" cargo zcore-build -m x86-laptop --flavour linux
+	cargo zcore-build -m x86-laptop --flavour linux
 	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
 	@rm -rf $(PXE_DIR)/zcore
 	@mkdir -p $(PXE_DIR)/zcore
@@ -371,11 +371,11 @@ libc-test: boot-test
 
 # Build libos in Linux mode
 libos-build-linux:
-	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos --flavour linux
+	cargo zcore-build -m libos --flavour linux
 
 # Build libos in Zircon mode (builds userstart + petal automatically)
 libos-build-zircon:
-	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos
+	cargo zcore-build -m libos
 
 # Run libos in Linux mode with busybox shell
 libos-run-linux:
@@ -383,7 +383,7 @@ libos-run-linux:
 
 # Run libos in Zircon mode (known broken -- see #281)
 libos-run-zircon:
-	ZCORE_CMDLINE="LOG=$(LOG)" cargo zcore-build -m libos
+	cargo zcore-build -m libos
 	./target/release/kernel
 
 # configure build environment (platform toolchain)
@@ -602,8 +602,8 @@ pre-push:
 	@echo "==> [10/16] Dual flavour (build-only)..."
 	cargo bin -m qemu-aarch64 --flavour linux
 	@echo "==> [11/16] LibOS (Linux + Zircon)..."
-	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos --flavour linux
-	ZCORE_CMDLINE="LOG=info" cargo zcore-build -m libos
+	cargo zcore-build -m libos --flavour linux
+	cargo zcore-build -m libos
 	@echo "==> [12/16] Hardware targets (build-only)..."
 	cargo bin -m raspi400
 	cargo bin -m x86-laptop

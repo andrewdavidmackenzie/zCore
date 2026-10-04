@@ -15,6 +15,10 @@ default-flavour = "linux"
 features = ["uefi-boot", "board-raspi400"]
 stub-features = ["board-raspi400", "uefi-console"]
 
+[cmdline]
+log = "info"
+root-proc = "/bin/busybox?sh"
+
 # No [qemu] section -- this is real hardware only.
 
 [rustc-target]

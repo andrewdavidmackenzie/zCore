@@ -13,6 +13,10 @@ cores = 8
 linker-script = "zCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
 drivers = ["apic", "ps2-keyboard", "fb-console"]
 
+[cmdline]
+log = "info"
+root-proc = "/bin/sh"
+
 # No [qemu] section -- this is real hardware.
 # Use `make x86-uefi-usb-linux` or `make x86-uefi-usb-zircon` to
 # build a UEFI boot image and write it to a USB drive.

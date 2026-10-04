@@ -46,6 +46,11 @@ pub struct TargetConfig {
     /// with no features.
     #[serde(rename = "stub-features", default)]
     pub stub_features: Vec<String>,
+    /// Kernel command line defaults for this target.
+    /// Provides LOG level and ROOTPROC so the Makefile doesn't need to
+    /// hardcode them per target.
+    #[serde(default)]
+    pub cmdline: CmdlineConfig,
     /// QEMU configuration (absent for real-hardware-only targets).
     #[allow(dead_code)]
     pub qemu: Option<QemuConfig>,
@@ -53,6 +58,31 @@ pub struct TargetConfig {
     /// Absent for libos targets that use the host's default target.
     #[serde(rename = "rustc-target", default)]
     pub rustc_target: HashMap<String, toml::Value>,
+}
+
+/// Kernel command line defaults.
+#[derive(Debug, Deserialize)]
+pub struct CmdlineConfig {
+    /// Default log level (error, warn, info, debug, trace).
+    #[serde(default = "default_log")]
+    pub log: String,
+    /// Default root process path (e.g., "/bin/sh", "/bin/busybox?sh").
+    /// If empty, xtask infers from the flavour (linux → busybox, zircon → petal shell).
+    #[serde(rename = "root-proc", default)]
+    pub root_proc: String,
+}
+
+impl Default for CmdlineConfig {
+    fn default() -> Self {
+        Self {
+            log: default_log(),
+            root_proc: String::new(),
+        }
+    }
+}
+
+fn default_log() -> String {
+    "warn".to_string()
 }
 
 /// QEMU launch configuration.
@@ -143,6 +173,26 @@ impl TargetConfig {
         }
         names.sort();
         names
+    }
+
+    /// Build the ZCORE_CMDLINE string from this target's [cmdline] config.
+    ///
+    /// `log_override` allows the caller (e.g. `--log` CLI arg or `LOG=`
+    /// env var) to override the target's default log level.
+    /// `is_linux` is used to infer root-proc when not explicitly set.
+    pub fn build_cmdline(&self, log_override: Option<&str>, is_linux: bool) -> String {
+        let log = log_override.unwrap_or(&self.cmdline.log);
+        let root_proc = if self.cmdline.root_proc.is_empty() {
+            // Infer from flavour
+            if is_linux {
+                "/bin/busybox?sh"
+            } else {
+                "/bin/sh"
+            }
+        } else {
+            &self.cmdline.root_proc
+        };
+        format!("LOG={log} ROOTPROC={root_proc}")
     }
 
     /// Collect all cargo features implied by this target's drivers
