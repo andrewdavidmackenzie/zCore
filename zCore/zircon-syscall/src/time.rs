@@ -74,6 +74,27 @@ impl Syscall<'_> {
         hal_impl::timer::timer_now().as_nanos() as i64
     }
 
+    /// Return the current boot clock time in nanoseconds.
+    ///
+    /// The boot clock is like the monotonic clock but also includes time
+    /// spent in suspend-to-RAM.  Since zCore does not implement suspend,
+    /// boot time is identical to monotonic time.
+    ///
+    /// Returns the value directly in rax (not a `zx_status_t`).
+    pub fn sys_clock_get_boot_via_kernel(&self) -> i64 {
+        timer_now().as_nanos() as i64
+    }
+
+    /// Return the current boot tick count.
+    ///
+    /// Boot ticks include time spent suspended.  Since zCore does not
+    /// implement suspend, this is identical to `ticks_get_via_kernel`.
+    ///
+    /// Returns the value directly in rax (not a `zx_status_t`).
+    pub fn sys_ticks_get_boot_via_kernel(&self) -> i64 {
+        hal_impl::timer::timer_now().as_nanos() as i64
+    }
+
     /// Acquire the current time.
     ///
     /// + Returns the current time of clock_id via `time`.
