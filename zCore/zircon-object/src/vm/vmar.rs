@@ -861,6 +861,98 @@ impl VmAddressRegion {
         task_stats
     }
 
+    /// Walk the VMAR tree producing `InfoMapsEntry` records for
+    /// ZX_INFO_PROCESS_MAPS / ZX_INFO_VMAR_MAPS.
+    ///
+    /// Produces a depth-first pre-order walk:
+    /// - depth 0: the VMAR itself
+    /// - depth 1+: child VMARs and mappings
+    pub fn get_info_maps(&self, base_depth: usize) -> Vec<InfoMapsEntry> {
+        let mut result = Vec::new();
+        self.walk_info_maps(base_depth, &mut result);
+        result
+    }
+
+    fn walk_info_maps(&self, depth: usize, out: &mut Vec<InfoMapsEntry>) {
+        // Emit an entry for this VMAR.
+        let mut name_buf = [0u8; 32];
+        let vmar_name = self.name();
+        let name_bytes = vmar_name.as_bytes();
+        let copy_len = name_bytes.len().min(31);
+        name_buf[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+
+        out.push(InfoMapsEntry {
+            name: name_buf,
+            base: self.addr() as u64,
+            size: self.size as u64,
+            depth: depth as u64,
+            r#type: 2, // ZX_INFO_MAPS_TYPE_VMAR
+            padding: 0,
+            mapping: InfoMapsMapping::default(),
+        });
+
+        // Snapshot children and mappings under the lock, then release
+        // before recursing into children (avoids holding the lock
+        // across recursive calls).
+        enum Item {
+            Child(Arc<VmAddressRegion>, usize),
+            Mapping(InfoMapsEntry),
+        }
+
+        let items: Vec<Item> = {
+            let guard = self.inner.lock();
+            let inner = match guard.as_ref() {
+                Some(inner) => inner,
+                None => return, // destroyed VMAR
+            };
+            let mut items = Vec::new();
+            for child in &inner.children {
+                items.push(Item::Child(child.clone(), child.addr()));
+            }
+            for mapping in &inner.mappings {
+                let m_inner = mapping.inner.lock();
+                let mmu_flags = mapping.permissions().bits() as u32;
+                let mut m_name_buf = [0u8; 32];
+                let vmo_name = mapping.vmo.name();
+                let vmo_name_bytes = vmo_name.as_bytes();
+                let m_copy_len = vmo_name_bytes.len().min(31);
+                m_name_buf[..m_copy_len].copy_from_slice(&vmo_name_bytes[..m_copy_len]);
+
+                items.push(Item::Mapping(InfoMapsEntry {
+                    name: m_name_buf,
+                    base: m_inner.addr as u64,
+                    size: m_inner.size as u64,
+                    depth: (depth + 1) as u64,
+                    r#type: 3, // ZX_INFO_MAPS_TYPE_MAPPING
+                    padding: 0,
+                    mapping: InfoMapsMapping {
+                        mmu_flags,
+                        padding1: 0,
+                        vmo_koid: mapping.vmo_koid(),
+                        vmo_offset: m_inner.vmo_offset as u64,
+                        committed_bytes: 0, // TODO
+                        populated_bytes: 0, // TODO
+                        ..Default::default()
+                    },
+                }));
+            }
+            // Sort by address for deterministic output.
+            items.sort_by_key(|item| match item {
+                Item::Child(_, addr) => *addr,
+                Item::Mapping(entry) => entry.base as usize,
+            });
+            items
+        };
+
+        // Process items — lock is released, safe to recurse.
+        for item in items {
+            match item {
+                Item::Child(child, _) => child.walk_info_maps(depth + 1, out),
+                Item::Mapping(entry) => out.push(entry),
+            }
+        }
+    }
+
     /// Read from address space.
     ///
     /// Return the actual number of bytes read.
@@ -985,8 +1077,10 @@ impl VmarInner {
 #[repr(C)]
 #[derive(Debug)]
 pub struct VmarInfo {
-    base: usize,
-    len: usize,
+    /// Base address of the VMAR.
+    pub base: usize,
+    /// Length of the VMAR in bytes.
+    pub len: usize,
     // pg_token: usize,
 }
 
@@ -1024,6 +1118,51 @@ pub struct TaskStatsInfo {
     private_bytes: u64,
     shared_bytes: u64,
     scaled_shared_bytes: u64,
+}
+
+/// `zx_info_maps_t` — 152 bytes per entry.
+/// Represents one node in the address space tree (aspace, VMAR, or mapping).
+#[repr(C)]
+#[derive(Clone, Default)]
+pub struct InfoMapsEntry {
+    /// Name of the entry (null-terminated, 32 bytes).
+    pub name: [u8; 32],
+    /// Base virtual address.
+    pub base: u64,
+    /// Size in bytes.
+    pub size: u64,
+    /// Depth in the tree (0 = root aspace).
+    pub depth: u64,
+    /// Type: 0=none, 1=aspace, 2=vmar, 3=mapping.
+    pub r#type: u32,
+    /// Padding for alignment.
+    pub padding: u32,
+    /// Union: mapping details (only valid when type == 3).
+    pub mapping: InfoMapsMapping,
+}
+
+/// Mapping-specific fields within `zx_info_maps_t`.
+#[repr(C)]
+#[derive(Clone, Default)]
+pub struct InfoMapsMapping {
+    /// MMU flags (ZX_VM_PERM_READ, etc.).
+    pub mmu_flags: u32,
+    pub padding1: u32,
+    /// KoID of the mapped VMO.
+    pub vmo_koid: u64,
+    /// Offset into the VMO.
+    pub vmo_offset: u64,
+    /// Committed bytes in this mapping's range.
+    pub committed_bytes: u64,
+    /// Populated bytes.
+    pub populated_bytes: u64,
+    // Remaining attribution fields (zeroed for now).
+    pub committed_private_bytes: u64,
+    pub populated_private_bytes: u64,
+    pub committed_scaled_bytes: u64,
+    pub populated_scaled_bytes: u64,
+    pub committed_fractional_scaled_bytes: u64,
+    pub populated_fractional_scaled_bytes: u64,
 }
 
 impl core::fmt::Debug for VmMapping {
@@ -1291,6 +1430,21 @@ impl VmMapping {
 
     fn end_addr(&self) -> VirtAddr {
         self.inner.lock().end_addr()
+    }
+
+    /// Get the KoID of the VMO backing this mapping.
+    pub fn vmo_koid(&self) -> KoID {
+        self.vmo.id()
+    }
+
+    /// Get the offset into the VMO where this mapping starts.
+    pub fn vmo_offset(&self) -> usize {
+        self.inner.lock().vmo_offset
+    }
+
+    /// Get the mapping's permission flags (from the VMAR map call).
+    pub fn permissions(&self) -> MMUFlags {
+        self.permissions
     }
 
     /// Get MMUFlags of this VmMapping.
