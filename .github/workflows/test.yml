@@ -177,6 +177,35 @@ jobs:
       - name: Zircon rootfs boot test
         run: tools/scripts/zircon-rootfs-test.sh aarch64
 
+  zircon-boot-test-x86:
+    name: Zircon Boot Test (x86_64)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-09-19
+          components: rust-src, llvm-tools-preview
+          targets: x86_64-unknown-none
+
+      - name: Install QEMU and OVMF (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf
+
+      - name: Install QEMU (macOS)
+        if: runner.os == 'macOS'
+        run: brew install qemu
+
+      - name: Zircon boot smoke test (x86_64)
+        run: make zircon-boot-test ARCH=x86_64
+
   libc-test:
     name: Libc Test (aarch64, macOS)
     runs-on: macos-latest

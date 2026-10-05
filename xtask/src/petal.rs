@@ -171,6 +171,10 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
     );
 
     let target_dir = PROJECT_DIR.join("target/userstart");
+    // Use PIC code generation so the static-PIE linker can emit
+    // proper relocations for all absolute addresses. Without this,
+    // aarch64's default relocation-model=static generates ABS64
+    // relocations in .rodata that the PIE linker rejects.
     let status = Command::new("cargo")
         .args(["build", "--release"])
         .args(["-p", "userstart"])
@@ -179,6 +183,7 @@ pub fn build_userstart(arch: Arch) -> PathBuf {
         .arg("--target-dir")
         .arg(&target_dir)
         .args(["-Z", "build-std=core,alloc"])
+        .env("CARGO_ENCODED_RUSTFLAGS", "-Crelocation-model=pic")
         .status()
         .expect("failed to run cargo build for userstart");
 

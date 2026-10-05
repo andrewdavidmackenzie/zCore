@@ -607,15 +607,17 @@ pre-push:
 	@echo "==> [12/16] Hardware targets (build-only)..."
 	cargo bin -m raspi400
 	cargo bin -m x86-laptop
-	@echo "==> [13/16] Zircon boot test (aarch64)..."
+	@echo "==> [13/18] Zircon boot test (aarch64)..."
 	$(MAKE) zircon-boot-test ARCH=aarch64
 	@tools/scripts/zircon-rootfs-test.sh aarch64
-	@echo "==> [14/16] Libc tests (aarch64 + x86_64)..."
+	@echo "==> [14/18] Zircon boot test (x86_64)..."
+	$(MAKE) zircon-boot-test ARCH=x86_64
+	@echo "==> [15/18] Libc tests (aarch64 + x86_64)..."
 	$(MAKE) libc-test ARCH=aarch64
 	$(MAKE) libc-test ARCH=x86_64
-	@echo "==> [15/16] Check all feature combinations..."
+	@echo "==> [16/18] Check all feature combinations..."
 	$(MAKE) check-all-features
-	@echo "==> [16/16] Done."
+	@echo "==> [17/18] Done."
 	@echo "==> All pre-push checks passed."
 
 # Run clippy for all architectures (catches cross-platform issues).
