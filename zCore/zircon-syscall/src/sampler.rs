@@ -51,7 +51,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
             res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_DEBUG_BASE, 1)?;
         }

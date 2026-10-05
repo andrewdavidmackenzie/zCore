@@ -139,8 +139,7 @@ impl Syscall<'_> {
             resource, clock_id, offset
         );
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(resource)?
-            .validate(ResourceKind::ROOT)?;
+        proc.get_resource(resource)?.validate(ResourceKind::ROOT)?;
         match clock_id {
             ZX_CLOCK_MONOTONIC => Err(ZxError::ACCESS_DENIED),
             ZX_CLOCK_UTC => {

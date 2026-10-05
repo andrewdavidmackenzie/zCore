@@ -8,7 +8,7 @@ use zircon_object::{
         MmioPcieAddressProvider, PCIeBusDriver, PciAddrSpace, PciEcamRegion, PcieDeviceInfo,
         PcieDeviceKObject, PcieIrqMode, PmioPcieAddressProvider,
     },
-    dev::{Resource, ResourceKind},
+    dev::ResourceKind,
     vm::{pages, VmObject},
 };
 
@@ -26,8 +26,7 @@ impl Syscall<'_> {
             handle, mmio, base, len, add
         );
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(handle)?
-            .validate(ResourceKind::ROOT)?;
+        proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
         let addr_space = if mmio {
             PciAddrSpace::MMIO
         } else {
@@ -60,7 +59,7 @@ impl Syscall<'_> {
             if #[cfg(all(target_arch = "x86_64", target_os = "none"))] {
                 use zircon_object::dev::pci::{pio_config_read, pio_config_write};
                 let proc = self.thread.proc();
-                proc.get_object::<Resource>(handle)?
+                proc.get_resource(handle)?
                     .validate(ResourceKind::ROOT)?;
                 if write {
                     let value = value_ptr.read()?;
@@ -83,8 +82,7 @@ impl Syscall<'_> {
             handle, init_buf, len
         );
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(handle)?
-            .validate(ResourceKind::ROOT)?;
+        proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
         if len > PCI_INIT_ARG_MAX_SIZE as u32 {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -180,8 +178,7 @@ impl Syscall<'_> {
             handle, index,
         );
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(handle)?
-            .validate(ResourceKind::ROOT)?;
+        proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
         let (info, device) = PCIeBusDriver::get_nth_device(index as usize)?;
         let handle = proc.add_handle(Handle::new(device, Rights::DEFAULT_DEVICE));
         out_info.write(info)?;

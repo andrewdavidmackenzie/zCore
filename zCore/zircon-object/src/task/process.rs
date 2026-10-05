@@ -559,6 +559,41 @@ impl Process {
         Ok(object)
     }
 
+    /// Get a `Resource` handle by value, using `type_name()` instead of
+    /// `TypeId`-based downcasting. This avoids LTO-induced `TypeId`
+    /// mismatches that cause `downcast_arc::<Resource>()` to fail even
+    /// when the object truly is a `Resource`.
+    pub fn get_resource(&self, handle_value: HandleValue) -> ZxResult<Arc<crate::dev::Resource>> {
+        let handle = self.get_handle(handle_value)?;
+        if handle.object.type_name() != "Resource" {
+            return Err(ZxError::WRONG_TYPE);
+        }
+        // SAFETY: type_name() confirmed this is a Resource. The Arc's
+        // inner data pointer already points to a Resource struct.
+        // We bypass downcast_arc (which uses TypeId, broken under LTO)
+        // and cast the pointer directly.
+        let ptr = Arc::into_raw(handle.object) as *const crate::dev::Resource;
+        Ok(unsafe { Arc::from_raw(ptr) })
+    }
+
+    /// Get a `Resource` handle with rights check, using `type_name()`
+    /// instead of `TypeId`-based downcasting.
+    pub fn get_resource_with_rights(
+        &self,
+        handle_value: HandleValue,
+        desired_rights: Rights,
+    ) -> ZxResult<Arc<crate::dev::Resource>> {
+        let handle = self.get_handle(handle_value)?;
+        if handle.object.type_name() != "Resource" {
+            return Err(ZxError::WRONG_TYPE);
+        }
+        if !handle.rights.contains(desired_rights) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        let ptr = Arc::into_raw(handle.object) as *const crate::dev::Resource;
+        Ok(unsafe { Arc::from_raw(ptr) })
+    }
+
     /// Get the handle's information corresponding to `handle_value`.
     pub fn get_handle_info(&self, handle_value: HandleValue) -> ZxResult<HandleBasicInfo> {
         let handle = self.get_handle(handle_value)?;

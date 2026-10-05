@@ -1,7 +1,4 @@
-use {
-    super::*,
-    zircon_object::{debuglog::*, dev::*},
-};
+use {super::*, zircon_object::debuglog::*};
 
 impl Syscall<'_> {
     /// Create a kernel managed debuglog reader or writer.
@@ -23,7 +20,7 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         if rsrc != 0 {
             // Any valid resource handle is accepted (not just ROOT).
-            proc.get_object::<Resource>(rsrc)?;
+            proc.get_resource(rsrc)?;
         } else if options & FLAG_READABLE != 0 {
             // ZX_HANDLE_INVALID is only allowed for write-only debuglogs.
             return Err(ZxError::BAD_HANDLE);

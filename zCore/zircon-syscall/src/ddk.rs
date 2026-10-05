@@ -20,8 +20,7 @@ impl Syscall<'_> {
             resource, type_, desc, desc_size, out
         );
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(resource)?
-            .validate(ResourceKind::ROOT)?;
+        proc.get_resource(resource)?.validate(ResourceKind::ROOT)?;
         if desc_size > IOMMU_MAX_DESC_LEN {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -143,8 +142,7 @@ impl Syscall<'_> {
     ) -> ZxResult {
         info!("pc_firmware_tables: handle={:?}", resource);
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(resource)?
-            .validate(ResourceKind::ROOT)?;
+        proc.get_resource(resource)?.validate(ResourceKind::ROOT)?;
         cfg_if::cfg_if! {
             if #[cfg(all(target_arch = "x86_64", target_os = "none"))] {
                 let (acpi_rsdp, smbios) = hal_impl::x86_64::pc_firmware_tables();
@@ -177,7 +175,7 @@ impl Syscall<'_> {
             }
             Interrupt::new_virtual()
         } else {
-            let resource = proc.get_object::<Resource>(resource)?;
+            let resource = proc.get_resource(resource)?;
             resource.validate_ranged_resource(ResourceKind::IRQ, src_num, 1)?;
             Interrupt::new_physical(src_num, options)?
         };
@@ -284,7 +282,7 @@ impl Syscall<'_> {
             resource, io_addr, len
         );
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(resource)?
+        proc.get_resource(resource)?
             .validate(ResourceKind::IOPORT)?;
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
@@ -309,7 +307,7 @@ impl Syscall<'_> {
             resource, io_addr, len
         );
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(resource)?
+        proc.get_resource(resource)?
             .validate(ResourceKind::IOPORT)?;
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
@@ -334,8 +332,7 @@ impl Syscall<'_> {
     ) -> ZxResult {
         info!("smc.call: handle={:#x}", handle);
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(handle)?
-            .validate(ResourceKind::SMC)?;
+        proc.get_resource(handle)?.validate(ResourceKind::SMC)?;
         // Would issue SMC instruction on bare metal aarch64
         Err(ZxError::NOT_SUPPORTED)
     }
@@ -353,7 +350,7 @@ impl Syscall<'_> {
     ) -> ZxResult {
         info!("msi.allocate: resource={:#x}, count={}", resource, count);
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
             res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_MSI_BASE, 1)?;
         }
