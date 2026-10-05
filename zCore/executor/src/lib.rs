@@ -41,19 +41,33 @@ mod runtime;
 pub mod task_collection;
 mod waker_page;
 
-/// Flag set by yield_now() to indicate the current task yielded
-/// voluntarily. The executor checks this after polling and calls
-/// on_yield() instead of relying on the waker self-wake mechanism.
-static YIELD_PENDING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+/// Per-CPU yield-pending flag. Set by PreemptYieldFuture::poll,
+/// consumed by Executor::run after polling a task. Using per-CPU
+/// storage avoids SMP races where a different CPU's executor could
+/// consume the flag.
+///
+/// Index by CPU ID (max 64 CPUs). On single-CPU systems, only [0] is used.
+static YIELD_PENDING: [core::sync::atomic::AtomicBool; 64] = {
+    const FALSE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+    [FALSE; 64]
+};
 
-/// Set the yield-pending flag (called from PreemptYieldFuture::poll).
+/// Set the yield-pending flag for the current CPU.
 pub fn set_yield_pending() {
-    YIELD_PENDING.store(true, core::sync::atomic::Ordering::Release);
+    let cpu = arch::cpu_id() as usize;
+    if cpu < 64 {
+        YIELD_PENDING[cpu].store(true, core::sync::atomic::Ordering::Release);
+    }
 }
 
-/// Check and clear the yield-pending flag (called from Executor::run).
+/// Check and clear the yield-pending flag for the current CPU.
 pub fn take_yield_pending() -> bool {
-    YIELD_PENDING.swap(false, core::sync::atomic::Ordering::Acquire)
+    let cpu = arch::cpu_id() as usize;
+    if cpu < 64 {
+        YIELD_PENDING[cpu].swap(false, core::sync::atomic::Ordering::Acquire)
+    } else {
+        false
+    }
 }
 
 pub use runtime::{
