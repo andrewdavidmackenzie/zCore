@@ -26,6 +26,33 @@ impl Future for YieldFuture {
     }
 }
 
+/// Like YieldFuture but uses the YIELD_PENDING flag instead of
+/// self-waking. The executor defers re-queueing this task until
+/// after scanning for new notifications, ensuring newly-spawned
+/// tasks get priority.
+#[must_use = "`preempt_yield()` does nothing unless polled/`await`-ed"]
+#[derive(Default)]
+pub(super) struct PreemptYieldFuture {
+    flag: bool,
+}
+
+impl Future for PreemptYieldFuture {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Self::Output> {
+        if self.flag {
+            Poll::Ready(())
+        } else {
+            self.flag = true;
+            #[cfg(not(feature = "libos"))]
+            executor::set_yield_pending();
+            #[cfg(feature = "libos")]
+            _cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    }
+}
+
 #[must_use = "`sleep_until()` does nothing unless polled/`await`-ed"]
 pub struct SleepFuture {
     deadline: Duration,
