@@ -137,6 +137,11 @@ impl Syscall<'_> {
         mapping_flags.set(MMUFlags::EXECUTE, options.contains(VmOptions::PERM_EXECUTE));
         let overwrite = options.contains(VmOptions::SPECIFIC_OVERWRITE);
         let map_range = if cfg!(any(feature = "deny-page-fault", not(target_os = "none"))) {
+            // On platforms that don't support page faults, reject
+            // FAULT_BEYOND_STREAM_SIZE since it requires lazy mapping.
+            if options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE) {
+                return Err(ZxError::NOT_SUPPORTED);
+            }
             true
         } else if options.contains(VmOptions::ALLOW_FAULTS) {
             // ALLOW_FAULTS: lazy commit, pages faulted in on demand
@@ -162,6 +167,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let vmar_offset = if is_specific { Some(vmar_offset) } else { None };
+        let fault_beyond = options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE);
         let vaddr = vmar.map_ext(
             vmar_offset,
             vmo.clone(),
@@ -171,6 +177,7 @@ impl Syscall<'_> {
             mapping_flags,
             overwrite,
             map_range,
+            fault_beyond,
         )?;
         mapped_addr.write(vaddr)?;
         Ok(())
@@ -345,6 +352,7 @@ impl Syscall<'_> {
             mapping_flags,
             overwrite,
             true,
+            false,
         )?;
         info!("vmar.map_clock: mapped at {:#x}", vaddr);
         mapped_addr.write(vaddr)?;
@@ -438,7 +446,8 @@ impl Syscall<'_> {
             permissions,
             mapping_flags,
             overwrite,
-            true, // map_range: commit pages immediately
+            true,  // map_range: commit pages immediately
+            false, // fault_beyond_stream_size
         )?;
         info!(
             "vmar.map_iob: mapped region {} at {:#x}",

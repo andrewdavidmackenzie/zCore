@@ -239,6 +239,7 @@ impl VmAddressRegion {
             flags,
             false,
             true,
+            false,
         )
     }
 
@@ -254,6 +255,7 @@ impl VmAddressRegion {
         flags: MMUFlags,
         overwrite: bool,
         map_range: bool,
+        fault_beyond_stream_size: bool,
     ) -> ZxResult<VirtAddr> {
         if !page_aligned(vmo_offset) || !page_aligned(len) || vmo_offset.overflowing_add(len).1 {
             return Err(ZxError::INVALID_ARGS);
@@ -336,6 +338,7 @@ impl VmAddressRegion {
             permissions,
             flags,
             self.page_table.clone(),
+            fault_beyond_stream_size,
         );
         if map_range {
             mapping.map()?;
@@ -1170,6 +1173,9 @@ struct VmMappingInner {
     addr: VirtAddr,
     size: usize,
     vmo_offset: usize,
+    /// If true, accesses past the VMO's content_size fault instead of
+    /// returning zeroes. Set by ZX_VM_FAULT_BEYOND_STREAM_SIZE.
+    fault_beyond_stream_size: bool,
 }
 
 /// Statistics about resources (e.g., memory) used by a task.
@@ -1242,6 +1248,7 @@ impl core::fmt::Debug for VmMapping {
 }
 
 impl VmMapping {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         addr: VirtAddr,
         size: usize,
@@ -1250,6 +1257,7 @@ impl VmMapping {
         permissions: MMUFlags,
         flags: MMUFlags,
         page_table: Arc<Mutex<dyn GenericPageTable>>,
+        fault_beyond_stream_size: bool,
     ) -> Arc<Self> {
         // For large lazy mappings (e.g., Scudo's 11 GB arena), don't
         // allocate per-page flags upfront. Use an empty vec and fall
@@ -1270,6 +1278,7 @@ impl VmMapping {
                 addr,
                 size,
                 vmo_offset,
+                fault_beyond_stream_size,
             }),
             permissions,
             page_table,
@@ -1396,6 +1405,7 @@ impl VmMapping {
                     addr: end,
                     size: new_len2,
                     vmo_offset: inner.vmo_offset + (end - inner.addr),
+                    fault_beyond_stream_size: inner.fault_beyond_stream_size,
                 }),
             });
             inner.size = new_len1;
@@ -1558,7 +1568,7 @@ impl VmMapping {
     /// Handle page fault happened on this VmMapping.
     pub(crate) fn handle_page_fault(&self, vaddr: VirtAddr, access_flags: MMUFlags) -> ZxResult {
         let vaddr = round_down_pages(vaddr);
-        let (vmo_offset, mut flags) = {
+        let (vmo_offset, mut flags, fault_beyond) = {
             let inner = self.inner.lock();
             let offset = vaddr - inner.addr;
             let pf = inner.page_flags(offset / PAGE_SIZE);
@@ -1569,7 +1579,11 @@ impl VmMapping {
             } else {
                 pf
             };
-            (offset + inner.vmo_offset, effective)
+            (
+                offset + inner.vmo_offset,
+                effective,
+                inner.fault_beyond_stream_size,
+            )
         };
         if !flags.contains(access_flags) {
             return Err(ZxError::ACCESS_DENIED);
@@ -1581,6 +1595,15 @@ impl VmMapping {
         // bypass that mechanism.
         if !access_flags.contains(MMUFlags::WRITE) {
             flags.remove(MMUFlags::WRITE);
+        }
+        // If ZX_VM_FAULT_BEYOND_STREAM_SIZE is set, fault on accesses
+        // past the VMO's content_size instead of returning zeroes.
+        // Note: already-mapped pages are not invalidated when content_size
+        // shrinks — a full implementation would need the VMO to track
+        // its mappings and unmap pages beyond the new content_size.
+        // This check catches faults on not-yet-mapped pages correctly.
+        if fault_beyond && vmo_offset >= self.vmo.content_size() {
+            return Err(ZxError::OUT_OF_RANGE);
         }
         // For pager-backed VMOs, check if the page is committed before
         // attempting commit_page. If absent, notify the pager and return
