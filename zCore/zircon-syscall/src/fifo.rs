@@ -17,7 +17,10 @@ impl Syscall<'_> {
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        if elem_count == 0 || elem_size == 0 || elem_count * elem_size > 4096 {
+        let total_bytes = elem_count
+            .checked_mul(elem_size)
+            .ok_or(ZxError::OUT_OF_RANGE)?;
+        if elem_count == 0 || elem_size == 0 || total_bytes > 4096 {
             return Err(ZxError::OUT_OF_RANGE);
         }
         let proc = self.thread.proc();
@@ -44,8 +47,9 @@ impl Syscall<'_> {
             handle_value, elem_size, count
         );
         if count != 0 {
-            self.check_user_buffer_read(user_bytes.as_addr(), count * elem_size)?;
-            let data = user_bytes.read_array(count * elem_size)?;
+            let total = count.checked_mul(elem_size).ok_or(ZxError::INVALID_ARGS)?;
+            self.check_user_buffer_read(user_bytes.as_addr(), total)?;
+            let data = user_bytes.read_array(total)?;
             let actual_count = self
                 .thread
                 .proc()

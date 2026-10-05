@@ -16,6 +16,10 @@ impl Syscall<'_> {
         mut proc_handle: UserOutPtr<HandleValue>,
         mut vmar_handle: UserOutPtr<HandleValue>,
     ) -> ZxResult {
+        // Fuchsia caps object names at ZX_MAX_NAME_LEN (32 bytes).
+        if name_size > ZX_MAX_NAME_LEN {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let name = match name.read_string(name_size) {
             Ok(n) => n,
             Err(e) => {
@@ -69,6 +73,10 @@ impl Syscall<'_> {
         options: u32,
         mut thread_handle: UserOutPtr<HandleValue>,
     ) -> ZxResult {
+        // Fuchsia caps object names at ZX_MAX_NAME_LEN (32 bytes).
+        if name_size > ZX_MAX_NAME_LEN {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let name = name.read_string(name_size)?;
         info!(
             "thread.create: proc={:#x?}, name={:?}, options={:#x?}",
@@ -428,7 +436,13 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let process =
             proc.get_object_with_rights::<Process>(handle_value, Rights::READ | Rights::WRITE)?;
-        let mut data = vec![0u8; buffer_size];
+        let mut data = {
+            let mut v = alloc::vec::Vec::new();
+            v.try_reserve(buffer_size)
+                .map_err(|_| ZxError::INVALID_ARGS)?;
+            v.resize(buffer_size, 0u8);
+            v
+        };
         let len = process.vmar().read_memory(vaddr, &mut data)?;
         buffer.write_array(&data[..len])?;
         actual.write(len)?;
@@ -688,3 +702,7 @@ const JOB_POL_RELATIVE: u32 = 0;
 const JOB_POL_ABSOLUTE: u32 = 1;
 
 const MAX_BLOCK: usize = 64 * 1024 * 1024; //64M
+
+/// Maximum length of an object name in Fuchsia (ZX_MAX_NAME_LEN).
+/// Includes the null terminator, so the usable string is 31 bytes.
+const ZX_MAX_NAME_LEN: usize = 32;

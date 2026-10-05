@@ -9,6 +9,13 @@ impl Syscall<'_> {
     /// Write debug info to the serial port.
     pub fn sys_debug_write(&self, buf: UserInPtr<u8>, len: usize) -> ZxResult {
         trace!("debug.write: buf=({:?}; {:#x})", buf, len);
+        // Cap at a reasonable size to prevent huge kernel allocations.
+        // Fuchsia's kernel log buffer is 128 KiB; individual writes are
+        // typically much smaller. We use 4 KiB as a generous upper bound.
+        const MAX_DEBUG_WRITE_LEN: usize = 4096;
+        if len > MAX_DEBUG_WRITE_LEN {
+            return Err(ZxError::INVALID_ARGS);
+        }
         hal_impl::console::console_write_str(&buf.read_string(len)?);
         Ok(())
     }
@@ -29,6 +36,11 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+        // Cap buf_size to prevent huge kernel allocations from a u32 value.
+        const MAX_DEBUG_READ_BUF: u32 = 4096;
+        if buf_size > MAX_DEBUG_READ_BUF {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let mut vec = vec![0u8; buf_size as usize];
         let len = hal_impl::console::console_read(&mut vec).await;
         buf.write_array(&vec[..len])?;

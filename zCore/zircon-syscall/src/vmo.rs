@@ -53,10 +53,16 @@ impl Syscall<'_> {
         if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        // TODO: optimize
-        let mut buffer = vec![0u8; buf_size];
-        vmo.read(offset as usize, &mut buffer)?;
-        buf.write_array(&buffer)?;
+        // Chunked VMO read: read page-sized chunks from the VMO and
+        // copy each chunk to user space, avoiding a single huge kernel
+        // allocation for the entire read.
+        let mut vmo_offset = offset as usize;
+        buf.for_each_chunk_mut::<ZxError>(buf_size, |chunk| {
+            vmo.read(vmo_offset, chunk)?;
+            let n = chunk.len();
+            vmo_offset += n;
+            Ok(n)
+        })?;
         Ok(())
     }
 
@@ -77,7 +83,17 @@ impl Syscall<'_> {
         if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        vmo.write(offset as usize, &buf.read_array(buf_size)?)
+        // Chunked VMO write: copy user data in page-sized chunks and
+        // write each chunk to the VMO, avoiding a single huge kernel
+        // allocation for the entire write.
+        let mut vmo_offset = offset as usize;
+        buf.for_each_chunk::<ZxError>(buf_size, |chunk| {
+            vmo.write(vmo_offset, chunk)?;
+            let n = chunk.len();
+            vmo_offset += n;
+            Ok(n)
+        })?;
+        Ok(())
     }
 
     /// Add execute rights to a VMO.
@@ -470,7 +486,12 @@ impl Syscall<'_> {
             // to the destination and decommit. This handles overlapping
             // ranges correctly.
             let len = length as usize;
-            let mut buf = vec![0u8; len];
+            let mut buf = {
+                let mut v = alloc::vec::Vec::new();
+                v.try_reserve(len).map_err(|_| ZxError::INVALID_ARGS)?;
+                v.resize(len, 0u8);
+                v
+            };
             src.read(src_offset as usize, &mut buf)?;
             dst.write(offset as usize, &buf)?;
             // Decommit source pages. For same-VMO, only decommit pages
