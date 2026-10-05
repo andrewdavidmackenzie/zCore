@@ -88,6 +88,9 @@ impl Pager {
         let mut inner = self.inner.lock();
         if let Some(pos) = inner.vmos.iter().position(|pv| Arc::ptr_eq(&pv.vmo, vmo)) {
             inner.vmos.remove(pos);
+            // Wake any threads blocked on pager faults before clearing
+            // the pager association — they'll get NOT_FOUND.
+            vmo.fail_pager_requests(ZxError::NOT_FOUND);
             vmo.clear_pager();
             Ok(())
         } else {
@@ -114,13 +117,26 @@ impl Pager {
 
         while dst_off < end {
             let chunk = PAGE_SIZE.min(end - dst_off);
-            aux_vmo.read(src_off, &mut buf[..chunk])?;
-            vmo.write(dst_off, &buf[..chunk])?;
+            if let Err(e) = aux_vmo.read(src_off, &mut buf[..chunk]) {
+                // Wake waiters for the pages written so far.
+                let written = dst_off - offset as usize;
+                if written > 0 {
+                    vmo.complete_pager_requests(offset as usize, written);
+                }
+                return Err(e);
+            }
+            if let Err(e) = vmo.write(dst_off, &buf[..chunk]) {
+                let written = dst_off - offset as usize;
+                if written > 0 {
+                    vmo.complete_pager_requests(offset as usize, written);
+                }
+                return Err(e);
+            }
             src_off += chunk;
             dst_off += chunk;
         }
-        // Notify any threads waiting for these pages.
-        vmo.notify_pages_supplied();
+        // Wake threads waiting for pages in this range.
+        vmo.complete_pager_requests(offset as usize, length as usize);
         Ok(())
     }
 

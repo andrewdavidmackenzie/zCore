@@ -9,7 +9,6 @@ use {
     },
     bitflags::bitflags,
     core::ops::Deref,
-    core::sync::atomic::{AtomicBool, Ordering},
     hal_impl::CachePolicy,
     lock::{Mutex, MutexGuard},
 };
@@ -145,8 +144,12 @@ struct VmObjectInner {
     /// Pager association: port to notify on page fault, and key.
     pager_port: Option<Arc<Port>>,
     pager_key: u64,
-    /// Set to true when pages have been supplied (wakes waiting threads).
-    pages_supplied: Arc<AtomicBool>,
+    /// Threads waiting for pager to supply pages. Each entry is a
+    /// (page_index, sender) pair. When pages are supplied covering
+    /// a page index, the sender is completed with Ok(()) to wake
+    /// the blocked thread. On pager detach, all senders are
+    /// completed with Err(NOT_FOUND).
+    pager_waiters: Vec<(usize, futures::channel::oneshot::Sender<ZxResult>)>,
 }
 
 impl VmObject {
@@ -201,7 +204,6 @@ impl VmObject {
         let mut inner = self.inner.lock();
         inner.pager_port = Some(port);
         inner.pager_key = key;
-        inner.pages_supplied = Arc::new(AtomicBool::new(false));
     }
 
     /// Check if this VMO is pager-backed.
@@ -217,38 +219,83 @@ impl VmObject {
     }
 
     /// Send a page request to the pager for the given offset/length.
+    /// Returns `Err(SHOULD_WAIT)` — the caller should then call
+    /// `wait_for_page` to block until the page is supplied.
     pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
         let inner = self.inner.lock();
         if let Some(port) = &inner.pager_port {
-            inner.pages_supplied.store(false, Ordering::SeqCst);
-            port.push(PortPacketRepr {
-                key: inner.pager_key,
-                status: ZxError::OK,
-                data: PayloadRepr::PageRequest(PacketPageRequest {
-                    command: ZX_PAGER_VMO_READ,
-                    flags: 0,
-                    _reserved0: 0,
-                    offset: offset as u64,
-                    length: length as u64,
-                    _reserved1: 0,
-                }),
-            });
-            info!(
-                "pager: requested pages at offset={:#x} len={:#x}",
-                offset, length
-            );
+            let page_idx = offset / PAGE_SIZE;
+            // Don't send duplicate port requests for the same page.
+            if !inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx) {
+                port.push(PortPacketRepr {
+                    key: inner.pager_key,
+                    status: ZxError::OK,
+                    data: PayloadRepr::PageRequest(PacketPageRequest {
+                        command: ZX_PAGER_VMO_READ,
+                        flags: 0,
+                        _reserved0: 0,
+                        offset: offset as u64,
+                        length: length as u64,
+                        _reserved1: 0,
+                    }),
+                });
+                info!(
+                    "pager: requested page at offset={:#x} len={:#x}",
+                    offset, length
+                );
+            }
             Err(ZxError::SHOULD_WAIT)
         } else {
             Err(ZxError::NOT_FOUND)
         }
     }
 
-    /// Notify that pages have been supplied (wakes waiting threads).
-    pub fn notify_pages_supplied(&self) {
-        self.inner
-            .lock()
-            .pages_supplied
-            .store(true, Ordering::SeqCst);
+    /// Block until the page at `offset` is supplied by the pager.
+    /// Returns `Ok(())` when the page is ready, or `Err` if the
+    /// pager is detached.
+    pub async fn wait_for_page(&self, offset: usize) -> ZxResult {
+        let rx = {
+            let mut inner = self.inner.lock();
+            let page_idx = offset / PAGE_SIZE;
+            // If the page was already supplied between request_pages()
+            // and now (race window), return immediately.
+            if self.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                return Ok(());
+            }
+            let (tx, rx) = futures::channel::oneshot::channel();
+            inner.pager_waiters.push((page_idx, tx));
+            rx
+        };
+        match rx.await {
+            Ok(result) => result,
+            Err(_) => Err(ZxError::CANCELED), // sender dropped
+        }
+    }
+
+    /// Wake threads waiting for pages in the given range.
+    /// Called by `Pager::supply_pages` after writing page data.
+    pub fn complete_pager_requests(&self, offset: usize, length: usize) {
+        let mut inner = self.inner.lock();
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        // Drain waiters whose page index falls in [start_page, end_page).
+        let mut i = 0;
+        while i < inner.pager_waiters.len() {
+            if inner.pager_waiters[i].0 >= start_page && inner.pager_waiters[i].0 < end_page {
+                let (_, tx) = inner.pager_waiters.swap_remove(i);
+                let _ = tx.send(Ok(()));
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    /// Wake all pager waiters with an error (called on detach/destroy).
+    pub fn fail_pager_requests(&self, err: ZxError) {
+        let mut inner = self.inner.lock();
+        for (_, tx) in inner.pager_waiters.drain(..) {
+            let _ = tx.send(Err(err));
+        }
     }
 
     /// Create a child VMO.
