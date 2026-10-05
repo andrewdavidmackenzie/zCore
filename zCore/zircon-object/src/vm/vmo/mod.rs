@@ -295,10 +295,16 @@ impl VmObject {
         }
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        for (i, dirty) in inner.dirty_pages[start_page..end_page.min(inner.dirty_pages.len())]
-            .iter()
-            .enumerate()
-        {
+        let max_page = end_page.min(inner.dirty_pages.len());
+        if start_page >= max_page {
+            // All pages in range are beyond the bitmap — they're clean.
+            return if start_page < end_page {
+                Some(start_page * PAGE_SIZE)
+            } else {
+                None
+            };
+        }
+        for (i, dirty) in inner.dirty_pages[start_page..max_page].iter().enumerate() {
             if !dirty {
                 return Some((start_page + i) * PAGE_SIZE);
             }
@@ -314,6 +320,47 @@ impl VmObject {
     /// Check if this VMO is pager-backed.
     pub fn is_pager_backed(&self) -> bool {
         self.inner.lock().pager_port.is_some()
+    }
+
+    /// Query dirty page ranges within [offset, offset+length).
+    /// Returns a list of (offset, length, options) tuples.
+    /// Only returns data for TRAP_DIRTY VMOs; others return empty.
+    pub fn query_dirty_ranges(&self, offset: usize, length: usize) -> Vec<(u64, u64, u64)> {
+        let inner = self.inner.lock();
+        if !inner.trap_dirty {
+            return Vec::new();
+        }
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        let max_page = end_page.min(inner.dirty_pages.len());
+        if start_page >= max_page {
+            return Vec::new();
+        }
+        let mut ranges = Vec::new();
+        let mut run_start: Option<usize> = None;
+        for (i, &dirty) in inner.dirty_pages[start_page..max_page].iter().enumerate() {
+            let page_idx = start_page + i;
+            if dirty {
+                if run_start.is_none() {
+                    run_start = Some(page_idx);
+                }
+            } else if let Some(start) = run_start {
+                ranges.push((
+                    (start * PAGE_SIZE) as u64,
+                    ((page_idx - start) * PAGE_SIZE) as u64,
+                    0u64,
+                ));
+                run_start = None;
+            }
+        }
+        if let Some(start) = run_start {
+            ranges.push((
+                (start * PAGE_SIZE) as u64,
+                ((max_page - start) * PAGE_SIZE) as u64,
+                0u64,
+            ));
+        }
+        ranges
     }
 
     /// Clear the pager association (called on detach).
@@ -694,6 +741,14 @@ impl Deref for VmObject {
 
 impl Drop for VmObject {
     fn drop(&mut self) {
+        // Wake any threads blocked on pager faults before freeing.
+        {
+            let inner = self.inner.lock();
+            if !inner.pager_waiters.is_empty() {
+                drop(inner);
+                self.fail_pager_requests(ZxError::BAD_STATE);
+            }
+        }
         let mut inner = self.inner.lock();
         let parent = match inner.parent.upgrade() {
             Some(parent) => parent,

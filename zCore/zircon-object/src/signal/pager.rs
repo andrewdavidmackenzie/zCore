@@ -8,7 +8,7 @@
 use crate::object::*;
 use crate::signal::port::*;
 use crate::vm::VmObject;
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use lock::Mutex;
 
@@ -21,9 +21,11 @@ pub struct Pager {
 impl_kobject!(Pager);
 
 /// Per-VMO pager association.
-#[allow(dead_code)] // port/key used when demand-paging notification is implemented
+/// Uses `Weak<VmObject>` to avoid reference cycles — the pager must
+/// not keep the VMO alive after all userspace handles are closed.
+#[allow(dead_code)] // port/key stored for future use (e.g. VMO complete notification)
 struct PagerVmo {
-    vmo: Arc<VmObject>,
+    vmo: Weak<VmObject>,
     port: Arc<Port>,
     key: u64,
 }
@@ -70,7 +72,7 @@ impl Pager {
 
         let mut inner = self.inner.lock();
         inner.vmos.push(PagerVmo {
-            vmo: vmo.clone(),
+            vmo: Arc::downgrade(&vmo),
             port: port.clone(),
             key,
         });
@@ -83,7 +85,11 @@ impl Pager {
     /// forwarded to the pager.
     pub fn detach_vmo(&self, vmo: &Arc<VmObject>) -> ZxResult {
         let mut inner = self.inner.lock();
-        if let Some(pos) = inner.vmos.iter().position(|pv| Arc::ptr_eq(&pv.vmo, vmo)) {
+        if let Some(pos) = inner
+            .vmos
+            .iter()
+            .position(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
+        {
             inner.vmos.remove(pos);
             // Wake any threads blocked on pager faults before clearing
             // the pager association — they'll get NOT_FOUND.
@@ -148,10 +154,18 @@ impl Pager {
     ) -> ZxResult {
         // Verify the VMO belongs to this pager.
         let inner = self.inner.lock();
-        if !inner.vmos.iter().any(|pv| Arc::ptr_eq(&pv.vmo, vmo)) {
+        if !inner
+            .vmos
+            .iter()
+            .any(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
+        {
             return Err(ZxError::INVALID_ARGS);
         }
         drop(inner); // Release pager lock before operating on VMO.
+                     // Validate range doesn't overflow.
+        (offset as usize)
+            .checked_add(length as usize)
+            .ok_or(ZxError::OUT_OF_RANGE)?;
         match op {
             ZX_PAGER_OP_FAIL => {
                 // Fail waiting threads for the specified range with
@@ -179,6 +193,18 @@ impl Pager {
                 Ok(())
             }
             _ => Err(ZxError::NOT_SUPPORTED),
+        }
+    }
+}
+
+impl Drop for Pager {
+    fn drop(&mut self) {
+        let inner = self.inner.lock();
+        for pv in &inner.vmos {
+            if let Some(vmo) = pv.vmo.upgrade() {
+                vmo.fail_pager_requests(ZxError::BAD_STATE);
+                vmo.clear_pager();
+            }
         }
     }
 }
