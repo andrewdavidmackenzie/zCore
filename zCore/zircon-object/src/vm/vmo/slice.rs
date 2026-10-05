@@ -47,8 +47,8 @@ impl VMObjectTrait for VMObjectSlice {
     }
 
     fn set_len(&self, _len: usize) -> ZxResult {
-        // TODO: slice VMOs cannot be resized; return NOT_SUPPORTED or INVALID_ARGS
-        unimplemented!()
+        // Slice/reference VMOs cannot be resized.
+        Err(ZxError::ACCESS_DENIED)
     }
 
     fn commit_page(&self, page_idx: usize, flags: MMUFlags) -> ZxResult<usize> {
