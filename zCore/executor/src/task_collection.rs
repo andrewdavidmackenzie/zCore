@@ -158,9 +158,11 @@ impl TaskCollection {
 
     /// Remove the task corresponding to the key.
     pub fn remove_task(&self, key: Key) {
+        // Lock ordering: sched_state first, then future_collections.
+        let mut sched = self.sched_state.lock();
         let mut inner = self.get_mut_inner(key >> PRIORITY_SHIFT);
         inner.remove(unmask_priority(key));
-        crate::sched::on_task_removed(&mut self.sched_state.lock(), key);
+        crate::sched::on_task_removed(&mut sched, key);
         self.task_num.fetch_sub(1, Ordering::Relaxed);
     }
 
@@ -175,10 +177,13 @@ impl TaskCollection {
             priority,
             MAX_PRIORITY
         );
+        // Lock ordering: sched_state first, then future_collections
+        // (same as scan_notifications to avoid deadlock).
+        let mut sched = self.sched_state.lock();
         let key = self.future_collections[priority].lock().insert(future);
         debug_assert!(key < TASK_NUM_PER_PRIORITY);
         let full_key = key | (priority << PRIORITY_SHIFT);
-        crate::sched::on_task_added(&mut self.sched_state.lock(), full_key, priority);
+        crate::sched::on_task_added(&mut sched, full_key, priority);
         self.task_num.fetch_add(1, Ordering::Relaxed);
         full_key
     }
