@@ -264,6 +264,22 @@ impl Futex {
         if check_value && self.load_user_value() != current_value {
             return Err(ZxError::BAD_STATE);
         }
+        // Check new_requeue_owner is not a waiter on EITHER futex
+        // BEFORE performing any wake/requeue. Fuchsia validates the
+        // proposed owner against the current wait queues, not the
+        // post-operation queues. A thread waiting on the wake futex
+        // that would be woken by this call is still invalid as an owner.
+        if let Some(ref owner) = new_requeue_owner {
+            let is_waiter = inner
+                .waiter_queue
+                .iter()
+                .chain(new_inner.waiter_queue.iter())
+                .filter_map(|w| w.thread.as_ref())
+                .any(|t| Arc::ptr_eq(t, owner));
+            if is_waiter {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        }
         // wake
         let mut woken = 0;
         for _ in 0..wake_count {
@@ -279,19 +295,6 @@ impl Futex {
         for waiter in inner.waiter_queue.drain(..requeue_count) {
             waiter.reset_futex(requeue_futex.clone());
             new_inner.waiter_queue.push_back(waiter);
-        }
-        // Check new_requeue_owner is not a waiter on EITHER futex
-        // (checked AFTER wake/requeue so woken threads are already removed).
-        if let Some(ref owner) = new_requeue_owner {
-            let is_waiter = inner
-                .waiter_queue
-                .iter()
-                .chain(new_inner.waiter_queue.iter())
-                .filter_map(|w| w.thread.as_ref())
-                .any(|t| Arc::ptr_eq(t, owner));
-            if is_waiter {
-                return Err(ZxError::INVALID_ARGS);
-            }
         }
         // set owner
         inner.set_owner(None);
@@ -478,6 +481,9 @@ mod tests {
         let proc = Process::create(&root_job, "proc").expect("failed to create process");
         let thread1 = Thread::create(&proc, "t1").expect("failed to create thread");
         let thread2 = Thread::create(&proc, "t2").expect("failed to create thread");
+        // Owner thread is NOT a waiter — matches Fuchsia semantics where
+        // the requeue owner must not be waiting on either futex.
+        let owner_thread = Thread::create(&proc, "owner").expect("failed to create thread");
 
         static VALUE: AtomicI32 = AtomicI32::new(1);
         let futex = proc.get_futex(&VALUE as *const AtomicI32 as usize);
@@ -509,9 +515,16 @@ mod tests {
         }
         assert_eq!(futex.inner.lock().waiter_queue.len(), 2);
 
-        // Requeue: wake 1, move 1 to requeue_futex, set new_requeue_owner
+        // A waiter thread as owner should be rejected (Fuchsia validates
+        // before wake/requeue).
+        assert_eq!(
+            futex.requeue(1, 1, 1, &requeue_futex, Some(thread1.clone()), true),
+            Err(ZxError::INVALID_ARGS)
+        );
+
+        // Requeue: wake 1, move 1 to requeue_futex, set non-waiter as owner
         futex
-            .requeue(1, 1, 1, &requeue_futex, Some(thread1.clone()), true)
+            .requeue(1, 1, 1, &requeue_futex, Some(owner_thread.clone()), true)
             .unwrap();
 
         // 1 woken, 1 requeued
@@ -520,7 +533,7 @@ mod tests {
 
         // The requeue futex should have the new owner set
         assert!(requeue_futex.owner().is_some());
-        assert!(Arc::ptr_eq(&requeue_futex.owner().unwrap(), &thread1));
+        assert!(Arc::ptr_eq(&requeue_futex.owner().unwrap(), &owner_thread));
 
         // Wake the requeued waiter to clean up
         requeue_futex.wake(1);
