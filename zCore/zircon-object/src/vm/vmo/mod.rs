@@ -2,7 +2,9 @@ use {
     self::{paged::*, physical::*, slice::*},
     super::*,
     crate::object::*,
-    crate::signal::{PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_READ},
+    crate::signal::{
+        PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_DIRTY, ZX_PAGER_VMO_READ,
+    },
     alloc::{
         sync::{Arc, Weak},
         vec::Vec,
@@ -144,11 +146,16 @@ struct VmObjectInner {
     /// Pager association: port to notify on page fault, and key.
     pager_port: Option<Arc<Port>>,
     pager_key: u64,
-    /// Threads waiting for pager to supply pages. Each entry is a
-    /// (page_index, sender) pair. When pages are supplied covering
-    /// a page index, the sender is completed with Ok(()) to wake
-    /// the blocked thread. On pager detach, all senders are
-    /// completed with Err(NOT_FOUND).
+    /// Whether this VMO traps writes for dirty-page notifications.
+    trap_dirty: bool,
+    /// Per-page dirty state. `true` = dirty (write allowed),
+    /// `false` = clean (write traps if `trap_dirty` is set).
+    /// Only used when `trap_dirty` is true.
+    dirty_pages: Vec<bool>,
+    /// Threads waiting for pager to supply/dirty pages. Each entry is a
+    /// (page_index, sender) pair. Waiters for both READ and DIRTY
+    /// requests share this list — they're woken by supply_pages or
+    /// op_range(DIRTY) respectively.
     pager_waiters: Vec<(usize, futures::channel::oneshot::Sender<ZxResult>)>,
 }
 
@@ -204,6 +211,104 @@ impl VmObject {
         let mut inner = self.inner.lock();
         inner.pager_port = Some(port);
         inner.pager_key = key;
+    }
+
+    /// Enable dirty-page trapping for this pager-backed VMO.
+    /// Writes to clean pages will send `ZX_PAGER_VMO_DIRTY` to the
+    /// pager port and block until the pager responds.
+    pub fn set_trap_dirty(&self, pages: usize) {
+        let mut inner = self.inner.lock();
+        inner.trap_dirty = true;
+        inner.dirty_pages = alloc::vec![false; pages];
+    }
+
+    /// Check if this VMO has dirty-page trapping enabled.
+    pub fn is_trap_dirty(&self) -> bool {
+        self.inner.lock().trap_dirty
+    }
+
+    /// Send a dirty-page request to the pager for the given range.
+    /// Returns `Err(SHOULD_WAIT)` — caller should await `wait_for_page`.
+    pub fn request_dirty(&self, offset: usize, length: usize) -> ZxResult {
+        let inner = self.inner.lock();
+        if let Some(port) = &inner.pager_port {
+            let page_idx = offset / PAGE_SIZE;
+            // Don't send duplicate requests.
+            if !inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx) {
+                port.push(PortPacketRepr {
+                    key: inner.pager_key,
+                    status: ZxError::OK,
+                    data: PayloadRepr::PageRequest(PacketPageRequest {
+                        command: ZX_PAGER_VMO_DIRTY,
+                        flags: 0,
+                        _reserved0: 0,
+                        offset: offset as u64,
+                        length: length as u64,
+                        _reserved1: 0,
+                    }),
+                });
+            }
+            Err(ZxError::SHOULD_WAIT)
+        } else {
+            Err(ZxError::NOT_FOUND)
+        }
+    }
+
+    /// Mark pages as dirty (called by pager_op_range(DIRTY)).
+    /// Wakes any threads waiting for dirty permission on these pages.
+    pub fn mark_pages_dirty(&self, offset: usize, length: usize) {
+        let mut inner = self.inner.lock();
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
+            inner.dirty_pages[page_idx] = true;
+        }
+        // Wake waiters for these pages (shared waiter list with read waiters).
+        let mut i = 0;
+        while i < inner.pager_waiters.len() {
+            if inner.pager_waiters[i].0 >= start_page && inner.pager_waiters[i].0 < end_page {
+                let (_, tx) = inner.pager_waiters.swap_remove(i);
+                let _ = tx.send(Ok(()));
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    /// Check if a page is dirty (i.e., write-allowed for TRAP_DIRTY VMOs).
+    pub fn is_page_dirty(&self, page_idx: usize) -> bool {
+        let inner = self.inner.lock();
+        if !inner.trap_dirty {
+            return true; // Non-TRAP_DIRTY VMOs treat all pages as writable
+        }
+        inner.dirty_pages.get(page_idx).copied().unwrap_or(false)
+    }
+
+    /// For TRAP_DIRTY VMOs, find the first clean page in the range
+    /// [offset, offset+length). Returns None if all pages are dirty
+    /// (or if TRAP_DIRTY is not set). Returns Some(clean_offset) with
+    /// the byte offset of the first clean page.
+    pub fn first_clean_page_in_range(&self, offset: usize, length: usize) -> Option<usize> {
+        let inner = self.inner.lock();
+        if !inner.trap_dirty {
+            return None;
+        }
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        for (i, dirty) in inner.dirty_pages[start_page..end_page.min(inner.dirty_pages.len())]
+            .iter()
+            .enumerate()
+        {
+            if !dirty {
+                return Some((start_page + i) * PAGE_SIZE);
+            }
+        }
+        // Pages beyond dirty_pages vec are clean.
+        if end_page > inner.dirty_pages.len() && start_page < end_page {
+            let first_beyond = inner.dirty_pages.len().max(start_page);
+            return Some(first_beyond * PAGE_SIZE);
+        }
+        None
     }
 
     /// Check if this VMO is pager-backed.
@@ -295,6 +400,23 @@ impl VmObject {
         let mut inner = self.inner.lock();
         for (_, tx) in inner.pager_waiters.drain(..) {
             let _ = tx.send(Err(err));
+        }
+    }
+
+    /// Wake pager waiters in a specific range with an error
+    /// (called by pager_op_range(FAIL)).
+    pub fn fail_pager_requests_range(&self, offset: usize, length: usize, err: ZxError) {
+        let mut inner = self.inner.lock();
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        let mut i = 0;
+        while i < inner.pager_waiters.len() {
+            if inner.pager_waiters[i].0 >= start_page && inner.pager_waiters[i].0 < end_page {
+                let (_, tx) = inner.pager_waiters.swap_remove(i);
+                let _ = tx.send(Err(err));
+            } else {
+                i += 1;
+            }
         }
     }
 
