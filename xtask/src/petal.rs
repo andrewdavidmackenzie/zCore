@@ -334,7 +334,14 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
     const PETAL_BINS: &[&str] = &["hello", "channel-test", "vmo-test"];
 
     // Check if rootfs is already populated with all expected binaries
-    if PETAL_BINS.iter().all(|name| bin_dir.join(name).is_file()) {
+    let prebuilt_cts = PROJECT_DIR
+        .join("prebuilt/zircon-test")
+        .join(arch.name())
+        .join("core-tests-standalone");
+    let has_cts = prebuilt_cts.is_file();
+    if PETAL_BINS.iter().all(|name| bin_dir.join(name).is_file())
+        && (!has_cts || bin_dir.join("core-tests-standalone").is_file())
+    {
         return rootfs_dir;
     }
 
@@ -356,6 +363,20 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
             )
         });
         println!("  {} (ELF) -> {}", name, dest.display());
+    }
+
+    // Include prebuilt core-tests-standalone if available.
+    if has_cts {
+        let dest = bin_dir.join("core-tests-standalone");
+        std::fs::copy(&prebuilt_cts, &dest).unwrap_or_else(|e| {
+            panic!(
+                "failed to copy {} to {}: {}",
+                prebuilt_cts.display(),
+                dest.display(),
+                e
+            )
+        });
+        println!("  core-tests-standalone (prebuilt) -> {}", dest.display());
     }
 
     println!("Zircon rootfs built at {}", rootfs_dir.display());

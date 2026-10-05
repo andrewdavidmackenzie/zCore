@@ -72,6 +72,14 @@ pub fn zbi() -> impl AsRef<[u8]> {
     }
 }
 
+/// Cached rootfs — opened once, shared across all callers.
+/// Without caching, each call to `try_zircon_rootfs()` would call
+/// `init_ram_disk()` again, creating a second `&'static mut` to the
+/// same memory (UB) and potentially reading stale SFS metadata.
+#[cfg(not(feature = "libos"))]
+static ZIRCON_ROOTFS: lock::Mutex<Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>>> =
+    lock::Mutex::new(None);
+
 pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
     // LibOS mode: use HostFS.
     #[cfg(feature = "libos")]
@@ -84,32 +92,65 @@ pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSys
         return None;
     }
 
-    // Bare-metal: try initrd or block device.
-    use alloc::sync::Arc;
-    use rcore_fs::vfs::FileSystem;
-    use rcore_fs_sfs::SimpleFileSystem;
-
-    if let Some(initrd) = hal_impl::boot::init_ram_disk() {
-        info!("Trying Zircon rootfs from initrd...");
-        let dev = Arc::new(MemBufDevice(spin::Mutex::new(initrd)));
-        if let Ok(fs) = SimpleFileSystem::open(dev) {
-            let fs: Arc<dyn FileSystem> = fs;
-            return Some(fs);
+    #[cfg(not(feature = "libos"))]
+    {
+        // Return cached rootfs if already opened.
+        let cached = ZIRCON_ROOTFS.lock();
+        if let Some(ref fs) = *cached {
+            return Some(fs.clone());
         }
-        warn!("Initrd is not a valid SFS image, trying block device...");
-    }
+        drop(cached);
 
-    if let Some(block) = hal_impl::device_registry::all_block().first() {
-        info!("Trying Zircon rootfs from block device...");
-        let dev: Arc<dyn rcore_fs::dev::Device> = Arc::new(BlockDevice(block));
-        if let Ok(fs) = SimpleFileSystem::open(dev) {
-            let fs: Arc<dyn FileSystem> = fs;
-            return Some(fs);
+        // First call: open SFS from initrd or block device.
+        use alloc::sync::Arc;
+        use rcore_fs::vfs::FileSystem;
+        use rcore_fs_sfs::SimpleFileSystem;
+
+        let fs: Option<Arc<dyn FileSystem>> = if let Some(initrd) = hal_impl::boot::init_ram_disk()
+        {
+            hal_impl::console::console_write_fmt(format_args!(
+                "rootfs: initrd found ({} bytes)\n",
+                initrd.len()
+            ));
+            let dev = Arc::new(MemBufDevice(spin::Mutex::new(initrd)));
+            match SimpleFileSystem::open(dev) {
+                Ok(sfs) => {
+                    hal_impl::console::console_write_fmt(format_args!(
+                        "rootfs: SFS opened successfully\n"
+                    ));
+                    Some(sfs)
+                }
+                Err(e) => {
+                    hal_impl::console::console_write_fmt(format_args!(
+                        "rootfs: SFS open failed: {:?}\n",
+                        e
+                    ));
+                    None
+                }
+            }
+        } else {
+            hal_impl::console::console_write_fmt(format_args!("rootfs: no initrd found\n"));
+            None
+        };
+
+        let fs = fs.or_else(|| {
+            let block = hal_impl::device_registry::all_block().first()?;
+            info!("Trying Zircon rootfs from block device...");
+            let dev: Arc<dyn rcore_fs::dev::Device> = Arc::new(BlockDevice(block));
+            match SimpleFileSystem::open(dev) {
+                Ok(sfs) => Some(sfs),
+                Err(_) => {
+                    warn!("Block device is not a valid SFS image");
+                    None
+                }
+            }
+        });
+
+        if let Some(ref fs) = fs {
+            *ZIRCON_ROOTFS.lock() = Some(fs.clone());
         }
-        warn!("Block device is not a valid SFS image");
+        fs
     }
-
-    None
 }
 
 // ── Initrd support (bare-metal only) ──────────────────────────────────
