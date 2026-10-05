@@ -162,6 +162,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let vmar_offset = if is_specific { Some(vmar_offset) } else { None };
+        let fault_beyond = options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE);
         let vaddr = vmar.map_ext(
             vmar_offset,
             vmo.clone(),
@@ -171,6 +172,7 @@ impl Syscall<'_> {
             mapping_flags,
             overwrite,
             map_range,
+            fault_beyond,
         )?;
         mapped_addr.write(vaddr)?;
         Ok(())
@@ -345,6 +347,7 @@ impl Syscall<'_> {
             mapping_flags,
             overwrite,
             true,
+            false,
         )?;
         info!("vmar.map_clock: mapped at {:#x}", vaddr);
         mapped_addr.write(vaddr)?;
@@ -438,7 +441,8 @@ impl Syscall<'_> {
             permissions,
             mapping_flags,
             overwrite,
-            true, // map_range: commit pages immediately
+            true,  // map_range: commit pages immediately
+            false, // fault_beyond_stream_size
         )?;
         info!(
             "vmar.map_iob: mapped region {} at {:#x}",
