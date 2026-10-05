@@ -467,10 +467,26 @@ impl Process {
     /// All handles are discarded on success or failure.
     pub fn remove_handles(&self, handle_values: &[HandleValue]) -> ZxResult<Vec<Handle>> {
         let mut inner = self.inner.lock();
-        handle_values
-            .iter()
-            .map(|h| inner.remove_handle(*h))
-            .collect()
+        let mut handles = Vec::with_capacity(handle_values.len());
+        let mut first_err = None;
+        for &hv in handle_values {
+            match inner.remove_handle(hv) {
+                Ok(h) => handles.push(h),
+                Err(e) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                    // Continue removing remaining handles — Fuchsia
+                    // guarantees all handles are consumed even on error.
+                }
+            }
+        }
+        if let Some(e) = first_err {
+            // All handles were removed; drop the successfully-removed
+            // ones and return the first error.
+            return Err(e);
+        }
+        Ok(handles)
     }
 
     /// Remove a handle referring to a kernel object of the given type from the process.

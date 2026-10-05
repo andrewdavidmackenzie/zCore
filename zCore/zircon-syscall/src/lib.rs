@@ -710,6 +710,21 @@ impl Syscall<'_> {
             Sys::SYSCALL_TEST_0 | Sys::SYSCALL_TEST_RUST_0 => {
                 return 0;
             }
+            // Wrapper variants: 3-arg sum with validation.
+            // Reject negative first arg (INVALID_ARGS), reject sum > 50 (OUT_OF_RANGE).
+            Sys::SYSCALL_TEST_WRAPPER | Sys::SYSCALL_TEST_RUST_WRAPPER => {
+                let a = a0 as i32;
+                let b = a1 as i32;
+                let c = a2 as i32;
+                if a < 0 {
+                    return ZxError::INVALID_ARGS as isize;
+                }
+                let sum = (a as i64) + (b as i64) + (c as i64);
+                if sum > 50 {
+                    return ZxError::OUT_OF_RANGE as isize;
+                }
+                return sum as isize;
+            }
             Sys::SYSCALL_TEST_1
             | Sys::SYSCALL_TEST_2
             | Sys::SYSCALL_TEST_3
@@ -718,7 +733,6 @@ impl Syscall<'_> {
             | Sys::SYSCALL_TEST_6
             | Sys::SYSCALL_TEST_7
             | Sys::SYSCALL_TEST_8
-            | Sys::SYSCALL_TEST_WRAPPER
             | Sys::SYSCALL_TEST_RUST_1
             | Sys::SYSCALL_TEST_RUST_2
             | Sys::SYSCALL_TEST_RUST_3
@@ -726,8 +740,7 @@ impl Syscall<'_> {
             | Sys::SYSCALL_TEST_RUST_5
             | Sys::SYSCALL_TEST_RUST_6
             | Sys::SYSCALL_TEST_RUST_7
-            | Sys::SYSCALL_TEST_RUST_8
-            | Sys::SYSCALL_TEST_RUST_WRAPPER => {
+            | Sys::SYSCALL_TEST_RUST_8 => {
                 let args: [isize; 8] = [
                     a0 as isize,
                     a1 as isize,
@@ -741,10 +754,7 @@ impl Syscall<'_> {
                 let n = match sys_type {
                     Sys::SYSCALL_TEST_1 | Sys::SYSCALL_TEST_RUST_1 => 1,
                     Sys::SYSCALL_TEST_2 | Sys::SYSCALL_TEST_RUST_2 => 2,
-                    Sys::SYSCALL_TEST_3
-                    | Sys::SYSCALL_TEST_RUST_3
-                    | Sys::SYSCALL_TEST_WRAPPER
-                    | Sys::SYSCALL_TEST_RUST_WRAPPER => 3,
+                    Sys::SYSCALL_TEST_3 | Sys::SYSCALL_TEST_RUST_3 => 3,
                     Sys::SYSCALL_TEST_4 | Sys::SYSCALL_TEST_RUST_4 => 4,
                     Sys::SYSCALL_TEST_5 | Sys::SYSCALL_TEST_RUST_5 => 5,
                     Sys::SYSCALL_TEST_6 | Sys::SYSCALL_TEST_RUST_6 => 6,

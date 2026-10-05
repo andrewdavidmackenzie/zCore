@@ -80,13 +80,13 @@ impl Syscall<'_> {
         Ok(())
     }
 
-    /// Test syscall: read from `in_out_ptr`, write value+1 back.
+    /// Test syscall: read from `in_out_ptr`, write value*2 back.
     pub fn sys_syscall_test_rust_inoutptr(&self, mut in_out_ptr: UserInOutPtr<i32>) -> ZxResult {
         if in_out_ptr.is_null() {
             return Err(ZxError::INVALID_ARGS);
         }
         let val = in_out_ptr.read()?;
-        in_out_ptr.write(val + 1)?;
+        in_out_ptr.write(val * 2)?;
         Ok(())
     }
 }
