@@ -137,6 +137,11 @@ impl Syscall<'_> {
         mapping_flags.set(MMUFlags::EXECUTE, options.contains(VmOptions::PERM_EXECUTE));
         let overwrite = options.contains(VmOptions::SPECIFIC_OVERWRITE);
         let map_range = if cfg!(any(feature = "deny-page-fault", not(target_os = "none"))) {
+            // On platforms that don't support page faults, reject
+            // FAULT_BEYOND_STREAM_SIZE since it requires lazy mapping.
+            if options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE) {
+                return Err(ZxError::NOT_SUPPORTED);
+            }
             true
         } else if options.contains(VmOptions::ALLOW_FAULTS) {
             // ALLOW_FAULTS: lazy commit, pages faulted in on demand

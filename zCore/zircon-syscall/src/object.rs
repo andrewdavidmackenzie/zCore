@@ -227,9 +227,13 @@ impl Syscall<'_> {
                     return Err(ZxError::ACCESS_DENIED);
                 }
                 let fsbase = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
-                // Fuchsia accepts non-canonical addresses here. The CPU
-                // will generate #GP when the thread resumes, which is
-                // delivered via the exception channel.
+                // Fuchsia accepts non-canonical addresses here. The
+                // trapframe restores FS base via WRFSBASE in the
+                // syscall_return path, which generates a user-mode #GP
+                // for non-canonical values. This is safe because
+                // WRFSBASE faults in the context of the user thread
+                // (unlike SYSRET which would fault in ring 0).
+                // The #GP is delivered via the exception channel.
                 thread.with_context(|ctx| ctx.general_mut().fsbase = fsbase)?;
                 Ok(())
             }

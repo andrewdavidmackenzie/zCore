@@ -1598,6 +1598,10 @@ impl VmMapping {
         }
         // If ZX_VM_FAULT_BEYOND_STREAM_SIZE is set, fault on accesses
         // past the VMO's content_size instead of returning zeroes.
+        // Note: already-mapped pages are not invalidated when content_size
+        // shrinks — a full implementation would need the VMO to track
+        // its mappings and unmap pages beyond the new content_size.
+        // This check catches faults on not-yet-mapped pages correctly.
         if fault_beyond && vmo_offset >= self.vmo.content_size() {
             return Err(ZxError::OUT_OF_RANGE);
         }
