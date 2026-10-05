@@ -86,11 +86,11 @@ grep '\[       OK \]' /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
 tail -5 /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
-### Current status (phase 17)
-- ~750/1776 tests pass (individual suite runs), ~583 in full sequential run
-- Phase 17: JobTest 15→26/29, JobGetInfoTest 32→39/39,
-  ProcessTest.GetRuntimeNoPermission fixed, DebugLogTest +2,
-  VmarGetInfoTest +1
+### Current status (phase 20)
+- 524/1776 tests pass in full sequential run (with skip list)
+- Phase 20: x86_64 Zircon boot fixed (#509), Resource downcast
+  LTO fix (#510), pager infrastructure (#515/#516), 8 test fixes
+  (#512/#513)
 - Mini-process infrastructure working — child processes can now be
   spawned via start_mini_process_etc (vDSO EXECUTE rights fix)
 - Demand-paging in guarded kernel copies — copy_from_user/copy_to_user
@@ -145,8 +145,11 @@ tail -5 /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
   - VmoZeroTestCase.EmptyCowChildren (populated_bytes)
   - VmoTestCase.* (multiple hangs: boot_options uninitialized, VMAR
     map failures causing infinite waits; only 1/58 passes)
-  - PagerProcess.* (thread blocked on pager fault not woken on
-    process kill — multiple tests hang, blocks 50+ later suites)
+  - PagerProcess.* (pager tests need preemptive scheduling #498)
+  - StreamTestCase.AppendSuppliesZeroes (TRAP_DIRTY + pager, needs #498)
+  - StreamTestCase.ContentSizeUpdatedOnPartialWrite (same)
+  - StreamTestCase.PartialVmoDirty (same)
+  - StreamTestCase.WriteShrinkRace (pager CreateUnboundedVmo, needs #498)
   - ProcessTest.ProcessWaitAsyncCancelSelf (race condition stress
     test — mini-process WAIT_ASYNC_CANCEL loop hangs)
   - ProcessTest.ProcessHwTraceContextIdProperty (hw trace not
