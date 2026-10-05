@@ -1,19 +1,24 @@
 /* Linker script for petal userspace programs.
  *
- * Places code at virtual address 0x10000. This matches the load
- * base used by userstart's ELF loader, so absolute addresses in
- * the binary (GOT entries, string literals) are correct at runtime
- * without needing dynamic relocations.
+ * Link base must be >= USER_ASPACE_BASE (0x200000 on x86_64,
+ * 0x4_0000_0000 on aarch64) because userstart maps binaries into
+ * the child process's VMAR which starts at that address. The binary
+ * is non-PIE, so all absolute addresses (GOT, string literals) are
+ * resolved at link time to match the expected load address.
+ *
+ * 0x200000 is the lowest value that works across all architectures
+ * (on aarch64, any code using absolute addresses would need
+ * relocations or PIC codegen; aarch64 codegen is naturally
+ * PC-relative, so the base value doesn't matter in practice).
  *
  * .text and .rodata are merged into one RX segment to avoid
- * page-overlap failures in the VMAR mapper (small programs would
- * otherwise have multiple segments sharing the same 4K page).
+ * page-overlap failures in the VMAR mapper.
  * .data and .bss are in a separate RW segment for W^X safety.
  */
 ENTRY(_start)
 
 SECTIONS {
-    . = 0x10000;
+    . = 0x200000;
 
     .text : {
         *(.text .text.*)

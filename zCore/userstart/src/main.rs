@@ -174,7 +174,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     // Step 6: Load program as ELF, mapping each PT_LOAD segment
     // with correct permissions (RX for code, RW for data).
-    let (entry_addr, map_end) = load_elf(program_data, init_vmar);
+    let (entry_addr, _map_end) = load_elf(program_data, init_vmar);
 
     // Step 7: Create a stack for the init program
     let stack_pages = 8;
@@ -184,14 +184,13 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
         zx_vmo_create(stack_size as u64, 0, &mut stack_vmo)
     });
 
-    // Map stack above the loaded segments
-    let stack_offset = map_end + PAGE_SIZE;
+    // Map stack (VMAR allocator chooses address)
     let mut stack_base: usize = 0;
     check("vmar_map(stack)", unsafe {
         zx_vmar_map(
             init_vmar,
-            ZX_VM_PERM_READ | ZX_VM_PERM_WRITE | ZX_VM_SPECIFIC,
-            stack_offset,
+            ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+            0,
             stack_vmo,
             0,
             stack_size,
@@ -201,44 +200,25 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     let stack_top = stack_base + stack_size;
 
-    // Step 7b: Map vDSO into the init process at a high address
-    // to avoid interfering with code/stack regions.
-    // Map code pages (0-6) as RX and data page (7) as R.
-    let vdso_base_addr = stack_top + 0x10000;
+    // Step 7b: Map vDSO into the init process.
+    // Map as a single contiguous block (VMAR allocator chooses address).
     let mut vdso_code_addr: usize = 0;
-    let mut vdso_data_addr: usize = 0;
-    // Map code pages (read + execute)
     let s = unsafe {
         zx_vmar_map(
             init_vmar,
-            ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE | ZX_VM_SPECIFIC,
-            vdso_base_addr,
+            ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE,
+            0,
             vdso_vmo,
-            0,                // offset 0 in VMO
-            VDSO_DATA_OFFSET, // pages 0-6
+            0,
+            VDSO_DATA_OFFSET + PAGE_SIZE, // code pages + data page
             &mut vdso_code_addr,
         )
     };
     if s != ZX_OK {
-        debug_print(b"userstart: vDSO code map failed\n");
+        debug_print(b"userstart: vDSO map failed\n");
         vdso_code_addr = 0;
     } else {
-        debug_print(b"userstart: vDSO code mapped\n");
-    }
-    // Map data page (read-only) right after code
-    let s = unsafe {
-        zx_vmar_map(
-            init_vmar,
-            ZX_VM_PERM_READ | ZX_VM_SPECIFIC,
-            vdso_base_addr + VDSO_DATA_OFFSET,
-            vdso_vmo,
-            VDSO_DATA_OFFSET, // offset 0x7000
-            PAGE_SIZE,
-            &mut vdso_data_addr,
-        )
-    };
-    if s != ZX_OK {
-        debug_print(b"userstart: warning: failed to map vDSO data\n");
+        debug_print(b"userstart: vDSO mapped\n");
     }
 
     // Step 8: Create a channel to forward bootstrap handles to init
@@ -355,6 +335,7 @@ fn apply_elf_relocations(
     vmo: HandleValue,
     base: usize,
 ) {
+    const PT_LOAD: u32 = 1;
     const PT_DYNAMIC: u32 = 2;
     const DT_NULL: u64 = 0;
     const DT_RELA: u64 = 7;
@@ -405,11 +386,23 @@ fn apply_elf_relocations(
         return; // No RELA entries.
     }
 
-    // The DT_RELA value is a virtual address. For a PIE binary loaded
-    // from offset 0 in the file, vaddr == file offset for sections
-    // within PT_LOAD segments. Find the file offset by scanning LOAD
-    // segments.
-    let rela_file_offset = rela_vaddr; // works when first LOAD segment has p_offset==0
+    // The DT_RELA value is a virtual address. Convert to file offset
+    // by finding which PT_LOAD segment contains it.
+    let mut rela_file_offset = rela_vaddr; // fallback
+    for i in 0..e_phnum {
+        let ph = &data[e_phoff + i * e_phentsize..];
+        let p_type = u32::from_le_bytes(ph[0..4].try_into().unwrap());
+        if p_type != PT_LOAD {
+            continue;
+        }
+        let p_offset = u64::from_le_bytes(ph[8..16].try_into().unwrap()) as usize;
+        let p_vaddr = u64::from_le_bytes(ph[16..24].try_into().unwrap()) as usize;
+        let p_filesz = u64::from_le_bytes(ph[32..40].try_into().unwrap()) as usize;
+        if rela_vaddr >= p_vaddr && rela_vaddr < p_vaddr + p_filesz {
+            rela_file_offset = p_offset + (rela_vaddr - p_vaddr);
+            break;
+        }
+    }
 
     // Apply each Elf64_Rela entry: { r_offset(8), r_info(8), r_addend(8) }
     const RELA_ENTRY_SIZE: usize = 24;
@@ -454,15 +447,11 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
 
     const PT_LOAD: u32 = 1;
 
-    // VMAR offset for the mapping. Use 0 so the code is mapped at the
-    // start of the child process's VMAR. The actual mapped address
-    // (VMAR base + offset) is returned by vmar_map and used as the
-    // relocation base.
-    let base: usize = 0;
-
-    // Create a single VMO large enough for all segments.
-    // Find the total size first.
-    let mut total_size: usize = 0;
+    // Find the ELF's address range: minimum and maximum vaddr across
+    // all PT_LOAD segments. The min_vaddr is the link base — the
+    // address the ELF expects to be loaded at.
+    let mut min_vaddr: usize = usize::MAX;
+    let mut max_vaddr: usize = 0;
     for i in 0..e_phnum {
         let ph = &data[e_phoff + i * e_phentsize..];
         let p_type = u32::from_le_bytes(ph[0..4].try_into().unwrap());
@@ -471,12 +460,21 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
         }
         let p_vaddr = u64::from_le_bytes(ph[16..24].try_into().unwrap()) as usize;
         let p_memsz = u64::from_le_bytes(ph[40..48].try_into().unwrap()) as usize;
+        if p_vaddr < min_vaddr {
+            min_vaddr = p_vaddr;
+        }
         let seg_end = p_vaddr + p_memsz;
-        if seg_end > total_size {
-            total_size = seg_end;
+        if seg_end > max_vaddr {
+            max_vaddr = seg_end;
         }
     }
+    if min_vaddr == usize::MAX {
+        min_vaddr = 0;
+    }
+    // Page-align the base down.
+    let elf_base = min_vaddr & !(PAGE_SIZE - 1);
 
+    let total_size = max_vaddr - elf_base;
     let total_pages = total_size.div_ceil(PAGE_SIZE);
     let vmo_size = total_pages * PAGE_SIZE;
 
@@ -485,7 +483,9 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
         zx_vmo_create(vmo_size as u64, 0, &mut code_vmo)
     });
 
-    // Write each PT_LOAD segment into the VMO at its virtual address offset.
+    // Write each PT_LOAD segment into the VMO at (p_vaddr - elf_base).
+    // The VMO starts at the page-aligned ELF base, so segment data is
+    // at the correct offset within the VMO.
     for i in 0..e_phnum {
         let ph = &data[e_phoff + i * e_phentsize..];
         let p_type = u32::from_le_bytes(ph[0..4].try_into().unwrap());
@@ -501,7 +501,7 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
                 zx_vmo_write(
                     code_vmo,
                     data[p_offset..].as_ptr(),
-                    p_vaddr as u64,
+                    (p_vaddr - elf_base) as u64,
                     p_filesz,
                 )
             });
@@ -515,16 +515,21 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
     });
     code_vmo = exec_vmo;
 
-    // Map the entire VMO as a single RWX region at the load base.
-    let vm_flags =
-        ZX_VM_SPECIFIC | ZX_VM_MAP_RANGE | ZX_VM_PERM_READ | ZX_VM_PERM_WRITE | ZX_VM_PERM_EXECUTE;
+    // Map the entire VMO into the child process's VMAR.
+    // Let the VMAR allocator choose the address — the entry point is
+    // computed as mapped_addr + (e_entry - elf_base). For PIE binaries
+    // (elf_base=0), any address works because relocations are applied.
+    // For non-PIE binaries, this only works if the link base matches
+    // the VMAR's allocation (which it does when link base equals
+    // USER_ASPACE_BASE and the VMAR is empty).
+    let vm_flags = ZX_VM_MAP_RANGE | ZX_VM_PERM_READ | ZX_VM_PERM_WRITE | ZX_VM_PERM_EXECUTE;
 
     let mut mapped_addr: usize = 0;
     check("vmar_map(elf)", unsafe {
         zx_vmar_map(
             vmar,
             vm_flags,
-            base,
+            0, // offset ignored for non-SPECIFIC maps
             code_vmo,
             0,
             vmo_size,
@@ -533,15 +538,17 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
     });
 
     // Apply ELF relocations using the actual mapped address as base.
-    // The VMAR base may be non-zero (e.g. USER_ASPACE_BASE = 0x200000),
-    // so mapped_addr differs from the raw ELF vaddr.
-    // Relocations write to the VMO which is shared with the mapping.
+    // For PIE binaries linked at base 0, mapped_addr is the load bias.
+    // For non-PIE binaries, mapped_addr == elf_base and relocations are
+    // a no-op (no RELA entries).
     apply_elf_relocations(data, e_phoff, e_phentsize, e_phnum, code_vmo, mapped_addr);
 
-    let map_end = mapped_addr + vmo_size;
-    let entry = mapped_addr + e_entry;
+    // Return the entry point (absolute address) and the end of the
+    // mapping (absolute address, for placing stack/vDSO after it).
+    let map_end_offset = mapped_addr + vmo_size;
+    let entry = mapped_addr + (e_entry - elf_base);
     debug_print(b"userstart: ELF loaded\n");
-    (entry, map_end)
+    (entry, map_end_offset)
 }
 
 /// Fallback: load flat binary (no ELF headers).
