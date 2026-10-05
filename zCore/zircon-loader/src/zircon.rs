@@ -273,6 +273,7 @@ async fn run_user(thread: CurrentThread) {
     };
     thread.handle_exception(ExceptionType::ThreadStarting).await;
 
+    let mut ready_since: u128 = hal_impl::timer::timer_now().as_nanos();
     loop {
         // wait
         let mut ctx = thread.wait_for_run().await;
@@ -280,8 +281,15 @@ async fn run_user(thread: CurrentThread) {
             break;
         }
 
+        // Accumulate time spent in the ready queue (waiting to be scheduled).
+        let now = hal_impl::timer::timer_now().as_nanos();
+        let waited = now.saturating_sub(ready_since);
+        if waited > 0 {
+            thread.queue_time_add(waited);
+        }
+
         // run
-        let tmp_time = hal_impl::timer::timer_now().as_nanos();
+        let tmp_time = now;
         thread.mark_uspace_enter(tmp_time);
 
         // * Attention
@@ -305,6 +313,8 @@ async fn run_user(thread: CurrentThread) {
             }
             thread.handle_exception(e).await;
         }
+        // Mark when the thread becomes ready again (for queue_time tracking).
+        ready_since = hal_impl::timer::timer_now().as_nanos();
     }
     thread.handle_exception(ExceptionType::ThreadExiting).await;
 

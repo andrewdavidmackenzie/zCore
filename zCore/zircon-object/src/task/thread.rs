@@ -128,8 +128,10 @@ struct ThreadInner {
     first_thread: bool,
     /// Should The ThreadExiting exception do not block this thread
     killed: bool,
-    /// The time this thread has run on cpu
+    /// The time this thread has run on cpu (nanoseconds).
     time: u128,
+    /// Time spent in the ready queue waiting to be scheduled (nanoseconds).
+    queue_time: u128,
     /// Timestamp (nanos) when the thread last entered userspace (0 if not in userspace).
     uspace_enter_time: u128,
     flags: ThreadFlag,
@@ -408,6 +410,16 @@ impl Thread {
         let mut inner = self.inner.lock();
         inner.time += time;
         inner.uspace_enter_time = 0;
+    }
+
+    /// Add time spent in the ready queue (waiting to be scheduled).
+    pub fn queue_time_add(&self, time: u128) {
+        self.inner.lock().queue_time += time;
+    }
+
+    /// Get the accumulated queue time (nanoseconds).
+    pub fn queue_time(&self) -> u128 {
+        self.inner.lock().queue_time
     }
 
     /// Record that the thread is entering userspace now.
