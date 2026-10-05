@@ -8,7 +8,7 @@
 use crate::object::*;
 use crate::signal::port::*;
 use crate::vm::VmObject;
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use lock::Mutex;
 
@@ -21,9 +21,11 @@ pub struct Pager {
 impl_kobject!(Pager);
 
 /// Per-VMO pager association.
-#[allow(dead_code)] // port/key used when demand-paging notification is implemented
+/// Uses `Weak<VmObject>` to avoid reference cycles — the pager must
+/// not keep the VMO alive after all userspace handles are closed.
+#[allow(dead_code)] // port/key stored for future use (e.g. VMO complete notification)
 struct PagerVmo {
-    vmo: Arc<VmObject>,
+    vmo: Weak<VmObject>,
     port: Arc<Port>,
     key: u64,
 }
@@ -54,14 +56,8 @@ impl Pager {
         key: u64,
         size: u64,
     ) -> ZxResult<Arc<VmObject>> {
-        // ZX_VMO_TRAP_DIRTY (0x8) requires dirty-page notification
-        // support that is not yet implemented. Accepting it silently
-        // causes tests to hang waiting for pager packets that never
-        // arrive.  Reject it explicitly.
         const ZX_VMO_TRAP_DIRTY: u32 = 1 << 3;
-        if options & ZX_VMO_TRAP_DIRTY != 0 {
-            return Err(ZxError::NOT_SUPPORTED);
-        }
+        let trap_dirty = options & ZX_VMO_TRAP_DIRTY != 0;
         let pages = (size as usize).div_ceil(PAGE_SIZE);
         // Pager-backed VMOs are always resizable in Fuchsia.
         let vmo = VmObject::new_paged_with_resizable(true, pages);
@@ -70,10 +66,13 @@ impl Pager {
         // Associate the pager's port and key with the VMO for
         // demand-paging notifications.
         vmo.set_pager(port.clone(), key);
+        if trap_dirty {
+            vmo.set_trap_dirty(pages);
+        }
 
         let mut inner = self.inner.lock();
         inner.vmos.push(PagerVmo {
-            vmo: vmo.clone(),
+            vmo: Arc::downgrade(&vmo),
             port: port.clone(),
             key,
         });
@@ -86,7 +85,11 @@ impl Pager {
     /// forwarded to the pager.
     pub fn detach_vmo(&self, vmo: &Arc<VmObject>) -> ZxResult {
         let mut inner = self.inner.lock();
-        if let Some(pos) = inner.vmos.iter().position(|pv| Arc::ptr_eq(&pv.vmo, vmo)) {
+        if let Some(pos) = inner
+            .vmos
+            .iter()
+            .position(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
+        {
             inner.vmos.remove(pos);
             // Wake any threads blocked on pager faults before clearing
             // the pager association — they'll get NOT_FOUND.
@@ -145,36 +148,63 @@ impl Pager {
         &self,
         op: u32,
         vmo: &Arc<VmObject>,
-        _offset: u64,
-        _length: u64,
-        _data: u64,
+        offset: u64,
+        length: u64,
+        data: u64,
     ) -> ZxResult {
         // Verify the VMO belongs to this pager.
         let inner = self.inner.lock();
-        if !inner.vmos.iter().any(|pv| Arc::ptr_eq(&pv.vmo, vmo)) {
+        if !inner
+            .vmos
+            .iter()
+            .any(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
+        {
             return Err(ZxError::INVALID_ARGS);
         }
+        drop(inner); // Release pager lock before operating on VMO.
+                     // Validate range doesn't overflow.
+        (offset as usize)
+            .checked_add(length as usize)
+            .ok_or(ZxError::OUT_OF_RANGE)?;
         match op {
             ZX_PAGER_OP_FAIL => {
-                // Mark pages in the range as failed. Threads waiting
-                // for these pages will get an error.
-                // TODO: implement page failure notification
-                warn!("pager.op_range: FAIL op not fully implemented");
+                // Fail waiting threads for the specified range with
+                // the error code in `data`. Map common Fuchsia errors;
+                // default to IO for unknown codes.
+                let err = match data as i32 {
+                    -54 => ZxError::NO_SPACE,
+                    -5 => ZxError::IO,
+                    -29 => ZxError::IO_DATA_INTEGRITY,
+                    -45 => ZxError::BAD_STATE,
+                    _ => ZxError::IO,
+                };
+                vmo.fail_pager_requests_range(offset as usize, length as usize, err);
                 Ok(())
             }
             ZX_PAGER_OP_DIRTY => {
-                // Mark pages as dirty (for writeback pagers).
-                // TODO: implement dirty page tracking
-                warn!("pager.op_range: DIRTY op not fully implemented");
+                // Grant dirty permission for the range. Wakes threads
+                // blocked on dirty traps.
+                vmo.mark_pages_dirty(offset as usize, length as usize);
                 Ok(())
             }
             ZX_PAGER_OP_WRITEBACK_BEGIN | ZX_PAGER_OP_WRITEBACK_END => {
-                // Writeback operations for modified pages.
-                // TODO: implement writeback lifecycle
-                warn!("pager.op_range: WRITEBACK op not fully implemented");
+                // Writeback lifecycle — currently a no-op since we
+                // don't distinguish clean/writeback/dirty states.
                 Ok(())
             }
             _ => Err(ZxError::NOT_SUPPORTED),
+        }
+    }
+}
+
+impl Drop for Pager {
+    fn drop(&mut self) {
+        let inner = self.inner.lock();
+        for pv in &inner.vmos {
+            if let Some(vmo) = pv.vmo.upgrade() {
+                vmo.fail_pager_requests(ZxError::BAD_STATE);
+                vmo.clear_pager();
+            }
         }
     }
 }

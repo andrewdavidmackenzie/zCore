@@ -110,8 +110,8 @@ impl Syscall<'_> {
         vmo_handle: HandleValue,
         offset: u64,
         length: u64,
-        _buffer: usize,
-        _buffer_size: usize,
+        buffer: usize,
+        buffer_size: usize,
         mut actual: UserOutPtr<usize>,
         mut avail: UserOutPtr<usize>,
     ) -> ZxResult {
@@ -126,12 +126,30 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate range doesn't overflow.
-        let query_end = offset.checked_add(length).ok_or(ZxError::OUT_OF_RANGE)?;
-        let _ = query_end; // used for validation only
-                           // Without TRAP_DIRTY, report 0 dirty ranges.  A VMO that was
-                           // never opted into dirty tracking has no dirty state to report.
-        actual.write_if_not_null(0)?;
-        avail.write_if_not_null(0)?;
+        let _query_end = offset.checked_add(length).ok_or(ZxError::OUT_OF_RANGE)?;
+
+        let ranges = vmo.query_dirty_ranges(offset as usize, length as usize);
+        let avail_count = ranges.len();
+
+        // Each range is 24 bytes: { offset: u64, length: u64, options: u64 }
+        const RANGE_SIZE: usize = 24;
+        let max_entries = buffer_size / RANGE_SIZE;
+        let write_count = avail_count.min(max_entries);
+
+        if write_count > 0 && buffer != 0 {
+            let mut out = UserOutPtr::<u8>::from(buffer);
+            for &(off, len, opts) in ranges.iter().take(write_count) {
+                out.write_array(&off.to_ne_bytes())?;
+                out = UserOutPtr::from(out.as_addr() + 8);
+                out.write_array(&len.to_ne_bytes())?;
+                out = UserOutPtr::from(out.as_addr() + 8);
+                out.write_array(&opts.to_ne_bytes())?;
+                out = UserOutPtr::from(out.as_addr() + 8);
+            }
+        }
+
+        actual.write_if_not_null(write_count)?;
+        avail.write_if_not_null(avail_count)?;
         Ok(())
     }
 
