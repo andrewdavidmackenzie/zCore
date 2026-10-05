@@ -128,6 +128,8 @@ pub struct VmObject {
     base: KObjectBase,
     _counter: CountHelper,
     resizable: bool,
+    /// True if this VMO is a slice or reference child.
+    is_slice: bool,
     /// True if the VMO was created with SNAPSHOT + NO_WRITE.
     immutable: core::sync::atomic::AtomicBool,
     trait_: Arc<dyn VMObjectTrait>,
@@ -170,6 +172,7 @@ impl VmObject {
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         Arc::new(VmObject {
             resizable,
+            is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new(pages),
@@ -183,6 +186,7 @@ impl VmObject {
         Arc::new(VmObject {
             base: KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN),
             resizable: false,
+            is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPhysical::new(paddr, pages),
@@ -195,6 +199,7 @@ impl VmObject {
         let vmo = Arc::new(VmObject {
             base: KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN),
             resizable: false,
+            is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new_contiguous(pages, align_log2)?,
@@ -480,6 +485,7 @@ impl VmObject {
         let child = Arc::new(VmObject {
             base,
             resizable,
+            is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false), // Caller sets this after creation if needed
             _counter: CountHelper::new(),
             trait_,
@@ -536,14 +542,20 @@ impl VmObject {
         if self.trait_.cache_policy() != CachePolicy::Cached && !self.trait_.is_contiguous() {
             return Err(ZxError::BAD_STATE);
         }
+        // Copy content_size from parent (clamped to slice range) so
+        // streams on REFERENCE children see the correct size.
+        let parent_content_size = self.content_size();
+        let child_content_size = parent_content_size.saturating_sub(offset).min(size);
         let child = Arc::new(VmObject {
             base: KObjectBase::with(&self.base.name(), Signal::VMO_ZERO_CHILDREN),
             resizable: false,
+            is_slice: true,
             immutable: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectSlice::new(self.trait_.clone(), offset, size),
             inner: Mutex::new(VmObjectInner {
                 parent: Arc::downgrade(self),
+                content_size: child_content_size,
                 ..VmObjectInner::default()
             }),
         });
@@ -569,6 +581,11 @@ impl VmObject {
             return Err(ZxError::OUT_OF_RANGE);
         }
         if !self.resizable {
+            // Slices/references return ACCESS_DENIED; regular
+            // non-resizable VMOs return UNAVAILABLE.
+            if self.is_slice {
+                return Err(ZxError::ACCESS_DENIED);
+            }
             return Err(ZxError::UNAVAILABLE);
         }
         self.trait_.set_len(size)
