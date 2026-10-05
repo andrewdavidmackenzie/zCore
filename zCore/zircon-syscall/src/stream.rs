@@ -192,15 +192,21 @@ impl Syscall<'_> {
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::READ)?;
         let mut actual_count = 0usize;
         for io_vec in data.iter() {
-            let mut buf = {
-                let mut v = alloc::vec::Vec::new();
-                v.try_reserve(io_vec.len())
-                    .map_err(|_| ZxError::INVALID_ARGS)?;
-                v.resize(io_vec.len(), 0u8);
-                v
-            };
-            actual_count += stream.read(&mut buf)?;
-            io_vec.write_from_slice(&buf)?;
+            // Read from stream in page-sized chunks and copy each
+            // chunk to user space, avoiding per-iovec allocations.
+            let iov_len = io_vec.len();
+            let mut iov_offset = 0usize;
+            let mut chunk_buf = [0u8; 4096];
+            while iov_offset < iov_len {
+                let n = (iov_len - iov_offset).min(chunk_buf.len());
+                let read_n = stream.read(&mut chunk_buf[..n])?;
+                if read_n == 0 {
+                    break;
+                }
+                io_vec.write_at_offset(iov_offset, &chunk_buf[..read_n])?;
+                actual_count += read_n;
+                iov_offset += read_n;
+            }
         }
         actual_count_ptr.write_if_not_null(actual_count)?;
         Ok(())
@@ -228,16 +234,22 @@ impl Syscall<'_> {
         let stream = proc.get_object_with_rights::<Stream>(handle_value, Rights::READ)?;
         let mut actual_count = 0usize;
         for io_vec in data.iter() {
-            let mut buf = {
-                let mut v = alloc::vec::Vec::new();
-                v.try_reserve(io_vec.len())
-                    .map_err(|_| ZxError::INVALID_ARGS)?;
-                v.resize(io_vec.len(), 0u8);
-                v
-            };
-            actual_count += stream.read_at(&mut buf, offset)?;
-            io_vec.write_from_slice(&buf)?;
-            offset += actual_count;
+            // Read from stream in page-sized chunks and copy each
+            // chunk to user space, avoiding per-iovec allocations.
+            let iov_len = io_vec.len();
+            let mut iov_offset = 0usize;
+            let mut chunk_buf = [0u8; 4096];
+            while iov_offset < iov_len {
+                let n = (iov_len - iov_offset).min(chunk_buf.len());
+                let read_n = stream.read_at(&mut chunk_buf[..n], offset)?;
+                if read_n == 0 {
+                    break;
+                }
+                io_vec.write_at_offset(iov_offset, &chunk_buf[..read_n])?;
+                actual_count += read_n;
+                iov_offset += read_n;
+                offset += read_n;
+            }
         }
         actual_count_ptr.write_if_not_null(actual_count)?;
         Ok(())

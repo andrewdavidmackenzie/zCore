@@ -445,7 +445,9 @@ impl<P: Read> UserPtr<u8, P> {
             return Ok(String::new());
         }
         self.check()?;
-        let mut buf = Vec::<u8>::with_capacity(len);
+        // Use try_reserve to return an error instead of panicking on OOM.
+        let mut buf = Vec::<u8>::new();
+        buf.try_reserve(len).map_err(|_| Error::InvalidLength)?;
         unsafe {
             buf.set_len(len);
             copy_from_user(buf.as_mut_ptr(), self.0, len)?;
@@ -545,7 +547,87 @@ impl<T, P: Write> UserPtr<T, P> {
     }
 }
 
+/// Default chunk size for chunked user-copy operations (one page).
+const CHUNK_SIZE: usize = 4096;
+
+impl<P: Read> UserPtr<u8, P> {
+    /// Copy data from user space in fixed-size chunks, calling `f` for each chunk.
+    ///
+    /// Never allocates more than `CHUNK_SIZE` bytes of kernel memory at a time.
+    /// The closure receives each chunk and returns the number of bytes consumed.
+    /// Returns the total number of bytes consumed across all chunks.
+    ///
+    /// The error type `E` must implement `From<Error>` so that user-copy
+    /// faults are automatically converted. This allows callers to use
+    /// `ZxError` (or any other error type) directly in the closure.
+    pub fn for_each_chunk<E: From<Error>>(
+        &self,
+        total_len: usize,
+        mut f: impl FnMut(&[u8]) -> core::result::Result<usize, E>,
+    ) -> core::result::Result<usize, E> {
+        if total_len == 0 {
+            return Ok(0);
+        }
+        self.check().map_err(E::from)?;
+        let mut buf = [0u8; CHUNK_SIZE];
+        let mut offset = 0usize;
+        let mut total_consumed = 0usize;
+        while offset < total_len {
+            let chunk_len = (total_len - offset).min(CHUNK_SIZE);
+            unsafe {
+                copy_from_user(
+                    buf.as_mut_ptr(),
+                    (self.0 as *const u8).add(offset),
+                    chunk_len,
+                )
+                .map_err(E::from)?;
+            }
+            let consumed = f(&buf[..chunk_len])?;
+            total_consumed += consumed;
+            offset += chunk_len;
+        }
+        Ok(total_consumed)
+    }
+}
+
 impl<P: Write> UserPtr<u8, P> {
+    /// Copy data to user space in fixed-size chunks, calling `f` to fill each chunk.
+    ///
+    /// Never allocates more than `CHUNK_SIZE` bytes of kernel memory at a time.
+    /// The closure fills the provided buffer and returns the number of bytes
+    /// actually produced. A return of 0 stops iteration (source exhausted).
+    /// Returns the total number of bytes written to user space.
+    ///
+    /// The error type `E` must implement `From<Error>` so that user-copy
+    /// faults are automatically converted.
+    pub fn for_each_chunk_mut<E: From<Error>>(
+        &mut self,
+        total_len: usize,
+        mut f: impl FnMut(&mut [u8]) -> core::result::Result<usize, E>,
+    ) -> core::result::Result<usize, E> {
+        if total_len == 0 {
+            return Ok(0);
+        }
+        self.check().map_err(E::from)?;
+        let mut buf = [0u8; CHUNK_SIZE];
+        let mut offset = 0usize;
+        let mut total_written = 0usize;
+        while offset < total_len {
+            let chunk_len = (total_len - offset).min(CHUNK_SIZE);
+            let produced = f(&mut buf[..chunk_len])?;
+            if produced == 0 {
+                break;
+            }
+            let write_len = produced.min(chunk_len);
+            unsafe {
+                copy_to_user(self.0.add(offset), buf.as_ptr(), write_len).map_err(E::from)?;
+            }
+            total_written += write_len;
+            offset += write_len;
+        }
+        Ok(total_written)
+    }
+
     // Copies the given string to the destination and appends a `\0` for C-style null termination.
     /// Copies `s` to `self`, then write a `'\0'` for c style string.
     pub fn write_cstring(&mut self, s: &str) -> Result<()> {
@@ -721,6 +803,26 @@ impl<P: Policy> IoVec<P> {
             copy_from_user(buf.as_mut_ptr(), self.ptr.0, len)?;
         }
         Ok(buf)
+    }
+
+    /// Copy data from a kernel buffer into user memory at the given byte offset.
+    ///
+    /// Writes up to `data.len()` bytes starting at `self.ptr + offset`.
+    /// Returns the number of bytes written.
+    pub fn write_at_offset(&self, offset: usize, data: &[u8]) -> Result<usize> {
+        if self.ptr.is_null() {
+            return Err(Error::InvalidVectorAddress);
+        }
+        self.ptr.check()?;
+        let remaining = self.len.saturating_sub(offset);
+        let len = core::cmp::min(data.len(), remaining);
+        if len == 0 {
+            return Ok(0);
+        }
+        unsafe {
+            copy_to_user(self.ptr.0.add(offset), data.as_ptr(), len)?;
+        }
+        Ok(len)
     }
 
     /// Copy data from a kernel buffer into user memory.

@@ -38,11 +38,15 @@ impl Syscall<'_> {
         );
         if (count == 0 || !user_bytes.is_null()) && options == 0 {
             self.check_user_buffer_read(user_bytes.as_addr(), count)?;
-            let actual_count = self
+            let socket = self
                 .thread
                 .proc()
-                .get_object_with_rights::<Socket>(handle_value, Rights::WRITE)?
-                .write(&user_bytes.read_array(count)?)?;
+                .get_object_with_rights::<Socket>(handle_value, Rights::WRITE)?;
+            // Socket capacity is bounded at SOCKET_SIZE (256 KiB).
+            // read_array uses try_reserve internally for OOM safety.
+            // We keep a single read+write here because datagram sockets
+            // require the entire message in one write() call.
+            let actual_count = socket.write(&user_bytes.read_array(count)?)?;
             actual_count_ptr.write_if_not_null(actual_count)?;
             Ok(())
         } else {

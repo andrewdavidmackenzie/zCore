@@ -8,6 +8,11 @@ impl Syscall<'_> {
     /// Clients that require a large volume of randomness should consider using these bytes to seed a user-space random number generator for better performance.
     pub fn sys_cprng_draw_once(&self, mut buf: UserOutPtr<u8>, len: usize) -> ZxResult {
         info!("cprng_draw_once: buf=({:?}; {:?})", buf, len);
+        // Fuchsia caps cprng_draw_once at ZX_CPRNG_DRAW_MAX_LEN (256 bytes).
+        const ZX_CPRNG_DRAW_MAX_LEN: usize = 256;
+        if len > ZX_CPRNG_DRAW_MAX_LEN {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let mut res = vec![0u8; len];
         // Fill random bytes to the buffer
         hal_impl::rand::fill_random(&mut res);
