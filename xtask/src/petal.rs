@@ -333,8 +333,17 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
 
     const PETAL_BINS: &[&str] = &["hello", "channel-test", "vmo-test"];
 
+    // Include prebuilt core-tests-standalone if available for this arch.
+    let prebuilt_cts = PROJECT_DIR
+        .join("prebuilt/zircon-test")
+        .join(arch.name())
+        .join("core-tests-standalone");
+    let has_cts = prebuilt_cts.is_file();
+
     // Check if rootfs is already populated with all expected binaries
-    if PETAL_BINS.iter().all(|name| bin_dir.join(name).is_file()) {
+    if PETAL_BINS.iter().all(|name| bin_dir.join(name).is_file())
+        && (!has_cts || bin_dir.join("core-tests-standalone").is_file())
+    {
         return rootfs_dir;
     }
 
@@ -356,6 +365,38 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
             )
         });
         println!("  {} (ELF) -> {}", name, dest.display());
+    }
+
+    // Copy all prebuilt Fuchsia Zircon test binaries and shared
+    // libraries into rootfs. core-tests-standalone requires ld.so.1
+    // and several shared libraries (libc.so, libc++.so.2, etc.).
+    if has_cts {
+        let prebuilt_dir = PROJECT_DIR.join("prebuilt/zircon-test").join(arch.name());
+        let lib_dir = rootfs_dir.join("lib");
+        std::fs::create_dir_all(&lib_dir).ok();
+        for entry in std::fs::read_dir(&prebuilt_dir).unwrap() {
+            let entry = entry.unwrap();
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if name_str == "README.md" || name_str.starts_with('.') {
+                continue;
+            }
+            // Binaries go to bin/, libraries and ld.so.1 go to lib/
+            let dest = if name_str.contains(".so") || name_str == "ld.so.1" {
+                lib_dir.join(&name)
+            } else {
+                bin_dir.join(&name)
+            };
+            std::fs::copy(entry.path(), &dest).unwrap_or_else(|e| {
+                panic!(
+                    "failed to copy {} to {}: {}",
+                    entry.path().display(),
+                    dest.display(),
+                    e
+                )
+            });
+            println!("  {} (prebuilt) -> {}", name_str, dest.display());
+        }
     }
 
     println!("Zircon rootfs built at {}", rootfs_dir.display());

@@ -13,7 +13,7 @@ export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)
 	jollac2-build jollac2-sd \
 	x86-linux-build x86-linux-run x86-zircon-build x86-zircon-run x86-uefi-image x86-uefi-usb-linux x86-uefi-usb-zircon \
 	debug-qemu debug-gdb \
-	pre-push pre-push-quick demo-busybox demo-petal demo-zircon \
+	pre-push pre-push-quick core-tests core-tests-build demo-busybox demo-petal demo-zircon \
 	boot-logo uefi-firmware
 
 # Build the rootfs image and kernel for the target architecture.
@@ -330,6 +330,66 @@ zircon-boot-test:
 zircon-rootfs-test:
 	@echo "==> Zircon rootfs boot test ($(ARCH))..."
 	@tools/scripts/zircon-rootfs-test.sh $(ARCH)
+
+# ── Fuchsia core-tests-standalone ──────────────────────────────────────
+# Run core-tests-standalone on x86_64 in QEMU. This target handles the
+# full build chain: userstart, petal ZBI, kernel (Zircon-only, no linux),
+# rootfs with core-tests-standalone, boot image, and QEMU launch.
+#
+# The kernel is built WITHOUT the linux feature to avoid interference
+# between Linux init_spawn and the Zircon rootfs boot path.
+#
+# Usage:
+#   make core-tests                    # full run (15 min timeout)
+#   make core-tests TIMEOUT=300        # custom timeout in seconds
+#   make core-tests FILTER='PortTest.*' # run specific test suite
+#
+# Results are written to /tmp/qemu-core-tests.log.
+CORE_TESTS_TIMEOUT ?= 900
+CORE_TESTS_FILTER ?=
+CORE_TESTS_LOG ?= /tmp/qemu-core-tests.log
+
+# Build everything needed for core-tests: userstart, kernel (Zircon
+# base, no linux), rootfs with core-tests-standalone + shared libs,
+# and the UEFI boot image. Re-running is safe — cargo and the xtask
+# skip unchanged artifacts.
+core-tests-build:
+	@echo "==> [1/4] Building userstart..."
+	@CARGO_ENCODED_RUSTFLAGS="-Crelocation-model=pic" \
+		cargo build -p userstart --target x86_64-unknown-none \
+		--release --target-dir target/userstart -Z build-std=core,alloc
+	@echo "==> [2/4] Building kernel (Zircon base, no linux)..."
+	@USERSTART_ELF="$$(pwd)/target/userstart/x86_64-unknown-none/release/userstart" \
+		ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/core-tests-standalone$(if $(CORE_TESTS_FILTER),?--gtest_filter=$(CORE_TESTS_FILTER))" \
+		cargo zcore-build -m qemu-x86_64 --flavour ""
+	@echo "==> [3/4] Building Zircon rootfs (with core-tests-standalone + libs)..."
+	@cargo xtask zircon-rootfs --arch x86_64
+	@echo "==> [4/4] Creating boot image with rootfs ramdisk..."
+	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
+	@tools/x86-bootimage/target/release/x86-bootimage \
+		target/qemu-x86_64/release/kernel \
+		target/qemu-x86_64/release/boot.img \
+		--ramdisk target/qemu-x86_64/release/x86_64-zircon.img
+
+# Build and run the full core-tests suite.
+core-tests: core-tests-build
+	@echo "==> Running QEMU (timeout=$(CORE_TESTS_TIMEOUT)s, log=$(CORE_TESTS_LOG))..."
+	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
+	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
+		-machine q35 -smp 1 \
+		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+		-serial mon:stdio \
+		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
+		-drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
+		> $(CORE_TESTS_LOG) 2>&1 & \
+	PID=$$!; \
+	sleep $(CORE_TESTS_TIMEOUT); \
+	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
+	echo "=== Core-tests results ==="; \
+	P=$$(grep -c '\[       OK \]' $(CORE_TESTS_LOG) || true); \
+	F=$$(grep -c '\[  FAILED  \]' $(CORE_TESTS_LOG) || true); \
+	echo "Passed: $$P  Failed: $$F  Not reached: $$((1776 - $$P - $$F))"; \
+	tail -5 $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g'
 
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
 test: boot-test libc-test

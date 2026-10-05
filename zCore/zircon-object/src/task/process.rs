@@ -559,34 +559,33 @@ impl Process {
         Ok(object)
     }
 
-    /// Get a `Resource` handle by value, using `type_name()` instead of
-    /// `TypeId`-based downcasting. This avoids LTO-induced `TypeId`
-    /// mismatches that cause `downcast_arc::<Resource>()` to fail even
-    /// when the object truly is a `Resource`.
+    /// Get a `Resource` handle by value.
+    ///
+    /// Uses [`KernelObject::as_resource()`] instead of `TypeId`-based
+    /// downcasting to avoid LTO-induced `TypeId` instability. The
+    /// `as_resource()` method is a virtual call through the trait vtable
+    /// that only the real `Resource` type can implement (it returns
+    /// `&Resource` from `self`, which no other type can fabricate).
     pub fn get_resource(&self, handle_value: HandleValue) -> ZxResult<Arc<crate::dev::Resource>> {
         let handle = self.get_handle(handle_value)?;
-        if handle.object.type_name() != "Resource" {
-            return Err(ZxError::WRONG_TYPE);
-        }
-        // SAFETY: type_name() confirmed this is a Resource. The Arc's
-        // inner data pointer already points to a Resource struct.
-        // We bypass downcast_arc (which uses TypeId, broken under LTO)
-        // and cast the pointer directly.
+        // Verify the object is truly a Resource via the sealed as_resource() method.
+        let _ = handle.object.as_resource().ok_or(ZxError::WRONG_TYPE)?;
+        // SAFETY: as_resource() returned Some, confirming the concrete type.
+        // The Arc data pointer points to a Resource allocation.
         let ptr = Arc::into_raw(handle.object) as *const crate::dev::Resource;
         Ok(unsafe { Arc::from_raw(ptr) })
     }
 
-    /// Get a `Resource` handle with rights check, using `type_name()`
-    /// instead of `TypeId`-based downcasting.
+    /// Get a `Resource` handle with rights check.
+    ///
+    /// See [`get_resource`](Self::get_resource) for the downcast mechanism.
     pub fn get_resource_with_rights(
         &self,
         handle_value: HandleValue,
         desired_rights: Rights,
     ) -> ZxResult<Arc<crate::dev::Resource>> {
         let handle = self.get_handle(handle_value)?;
-        if handle.object.type_name() != "Resource" {
-            return Err(ZxError::WRONG_TYPE);
-        }
+        let _ = handle.object.as_resource().ok_or(ZxError::WRONG_TYPE)?;
         if !handle.rights.contains(desired_rights) {
             return Err(ZxError::ACCESS_DENIED);
         }
