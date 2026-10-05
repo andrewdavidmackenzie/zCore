@@ -35,6 +35,11 @@ pub fn on_task_notified(state: &mut SchedState, key: Key) {
     }
 }
 
+/// Get the number of ready tasks (for debugging).
+pub fn ready_count(state: &SchedState) -> usize {
+    state.ready.len()
+}
+
 /// Select the next task to run.
 pub fn pick_next(state: &mut SchedState) -> Option<Key> {
     state.ready.pop_front()

@@ -345,6 +345,11 @@ async fn handler_user_trap(
         thread
             .with_context(|ctx| ctx.set_field(UserContextField::ReturnValue, ret))
             .map_err(|_| ExceptionType::ThreadExiting)?;
+        // Preemptive yield after syscalls: ensures other threads
+        // get a chance to run even when this thread is in a tight
+        // syscall loop. Uses preempt_yield (not yield_now) so
+        // newly-notified tasks get priority over this task.
+        hal_impl::thread::preempt_yield().await;
         return Ok(());
     }
 
@@ -353,7 +358,15 @@ async fn handler_user_trap(
         TrapReason::Interrupt(vector) => {
             EXCEPTIONS_IRQ.add(1);
             hal_impl::interrupt::handle_irq(vector);
-            hal_impl::thread::yield_now().await;
+            // Use preempt_yield for timer interrupts: defers re-queueing
+            // this task until after scanning new notifications, ensuring
+            // newly-spawned child threads get a chance to run first.
+            // Other interrupts use regular yield_now (self-wake).
+            if vector == hal_impl::context::TIMER_INTERRUPT_VEC {
+                hal_impl::thread::preempt_yield().await;
+            } else {
+                hal_impl::thread::yield_now().await;
+            }
             Ok(())
         }
         TrapReason::PageFault(vaddr, flags) => {

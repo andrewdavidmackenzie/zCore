@@ -46,7 +46,7 @@ mod waker_page;
 /// on_yield() instead of relying on the waker self-wake mechanism.
 static YIELD_PENDING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
-/// Set the yield-pending flag (called from YieldFuture::poll).
+/// Set the yield-pending flag (called from PreemptYieldFuture::poll).
 pub fn set_yield_pending() {
     YIELD_PENDING.store(true, core::sync::atomic::Ordering::Release);
 }
