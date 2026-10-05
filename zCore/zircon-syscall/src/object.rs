@@ -539,8 +539,7 @@ impl Syscall<'_> {
             }
             Topic::KmemStats => {
                 // Fuchsia requires a root resource or system-info resource.
-                proc.get_object::<Resource>(handle)?
-                    .validate(ResourceKind::ROOT)?;
+                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
                 if buffer_size < core::mem::size_of::<KmemInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -556,8 +555,7 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::KmemStatsExtended => {
-                proc.get_object::<Resource>(handle)?
-                    .validate(ResourceKind::ROOT)?;
+                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
                 if buffer_size < core::mem::size_of::<KmemStatsExtendedInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -637,7 +635,7 @@ impl Syscall<'_> {
             }
             Topic::Resource => {
                 let mut info_ptr = UserOutPtr::<ResourceInfo>::from_addr_size(buffer, buffer_size)?;
-                let resource = proc.get_object_with_rights::<Resource>(handle, Rights::INSPECT)?;
+                let resource = proc.get_resource_with_rights(handle, Rights::INSPECT)?;
                 info_ptr.write(resource.get_info())?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
@@ -728,8 +726,7 @@ impl Syscall<'_> {
             }
             Topic::CpuStats => {
                 // Requires a root or system-info resource handle.
-                proc.get_object::<Resource>(handle)?
-                    .validate(ResourceKind::ROOT)?;
+                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
                 // Return one CPU stats record (single-CPU system).
                 let entry = CpuStatsInfo {
                     flags: 1, // ZX_INFO_CPU_STATS_FLAG_ONLINE
@@ -745,8 +742,7 @@ impl Syscall<'_> {
             }
             Topic::MemoryStall => {
                 // Requires a root or system-stall resource handle.
-                proc.get_object::<Resource>(handle)?
-                    .validate(ResourceKind::ROOT)?;
+                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
                 if buffer_size < core::mem::size_of::<MemoryStallInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -760,8 +756,7 @@ impl Syscall<'_> {
             }
             Topic::GuestStats => {
                 // Requires a root or system-info resource handle.
-                proc.get_object::<Resource>(handle)?
-                    .validate(ResourceKind::ROOT)?;
+                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
                 // Return one record per CPU with zeroed guest counters.
                 // GuestStats is per-CPU like CpuStats.
                 let entry_size = core::mem::size_of::<GuestStatsInfo>();

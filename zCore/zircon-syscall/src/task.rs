@@ -478,7 +478,7 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         // Validate: require root resource
-        proc.get_object_with_rights::<zircon_object::dev::Resource>(resource, Rights::empty())?
+        proc.get_resource_with_rights(resource, Rights::empty())?
             .validate(zircon_object::dev::ResourceKind::ROOT)?;
         // Check job policy
         proc.check_policy(PolicyCondition::NewProfile)?;

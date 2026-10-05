@@ -38,7 +38,11 @@ pub struct Resource {
     flags: ResourceFlags,
 }
 
-impl_kobject!(Resource);
+impl_kobject!(Resource
+    fn as_resource(&self) -> Option<&crate::dev::Resource> {
+        Some(self)
+    }
+);
 
 impl Resource {
     /// Create a new `Resource`.

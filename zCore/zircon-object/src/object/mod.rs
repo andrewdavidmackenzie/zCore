@@ -193,6 +193,16 @@ pub trait KernelObject: DowncastSync + Debug {
     fn inc_handle_count(&self) {}
     /// Decrement the handle count (called when a handle is removed from a process).
     fn dec_handle_count(&self) {}
+    /// Downcast to `Resource` without using `TypeId`.
+    ///
+    /// Returns `None` by default. Overridden by `impl_kobject!(Resource ...)`
+    /// to return `Some(self)`. This provides a type-safe downcast path that
+    /// is immune to LTO-induced `TypeId` instability, and cannot be spoofed
+    /// by other `KernelObject` implementations because only `Resource`
+    /// can return a valid `&Resource` reference from `self`.
+    fn as_resource(&self) -> Option<&crate::dev::Resource> {
+        None
+    }
 }
 
 impl_downcast!(sync KernelObject);

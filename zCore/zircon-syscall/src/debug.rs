@@ -28,8 +28,7 @@ impl Syscall<'_> {
             buf_size
         );
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(handle)?
-            .validate(ResourceKind::ROOT)?;
+        proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
         let mut vec = vec![0u8; buf_size as usize];
         let len = hal_impl::console::console_read(&mut vec).await;
         buf.write_array(&vec[..len])?;
@@ -104,7 +103,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         // Accept root resource or a SYSTEM resource covering DEBUG_BASE.
         if res.validate(ResourceKind::ROOT).is_err() {
             res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_DEBUG_BASE, 1)?;

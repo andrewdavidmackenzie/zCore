@@ -16,7 +16,7 @@ impl Syscall<'_> {
         let name = name.read_string(name_size as usize)?;
         info!("name={:?}", name);
         let proc = self.thread.proc();
-        let parent_rsrc = proc.get_object_with_rights::<Resource>(parent_rsrc, Rights::WRITE)?;
+        let parent_rsrc = proc.get_resource_with_rights(parent_rsrc, Rights::WRITE)?;
         let kind = ResourceKind::try_from(options & 0xFFFF).map_err(|_| ZxError::INVALID_ARGS)?;
         let flags = ResourceFlags::from_bits(options & 0xFFFF_0000).ok_or(ZxError::INVALID_ARGS)?;
         parent_rsrc.validate_ranged_resource(kind, base as usize, size as usize)?;

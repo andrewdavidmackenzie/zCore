@@ -28,7 +28,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        proc.get_object::<Resource>(resource)?
+        proc.get_resource(resource)?
             .validate(ResourceKind::HYPERVISOR)?;
 
         let guest = Guest::new()?;

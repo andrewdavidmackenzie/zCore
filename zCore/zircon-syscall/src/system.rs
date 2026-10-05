@@ -1,7 +1,5 @@
 use super::*;
-use zircon_object::dev::{
-    Resource, ResourceKind, ZX_RSRC_SYSTEM_MEXEC_BASE, ZX_RSRC_SYSTEM_TRACING_BASE,
-};
+use zircon_object::dev::{ResourceKind, ZX_RSRC_SYSTEM_MEXEC_BASE, ZX_RSRC_SYSTEM_TRACING_BASE};
 use zircon_object::signal::{Counter, Event};
 use zircon_object::task::Job;
 
@@ -67,8 +65,7 @@ impl Syscall<'_> {
         info!("system.powerctl: resource={:#x}, cmd={}", resource, cmd);
         let proc = self.thread.proc();
         // Validate: require root resource
-        let resource =
-            proc.get_object_with_rights::<zircon_object::dev::Resource>(resource, Rights::empty())?;
+        let resource = proc.get_resource_with_rights(resource, Rights::empty())?;
         resource.validate(zircon_object::dev::ResourceKind::ROOT)?;
 
         match cmd {
@@ -209,7 +206,7 @@ impl Syscall<'_> {
     ) -> ZxResult {
         info!("system.mexec: resource={:#x}", resource);
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
             res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_MEXEC_BASE, 1)?;
         }
@@ -246,7 +243,7 @@ impl Syscall<'_> {
             resource, buf_size
         );
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
             res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_MEXEC_BASE, 1)?;
         }
@@ -278,7 +275,7 @@ impl Syscall<'_> {
             resource, topic, count
         );
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         res.validate(ResourceKind::ROOT)?;
         if topic > 1 {
             return Err(ZxError::INVALID_ARGS);
@@ -319,7 +316,7 @@ impl Syscall<'_> {
             resource, topic
         );
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         res.validate(ResourceKind::ROOT)?;
         if topic > 1 {
             return Err(ZxError::INVALID_ARGS);
@@ -349,7 +346,7 @@ impl Syscall<'_> {
             resource, resume_deadline
         );
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         res.validate(ResourceKind::ROOT)?;
 
         // Wait until the resume deadline by polling the monotonic clock.
@@ -373,7 +370,7 @@ impl Syscall<'_> {
     pub fn sys_system_watch_memory_stall(&self, resource: HandleValue, _options: u32) -> ZxResult {
         info!("system.watch_memory_stall: resource={:#x}", resource);
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         res.validate(ResourceKind::ROOT)?;
         // No memory pressure tracking — return Ok immediately.
         Ok(())
@@ -396,7 +393,7 @@ impl Syscall<'_> {
             resource, offset, data_size
         );
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
             res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_TRACING_BASE, 1)?;
         }
@@ -423,7 +420,7 @@ impl Syscall<'_> {
             resource, action, options
         );
         let proc = self.thread.proc();
-        let res = proc.get_object::<Resource>(resource)?;
+        let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
             res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_TRACING_BASE, 1)?;
         }

@@ -89,8 +89,7 @@ impl Syscall<'_> {
     ) -> ZxResult {
         let proc = self.thread.proc();
         if vmex != INVALID_HANDLE {
-            proc.get_object::<Resource>(vmex)?
-                .validate(ResourceKind::VMEX)?;
+            proc.get_resource(vmex)?.validate(ResourceKind::VMEX)?;
         } else {
             proc.check_policy(PolicyCondition::AmbientMarkVMOExec)?;
         }
@@ -225,7 +224,7 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         proc.check_policy(PolicyCondition::NewVMO)?;
-        proc.get_object::<Resource>(resource)?
+        proc.get_resource(resource)?
             .validate_ranged_resource(ResourceKind::MMIO, paddr, size)?;
         let size = roundup_pages(size);
         if size == 0 || !page_aligned(paddr) {

@@ -38,44 +38,52 @@ Run the full `make pre-push` before the final push.
 ## Running Fuchsia core-tests
 
 The `core-tests-standalone` binary (1776 tests, 110 suites) validates
-Zircon syscall compatibility. Always use `-smp 1` to eliminate
-multi-core timing issues.
+Zircon syscall compatibility. Always use the Makefile target which
+handles the full build chain with correct flags.
+
+**Important:** The kernel must be built WITHOUT the `linux` feature
+(`--flavour ""`) to avoid interference between the Linux init_spawn
+and the Zircon rootfs boot path.
 
 ### Build and run
 ```bash
-# Build kernel
-ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/core-tests-standalone" cargo bin -m qemu-x86_64
+# Full run (15 min timeout, results in /tmp/qemu-core-tests.log)
+make core-tests
 
-# Create boot image
-tools/x86-bootimage/target/release/x86-bootimage \
-  target/qemu-x86_64/release/kernel \
-  target/qemu-x86_64/release/boot.img \
-  --ramdisk target/qemu-x86_64/release/x86_64-zircon.img
+# Run a specific test suite
+make core-tests CORE_TESTS_FILTER='PortTest.*'
 
-# Run in QEMU (1 CPU, kill after timeout)
-source tools/scripts/find-ovmf.sh && OVMF=$(find_ovmf)
-qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
-  -machine q35 -smp 1 \
-  -cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
-  -serial mon:stdio \
-  -drive if=pflash,format=raw,readonly=on,file="$OVMF" \
-  -drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
-  2>&1 > /tmp/qemu-test.log &
-PID=$!; sleep 900; kill $PID 2>/dev/null; wait $PID 2>/dev/null
+# Custom timeout (seconds)
+make core-tests CORE_TESTS_TIMEOUT=300
+```
+
+The `make core-tests` target performs all steps:
+1. Builds userstart (static PIE)
+2. Builds petal shell ZBI (kernel fallback)
+3. Builds kernel with `--flavour ""` (Zircon-only, no linux feature)
+4. Builds Zircon rootfs containing core-tests-standalone
+5. Creates UEFI boot image with rootfs ramdisk
+6. Runs QEMU with 1 CPU and the specified timeout
+
+Use `make core-tests-build` to prepare everything without running
+QEMU. Then use `make core-tests` to run, or run a filtered subset:
+```bash
+make core-tests-build
+make core-tests CORE_TESTS_FILTER='ChannelTest.*'
 ```
 
 ### Check results
 ```bash
 # Summary
-P=$(grep -c '\[       OK \]' /tmp/qemu-test.log)
-F=$(grep -c '\[  FAILED  \]' /tmp/qemu-test.log)
+P=$(grep -c '\[       OK \]' /tmp/qemu-core-tests.log)
+F=$(grep -c '\[  FAILED  \]' /tmp/qemu-core-tests.log)
 echo "Passed: $P  Failed: $F  Not reached: $((1776 - P - F))"
 
 # Passing tests
-grep '\[       OK \]' /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
+grep '\[       OK \]' /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
 
 # Where it stopped
-tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
+tail -5 /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
 ```
 
 ### Current status (phase 17)
@@ -165,6 +173,9 @@ tail -5 /tmp/qemu-test.log | sed 's/\x1b\[[0-9;]*m//g'
 - Pager query_dirty_ranges and query_vmo_stats stubs implemented
 
 ### Key notes
+- **Always use `make core-tests`** — never run the build steps manually.
+  The Makefile target ensures correct flags (`--flavour ""`, rootfs
+  with core-tests-standalone, boot image with ramdisk).
 - `LOG=warn` required — `LOG=info` messages get stripped by LTO in
   release builds. Use `hal_impl::console::console_write_fmt` for
   diagnostics that must survive LTO.
