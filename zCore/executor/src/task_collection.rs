@@ -132,7 +132,9 @@ pub struct TaskCollection {
     cpu_id: u8,
     future_collections: Vec<Mutex<FutureCollection>>,
     pub task_num: AtomicUsize,
-    sched_state: Mutex<crate::sched::SchedState>,
+    pub sched_state: Mutex<crate::sched::SchedState>,
+    /// Key of a task that yielded voluntarily, pending re-queue.
+    pending_yield: Mutex<Option<Key>>,
 }
 
 impl TaskCollection {
@@ -142,6 +144,7 @@ impl TaskCollection {
             future_collections: Vec::with_capacity(MAX_PRIORITY),
             task_num: AtomicUsize::new(0),
             sched_state: Mutex::new(crate::sched::new(cpu_id)),
+            pending_yield: Mutex::new(None),
         });
         let tc = unsafe { Arc::get_mut_unchecked(&mut task_collection) };
         for priority in 0..MAX_PRIORITY {
@@ -224,9 +227,23 @@ impl TaskCollection {
         }
     }
 
+    /// Store the key of a task that yielded voluntarily.
+    pub fn set_pending_yield(&self, key: Key) {
+        *self.pending_yield.lock() = Some(key);
+    }
+
     /// Select the next task to run using the scheduler.
     pub fn take_task(&self) -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {
         self.scan_notifications();
+        // Re-queue any task that yielded AFTER scanning notifications.
+        // This ensures newly-notified tasks (e.g., child threads) are
+        // in the queue BEFORE the yielding task, giving them priority.
+        {
+            let mut sched = self.sched_state.lock();
+            if let Some(yield_key) = self.pending_yield.lock().take() {
+                crate::sched::on_yield(&mut sched, yield_key);
+            }
+        }
         let key = crate::sched::pick_next(&mut self.sched_state.lock())?;
         let (priority, page_idx, subpage_idx) = unpack_key(key);
         let mut inner = self.get_mut_inner(priority);

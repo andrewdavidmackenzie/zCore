@@ -110,7 +110,7 @@ impl Executor {
             if task_info.is_none() {
                 task_info = crate::runtime::steal_task_from_other_cpu();
             }
-            if let Some((_key, task, waker_ref, droper)) = task_info {
+            if let Some((key, task, waker_ref, droper)) = task_info {
                 let waker_ref = Arc::new(waker_ref);
                 let waker = woke::waker_ref(&waker_ref);
                 let mut cx = Context::from_waker(&waker);
@@ -125,7 +125,12 @@ impl Executor {
                         droper.drop_by_ref();
                     }
                     Poll::Pending => {
-                        // Do Nothing
+                        // If the task yielded voluntarily, store the key
+                        // so take_task can re-queue it AFTER scanning
+                        // new notifications (fairness: new tasks first).
+                        if crate::take_yield_pending() {
+                            self.task_collection.set_pending_yield(key);
+                        }
                     }
                 };
                 if let ExecutorState::WEAK = self.state {
@@ -139,8 +144,7 @@ impl Executor {
                 // notified page before the notification arrived).
                 let retry = self.task_collection.take_task();
                 if retry.is_some() {
-                    // Found a task — process it instead of going idle.
-                    let (_key, task, waker_ref, droper) = retry.unwrap();
+                    let (retry_key, task, waker_ref, droper) = retry.unwrap();
                     let waker_ref = Arc::new(waker_ref);
                     let waker = woke::waker_ref(&waker_ref);
                     let mut cx = Context::from_waker(&waker);
@@ -153,7 +157,11 @@ impl Executor {
                         Poll::Ready(()) => {
                             droper.drop_by_ref();
                         }
-                        Poll::Pending => {}
+                        Poll::Pending => {
+                            if crate::take_yield_pending() {
+                                self.task_collection.set_pending_yield(retry_key);
+                            }
+                        }
                     };
                     if let ExecutorState::WEAK = self.state {
                         self.state = ExecutorState::KILLED;

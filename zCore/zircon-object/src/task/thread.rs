@@ -300,6 +300,7 @@ impl Thread {
             .change_state(ThreadState::Running, &self.base);
         let current = CurrentThread(self.clone());
         let future = thread_fn(current);
+
         hal_impl::thread::spawn(ThreadSwitchFuture::new(self.clone(), future));
         Ok(())
     }
