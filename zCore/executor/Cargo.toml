@@ -8,6 +8,8 @@ edition = "2021"
 # For bare-metal testing, if kernel panic or the root process is finished,
 # shutdown the machine and exit QEMU.
 baremetal-test = []
+# Use priority round-robin scheduler instead of cooperative FIFO.
+sched-priority = []
 
 [dependencies]
 unicycle = { git = "https://github.com/pleasewhy/unicycle", rev = "904f1c061d4784a5642e092d308cf523a9270c6e", default-features = false }

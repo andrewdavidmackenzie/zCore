@@ -25,13 +25,25 @@ extern crate alloc;
 #[macro_use]
 extern crate log;
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "sched-priority")] {
+        #[path = "sched/priority.rs"]
+        pub mod sched;
+    } else {
+        #[path = "sched/cooperative.rs"]
+        pub mod sched;
+    }
+}
+
 mod context;
 mod executor;
 mod runtime;
-mod task_collection;
+pub mod task_collection;
 mod waker_page;
 
-pub use runtime::{handle_timeout, init_runtimes, run_until_idle, sched_yield, spawn};
+pub use runtime::{
+    handle_timeout, init_runtimes, run_until_idle, sched_yield, spawn, spawn_with_priority,
+};
 
 #[macro_export]
 macro_rules! run_with_intr_saved_on {

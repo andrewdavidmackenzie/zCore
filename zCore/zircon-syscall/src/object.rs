@@ -698,12 +698,19 @@ impl Syscall<'_> {
                 } else {
                     0
                 };
+                // Compute queue time (time spent ready-but-not-running).
+                let queue_time: i64 =
+                    if let Ok(t) = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT) {
+                        t.queue_time() as i64
+                    } else {
+                        0
+                    };
                 // Write cpu_time and queue_time as raw i64 values.
                 let mut out = UserOutPtr::<i64>::from(buffer);
                 out.write(cpu_time)?;
                 // queue_time is at offset 8
                 let mut out2 = UserOutPtr::<i64>::from(buffer + core::mem::size_of::<i64>());
-                out2.write(0i64)?; // queue_time: 0 until ready-but-not-running tracking exists
+                out2.write(queue_time)?;
                 if info_size > 16 {
                     // V2: write page_fault_time and lock_contention_time (zeros)
                     let mut out3 =

@@ -77,7 +77,7 @@ impl ExecutorRuntime {
     // Add a task. Its initial state is notified, meaning it is ready to execute.
     fn add_task<F: Future<Output = ()> + 'static + Send>(&self, priority: usize, future: F) -> Key {
         debug_assert!(priority < MAX_PRIORITY);
-        self.task_collection.add_task(future)
+        self.task_collection.priority_add_task(priority, future)
     }
 
     fn remove_task(&self, key: Key) {
@@ -214,6 +214,19 @@ pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
     }
     let cpu_id = crate::arch::cpu_id();
     spawn_task(future, None, Some(cpu_id));
+    if enable {
+        crate::arch::intr_on();
+    }
+}
+
+/// Spawn a future with a specific priority on the current CPU.
+pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) {
+    let enable = crate::arch::intr_get();
+    if enable {
+        crate::arch::intr_off();
+    }
+    let cpu_id = crate::arch::cpu_id();
+    spawn_task(future, Some(priority), Some(cpu_id));
     if enable {
         crate::arch::intr_on();
     }

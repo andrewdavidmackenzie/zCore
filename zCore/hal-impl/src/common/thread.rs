@@ -12,3 +12,14 @@ pub async fn sleep_until(deadline: Duration) {
 pub async fn yield_now() {
     YieldFuture::default().await
 }
+
+/// Perform an executor-level context switch for preemptive scheduling.
+#[cfg(not(feature = "libos"))]
+pub fn sched_yield() {
+    executor::sched_yield();
+}
+
+#[cfg(feature = "libos")]
+pub fn sched_yield() {
+    // No-op for libos.
+}
