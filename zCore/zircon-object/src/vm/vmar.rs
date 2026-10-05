@@ -291,6 +291,13 @@ impl VmAddressRegion {
                 None => return Err(ZxError::INVALID_ARGS),
             }
         } else {
+            // For SPECIFIC maps, reject out-of-range offsets early to
+            // avoid overflow in determine_offset → test_map → self.addr + offset.
+            if let Some(off) = vmar_offset {
+                if off.checked_add(len).is_none_or(|end| end > self.size) {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+            }
             self.determine_offset(inner, vmar_offset, len, PAGE_SIZE)
                 .map_err(|e| {
                     // For SPECIFIC maps (offset is Some), convert overlap errors

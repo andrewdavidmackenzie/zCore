@@ -300,6 +300,11 @@ impl Syscall<'_> {
         if options.contains(VmOptions::PERM_WRITE) || options.contains(VmOptions::PERM_EXECUTE) {
             return Err(ZxError::INVALID_ARGS);
         }
+        // FAULT_BEYOND_STREAM_SIZE is not valid for clock mappings —
+        // clocks are not streams and don't have a content size.
+        if options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         // Handle pseudo-handle for root VMAR (ZX_HANDLE_VMAR_ROOT_SELF).
         let vmar = if let Some(obj) = self.resolve_pseudo_handle(handle) {
