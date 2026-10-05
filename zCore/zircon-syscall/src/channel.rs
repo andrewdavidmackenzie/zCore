@@ -100,19 +100,26 @@ impl Syscall<'_> {
             }
             user_bytes.read_array(num_bytes as usize)?
         };
-        let handles = user_handles.read_array(num_handles as usize)?;
-        let transfer_self = handles.contains(&handle_value);
+        let handle_values = user_handles.read_array(num_handles as usize)?;
+        let transfer_self = handle_values.contains(&handle_value);
+        // Look up the channel BEFORE consuming handles — if the handle
+        // list includes the channel's own handle, remove_handles would
+        // close it and the lookup would fail with BAD_HANDLE.
+        let channel = proc.get_object_with_rights::<Channel>(handle_value, Rights::WRITE);
+        // Consume handles immediately — Fuchsia guarantees handles are
+        // always consumed by channel_write regardless of subsequent errors.
+        let handles = if !handle_values.is_empty() {
+            proc.remove_handles(&handle_values)?
+        } else {
+            alloc::vec::Vec::new()
+        };
         if handles.len() > 64 {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        let channel = proc.get_object_with_rights::<Channel>(handle_value, Rights::WRITE)?;
-        // Check queue capacity BEFORE removing handles from the
-        // process, so handles are preserved on SHOULD_WAIT.
-        channel.check_write_capacity()?;
-        let handles = proc.remove_handles(&handles)?;
         if transfer_self {
             return Err(ZxError::NOT_SUPPORTED);
         }
+        let channel = channel?;
         for handle in handles.iter() {
             if !handle.rights.contains(Rights::TRANSFER) {
                 return Err(ZxError::ACCESS_DENIED);
