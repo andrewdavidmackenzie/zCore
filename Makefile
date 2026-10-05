@@ -354,6 +354,8 @@ CORE_TESTS_LOG ?= /tmp/qemu-core-tests.log
 # and the UEFI boot image. Re-running is safe — cargo and the xtask
 # skip unchanged artifacts.
 core-tests-build:
+	@test -f prebuilt/zircon-test/x86_64/core-tests-standalone || \
+		{ echo "ERROR: prebuilt/zircon-test/x86_64/core-tests-standalone not found"; exit 1; }
 	@echo "==> [1/4] Building userstart..."
 	@CARGO_ENCODED_RUSTFLAGS="-Crelocation-model=pic" \
 		cargo build -p userstart --target x86_64-unknown-none \
@@ -383,9 +385,13 @@ core-tests: core-tests-build
 		-drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
 		> $(CORE_TESTS_LOG) 2>&1 & \
 	PID=$$!; \
-	sleep $(CORE_TESTS_TIMEOUT); \
+	ELAPSED=0; \
+	while [ $$ELAPSED -lt $(CORE_TESTS_TIMEOUT) ]; do \
+		if ! kill -0 $$PID 2>/dev/null; then break; fi; \
+		sleep 1; ELAPSED=$$((ELAPSED + 1)); \
+	done; \
 	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
-	echo "=== Core-tests results ==="; \
+	echo "=== Core-tests results ($$ELAPSED s) ==="; \
 	P=$$(grep -c '\[       OK \]' $(CORE_TESTS_LOG) || true); \
 	F=$$(grep -c '\[  FAILED  \]' $(CORE_TESTS_LOG) || true); \
 	echo "Passed: $$P  Failed: $$F  Not reached: $$((1776 - $$P - $$F))"; \

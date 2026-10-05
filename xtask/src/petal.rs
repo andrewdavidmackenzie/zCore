@@ -340,10 +340,11 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
         .join("core-tests-standalone");
     let has_cts = prebuilt_cts.is_file();
 
-    // Check if rootfs is already populated with all expected binaries
-    if PETAL_BINS.iter().all(|name| bin_dir.join(name).is_file())
-        && (!has_cts || bin_dir.join("core-tests-standalone").is_file())
-    {
+    // Check if rootfs petal binaries are already built.
+    // Prebuilt files (core-tests-standalone, shared libs) are always
+    // re-copied to avoid stale versions when prebuilts are updated.
+    let petal_built = PETAL_BINS.iter().all(|name| bin_dir.join(name).is_file());
+    if petal_built && !has_cts {
         return rootfs_dir;
     }
 

@@ -14,6 +14,31 @@ use crate::vm::{VmarFlags, PAGE_SIZE};
 use crate::{define_count_helper, impl_kobject};
 use crate::{signal::Futex, vm::VmAddressRegion, ZxError, ZxResult};
 
+/// Downcast `Arc<dyn KernelObject>` to `Arc<Resource>` without `TypeId`.
+///
+/// Uses `as_resource()` to verify the concrete type, then confirms
+/// that the returned `&Resource` pointer matches the trait object's
+/// data pointer — proving the `Arc` allocation is truly a `Resource`,
+/// not a wrapper holding an inner `Arc<Resource>`.
+fn downcast_arc_to_resource(obj: Arc<dyn KernelObject>) -> ZxResult<Arc<crate::dev::Resource>> {
+    let resource_ref = obj.as_resource().ok_or(ZxError::WRONG_TYPE)?;
+    // Verify the &Resource points into the same allocation as the Arc.
+    // The trait object's data pointer (first word of the fat pointer)
+    // must equal the &Resource pointer.
+    let obj_data_ptr = &*obj as *const dyn KernelObject as *const () as usize;
+    let res_ptr = resource_ref as *const crate::dev::Resource as usize;
+    if obj_data_ptr != res_ptr {
+        // as_resource() returned a reference to a different allocation
+        // (e.g. a wrapper holding an inner Arc<Resource>). Reject.
+        return Err(ZxError::WRONG_TYPE);
+    }
+    // SAFETY: obj_data_ptr == res_ptr proves the Arc's inner allocation
+    // is a Resource struct. The raw pointer cast is equivalent to what
+    // downcast_arc does internally, without the broken TypeId check.
+    let ptr = Arc::into_raw(obj) as *const crate::dev::Resource;
+    Ok(unsafe { Arc::from_raw(ptr) })
+}
+
 /// Process abstraction
 ///
 /// ## SYNOPSIS
@@ -562,18 +587,10 @@ impl Process {
     /// Get a `Resource` handle by value.
     ///
     /// Uses [`KernelObject::as_resource()`] instead of `TypeId`-based
-    /// downcasting to avoid LTO-induced `TypeId` instability. The
-    /// `as_resource()` method is a virtual call through the trait vtable
-    /// that only the real `Resource` type can implement (it returns
-    /// `&Resource` from `self`, which no other type can fabricate).
+    /// downcasting to avoid LTO-induced `TypeId` instability.
     pub fn get_resource(&self, handle_value: HandleValue) -> ZxResult<Arc<crate::dev::Resource>> {
         let handle = self.get_handle(handle_value)?;
-        // Verify the object is truly a Resource via the sealed as_resource() method.
-        let _ = handle.object.as_resource().ok_or(ZxError::WRONG_TYPE)?;
-        // SAFETY: as_resource() returned Some, confirming the concrete type.
-        // The Arc data pointer points to a Resource allocation.
-        let ptr = Arc::into_raw(handle.object) as *const crate::dev::Resource;
-        Ok(unsafe { Arc::from_raw(ptr) })
+        downcast_arc_to_resource(handle.object)
     }
 
     /// Get a `Resource` handle with rights check.
@@ -585,12 +602,13 @@ impl Process {
         desired_rights: Rights,
     ) -> ZxResult<Arc<crate::dev::Resource>> {
         let handle = self.get_handle(handle_value)?;
-        let _ = handle.object.as_resource().ok_or(ZxError::WRONG_TYPE)?;
+        if handle.object.as_resource().is_none() {
+            return Err(ZxError::WRONG_TYPE);
+        }
         if !handle.rights.contains(desired_rights) {
             return Err(ZxError::ACCESS_DENIED);
         }
-        let ptr = Arc::into_raw(handle.object) as *const crate::dev::Resource;
-        Ok(unsafe { Arc::from_raw(ptr) })
+        downcast_arc_to_resource(handle.object)
     }
 
     /// Get the handle's information corresponding to `handle_value`.
