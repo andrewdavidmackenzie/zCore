@@ -857,6 +857,47 @@ impl VmAddressRegion {
         Err(ZxError::NOT_FOUND)
     }
 
+    /// Find the pager-backed VMO that maps `vaddr`, if any.
+    pub fn find_pager_vmo(&self, vaddr: VirtAddr) -> Option<Arc<VmObject>> {
+        let guard = self.inner.lock();
+        let inner = guard.as_ref()?;
+        if !self.contains(vaddr) {
+            return None;
+        }
+        for child in inner.children.iter() {
+            if let Some(vmo) = child.find_pager_vmo(vaddr) {
+                return Some(vmo);
+            }
+        }
+        for mapping in inner.mappings.iter() {
+            if mapping.contains(vaddr) && mapping.vmo.is_pager_backed() {
+                return Some(mapping.vmo.clone());
+            }
+        }
+        None
+    }
+
+    /// Convert a virtual address to the VMO offset in the mapping.
+    pub fn vaddr_to_vmo_offset(&self, vaddr: VirtAddr) -> Option<usize> {
+        let guard = self.inner.lock();
+        let inner = guard.as_ref()?;
+        if !self.contains(vaddr) {
+            return None;
+        }
+        for child in inner.children.iter() {
+            if let Some(off) = child.vaddr_to_vmo_offset(vaddr) {
+                return Some(off);
+            }
+        }
+        for mapping in inner.mappings.iter() {
+            if mapping.contains(vaddr) {
+                let map_inner = mapping.inner.lock();
+                return Some(map_inner.vmo_offset + (vaddr - map_inner.addr));
+            }
+        }
+        None
+    }
+
     fn for_each_mapping(&self, f: &mut impl FnMut(&Arc<VmMapping>)) {
         let guard = self.inner.lock();
         let inner = guard.as_ref().unwrap();

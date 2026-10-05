@@ -353,16 +353,46 @@ async fn handler_user_trap(
             match vmar.handle_page_fault(vaddr, flags) {
                 Ok(()) => Ok(()),
                 Err(ZxError::SHOULD_WAIT) => {
-                    // Pager-backed VMO: the pager has been notified.
-                    // Yield repeatedly to let the pager supply pages.
-                    // The thread will re-fault after this returns Ok(()).
-                    trace!("page fault: waiting for pager to supply pages");
-                    // Yield multiple times to give the pager process
-                    // time to run and supply the requested pages.
-                    for _ in 0..100 {
-                        hal_impl::thread::yield_now().await;
+                    // Pager-backed VMO: a page request has been sent to
+                    // the pager's port. Find the VMO and wait for the
+                    // page to be supplied, racing against thread kill.
+                    let vmo = vmar.find_pager_vmo(vaddr);
+                    let offset = vmar.vaddr_to_vmo_offset(vaddr);
+                    if let (Some(vmo), Some(offset)) = (vmo, offset) {
+                        let mut page_fut = core::pin::pin!(vmo.wait_for_page(offset));
+                        loop {
+                            if thread.state() == ThreadState::Dying
+                                || thread.state() == ThreadState::Dead
+                            {
+                                // Drop the future — the oneshot Receiver
+                                // is dropped, and the stale waiter entry
+                                // will be cleaned up on the next supply.
+                                return Err(ExceptionType::ThreadExiting);
+                            }
+                            // Poll the page future in a scoped block so
+                            // Context doesn't live across the yield.
+                            let poll_result = {
+                                let waker = core::task::Waker::noop();
+                                let mut cx = core::task::Context::from_waker(waker);
+                                page_fut.as_mut().poll(&mut cx)
+                            };
+                            match poll_result {
+                                core::task::Poll::Ready(Ok(())) => break Ok(()),
+                                core::task::Poll::Ready(Err(e)) => {
+                                    warn!("pager wait failed: {:?}", e);
+                                    break Err(ExceptionType::FatalPageFault);
+                                }
+                                core::task::Poll::Pending => {
+                                    hal_impl::thread::yield_now().await;
+                                }
+                            }
+                        }
+                    } else {
+                        for _ in 0..10 {
+                            hal_impl::thread::yield_now().await;
+                        }
+                        Ok(())
                     }
-                    Ok(())
                 }
                 Err(err) => {
                     #[cfg_attr(not(target_arch = "x86_64"), allow(unused_variables))]
