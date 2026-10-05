@@ -129,10 +129,10 @@ impl FutureCollection {
 }
 
 pub struct TaskCollection {
-    cpu_id: u8, // Just for debug, not used
+    cpu_id: u8,
     future_collections: Vec<Mutex<FutureCollection>>,
     pub task_num: AtomicUsize,
-    generator: Option<Mutex<Pin<Box<dyn Coroutine<Yield = Option<Key>, Return = ()>>>>>,
+    sched_state: Mutex<crate::sched::SchedState>,
 }
 
 impl TaskCollection {
@@ -141,16 +141,13 @@ impl TaskCollection {
             cpu_id,
             future_collections: Vec::with_capacity(MAX_PRIORITY),
             task_num: AtomicUsize::new(0),
-            generator: None,
+            sched_state: Mutex::new(crate::sched::new(cpu_id)),
         });
-        // SAFETY: no other Arc or Weak pointers
-        let tc_clone = task_collection.clone();
         let tc = unsafe { Arc::get_mut_unchecked(&mut task_collection) };
         for priority in 0..MAX_PRIORITY {
             tc.future_collections
                 .push(Mutex::new(FutureCollection::new(priority)));
         }
-        tc.generator = Some(Mutex::new(Box::pin(TaskCollection::generator(tc_clone))));
         task_collection
     }
 
@@ -159,23 +156,31 @@ impl TaskCollection {
         self.priority_add_task(DEFAULT_PRIORITY, future)
     }
 
-    /// remove the task correponding to the key.
+    /// Remove the task corresponding to the key.
     pub fn remove_task(&self, key: Key) {
         let mut inner = self.get_mut_inner(key >> PRIORITY_SHIFT);
         inner.remove(unmask_priority(key));
+        crate::sched::on_task_removed(&mut self.sched_state.lock(), key);
         self.task_num.fetch_sub(1, Ordering::Relaxed);
     }
 
-    fn priority_add_task<F: Future<Output = ()> + 'static + Send>(
+    pub fn priority_add_task<F: Future<Output = ()> + 'static + Send>(
         &self,
         priority: usize,
         future: F,
     ) -> Key {
-        debug_assert!(priority == DEFAULT_PRIORITY);
+        debug_assert!(
+            priority < MAX_PRIORITY,
+            "priority {} >= MAX {}",
+            priority,
+            MAX_PRIORITY
+        );
         let key = self.future_collections[priority].lock().insert(future);
         debug_assert!(key < TASK_NUM_PER_PRIORITY);
+        let full_key = key | (priority << PRIORITY_SHIFT);
+        crate::sched::on_task_added(&mut self.sched_state.lock(), full_key, priority);
         self.task_num.fetch_add(1, Ordering::Relaxed);
-        key | (priority << PRIORITY_SHIFT)
+        full_key
     }
 
     fn get_mut_inner(&self, priority: usize) -> MutexGuard<'_, FutureCollection> {
@@ -186,62 +191,44 @@ impl TaskCollection {
         self.task_num.load(Ordering::Relaxed)
     }
 
-    pub fn take_task(&self) -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {
-        let mut generator = self.generator.as_ref().unwrap().lock();
-        match generator.as_mut().resume(()) {
-            CoroutineState::Yielded(key) => {
-                if let Some(key) = key {
-                    let (priority, page_idx, subpage_idx) = unpack_key(key);
-                    let mut inner = self.get_mut_inner(priority);
-                    let task = inner.slab.get(unmask_priority(key)).unwrap().clone();
-                    let waker = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
-                    let droper = waker.clone();
-                    Some((key, task, waker, droper))
-                } else {
-                    None
+    /// Scan waker pages for notifications and dropped tasks.
+    /// Feeds notified tasks into the scheduler and removes dropped ones.
+    fn scan_notifications(&self) {
+        let mut sched = self.sched_state.lock();
+        for priority in 0..MAX_PRIORITY {
+            let mut inner = self.get_mut_inner(priority);
+            for page_idx in 0..inner.pages.len() {
+                let page = &inner.pages[page_idx];
+                let notified = page.take_notified();
+                let dropped = page.take_dropped();
+                if notified != 0 {
+                    for subpage_idx in BitIter::from(notified) {
+                        let key = pack_key(priority, page_idx, subpage_idx);
+                        crate::sched::on_task_notified(&mut sched, key);
+                    }
+                }
+                if dropped != 0 {
+                    for subpage_idx in BitIter::from(dropped) {
+                        let key = pack_key(priority, page_idx, subpage_idx);
+                        self.task_num.fetch_sub(1, Ordering::Relaxed);
+                        crate::sched::on_task_removed(&mut sched, key);
+                        inner.remove(key);
+                    }
                 }
             }
-            _ => panic!("unexpected value from resume"),
         }
     }
 
-    pub fn generator(self: Arc<Self>) -> impl Coroutine<Yield = Option<Key>, Return = ()> {
-        #[coroutine]
-        static move || {
-            loop {
-                let priority = DEFAULT_PRIORITY;
-                loop {
-                    let mut found_key: Option<Key> = None;
-                    let mut inner = self.get_mut_inner(priority);
-                    for page_idx in 0..inner.pages.len() {
-                        let page = &inner.pages[page_idx];
-                        let notified = page.take_notified();
-                        let dropped = page.take_dropped();
-                        if notified != 0 {
-                            for subpage_idx in BitIter::from(notified) {
-                                // the key corresponding to the task
-                                found_key = Some(pack_key(priority, page_idx, subpage_idx));
-                                drop(inner);
-                                yield found_key;
-                                inner = self.get_mut_inner(priority);
-                            }
-                        }
-                        if dropped != 0 {
-                            for subpage_idx in BitIter::from(dropped) {
-                                // the key corresponding to the task
-                                let key = pack_key(priority, page_idx, subpage_idx);
-                                self.task_num.fetch_sub(1, Ordering::Relaxed);
-                                inner.remove(key);
-                            }
-                        }
-                    }
-                    if found_key.is_none() {
-                        break;
-                    }
-                }
-                yield None;
-            }
-        }
+    /// Select the next task to run using the scheduler.
+    pub fn take_task(&self) -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {
+        self.scan_notifications();
+        let key = crate::sched::pick_next(&mut self.sched_state.lock())?;
+        let (priority, page_idx, subpage_idx) = unpack_key(key);
+        let mut inner = self.get_mut_inner(priority);
+        let task = inner.slab.get(unmask_priority(key))?.clone();
+        let waker = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
+        let droper = waker.clone();
+        Some((key, task, waker, droper))
     }
 }
 

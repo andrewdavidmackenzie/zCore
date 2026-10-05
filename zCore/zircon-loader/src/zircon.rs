@@ -341,8 +341,13 @@ async fn handler_user_trap(
     thread.put_context(ctx);
     match reason {
         TrapReason::Interrupt(vector) => {
-            EXCEPTIONS_IRQ.add(1); // FIXME
+            EXCEPTIONS_IRQ.add(1);
             hal_impl::interrupt::handle_irq(vector);
+            // For timer interrupts, do a proper executor-level context
+            // switch so other tasks get CPU time (preemptive scheduling).
+            if vector == hal_impl::context::TIMER_INTERRUPT_VEC {
+                hal_impl::thread::sched_yield();
+            }
             hal_impl::thread::yield_now().await;
             Ok(())
         }

@@ -21,6 +21,7 @@ colorless-log = []
 thead-maee = ["hal-impl/thead-maee"]
 link-user-img = []
 baremetal-test = ["executor/baremetal-test"]
+sched-priority = ["executor/sched-priority"]
 
 # --- Flavour ---
 # Zircon is the base flavour (always enabled).
