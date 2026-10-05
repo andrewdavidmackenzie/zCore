@@ -69,9 +69,12 @@ launch_qemu() {
         -kernel "$KERNEL" > "$output" 2>&1 &
       ;;
     x86_64)
-      tools/x86-bootimage/target/release/x86-bootimage \
+      if ! tools/x86-bootimage/target/release/x86-bootimage \
         "$KERNEL" \
-        target/qemu-x86_64/release/boot.img
+        target/qemu-x86_64/release/boot.img; then
+        echo "ERROR: x86-bootimage failed" >&2
+        return 1
+      fi
       qemu-system-x86_64 \
         -m 4G -display none -no-reboot -nographic \
         -machine q35 -smp 1 \

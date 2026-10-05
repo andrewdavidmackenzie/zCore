@@ -325,15 +325,22 @@ fn write_processargs_header(handle_info: &[u32], buf: &mut [u8]) -> usize {
 /// Apply ELF dynamic relocations from the PT_DYNAMIC segment.
 ///
 /// Scans program headers for PT_DYNAMIC, reads DT_RELA/DT_RELASZ entries,
-/// and applies R_X86_64_RELATIVE / R_AARCH64_RELATIVE relocations by writing
-/// `base + addend` into the VMO at each relocation offset.
+/// and applies R_X86_64_RELATIVE / R_AARCH64_RELATIVE relocations.
+///
+/// `mapped_addr` is the address where VMO offset 0 is mapped.
+/// `elf_base` is the minimum p_vaddr (the ELF's link base).
+/// The load bias is `mapped_addr - elf_base`.
+///
+/// Each R_*_RELATIVE relocation: write `load_bias + r_addend` at
+/// VMO offset `r_offset - elf_base`.
 fn apply_elf_relocations(
     data: &[u8],
     e_phoff: usize,
     e_phentsize: usize,
     e_phnum: usize,
     vmo: HandleValue,
-    base: usize,
+    mapped_addr: usize,
+    elf_base: usize,
 ) {
     const PT_LOAD: u32 = 1;
     const PT_DYNAMIC: u32 = 2;
@@ -418,10 +425,12 @@ fn apply_elf_relocations(
         let r_type = (r_info & 0xFFFFFFFF) as u32;
 
         if r_type == R_RELATIVE {
-            // R_*_RELATIVE: *(base + r_offset) = base + r_addend
-            let value = (base as i64 + r_addend) as u64;
+            // R_*_RELATIVE: write (load_bias + r_addend) at VMO offset (r_offset - elf_base).
+            let load_bias = mapped_addr as i64 - elf_base as i64;
+            let value = (load_bias + r_addend) as u64;
+            let vmo_off = (r_offset - elf_base) as u64;
             check("vmo_write(reloc)", unsafe {
-                zx_vmo_write(vmo, &value as *const u64 as *const u8, r_offset as u64, 8)
+                zx_vmo_write(vmo, &value as *const u64 as *const u8, vmo_off, 8)
             });
         }
         // Other relocation types are not expected in static-pie petal binaries.
@@ -537,11 +546,18 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
         )
     });
 
-    // Apply ELF relocations using the actual mapped address as base.
-    // For PIE binaries linked at base 0, mapped_addr is the load bias.
-    // For non-PIE binaries, mapped_addr == elf_base and relocations are
-    // a no-op (no RELA entries).
-    apply_elf_relocations(data, e_phoff, e_phentsize, e_phnum, code_vmo, mapped_addr);
+    // Apply ELF relocations. The load bias = mapped_addr - elf_base.
+    // For PIE binaries (elf_base=0), load_bias = mapped_addr.
+    // For non-PIE binaries, there are no RELA entries so this is a no-op.
+    apply_elf_relocations(
+        data,
+        e_phoff,
+        e_phentsize,
+        e_phnum,
+        code_vmo,
+        mapped_addr,
+        elf_base,
+    );
 
     // Return the entry point (absolute address) and the end of the
     // mapping (absolute address, for placing stack/vDSO after it).
