@@ -1761,6 +1761,8 @@ impl VmMappingInner {
 impl Drop for VmMapping {
     fn drop(&mut self) {
         self.unmap();
+        // Clean up expired weak refs from the VMO's mappings list.
+        self.vmo.cleanup_stale_mappings();
     }
 }
 

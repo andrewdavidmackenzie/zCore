@@ -140,21 +140,8 @@ pub struct VmObject {
 }
 
 impl_kobject!(VmObject
-    fn on_zero_handles(&self) {
-        // When all handles to a slice/reference VMO are closed,
-        // invalidate all page table entries and mark the VMO as
-        // dead. This matches Fuchsia's OnZeroHandles behavior —
-        // mapped pages become inaccessible (re-faults fail).
-        if self.is_slice {
-            self.dead
-                .store(true, core::sync::atomic::Ordering::Release);
-            let inner = self.inner.lock();
-            for mapping_weak in &inner.mappings {
-                if let Some(mapping) = mapping_weak.upgrade() {
-                    mapping.unmap_all_pages();
-                }
-            }
-        }
+    fn as_vmo(&self) -> Option<&crate::vm::VmObject> {
+        Some(self)
     }
 );
 define_count_helper!(VmObject);
@@ -764,6 +751,12 @@ impl VmObject {
         self.trait_.remove_mapping(mapping);
     }
 
+    /// Remove expired weak mapping references.
+    pub fn cleanup_stale_mappings(&self) {
+        let mut inner = self.inner.lock();
+        inner.mappings.retain(|m| m.strong_count() > 0);
+    }
+
     /// Returns an estimate of the number of unique VmAspaces that this object
     /// is mapped into.
     pub fn share_count(&self) -> usize {
@@ -784,8 +777,9 @@ impl VmObject {
     /// Regular (non-child) VMOs are NOT affected — it's valid in
     /// Fuchsia to close a VMO handle and keep using the mapping.
     pub fn on_zero_handles_impl(&self) {
-        let is_child = self.inner.lock().parent.upgrade().is_some();
-
+        // is_slice is permanent (set at creation for slice/reference).
+        // parent check covers COW children whose parent may still exist.
+        let is_child = self.is_slice || self.inner.lock().parent.upgrade().is_some();
         if !is_child {
             return;
         }
