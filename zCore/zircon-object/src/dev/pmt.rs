@@ -26,7 +26,7 @@ impl_kobject!(PinnedMemoryToken);
 impl Drop for PinnedMemoryToken {
     fn drop(&mut self) {
         if self.vmo.is_paged() {
-            self.vmo.unpin(self.offset, self.size).unwrap();
+            let _ = self.vmo.unpin(self.offset, self.size);
         }
     }
 }

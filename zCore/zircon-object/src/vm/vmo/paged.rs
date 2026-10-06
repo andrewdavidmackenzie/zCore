@@ -405,13 +405,20 @@ impl VMObjectTrait for VMObjectPaged {
         let start_page = offset / PAGE_SIZE;
         let end_page = pages(offset + len);
         for i in start_page..end_page {
-            let frame = inner.frames.get(&i).unwrap();
+            let frame = match inner.frames.get(&i) {
+                Some(f) => f,
+                None => return Err(ZxError::NOT_FOUND),
+            };
             if frame.pin_count == VM_PAGE_OBJECT_MAX_PIN_COUNT {
                 return Err(ZxError::UNAVAILABLE);
             }
         }
         for i in start_page..end_page {
-            inner.frames.get_mut(&i).unwrap().pin_count += 1;
+            if let Some(frame) = inner.frames.get_mut(&i) {
+                frame.pin_count += 1;
+            } else {
+                return Err(ZxError::NOT_FOUND);
+            }
             inner.pin_count += 1;
         }
         Ok(())
@@ -445,15 +452,22 @@ impl VMObjectTrait for VMObjectPaged {
         let start_page = offset / PAGE_SIZE;
         let end_page = pages(offset + len);
         for i in start_page..end_page {
-            let frame = inner.frames.get(&i).unwrap();
+            let frame = match inner.frames.get(&i) {
+                Some(f) => f,
+                None => return Err(ZxError::UNAVAILABLE),
+            };
             if frame.pin_count == 0 {
                 return Err(ZxError::UNAVAILABLE);
             }
         }
-        assert_ne!(inner.pin_count, 0);
+        if inner.pin_count == 0 {
+            return Err(ZxError::UNAVAILABLE);
+        }
         for i in start_page..end_page {
-            inner.frames.get_mut(&i).unwrap().pin_count -= 1;
-            inner.pin_count -= 1;
+            if let Some(frame) = inner.frames.get_mut(&i) {
+                frame.pin_count -= 1;
+                inner.pin_count -= 1;
+            }
         }
         Ok(())
     }
@@ -583,8 +597,11 @@ impl VMObjectPagedInner {
                 //   to transfer the page to the hidden node, losing data.
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if out_of_range {
-                    // can never be a hidden vmo
-                    assert!(!self.type_.is_hidden());
+                    if self.type_.is_hidden() {
+                        // Hidden nodes should not have out-of-range
+                        // page commits. Return error instead of panicking.
+                        return Err(ZxError::OUT_OF_RANGE);
+                    }
                 }
                 if self.type_.is_hidden() {
                     return Ok(CommitResult::NewPage(target_frame));
