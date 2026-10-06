@@ -290,7 +290,8 @@ impl Syscall<'_> {
                 if content_size > isize::MAX as usize {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
-                proc.get_object::<VmObject>(handle_value)?
+                // Setting content_size requires WRITE right.
+                proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?
                     .set_content_size_with_zero(content_size)
             }
             Property::ExceptionState => {

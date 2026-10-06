@@ -742,10 +742,18 @@ impl VmObject {
     /// Decommit pages in the given range.
     ///
     /// After decommitting, invalidates page table entries in all
-    /// mappings so subsequent reads fault in zero pages.
+    /// mappings (including on child/reference VMOs) so subsequent
+    /// reads fault in zero pages.
     pub fn decommit(&self, offset: usize, len: usize) -> ZxResult {
         self.trait_.decommit(offset, len)?;
-        // Invalidate PTEs so mappings see zero pages on next access.
+        self.invalidate_mappings(offset, len);
+        Ok(())
+    }
+
+    /// Invalidate PTEs in all mappings of this VMO and its children
+    /// for the given range. Used after decommit to ensure mappings
+    /// see zero pages on next access.
+    fn invalidate_mappings(&self, offset: usize, len: usize) {
         let inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let page_count = len / PAGE_SIZE;
@@ -754,7 +762,13 @@ impl VmObject {
                 mapping.range_change(start_page, page_count, RangeChangeOp::Unmap);
             }
         }
-        Ok(())
+        // Also invalidate mappings on child VMOs (especially
+        // reference/slice children that share pages with us).
+        let children: Vec<_> = inner.children.iter().filter_map(|c| c.upgrade()).collect();
+        drop(inner);
+        for child in children {
+            child.invalidate_mappings(offset, len);
+        }
     }
 
     /// Zero a range of bytes within the VMO.

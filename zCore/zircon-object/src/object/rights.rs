@@ -75,6 +75,9 @@ bitflags! {
         /// Allows socket disposition changes.
         const MANAGE_SOCKET = 1 << 20;
 
+        /// Allows resizing a VMO.
+        const RESIZE = 1 << 23;
+
         /// Used to duplicate a handle with the same rights.
         const SAME_RIGHTS = 1 << 31;
 
@@ -102,7 +105,7 @@ bitflags! {
         const DEFAULT_THREAD = Self::BASIC.bits | Self::IO.bits | Self::PROPERTY.bits | Self::DESTROY.bits | Self::SIGNAL.bits | Self::MANAGE_THREAD.bits;
 
         /// BASIC | IO | PROPERTY | MAP | SIGNAL
-        const DEFAULT_VMO = Self::BASIC.bits | Self::IO.bits | Self::PROPERTY.bits | Self::MAP.bits | Self::SIGNAL.bits;
+        const DEFAULT_VMO = Self::BASIC.bits | Self::IO.bits | Self::PROPERTY.bits | Self::MAP.bits | Self::SIGNAL.bits | Self::RESIZE.bits;
 
         /// BASIC | WAIT
         const DEFAULT_VMAR = Self::BASIC.bits & !Self::WAIT.bits;
