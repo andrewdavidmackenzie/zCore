@@ -631,8 +631,11 @@ impl VmObject {
         zero_until_offset: usize,
     ) -> ZxResult<usize> {
         // REFERENCE children delegate to the parent.
+        // Acquire parent Arc first, drop the guard, then call —
+        // avoids child→parent lock ordering deadlocks.
         if self.trait_.is_reference() {
-            if let Some(parent) = self.inner.lock().parent.upgrade() {
+            let parent = self.inner.lock().parent.upgrade();
+            if let Some(parent) = parent {
                 return parent.set_content_size_and_resize(size, zero_until_offset);
             }
         }
@@ -661,19 +664,16 @@ impl VmObject {
     pub fn content_size(&self) -> usize {
         // REFERENCE children delegate to the parent so they always
         // reflect the parent's current content_size.
-        if self.is_slice {
-            let inner = self.inner.lock();
-            if let Some(parent) = inner.parent.upgrade() {
-                // If we're a reference (full-VMO alias), use parent's content_size.
-                // Check by seeing if our trait_ is a reference slice.
-                if self.trait_.is_reference() {
-                    return parent.content_size();
-                }
+        if self.trait_.is_reference() {
+            // Acquire parent Arc first, then drop the lock before
+            // calling parent.content_size() to avoid child→parent
+            // lock ordering issues.
+            let parent = self.inner.lock().parent.upgrade();
+            if let Some(parent) = parent {
+                return parent.content_size();
             }
-            inner.content_size
-        } else {
-            self.inner.lock().content_size
         }
+        self.inner.lock().content_size
     }
 
     /// Get the size of the content stored in the VMO in bytes.
@@ -690,8 +690,11 @@ impl VmObject {
     /// content_size is properly initialized.
     pub fn set_content_size(&self, size: usize) -> ZxResult {
         // REFERENCE children delegate to the parent.
+        // Acquire parent Arc first, drop the guard, then call —
+        // avoids child→parent lock ordering deadlocks.
         if self.trait_.is_reference() {
-            if let Some(parent) = self.inner.lock().parent.upgrade() {
+            let parent = self.inner.lock().parent.upgrade();
+            if let Some(parent) = parent {
                 return parent.set_content_size(size);
             }
         }

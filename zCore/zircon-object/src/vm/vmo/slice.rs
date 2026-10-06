@@ -32,7 +32,10 @@ impl VMObjectSlice {
     }
 
     fn check_range(&self, offset: usize, len: usize) -> ZxResult {
-        if offset + len >= self.size {
+        // Use self.len() instead of self.size so reference slices
+        // reflect the parent's current size after resizing.
+        // Use > (not >=): a range ending exactly at size is valid.
+        if !offset.checked_add(len).is_some_and(|end| end <= self.len()) {
             return Err(ZxError::OUT_OF_RANGE);
         }
         Ok(())

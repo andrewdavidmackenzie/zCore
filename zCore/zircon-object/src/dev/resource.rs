@@ -98,11 +98,14 @@ impl Resource {
         if self.kind == ResourceKind::ROOT {
             return Ok(());
         }
-        if addr >= self.addr && (addr + len) <= (self.addr + self.len) {
-            Ok(())
-        } else {
-            Err(ZxError::OUT_OF_RANGE)
+        let req_end = addr.checked_add(len);
+        let res_end = self.addr.checked_add(self.len);
+        if let (Some(req_end), Some(res_end)) = (req_end, res_end) {
+            if addr >= self.addr && req_end <= res_end {
+                return Ok(());
+            }
         }
+        Err(ZxError::OUT_OF_RANGE)
     }
 
     /// Returns `Err(ZxError::INVALID_ARGS)` if the resource is not the root resource, and

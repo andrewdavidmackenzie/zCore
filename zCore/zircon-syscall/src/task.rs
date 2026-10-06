@@ -1,4 +1,4 @@
-use alloc::vec::Vec;
+use alloc::{string::ToString, vec::Vec};
 use core::convert::TryFrom;
 use hal_impl::context::UserContextField;
 use {super::*, zircon_object::task::*};
@@ -18,17 +18,14 @@ impl Syscall<'_> {
     ) -> ZxResult {
         // Fuchsia accepts arbitrarily long name buffers but truncates
         // at ZX_MAX_NAME_LEN (32 bytes including null terminator).
+        // Read raw bytes and truncate safely at a UTF-8 boundary.
         let name_len = name_size.min(ZX_MAX_NAME_LEN);
-        let name = match name.read_string(name_len) {
-            Ok(n) => n,
-            Err(e) => {
-                warn!(
-                    "proc.create: read_string failed: {:?}, name_size={}, name_ptr={:?}",
-                    e, name_size, name
-                );
-                return Err(e.into());
-            }
-        };
+        let raw = name.read_array(name_len)?;
+        let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+        let truncated = &raw[..end.min(ZX_MAX_NAME_LEN)];
+        let name = core::str::from_utf8(truncated)
+            .unwrap_or_else(|e| core::str::from_utf8(&truncated[..e.valid_up_to()]).unwrap_or(""))
+            .to_string();
         info!(
             "proc.create: job={:#x?}, name={:?}, options={:#x?}",
             job, name, options,
@@ -73,7 +70,12 @@ impl Syscall<'_> {
         mut thread_handle: UserOutPtr<HandleValue>,
     ) -> ZxResult {
         let name_len = name_size.min(ZX_MAX_NAME_LEN);
-        let name = name.read_string(name_len)?;
+        let raw = name.read_array(name_len)?;
+        let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+        let truncated = &raw[..end.min(ZX_MAX_NAME_LEN)];
+        let name = core::str::from_utf8(truncated)
+            .unwrap_or_else(|e| core::str::from_utf8(&truncated[..e.valid_up_to()]).unwrap_or(""))
+            .to_string();
         info!(
             "thread.create: proc={:#x?}, name={:?}, options={:#x?}",
             proc_handle, name, options,
