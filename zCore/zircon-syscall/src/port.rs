@@ -30,6 +30,7 @@ impl Syscall<'_> {
         let port = proc.get_object_with_rights::<Port>(handle_value, Rights::READ)?;
         let future = port.wait();
         pin_mut!(future);
+        self.thread.set_blocking_state(ThreadState::BlockedPort);
         let packet = self
             .thread
             .blocking_run(future, ThreadState::BlockedPort, deadline.into(), None)

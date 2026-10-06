@@ -203,6 +203,7 @@ impl Syscall<'_> {
         let cancel_token = proc.get_cancel_token(handle_value)?;
         let future = channel.call(wr_msg);
         pin_mut!(future);
+        self.thread.set_blocking_state(ThreadState::BlockedChannel);
         let rd_msg: MessagePacket = self
             .thread
             .blocking_run(
@@ -417,6 +418,7 @@ impl Syscall<'_> {
         let cancel_token = proc.get_cancel_token(handle_value)?;
         let future = channel.call(wr_msg);
         pin_mut!(future);
+        self.thread.set_blocking_state(ThreadState::BlockedChannel);
         let rd_msg: MessagePacket = self
             .thread
             .blocking_run(

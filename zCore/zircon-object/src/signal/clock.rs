@@ -48,7 +48,7 @@ impl Default for ClockInner {
             synthetic_offset: 0,
             rate_num: 1,
             rate_den: 1,
-            error_bound: 0,
+            error_bound: u64::MAX, // ZX_CLOCK_UNKNOWN_ERROR
             generation: 0,
         }
     }
@@ -153,19 +153,16 @@ impl Clock {
 
     /// Create a VMO containing the clock's transformation state.
     ///
-    /// The VMO holds a `zx_clock_details_v1_t` struct (64 bytes)
-    /// that userspace can read to compute clock time without a syscall.
-    /// All padding bytes in the page are filled with 0x0C
-    /// (`ZX_CLOCK_UNKNOWN_ERROR`) to prevent kernel memory leaks.
+    /// The VMO holds the clock details struct that userspace can
+    /// read to compute clock time without a syscall.  The entire
+    /// page is zero-filled first, then the struct is written on
+    /// top.  This ensures all padding bytes are zero (preventing
+    /// kernel memory leakage).
     pub fn create_state_vmo(&self) -> ZxResult<alloc::sync::Arc<crate::vm::VmObject>> {
         let details = self.get_details()?;
         let vmo = crate::vm::VmObject::new_paged(1);
-        // Fill entire page with ZX_CLOCK_UNKNOWN_ERROR sentinel (0x0C)
-        // before writing the actual clock details. This ensures all
-        // padding bytes — both intra-struct and tail-of-page — contain
-        // the sentinel, preventing kernel memory leakage.
-        const ZX_CLOCK_UNKNOWN_ERROR: u8 = 0x0C;
-        let mut page = [ZX_CLOCK_UNKNOWN_ERROR; hal::PAGE_SIZE];
+        // Zero-fill the page, then write the clock details.
+        let mut page = [0u8; hal::PAGE_SIZE];
         page[..details.len()].copy_from_slice(&details);
         vmo.write(0, &page)?;
         vmo.set_name("clock-state");

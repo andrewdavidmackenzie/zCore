@@ -3,6 +3,14 @@ use {crate::object::*, alloc::sync::Arc, bitflags::bitflags, numeric_enum_macro:
 numeric_enum! {
     #[repr(u32)]
     /// ResourceKind definition from fuchsia/zircon/system/public/zircon/syscalls/resource.h
+    ///
+    /// ABI values match Fuchsia exactly:
+    ///   MMIO=0, IRQ=1, IOPORT=2, SMC=4, SYSTEM=5, COUNT=6
+    ///
+    /// ROOT (0x3F) is an internal-only value — not part of the
+    /// userspace ABI.  HYPERVISOR and VMEX are system sub-resources
+    /// (ZX_RSRC_SYSTEM_HYPERVISOR_BASE, ZX_RSRC_SYSTEM_VMEX_BASE),
+    /// not separate top-level kinds.
     #[allow(missing_docs)]
     #[allow(clippy::upper_case_acronyms)]
     #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -10,13 +18,13 @@ numeric_enum! {
         MMIO = 0,
         IRQ = 1,
         IOPORT = 2,
-        HYPERVISOR = 3,
-        ROOT = 4,
-        VMEX = 5,
-        SMC = 6,
-        COUNT = 7,
-        /// System resource kind (used for power, debug, mexec, etc.)
-        SYSTEM = 0x3F,
+        // 3 is unused in Fuchsia ABI
+        SMC = 4,
+        SYSTEM = 5,
+        COUNT = 6,
+        /// Internal-only: the root resource that can create any
+        /// sub-resource. Not exposed as a userspace ABI value.
+        ROOT = 0x3F,
     }
 }
 
@@ -124,20 +132,37 @@ impl Resource {
 }
 
 // System resource sub-resource base IDs (for validate_ranged_resource).
-// These match zircon/system/public/zircon/syscalls/resource.h.
+// Values match zircon/system/public/zircon/syscalls/resource.h exactly.
 
-/// Base for power control (reboot, shutdown).
-pub const ZX_RSRC_SYSTEM_POWER_BASE: usize = 0;
-/// Base for mexec (soft reboot / kexec).
-pub const ZX_RSRC_SYSTEM_MEXEC_BASE: usize = 1;
+/// Base for hypervisor resource.
+pub const ZX_RSRC_SYSTEM_HYPERVISOR_BASE: usize = 0;
+/// Base for VMEX (VM-exec) resource.
+pub const ZX_RSRC_SYSTEM_VMEX_BASE: usize = 1;
 /// Base for debug operations (debug_send_command, mtrace).
 pub const ZX_RSRC_SYSTEM_DEBUG_BASE: usize = 2;
-/// Base for MSI interrupt allocation.
-pub const ZX_RSRC_SYSTEM_MSI_BASE: usize = 3;
+/// Base for info resource.
+pub const ZX_RSRC_SYSTEM_INFO_BASE: usize = 3;
+/// Base for CPU resource.
+pub const ZX_RSRC_SYSTEM_CPU_BASE: usize = 4;
+/// Base for power control (reboot, shutdown).
+pub const ZX_RSRC_SYSTEM_POWER_BASE: usize = 5;
+/// Base for mexec (soft reboot / kexec).
+pub const ZX_RSRC_SYSTEM_MEXEC_BASE: usize = 6;
+/// Base for energy info resource.
+pub const ZX_RSRC_SYSTEM_ENERGY_INFO_BASE: usize = 7;
+/// Base for IOMMU resource.
+pub const ZX_RSRC_SYSTEM_IOMMU_BASE: usize = 8;
+// 9 is unused
 /// Base for profile creation.
-pub const ZX_RSRC_SYSTEM_PROFILE_BASE: usize = 4;
+pub const ZX_RSRC_SYSTEM_PROFILE_BASE: usize = 10;
+/// Base for MSI interrupt allocation.
+pub const ZX_RSRC_SYSTEM_MSI_BASE: usize = 11;
+/// Base for debuglog resource.
+pub const ZX_RSRC_SYSTEM_DEBUGLOG_BASE: usize = 12;
+/// Base for stall resource.
+pub const ZX_RSRC_SYSTEM_STALL_BASE: usize = 13;
 /// Base for kernel tracing (ktrace).
-pub const ZX_RSRC_SYSTEM_TRACING_BASE: usize = 5;
+pub const ZX_RSRC_SYSTEM_TRACING_BASE: usize = 14;
 
 /// Information of a resource.
 #[repr(C)]

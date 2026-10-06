@@ -333,6 +333,7 @@ impl Syscall<'_> {
         let object = self.get_object_with_pseudo(handle, Rights::WAIT)?;
         let cancel_token = proc.get_cancel_token(handle)?;
         let future = object.wait_signal(signals);
+        self.thread.set_blocking_state(ThreadState::BlockedWaitOne);
         let signal = self
             .thread
             .blocking_run(
@@ -948,6 +949,7 @@ impl Syscall<'_> {
             waiters.push((object, item.wait_for));
         }
         let future = wait_signal_many(&waiters);
+        self.thread.set_blocking_state(ThreadState::BlockedWaitMany);
         let res = self
             .thread
             .blocking_run(future, ThreadState::BlockedWaitMany, deadline.into(), None)

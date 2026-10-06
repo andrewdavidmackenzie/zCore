@@ -105,7 +105,14 @@ impl Syscall<'_> {
     ) -> ZxResult {
         let proc = self.thread.proc();
         if vmex != INVALID_HANDLE {
-            proc.get_resource(vmex)?.validate(ResourceKind::VMEX)?;
+            let res = proc.get_resource(vmex)?;
+            if res.validate(ResourceKind::ROOT).is_err() {
+                res.validate_ranged_resource(
+                    ResourceKind::SYSTEM,
+                    zircon_object::dev::ZX_RSRC_SYSTEM_VMEX_BASE,
+                    1,
+                )?;
+            }
         } else {
             proc.check_policy(PolicyCondition::AmbientMarkVMOExec)?;
         }
