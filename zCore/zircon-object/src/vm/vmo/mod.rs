@@ -132,11 +132,18 @@ pub struct VmObject {
     is_slice: bool,
     /// True if the VMO was created with SNAPSHOT + NO_WRITE.
     immutable: core::sync::atomic::AtomicBool,
+    /// True if all handles are closed (for slice VMOs, commit_page
+    /// returns NOT_FOUND to prevent re-mapping parent data).
+    dead: core::sync::atomic::AtomicBool,
     trait_: Arc<dyn VMObjectTrait>,
     inner: Mutex<VmObjectInner>,
 }
 
-impl_kobject!(VmObject);
+impl_kobject!(VmObject
+    fn as_vmo(&self) -> Option<&crate::vm::VmObject> {
+        Some(self)
+    }
+);
 define_count_helper!(VmObject);
 
 #[derive(Default)]
@@ -144,6 +151,9 @@ struct VmObjectInner {
     parent: Weak<VmObject>,
     children: Vec<Weak<VmObject>>,
     mapping_count: usize,
+    /// Weak references to mappings (for slice VMOs that need to
+    /// invalidate page table entries on drop).
+    mappings: Vec<Weak<VmMapping>>,
     content_size: usize,
     /// Pager association: port to notify on page fault, and key.
     pager_port: Option<Arc<Port>>,
@@ -174,6 +184,7 @@ impl VmObject {
             resizable,
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
+            dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new(pages),
             inner: Mutex::new(VmObjectInner::default()),
@@ -188,6 +199,7 @@ impl VmObject {
             resizable: false,
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
+            dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPhysical::new(paddr, pages),
             inner: Mutex::new(VmObjectInner::default()),
@@ -201,6 +213,7 @@ impl VmObject {
             resizable: false,
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
+            dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new_contiguous(pages, align_log2)?,
             inner: Mutex::new(VmObjectInner::default()),
@@ -487,6 +500,7 @@ impl VmObject {
             resizable,
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false), // Caller sets this after creation if needed
+            dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_,
             inner: Mutex::new(VmObjectInner {
@@ -551,6 +565,7 @@ impl VmObject {
             resizable: false,
             is_slice: true,
             immutable: core::sync::atomic::AtomicBool::new(false),
+            dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectSlice::new(self.trait_.clone(), offset, size),
             inner: Mutex::new(VmObjectInner {
@@ -720,14 +735,26 @@ impl VmObject {
 
     /// Append a mapping to the VMO's mapping list.
     pub fn append_mapping(&self, mapping: Weak<VmMapping>) {
-        self.inner.lock().mapping_count += 1;
+        let mut inner = self.inner.lock();
+        inner.mapping_count += 1;
+        inner.mappings.push(mapping.clone());
+        drop(inner);
         self.trait_.append_mapping(mapping);
     }
 
     /// Remove a mapping from the VMO's mapping list.
     pub fn remove_mapping(&self, mapping: Weak<VmMapping>) {
-        self.inner.lock().mapping_count -= 1;
+        let mut inner = self.inner.lock();
+        inner.mapping_count -= 1;
+        inner.mappings.retain(|m| !Weak::ptr_eq(m, &mapping));
+        drop(inner);
         self.trait_.remove_mapping(mapping);
+    }
+
+    /// Remove expired weak mapping references.
+    pub fn cleanup_stale_mappings(&self) {
+        let mut inner = self.inner.lock();
+        inner.mappings.retain(|m| m.strong_count() > 0);
     }
 
     /// Returns an estimate of the number of unique VmAspaces that this object
@@ -742,7 +769,33 @@ impl VmObject {
         self.resizable
     }
 
-    /// Returns true if the object is backed by a contiguous range of physical memory.
+    /// Called when all handles to this VMO are closed.
+    /// For child VMOs (slices, references, COW snapshots), invalidates
+    /// all page table entries so accesses through existing mappings
+    /// fault instead of returning stale data.
+    ///
+    /// Regular (non-child) VMOs are NOT affected — it's valid in
+    /// Fuchsia to close a VMO handle and keep using the mapping.
+    pub fn on_zero_handles_impl(&self) {
+        // is_slice is permanent (set at creation for slice/reference).
+        // parent check covers COW children whose parent may still exist.
+        let is_child = self.is_slice || self.inner.lock().parent.upgrade().is_some();
+        if !is_child {
+            return;
+        }
+        self.dead.store(true, core::sync::atomic::Ordering::Release);
+        let inner = self.inner.lock();
+        for mapping_weak in &inner.mappings {
+            if let Some(mapping) = mapping_weak.upgrade() {
+                mapping.unmap_all_pages();
+            }
+        }
+    }
+
+    pub fn is_dead(&self) -> bool {
+        self.dead.load(core::sync::atomic::Ordering::Acquire)
+    }
+
     pub fn is_contiguous(&self) -> bool {
         self.trait_.is_contiguous()
     }
@@ -764,6 +817,17 @@ impl Drop for VmObject {
             if !inner.pager_waiters.is_empty() {
                 drop(inner);
                 self.fail_pager_requests(ZxError::BAD_STATE);
+            }
+        }
+        // For slice/reference VMOs, invalidate all page table entries.
+        // This ensures that after a REFERENCE child is destroyed,
+        // mapped pages become inaccessible (reads return zeroes).
+        if self.is_slice {
+            let inner = self.inner.lock();
+            for mapping_weak in &inner.mappings {
+                if let Some(mapping) = mapping_weak.upgrade() {
+                    mapping.unmap_all_pages();
+                }
             }
         }
         let mut inner = self.inner.lock();

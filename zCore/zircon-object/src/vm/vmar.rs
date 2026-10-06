@@ -1322,6 +1322,18 @@ impl VmMapping {
             .expect("failed to unmap")
     }
 
+    /// Invalidate all page table entries for this mapping.
+    /// Called when a REFERENCE child VMO is destroyed, to ensure
+    /// mapped pages become inaccessible.
+    pub fn unmap_all_pages(&self) {
+        let inner = self.inner.lock();
+        let page_count = inner.size / PAGE_SIZE;
+        let mut pg_table = self.page_table.lock();
+        for i in 0..page_count {
+            let _ = pg_table.unmap(inner.addr + i * PAGE_SIZE);
+        }
+    }
+
     fn fill_in_task_status(&self, task_stats: &mut TaskStatsInfo) {
         let (start_idx, end_idx) = {
             let inner = self.inner.lock();
@@ -1749,6 +1761,8 @@ impl VmMappingInner {
 impl Drop for VmMapping {
     fn drop(&mut self) {
         self.unmap();
+        // Clean up expired weak refs from the VMO's mappings list.
+        self.vmo.cleanup_stale_mappings();
     }
 }
 

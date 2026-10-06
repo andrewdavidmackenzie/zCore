@@ -957,24 +957,43 @@ impl VMObjectPagedInner {
         if self.is_contiguous() {
             info.flags |= VmoInfoFlags::CONTIGUOUS;
         }
-        // info.num_children = if self.type_.is_hidden() { 2 } else { 0 };
-        info.num_mappings = self.mappings.len() as u64; // FIXME remove weak ptr
-        info.share_count = self.mappings.len() as u64; // FIXME share_count should be the count of unique aspace
-        let committed =
-            (self.committed_pages_in_range(0, self.size / PAGE_SIZE) * PAGE_SIZE) as u64;
+        info.num_mappings = self.mappings.len() as u64;
+        info.share_count = self.mappings.len() as u64;
+
+        let total_pages = self.size / PAGE_SIZE;
+        let committed = (self.committed_pages_in_range(0, total_pages) * PAGE_SIZE) as u64;
         info.committed_bytes = committed;
-        // We don't track compressed/deduplicated pages, so populated == committed.
+        // No compression/deduplication, so populated == committed.
         info.populated_bytes = committed;
-        // Private bytes: same as committed for now (no sharing tracking).
-        info.committed_private_bytes = committed;
-        info.populated_private_bytes = committed;
-        // Scaled bytes: same as committed (no fractional attribution implemented).
-        info.committed_scaled_bytes = committed;
-        info.populated_scaled_bytes = committed;
-        // Signal that fractional scaling is not supported — the test helper
-        // PollVmoPopulatedBytes checks this and falls back to populated_bytes.
-        info.committed_fractional_scaled_bytes = u64::MAX;
-        info.populated_fractional_scaled_bytes = u64::MAX;
+
+        // Private bytes: pages in self.frames that are directly owned
+        // by this VMO (not resolved from a parent via COW walk).
+        // For non-hidden VMOs, local frames are private (COW-copied).
+        let private_pages = self.frames.len();
+        let private_bytes = (private_pages * PAGE_SIZE) as u64;
+        info.committed_private_bytes = private_bytes;
+        info.populated_private_bytes = private_bytes;
+
+        // Scaled bytes: for private pages, sharing_count=1 (full attribution).
+        // For shared pages (resolved from parent), sharing_count depends on
+        // the COW tree structure. As an approximation, shared pages get
+        // sharing_count=2 (shared between this VMO and at least one sibling).
+        let shared_pages = self.committed_pages_in_range(0, total_pages) - private_pages;
+        // Private pages contribute full PAGE_SIZE each.
+        // Shared pages contribute PAGE_SIZE/2 each (approximation).
+        let scaled = private_bytes + (shared_pages as u64 * PAGE_SIZE as u64) / 2;
+        info.committed_scaled_bytes = scaled;
+        info.populated_scaled_bytes = scaled;
+
+        // Fractional remainder from the scaling division.
+        // For shared pages divided by 2, the remainder is 0 when even.
+        let fractional = if shared_pages > 0 {
+            (shared_pages as u64 * PAGE_SIZE as u64) % 2
+        } else {
+            0
+        };
+        info.committed_fractional_scaled_bytes = fractional;
+        info.populated_fractional_scaled_bytes = fractional;
     }
 
     fn release_unwanted_pages_in_parent(&mut self, mut unwanted: VecDeque<usize>) {

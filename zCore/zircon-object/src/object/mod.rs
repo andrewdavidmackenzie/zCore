@@ -193,6 +193,14 @@ pub trait KernelObject: DowncastSync + Debug {
     fn inc_handle_count(&self) {}
     /// Decrement the handle count (called when a handle is removed from a process).
     fn dec_handle_count(&self) {}
+    /// Called after dec_handle_count when the handle count reaches zero.
+    /// Override in impl_kobject! for types that need cleanup.
+    fn on_zero_handles(&self) {}
+    /// Downcast to `VmObject` without using `TypeId`.
+    /// Returns `None` by default. Overridden for VmObject.
+    fn as_vmo(&self) -> Option<&crate::vm::VmObject> {
+        None
+    }
     /// Downcast to `Resource` without using `TypeId`.
     ///
     /// Returns `None` by default. Overridden by `impl_kobject!(Resource ...)`

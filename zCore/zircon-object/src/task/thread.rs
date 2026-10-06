@@ -676,8 +676,8 @@ impl CurrentThread {
             select_biased! {
                 ret = future.fuse() => ret.into_result(),
                 _ = killed.fuse() => Err(ZxError::STOP),
-                _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
                 _ = cancel_token.fuse() => Err(ZxError::CANCELED),
+                _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
             }
         } else {
             select_biased! {
