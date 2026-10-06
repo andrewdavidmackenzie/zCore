@@ -16,11 +16,10 @@ impl Syscall<'_> {
         mut proc_handle: UserOutPtr<HandleValue>,
         mut vmar_handle: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        // Fuchsia caps object names at ZX_MAX_NAME_LEN (32 bytes).
-        if name_size > ZX_MAX_NAME_LEN {
-            return Err(ZxError::INVALID_ARGS);
-        }
-        let name = match name.read_string(name_size) {
+        // Fuchsia accepts arbitrarily long name buffers but truncates
+        // at ZX_MAX_NAME_LEN (32 bytes including null terminator).
+        let name_len = name_size.min(ZX_MAX_NAME_LEN);
+        let name = match name.read_string(name_len) {
             Ok(n) => n,
             Err(e) => {
                 warn!(
@@ -73,11 +72,8 @@ impl Syscall<'_> {
         options: u32,
         mut thread_handle: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        // Fuchsia caps object names at ZX_MAX_NAME_LEN (32 bytes).
-        if name_size > ZX_MAX_NAME_LEN {
-            return Err(ZxError::INVALID_ARGS);
-        }
-        let name = name.read_string(name_size)?;
+        let name_len = name_size.min(ZX_MAX_NAME_LEN);
+        let name = name.read_string(name_len)?;
         info!(
             "thread.create: proc={:#x?}, name={:?}, options={:#x?}",
             proc_handle, name, options,
