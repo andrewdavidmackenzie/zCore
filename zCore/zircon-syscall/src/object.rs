@@ -7,6 +7,14 @@ use {
     zircon_object::{dev::*, ipc::*, signal::Clock, signal::Port, task::*, vm::*},
 };
 
+/// Check if an x86_64 address is canonical (bits 48..63 are copies of bit 47).
+#[cfg(target_arch = "x86_64")]
+fn is_canonical(addr: usize) -> bool {
+    // Sign-extend bit 47 to bits 48..63
+    let canonical = ((addr as i64) << 16 >> 16) as usize;
+    addr == canonical
+}
+
 impl Syscall<'_> {
     /// Ask for various properties of various kernel objects.
     ///
@@ -227,13 +235,11 @@ impl Syscall<'_> {
                     return Err(ZxError::ACCESS_DENIED);
                 }
                 let fsbase = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
-                // Fuchsia accepts non-canonical addresses here. The
-                // trapframe restores FS base via WRFSBASE in the
-                // syscall_return path, which generates a user-mode #GP
-                // for non-canonical values. This is safe because
-                // WRFSBASE faults in the context of the user thread
-                // (unlike SYSRET which would fault in ring 0).
-                // The #GP is delivered via the exception channel.
+                // Reject non-canonical addresses (x86_64: bits 48..63
+                // must be copies of bit 47).
+                if !is_canonical(fsbase) {
+                    return Err(ZxError::INVALID_ARGS);
+                }
                 thread.with_context(|ctx| ctx.general_mut().fsbase = fsbase)?;
                 Ok(())
             }
@@ -244,6 +250,9 @@ impl Syscall<'_> {
                     return Err(ZxError::ACCESS_DENIED);
                 }
                 let gsbase = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
+                if !is_canonical(gsbase) {
+                    return Err(ZxError::INVALID_ARGS);
+                }
                 thread.with_context(|ctx| ctx.general_mut().gsbase = gsbase)?;
                 Ok(())
             }
