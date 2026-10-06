@@ -147,8 +147,9 @@ bitflags! {
         /// BASIC | PROPERTY | SIGNAL
         const DEFAULT_STREAM = Self::BASIC.bits | Self::PROPERTY.bits | Self::SIGNAL.bits;
 
-        /// (BASIC & !WAIT) | IO | MAP
-        const DEFAULT_BTI = (Self::BASIC.bits & !Self::WAIT.bits) | Self::IO.bits | Self::MAP.bits;
+        /// Fuchsia's kDefaultBtiRights: DUPLICATE | TRANSFER | READ |
+        /// WRITE | MAP | INSPECT | GET_PROPERTY | SET_PROPERTY.
+        const DEFAULT_BTI = Self::DUPLICATE.bits | Self::TRANSFER.bits | Self::IO.bits | Self::MAP.bits | Self::INSPECT.bits | Self::PROPERTY.bits;
 
         /// BASIC | IO | SIGNAL
         const DEFAULT_INTERRUPT = Self::BASIC.bits | Self::IO.bits | Self::SIGNAL.bits;

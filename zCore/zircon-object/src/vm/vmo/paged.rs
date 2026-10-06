@@ -596,12 +596,10 @@ impl VMObjectPagedInner {
                 //   entry.  A later `create_child` (fork) would then fail
                 //   to transfer the page to the hidden node, losing data.
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
-                if out_of_range {
-                    if self.type_.is_hidden() {
-                        // Hidden nodes should not have out-of-range
-                        // page commits. Return error instead of panicking.
-                        return Err(ZxError::OUT_OF_RANGE);
-                    }
+                if out_of_range && self.type_.is_hidden() {
+                    // Hidden nodes should not have out-of-range
+                    // page commits. Return error instead of panicking.
+                    return Err(ZxError::OUT_OF_RANGE);
                 }
                 if self.type_.is_hidden() {
                     return Ok(CommitResult::NewPage(target_frame));
