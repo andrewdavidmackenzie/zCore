@@ -318,9 +318,21 @@ impl VMObjectTrait for VMObjectPaged {
         if inner.parent.is_some() {
             return Err(ZxError::NOT_SUPPORTED);
         }
+        // Cannot decommit pinned pages.
+        if inner.pin_count > 0 {
+            let start_page = offset / PAGE_SIZE;
+            let end_page = pages(offset + len);
+            for i in start_page..end_page {
+                if let Some(frame) = inner.frames.get(&i) {
+                    if frame.pin_count > 0 {
+                        return Err(ZxError::BAD_STATE);
+                    }
+                }
+            }
+        }
         let start_page = offset / PAGE_SIZE;
-        let pages = len / PAGE_SIZE;
-        for i in 0..pages {
+        let page_count = len / PAGE_SIZE;
+        for i in 0..page_count {
             inner.decommit(start_page + i);
         }
         Ok(())
