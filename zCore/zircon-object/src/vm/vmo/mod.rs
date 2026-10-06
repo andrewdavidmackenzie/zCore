@@ -777,10 +777,17 @@ impl VmObject {
     }
 
     /// Called when all handles to this VMO are closed.
-    /// Invalidates all page table entries so accesses through
-    /// existing mappings fault instead of returning stale data.
-    /// On re-fault, the dead flag prevents re-committing pages.
+    /// For child VMOs (slices, references, COW snapshots), invalidates
+    /// all page table entries so accesses through existing mappings
+    /// fault instead of returning stale data.
+    ///
+    /// Regular (non-child) VMOs are NOT affected — it's valid in
+    /// Fuchsia to close a VMO handle and keep using the mapping.
     pub fn on_zero_handles_impl(&self) {
+        let is_child = self.inner.lock().parent.upgrade().is_some();
+        if !is_child {
+            return;
+        }
         self.dead.store(true, core::sync::atomic::Ordering::Release);
         let inner = self.inner.lock();
         for mapping_weak in &inner.mappings {

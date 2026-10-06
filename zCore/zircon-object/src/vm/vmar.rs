@@ -1608,11 +1608,6 @@ impl VmMapping {
         if !access_flags.contains(MMUFlags::WRITE) {
             flags.remove(MMUFlags::WRITE);
         }
-        // If the VMO is dead (all handles closed for a REFERENCE child),
-        // reject the fault — pages should not be re-committed.
-        if self.vmo.is_dead() {
-            return Err(ZxError::NOT_FOUND);
-        }
         // If ZX_VM_FAULT_BEYOND_STREAM_SIZE is set, fault on accesses
         // past the VMO's content_size instead of returning zeroes.
         // Note: already-mapped pages are not invalidated when content_size
