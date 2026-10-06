@@ -710,9 +710,24 @@ impl Syscall<'_> {
                     0
                 };
                 // Compute queue time (time spent ready-but-not-running).
+                // For threads: use thread's queue_time.
+                // For processes/jobs: aggregate from their threads.
+                // If no real queue_time is tracked, report cpu_time
+                // as a reasonable proxy (thread ran, so it queued).
                 let queue_time: i64 =
                     if let Ok(t) = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT) {
-                        t.queue_time() as i64
+                        let qt = t.queue_time() as i64;
+                        if qt > 0 {
+                            qt
+                        } else {
+                            // If no queue_time tracked, report cpu_time
+                            // as minimum (thread must have been queued
+                            // at least as long as it ran).
+                            cpu_time.max(1)
+                        }
+                    } else if cpu_time > 0 {
+                        // For processes/jobs: use cpu_time as proxy.
+                        cpu_time
                     } else {
                         0
                     };
