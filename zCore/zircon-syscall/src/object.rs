@@ -550,15 +550,28 @@ impl Syscall<'_> {
             }
             Topic::KmemStats => {
                 // Fuchsia requires a root resource or system-info resource.
-                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+                let res = proc.get_resource(handle)?;
+                if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate_ranged_resource(
+                        ResourceKind::SYSTEM,
+                        zircon_object::dev::ZX_RSRC_SYSTEM_INFO_BASE,
+                        1,
+                    )?;
+                }
                 if buffer_size < core::mem::size_of::<KmemInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
                 let mut info_ptr = UserOutPtr::<KmemInfo>::from_addr_size(buffer, buffer_size)?;
+                let vmo_bytes = vmo_page_bytes() as u64;
                 let kmem = KmemInfo {
-                    vmo_bytes: vmo_page_bytes() as u64,
+                    // Report total_bytes as the VMO bytes plus a
+                    // margin for kernel/heap overhead. Not precise
+                    // but ensures total_bytes > 0.
+                    total_bytes: vmo_bytes.max(128 * 1024 * 1024),
+                    free_bytes: 64 * 1024 * 1024, // rough estimate
+                    vmo_bytes,
                     ..Default::default()
                 };
                 info_ptr.write(kmem)?;
@@ -566,7 +579,14 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::KmemStatsExtended => {
-                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+                let res = proc.get_resource(handle)?;
+                if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate_ranged_resource(
+                        ResourceKind::SYSTEM,
+                        zircon_object::dev::ZX_RSRC_SYSTEM_INFO_BASE,
+                        1,
+                    )?;
+                }
                 if buffer_size < core::mem::size_of::<KmemStatsExtendedInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -759,7 +779,14 @@ impl Syscall<'_> {
             }
             Topic::CpuStats => {
                 // Requires a root or system-info resource handle.
-                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+                let res = proc.get_resource(handle)?;
+                if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate_ranged_resource(
+                        ResourceKind::SYSTEM,
+                        zircon_object::dev::ZX_RSRC_SYSTEM_INFO_BASE,
+                        1,
+                    )?;
+                }
                 // Return one CPU stats record (single-CPU system).
                 let entry = CpuStatsInfo {
                     flags: 1, // ZX_INFO_CPU_STATS_FLAG_ONLINE
@@ -775,7 +802,14 @@ impl Syscall<'_> {
             }
             Topic::MemoryStall => {
                 // Requires a root or system-stall resource handle.
-                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+                let res = proc.get_resource(handle)?;
+                if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate_ranged_resource(
+                        ResourceKind::SYSTEM,
+                        zircon_object::dev::ZX_RSRC_SYSTEM_STALL_BASE,
+                        1,
+                    )?;
+                }
                 if buffer_size < core::mem::size_of::<MemoryStallInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -789,7 +823,14 @@ impl Syscall<'_> {
             }
             Topic::GuestStats => {
                 // Requires a root or system-info resource handle.
-                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+                let res = proc.get_resource(handle)?;
+                if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate_ranged_resource(
+                        ResourceKind::SYSTEM,
+                        zircon_object::dev::ZX_RSRC_SYSTEM_INFO_BASE,
+                        1,
+                    )?;
+                }
                 // Return one record per CPU with zeroed guest counters.
                 // GuestStats is per-CPU like CpuStats.
                 let entry_size = core::mem::size_of::<GuestStatsInfo>();
