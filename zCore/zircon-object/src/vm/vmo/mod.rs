@@ -842,6 +842,23 @@ impl VmObject {
     pub fn is_contiguous(&self) -> bool {
         self.trait_.is_contiguous()
     }
+
+    /// Returns true if this VMO is a REFERENCE child.
+    pub fn is_reference(&self) -> bool {
+        self.trait_.is_reference()
+    }
+
+    /// Get the parent VmObject (for REFERENCE children).
+    pub fn parent(&self) -> Option<Arc<VmObject>> {
+        self.inner.lock().parent.upgrade()
+    }
+
+    /// Override the parent reference (used when creating a child
+    /// through a REFERENCE so the child's parent_koid points to
+    /// the reference, not the underlying VMO).
+    pub fn set_parent_ref(&self, parent: &Arc<VmObject>) {
+        self.inner.lock().parent = Arc::downgrade(parent);
+    }
 }
 
 impl Deref for VmObject {

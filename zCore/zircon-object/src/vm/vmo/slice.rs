@@ -93,12 +93,12 @@ impl VMObjectTrait for VMObjectSlice {
         self.parent.decommit(offset + self.offset, len)
     }
 
-    fn create_child(&self, offset: usize, len: usize) -> ZxResult<Arc<dyn VMObjectTrait>> {
-        // REFERENCE children are implemented as slices. Creating a
-        // SNAPSHOT or SNAPSHOT_AT_LEAST_ON_WRITE child of a reference
-        // should behave as if creating the child on the parent VMO
-        // (since a reference is a transparent alias).
-        self.parent.create_child(offset + self.offset, len)
+    fn create_child(&self, _offset: usize, _len: usize) -> ZxResult<Arc<dyn VMObjectTrait>> {
+        // Slices cannot create COW children at the trait level.
+        // For REFERENCE children, the syscall handler detects the
+        // reference and delegates to the parent VmObject's
+        // create_child instead (which handles the COW tree correctly).
+        Err(ZxError::NOT_SUPPORTED)
     }
 
     fn complete_info(&self, info: &mut VmoInfo) {

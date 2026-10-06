@@ -208,7 +208,22 @@ impl Syscall<'_> {
             {
                 return Err(ZxError::NOT_SUPPORTED);
             }
-            vmo.create_child(resizable, offset, child_size)
+            // If the VMO is a REFERENCE (transparent alias), create
+            // the child on the parent VMO instead. This ensures the
+            // COW tree is built on the real VMO, not the alias.
+            // The child's parent_koid should point to the reference,
+            // not the underlying parent (matching Fuchsia semantics).
+            if vmo.is_reference() {
+                if let Some(parent) = vmo.parent() {
+                    let child = parent.create_child(resizable, offset, child_size)?;
+                    child.set_parent_ref(&vmo);
+                    Ok(child)
+                } else {
+                    Err(ZxError::BAD_STATE)
+                }
+            } else {
+                vmo.create_child(resizable, offset, child_size)
+            }
         }?;
         // Mark as immutable if SNAPSHOT + NO_WRITE.
         if no_write && options.contains(VmoCloneFlags::SNAPSHOT) {
