@@ -103,6 +103,9 @@ pub trait VMObjectTrait: Sync + Send {
     fn is_contiguous(&self) -> bool {
         false
     }
+    fn is_reference(&self) -> bool {
+        false
+    }
 
     /// Returns true if the object is backed by RAM.
     fn is_paged(&self) -> bool {
@@ -219,6 +222,11 @@ impl VmObject {
             inner: Mutex::new(VmObjectInner::default()),
         });
         Ok(vmo)
+    }
+
+    /// Returns true if this VMO is pager-backed.
+    pub fn has_pager(&self) -> bool {
+        self.inner.lock().pager_port.is_some()
     }
 
     /// Set the pager association for this VMO.
@@ -519,16 +527,21 @@ impl VmObject {
     /// is skipped. This is used for ZX_VMO_CHILD_REFERENCE which creates
     /// a full-VMO alias that is allowed on resizable VMOs.
     pub fn create_slice(self: &Arc<Self>, offset: usize, p_size: usize) -> ZxResult<Arc<Self>> {
-        self.create_slice_inner(offset, p_size, false)
+        self.create_slice_inner(offset, p_size, false, false)
     }
 
-    /// Create a slice that is allowed on resizable parents (REFERENCE child).
+    /// Create a REFERENCE child (full-VMO alias).
+    ///
+    /// Unlike regular slices, REFERENCE children are allowed on
+    /// resizable parents. If `resizable` is true, the child can
+    /// resize the parent (requires parent to be resizable).
     pub fn create_reference_slice(
         self: &Arc<Self>,
         offset: usize,
         p_size: usize,
+        resizable: bool,
     ) -> ZxResult<Arc<Self>> {
-        self.create_slice_inner(offset, p_size, true)
+        self.create_slice_inner(offset, p_size, true, resizable)
     }
 
     fn create_slice_inner(
@@ -536,6 +549,7 @@ impl VmObject {
         offset: usize,
         p_size: usize,
         allow_resizable_parent: bool,
+        resizable: bool,
     ) -> ZxResult<Arc<Self>> {
         let size = roundup_pages(p_size);
         // why 32 * PAGE_SIZE? Refered to zircon source codes
@@ -562,12 +576,16 @@ impl VmObject {
         let child_content_size = parent_content_size.saturating_sub(offset).min(size);
         let child = Arc::new(VmObject {
             base: KObjectBase::with(&self.base.name(), Signal::VMO_ZERO_CHILDREN),
-            resizable: false,
+            resizable,
             is_slice: true,
             immutable: core::sync::atomic::AtomicBool::new(false),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
-            trait_: VMObjectSlice::new(self.trait_.clone(), offset, size),
+            trait_: if allow_resizable_parent {
+                VMObjectSlice::new_reference(self.trait_.clone(), offset, size)
+            } else {
+                VMObjectSlice::new(self.trait_.clone(), offset, size)
+            },
             inner: Mutex::new(VmObjectInner {
                 parent: Arc::downgrade(self),
                 content_size: child_content_size,
@@ -612,6 +630,12 @@ impl VmObject {
         size: usize,
         zero_until_offset: usize,
     ) -> ZxResult<usize> {
+        // REFERENCE children delegate to the parent.
+        if self.trait_.is_reference() {
+            if let Some(parent) = self.inner.lock().parent.upgrade() {
+                return parent.set_content_size_and_resize(size, zero_until_offset);
+            }
+        }
         let mut inner = self.inner.lock();
         let content_size = inner.content_size;
         let len = self.trait_.len();
@@ -635,8 +659,21 @@ impl VmObject {
 
     /// Get the size of the content stored in the VMO in bytes.
     pub fn content_size(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.content_size
+        // REFERENCE children delegate to the parent so they always
+        // reflect the parent's current content_size.
+        if self.is_slice {
+            let inner = self.inner.lock();
+            if let Some(parent) = inner.parent.upgrade() {
+                // If we're a reference (full-VMO alias), use parent's content_size.
+                // Check by seeing if our trait_ is a reference slice.
+                if self.trait_.is_reference() {
+                    return parent.content_size();
+                }
+            }
+            inner.content_size
+        } else {
+            self.inner.lock().content_size
+        }
     }
 
     /// Get the size of the content stored in the VMO in bytes.
@@ -652,6 +689,12 @@ impl VmObject {
 
     /// content_size is properly initialized.
     pub fn set_content_size(&self, size: usize) -> ZxResult {
+        // REFERENCE children delegate to the parent.
+        if self.trait_.is_reference() {
+            if let Some(parent) = self.inner.lock().parent.upgrade() {
+                return parent.set_content_size(size);
+            }
+        }
         let mut inner = self.inner.lock();
         inner.content_size = size;
         Ok(())

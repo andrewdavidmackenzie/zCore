@@ -5,8 +5,11 @@ pub struct VMObjectSlice {
     parent: Arc<dyn VMObjectTrait>,
     /// The offset from parent.
     offset: usize,
-    /// The size in bytes.
+    /// The size in bytes (for regular slices).
     size: usize,
+    /// True for REFERENCE children: len() and set_len() delegate
+    /// to the parent, making the reference a transparent alias.
+    is_reference: bool,
 }
 
 impl VMObjectSlice {
@@ -15,6 +18,16 @@ impl VMObjectSlice {
             parent,
             offset,
             size,
+            is_reference: false,
+        })
+    }
+
+    pub fn new_reference(parent: Arc<dyn VMObjectTrait>, offset: usize, size: usize) -> Arc<Self> {
+        Arc::new(VMObjectSlice {
+            parent,
+            offset,
+            size,
+            is_reference: true,
         })
     }
 
@@ -43,12 +56,21 @@ impl VMObjectTrait for VMObjectSlice {
     }
 
     fn len(&self) -> usize {
-        self.size
+        if self.is_reference {
+            // REFERENCE children always reflect the parent's size.
+            self.parent.len()
+        } else {
+            self.size
+        }
     }
 
-    fn set_len(&self, _len: usize) -> ZxResult {
-        // Slice/reference VMOs cannot be resized.
-        Err(ZxError::ACCESS_DENIED)
+    fn set_len(&self, len: usize) -> ZxResult {
+        if self.is_reference {
+            // Delegate resize to the parent VMO.
+            self.parent.set_len(len)
+        } else {
+            Err(ZxError::ACCESS_DENIED)
+        }
     }
 
     fn commit_page(&self, page_idx: usize, flags: MMUFlags) -> ZxResult<usize> {
@@ -71,12 +93,20 @@ impl VMObjectTrait for VMObjectSlice {
         self.parent.decommit(offset + self.offset, len)
     }
 
-    fn create_child(&self, _offset: usize, _len: usize) -> ZxResult<Arc<dyn VMObjectTrait>> {
-        Err(ZxError::NOT_SUPPORTED)
+    fn create_child(&self, offset: usize, len: usize) -> ZxResult<Arc<dyn VMObjectTrait>> {
+        // REFERENCE children are implemented as slices. Creating a
+        // SNAPSHOT or SNAPSHOT_AT_LEAST_ON_WRITE child of a reference
+        // should behave as if creating the child on the parent VMO
+        // (since a reference is a transparent alias).
+        self.parent.create_child(offset + self.offset, len)
     }
 
     fn complete_info(&self, info: &mut VmoInfo) {
         self.parent.complete_info(info);
+    }
+
+    fn is_reference(&self) -> bool {
+        self.is_reference
     }
 
     fn cache_policy(&self) -> CachePolicy {

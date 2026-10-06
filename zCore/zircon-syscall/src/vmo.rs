@@ -171,25 +171,22 @@ impl Syscall<'_> {
             if offset != 0 || size != 0 {
                 return Err(ZxError::INVALID_ARGS);
             }
-            // Resizable REFERENCE children are not supported by Fuchsia.
-            if resizable {
-                return Err(ZxError::NOT_SUPPORTED);
+            // Resizable REFERENCE requires a resizable parent.
+            if resizable && !vmo.is_resizable() {
+                return Err(ZxError::ACCESS_DENIED);
             }
-            let remaining = options
-                - VmoCloneFlags::REFERENCE
-                - if no_write {
-                    VmoCloneFlags::NO_WRITE
-                } else {
-                    VmoCloneFlags::empty()
-                };
+            let mut remaining = options - VmoCloneFlags::REFERENCE;
+            if no_write {
+                remaining -= VmoCloneFlags::NO_WRITE;
+            }
+            if resizable {
+                remaining -= VmoCloneFlags::RESIZABLE;
+            }
             if !remaining.is_empty() {
                 return Err(ZxError::INVALID_ARGS);
             }
             // Implement as a slice over the entire VMO.
-            // Use create_reference_slice to allow resizable parents
-            // (REFERENCE children are allowed on resizable VMOs in
-            // Fuchsia, unlike regular slices).
-            vmo.create_reference_slice(0, vmo.len())
+            vmo.create_reference_slice(0, vmo.len(), resizable)
         } else if options.contains(VmoCloneFlags::SLICE) {
             if options != VmoCloneFlags::SLICE {
                 Err(ZxError::INVALID_ARGS)
@@ -198,12 +195,17 @@ impl Syscall<'_> {
             }
         } else {
             if options.contains(VmoCloneFlags::SNAPSHOT) {
+                // SNAPSHOT is not supported on pager-backed VMOs.
+                if vmo.has_pager() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
                 // TODO: implement true ZX_VMO_CHILD_SNAPSHOT (full CoW
                 // clone with immutable parent). Currently treated as
-                // SNAPSHOT_AT_LEAST_ON_WRITE, which is a valid superset
-                // behaviour per the Zircon spec.
+                // SNAPSHOT_AT_LEAST_ON_WRITE for non-pager VMOs.
                 warn!("vmo.create_child: SNAPSHOT treated as SNAPSHOT_AT_LEAST_ON_WRITE");
-            } else if !options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE) {
+            } else if !options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
+                && !options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
+            {
                 return Err(ZxError::NOT_SUPPORTED);
             }
             vmo.create_child(resizable, offset, child_size)
@@ -305,16 +307,9 @@ impl Syscall<'_> {
             vmo.len(),
         );
         vmo.set_len(size)?;
-        // Fuchsia's SetSize updates content_size:
-        // - Growing: content_size = new_size (pages beyond old size are zero)
-        // - Shrinking: content_size = min(content_size, new_size)
-        let content_size = vmo.content_size();
-        if size > content_size {
-            vmo.set_content_size(size)?;
-        } else if vmo.len() < content_size {
-            // VMO shrank below content_size — clamp it.
-            vmo.set_content_size(vmo.len())?;
-        }
+        // Fuchsia's SetSize always updates content_size to the
+        // user-requested size (which may be non-page-aligned).
+        vmo.set_content_size(size)?;
         Ok(())
     }
 
