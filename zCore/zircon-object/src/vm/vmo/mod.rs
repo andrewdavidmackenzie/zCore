@@ -712,6 +712,13 @@ impl VmObject {
     /// invariant that data beyond content_size reads as zero. Zeros from
     /// the new content_size to the old content_size (or page boundary).
     pub fn set_content_size_with_zero(&self, size: usize) -> ZxResult {
+        // REFERENCE children delegate to the parent.
+        if self.trait_.is_reference() {
+            let parent = self.inner.lock().parent.upgrade();
+            if let Some(parent) = parent {
+                return parent.set_content_size_with_zero(size);
+            }
+        }
         let mut inner = self.inner.lock();
         let old = inner.content_size;
         inner.content_size = size;
@@ -826,19 +833,11 @@ impl VmObject {
     /// Regular (non-child) VMOs are NOT affected — it's valid in
     /// Fuchsia to close a VMO handle and keep using the mapping.
     pub fn on_zero_handles_impl(&self) {
-        // is_slice is permanent (set at creation for slice/reference).
-        // parent check covers COW children whose parent may still exist.
-        let is_child = self.is_slice || self.inner.lock().parent.upgrade().is_some();
-        if !is_child {
-            return;
-        }
-        self.dead.store(true, core::sync::atomic::Ordering::Release);
-        let inner = self.inner.lock();
-        for mapping_weak in &inner.mappings {
-            if let Some(mapping) = mapping_weak.upgrade() {
-                mapping.unmap_all_pages();
-            }
-        }
+        // In Fuchsia, closing the last handle to a VMO does NOT
+        // invalidate existing mappings. Mapped pages remain accessible
+        // until the mapping is explicitly removed or the process exits.
+        // The only effect is signaling ZX_VMO_ZERO_CHILDREN on the
+        // parent (handled elsewhere via child list tracking).
     }
 
     pub fn is_dead(&self) -> bool {
@@ -859,11 +858,29 @@ impl VmObject {
         self.inner.lock().parent.upgrade()
     }
 
-    /// Override the parent reference (used when creating a child
-    /// through a REFERENCE so the child's parent_koid points to
-    /// the reference, not the underlying VMO).
-    pub fn set_parent_ref(&self, parent: &Arc<VmObject>) {
-        self.inner.lock().parent = Arc::downgrade(parent);
+    /// Override the parent reference and move the child registration
+    /// from the old parent to the new parent. Used when creating a
+    /// child through a REFERENCE so the child's parent_koid points
+    /// to the reference. Also ensures ZX_VMO_ZERO_CHILDREN is
+    /// signaled correctly on the reference.
+    pub fn set_parent_ref(self: &Arc<Self>, new_parent: &Arc<VmObject>) {
+        // Remove from old parent's children list.
+        let old_parent = self.inner.lock().parent.upgrade();
+        if let Some(old_parent) = &old_parent {
+            let mut old_inner = old_parent.inner.lock();
+            old_inner
+                .children
+                .retain(|c| !c.upgrade().is_some_and(|c| Arc::ptr_eq(&c, self)));
+            // Re-assert zero-children if needed.
+            if old_inner.children.iter().all(|c| c.strong_count() == 0) {
+                drop(old_inner);
+                old_parent.base.signal_set(Signal::VMO_ZERO_CHILDREN);
+            }
+        }
+        // Add to new parent's children list.
+        new_parent.add_child(self);
+        // Update parent weak ref.
+        self.inner.lock().parent = Arc::downgrade(new_parent);
     }
 }
 

@@ -238,6 +238,7 @@ impl Syscall<'_> {
             // Reference children inherit parent rights.
         } else if options.contains(VmoCloneFlags::SNAPSHOT)
             || options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
+            || options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
         {
             child_rights.remove(Rights::EXECUTE);
             child_rights.insert(Rights::WRITE);

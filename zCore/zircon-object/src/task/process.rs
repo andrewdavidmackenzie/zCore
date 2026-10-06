@@ -103,10 +103,12 @@ impl_kobject!(Process
     fn on_zero_handles(&self) {
         // When all handles to the process are closed and it was never
         // started (or has already exited), destroy the root VMAR.
-        // This matches Fuchsia's behavior: querying VMAR_MAPS on an
-        // orphaned VMAR returns BAD_STATE.
+        // Skip for shared processes — the VMAR is used by another
+        // process and must remain alive.
         let status = self.inner.lock().status;
-        if status == Status::Init || matches!(status, Status::Exited(_)) {
+        if !self.is_shared()
+            && (status == Status::Init || matches!(status, Status::Exited(_)))
+        {
             let _ = self.vmar.destroy();
         }
     }
@@ -288,21 +290,30 @@ impl Process {
     /// The process do not terminate immediately when exited.
     /// It will terminate after all its child threads are terminated.
     pub fn exit(&self, retcode: i64) {
-        let mut inner = self.inner.lock();
-        if let Status::Exited(_) = inner.status {
-            return;
+        let zero_handles_objects;
+        {
+            let mut inner = self.inner.lock();
+            if let Status::Exited(_) = inner.status {
+                return;
+            }
+            inner.status = Status::Exited(retcode);
+            if inner.threads.is_empty() {
+                zero_handles_objects = inner.clear_handles();
+                drop(inner);
+                for obj in &zero_handles_objects {
+                    obj.on_zero_handles();
+                }
+                self.terminate();
+                return;
+            }
+            for thread in inner.threads.iter() {
+                thread.kill();
+            }
+            zero_handles_objects = inner.clear_handles();
         }
-        inner.status = Status::Exited(retcode);
-        if inner.threads.is_empty() {
-            inner.clear_handles();
-            drop(inner);
-            self.terminate();
-            return;
+        for obj in &zero_handles_objects {
+            obj.on_zero_handles();
         }
-        for thread in inner.threads.iter() {
-            thread.kill();
-        }
-        inner.clear_handles();
     }
 
     /// The process finally terminates.
@@ -472,7 +483,14 @@ impl Process {
 
     /// Remove a handle from the process
     pub fn remove_handle(&self, handle_value: HandleValue) -> ZxResult<Handle> {
-        self.inner.lock().remove_handle(handle_value)
+        let handle = self.inner.lock().remove_handle(handle_value)?;
+        // Run zero-handle hooks AFTER releasing the ProcessInner lock
+        // to avoid deadlocks (e.g., Process::on_zero_handles acquires
+        // the same lock via self.inner.lock()).
+        if handle.object.handle_count() == 0 {
+            handle.object.on_zero_handles();
+        }
+        Ok(handle)
     }
 
     /// Remove all handles from the process.
@@ -480,27 +498,35 @@ impl Process {
     /// If one or more error happens, return one of them.
     /// All handles are discarded on success or failure.
     pub fn remove_handles(&self, handle_values: &[HandleValue]) -> ZxResult<Vec<Handle>> {
-        let mut inner = self.inner.lock();
-        let mut handles = Vec::with_capacity(handle_values.len());
-        let mut first_err = None;
-        for &hv in handle_values {
-            match inner.remove_handle(hv) {
-                Ok(h) => handles.push(h),
-                Err(e) => {
-                    if first_err.is_none() {
-                        first_err = Some(e);
+        let handles_result = {
+            let mut inner = self.inner.lock();
+            let mut handles = Vec::with_capacity(handle_values.len());
+            let mut first_err = None;
+            for &hv in handle_values {
+                match inner.remove_handle(hv) {
+                    Ok(h) => handles.push(h),
+                    Err(e) => {
+                        if first_err.is_none() {
+                            first_err = Some(e);
+                        }
                     }
-                    // Continue removing remaining handles — Fuchsia
-                    // guarantees all handles are consumed even on error.
+                }
+            }
+            if let Some(e) = first_err {
+                Err(e)
+            } else {
+                Ok(handles)
+            }
+        };
+        // Run zero-handle hooks after releasing the lock.
+        if let Ok(ref handles) = handles_result {
+            for h in handles {
+                if h.object.handle_count() == 0 {
+                    h.object.on_zero_handles();
                 }
             }
         }
-        if let Some(e) = first_err {
-            // All handles were removed; drop the successfully-removed
-            // ones and return the first error.
-            return Err(e);
-        }
-        Ok(handles)
+        handles_result
     }
 
     /// Remove a handle referring to a kernel object of the given type from the process.
@@ -842,9 +868,6 @@ impl ProcessInner {
             .remove(&handle_value)
             .ok_or(ZxError::BAD_HANDLE)?;
         handle.object.dec_handle_count();
-        if handle.object.handle_count() == 0 {
-            handle.object.on_zero_handles();
-        }
         for sender in queue {
             let _ = sender.send(());
         }
@@ -852,14 +875,18 @@ impl ProcessInner {
     }
 
     /// Clear all handles, decrementing each object's handle count.
-    fn clear_handles(&mut self) {
+    /// Returns objects that need on_zero_handles (caller must invoke
+    /// them after releasing ProcessInner's lock).
+    fn clear_handles(&mut self) -> Vec<Arc<dyn KernelObject>> {
+        let mut zero_handles = Vec::new();
         for (handle, _) in self.handles.values() {
             handle.object.dec_handle_count();
             if handle.object.handle_count() == 0 {
-                handle.object.on_zero_handles();
+                zero_handles.push(handle.object.clone());
             }
         }
         self.handles.clear();
+        zero_handles
     }
 
     fn get_cancel_token(&mut self, handle_value: HandleValue) -> ZxResult<Receiver<()>> {

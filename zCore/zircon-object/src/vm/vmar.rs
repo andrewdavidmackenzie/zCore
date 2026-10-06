@@ -982,9 +982,9 @@ impl VmAddressRegion {
                 let m_inner = mapping.inner.lock();
                 // Convert internal MMUFlags bit positions to the
                 // Fuchsia ABI ZX_VM_PERM_* values.
-                // Use default_flags (the actual requested permissions),
-                // not permissions (the max allowed from VMO rights).
-                let perms = m_inner.default_flags;
+                // Use page_flags(0) which returns the effective
+                // permissions, accounting for protect() changes.
+                let perms = m_inner.page_flags(0);
                 let mut mmu_flags: u32 = 0;
                 if perms.contains(MMUFlags::READ) {
                     mmu_flags |= 1; // ZX_VM_PERM_READ
