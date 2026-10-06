@@ -193,6 +193,10 @@ pub trait KernelObject: DowncastSync + Debug {
     fn inc_handle_count(&self) {}
     /// Decrement the handle count (called when a handle is removed from a process).
     fn dec_handle_count(&self) {}
+    /// Called after dec_handle_count when the handle count reaches zero.
+    /// Used by VmObject to invalidate REFERENCE child mappings.
+    #[inline(never)]
+    fn on_zero_handles(&self) {}
     /// Downcast to `Resource` without using `TypeId`.
     ///
     /// Returns `None` by default. Overridden by `impl_kobject!(Resource ...)`

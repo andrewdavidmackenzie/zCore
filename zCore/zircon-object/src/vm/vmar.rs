@@ -1322,6 +1322,18 @@ impl VmMapping {
             .expect("failed to unmap")
     }
 
+    /// Invalidate all page table entries for this mapping.
+    /// Called when a REFERENCE child VMO is destroyed, to ensure
+    /// mapped pages become inaccessible.
+    pub fn unmap_all_pages(&self) {
+        let inner = self.inner.lock();
+        let page_count = inner.size / PAGE_SIZE;
+        let mut pg_table = self.page_table.lock();
+        for i in 0..page_count {
+            let _ = pg_table.unmap(inner.addr + i * PAGE_SIZE);
+        }
+    }
+
     fn fill_in_task_status(&self, task_stats: &mut TaskStatsInfo) {
         let (start_idx, end_idx) = {
             let inner = self.inner.lock();
@@ -1595,6 +1607,11 @@ impl VmMapping {
         // bypass that mechanism.
         if !access_flags.contains(MMUFlags::WRITE) {
             flags.remove(MMUFlags::WRITE);
+        }
+        // If the VMO is dead (all handles closed for a REFERENCE child),
+        // reject the fault — pages should not be re-committed.
+        if self.vmo.is_dead() {
+            return Err(ZxError::NOT_FOUND);
         }
         // If ZX_VM_FAULT_BEYOND_STREAM_SIZE is set, fault on accesses
         // past the VMO's content_size instead of returning zeroes.

@@ -828,6 +828,12 @@ impl ProcessInner {
             .remove(&handle_value)
             .ok_or(ZxError::BAD_HANDLE)?;
         handle.object.dec_handle_count();
+        if handle.object.handle_count() == 0 && handle.object.type_name() == "VmObject" {
+            let ptr = Arc::into_raw(handle.object.clone());
+            let vmo = unsafe { &*(ptr as *const crate::vm::VmObject) };
+            vmo.on_zero_handles_impl();
+            unsafe { Arc::from_raw(ptr) };
+        }
         for sender in queue {
             let _ = sender.send(());
         }
@@ -838,6 +844,12 @@ impl ProcessInner {
     fn clear_handles(&mut self) {
         for (handle, _) in self.handles.values() {
             handle.object.dec_handle_count();
+            if handle.object.handle_count() == 0 && handle.object.type_name() == "VmObject" {
+                let ptr = Arc::into_raw(handle.object.clone());
+                let vmo = unsafe { &*(ptr as *const crate::vm::VmObject) };
+                vmo.on_zero_handles_impl();
+                unsafe { Arc::from_raw(ptr) };
+            }
         }
         self.handles.clear();
     }
