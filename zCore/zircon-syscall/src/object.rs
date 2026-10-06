@@ -830,7 +830,7 @@ impl Syscall<'_> {
                     mapping: InfoMapsMapping::default(),
                 });
                 // VMAR tree walk (depth 1+).
-                let vmar_entries = vmar.get_info_maps(1);
+                let vmar_entries = vmar.get_info_maps(1)?;
                 entries.extend(vmar_entries);
                 let entry_size = core::mem::size_of::<InfoMapsEntry>();
                 let count = (buffer_size / entry_size).min(entries.len());
@@ -843,7 +843,7 @@ impl Syscall<'_> {
             Topic::VmarMaps => {
                 let vmar =
                     proc.get_object_with_rights::<VmAddressRegion>(handle, Rights::INSPECT)?;
-                let entries = vmar.get_info_maps(0);
+                let entries = vmar.get_info_maps(0)?;
                 let entry_size = core::mem::size_of::<InfoMapsEntry>();
                 let count = (buffer_size / entry_size).min(entries.len());
                 if count > 0 {

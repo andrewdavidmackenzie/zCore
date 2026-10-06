@@ -100,6 +100,16 @@ impl_kobject!(Process
     fn related_koid(&self) -> KoID {
         self.job.id()
     }
+    fn on_zero_handles(&self) {
+        // When all handles to the process are closed and it was never
+        // started (or has already exited), destroy the root VMAR.
+        // This matches Fuchsia's behavior: querying VMAR_MAPS on an
+        // orphaned VMAR returns BAD_STATE.
+        let status = self.inner.lock().status;
+        if status == Status::Init || matches!(status, Status::Exited(_)) {
+            let _ = self.vmar.destroy();
+        }
+    }
 );
 define_count_helper!(Process);
 
@@ -308,6 +318,10 @@ impl Process {
         self.base.signal_set(Signal::PROCESS_TERMINATED);
         self.exceptionate.shutdown();
         self.debug_exceptionate.shutdown();
+        // Destroy the process's address space. After this, any
+        // handle to the root VMAR will see it as destroyed
+        // (get_info returns BAD_STATE), matching Fuchsia behavior.
+        let _ = self.vmar.destroy();
 
         self.job.remove_process(self.base.id);
         // If we are critical to a job, we need to take action.
@@ -829,9 +843,7 @@ impl ProcessInner {
             .ok_or(ZxError::BAD_HANDLE)?;
         handle.object.dec_handle_count();
         if handle.object.handle_count() == 0 {
-            if let Some(vmo) = handle.object.as_vmo() {
-                vmo.on_zero_handles_impl();
-            }
+            handle.object.on_zero_handles();
         }
         for sender in queue {
             let _ = sender.send(());
@@ -844,9 +856,7 @@ impl ProcessInner {
         for (handle, _) in self.handles.values() {
             handle.object.dec_handle_count();
             if handle.object.handle_count() == 0 {
-                if let Some(vmo) = handle.object.as_vmo() {
-                    vmo.on_zero_handles_impl();
-                }
+                handle.object.on_zero_handles();
             }
         }
         self.handles.clear();

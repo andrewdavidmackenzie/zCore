@@ -143,6 +143,9 @@ pub struct VmObject {
 }
 
 impl_kobject!(VmObject
+    fn on_zero_handles(&self) {
+        self.on_zero_handles_impl();
+    }
     fn as_vmo(&self) -> Option<&crate::vm::VmObject> {
         Some(self)
     }
