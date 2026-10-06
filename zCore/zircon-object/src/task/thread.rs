@@ -655,8 +655,15 @@ impl CurrentThread {
     /// observing this thread's state (via `zx_object_get_info`) can
     /// see the blocked state immediately, without waiting for the
     /// async executor to poll the future.
+    ///
+    /// Does nothing if the thread is already `Dying` or `Dead` — those
+    /// are terminal states that must not be overwritten.  The subsequent
+    /// `blocking_run` will observe `Dying` and return `ZxError::STOP`.
     pub fn set_blocking_state(&self, state: ThreadState) {
         let mut inner = self.inner.lock();
+        if inner.state == ThreadState::Dying || inner.state == ThreadState::Dead {
+            return;
+        }
         inner.change_state(state, &self.base);
     }
 

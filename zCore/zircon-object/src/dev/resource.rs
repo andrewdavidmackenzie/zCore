@@ -71,11 +71,11 @@ impl Resource {
     }
 
     /// Validate the resource is the given kind or it is the root resource.
+    ///
+    /// Only ROOT bypasses kind checks.  A SYSTEM resource only matches
+    /// if `kind == SYSTEM`.  All other resources must match exactly.
     pub fn validate(&self, kind: ResourceKind) -> ZxResult {
-        // ROOT and SYSTEM resources can create sub-resources of any kind.
-        // Other resources can only create children of the same kind.
-        if self.kind == kind || self.kind == ResourceKind::ROOT || self.kind == ResourceKind::SYSTEM
-        {
+        if self.kind == kind || self.kind == ResourceKind::ROOT {
             Ok(())
         } else {
             Err(ZxError::WRONG_TYPE)
@@ -84,6 +84,9 @@ impl Resource {
 
     /// Validate the resource is the given kind or it is the root resource,
     /// and [addr, addr+len] is within the range of the resource.
+    ///
+    /// Only ROOT bypasses range checks.  SYSTEM (and all other)
+    /// resources must match kind AND cover the requested range.
     pub fn validate_ranged_resource(
         &self,
         kind: ResourceKind,
@@ -91,8 +94,8 @@ impl Resource {
         len: usize,
     ) -> ZxResult {
         self.validate(kind)?;
-        // ROOT and SYSTEM resources with zero range allow any sub-range.
-        if self.kind == ResourceKind::ROOT || self.kind == ResourceKind::SYSTEM {
+        // ROOT resources allow any sub-range.
+        if self.kind == ResourceKind::ROOT {
             return Ok(());
         }
         if addr >= self.addr && (addr + len) <= (self.addr + self.len) {

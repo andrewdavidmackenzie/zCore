@@ -414,7 +414,7 @@ pub fn spawn_process(
         "system",
         crate::dev::ResourceKind::SYSTEM,
         0,
-        0,
+        16, // covers all ZX_RSRC_SYSTEM_*_BASE values (0..15)
         crate::dev::ResourceFlags::empty(),
     );
     // Create a minimal ZBI VMO for standalone test's GetOptions/GetBootOptions.
