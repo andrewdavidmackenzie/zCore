@@ -28,8 +28,14 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        proc.get_resource(resource)?
-            .validate(ResourceKind::HYPERVISOR)?;
+        let res = proc.get_resource(resource)?;
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(
+                ResourceKind::SYSTEM,
+                zircon_object::dev::ZX_RSRC_SYSTEM_HYPERVISOR_BASE,
+                1,
+            )?;
+        }
 
         let guest = Guest::new()?;
         let vmar = guest.vmar();

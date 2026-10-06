@@ -649,6 +649,24 @@ impl CurrentThread {
         inner.change_state(state, &self.base);
     }
 
+    /// Set the thread's blocking state synchronously.
+    ///
+    /// Call this BEFORE `blocking_run().await` so that other threads
+    /// observing this thread's state (via `zx_object_get_info`) can
+    /// see the blocked state immediately, without waiting for the
+    /// async executor to poll the future.
+    ///
+    /// Does nothing if the thread is already `Dying` or `Dead` — those
+    /// are terminal states that must not be overwritten.  The subsequent
+    /// `blocking_run` will observe `Dying` and return `ZxError::STOP`.
+    pub fn set_blocking_state(&self, state: ThreadState) {
+        let mut inner = self.inner.lock();
+        if inner.state == ThreadState::Dying || inner.state == ThreadState::Dead {
+            return;
+        }
+        inner.change_state(state, &self.base);
+    }
+
     /// Run async future and change state while blocking.
     pub async fn blocking_run<F, T, FT>(
         &self,
@@ -668,8 +686,15 @@ impl CurrentThread {
             }
             let (sender, receiver) = channel();
             inner.killer = Some(sender);
-            let old_state = inner.state;
-            inner.change_state(state, &self.base);
+            // State may already be set by set_blocking_state().
+            // Record old state for restoration on completion.
+            let old_state = if inner.state == state {
+                ThreadState::Running
+            } else {
+                let old = inner.state;
+                inner.change_state(state, &self.base);
+                old
+            };
             (old_state, receiver)
         };
         let ret = if let Some(cancel_token) = cancel_token {

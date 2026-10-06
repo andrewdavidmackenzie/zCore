@@ -20,7 +20,11 @@ impl Syscall<'_> {
             resource, type_, desc, desc_size, out
         );
         let proc = self.thread.proc();
-        proc.get_resource(resource)?.validate(ResourceKind::ROOT)?;
+        let res = proc.get_resource(resource)?;
+        // Accept ROOT resource or SYSTEM resource with IOMMU base.
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_IOMMU_BASE, 1)?;
+        }
         if desc_size > IOMMU_MAX_DESC_LEN {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -262,6 +266,8 @@ impl Syscall<'_> {
         let interrupt = proc.get_object_with_rights::<Interrupt>(interrupt, Rights::WAIT)?;
         let future = interrupt.wait();
         pin_mut!(future);
+        self.thread
+            .set_blocking_state(ThreadState::BlockedInterrupt);
         let timestamp = self
             .thread
             .blocking_run(

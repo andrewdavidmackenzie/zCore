@@ -932,10 +932,14 @@ impl VmAddressRegion {
     /// Produces a depth-first pre-order walk:
     /// - depth 0: the VMAR itself
     /// - depth 1+: child VMARs and mappings
-    pub fn get_info_maps(&self, base_depth: usize) -> Vec<InfoMapsEntry> {
+    pub fn get_info_maps(&self, base_depth: usize) -> ZxResult<Vec<InfoMapsEntry>> {
+        // Check if the VMAR is alive (not destroyed).
+        if self.inner.lock().is_none() {
+            return Err(ZxError::BAD_STATE);
+        }
         let mut result = Vec::new();
         self.walk_info_maps(base_depth, &mut result);
-        result
+        Ok(result)
     }
 
     fn walk_info_maps(&self, depth: usize, out: &mut Vec<InfoMapsEntry>) {
@@ -976,7 +980,21 @@ impl VmAddressRegion {
             }
             for mapping in &inner.mappings {
                 let m_inner = mapping.inner.lock();
-                let mmu_flags = mapping.permissions().bits() as u32;
+                // Convert internal MMUFlags bit positions to the
+                // Fuchsia ABI ZX_VM_PERM_* values.
+                // Use page_flags(0) which returns the effective
+                // permissions, accounting for protect() changes.
+                let perms = m_inner.page_flags(0);
+                let mut mmu_flags: u32 = 0;
+                if perms.contains(MMUFlags::READ) {
+                    mmu_flags |= 1; // ZX_VM_PERM_READ
+                }
+                if perms.contains(MMUFlags::WRITE) {
+                    mmu_flags |= 2; // ZX_VM_PERM_WRITE
+                }
+                if perms.contains(MMUFlags::EXECUTE) {
+                    mmu_flags |= 4; // ZX_VM_PERM_EXECUTE
+                }
                 let mut m_name_buf = [0u8; 32];
                 let vmo_name = mapping.vmo.name();
                 let vmo_name_bytes = vmo_name.as_bytes();

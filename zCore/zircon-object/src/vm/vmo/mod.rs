@@ -103,6 +103,9 @@ pub trait VMObjectTrait: Sync + Send {
     fn is_contiguous(&self) -> bool {
         false
     }
+    fn is_reference(&self) -> bool {
+        false
+    }
 
     /// Returns true if the object is backed by RAM.
     fn is_paged(&self) -> bool {
@@ -140,6 +143,9 @@ pub struct VmObject {
 }
 
 impl_kobject!(VmObject
+    fn on_zero_handles(&self) {
+        self.on_zero_handles_impl();
+    }
     fn as_vmo(&self) -> Option<&crate::vm::VmObject> {
         Some(self)
     }
@@ -219,6 +225,11 @@ impl VmObject {
             inner: Mutex::new(VmObjectInner::default()),
         });
         Ok(vmo)
+    }
+
+    /// Returns true if this VMO is pager-backed.
+    pub fn has_pager(&self) -> bool {
+        self.inner.lock().pager_port.is_some()
     }
 
     /// Set the pager association for this VMO.
@@ -519,16 +530,21 @@ impl VmObject {
     /// is skipped. This is used for ZX_VMO_CHILD_REFERENCE which creates
     /// a full-VMO alias that is allowed on resizable VMOs.
     pub fn create_slice(self: &Arc<Self>, offset: usize, p_size: usize) -> ZxResult<Arc<Self>> {
-        self.create_slice_inner(offset, p_size, false)
+        self.create_slice_inner(offset, p_size, false, false)
     }
 
-    /// Create a slice that is allowed on resizable parents (REFERENCE child).
+    /// Create a REFERENCE child (full-VMO alias).
+    ///
+    /// Unlike regular slices, REFERENCE children are allowed on
+    /// resizable parents. If `resizable` is true, the child can
+    /// resize the parent (requires parent to be resizable).
     pub fn create_reference_slice(
         self: &Arc<Self>,
         offset: usize,
         p_size: usize,
+        resizable: bool,
     ) -> ZxResult<Arc<Self>> {
-        self.create_slice_inner(offset, p_size, true)
+        self.create_slice_inner(offset, p_size, true, resizable)
     }
 
     fn create_slice_inner(
@@ -536,6 +552,7 @@ impl VmObject {
         offset: usize,
         p_size: usize,
         allow_resizable_parent: bool,
+        resizable: bool,
     ) -> ZxResult<Arc<Self>> {
         let size = roundup_pages(p_size);
         // why 32 * PAGE_SIZE? Refered to zircon source codes
@@ -562,12 +579,16 @@ impl VmObject {
         let child_content_size = parent_content_size.saturating_sub(offset).min(size);
         let child = Arc::new(VmObject {
             base: KObjectBase::with(&self.base.name(), Signal::VMO_ZERO_CHILDREN),
-            resizable: false,
+            resizable,
             is_slice: true,
             immutable: core::sync::atomic::AtomicBool::new(false),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
-            trait_: VMObjectSlice::new(self.trait_.clone(), offset, size),
+            trait_: if allow_resizable_parent {
+                VMObjectSlice::new_reference(self.trait_.clone(), offset, size)
+            } else {
+                VMObjectSlice::new(self.trait_.clone(), offset, size)
+            },
             inner: Mutex::new(VmObjectInner {
                 parent: Arc::downgrade(self),
                 content_size: child_content_size,
@@ -612,6 +633,15 @@ impl VmObject {
         size: usize,
         zero_until_offset: usize,
     ) -> ZxResult<usize> {
+        // REFERENCE children delegate to the parent.
+        // Acquire parent Arc first, drop the guard, then call —
+        // avoids child→parent lock ordering deadlocks.
+        if self.trait_.is_reference() {
+            let parent = self.inner.lock().parent.upgrade();
+            if let Some(parent) = parent {
+                return parent.set_content_size_and_resize(size, zero_until_offset);
+            }
+        }
         let mut inner = self.inner.lock();
         let content_size = inner.content_size;
         let len = self.trait_.len();
@@ -635,8 +665,18 @@ impl VmObject {
 
     /// Get the size of the content stored in the VMO in bytes.
     pub fn content_size(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.content_size
+        // REFERENCE children delegate to the parent so they always
+        // reflect the parent's current content_size.
+        if self.trait_.is_reference() {
+            // Acquire parent Arc first, then drop the lock before
+            // calling parent.content_size() to avoid child→parent
+            // lock ordering issues.
+            let parent = self.inner.lock().parent.upgrade();
+            if let Some(parent) = parent {
+                return parent.content_size();
+            }
+        }
+        self.inner.lock().content_size
     }
 
     /// Get the size of the content stored in the VMO in bytes.
@@ -652,6 +692,15 @@ impl VmObject {
 
     /// content_size is properly initialized.
     pub fn set_content_size(&self, size: usize) -> ZxResult {
+        // REFERENCE children delegate to the parent.
+        // Acquire parent Arc first, drop the guard, then call —
+        // avoids child→parent lock ordering deadlocks.
+        if self.trait_.is_reference() {
+            let parent = self.inner.lock().parent.upgrade();
+            if let Some(parent) = parent {
+                return parent.set_content_size(size);
+            }
+        }
         let mut inner = self.inner.lock();
         inner.content_size = size;
         Ok(())
@@ -663,6 +712,13 @@ impl VmObject {
     /// invariant that data beyond content_size reads as zero. Zeros from
     /// the new content_size to the old content_size (or page boundary).
     pub fn set_content_size_with_zero(&self, size: usize) -> ZxResult {
+        // REFERENCE children delegate to the parent.
+        if self.trait_.is_reference() {
+            let parent = self.inner.lock().parent.upgrade();
+            if let Some(parent) = parent {
+                return parent.set_content_size_with_zero(size);
+            }
+        }
         let mut inner = self.inner.lock();
         let old = inner.content_size;
         inner.content_size = size;
@@ -777,19 +833,11 @@ impl VmObject {
     /// Regular (non-child) VMOs are NOT affected — it's valid in
     /// Fuchsia to close a VMO handle and keep using the mapping.
     pub fn on_zero_handles_impl(&self) {
-        // is_slice is permanent (set at creation for slice/reference).
-        // parent check covers COW children whose parent may still exist.
-        let is_child = self.is_slice || self.inner.lock().parent.upgrade().is_some();
-        if !is_child {
-            return;
-        }
-        self.dead.store(true, core::sync::atomic::Ordering::Release);
-        let inner = self.inner.lock();
-        for mapping_weak in &inner.mappings {
-            if let Some(mapping) = mapping_weak.upgrade() {
-                mapping.unmap_all_pages();
-            }
-        }
+        // In Fuchsia, closing the last handle to a VMO does NOT
+        // invalidate existing mappings. Mapped pages remain accessible
+        // until the mapping is explicitly removed or the process exits.
+        // The only effect is signaling ZX_VMO_ZERO_CHILDREN on the
+        // parent (handled elsewhere via child list tracking).
     }
 
     pub fn is_dead(&self) -> bool {
@@ -798,6 +846,41 @@ impl VmObject {
 
     pub fn is_contiguous(&self) -> bool {
         self.trait_.is_contiguous()
+    }
+
+    /// Returns true if this VMO is a REFERENCE child.
+    pub fn is_reference(&self) -> bool {
+        self.trait_.is_reference()
+    }
+
+    /// Get the parent VmObject (for REFERENCE children).
+    pub fn parent(&self) -> Option<Arc<VmObject>> {
+        self.inner.lock().parent.upgrade()
+    }
+
+    /// Override the parent reference and move the child registration
+    /// from the old parent to the new parent. Used when creating a
+    /// child through a REFERENCE so the child's parent_koid points
+    /// to the reference. Also ensures ZX_VMO_ZERO_CHILDREN is
+    /// signaled correctly on the reference.
+    pub fn set_parent_ref(self: &Arc<Self>, new_parent: &Arc<VmObject>) {
+        // Remove from old parent's children list.
+        let old_parent = self.inner.lock().parent.upgrade();
+        if let Some(old_parent) = &old_parent {
+            let mut old_inner = old_parent.inner.lock();
+            old_inner
+                .children
+                .retain(|c| !c.upgrade().is_some_and(|c| Arc::ptr_eq(&c, self)));
+            // Re-assert zero-children if needed.
+            if old_inner.children.iter().all(|c| c.strong_count() == 0) {
+                drop(old_inner);
+                old_parent.base.signal_set(Signal::VMO_ZERO_CHILDREN);
+            }
+        }
+        // Add to new parent's children list.
+        new_parent.add_child(self);
+        // Update parent weak ref.
+        self.inner.lock().parent = Arc::downgrade(new_parent);
     }
 }
 

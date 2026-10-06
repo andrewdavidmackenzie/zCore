@@ -189,6 +189,7 @@ impl Syscall<'_> {
         } else {
             let future = hal_impl::thread::sleep_until(deadline.into());
             pin_mut!(future);
+            self.thread.set_blocking_state(ThreadState::BlockedSleeping);
             self.thread
                 .blocking_run(
                     future,
