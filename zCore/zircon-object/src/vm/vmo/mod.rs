@@ -785,6 +785,7 @@ impl VmObject {
     /// Fuchsia to close a VMO handle and keep using the mapping.
     pub fn on_zero_handles_impl(&self) {
         let is_child = self.inner.lock().parent.upgrade().is_some();
+
         if !is_child {
             return;
         }
