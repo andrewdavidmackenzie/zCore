@@ -270,10 +270,7 @@ impl VmAddressRegion {
         // `map_range || vmo.name() != ""` forced eager commit for named VMOs,
         // but Fuchsia's Scudo allocator names its VMOs and requires lazy commit.
         // Page faults on uncommitted pages are handled by handle_page_fault.
-        // When the mapping extends past the VMO, only eagerly commit
-        // pages within the VMO's current range. Pages beyond will be
-        // faulted in lazily (or after a resize).
-        if map_range && vmo_offset > vmo.len() {
+        if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
             warn!(
                 "map_ext: INVALID_ARGS: vmo '{}' len={:#x} < offset={:#x}+len={:#x}, map_range={}",
                 vmo.name(),
@@ -1318,13 +1315,9 @@ impl VmMapping {
         self.vmo.commit_pages_with(&mut |commit| {
             let inner = self.inner.lock();
             let mut page_table = self.page_table.lock();
-            let mapping_pages = inner.size / PAGE_SIZE;
+            let page_num = inner.size / PAGE_SIZE;
             let vmo_offset = inner.vmo_offset / PAGE_SIZE;
-            // Only commit pages within the VMO's current size.
-            // Pages beyond will be faulted in lazily after a resize.
-            let vmo_pages = self.vmo.len() / PAGE_SIZE;
-            let commit_pages = mapping_pages.min(vmo_pages.saturating_sub(vmo_offset));
-            for i in 0..commit_pages {
+            for i in 0..page_num {
                 let paddr = commit(vmo_offset + i, inner.page_flags(i))?;
                 // Perform page table mapping via GenericPageTable's hal_pt_map
                 page_table
