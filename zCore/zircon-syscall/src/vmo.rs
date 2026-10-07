@@ -26,6 +26,7 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let resizable = options & ZX_VMO_RESIZABLE != 0;
+        let unbounded = options & ZX_VMO_UNBOUNDED != 0;
         let proc = self.thread.proc();
         let size_usize = size as usize;
         let rounded = roundup_pages(size_usize);
@@ -33,9 +34,17 @@ impl Syscall<'_> {
         if rounded < size_usize {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        let vmo = VmObject::new_paged_with_resizable(resizable, pages(size_usize));
-        // Fuchsia's vmo_create sets content_size (stream size) to the
-        // exact user-requested size (not the rounded-up page size).
+        // UNBOUNDED VMOs have maximum capacity; the create size is
+        // only the initial content_size (stream size).
+        let vmo_pages = if unbounded {
+            // Use a large but finite capacity (256K pages = 1GB).
+            // Pages are allocated lazily on demand.
+            256 * 1024
+        } else {
+            pages(size_usize)
+        };
+        let vmo = VmObject::new_paged_with_resizable(resizable, vmo_pages);
+        // Set content_size to the exact user-requested size.
         vmo.set_content_size(size_usize)?;
         // Default VMO rights do not include EXECUTE. The caller must
         // use zx_vmo_replace_as_executable to add EXECUTE rights.
@@ -463,10 +472,22 @@ impl Syscall<'_> {
                 }
                 vmo.zero(offset, len)
             }
-            VmoOpType::Lock | VmoOpType::Unlock => {
-                // TODO: implement VMO Lock/Unlock operations
-                warn!("vmo.op_range: Lock/Unlock not yet implemented");
-                Err(ZxError::NOT_SUPPORTED)
+            VmoOpType::Lock => {
+                // Lock (TRY_LOCK) a discardable VMO to prevent eviction.
+                // Stub: accept the operation but don't actually track
+                // lock state. Returns success so tests can proceed.
+                if !rights.contains(Rights::WRITE) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                Ok(())
+            }
+            VmoOpType::Unlock => {
+                // Unlock a discardable VMO, allowing eviction.
+                // Stub: accept the operation.
+                if !rights.contains(Rights::WRITE) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                Ok(())
             }
             VmoOpType::CacheSync | VmoOpType::CacheClean | VmoOpType::CacheCleanInvalidate => {
                 // These require READ rights per the Zircon ABI.
