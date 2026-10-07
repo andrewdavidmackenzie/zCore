@@ -1,0 +1,151 @@
+# Core-tests skip list — tests that hang or crash the test runner.
+#
+# Each non-empty, non-comment line is a gtest pattern to exclude.
+# The Makefile concatenates them into a single --gtest_filter=-... string.
+#
+# When a test is fixed, DELETE its line here (and close the matching
+# checkbox in the GitHub tracking issue).
+#
+# Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/XXX
+# ──────────────────────────────────────────────────────────────────────
+
+# ── Multi-threaded / cooperative scheduler ───────────────────────────
+# These tests spawn real OS threads and require preemptive scheduling.
+PortStressTest.*
+ChannelTest.NoSpuriousReadableSignalWhenRacing
+ChannelCallMutexTest.*
+ChannelInternalTest.*
+ProcessTest.ProcessWaitAsyncCancelSelf
+ProcessTest.GetInfoRuntime
+ProcessTest.GetInfoRuntimeV1
+
+# ── Thread suspend / register state (cooperative scheduler) ─────────
+# 43/57 Threads tests hang — they suspend child threads, write
+# register state, or use exception channels. Only ~14 are safe.
+Threads.*
+ProcessTest.SuspendSelf
+
+# ── Policy exception infrastructure ─────────────────────────────────
+# Need ZX_EXCP_POLICY_CODE_CHANNEL_FULL_WRITE and exception delivery.
+PortTest.QueuePacketLimitExceededGeneratesPolicyException
+PortTest.TooManyObservers
+ChannelTest.ChannelFullException
+DefaultExceptionHandlerTest.UnhandledPolicyException
+
+# ── COW populated_bytes / fractional attribution (#508) ──────────────
+# commit_page_internal creates intermediate copies; Fuchsia does flat
+# lookup. populated_scaled_bytes values diverge → polling hangs.
+VmoClone2TestCase.*
+VmoCloneResizeTests.*
+VmoZeroTestCase.*
+VmoZeroTestcase.ZeroFreesAndAllocates
+ProgressiveCloneDiscardTests.ProgressiveCloneTruncate
+
+# ── VmoTestCase (multiple root causes) ───────────────────────────────
+# boot_options uninitialized, VMAR map failures, contiguous VMO stubs.
+# Only a handful pass; the rest hang or crash the runner.
+VmoTestCase.*
+
+# ── VMO clone/slice/signal hangs ─────────────────────────────────────
+# Individual tests that hang within otherwise-passing suites.
+VmoReference.ChildSlice
+VmoSliceTestCase.ZeroChildrenGrandchildClosedLast
+VmoCloneTestCase.Commit
+VmoCloneDisjointClonesTests.DisjointCloneLateClose
+VmoSignalTestCase.ChildSignalMap
+
+# ── Pager infrastructure (#498, #499) ────────────────────────────────
+# Pager tests need preemptive scheduling + TRAP_DIRTY support.
+Pager.*
+PagerProcess.*
+PagerWriteback.*
+Snapshot.*
+StreamTestCase.AppendSuppliesZeroes
+StreamTestCase.ContentSizeUpdatedOnPartialWrite
+StreamTestCase.PartialVmoDirty
+StreamTestCase.WriteShrinkRace
+StreamTestCase.FaultBeyondStreamSizeResizeDownRace
+StreamTestCase.NoStreamFromContiguousOrPhysicalVmo
+
+# ── Memory probe — crashes the runner (UD2 abort) ────────────────────
+# memory-probe.cc spawns a child thread, catches its page-fault
+# exception, and checks the synth_code. Our kernel demand-pages
+# uncommitted memory instead of faulting, so the assertion at
+# memory-probe.cc:130 fires and aborts the whole test process.
+# (VmoTestCase.* and Pager.* wildcards already cover the rest.)
+Vmar.ProtectLargeUncomittedTest
+Vmar.UnmapLargeUncommittedTest
+Vmar.ProtectOverDemandPagedTest
+Vmar.MapReadIfXomUnsupported
+Vmar.ProtectReadIfXomUnsupported
+Vmar.MapRangeResizable
+Vmar.FaultBeyondStreamSize
+Vmar.FaultBeyondReducedStreamSize
+Vmar.FaultBeyondStreamSizeRange
+Vmar.MapRangeStreamSizeWraparound
+Vmar.FaultBeyondStreamSizeForceWritable
+
+# ── Memory mapping crash ────────────────────────────────────────────
+# Page fault (trap 0xe) during mmap PROT_EXEC test.
+MemoryMappingTest.MmapProtExecTest
+
+# ── Invalid buffer pointer hangs ─────────────────────────────────────
+# Tests that pass null/invalid user buffer pointers to info syscalls.
+# Our kernel crashes or infinite-loops instead of returning an error.
+JobGetInfoTest.InfoJobProcessesInvalidBufferPointerFails
+VmarGetInfoTest.InfoHandleBasicNullActualAndAvailSucceeds
+KernelStatsGetInfoTest.KmemStatsSmallBuffer
+TaskGetInfoTest.InfoTaskStatsJobHandleIsBadHandle
+VmarMapsGetInfoTest.InfoVmarMapsInvalidBufferPointerFails
+ProcessGetInfoTest.InfoProcessJobHandleIsBadHandle
+
+# ── Unimplemented hardware / missing binaries ───────────────────────
+ProcessTest.ProcessHwTraceContextIdProperty
+VmoTransferDataTestCase.InvalidInputs
+
+# ── BTI (Bus Transaction Initiator) ─────────────────────────────────
+# Kernel panics in paged.rs:1161 assertion during pin operations.
+Bti.*
+
+# ── Interrupt / MSI tests ────────────────────────────────────────────
+# Multiple tests panic (interrupt/mod.rs:55 unwrap) or hang.
+# MsiTest crashes on boot_options_vmo (test_ram_reserve).
+InterruptTest.*
+MsiTest.*
+
+# ── Channel fault handling ───────────────────────────────────────────
+# Reads from a faulting buffer — hangs (needs exception infrastructure).
+ChannelTest.ReadFaultDoesNotLeakHandles
+
+# ── Resource tests ───────────────────────────────────────────────────
+# Mexec* triggers platform reset. Ioports crashes — needs boot
+# resource handle. ExclusiveShared* crashes similarly.
+Resource.Mexec*
+Resource.Ioports
+Resource.CreateAndDestroy
+Resource.ExclusiveShared*
+
+# ── Timer tests ──────────────────────────────────────────────────────
+# Timer.Basic hangs — likely timer implementation gap.
+Timer.Basic
+
+# ── Job critical process ─────────────────────────────────────────────
+# Hangs — needs critical process kill-on-exit infrastructure.
+JobTest.CriticalProcessAlreadySet
+
+# ── VMAR protect tests ──────────────────────────────────────────────
+# ProtectTestCase.Unmap hangs — likely memory probe related.
+ProtectTestCase.Unmap
+
+# ── Process debug ────────────────────────────────────────────────────
+# Hangs reading/writing process memory at invalid offsets.
+ProcessDebugTest.ReadMemoryAtInvalidOffsetReturnsErrorNotFound
+ProcessDebugVDSO.WriteToVdsoAddressReturnsAccessDenied
+
+# ── Profile tests ────────────────────────────────────────────────────
+# Profile creation hangs after first test.
+ProfileTest.CreateProfileWithMutuallyExclusiveFlagsIsInvalidArgs
+
+# ── System suspend / wake reports ────────────────────────────────────
+# WakeReportTestsThreadBound hangs — thread-bound suspend not implemented.
+WakeReportTestsThreadBound.*
