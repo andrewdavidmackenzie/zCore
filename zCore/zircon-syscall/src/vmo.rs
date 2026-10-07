@@ -125,9 +125,11 @@ impl Syscall<'_> {
             proc.check_policy(PolicyCondition::AmbientMarkVMOExec)?;
         }
         let _ = proc.get_object_and_rights::<VmObject>(handle)?;
+        // Replace: create new handle with EXECUTE, remove old handle.
         let new_handle = proc.dup_handle_operating_rights(handle, |handle_rights| {
             Ok(handle_rights | Rights::EXECUTE)
         })?;
+        proc.remove_handle(handle)?;
         out.write(new_handle)?;
         Ok(())
     }
