@@ -20,39 +20,6 @@ pub fn read_rootfs_file(path: &str) -> Option<alloc::vec::Vec<u8>> {
     Some(data)
 }
 
-// ── Linux flavour ─────────────────────────────────────────────────────
-
-#[cfg(feature = "linux")]
-#[allow(dead_code)]
-pub fn rootfs() -> alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem> {
-    use alloc::sync::Arc;
-
-    // LibOS mode: use HostFS from the rootfs directory on the host.
-    #[cfg(feature = "libos")]
-    if let Some(path) = hal_impl::platform::libos_rootfs_path("linux") {
-        info!("LibOS rootfs: {}", path);
-        return rcore_fs_hostfs::HostFS::new(path);
-    }
-
-    // Bare-metal: open an SFS image from initrd or block device.
-    use rcore_fs::dev::Device;
-    let device: Arc<dyn Device> = {
-        use linux_object::fs::rcore_fs_wrapper::*;
-        if let Some(initrd) = init_ram_disk() {
-            Arc::new(MemBuf::new(initrd))
-        } else if let Some(block) = hal_impl::device_registry::all_block().first() {
-            Arc::new(BlockCache::new(Block::new(block), 0x100))
-        } else {
-            panic!(
-                "No rootfs available: no initrd and no block device. \
-                 On RPi 400, pass rootfs via -initrd or use Zircon mode."
-            );
-        }
-    };
-    info!("Opening the rootfs...");
-    rcore_fs_sfs::SimpleFileSystem::open(device).expect("failed to open device SimpleFS")
-}
-
 // ── Zircon flavour ────────────────────────────────────────────────────
 
 pub fn zbi() -> impl AsRef<[u8]> {
@@ -109,17 +76,6 @@ pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSys
     }
 
     None
-}
-
-// ── Initrd support (bare-metal only) ──────────────────────────────────
-
-#[cfg(feature = "linux")]
-#[allow(dead_code)]
-pub(crate) fn init_ram_disk() -> Option<&'static mut [u8]> {
-    if hal_impl::platform::is_hosted() {
-        return None;
-    }
-    hal_impl::boot::init_ram_disk()
 }
 
 // ── Device wrappers (bare-metal Zircon) ───────────────────────────────

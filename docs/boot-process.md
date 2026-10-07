@@ -416,7 +416,7 @@ The flavour is selected at compile time via mutually exclusive features:
 ### Linux Mode (`--features linux`)
 
 ```rust
-let rootfs = fs::rootfs();  // SFS image, initrd, or host FS
+let rootfs = fs::try_rootfs().expect("no rootfs");  // SFS image, initrd, or host FS
 let proc = linux_loader::linux::run(args, envs, rootfs);
 ```
 
