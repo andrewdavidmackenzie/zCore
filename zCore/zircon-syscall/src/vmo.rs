@@ -26,10 +26,16 @@ impl Syscall<'_> {
         }
         let resizable = options & ZX_VMO_RESIZABLE != 0;
         let proc = self.thread.proc();
-        let vmo = VmObject::new_paged_with_resizable(resizable, pages(size as usize));
+        let size_usize = size as usize;
+        let rounded = roundup_pages(size_usize);
+        // Reject sizes that overflow when rounded up to page boundary.
+        if rounded < size_usize {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        let vmo = VmObject::new_paged_with_resizable(resizable, pages(size_usize));
         // Fuchsia's vmo_create sets content_size (stream size) to the
         // exact user-requested size (not the rounded-up page size).
-        vmo.set_content_size(size as usize)?;
+        vmo.set_content_size(size_usize)?;
         // Default VMO rights do not include EXECUTE. The caller must
         // use zx_vmo_replace_as_executable to add EXECUTE rights.
         // RESIZE right is only granted when the VMO is resizable.
@@ -61,11 +67,13 @@ impl Syscall<'_> {
         if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
             return Err(ZxError::NOT_FOUND);
         }
-        // Reject buffers that span the user/kernel boundary.
-        if let Some(end) = buf.as_addr().checked_add(buf_size) {
-            if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize {
+        // Reject buffers that span the user/kernel boundary or overflow.
+        match buf.as_addr().checked_add(buf_size) {
+            Some(end) if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize => {
                 return Err(ZxError::NOT_FOUND);
             }
+            None => return Err(ZxError::NOT_FOUND),
+            _ => {}
         }
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::READ)?;
@@ -105,10 +113,12 @@ impl Syscall<'_> {
         if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
             return Err(ZxError::NOT_FOUND);
         }
-        if let Some(end) = buf.as_addr().checked_add(buf_size) {
-            if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize {
+        match buf.as_addr().checked_add(buf_size) {
+            Some(end) if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize => {
                 return Err(ZxError::NOT_FOUND);
             }
+            None => return Err(ZxError::NOT_FOUND),
+            _ => {}
         }
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?;
