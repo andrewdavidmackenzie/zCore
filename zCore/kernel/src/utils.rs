@@ -1,5 +1,4 @@
-use alloc::{string::String, sync::Arc};
-use zircon_object::{object::KernelObject, task::Process};
+use alloc::string::String;
 
 #[derive(Debug)]
 pub struct BootOptions {
@@ -33,48 +32,4 @@ fn parse_cmdline_value<'a>(cmdline: &'a str, key: &str) -> Option<&'a str> {
         }
     }
     None
-}
-
-/// Wait for the init process to exit, then terminate.
-pub fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
-    let exit_code = if let Some(proc) = proc {
-        let future = async move {
-            use zircon_object::object::Signal;
-            let object: Arc<dyn KernelObject> = proc.clone();
-            // Wait for either termination signal — Linux processes use
-            // PROCESS_TERMINATED, Zircon processes use USER_SIGNAL_0.
-            // In dual-flavour mode, wait for either.
-            let signal = Signal::PROCESS_TERMINATED | Signal::USER_SIGNAL_0;
-            object.wait_signal(signal).await;
-            check_exit_code(proc)
-        };
-        hal_impl::run_executor(future)
-    } else {
-        // Secondary core: enter the executor idle loop to service
-        // tasks spawned by the primary core. The future never
-        // completes — secondary cores run until the system shuts down.
-        let future = core::future::pending::<i32>();
-        hal_impl::run_executor(future)
-    };
-    info!("exiting with code {}", exit_code);
-    hal_impl::cpu::reset()
-}
-
-fn check_exit_code(proc: Arc<Process>) -> i32 {
-    let code = proc.exit_code().unwrap_or(-1);
-    if code != 0 {
-        error!(
-            "process {:?}({}) exited with code {:?}",
-            proc.name(),
-            proc.id(),
-            code
-        );
-    } else {
-        info!(
-            "process {:?}({}) exited with code 0",
-            proc.name(),
-            proc.id()
-        )
-    }
-    code as i32
 }

@@ -5,7 +5,9 @@
 
 // Zircon is always the base flavour. Linux is additive.
 
+use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
+use zircon_object::{object::KernelObject, task::Process};
 
 extern crate alloc;
 #[macro_use]
@@ -47,7 +49,7 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) {
     // steal the BSP's init task via work-stealing before the BSP
     // can run it.
     STARTED.store(true, Ordering::SeqCst);
-    utils::wait_for_exit(Some(proc))
+    wait_for_exit(Some(proc))
 }
 
 /// Start the init process specified by ROOTPROC.
@@ -162,5 +164,54 @@ pub extern "Rust" fn secondary_core_init() -> ! {
     }
     hal_impl::secondary_init();
     info!("secondary core {} initialized", hal_impl::cpu::cpu_id());
-    utils::wait_for_exit(None)
+    wait_for_exit(None)
+}
+
+/// Wait for the init process to exit, then reset the system.
+///
+/// On the primary core, waits for the init process to signal termination
+/// (either `PROCESS_TERMINATED` or `USER_SIGNAL_0`), logs the exit code,
+/// and resets. On secondary cores, enters the executor idle loop to
+/// service tasks spawned by the primary core (the future never completes).
+fn wait_for_exit(proc: Option<Arc<Process>>) -> ! {
+    let exit_code = if let Some(proc) = proc {
+        let future = async move {
+            use zircon_object::object::Signal;
+            let object: Arc<dyn KernelObject> = proc.clone();
+            // Wait for either termination signal — Linux processes use
+            // PROCESS_TERMINATED, Zircon processes use USER_SIGNAL_0.
+            // In dual-flavour mode, wait for either.
+            let signal = Signal::PROCESS_TERMINATED | Signal::USER_SIGNAL_0;
+            object.wait_signal(signal).await;
+            check_exit_code(proc)
+        };
+        hal_impl::run_executor(future)
+    } else {
+        // Secondary core: enter the executor idle loop to service
+        // tasks spawned by the primary core. The future never
+        // completes — secondary cores run until the system shuts down.
+        let future = core::future::pending::<i32>();
+        hal_impl::run_executor(future)
+    };
+    info!("exiting with code {}", exit_code);
+    hal_impl::cpu::reset()
+}
+
+fn check_exit_code(proc: Arc<Process>) -> i32 {
+    let code = proc.exit_code().unwrap_or(-1);
+    if code != 0 {
+        error!(
+            "process {:?}({}) exited with code {:?}",
+            proc.name(),
+            proc.id(),
+            code
+        );
+    } else {
+        info!(
+            "process {:?}({}) exited with code 0",
+            proc.name(),
+            proc.id()
+        )
+    }
+    code as i32
 }
