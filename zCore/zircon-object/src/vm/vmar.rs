@@ -17,7 +17,13 @@ pub enum VmarOpType {
     /// Decommit memory pages (release physical frames) for mapped VMOs.
     Decommit = 2,
     /// Populate page table entries for committed pages (performance hint).
-    MapRange = 4,
+    MapRange = 3,
+    /// Zero mapped pages (write zeroes to the VMO range).
+    Zero = 10,
+    /// Hint: pages not needed soon (may be reclaimed).
+    DontNeed = 12,
+    /// Hint: pages will be needed soon (prefetch).
+    AlwaysNeed = 13,
 }
 
 impl VmarOpType {
@@ -26,7 +32,10 @@ impl VmarOpType {
         match op {
             1 => Ok(Self::Commit),
             2 => Ok(Self::Decommit),
-            4 => Ok(Self::MapRange),
+            3 => Ok(Self::MapRange),
+            10 => Ok(Self::Zero),
+            12 => Ok(Self::DontNeed),
+            13 => Ok(Self::AlwaysNeed),
             _ => Err(ZxError::INVALID_ARGS),
         }
     }
@@ -570,6 +579,12 @@ impl VmAddressRegion {
                     // For simplicity, commit the pages (which maps them).
                     map.vmo.commit(vmo_offset, op_len)?;
                 }
+                VmarOpType::Zero => {
+                    map.vmo.zero(vmo_offset, op_len)?;
+                }
+                VmarOpType::DontNeed | VmarOpType::AlwaysNeed => {
+                    // Performance hints — no-op for now.
+                }
             }
         }
         Ok(())
@@ -1042,7 +1057,7 @@ impl VmAddressRegion {
     /// Return the actual number of bytes read.
     pub fn read_memory(&self, vaddr: usize, buf: &mut [u8]) -> ZxResult<usize> {
         // TODO: support multiple VMOs
-        let map = self.find_mapping(vaddr).ok_or(ZxError::NO_MEMORY)?;
+        let map = self.find_mapping(vaddr).ok_or(ZxError::NOT_FOUND)?;
         let map_inner = map.inner.lock();
         let vmo_offset = vaddr - map_inner.addr + map_inner.vmo_offset;
         let size_limit = map_inner.addr + map_inner.size - vaddr;
@@ -1056,7 +1071,7 @@ impl VmAddressRegion {
     /// Return the actual number of bytes written.
     pub fn write_memory(&self, vaddr: usize, buf: &[u8]) -> ZxResult<usize> {
         // TODO: support multiple VMOs
-        let map = self.find_mapping(vaddr).ok_or(ZxError::NO_MEMORY)?;
+        let map = self.find_mapping(vaddr).ok_or(ZxError::NOT_FOUND)?;
         let map_inner = map.inner.lock();
         let vmo_offset = vaddr - map_inner.addr + map_inner.vmo_offset;
         let size_limit = map_inner.addr + map_inner.size - vaddr;

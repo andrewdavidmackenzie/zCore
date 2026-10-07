@@ -400,14 +400,14 @@ pub fn spawn_process(
         "mmio",
         crate::dev::ResourceKind::MMIO,
         0,
-        0,
+        usize::MAX,
         crate::dev::ResourceFlags::empty(),
     );
     let irq_resource = Resource::create(
         "irq",
         crate::dev::ResourceKind::IRQ,
         0,
-        0,
+        usize::MAX,
         crate::dev::ResourceFlags::empty(),
     );
     let system_resource = Resource::create(
