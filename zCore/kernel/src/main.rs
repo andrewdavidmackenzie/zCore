@@ -22,7 +22,7 @@ mod utils;
 #[cfg(feature = "libos")]
 fn main() {
     primary_core_init(hal_impl::KernelConfig {
-        cmdline: env!("ZCORE_CMDLINE"),
+        cmdline: option_env!("ZCORE_CMDLINE").unwrap_or("LOG=warn"),
         ..Default::default()
     });
 }
