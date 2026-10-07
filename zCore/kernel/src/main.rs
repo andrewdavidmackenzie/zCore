@@ -13,12 +13,10 @@ extern crate alloc;
 #[macro_use]
 extern crate log;
 
-#[macro_use]
 mod logging;
 
 mod fs;
 mod handler;
-mod utils;
 
 /// LibOS entry point.
 #[cfg(feature = "libos")]
@@ -38,7 +36,7 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) {
     hal_impl::memory::init();
     hal_impl::primary_init_early(config, &handler::ZcoreKernelHandler);
 
-    let options = utils::boot_options();
+    let options = boot_options();
     info!("Boot options: {:#?}", options);
     hal_impl::memory::insert_regions(&hal_impl::mem::free_pmem_regions());
     hal_impl::primary_init();
@@ -58,7 +56,7 @@ pub extern "Rust" fn primary_core_init(config: hal_impl::KernelConfig) {
 /// - ELFOSABI_ZIRCON (0xFC) → Zircon process (petal)
 /// - Anything else → Linux process (if `linux` feature compiled in)
 /// - Falls back to Zircon userboot if no rootfs is available
-fn boot_init(options: utils::BootOptions) -> alloc::sync::Arc<zircon_object::task::Process> {
+fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Process> {
     // Register the Zircon spawn config globally so cross-flavour
     // exec can spawn Zircon processes from Linux context.
     zircon_object::task::spawn::set_spawn_config(zircon_loader::zircon::zircon_spawn_config());
@@ -214,4 +212,43 @@ fn check_exit_code(proc: Arc<Process>) -> i32 {
         )
     }
     code as i32
+}
+
+// ── Boot options ─────────────────────────────────────────────────────
+
+#[derive(Debug)]
+struct BootOptions {
+    cmdline: alloc::string::String,
+    /// Root process path (e.g. "/bin/busybox?sh" or "/bin/hello").
+    root_proc: alloc::string::String,
+}
+
+/// Parse boot options from the kernel command line.
+///
+/// Extracts `ROOTPROC=<path>` from the cmdline provided by hal-impl.
+/// Defaults to `/bin/busybox?sh` in Linux mode or `/bin/hello` otherwise.
+fn boot_options() -> BootOptions {
+    use alloc::string::ToString;
+    let cmdline = hal_impl::boot::cmdline();
+    let root_proc = parse_cmdline_value(&cmdline, "ROOTPROC")
+        .unwrap_or(if cfg!(feature = "linux") {
+            "/bin/busybox?sh"
+        } else {
+            "/bin/hello"
+        })
+        .to_string();
+    BootOptions { cmdline, root_proc }
+}
+
+/// Extract a value from a "KEY=VALUE KEY2=VALUE2" cmdline string.
+fn parse_cmdline_value<'a>(cmdline: &'a str, key: &str) -> Option<&'a str> {
+    for token in cmdline.split_whitespace() {
+        let mut iter = token.splitn(2, '=');
+        if let (Some(k), Some(v)) = (iter.next(), iter.next()) {
+            if k.trim() == key {
+                return Some(v.trim());
+            }
+        }
+    }
+    None
 }
