@@ -39,6 +39,10 @@ libos = [
 ]
 
 # --- Driver features (forwarded to hal-impl -> drivers) ---
+# These are pure pass-throughs: the kernel code never checks these features
+# via cfg!(). They exist because the kernel is the top-level cargo build
+# target and Cargo requires features to be declared on the target package
+# for --features to work. The actual code lives in hal-impl/drivers.
 apic = ["hal-impl/apic"]
 gic-400 = ["hal-impl/gic-400"]
 gic-v3 = ["hal-impl/gic-v3"]
@@ -55,10 +59,10 @@ uefi-boot = ["hal-impl/uefi-boot"]
 allwinner-drivers = ["hal-impl/allwinner-drivers"]
 fu740-drivers = ["hal-impl/fu740-drivers"]
 
-# --- Board presets (combine flavour + drivers + board-specific flags) ---
-board-d1 = ["allwinner-drivers"]
-board-c910light = ["hal-impl/board-c910light"]
-board-fu740 = ["fu740-drivers", "hal-impl/board-fu740"]
+# --- Board presets (forwarded to hal-impl) ---
+# Same pass-through pattern as driver features. Target TOMLs specify
+# these on the kernel package; the kernel forwards them to hal-impl
+# where the board-specific code lives.
 board-jollac2 = ["hal-impl/board-jollac2"]
 board-raspi400 = ["hal-impl/board-raspi400"]
 
@@ -82,24 +86,6 @@ rcore-fs-sfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
 async-std = { version = "1.10", optional = true }
 chrono = { version = "0.4", optional = true }
 rcore-fs-hostfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
-
-# RISC-V
-[target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
-r0 = "1"
-riscv = "0.9"
-dtb-walker = "=0.2.0-alpha.3"
-page-table = "0.0.6"
-sbi-rt = { version = "0.0.4", features = ["legacy"] }
-
-# Bare-metal mode on aarch64
-# rayboot dependency removed — using direct kernel boot with QEMU -kernel
-# See issue #2 for details on the migration from UEFI/rayboot to direct boot
-[target.'cfg(all(target_os = "none", target_arch = "aarch64"))'.dependencies]
-
-# Bare-metal mode on x86_64
-[target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
-bootloader_api = "0.11"
-# rvm = { git = "https://github.com/rcore-os/RVM", rev = "e91d625", optional = true }
 
 [package.metadata.cargo-all-features]
 # Requires custom JSON target specs and -Z build-std; cannot be
