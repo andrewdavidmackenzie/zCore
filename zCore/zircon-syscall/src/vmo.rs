@@ -90,6 +90,14 @@ impl Syscall<'_> {
             let n = chunk.len();
             vmo_offset += n;
             Ok(n)
+        })
+        .map_err(|e| {
+            // Fuchsia returns NOT_FOUND for unmapped user buffers.
+            if e == ZxError::INVALID_ARGS {
+                ZxError::NOT_FOUND
+            } else {
+                e
+            }
         })?;
         Ok(())
     }
@@ -134,6 +142,13 @@ impl Syscall<'_> {
             let n = chunk.len();
             vmo_offset += n;
             Ok(n)
+        })
+        .map_err(|e| {
+            if e == ZxError::INVALID_ARGS {
+                ZxError::NOT_FOUND
+            } else {
+                e
+            }
         })?;
         Ok(())
     }
