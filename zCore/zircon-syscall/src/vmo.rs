@@ -57,6 +57,16 @@ impl Syscall<'_> {
         if buf_size > 0 && buf.is_null() {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Reject kernel-space addresses.
+        if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
+            return Err(ZxError::NOT_FOUND);
+        }
+        // Reject buffers that span the user/kernel boundary.
+        if let Some(end) = buf.as_addr().checked_add(buf_size) {
+            if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize {
+                return Err(ZxError::NOT_FOUND);
+            }
+        }
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::READ)?;
         // in case integer addition overflows
@@ -90,6 +100,15 @@ impl Syscall<'_> {
         );
         if buf_size > 0 && buf.is_null() {
             return Err(ZxError::INVALID_ARGS);
+        }
+        // Reject kernel-space addresses.
+        if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
+            return Err(ZxError::NOT_FOUND);
+        }
+        if let Some(end) = buf.as_addr().checked_add(buf_size) {
+            if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize {
+                return Err(ZxError::NOT_FOUND);
+            }
         }
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?;
