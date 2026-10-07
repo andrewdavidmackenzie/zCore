@@ -112,6 +112,10 @@ impl VMObjectTrait for VMObjectSlice {
         self.is_reference
     }
 
+    fn parent_offset(&self) -> usize {
+        self.offset
+    }
+
     fn cache_policy(&self) -> CachePolicy {
         self.parent.cache_policy()
     }

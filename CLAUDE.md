@@ -36,6 +36,8 @@ When working on issue #21 (or any batch-fix task):
 - **Merge PRs when green** without waiting for user approval (unless
   the user has said otherwise). Use `gh pr merge <N> --squash --delete-branch`.
 - **After merging**, rebase dependent branches, push, and continue.
+- **Never force-push.** Always create new commits to fix issues.
+  Force-pushing rewrites history and disrupts CI and reviewers.
 - **Never ask "should I continue?"** — always continue unless the user
   explicitly says to stop.
 

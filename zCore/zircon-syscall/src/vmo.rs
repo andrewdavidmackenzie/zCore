@@ -26,11 +26,16 @@ impl Syscall<'_> {
         }
         let resizable = options & ZX_VMO_RESIZABLE != 0;
         let proc = self.thread.proc();
-        let vmo = VmObject::new_paged_with_resizable(resizable, pages(size as usize));
+        let size_usize = size as usize;
+        let rounded = roundup_pages(size_usize);
+        // Reject sizes that overflow when rounded up to page boundary.
+        if rounded < size_usize {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        let vmo = VmObject::new_paged_with_resizable(resizable, pages(size_usize));
         // Fuchsia's vmo_create sets content_size (stream size) to the
-        // initial VMO size. This is important for streams — a stream
-        // created on a new VMO should see content_size == vmo.size().
-        vmo.set_content_size(vmo.len())?;
+        // exact user-requested size (not the rounded-up page size).
+        vmo.set_content_size(size_usize)?;
         // Default VMO rights do not include EXECUTE. The caller must
         // use zx_vmo_replace_as_executable to add EXECUTE rights.
         // RESIZE right is only granted when the VMO is resizable.
@@ -58,6 +63,18 @@ impl Syscall<'_> {
         if buf_size > 0 && buf.is_null() {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Reject kernel-space addresses.
+        if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
+            return Err(ZxError::NOT_FOUND);
+        }
+        // Reject buffers that span the user/kernel boundary or overflow.
+        match buf.as_addr().checked_add(buf_size) {
+            Some(end) if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize => {
+                return Err(ZxError::NOT_FOUND);
+            }
+            None => return Err(ZxError::NOT_FOUND),
+            _ => {}
+        }
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::READ)?;
         // in case integer addition overflows
@@ -73,6 +90,14 @@ impl Syscall<'_> {
             let n = chunk.len();
             vmo_offset += n;
             Ok(n)
+        })
+        .map_err(|e| {
+            // Fuchsia returns NOT_FOUND for unmapped user buffers.
+            if e == ZxError::INVALID_ARGS {
+                ZxError::NOT_FOUND
+            } else {
+                e
+            }
         })?;
         Ok(())
     }
@@ -92,6 +117,17 @@ impl Syscall<'_> {
         if buf_size > 0 && buf.is_null() {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Reject kernel-space addresses.
+        if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
+            return Err(ZxError::NOT_FOUND);
+        }
+        match buf.as_addr().checked_add(buf_size) {
+            Some(end) if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize => {
+                return Err(ZxError::NOT_FOUND);
+            }
+            None => return Err(ZxError::NOT_FOUND),
+            _ => {}
+        }
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?;
         if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
@@ -106,6 +142,13 @@ impl Syscall<'_> {
             let n = chunk.len();
             vmo_offset += n;
             Ok(n)
+        })
+        .map_err(|e| {
+            if e == ZxError::INVALID_ARGS {
+                ZxError::NOT_FOUND
+            } else {
+                e
+            }
         })?;
         Ok(())
     }
