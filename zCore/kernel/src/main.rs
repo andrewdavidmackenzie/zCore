@@ -125,9 +125,30 @@ fn boot_init(options: utils::BootOptions) -> alloc::sync::Arc<zircon_object::tas
         }
     }
 
-    // No rootfs or binary not found — fall back to embedded ZBI
+    // No rootfs or binary not found — fall back to embedded ZBI.
     info!("No rootfs or init binary not found, using embedded ZBI");
-    zircon_loader::zircon::run_userboot(fs::zbi(), &options.cmdline)
+    let zbi = load_zbi();
+    zircon_loader::zircon::run_userboot(zbi, &options.cmdline)
+}
+
+/// Load the petal ZBI (Zircon Boot Image) for userboot fallback.
+///
+/// In libOS mode, reads the ZBI file path from the first command-line argument.
+/// On bare-metal, returns the ZBI embedded at compile time by `zircon-loader`.
+fn load_zbi() -> impl AsRef<[u8]> {
+    #[cfg(feature = "libos")]
+    {
+        let path = std::env::args().nth(1).expect(
+            "Usage: zcore-libos <ZBI_FILE>\n\
+             Build a petal ZBI with: cargo petal-zbi --arch aarch64",
+        );
+        std::fs::read(path).expect("failed to read ZBI file")
+    }
+
+    #[cfg(not(feature = "libos"))]
+    {
+        zircon_loader::zircon::embedded_zbi()
+    }
 }
 
 /// Secondary core/hart initialization (SMP).

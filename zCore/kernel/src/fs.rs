@@ -1,45 +1,17 @@
-//! Filesystem initialization.
+//! Root filesystem access.
 //!
-//! Provides rootfs access for both Linux and Zircon personalities.
-//! Platform differences (libos vs bare-metal) are handled by hal-impl.
+//! Provides a unified rootfs interface for the kernel. On bare-metal,
+//! the rootfs is an SFS image loaded from initrd or a block device.
+//! In libOS mode, the rootfs is a host directory via HostFS.
 
-/// Try to open a rootfs (works for both Linux and Zircon).
-/// Returns None if no rootfs is available.
+/// Try to open a rootfs.
+///
+/// Returns `None` if no rootfs is available (no initrd, no block device,
+/// and no host directory). Tries initrd first, then block device.
+///
+/// In libOS mode, uses HostFS backed by a host directory.
 pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
-    try_zircon_rootfs()
-}
-
-/// Read a file from the rootfs by path.
-/// Used as a callback for `zircon_object::task::spawn::set_rootfs_reader`.
-pub fn read_rootfs_file(path: &str) -> Option<alloc::vec::Vec<u8>> {
-    let rootfs = try_rootfs()?;
-    let inode = rootfs.root_inode().lookup(path).ok()?;
-    let meta = inode.metadata().ok()?;
-    let mut data = alloc::vec![0u8; meta.size];
-    inode.read_at(0, &mut data).ok()?;
-    Some(data)
-}
-
-// ── Zircon flavour ────────────────────────────────────────────────────
-
-pub fn zbi() -> impl AsRef<[u8]> {
-    #[cfg(feature = "libos")]
-    {
-        let path = std::env::args().nth(1).expect(
-            "Usage: zcore-libos <ZBI_FILE>\n\
-             Build a petal ZBI with: cargo petal-zbi --arch aarch64",
-        );
-        std::fs::read(path).expect("failed to read ZBI file")
-    }
-
-    #[cfg(not(feature = "libos"))]
-    {
-        zircon_loader::zircon::embedded_zbi()
-    }
-}
-
-pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
-    // LibOS mode: use HostFS.
+    // LibOS mode: use HostFS from the rootfs directory on the host.
     #[cfg(feature = "libos")]
     if let Some(path) = hal_impl::platform::libos_rootfs_path("zircon") {
         let path = std::path::PathBuf::from(path);
@@ -56,7 +28,7 @@ pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSys
     use rcore_fs_sfs::SimpleFileSystem;
 
     if let Some(initrd) = hal_impl::boot::init_ram_disk() {
-        info!("Trying Zircon rootfs from initrd...");
+        info!("Trying rootfs from initrd...");
         let dev = Arc::new(MemBufDevice(spin::Mutex::new(initrd)));
         if let Ok(fs) = SimpleFileSystem::open(dev) {
             let fs: Arc<dyn FileSystem> = fs;
@@ -66,7 +38,7 @@ pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSys
     }
 
     if let Some(block) = hal_impl::device_registry::all_block().first() {
-        info!("Trying Zircon rootfs from block device...");
+        info!("Trying rootfs from block device...");
         let dev: Arc<dyn rcore_fs::dev::Device> = Arc::new(BlockDevice(block));
         if let Ok(fs) = SimpleFileSystem::open(dev) {
             let fs: Arc<dyn FileSystem> = fs;
@@ -78,8 +50,23 @@ pub fn try_zircon_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSys
     None
 }
 
-// ── Device wrappers (bare-metal Zircon) ───────────────────────────────
+/// Read a file from the rootfs by path.
+///
+/// Registered at boot via [`zircon_object::task::spawn::set_rootfs_reader`]
+/// so that zircon-syscall can read ELF binaries and shared libraries
+/// for process creation and dynamic linking.
+pub fn read_rootfs_file(path: &str) -> Option<alloc::vec::Vec<u8>> {
+    let rootfs = try_rootfs()?;
+    let inode = rootfs.root_inode().lookup(path).ok()?;
+    let meta = inode.metadata().ok()?;
+    let mut data = alloc::vec![0u8; meta.size];
+    inode.read_at(0, &mut data).ok()?;
+    Some(data)
+}
 
+// ── Device wrappers ──────────────────────────────────────────────────
+
+/// In-memory device backed by a static byte slice (used for initrd).
 struct MemBufDevice(spin::Mutex<&'static mut [u8]>);
 
 impl rcore_fs::dev::Device for MemBufDevice {
@@ -106,6 +93,8 @@ impl rcore_fs::dev::Device for MemBufDevice {
     }
 }
 
+/// Block device adapter from [`hal_impl::device_registry::scheme::BlockScheme`]
+/// to [`rcore_fs::dev::Device`].
 struct BlockDevice(alloc::sync::Arc<dyn hal_impl::device_registry::scheme::BlockScheme>);
 
 impl rcore_fs::dev::Device for BlockDevice {
