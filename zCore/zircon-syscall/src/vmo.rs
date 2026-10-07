@@ -654,6 +654,7 @@ numeric_enum! {
         Zero = 10,
         AlwaysNeed = 11,
         DontNeed = 12,
-        Prefetch = 13,
+        // 13 is unused
+        Prefetch = 14,
     }
 }
