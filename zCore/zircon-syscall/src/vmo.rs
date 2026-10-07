@@ -474,10 +474,20 @@ impl Syscall<'_> {
             }
             VmoOpType::Lock => {
                 // Lock (TRY_LOCK) a discardable VMO to prevent eviction.
-                // Stub: accept the operation but don't actually track
-                // lock state. Returns success so tests can proceed.
+                // Stub: returns success with lock state indicating
+                // the full range is locked and nothing was discarded.
                 if !rights.contains(Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
+                }
+                // Write zx_vmo_lock_state_t to buffer:
+                // { offset: u64, size: u64, discarded_offset: u64, discarded_size: u64 }
+                if _buffer_size >= 32 {
+                    let mut buf = _buffer;
+                    let mut state = [0u8; 32];
+                    state[0..8].copy_from_slice(&(offset as u64).to_le_bytes());
+                    state[8..16].copy_from_slice(&(len as u64).to_le_bytes());
+                    // discarded_offset and discarded_size are 0 (bytes 16..32)
+                    buf.write_array(&state)?;
                 }
                 Ok(())
             }
