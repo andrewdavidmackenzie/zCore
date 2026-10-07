@@ -12,8 +12,13 @@
 /// In libOS mode, uses HostFS backed by a host directory.
 pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
     // LibOS mode: use HostFS from the rootfs directory on the host.
+    // Select the rootfs flavour based on the enabled feature.
     #[cfg(feature = "libos")]
-    if let Some(path) = hal_impl::platform::libos_rootfs_path("zircon") {
+    if let Some(path) = hal_impl::platform::libos_rootfs_path(if cfg!(feature = "linux") {
+        "linux"
+    } else {
+        "zircon"
+    }) {
         let path = std::path::PathBuf::from(path);
         if path.is_dir() && path.join("bin").is_dir() {
             info!("LibOS Zircon rootfs: {}", path.display());
