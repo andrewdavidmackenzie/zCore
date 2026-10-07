@@ -392,6 +392,11 @@ impl Syscall<'_> {
             "object.get_info: handle={:#x?}, topic={:?}, buffer=({:#x}; {:#x})",
             handle, topic, buffer, buffer_size,
         );
+        // Reject null buffer with non-zero size (except for topics
+        // that only return counts via actual/avail).
+        if buffer == 0 && buffer_size > 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         match topic {
             Topic::HandleValid => {
