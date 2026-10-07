@@ -194,7 +194,7 @@ See [#96](https://github.com/andrewdavidmackenzie/zCore/issues/96).
 
 BUILD TOOL (not linked into the kernel)
 ========================================
-xtask/
+tools/xtask/
  +-- z-config/
 ```
 

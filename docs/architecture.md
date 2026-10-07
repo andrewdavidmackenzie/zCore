@@ -574,7 +574,7 @@ memory (~5), time (~15), IPC (~7), networking (~16), system/misc (~20+)
   syscall numbers and struct layouts)
 - `test/` directory has C test programs for manual validation
 
-They ARE used: `xtask/src/linux/test.rs` cross- compiles them and copies
+They ARE used: `tools/xtask/src/linux/test.rs` cross- compiles them and copies
 binaries into rootfs via the `other-test` subcommand. They are NOT in the main
 CI `test` target (which runs boot-test + libc-test), but available via `cargo
 other-test`. They do NOT overlap with libc-test: these test zCore-specific IPC
@@ -827,7 +827,7 @@ rest of the kernel.
 
 ---
 
-### `xtask/` -- Build Task Runner
+### `tools/xtask/` -- Build Task Runner
 
 **Purpose:** Implements the cargo-xtask pattern, providing a type-safe CLI for
 all build, test, rootfs, and QEMU operations.

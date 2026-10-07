@@ -12,7 +12,7 @@ members = [
     "zCore/linux-loader",
     "zCore/kernel",
 
-    "xtask",
+    "tools/xtask",
     "zCore/executor",
     "zCore/region-alloc",
     "zCore/lock",
@@ -23,7 +23,7 @@ members = [
     "petal",
     "zCore/userstart",
 ]
-default-members = ["xtask"]
+default-members = ["tools/xtask"]
 exclude = ["tools/x86-bootimage"]
 resolver = "2"
 

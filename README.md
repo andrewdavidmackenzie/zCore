@@ -202,7 +202,7 @@ for current development activity.
 
 ### 命令参考
 
-如果下面的命令描述与行为不符，或怀疑此文档更新不及时，亦可直接查看[内联文档](xtask/src/main.rs#L48)。
+如果下面的命令描述与行为不符，或怀疑此文档更新不及时，亦可直接查看[内联文档](tools/xtask/src/main.rs#L48)。
 如果发现 `error: no such subcommand: ...`，查看[命令简写](.cargo/config.toml)为哪些命令设置了别名。
 
 ---
@@ -373,4 +373,4 @@ cargo bin -m cr1825 -o z.bin
 
 - [An English README](docs/README_EN.md)
 - [开发者注意事项（草案）](docs/for-developers.md)
-- [构建系统更新日志](xtask/CHANGELOG.md)
+- [构建系统更新日志](tools/xtask/CHANGELOG.md)

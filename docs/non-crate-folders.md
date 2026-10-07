@@ -165,12 +165,12 @@ Yes, exactly. The SFS image has root `/` with: `/bin/busybox` (the binary),
 
 
 `rootfs/` IS an output-only directory (gitignored). Built by `cargo rootfs`
-which calls `LinuxRootfs::make()` in `xtask/src/linux/mod.rs`: (1) downloads
+which calls `LinuxRootfs::make()` in `tools/xtask/src/linux/mod.rs`: (1) downloads
 musl cross-toolchain, (2) clones busybox, runs `make defconfig`, patches
 .config for CONFIG_STATIC=y, (3) cross-compiles busybox with musl, strips it,
 (4) creates rootfs/linux/{arch}/bin/ and lib/, (5) copies busybox, musl libc,
 (6) creates symlinks from a hardcoded list of 31 utility names at
-xtask/src/linux/mod.rs:67-72. The utility list is the definition.
+tools/xtask/src/linux/mod.rs:67-72. The utility list is the definition.
 
 
 The Linux rootfs contains ELF binaries linked against musl libc. The Zircon
@@ -197,7 +197,7 @@ myutil.c -static` (or `cargo build
 `rootfs/linux/aarch64/bin/` 3. Rebuild the image: `cargo image --arch aarch64` 4.
 Run: `cargo qemu --arch aarch64`, then at the shell prompt: `/bin/myutil` For
 permanent inclusion, add the binary name to the symlink list in
-`xtask/src/linux/mod.rs:67` (if it's a busybox applet) or add a copy step to
+`tools/xtask/src/linux/mod.rs:67` (if it's a busybox applet) or add a copy step to
 `LinuxRootfs::make()`.
 
 
@@ -205,7 +205,7 @@ permanent inclusion, add the binary name to the symlink list in
 
 The utility LIST is arch-independent (same busybox applets), but the BINARIES
 must be compiled per-architecture (different ISA, different musl libc). The
-list is already defined once in `xtask/src/linux/mod.rs:67-72`; `cargo rootfs
+list is already defined once in `tools/xtask/src/linux/mod.rs:67-72`; `cargo rootfs
 --arch {arch}` builds for the specified target. The per-arch rootfs/
 directories exist because each contains arch-specific binaries.
 

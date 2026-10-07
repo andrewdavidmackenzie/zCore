@@ -73,7 +73,7 @@ Built by `cargo rootfs`. Removed by `cargo clean`.
 | Zircon SyscallType enum        | `syscall/`    |
 | from zx-syscall-numbers.h.     | `build.rs`    |
 | Written into source tree.      |               |
-| `$OUT_DIR/shadow.rs`           | `xtask/`      |
+| `$OUT_DIR/shadow.rs`           | `tools/xtask/` |
 | (in target build dir)          | `build.rs`    |
 | Build metadata for `dump`.     | (shadow-rs)   |
 
