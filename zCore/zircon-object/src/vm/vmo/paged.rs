@@ -318,10 +318,15 @@ impl VMObjectTrait for VMObjectPaged {
         if inner.parent.is_some() {
             return Err(ZxError::NOT_SUPPORTED);
         }
+        // Validate range.
+        let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
+        if end > inner.size {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         // Cannot decommit pinned pages.
         if inner.pin_count > 0 {
             let start_page = offset / PAGE_SIZE;
-            let end_page = pages(offset + len);
+            let end_page = pages(end);
             for i in start_page..end_page {
                 if let Some(frame) = inner.frames.get(&i) {
                     if frame.pin_count > 0 {
@@ -455,7 +460,8 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn unpin(&self, offset: usize, len: usize) -> ZxResult {
         let (_guard, mut inner) = self.get_inner_mut();
-        if offset + len > inner.size {
+        let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
+        if end > inner.size {
             return Err(ZxError::OUT_OF_RANGE);
         }
         if len == 0 {

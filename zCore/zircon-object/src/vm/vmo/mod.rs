@@ -745,6 +745,11 @@ impl VmObject {
     /// mappings (including on child/reference VMOs) so subsequent
     /// reads fault in zero pages.
     pub fn decommit(&self, offset: usize, len: usize) -> ZxResult {
+        // Validate range before decommitting.
+        let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
+        if end > self.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         self.trait_.decommit(offset, len)?;
         self.invalidate_mappings(offset, len);
         Ok(())
