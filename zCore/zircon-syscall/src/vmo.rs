@@ -340,8 +340,7 @@ impl Syscall<'_> {
             vmo.len(),
         );
         vmo.set_len(size)?;
-        // Fuchsia's SetSize always updates content_size to the
-        // user-requested size (which may be non-page-aligned).
+        // Fuchsia's SetSize sets content_size to the unrounded request.
         vmo.set_content_size(size)?;
         Ok(())
     }
