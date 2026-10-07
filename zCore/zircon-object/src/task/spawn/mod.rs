@@ -498,7 +498,7 @@ pub fn spawn_process(
         Handle::new(irq_resource, Rights::DEFAULT_RESOURCE), // PA_IRQ_RESOURCE
         Handle::new(system_resource, Rights::DEFAULT_RESOURCE), // PA_SYSTEM_RESOURCE
         Handle::new(zbi_vmo, Rights::DEFAULT_VMO),          // PA_VMO_BOOTDATA
-        Handle::new(boot_opts_vmo, Rights::DEFAULT_VMO),    // PA_VMO_BOOTDATA (boot-options.txt)
+        Handle::new(boot_opts_vmo, Rights::DEFAULT_VMO),    // PA_VMO_KERNEL_FILE (boot-options.txt)
         Handle::new(
             utc_clock,
             Rights::DUPLICATE
@@ -522,7 +522,7 @@ pub fn spawn_process(
         pa_hnd(PA_IRQ_RESOURCE, 0),
         pa_hnd(PA_SYSTEM_RESOURCE, 0),
         pa_hnd(PA_VMO_BOOTDATA, 0),
-        pa_hnd(PA_VMO_BOOTDATA, 1), // arg=1 distinguishes boot-options.txt
+        pa_hnd(PA_VMO_KERNEL_FILE, 0), // boot-options.txt
         pa_hnd(PA_CLOCK_UTC, 0),
     ];
     let msg2_data = build_message(&msg2_info, argv.as_bytes());

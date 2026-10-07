@@ -105,7 +105,7 @@ bitflags! {
         const DEFAULT_THREAD = Self::BASIC.bits | Self::IO.bits | Self::PROPERTY.bits | Self::DESTROY.bits | Self::SIGNAL.bits | Self::MANAGE_THREAD.bits;
 
         /// BASIC | IO | PROPERTY | MAP | SIGNAL
-        const DEFAULT_VMO = Self::BASIC.bits | Self::IO.bits | Self::PROPERTY.bits | Self::MAP.bits | Self::SIGNAL.bits | Self::RESIZE.bits;
+        const DEFAULT_VMO = Self::BASIC.bits | Self::IO.bits | Self::PROPERTY.bits | Self::MAP.bits | Self::SIGNAL.bits;
 
         /// BASIC | WAIT
         const DEFAULT_VMAR = Self::BASIC.bits & !Self::WAIT.bits;

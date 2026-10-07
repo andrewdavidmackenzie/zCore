@@ -18,10 +18,13 @@ impl Syscall<'_> {
             "vmo.create: size={:#x?}, options={:#x?}, out={:#x?}",
             size, options, out
         );
-        if options & !2u32 != 0 {
+        // Accept RESIZABLE (0x02) and DISCARDABLE (0x80).
+        const ZX_VMO_RESIZABLE: u32 = 0x02;
+        const ZX_VMO_DISCARDABLE: u32 = 0x80;
+        if options & !(ZX_VMO_RESIZABLE | ZX_VMO_DISCARDABLE) != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let resizable = options != 0;
+        let resizable = options & ZX_VMO_RESIZABLE != 0;
         let proc = self.thread.proc();
         let vmo = VmObject::new_paged_with_resizable(resizable, pages(size as usize));
         // Fuchsia's vmo_create sets content_size (stream size) to the
@@ -32,8 +35,8 @@ impl Syscall<'_> {
         // use zx_vmo_replace_as_executable to add EXECUTE rights.
         // RESIZE right is only granted when the VMO is resizable.
         let mut vmo_rights = Rights::DEFAULT_VMO;
-        if !resizable {
-            vmo_rights.remove(Rights::RESIZE);
+        if resizable {
+            vmo_rights.insert(Rights::RESIZE);
         }
         let handle_value = proc.add_handle(Handle::new(vmo, vmo_rights));
         out.write(handle_value)?;
@@ -122,9 +125,11 @@ impl Syscall<'_> {
             proc.check_policy(PolicyCondition::AmbientMarkVMOExec)?;
         }
         let _ = proc.get_object_and_rights::<VmObject>(handle)?;
+        // Replace: create new handle with EXECUTE, remove old handle.
         let new_handle = proc.dup_handle_operating_rights(handle, |handle_rights| {
             Ok(handle_rights | Rights::EXECUTE)
         })?;
+        proc.remove_handle(handle)?;
         out.write(new_handle)?;
         Ok(())
     }
@@ -327,9 +332,7 @@ impl Syscall<'_> {
     /// Resize a VMO object.
     pub fn sys_vmo_set_size(&self, handle_value: HandleValue, size: usize) -> ZxResult {
         let proc = self.thread.proc();
-        // Fuchsia requires both WRITE and RESIZE rights for set_size.
-        let vmo =
-            proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE | Rights::RESIZE)?;
+        let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?;
         info!(
             "vmo.set_size: handle={:#x}, size={:#x}, current_size={:#x}",
             handle_value,
@@ -437,6 +440,18 @@ impl Syscall<'_> {
                 if offset.checked_add(len).is_none() || offset + len > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
+                Ok(())
+            }
+            VmoOpType::AlwaysNeed | VmoOpType::DontNeed | VmoOpType::Prefetch => {
+                // Hinting operations. Require READ rights and valid range.
+                if !rights.contains(Rights::READ) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
+                if end > vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                // No-op: we don't implement prefetch/eviction hints.
                 Ok(())
             }
         }
@@ -589,5 +604,8 @@ numeric_enum! {
         CacheClean = 8,
         CacheCleanInvalidate = 9,
         Zero = 10,
+        AlwaysNeed = 11,
+        DontNeed = 12,
+        Prefetch = 13,
     }
 }
