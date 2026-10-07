@@ -67,8 +67,7 @@ pub fn zbi() -> impl AsRef<[u8]> {
 
     #[cfg(not(feature = "libos"))]
     {
-        const ZBI_DATA: &[u8] = include_bytes!(env!("PETAL_ZBI"));
-        ZBI_DATA.to_vec()
+        zircon_loader::zircon::embedded_zbi()
     }
 }
 
@@ -120,20 +119,7 @@ pub(crate) fn init_ram_disk() -> Option<&'static mut [u8]> {
     if hal_impl::platform::is_hosted() {
         return None;
     }
-    if cfg!(feature = "link-user-img") {
-        extern "C" {
-            fn _user_img_start();
-            fn _user_img_end();
-        }
-        Some(unsafe {
-            core::slice::from_raw_parts_mut(
-                _user_img_start as *const () as usize as *mut u8,
-                _user_img_end as *const () as usize - _user_img_start as *const () as usize,
-            )
-        })
-    } else {
-        hal_impl::boot::init_ram_disk()
-    }
+    hal_impl::boot::init_ram_disk()
 }
 
 // ── Device wrappers (bare-metal Zircon) ───────────────────────────────
@@ -218,19 +204,3 @@ impl rcore_fs::dev::Device for BlockDevice {
         Ok(())
     }
 }
-
-// ── Embedded rootfs image (link-user-img feature) ─────────────────────
-
-#[cfg(feature = "link-user-img")]
-core::arch::global_asm!(concat!(
-    r#"
-    .section .data.img
-    .global _user_img_start
-    .global _user_img_end
-_user_img_start:
-    .incbin ""#,
-    env!("USER_IMG"),
-    r#""
-_user_img_end:
-"#
-));

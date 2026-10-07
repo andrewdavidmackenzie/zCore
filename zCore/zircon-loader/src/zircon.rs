@@ -251,6 +251,13 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     proc
 }
 
+/// Return the petal ZBI embedded at compile time.
+///
+/// If `PETAL_ZBI` was not set during the build, returns an empty slice.
+pub fn embedded_zbi() -> &'static [u8] {
+    include_bytes!(env!("PETAL_ZBI"))
+}
+
 /// Backward-compatible alias for [`run_userstart`].
 pub fn run_userboot(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     run_userstart(zbi, cmdline)

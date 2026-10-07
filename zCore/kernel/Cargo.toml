@@ -19,7 +19,6 @@ doc = false
 # Print colorless logs
 colorless-log = []
 thead-maee = ["hal-impl/thead-maee"]
-link-user-img = []
 baremetal-test = ["executor/baremetal-test"]
 sched-priority = ["executor/sched-priority"]
 
@@ -57,9 +56,9 @@ allwinner-drivers = ["hal-impl/allwinner-drivers"]
 fu740-drivers = ["hal-impl/fu740-drivers"]
 
 # --- Board presets (combine flavour + drivers + board-specific flags) ---
-board-d1 = ["link-user-img", "allwinner-drivers"]
-board-c910light = ["link-user-img", "hal-impl/board-c910light"]
-board-fu740 = ["link-user-img", "fu740-drivers", "hal-impl/board-fu740"]
+board-d1 = ["allwinner-drivers"]
+board-c910light = ["hal-impl/board-c910light"]
+board-fu740 = ["fu740-drivers", "hal-impl/board-fu740"]
 board-jollac2 = ["hal-impl/board-jollac2"]
 board-raspi400 = ["hal-impl/board-raspi400"]
 

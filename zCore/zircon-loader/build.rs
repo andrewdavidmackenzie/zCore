@@ -22,6 +22,19 @@ fn main() {
         println!("cargo:rustc-env=USERSTART_ELF={}", stub.display());
     }
 
+    // For Zircon mode: if PETAL_ZBI is not set, generate an empty stub
+    // so include_bytes! doesn't fail. The rootfs-based boot path doesn't
+    // need the embedded ZBI.
+    println!("cargo:rerun-if-env-changed=PETAL_ZBI");
+    if let Ok(path) = std::env::var("PETAL_ZBI") {
+        // Rebuild when the ZBI file changes.
+        println!("cargo:rerun-if-changed={path}");
+    } else {
+        let stub = out.join("empty.zbi");
+        std::fs::write(stub.as_path(), b"").unwrap();
+        println!("cargo:rustc-env=PETAL_ZBI={}", stub.display());
+    }
+
     println!("cargo:rerun-if-env-changed=VDSO_BIN");
     if let Ok(vdso_path) = std::env::var("VDSO_BIN") {
         println!("cargo:rerun-if-changed={}", vdso_path);
