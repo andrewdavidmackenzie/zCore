@@ -55,6 +55,9 @@ impl Syscall<'_> {
             "vmo.read: handle={:#x?}, offset={:#x?}, buf=({:#x?}; {:#x?})",
             handle_value, offset, buf, buf_size,
         );
+        if buf_size > 0 && buf.is_null() {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::READ)?;
         // in case integer addition overflows
@@ -86,6 +89,9 @@ impl Syscall<'_> {
             "vmo.write: handle={:#x?}, offset={:#x?}, buf=({:#x?}; {:#x?})",
             handle_value, offset, buf, buf_size,
         );
+        if buf_size > 0 && buf.is_null() {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?;
         if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
@@ -340,8 +346,7 @@ impl Syscall<'_> {
             vmo.len(),
         );
         vmo.set_len(size)?;
-        // Fuchsia's SetSize always updates content_size to the
-        // user-requested size (which may be non-page-aligned).
+        // Fuchsia's SetSize sets content_size to the unrounded request.
         vmo.set_content_size(size)?;
         Ok(())
     }

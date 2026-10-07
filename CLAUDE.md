@@ -23,6 +23,22 @@ For faster iteration, use `make pre-push-quick` which runs clippy,
 fmt, unit tests, and builds (~3 min) but skips QEMU boot tests.
 Run the full `make pre-push` before the final push.
 
+## Continuous work mode
+When working on issue #21 (or any batch-fix task):
+- **Never stop to wait for CI or the user.** Keep producing stacked
+  PRs with fixes. Push each PR and immediately start the next batch.
+- **Check for code review comments on ALL open PRs** before each new
+  commit. Fix review comments as part of the current batch, not as
+  a separate step. Use `gh api repos/andrewdavidmackenzie/zCore/pulls/<PR>/comments`
+  to check.
+- **Run full test suite only at the end of a batch**, not after each
+  individual fix. Use `say` to notify when results are ready.
+- **Merge PRs when green** without waiting for user approval (unless
+  the user has said otherwise). Use `gh pr merge <N> --squash --delete-branch`.
+- **After merging**, rebase dependent branches, push, and continue.
+- **Never ask "should I continue?"** — always continue unless the user
+  explicitly says to stop.
+
 ## Problem-solving principles
 - **Never silence errors or warnings without understanding the root cause.**
   Downgrading a log level or suppressing output is not a fix. Investigate
