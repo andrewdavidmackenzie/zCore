@@ -318,9 +318,26 @@ impl VMObjectTrait for VMObjectPaged {
         if inner.parent.is_some() {
             return Err(ZxError::NOT_SUPPORTED);
         }
+        // Validate range.
+        let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
+        if end > inner.size {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        // Cannot decommit pinned pages.
+        if inner.pin_count > 0 {
+            let start_page = offset / PAGE_SIZE;
+            let end_page = pages(end);
+            for i in start_page..end_page {
+                if let Some(frame) = inner.frames.get(&i) {
+                    if frame.pin_count > 0 {
+                        return Err(ZxError::BAD_STATE);
+                    }
+                }
+            }
+        }
         let start_page = offset / PAGE_SIZE;
-        let pages = len / PAGE_SIZE;
-        for i in 0..pages {
+        let page_count = len / PAGE_SIZE;
+        for i in 0..page_count {
             inner.decommit(start_page + i);
         }
         Ok(())
@@ -405,13 +422,20 @@ impl VMObjectTrait for VMObjectPaged {
         let start_page = offset / PAGE_SIZE;
         let end_page = pages(offset + len);
         for i in start_page..end_page {
-            let frame = inner.frames.get(&i).unwrap();
+            let frame = match inner.frames.get(&i) {
+                Some(f) => f,
+                None => return Err(ZxError::NOT_FOUND),
+            };
             if frame.pin_count == VM_PAGE_OBJECT_MAX_PIN_COUNT {
                 return Err(ZxError::UNAVAILABLE);
             }
         }
         for i in start_page..end_page {
-            inner.frames.get_mut(&i).unwrap().pin_count += 1;
+            if let Some(frame) = inner.frames.get_mut(&i) {
+                frame.pin_count += 1;
+            } else {
+                return Err(ZxError::NOT_FOUND);
+            }
             inner.pin_count += 1;
         }
         Ok(())
@@ -436,7 +460,8 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn unpin(&self, offset: usize, len: usize) -> ZxResult {
         let (_guard, mut inner) = self.get_inner_mut();
-        if offset + len > inner.size {
+        let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
+        if end > inner.size {
             return Err(ZxError::OUT_OF_RANGE);
         }
         if len == 0 {
@@ -445,15 +470,22 @@ impl VMObjectTrait for VMObjectPaged {
         let start_page = offset / PAGE_SIZE;
         let end_page = pages(offset + len);
         for i in start_page..end_page {
-            let frame = inner.frames.get(&i).unwrap();
+            let frame = match inner.frames.get(&i) {
+                Some(f) => f,
+                None => return Err(ZxError::UNAVAILABLE),
+            };
             if frame.pin_count == 0 {
                 return Err(ZxError::UNAVAILABLE);
             }
         }
-        assert_ne!(inner.pin_count, 0);
+        if inner.pin_count == 0 {
+            return Err(ZxError::UNAVAILABLE);
+        }
         for i in start_page..end_page {
-            inner.frames.get_mut(&i).unwrap().pin_count -= 1;
-            inner.pin_count -= 1;
+            if let Some(frame) = inner.frames.get_mut(&i) {
+                frame.pin_count -= 1;
+                inner.pin_count -= 1;
+            }
         }
         Ok(())
     }
@@ -582,9 +614,10 @@ impl VMObjectPagedInner {
                 //   entry.  A later `create_child` (fork) would then fail
                 //   to transfer the page to the hidden node, losing data.
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
-                if out_of_range {
-                    // can never be a hidden vmo
-                    assert!(!self.type_.is_hidden());
+                if out_of_range && self.type_.is_hidden() {
+                    // Hidden nodes should not have out-of-range
+                    // page commits. Return error instead of panicking.
+                    return Err(ZxError::OUT_OF_RANGE);
                 }
                 if self.type_.is_hidden() {
                     return Ok(CommitResult::NewPage(target_frame));

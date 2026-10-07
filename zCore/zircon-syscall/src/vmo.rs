@@ -171,8 +171,9 @@ impl Syscall<'_> {
             if offset != 0 || size != 0 {
                 return Err(ZxError::INVALID_ARGS);
             }
-            // Resizable REFERENCE requires a resizable parent.
-            if resizable && !vmo.is_resizable() {
+            // Resizable REFERENCE requires a resizable parent AND
+            // the parent handle must have RESIZE right.
+            if resizable && (!vmo.is_resizable() || !parent_rights.contains(Rights::RESIZE)) {
                 return Err(ZxError::ACCESS_DENIED);
             }
             let mut remaining = options - VmoCloneFlags::REFERENCE;

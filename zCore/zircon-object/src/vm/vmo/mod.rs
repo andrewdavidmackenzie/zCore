@@ -739,6 +739,43 @@ impl VmObject {
         Ok(())
     }
 
+    /// Decommit pages in the given range.
+    ///
+    /// After decommitting, invalidates page table entries in all
+    /// mappings (including on child/reference VMOs) so subsequent
+    /// reads fault in zero pages.
+    pub fn decommit(&self, offset: usize, len: usize) -> ZxResult {
+        // Validate range before decommitting.
+        let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
+        if end > self.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        self.trait_.decommit(offset, len)?;
+        self.invalidate_mappings(offset, len);
+        Ok(())
+    }
+
+    /// Invalidate PTEs in all mappings of this VMO and its children
+    /// for the given range. Used after decommit to ensure mappings
+    /// see zero pages on next access.
+    fn invalidate_mappings(&self, offset: usize, len: usize) {
+        let inner = self.inner.lock();
+        let start_page = offset / PAGE_SIZE;
+        let page_count = len / PAGE_SIZE;
+        for mapping_weak in &inner.mappings {
+            if let Some(mapping) = mapping_weak.upgrade() {
+                mapping.range_change(start_page, page_count, RangeChangeOp::Unmap);
+            }
+        }
+        // Also invalidate mappings on child VMOs (especially
+        // reference/slice children that share pages with us).
+        let children: Vec<_> = inner.children.iter().filter_map(|c| c.upgrade()).collect();
+        drop(inner);
+        for child in children {
+            child.invalidate_mappings(offset, len);
+        }
+    }
+
     /// Zero a range of bytes within the VMO.
     pub fn zero(&self, offset: usize, len: usize) -> ZxResult {
         self.trait_.zero(offset, len)
