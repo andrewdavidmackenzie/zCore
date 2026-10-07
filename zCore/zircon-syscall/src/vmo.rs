@@ -18,10 +18,11 @@ impl Syscall<'_> {
             "vmo.create: size={:#x?}, options={:#x?}, out={:#x?}",
             size, options, out
         );
-        // Accept RESIZABLE (0x02) and DISCARDABLE (0x80).
-        const ZX_VMO_RESIZABLE: u32 = 0x02;
-        const ZX_VMO_DISCARDABLE: u32 = 0x80;
-        if options & !(ZX_VMO_RESIZABLE | ZX_VMO_DISCARDABLE) != 0 {
+        // Accept known VMO creation flags.
+        const ZX_VMO_RESIZABLE: u32 = 1 << 1; // 0x02
+        const ZX_VMO_DISCARDABLE: u32 = 1 << 2; // 0x04
+        const ZX_VMO_UNBOUNDED: u32 = 1 << 3; // 0x08
+        if options & !(ZX_VMO_RESIZABLE | ZX_VMO_DISCARDABLE | ZX_VMO_UNBOUNDED) != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
         let resizable = options & ZX_VMO_RESIZABLE != 0;
@@ -60,14 +61,14 @@ impl Syscall<'_> {
             "vmo.read: handle={:#x?}, offset={:#x?}, buf=({:#x?}; {:#x?})",
             handle_value, offset, buf, buf_size,
         );
+        // Fuchsia returns NOT_FOUND for null, kernel-space, or
+        // boundary-spanning user buffers.
         if buf_size > 0 && buf.is_null() {
-            return Err(ZxError::INVALID_ARGS);
+            return Err(ZxError::NOT_FOUND);
         }
-        // Reject kernel-space addresses.
         if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
             return Err(ZxError::NOT_FOUND);
         }
-        // Reject buffers that span the user/kernel boundary or overflow.
         match buf.as_addr().checked_add(buf_size) {
             Some(end) if end > zircon_object::vm::KERNEL_ASPACE_BASE as usize => {
                 return Err(ZxError::NOT_FOUND);
@@ -115,9 +116,8 @@ impl Syscall<'_> {
             handle_value, offset, buf, buf_size,
         );
         if buf_size > 0 && buf.is_null() {
-            return Err(ZxError::INVALID_ARGS);
+            return Err(ZxError::NOT_FOUND);
         }
-        // Reject kernel-space addresses.
         if buf.as_addr() >= zircon_object::vm::KERNEL_ASPACE_BASE as usize {
             return Err(ZxError::NOT_FOUND);
         }
@@ -654,6 +654,7 @@ numeric_enum! {
         Zero = 10,
         AlwaysNeed = 11,
         DontNeed = 12,
-        Prefetch = 13,
+        // 13 is unused
+        Prefetch = 14,
     }
 }

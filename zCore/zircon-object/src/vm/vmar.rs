@@ -270,8 +270,6 @@ impl VmAddressRegion {
         // `map_range || vmo.name() != ""` forced eager commit for named VMOs,
         // but Fuchsia's Scudo allocator names its VMOs and requires lazy commit.
         // Page faults on uncommitted pages are handled by handle_page_fault.
-        // When eager (map_range), the VMO must cover the mapped range.
-        // When lazy (ALLOW_FAULTS), the mapping can extend past the VMO.
         if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
             warn!(
                 "map_ext: INVALID_ARGS: vmo '{}' len={:#x} < offset={:#x}+len={:#x}, map_range={}",
