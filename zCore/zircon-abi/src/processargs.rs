@@ -36,6 +36,8 @@ pub const PA_VMO_VDSO: u32 = 0x11;
 pub const PA_VMO_EXECUTABLE: u32 = 0x14;
 /// Boot data VMO (ZBI, boot-options, etc.).
 pub const PA_VMO_BOOTDATA: u32 = 0x1A;
+/// Kernel file VMO (named files like "boot-options.txt").
+pub const PA_VMO_KERNEL_FILE: u32 = 0x23;
 /// Root resource handle.
 pub const PA_RESOURCE: u32 = 0x3F;
 /// MMIO sub-resource.
