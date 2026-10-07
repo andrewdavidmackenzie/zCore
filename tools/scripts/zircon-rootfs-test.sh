@@ -43,7 +43,7 @@ fi
 
 echo "==> Building kernel (Zircon mode)..."
 # Build userstart as a static PIE with PIC codegen.
-# Must match xtask/src/petal.rs build_userstart() flags.
+# Must match tools/xtask/src/petal.rs build_userstart() flags.
 CARGO_ENCODED_RUSTFLAGS="-Crelocation-model=pic" \
   cargo build -p userstart \
   --target "$RUST_TARGET" \

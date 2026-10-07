@@ -33,7 +33,7 @@ esac
 USERSTART="target/userstart/${RUST_TARGET}/release/userstart"
 
 # Build userstart as a static PIE with PIC codegen.
-# Must match xtask/src/petal.rs build_userstart() flags:
+# Must match tools/xtask/src/petal.rs build_userstart() flags:
 #   --pie (from build.rs), -Crelocation-model=pic, -Z build-std=core,alloc
 echo "Building userstart for $ARCH..."
 if ! CARGO_ENCODED_RUSTFLAGS="-Crelocation-model=pic" \

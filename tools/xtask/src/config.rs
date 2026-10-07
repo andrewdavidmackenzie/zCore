@@ -137,7 +137,7 @@ fn driver_to_feature(driver: &str) -> &'static str {
         "pci" => "pci",
         "virtio-blk" => "virtio",
         _ => {
-            panic!("unknown driver '{}' in target definition -- add it to driver_to_feature() in xtask/src/config.rs", driver);
+            panic!("unknown driver '{}' in target definition -- add it to driver_to_feature() in tools/xtask/src/config.rs", driver);
         }
     }
 }
@@ -147,7 +147,11 @@ impl TargetConfig {
     ///
     /// Looks for `targets/<name>.toml` relative to the workspace root.
     pub fn load(name: &str) -> Self {
-        let workspace_root = Path::new(std::env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let workspace_root = Path::new(std::env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
         let path = workspace_root.join("targets").join(format!("{name}.toml"));
         let content = fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("Failed to read target '{}': {}", path.display(), e));
@@ -158,7 +162,11 @@ impl TargetConfig {
     /// List all available target names (from `targets/*.toml`).
     #[allow(dead_code)]
     pub fn list_targets() -> Vec<String> {
-        let workspace_root = Path::new(std::env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let workspace_root = Path::new(std::env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
         let targets_dir = workspace_root.join("targets");
         let mut names = Vec::new();
         if let Ok(entries) = fs::read_dir(&targets_dir) {
@@ -251,7 +259,11 @@ impl TargetConfig {
     /// xtask and Makefile can reference the same `--target` path.
     /// Only writes if content changed to avoid unnecessary rebuilds.
     pub fn write_target_json(&self, name: &str) -> PathBuf {
-        let workspace_root = Path::new(std::env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let workspace_root = Path::new(std::env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
         let targets_dir = workspace_root.join("targets");
         let path = targets_dir.join(format!("{name}.json"));
         let json = self.generate_target_json();

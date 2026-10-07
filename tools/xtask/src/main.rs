@@ -29,8 +29,13 @@ use std::{
 use crate::build::{BuildArgs, BuildConfig};
 
 /// The path of zCore project.
-static PROJECT_DIR: Lazy<&'static Path> =
-    Lazy::new(|| Path::new(std::env!("CARGO_MANIFEST_DIR")).parent().unwrap());
+static PROJECT_DIR: Lazy<&'static Path> = Lazy::new(|| {
+    Path::new(std::env!("CARGO_MANIFEST_DIR"))
+        .parent() // tools/
+        .unwrap()
+        .parent() // project root
+        .unwrap()
+});
 /// The path to store arch-dependent files from network.
 /// Downloads are kept under `.build-cache/` so they survive `cargo clean`
 /// (which removes only `target/`).
