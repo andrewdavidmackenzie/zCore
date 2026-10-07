@@ -18,10 +18,13 @@ impl Syscall<'_> {
             "vmo.create: size={:#x?}, options={:#x?}, out={:#x?}",
             size, options, out
         );
-        if options & !2u32 != 0 {
+        // Accept RESIZABLE (0x02) and DISCARDABLE (0x80).
+        const ZX_VMO_RESIZABLE: u32 = 0x02;
+        const ZX_VMO_DISCARDABLE: u32 = 0x80;
+        if options & !(ZX_VMO_RESIZABLE | ZX_VMO_DISCARDABLE) != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let resizable = options != 0;
+        let resizable = options & ZX_VMO_RESIZABLE != 0;
         let proc = self.thread.proc();
         let vmo = VmObject::new_paged_with_resizable(resizable, pages(size as usize));
         // Fuchsia's vmo_create sets content_size (stream size) to the
