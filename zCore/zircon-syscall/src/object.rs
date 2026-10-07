@@ -606,12 +606,13 @@ impl Syscall<'_> {
                 }
                 let mut info_ptr = UserOutPtr::<KmemInfo>::from_addr_size(buffer, buffer_size)?;
                 let vmo_bytes = vmo_page_bytes() as u64;
+                // total_bytes: physical memory estimate.
+                // free_bytes = total - committed (vmo_bytes + overhead).
+                let total_bytes = vmo_bytes.max(128 * 1024 * 1024) + 64 * 1024 * 1024;
+                let free_bytes = total_bytes.saturating_sub(vmo_bytes);
                 let kmem = KmemInfo {
-                    // Report total_bytes as the VMO bytes plus a
-                    // margin for kernel/heap overhead. Not precise
-                    // but ensures total_bytes > 0.
-                    total_bytes: vmo_bytes.max(128 * 1024 * 1024),
-                    free_bytes: 64 * 1024 * 1024, // rough estimate
+                    total_bytes,
+                    free_bytes,
                     vmo_bytes,
                     ..Default::default()
                 };
@@ -771,24 +772,10 @@ impl Syscall<'_> {
                     0
                 };
                 // Compute queue time (time spent ready-but-not-running).
-                // For threads: use thread's queue_time.
-                // For processes/jobs: aggregate from their threads.
-                // If no real queue_time is tracked, report cpu_time
-                // as a reasonable proxy (thread ran, so it queued).
+                // Report actual tracked queue_time; 0 if not tracked.
                 let queue_time: i64 =
                     if let Ok(t) = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT) {
-                        let qt = t.queue_time() as i64;
-                        if qt > 0 {
-                            qt
-                        } else {
-                            // If no queue_time tracked, report cpu_time
-                            // as minimum (thread must have been queued
-                            // at least as long as it ran).
-                            cpu_time.max(1)
-                        }
-                    } else if cpu_time > 0 {
-                        // For processes/jobs: use cpu_time as proxy.
-                        cpu_time
+                        t.queue_time() as i64
                     } else {
                         0
                     };
