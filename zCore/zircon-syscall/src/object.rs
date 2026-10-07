@@ -367,6 +367,7 @@ impl Syscall<'_> {
     ///
     /// `topic: u32`, indicates what specific information is desired.
     /// `buffer: usize`, a pointer to a buffer of size buffer_size to return the information.
+    #[allow(unsafe_code)]
     pub fn sys_object_get_info(
         &self,
         handle: HandleValue,
@@ -530,35 +531,89 @@ impl Syscall<'_> {
                     }
                 }
                 drop(raw_entries);
-                let entry_size = core::mem::size_of::<VmoInfo>();
+                let full_size = core::mem::size_of::<VmoInfo>();
+                // Versioned VmoInfo entry sizes:
+                // V0: 104 bytes (original without attribution)
+                // V1: 128 bytes (+ populated_bytes + populated_private)
+                // V2: 152 bytes (+ scaled bytes)
+                // V3+: full VmoInfo (168 bytes)
+                let entry_size = match topic_version {
+                    0 => 104,
+                    1 => 128,
+                    2 => 152,
+                    _ => full_size,
+                };
                 let count = (buffer_size / entry_size).min(vmo_infos.len());
                 if count > 0 {
-                    UserOutPtr::<VmoInfo>::from(buffer).write_array(&vmo_infos[..count])?;
+                    if entry_size == full_size {
+                        UserOutPtr::<VmoInfo>::from(buffer).write_array(&vmo_infos[..count])?;
+                    } else {
+                        let src = unsafe {
+                            core::slice::from_raw_parts(
+                                vmo_infos.as_ptr() as *const u8,
+                                vmo_infos.len() * full_size,
+                            )
+                        };
+                        for i in 0..count {
+                            let entry_bytes = &src[i * full_size..i * full_size + entry_size];
+                            let mut dst = UserOutPtr::<u8>::from(buffer + i * entry_size);
+                            dst.write_array(entry_bytes)?;
+                        }
+                    }
                 }
                 actual.write_if_not_null(count)?;
                 avail.write_if_not_null(vmo_infos.len())?;
             }
             Topic::Vmo => {
-                let mut info_ptr = UserOutPtr::<VmoInfo>::from_addr_size(buffer, buffer_size)?;
                 let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle)?;
                 let mut info = vmo.get_info();
                 info.flags |= VmoInfoFlags::VIA_HANDLE;
                 info.rights |= rights;
-                info_ptr.write(info)?;
+                let full_size = core::mem::size_of::<VmoInfo>();
+                // Versioned VmoInfo: write only the bytes the caller expects.
+                let entry_size = match topic_version {
+                    0 => 104,
+                    1 => 128,
+                    2 => 152,
+                    _ => full_size,
+                };
+                if buffer_size < entry_size {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let info_bytes = unsafe {
+                    core::slice::from_raw_parts(&info as *const VmoInfo as *const u8, full_size)
+                };
+                UserOutPtr::<u8>::from(buffer).write_array(&info_bytes[..entry_size])?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }
             Topic::KmemStats => {
                 // Fuchsia requires a root resource or system-info resource.
-                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+                let res = proc.get_resource(handle)?;
+                if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate_ranged_resource(
+                        ResourceKind::SYSTEM,
+                        zircon_object::dev::ZX_RSRC_SYSTEM_INFO_BASE,
+                        1,
+                    )?;
+                }
                 if buffer_size < core::mem::size_of::<KmemInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
                 let mut info_ptr = UserOutPtr::<KmemInfo>::from_addr_size(buffer, buffer_size)?;
+                let vmo_bytes = vmo_page_bytes() as u64;
+                // total_bytes: physical memory estimate.
+                // free_bytes = total - committed (vmo_bytes + overhead).
+                let total_bytes = vmo_bytes.max(128 * 1024 * 1024) + 64 * 1024 * 1024;
+                let free_bytes = total_bytes.saturating_sub(vmo_bytes);
                 let kmem = KmemInfo {
-                    vmo_bytes: vmo_page_bytes() as u64,
+                    total_bytes,
+                    free_bytes,
+                    vmo_bytes,
                     ..Default::default()
                 };
                 info_ptr.write(kmem)?;
@@ -566,7 +621,14 @@ impl Syscall<'_> {
                 avail.write_if_not_null(1)?;
             }
             Topic::KmemStatsExtended => {
-                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+                let res = proc.get_resource(handle)?;
+                if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate_ranged_resource(
+                        ResourceKind::SYSTEM,
+                        zircon_object::dev::ZX_RSRC_SYSTEM_INFO_BASE,
+                        1,
+                    )?;
+                }
                 if buffer_size < core::mem::size_of::<KmemStatsExtendedInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -710,24 +772,10 @@ impl Syscall<'_> {
                     0
                 };
                 // Compute queue time (time spent ready-but-not-running).
-                // For threads: use thread's queue_time.
-                // For processes/jobs: aggregate from their threads.
-                // If no real queue_time is tracked, report cpu_time
-                // as a reasonable proxy (thread ran, so it queued).
+                // Report actual tracked queue_time; 0 if not tracked.
                 let queue_time: i64 =
                     if let Ok(t) = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT) {
-                        let qt = t.queue_time() as i64;
-                        if qt > 0 {
-                            qt
-                        } else {
-                            // If no queue_time tracked, report cpu_time
-                            // as minimum (thread must have been queued
-                            // at least as long as it ran).
-                            cpu_time.max(1)
-                        }
-                    } else if cpu_time > 0 {
-                        // For processes/jobs: use cpu_time as proxy.
-                        cpu_time
+                        t.queue_time() as i64
                     } else {
                         0
                     };
@@ -759,7 +807,14 @@ impl Syscall<'_> {
             }
             Topic::CpuStats => {
                 // Requires a root or system-info resource handle.
-                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+                let res = proc.get_resource(handle)?;
+                if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate_ranged_resource(
+                        ResourceKind::SYSTEM,
+                        zircon_object::dev::ZX_RSRC_SYSTEM_INFO_BASE,
+                        1,
+                    )?;
+                }
                 // Return one CPU stats record (single-CPU system).
                 let entry = CpuStatsInfo {
                     flags: 1, // ZX_INFO_CPU_STATS_FLAG_ONLINE
@@ -775,7 +830,14 @@ impl Syscall<'_> {
             }
             Topic::MemoryStall => {
                 // Requires a root or system-stall resource handle.
-                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+                let res = proc.get_resource(handle)?;
+                if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate_ranged_resource(
+                        ResourceKind::SYSTEM,
+                        zircon_object::dev::ZX_RSRC_SYSTEM_STALL_BASE,
+                        1,
+                    )?;
+                }
                 if buffer_size < core::mem::size_of::<MemoryStallInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;
@@ -789,7 +851,14 @@ impl Syscall<'_> {
             }
             Topic::GuestStats => {
                 // Requires a root or system-info resource handle.
-                proc.get_resource(handle)?.validate(ResourceKind::ROOT)?;
+                let res = proc.get_resource(handle)?;
+                if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate_ranged_resource(
+                        ResourceKind::SYSTEM,
+                        zircon_object::dev::ZX_RSRC_SYSTEM_INFO_BASE,
+                        1,
+                    )?;
+                }
                 // Return one record per CPU with zeroed guest counters.
                 // GuestStats is per-CPU like CpuStats.
                 let entry_size = core::mem::size_of::<GuestStatsInfo>();
@@ -848,10 +917,34 @@ impl Syscall<'_> {
                 // VMAR tree walk (depth 1+).
                 let vmar_entries = vmar.get_info_maps(1)?;
                 entries.extend(vmar_entries);
-                let entry_size = core::mem::size_of::<InfoMapsEntry>();
+                // Versioned entry size:
+                // V0: 96 bytes (name + base + size + depth + type + pad + mmu_flags + pad + vmo_koid + vmo_offset + committed_bytes)
+                // V1: 104 bytes (V0 + populated_bytes)
+                // V2+: full InfoMapsEntry (152 bytes)
+                let full_size = core::mem::size_of::<InfoMapsEntry>();
+                let entry_size = match topic_version {
+                    0 => 96,
+                    1 => 104,
+                    _ => full_size,
+                };
                 let count = (buffer_size / entry_size).min(entries.len());
                 if count > 0 {
-                    UserOutPtr::<InfoMapsEntry>::from(buffer).write_array(&entries[..count])?;
+                    if entry_size == full_size {
+                        UserOutPtr::<InfoMapsEntry>::from(buffer).write_array(&entries[..count])?;
+                    } else {
+                        // Write truncated entries at the versioned stride.
+                        let src = unsafe {
+                            core::slice::from_raw_parts(
+                                entries.as_ptr() as *const u8,
+                                entries.len() * full_size,
+                            )
+                        };
+                        for i in 0..count {
+                            let entry_bytes = &src[i * full_size..i * full_size + entry_size];
+                            let mut dst = UserOutPtr::<u8>::from(buffer + i * entry_size);
+                            dst.write_array(entry_bytes)?;
+                        }
+                    }
                 }
                 actual.write_if_not_null(count)?;
                 avail.write_if_not_null(entries.len())?;
@@ -860,10 +953,29 @@ impl Syscall<'_> {
                 let vmar =
                     proc.get_object_with_rights::<VmAddressRegion>(handle, Rights::INSPECT)?;
                 let entries = vmar.get_info_maps(0)?;
-                let entry_size = core::mem::size_of::<InfoMapsEntry>();
+                let full_size = core::mem::size_of::<InfoMapsEntry>();
+                let entry_size = match topic_version {
+                    0 => 96,
+                    1 => 104,
+                    _ => full_size,
+                };
                 let count = (buffer_size / entry_size).min(entries.len());
                 if count > 0 {
-                    UserOutPtr::<InfoMapsEntry>::from(buffer).write_array(&entries[..count])?;
+                    if entry_size == full_size {
+                        UserOutPtr::<InfoMapsEntry>::from(buffer).write_array(&entries[..count])?;
+                    } else {
+                        let src = unsafe {
+                            core::slice::from_raw_parts(
+                                entries.as_ptr() as *const u8,
+                                entries.len() * full_size,
+                            )
+                        };
+                        for i in 0..count {
+                            let entry_bytes = &src[i * full_size..i * full_size + entry_size];
+                            let mut dst = UserOutPtr::<u8>::from(buffer + i * entry_size);
+                            dst.write_array(entry_bytes)?;
+                        }
+                    }
                 }
                 actual.write_if_not_null(count)?;
                 avail.write_if_not_null(entries.len())?;
