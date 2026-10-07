@@ -106,6 +106,10 @@ pub trait VMObjectTrait: Sync + Send {
     fn is_reference(&self) -> bool {
         false
     }
+    /// Offset into the parent VMO (for slices). 0 for non-slices.
+    fn parent_offset(&self) -> usize {
+        0
+    }
 
     /// Returns true if the object is backed by RAM.
     fn is_paged(&self) -> bool {
@@ -750,14 +754,16 @@ impl VmObject {
         if end > self.len() {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        self.trait_.decommit(offset, len)?;
+        // Invalidate PTEs BEFORE freeing frames. This prevents
+        // another CPU from accessing a PTE that points to a
+        // frame the allocator has already reused.
         self.invalidate_mappings(offset, len);
+        self.trait_.decommit(offset, len)?;
         Ok(())
     }
 
     /// Invalidate PTEs in all mappings of this VMO and its children
-    /// for the given range. Used after decommit to ensure mappings
-    /// see zero pages on next access.
+    /// for the given range (offset and len in bytes).
     fn invalidate_mappings(&self, offset: usize, len: usize) {
         let inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
@@ -767,12 +773,22 @@ impl VmObject {
                 mapping.range_change(start_page, page_count, RangeChangeOp::Unmap);
             }
         }
-        // Also invalidate mappings on child VMOs (especially
-        // reference/slice children that share pages with us).
+        // Invalidate mappings on child VMOs. For slice/reference
+        // children, translate the offset from parent to child
+        // coordinates using the child's trait offset.
         let children: Vec<_> = inner.children.iter().filter_map(|c| c.upgrade()).collect();
         drop(inner);
         for child in children {
-            child.invalidate_mappings(offset, len);
+            // Translate parent offset to child coordinates.
+            let child_offset = child.trait_.parent_offset();
+            let child_len = child.trait_.len();
+            // Compute intersection of [offset, offset+len) with
+            // [child_offset, child_offset+child_len).
+            let inter_start = offset.max(child_offset);
+            let inter_end = (offset + len).min(child_offset + child_len);
+            if inter_start < inter_end {
+                child.invalidate_mappings(inter_start - child_offset, inter_end - inter_start);
+            }
         }
     }
 
