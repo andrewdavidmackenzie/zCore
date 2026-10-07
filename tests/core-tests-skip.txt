@@ -146,6 +146,8 @@ ProcessDebugVDSO.WriteToVdsoAddressReturnsAccessDenied
 # Profile creation hangs after first test.
 ProfileTest.CreateProfileWithMutuallyExclusiveFlagsIsInvalidArgs
 
-# ── System suspend / wake reports ────────────────────────────────────
+# ── System events / suspend / wake reports ───────────────────────────
+# ExactlyOneMemoryEventSignaled hangs — polls all pressure events.
+SystemEvent.ExactlyOneMemoryEventSignaled
 # WakeReportTestsThreadBound hangs — thread-bound suspend not implemented.
 WakeReportTestsThreadBound.*

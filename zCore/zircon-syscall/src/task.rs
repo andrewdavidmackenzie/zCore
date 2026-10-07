@@ -489,9 +489,15 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        // Validate: require root resource
-        proc.get_resource_with_rights(resource, Rights::empty())?
-            .validate(zircon_object::dev::ResourceKind::ROOT)?;
+        // Validate: accept ROOT or SYSTEM resource with PROFILE_BASE
+        let rsrc = proc.get_resource_with_rights(resource, Rights::empty())?;
+        if rsrc.validate(zircon_object::dev::ResourceKind::ROOT).is_err() {
+            rsrc.validate_ranged_resource(
+                zircon_object::dev::ResourceKind::SYSTEM,
+                zircon_object::dev::ZX_RSRC_SYSTEM_PROFILE_BASE,
+                1,
+            )?;
+        }
         // Check job policy
         proc.check_policy(PolicyCondition::NewProfile)?;
         // Read and validate profile info

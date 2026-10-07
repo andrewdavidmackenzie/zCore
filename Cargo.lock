@@ -2589,6 +2589,7 @@ dependencies = [
  "lock",
  "log",
  "numeric-enum-macro",
+ "spin 0.9.4",
  "zircon-object",
 ]
 
