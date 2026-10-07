@@ -135,6 +135,10 @@ impl Syscall<'_> {
         mapping_flags.set(MMUFlags::READ, options.contains(VmOptions::PERM_READ));
         mapping_flags.set(MMUFlags::WRITE, options.contains(VmOptions::PERM_WRITE));
         mapping_flags.set(MMUFlags::EXECUTE, options.contains(VmOptions::PERM_EXECUTE));
+        // WRITE without READ is invalid (Fuchsia ABI requirement).
+        if mapping_flags.contains(MMUFlags::WRITE) && !mapping_flags.contains(MMUFlags::READ) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let overwrite = options.contains(VmOptions::SPECIFIC_OVERWRITE);
         let map_range = if cfg!(any(feature = "deny-page-fault", not(target_os = "none"))) {
             // On platforms that don't support page faults, reject
