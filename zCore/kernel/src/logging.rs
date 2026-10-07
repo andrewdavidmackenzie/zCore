@@ -22,22 +22,6 @@ pub fn parse_log_level(cmdline: &str) -> LevelFilter {
         .unwrap_or(LevelFilter::Warn)
 }
 
-#[macro_export]
-macro_rules! print {
-    ($($arg:tt)*) => {
-        hal_impl::console::console_write_fmt(core::format_args!($($arg)*));
-    }
-}
-
-#[macro_export]
-macro_rules! println {
-    () => ($crate::print!("\r\n"));
-    ($($arg:tt)*) => {
-        hal_impl::console::console_write_fmt(core::format_args!($($arg)*));
-        $crate::print!("\r\n");
-    }
-}
-
 #[allow(dead_code)]
 #[repr(u8)]
 enum ColorCode {
