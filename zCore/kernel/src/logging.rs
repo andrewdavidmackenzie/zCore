@@ -1,5 +1,7 @@
 use cfg_if::cfg_if;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
+use zircon_object::object::KernelObject;
+use zircon_object::task::Thread;
 
 /// Initialize logging with the given log level filter.
 pub fn init(level: LevelFilter) {
@@ -80,7 +82,10 @@ impl Log for SimpleLogger {
         }
         let now = hal_impl::timer::timer_now();
         let cpu_id = hal_impl::cpu::cpu_id();
-        let (tid, pid) = (0, 0); //hal_impl::thread::get_tid();
+        let (tid, pid) = hal_impl::thread::get_current_thread()
+            .and_then(|t| t.downcast::<Thread>().ok())
+            .map(|t| (t.id(), t.proc().id()))
+            .unwrap_or((0, 0));
         let level = record.level();
         let target = record.target();
         let level_color = match level {
