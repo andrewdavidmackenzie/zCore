@@ -343,7 +343,7 @@ impl VmAddressRegion {
         // Only commit pages if the mapping has at least one access
         // permission. Mappings with no R/W/X are address reservations
         // that should fault on access (matching Fuchsia behavior).
-        if map_range && flags.intersects(MMUFlags::RXW) {
+        if map_range {
             mapping.map()?;
         }
         inner.mappings.push(mapping);

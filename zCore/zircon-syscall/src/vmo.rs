@@ -35,8 +35,8 @@ impl Syscall<'_> {
         // use zx_vmo_replace_as_executable to add EXECUTE rights.
         // RESIZE right is only granted when the VMO is resizable.
         let mut vmo_rights = Rights::DEFAULT_VMO;
-        if !resizable {
-            vmo_rights.remove(Rights::RESIZE);
+        if resizable {
+            vmo_rights.insert(Rights::RESIZE);
         }
         let handle_value = proc.add_handle(Handle::new(vmo, vmo_rights));
         out.write(handle_value)?;
@@ -330,9 +330,7 @@ impl Syscall<'_> {
     /// Resize a VMO object.
     pub fn sys_vmo_set_size(&self, handle_value: HandleValue, size: usize) -> ZxResult {
         let proc = self.thread.proc();
-        // Fuchsia requires both WRITE and RESIZE rights for set_size.
-        let vmo =
-            proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE | Rights::RESIZE)?;
+        let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?;
         info!(
             "vmo.set_size: handle={:#x}, size={:#x}, current_size={:#x}",
             handle_value,
