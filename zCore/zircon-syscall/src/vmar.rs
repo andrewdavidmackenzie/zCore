@@ -263,8 +263,8 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let required_rights = match op {
-            VmarOpType::Commit | VmarOpType::Decommit => Rights::WRITE,
-            VmarOpType::MapRange => Rights::READ,
+            VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero => Rights::WRITE,
+            VmarOpType::MapRange | VmarOpType::DontNeed | VmarOpType::AlwaysNeed => Rights::READ,
         };
         let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, required_rights)?;
         vmar.op_range(op, addr as usize, size as usize)?;
