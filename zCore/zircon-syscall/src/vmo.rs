@@ -442,6 +442,18 @@ impl Syscall<'_> {
                 }
                 Ok(())
             }
+            VmoOpType::AlwaysNeed | VmoOpType::DontNeed | VmoOpType::Prefetch => {
+                // Hinting operations. Require READ rights and valid range.
+                if !rights.contains(Rights::READ) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
+                if end > vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                // No-op: we don't implement prefetch/eviction hints.
+                Ok(())
+            }
         }
     }
 
@@ -592,5 +604,8 @@ numeric_enum! {
         CacheClean = 8,
         CacheCleanInvalidate = 9,
         Zero = 10,
+        AlwaysNeed = 11,
+        DontNeed = 12,
+        Prefetch = 13,
     }
 }
