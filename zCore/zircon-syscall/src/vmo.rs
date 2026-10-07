@@ -28,9 +28,8 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let vmo = VmObject::new_paged_with_resizable(resizable, pages(size as usize));
         // Fuchsia's vmo_create sets content_size (stream size) to the
-        // initial VMO size. This is important for streams — a stream
-        // created on a new VMO should see content_size == vmo.size().
-        vmo.set_content_size(vmo.len())?;
+        // exact user-requested size (not the rounded-up page size).
+        vmo.set_content_size(size as usize)?;
         // Default VMO rights do not include EXECUTE. The caller must
         // use zx_vmo_replace_as_executable to add EXECUTE rights.
         // RESIZE right is only granted when the VMO is resizable.

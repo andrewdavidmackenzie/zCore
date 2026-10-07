@@ -723,6 +723,10 @@ impl VmObject {
                 return parent.set_content_size_with_zero(size);
             }
         }
+        // content_size cannot exceed VMO size.
+        if size > self.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         let mut inner = self.inner.lock();
         let old = inner.content_size;
         inner.content_size = size;
