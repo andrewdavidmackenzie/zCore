@@ -29,7 +29,8 @@ impl Syscall<'_> {
                     zircon_object::dev::ResourceKind::SYSTEM,
                     zircon_object::dev::ZX_RSRC_SYSTEM_DEBUGLOG_BASE,
                     1,
-                )?;
+                )
+                .map_err(|_| ZxError::WRONG_TYPE)?;
             }
         } else if options & FLAG_READABLE != 0 {
             // ZX_HANDLE_INVALID is only allowed for write-only debuglogs.

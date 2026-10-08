@@ -302,7 +302,8 @@ impl Syscall<'_> {
                 ResourceKind::SYSTEM,
                 zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
                 1,
-            )?;
+            )
+            .map_err(|_| ZxError::WRONG_TYPE)?;
         }
         if topic > 1 {
             return Err(ZxError::OUT_OF_RANGE);
@@ -353,7 +354,8 @@ impl Syscall<'_> {
                 ResourceKind::SYSTEM,
                 zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
                 1,
-            )?;
+            )
+            .map_err(|_| ZxError::WRONG_TYPE)?;
         }
         if topic > 1 {
             return Err(ZxError::OUT_OF_RANGE);

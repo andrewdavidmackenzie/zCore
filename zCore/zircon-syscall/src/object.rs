@@ -649,7 +649,21 @@ impl Syscall<'_> {
                 }
                 let mut info_ptr =
                     UserOutPtr::<KmemStatsExtendedInfo>::from_addr_size(buffer, buffer_size)?;
-                info_ptr.write(KmemStatsExtendedInfo::default())?;
+                let vmo_bytes = vmo_page_bytes() as u64;
+                let total_bytes = vmo_bytes.max(128 * 1024 * 1024) + 64 * 1024 * 1024;
+                let free_bytes = total_bytes.saturating_sub(vmo_bytes);
+                info_ptr.write(KmemStatsExtendedInfo {
+                    total_bytes,
+                    free_bytes,
+                    wired_bytes: 16 * 1024 * 1024,
+                    total_heap_bytes: 4 * 1024 * 1024,
+                    free_heap_bytes: 2 * 1024 * 1024,
+                    vmo_bytes,
+                    mmu_overhead_bytes: 2 * 1024 * 1024,
+                    ipc_bytes: 256 * 1024,
+                    other_bytes: 1024 * 1024,
+                    ..Default::default()
+                })?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }
