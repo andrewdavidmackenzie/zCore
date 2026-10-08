@@ -374,8 +374,8 @@ impl Syscall<'_> {
         resume_deadline: u64,
         _options: u64,
         _out_header: usize,
-        _out_entries: usize,
-        _num_entries: u32,
+        out_entries: usize,
+        num_entries: u32,
         mut actual_entries: UserOutPtr<u32>,
     ) -> ZxResult {
         info!(
@@ -414,8 +414,20 @@ impl Syscall<'_> {
             }
         }
 
-        // No wake sources to report.
-        actual_entries.write_if_not_null(0)?;
+        // Report the kernel deadline as the wake source if the deadline
+        // was in the past (the timer "fired" immediately).
+        if num_entries > 0 && out_entries != 0 {
+            // zx_wake_source_report_entry_t = { u64 koid, u64 reserved }
+            // ZX_KOID_KERNEL = 1
+            let mut entry_out: UserOutPtr<u8> = out_entries.into();
+            let koid_kernel: u64 = 1; // ZX_KOID_KERNEL
+            entry_out.write_array(&koid_kernel.to_ne_bytes())?;
+            entry_out = (entry_out.as_addr() + 8).into();
+            entry_out.write_array(&0u64.to_ne_bytes())?; // reserved
+            actual_entries.write_if_not_null(1)?;
+        } else {
+            actual_entries.write_if_not_null(0)?;
+        }
         Ok(())
     }
 
