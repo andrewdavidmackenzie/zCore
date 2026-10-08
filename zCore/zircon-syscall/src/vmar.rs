@@ -171,9 +171,8 @@ impl Syscall<'_> {
             "mmuflags: {:?}, is_specific {:?}, overwrite {:?}, map_range {:?}",
             mapping_flags, is_specific, overwrite, map_range
         );
-        if map_range && overwrite {
-            return Err(ZxError::INVALID_ARGS);
-        }
+        // Note: SPECIFIC_OVERWRITE with eager commit is valid — the VMAR
+        // layer removes existing mappings before creating the new one.
         // Note: we should reject non-page-aligned length here,
         // but since zCore use different memory layout from zircon,
         // we should not reject them and round up them instead
