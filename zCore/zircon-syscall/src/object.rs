@@ -1292,34 +1292,25 @@ struct KmemInfo {
 
 /// `zx_info_kmem_stats_extended_t` — includes all base kmem fields
 /// plus pager-specific extended fields.
+/// Matches Fuchsia's `zx_info_kmem_stats_extended_t` (15 fields, 120 bytes).
 #[repr(C)]
 #[derive(Default)]
 struct KmemStatsExtendedInfo {
-    // Base kmem stats (same as KmemInfo, 19 fields, 152 bytes)
     total_bytes: u64,
     free_bytes: u64,
-    free_loaned_bytes: u64,
     wired_bytes: u64,
     total_heap_bytes: u64,
     free_heap_bytes: u64,
     vmo_bytes: u64,
-    mmu_overhead_bytes: u64,
-    ipc_bytes: u64,
-    cache_bytes: u64,
-    slab_bytes: u64,
-    zram_bytes: u64,
-    other_bytes: u64,
-    vmo_reclaim_total_bytes: u64,
-    vmo_reclaim_newest_bytes: u64,
-    vmo_reclaim_oldest_bytes: u64,
-    vmo_reclaim_disabled_bytes: u64,
-    vmo_discardable_locked_bytes: u64,
-    vmo_discardable_unlocked_bytes: u64,
-    // Extended pager fields
     vmo_pager_total_bytes: u64,
     vmo_pager_newest_bytes: u64,
     vmo_pager_oldest_bytes: u64,
-    vmo_pager_writeback_bytes: u64,
+    vmo_discardable_locked_bytes: u64,
+    vmo_discardable_unlocked_bytes: u64,
+    mmu_overhead_bytes: u64,
+    ipc_bytes: u64,
+    other_bytes: u64,
+    vmo_reclaim_disabled_bytes: u64,
 }
 
 /// `zx_info_cpu_stats_t` — 120 bytes per CPU.
