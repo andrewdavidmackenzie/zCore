@@ -99,9 +99,14 @@ impl Timer {
     }
 
     /// Cancel the pending timer started by `set`.
+    ///
+    /// Clears `Signal::SIGNALED` if it was asserted.
     pub fn cancel(&self) {
-        let mut inner = self.inner.lock();
-        inner.deadline = None;
+        {
+            let mut inner = self.inner.lock();
+            inner.deadline = None;
+        }
+        self.base.signal_clear(Signal::SIGNALED);
     }
 
     /// Get timer info for `ZX_INFO_TIMER`.
