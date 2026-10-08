@@ -419,13 +419,14 @@ impl VmAddressRegion {
         let mut guard = self.inner.lock();
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         let end_addr = addr + len;
-        // check if there are overlapping subregions (strict overlap, not touching)
+        // Check for overlapping subregions — treat child VMARs as
+        // unmapped gaps (Fuchsia returns NOT_FOUND for protect across gaps).
         if inner
             .children
             .iter()
             .any(|child| child.end_addr() > addr && child.addr() < end_addr)
         {
-            return Err(ZxError::INVALID_ARGS);
+            return Err(ZxError::NOT_FOUND);
         }
         let length: usize = inner
             .mappings
