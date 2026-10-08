@@ -24,6 +24,7 @@ define_count_helper!(Timer);
 #[derive(Default)]
 struct TimerInner {
     deadline: Option<Duration>,
+    slack: Duration,
 }
 
 /// Slack specifies how much a timer or event is allowed to deviate from its deadline.
@@ -67,21 +68,44 @@ impl Timer {
     ///
     /// If a previous call to `set` was pending, the previous timer is canceled
     /// and `Signal::SIGNALED` is de-asserted as needed.
-    pub fn set(self: &Arc<Self>, deadline: Duration, _slack: Duration) {
+    ///
+    /// If the deadline is already in the past (or zero), the timer fires
+    /// immediately by asserting SIGNALED synchronously.
+    pub fn set(self: &Arc<Self>, deadline: Duration, slack: Duration) {
         let mut inner = self.inner.lock();
-        inner.deadline = Some(deadline);
-        self.base.signal_clear(Signal::SIGNALED);
-        let me = Arc::downgrade(self);
-        hal_impl::timer::timer_set(
-            deadline,
-            Box::new(move |now| me.upgrade().map(|timer| timer.touch(now)).unwrap_or(())),
-        );
+        inner.slack = slack;
+        let now = hal_impl::timer::timer_now();
+        if deadline <= now {
+            // Deadline already passed: fire immediately
+            inner.deadline = None;
+            self.base.signal_set(Signal::SIGNALED);
+        } else {
+            inner.deadline = Some(deadline);
+            self.base.signal_clear(Signal::SIGNALED);
+            let me = Arc::downgrade(self);
+            hal_impl::timer::timer_set(
+                deadline,
+                Box::new(move |now| me.upgrade().map(|timer| timer.touch(now)).unwrap_or(())),
+            );
+        }
     }
 
     /// Cancel the pending timer started by `set`.
     pub fn cancel(&self) {
         let mut inner = self.inner.lock();
         inner.deadline = None;
+    }
+
+    /// Get timer info for `ZX_INFO_TIMER`.
+    ///
+    /// Returns `(options, deadline_nanos, slack_nanos)` where options
+    /// encodes the slack mode (0=Center, 1=Early, 2=Late).
+    pub fn get_info(&self) -> (u32, i64, i64) {
+        let inner = self.inner.lock();
+        let options = self.slack as u32;
+        let deadline = inner.deadline.map_or(0i64, |d| d.as_nanos() as i64);
+        let slack = inner.slack.as_nanos() as i64;
+        (options, deadline, slack)
     }
 
     /// Called by HAL timer.

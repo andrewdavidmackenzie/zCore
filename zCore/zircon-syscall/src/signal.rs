@@ -18,7 +18,9 @@ impl Syscall<'_> {
             "timer.create: options={:#x}, clock_id={:#x}",
             options, clock_id
         );
-        if clock_id != 0 {
+        // Accept ZX_CLOCK_MONOTONIC (0) and ZX_CLOCK_BOOT (1).
+        // Since zCore doesn't suspend, both clocks advance identically.
+        if clock_id > 1 {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
