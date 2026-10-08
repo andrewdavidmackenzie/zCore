@@ -20,10 +20,10 @@ struct SamplerSession {
 }
 
 /// Minimum sampling period (10 microseconds).
-const SAMPLER_MIN_PERIOD_NS: u64 = 10_000;
+const SAMPLER_MIN_PERIOD_NS: u64 = 10_000; // 10 microseconds
 
 /// Size of zx_sampler_config_t: period(8) + buffer_size(8) + discipline(8).
-const SAMPLER_CONFIG_SIZE: usize = 24;
+const SAMPLER_CONFIG_SIZE: usize = 16; // period (8) + buffer_size (8)
 
 /// Number of per-CPU regions to create. Use the compile-time max.
 const NUM_SAMPLER_CPUS: usize = hal_impl::config::MAX_CORE_NUM;
@@ -82,13 +82,8 @@ impl Syscall<'_> {
                 .try_into()
                 .map_err(|_| ZxError::INVALID_ARGS)?,
         );
-        let discipline = u64::from_ne_bytes(
-            config_data[16..24]
-                .try_into()
-                .map_err(|_| ZxError::INVALID_ARGS)?,
-        );
 
-        if period_ns < SAMPLER_MIN_PERIOD_NS || buffer_size == 0 || discipline != 0 {
+        if period_ns < SAMPLER_MIN_PERIOD_NS || buffer_size == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
 
