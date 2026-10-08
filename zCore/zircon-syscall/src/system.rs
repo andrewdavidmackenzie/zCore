@@ -309,15 +309,19 @@ impl Syscall<'_> {
         }
 
         // Return static 1.0x scale for each CPU.
-        // zx_cpu_performance_scale_t: { u16 integral_part, u16 fractional_part }
-        // 1.0x = { 1, 0 } = 4 bytes per CPU.
+        // zx_cpu_performance_info_t: { u32 logical_cpu_number, { u16 integral, u16 fractional } }
+        // = 8 bytes per entry.
         let num_cpus = hal_impl::config::MAX_CORE_NUM;
         let entries = core::cmp::min(count, num_cpus);
         if entries > 0 && info != 0 {
-            // Each entry: integral=1 (u16 LE), fractional=0 (u16 LE) = [1, 0, 0, 0]
-            let scale_1x: [u8; 4] = [1, 0, 0, 0];
             let mut out: UserOutPtr<u8> = info.into();
-            for _ in 0..entries {
+            for i in 0..entries {
+                // logical_cpu_number (u32 LE)
+                let cpu_num = (i as u32).to_ne_bytes();
+                out.write_array(&cpu_num)?;
+                out = (out.as_addr() + 4).into();
+                // performance_scale: integral=1 (u16 LE), fractional=0 (u16 LE)
+                let scale_1x: [u8; 4] = [1, 0, 0, 0];
                 out.write_array(&scale_1x)?;
                 out = (out.as_addr() + 4).into();
             }
