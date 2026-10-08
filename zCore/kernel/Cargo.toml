@@ -35,7 +35,8 @@ libos = [
   "linux-loader?/libos",
   "async-std",
   "chrono",
-  "rcore-fs-hostfs",
+  "nix",
+  "rcore-fs/std",
 ]
 
 # --- Driver features (forwarded to hal-impl -> drivers) ---
@@ -85,7 +86,7 @@ rcore-fs-sfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
 [target.'cfg(not(target_os = "none"))'.dependencies]
 async-std = { version = "1.10", optional = true }
 chrono = { version = "0.4", optional = true }
-rcore-fs-hostfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
+nix = { version = "0.23", optional = true }
 
 [package.metadata.cargo-all-features]
 # Requires custom JSON target specs and -Z build-std; cannot be

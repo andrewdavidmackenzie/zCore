@@ -574,16 +574,25 @@ pub fn run_from_rootfs(
         .read_at(0, &mut program_data)
         .unwrap_or_else(|e| panic!("failed to read '{}': {:?}", init_path, e));
 
-    info!(
-        "Loaded '{}' ({} bytes) from rootfs",
-        init_path,
-        program_data.len()
-    );
+    run_from_data(&program_data, init_path, extra_args)
+}
+
+/// Boot a Zircon process from pre-loaded program data.
+///
+/// Like [`run_from_rootfs`], but takes the program bytes directly instead
+/// of reading from a filesystem. Used in libos mode where the caller can
+/// read the file via `std::fs::read()` without going through the VFS layer.
+pub fn run_from_data(
+    program_data: &[u8],
+    init_path: &str,
+    extra_args: alloc::vec::Vec<alloc::string::String>,
+) -> Arc<Process> {
+    info!("Loaded '{}' ({} bytes)", init_path, program_data.len());
 
     let job = Job::root();
     let mut config = zircon_spawn_config();
     config.extra_args = extra_args;
-    zircon_object::task::spawn::spawn_process(&job, "init", &program_data, &config)
+    zircon_object::task::spawn::spawn_process(&job, "init", program_data, &config)
         .expect("failed to spawn init process")
 }
 

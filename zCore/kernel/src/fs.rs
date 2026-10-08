@@ -2,7 +2,10 @@
 //!
 //! Provides a unified rootfs interface for the kernel. On bare-metal,
 //! the rootfs is an SFS image loaded from initrd or a block device.
-//! In libOS mode, the rootfs is a host directory via HostFS.
+//! In libOS mode, `read_rootfs_file` reads directly from the host
+//! filesystem via `std::fs::read`. HostFS (rcore-fs VFS adapter) is
+//! only used when both `libos` and `linux` features are active, since
+//! Linux needs full POSIX filesystem semantics.
 
 /// Try to open a rootfs.
 ///
@@ -11,18 +14,16 @@
 ///
 /// In libOS mode, uses HostFS backed by a host directory.
 pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
-    // LibOS mode: use HostFS from the rootfs directory on the host.
-    // Select the rootfs flavour based on the enabled feature.
-    #[cfg(feature = "libos")]
-    if let Some(path) = hal_impl::platform::libos_rootfs_path(if cfg!(feature = "linux") {
-        "linux"
-    } else {
-        "zircon"
-    }) {
+    // LibOS + Linux mode: use HostFS from the rootfs directory on the host.
+    // Linux needs a full FileSystem for POSIX operations (create, write, etc.).
+    // In libos + Zircon-only mode, read_rootfs_file() uses std::fs::read()
+    // directly, so try_rootfs() is not needed for the Zircon path.
+    #[cfg(all(feature = "libos", feature = "linux"))]
+    if let Some(path) = hal_impl::platform::libos_rootfs_path("linux") {
         let path = std::path::PathBuf::from(path);
         if path.is_dir() && path.join("bin").is_dir() {
-            info!("LibOS Zircon rootfs: {}", path.display());
-            return Some(rcore_fs_hostfs::HostFS::new(path));
+            info!("LibOS Linux rootfs: {}", path.display());
+            return Some(crate::hostfs::HostFS::new(path));
         }
         return None;
     }
@@ -60,13 +61,31 @@ pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
 /// Registered at boot via [`zircon_object::task::spawn::set_rootfs_reader`]
 /// so that zircon-syscall can read ELF binaries and shared libraries
 /// for process creation and dynamic linking.
+///
+/// In libos mode, reads directly from the host filesystem via `std::fs::read`,
+/// bypassing the rcore-fs VFS layer entirely.
+/// On bare-metal, goes through the SFS rootfs via INode trait.
 pub fn read_rootfs_file(path: &str) -> Option<alloc::vec::Vec<u8>> {
-    let rootfs = try_rootfs()?;
-    let inode = rootfs.root_inode().lookup(path).ok()?;
-    let meta = inode.metadata().ok()?;
-    let mut data = alloc::vec![0u8; meta.size];
-    inode.read_at(0, &mut data).ok()?;
-    Some(data)
+    #[cfg(feature = "libos")]
+    {
+        let flavour = if cfg!(feature = "linux") {
+            "linux"
+        } else {
+            "zircon"
+        };
+        let dir = hal_impl::platform::libos_rootfs_path(flavour)?;
+        let full_path = std::path::PathBuf::from(dir).join(path.trim_start_matches('/'));
+        std::fs::read(full_path).ok()
+    }
+    #[cfg(not(feature = "libos"))]
+    {
+        let rootfs = try_rootfs()?;
+        let inode = rootfs.root_inode().lookup(path).ok()?;
+        let meta = inode.metadata().ok()?;
+        let mut data = alloc::vec![0u8; meta.size];
+        inode.read_at(0, &mut data).ok()?;
+        Some(data)
+    }
 }
 
 // ── Device wrappers ──────────────────────────────────────────────────

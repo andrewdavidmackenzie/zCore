@@ -1096,8 +1096,8 @@ dependencies = [
  "linux-object",
  "lock",
  "log",
+ "nix",
  "rcore-fs",
- "rcore-fs-hostfs",
  "rcore-fs-sfs",
  "spin 0.9.4",
  "zircon-loader",
@@ -1620,16 +1620,6 @@ dependencies = [
  "rcore-fs-sfs",
  "structopt",
  "time 0.3.15",
-]
-
-[[package]]
-name = "rcore-fs-hostfs"
-version = "0.1.0"
-source = "git+https://github.com/rcore-os/rcore-fs?rev=1a3246b#1a3246b1d3754f414817d72a6217fc7b6076ff30"
-dependencies = [
- "log",
- "nix",
- "rcore-fs",
 ]
 
 [[package]]
