@@ -126,7 +126,8 @@ impl Resource {
         let name = self.base.name();
         let name = name.as_bytes();
         let mut name_vec = [0u8; 32];
-        name_vec[..name.len()].clone_from_slice(name);
+        let copy_len = name.len().min(name_vec.len());
+        name_vec[..copy_len].clone_from_slice(&name[..copy_len]);
         ResourceInfo {
             kind: self.kind as _,
             flags: self.flags.bits,
