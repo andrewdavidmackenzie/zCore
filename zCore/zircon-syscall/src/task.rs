@@ -1,7 +1,7 @@
 use alloc::{string::ToString, vec::Vec};
 use core::convert::TryFrom;
 use hal_impl::context::UserContextField;
-use {super::*, zircon_object::task::*};
+use {super::*, zircon_object::task::*, zircon_object::vm::VmAddressRegion};
 
 impl Syscall<'_> {
     /// Create a new process.
@@ -530,13 +530,16 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        // Validate target is a thread with MANAGE_THREAD
-        let _thread = proc.get_object_with_rights::<Thread>(target, Rights::MANAGE_THREAD)?;
         // Validate profile handle with APPLY_PROFILE
         let _profile = proc.get_object_with_rights::<Profile>(profile, Rights::APPLY_PROFILE)?;
-        // TODO: actually apply scheduling parameters to the thread.
-        // For now, accept the call without error (the profile is valid
-        // but runtime priority changes are not implemented).
+        // Accept both Thread (scheduling profile) and VMAR (memory priority profile).
+        let thread_result = proc.get_object_with_rights::<Thread>(target, Rights::MANAGE_THREAD);
+        if thread_result.is_err() {
+            // Try VMAR — memory priority profiles can be applied to VMARs.
+            proc.get_object::<VmAddressRegion>(target)?;
+        }
+        // TODO: actually apply scheduling/memory parameters.
+        // For now, accept the call without error.
         Ok(())
     }
 
