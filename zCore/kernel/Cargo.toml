@@ -25,7 +25,7 @@ sched-priority = ["executor/sched-priority"]
 # --- Flavour ---
 # Zircon is the base flavour (always enabled).
 # Linux is additive — adds Linux syscall emulation on top of Zircon.
-linux = ["linux-loader", "linux-object", "zircon-object/linux", "nix", "rcore-fs/std"]
+linux = ["linux-loader", "linux-object", "zircon-object/linux"]
 # Dynamic linking — enables Fuchsia-style dynamic linking via ld.so.1.
 # Needed for running dynamically-linked binaries like core-tests-standalone.
 # Without this, all binaries are treated as statically linked.
@@ -35,6 +35,8 @@ libos = [
   "linux-loader?/libos",
   "async-std",
   "chrono",
+  "nix",
+  "rcore-fs/std",
 ]
 
 # --- Driver features (forwarded to hal-impl -> drivers) ---
