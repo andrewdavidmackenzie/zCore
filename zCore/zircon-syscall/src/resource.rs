@@ -19,7 +19,21 @@ impl Syscall<'_> {
         let parent_rsrc = proc.get_resource_with_rights(parent_rsrc, Rights::WRITE)?;
         let kind = ResourceKind::try_from(options & 0xFFFF).map_err(|_| ZxError::INVALID_ARGS)?;
         let flags = ResourceFlags::from_bits(options & 0xFFFF_0000).ok_or(ZxError::INVALID_ARGS)?;
-        parent_rsrc.validate_ranged_resource(kind, base as usize, size as usize)?;
+        // Check for arithmetic overflow before range validation.
+        if (base as usize).checked_add(size as usize).is_none() {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Validate kind match and range. In resource_create context,
+        // kind mismatch is ACCESS_DENIED (not WRONG_TYPE).
+        parent_rsrc
+            .validate_ranged_resource(kind, base as usize, size as usize)
+            .map_err(|e| {
+                if e == ZxError::WRONG_TYPE {
+                    ZxError::ACCESS_DENIED
+                } else {
+                    e
+                }
+            })?;
         parent_rsrc.check_exclusive(flags)?;
         let rsrc = Resource::create(&name, kind, base as usize, size as usize, flags);
         let handle = proc.add_handle(Handle::new(rsrc, Rights::DEFAULT_RESOURCE));
