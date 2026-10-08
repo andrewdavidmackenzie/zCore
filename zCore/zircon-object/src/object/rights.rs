@@ -75,8 +75,11 @@ bitflags! {
         /// Allows socket disposition changes.
         const MANAGE_SOCKET = 1 << 20;
 
+        /// Allows operations on child objects (VMAR destroy/unmap across children).
+        const OP_CHILDREN = 1 << 21;
+
         /// Allows resizing a VMO.
-        const RESIZE = 1 << 23;
+        const RESIZE = 1 << 22;
 
         /// Used to duplicate a handle with the same rights.
         const SAME_RIGHTS = 1 << 31;
@@ -108,7 +111,8 @@ bitflags! {
         const DEFAULT_VMO = Self::BASIC.bits | Self::IO.bits | Self::PROPERTY.bits | Self::MAP.bits | Self::SIGNAL.bits;
 
         /// BASIC | WAIT
-        const DEFAULT_VMAR = Self::BASIC.bits & !Self::WAIT.bits;
+        /// (BASIC & ~WAIT) | OP_CHILDREN
+        const DEFAULT_VMAR = (Self::BASIC.bits & !Self::WAIT.bits) | Self::OP_CHILDREN.bits;
 
         /// BASIC | IO | PROPERTY | POLICY | ENUMERATE | DESTROY | SIGNAL | MANAGE_JOB | MANAGE_PROCESS | MANAGE_THREAD
         const DEFAULT_JOB = Self::BASIC.bits | Self::IO.bits | Self::PROPERTY.bits | Self::POLICY.bits | Self::ENUMERATE.bits
