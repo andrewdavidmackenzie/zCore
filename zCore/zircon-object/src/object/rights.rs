@@ -135,8 +135,8 @@ bitflags! {
         /// BASIC | SIGNAL | READ | WRITE
         const DEFAULT_COUNTER = Self::BASIC.bits | Self::SIGNAL.bits | Self::READ.bits | Self::WRITE.bits;
 
-        /// DUPLICATE | TRANSFER | SIGNAL_PEER | APPLY_PROFILE
-        const DEFAULT_PROFILE = Self::DUPLICATE.bits | Self::TRANSFER.bits | Self::SIGNAL_PEER.bits | Self::APPLY_PROFILE.bits;
+        /// (BASIC & ~WAIT) | APPLY_PROFILE = DUPLICATE | TRANSFER | INSPECT | APPLY_PROFILE
+        const DEFAULT_PROFILE = (Self::BASIC.bits & !Self::WAIT.bits) | Self::APPLY_PROFILE.bits;
 
         /// BASIC | SIGNAL | SIGNAL_PEER
         const DEFAULT_EVENTPAIR = Self::BASIC.bits | Self::SIGNAL.bits | Self::SIGNAL_PEER.bits;
