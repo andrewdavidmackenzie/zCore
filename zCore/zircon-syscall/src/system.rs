@@ -305,7 +305,7 @@ impl Syscall<'_> {
             )
             .map_err(|_| ZxError::WRONG_TYPE)?;
         }
-        if topic > 1 {
+        if topic > 2 {
             return Err(ZxError::OUT_OF_RANGE);
         }
 
@@ -357,7 +357,7 @@ impl Syscall<'_> {
             )
             .map_err(|_| ZxError::WRONG_TYPE)?;
         }
-        if topic > 1 {
+        if topic > 2 {
             return Err(ZxError::OUT_OF_RANGE);
         }
         // Accept the request without applying (no DVFS hardware).
