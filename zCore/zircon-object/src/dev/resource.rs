@@ -169,6 +169,8 @@ pub const ZX_RSRC_SYSTEM_DEBUGLOG_BASE: usize = 12;
 pub const ZX_RSRC_SYSTEM_STALL_BASE: usize = 13;
 /// Base for kernel tracing (ktrace).
 pub const ZX_RSRC_SYSTEM_TRACING_BASE: usize = 14;
+/// Base for thread sampling.
+pub const ZX_RSRC_SYSTEM_SAMPLING_BASE: usize = 15;
 
 /// Information of a resource.
 #[repr(C)]
