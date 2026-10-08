@@ -105,7 +105,7 @@ impl Resource {
                 return Ok(());
             }
         }
-        Err(ZxError::OUT_OF_RANGE)
+        Err(ZxError::ACCESS_DENIED)
     }
 
     /// Returns `Err(ZxError::INVALID_ARGS)` if the resource is not the root resource, and
