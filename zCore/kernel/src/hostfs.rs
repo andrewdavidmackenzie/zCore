@@ -161,7 +161,7 @@ impl INode for HNode {
 
     fn link(&self, name: &str, other: &Arc<dyn INode>) -> Result<()> {
         let other = other.downcast_ref::<Self>().ok_or(FsError::NotSameFs)?;
-        std::fs::hard_link(&other.path, &self.path.join(name))?;
+        std::fs::hard_link(&other.path, self.path.join(name))?;
         Ok(())
     }
 
@@ -244,6 +244,7 @@ impl HNode {
                 .read(true)
                 .write(true)
                 .create(true)
+                .truncate(false)
                 .open(&self.path)?;
             *maybe_file = Some(file);
         }
