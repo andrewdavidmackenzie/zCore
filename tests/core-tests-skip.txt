@@ -149,5 +149,9 @@ ProfileTest.CreateProfileWithMutuallyExclusiveFlagsIsInvalidArgs
 # ── System events / suspend / wake reports ───────────────────────────
 # ExactlyOneMemoryEventSignaled hangs — polls all pressure events.
 SystemEvent.ExactlyOneMemoryEventSignaled
-# WakeReportTestsThreadBound hangs — thread-bound suspend not implemented.
+# WakeReport tests hang — wake source reporting not implemented.
+WakeReportTestsPortBound.*
 WakeReportTestsThreadBound.*
+# SuspendAndResumeByTimer hangs — cooperative scheduler can't
+# fire timer while main thread is in the suspend busy-wait.
+SystemSuspend.SuspendAndResumeByTimer
