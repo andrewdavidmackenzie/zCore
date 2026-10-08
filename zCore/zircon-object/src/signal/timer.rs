@@ -72,15 +72,23 @@ impl Timer {
     /// If the deadline is already in the past (or zero), the timer fires
     /// immediately by asserting SIGNALED synchronously.
     pub fn set(self: &Arc<Self>, deadline: Duration, slack: Duration) {
-        let mut inner = self.inner.lock();
-        inner.slack = slack;
-        let now = hal_impl::timer::timer_now();
-        if deadline <= now {
-            // Deadline already passed: fire immediately
-            inner.deadline = None;
+        let fire_now = {
+            let mut inner = self.inner.lock();
+            inner.slack = slack;
+            let now = hal_impl::timer::timer_now();
+            if deadline <= now {
+                inner.deadline = None;
+                true
+            } else {
+                inner.deadline = Some(deadline);
+                false
+            }
+        };
+        // Signal operations are done outside the lock to avoid
+        // potential deadlocks with signal handler callbacks.
+        if fire_now {
             self.base.signal_set(Signal::SIGNALED);
         } else {
-            inner.deadline = Some(deadline);
             self.base.signal_clear(Signal::SIGNALED);
             let me = Arc::downgrade(self);
             hal_impl::timer::timer_set(
@@ -103,8 +111,10 @@ impl Timer {
     pub fn get_info(&self) -> (u32, i64, i64) {
         let inner = self.inner.lock();
         let options = self.slack as u32;
-        let deadline = inner.deadline.map_or(0i64, |d| d.as_nanos() as i64);
-        let slack = inner.slack.as_nanos() as i64;
+        let deadline = inner
+            .deadline
+            .map_or(0i64, |d| i64::try_from(d.as_nanos()).unwrap_or(i64::MAX));
+        let slack = i64::try_from(inner.slack.as_nanos()).unwrap_or(i64::MAX);
         (options, deadline, slack)
     }
 
