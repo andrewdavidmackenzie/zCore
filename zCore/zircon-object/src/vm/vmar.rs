@@ -740,7 +740,7 @@ impl VmAddressRegion {
         } else {
             match self.find_free_area(inner, 0, len, align) {
                 Some(offset) => Ok(offset),
-                None => Err(ZxError::NO_MEMORY),
+                None => Err(ZxError::NO_RESOURCES),
             }
         }
     }

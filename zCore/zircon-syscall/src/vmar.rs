@@ -194,7 +194,8 @@ impl Syscall<'_> {
     pub fn sys_vmar_destroy(&self, handle_value: HandleValue) -> ZxResult {
         info!("vmar.destroy: handle={:#x?}", handle_value);
         let proc = self.thread.proc();
-        let vmar = proc.get_object::<VmAddressRegion>(handle_value)?;
+        let vmar =
+            proc.get_object_with_rights::<VmAddressRegion>(handle_value, Rights::OP_CHILDREN)?;
         vmar.destroy()?;
         Ok(())
     }
