@@ -368,7 +368,14 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
-        res.validate(ResourceKind::ROOT)?;
+        // Accept ROOT or SYSTEM/CPU_BASE resource
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(
+                ResourceKind::SYSTEM,
+                zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
+                1,
+            )?;
+        }
 
         // Wait until the resume deadline by polling the monotonic clock.
         // A real implementation would enter a low-power state via
