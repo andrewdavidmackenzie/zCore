@@ -580,6 +580,7 @@ impl VmAddressRegion {
                     map.vmo.commit(vmo_offset, op_len)?;
                 }
                 VmarOpType::Zero => {
+                    // The syscall layer already checks Rights::WRITE on the VMAR handle.
                     map.vmo.zero(vmo_offset, op_len)?;
                 }
                 VmarOpType::DontNeed | VmarOpType::AlwaysNeed => {
