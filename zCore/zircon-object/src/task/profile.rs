@@ -130,7 +130,7 @@ pub struct SchedDeadlineParams {
 ///
 /// The `priority` and `deadline` fields occupy the same memory (C union).
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct ProfileInfo {
     /// Bitmask of `ProfileInfoFlags`.
     pub flags_raw: u32,
@@ -139,17 +139,6 @@ pub struct ProfileInfo {
     sched_union: [u8; 24],
     /// CPU affinity mask (for CPU_MASK). 512 CPUs max.
     pub cpu_affinity_mask: [u64; 8],
-}
-
-impl Default for ProfileInfo {
-    fn default() -> Self {
-        Self {
-            flags_raw: 0,
-            _padding1: 0,
-            sched_union: [0; 24],
-            cpu_affinity_mask: [0; 8],
-        }
-    }
 }
 
 impl core::fmt::Debug for ProfileInfo {
@@ -180,7 +169,9 @@ impl ProfileInfo {
 
     /// Read the deadline parameters (entire 24-byte union).
     pub fn deadline_params(&self) -> SchedDeadlineParams {
-        unsafe { core::ptr::read_unaligned(self.sched_union.as_ptr() as *const SchedDeadlineParams) }
+        unsafe {
+            core::ptr::read_unaligned(self.sched_union.as_ptr() as *const SchedDeadlineParams)
+        }
     }
 
     /// Create a ProfileInfo with the given priority (for tests and internal use).

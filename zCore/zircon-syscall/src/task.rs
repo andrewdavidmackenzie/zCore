@@ -491,7 +491,10 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         // Validate: accept ROOT or SYSTEM resource with PROFILE_BASE
         let rsrc = proc.get_resource_with_rights(resource, Rights::empty())?;
-        if rsrc.validate(zircon_object::dev::ResourceKind::ROOT).is_err() {
+        if rsrc
+            .validate(zircon_object::dev::ResourceKind::ROOT)
+            .is_err()
+        {
             rsrc.validate_ranged_resource(
                 zircon_object::dev::ResourceKind::SYSTEM,
                 zircon_object::dev::ZX_RSRC_SYSTEM_PROFILE_BASE,
