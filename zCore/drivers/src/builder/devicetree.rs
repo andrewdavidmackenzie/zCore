@@ -206,7 +206,13 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
         props: &InheritProps,
     ) -> DeviceResult<(DevWithInterrupt, IntcProps)> {
         let phandle = node.phandle.ok_or(DeviceError::InvalidParam)?;
-        let interrupt_cells = node.interrupt_cells.unwrap_or(0);
+        let interrupt_cells = node.interrupt_cells.ok_or_else(|| {
+            warn!(
+                "{MODULE}: interrupt controller {:?} missing #interrupt-cells",
+                node.name
+            );
+            DeviceError::InvalidParam
+        })?;
         let interrupts_extended = node.effective_interrupts(props);
         let base_vaddr = node
             .reg

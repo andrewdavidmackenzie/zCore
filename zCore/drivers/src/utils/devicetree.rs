@@ -92,6 +92,134 @@ impl NodeInfo {
     }
 }
 
+/// Scan raw DTB bytes to extract #interrupt-cells for each phandle.
+///
+/// dtb-walker consumes #interrupt-cells internally and doesn't deliver it
+/// to the walk callback. We need it for the driver builder's interrupt
+/// registration loop. This function scans the raw FDT structure block
+/// to find phandle + #interrupt-cells pairs.
+fn scan_interrupt_cells(dtb_vaddr: VirtAddr) -> alloc::collections::BTreeMap<u32, u32> {
+    use alloc::collections::BTreeMap;
+
+    let mut map = BTreeMap::new();
+
+    // Parse the FDT header to find the structure block.
+    let header = dtb_vaddr as *const u8;
+    let read_u32 = |off: usize| -> u32 {
+        unsafe {
+            let p = header.add(off);
+            u32::from_be_bytes([*p, *p.add(1), *p.add(2), *p.add(3)])
+        }
+    };
+
+    let magic = read_u32(0);
+    if magic != 0xd00dfeed {
+        return map;
+    }
+    let totalsize = read_u32(4) as usize;
+    let off_dt_struct = read_u32(8) as usize;
+    let off_dt_strings = read_u32(12) as usize;
+
+    let struct_base = dtb_vaddr + off_dt_struct;
+    let strings_base = dtb_vaddr + off_dt_strings;
+    let struct_end = dtb_vaddr + totalsize.min(off_dt_struct + 0x100000); // safety limit
+
+    // Walk the structure block looking for phandle and #interrupt-cells
+    // properties within the same node.
+    let mut pos = struct_base;
+    let mut current_phandle: Option<u32> = None;
+    let mut current_intc_cells: Option<u32> = None;
+
+    let read_u32_at = |addr: usize| -> u32 {
+        unsafe {
+            let p = addr as *const u8;
+            u32::from_be_bytes([*p, *p.add(1), *p.add(2), *p.add(3)])
+        }
+    };
+
+    // Get a null-terminated string from the strings block.
+    let get_string = |nameoff: u32| -> &[u8] {
+        let start = strings_base + nameoff as usize;
+        let mut end = start;
+        unsafe {
+            while *(end as *const u8) != 0 && end < struct_end {
+                end += 1;
+            }
+        }
+        unsafe { core::slice::from_raw_parts(start as *const u8, end - start) }
+    };
+
+    while pos + 4 <= struct_end {
+        let token = read_u32_at(pos);
+        pos += 4;
+        match token {
+            1 => {
+                // FDT_BEGIN_NODE: skip the name (null-terminated, 4-byte aligned)
+                // Flush previous node
+                if let (Some(ph), Some(cells)) = (current_phandle, current_intc_cells) {
+                    map.insert(ph, cells);
+                }
+                current_phandle = None;
+                current_intc_cells = None;
+
+                // Skip node name
+                while pos < struct_end {
+                    if unsafe { *(pos as *const u8) } == 0 {
+                        pos += 1;
+                        break;
+                    }
+                    pos += 1;
+                }
+                // Align to 4 bytes
+                pos = (pos + 3) & !3;
+            }
+            2 => {
+                // FDT_END_NODE
+                if let (Some(ph), Some(cells)) = (current_phandle, current_intc_cells) {
+                    map.insert(ph, cells);
+                }
+                current_phandle = None;
+                current_intc_cells = None;
+            }
+            3 => {
+                // FDT_PROP: len (u32), nameoff (u32), value (len bytes, padded)
+                if pos + 8 > struct_end {
+                    break;
+                }
+                let len = read_u32_at(pos) as usize;
+                let nameoff = read_u32_at(pos + 4);
+                pos += 8;
+                let value_start = pos;
+                let padded_len = (len + 3) & !3;
+                pos += padded_len;
+
+                if pos > struct_end {
+                    break;
+                }
+
+                let name = get_string(nameoff);
+                if (name == b"phandle" || (name == b"linux,phandle" && current_phandle.is_none()))
+                    && len == 4
+                {
+                    current_phandle = Some(read_u32_at(value_start));
+                } else if name == b"#interrupt-cells" && len == 4 {
+                    current_intc_cells = Some(read_u32_at(value_start));
+                }
+            }
+            9 => break, // FDT_END
+            4 => {}     // FDT_NOP
+            _ => break, // Unknown token
+        }
+    }
+
+    // Flush last node
+    if let (Some(ph), Some(cells)) = (current_phandle, current_intc_cells) {
+        map.insert(ph, cells);
+    }
+
+    map
+}
+
 /// Parse a big-endian byte slice as a u64 (4 or 8 bytes).
 fn parse_u64(value: &[u8]) -> Option<usize> {
     match value.len() {
@@ -230,8 +358,13 @@ impl Devicetree {
 
     /// Walk the DTB for driver probing.
     ///
-    /// Calls `device_node_op` for each node that has a `compatible` property,
-    /// providing the collected [`NodeInfo`] and inherited [`InheritProps`].
+    /// Collects all device nodes into a flat list, then calls `device_node_op`
+    /// for each one. Uses a two-pass approach:
+    /// 1. Walk the DTB to collect all nodes with their properties
+    /// 2. Process the collected nodes sequentially
+    ///
+    /// This avoids issues with dtb-walker consuming `#interrupt-cells`
+    /// internally -- we scan the raw DTB bytes to extract it separately.
     pub fn walk_for_drivers<F>(&self, mut device_node_op: F)
     where
         F: FnMut(&NodeInfo, &InheritProps),
@@ -250,21 +383,13 @@ impl Devicetree {
             Err(_) => return,
         };
 
-        // We need to collect properties per-node. Since dtb-walker gives us
-        // properties one at a time via callbacks, we accumulate them in a
-        // stack of NodeInfo structs (one per nesting level).
-        //
-        // When we see a SubNode, we push a new NodeInfo. When we see properties,
-        // we add them to the current (top) NodeInfo. When we step out of a node
-        // (next SubNode at same level or end), we pop and process it.
-        //
-        // However, dtb-walker doesn't give us an explicit "end of node" signal.
-        // Instead, we detect it when we see the next SubNode at the same or
-        // higher level, or when the walk ends.
+        // Pre-scan: extract #interrupt-cells for each phandle from the raw
+        // DTB bytes. dtb-walker consumes this property internally and never
+        // delivers it to the walk callback.
+        let intc_cells_map = scan_interrupt_cells(self.dtb_vaddr);
 
-        let mut inherited_stack: Vec<InheritProps> = Vec::new();
-        inherited_stack.push(InheritProps::default());
-
+        // Pass 1: Collect all nodes with their properties and depth levels.
+        let mut nodes: Vec<(NodeInfo, usize)> = Vec::new(); // (node, depth)
         let mut current_node: Option<NodeInfo> = None;
         let mut current_level: usize = 0;
 
@@ -273,37 +398,16 @@ impl Devicetree {
 
             match obj {
                 DtbObj::SubNode { name } => {
-                    // Process the previous node at this level or deeper
+                    // Flush the previous node
                     if let Some(node) = current_node.take() {
-                        if !node.compatible.is_empty() {
-                            let inherited = inherited_stack.last().copied().unwrap_or_default();
-                            device_node_op(&node, &inherited);
-                        }
-                        // Update inherited props from the processed node
-                        if let Some(ip) = node.interrupt_parent {
-                            if let Some(last) = inherited_stack.last_mut() {
-                                last.interrupt_parent = ip;
-                            }
-                        }
+                        nodes.push((node, current_level));
                     }
 
-                    // Manage the inherited props stack
-                    while inherited_stack.len() > level + 1 {
-                        inherited_stack.pop();
-                    }
-                    if inherited_stack.len() <= level {
-                        let parent = inherited_stack.last().copied().unwrap_or_default();
-                        inherited_stack.push(parent);
-                    }
-
-                    // Start collecting a new node
-                    let name_str = name.as_str().unwrap_or("").into();
                     current_node = Some(NodeInfo {
-                        name: name_str,
+                        name: name.as_str().unwrap_or("").into(),
                         ..Default::default()
                     });
                     current_level = level;
-
                     StepInto
                 }
                 DtbObj::Property(prop) => {
@@ -320,7 +424,6 @@ impl Devicetree {
                                 node.phandle = Some(ph.value());
                             }
                             Property::Reg(reg) => {
-                                // Take the first range
                                 if let Some(range) = reg.clone().next() {
                                     node.reg = Some((
                                         range.start as u64,
@@ -332,9 +435,8 @@ impl Devicetree {
                                 if name == Str::from("interrupt-controller") {
                                     node.is_interrupt_controller = true;
                                 } else if name == Str::from("#interrupt-cells") {
-                                    // dtb-walker consumes this internally, but we
-                                    // still need it for the driver builder. It may
-                                    // not reach here. Handle both cases.
+                                    // dtb-walker normally consumes this, but
+                                    // may deliver it if format is unexpected.
                                     node.interrupt_cells = parse_u32(value);
                                 } else if name == Str::from("interrupts-extended") {
                                     node.interrupts_extended = Some(parse_cells(value));
@@ -342,12 +444,8 @@ impl Devicetree {
                                     node.interrupts = Some(parse_cells(value));
                                 } else if name == Str::from("interrupt-parent") {
                                     node.interrupt_parent = parse_u32(value);
-                                } else if name == Str::from("phandle") {
-                                    // Fallback: dtb-walker may parse this as
-                                    // Property::PHandle, but handle raw form too.
-                                    if node.phandle.is_none() {
-                                        node.phandle = parse_u32(value);
-                                    }
+                                } else if name == Str::from("phandle") && node.phandle.is_none() {
+                                    node.phandle = parse_u32(value);
                                 }
                             }
                             _ => {}
@@ -358,11 +456,54 @@ impl Devicetree {
             }
         });
 
-        // Process the last node
+        // Flush the last node
         if let Some(node) = current_node.take() {
+            nodes.push((node, current_level));
+        }
+
+        // Pass 2: Resolve #interrupt-cells for interrupt controllers.
+        // dtb-walker consumes this property internally, so we use the
+        // pre-scanned map from the raw DTB bytes.
+        for (node, _level) in &mut nodes {
+            if node.is_interrupt_controller && node.interrupt_cells.is_none() {
+                if let Some(ph) = node.phandle {
+                    node.interrupt_cells = intc_cells_map.get(&ph).copied();
+                }
+            }
+        }
+
+        // Build interrupt-parent inheritance by depth.
+        let mut inherited_stack: Vec<InheritProps> = alloc::vec![InheritProps::default()];
+
+        // Collect root-level interrupt-parent if present.
+        // (Root properties arrive before any SubNode in the DTB.)
+        // We handle this by scanning the first few nodes at depth 0.
+
+        for (node, level) in &nodes {
+            // Trim stack to current level
+            inherited_stack.truncate(inherited_stack.len().max(*level + 1));
+            while inherited_stack.len() <= *level {
+                let parent = inherited_stack.last().copied().unwrap_or_default();
+                inherited_stack.push(parent);
+            }
+
+            let inherited = inherited_stack[*level];
+
             if !node.compatible.is_empty() {
-                let inherited = inherited_stack.last().copied().unwrap_or_default();
-                device_node_op(&node, &inherited);
+                device_node_op(node, &inherited);
+            }
+
+            // If this node sets interrupt-parent, it applies to children
+            // (next deeper level), not to siblings.
+            if let Some(ip) = node.interrupt_parent {
+                let child_level = *level + 1;
+                let mut child_props = inherited;
+                child_props.interrupt_parent = ip;
+                if child_level < inherited_stack.len() {
+                    inherited_stack[child_level] = child_props;
+                } else {
+                    inherited_stack.resize(child_level + 1, child_props);
+                }
             }
         }
     }
