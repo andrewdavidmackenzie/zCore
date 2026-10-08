@@ -129,200 +129,29 @@ pub fn gic_base() -> usize {
     }
 }
 
-/// Information discovered from the DTB.
-struct DtbInfo {
-    bootargs: Option<String>,
-    initrd_start: Option<usize>,
-    initrd_end: Option<usize>,
-    memory_base: Option<usize>,
-    memory_size: Option<usize>,
-    uart_base: Option<usize>,
-    gic_base: Option<usize>,
-    cpu_count: usize,
-}
-
 /// Parse the DTB to extract bootargs, initrd, and hardware info.
+///
+/// Uses the shared [`Devicetree`] wrapper from the `drivers` crate
+/// for all DTB parsing.
 fn parse_dtb(dtb_paddr: usize) {
-    use dtb_walker::{Dtb, DtbObj, Property, Str, WalkOperation::*};
+    use ::drivers::utils::devicetree::Devicetree;
 
     let dtb_vaddr = phys_to_virt(dtb_paddr);
-    let dtb = unsafe {
-        Dtb::from_raw_parts_filtered(dtb_vaddr as _, |e| {
-            log::error!("DTB parse error: {:?}", e);
-            false
-        })
-    };
-    let dtb = match dtb {
-        Ok(dtb) => dtb,
+    let dt = match Devicetree::from(dtb_vaddr) {
+        Ok(dt) => dt,
         Err(e) => {
-            log::error!("DTB parse failed: {:?}", e);
-            log::error!("Failed to parse DTB at {:#x}", dtb_paddr);
+            log::error!("Failed to parse DTB at {:#x}: {:?}", dtb_paddr, e);
             CMDLINE.init_once_by(KCONFIG.cmdline.to_string());
             return;
         }
     };
 
-    log::info!("DTB at {:#x}, size={}", dtb_paddr, dtb.total_size());
-
-    let mut info = DtbInfo {
-        bootargs: None,
-        initrd_start: None,
-        initrd_end: None,
-        memory_base: None,
-        memory_size: None,
-        uart_base: None,
-        gic_base: None,
-        cpu_count: 0,
-    };
-
-    // Track which top-level node we're inside for property context.
-    // The dtb_walker doesn't provide node-property association, so
-    // we track it manually via the node name.
-    let mut current_node: [u8; 64] = [0; 64];
-    let mut current_node_len: usize = 0;
-    let mut node_depth: usize = 0;
-
-    dtb.walk(|path, obj| match obj {
-        DtbObj::SubNode { name } => {
-            let name_bytes = name.as_bytes();
-            if path.is_root() {
-                // Save top-level node name for property context
-                current_node_len = name_bytes.len().min(64);
-                current_node[..current_node_len].copy_from_slice(&name_bytes[..current_node_len]);
-                node_depth = 1;
-                // Step into nodes we care about
-                if name_bytes.starts_with(b"chosen")
-                    || name_bytes.starts_with(b"memory")
-                    || name_bytes.starts_with(b"pl011")
-                    || name_bytes.starts_with(b"uart")
-                    || name_bytes.starts_with(b"serial")
-                    || name_bytes.starts_with(b"intc")
-                    || name_bytes.starts_with(b"interrupt-controller")
-                {
-                    return StepInto;
-                }
-                // Also step into soc/ and cpus/ to find nested devices
-                if name_bytes == b"soc" || name_bytes == b"cpus" {
-                    current_node_len = name_bytes.len().min(64);
-                    current_node[..current_node_len]
-                        .copy_from_slice(&name_bytes[..current_node_len]);
-                    node_depth = 1;
-                    return StepInto;
-                }
-            } else if node_depth >= 1 {
-                // Inside /cpus (depth 1 or 2) -- count cpu@N nodes
-                if name_bytes.starts_with(b"cpu@") {
-                    info.cpu_count += 1;
-                    return StepOver;
-                }
-                // Inside /soc -- look for UART and interrupt controller
-                current_node_len = name_bytes.len().min(64);
-                current_node[..current_node_len].copy_from_slice(&name_bytes[..current_node_len]);
-                node_depth = 2;
-                if name_bytes.starts_with(b"pl011")
-                    || name_bytes.starts_with(b"uart")
-                    || name_bytes.starts_with(b"serial")
-                    || name_bytes.starts_with(b"intc")
-                    || name_bytes.starts_with(b"interrupt-controller")
-                {
-                    return StepInto;
-                }
-            }
-            StepOver
-        }
-        DtbObj::Property(Property::Reg(reg)) => {
-            let ctx = &current_node[..current_node_len];
-            if ctx.starts_with(b"memory") {
-                for range in reg {
-                    let base = range.start;
-                    let size = range.end - range.start;
-                    log::info!(
-                        "DTB memory (reg): base={:#x}, size={:#x} ({} MiB)",
-                        base,
-                        size,
-                        size >> 20
-                    );
-                    if info.memory_base.is_none() {
-                        info.memory_base = Some(base);
-                        info.memory_size = Some(size);
-                    }
-                }
-            }
-            StepOver
-        }
-        DtbObj::Property(Property::General { name, value }) => {
-            let ctx = &current_node[..current_node_len];
-
-            if ctx.starts_with(b"chosen") {
-                if name == Str::from("bootargs") {
-                    if let Ok(s) = core::str::from_utf8(value) {
-                        let s = s.trim_end_matches('\0');
-                        log::info!("DTB bootargs: {:?}", s);
-                        info.bootargs = Some(s.to_string());
-                    }
-                } else if name == Str::from("linux,initrd-start") {
-                    info.initrd_start = parse_dtb_u64(value);
-                    log::info!("DTB initrd-start: {:#x?}", info.initrd_start);
-                } else if name == Str::from("linux,initrd-end") {
-                    info.initrd_end = parse_dtb_u64(value);
-                    log::info!("DTB initrd-end: {:#x?}", info.initrd_end);
-                }
-            } else if ctx.starts_with(b"memory") && name == Str::from("reg") {
-                if value.len() >= 16 {
-                    let base = u64::from_be_bytes(value[0..8].try_into().unwrap()) as usize;
-                    let size = u64::from_be_bytes(value[8..16].try_into().unwrap()) as usize;
-                    log::info!(
-                        "DTB memory: base={:#x}, size={:#x} ({} MiB)",
-                        base,
-                        size,
-                        size >> 20
-                    );
-                    info.memory_base = Some(base);
-                    info.memory_size = Some(size);
-                } else if value.len() >= 8 {
-                    let base = u32::from_be_bytes(value[0..4].try_into().unwrap()) as usize;
-                    let size = u32::from_be_bytes(value[4..8].try_into().unwrap()) as usize;
-                    log::info!(
-                        "DTB memory: base={:#x}, size={:#x} ({} MiB)",
-                        base,
-                        size,
-                        size >> 20
-                    );
-                    info.memory_base = Some(base);
-                    info.memory_size = Some(size);
-                }
-            } else if name == Str::from("compatible") {
-                // Check for PL011 UART
-                if value.windows(9).any(|w| w == b"arm,pl011") && info.uart_base.is_none() {
-                    // Extract address from node name: "pl011@ADDR" or "serial@ADDR"
-                    if let Some(addr) = parse_node_addr(ctx) {
-                        log::info!("DTB UART (PL011): {:#x}", addr);
-                        info.uart_base = Some(addr);
-                    }
-                }
-                // Check for GIC-400 or compatible GIC
-                if (value.windows(11).any(|w| w == b"arm,gic-400")
-                    || value.windows(19).any(|w| w == b"arm,cortex-a15-gic"))
-                    && info.gic_base.is_none()
-                {
-                    if let Some(addr) = parse_node_addr(ctx) {
-                        log::info!("DTB GIC: {:#x}", addr);
-                        info.gic_base = Some(addr);
-                    }
-                }
-            }
-            StepOver
-        }
-        _ => StepOver,
-    });
-
     // Merge DTB bootargs with compile-time cmdline.
     // DTB bootargs take precedence for keys that appear in both;
     // compile-time keys (like LOG=) are appended if not in DTB.
-    let cmdline = match info.bootargs {
+    let cmdline = match dt.bootargs() {
         Some(dtb_args) => {
-            let mut merged = dtb_args.clone();
-            // Append compile-time cmdline keys not already in DTB bootargs
+            let mut merged = dtb_args.to_string();
             for token in KCONFIG.cmdline.split_whitespace() {
                 if let Some(key) = token.split('=').next() {
                     if !dtb_args.split_whitespace().any(|t| t.starts_with(key)) {
@@ -337,70 +166,60 @@ fn parse_dtb(dtb_paddr: usize) {
     };
     CMDLINE.init_once_by(cmdline);
 
-    // Set initrd region if both start and end are provided
-    if let (Some(start), Some(end)) = (info.initrd_start, info.initrd_end) {
-        if end > start {
+    // Set initrd region
+    if let Some(region) = dt.initrd_region() {
+        if region.end > region.start {
             log::info!(
                 "DTB initrd: {:#x}..{:#x} ({} bytes)",
-                start,
-                end,
-                end - start
+                region.start,
+                region.end,
+                region.end - region.start
             );
-            INITRD_REGION.init_once_by(Some(start..end));
+            INITRD_REGION.init_once_by(Some(region));
         }
     }
 
     // Store DTB-discovered UART and GIC addresses.
-    if let Some(uart) = info.uart_base {
+    if let Some(uart) = dt.device_address("arm,pl011") {
+        log::info!("DTB UART (PL011): {:#x}", uart);
         DTB_UART_BASE.init_once_by(Some(uart));
     }
-    if let Some(gic) = info.gic_base {
+    if let Some(gic) = dt
+        .device_address("arm,gic-400")
+        .or_else(|| dt.device_address("arm,cortex-a15-gic"))
+    {
+        log::info!("DTB GIC: {:#x}", gic);
         DTB_GIC_BASE.init_once_by(Some(gic));
     }
-    if info.cpu_count > 0 {
-        DTB_CPU_COUNT.init_once_by(info.cpu_count);
-        log::info!("DTB: {} CPU(s) detected", info.cpu_count);
+    let cpu_count = dt.cpu_count();
+    if cpu_count > 0 {
+        DTB_CPU_COUNT.init_once_by(cpu_count);
+        log::info!("DTB: {} CPU(s) detected", cpu_count);
     }
 
     // Use DTB-discovered memory to override compile-time defaults.
-    // Cap at a reasonable limit to avoid mapping issues with the boot
-    // page tables (which only cover 3-4 GiB depending on board).
-    if let (Some(base), Some(size)) = (info.memory_base, info.memory_size) {
-        let end = base + size;
-        // Cap usable memory at 1 GiB from kernel end to stay within
-        // the boot page table mappings. The 4K remap in vm::init()
-        // will eventually map all physical memory properly.
-        let kernel_end = {
-            extern "C" {
-                fn ekernel();
-            }
-            ekernel as *const () as usize & config::PHYS_ADDR_MASK
-        };
-        let capped_end = end.min(kernel_end + 1024 * 1024 * 1024);
-        log::info!(
-            "DTB memory: {:#x}..{:#x}, usable end capped to {:#x}",
-            base,
-            end,
-            capped_end
-        );
-        DTB_MEMORY_END.init_once_by(Some(capped_end));
+    if let Ok(regions) = dt.memory_regions() {
+        if let Some(region) = regions.first() {
+            let base = region.start;
+            let end = region.end;
+            // Cap usable memory at 1 GiB from kernel end to stay within
+            // the boot page table mappings.
+            let kernel_end = {
+                extern "C" {
+                    fn ekernel();
+                }
+                ekernel as *const () as usize & config::PHYS_ADDR_MASK
+            };
+            let capped_end = end.min(kernel_end + 1024 * 1024 * 1024);
+            log::info!(
+                "DTB memory: {:#x}..{:#x}, usable end capped to {:#x}",
+                base,
+                end,
+                capped_end
+            );
+            DTB_MEMORY_END.init_once_by(Some(capped_end));
+        }
     }
-}
-
-/// Parse a DTB property value as a u64 (big-endian, 4 or 8 bytes).
-fn parse_dtb_u64(value: &[u8]) -> Option<usize> {
-    match value.len() {
-        4 => Some(u32::from_be_bytes(value.try_into().ok()?) as usize),
-        8 => Some(u64::from_be_bytes(value.try_into().ok()?) as usize),
-        _ => None,
-    }
-}
-
-/// Parse an address from a DTB node name like "serial@9000000" or "intc@8000000".
-fn parse_node_addr(name: &[u8]) -> Option<usize> {
-    let at_pos = name.iter().position(|&b| b == b'@')?;
-    let addr_str = core::str::from_utf8(&name[at_pos + 1..]).ok()?;
-    usize::from_str_radix(addr_str, 16).ok()
 }
 
 pub fn primary_init() {
