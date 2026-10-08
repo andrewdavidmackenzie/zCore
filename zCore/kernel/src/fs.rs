@@ -23,7 +23,7 @@ pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
         let path = std::path::PathBuf::from(path);
         if path.is_dir() && path.join("bin").is_dir() {
             info!("LibOS Linux rootfs: {}", path.display());
-            return Some(rcore_fs_hostfs::HostFS::new(path));
+            return Some(crate::hostfs::HostFS::new(path));
         }
         return None;
     }

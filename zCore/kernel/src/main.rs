@@ -17,6 +17,8 @@ mod logging;
 
 mod fs;
 mod handler;
+#[cfg(all(feature = "libos", feature = "linux"))]
+mod hostfs;
 
 /// LibOS entry point.
 #[cfg(feature = "libos")]

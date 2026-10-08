@@ -25,7 +25,7 @@ sched-priority = ["executor/sched-priority"]
 # --- Flavour ---
 # Zircon is the base flavour (always enabled).
 # Linux is additive — adds Linux syscall emulation on top of Zircon.
-linux = ["linux-loader", "linux-object", "zircon-object/linux", "rcore-fs-hostfs"]
+linux = ["linux-loader", "linux-object", "zircon-object/linux", "nix", "rcore-fs/std"]
 # Dynamic linking — enables Fuchsia-style dynamic linking via ld.so.1.
 # Needed for running dynamically-linked binaries like core-tests-standalone.
 # Without this, all binaries are treated as statically linked.
@@ -84,7 +84,7 @@ rcore-fs-sfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
 [target.'cfg(not(target_os = "none"))'.dependencies]
 async-std = { version = "1.10", optional = true }
 chrono = { version = "0.4", optional = true }
-rcore-fs-hostfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b", optional = true }
+nix = { version = "0.23", optional = true }
 
 [package.metadata.cargo-all-features]
 # Requires custom JSON target specs and -Z build-std; cannot be
