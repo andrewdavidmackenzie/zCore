@@ -74,53 +74,50 @@ fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Proc
     let init_path = options.root_proc.split('?').next().unwrap_or("/bin/hello");
     info!("Init process: {}", options.root_proc);
 
-    // Try to read the init binary from rootfs to detect its flavour.
-    if let Some(rootfs) = fs::try_rootfs() {
-        if let Ok(inode) = rootfs.root_inode().lookup(init_path) {
-            if inode.metadata().is_ok() {
-                let mut header = [0u8; 8];
-                let n = inode.read_at(0, &mut header).unwrap_or(0);
-                if n < 8 {
-                    panic!(
-                        "Init binary '{}' too small ({} bytes) — not a valid ELF",
-                        init_path, n
-                    );
-                }
-                let flavour = zircon_object::task::Flavour::from_elf(&header);
-                info!("Detected init flavour: {:?}", flavour);
+    // Try to read the init binary to detect its flavour.
+    // Use read_rootfs_file (which uses std::fs::read in libos mode,
+    // bypassing the rcore-fs VFS layer and HostFS).
+    if let Some(program_data) = fs::read_rootfs_file(init_path) {
+        if program_data.len() < 8 {
+            panic!(
+                "Init binary '{}' too small ({} bytes) — not a valid ELF",
+                init_path,
+                program_data.len()
+            );
+        }
+        let flavour = zircon_object::task::Flavour::from_elf(&program_data[..8]);
+        info!("Detected init flavour: {:?}", flavour);
 
-                match flavour {
-                    zircon_object::task::Flavour::Zircon => {
-                        let extra_args: alloc::vec::Vec<alloc::string::String> = options
-                            .root_proc
-                            .split('?')
-                            .skip(1)
-                            .map(Into::into)
-                            .collect();
-                        return zircon_loader::zircon::run_from_rootfs(
-                            rootfs, init_path, extra_args,
-                        );
-                    }
-                    #[cfg(feature = "linux")]
-                    zircon_object::task::Flavour::Linux => {
-                        let args = options.root_proc.split('?').map(Into::into).collect();
-                        let envs = alloc::vec!["PATH=/usr/sbin:/usr/bin:/sbin:/bin".into()];
-                        return linux_loader::linux::run(args, envs, rootfs);
-                    }
-                    #[cfg(not(feature = "linux"))]
-                    zircon_object::task::Flavour::Linux => {
-                        panic!(
-                            "Init binary '{}' is a Linux ELF but the linux feature is not compiled in",
-                            init_path
-                        );
-                    }
-                    zircon_object::task::Flavour::Wasi => {
-                        panic!(
-                            "Init binary '{}' is a WASM file — cannot use as init process",
-                            init_path
-                        );
-                    }
-                }
+        match flavour {
+            zircon_object::task::Flavour::Zircon => {
+                let extra_args: alloc::vec::Vec<alloc::string::String> = options
+                    .root_proc
+                    .split('?')
+                    .skip(1)
+                    .map(Into::into)
+                    .collect();
+                return zircon_loader::zircon::run_from_data(&program_data, init_path, extra_args);
+            }
+            #[cfg(feature = "linux")]
+            zircon_object::task::Flavour::Linux => {
+                // Linux needs the full rootfs for process creation.
+                let rootfs = fs::try_rootfs().expect("Linux init requires a rootfs");
+                let args = options.root_proc.split('?').map(Into::into).collect();
+                let envs = alloc::vec!["PATH=/usr/sbin:/usr/bin:/sbin:/bin".into()];
+                return linux_loader::linux::run(args, envs, rootfs);
+            }
+            #[cfg(not(feature = "linux"))]
+            zircon_object::task::Flavour::Linux => {
+                panic!(
+                    "Init binary '{}' is a Linux ELF but the linux feature is not compiled in",
+                    init_path
+                );
+            }
+            zircon_object::task::Flavour::Wasi => {
+                panic!(
+                    "Init binary '{}' is a WASM file — cannot use as init process",
+                    init_path
+                );
             }
         }
     }
