@@ -379,16 +379,20 @@ impl Syscall<'_> {
 
         // Interpret the deadline as a signed timestamp (nanoseconds since boot).
         // If already in the past (or infinite_past), return immediately.
-        // NOTE: This is a stub — a real implementation would enter a
-        // low-power state via PSCI/ACPI/SBI. The busy-wait here only
-        // runs for very short durations; tests that pass long deadlines
-        // are skipped (SuspendAndResumeByTimer in the skip list).
+        //
+        // STUB: A real implementation would enter a low-power state via
+        // PSCI (aarch64), ACPI S-states (x86), or SBI HSM (riscv).
+        // This busy-wait is only safe for short durations. Tests with
+        // long deadlines are in the skip list (SuspendAndResumeByTimer).
+        // Cap the wait at 5 seconds to prevent indefinite hangs.
         let deadline_signed = resume_deadline as i64;
         if deadline_signed > 0 {
             let deadline = core::time::Duration::from_nanos(deadline_signed as u64);
             let now = hal_impl::timer::timer_now();
-            if deadline > now {
-                while hal_impl::timer::timer_now() < deadline {
+            let max_wait = core::time::Duration::from_secs(5);
+            let capped = deadline.min(now + max_wait);
+            if capped > now {
+                while hal_impl::timer::timer_now() < capped {
                     core::hint::spin_loop();
                 }
             }
