@@ -38,6 +38,12 @@ impl Syscall<'_> {
         if vm_options.intersects(VmOptions::PERM_RXW | VmOptions::MAP_RANGE) {
             return Err(ZxError::INVALID_ARGS);
         }
+        // OFFSET_IS_UPPER_LIMIT is mutually exclusive with SPECIFIC and SPECIFIC_OVERWRITE.
+        if vm_options.contains(VmOptions::OFFSET_IS_UPPER_LIMIT)
+            && vm_options.intersects(VmOptions::SPECIFIC | VmOptions::SPECIFIC_OVERWRITE)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
         // get vmar_flags
         let vmar_flags = vm_options.to_flags();
         if vmar_flags.intersects(
@@ -115,6 +121,12 @@ impl Syscall<'_> {
         // FAULT_BEYOND_STREAM_SIZE requires ALLOW_FAULTS.
         if options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE)
             && !options.contains(VmOptions::ALLOW_FAULTS)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // OFFSET_IS_UPPER_LIMIT is mutually exclusive with SPECIFIC/SPECIFIC_OVERWRITE.
+        if options.contains(VmOptions::OFFSET_IS_UPPER_LIMIT)
+            && options.intersects(VmOptions::SPECIFIC | VmOptions::SPECIFIC_OVERWRITE)
         {
             return Err(ZxError::INVALID_ARGS);
         }
