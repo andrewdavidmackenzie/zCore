@@ -615,10 +615,18 @@ impl Syscall<'_> {
                 // free_bytes = total - committed (vmo_bytes + overhead).
                 let total_bytes = vmo_bytes.max(128 * 1024 * 1024) + 64 * 1024 * 1024;
                 let free_bytes = total_bytes.saturating_sub(vmo_bytes);
+                // wired_bytes: kernel code + data + page tables (estimate)
+                let wired_bytes = 16 * 1024 * 1024; // 16 MiB
                 let kmem = KmemInfo {
                     total_bytes,
                     free_bytes,
+                    wired_bytes,
+                    total_heap_bytes: 4 * 1024 * 1024,
+                    free_heap_bytes: 2 * 1024 * 1024,
                     vmo_bytes,
+                    mmu_overhead_bytes: 2 * 1024 * 1024,
+                    ipc_bytes: 256 * 1024,
+                    other_bytes: 1024 * 1024,
                     ..Default::default()
                 };
                 info_ptr.write(kmem)?;
