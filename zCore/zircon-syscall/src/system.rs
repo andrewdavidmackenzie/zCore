@@ -305,7 +305,7 @@ impl Syscall<'_> {
             )?;
         }
         if topic > 1 {
-            return Err(ZxError::INVALID_ARGS);
+            return Err(ZxError::OUT_OF_RANGE);
         }
 
         // Return static 1.0x scale for each CPU.
@@ -352,7 +352,7 @@ impl Syscall<'_> {
             )?;
         }
         if topic > 1 {
-            return Err(ZxError::INVALID_ARGS);
+            return Err(ZxError::OUT_OF_RANGE);
         }
         // Accept the request without applying (no DVFS hardware).
         Ok(())
