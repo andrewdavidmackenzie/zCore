@@ -21,7 +21,7 @@ impl Syscall<'_> {
         // Accept known VMO creation flags.
         const ZX_VMO_RESIZABLE: u32 = 1 << 1; // 0x02
         const ZX_VMO_DISCARDABLE: u32 = 1 << 2; // 0x04
-        const ZX_VMO_UNBOUNDED: u32 = 1 << 3; // 0x08
+        const ZX_VMO_UNBOUNDED: u32 = 1 << 4; // 0x10 (matches Fuchsia ABI)
         if options & !(ZX_VMO_RESIZABLE | ZX_VMO_DISCARDABLE | ZX_VMO_UNBOUNDED) != 0 {
             return Err(ZxError::INVALID_ARGS);
         }

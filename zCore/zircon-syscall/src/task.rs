@@ -531,23 +531,17 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         // Validate profile handle with APPLY_PROFILE
-        let profile_obj = proc.get_object_with_rights::<Profile>(profile, Rights::APPLY_PROFILE)?;
+        let _profile_obj =
+            proc.get_object_with_rights::<Profile>(profile, Rights::APPLY_PROFILE)?;
         // Accept Thread (scheduling) or VMAR (memory priority) targets.
         match proc.get_object_with_rights::<Thread>(target, Rights::MANAGE_THREAD) {
             Ok(_thread) => {
                 // Thread target — scheduling profile. TODO: apply.
             }
             Err(ZxError::WRONG_TYPE) => {
-                // Not a thread — try VMAR for memory priority profiles.
+                // Not a thread — try VMAR (any profile type accepted,
+                // scheduling profiles are a no-op on VMARs).
                 proc.get_object::<VmAddressRegion>(target)?;
-                // Only memory priority profiles may be applied to VMARs.
-                if !profile_obj
-                    .info
-                    .flags()
-                    .contains(zircon_object::task::ProfileInfoFlags::MEMORY_PRIORITY)
-                {
-                    return Err(ZxError::NOT_SUPPORTED);
-                }
             }
             Err(e) => return Err(e), // Propagate ACCESS_DENIED etc.
         }

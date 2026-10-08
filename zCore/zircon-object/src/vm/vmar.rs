@@ -419,47 +419,67 @@ impl VmAddressRegion {
         let mut guard = self.inner.lock();
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         let end_addr = addr + len;
-        // Check for overlapping subregions — treat child VMARs as
-        // unmapped gaps (Fuchsia returns NOT_FOUND for protect across gaps).
-        if inner
-            .children
-            .iter()
-            .any(|child| child.end_addr() > addr && child.addr() < end_addr)
-        {
-            return Err(ZxError::NOT_FOUND);
-        }
-        let length: usize = inner
+
+        // Calculate coverage from mappings at this level.
+        let mapping_coverage: usize = inner
             .mappings
             .iter()
             .filter_map(|map| {
-                if map.end_addr() >= addr && map.addr() <= end_addr {
+                if map.end_addr() > addr && map.addr() < end_addr {
                     Some(end_addr.min(map.end_addr()) - addr.max(map.addr()))
                 } else {
                     None
                 }
             })
             .sum();
-        if length != len {
+
+        // Calculate coverage from child VMARs.
+        let child_coverage: usize = inner
+            .children
+            .iter()
+            .filter_map(|child| {
+                if child.end_addr() > addr && child.addr() < end_addr {
+                    Some(end_addr.min(child.end_addr()) - addr.max(child.addr()))
+                } else {
+                    None
+                }
+            })
+            .sum();
+
+        if mapping_coverage + child_coverage != len {
             return Err(ZxError::NOT_FOUND);
         }
-        // check if protect flags is valid
+
+        // Check if protect flags are valid for mappings at this level.
         if inner
             .mappings
             .iter()
-            .filter(|map| map.end_addr() >= addr && map.addr() <= end_addr) // get mappings in range: [addr, end_addr]
+            .filter(|map| map.end_addr() > addr && map.addr() < end_addr)
             .any(|map| !map.is_valid_mapping_flags(flags))
         {
             return Err(ZxError::ACCESS_DENIED);
         }
+
+        // Apply to mappings at this level.
         inner
             .mappings
             .iter()
-            .filter(|map| map.end_addr() >= addr && map.addr() <= end_addr)
+            .filter(|map| map.end_addr() > addr && map.addr() < end_addr)
             .for_each(|map| {
                 let start_index = pages(addr.max(map.addr()) - map.addr());
                 let end_index = pages(end_addr.min(map.end_addr()) - map.addr());
                 map.protect(flags, start_index, end_index);
             });
+
+        // Recurse into child VMARs.
+        for child in inner.children.iter() {
+            if child.end_addr() <= addr || child.addr() >= end_addr {
+                continue;
+            }
+            let child_start = addr.max(child.addr());
+            let child_end = end_addr.min(child.end_addr());
+            child.protect(child_start, child_end - child_start, flags)?;
+        }
         Ok(())
     }
 
