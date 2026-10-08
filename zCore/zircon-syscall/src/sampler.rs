@@ -66,7 +66,8 @@ impl Syscall<'_> {
             }
         }
 
-        if config_size < SAMPLER_CONFIG_SIZE {
+        // Accept config_size >= 16 or 0 (some vDSO wrappers omit the size arg).
+        if config_size != 0 && config_size < SAMPLER_CONFIG_SIZE {
             return Err(ZxError::INVALID_ARGS);
         }
         let config_buf: UserInPtr<u8> = config_ptr.into();
