@@ -225,18 +225,11 @@ impl Syscall<'_> {
             handle_value, options, addr, len
         );
         let proc = self.thread.proc();
-        // Check that the VMAR handle has rights matching the requested protection.
-        let mut required_rights = Rights::empty();
-        if options.contains(VmOptions::PERM_READ) {
-            required_rights |= Rights::READ;
-        }
-        if options.contains(VmOptions::PERM_WRITE) {
-            required_rights |= Rights::WRITE;
-        }
-        if options.contains(VmOptions::PERM_EXECUTE) {
-            required_rights |= Rights::EXECUTE;
-        }
-        let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, required_rights)?;
+        // vmar_protect doesn't check handle rights — the VMAR's own
+        // CAN_MAP_* permissions (set at allocate time) govern what
+        // protections are allowed. The mapping-level check happens
+        // inside vmar.protect() via is_valid_mapping_flags().
+        let vmar = proc.get_object::<VmAddressRegion>(handle_value)?;
         if options.intersects(!VmOptions::PERM_RXW) {
             return Err(ZxError::INVALID_ARGS);
         }
