@@ -297,7 +297,13 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
-        res.validate(ResourceKind::ROOT)?;
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(
+                ResourceKind::SYSTEM,
+                zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
+                1,
+            )?;
+        }
         if topic > 1 {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -338,7 +344,13 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
-        res.validate(ResourceKind::ROOT)?;
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(
+                ResourceKind::SYSTEM,
+                zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
+                1,
+            )?;
+        }
         if topic > 1 {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -408,12 +420,40 @@ impl Syscall<'_> {
     /// Returns immediately with no stall detected. A full
     /// implementation would monitor page allocation latency and
     /// reclaim activity, signaling when thresholds are exceeded.
-    pub fn sys_system_watch_memory_stall(&self, resource: HandleValue, _options: u32) -> ZxResult {
-        info!("system.watch_memory_stall: resource={:#x}", resource);
+    pub fn sys_system_watch_memory_stall(
+        &self,
+        resource: HandleValue,
+        kind: u32,
+        threshold: u64,
+        window: u64,
+        mut out_event: UserOutPtr<HandleValue>,
+    ) -> ZxResult {
+        info!(
+            "system.watch_memory_stall: resource={:#x}, kind={}, threshold={}, window={}",
+            resource, kind, threshold, window
+        );
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
-        res.validate(ResourceKind::ROOT)?;
-        // No memory pressure tracking — return Ok immediately.
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(
+                ResourceKind::SYSTEM,
+                zircon_object::dev::ZX_RSRC_SYSTEM_STALL_BASE,
+                1,
+            )?;
+        }
+        // Validate kind: 0 = SOME, 1 = FULL
+        if kind > 1 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Validate thresholds: 0 < threshold <= window <= 10 seconds
+        const MAX_WINDOW: u64 = 10_000_000_000; // 10 seconds in nanoseconds
+        if threshold == 0 || threshold > window || window > MAX_WINDOW {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Create a stall event (stub — never fires).
+        let event = Event::new();
+        let handle = proc.add_handle(Handle::new(event, LOW_MEMORY_RIGHTS));
+        out_event.write(handle)?;
         Ok(())
     }
 

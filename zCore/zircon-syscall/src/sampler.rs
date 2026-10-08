@@ -53,7 +53,17 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
-            res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_DEBUG_BASE, 1)?;
+            // Accept either DEBUG or SAMPLING sub-resource.
+            if res
+                .validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_DEBUG_BASE, 1)
+                .is_err()
+            {
+                res.validate_ranged_resource(
+                    ResourceKind::SYSTEM,
+                    zircon_object::dev::ZX_RSRC_SYSTEM_SAMPLING_BASE,
+                    1,
+                )?;
+            }
         }
 
         if config_size < SAMPLER_CONFIG_SIZE {
