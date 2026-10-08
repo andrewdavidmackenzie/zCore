@@ -414,16 +414,22 @@ impl Syscall<'_> {
             }
         }
 
-        // Report the kernel deadline as the wake source if the deadline
-        // was in the past (the timer "fired" immediately).
-        if num_entries > 0 && out_entries != 0 {
-            // zx_wake_source_report_entry_t = { u64 koid, u64 reserved }
+        // Report the kernel deadline as a wake source. The deadline timer
+        // always "fires" in our stub (we don't actually suspend), so always
+        // report the kernel wake source when a report buffer is provided.
+        let deadline_fired = true; // stub: deadline always fires immediately
+        if deadline_fired && num_entries > 0 && out_entries != 0 {
+            // zx_wake_source_report_entry_t = { u64 koid, u64 reserved[3] } = 32 bytes
             // ZX_KOID_KERNEL = 1
             let mut entry_out: UserOutPtr<u8> = out_entries.into();
             let koid_kernel: u64 = 1; // ZX_KOID_KERNEL
             entry_out.write_array(&koid_kernel.to_ne_bytes())?;
             entry_out = (entry_out.as_addr() + 8).into();
-            entry_out.write_array(&0u64.to_ne_bytes())?; // reserved
+            // reserved[3] = {0, 0, 0}
+            for _ in 0..3 {
+                entry_out.write_array(&0u64.to_ne_bytes())?;
+                entry_out = (entry_out.as_addr() + 8).into();
+            }
             actual_entries.write_if_not_null(1)?;
         } else {
             actual_entries.write_if_not_null(0)?;
