@@ -30,10 +30,17 @@ impl Profile {
         let has_critical = flags.contains(ProfileInfoFlags::CRITICAL);
         let has_no_inherit = flags.contains(ProfileInfoFlags::NO_INHERIT);
 
+        let has_cpu_mask = flags.contains(ProfileInfoFlags::CPU_MASK);
+
         // Must specify exactly one scheduling discipline (or memory priority)
         if has_memory {
-            // Memory priority is incompatible with scheduling flags
-            if has_priority || has_deadline {
+            // Memory priority is incompatible with all other flags
+            if has_priority || has_deadline || has_cpu_mask {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Only ZX_PRIORITY_DEFAULT (16) and ZX_PRIORITY_HIGH (24) are valid
+            let prio = info.priority();
+            if prio != 16 && prio != 24 {
                 return Err(ZxError::INVALID_ARGS);
             }
         } else if has_priority && has_deadline {
