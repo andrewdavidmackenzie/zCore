@@ -377,16 +377,23 @@ impl Syscall<'_> {
             )?;
         }
 
-        // Wait until the resume deadline by polling the monotonic clock.
-        // A real implementation would enter a low-power state via
-        // PSCI (aarch64), ACPI S-states (x86), or SBI HSM (riscv).
-        let deadline = core::time::Duration::from_nanos(resume_deadline);
-        while hal_impl::timer::timer_now() < deadline {
-            core::hint::spin_loop();
+        // Interpret the deadline as a signed timestamp (nanoseconds since boot).
+        // If already in the past (or infinite_past), return immediately.
+        let deadline_signed = resume_deadline as i64;
+        if deadline_signed > 0 {
+            let deadline = core::time::Duration::from_nanos(deadline_signed as u64);
+            let now = hal_impl::timer::timer_now();
+            if deadline > now {
+                // A real implementation would enter a low-power state.
+                // We just busy-wait until the deadline.
+                while hal_impl::timer::timer_now() < deadline {
+                    core::hint::spin_loop();
+                }
+            }
         }
 
         // No wake sources to report.
-        actual_entries.write(0)?;
+        actual_entries.write_if_not_null(0)?;
         Ok(())
     }
 
