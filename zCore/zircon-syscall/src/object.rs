@@ -4,7 +4,7 @@ use {
     core::convert::TryFrom,
     hal::UserContextField,
     numeric_enum_macro::numeric_enum,
-    zircon_object::{dev::*, ipc::*, signal::Clock, signal::Port, task::*, vm::*},
+    zircon_object::{dev::*, ipc::*, signal::Clock, signal::Port, signal::Timer, task::*, vm::*},
 };
 
 /// Check if an x86_64 address is canonical (bits 48..63 are copies of bit 47).
@@ -615,10 +615,18 @@ impl Syscall<'_> {
                 // free_bytes = total - committed (vmo_bytes + overhead).
                 let total_bytes = vmo_bytes.max(128 * 1024 * 1024) + 64 * 1024 * 1024;
                 let free_bytes = total_bytes.saturating_sub(vmo_bytes);
+                // wired_bytes: kernel code + data + page tables (estimate)
+                let wired_bytes = 16 * 1024 * 1024; // 16 MiB
                 let kmem = KmemInfo {
                     total_bytes,
                     free_bytes,
+                    wired_bytes,
+                    total_heap_bytes: 4 * 1024 * 1024,
+                    free_heap_bytes: 2 * 1024 * 1024,
                     vmo_bytes,
+                    mmu_overhead_bytes: 2 * 1024 * 1024,
+                    ipc_bytes: 256 * 1024,
+                    other_bytes: 1024 * 1024,
                     ..Default::default()
                 };
                 info_ptr.write(kmem)?;
@@ -729,6 +737,25 @@ impl Syscall<'_> {
                 let mut info_ptr = UserOutPtr::<StreamInfo>::from_addr_size(buffer, buffer_size)?;
                 let stream = proc.get_object_with_rights::<Stream>(handle, Rights::INSPECT)?;
                 info_ptr.write(stream.get_info())?;
+                actual.write_if_not_null(1)?;
+                avail.write_if_not_null(1)?;
+            }
+            Topic::Timer => {
+                // zx_info_timer_t = { options: u32, padding: u32, deadline: i64, slack: i64 } = 24 bytes
+                if buffer_size < 24 {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let timer = proc.get_object_with_rights::<Timer>(handle, Rights::INSPECT)?;
+                let (options, deadline, slack) = timer.get_info();
+                let mut info = [0u8; 24];
+                info[0..4].copy_from_slice(&options.to_ne_bytes());
+                // bytes 4..8 = padding (zero)
+                info[8..16].copy_from_slice(&deadline.to_ne_bytes());
+                info[16..24].copy_from_slice(&slack.to_ne_bytes());
+                let mut out = UserOutPtr::<[u8; 24]>::from_addr_size(buffer, buffer_size)?;
+                out.write(info)?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
             }

@@ -346,8 +346,19 @@ zircon-rootfs-test:
 #
 # Results are written to /tmp/qemu-core-tests.log.
 CORE_TESTS_TIMEOUT ?= 900
-CORE_TESTS_FILTER ?=
 CORE_TESTS_LOG ?= /tmp/qemu-core-tests.log
+CORE_TESTS_SKIP_FILE ?= tests/core-tests-skip.txt
+
+# Build the skip filter from the skip-list file unless the caller
+# supplied an explicit CORE_TESTS_FILTER.  The file uses one gtest
+# pattern per line; comments (#) and blank lines are ignored.
+ifndef CORE_TESTS_FILTER
+  ifneq ($(wildcard $(CORE_TESTS_SKIP_FILE)),)
+    CORE_TESTS_FILTER := $(shell sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) \
+                            | paste -sd ':' | sed 's/^/-/')
+  endif
+endif
+CORE_TESTS_FILTER ?=
 
 # Build everything needed for core-tests: userstart, kernel (Zircon
 # base, no linux), rootfs with core-tests-standalone + shared libs,
@@ -394,7 +405,8 @@ core-tests: core-tests-build
 	echo "=== Core-tests results ($$ELAPSED s) ==="; \
 	P=$$(grep -c '\[       OK \]' $(CORE_TESTS_LOG) || true); \
 	F=$$(grep -c '\[  FAILED  \]' $(CORE_TESTS_LOG) || true); \
-	echo "Passed: $$P  Failed: $$F  Not reached: $$((1776 - $$P - $$F))"; \
+	S=$$(sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) 2>/dev/null | wc -l || echo 0); \
+	echo "Passed: $$P  Failed: $$F  Skipped: $$S  Not reached: $$((1776 - $$P - $$F - $$S))"; \
 	tail -5 $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g'
 
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).

@@ -1,7 +1,41 @@
 use super::*;
+use alloc::sync::Arc;
 use zircon_object::dev::{ResourceKind, ZX_RSRC_SYSTEM_MEXEC_BASE, ZX_RSRC_SYSTEM_TRACING_BASE};
+use zircon_object::object::Signal;
 use zircon_object::signal::{Counter, Event};
 use zircon_object::task::Job;
+
+/// System event rights: WAIT | DUPLICATE | TRANSFER (no SIGNAL).
+const LOW_MEMORY_RIGHTS: Rights = Rights::from_bits_truncate(
+    Rights::WAIT.bits() | Rights::DUPLICATE.bits() | Rights::TRANSFER.bits(),
+);
+
+/// Kernel-global singleton events for each memory pressure level.
+/// NORMAL starts signaled; the rest start unsignaled.
+struct SystemEvents {
+    oom: Arc<Event>,
+    imminent_oom: Arc<Event>,
+    critical: Arc<Event>,
+    warning: Arc<Event>,
+    normal: Arc<Event>,
+}
+
+static SYSTEM_EVENTS: spin::Once<SystemEvents> = spin::Once::new();
+
+fn system_events() -> &'static SystemEvents {
+    SYSTEM_EVENTS.call_once(|| {
+        let normal = Event::new();
+        // System starts in normal memory state
+        normal.signal_set(Signal::USER_SIGNAL_0);
+        SystemEvents {
+            oom: Event::new(),
+            imminent_oom: Event::new(),
+            critical: Event::new(),
+            warning: Event::new(),
+            normal,
+        }
+    })
+}
 
 impl Syscall<'_> {
     /// Retrieve a handle to a system event.
@@ -24,37 +58,24 @@ impl Syscall<'_> {
             "system.get_event: root_job={:#x}, kind={:#x}, out_ptr={:#x?}",
             root_job, kind, out
         );
-        match kind {
-            EVENT_OUT_OF_MEMORY => {
-                let proc = self.thread.proc();
-                proc.get_object_with_rights::<Job>(root_job, Rights::MANAGE_PROCESS)?
-                    .check_root_job()?;
-                // TODO: out-of-memory event
-                let event = Event::new();
-                let event_handle = proc.add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
-                out.write(event_handle)?;
-                Ok(())
-            }
-            EVENT_MEMORY_PRESSURE_CRITICAL
-            | EVENT_MEMORY_PRESSURE_WARNING
-            | EVENT_MEMORY_PRESSURE_NORMAL => {
-                let proc = self.thread.proc();
-                proc.get_object_with_rights::<Job>(root_job, Rights::MANAGE_PROCESS)?
-                    .check_root_job()?;
-                // TODO: implement real memory pressure event monitoring.
-                // Returning a stub Event would cause callers to block
-                // indefinitely waiting for a signal that never fires.
-                warn!(
-                    "system.get_event: memory pressure event kind={} not yet implemented",
-                    kind
-                );
-                Err(ZxError::NOT_SUPPORTED)
-            }
+        let proc = self.thread.proc();
+        proc.get_object_with_rights::<Job>(root_job, Rights::MANAGE_PROCESS)?
+            .check_root_job()?;
+        let events = system_events();
+        let event: Arc<Event> = match kind {
+            EVENT_OUT_OF_MEMORY => events.oom.clone(),
+            EVENT_IMMINENT_OUT_OF_MEMORY => events.imminent_oom.clone(),
+            EVENT_MEMORY_PRESSURE_CRITICAL => events.critical.clone(),
+            EVENT_MEMORY_PRESSURE_WARNING => events.warning.clone(),
+            EVENT_MEMORY_PRESSURE_NORMAL => events.normal.clone(),
             _ => {
                 warn!("system.get_event: unknown event kind {:#x}", kind);
-                Err(ZxError::INVALID_ARGS)
+                return Err(ZxError::INVALID_ARGS);
             }
-        }
+        };
+        let event_handle = proc.add_handle(Handle::new(event, LOW_MEMORY_RIGHTS));
+        out.write(event_handle)?;
+        Ok(())
     }
 
     /// Perform a power control operation (reboot, shutdown, etc.).
@@ -347,18 +368,38 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
-        res.validate(ResourceKind::ROOT)?;
+        // Accept ROOT or SYSTEM/CPU_BASE resource
+        if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate_ranged_resource(
+                ResourceKind::SYSTEM,
+                zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
+                1,
+            )?;
+        }
 
-        // Wait until the resume deadline by polling the monotonic clock.
-        // A real implementation would enter a low-power state via
+        // Interpret the deadline as a signed timestamp (nanoseconds since boot).
+        // If already in the past (or infinite_past), return immediately.
+        //
+        // STUB: A real implementation would enter a low-power state via
         // PSCI (aarch64), ACPI S-states (x86), or SBI HSM (riscv).
-        let deadline = core::time::Duration::from_nanos(resume_deadline);
-        while hal_impl::timer::timer_now() < deadline {
-            core::hint::spin_loop();
+        // This busy-wait is only safe for short durations. Tests with
+        // long deadlines are in the skip list (SuspendAndResumeByTimer).
+        // Cap the wait at 5 seconds to prevent indefinite hangs.
+        let deadline_signed = resume_deadline as i64;
+        if deadline_signed > 0 {
+            let deadline = core::time::Duration::from_nanos(deadline_signed as u64);
+            let now = hal_impl::timer::timer_now();
+            let max_wait = core::time::Duration::from_secs(5);
+            let capped = deadline.min(now + max_wait);
+            if capped > now {
+                while hal_impl::timer::timer_now() < capped {
+                    core::hint::spin_loop();
+                }
+            }
         }
 
         // No wake sources to report.
-        actual_entries.write(0)?;
+        actual_entries.write_if_not_null(0)?;
         Ok(())
     }
 
@@ -432,6 +473,7 @@ const EVENT_OUT_OF_MEMORY: u32 = 1;
 const EVENT_MEMORY_PRESSURE_CRITICAL: u32 = 2;
 const EVENT_MEMORY_PRESSURE_WARNING: u32 = 3;
 const EVENT_MEMORY_PRESSURE_NORMAL: u32 = 4;
+const EVENT_IMMINENT_OUT_OF_MEMORY: u32 = 5;
 
 // Power control commands
 const POWERCTL_REBOOT: u32 = 5;

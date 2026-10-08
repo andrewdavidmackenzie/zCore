@@ -30,10 +30,17 @@ impl Profile {
         let has_critical = flags.contains(ProfileInfoFlags::CRITICAL);
         let has_no_inherit = flags.contains(ProfileInfoFlags::NO_INHERIT);
 
+        let has_cpu_mask = flags.contains(ProfileInfoFlags::CPU_MASK);
+
         // Must specify exactly one scheduling discipline (or memory priority)
         if has_memory {
-            // Memory priority is incompatible with scheduling flags
-            if has_priority || has_deadline {
+            // Memory priority is incompatible with all other flags
+            if has_priority || has_deadline || has_cpu_mask {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Only ZX_PRIORITY_DEFAULT (16) and ZX_PRIORITY_HIGH (24) are valid
+            let prio = info.priority();
+            if prio != 16 && prio != 24 {
                 return Err(ZxError::INVALID_ARGS);
             }
         } else if has_priority && has_deadline {
@@ -57,8 +64,30 @@ impl Profile {
         }
 
         // Validate priority range
-        if has_priority && !(LOWEST_PRIORITY..=HIGHEST_PRIORITY).contains(&info.priority) {
+        if has_priority && !(LOWEST_PRIORITY..=HIGHEST_PRIORITY).contains(&info.priority()) {
             return Err(ZxError::INVALID_ARGS);
+        }
+
+        // Validate deadline parameters: 0 < capacity <= relative_deadline <= period
+        if has_deadline {
+            let dl = info.deadline_params();
+            if dl.capacity <= 0
+                || dl.relative_deadline <= 0
+                || dl.period <= 0
+                || dl.capacity > dl.relative_deadline
+                || dl.relative_deadline > dl.period
+            {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Reject out-of-range values (> INT32_MAX nanoseconds ≈ 2.1 seconds)
+            // This matches the Fuchsia kernel's SchedDeadlineParams validation.
+            const MAX_DEADLINE: i64 = i32::MAX as i64;
+            if dl.capacity > MAX_DEADLINE
+                || dl.relative_deadline > MAX_DEADLINE
+                || dl.period > MAX_DEADLINE
+            {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
         }
 
         Ok(Arc::new(Profile {
@@ -92,24 +121,74 @@ pub const LOWEST_PRIORITY: i32 = 0;
 /// Maximum scheduling priority.
 pub const HIGHEST_PRIORITY: i32 = 31;
 
-/// Profile configuration (matches `zx_profile_info_t` layout).
+/// Deadline scheduling parameters (matches `zx_sched_deadline_params_t`).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
+pub struct SchedDeadlineParams {
+    /// Worst-case execution time per period (nanoseconds).
+    pub capacity: i64,
+    /// Worst-case finish time relative to period start (nanoseconds).
+    pub relative_deadline: i64,
+    /// Interarrival period (nanoseconds).
+    pub period: i64,
+}
+
+/// Profile configuration (matches `zx_profile_info_t` layout).
+///
+/// The `priority` and `deadline` fields occupy the same memory (C union).
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
 pub struct ProfileInfo {
     /// Bitmask of `ProfileInfoFlags`.
     pub flags_raw: u32,
     _padding1: u32,
-    /// Scheduling priority (for PRIORITY or MEMORY_PRIORITY).
-    pub priority: i32,
-    _padding2: [u8; 20],
+    /// Union: priority (i32 + 20 bytes padding) or deadline params (24 bytes).
+    sched_union: [u8; 24],
     /// CPU affinity mask (for CPU_MASK). 512 CPUs max.
     pub cpu_affinity_mask: [u64; 8],
+}
+
+impl core::fmt::Debug for ProfileInfo {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ProfileInfo")
+            .field("flags_raw", &self.flags_raw)
+            .field("priority", &self.priority())
+            .finish()
+    }
 }
 
 impl ProfileInfo {
     /// Parse the flags field.
     pub fn flags(&self) -> ProfileInfoFlags {
         ProfileInfoFlags::from_bits_truncate(self.flags_raw)
+    }
+
+    /// Read the priority field (first i32 of the union).
+    pub fn priority(&self) -> i32 {
+        i32::from_ne_bytes(self.sched_union[..4].try_into().unwrap())
+    }
+
+    /// Read priority (kept as a field-like accessor for compatibility).
+    #[allow(non_snake_case)]
+    pub fn get_priority(&self) -> i32 {
+        self.priority()
+    }
+
+    /// Read the deadline parameters (entire 24-byte union).
+    pub fn deadline_params(&self) -> SchedDeadlineParams {
+        unsafe {
+            core::ptr::read_unaligned(self.sched_union.as_ptr() as *const SchedDeadlineParams)
+        }
+    }
+
+    /// Create a ProfileInfo with the given priority (for tests and internal use).
+    pub fn with_priority(flags: u32, priority: i32) -> Self {
+        let mut info = Self {
+            flags_raw: flags,
+            ..Default::default()
+        };
+        info.sched_union[..4].copy_from_slice(&priority.to_ne_bytes());
+        info
     }
 }
 
@@ -119,13 +198,9 @@ mod tests {
 
     #[test]
     fn create_priority_profile() {
-        let info = ProfileInfo {
-            flags_raw: ProfileInfoFlags::PRIORITY.bits(),
-            priority: 16,
-            ..Default::default()
-        };
+        let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 16);
         let profile = Profile::create(info).unwrap();
-        assert_eq!(profile.info.priority, 16);
+        assert_eq!(profile.info.priority(), 16);
     }
 
     #[test]
@@ -147,31 +222,25 @@ mod tests {
 
     #[test]
     fn invalid_priority_and_deadline() {
-        let info = ProfileInfo {
-            flags_raw: (ProfileInfoFlags::PRIORITY | ProfileInfoFlags::DEADLINE).bits(),
-            priority: 10,
-            ..Default::default()
-        };
+        let info = ProfileInfo::with_priority(
+            (ProfileInfoFlags::PRIORITY | ProfileInfoFlags::DEADLINE).bits(),
+            10,
+        );
         assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
     }
 
     #[test]
     fn invalid_priority_out_of_range() {
-        let info = ProfileInfo {
-            flags_raw: ProfileInfoFlags::PRIORITY.bits(),
-            priority: 100, // > HIGHEST_PRIORITY (31)
-            ..Default::default()
-        };
+        let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 100);
         assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
     }
 
     #[test]
     fn invalid_critical_without_deadline() {
-        let info = ProfileInfo {
-            flags_raw: (ProfileInfoFlags::PRIORITY | ProfileInfoFlags::CRITICAL).bits(),
-            priority: 10,
-            ..Default::default()
-        };
+        let info = ProfileInfo::with_priority(
+            (ProfileInfoFlags::PRIORITY | ProfileInfoFlags::CRITICAL).bits(),
+            10,
+        );
         assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
     }
 
@@ -186,11 +255,10 @@ mod tests {
 
     #[test]
     fn invalid_memory_with_scheduling() {
-        let info = ProfileInfo {
-            flags_raw: (ProfileInfoFlags::MEMORY_PRIORITY | ProfileInfoFlags::PRIORITY).bits(),
-            priority: 5,
-            ..Default::default()
-        };
+        let info = ProfileInfo::with_priority(
+            (ProfileInfoFlags::MEMORY_PRIORITY | ProfileInfoFlags::PRIORITY).bits(),
+            5,
+        );
         assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
     }
 }
