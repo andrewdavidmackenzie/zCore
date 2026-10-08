@@ -6,7 +6,7 @@
 # When a test is fixed, DELETE its line here (and close the matching
 # checkbox in the GitHub tracking issue).
 #
-# Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/XXX
+# Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
 # ──────────────────────────────────────────────────────────────────────
 
 # ── Multi-threaded / cooperative scheduler ───────────────────────────
