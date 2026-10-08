@@ -689,7 +689,9 @@ impl Syscall<'_> {
             Sys::SYSTEM_SUSPEND_ENTER => {
                 self.sys_system_suspend_enter(a0 as _, a1 as _, a2 as _, a3, a4, a5 as _, a6.into())
             }
-            Sys::SYSTEM_WATCH_MEMORY_STALL => self.sys_system_watch_memory_stall(a0 as _, a1 as _),
+            Sys::SYSTEM_WATCH_MEMORY_STALL => {
+                self.sys_system_watch_memory_stall(a0 as _, a1 as _, a2 as _, a3 as _, a4.into())
+            }
             Sys::HANDLE_CHECK_VALID => self.sys_handle_check_valid(a0 as _),
             Sys::UTC_REFERENCE_SWAP => self.sys_utc_reference_swap(a0 as _, a1.into()),
             Sys::UTC_REFERENCE_GET => {

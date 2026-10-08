@@ -119,7 +119,8 @@ bitflags! {
             | Self::DESTROY.bits | Self::SIGNAL.bits | Self::MANAGE_JOB.bits | Self::MANAGE_PROCESS.bits | Self::MANAGE_THREAD.bits;
 
         /// TRANSFER | DUPLICATE | WRITE | INSPECT
-        const DEFAULT_RESOURCE = Self::TRANSFER.bits | Self::DUPLICATE.bits | Self::WRITE.bits | Self::INSPECT.bits;
+        /// (BASIC & ~WAIT) | WRITE | GET_PROPERTY
+        const DEFAULT_RESOURCE = Self::TRANSFER.bits | Self::DUPLICATE.bits | Self::WRITE.bits | Self::INSPECT.bits | Self::GET_PROPERTY.bits;
 
         /// BASIC | WRITE | SIGNAL
         const DEFAULT_DEBUGLOG = Self::BASIC.bits | Self::WRITE.bits | Self::SIGNAL.bits;

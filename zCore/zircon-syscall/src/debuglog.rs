@@ -19,8 +19,18 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         if rsrc != 0 {
-            // Any valid resource handle is accepted (not just ROOT).
-            proc.get_resource(rsrc)?;
+            // Validate: ROOT or SYSTEM/DEBUGLOG_BASE resource.
+            let res = proc.get_resource(rsrc)?;
+            if res
+                .validate(zircon_object::dev::ResourceKind::ROOT)
+                .is_err()
+            {
+                res.validate_ranged_resource(
+                    zircon_object::dev::ResourceKind::SYSTEM,
+                    zircon_object::dev::ZX_RSRC_SYSTEM_DEBUGLOG_BASE,
+                    1,
+                )?;
+            }
         } else if options & FLAG_READABLE != 0 {
             // ZX_HANDLE_INVALID is only allowed for write-only debuglogs.
             return Err(ZxError::BAD_HANDLE);

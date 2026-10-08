@@ -194,7 +194,8 @@ impl Syscall<'_> {
     pub fn sys_vmar_destroy(&self, handle_value: HandleValue) -> ZxResult {
         info!("vmar.destroy: handle={:#x?}", handle_value);
         let proc = self.thread.proc();
-        let vmar = proc.get_object::<VmAddressRegion>(handle_value)?;
+        let vmar =
+            proc.get_object_with_rights::<VmAddressRegion>(handle_value, Rights::OP_CHILDREN)?;
         vmar.destroy()?;
         Ok(())
     }
@@ -264,7 +265,9 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let required_rights = match op {
             VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero => Rights::WRITE,
-            VmarOpType::MapRange | VmarOpType::DontNeed | VmarOpType::AlwaysNeed => Rights::READ,
+            VmarOpType::MapRange => Rights::READ,
+            // DONT_NEED, ALWAYS_NEED, and PREFETCH require no handle rights.
+            VmarOpType::DontNeed | VmarOpType::AlwaysNeed | VmarOpType::Prefetch => Rights::empty(),
         };
         let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, required_rights)?;
         vmar.op_range(op, addr as usize, size as usize)?;

@@ -24,6 +24,8 @@ pub enum VmarOpType {
     DontNeed = 12,
     /// Hint: pages will be needed soon (prefetch).
     AlwaysNeed = 13,
+    /// Prefetch pages into memory (performance hint).
+    Prefetch = 14,
 }
 
 impl VmarOpType {
@@ -36,6 +38,7 @@ impl VmarOpType {
             10 => Ok(Self::Zero),
             12 => Ok(Self::DontNeed),
             13 => Ok(Self::AlwaysNeed),
+            14 => Ok(Self::Prefetch),
             _ => Err(ZxError::INVALID_ARGS),
         }
     }
@@ -536,8 +539,24 @@ impl VmAddressRegion {
             return Err(ZxError::OUT_OF_RANGE);
         }
 
-        // Verify the full range is covered by mappings (no gaps)
-        let length: usize = inner
+        // Check if child VMARs overlap the range.
+        let children_overlap = inner
+            .children
+            .iter()
+            .any(|child| child.end_addr() > addr && child.addr() < end_addr);
+
+        // COMMIT and DECOMMIT cannot span child VMARs — return INVALID_ARGS.
+        if children_overlap
+            && matches!(
+                op,
+                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero
+            )
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
+
+        // Calculate coverage from mappings at this VMAR level.
+        let mapping_coverage: usize = inner
             .mappings
             .iter()
             .filter_map(|map| {
@@ -548,7 +567,21 @@ impl VmAddressRegion {
                 }
             })
             .sum();
-        if length != len {
+
+        // Calculate coverage from child VMARs.
+        let child_coverage: usize = inner
+            .children
+            .iter()
+            .filter_map(|child| {
+                if child.end_addr() > addr && child.addr() < end_addr {
+                    Some(end_addr.min(child.end_addr()) - addr.max(child.addr()))
+                } else {
+                    None
+                }
+            })
+            .sum();
+
+        if mapping_coverage + child_coverage != len {
             return Err(ZxError::BAD_STATE);
         }
 
@@ -571,6 +604,9 @@ impl VmAddressRegion {
                     map.vmo.commit(vmo_offset, op_len)?;
                 }
                 VmarOpType::Decommit => {
+                    if !map.permissions().contains(MMUFlags::WRITE) {
+                        return Err(ZxError::ACCESS_DENIED);
+                    }
                     map.vmo.decommit(vmo_offset, op_len)?;
                 }
                 VmarOpType::MapRange => {
@@ -585,10 +621,21 @@ impl VmAddressRegion {
                     }
                     map.vmo.zero(vmo_offset, op_len)?;
                 }
-                VmarOpType::DontNeed | VmarOpType::AlwaysNeed => {
+                VmarOpType::DontNeed | VmarOpType::AlwaysNeed | VmarOpType::Prefetch => {
                     // Performance hints — no-op for now.
                 }
             }
+        }
+
+        // Recurse into child VMARs for operations that support it.
+        // (COMMIT/DECOMMIT/ZERO already returned INVALID_ARGS above.)
+        for child in inner.children.iter() {
+            if child.end_addr() <= addr || child.addr() >= end_addr {
+                continue;
+            }
+            let child_start = addr.max(child.addr());
+            let child_end = end_addr.min(child.end_addr());
+            child.op_range(op, child_start, child_end - child_start)?;
         }
         Ok(())
     }
@@ -693,7 +740,7 @@ impl VmAddressRegion {
         } else {
             match self.find_free_area(inner, 0, len, align) {
                 Some(offset) => Ok(offset),
-                None => Err(ZxError::NO_MEMORY),
+                None => Err(ZxError::NO_RESOURCES),
             }
         }
     }
