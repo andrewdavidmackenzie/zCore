@@ -18,11 +18,20 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let parent_rsrc = proc.get_resource_with_rights(parent_rsrc, Rights::WRITE)?;
         let kind = ResourceKind::try_from(options & 0xFFFF).map_err(|_| ZxError::INVALID_ARGS)?;
+        // COUNT and ROOT are not valid kinds for resource_create.
+        if kind == ResourceKind::COUNT || kind == ResourceKind::ROOT {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let flags = ResourceFlags::from_bits(options & 0xFFFF_0000).ok_or(ZxError::INVALID_ARGS)?;
         // Check for arithmetic overflow before range validation.
         if (base as usize).checked_add(size as usize).is_none() {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Zero-size non-SYSTEM resources are forbidden.
+        if size == 0 && kind != ResourceKind::SYSTEM {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+
         // Validate kind match and range. In resource_create context,
         // kind mismatch is ACCESS_DENIED (not WRONG_TYPE).
         parent_rsrc

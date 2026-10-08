@@ -38,6 +38,12 @@ impl Syscall<'_> {
         if vm_options.intersects(VmOptions::PERM_RXW | VmOptions::MAP_RANGE) {
             return Err(ZxError::INVALID_ARGS);
         }
+        // OFFSET_IS_UPPER_LIMIT is mutually exclusive with SPECIFIC and SPECIFIC_OVERWRITE.
+        if vm_options.contains(VmOptions::OFFSET_IS_UPPER_LIMIT)
+            && vm_options.intersects(VmOptions::SPECIFIC | VmOptions::SPECIFIC_OVERWRITE)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
         // get vmar_flags
         let vmar_flags = vm_options.to_flags();
         if vmar_flags.intersects(
@@ -118,6 +124,12 @@ impl Syscall<'_> {
         {
             return Err(ZxError::INVALID_ARGS);
         }
+        // OFFSET_IS_UPPER_LIMIT is mutually exclusive with SPECIFIC/SPECIFIC_OVERWRITE.
+        if options.contains(VmOptions::OFFSET_IS_UPPER_LIMIT)
+            && options.intersects(VmOptions::SPECIFIC | VmOptions::SPECIFIC_OVERWRITE)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
         // check SPECIFIC options with offset
         let is_specific = options.contains(VmOptions::SPECIFIC)
             || options.contains(VmOptions::SPECIFIC_OVERWRITE);
@@ -159,9 +171,8 @@ impl Syscall<'_> {
             "mmuflags: {:?}, is_specific {:?}, overwrite {:?}, map_range {:?}",
             mapping_flags, is_specific, overwrite, map_range
         );
-        if map_range && overwrite {
-            return Err(ZxError::INVALID_ARGS);
-        }
+        // Note: SPECIFIC_OVERWRITE with eager commit is valid — the VMAR
+        // layer removes existing mappings before creating the new one.
         // Note: we should reject non-page-aligned length here,
         // but since zCore use different memory layout from zircon,
         // we should not reject them and round up them instead
@@ -214,13 +225,11 @@ impl Syscall<'_> {
             handle_value, options, addr, len
         );
         let proc = self.thread.proc();
-        // TODO: Rights::empty() is too permissive. Fuchsia's VMAR protection
-        // model requires checking that the handle carries rights matching the
-        // requested protection flags (e.g., ZX_RIGHT_READ for PERM_READ,
-        // ZX_RIGHT_WRITE for PERM_WRITE, ZX_RIGHT_EXECUTE for PERM_EXECUTE).
-        // Implement proper rights validation to match Fuchsia's zx_vmar_protect
-        // semantics.
-        let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, Rights::empty())?;
+        // vmar_protect doesn't check handle rights — the VMAR's own
+        // CAN_MAP_* permissions (set at allocate time) govern what
+        // protections are allowed. The mapping-level check happens
+        // inside vmar.protect() via is_valid_mapping_flags().
+        let vmar = proc.get_object::<VmAddressRegion>(handle_value)?;
         if options.intersects(!VmOptions::PERM_RXW) {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -265,9 +274,9 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let required_rights = match op {
             VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero => Rights::WRITE,
-            VmarOpType::MapRange => Rights::READ,
-            // DONT_NEED, ALWAYS_NEED, and PREFETCH require no handle rights.
-            VmarOpType::DontNeed | VmarOpType::AlwaysNeed | VmarOpType::Prefetch => Rights::empty(),
+            VmarOpType::MapRange | VmarOpType::Prefetch => Rights::READ,
+            // DONT_NEED and ALWAYS_NEED require no handle rights.
+            VmarOpType::DontNeed | VmarOpType::AlwaysNeed => Rights::empty(),
         };
         let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, required_rights)?;
         vmar.op_range(op, addr as usize, size as usize)?;

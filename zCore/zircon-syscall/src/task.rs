@@ -1,7 +1,7 @@
 use alloc::{string::ToString, vec::Vec};
 use core::convert::TryFrom;
 use hal_impl::context::UserContextField;
-use {super::*, zircon_object::task::*};
+use {super::*, zircon_object::task::*, zircon_object::vm::VmAddressRegion};
 
 impl Syscall<'_> {
     /// Create a new process.
@@ -530,13 +530,27 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        // Validate target is a thread with MANAGE_THREAD
-        let _thread = proc.get_object_with_rights::<Thread>(target, Rights::MANAGE_THREAD)?;
         // Validate profile handle with APPLY_PROFILE
-        let _profile = proc.get_object_with_rights::<Profile>(profile, Rights::APPLY_PROFILE)?;
-        // TODO: actually apply scheduling parameters to the thread.
-        // For now, accept the call without error (the profile is valid
-        // but runtime priority changes are not implemented).
+        let profile_obj = proc.get_object_with_rights::<Profile>(profile, Rights::APPLY_PROFILE)?;
+        // Accept Thread (scheduling) or VMAR (memory priority) targets.
+        match proc.get_object_with_rights::<Thread>(target, Rights::MANAGE_THREAD) {
+            Ok(_thread) => {
+                // Thread target — scheduling profile. TODO: apply.
+            }
+            Err(ZxError::WRONG_TYPE) => {
+                // Not a thread — try VMAR for memory priority profiles.
+                proc.get_object::<VmAddressRegion>(target)?;
+                // Only memory priority profiles may be applied to VMARs.
+                if !profile_obj
+                    .info
+                    .flags()
+                    .contains(zircon_object::task::ProfileInfoFlags::MEMORY_PRIORITY)
+                {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
+            }
+            Err(e) => return Err(e), // Propagate ACCESS_DENIED etc.
+        }
         Ok(())
     }
 

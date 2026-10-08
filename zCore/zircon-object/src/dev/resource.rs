@@ -108,17 +108,13 @@ impl Resource {
         Err(ZxError::ACCESS_DENIED)
     }
 
-    /// Returns `Err(ZxError::INVALID_ARGS)` if the resource is not the root resource, and
-    /// either it's flags or parameter `flags` contains `ResourceFlags::EXCLUSIVE`.
-    pub fn check_exclusive(&self, flags: ResourceFlags) -> ZxResult {
-        if self.kind != ResourceKind::ROOT
-            && (self.flags.contains(ResourceFlags::EXCLUSIVE)
-                || flags.contains(ResourceFlags::EXCLUSIVE))
-        {
-            Err(ZxError::INVALID_ARGS)
-        } else {
-            Ok(())
-        }
+    /// Check exclusive resource constraints.
+    ///
+    /// In a full implementation, this would track allocated exclusive
+    /// ranges and reject overlapping requests with NOT_FOUND.
+    /// For now, exclusive resources are accepted (no overlap tracking).
+    pub fn check_exclusive(&self, _flags: ResourceFlags) -> ZxResult {
+        Ok(())
     }
 
     /// Get information of the resource.
@@ -126,7 +122,8 @@ impl Resource {
         let name = self.base.name();
         let name = name.as_bytes();
         let mut name_vec = [0u8; 32];
-        let copy_len = name.len().min(name_vec.len());
+        // Copy name, reserving last byte for NUL terminator.
+        let copy_len = name.len().min(name_vec.len() - 1);
         name_vec[..copy_len].clone_from_slice(&name[..copy_len]);
         ResourceInfo {
             kind: self.kind as _,
