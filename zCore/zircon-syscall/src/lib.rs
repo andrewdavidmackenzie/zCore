@@ -591,8 +591,8 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
             Sys::SYSCALL_NEXT_1 => {
-                // Reserved syscall slot — intentionally unimplemented upstream.
-                Err(ZxError::NOT_SUPPORTED)
+                // "Next" vDSO canary — always succeeds to indicate support.
+                Ok(())
             }
             // --- Newer upstream Fuchsia syscalls ---
             Sys::IOB_CREATE => {
