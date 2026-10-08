@@ -165,8 +165,8 @@ Advantages over traits: zero-cost (no vtable), clean call syntax
 Disadvantages: hard to navigate in IDE, non- standard pattern.
 
 Re "why are shared implementations in HAL": code in `bare/boot.rs`,
-`bare/timer.rs`, `bare/net.rs` is shared across architectures but still HAL-
-level (it uses hardware abstractions like `naive-timer`, `smoltcp`).
+`bare/timer.rs` is shared across architectures but still HAL-
+level (it uses hardware abstractions like `naive-timer`).
 Architecture-specific code is in `bare/arch/{aarch64,riscv,x86_64}/`. The split
 is defensible but could be cleaner with a more conventional trait-based
 approach.
@@ -392,7 +392,7 @@ TODO Describe this more, including the "scheme" concept
   > (provides `name()` and `handle_irq()`). Specific
   > device traits extend it: `BlockScheme` (read/write
   > blocks), `UartScheme` (send/recv bytes),
-  > `NetScheme` (send/recv packets), `DisplayScheme`
+   > `DisplayScheme`
   > (framebuffer), `InputScheme` (events),
   > `IrqScheme` (interrupt controller). hal-impl
   > re-exports these traits and manages device
@@ -521,8 +521,7 @@ EventFd, Stdin/Stdout, devfs (/dev/null, /dev/random, /dev/fb0, /dev/ttyS*,
 /dev/input/*)
 - **Signals:** Full Linux signal model (1-64),
 SignalAction, signal delivery with arch-specific MachineContext
-- **Networking:** TCP, UDP, Raw, Netlink sockets via
-  smoltcp
+- **Networking:** Parked (removed from active kernel, see PR #237)
 - **IPC:** System V semaphores and shared memory
 - **Sync:** EventBus, counting Semaphore
 - **ELF Loader:** `LinuxElfLoader` with dynamic linker
@@ -757,8 +756,8 @@ See [#80](https://github.com/andrewdavidmackenzie/zCore/issues/80).
 ### `drivers/` -- Device Driver Framework (`zcore-drivers`)
 
 It's both. The `scheme/` module defines the framework: trait interfaces
-(`BlockScheme`, `UartScheme`, `NetScheme`, etc.) and the `Device` enum. The
-rest (uart/, irq/, virtio/, net/, display/, input/, nvme/) contains concrete
+(`BlockScheme`, `UartScheme`, etc.) and the `Device` enum. The
+rest (uart/, irq/, virtio/, display/, input/) contains concrete
 driver implementations. The `DevicetreeDriverBuilder` provides auto-discovery
 from device trees. A new driver would implement the relevant Scheme trait and
 register via the builder. So it's a framework WITH a set of bundled drivers.
@@ -783,7 +782,6 @@ would create a circular dependency (hal-impl already depends on drivers).
 - **UARTs:** PL011, 16550 (MMIO + PMIO), Allwinner, FU740
 - **Block:** VirtIO block, NVMe
 - **Display:** VirtIO GPU, UEFI framebuffer
-- **Network:** E1000, Realtek, loopback
 - **Input:** VirtIO input
 - **Mock:** SDL-based mock drivers for libos mode
 
@@ -809,7 +807,7 @@ in `zCore/src/platform/aarch64/entry.rs:9` as `uart_base: 0x0900_0000` in
 
 
 **Key design:**
-- `Scheme` traits define driver interfaces (BlockScheme, UartScheme, NetScheme,
+- `Scheme` traits define driver interfaces (BlockScheme, UartScheme,
   etc.)
 - `DevicetreeDriverBuilder` walks FDT for auto-discovery (aarch64/riscv64)
 - Communicates with kernel via extern "C" FFI (no workspace crate dependencies)

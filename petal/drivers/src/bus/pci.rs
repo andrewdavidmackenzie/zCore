@@ -58,8 +58,6 @@ const PCI_BASE: usize = 0xbbe00000;
 
 #[cfg(target_arch = "riscv64")]
 const PCI_BASE: usize = 0x30000000;
-#[cfg(target_arch = "riscv64")]
-const E1000_BASE: usize = 0x40000000;
 // riscv64 Qemu
 
 #[cfg(target_arch = "x86_64")]
@@ -166,27 +164,7 @@ unsafe fn enable(loc: Location, paddr: u64) -> Option<usize> {
 pub fn init_driver(dev: &PCIDevice, mapper: &Option<Arc<dyn IoMapper>>) -> DeviceResult<Device> {
     let name = format!("enp{}s{}f{}", dev.loc.bus, dev.loc.device, dev.loc.function);
     match (dev.id.vendor_id, dev.id.device_id) {
-        (0x8086, 0x100e) | (0x8086, 0x100f) | (0x8086, 0x10d3) => {
-            if let Some(BAR::Memory(addr, len, _, _)) = dev.bars[0] {
-                #[cfg(target_arch = "riscv64")]
-                let addr = if addr == 0 { E1000_BASE as u64 } else { addr };
-
-                if let Some(m) = mapper {
-                    m.query_or_map(addr as usize, PAGE_SIZE * 8);
-                }
-                let irq = unsafe { enable(dev.loc, addr) };
-                let vaddr = phys_to_virt(addr as usize);
-                let dev = Device::Net(Arc::new(crate::net::e1000::init(
-                    name,
-                    irq.unwrap_or(0),
-                    vaddr,
-                    len as usize,
-                    0,
-                )?));
-                return Ok(dev);
-            }
-        }
-
+        // (0x8086, 0x100e/0x100f/0x10d3) was E1000 -- removed (networking parked, see #237)
         // (0x1b36, 0x10) was NVMe -- removed (dead code, see #237)
         (0x8086, 0x10fb) => {
             // 82599ES 10-Gigabit SFI/SFP+ Network Connection

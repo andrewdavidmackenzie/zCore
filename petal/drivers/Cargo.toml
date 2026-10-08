@@ -8,10 +8,8 @@ description = "Device drivers of zCore"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-graphic = ["rcore-console"]
 mock = ["async-std", "sdl2"]
 virtio = ["virtio-drivers"]
-loopback = []
 
 
 # special drivers for hardwares
@@ -31,26 +29,7 @@ device_tree = { git = "https://github.com/rcore-os/device_tree-rs", rev = "2f2e5
 bitmap-allocator = "0.4"
 pci = { git = "https://github.com/elliott10/pci-rs", rev = "8f33774b" }
 virtio-drivers = { version = "0.7", optional = true }
-rcore-console = { git = "https://github.com/rcore-os/rcore-console", default-features = false, rev = "ca5b1bc", optional = true }
 lock = { path = "../zCore/lock" }
-isomorphic_drivers = { git = "https://github.com/rcore-os/isomorphic_drivers", rev = "f7cd97a8", features = [
-    "log",
-] }
-smoltcp = { version = "0.11.0", default-features = false, features = [
-    "log",
-    "alloc",
-    "verbose",
-    "proto-ipv4",
-    "proto-ipv6",
-    "proto-igmp",
-    "medium-ip",
-    "medium-ethernet",
-    "socket-raw",
-    "socket-udp",
-    "socket-tcp",
-    "socket-icmp",
-    "async",
-] }
 d1-pac = { version = "0.0.27", optional = true }
 volatile = "0.3"
 

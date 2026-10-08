@@ -163,8 +163,7 @@ unsafe fn enable(loc: Location, paddr: u64) -> Option<usize> {
 pub fn init_driver(dev: &PCIDevice, _mapper: &Option<Arc<dyn IoMapper>>) -> DeviceResult<Device> {
     let _name = format!("enp{}s{}f{}", dev.loc.bus, dev.loc.device, dev.loc.function);
     match (dev.id.vendor_id, dev.id.device_id) {
-        // e1000 and NVMe drivers removed from drivers (see #237)
-        // Network drivers are in the separate drivers crate.
+        // e1000 and NVMe drivers removed (see #237)
         (0x8086, 0x10fb) => {
             // 82599ES 10-Gigabit SFI/SFP+ Network Connection
             if let Some(BAR::Memory(addr, _len, _, _)) = dev.bars[0] {
