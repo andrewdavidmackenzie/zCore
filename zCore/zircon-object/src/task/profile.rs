@@ -72,8 +72,9 @@ impl Profile {
             {
                 return Err(ZxError::INVALID_ARGS);
             }
-            // Reject unreasonably large values (> ~100 seconds)
-            const MAX_DEADLINE: i64 = 100_000_000_000; // 100s in nanoseconds
+            // Reject out-of-range values (> INT32_MAX nanoseconds ≈ 2.1 seconds)
+            // This matches the Fuchsia kernel's SchedDeadlineParams validation.
+            const MAX_DEADLINE: i64 = i32::MAX as i64;
             if dl.capacity > MAX_DEADLINE
                 || dl.relative_deadline > MAX_DEADLINE
                 || dl.period > MAX_DEADLINE
