@@ -19,9 +19,7 @@
 
 use super::IoMapper;
 use crate::{
-    utils::devicetree::{
-        parse_interrupts, parse_reg, Devicetree, InheritProps, InterruptsProp, Node, StringList,
-    },
+    utils::devicetree::{Devicetree, InheritProps, InterruptsProp, NodeInfo},
     Device, DeviceError, DeviceResult, PhysAddr, VirtAddr,
 };
 #[cfg(any(
@@ -114,14 +112,14 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
         }
 
         // Parse the device tree
-        self.dt.walk(&mut |node, comp, props| {
+        self.dt.walk_for_drivers(|node, props| {
             debug!(
-                "{MODULE}: parsing node {:?} with compatible {comp:?}",
-                node.name
+                "{MODULE}: parsing node {:?} with compatible {:?}",
+                node.name, node.compatible
             );
             // parse interrupt controller
-            let res = if node.has_prop("interrupt-controller") {
-                self.parse_intc(node, comp, props).map(|(dev, intc)| {
+            let res = if node.is_interrupt_controller {
+                self.parse_intc(node, props).map(|(dev, intc)| {
                     intc_map.insert(
                         intc.phandle,
                         Intc {
@@ -133,20 +131,27 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
                 })
             } else {
                 // parse other device
-                match comp {
+                if node.compatible_contains("virtio,mmio") {
                     #[cfg(feature = "virtio")]
-                    c if c.contains("virtio,mmio") => self.parse_virtio(node, props),
-                    // Ethernet drivers removed from drivers (see #237)
-                    c if c.contains("ns16550a") || c.iter().any(|str| str.ends_with("uart")) => {
-                        self.parse_uart(node, comp, props)
+                    {
+                        self.parse_virtio(node, props)
                     }
-                    _ => Err(DeviceError::NotSupported),
+                    #[cfg(not(feature = "virtio"))]
+                    {
+                        Err(DeviceError::NotSupported)
+                    }
+                } else if node.compatible_contains("ns16550a")
+                    || node.compatible_any_ends_with("uart")
+                {
+                    self.parse_uart(node, props)
+                } else {
+                    Err(DeviceError::NotSupported)
                 }
             };
             match res {
                 Ok(dev) => dev_list.push(dev),
                 Err(DeviceError::NotSupported) => {}
-                Err(err) => warn!("{MODULE}: failed to parsing node {:?}: {err:?}", node.name),
+                Err(err) => warn!("{MODULE}: failed to parse node {:?}: {err:?}", node.name),
             }
         });
 
@@ -197,27 +202,28 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
     /// Parse nodes for interrupt controllers.
     fn parse_intc(
         &self,
-        node: &Node,
-        comp: &StringList,
+        node: &NodeInfo,
         props: &InheritProps,
     ) -> DeviceResult<(DevWithInterrupt, IntcProps)> {
-        let phandle = node
-            .prop_u32("phandle")
-            .map_err(|_| DeviceError::InvalidParam)?;
-        let interrupt_cells = node
-            .prop_u32("#interrupt-cells")
-            .map_err(|_| DeviceError::InvalidParam)?;
-        let interrupts_extended = parse_interrupts(node, props)?;
-        let base_vaddr =
-            parse_reg(node, props).and_then(|(paddr, size)| self.mmap(paddr as _, size as _));
+        let phandle = node.phandle.ok_or(DeviceError::InvalidParam)?;
+        let interrupt_cells = node.interrupt_cells.unwrap_or(0);
+        let interrupts_extended = node.effective_interrupts(props);
+        let base_vaddr = node
+            .reg
+            .map(|(addr, size)| self.mmap(addr as _, size as _))
+            .transpose();
         use crate::irq::*;
-        let dev = Device::Irq(match comp {
+        let dev = Device::Irq(match () {
             #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
-            c if c.contains("riscv,cpu-intc") => Arc::new(riscv::Intc::new()),
+            () if node.compatible_contains("riscv,cpu-intc") => Arc::new(riscv::Intc::new()),
             #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
-            c if c.contains("riscv,plic0") => Arc::new(riscv::Plic::new(base_vaddr?)),
+            () if node.compatible_contains("riscv,plic0") => Arc::new(riscv::Plic::new(
+                base_vaddr?.ok_or(DeviceError::InvalidParam)?,
+            )),
             #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
-            c if c.contains("sifive,fu540-c000-plic") => Arc::new(riscv::Plic::new(base_vaddr?)),
+            () if node.compatible_contains("sifive,fu540-c000-plic") => Arc::new(riscv::Plic::new(
+                base_vaddr?.ok_or(DeviceError::InvalidParam)?,
+            )),
             _ => return Err(DeviceError::NotSupported),
         });
 
@@ -232,15 +238,19 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
 
     /// Parse nodes for virtio devices over MMIO.
     #[cfg(feature = "virtio")]
-    fn parse_virtio(&self, node: &Node, props: &InheritProps) -> DeviceResult<DevWithInterrupt> {
+    fn parse_virtio(
+        &self,
+        node: &NodeInfo,
+        props: &InheritProps,
+    ) -> DeviceResult<DevWithInterrupt> {
         use core::ptr::NonNull;
 
         use crate::virtio::*;
         use virtio_drivers::transport::{mmio::MmioTransport, DeviceType, Transport};
 
-        let interrupts_extended = parse_interrupts(node, props)?;
-        let base_vaddr =
-            parse_reg(node, props).and_then(|(paddr, size)| self.mmap(paddr as _, size as _))?;
+        let interrupts_extended = node.effective_interrupts(props);
+        let (addr, size) = node.reg.ok_or(DeviceError::InvalidParam)?;
+        let base_vaddr = self.mmap(addr as _, size as _)?;
 
         let header =
             NonNull::new(base_vaddr as *mut VirtIOHeader).ok_or(DeviceError::InvalidParam)?;
@@ -264,34 +274,27 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
         Ok((dev, interrupts_extended))
     }
 
-    // parse_ethernet removed from drivers (see #237)
-
     /// Parse nodes for UART devices.
-    fn parse_uart(
-        &self,
-        node: &Node,
-        comp: &StringList,
-        props: &InheritProps,
-    ) -> DeviceResult<DevWithInterrupt> {
-        let interrupts_extended = parse_interrupts(node, props)?;
-        let base_vaddr =
-            parse_reg(node, props).and_then(|(paddr, size)| self.mmap(paddr as _, size as _))?;
+    fn parse_uart(&self, node: &NodeInfo, props: &InheritProps) -> DeviceResult<DevWithInterrupt> {
+        let interrupts_extended = node.effective_interrupts(props);
+        let (addr, size) = node.reg.ok_or(DeviceError::InvalidParam)?;
+        let base_vaddr = self.mmap(addr as _, size as _)?;
 
-        let dev = Device::Uart(match comp {
+        let dev = Device::Uart(match () {
             #[cfg(feature = "uart-16550")]
-            c if c.contains("ns16550a") => {
+            () if node.compatible_contains("ns16550a") => {
                 Arc::new(unsafe { crate::uart::Uart16550Mmio::<u8>::new(base_vaddr) })
             }
             #[cfg(feature = "uart-16550")]
-            c if c.contains("snps,dw-apb-uart") => {
+            () if node.compatible_contains("snps,dw-apb-uart") => {
                 Arc::new(unsafe { crate::uart::Uart16550Mmio::<u32>::new(base_vaddr) })
             }
             #[cfg(feature = "allwinner")]
-            c if c.contains("allwinner,sun20i-uart") => {
+            () if node.compatible_contains("allwinner,sun20i-uart") => {
                 Arc::new(crate::uart::UartAllwinner::new(base_vaddr))
             }
             #[cfg(feature = "fu740")]
-            c if c.contains("sifive,fu740-c000-uart") => {
+            () if node.compatible_contains("sifive,fu740-c000-uart") => {
                 Arc::new(unsafe { crate::uart::UartU740Mmio::<u32>::new(base_vaddr) })
             }
             _ => return Err(DeviceError::NotSupported),

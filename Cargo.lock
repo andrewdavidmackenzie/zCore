@@ -604,11 +604,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "device_tree"
-version = "1.0.3"
-source = "git+https://github.com/rcore-os/device_tree-rs?rev=2f2e55f#2f2e55fb5238466747fef49d9ce0f59b2e808154"
-
-[[package]]
 name = "dircpy"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -635,7 +630,7 @@ dependencies = [
  "bitmap-allocator",
  "cfg-if",
  "d1-pac",
- "device_tree",
+ "dtb-walker",
  "hal",
  "lock",
  "log",
