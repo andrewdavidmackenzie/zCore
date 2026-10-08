@@ -15,17 +15,6 @@ by role.
 These are large, complex crates that provide significant functionality to
 zCore. A change or update in any of these would have broad impact.
 
-**`smoltcp`** (git, rev `35e833e3`) User-space TCP/IP network stack. Provides
-TCP, UDP, raw, and ICMP sockets. Used by `drivers`, `hal-impl`, and `linux-
-object`. Pinned to a specific git revision. Features enabled: `proto-ipv4`,
-`proto-ipv6`, `proto-igmp`, `socket-raw`, `socket-udp`, `socket-tcp`, `socket-
-icmp`, `async`.
-
-Latest smoltcp release is 0.11.0 (2024). The pinned revision predates it.
-Upgrading requires checking API compatibility (smoltcp's API changes
-between versions). See [#97](https://github.com/andrewdavidmackenzie/zCore/issues/97).
-
-
 **`rcore-fs` family** (git, rev `1a3246b`) Virtual filesystem framework from
 the rCore project. Seven crates from one repo:
   - `rcore-fs` -- VFS trait definitions. Used by
@@ -100,19 +89,12 @@ abstractions for specific CPU architectures.
   `executor`. Two versions.
 - `uefi` (0.16) -- UEFI boot services types. Used by `hal-impl` (bare-metal
   x86_64).
-- `rboot` (git, rev `ad21575`) -- UEFI bootloader interface (`BootInfo`
-  struct). Used by `zCore` (bare-metal x86_64).
-- `x86-smpboot` (git, rev `1069df3`) -- SMP AP startup. Used by `hal-impl`
-  (bare-metal x86_64).
 - `acpi` (4.1) -- ACPI table parsing. Used by `drivers` (x86_64).
 
 ### Device and Driver Support Crates
 
 **`device_tree`** (git, rev `2f2e55f`) Flattened device tree (FDT/DTB) parser.
 Used by `drivers` for device discovery on aarch64/riscv64.
-
-**`isomorphic_drivers`** (git, rev `f7cd97a8`) Platform-independent driver
-implementations from the rCore ecosystem. Used by `drivers`.
 
 **`pci`** (git, rev `8f33774b`) PCI bus scanning and configuration space
 access. Used by `drivers`.
@@ -241,9 +223,6 @@ TOML parsing. **`toml`** (0.5.9) -- TOML file parser.
 
 ### Console and Graphics Support
 
-**`rcore-console`** (git, rev `ca5b1bc`) Text console rendering on a
-framebuffer. Used by `drivers` behind `graphic` feature.
-
 **`volatile`** (0.3) Volatile memory access for MMIO registers. Used by
 `drivers`.
 
@@ -251,22 +230,20 @@ framebuffer. Used by `drivers` behind `graphic` feature.
 
 | Source      | Count | Examples                |
 |-------------|-------|-------------------------|
-| crates.io   | 41    | log, bitflags, futures, |
-|             |       | spin, clap, xmas-elf    |
-| Git (rcore  | 9     | rcore-fs-*, virtio-     |
-| ecosystem)  |       | drivers, device_tree,   |
+| crates.io   | 44    | log, bitflags, futures, |
+|             |       | spin, clap, xmas-elf,   |
+|             |       | smoltcp, virtio-drivers,|
 |             |       | bitmap-allocator        |
-| Git (other) | 5     | smoltcp, lock, pci,     |
-|             |       | unicycle, x86-smpboot   |
+| Git (rcore  | 8     | rcore-fs-*, device_tree  |
+| ecosystem)  |       |                         |
+| Git (other) | 3     | lock, pci, unicycle     |
 
 Reducing git dependencies is tracked in
 [#98](https://github.com/andrewdavidmackenzie/zCore/issues/98).
-Priority targets: `smoltcp` (has 0.11 release),
-`lock`/kernel-sync (could fork/publish), `virtio-
-drivers` (has releases), `rcore-fs` family
-(significant effort). The `rcore-os/*` ecosystem
-crates are research-quality code not published to
-crates.io.
+Priority targets: `lock`/kernel-sync (replace with
+`spin`, see #81), `rcore-fs` family (vendor into
+project). The `rcore-os/*` ecosystem crates are
+research-quality code not published to crates.io.
 
 
 ### Most Widely Used (by consumer count)

@@ -127,10 +127,7 @@ impl<M: IoMapper> DevicetreeDriverBuilder<M> {
                 match comp {
                     #[cfg(feature = "virtio")]
                     c if c.contains("virtio,mmio") => self.parse_virtio(node, props),
-                    #[cfg(not(feature = "loopback"))]
-                    c if c.contains("allwinner,sunxi-gmac") => {
-                        self.parse_ethernet(node, comp, props)
-                    }
+                    // Ethernet parsing removed (networking parked, see #237)
                     c if c.contains("ns16550a") || c.iter().any(|str| str.ends_with("uart")) => {
                         self.parse_uart(node, comp, props)
                     }

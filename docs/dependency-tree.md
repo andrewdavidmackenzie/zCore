@@ -68,12 +68,11 @@ linux-object/
  +-- hal-impl/       (default-features=false)
  +-- drivers/          (with feature "virtio")
  
-linux-object uses `drivers::get_sockets()` to
-access the global smoltcp socket set for TCP/UDP
-networking, and uses `BlockScheme`, `UartScheme`,
+linux-object uses `BlockScheme`, `UartScheme`,
 `DisplayScheme` for device filesystem nodes
 (/dev/ttySN, /dev/fb0, block devices). It needs
 direct driver access for Linux device emulation.
+(Networking was removed from the active kernel in PR #237.)
 
  
 

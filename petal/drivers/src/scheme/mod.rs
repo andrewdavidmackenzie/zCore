@@ -9,7 +9,6 @@ pub(super) mod block;
 pub(super) mod display;
 pub(super) mod input;
 pub(super) mod irq;
-pub(super) mod net;
 pub(super) mod uart;
 
 #[macro_use]
@@ -23,7 +22,6 @@ pub use display::DisplayScheme;
 pub use event::EventScheme;
 pub use input::InputScheme;
 pub use irq::IrqScheme;
-pub use net::NetScheme;
 pub use uart::UartScheme;
 
 /// Common of all device drivers.

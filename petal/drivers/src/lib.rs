@@ -23,7 +23,7 @@ pub mod display;
 pub mod input;
 pub mod io;
 pub mod irq;
-pub mod net;
+// net removed: networking parked, never compiled (see #237)
 // nvme removed: was dead code, never used (see #237)
 pub mod prelude;
 pub mod scheme;
@@ -65,8 +65,6 @@ pub enum Device {
     Input(Arc<dyn scheme::InputScheme>),
     /// Interrupt request and handle
     Irq(Arc<dyn scheme::IrqScheme>),
-    /// Network device
-    Net(Arc<dyn scheme::NetScheme>),
     /// Uart port
     Uart(Arc<dyn scheme::UartScheme>),
 }
@@ -79,7 +77,6 @@ impl Device {
             Self::Display(d) => d.clone().upcast(),
             Self::Input(d) => d.clone().upcast(),
             Self::Irq(d) => d.clone().upcast(),
-            Self::Net(d) => d.clone().upcast(),
             Self::Uart(d) => d.clone().upcast(),
         }
     }
@@ -92,7 +89,6 @@ impl fmt::Debug for Device {
             Self::Display(d) => write!(f, "DisplayDevice({:?})", d.name()),
             Self::Input(d) => write!(f, "InputDevice({:?})", d.name()),
             Self::Irq(d) => write!(f, "IrqDevice({:?})", d.name()),
-            Self::Net(d) => write!(f, "NetDevice({:?})", d.name()),
             Self::Uart(d) => write!(f, "UartDevice({:?})", d.name()),
         }
     }
