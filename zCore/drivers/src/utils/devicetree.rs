@@ -21,6 +21,10 @@ pub struct Devicetree {
     initrd_start: Option<usize>,
     initrd_end: Option<usize>,
     memory_regions: Vec<Range<PhysAddr>>,
+    cpu_count: usize,
+    /// Device addresses keyed by compatible string (first match wins).
+    /// E.g., "arm,pl011" -> 0x0900_0000 for UART base address.
+    device_addresses: alloc::collections::BTreeMap<String, usize>,
     /// Raw DTB pointer, kept for the driver builder's walk.
     dtb_vaddr: VirtAddr,
 }
@@ -220,6 +224,15 @@ fn scan_interrupt_cells(dtb_vaddr: VirtAddr) -> alloc::collections::BTreeMap<u32
     map
 }
 
+/// Parse the hex address from a device tree node name like "pl011@9000000".
+/// Returns `None` if there's no '@' or the address is not valid hex.
+fn parse_node_addr(name: &[u8]) -> Option<usize> {
+    let at_pos = name.iter().position(|&b| b == b'@')?;
+    let hex = &name[at_pos + 1..];
+    let s = core::str::from_utf8(hex).ok()?;
+    usize::from_str_radix(s, 16).ok()
+}
+
 /// Parse a big-endian byte slice as a u64 (4 or 8 bytes).
 fn parse_u64(value: &[u8]) -> Option<usize> {
     match value.len() {
@@ -279,36 +292,81 @@ impl Devicetree {
             initrd_start: None,
             initrd_end: None,
             memory_regions: Vec::new(),
+            cpu_count: 0,
+            device_addresses: alloc::collections::BTreeMap::new(),
             dtb_vaddr: dtb_base_vaddr,
         };
 
-        // Track which top-level node we're inside.
-        let mut in_chosen = false;
-        let mut in_cpus = false;
-        let mut in_memory = false;
+        // Track context during the walk. We need to know which
+        // top-level (or /soc child) node we're inside, and the
+        // current node name (for extracting addresses like "pl011@9000000").
+        let mut current_node: [u8; 64] = [0; 64];
+        let mut current_node_len: usize = 0;
 
         dtb.walk(|ctx, obj| match obj {
             DtbObj::SubNode { name } => {
+                let name_bytes = name.as_bytes();
                 if ctx.is_root() {
-                    in_chosen = name.as_bytes() == b"chosen";
-                    in_cpus = name.as_bytes() == b"cpus";
-                    in_memory = name.as_bytes().starts_with(b"memory");
-                    if in_chosen || in_cpus || in_memory {
+                    // Save node name for property context
+                    current_node_len = name_bytes.len().min(64);
+                    current_node[..current_node_len]
+                        .copy_from_slice(&name_bytes[..current_node_len]);
+                    // Step into nodes we care about
+                    if name_bytes.starts_with(b"chosen")
+                        || name_bytes.starts_with(b"memory")
+                        || name_bytes == b"cpus"
+                        || name_bytes == b"soc"
+                    {
+                        return StepInto;
+                    }
+                    // Also step into top-level device nodes (e.g., pl011@, uart@, intc@)
+                    if name_bytes.contains(&b'@') {
+                        return StepInto;
+                    }
+                } else {
+                    current_node_len = name_bytes.len().min(64);
+                    current_node[..current_node_len]
+                        .copy_from_slice(&name_bytes[..current_node_len]);
+
+                    // Count CPU nodes
+                    if name_bytes.starts_with(b"cpu@") {
+                        result.cpu_count += 1;
+                        return StepOver;
+                    }
+                    // Step into device nodes inside /soc
+                    if name_bytes.contains(&b'@') {
                         return StepInto;
                     }
                 }
                 StepOver
             }
             DtbObj::Property(Property::Reg(reg)) => {
-                if in_memory {
+                let ctx_name = &current_node[..current_node_len];
+                if ctx_name.starts_with(b"memory") {
                     for range in reg {
                         result.memory_regions.push(range);
                     }
                 }
                 StepOver
             }
+            DtbObj::Property(Property::Compatible(list)) => {
+                // Record device address from node name for each compatible string.
+                // Node names like "pl011@9000000" encode the address after '@'.
+                let ctx_name = &current_node[..current_node_len];
+                if let Some(addr) = parse_node_addr(ctx_name) {
+                    for s in list {
+                        if let Ok(cs) = s.as_str() {
+                            // Only record the first occurrence of each compatible string
+                            let key = String::from(cs);
+                            result.device_addresses.entry(key).or_insert(addr);
+                        }
+                    }
+                }
+                StepOver
+            }
             DtbObj::Property(Property::General { name, value }) => {
-                if in_chosen {
+                let ctx_name = &current_node[..current_node_len];
+                if ctx_name.starts_with(b"chosen") {
                     if name == Str::from("bootargs") {
                         if let Ok(s) = core::str::from_utf8(value) {
                             result.bootargs = Some(s.trim_end_matches('\0').into());
@@ -318,7 +376,7 @@ impl Devicetree {
                     } else if name == Str::from("linux,initrd-end") {
                         result.initrd_end = parse_u64(value);
                     }
-                } else if in_cpus && name == Str::from("timebase-frequency") {
+                } else if ctx_name == b"cpus" && name == Str::from("timebase-frequency") {
                     result.timebase_frequency = parse_u32(value);
                 }
                 StepOver
@@ -349,6 +407,20 @@ impl Devicetree {
     /// Returns the physical memory regions from `/memory` nodes.
     pub fn memory_regions(&self) -> DeviceResult<Vec<Range<PhysAddr>>> {
         Ok(self.memory_regions.clone())
+    }
+
+    /// Returns the number of CPU nodes found in `/cpus`.
+    pub fn cpu_count(&self) -> usize {
+        self.cpu_count
+    }
+
+    /// Returns the base address of a device by its compatible string.
+    ///
+    /// The address is extracted from the device tree node name
+    /// (e.g., "pl011@9000000" -> 0x9000000). Returns `None` if no
+    /// device with the given compatible string was found.
+    pub fn device_address(&self, compatible: &str) -> Option<usize> {
+        self.device_addresses.get(compatible).copied()
     }
 
     /// Get the raw DTB virtual address for use by the driver builder.
