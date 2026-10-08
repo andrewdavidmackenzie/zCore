@@ -405,8 +405,9 @@ core-tests: core-tests-build
 	echo "=== Core-tests results ($$ELAPSED s) ==="; \
 	P=$$(grep -c '\[       OK \]' $(CORE_TESTS_LOG) || true); \
 	F=$$(grep -c '\[  FAILED  \]' $(CORE_TESTS_LOG) || true); \
-	S=$$(sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) 2>/dev/null | wc -l || echo 0); \
-	echo "Passed: $$P  Failed: $$F  Skipped: $$S  Not reached: $$((1776 - $$P - $$F - $$S))"; \
+	R=$$(grep -ao '\[==========\] [0-9]* tests from' $(CORE_TESTS_LOG) | awk '{print $$2}' | tail -1); \
+	R=$${R:-0}; \
+	echo "Passed: $$P  Failed: $$F  Ran: $$R/1776  Skipped: $$((1776 - $$R))"; \
 	tail -5 $(CORE_TESTS_LOG) | sed 's/\x1b\[[0-9;]*m//g'
 
 # Run all tests: boot smoke test (must pass) then libc conformance (reporting only).
