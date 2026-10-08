@@ -38,6 +38,10 @@ impl Syscall<'_> {
         if vm_options.intersects(VmOptions::PERM_RXW | VmOptions::MAP_RANGE) {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Size must be page-aligned.
+        if !(size as usize).is_multiple_of(PAGE_SIZE) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         // OFFSET_IS_UPPER_LIMIT is mutually exclusive with SPECIFIC and SPECIFIC_OVERWRITE.
         if vm_options.contains(VmOptions::OFFSET_IS_UPPER_LIMIT)
             && vm_options.intersects(VmOptions::SPECIFIC | VmOptions::SPECIFIC_OVERWRITE)
@@ -152,6 +156,11 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let overwrite = options.contains(VmOptions::SPECIFIC_OVERWRITE);
+        // The explicit MAP_RANGE flag is incompatible with SPECIFIC_OVERWRITE.
+        // (Implicit eager commit from bare-metal mode is fine.)
+        if overwrite && options.contains(VmOptions::MAP_RANGE) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let map_range = if cfg!(any(feature = "deny-page-fault", not(target_os = "none"))) {
             // On platforms that don't support page faults, reject
             // FAULT_BEYOND_STREAM_SIZE since it requires lazy mapping.
