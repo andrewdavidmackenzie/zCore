@@ -105,7 +105,19 @@ impl VMObjectTrait for VMObjectSlice {
     }
 
     fn complete_info(&self, info: &mut VmoInfo) {
+        // Inherit flags (e.g., CONTIGUOUS) from the parent, then
+        // override page attribution to zero. Slices are transparent
+        // windows -- pages are always attributed to the parent VMO,
+        // not the slice.
         self.parent.complete_info(info);
+        info.committed_bytes = 0;
+        info.populated_bytes = 0;
+        info.committed_private_bytes = 0;
+        info.populated_private_bytes = 0;
+        info.committed_scaled_bytes = 0;
+        info.populated_scaled_bytes = 0;
+        info.committed_fractional_scaled_bytes = 0;
+        info.populated_fractional_scaled_bytes = 0;
     }
 
     fn is_reference(&self) -> bool {
