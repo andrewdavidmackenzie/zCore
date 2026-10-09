@@ -327,5 +327,8 @@ pub fn get_bar0_mem(address: PciAddress) -> Option<(usize, usize)> {
     let header = PciHeader::new(address);
     let endpoint = EndpointHeader::from_header(header, &access)?;
     let bar = endpoint.bar(0, &access)?;
-    Some(bar.unwrap_mem())
+    match bar {
+        Bar::Memory32 { .. } | Bar::Memory64 { .. } => Some(bar.unwrap_mem()),
+        Bar::Io { .. } => None,
+    }
 }
