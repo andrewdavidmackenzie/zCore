@@ -825,35 +825,77 @@ impl VMObjectPagedInner {
         }
         let (tag, other_child) = self.type_.get_tag_and_other(child);
         let arc_child = other_child.upgrade().unwrap();
-        let mut child = arc_child.inner.borrow_mut();
-        let start = child.parent_offset / PAGE_SIZE;
-        let end = child.parent_limit / PAGE_SIZE;
-        // merge nodes to the child
+        let mut surviving = arc_child.inner.borrow_mut();
+        let start = surviving.parent_offset / PAGE_SIZE;
+        let end = surviving.parent_limit / PAGE_SIZE;
+
+        // Step 1: Decrement share_count for pages visible to the dying
+        // child. The dying child is the one whose tag matches `tag.negate()`.
+        // - Pages with tag == Owned: shared by both → dying child sees them → decrement
+        // - Pages with tag == tag.negate(): split to dying child → decrement
+        // - Pages with tag == tag: split to surviving child → dying child doesn't see → skip
+        let dying_split_tag = tag.negate();
+        for page in self.frames.values_mut() {
+            if page.tag == PageStateTag::Owned || page.tag == dying_split_tag {
+                if page.share_count > 0 {
+                    page.share_count -= 1;
+                }
+            }
+        }
+        // Also decrement in ancestors for pages the dying child could see.
+        if let Some(ref parent) = self.parent {
+            let dying_start = self.parent_offset / PAGE_SIZE;
+            let dying_end = dying_start + self.size / PAGE_SIZE;
+            let mut cur = Some(parent.clone());
+            let mut cur_start = dying_start;
+            let mut cur_end = dying_end;
+            while let Some(vmop) = cur {
+                let mut inner = vmop.inner.borrow_mut();
+                for idx in cur_start..cur_end.min(inner.size / PAGE_SIZE) {
+                    if let Some(page) = inner.frames.get_mut(&idx) {
+                        if page.share_count > 0 {
+                            page.share_count -= 1;
+                        }
+                    }
+                }
+                if inner.parent.is_none() {
+                    break;
+                }
+                cur_start += inner.parent_offset / PAGE_SIZE;
+                cur_end += inner.parent_offset / PAGE_SIZE;
+                cur = inner.parent.clone();
+            }
+        }
+
+        // Step 2: Merge remaining frames to the surviving child.
+        // Only move frames that are within the surviving child's
+        // visible range and not already present in the child.
         for (key, mut value) in core::mem::take(&mut self.frames) {
             if key < start || key >= end {
                 continue;
             }
-            if self.contiguous && !child.contiguous && value.pin_count >= 1 {
+            if self.contiguous && !surviving.contiguous && value.pin_count >= 1 {
                 value.pin_count -= 1;
             }
             let idx = key - start;
-            if !child.frames.contains_key(&idx) && value.tag != tag.negate() {
+            if !surviving.frames.contains_key(&idx) && value.tag != tag.negate() {
                 value.tag = PageStateTag::Owned;
-                child.frames.insert(idx, value);
+                surviving.frames.insert(idx, value);
             }
         }
-        // connect child to my parent
-        child.parent_offset += self.parent_offset;
-        child.parent_limit += self.parent_offset;
+
+        // Step 3: Connect surviving child to my parent.
+        surviving.parent_offset += self.parent_offset;
+        surviving.parent_limit += self.parent_offset;
         if let Some(parent) = &self.parent {
             parent.inner.borrow_mut().replace_child(
                 &self.self_ref,
                 self.owner,
                 other_child,
-                Some((child.parent_offset, child.parent_limit)),
+                Some((surviving.parent_offset, surviving.parent_limit)),
             );
         }
-        child.parent = self.parent.take();
+        surviving.parent = self.parent.take();
     }
 
     /// Create a snapshot child VMO.
