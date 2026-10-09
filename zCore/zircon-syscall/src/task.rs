@@ -541,8 +541,11 @@ impl Syscall<'_> {
             Err(ZxError::WRONG_TYPE) => {
                 // Not a thread — try VMAR (any profile type accepted,
                 // scheduling profiles are a no-op on VMARs).
-                // Require DUPLICATE right as a minimal access check.
-                proc.get_object_with_rights::<VmAddressRegion>(target, Rights::DUPLICATE)?;
+                // A handle with ZX_RIGHT_NONE (0) is rejected.
+                let (_vmar, rights) = proc.get_object_and_rights::<VmAddressRegion>(target)?;
+                if rights.is_empty() {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
             }
             Err(e) => return Err(e), // Propagate ACCESS_DENIED etc.
         }

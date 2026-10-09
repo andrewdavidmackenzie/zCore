@@ -177,11 +177,15 @@ impl Syscall<'_> {
         if vmex != INVALID_HANDLE {
             let res = proc.get_resource(vmex)?;
             if res.validate(ResourceKind::ROOT).is_err() {
+                // Wrong kind → WRONG_TYPE; right kind wrong sub-base → OUT_OF_RANGE.
+                res.validate(ResourceKind::SYSTEM)
+                    .map_err(|_| ZxError::WRONG_TYPE)?;
                 res.validate_ranged_resource(
                     ResourceKind::SYSTEM,
                     zircon_object::dev::ZX_RSRC_SYSTEM_VMEX_BASE,
                     1,
-                )?;
+                )
+                .map_err(|_| ZxError::OUT_OF_RANGE)?;
             }
         } else {
             proc.check_policy(PolicyCondition::AmbientMarkVMOExec)?;

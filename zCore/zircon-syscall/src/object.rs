@@ -598,11 +598,14 @@ impl Syscall<'_> {
                 // Fuchsia requires a root resource or system-info resource.
                 let res = proc.get_resource(handle)?;
                 if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate(ResourceKind::SYSTEM)
+                        .map_err(|_| ZxError::WRONG_TYPE)?;
                     res.validate_ranged_resource(
                         ResourceKind::SYSTEM,
                         zircon_object::dev::ZX_RSRC_SYSTEM_INFO_BASE,
                         1,
-                    )?;
+                    )
+                    .map_err(|_| ZxError::OUT_OF_RANGE)?;
                 }
                 if buffer_size < core::mem::size_of::<KmemInfo>() {
                     actual.write_if_not_null(0)?;
@@ -636,11 +639,14 @@ impl Syscall<'_> {
             Topic::KmemStatsExtended => {
                 let res = proc.get_resource(handle)?;
                 if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate(ResourceKind::SYSTEM)
+                        .map_err(|_| ZxError::WRONG_TYPE)?;
                     res.validate_ranged_resource(
                         ResourceKind::SYSTEM,
                         zircon_object::dev::ZX_RSRC_SYSTEM_INFO_BASE,
                         1,
-                    )?;
+                    )
+                    .map_err(|_| ZxError::OUT_OF_RANGE)?;
                 }
                 if buffer_size < core::mem::size_of::<KmemStatsExtendedInfo>() {
                     actual.write_if_not_null(0)?;

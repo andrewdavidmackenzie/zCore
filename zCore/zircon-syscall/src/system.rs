@@ -298,34 +298,66 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
+            // Wrong kind (e.g., MMIO) → WRONG_TYPE.
+            // Right kind (SYSTEM) but wrong sub-base → OUT_OF_RANGE.
+            res.validate(ResourceKind::SYSTEM)
+                .map_err(|_| ZxError::WRONG_TYPE)?;
             res.validate_ranged_resource(
                 ResourceKind::SYSTEM,
                 zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
                 1,
             )
-            .map_err(|_| ZxError::WRONG_TYPE)?;
+            .map_err(|_| ZxError::OUT_OF_RANGE)?;
         }
-        if topic > 2 {
-            return Err(ZxError::OUT_OF_RANGE);
+        // Invalid topic → INVALID_ARGS.
+        if topic > 3 {
+            return Err(ZxError::INVALID_ARGS);
         }
 
-        // Return static 1.0x scale for each CPU.
-        // zx_cpu_performance_info_t: { u32 logical_cpu_number, { u16 integral, u16 fractional } }
-        // = 8 bytes per entry.
-        let num_cpus = hal_impl::config::MAX_CORE_NUM;
-        let entries = core::cmp::min(count, num_cpus);
-        if entries > 0 && info != 0 {
+        // Use actual online CPU count. CpuStats reports avail=1 for
+        // our single-CPU QEMU configuration, so be consistent.
+        let online_cpus: usize = 1;
+        // count must match the number of online CPUs exactly.
+        if count != online_cpus {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        if info == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let entries = online_cpus;
+        {
             let mut out: UserOutPtr<u8> = info.into();
-            for i in 0..entries {
-                // logical_cpu_number (u32 LE)
-                let cpu_num = (i as u32).to_ne_bytes();
-                out.write_array(&cpu_num)?;
-                out = (out.as_addr() + 4).into();
-                // performance_scale: integral=1 (u16 LE), fractional=0 (u16 LE)
-                let scale_1x: [u8; 4] = [1, 0, 0, 0];
-                out.write_array(&scale_1x)?;
-                out = (out.as_addr() + 4).into();
+            if topic == 3 {
+                // ZX_CPU_PERF_LIMIT: zx_cpu_perf_limit_t = { u32 cpu, u32 limit_type, u64 min, u64 max } = 24 bytes
+                for i in 0..entries {
+                    let cpu_num = (i as u32).to_ne_bytes();
+                    out.write_array(&cpu_num)?;
+                    out = (out.as_addr() + 4).into();
+                    // limit_type = ZX_CPU_PERF_LIMIT_TYPE_RATE (0)
+                    out.write_array(&0u32.to_ne_bytes())?;
+                    out = (out.as_addr() + 4).into();
+                    // min = 0, max = 1000 (default rate limit)
+                    out.write_array(&0u64.to_ne_bytes())?;
+                    out = (out.as_addr() + 8).into();
+                    out.write_array(&1000u64.to_ne_bytes())?;
+                    out = (out.as_addr() + 8).into();
+                }
+            } else {
+                // ZX_CPU_PERF_SCALE / DEFAULT_PERF_SCALE:
+                // zx_cpu_performance_info_t = { u32 cpu, { u16 integral, u16 fractional } } = 8 bytes
+                for i in 0..entries {
+                    let cpu_num = (i as u32).to_ne_bytes();
+                    out.write_array(&cpu_num)?;
+                    out = (out.as_addr() + 4).into();
+                    // performance_scale: 1.0x = { integral=1, fractional=0 }
+                    let scale_1x: [u8; 4] = [1, 0, 0, 0];
+                    out.write_array(&scale_1x)?;
+                    out = (out.as_addr() + 4).into();
+                }
             }
+        }
+        if output_count.is_null() {
+            return Err(ZxError::INVALID_ARGS);
         }
         output_count.write(entries)?;
         Ok(())
@@ -340,8 +372,8 @@ impl Syscall<'_> {
         &self,
         resource: HandleValue,
         topic: u32,
-        _info: usize,
-        _count: usize,
+        info: usize,
+        count: usize,
     ) -> ZxResult {
         info!(
             "system.set_performance_info: resource={:#x}, topic={}",
@@ -350,15 +382,41 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate(ResourceKind::SYSTEM)
+                .map_err(|_| ZxError::WRONG_TYPE)?;
             res.validate_ranged_resource(
                 ResourceKind::SYSTEM,
                 zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
                 1,
             )
-            .map_err(|_| ZxError::WRONG_TYPE)?;
+            .map_err(|_| ZxError::OUT_OF_RANGE)?;
         }
-        if topic > 2 {
+        if topic > 3 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Validate count and info pointer.
+        let online_cpus: usize = 1;
+        if count == 0 || count > online_cpus {
             return Err(ZxError::OUT_OF_RANGE);
+        }
+        if info == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Validate scale values for ZX_CPU_PERF_SCALE (topic 1).
+        if topic == 1 {
+            let buf: UserInPtr<u8> = info.into();
+            let data = buf.read_array(count * 4)?;
+            for i in 0..count {
+                let offset = i * 4;
+                let integral = u16::from_ne_bytes([data[offset], data[offset + 1]]);
+                let fractional = u16::from_ne_bytes([data[offset + 2], data[offset + 3]]);
+                if integral == 0 && fractional == 0 {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                if integral > 1 || (integral == 1 && fractional > 0) {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+            }
         }
         // Accept the request without applying (no DVFS hardware).
         Ok(())
