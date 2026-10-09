@@ -1132,11 +1132,11 @@ impl VMObjectPagedInner {
             }
 
             // Page not found at this level. Continue up the tree.
-            if inner.owner != self.owner {
-                break;
-            }
+            // Don't use owner-based termination here (unlike committed_pages_in_range)
+            // because we need to find the actual physical page for attribution,
+            // regardless of ownership domain boundaries.
             let next_idx = current_idx + inner.parent_offset / PAGE_SIZE;
-            if next_idx >= inner.parent_limit / PAGE_SIZE {
+            if next_idx * PAGE_SIZE >= inner.parent_limit {
                 break;
             }
             current = inner.parent.clone();
