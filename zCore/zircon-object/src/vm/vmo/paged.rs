@@ -928,34 +928,47 @@ impl VMObjectPagedInner {
         self.parent_limit = self.size;
         child.inner.borrow_mut().parent = Some(hidden.clone());
         // Increment share_count for pages visible to the new child.
+        // For each page index, only increment the FIRST frame found
+        // (closest to the child). This avoids double-counting when
+        // intermediate COW frames exist at multiple levels.
         {
             let child_start = offset / PAGE_SIZE;
             let child_end = (offset + len).min(self.size) / PAGE_SIZE;
+            let count = child_end - child_start;
+            // Track which page indices have been found.
+            let mut found = alloc::vec![false; count];
+
             let mut h = hidden.inner.borrow_mut();
             for idx in child_start..child_end {
                 if let Some(page) = h.frames.get_mut(&idx) {
                     page.share_count += 1;
+                    found[idx - child_start] = true;
                 }
             }
-            // Also walk up ancestors for pages not in the hidden node.
-            if let Some(ref parent) = h.parent {
-                let mut cur = Some(parent.clone());
-                let mut cur_start = child_start + h.parent_offset / PAGE_SIZE;
-                let mut cur_end = child_end + h.parent_offset / PAGE_SIZE;
-                while let Some(vmop) = cur {
-                    let mut inner = vmop.inner.borrow_mut();
-                    for idx in cur_start..cur_end {
-                        if let Some(page) = inner.frames.get_mut(&idx) {
-                            page.share_count += 1;
+            // Walk up ancestors for pages not yet found.
+            if found.iter().any(|f| !f) {
+                if let Some(ref parent) = h.parent {
+                    let mut cur = Some(parent.clone());
+                    let mut cur_start = child_start + h.parent_offset / PAGE_SIZE;
+                    while let Some(vmop) = cur {
+                        let mut inner = vmop.inner.borrow_mut();
+                        for (i, found_flag) in found.iter_mut().enumerate() {
+                            if *found_flag {
+                                continue;
+                            }
+                            let idx = cur_start + i;
+                            if let Some(page) = inner.frames.get_mut(&idx) {
+                                page.share_count += 1;
+                                *found_flag = true;
+                            }
                         }
+                        if found.iter().all(|f| *f) || inner.parent_limit == 0 {
+                            break;
+                        }
+                        let off = inner.parent_offset / PAGE_SIZE;
+                        cur_start += off;
+                        cur = inner.parent.clone();
                     }
-                    if inner.parent_limit == 0 {
-                        break;
-                    }
-                    let off = inner.parent_offset / PAGE_SIZE;
-                    cur_start += off;
-                    cur_end += off;
-                    cur = inner.parent.clone();
                 }
             }
         }
@@ -1252,28 +1265,37 @@ impl Drop for VMObjectPaged {
             let end = inner.parent_limit / PAGE_SIZE;
             // Walk up from parent, decrementing share_count for pages
             // this VMO doesn't have locally (local frames shadow parent).
+            // Decrement share_count for the FIRST frame found per page
+            // index (matching the increment logic in create_child).
+            let count = end - start;
+            let mut found = alloc::vec![false; count];
+            // Mark pages we have locally (these shadow parent pages).
+            for (i, found_flag) in found.iter_mut().enumerate() {
+                if inner.frames.contains_key(&i) {
+                    *found_flag = true;
+                }
+            }
             let mut cur = Some(parent.clone());
             let mut cur_start = start;
-            let mut cur_end = end;
             while let Some(vmop) = cur {
                 let mut p = vmop.inner.borrow_mut();
-                for idx in cur_start..cur_end {
-                    // Check if we have a local frame that shadows this parent page
-                    let has_local = inner.frames.contains_key(&(idx - start));
-                    if !has_local {
-                        if let Some(page) = p.frames.get_mut(&idx) {
-                            if page.share_count > 0 {
-                                page.share_count -= 1;
-                            }
+                for (i, found_flag) in found.iter_mut().enumerate() {
+                    if *found_flag {
+                        continue;
+                    }
+                    let idx = cur_start + i;
+                    if let Some(page) = p.frames.get_mut(&idx) {
+                        if page.share_count > 0 {
+                            page.share_count -= 1;
                         }
+                        *found_flag = true;
                     }
                 }
-                if p.parent_limit == 0 {
+                if found.iter().all(|f| *f) || p.parent_limit == 0 {
                     break;
                 }
                 let off = p.parent_offset / PAGE_SIZE;
                 cur_start += off;
-                cur_end += off;
                 cur = p.parent.clone();
             }
             parent.inner.borrow_mut().remove_child(&inner.self_ref);
