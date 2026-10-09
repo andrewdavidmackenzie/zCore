@@ -462,7 +462,23 @@ impl VmAddressRegion {
     /// Change protections on a subset of the region of memory in the containing
     /// address space.  If the requested range overlaps with a subregion,
     /// protect() will fail.
+    /// Set protection on a range of virtual addresses (simple interface).
     pub fn protect(&self, addr: usize, len: usize, flags: MMUFlags) -> ZxResult {
+        self.protect_ext(addr, len, flags, true, false)
+    }
+
+    /// Set protection on a range of virtual addresses (extended interface).
+    ///
+    /// `op_children`: if false, return INVALID_ARGS when the range spans children.
+    /// `from_parent`: if true, cannot escalate permissions on child mappings.
+    pub fn protect_ext(
+        &self,
+        addr: usize,
+        len: usize,
+        flags: MMUFlags,
+        op_children: bool,
+        from_parent: bool,
+    ) -> ZxResult {
         if !page_aligned(addr) || !page_aligned(len) {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -510,6 +526,27 @@ impl VmAddressRegion {
             return Err(ZxError::ACCESS_DENIED);
         }
 
+        // When protecting from a parent VMAR, cannot escalate permissions
+        // beyond what each page currently has.
+        if from_parent {
+            for map in inner
+                .mappings
+                .iter()
+                .filter(|map| map.end_addr() > addr && map.addr() < end_addr)
+            {
+                let start_index = pages(addr.max(map.addr()) - map.addr());
+                let end_index = pages(end_addr.min(map.end_addr()) - map.addr());
+                let inner_lock = map.inner.lock();
+                for idx in start_index..end_index {
+                    let current = inner_lock.page_flags(idx);
+                    // New flags must be a subset of current flags.
+                    if flags & !current != MMUFlags::empty() {
+                        return Err(ZxError::ACCESS_DENIED);
+                    }
+                }
+            }
+        }
+
         // Apply to mappings at this level.
         inner
             .mappings
@@ -526,9 +563,13 @@ impl VmAddressRegion {
             if child.end_addr() <= addr || child.addr() >= end_addr {
                 continue;
             }
+            if !op_children {
+                return Err(ZxError::INVALID_ARGS);
+            }
             let child_start = addr.max(child.addr());
             let child_end = end_addr.min(child.end_addr());
-            child.protect(child_start, child_end - child_start, flags)?;
+            // When recursing from parent, set from_parent=true to prevent escalation.
+            child.protect_ext(child_start, child_end - child_start, flags, true, true)?;
         }
         Ok(())
     }

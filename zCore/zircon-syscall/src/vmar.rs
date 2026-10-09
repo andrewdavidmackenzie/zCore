@@ -264,7 +264,8 @@ impl Syscall<'_> {
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        vmar.protect(addr as usize, len, mapping_flags)?;
+        let op_children = vmar_rights.contains(Rights::OP_CHILDREN);
+        vmar.protect_ext(addr as usize, len, mapping_flags, op_children, false)?;
         Ok(())
     }
 
