@@ -547,6 +547,15 @@ impl VmAddressRegion {
             }
         }
 
+        // Check child overlap BEFORE modifying any mappings.
+        let has_child_overlap = inner
+            .children
+            .iter()
+            .any(|child| child.end_addr() > addr && child.addr() < end_addr);
+        if has_child_overlap && !op_children {
+            return Err(ZxError::INVALID_ARGS);
+        }
+
         // Apply to mappings at this level.
         inner
             .mappings
@@ -562,9 +571,6 @@ impl VmAddressRegion {
         for child in inner.children.iter() {
             if child.end_addr() <= addr || child.addr() >= end_addr {
                 continue;
-            }
-            if !op_children {
-                return Err(ZxError::INVALID_ARGS);
             }
             let child_start = addr.max(child.addr());
             let child_end = end_addr.min(child.end_addr());

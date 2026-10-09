@@ -383,6 +383,9 @@ impl Syscall<'_> {
         let mapping_flags = MMUFlags::USER | MMUFlags::READ;
         let is_specific = options.contains(VmOptions::SPECIFIC)
             || options.contains(VmOptions::SPECIFIC_OVERWRITE);
+        if is_specific && !vmar.flags().contains(VmarFlags::CAN_MAP_SPECIFIC) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
         let vmar_off = if is_specific {
             Some(vmar_offset as usize)
         } else {
@@ -479,6 +482,9 @@ impl Syscall<'_> {
         // Determine if specific placement is requested.
         let is_specific = options.contains(VmOptions::SPECIFIC)
             || options.contains(VmOptions::SPECIFIC_OVERWRITE);
+        if is_specific && !vmar.flags().contains(VmarFlags::CAN_MAP_SPECIFIC) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
         let vmar_offset = if is_specific { Some(vmar_offset) } else { None };
         let overwrite = options.contains(VmOptions::SPECIFIC_OVERWRITE);
 
