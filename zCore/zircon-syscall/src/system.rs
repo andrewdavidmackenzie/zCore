@@ -403,19 +403,19 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate scale values for ZX_CPU_PERF_SCALE (topic 1).
+        // zx_cpu_performance_info_t = { u32 cpu, { u16 integral, u16 fractional } } = 8 bytes.
+        // Zero scale (0.0) is rejected; values > 1.0 are clamped (accepted).
         if topic == 1 {
             let buf: UserInPtr<u8> = info.into();
-            let data = buf.read_array(count * 4)?;
+            let data = buf.read_array(count * 8)?;
             for i in 0..count {
-                let offset = i * 4;
+                let offset = i * 8 + 4; // skip u32 cpu_number
                 let integral = u16::from_ne_bytes([data[offset], data[offset + 1]]);
                 let fractional = u16::from_ne_bytes([data[offset + 2], data[offset + 3]]);
                 if integral == 0 && fractional == 0 {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
-                if integral > 1 || (integral == 1 && fractional > 0) {
-                    return Err(ZxError::OUT_OF_RANGE);
-                }
+                // Values > 1.0 are clamped, not rejected.
             }
         }
         // Accept the request without applying (no DVFS hardware).

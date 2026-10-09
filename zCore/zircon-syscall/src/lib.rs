@@ -609,9 +609,7 @@ impl Syscall<'_> {
             Sys::COUNTER_READ => self.sys_counter_read(a0 as _, a1.into()),
             Sys::COUNTER_WRITE => self.sys_counter_write(a0 as _, a1 as _),
             Sys::COUNTER_ADD => self.sys_counter_add(a0 as _, a1 as _),
-            Sys::SAMPLER_CREATE => {
-                self.sys_sampler_create(a0 as _, a1 as _, a2, a3 as _, a4.into())
-            }
+            Sys::SAMPLER_CREATE => self.sys_sampler_create(a0 as _, a1 as _, a2, a3.into()),
             Sys::SAMPLER_START => self.sys_sampler_start(a0 as _),
             Sys::SAMPLER_STOP => self.sys_sampler_stop(a0 as _),
             Sys::SAMPLER_READ => self.sys_sampler_read(a0 as _, a1.into(), a2 as _, a3.into()),
