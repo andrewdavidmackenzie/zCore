@@ -1,6 +1,10 @@
 **/.*/*
 !.github/*
 !.cargo/*
+!.claude/*
+!.claude/skills/**
+# Keep settings.local.json out of version control (personal config)
+.claude/settings.local.json
 
 # Cargo build output (includes rootfs, images, and kernel binaries)
 **/target
