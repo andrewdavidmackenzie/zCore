@@ -6,7 +6,7 @@
 
 # Build cache: downloaded toolchains, compiled busybox, etc.
 # Survives `cargo clean` (which only removes target/).
-/.build-cache
+**/.build-cache
 
 # Legacy locations (safe to remove from checkouts that predate #79)
 *.img
