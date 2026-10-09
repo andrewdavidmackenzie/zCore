@@ -1157,6 +1157,7 @@ impl VMObjectPagedInner {
     /// Uses the same parent_limit-based walk as committed_pages_in_range.
     /// For each committed page found, uses `PAGE_SIZE / (share_count + 1)`
     /// for fractional attribution.
+    #[inline(never)]
     fn compute_attribution(&self, start_idx: usize, end_idx: usize) -> Attribution {
         let pages = self.size / PAGE_SIZE;
         if pages == 0 || start_idx >= pages {
@@ -1173,12 +1174,17 @@ impl VMObjectPagedInner {
             if self.parent_limit <= i * PAGE_SIZE {
                 continue;
             }
+            // Exact same walk as committed_pages_in_range but with
+            // share_count attribution instead of counting.
             let mut current = self.parent.clone();
             let mut current_idx = i + self.parent_offset / PAGE_SIZE;
             while let Some(vmop) = current {
                 let inner = vmop.inner.borrow();
-                if let Some(frame) = inner.frames.get(&current_idx) {
-                    result.add_page((frame.share_count as u64) + 1);
+                if inner.frames.contains_key(&current_idx) {
+                    // Page found -- same condition as committed_pages_in_range.
+                    // Use its share_count for attribution.
+                    let sc = inner.frames.get(&current_idx).unwrap().share_count;
+                    result.add_page((sc as u64) + 1);
                     break;
                 }
                 if inner.parent_limit == 0 {
