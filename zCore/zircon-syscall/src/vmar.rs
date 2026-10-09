@@ -301,8 +301,13 @@ impl Syscall<'_> {
             handle_value, addr, len
         );
         let proc = self.thread.proc();
-        let vmar = proc.get_object::<VmAddressRegion>(handle_value)?;
-        vmar.unmap(addr, pages(len) * PAGE_SIZE)?;
+        let (vmar, vmar_rights) = proc.get_object_and_rights::<VmAddressRegion>(handle_value)?;
+        let len = pages(len) * PAGE_SIZE;
+        // If the unmap range spans child VMARs, require OP_CHILDREN.
+        if vmar.has_children_in_range(addr, len) && !vmar_rights.contains(Rights::OP_CHILDREN) {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        vmar.unmap(addr, len)?;
         Ok(())
     }
 
