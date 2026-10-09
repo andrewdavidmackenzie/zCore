@@ -76,7 +76,6 @@ StreamTestCase.NoStreamFromContiguousOrPhysicalVmo
 Vmar.ProtectLargeUncomittedTest
 Vmar.UnmapLargeUncommittedTest
 Vmar.ProtectOverDemandPagedTest
-Vmar.MapReadIfXomUnsupported
 Vmar.ProtectReadIfXomUnsupported
 Vmar.MapRangeResizable
 Vmar.FaultBeyondStreamSize
@@ -90,14 +89,7 @@ Vmar.FaultBeyondStreamSizeForceWritable
 MemoryMappingTest.MmapProtExecTest
 
 # ── Invalid buffer pointer hangs ─────────────────────────────────────
-# Tests that pass null/invalid user buffer pointers to info syscalls.
-# Our kernel crashes or infinite-loops instead of returning an error.
-JobGetInfoTest.InfoJobProcessesInvalidBufferPointerFails
-VmarGetInfoTest.InfoHandleBasicNullActualAndAvailSucceeds
-KernelStatsGetInfoTest.KmemStatsSmallBuffer
-TaskGetInfoTest.InfoTaskStatsJobHandleIsBadHandle
-VmarMapsGetInfoTest.InfoVmarMapsInvalidBufferPointerFails
-ProcessGetInfoTest.InfoProcessJobHandleIsBadHandle
+# (Most previously-skipped tests now pass — removed from list.)
 
 # ── Unimplemented hardware / missing binaries ───────────────────────
 ProcessTest.ProcessHwTraceContextIdProperty
@@ -122,29 +114,21 @@ ChannelTest.ReadFaultDoesNotLeakHandles
 # resource handle. ExclusiveShared* crashes similarly.
 Resource.Mexec*
 Resource.Ioports
-Resource.CreateAndDestroy
 Resource.ExclusiveShared*
 
-# ── Timer tests ──────────────────────────────────────────────────────
-# Timer.Basic hangs — likely timer implementation gap.
-Timer.Basic
-
-# ── Job critical process ─────────────────────────────────────────────
-# Hangs — needs critical process kill-on-exit infrastructure.
-JobTest.CriticalProcessAlreadySet
+# ── Timer / Job (previously skipped, now passing) ────────────────────
+# Timer.Basic and JobTest.CriticalProcessAlreadySet removed — now pass.
 
 # ── VMAR protect tests ──────────────────────────────────────────────
 # ProtectTestCase.Unmap hangs — likely memory probe related.
 ProtectTestCase.Unmap
 
 # ── Process debug ────────────────────────────────────────────────────
-# Hangs reading/writing process memory at invalid offsets.
-ProcessDebugTest.ReadMemoryAtInvalidOffsetReturnsErrorNotFound
+# WriteToVdsoAddress crashes (page fault in vDSO region).
 ProcessDebugVDSO.WriteToVdsoAddressReturnsAccessDenied
 
-# ── Profile tests ────────────────────────────────────────────────────
-# Profile creation hangs after first test.
-ProfileTest.CreateProfileWithMutuallyExclusiveFlagsIsInvalidArgs
+# ── Profile tests (previously skipped, now passing) ──────────────────
+# ProfileTest.CreateProfileWithMutuallyExclusiveFlagsIsInvalidArgs removed.
 
 # ── System events / suspend / wake reports ───────────────────────────
 # ExactlyOneMemoryEventSignaled hangs — polls all pressure events.
