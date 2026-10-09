@@ -841,19 +841,22 @@ impl VMObjectPagedInner {
             }
             let idx = key - start;
             if !child.frames.contains_key(&idx) && value.tag != tag.negate() {
-                // Check if this page also exists in an ancestor. If so,
-                // this is an intermediate COW copy -- don't move it.
-                let ancestor_idx = key + self.parent_offset / PAGE_SIZE;
-                let in_ancestor = if let Some(ref gp) = grandparent {
-                    Self::page_exists_in_ancestor(gp, ancestor_idx)
+                // Only skip intermediate COW copies (share_count=0
+                // that also exist in an ancestor).
+                let skip = if value.share_count == 0 {
+                    let ancestor_idx = key + self.parent_offset / PAGE_SIZE;
+                    if let Some(ref gp) = grandparent {
+                        Self::page_exists_in_ancestor(gp, ancestor_idx)
+                    } else {
+                        false
+                    }
                 } else {
                     false
                 };
-                if in_ancestor {
-                    continue;
+                if !skip {
+                    value.tag = PageStateTag::Owned;
+                    child.frames.insert(idx, value);
                 }
-                value.tag = PageStateTag::Owned;
-                child.frames.insert(idx, value);
             }
         }
         // connect child to my parent
@@ -1037,15 +1040,21 @@ impl VMObjectPagedInner {
                                 new_frame.pin_count -= 1;
                             }
                             if new_frame.tag == tag && other_start <= i && other_end > i {
-                                // Check if this page also exists in an ancestor.
-                                // If so, it's an intermediate COW copy -- drop it.
-                                let ancestor_idx = i + self.parent_offset / PAGE_SIZE;
-                                let in_ancestor = if let Some(ref p) = self.parent {
-                                    Self::page_exists_in_ancestor(p, ancestor_idx)
+                                // Only skip intermediate COW copies (share_count=0
+                                // that also exist in an ancestor). Frames with
+                                // share_count > 0 are legitimately shared and
+                                // should be moved.
+                                let skip = if new_frame.share_count == 0 {
+                                    let ancestor_idx = i + self.parent_offset / PAGE_SIZE;
+                                    if let Some(ref p) = self.parent {
+                                        Self::page_exists_in_ancestor(p, ancestor_idx)
+                                    } else {
+                                        false
+                                    }
                                 } else {
                                     false
                                 };
-                                if !in_ancestor {
+                                if !skip {
                                     new_frame.tag = PageStateTag::Owned;
                                     let new_key = i - other_child.parent_offset / PAGE_SIZE;
                                     other_child.frames.insert(new_key, new_frame);
