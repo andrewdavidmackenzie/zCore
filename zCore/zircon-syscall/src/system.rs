@@ -314,15 +314,17 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
 
-        let num_cpus = hal_impl::config::MAX_CORE_NUM;
-        // count must match the number of CPUs exactly.
-        if count != num_cpus {
+        // Use actual online CPU count. CpuStats reports avail=1 for
+        // our single-CPU QEMU configuration, so be consistent.
+        let online_cpus: usize = 1;
+        // count must match the number of online CPUs exactly.
+        if count != online_cpus {
             return Err(ZxError::OUT_OF_RANGE);
         }
         if info == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let entries = num_cpus;
+        let entries = online_cpus;
         {
             let mut out: UserOutPtr<u8> = info.into();
             if topic == 3 {
@@ -393,8 +395,9 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate count and info pointer.
-        if count == 0 {
-            return Err(ZxError::INVALID_ARGS);
+        let online_cpus: usize = 1;
+        if count == 0 || count > online_cpus {
+            return Err(ZxError::OUT_OF_RANGE);
         }
         if info == 0 {
             return Err(ZxError::INVALID_ARGS);
