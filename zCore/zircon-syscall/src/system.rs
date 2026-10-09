@@ -298,15 +298,20 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
+            // Wrong kind (e.g., MMIO) → WRONG_TYPE.
+            // Right kind (SYSTEM) but wrong sub-base → OUT_OF_RANGE.
+            res.validate(ResourceKind::SYSTEM)
+                .map_err(|_| ZxError::WRONG_TYPE)?;
             res.validate_ranged_resource(
                 ResourceKind::SYSTEM,
                 zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
                 1,
             )
-            .map_err(|_| ZxError::WRONG_TYPE)?;
+            .map_err(|_| ZxError::OUT_OF_RANGE)?;
         }
+        // Invalid topic → INVALID_ARGS.
         if topic > 2 {
-            return Err(ZxError::OUT_OF_RANGE);
+            return Err(ZxError::INVALID_ARGS);
         }
 
         // Return static 1.0x scale for each CPU.
@@ -350,15 +355,17 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
         if res.validate(ResourceKind::ROOT).is_err() {
+            res.validate(ResourceKind::SYSTEM)
+                .map_err(|_| ZxError::WRONG_TYPE)?;
             res.validate_ranged_resource(
                 ResourceKind::SYSTEM,
                 zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
                 1,
             )
-            .map_err(|_| ZxError::WRONG_TYPE)?;
+            .map_err(|_| ZxError::OUT_OF_RANGE)?;
         }
         if topic > 2 {
-            return Err(ZxError::OUT_OF_RANGE);
+            return Err(ZxError::INVALID_ARGS);
         }
         // Accept the request without applying (no DVFS hardware).
         Ok(())
