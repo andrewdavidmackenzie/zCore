@@ -832,7 +832,12 @@ impl VMObjectPagedInner {
         let mut child = arc_child.inner.borrow_mut();
         let start = child.parent_offset / PAGE_SIZE;
         let end = child.parent_limit / PAGE_SIZE;
-        // merge nodes to the child
+        // Merge frames to the surviving child. Only move frames that the
+        // child can't already access through the grandparent chain. This
+        // avoids creating redundant local copies that shadow shared pages
+        // in ancestor hidden nodes, which would break share_count-based
+        // attribution.
+        let grandparent = self.parent.clone();
         for (key, mut value) in core::mem::take(&mut self.frames) {
             if key < start || key >= end {
                 continue;
@@ -842,6 +847,19 @@ impl VMObjectPagedInner {
             }
             let idx = key - start;
             if !child.frames.contains_key(&idx) && value.tag != tag.negate() {
+                // Check if this page is also available through the grandparent.
+                // If so, skip the move -- the child will read through to the
+                // ancestor page, preserving the correct share_count.
+                let parent_idx = key + self.parent_offset / PAGE_SIZE;
+                let available_above = if let Some(ref gp) = grandparent {
+                    Self::page_exists_in_ancestor(gp, parent_idx)
+                } else {
+                    false
+                };
+                if available_above {
+                    // Drop this frame -- the child reads through to the ancestor.
+                    continue;
+                }
                 value.tag = PageStateTag::Owned;
                 child.frames.insert(idx, value);
             }
@@ -1063,6 +1081,24 @@ impl VMObjectPagedInner {
             }
             current = inner.parent.clone();
         }
+    }
+
+    /// Check if a page exists in an ancestor hidden node's frames.
+    fn page_exists_in_ancestor(node: &Arc<VMObjectPaged>, page_idx: usize) -> bool {
+        let mut current = Some(node.clone());
+        let mut idx = page_idx;
+        while let Some(vmop) = current {
+            let inner = vmop.inner.borrow();
+            if inner.frames.contains_key(&idx) {
+                return true;
+            }
+            if inner.parent_limit == 0 || idx * PAGE_SIZE >= inner.parent_limit {
+                break;
+            }
+            idx += inner.parent_offset / PAGE_SIZE;
+            current = inner.parent.clone();
+        }
+        false
     }
 
     /// Decrement share_count for specific page indices, walking up the
