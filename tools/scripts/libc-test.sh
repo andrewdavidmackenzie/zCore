@@ -82,17 +82,17 @@ esac
 
 # Step 1: Build libc-test static binaries
 echo "==> Building libc-test static binaries..."
-if [ ! -f libc-test/src/functional/argv-static.exe ]; then
-  cp libc-test/config.mak.def libc-test/config.mak
-  echo 'CFLAGS += -static' >> libc-test/config.mak
-  echo 'LDFLAGS += -static' >> libc-test/config.mak
+if [ ! -f tests/libc-test/src/functional/argv-static.exe ]; then
+  cp tests/libc-test/config.mak.def tests/libc-test/config.mak
+  echo 'CFLAGS += -static' >> tests/libc-test/config.mak
+  echo 'LDFLAGS += -static' >> tests/libc-test/config.mak
   PATH="${MUSL_BIN:+$MUSL_BIN:}$PATH" \
-    make -C libc-test ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu)" 2>&1 | tail -3
+    make -C tests/libc-test ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu)" 2>&1 | tail -3
 fi
 
 # Collect all static test binaries
 TESTS=()
-for exe in libc-test/src/functional/*-static.exe; do
+for exe in tests/libc-test/src/functional/*-static.exe; do
   [ -f "$exe" ] && TESTS+=("$exe")
 done
 echo "   Found ${#TESTS[@]} static test binaries"
@@ -133,7 +133,7 @@ SKIP_COUNT=0
       continue
     fi
     RUN_COUNT=$((RUN_COUNT + 1))
-    echo "/bin/libc-test/$name && echo PASS:$name || echo FAIL:$name"
+    echo "/bin/tests/libc-test/$name && echo PASS:$name || echo FAIL:$name"
   done
   echo 'echo ALL_TESTS_DONE'
   echo 'poweroff -f'

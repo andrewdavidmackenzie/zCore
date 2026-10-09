@@ -14,9 +14,9 @@ impl super::LinuxRootfs {
         // Recursively build rootfs
         self.make(false);
         // Copy repository
-        let dir = self.path().join("libc-test");
+        let dir = self.path().join("tests/libc-test");
         dir::rm(&dir).unwrap();
-        dircpy::copy_dir("libc-test", &dir).unwrap();
+        dircpy::copy_dir("tests/libc-test", &dir).unwrap();
         // Compile
         fs::copy(dir.join("config.mak.def"), dir.join("config.mak")).unwrap();
         Make::new()
