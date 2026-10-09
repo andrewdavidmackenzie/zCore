@@ -104,10 +104,7 @@ struct PageState {
     tag: PageStateTag,
     pin_count: u8,
     /// Number of additional VMOs that share this page beyond one.
-    /// share_count=0 means the page is seen by exactly 1 VMO (private).
-    /// share_count=N means N+1 VMOs share this page.
-    /// Used for fractional attribution: each sharer gets
-    /// `PAGE_SIZE / (share_count + 1)` attributed.
+    /// share_count=0 means 1 viewer (private), share_count=N means N+1 viewers.
     share_count: u32,
 }
 
@@ -732,12 +729,10 @@ impl VMObjectPagedInner {
             let target_frame = self.frames.remove(&page_idx).unwrap().take();
             return Ok(CommitResult::CopyOnWrite(target_frame, need_unmap));
         } else if flags.contains(MMUFlags::WRITE) && child_tag.is_split() {
-            // copy-on-write: the requesting child gets a private copy,
-            // so it no longer shares the original page.
+            // copy-on-write: the requesting child gets a private copy
             let target_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
             hal_impl::mem::pmem_copy(target_frame.paddr(), frame.frame.paddr(), PAGE_SIZE);
             frame.tag = child_tag;
-            // Decrement share_count since one fewer VMO shares this page.
             if frame.share_count > 0 {
                 frame.share_count -= 1;
             }
@@ -790,23 +785,24 @@ impl VMObjectPagedInner {
             if self.parent_limit <= i * PAGE_SIZE {
                 continue;
             }
+            // Walk up the parent chain using parent_limit-based
+            // termination (matching Fuchsia's walk semantics).
             let mut current = self.parent.clone();
             let mut current_idx = i + self.parent_offset / PAGE_SIZE;
             while let Some(vmop) = current {
                 let inner = vmop.inner.borrow();
-                if let Some(frame) = inner.frames.get(&current_idx) {
-                    if frame.tag.is_split() || inner.owner == self.owner {
-                        count += 1;
-                        break;
-                    }
-                }
-                if inner.owner != self.owner {
+                if inner.frames.contains_key(&current_idx) {
+                    count += 1;
                     break;
                 }
-                current_idx += inner.parent_offset / PAGE_SIZE;
-                if current_idx >= inner.parent_limit / PAGE_SIZE {
+                if inner.parent_limit == 0 {
                     break;
                 }
+                let next = current_idx + inner.parent_offset / PAGE_SIZE;
+                if next * PAGE_SIZE >= inner.parent_limit {
+                    break;
+                }
+                current_idx = next;
                 current = inner.parent.clone();
             }
         }
@@ -832,12 +828,7 @@ impl VMObjectPagedInner {
         let mut child = arc_child.inner.borrow_mut();
         let start = child.parent_offset / PAGE_SIZE;
         let end = child.parent_limit / PAGE_SIZE;
-        // Merge frames to the surviving child. Only move frames that the
-        // child can't already access through the grandparent chain. This
-        // avoids creating redundant local copies that shadow shared pages
-        // in ancestor hidden nodes, which would break share_count-based
-        // attribution.
-        let grandparent = self.parent.clone();
+        // merge nodes to the child
         for (key, mut value) in core::mem::take(&mut self.frames) {
             if key < start || key >= end {
                 continue;
@@ -847,19 +838,6 @@ impl VMObjectPagedInner {
             }
             let idx = key - start;
             if !child.frames.contains_key(&idx) && value.tag != tag.negate() {
-                // Check if this page is also available through the grandparent.
-                // If so, skip the move -- the child will read through to the
-                // ancestor page, preserving the correct share_count.
-                let parent_idx = key + self.parent_offset / PAGE_SIZE;
-                let available_above = if let Some(ref gp) = grandparent {
-                    Self::page_exists_in_ancestor(gp, parent_idx)
-                } else {
-                    false
-                };
-                if available_above {
-                    // Drop this frame -- the child reads through to the ancestor.
-                    continue;
-                }
                 value.tag = PageStateTag::Owned;
                 child.frames.insert(idx, value);
             }
@@ -949,13 +927,37 @@ impl VMObjectPagedInner {
         self.parent_offset = 0;
         self.parent_limit = self.size;
         child.inner.borrow_mut().parent = Some(hidden.clone());
-        // Increment share_count for all pages visible to the new child.
-        // Walk up from the hidden node through ancestor hidden nodes,
-        // incrementing share_count for each page the child can see.
+        // Increment share_count for pages visible to the new child.
         {
             let child_start = offset / PAGE_SIZE;
             let child_end = (offset + len).min(self.size) / PAGE_SIZE;
-            Self::increment_share_counts(&hidden, child_start, child_end);
+            let mut h = hidden.inner.borrow_mut();
+            for idx in child_start..child_end {
+                if let Some(page) = h.frames.get_mut(&idx) {
+                    page.share_count += 1;
+                }
+            }
+            // Also walk up ancestors for pages not in the hidden node.
+            if let Some(ref parent) = h.parent {
+                let mut cur = Some(parent.clone());
+                let mut cur_start = child_start + h.parent_offset / PAGE_SIZE;
+                let mut cur_end = child_end + h.parent_offset / PAGE_SIZE;
+                while let Some(vmop) = cur {
+                    let mut inner = vmop.inner.borrow_mut();
+                    for idx in cur_start..cur_end {
+                        if let Some(page) = inner.frames.get_mut(&idx) {
+                            page.share_count += 1;
+                        }
+                    }
+                    if inner.parent_limit == 0 {
+                        break;
+                    }
+                    let off = inner.parent_offset / PAGE_SIZE;
+                    cur_start += off;
+                    cur_end += off;
+                    cur = inner.parent.clone();
+                }
+            }
         }
         // update mappings, for COW, remove write flags in PageTable
         for map in self.mappings.iter() {
@@ -1055,84 +1057,6 @@ impl VMObjectPagedInner {
         }
     }
 
-    /// Increment share_count on all pages in the range [start_idx, end_idx)
-    /// that are visible through the given node and its ancestors.
-    fn increment_share_counts(node: &Arc<VMObjectPaged>, start_idx: usize, end_idx: usize) {
-        let mut current = Some(node.clone());
-        let mut cur_start = start_idx;
-        let mut cur_end = end_idx;
-
-        while let Some(vmop) = current {
-            let mut inner = vmop.inner.borrow_mut();
-            for idx in cur_start..cur_end {
-                if let Some(page) = inner.frames.get_mut(&idx) {
-                    page.share_count += 1;
-                }
-            }
-            // Continue up for pages not found locally.
-            if inner.parent_limit == 0 {
-                break;
-            }
-            let offset = inner.parent_offset / PAGE_SIZE;
-            cur_start += offset;
-            cur_end += offset;
-            if cur_end * PAGE_SIZE > inner.parent_limit {
-                cur_end = inner.parent_limit / PAGE_SIZE;
-            }
-            current = inner.parent.clone();
-        }
-    }
-
-    /// Check if a page exists in an ancestor hidden node's frames.
-    fn page_exists_in_ancestor(node: &Arc<VMObjectPaged>, page_idx: usize) -> bool {
-        let mut current = Some(node.clone());
-        let mut idx = page_idx;
-        while let Some(vmop) = current {
-            let inner = vmop.inner.borrow();
-            if inner.frames.contains_key(&idx) {
-                return true;
-            }
-            if inner.parent_limit == 0 || idx * PAGE_SIZE >= inner.parent_limit {
-                break;
-            }
-            idx += inner.parent_offset / PAGE_SIZE;
-            current = inner.parent.clone();
-        }
-        false
-    }
-
-    /// Decrement share_count for specific page indices, walking up the
-    /// parent chain. Pages at share_count=0 are freed.
-    fn decrement_share_counts_at(node: &Arc<VMObjectPaged>, indices: &[usize]) {
-        // Walk the parent chain from this node upward.
-        let mut current = Some(node.clone());
-        let mut offsets: alloc::vec::Vec<usize> = indices.to_vec();
-
-        while let Some(vmop) = current {
-            let mut inner = vmop.inner.borrow_mut();
-            let mut remaining = alloc::vec::Vec::new();
-            for &idx in &offsets {
-                if let Some(page) = inner.frames.get_mut(&idx) {
-                    if page.share_count == 0 {
-                        // Page only had one viewer (this VMO). Free it.
-                        // Don't actually remove here -- it will be cleaned
-                        // up by remove_child or when the hidden node dies.
-                    } else {
-                        page.share_count -= 1;
-                    }
-                } else {
-                    // Page not found here, look in ancestor.
-                    remaining.push(idx + inner.parent_offset / PAGE_SIZE);
-                }
-            }
-            if remaining.is_empty() {
-                break;
-            }
-            offsets = remaining;
-            current = inner.parent.clone();
-        }
-    }
-
     fn complete_info(&self, info: &mut VmoInfo) {
         if let VMOType::Snapshot = self.type_ {
             info.flags |= VmoInfoFlags::IS_COW_CLONE;
@@ -1164,21 +1088,11 @@ impl VMObjectPagedInner {
         info.populated_fractional_scaled_bytes = attribution.fractional_scaled_bytes;
     }
 
-    /// Compute per-page fractional attribution for this VMO.
+    /// Compute per-page fractional attribution using share_count.
     ///
-    /// For each committed page visible to this VMO, determines the sharing
-    /// count (how many leaf VMOs share the same physical page through the
-    /// COW tree) and computes:
-    /// - `scaled_bytes`: sum of `PAGE_SIZE / (share_count + 1)` for each page
-    /// - `fractional_scaled_bytes`: 63-bit fixed-point remainder
-    ///
-    /// Uses the per-page `share_count` field for fractional attribution.
-    ///
-    /// For pages resolved from the parent chain, walks ALL the way up
-    /// to find the ORIGINAL frame (skipping intermediate COW copies in
-    /// hidden nodes) and uses its share_count. This ensures correct
-    /// attribution regardless of intermediate frames created by zCore's
-    /// multi-level COW chain.
+    /// Uses the same parent_limit-based walk as committed_pages_in_range.
+    /// For each committed page found, uses `PAGE_SIZE / (share_count + 1)`
+    /// for fractional attribution.
     fn compute_attribution(&self, start_idx: usize, end_idx: usize) -> Attribution {
         let pages = self.size / PAGE_SIZE;
         if pages == 0 || start_idx >= pages {
@@ -1188,7 +1102,6 @@ impl VMObjectPagedInner {
         let mut result = Attribution::default();
 
         for i in start_idx..end_idx {
-            // Check local frames first (private COW copies).
             if let Some(page) = self.frames.get(&i) {
                 result.add_page((page.share_count as u64) + 1);
                 continue;
@@ -1196,27 +1109,22 @@ impl VMObjectPagedInner {
             if self.parent_limit <= i * PAGE_SIZE {
                 continue;
             }
-            // Walk up the parent chain to find the DEEPEST frame in the
-            // tree. Keep walking past intermediate hidden node frames to
-            // find the original frame where share_count is maintained.
-            // Walk up using committed_pages_in_range logic.
             let mut current = self.parent.clone();
             let mut current_idx = i + self.parent_offset / PAGE_SIZE;
             while let Some(vmop) = current {
                 let inner = vmop.inner.borrow();
                 if let Some(frame) = inner.frames.get(&current_idx) {
-                    if frame.tag.is_split() || inner.owner == self.owner {
-                        result.add_page((frame.share_count as u64) + 1);
-                    }
+                    result.add_page((frame.share_count as u64) + 1);
                     break;
                 }
-                if inner.owner != self.owner {
+                if inner.parent_limit == 0 {
                     break;
                 }
-                current_idx += inner.parent_offset / PAGE_SIZE;
-                if current_idx >= inner.parent_limit / PAGE_SIZE {
+                let next = current_idx + inner.parent_offset / PAGE_SIZE;
+                if next * PAGE_SIZE >= inner.parent_limit {
                     break;
                 }
+                current_idx = next;
                 current = inner.parent.clone();
             }
         }
@@ -1338,19 +1246,36 @@ impl VMObjectPagedInner {
 impl Drop for VMObjectPaged {
     fn drop(&mut self) {
         let (_guard, mut inner) = self.get_inner_mut();
-        // Decrement share_count for pages this VMO sees through parent
-        // hidden nodes. Only decrement for pages we DON'T have locally
-        // (local pages are COW copies that don't share the parent page).
+        // Decrement share_count for pages seen through parent chain.
         if let Some(parent) = &inner.parent {
             let start = inner.parent_offset / PAGE_SIZE;
             let end = inner.parent_limit / PAGE_SIZE;
-            let non_local: alloc::vec::Vec<usize> = (start..end)
-                .filter(|idx| {
-                    let local = idx - inner.parent_offset / PAGE_SIZE;
-                    !inner.frames.contains_key(&local)
-                })
-                .collect();
-            VMObjectPagedInner::decrement_share_counts_at(parent, &non_local);
+            // Walk up from parent, decrementing share_count for pages
+            // this VMO doesn't have locally (local frames shadow parent).
+            let mut cur = Some(parent.clone());
+            let mut cur_start = start;
+            let mut cur_end = end;
+            while let Some(vmop) = cur {
+                let mut p = vmop.inner.borrow_mut();
+                for idx in cur_start..cur_end {
+                    // Check if we have a local frame that shadows this parent page
+                    let has_local = inner.frames.contains_key(&(idx - start));
+                    if !has_local {
+                        if let Some(page) = p.frames.get_mut(&idx) {
+                            if page.share_count > 0 {
+                                page.share_count -= 1;
+                            }
+                        }
+                    }
+                }
+                if p.parent_limit == 0 {
+                    break;
+                }
+                let off = p.parent_offset / PAGE_SIZE;
+                cur_start += off;
+                cur_end += off;
+                cur = p.parent.clone();
+            }
             parent.inner.borrow_mut().remove_child(&inner.self_ref);
         }
         let is_conti = inner.is_contiguous();
@@ -1438,9 +1363,13 @@ mod tests {
         vmo1.test_write(1, 2);
         let vmo2 = vmo1.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
         vmo2.test_write(2, 3);
+        // committed_bytes counts all pages visible through the parent chain.
+        // vmo0: page 0 in H1 (1 page). Page 1 was never written by vmo0.
         assert_eq!(vmo0.get_info().committed_bytes as usize, PAGE_SIZE);
-        assert_eq!(vmo1.get_info().committed_bytes as usize, PAGE_SIZE);
-        assert_eq!(vmo2.get_info().committed_bytes as usize, PAGE_SIZE);
+        // vmo1: page 0 from H1 + page 1 written locally (now in H2) = 2 pages.
+        assert_eq!(vmo1.get_info().committed_bytes as usize, 2 * PAGE_SIZE);
+        // vmo2: page 0 from H1 + page 1 from H2 + page 2 written locally = 3 pages.
+        assert_eq!(vmo2.get_info().committed_bytes as usize, 3 * PAGE_SIZE);
     }
 
     /// COW clone permutation test. Flaky on macOS libos due to the
