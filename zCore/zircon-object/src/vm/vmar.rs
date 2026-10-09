@@ -299,10 +299,9 @@ impl VmAddressRegion {
         if flags.contains(MMUFlags::EXECUTE) && !self.flags.contains(VmarFlags::CAN_MAP_EXECUTE) {
             return Err(ZxError::ACCESS_DENIED);
         }
-        // SPECIFIC / SPECIFIC_OVERWRITE requires CAN_MAP_SPECIFIC on the VMAR.
-        if vmar_offset.is_some() && !self.flags.contains(VmarFlags::CAN_MAP_SPECIFIC) {
-            return Err(ZxError::ACCESS_DENIED);
-        }
+        // Note: CAN_MAP_SPECIFIC is checked at the syscall layer (sys_vmar_map),
+        // not here, because internal callers (ELF loader, etc.) need to use
+        // specific offsets on VMARs without CAN_MAP_SPECIFIC.
         // When map_range is false (lazy/demand-paged mapping), allow the
         // mapping to extend past the VMO's current size. Pages are committed
         // on demand via page faults. This is standard behavior in Fuchsia
@@ -757,6 +756,11 @@ impl VmAddressRegion {
     /// Get start address of this VMAR.
     pub fn addr(&self) -> usize {
         self.addr
+    }
+
+    /// Get this VMAR's creation flags (CAN_MAP_*, SPECIFIC, etc.)
+    pub fn flags(&self) -> VmarFlags {
+        self.flags
     }
 
     /// Whether this VMAR is dead.

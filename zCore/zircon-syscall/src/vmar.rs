@@ -140,6 +140,10 @@ impl Syscall<'_> {
         if !is_specific && vmar_offset != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        // SPECIFIC/SPECIFIC_OVERWRITE requires CAN_MAP_SPECIFIC on the VMAR.
+        if is_specific && !vmar.flags().contains(VmarFlags::CAN_MAP_SPECIFIC) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
         if !vmar_rights.contains(options.to_required_rights()) {
             return Err(ZxError::ACCESS_DENIED);
         }
