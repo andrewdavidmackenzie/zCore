@@ -17,3 +17,5 @@
 .DS_Store
 __pycache__
 
+.idea/
+.jiri_root/
