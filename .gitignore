@@ -1,6 +1,5 @@
-**/.*/*
-!.github/*
-!.cargo/*
+# Personal/local config (not shared)
+.claude/settings.local.json
 
 # Cargo build output (includes rootfs, images, and kernel binaries)
 **/target
