@@ -670,13 +670,6 @@ impl VMObjectPagedInner {
                         self.frames.insert(page_idx, PageState::new(frame));
                     }
                     CommitResult::CopyOnWrite(frame, unmap) => {
-                        if self.type_.is_hidden() {
-                            // Hidden nodes pass COW results through without
-                            // storing a local copy. The split tag was set at
-                            // the ancestor level that found the original frame.
-                            // Only leaf nodes keep the COW copy.
-                            return Ok(CommitResult::CopyOnWrite(frame, unmap));
-                        }
                         let mut new_frame = PageState::new(frame);
                         // Cloning a contiguous vmo: original frames are stored in hidden parent nodes.
                         // In order to make sure original vmo (now is a child of hidden parent)
