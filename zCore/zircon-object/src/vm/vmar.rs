@@ -280,8 +280,11 @@ impl VmAddressRegion {
         map_range: bool,
         fault_beyond_stream_size: bool,
     ) -> ZxResult<VirtAddr> {
-        if !page_aligned(vmo_offset) || !page_aligned(len) || vmo_offset.overflowing_add(len).1 {
+        if !page_aligned(vmo_offset) || !page_aligned(len) {
             return Err(ZxError::INVALID_ARGS);
+        }
+        if vmo_offset.overflowing_add(len).1 {
+            return Err(ZxError::OUT_OF_RANGE);
         }
         if !permissions.contains(flags & MMUFlags::RXW) {
             return Err(ZxError::ACCESS_DENIED);
@@ -294,6 +297,10 @@ impl VmAddressRegion {
             return Err(ZxError::ACCESS_DENIED);
         }
         if flags.contains(MMUFlags::EXECUTE) && !self.flags.contains(VmarFlags::CAN_MAP_EXECUTE) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        // SPECIFIC / SPECIFIC_OVERWRITE requires CAN_MAP_SPECIFIC on the VMAR.
+        if vmar_offset.is_some() && !self.flags.contains(VmarFlags::CAN_MAP_SPECIFIC) {
             return Err(ZxError::ACCESS_DENIED);
         }
         // When map_range is false (lazy/demand-paged mapping), allow the
