@@ -289,7 +289,16 @@ impl Syscall<'_> {
             // DONT_NEED and ALWAYS_NEED require no handle rights.
             VmarOpType::DontNeed | VmarOpType::AlwaysNeed => Rights::empty(),
         };
-        let vmar = proc.get_object_with_rights::<VmAddressRegion>(handle_value, required_rights)?;
+        let (vmar, vmar_rights) = proc.get_object_and_rights::<VmAddressRegion>(handle_value)?;
+        if !vmar_rights.contains(required_rights) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        // Operations on ranges that span child VMARs require OP_CHILDREN.
+        if vmar.has_children_in_range(addr as usize, size as usize)
+            && !vmar_rights.contains(Rights::OP_CHILDREN)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
         vmar.op_range(op, addr as usize, size as usize)?;
         Ok(())
     }
