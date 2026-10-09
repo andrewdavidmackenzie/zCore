@@ -889,11 +889,14 @@ impl Syscall<'_> {
                 // Requires a root or system-stall resource handle.
                 let res = proc.get_resource(handle)?;
                 if res.validate(ResourceKind::ROOT).is_err() {
+                    res.validate(ResourceKind::SYSTEM)
+                        .map_err(|_| ZxError::WRONG_TYPE)?;
                     res.validate_ranged_resource(
                         ResourceKind::SYSTEM,
                         zircon_object::dev::ZX_RSRC_SYSTEM_STALL_BASE,
                         1,
-                    )?;
+                    )
+                    .map_err(|_| ZxError::OUT_OF_RANGE)?;
                 }
                 if buffer_size < core::mem::size_of::<MemoryStallInfo>() {
                     actual.write_if_not_null(0)?;

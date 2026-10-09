@@ -40,7 +40,6 @@ impl Syscall<'_> {
         resource: HandleValue,
         options: u64,
         config_ptr: usize,
-        config_size: usize,
         mut iob_out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
         info!(
@@ -66,10 +65,6 @@ impl Syscall<'_> {
             }
         }
 
-        // Accept config_size >= 16 or 0 (some vDSO wrappers omit the size arg).
-        if config_size != 0 && config_size < SAMPLER_CONFIG_SIZE {
-            return Err(ZxError::INVALID_ARGS);
-        }
         let config_buf: UserInPtr<u8> = config_ptr.into();
         let config_data = config_buf.read_array(SAMPLER_CONFIG_SIZE)?;
 
@@ -156,8 +151,9 @@ impl Syscall<'_> {
         if !sess.active {
             return Err(ZxError::BAD_STATE);
         }
-        sess.active = false;
-        info!("sampler: stopped");
+        // Clear the session so a new one can be created.
+        *session = None;
+        info!("sampler: stopped and session cleared");
         Ok(())
     }
 
