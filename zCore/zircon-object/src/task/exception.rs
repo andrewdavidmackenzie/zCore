@@ -166,7 +166,7 @@ impl ExceptionContext {
         let fault_vaddr = if let TrapReason::PageFault(vaddr, _) = ctx.trap_reason() {
             vaddr as u64
         } else {
-            return Default::default();
+            0
         };
         cfg_if::cfg_if! {
             if #[cfg(target_arch = "x86_64")] {
