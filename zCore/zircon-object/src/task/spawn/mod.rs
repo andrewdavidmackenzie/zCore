@@ -253,6 +253,19 @@ pub fn spawn_process(
     // Avoid allocating at vaddr 0: PIE binaries like ld.so.1 have PT_LOAD
     // starting at vaddr 0, and loading at base 0 causes fsbase=0 to alias
     // the ELF header, corrupting TLS accesses via %fs:0.
+    // vDSO: map FIRST so it's at a low address that ld.so.1's unmap
+    // of the image range won't reach. ld.so.1 unmaps the entire image
+    // region when re-mapping shared libraries, which would destroy the
+    // vDSO mapping if it was adjacent to the image.
+    let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
+    let vdso_code_addr = vmar.map(
+        None,
+        config.vdso_vmo.clone(),
+        0,
+        config.vdso_code_size,
+        vdso_flags,
+    )?;
+
     let size = elf.load_segment_size();
     let min_offset = if elf.header.pt2.entry_point() < size as u64 {
         Some(0x10_0000) // 1 MiB minimum offset for PIE/shared objects
@@ -270,10 +283,6 @@ pub fn spawn_process(
     let entry = base + elf.header.pt2.entry_point() as usize;
 
     // Apply ELF relocations only for statically-linked executables.
-    // When has_interp is true, we loaded the dynamic linker (ld.so.1),
-    // which self-relocates via its rcrt1 entry code.  Applying relocations
-    // here too would double-relocate all RELR entries, corrupting data
-    // pointers (e.g. stdout's FILE struct gets base added twice).
     if !has_interp {
         if let Err(e) = elf.relocate(image_vmar.clone()) {
             warn!("spawn_process: ELF relocation failed: {}", e);
@@ -287,16 +296,6 @@ pub fn spawn_process(
     let stack_flags = MMUFlags::READ | MMUFlags::WRITE | MMUFlags::USER;
     let stack_base = vmar.map(None, stack_vmo, 0, stack_size, stack_flags)?;
     let sp = stack_base + stack_size;
-
-    // vDSO: map the entire ELF into the process address space.
-    let vdso_flags = MMUFlags::READ | MMUFlags::EXECUTE | MMUFlags::USER;
-    let vdso_code_addr = vmar.map(
-        None,
-        config.vdso_vmo.clone(),
-        0,
-        config.vdso_code_size,
-        vdso_flags,
-    )?;
 
     // Eagerly resolve vDSO symbols in the loaded ELF's PLT.
     // ld.so.1 can't use lazy PLT binding before initializing its resolver.
