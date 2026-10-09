@@ -431,8 +431,8 @@ pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
         }
     }
 
+    use crate::sfs_image::zip_dir;
     use rcore_fs::vfs::FileSystem;
-    use rcore_fs_fuse::zip::zip_dir;
     use rcore_fs_sfs::SimpleFileSystem;
     use std::sync::{Arc, Mutex};
 
