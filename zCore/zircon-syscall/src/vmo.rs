@@ -656,10 +656,13 @@ impl Syscall<'_> {
                 let chunk = core::cmp::min(remaining, PAGE_SIZE);
                 src.read(s_off, &mut buf[..chunk])?;
                 dst.write(d_off, &buf[..chunk])?;
-                // Decommit the source page to release its physical frame,
-                // matching the Fuchsia "move, not copy" semantics.
-                // Ignore decommit errors for child VMOs.
+                // Release the source page. Decommit frees the physical
+                // frame for root VMOs. For COW children, decommit may
+                // succeed but the page is still readable from the parent
+                // chain. Zero the range to ensure the source reads as
+                // zeros after transfer, matching Fuchsia's "move" semantics.
                 let _ = src.decommit(s_off, chunk);
+                let _ = src.zero(s_off, chunk);
                 s_off += chunk;
                 d_off += chunk;
                 remaining -= chunk;
