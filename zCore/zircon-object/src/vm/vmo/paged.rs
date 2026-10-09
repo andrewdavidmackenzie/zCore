@@ -855,10 +855,8 @@ impl VMObjectPagedInner {
                 };
                 if !skip {
                     value.tag = PageStateTag::Owned;
-                    // The removed child no longer shares this page.
-                    if value.share_count > 0 {
-                        value.share_count -= 1;
-                    }
+                    // Keep share_count -- still shared with descendants
+                    // of the parent's other subtree.
                     child.frames.insert(idx, value);
                 }
             }
@@ -1013,7 +1011,7 @@ impl VMObjectPagedInner {
     ) {
         let (tag, other) = self.type_.get_tag_and_other(old);
         let arc_other_child = other.upgrade().unwrap();
-        let mut other_child = arc_other_child.inner.borrow_mut();
+        let other_child = arc_other_child.inner.borrow_mut();
         let mut unwanted = VecDeque::<usize>::new();
         if let Some((new_start, new_end)) = new_range {
             let other_start = other_child.parent_offset / PAGE_SIZE;
@@ -1044,29 +1042,13 @@ impl VMObjectPagedInner {
                                 new_frame.pin_count -= 1;
                             }
                             if new_frame.tag == tag && other_start <= i && other_end > i {
-                                // Only skip intermediate COW copies (share_count=0
-                                // that also exist in an ancestor). Frames with
-                                // share_count > 0 are legitimately shared and
-                                // should be moved.
-                                let skip = if new_frame.share_count == 0 {
-                                    let ancestor_idx = i + self.parent_offset / PAGE_SIZE;
-                                    if let Some(ref p) = self.parent {
-                                        Self::page_exists_in_ancestor(p, ancestor_idx)
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                };
-                                if !skip {
-                                    new_frame.tag = PageStateTag::Owned;
-                                    // The replaced child no longer shares this page.
-                                    if new_frame.share_count > 0 {
-                                        new_frame.share_count -= 1;
-                                    }
-                                    let new_key = i - other_child.parent_offset / PAGE_SIZE;
-                                    other_child.frames.insert(new_key, new_frame);
-                                }
+                                // Don't move shared frames to the other child
+                                // during replace_child. The frame stays in this
+                                // hidden node and will be moved by remove_child
+                                // when the node actually collapses. This ensures
+                                // the Drop decrement path can still find it.
+                                new_frame.tag = PageStateTag::Owned;
+                                self.frames.insert(i, new_frame);
                             }
                         }
                     }
@@ -1746,20 +1728,21 @@ mod tests {
         //   page 3: private to vmo => 4096
         //   Expected: 4096 + 2048 + 2048 + 4096 = 12288
         //
-        // TODO(#577): Clone teardown attribution is not yet correct.
-        // replace_child moves frames with stale share_counts when
-        // collapsing hidden nodes. The values below are known-wrong.
-        // Uncomment assertions when fixed.
         let info = vmo.get_info();
         assert_eq!(info.committed_bytes as usize, 4 * PAGE_SIZE);
-        // assert_eq!(info.populated_scaled_bytes as usize, 12288,
-        //     "after dropping clone2, vmo should have 12288 scaled bytes");
+        assert_eq!(
+            info.populated_scaled_bytes as usize, 12288,
+            "after dropping clone2, vmo should have 12288 scaled bytes"
+        );
 
         // Drop clone1 -- all pages become private to vmo
         drop(clone1);
         let info = vmo.get_info();
         assert_eq!(info.committed_bytes as usize, 4 * PAGE_SIZE);
-        // assert_eq!(info.populated_scaled_bytes as usize, 4 * PAGE_SIZE,
-        //     "after dropping all clones, vmo should have all private pages");
+        assert_eq!(
+            info.populated_scaled_bytes as usize,
+            4 * PAGE_SIZE,
+            "after dropping all clones, vmo should have all private pages"
+        );
     }
 }
