@@ -997,7 +997,7 @@ for UEFI support via the `bootloader` crate.
 
 ## Git Submodules
 
-### `libc-test/` -- musl libc Test Suite (Git Submodule)
+### `tests/libc-test/` -- musl libc Test Suite (Git Submodule)
 
 **Purpose:** The musl libc conformance test suite (C project). Used to validate
 zCore's Linux syscall compatibility.
