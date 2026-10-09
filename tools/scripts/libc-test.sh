@@ -99,7 +99,7 @@ echo "   Found ${#TESTS[@]} static test binaries"
 
 # Step 2: Copy into rootfs
 echo "==> Copying tests into rootfs..."
-TEST_DIR="target/rootfs/linux/$ARCH/bin/libc-test"
+TEST_DIR="target/rootfs/linux/$ARCH/bin/tests/libc-test"
 mkdir -p "$TEST_DIR"
 for exe in "${TESTS[@]}"; do
   name=$(basename "$exe" -static.exe)
