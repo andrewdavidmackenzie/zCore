@@ -392,6 +392,20 @@ impl VmAddressRegion {
 
     /// Unmaps all VMO mappings and destroys all sub-regions within the absolute range
     /// including `addr` and ending before exclusively at `addr + len`.
+    /// Check if any child VMARs overlap with the given address range.
+    pub fn has_children_in_range(&self, addr: VirtAddr, len: usize) -> bool {
+        let end_addr = addr + len;
+        let guard = self.inner.lock();
+        if let Some(inner) = guard.as_ref() {
+            inner
+                .children
+                .iter()
+                .any(|child| child.end_addr() > addr && child.addr() < end_addr)
+        } else {
+            false
+        }
+    }
+
     /// Any sub-region that is in the range must be fully in the range
     /// (i.e. partial overlaps are an error).
     /// If a mapping is only partially in the range, the mapping is split and the requested
