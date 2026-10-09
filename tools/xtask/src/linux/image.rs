@@ -1,4 +1,4 @@
-﻿use crate::PROJECT_DIR;
+use crate::PROJECT_DIR;
 use os_xtask_utils::{CommandExt, Qemu};
 use std::{fs, path::Path};
 
@@ -76,8 +76,8 @@ fn is_stale(output: &std::path::Path, input_dir: &std::path::Path) -> bool {
 
 /// Creates a filesystem image.
 fn fuse(dir: impl AsRef<Path>, image: impl AsRef<Path>) {
+    use crate::sfs_image::zip_dir;
     use rcore_fs::vfs::FileSystem;
-    use rcore_fs_fuse::zip::zip_dir;
     use rcore_fs_sfs::SimpleFileSystem;
     use std::sync::{Arc, Mutex};
 

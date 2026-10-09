@@ -13,6 +13,7 @@ mod config;
 mod errors;
 mod linux;
 mod petal;
+mod sfs_image;
 
 use arch::{Arch, ArchArg};
 use build::{GdbArgs, OutArgs, QemuArgs};
