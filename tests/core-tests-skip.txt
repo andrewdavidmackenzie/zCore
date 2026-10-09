@@ -38,7 +38,6 @@ DefaultExceptionHandlerTest.UnhandledPolicyException
 VmoClone2TestCase.*
 VmoCloneResizeTests.*
 VmoZeroTestCase.*
-VmoZeroTestcase.ZeroFreesAndAllocates
 ProgressiveCloneDiscardTests.ProgressiveCloneTruncate
 
 # ── VmoTestCase (multiple root causes) ───────────────────────────────
@@ -46,13 +45,11 @@ ProgressiveCloneDiscardTests.ProgressiveCloneTruncate
 # Only a handful pass; the rest hang or crash the runner.
 VmoTestCase.*
 
-# ── VMO clone/slice/signal hangs ─────────────────────────────────────
-# Individual tests that hang within otherwise-passing suites.
-VmoReference.ChildSlice
-VmoSliceTestCase.ZeroChildrenGrandchildClosedLast
-VmoCloneTestCase.Commit
-VmoCloneDisjointClonesTests.DisjointCloneLateClose
-VmoSignalTestCase.ChildSignalMap
+# ── VMO clone/slice/signal — previously skipped, most now pass ───────
+# (VmoReference.ChildSlice, VmoSliceTestCase.ZeroChildrenGrandchildClosedLast,
+#  VmoCloneTestCase.Commit, VmoCloneDisjointClonesTests.DisjointCloneLateClose,
+#  VmoSignalTestCase.ChildSignalMap, VmoZeroTestcase.ZeroFreesAndAllocates
+#  removed — now pass thanks to COW attribution fix #575)
 
 # ── Pager infrastructure (#498, #499) ────────────────────────────────
 # Pager tests need preemptive scheduling + TRAP_DIRTY support.
