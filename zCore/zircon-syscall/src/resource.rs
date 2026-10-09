@@ -46,8 +46,10 @@ impl Syscall<'_> {
                     e
                 }
             })?;
-        parent_rsrc.check_exclusive(flags)?;
+        // Check for exclusive overlap with existing resources.
+        Resource::check_exclusive_overlap(kind, base as usize, size as usize, flags)?;
         let rsrc = Resource::create(&name, kind, base as usize, size as usize, flags);
+        rsrc.register_region();
         let handle = proc.add_handle(Handle::new(rsrc, Rights::DEFAULT_RESOURCE));
         out.write(handle)?;
         Ok(())

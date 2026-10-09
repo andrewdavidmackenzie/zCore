@@ -111,7 +111,6 @@ ChannelTest.ReadFaultDoesNotLeakHandles
 # resource handle. ExclusiveShared* crashes similarly.
 Resource.Mexec*
 Resource.Ioports
-Resource.ExclusiveShared*
 
 # ── Timer / Job (previously skipped, now passing) ────────────────────
 # Timer.Basic and JobTest.CriticalProcessAlreadySet removed — now pass.

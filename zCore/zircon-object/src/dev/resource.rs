@@ -1,4 +1,33 @@
-use {crate::object::*, alloc::sync::Arc, bitflags::bitflags, numeric_enum_macro::numeric_enum};
+use {
+    crate::object::*, alloc::sync::Arc, alloc::vec::Vec, bitflags::bitflags, lock::Mutex,
+    numeric_enum_macro::numeric_enum,
+};
+
+/// Global registry of allocated resource ranges.
+/// Tracks (kind, addr, len, exclusive) for overlap checking.
+static RESOURCE_REGIONS: Mutex<Vec<ResourceRegion>> = Mutex::new(Vec::new());
+
+#[derive(Clone)]
+struct ResourceRegion {
+    kind: u32,
+    addr: usize,
+    len: usize,
+    #[allow(dead_code)]
+    exclusive: bool,
+    /// KoID of the owning Resource (for cleanup on drop).
+    owner_koid: KoID,
+}
+
+impl ResourceRegion {
+    fn overlaps(&self, kind: u32, addr: usize, len: usize) -> bool {
+        if self.kind != kind {
+            return false;
+        }
+        let self_end = self.addr.saturating_add(self.len);
+        let other_end = addr.saturating_add(len);
+        self.addr < other_end && addr < self_end
+    }
+}
 
 numeric_enum! {
     #[repr(u32)]
@@ -49,6 +78,9 @@ pub struct Resource {
 impl_kobject!(Resource
     fn as_resource(&self) -> Option<&crate::dev::Resource> {
         Some(self)
+    }
+    fn on_zero_handles(&self) {
+        self.unregister_region();
     }
 );
 
@@ -108,13 +140,49 @@ impl Resource {
         Err(ZxError::ACCESS_DENIED)
     }
 
-    /// Check exclusive resource constraints.
+    /// Check exclusive resource constraints against the global registry.
     ///
-    /// In a full implementation, this would track allocated exclusive
-    /// ranges and reject overlapping requests with NOT_FOUND.
-    /// For now, exclusive resources are accepted (no overlap tracking).
-    pub fn check_exclusive(&self, _flags: ResourceFlags) -> ZxResult {
+    /// Returns NOT_FOUND if:
+    /// - Creating an exclusive resource that overlaps any existing resource
+    /// - Creating any resource that overlaps an existing exclusive resource
+    pub fn check_exclusive_overlap(
+        kind: ResourceKind,
+        addr: usize,
+        len: usize,
+        flags: ResourceFlags,
+    ) -> ZxResult {
+        let regions = RESOURCE_REGIONS.lock();
+        let kind_raw = kind as u32;
+        for region in regions.iter() {
+            if region.overlaps(kind_raw, addr, len) {
+                // Any overlap with an exclusive region is rejected.
+                if region.exclusive || flags.contains(ResourceFlags::EXCLUSIVE) {
+                    return Err(ZxError::NOT_FOUND);
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// Register this resource's range in the global registry.
+    pub fn register_region(&self) {
+        if self.kind == ResourceKind::ROOT || self.kind == ResourceKind::COUNT {
+            return; // ROOT/COUNT don't participate in overlap tracking
+        }
+        let mut regions = RESOURCE_REGIONS.lock();
+        regions.push(ResourceRegion {
+            kind: self.kind as u32,
+            addr: self.addr,
+            len: self.len,
+            exclusive: self.flags.contains(ResourceFlags::EXCLUSIVE),
+            owner_koid: self.base.id,
+        });
+    }
+
+    /// Unregister this resource's range from the global registry.
+    fn unregister_region(&self) {
+        let mut regions = RESOURCE_REGIONS.lock();
+        regions.retain(|r| r.owner_koid != self.base.id);
     }
 
     /// Whether this resource has the EXCLUSIVE flag.
