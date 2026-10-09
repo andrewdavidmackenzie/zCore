@@ -1562,7 +1562,9 @@ mod tests {
     #[test]
     fn offset_test2_attribution() {
         // 4-page parent VMO, write all pages so they're committed.
-        let vmo = VmObject::new_paged(4);
+        // Use resizable VMO to match the Fuchsia core-test (InitPageTaggedVmo
+        // creates with ZX_VMO_RESIZABLE).
+        let vmo = VmObject::new_paged_with_resizable(true, 4);
         for i in 0..4 {
             vmo.test_write(i, (i + 1) as u8);
         }
