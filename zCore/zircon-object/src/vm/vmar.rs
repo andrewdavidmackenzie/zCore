@@ -356,6 +356,15 @@ impl VmAddressRegion {
         // align = 1K? 2K? 4K? 8K? ...
         if !self.test_map(inner, offset, len, PAGE_SIZE) {
             if overwrite {
+                // SPECIFIC_OVERWRITE must not span child sub-VMARs.
+                let end_addr = addr + len;
+                if inner
+                    .children
+                    .iter()
+                    .any(|child| child.end_addr() > addr && child.addr() < end_addr)
+                {
+                    return Err(ZxError::INVALID_ARGS);
+                }
                 self.unmap_inner(addr, len, inner)?;
             } else {
                 return Err(ZxError::NO_MEMORY);
