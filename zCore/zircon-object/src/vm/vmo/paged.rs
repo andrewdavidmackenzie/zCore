@@ -673,6 +673,18 @@ impl VMObjectPagedInner {
                         self.frames.insert(page_idx, PageState::new(frame));
                     }
                     CommitResult::CopyOnWrite(frame, unmap) => {
+                        if self.type_.is_hidden() {
+                            // Hidden nodes pass COW frames through to the
+                            // requesting child without storing locally.
+                            // Only leaf nodes keep the COW copy. The split
+                            // tag was already set at the level where the
+                            // original frame lives (the ancestor hidden node
+                            // that found and split the page).
+                            //
+                            // This matches Fuchsia's model where only the
+                            // writing leaf VMO gets a new frame.
+                            return Ok(CommitResult::CopyOnWrite(frame, unmap));
+                        }
                         let mut new_frame = PageState::new(frame);
                         // Cloning a contiguous vmo: original frames are stored in hidden parent nodes.
                         // In order to make sure original vmo (now is a child of hidden parent)
