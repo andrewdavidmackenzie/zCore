@@ -371,6 +371,21 @@ impl Job {
         proc_time + child_time + exited_time
     }
 
+    /// Get total queue time across all processes and child jobs.
+    pub fn total_queue_time(&self) -> u64 {
+        let (processes, children) = {
+            let inner = self.inner.lock();
+            (inner.processes.clone(), inner.children.clone())
+        };
+        let proc_time: u64 = processes.iter().map(|p| p.total_queue_time()).sum();
+        let child_time: u64 = children
+            .iter()
+            .filter_map(|j| j.upgrade())
+            .map(|j| j.total_queue_time())
+            .sum();
+        proc_time + child_time
+    }
+
     /// The job finally terminates.
     fn terminate(&self) {
         self.exceptionate.shutdown();

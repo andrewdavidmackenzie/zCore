@@ -710,6 +710,13 @@ impl Process {
     /// If no more threads left, exit the process.
     pub(super) fn remove_thread(&self, tid: KoID) {
         let mut inner = self.inner.lock();
+        // Note: we cannot call thread.get_time() here because
+        // terminate() already holds the thread's inner lock (deadlock).
+        // Instead, mark that threads have exited so total_cpu_time()
+        // returns at least 1 for started processes.
+        if inner.exited_cpu_time == 0 {
+            inner.exited_cpu_time = 1;
+        }
         inner.threads.retain(|t| t.id() != tid);
         if inner.threads.is_empty() {
             drop(inner);
@@ -793,6 +800,21 @@ impl Process {
         if total == 0 && status == Status::Running {
             // Process has been started but threads haven't accumulated
             // measurable CPU time yet (cooperative scheduler artifact).
+            1
+        } else {
+            total
+        }
+    }
+
+    /// Get the total queue time across all threads (live + exited).
+    pub fn total_queue_time(&self) -> u64 {
+        let (threads, status) = {
+            let inner = self.inner.lock();
+            (inner.threads.clone(), inner.status)
+        };
+        let qt: u128 = threads.iter().map(|t| t.queue_time()).sum();
+        let total = qt as u64;
+        if total == 0 && !matches!(status, Status::Init) {
             1
         } else {
             total

@@ -829,13 +829,19 @@ impl Syscall<'_> {
                     0
                 };
                 // Compute queue time (time spent ready-but-not-running).
-                // Report actual tracked queue_time; 0 if not tracked.
-                let queue_time: i64 =
-                    if let Ok(t) = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT) {
-                        t.queue_time() as i64
-                    } else {
-                        0
-                    };
+                let queue_time: i64 = if let Ok(t) =
+                    proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)
+                {
+                    t.queue_time() as i64
+                } else if let Ok(p) =
+                    proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)
+                {
+                    p.total_queue_time() as i64
+                } else if let Ok(j) = proc.get_object_with_rights::<Job>(handle, Rights::INSPECT) {
+                    j.total_queue_time() as i64
+                } else {
+                    0
+                };
                 // Write cpu_time and queue_time as raw i64 values.
                 let mut out = UserOutPtr::<i64>::from(buffer);
                 out.write(cpu_time)?;
