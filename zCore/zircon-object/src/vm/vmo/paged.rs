@@ -103,6 +103,12 @@ struct PageState {
     frame: PhysFrame,
     tag: PageStateTag,
     pin_count: u8,
+    /// Number of additional VMOs that share this page beyond one.
+    /// share_count=0 means the page is seen by exactly 1 VMO (private).
+    /// share_count=N means N+1 VMOs share this page.
+    /// Used for fractional attribution: each sharer gets
+    /// `PAGE_SIZE / (share_count + 1)` attributed.
+    share_count: u32,
 }
 
 /// The owner tag of pages in the node.
@@ -171,6 +177,7 @@ impl PageState {
             frame,
             tag: PageStateTag::Owned,
             pin_count: 0,
+            share_count: 0,
         }
     }
     #[allow(unsafe_code)]
@@ -725,10 +732,15 @@ impl VMObjectPagedInner {
             let target_frame = self.frames.remove(&page_idx).unwrap().take();
             return Ok(CommitResult::CopyOnWrite(target_frame, need_unmap));
         } else if flags.contains(MMUFlags::WRITE) && child_tag.is_split() {
-            // copy-on-write
+            // copy-on-write: the requesting child gets a private copy,
+            // so it no longer shares the original page.
             let target_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
             hal_impl::mem::pmem_copy(target_frame.paddr(), frame.frame.paddr(), PAGE_SIZE);
             frame.tag = child_tag;
+            // Decrement share_count since one fewer VMO shares this page.
+            if frame.share_count > 0 {
+                frame.share_count -= 1;
+            }
             return Ok(CommitResult::CopyOnWrite(target_frame, true));
         }
         // otherwise already committed
@@ -918,7 +930,15 @@ impl VMObjectPagedInner {
         self.parent = Some(hidden.clone());
         self.parent_offset = 0;
         self.parent_limit = self.size;
-        child.inner.borrow_mut().parent = Some(hidden);
+        child.inner.borrow_mut().parent = Some(hidden.clone());
+        // Increment share_count for all pages visible to the new child.
+        // Walk up from the hidden node through ancestor hidden nodes,
+        // incrementing share_count for each page the child can see.
+        {
+            let child_start = offset / PAGE_SIZE;
+            let child_end = (offset + len).min(self.size) / PAGE_SIZE;
+            Self::increment_share_counts(&hidden, child_start, child_end);
+        }
         // update mappings, for COW, remove write flags in PageTable
         for map in self.mappings.iter() {
             if let Some(map) = map.upgrade() {
@@ -1017,6 +1037,66 @@ impl VMObjectPagedInner {
         }
     }
 
+    /// Increment share_count on all pages in the range [start_idx, end_idx)
+    /// that are visible through the given node and its ancestors.
+    fn increment_share_counts(node: &Arc<VMObjectPaged>, start_idx: usize, end_idx: usize) {
+        let mut current = Some(node.clone());
+        let mut cur_start = start_idx;
+        let mut cur_end = end_idx;
+
+        while let Some(vmop) = current {
+            let mut inner = vmop.inner.borrow_mut();
+            for idx in cur_start..cur_end {
+                if let Some(page) = inner.frames.get_mut(&idx) {
+                    page.share_count += 1;
+                }
+            }
+            // Continue up for pages not found locally.
+            if inner.parent_limit == 0 {
+                break;
+            }
+            let offset = inner.parent_offset / PAGE_SIZE;
+            cur_start += offset;
+            cur_end += offset;
+            if cur_end * PAGE_SIZE > inner.parent_limit {
+                cur_end = inner.parent_limit / PAGE_SIZE;
+            }
+            current = inner.parent.clone();
+        }
+    }
+
+    /// Decrement share_count for specific page indices, walking up the
+    /// parent chain. Pages at share_count=0 are freed.
+    fn decrement_share_counts_at(node: &Arc<VMObjectPaged>, indices: &[usize]) {
+        // Walk the parent chain from this node upward.
+        let mut current = Some(node.clone());
+        let mut offsets: alloc::vec::Vec<usize> = indices.to_vec();
+
+        while let Some(vmop) = current {
+            let mut inner = vmop.inner.borrow_mut();
+            let mut remaining = alloc::vec::Vec::new();
+            for &idx in &offsets {
+                if let Some(page) = inner.frames.get_mut(&idx) {
+                    if page.share_count == 0 {
+                        // Page only had one viewer (this VMO). Free it.
+                        // Don't actually remove here -- it will be cleaned
+                        // up by remove_child or when the hidden node dies.
+                    } else {
+                        page.share_count -= 1;
+                    }
+                } else {
+                    // Page not found here, look in ancestor.
+                    remaining.push(idx + inner.parent_offset / PAGE_SIZE);
+                }
+            }
+            if remaining.is_empty() {
+                break;
+            }
+            offsets = remaining;
+            current = inner.parent.clone();
+        }
+    }
+
     fn complete_info(&self, info: &mut VmoInfo) {
         if let VMOType::Snapshot = self.type_ {
             info.flags |= VmoInfoFlags::IS_COW_CLONE;
@@ -1053,12 +1133,11 @@ impl VMObjectPagedInner {
     /// For each committed page visible to this VMO, determines the sharing
     /// count (how many leaf VMOs share the same physical page through the
     /// COW tree) and computes:
-    /// - `scaled_bytes`: sum of `PAGE_SIZE / sharing_count` for each page
+    /// - `scaled_bytes`: sum of `PAGE_SIZE / (share_count + 1)` for each page
     /// - `fractional_scaled_bytes`: 63-bit fixed-point remainder
     ///
-    /// Private pages (in `self.frames`) have sharing_count=1.
-    /// Shared pages (resolved from parent hidden nodes) have sharing_count
-    /// determined by counting leaf VMOs that can see the page.
+    /// Uses the per-page `share_count` field (maintained by create_child
+    /// and the VMO drop path) instead of walking the tree to count leaves.
     fn compute_attribution(&self, start_idx: usize, end_idx: usize) -> Attribution {
         let pages = self.size / PAGE_SIZE;
         if pages == 0 || start_idx >= pages {
@@ -1068,73 +1147,35 @@ impl VMObjectPagedInner {
         let mut result = Attribution::default();
 
         for i in start_idx..end_idx {
-            // Private page -- sharing_count = 1, full attribution.
-            if self.frames.contains_key(&i) {
-                result.add_page(1);
+            // Check local frames first.
+            if let Some(page) = self.frames.get(&i) {
+                result.add_page((page.share_count as u64) + 1);
                 continue;
             }
             // Check if this page is beyond our parent view.
             if self.parent_limit <= i * PAGE_SIZE {
                 continue;
             }
-            // Walk up the parent chain to find the page and its sharing count.
+            // Walk up the parent chain to find the page's share_count.
             let parent_idx = i + self.parent_offset / PAGE_SIZE;
-            if let Some(sharing_count) = self.find_page_sharing_count(parent_idx, &self.self_ref) {
-                result.add_page(sharing_count);
+            if let Some(sc) = self.find_page_share_count(parent_idx) {
+                result.add_page((sc as u64) + 1);
             }
         }
         result
     }
 
-    /// Find a page in the parent chain and return its sharing count.
-    ///
-    /// `page_idx` is the index in the parent's address space.
-    /// `child_ref` identifies which child of the parent is requesting.
-    fn find_page_sharing_count(&self, page_idx: usize, _child_ref: &WeakRef) -> Option<u64> {
+    /// Walk up the parent chain to find a page and return its share_count.
+    fn find_page_share_count(&self, page_idx: usize) -> Option<u32> {
         let mut current = self.parent.clone();
         let mut current_idx = page_idx;
 
         while let Some(vmop) = current {
             let inner = vmop.inner.borrow();
-
-            if let Some(frame) = inner.frames.get(&current_idx) {
-                // Found the page. Now count how many leaf VMOs share it.
-                match &inner.type_ {
-                    VMOType::Hidden { left, right } => {
-                        match frame.tag {
-                            PageStateTag::Owned => {
-                                // Both children can see this page.
-                                let left_count =
-                                    Self::count_leaves_for_page(left, current_idx, &inner);
-                                let right_count =
-                                    Self::count_leaves_for_page(right, current_idx, &inner);
-                                return Some(left_count + right_count);
-                            }
-                            PageStateTag::LeftSplit => {
-                                // Split toward left -- right child owns it.
-                                // Only the right subtree can see it.
-                                let count = Self::count_leaves_for_page(right, current_idx, &inner);
-                                return Some(count);
-                            }
-                            PageStateTag::RightSplit => {
-                                // Split toward right -- left child owns it.
-                                let count = Self::count_leaves_for_page(left, current_idx, &inner);
-                                return Some(count);
-                            }
-                        }
-                    }
-                    _ => {
-                        // Non-hidden node with a frame -- shouldn't happen
-                        // for shared pages, but count as private.
-                        return Some(1);
-                    }
-                }
+            if let Some(page) = inner.frames.get(&current_idx) {
+                return Some(page.share_count);
             }
-
-            // Page not found at this level. Continue up the tree.
-            // Don't use owner-based termination here (unlike committed_pages_in_range)
-            // because we need to find the actual physical page for attribution,
-            // regardless of ownership domain boundaries.
+            // Continue up the parent chain.
             let next_idx = current_idx + inner.parent_offset / PAGE_SIZE;
             if next_idx * PAGE_SIZE >= inner.parent_limit {
                 break;
@@ -1142,72 +1183,7 @@ impl VMObjectPagedInner {
             current = inner.parent.clone();
             current_idx = next_idx;
         }
-        None // page not found
-    }
-
-    /// Count how many leaf VMOs in a child subtree can see a page at
-    /// `page_idx` (in the parent's address space).
-    fn count_leaves_for_page(
-        child_ref: &WeakRef,
-        page_idx: usize,
-        _parent_inner: &VMObjectPagedInner,
-    ) -> u64 {
-        let child = match child_ref.upgrade() {
-            Some(c) => c,
-            None => return 0, // child has been dropped
-        };
-        let child_inner = child.inner.borrow();
-
-        // Translate parent's page_idx to child's local page index.
-        let child_offset_pages = child_inner.parent_offset / PAGE_SIZE;
-        let child_limit_pages = child_inner.parent_limit / PAGE_SIZE;
-
-        // Check if the page is within the child's view of the parent.
-        if page_idx < child_offset_pages || page_idx >= child_limit_pages {
-            return 0; // page is outside this child's range
-        }
-        let local_idx = page_idx - child_offset_pages;
-
-        // If the child has its own frame at this index, it's using a
-        // COW copy -- the parent's page is NOT shared with this child.
-        if child_inner.frames.contains_key(&local_idx) {
-            return 0;
-        }
-
-        match &child_inner.type_ {
-            VMOType::Hidden { left, right } => {
-                // This child is a hidden node. Check if it has the page
-                // (with possible split tags), then recurse.
-                if let Some(frame) = child_inner.frames.get(&local_idx) {
-                    match frame.tag {
-                        PageStateTag::Owned => {
-                            // Both children of this hidden node can see it.
-                            let l = Self::count_leaves_for_page(left, local_idx, &child_inner);
-                            let r = Self::count_leaves_for_page(right, local_idx, &child_inner);
-                            l + r
-                        }
-                        PageStateTag::LeftSplit => {
-                            // Right child owns it.
-                            Self::count_leaves_for_page(right, local_idx, &child_inner)
-                        }
-                        PageStateTag::RightSplit => {
-                            // Left child owns it.
-                            Self::count_leaves_for_page(left, local_idx, &child_inner)
-                        }
-                    }
-                } else {
-                    // Hidden node doesn't have the page locally either.
-                    // Both children can still see the parent's page.
-                    let l = Self::count_leaves_for_page(left, local_idx, &child_inner);
-                    let r = Self::count_leaves_for_page(right, local_idx, &child_inner);
-                    l + r
-                }
-            }
-            VMOType::Origin | VMOType::Snapshot => {
-                // Leaf node that can see the page -- count as 1.
-                1
-            }
-        }
+        None
     }
 
     fn release_unwanted_pages_in_parent(&mut self, mut unwanted: VecDeque<usize>) {
@@ -1325,8 +1301,19 @@ impl VMObjectPagedInner {
 impl Drop for VMObjectPaged {
     fn drop(&mut self) {
         let (_guard, mut inner) = self.get_inner_mut();
-        // remove self from parent
+        // Decrement share_count for pages this VMO sees through parent
+        // hidden nodes. Only decrement for pages we DON'T have locally
+        // (local pages are COW copies that don't share the parent page).
         if let Some(parent) = &inner.parent {
+            let start = inner.parent_offset / PAGE_SIZE;
+            let end = inner.parent_limit / PAGE_SIZE;
+            let non_local: alloc::vec::Vec<usize> = (start..end)
+                .filter(|idx| {
+                    let local = idx - inner.parent_offset / PAGE_SIZE;
+                    !inner.frames.contains_key(&local)
+                })
+                .collect();
+            VMObjectPagedInner::decrement_share_counts_at(parent, &non_local);
             parent.inner.borrow_mut().remove_child(&inner.self_ref);
         }
         let is_conti = inner.is_contiguous();
