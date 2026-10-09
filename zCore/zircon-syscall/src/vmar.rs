@@ -234,11 +234,13 @@ impl Syscall<'_> {
             handle_value, options, addr, len
         );
         let proc = self.thread.proc();
-        // vmar_protect doesn't check handle rights — the VMAR's own
-        // CAN_MAP_* permissions (set at allocate time) govern what
-        // protections are allowed. The mapping-level check happens
-        // inside vmar.protect() via is_valid_mapping_flags().
-        let vmar = proc.get_object::<VmAddressRegion>(handle_value)?;
+        // Fuchsia checks handle rights: the VMAR handle must have
+        // READ/WRITE/EXECUTE rights matching the PERM_* flags.
+        let required_rights = options.to_required_rights();
+        let (vmar, vmar_rights) = proc.get_object_and_rights::<VmAddressRegion>(handle_value)?;
+        if !vmar_rights.contains(required_rights) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
         if options.intersects(!VmOptions::PERM_RXW) {
             return Err(ZxError::INVALID_ARGS);
         }

@@ -350,7 +350,10 @@ pub fn spawn_process(
             Rights::DEFAULT_VMO | Rights::EXECUTE
         ), // PA_VMO_VDSO
         Handle::new(root_resource2, Rights::DEFAULT_RESOURCE), // PA_RESOURCE
-        Handle::new(image_vmar.clone(), Rights::DEFAULT_VMAR), // PA_VMAR_LOADED
+        Handle::new(
+            image_vmar.clone(),
+            Rights::DEFAULT_VMAR | Rights::READ | Rights::WRITE | Rights::EXECUTE,
+        ), // PA_VMAR_LOADED
     ];
     let msg1_base_info = alloc::vec![
         pa_hnd(PA_PROC_SELF, 0),
@@ -493,7 +496,10 @@ pub fn spawn_process(
             Rights::DEFAULT_VMO | Rights::EXECUTE
         ), // PA_VMO_VDSO
         Handle::new(root_resource, Rights::DEFAULT_RESOURCE), // PA_RESOURCE
-        Handle::new(image_vmar.clone(), Rights::DEFAULT_VMAR), // PA_VMAR_LOADED
+        Handle::new(
+            image_vmar.clone(),
+            Rights::DEFAULT_VMAR | Rights::READ | Rights::WRITE | Rights::EXECUTE,
+        ), // PA_VMAR_LOADED
         Handle::new(mmio_resource, Rights::DEFAULT_RESOURCE), // PA_MMIO_RESOURCE
         Handle::new(irq_resource, Rights::DEFAULT_RESOURCE), // PA_IRQ_RESOURCE
         Handle::new(system_resource, Rights::DEFAULT_RESOURCE), // PA_SYSTEM_RESOURCE

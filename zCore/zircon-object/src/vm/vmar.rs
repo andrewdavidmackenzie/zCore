@@ -199,6 +199,17 @@ impl VmAddressRegion {
         flags: VmarFlags,
         align: usize,
     ) -> ZxResult<Arc<Self>> {
+        // A child VMAR cannot have CAN_MAP privileges the parent lacks.
+        let child_can_map = flags & VmarFlags::CAN_MAP_RXW;
+        let parent_can_map = self.flags & VmarFlags::CAN_MAP_RXW;
+        if child_can_map & !parent_can_map != VmarFlags::empty() {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        // SPECIFIC requires CAN_MAP_SPECIFIC on the parent.
+        if flags.contains(VmarFlags::SPECIFIC) && !self.flags.contains(VmarFlags::CAN_MAP_SPECIFIC)
+        {
+            return Err(ZxError::ACCESS_DENIED);
+        }
         let mut guard = self.inner.lock();
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         let offset = self.determine_offset(inner, offset, len, align)?;
@@ -273,6 +284,16 @@ impl VmAddressRegion {
             return Err(ZxError::INVALID_ARGS);
         }
         if !permissions.contains(flags & MMUFlags::RXW) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        // Check the VMAR's own CAN_MAP flags permit the requested permissions.
+        if flags.contains(MMUFlags::READ) && !self.flags.contains(VmarFlags::CAN_MAP_READ) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        if flags.contains(MMUFlags::WRITE) && !self.flags.contains(VmarFlags::CAN_MAP_WRITE) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        if flags.contains(MMUFlags::EXECUTE) && !self.flags.contains(VmarFlags::CAN_MAP_EXECUTE) {
             return Err(ZxError::ACCESS_DENIED);
         }
         // When map_range is false (lazy/demand-paged mapping), allow the
