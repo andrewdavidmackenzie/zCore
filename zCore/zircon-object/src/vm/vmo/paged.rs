@@ -828,7 +828,10 @@ impl VMObjectPagedInner {
         let mut child = arc_child.inner.borrow_mut();
         let start = child.parent_offset / PAGE_SIZE;
         let end = child.parent_limit / PAGE_SIZE;
-        // merge nodes to the child
+        // Merge frames to the surviving child. Skip intermediate COW
+        // copies that also exist in an ancestor -- the child can read
+        // through to the ancestor's frame (which has correct share_count).
+        let grandparent = self.parent.clone();
         for (key, mut value) in core::mem::take(&mut self.frames) {
             if key < start || key >= end {
                 continue;
@@ -838,6 +841,17 @@ impl VMObjectPagedInner {
             }
             let idx = key - start;
             if !child.frames.contains_key(&idx) && value.tag != tag.negate() {
+                // Check if this page also exists in an ancestor. If so,
+                // this is an intermediate COW copy -- don't move it.
+                let ancestor_idx = key + self.parent_offset / PAGE_SIZE;
+                let in_ancestor = if let Some(ref gp) = grandparent {
+                    Self::page_exists_in_ancestor(gp, ancestor_idx)
+                } else {
+                    false
+                };
+                if in_ancestor {
+                    continue;
+                }
                 value.tag = PageStateTag::Owned;
                 child.frames.insert(idx, value);
             }
@@ -1023,9 +1037,19 @@ impl VMObjectPagedInner {
                                 new_frame.pin_count -= 1;
                             }
                             if new_frame.tag == tag && other_start <= i && other_end > i {
-                                new_frame.tag = PageStateTag::Owned;
-                                let new_key = i - other_child.parent_offset / PAGE_SIZE;
-                                other_child.frames.insert(new_key, new_frame);
+                                // Check if this page also exists in an ancestor.
+                                // If so, it's an intermediate COW copy -- drop it.
+                                let ancestor_idx = i + self.parent_offset / PAGE_SIZE;
+                                let in_ancestor = if let Some(ref p) = self.parent {
+                                    Self::page_exists_in_ancestor(p, ancestor_idx)
+                                } else {
+                                    false
+                                };
+                                if !in_ancestor {
+                                    new_frame.tag = PageStateTag::Owned;
+                                    let new_key = i - other_child.parent_offset / PAGE_SIZE;
+                                    other_child.frames.insert(new_key, new_frame);
+                                }
                             }
                         }
                     }
@@ -1068,6 +1092,24 @@ impl VMObjectPagedInner {
             }
             _ => panic!(),
         }
+    }
+
+    /// Check if a page exists in an ancestor node's frames.
+    fn page_exists_in_ancestor(node: &Arc<VMObjectPaged>, page_idx: usize) -> bool {
+        let mut current = Some(node.clone());
+        let mut idx = page_idx;
+        while let Some(vmop) = current {
+            let inner = vmop.inner.borrow();
+            if inner.frames.contains_key(&idx) {
+                return true;
+            }
+            if inner.parent_limit == 0 || idx * PAGE_SIZE >= inner.parent_limit {
+                break;
+            }
+            idx += inner.parent_offset / PAGE_SIZE;
+            current = inner.parent.clone();
+        }
+        false
     }
 
     fn complete_info(&self, info: &mut VmoInfo) {
