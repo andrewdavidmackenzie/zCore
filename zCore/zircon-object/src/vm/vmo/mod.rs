@@ -827,7 +827,7 @@ impl VmObject {
                 f
             },
             cache_policy: self.trait_.cache_policy() as u32,
-            share_count: self.base.get_handle_count().max(inner.mapping_count as u32) as u64,
+            share_count: inner.mapping_count as u64,
             // metadata_bytes: kernel overhead for VMO tracking.
             // Approximate as the VMO struct size + per-page BTreeMap entries.
             metadata_bytes: {
@@ -1030,7 +1030,7 @@ pub struct VmoInfo {
     /// The number of times this VMO is currently mapped into VMARs.
     num_mappings: u64,
     /// The number of unique address space we're mapped into.
-    share_count: u64,
+    pub share_count: u64,
     /// Flags.
     pub flags: VmoInfoFlags,
     /// Padding.

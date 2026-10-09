@@ -280,8 +280,11 @@ impl VmAddressRegion {
         map_range: bool,
         fault_beyond_stream_size: bool,
     ) -> ZxResult<VirtAddr> {
-        if !page_aligned(vmo_offset) || !page_aligned(len) || vmo_offset.overflowing_add(len).1 {
+        if !page_aligned(vmo_offset) || !page_aligned(len) {
             return Err(ZxError::INVALID_ARGS);
+        }
+        if vmo_offset.overflowing_add(len).1 {
+            return Err(ZxError::OUT_OF_RANGE);
         }
         if !permissions.contains(flags & MMUFlags::RXW) {
             return Err(ZxError::ACCESS_DENIED);
@@ -296,6 +299,9 @@ impl VmAddressRegion {
         if flags.contains(MMUFlags::EXECUTE) && !self.flags.contains(VmarFlags::CAN_MAP_EXECUTE) {
             return Err(ZxError::ACCESS_DENIED);
         }
+        // Note: CAN_MAP_SPECIFIC is checked at the syscall layer (sys_vmar_map),
+        // not here, because internal callers (ELF loader, etc.) need to use
+        // specific offsets on VMARs without CAN_MAP_SPECIFIC.
         // When map_range is false (lazy/demand-paged mapping), allow the
         // mapping to extend past the VMO's current size. Pages are committed
         // on demand via page faults. This is standard behavior in Fuchsia
@@ -456,7 +462,23 @@ impl VmAddressRegion {
     /// Change protections on a subset of the region of memory in the containing
     /// address space.  If the requested range overlaps with a subregion,
     /// protect() will fail.
+    /// Set protection on a range of virtual addresses (simple interface).
     pub fn protect(&self, addr: usize, len: usize, flags: MMUFlags) -> ZxResult {
+        self.protect_ext(addr, len, flags, true, false)
+    }
+
+    /// Set protection on a range of virtual addresses (extended interface).
+    ///
+    /// `op_children`: if false, return INVALID_ARGS when the range spans children.
+    /// `from_parent`: if true, cannot escalate permissions on child mappings.
+    pub fn protect_ext(
+        &self,
+        addr: usize,
+        len: usize,
+        flags: MMUFlags,
+        op_children: bool,
+        from_parent: bool,
+    ) -> ZxResult {
         if !page_aligned(addr) || !page_aligned(len) {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -504,6 +526,36 @@ impl VmAddressRegion {
             return Err(ZxError::ACCESS_DENIED);
         }
 
+        // When protecting from a parent VMAR, cannot escalate permissions
+        // beyond what each page currently has.
+        if from_parent {
+            for map in inner
+                .mappings
+                .iter()
+                .filter(|map| map.end_addr() > addr && map.addr() < end_addr)
+            {
+                let start_index = pages(addr.max(map.addr()) - map.addr());
+                let end_index = pages(end_addr.min(map.end_addr()) - map.addr());
+                let inner_lock = map.inner.lock();
+                for idx in start_index..end_index {
+                    let current = inner_lock.page_flags(idx);
+                    // New flags must be a subset of current flags.
+                    if flags & !current != MMUFlags::empty() {
+                        return Err(ZxError::ACCESS_DENIED);
+                    }
+                }
+            }
+        }
+
+        // Check child overlap BEFORE modifying any mappings.
+        let has_child_overlap = inner
+            .children
+            .iter()
+            .any(|child| child.end_addr() > addr && child.addr() < end_addr);
+        if has_child_overlap && !op_children {
+            return Err(ZxError::INVALID_ARGS);
+        }
+
         // Apply to mappings at this level.
         inner
             .mappings
@@ -522,7 +574,8 @@ impl VmAddressRegion {
             }
             let child_start = addr.max(child.addr());
             let child_end = end_addr.min(child.end_addr());
-            child.protect(child_start, child_end - child_start, flags)?;
+            // When recursing from parent, set from_parent=true to prevent escalation.
+            child.protect_ext(child_start, child_end - child_start, flags, true, true)?;
         }
         Ok(())
     }
@@ -611,10 +664,11 @@ impl VmAddressRegion {
             .any(|child| child.end_addr() > addr && child.addr() < end_addr);
 
         // COMMIT and DECOMMIT cannot span child VMARs — return INVALID_ARGS.
+        // COMMIT, DECOMMIT, ZERO, and PREFETCH cannot span child VMARs.
         if children_overlap
             && matches!(
                 op,
-                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero
+                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero | VmarOpType::Prefetch
             )
         {
             return Err(ZxError::INVALID_ARGS);
@@ -750,6 +804,11 @@ impl VmAddressRegion {
     /// Get start address of this VMAR.
     pub fn addr(&self) -> usize {
         self.addr
+    }
+
+    /// Get this VMAR's creation flags (CAN_MAP_*, SPECIFIC, etc.)
+    pub fn flags(&self) -> VmarFlags {
+        self.flags
     }
 
     /// Whether this VMAR is dead.

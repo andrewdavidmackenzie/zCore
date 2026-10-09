@@ -259,7 +259,12 @@ pub fn spawn_process(
     } else {
         None // Statically-linked at a fixed address
     };
-    let image_vmar = vmar.allocate(min_offset, size, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)?;
+    let image_vmar = vmar.allocate(
+        min_offset,
+        size,
+        VmarFlags::CAN_MAP_RXW | VmarFlags::CAN_MAP_SPECIFIC,
+        PAGE_SIZE,
+    )?;
     let _vmo = image_vmar.load_from_elf(&elf)?;
     let base = image_vmar.addr();
     let entry = base + elf.header.pt2.entry_point() as usize;

@@ -140,6 +140,10 @@ impl Syscall<'_> {
         if !is_specific && vmar_offset != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        // SPECIFIC/SPECIFIC_OVERWRITE requires CAN_MAP_SPECIFIC on the VMAR.
+        if is_specific && !vmar.flags().contains(VmarFlags::CAN_MAP_SPECIFIC) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
         if !vmar_rights.contains(options.to_required_rights()) {
             return Err(ZxError::ACCESS_DENIED);
         }
@@ -260,7 +264,8 @@ impl Syscall<'_> {
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        vmar.protect(addr as usize, len, mapping_flags)?;
+        let op_children = vmar_rights.contains(Rights::OP_CHILDREN);
+        vmar.protect_ext(addr as usize, len, mapping_flags, op_children, false)?;
         Ok(())
     }
 
@@ -378,6 +383,9 @@ impl Syscall<'_> {
         let mapping_flags = MMUFlags::USER | MMUFlags::READ;
         let is_specific = options.contains(VmOptions::SPECIFIC)
             || options.contains(VmOptions::SPECIFIC_OVERWRITE);
+        if is_specific && !vmar.flags().contains(VmarFlags::CAN_MAP_SPECIFIC) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
         let vmar_off = if is_specific {
             Some(vmar_offset as usize)
         } else {
@@ -474,6 +482,9 @@ impl Syscall<'_> {
         // Determine if specific placement is requested.
         let is_specific = options.contains(VmOptions::SPECIFIC)
             || options.contains(VmOptions::SPECIFIC_OVERWRITE);
+        if is_specific && !vmar.flags().contains(VmarFlags::CAN_MAP_SPECIFIC) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
         let vmar_offset = if is_specific { Some(vmar_offset) } else { None };
         let overwrite = options.contains(VmOptions::SPECIFIC_OVERWRITE);
 
