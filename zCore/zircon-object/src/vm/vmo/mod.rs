@@ -1030,7 +1030,7 @@ pub struct VmoInfo {
     /// The number of times this VMO is currently mapped into VMARs.
     num_mappings: u64,
     /// The number of unique address space we're mapped into.
-    share_count: u64,
+    pub share_count: u64,
     /// Flags.
     pub flags: VmoInfoFlags,
     /// Padding.

@@ -531,6 +531,11 @@ impl Syscall<'_> {
                             let mut info = vmo.get_info();
                             info.flags |= VmoInfoFlags::VIA_HANDLE;
                             info.rights |= Rights::from_bits_truncate(rights_bits);
+                            // For VMOs accessed via handle, share_count is at least 1
+                            // (the owning process has a handle reference).
+                            if info.share_count == 0 {
+                                info.share_count = 1;
+                            }
                             vmo_infos.push(info);
                         }
                     }
