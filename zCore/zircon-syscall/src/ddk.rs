@@ -2,7 +2,7 @@ use {
     super::*,
     bitflags::bitflags,
     hal_impl::DevVAddr,
-    zircon_object::{dev::pci::PcieDeviceKObject, dev::*, signal::*, task::*, vm::*},
+    zircon_object::{dev::*, signal::*, task::*, vm::*},
 };
 
 impl Syscall<'_> {
@@ -410,14 +410,6 @@ impl Syscall<'_> {
         let handle = proc.add_handle(Handle::new(interrupt, Rights::DEFAULT_INTERRUPT));
         out.write(handle)?;
         Ok(())
-    }
-
-    /// Reset a PCI device to its initial state via Function Level Reset.
-    pub fn sys_pci_reset_device(&self, handle: HandleValue) -> ZxResult {
-        info!("pci.reset_device: handle={:#x}", handle);
-        let proc = self.thread.proc();
-        let device = proc.get_object_with_rights::<PcieDeviceKObject>(handle, Rights::WRITE)?;
-        device.reset()
     }
 
     /// Bind an interrupt object to a virtual CPU.

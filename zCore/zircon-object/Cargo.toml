@@ -42,7 +42,6 @@ futures = { version = "0.3", default-features = false, features = [
     "async-await",
 ] }
 xmas-elf = { version = "0.7", optional = true }
-region-alloc = { path = "../region-alloc" }
 spin = "0.9"
 cfg-if = "1.0"
 #rvm = { git = "https://github.com/rcore-os/RVM", rev = "382fc60", optional = true }

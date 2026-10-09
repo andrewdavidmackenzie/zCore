@@ -40,7 +40,6 @@ mod hypervisor;
 mod iob;
 mod object;
 mod pager;
-mod pci;
 mod port;
 mod resource;
 mod restricted;
@@ -477,30 +476,6 @@ impl Syscall<'_> {
                 self.sys_object_get_child(a0 as _, a1 as _, a2 as _, a3.into())
             }
             Sys::PC_FIRMWARE_TABLES => self.sys_pc_firmware_tables(a0 as _, a1.into(), a2.into()),
-            Sys::PCI_ADD_SUBTRACT_IO_RANGE => {
-                self.sys_pci_add_subtract_io_range(a0 as _, a1 != 0, a2 as _, a3 as _, a4 != 0)
-            }
-            Sys::PCI_CFG_PIO_RW => self.sys_pci_cfg_pio_rw(
-                a0 as _,
-                a1 as _,
-                a2 as _,
-                a3 as _,
-                a4 as _,
-                a5.into(),
-                a6 as _,
-                a7 != 0,
-            ),
-            Sys::PCI_INIT => self.sys_pci_init(a0 as _, a1 as _, a2 as _),
-            Sys::PCI_GET_NTH_DEVICE => {
-                self.sys_pci_get_nth_device(a0 as _, a1 as _, a2.into(), a3.into())
-            }
-            Sys::PCI_MAP_INTERRUPT => self.sys_pci_map_interrupt(a0 as _, a1 as _, a2.into()),
-            Sys::PCI_GET_BAR => self.sys_pci_get_bar(a0 as _, a1 as _, a2.into(), a3.into()),
-            Sys::PCI_ENABLE_BUS_MASTER => self.sys_pci_enable_bus_master(a0 as _, a1 != 0),
-            Sys::PCI_QUERY_IRQ_MODE => self.sys_pci_query_irq_mode(a0 as _, a1 as _, a2.into()),
-            Sys::PCI_SET_IRQ_MODE => self.sys_pci_set_irq_mode(a0 as _, a1 as _, a2 as _),
-            Sys::PCI_CONFIG_READ => self.sys_pci_config_read(a0 as _, a1 as _, a2 as _, a3.into()),
-            Sys::PCI_CONFIG_WRITE => self.sys_pci_config_write(a0 as _, a1 as _, a2 as _, a3 as _),
             Sys::INTERRUPT_CREATE => {
                 self.sys_interrupt_create(a0 as _, a1 as _, a2 as _, a3.into())
             }
@@ -537,7 +512,6 @@ impl Syscall<'_> {
             Sys::VMAR_OP_RANGE => {
                 self.sys_vmar_op_range(a0 as _, a1 as _, a2 as _, a3 as _, a4, a5)
             }
-            Sys::PCI_RESET_DEVICE => self.sys_pci_reset_device(a0 as _),
             Sys::MSI_ALLOCATE => self.sys_msi_allocate(a0 as _, a1 as _, a2.into()),
             Sys::MSI_CREATE => {
                 self.sys_msi_create(a0 as _, a1 as _, a2 as _, a3 as _, a4 as _, a5.into())
