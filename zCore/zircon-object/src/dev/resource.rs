@@ -117,6 +117,11 @@ impl Resource {
         Ok(())
     }
 
+    /// Whether this resource has the EXCLUSIVE flag.
+    pub fn is_exclusive(&self) -> bool {
+        self.flags.contains(ResourceFlags::EXCLUSIVE)
+    }
+
     /// Get information of the resource.
     pub fn get_info(&self) -> ResourceInfo {
         let name = self.base.name();

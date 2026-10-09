@@ -32,8 +32,11 @@ impl Syscall<'_> {
             return Err(ZxError::ACCESS_DENIED);
         }
 
-        // Validate kind match and range. In resource_create context,
-        // kind mismatch is ACCESS_DENIED (not WRONG_TYPE).
+        // Cannot create children from an exclusive parent resource.
+        if parent_rsrc.is_exclusive() {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Validate the requested range is valid.
         parent_rsrc
             .validate_ranged_resource(kind, base as usize, size as usize)
             .map_err(|e| {
