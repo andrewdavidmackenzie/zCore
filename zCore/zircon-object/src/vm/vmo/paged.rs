@@ -725,9 +725,27 @@ impl VMObjectPagedInner {
         }
         let frame = self.frames.get_mut(&page_idx).unwrap();
         if frame.tag.is_split() {
-            // has split, take out
-            let target_frame = self.frames.remove(&page_idx).unwrap().take();
-            return Ok(CommitResult::CopyOnWrite(target_frame, need_unmap));
+            if frame.tag == child_tag.negate() {
+                // The frame was split toward the OTHER child. This
+                // original page belongs to the requesting child.
+                // For writes: take it out (the child claims it).
+                // For reads: return a reference without modifying.
+                if flags.contains(MMUFlags::WRITE) {
+                    let target_frame = self.frames.remove(&page_idx).unwrap().take();
+                    return Ok(CommitResult::CopyOnWrite(target_frame, need_unmap));
+                } else {
+                    return Ok(CommitResult::Ref(frame.frame.paddr()));
+                }
+            } else {
+                // The frame was split toward the requesting child.
+                // The requesting child already got a COW copy; this
+                // original belongs to the OTHER child. The requesting
+                // child should NOT see this page.
+                // For reads: return a zero page.
+                // For writes: allocate a new page.
+                let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
+                return Ok(CommitResult::CopyOnWrite(target_frame, need_unmap));
+            }
         } else if flags.contains(MMUFlags::WRITE) && child_tag.is_split() {
             // copy-on-write: the requesting child gets a private copy
             let target_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
