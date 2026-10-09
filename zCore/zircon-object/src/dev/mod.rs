@@ -7,7 +7,6 @@ mod iommu;
 pub mod ktrace;
 /// MSI allocation kernel object.
 pub mod msi;
-pub mod pci;
 mod pmt;
 mod resource;
 

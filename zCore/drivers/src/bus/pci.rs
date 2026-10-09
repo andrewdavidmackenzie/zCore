@@ -2,241 +2,278 @@ use super::{phys_to_virt, PAGE_SIZE};
 use crate::builder::IoMapper;
 use crate::{Device, DeviceError, DeviceResult};
 use alloc::{format, sync::Arc, vec::Vec};
-use pci::*;
+use pci_types::capability::PciCapability;
+use pci_types::*;
 
-const PCI_COMMAND: u16 = 0x04;
-const BAR0: u16 = 0x10;
-const PCI_CAP_PTR: u16 = 0x34;
-const _PCI_INTERRUPT_LINE: u16 = 0x3c;
-const _PCI_INTERRUPT_PIN: u16 = 0x3d;
+// ---------- ConfigRegionAccess implementations ----------
 
-const PCI_MSI_CTRL_CAP: u16 = 0x00;
-const PCI_MSI_ADDR: u16 = 0x04;
-const _PCI_MSI_UPPER_ADDR: u16 = 0x08;
-const PCI_MSI_DATA_32: u16 = 0x08;
-const PCI_MSI_DATA_64: u16 = 0x0C;
-
-// const PCI_COMMAND_INTX_DISABLE:u16 = 0x400;
-
-const PCI_CAP_ID_MSI: u8 = 0x05;
-
-struct PortOpsImpl;
+/// x86_64 PCI configuration space access via I/O ports 0xCF8/0xCFC.
+#[cfg(feature = "apic")]
+struct PciAccess;
 
 #[cfg(feature = "apic")]
-use x86_64::instructions::port::Port;
+impl ConfigRegionAccess for PciAccess {
+    unsafe fn read(&self, address: PciAddress, offset: u16) -> u32 {
+        use x86_64::instructions::port::Port;
+        let addr: u32 = 0x8000_0000
+            | ((address.bus() as u32) << 16)
+            | ((address.device() as u32) << 11)
+            | ((address.function() as u32) << 8)
+            | ((offset as u32) & 0xFC);
+        unsafe {
+            Port::new(0xCF8).write(addr);
+            Port::new(0xCFC).read()
+        }
+    }
 
-#[cfg(feature = "apic")]
-impl PortOps for PortOpsImpl {
-    unsafe fn read8(&self, port: u16) -> u8 {
-        Port::new(port).read()
-    }
-    unsafe fn read16(&self, port: u16) -> u16 {
-        Port::new(port).read()
-    }
-    unsafe fn read32(&self, port: u32) -> u32 {
-        Port::new(port as u16).read()
-    }
-    unsafe fn write8(&self, port: u16, val: u8) {
-        Port::new(port).write(val);
-    }
-    unsafe fn write16(&self, port: u16, val: u16) {
-        Port::new(port).write(val);
-    }
-    unsafe fn write32(&self, port: u32, val: u32) {
-        Port::new(port as u16).write(val);
+    unsafe fn write(&self, address: PciAddress, offset: u16, value: u32) {
+        use x86_64::instructions::port::Port;
+        let addr: u32 = 0x8000_0000
+            | ((address.bus() as u32) << 16)
+            | ((address.device() as u32) << 11)
+            | ((address.function() as u32) << 8)
+            | ((offset as u32) & 0xFC);
+        unsafe {
+            Port::new(0xCF8).write(addr);
+            Port::new(0xCFC).write(value);
+        }
     }
 }
 
 #[cfg(feature = "apic")]
-const PCI_BASE: usize = 0; //Fix me
+const PCI_BASE: usize = 0;
 
-#[cfg(any(target_arch = "mips", target_arch = "riscv64"))]
-use super::{read, write};
+/// MMIO-based PCI configuration space access (RISC-V, future aarch64).
+#[cfg(all(
+    any(target_arch = "riscv64", target_arch = "aarch64"),
+    not(feature = "apic")
+))]
+struct PciAccess;
 
 #[cfg(feature = "board_malta")]
 const PCI_BASE: usize = 0xbbe00000;
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(all(target_arch = "riscv64", not(feature = "board_malta")))]
 const PCI_BASE: usize = 0x30000000;
 
-#[cfg(feature = "apic")]
-const PCI_ACCESS: CSpaceAccessMethod = CSpaceAccessMethod::IO;
-#[cfg(not(feature = "apic"))]
-const PCI_ACCESS: CSpaceAccessMethod = CSpaceAccessMethod::MemoryMapped(PCI_BASE as *mut u8);
+// Fallback PCI_BASE for host/libos builds where PCI is enabled but
+// won't actually be used at runtime.
+#[cfg(not(any(feature = "apic", target_arch = "riscv64", feature = "board_malta")))]
+const PCI_BASE: usize = 0;
 
-#[cfg(any(target_arch = "mips", target_arch = "riscv64"))]
-impl PortOps for PortOpsImpl {
-    unsafe fn read8(&self, port: u16) -> u8 {
-        read(phys_to_virt(PCI_BASE) + port as usize)
+// Fallback PciAccess for host builds (PCI module compiles but won't run).
+#[cfg(not(any(feature = "apic", target_arch = "riscv64", target_arch = "aarch64")))]
+struct PciAccess;
+
+#[cfg(not(any(feature = "apic", target_arch = "riscv64", target_arch = "aarch64")))]
+impl ConfigRegionAccess for PciAccess {
+    unsafe fn read(&self, _address: PciAddress, _offset: u16) -> u32 {
+        0xFFFF_FFFF // No device present
     }
-    unsafe fn read16(&self, port: u16) -> u16 {
-        read(phys_to_virt(PCI_BASE) + port as usize)
+    unsafe fn write(&self, _address: PciAddress, _offset: u16, _value: u32) {}
+}
+
+#[cfg(all(
+    any(target_arch = "riscv64", target_arch = "aarch64"),
+    not(feature = "apic")
+))]
+impl ConfigRegionAccess for PciAccess {
+    unsafe fn read(&self, address: PciAddress, offset: u16) -> u32 {
+        let addr = phys_to_virt(PCI_BASE)
+            + (((address.bus() as usize) << 20)
+                | ((address.device() as usize) << 15)
+                | ((address.function() as usize) << 12)
+                | ((offset as usize) & 0xFFC));
+        unsafe { core::ptr::read_volatile(addr as *const u32) }
     }
-    unsafe fn read32(&self, port: u32) -> u32 {
-        read(phys_to_virt(PCI_BASE) + port as usize)
-    }
-    unsafe fn write8(&self, port: u16, val: u8) {
-        write(phys_to_virt(PCI_BASE) + port as usize, val);
-    }
-    unsafe fn write16(&self, port: u16, val: u16) {
-        write(phys_to_virt(PCI_BASE) + port as usize, val);
-    }
-    unsafe fn write32(&self, port: u32, val: u32) {
-        write(phys_to_virt(PCI_BASE) + port as usize, val);
+
+    unsafe fn write(&self, address: PciAddress, offset: u16, value: u32) {
+        let addr = phys_to_virt(PCI_BASE)
+            + (((address.bus() as usize) << 20)
+                | ((address.device() as usize) << 15)
+                | ((address.function() as usize) << 12)
+                | ((offset as usize) & 0xFFC));
+        unsafe { core::ptr::write_volatile(addr as *mut u32, value) }
     }
 }
 
-/// Enable the pci device and its interrupt
-/// Return assigned MSI interrupt number when applicable
-unsafe fn enable(loc: Location, paddr: u64) -> Option<usize> {
-    let ops = &PortOpsImpl;
-    //let am = CSpaceAccessMethod::IO;
-    let am = PCI_ACCESS;
+// ---------- Discovered device info ----------
 
-    if paddr != 0 {
-        // reveal PCI regs by setting paddr
-        let bar0_raw = am.read32(ops, loc, BAR0);
-        am.write32(ops, loc, BAR0, (paddr & !0xfff) as u32); //Only for 32-bit decoding
-        warn!(
-            "BAR0 set from {:#x} to {:#x}",
-            bar0_raw,
-            am.read32(ops, loc, BAR0)
-        );
+/// Information about a discovered PCI device.
+struct PciDeviceInfo {
+    address: PciAddress,
+    vendor_id: VendorId,
+    device_id: DeviceId,
+    base_class: BaseClass,
+    sub_class: SubClass,
+    interrupt_line: InterruptLine,
+    interrupt_pin: InterruptPin,
+}
+
+// ---------- Bus scanning ----------
+
+/// Scan the PCI bus and return discovered devices.
+fn scan_bus(access: &PciAccess) -> Vec<PciDeviceInfo> {
+    let mut devices = Vec::new();
+    for bus in 0..=255u8 {
+        for device in 0..32u8 {
+            for function in 0..8u8 {
+                let address = PciAddress::new(0, bus, device, function);
+                let header = PciHeader::new(address);
+                let (vendor_id, device_id) = header.id(access);
+                if vendor_id == 0xFFFF {
+                    if function == 0 {
+                        break;
+                    }
+                    continue;
+                }
+                let (_revision, base_class, sub_class, _interface) =
+                    header.revision_and_class(access);
+                let (interrupt_pin, interrupt_line) =
+                    if let Some(endpoint) = EndpointHeader::from_header(header, access) {
+                        endpoint.interrupt(access)
+                    } else {
+                        (0, 0)
+                    };
+                devices.push(PciDeviceInfo {
+                    address,
+                    vendor_id,
+                    device_id,
+                    base_class,
+                    sub_class,
+                    interrupt_line,
+                    interrupt_pin,
+                });
+                let header = PciHeader::new(address);
+                if function == 0 && !header.has_multiple_functions(access) {
+                    break;
+                }
+            }
+        }
     }
+    devices
+}
+
+// ---------- MSI setup ----------
+
+/// Enable the PCI device and its MSI interrupt.
+/// Returns the assigned MSI interrupt number when applicable.
+unsafe fn enable_msi(address: PciAddress, access: &PciAccess) -> Option<usize> {
+    use pci_types::capability::TriggerMode;
 
     // 23 and lower are used
     static mut MSI_IRQ: u32 = 23;
 
-    let _orig = am.read16(ops, loc, PCI_COMMAND);
-    // IO Space | MEM Space | Bus Mastering | Special Cycles | PCI Interrupt Disable
-    // am.write32(ops, loc, PCI_COMMAND, (orig | 0x40f) as u32);
+    let header = PciHeader::new(address);
+    let endpoint = EndpointHeader::from_header(header, access)?;
 
-    // find MSI cap
     let mut msi_found = false;
-    let mut cap_ptr = am.read8(ops, loc, PCI_CAP_PTR) as u16;
     let mut assigned_irq = None;
-    while cap_ptr > 0 {
-        let cap_id = am.read8(ops, loc, cap_ptr);
-        if cap_id == PCI_CAP_ID_MSI {
-            let orig_ctrl = am.read32(ops, loc, cap_ptr + PCI_MSI_CTRL_CAP);
-            // The manual Volume 3 Chapter 10.11 Message Signalled Interrupts
-            // 0 is (usually) the apic id of the bsp.
-            //am.write32(ops, loc, cap_ptr + PCI_MSI_ADDR, 0xfee00000 | (0 << 12));
-            am.write32(ops, loc, cap_ptr + PCI_MSI_ADDR, 0xfee00000);
-            MSI_IRQ += 1;
-            let irq = MSI_IRQ;
-            assigned_irq = Some(irq as usize);
-            // we offset all our irq numbers by 32
-            if (orig_ctrl >> 16) & (1 << 7) != 0 {
-                // 64bit
-                am.write32(ops, loc, cap_ptr + PCI_MSI_DATA_64, irq + 32);
-            } else {
-                // 32bit
-                am.write32(ops, loc, cap_ptr + PCI_MSI_DATA_32, irq + 32);
-            }
 
-            // enable MSI interrupt, assuming 64bit for now
-            am.write32(ops, loc, cap_ptr + PCI_MSI_CTRL_CAP, orig_ctrl | 0x10000);
-            debug!(
-                "MSI control {:#b}, enabling MSI interrupt {}",
-                orig_ctrl >> 16,
-                irq
-            );
+    for capability in endpoint.capabilities(access) {
+        if let PciCapability::Msi(msi) = capability {
+            unsafe { MSI_IRQ += 1 };
+            let irq = unsafe { MSI_IRQ };
+            assigned_irq = Some(irq as usize);
+
+            // Configure MSI: target BSP LAPIC, edge-triggered, vector = irq + 32
+            msi.set_message_info_lapic(0xfee00000, (irq + 32) as u8, TriggerMode::Edge, access);
+            msi.set_enabled(true, access);
+
+            debug!("MSI enabled for {}, interrupt vector {}", address, irq + 32);
             msi_found = true;
         }
-        debug!("PCI device has cap id {} at {:#X}", cap_id, cap_ptr);
-        cap_ptr = am.read8(ops, loc, cap_ptr + 1) as u16;
     }
 
     if !msi_found {
-        // am.write16(ops, loc, PCI_COMMAND, (0x2) as u16);
-        am.write16(ops, loc, PCI_COMMAND, 0x6);
-        am.write32(ops, loc, _PCI_INTERRUPT_LINE, 33);
-        debug!("MSI not found, using PCI interrupt");
+        // Enable MEM + bus mastering, set interrupt line
+        unsafe {
+            access.write(address, 0x04, 0x6);
+            access.write(address, 0x3c, 33);
+        }
+        debug!("MSI not found for {}, using legacy PCI interrupt", address);
     }
 
     warn!("pci device enable done");
-
     assigned_irq
 }
 
-pub fn init_driver(dev: &PCIDevice, _mapper: &Option<Arc<dyn IoMapper>>) -> DeviceResult<Device> {
-    let _name = format!("enp{}s{}f{}", dev.loc.bus, dev.loc.device, dev.loc.function);
-    match (dev.id.vendor_id, dev.id.device_id) {
+// ---------- Driver matching ----------
+
+fn init_driver(
+    dev: &PciDeviceInfo,
+    access: &PciAccess,
+    _mapper: &Option<Arc<dyn IoMapper>>,
+) -> DeviceResult<Device> {
+    let _name = format!(
+        "enp{}s{}f{}",
+        dev.address.bus(),
+        dev.address.device(),
+        dev.address.function()
+    );
+    let header = PciHeader::new(dev.address);
+
+    match (dev.vendor_id, dev.device_id) {
         // e1000 and NVMe drivers removed (see #237)
         (0x8086, 0x10fb) => {
             // 82599ES 10-Gigabit SFI/SFP+ Network Connection
-            if let Some(BAR::Memory(addr, _len, _, _)) = dev.bars[0] {
-                let irq = unsafe { enable(dev.loc, 0) };
-                let vaddr = phys_to_virt(addr as usize);
-                info!("Found ixgbe dev {:#x}, irq: {:?}", vaddr, irq);
-                /*
-                let index = NET_DRIVERS.read().len();
-                PCI_DRIVERS.lock().insert(
-                    dev.loc,
-                    ixgbe::ixgbe_init(name, irq, vaddr, len as usize, index),
-                );
-                */
-                return Err(DeviceError::NotSupported);
+            if let Some(endpoint) = EndpointHeader::from_header(header, access) {
+                if let Some(bar) = endpoint.bar(0, access) {
+                    let (addr, _len) = bar.unwrap_mem();
+                    let irq = unsafe { enable_msi(dev.address, access) };
+                    let vaddr = phys_to_virt(addr);
+                    info!("Found ixgbe dev {:#x}, irq: {:?}", vaddr, irq);
+                    return Err(DeviceError::NotSupported);
+                }
             }
         }
         (0x8086, 0x1533) => {
-            if let Some(BAR::Memory(addr, _len, _, _)) = dev.bars[0] {
-                info!("Intel Corporation I210 Gigabit Network Connection");
-                info!("DEV: {:?}, BAR0: {:#x}", dev, addr);
-                return Err(DeviceError::NotSupported);
+            let header = PciHeader::new(dev.address);
+            if let Some(endpoint) = EndpointHeader::from_header(header, access) {
+                if let Some(bar) = endpoint.bar(0, access) {
+                    let (addr, _len) = bar.unwrap_mem();
+                    info!("Intel Corporation I210 Gigabit Network Connection");
+                    info!("DEV: {}, BAR0: {:#x}", dev.address, addr);
+                    return Err(DeviceError::NotSupported);
+                }
             }
         }
         (0x8086, 0x1539) => {
-            if let Some(BAR::Memory(addr, _len, _, _)) = dev.bars[0] {
-                info!(
-                    "Found Intel I211 ethernet controller dev {:?}, addr: {:x?}",
-                    dev, addr
-                );
-                return Err(DeviceError::NotSupported);
+            let header = PciHeader::new(dev.address);
+            if let Some(endpoint) = EndpointHeader::from_header(header, access) {
+                if let Some(bar) = endpoint.bar(0, access) {
+                    let (addr, _len) = bar.unwrap_mem();
+                    info!(
+                        "Found Intel I211 ethernet controller dev {}, addr: {:x?}",
+                        dev.address, addr
+                    );
+                    return Err(DeviceError::NotSupported);
+                }
             }
         }
         _ => {}
     }
-    if dev.id.class == 0x01 && dev.id.subclass == 0x06 {
-        // Mass storage class
-        // SATA subclass
-        if let Some(BAR::Memory(addr, _len, _, _)) = dev.bars[5] {
-            info!("Found AHCI dev {:?} BAR5 {:x?}", dev, addr);
-            /*
-            let irq = unsafe { enable(dev.loc) };
-            assert!(len as usize <= PAGE_SIZE);
-            let vaddr = phys_to_virt(addr as usize);
-            if let Some(driver) = ahci::init(irq, vaddr, len as usize) {
-                PCI_DRIVERS.lock().insert(dev.loc, driver);
+    if dev.base_class == 0x01 && dev.sub_class == 0x06 {
+        // Mass storage class, SATA subclass
+        let header = PciHeader::new(dev.address);
+        if let Some(endpoint) = EndpointHeader::from_header(header, access) {
+            if let Some(bar) = endpoint.bar(5, access) {
+                let (addr, _len) = bar.unwrap_mem();
+                info!("Found AHCI dev {} BAR5 {:x?}", dev.address, addr);
+                return Err(DeviceError::NotSupported);
             }
-            */
-            return Err(DeviceError::NotSupported);
         }
     }
 
     Err(DeviceError::NoResources)
 }
 
-pub fn detach_driver(_loc: &Location) -> bool {
-    /*
-    match PCI_DRIVERS.lock().remove(loc) {
-        Some(driver) => {
-            DRIVERS
-                .write()
-                .retain(|dri| dri.get_id() != driver.get_id());
-            NET_DRIVERS
-                .write()
-                .retain(|dri| dri.get_id() != driver.get_id());
-            true
-        }
-        None => false,
-    }
-    */
+pub fn detach_driver(_address: &PciAddress) -> bool {
     false
 }
 
 pub fn init(mapper: Option<Arc<dyn IoMapper>>) -> DeviceResult<Vec<Device>> {
+    let access = PciAccess;
     let mapper_driver = if let Some(m) = mapper {
         m.query_or_map(PCI_BASE, PAGE_SIZE * 256 * 32 * 8);
         Some(m)
@@ -245,28 +282,26 @@ pub fn init(mapper: Option<Arc<dyn IoMapper>>) -> DeviceResult<Vec<Device>> {
     };
 
     let mut dev_list = Vec::new();
-    let pci_iter = unsafe { scan_bus(&PortOpsImpl, PCI_ACCESS) };
+    let devices = scan_bus(&access);
     info!("");
     info!("--------- PCI bus:device:function ---------");
-    for dev in pci_iter {
+    for dev in &devices {
         info!(
-            "pci: {}:{}:{} {:04x}:{:04x} ({} {}) irq: {}:{:?}",
-            dev.loc.bus,
-            dev.loc.device,
-            dev.loc.function,
-            dev.id.vendor_id,
-            dev.id.device_id,
-            dev.id.class,
-            dev.id.subclass,
-            dev.pic_interrupt_line,
+            "pci: {} {:04x}:{:04x} ({} {}) irq: {}:{:?}",
+            dev.address,
+            dev.vendor_id,
+            dev.device_id,
+            dev.base_class,
+            dev.sub_class,
+            dev.interrupt_line,
             dev.interrupt_pin,
         );
-        let res = init_driver(&dev, &mapper_driver);
+        let res = init_driver(dev, &access, &mapper_driver);
         match res {
             Ok(d) => dev_list.push(d),
             Err(e) => warn!(
                 "{:?}, failed to initialize PCI device: {:04x}:{:04x}",
-                e, dev.id.vendor_id, dev.id.device_id
+                e, dev.vendor_id, dev.device_id
             ),
         }
     }
@@ -276,23 +311,24 @@ pub fn init(mapper: Option<Arc<dyn IoMapper>>) -> DeviceResult<Vec<Device>> {
     Ok(dev_list)
 }
 
-pub fn find_device(vendor: u16, product: u16) -> Option<Location> {
-    let pci_iter = unsafe { scan_bus(&PortOpsImpl, PCI_ACCESS) };
-    for dev in pci_iter {
-        if dev.id.vendor_id == vendor && dev.id.device_id == product {
-            return Some(dev.loc);
+pub fn find_device(vendor: u16, product: u16) -> Option<PciAddress> {
+    let access = PciAccess;
+    let devices = scan_bus(&access);
+    for dev in &devices {
+        if dev.vendor_id == vendor && dev.device_id == product {
+            return Some(dev.address);
         }
     }
     None
 }
 
-pub fn get_bar0_mem(loc: Location) -> Option<(usize, usize)> {
-    unsafe { probe_function(&PortOpsImpl, loc, PCI_ACCESS) }
-        .and_then(|dev| dev.bars[0])
-        .map(|bar| match bar {
-            BAR::Memory(addr, len, _, _) => (addr as usize, len as usize),
-            _ => unimplemented!(),
-        })
+pub fn get_bar0_mem(address: PciAddress) -> Option<(usize, usize)> {
+    let access = PciAccess;
+    let header = PciHeader::new(address);
+    let endpoint = EndpointHeader::from_header(header, &access)?;
+    let bar = endpoint.bar(0, &access)?;
+    match bar {
+        Bar::Memory32 { .. } | Bar::Memory64 { .. } => Some(bar.unwrap_mem()),
+        Bar::Io { .. } => None,
+    }
 }
-
-// all devices stored in: AllDeviceList
