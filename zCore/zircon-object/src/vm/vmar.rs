@@ -617,10 +617,11 @@ impl VmAddressRegion {
             .any(|child| child.end_addr() > addr && child.addr() < end_addr);
 
         // COMMIT and DECOMMIT cannot span child VMARs — return INVALID_ARGS.
+        // COMMIT, DECOMMIT, ZERO, and PREFETCH cannot span child VMARs.
         if children_overlap
             && matches!(
                 op,
-                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero
+                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero | VmarOpType::Prefetch
             )
         {
             return Err(ZxError::INVALID_ARGS);
