@@ -2,8 +2,34 @@
 
 use crate::arch::Arch;
 use crate::PROJECT_DIR;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Copy `src` to `dest` only if `src` is newer than `dest` (or `dest`
+/// doesn't exist). This preserves destination mtimes when the source
+/// hasn't changed, allowing downstream staleness checks to skip work.
+fn copy_if_newer(src: &Path, dest: &Path) -> bool {
+    let dominated = dest.is_file()
+        && src
+            .metadata()
+            .and_then(|s| {
+                dest.metadata()
+                    .and_then(|d| Ok(s.modified()? <= d.modified()?))
+            })
+            .unwrap_or(false);
+    if dominated {
+        return false;
+    }
+    std::fs::copy(src, dest).unwrap_or_else(|e| {
+        panic!(
+            "failed to copy {} to {}: {}",
+            src.display(),
+            dest.display(),
+            e
+        )
+    });
+    true
+}
 
 /// ELF OS/ABI value for zCore Zircon flavour binaries.
 ///
@@ -356,15 +382,9 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
     for name in PETAL_BINS {
         let elf = build_petal(arch, name);
         let dest = bin_dir.join(name);
-        std::fs::copy(&elf, &dest).unwrap_or_else(|e| {
-            panic!(
-                "failed to copy {} to {}: {}",
-                elf.display(),
-                dest.display(),
-                e
-            )
-        });
-        println!("  {} (ELF) -> {}", name, dest.display());
+        if copy_if_newer(&elf, &dest) {
+            println!("  {} (ELF) -> {}", name, dest.display());
+        }
     }
 
     // Copy all prebuilt Fuchsia Zircon test binaries and shared
@@ -387,15 +407,9 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
             } else {
                 bin_dir.join(&name)
             };
-            std::fs::copy(entry.path(), &dest).unwrap_or_else(|e| {
-                panic!(
-                    "failed to copy {} to {}: {}",
-                    entry.path().display(),
-                    dest.display(),
-                    e
-                )
-            });
-            println!("  {} (prebuilt) -> {}", name_str, dest.display());
+            if copy_if_newer(&entry.path(), &dest) {
+                println!("  {} (prebuilt) -> {}", name_str, dest.display());
+            }
         }
     }
 
