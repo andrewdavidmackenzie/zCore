@@ -672,12 +672,10 @@ impl VMObjectPagedInner {
                     }
                 }
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
-                if out_of_range && self.type_.is_hidden() {
-                    // Hidden nodes should not have out-of-range
-                    // page commits. Return error instead of panicking.
-                    return Err(ZxError::OUT_OF_RANGE);
-                }
                 if self.type_.is_hidden() {
+                    // Hidden nodes return a zero page for both in-range
+                    // and out-of-range requests. The caller decides
+                    // whether to insert it or pass it through.
                     return Ok(CommitResult::NewPage(target_frame));
                 }
                 self.frames.insert(page_idx, PageState::new(target_frame));
@@ -694,6 +692,22 @@ impl VMObjectPagedInner {
                 let parent_idx = page_idx + self.parent_offset / PAGE_SIZE;
                 match parent.commit_page_internal(parent_idx, flags, &self.self_ref)? {
                     CommitResult::NewPage(frame) if !self.type_.is_hidden() => {
+                        // For read-only access, don't insert the zero
+                        // page locally — just return a reference to the
+                        // shared zero page. This avoids counting
+                        // uncommitted zero pages as private in
+                        // attribution.
+                        if !flags.contains(MMUFlags::WRITE) {
+                            // Drop the allocated frame (not needed)
+                            // and return the cached zero page instead.
+                            drop(frame);
+                            static ZERO_PAGE_NP: spin::Lazy<Option<PhysFrame>> =
+                                spin::Lazy::new(PhysFrame::new_zero);
+                            return match ZERO_PAGE_NP.as_ref() {
+                                Some(zp) => Ok(CommitResult::Ref(zp.paddr())),
+                                None => Err(ZxError::NO_MEMORY),
+                            };
+                        }
                         self.frames.insert(page_idx, PageState::new(frame));
                     }
                     CommitResult::CopyOnWrite(frame, unmap) => {
@@ -752,9 +766,18 @@ impl VMObjectPagedInner {
         }
         let frame = self.frames.get_mut(&page_idx).unwrap();
         if frame.tag.is_split() {
-            // has split, take out
-            let target_frame = self.frames.remove(&page_idx).unwrap().take();
-            return Ok(CommitResult::CopyOnWrite(target_frame, need_unmap));
+            // The page was split during a previous COW fork. The
+            // requesting child can still read the data. For WRITE,
+            // a COW copy is needed. Don't remove the frame — keep
+            // it in the hidden node so the other child's subtree
+            // can still find it (avoiding broken sharing for
+            // attribution).
+            if flags.contains(MMUFlags::WRITE) {
+                let target_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
+                hal_impl::mem::pmem_copy(target_frame.paddr(), frame.frame.paddr(), PAGE_SIZE);
+                return Ok(CommitResult::CopyOnWrite(target_frame, true));
+            }
+            return Ok(CommitResult::Ref(frame.frame.paddr()));
         } else if flags.contains(MMUFlags::WRITE) && child_tag.is_split() {
             // copy-on-write: the requesting child gets a private copy
             let target_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
@@ -1341,7 +1364,7 @@ impl VMObjectPagedInner {
     fn count_leaves_seeing_page(
         owner: &VMObjectPagedInner,
         page_idx: usize,
-        tag: &PageStateTag,
+        _tag: &PageStateTag,
     ) -> usize {
         if !owner.type_.is_hidden() {
             // Leaf node: it can see this page (we wouldn't be called
@@ -1352,11 +1375,13 @@ impl VMObjectPagedInner {
         // on the tag and their visible range.
         let mut count = 0;
         if let VMOType::Hidden { left, right, .. } = &owner.type_ {
-            // For Owned tag, both children can see the page.
-            // For LeftSplit, the left child already COW'd → only right sees original.
-            // For RightSplit, the right child already COW'd → only left sees original.
-            let check_left = *tag != PageStateTag::LeftSplit;
-            let check_right = *tag != PageStateTag::RightSplit;
+            // Always check both children. Split tags indicate a COW
+            // fork happened, but intermediate hidden nodes may hold
+            // copies of the same data. count_child_viewers correctly
+            // returns 0 for children that have their own private copy
+            // (leaf with local frame), so double-counting is avoided.
+            let check_left = true;
+            let check_right = true;
 
             if check_left {
                 if let Some(arc_left) = left.upgrade() {
