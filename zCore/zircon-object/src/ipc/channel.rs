@@ -69,7 +69,10 @@ impl Channel {
             call_reply: Default::default(),
             next_txid: AtomicU32::new(0x8000_0000),
         });
-        // no other reference of `channel0`
+        // SAFETY: channel0/end0/event0 was just created with strong_count=1.
+        // The only other reference is a Weak held by channel1/end1/event1.
+        // We need to set the peer before returning, and Arc::get_mut
+        // fails because the weak count is non-zero.
         unsafe { &mut *(Arc::as_ptr(&channel0) as *mut Channel) }.peer = Arc::downgrade(&channel1);
         (channel0, channel1)
     }

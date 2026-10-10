@@ -93,7 +93,10 @@ impl Socket {
             flags,
             inner: Default::default(),
         });
-        // no other reference of `end0`
+        // SAFETY: channel0/end0/event0 was just created with strong_count=1.
+        // The only other reference is a Weak held by channel1/end1/event1.
+        // We need to set the peer before returning, and Arc::get_mut
+        // fails because the weak count is non-zero.
         unsafe { &mut *(Arc::as_ptr(&end0) as *mut Socket) }.peer = Arc::downgrade(&end1);
         Ok((end0, end1))
     }

@@ -43,7 +43,10 @@ impl EventPair {
             _counter: CountHelper::new(),
             peer: Arc::downgrade(&event0),
         });
-        // no other reference of `channel0`
+        // SAFETY: channel0/end0/event0 was just created with strong_count=1.
+        // The only other reference is a Weak held by channel1/end1/event1.
+        // We need to set the peer before returning, and Arc::get_mut
+        // fails because the weak count is non-zero.
         unsafe { &mut *(Arc::as_ptr(&event0) as *mut EventPair) }.peer = Arc::downgrade(&event1);
         (event0, event1)
     }
