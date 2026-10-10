@@ -64,3 +64,15 @@ mod vmo_reference;
 
 #[cfg(test)]
 mod vmar;
+
+#[cfg(test)]
+mod clock;
+
+#[cfg(test)]
+mod resource;
+
+#[cfg(test)]
+mod interrupt;
+
+#[cfg(test)]
+mod bti;
