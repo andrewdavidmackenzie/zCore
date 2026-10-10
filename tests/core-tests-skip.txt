@@ -41,10 +41,22 @@ VmoClone2TestCase.Offset
 VmoZeroTestCase.WriteCowParent
 VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 
-# ── VmoTestCase (multiple root causes) ───────────────────────────────
-# boot_options uninitialized, VMAR map failures, contiguous VMO stubs.
-# Only a handful pass; the rest hang or crash the runner.
-VmoTestCase.*
+# ── VmoTestCase (individual hangs/crashes) ────────────────────────────
+# ~28 pass, ~18 fail without hanging. Skip only tests that hang or
+# crash the runner (kernel panic, boot_options UD2, memory-probe UD2).
+# Crash: kernel panic (assertion failure in paged.rs)
+VmoTestCase.Commit
+VmoTestCase.PinTests
+VmoTestCase.UnmapLoanedcontiguousWhileFaulting
+# Crash: boot_options_vmo uninitialized (UD2 abort)
+VmoTestCase.ProtectToWrite
+VmoTestCase.Physical*
+VmoTestCase.FaultBeyondStreamSizeNoPhysOrContig
+# Crash: memory-probe.cc assertion (demand-pages instead of faulting)
+VmoTestCase.NoPermProtect
+VmoTestCase.ReadOnlyMap
+# Hang: polling or waiting forever
+VmoTestCase.Prefetch
 
 # ── VMO clone/slice/signal — previously skipped, most now pass ───────
 # (VmoReference.ChildSlice, VmoSliceTestCase.ZeroChildrenGrandchildClosedLast,
@@ -54,15 +66,9 @@ VmoTestCase.*
 # (VmoSliceTestCase.AttributedCounts, VmoReference.AttributedCounts,
 #  VmoTransferDataTestCase.SnapshotChildSrc — now pass thanks to #508 fixes)
 
-# ── VmoReference: remaining failures needing new infrastructure ──────
-# ChildSnapshotAtLeastOnWrite: needs true SNAPSHOT_AT_LEAST_ON_WRITE
-#   semantics (parent writes visible until child writes). Also uses
-#   pager-backed VMO. Currently both SNAPSHOT types create full COW.
-VmoReference.ChildSnapshotAtLeastOnWrite
-# MappingUpdateNestedRootDestroy: mapping invalidation doesn't propagate
-#   up through reference/slice parents when decommitting after root
-#   handle is closed.
-VmoReference.MappingUpdateNestedRootDestroy
+# ── VmoReference: failures that don't hang (removed from skip list) ──
+# ChildSnapshotAtLeastOnWrite and MappingUpdateNestedRootDestroy
+# fail but don't hang/crash — removed.
 
 # ── Pager infrastructure (#498, #499) ────────────────────────────────
 # Pager tests need preemptive scheduling + TRAP_DIRTY support.
@@ -94,15 +100,14 @@ Vmar.FaultBeyondStreamSizeRange
 Vmar.MapRangeStreamSizeWraparound
 Vmar.FaultBeyondStreamSizeForceWritable
 
-# ── Memory mapping crash ────────────────────────────────────────────
-# Page fault (trap 0xe) during mmap PROT_EXEC test.
-MemoryMappingTest.MmapProtExecTest
+# ── Memory mapping ───────────────────────────────────────────────────
+# MmapProtExecTest: now passes — removed from skip.
 
 # ── Invalid buffer pointer hangs ─────────────────────────────────────
 # (Most previously-skipped tests now pass — removed from list.)
 
 # ── Unimplemented hardware / missing binaries ───────────────────────
-ProcessTest.ProcessHwTraceContextIdProperty
+# ProcessTest.ProcessHwTraceContextIdProperty: now passes — removed.
 # InvalidInputs: test accesses boot_options->test_ram_reserve which is
 # uninitialized, causing trap 0x6 (invalid opcode).
 VmoTransferDataTestCase.InvalidInputs
@@ -131,12 +136,10 @@ Resource.Ioports
 # Timer.Basic and JobTest.CriticalProcessAlreadySet removed — now pass.
 
 # ── VMAR protect tests ──────────────────────────────────────────────
-# ProtectTestCase.Unmap hangs — likely memory probe related.
-ProtectTestCase.Unmap
+# ProtectTestCase.Unmap: fails but doesn't hang — removed from skip.
 
 # ── Process debug ────────────────────────────────────────────────────
-# WriteToVdsoAddress crashes (page fault in vDSO region).
-ProcessDebugVDSO.WriteToVdsoAddressReturnsAccessDenied
+# WriteToVdsoAddress: fails but doesn't crash — removed from skip.
 
 # ── Profile tests (previously skipped, now passing) ──────────────────
 # ProfileTest.CreateProfileWithMutuallyExclusiveFlagsIsInvalidArgs removed.
@@ -147,9 +150,7 @@ SystemEvent.ExactlyOneMemoryEventSignaled
 # WakeReport tests hang — wake source reporting not implemented.
 WakeReportTestsPortBound.*
 WakeReportTestsThreadBound.*
-# SuspendAndResumeByTimer hangs — cooperative scheduler can't
-# fire timer while main thread is in the suspend busy-wait.
-SystemSuspend.SuspendAndResumeByTimer
+# SuspendAndResumeByTimer: now passes — removed from skip.
 
 # ── ThreadSampler — crashes test runner ──────────────────────────────
 # sampler_create now works (4-arg ABI fix) but the sampler doesn't
