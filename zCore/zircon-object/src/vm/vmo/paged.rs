@@ -665,7 +665,7 @@ impl VMObjectPagedInner {
                     // reading beyond their parent_limit. The frame
                     // is cached to avoid repeated allocations.
                     static ZERO_PAGE: spin::Lazy<Option<PhysFrame>> =
-                        spin::Lazy::new(|| PhysFrame::new_zero());
+                        spin::Lazy::new(PhysFrame::new_zero);
                     match ZERO_PAGE.as_ref() {
                         Some(zp) => return Ok(CommitResult::Ref(zp.paddr())),
                         None => return Err(ZxError::NO_MEMORY),
