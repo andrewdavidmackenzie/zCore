@@ -24,6 +24,9 @@ jobs:
       - name: Run unit test
         run: cargo test --no-fail-fast
 
+      - name: Run Zircon syscall tests (libos)
+        run: cargo test -p zircon-tests --no-fail-fast
+
   boot-smoke-test:
     name: Boot Smoke Test (aarch64)
     runs-on: ${{ matrix.os }}
