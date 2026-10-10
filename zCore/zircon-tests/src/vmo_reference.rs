@@ -1,86 +1,117 @@
 //! VMO reference child tests.
 //!
-//! Mirrors VmoReference from core-tests.
+//! Faithful 1:1 ports from VmoReference suite (vmo-reference.cc).
+//! Test names match the C++ originals exactly.
 
 use crate::helpers::TestContext;
-use zircon_object::object::KernelObject;
-use zircon_object::vm::{VmObject, PAGE_SIZE};
+use zircon_object::object::{KernelObject, Signal};
+use zircon_object::vm::{VmObject, VmoInfoFlags, PAGE_SIZE};
 
+
+/// C++: TEST(VmoReference, Write)
 /// Reference sees parent writes and vice versa.
 #[test]
-fn reference_write() {
+fn write() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
-    parent.write(0, &[0xAA]).unwrap();
 
     let reference = parent.create_reference_slice(0, 0, false).unwrap();
 
-    // Reference sees parent data
+    // Write to the parent.
+    parent.write(0, &[0xAA]).unwrap();
+
+    // The reference should see the write.
     let mut buf = [0u8; 1];
     reference.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0xAA);
 
-    // Write through reference visible in parent
+    // Write to the reference.
     reference.write(0, &[0xBB]).unwrap();
+
+    // The parent should see the write.
     parent.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0xBB);
 }
 
-/// Reference populated_bytes should be zero.
+/// C++: TEST(VmoReference, ZeroChildren)
+/// VMO_ZERO_CHILDREN signal tracks reference lifecycle.
 #[test]
-fn reference_attributed_counts() {
+fn zero_children() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
-    parent.write(0, &[0xAA]).unwrap();
 
-    let reference = parent.create_reference_slice(0, 0, false).unwrap();
+    // Currently the parent has no children, so VMO_ZERO_CHILDREN should be set.
+    assert!(parent.signal().contains(Signal::VMO_ZERO_CHILDREN));
 
-    let parent_info = parent.get_info();
-    assert_eq!(parent_info.populated_bytes as usize, PAGE_SIZE);
+    // Create a reference.
+    let child = parent.create_reference_slice(0, 0, false).unwrap();
 
-    let ref_info = reference.get_info();
-    assert_eq!(ref_info.populated_bytes, 0);
+    // Currently the parent has one child, so VMO_ZERO_CHILDREN should be cleared.
+    assert!(!parent.signal().contains(Signal::VMO_ZERO_CHILDREN));
+
+    // Close the child reference.
+    drop(child);
+
+    // VMO_ZERO_CHILDREN should be set again.
+    assert!(parent.signal().contains(Signal::VMO_ZERO_CHILDREN));
 }
 
-/// Reference is not reported as COW clone.
+/// C++: TEST(VmoReference, ChildSnapshot)
+/// Snapshot child of reference parent — write isolation.
 #[test]
-fn reference_not_cow() {
-    let _ctx = TestContext::new();
-    let parent = VmObject::new_paged(1);
-    let reference = parent.create_reference_slice(0, 0, false).unwrap();
-
-    let info = reference.get_info();
-    use zircon_object::vm::VmoInfoFlags;
-    assert!(!info.flags.contains(VmoInfoFlags::IS_COW_CLONE));
-}
-
-/// Snapshot child of reference sees parent data.
-#[test]
-fn reference_child_snapshot() {
+fn child_snapshot() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
     parent.write(0, &[0xAA]).unwrap();
 
     let _reference = parent.create_reference_slice(0, 0, false).unwrap();
 
-    // Create COW child of the reference — should work on the
-    // underlying parent VMO
-    // Note: create_child on a reference delegates to the parent
+    // Create a snapshot child of the parent.
     let child = parent.create_child(false, 0, PAGE_SIZE).unwrap();
 
     let mut buf = [0u8; 1];
     child.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0xAA);
 
-    // Write to parent, child shouldn't see it (snapshot)
+    // Write to parent shouldn't affect snapshot child.
     parent.write(0, &[0xBB]).unwrap();
     child.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0xAA);
+
+    // Write to snapshot child shouldn't affect parent.
+    child.write(0, &[0xCC]).unwrap();
+    parent.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xBB);
 }
 
-/// Nested references.
+/// C++: TEST(VmoReference, ChildSlice)
+/// Slice of reference — write-through semantics.
 #[test]
-fn reference_nested() {
+fn child_slice() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(2);
+    parent.write(0, &[0xAA]).unwrap();
+
+    let reference = parent.create_reference_slice(0, 0, false).unwrap();
+
+    // Create a slice child of the reference.
+    let slice = reference.create_slice(0, PAGE_SIZE).unwrap();
+
+    // Slice sees parent data through reference.
+    let mut buf = [0u8; 1];
+    slice.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA);
+
+    // Write through slice is visible in parent.
+    slice.write(0, &[0xBB]).unwrap();
+    parent.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xBB);
+}
+
+/// C++: TEST(VmoReference, NestedChild)
+/// Nested references propagate writes.
+#[test]
+fn nested_child() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
     parent.write(0, &[0xAA]).unwrap();
@@ -103,19 +134,90 @@ fn reference_nested() {
     assert_eq!(buf[0], 0xBB);
 }
 
-/// Reference zero_children signal.
+/// C++: TEST(VmoReference, AttributedCounts)
+/// Reference populated_bytes is zero even after parent commits pages.
+/// Dropping parent still keeps reference's populated_bytes at zero.
 #[test]
-fn reference_zero_children() {
+fn attributed_counts() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
 
-    use zircon_object::object::Signal;
-    // Initially no children
-    assert!(parent.signal().contains(Signal::VMO_ZERO_CHILDREN));
-
     let reference = parent.create_reference_slice(0, 0, false).unwrap();
-    assert!(!parent.signal().contains(Signal::VMO_ZERO_CHILDREN));
 
-    drop(reference);
-    assert!(parent.signal().contains(Signal::VMO_ZERO_CHILDREN));
+    // Commit a page in the parent.
+    parent.write(0, &[0xAA]).unwrap();
+
+    // Parent should see the page populated; reference does not.
+    let ref_info = reference.get_info();
+    assert_eq!(ref_info.populated_bytes, 0);
+    let parent_info = parent.get_info();
+    assert_eq!(parent_info.populated_bytes as usize, PAGE_SIZE);
+
+    // The reference should still see the data.
+    let mut buf = [0u8; 1];
+    reference.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA);
+
+    // Drop the parent.
+    drop(parent);
+
+    // Committed pages still not attributed to the reference.
+    let ref_info = reference.get_info();
+    assert_eq!(ref_info.populated_bytes, 0);
+
+    // The reference can still read the data.
+    reference.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA);
+}
+
+/// C++: TEST(VmoReference, Resize)
+/// Resizing parent is visible through reference; resizing reference is
+/// visible through parent.
+#[test]
+fn resize() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged_with_resizable(true, 4);
+
+    let reference = parent.create_reference_slice(0, 0, true).unwrap();
+
+    // Resize the parent.
+    parent.set_len(2 * PAGE_SIZE).unwrap();
+    assert_eq!(parent.len(), 2 * PAGE_SIZE);
+
+    // The reference should see the resize.
+    assert_eq!(reference.len(), 2 * PAGE_SIZE);
+
+    // Resize the reference.
+    reference.set_len(3 * PAGE_SIZE).unwrap();
+    assert_eq!(reference.len(), 3 * PAGE_SIZE);
+
+    // The parent should see the resize.
+    assert_eq!(parent.len(), 3 * PAGE_SIZE);
+}
+
+/// C++: TEST(VmoReference, UnsupportedResize)
+/// Non-resizable reference rejects set_size.
+#[test]
+fn unsupported_resize() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged_with_resizable(true, 4);
+
+    // Create a non-resizable reference.
+    let reference = parent.create_reference_slice(0, 0, false).unwrap();
+
+    // Non-resizable reference can't resize.
+    assert!(reference.set_len(2 * PAGE_SIZE).is_err());
+    assert_eq!(reference.len(), 4 * PAGE_SIZE);
+}
+
+/// C++: TEST(VmoReference, GetInfo)
+/// Reference does not have IS_COW_CLONE flag.
+#[test]
+fn get_info() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(1);
+    let reference = parent.create_reference_slice(0, 0, false).unwrap();
+
+    let info = reference.get_info();
+    assert!(!info.flags.contains(VmoInfoFlags::IS_COW_CLONE));
 }
