@@ -19,3 +19,15 @@ mod channel;
 
 #[cfg(test)]
 mod vmo;
+
+#[cfg(test)]
+mod socket;
+
+#[cfg(test)]
+mod event;
+
+#[cfg(test)]
+mod fifo;
+
+#[cfg(test)]
+mod port;
