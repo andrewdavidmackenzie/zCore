@@ -24,6 +24,11 @@ jobs:
       - name: Run unit test
         run: cargo test --no-fail-fast
 
+      - name: Run Zircon syscall tests (libos)
+        run: cargo test -p zircon-tests --no-fail-fast || true
+        # Failures are expected as the test suite grows ahead of
+        # kernel fixes. This step reports results without blocking CI.
+
   boot-smoke-test:
     name: Boot Smoke Test (aarch64)
     runs-on: ${{ matrix.os }}
