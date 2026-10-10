@@ -355,6 +355,22 @@ impl VmObject {
         self.inner.lock().pager_port.is_some()
     }
 
+    /// Check if this VMO or any ancestor in its clone tree is pager-backed.
+    /// SNAPSHOT is not allowed on any VMO in a pager-backed tree.
+    pub fn is_in_pager_tree(&self) -> bool {
+        if self.has_pager() {
+            return true;
+        }
+        let mut cur = self.inner.lock().parent.upgrade();
+        while let Some(parent) = cur {
+            if parent.has_pager() {
+                return true;
+            }
+            cur = parent.inner.lock().parent.upgrade();
+        }
+        false
+    }
+
     /// Query dirty page ranges within [offset, offset+length).
     /// Returns a list of (offset, length, options) tuples.
     /// Only returns data for TRAP_DIRTY VMOs; others return empty.
