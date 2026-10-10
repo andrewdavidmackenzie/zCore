@@ -18,8 +18,8 @@ dircpy = "0.3"
 rand = "0.8"
 once_cell = "1.15.0"
 num_cpus = "1"
-rcore-fs = { path = "../../zCore/vfs/rcore-fs", features = ["std"] }
-rcore-fs-sfs = { path = "../../zCore/vfs/rcore-fs-sfs" }
+zcore-fs = { path = "../../zCore/vfs/zcore-fs", features = ["std"] }
+zcore-sfs = { path = "../../zCore/vfs/zcore-sfs" }
 os-xtask-utils = "0.0.0"
 
 [target.'cfg(not(target_arch = "riscv64"))'.dependencies]

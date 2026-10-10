@@ -8,8 +8,8 @@ use alloc::{
     sync::{Arc, Weak},
 };
 use core::any::Any;
-use rcore_fs::vfs::*;
 use spin::RwLock;
+use zcore_fs::vfs::*;
 
 pub mod special;
 

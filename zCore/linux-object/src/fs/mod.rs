@@ -7,9 +7,9 @@ mod file;
 mod ioctl;
 mod pipe;
 mod pseudo;
-pub mod rcore_fs_wrapper;
 mod stdio;
 pub mod unix_socket;
+pub mod vfs_wrapper;
 
 #[cfg(feature = "mock-disk")]
 pub mod mock;
@@ -33,13 +33,13 @@ use async_trait::async_trait;
 use downcast_rs::impl_downcast;
 
 use hal_impl::device_registry;
-use rcore_fs::vfs::{FileSystem, FileType, INode, Result};
-use rcore_fs_devfs::{
+use zcore_devfs::{
     special::{NullINode, ZeroINode},
     DevFS,
 };
-use rcore_fs_mountfs::MountFS;
-use rcore_fs_ramfs::RamFS;
+use zcore_fs::vfs::{FileSystem, FileType, INode, Result};
+use zcore_mountfs::MountFS;
+use zcore_ramfs::RamFS;
 use zircon_object::{object::KernelObject, vm::VmObject};
 
 use crate::error::{LxError, LxResult};
@@ -52,8 +52,8 @@ pub use epoll::{EpollEvent, EpollFile, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_M
 pub use eventfd::EventFd;
 pub use file::{File, OpenFlags, PollEvents, SeekFrom};
 pub use pipe::Pipe;
-pub use rcore_fs::vfs::{self, PollStatus};
 pub use stdio::{STDIN, STDOUT};
+pub use zcore_fs::vfs::{self, PollStatus};
 
 #[async_trait]
 /// Generic file interface

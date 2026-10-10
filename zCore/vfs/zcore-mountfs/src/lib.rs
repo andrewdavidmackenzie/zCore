@@ -11,8 +11,8 @@ use alloc::{
     sync::{Arc, Weak},
 };
 use core::{any::Any, future::Future, pin::Pin};
-use rcore_fs::vfs::*;
 use spin::RwLock;
+use zcore_fs::vfs::*;
 
 #[cfg(test)]
 mod tests;

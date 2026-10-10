@@ -2,7 +2,7 @@
 
 use alloc::sync::Arc;
 use core::time::Duration;
-use rcore_fs::vfs::*;
+use zcore_fs::vfs::*;
 
 /// TimeSpec struct for clock_gettime, similar to Timespec
 #[repr(C)]

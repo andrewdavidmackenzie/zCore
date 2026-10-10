@@ -6,8 +6,8 @@ use lock::Mutex;
 
 use hal::scheme::input::{InputEvent, InputEventType};
 use hal::InputScheme;
-use rcore_fs::vfs::*;
-use rcore_fs_devfs::DevFS;
+use zcore_fs::vfs::*;
+use zcore_devfs::DevFS;
 
 use crate::time::TimeVal;
 

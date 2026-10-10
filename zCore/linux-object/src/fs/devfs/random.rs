@@ -4,8 +4,8 @@ use alloc::sync::Arc;
 use core::any::Any;
 
 use lock::Mutex;
-use rcore_fs::vfs::*;
-use rcore_fs_devfs::DevFS;
+use zcore_devfs::DevFS;
+use zcore_fs::vfs::*;
 
 /// random INode data struct
 pub struct RandomINodeData {

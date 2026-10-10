@@ -2,8 +2,8 @@ use alloc::sync::Arc;
 use core::any::Any;
 use hal::DeviceError;
 use hal::UartScheme;
-use rcore_fs::vfs::{make_rdev, FileType, FsError, INode, Metadata, PollStatus, Result, Timespec};
-use rcore_fs_devfs::DevFS;
+use zcore_devfs::DevFS;
+use zcore_fs::vfs::{make_rdev, FileType, FsError, INode, Metadata, PollStatus, Result, Timespec};
 
 /// Uart device.
 pub struct UartDev {

@@ -5,8 +5,8 @@ use {
     crate::error::LxResult,
     crate::fs::INodeExt,
     alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec},
-    rcore_fs::vfs::INode,
     xmas_elf::ElfFile,
+    zcore_fs::vfs::INode,
     zircon_object::{util::elf_loader::*, vm::*, ZxError},
 };
 

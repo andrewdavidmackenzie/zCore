@@ -19,8 +19,8 @@ use core::time::Duration;
 use hal::VirtAddr;
 use hashbrown::HashMap;
 use lock::{Mutex, MutexGuard};
-use rcore_fs::vfs::{FileSystem, INode};
 use spin::Mutex as SpinMutex;
+use zcore_fs::vfs::{FileSystem, INode};
 
 use zircon_object::{
     object::{KernelObject, KoID, Signal},
@@ -29,7 +29,7 @@ use zircon_object::{
     ZxResult,
 };
 
-pub use rcore_fs::vfs::FsInfo;
+pub use zcore_fs::vfs::FsInfo;
 
 /// Process extension for linux
 pub trait ProcessExt {

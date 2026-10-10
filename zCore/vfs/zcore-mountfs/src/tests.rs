@@ -1,5 +1,5 @@
 use crate::*;
-use rcore_fs_ramfs::RamFS;
+use zcore_ramfs::RamFS;
 
 #[test]
 fn mount() {

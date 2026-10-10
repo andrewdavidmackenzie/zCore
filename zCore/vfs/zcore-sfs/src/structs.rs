@@ -6,8 +6,8 @@ use alloc::str;
 use core::fmt::{Debug, Error, Formatter};
 use core::mem::{size_of, size_of_val};
 use core::slice;
-use rcore_fs::vfs::Timespec;
 use static_assertions::const_assert;
+use zcore_fs::vfs::Timespec;
 
 /// On-disk superblock
 #[repr(C)]

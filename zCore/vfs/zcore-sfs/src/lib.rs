@@ -19,7 +19,7 @@ use core::{
 use bitvec::prelude::*;
 use spin::RwLock;
 
-use rcore_fs::{
+use zcore_fs::{
     dev::Device,
     dirty::Dirty,
     util::*,

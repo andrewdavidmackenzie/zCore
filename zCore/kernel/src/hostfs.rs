@@ -1,18 +1,18 @@
 //! Host filesystem adapter for libos + linux mode.
 //!
-//! Inlined from `rcore-fs-hostfs` to eliminate the git dependency.
-//! Implements the `rcore_fs::vfs::FileSystem` and `INode` traits
+//! Inlined from `vfs-hostfs` to eliminate the git dependency.
+//! Implements the `zcore_fs::vfs::FileSystem` and `INode` traits
 //! by delegating to `std::fs` operations on the host filesystem.
 //!
 //! Only compiled when both `libos` and `linux` features are active.
 
 use core::any::Any;
-use rcore_fs::vfs::*;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::string::String;
 use std::sync::{Arc, Weak};
 use std::sync::{Mutex, MutexGuard};
+use zcore_fs::vfs::*;
 
 /// Host filesystem backed by a directory on the host OS.
 pub struct HostFS {

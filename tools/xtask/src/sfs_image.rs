@@ -1,9 +1,8 @@
 //! SFS image building utilities.
 //!
-//! Inlined from `rcore-fs-fuse/src/zip.rs` to eliminate the git dependency.
+//! Inlined from `vfs-fuse/src/zip.rs` to eliminate the git dependency.
 //! Only the `zip_dir` function is used by zCore (for building rootfs images).
 
-use rcore_fs::vfs::{FileType, INode};
 use std::error::Error;
 use std::fs;
 use std::io::Read;
@@ -11,11 +10,12 @@ use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::Arc;
+use zcore_fs::vfs::{FileType, INode};
 
 const DEFAULT_MODE: u32 = 0o664;
 const BUF_SIZE: usize = 0x1000;
 
-/// Recursively copy a host directory tree into an rcore-fs INode.
+/// Recursively copy a host directory tree into an vfs INode.
 ///
 /// Each file is created in the VFS, resized to the source file's length,
 /// and its contents are copied in 4 KiB chunks. Directories are created

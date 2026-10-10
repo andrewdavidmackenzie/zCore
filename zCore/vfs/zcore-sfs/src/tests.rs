@@ -1,13 +1,13 @@
 extern crate std;
 
 use crate::*;
-use rcore_fs::{
-    util::uninit_memory,
-    vfs::{FileSystem, FileType, Metadata, Result, Timespec},
-};
 use std::{
     fs::{self, OpenOptions},
     sync::{Arc, Mutex},
+};
+use zcore_fs::{
+    util::uninit_memory,
+    vfs::{FileSystem, FileType, Metadata, Result, Timespec},
 };
 
 fn _open_sample_file() -> Arc<SimpleFileSystem> {

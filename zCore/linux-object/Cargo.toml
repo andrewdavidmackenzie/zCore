@@ -30,10 +30,10 @@ zircon-object = { path = "../zircon-object", features = ["elf"] }
 hal-impl = { path = "../hal-impl", default-features = false }
 downcast-rs = { version = "1.2", default-features = false }
 spin = "0.9"
-rcore-fs = { path = "../vfs/rcore-fs" }
-rcore-fs-sfs = { path = "../vfs/rcore-fs-sfs" }
-rcore-fs-ramfs = { path = "../vfs/rcore-fs-ramfs" }
-rcore-fs-mountfs = { path = "../vfs/rcore-fs-mountfs" }
-rcore-fs-devfs = { path = "../vfs/rcore-fs-devfs" }
+zcore-fs = { path = "../vfs/zcore-fs" }
+zcore-sfs = { path = "../vfs/zcore-sfs" }
+zcore-ramfs = { path = "../vfs/zcore-ramfs" }
+zcore-mountfs = { path = "../vfs/zcore-mountfs" }
+zcore-devfs = { path = "../vfs/zcore-devfs" }
 cfg-if = "1.0"
 lock = { path = "../lock" }

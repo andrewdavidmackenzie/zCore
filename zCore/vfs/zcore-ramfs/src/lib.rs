@@ -10,8 +10,8 @@ use alloc::{
     vec::Vec,
 };
 use core::any::Any;
-use rcore_fs::vfs::*;
 use spin::{RwLock, RwLockWriteGuard};
+use zcore_fs::vfs::*;
 
 pub struct RamFS {
     root: Arc<LockedINode>,

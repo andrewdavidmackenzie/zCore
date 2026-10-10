@@ -17,7 +17,7 @@ use zircon_object::object::*;
 use crate::error::{LxError, LxResult};
 use crate::fs::{FileLike, OpenFlags, PollEvents};
 use crate::sync::{Event, EventBus};
-use rcore_fs::vfs::PollStatus;
+use zcore_fs::vfs::PollStatus;
 
 /// Maximum value for the eventfd counter (u64::MAX - 1, per Linux semantics).
 const EVENTFD_MAX: u64 = u64::MAX - 1;
