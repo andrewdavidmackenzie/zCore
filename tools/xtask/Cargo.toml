@@ -21,9 +21,3 @@ num_cpus = "1"
 zcore-fs = { path = "../../zCore/vfs/zcore-fs", features = ["std"] }
 zcore-sfs = { path = "../../zCore/vfs/zcore-sfs" }
 os-xtask-utils = "0.0.0"
-
-[target.'cfg(not(target_arch = "riscv64"))'.dependencies]
-shadow-rs = "0.11"
-
-[target.'cfg(not(target_arch = "riscv64"))'.build-dependencies]
-shadow-rs = "0.11"
