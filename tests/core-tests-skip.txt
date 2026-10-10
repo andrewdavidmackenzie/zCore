@@ -36,10 +36,16 @@ DefaultExceptionHandlerTest.UnhandledPolicyException
 # Tree-walking attribution now handles most tests. Remaining skips
 # are for tests that still hang due to populated_bytes polling or
 # COW attribution edge cases not yet fixed.
-VmoClone2TestCase.ZeroPageWrite
-VmoClone2TestCase.SnapshotAtLeastOnWriteSliceInChain
+# NoPhysical: boot_options crash (UD2 abort)
 VmoClone2TestCase.NoPhysical
+# NoSnapshotPager: missing pager-VMO SNAPSHOT rejection
+VmoClone2TestCase.NoSnapshotPager
+# Offset: populated_bytes polling hang
 VmoClone2TestCase.Offset
+# SnapshotAtLeastOnWriteSliceInChain: SALOW not implemented
+VmoClone2TestCase.SnapshotAtLeastOnWriteSliceInChain
+# ZeroPageWrite: zero page committed when reading beyond parent_limit
+VmoClone2TestCase.ZeroPageWrite
 VmoCloneResizeTests.*
 VmoZeroTestCase.*
 ProgressiveCloneDiscardTests.ProgressiveCloneTruncate
