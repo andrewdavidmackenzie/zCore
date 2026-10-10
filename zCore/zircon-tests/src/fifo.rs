@@ -185,3 +185,107 @@ fn fifo_order() {
         assert_eq!(u32::from_ne_bytes(buf), i);
     }
 }
+
+// -- Faithful 1:1 ports from FifoTest (fifo.cc) --
+
+/// C++: TEST(FifoTest, DequeueSignalsWriteable)
+/// Full signal lifecycle: write fills, read drains, signal transitions.
+#[test]
+fn dequeue_signals_writeable() {
+    let _ctx = TestContext::new();
+    let (fa, fb) = Fifo::create(8, 8); // 8 elements of 8 bytes
+
+    assert!(fa.signal().contains(Signal::WRITABLE));
+    assert!(fb.signal().contains(Signal::WRITABLE));
+
+    // Fill the FIFO completely
+    let data: Vec<u8> = (1u64..=8).flat_map(|x| x.to_ne_bytes()).collect();
+    let n = fa.write(8, &data, 8).unwrap();
+    assert_eq!(n, 8);
+
+    // fb should be readable
+    assert!(fb.signal().contains(Signal::READABLE));
+
+    // fa should no longer be writable (peer's queue is full)
+    assert!(!fa.signal().contains(Signal::WRITABLE));
+
+    // Read half
+    let mut buf = [0u8; 32];
+    let n = fb.read(8, &mut buf, 4).unwrap();
+    assert_eq!(n, 4);
+
+    // fa should be writable again
+    assert!(fa.signal().contains(Signal::WRITABLE));
+
+    // Read remaining
+    let n = fb.read(8, &mut buf, 4).unwrap();
+    assert_eq!(n, 4);
+
+    // fb should no longer be readable
+    assert!(!fb.signal().contains(Signal::READABLE));
+}
+
+/// C++: TEST(FifoTest, NonPowerOfTwoCountSupported)
+/// FIFO with non-power-of-2 count works correctly.
+#[test]
+fn non_power_of_two_count_supported() {
+    let _ctx = TestContext::new();
+    let (fa, fb) = Fifo::create(10, 4); // 10 elements
+
+    // Write all 10 elements
+    let data: Vec<u8> = (0u32..10).flat_map(|x| x.to_ne_bytes()).collect();
+    let n = fa.write(4, &data, 10).unwrap();
+    assert_eq!(n, 10);
+
+    // Read all 10 back
+    let mut buf = vec![0u8; 40];
+    let n = fb.read(4, &mut buf, 10).unwrap();
+    assert_eq!(n, 10);
+
+    for i in 0u32..10 {
+        let val = u32::from_ne_bytes(buf[i as usize * 4..(i as usize + 1) * 4].try_into().unwrap());
+        assert_eq!(val, i);
+    }
+}
+
+/// C++: TEST(FifoTest, SingleElementCapacity)
+/// FIFO with capacity=1, signal transitions on single element.
+#[test]
+fn single_element_capacity() {
+    let _ctx = TestContext::new();
+    let (fa, fb) = Fifo::create(1, 8);
+
+    assert!(fa.signal().contains(Signal::WRITABLE));
+    assert!(!fb.signal().contains(Signal::READABLE));
+
+    // Write one element — fa no longer writable, fb becomes readable
+    let data = 42u64.to_ne_bytes();
+    fa.write(8, &data, 1).unwrap();
+    assert!(!fa.signal().contains(Signal::WRITABLE));
+    assert!(fb.signal().contains(Signal::READABLE));
+
+    // Read one element — fa writable again, fb not readable
+    let mut buf = [0u8; 8];
+    fb.read(8, &mut buf, 1).unwrap();
+    assert_eq!(u64::from_ne_bytes(buf), 42);
+    assert!(fa.signal().contains(Signal::WRITABLE));
+    assert!(!fb.signal().contains(Signal::READABLE));
+}
+
+/// C++: TEST(FifoTest, UserSignalsAndSignalPeer)
+/// User signals on FIFO endpoints.
+#[test]
+fn user_signals_and_signal_peer() {
+    let _ctx = TestContext::new();
+    let (fa, fb) = Fifo::create(8, 4);
+
+    // Set user signal on self
+    fa.signal_set(Signal::USER_SIGNAL_0);
+    assert!(fa.signal().contains(Signal::USER_SIGNAL_0));
+    assert!(!fb.signal().contains(Signal::USER_SIGNAL_0));
+
+    // Signal peer
+    fa.peer().unwrap().signal_set(Signal::USER_SIGNAL_1);
+    assert!(fb.signal().contains(Signal::USER_SIGNAL_1));
+    assert!(!fa.signal().contains(Signal::USER_SIGNAL_1));
+}
