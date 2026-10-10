@@ -120,12 +120,15 @@ impl FutureCollection {
         key
     }
 
-    pub fn remove(&mut self, key: Key) {
+    pub fn remove(&mut self, key: Key) -> bool {
         let (page, subpage_idx) = self.page(key);
         page.clear(subpage_idx);
         let slab_key = unmask_priority(key);
         if self.slab.contains(slab_key) {
             self.slab.remove(slab_key);
+            true
+        } else {
+            false
         }
     }
 }
@@ -166,9 +169,10 @@ impl TaskCollection {
         // Lock ordering: sched_state first, then future_collections.
         let mut sched = self.sched_state.lock();
         let mut inner = self.get_mut_inner(key >> PRIORITY_SHIFT);
-        inner.remove(unmask_priority(key));
-        crate::sched::on_task_removed(&mut sched, key);
-        self.task_num.fetch_sub(1, Ordering::Relaxed);
+        if inner.remove(unmask_priority(key)) {
+            crate::sched::on_task_removed(&mut sched, key);
+            self.task_num.fetch_sub(1, Ordering::Relaxed);
+        }
     }
 
     pub fn priority_add_task<F: Future<Output = ()> + 'static + Send>(
@@ -220,9 +224,10 @@ impl TaskCollection {
                 if dropped != 0 {
                     for subpage_idx in BitIter::from(dropped) {
                         let key = pack_key(priority, page_idx, subpage_idx);
-                        self.task_num.fetch_sub(1, Ordering::Relaxed);
-                        crate::sched::on_task_removed(&mut sched, key);
-                        inner.remove(key);
+                        if inner.remove(key) {
+                            self.task_num.fetch_sub(1, Ordering::Relaxed);
+                            crate::sched::on_task_removed(&mut sched, key);
+                        }
                     }
                 }
             }
