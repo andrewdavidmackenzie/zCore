@@ -78,3 +78,9 @@ mod interrupt;
 
 #[cfg(test)]
 mod bti;
+
+#[cfg(test)]
+mod syscall_channel;
+
+#[cfg(test)]
+mod syscall_handle;
