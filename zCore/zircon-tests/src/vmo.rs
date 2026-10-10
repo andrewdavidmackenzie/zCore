@@ -59,8 +59,8 @@ fn vmo_set_size() {
     vmo.set_len(4 * PAGE_SIZE).unwrap();
     assert_eq!(vmo.len(), 4 * PAGE_SIZE);
 
-    vmo.set_len(1 * PAGE_SIZE).unwrap();
-    assert_eq!(vmo.len(), 1 * PAGE_SIZE);
+    vmo.set_len(PAGE_SIZE).unwrap();
+    assert_eq!(vmo.len(), PAGE_SIZE);
 }
 
 /// vmo_set_size: non-resizable VMO returns error.

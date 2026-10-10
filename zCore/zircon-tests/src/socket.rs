@@ -88,10 +88,7 @@ fn socket_datagram() {
 #[test]
 fn socket_create_invalid_options() {
     let _ctx = TestContext::new();
-    assert_eq!(
-        Socket::create(0xFF).unwrap_err(),
-        ZxError::INVALID_ARGS
-    );
+    assert_eq!(Socket::create(0xFF).unwrap_err(), ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(SocketTest, IsWritableByDefault)
@@ -312,7 +309,11 @@ fn socket_get_info() {
     let info = s1.get_info();
     let debug = format!("{:?}", info);
     // Should show rx_buf_available = 5
-    assert!(debug.contains("rx_buf_available: 5"), "expected rx_buf_available=5, got: {}", debug);
+    assert!(
+        debug.contains("rx_buf_available: 5"),
+        "expected rx_buf_available=5, got: {}",
+        debug
+    );
 }
 
 /// C++: TEST(SocketTest, RelatedKoid)

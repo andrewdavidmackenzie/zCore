@@ -4,7 +4,6 @@ use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::task::{Job, Process};
 
-
 #[test]
 fn job_root() {
     let _ctx = TestContext::new();

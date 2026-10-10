@@ -76,10 +76,7 @@ async fn port_fifo_order() {
 fn port_create_invalid_options() {
     let _ctx = TestContext::new();
     // Only 0 and 1 (BIND_TO_INTERRUPT) are valid
-    assert_eq!(
-        Port::new(0xFF).unwrap_err(),
-        ZxError::INVALID_ARGS
-    );
+    assert_eq!(Port::new(0xFF).unwrap_err(), ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(PortTest, QueueUserPacketLimit)
@@ -178,8 +175,5 @@ fn port_cancel_by_key_not_found() {
     let port = Port::new(0).unwrap();
 
     // No subscriptions exist — should return NOT_FOUND
-    assert_eq!(
-        port.cancel_by_key(999).unwrap_err(),
-        ZxError::NOT_FOUND
-    );
+    assert_eq!(port.cancel_by_key(999).unwrap_err(), ZxError::NOT_FOUND);
 }
