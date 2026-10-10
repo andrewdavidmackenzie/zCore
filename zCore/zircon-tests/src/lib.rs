@@ -31,3 +31,15 @@ mod fifo;
 
 #[cfg(test)]
 mod port;
+
+#[cfg(test)]
+mod timer;
+
+#[cfg(test)]
+mod handle;
+
+#[cfg(test)]
+mod job;
+
+#[cfg(test)]
+mod process;
