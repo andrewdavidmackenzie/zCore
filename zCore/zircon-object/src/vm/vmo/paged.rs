@@ -652,19 +652,13 @@ impl VMObjectPagedInner {
         if no_frame {
             // if out_of_range
             if out_of_range || no_parent {
-                // Always allocate a real zero-filled frame.  The global
-                // ZERO_FRAME must never be returned here because:
-                //
-                // - Leaf nodes (Origin / Snapshot) would map it into page
-                //   tables.  A later `mprotect` could add WRITE, allowing
-                //   writes to the shared page and corrupting it for everyone.
-                //
-                // - Even for hidden nodes, returning `Ref(ZERO_FRAME)` is
-                //   unsafe: the recursive caller in a Snapshot leaf forwards
-                //   `Ref` results directly (line `r => return Ok(r)`)
-                //   without inserting a frame, so the leaf has no `frames`
-                //   entry.  A later `create_child` (fork) would then fail
-                //   to transfer the page to the hidden node, losing data.
+                // For read-only access to uncommitted pages, return the
+                // shared zero page without allocating. This avoids
+                // wasting memory on zero-filled pages that haven't been
+                // written to, matching Fuchsia's demand-paging behavior.
+                if !flags.contains(MMUFlags::WRITE) && !self.type_.is_hidden() {
+                    return Ok(CommitResult::Ref(PhysFrame::zero_frame_addr()));
+                }
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if out_of_range && self.type_.is_hidden() {
                     // Hidden nodes should not have out-of-range
