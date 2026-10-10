@@ -669,6 +669,13 @@ impl VMObjectPagedInner {
                     return Ok(CommitResult::NewPage(target_frame));
                 }
                 self.frames.insert(page_idx, PageState::new(target_frame));
+                // Unmap existing zero-frame mappings so they pick up
+                // the new real frame on next access.
+                for map in self.mappings.iter() {
+                    if let Some(map) = map.upgrade() {
+                        map.range_change(page_idx, 1, RangeChangeOp::Unmap);
+                    }
+                }
             } else {
                 // recursively find a frame in parent
                 let mut parent = self.parent.as_ref().unwrap().inner.borrow_mut();
