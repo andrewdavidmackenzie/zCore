@@ -32,10 +32,14 @@ PortTest.TooManyObservers
 ChannelTest.ChannelFullException
 DefaultExceptionHandlerTest.UnhandledPolicyException
 
-# ── COW populated_bytes / fractional attribution (#508) ──────────────
-# commit_page_internal creates intermediate copies; Fuchsia does flat
-# lookup. populated_scaled_bytes values diverge → polling hangs.
-VmoClone2TestCase.*
+# ── COW populated_bytes / fractional attribution (#577) ──────────────
+# Tree-walking attribution now handles most tests. Remaining skips
+# are for tests that still hang due to populated_bytes polling or
+# COW attribution edge cases not yet fixed.
+VmoClone2TestCase.ZeroPageWrite
+VmoClone2TestCase.SnapshotAtLeastOnWriteSliceInChain
+VmoClone2TestCase.NoPhysical
+VmoClone2TestCase.Offset
 VmoCloneResizeTests.*
 VmoZeroTestCase.*
 ProgressiveCloneDiscardTests.ProgressiveCloneTruncate

@@ -829,47 +829,7 @@ impl VMObjectPagedInner {
         let start = surviving.parent_offset / PAGE_SIZE;
         let end = surviving.parent_limit / PAGE_SIZE;
 
-        // Step 1: Decrement share_count for pages visible to the dying
-        // child. The dying child is the one whose tag matches `tag.negate()`.
-        // - Pages with tag == Owned: shared by both → dying child sees them → decrement
-        // - Pages with tag == tag.negate(): split to dying child → decrement
-        // - Pages with tag == tag: split to surviving child → dying child doesn't see → skip
-        let dying_split_tag = tag.negate();
-        for page in self.frames.values_mut() {
-            if page.tag == PageStateTag::Owned || page.tag == dying_split_tag {
-                if page.share_count > 0 {
-                    page.share_count -= 1;
-                }
-            }
-        }
-        // Also decrement in ancestors for pages the dying child could see.
-        if let Some(ref parent) = self.parent {
-            let dying_start = self.parent_offset / PAGE_SIZE;
-            let dying_end = dying_start + self.size / PAGE_SIZE;
-            let mut cur = Some(parent.clone());
-            let mut cur_start = dying_start;
-            let mut cur_end = dying_end;
-            while let Some(vmop) = cur {
-                let mut inner = vmop.inner.borrow_mut();
-                for idx in cur_start..cur_end.min(inner.size / PAGE_SIZE) {
-                    if let Some(page) = inner.frames.get_mut(&idx) {
-                        if page.share_count > 0 {
-                            page.share_count -= 1;
-                        }
-                    }
-                }
-                if inner.parent.is_none() {
-                    break;
-                }
-                cur_start += inner.parent_offset / PAGE_SIZE;
-                cur_end += inner.parent_offset / PAGE_SIZE;
-                cur = inner.parent.clone();
-            }
-        }
-
-        // Step 2: Merge remaining frames to the surviving child.
-        // Only move frames that are within the surviving child's
-        // visible range and not already present in the child.
+        // Merge frames to the surviving child.
         for (key, mut value) in core::mem::take(&mut self.frames) {
             if key < start || key >= end {
                 continue;
@@ -884,18 +844,101 @@ impl VMObjectPagedInner {
             }
         }
 
-        // Step 3: Connect surviving child to my parent.
+        // Connect surviving child to my parent.
         surviving.parent_offset += self.parent_offset;
         surviving.parent_limit += self.parent_offset;
+        let surviving_offset = surviving.parent_offset;
+        let surviving_limit = surviving.parent_limit;
+        // Drop the surviving borrow before accessing the parent, since
+        // the parent's cleanup may need to borrow its children.
+        drop(surviving);
+
         if let Some(parent) = &self.parent {
-            parent.inner.borrow_mut().replace_child(
+            let mut parent_inner = parent.inner.borrow_mut();
+            parent_inner.replace_child(
                 &self.self_ref,
                 self.owner,
                 other_child,
-                Some((surviving.parent_offset, surviving.parent_limit)),
+                Some((surviving_offset, surviving_limit)),
             );
+            // After replacing the child, clean up stale intermediate COW
+            // copies in the parent (grandparent of the dying child).
+            if parent_inner.type_.is_hidden() {
+                Self::cleanup_stale_cow_copies(&mut parent_inner);
+            }
         }
+        // Re-borrow to set parent.
+        let mut surviving = arc_child.inner.borrow_mut();
         surviving.parent = self.parent.take();
+    }
+
+    /// Remove intermediate COW copies whose split tags point to a child
+    /// that can no longer see them (out of range). For each such frame,
+    /// remove it from this node and reset the parent's corresponding
+    /// frame tag to Owned (if the parent has one with the opposite tag).
+    fn cleanup_stale_cow_copies(inner: &mut VMObjectPagedInner) {
+        if !inner.type_.is_hidden() {
+            return;
+        }
+        let (left_start, left_end, right_start, right_end) = {
+            if let VMOType::Hidden { left, right, .. } = &inner.type_ {
+                let ls = left
+                    .upgrade()
+                    .map(|a| {
+                        let c = a.inner.borrow();
+                        (c.parent_offset / PAGE_SIZE, c.parent_limit / PAGE_SIZE)
+                    })
+                    .unwrap_or((0, 0));
+                let rs = right
+                    .upgrade()
+                    .map(|a| {
+                        let c = a.inner.borrow();
+                        (c.parent_offset / PAGE_SIZE, c.parent_limit / PAGE_SIZE)
+                    })
+                    .unwrap_or((0, 0));
+                (ls.0, ls.1, rs.0, rs.1)
+            } else {
+                return;
+            }
+        };
+        // Collect indices of stale frames to remove.
+        let mut to_remove = alloc::vec::Vec::new();
+        for (&idx, frame) in inner.frames.iter() {
+            match frame.tag {
+                PageStateTag::LeftSplit => {
+                    // Split to left child. If left child can't see this
+                    // page (out of range), the split is stale.
+                    if idx < left_start || idx >= left_end {
+                        to_remove.push(idx);
+                    }
+                }
+                PageStateTag::RightSplit => {
+                    // Split to right child. If right child can't see
+                    // this page, the split is stale.
+                    if idx < right_start || idx >= right_end {
+                        to_remove.push(idx);
+                    }
+                }
+                PageStateTag::Owned => {}
+            }
+        }
+        // Remove stale frames and un-tag parent frames.
+        for idx in to_remove {
+            let _removed = inner.frames.remove(&idx);
+            // Try to un-tag the corresponding parent frame.
+            if let Some(ref parent) = inner.parent {
+                let parent_idx = idx + inner.parent_offset / PAGE_SIZE;
+                let mut p = parent.inner.borrow_mut();
+                if let Some(parent_frame) = p.frames.get_mut(&parent_idx) {
+                    // The parent frame should have the opposite split
+                    // tag. Reset it to Owned so both children of the
+                    // parent can see it again.
+                    if parent_frame.tag.is_split() {
+                        parent_frame.tag = PageStateTag::Owned;
+                    }
+                }
+            }
+        }
     }
 
     /// Create a snapshot child VMO.
@@ -1044,17 +1087,59 @@ impl VMObjectPagedInner {
                     // if in this node's range, check if it can be moved
                     if let Some(frame) = self.frames.get(&i) {
                         if frame.tag.is_split() {
-                            let mut new_frame = self.frames.remove(&i).unwrap();
-                            if self.contiguous
-                                && !other_child.contiguous
-                                && new_frame.pin_count >= 1
-                            {
-                                new_frame.pin_count -= 1;
-                            }
-                            if new_frame.tag == tag && other_start <= i && other_end > i {
-                                new_frame.tag = PageStateTag::Owned;
-                                let new_key = i - other_child.parent_offset / PAGE_SIZE;
-                                other_child.frames.insert(new_key, new_frame);
+                            // Check if the split is stale: the frame was
+                            // split to the old child (frame.tag == tag)
+                            // but the replacement child can't see this
+                            // page (out of its range).
+                            let split_is_stale = frame.tag == tag && (i < start || i >= end);
+                            if split_is_stale {
+                                // The split tag pointed to the old child
+                                // but the replacement child can't see
+                                // this page. Reset the tag so the other
+                                // child (and its subtree) can see it.
+                                // Also check if this frame is an
+                                // intermediate copy that shadows a parent
+                                // frame — if so, remove it and un-tag
+                                // the parent's frame.
+                                let has_parent_frame = self.parent.as_ref().map_or(false, |p| {
+                                    let pi = i + self.parent_offset / PAGE_SIZE;
+                                    p.inner.borrow().frames.contains_key(&pi)
+                                });
+                                if has_parent_frame {
+                                    // This frame is an intermediate COW
+                                    // copy. Remove it and un-tag the
+                                    // parent's frame.
+                                    let _removed = self.frames.remove(&i);
+                                    if let Some(ref parent) = self.parent {
+                                        let parent_idx = i + self.parent_offset / PAGE_SIZE;
+                                        let mut p = parent.inner.borrow_mut();
+                                        if let Some(pf) = p.frames.get_mut(&parent_idx) {
+                                            if pf.tag.is_split() {
+                                                pf.tag = PageStateTag::Owned;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // This is the original page (no
+                                    // parent copy). Just reset the tag
+                                    // so both children can see it.
+                                    if let Some(f) = self.frames.get_mut(&i) {
+                                        f.tag = PageStateTag::Owned;
+                                    }
+                                }
+                            } else {
+                                let mut new_frame = self.frames.remove(&i).unwrap();
+                                if self.contiguous
+                                    && !other_child.contiguous
+                                    && new_frame.pin_count >= 1
+                                {
+                                    new_frame.pin_count -= 1;
+                                }
+                                if new_frame.tag == tag && other_start <= i && other_end > i {
+                                    new_frame.tag = PageStateTag::Owned;
+                                    let new_key = i - other_child.parent_offset / PAGE_SIZE;
+                                    other_child.frames.insert(new_key, new_frame);
+                                }
                             }
                         }
                     }
@@ -1130,11 +1215,12 @@ impl VMObjectPagedInner {
         info.populated_fractional_scaled_bytes = attribution.fractional_scaled_bytes;
     }
 
-    /// Compute per-page fractional attribution using share_count.
+    /// Compute per-page fractional attribution by counting leaf VMOs
+    /// that share each page.
     ///
-    /// Uses the same parent_limit-based walk as committed_pages_in_range.
-    /// For each committed page found, uses `PAGE_SIZE / (share_count + 1)`
-    /// for fractional attribution.
+    /// For each page the querying VMO sees (locally or through the
+    /// parent chain), counts how many leaf VMOs see the SAME physical
+    /// frame by walking DOWN the COW tree from the owning node.
     fn compute_attribution(&self, start_idx: usize, end_idx: usize) -> Attribution {
         let pages = self.size / PAGE_SIZE;
         if pages == 0 || start_idx >= pages {
@@ -1144,19 +1230,27 @@ impl VMObjectPagedInner {
         let mut result = Attribution::default();
 
         for i in start_idx..end_idx {
-            if let Some(page) = self.frames.get(&i) {
-                result.add_page((page.share_count as u64) + 1);
+            // Case 1: we have a local frame — it's private to us.
+            if self.frames.contains_key(&i) {
+                result.add_page(1);
                 continue;
             }
             if self.parent_limit <= i * PAGE_SIZE {
                 continue;
             }
+            // Case 2: walk up the parent chain to find the owning node,
+            // then count leaves from that owner downward.
             let mut current = self.parent.clone();
             let mut current_idx = i + self.parent_offset / PAGE_SIZE;
             while let Some(vmop) = current {
                 let inner = vmop.inner.borrow();
                 if let Some(frame) = inner.frames.get(&current_idx) {
-                    result.add_page((frame.share_count as u64) + 1);
+                    // Found the owning node. Count how many leaf VMOs
+                    // see this frame by walking down from this node.
+                    let count = Self::count_leaves_seeing_page(&inner, current_idx, &frame.tag);
+                    if count > 0 {
+                        result.add_page(count as u64);
+                    }
                     break;
                 }
                 if inner.parent_limit == 0 {
@@ -1171,6 +1265,89 @@ impl VMObjectPagedInner {
             }
         }
         result
+    }
+
+    /// Count how many leaf VMOs can see a page at `page_idx` in `owner`.
+    /// `tag` indicates which children of the hidden `owner` can see it.
+    fn count_leaves_seeing_page(
+        owner: &VMObjectPagedInner,
+        page_idx: usize,
+        tag: &PageStateTag,
+    ) -> usize {
+        if !owner.type_.is_hidden() {
+            // Leaf node: it can see this page (we wouldn't be called
+            // if it couldn't).
+            return 1;
+        }
+        // Hidden node: check which children can see this page based
+        // on the tag and their visible range.
+        let mut count = 0;
+        if let VMOType::Hidden { left, right, .. } = &owner.type_ {
+            // For Owned tag, both children can see the page.
+            // For LeftSplit, the left child already COW'd → only right sees original.
+            // For RightSplit, the right child already COW'd → only left sees original.
+            let check_left = *tag != PageStateTag::LeftSplit;
+            let check_right = *tag != PageStateTag::RightSplit;
+
+            if check_left {
+                if let Some(arc_left) = left.upgrade() {
+                    let child = arc_left.inner.borrow();
+                    let start = child.parent_offset / PAGE_SIZE;
+                    let end = child.parent_limit / PAGE_SIZE;
+                    if page_idx >= start && page_idx < end {
+                        let child_idx = page_idx - start;
+                        // If the child has its own frame, it doesn't see
+                        // the parent's frame.
+                        if child.frames.contains_key(&child_idx) {
+                            // Child has its own copy — doesn't count as
+                            // seeing the parent's page. But the child's
+                            // own page is private to it (counted when
+                            // attribution is computed for the child).
+                        } else if child.type_.is_hidden() {
+                            // Recurse into hidden child. The child
+                            // doesn't have a local frame, so its
+                            // children might see this page. Use Owned
+                            // tag since from the child's perspective,
+                            // both of its children might see the page
+                            // (unless the child has its own split tags,
+                            // but those would be in the child's frames
+                            // which we already checked).
+                            count += Self::count_leaves_seeing_page(
+                                &child,
+                                child_idx,
+                                &PageStateTag::Owned,
+                            );
+                        } else {
+                            // Leaf node that can see this page.
+                            count += 1;
+                        }
+                    }
+                }
+            }
+
+            if check_right {
+                if let Some(arc_right) = right.upgrade() {
+                    let child = arc_right.inner.borrow();
+                    let start = child.parent_offset / PAGE_SIZE;
+                    let end = child.parent_limit / PAGE_SIZE;
+                    if page_idx >= start && page_idx < end {
+                        let child_idx = page_idx - start;
+                        if child.frames.contains_key(&child_idx) {
+                            // Child has its own copy.
+                        } else if child.type_.is_hidden() {
+                            count += Self::count_leaves_seeing_page(
+                                &child,
+                                child_idx,
+                                &PageStateTag::Owned,
+                            );
+                        } else {
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+        count
     }
 
     fn release_unwanted_pages_in_parent(&mut self, mut unwanted: VecDeque<usize>) {
@@ -1292,15 +1469,12 @@ impl Drop for VMObjectPaged {
         if let Some(parent) = &inner.parent {
             let start = inner.parent_offset / PAGE_SIZE;
             let end = inner.parent_limit / PAGE_SIZE;
-            // Walk up from parent, decrementing share_count for pages
-            // this VMO doesn't have locally (local frames shadow parent).
             let mut cur = Some(parent.clone());
             let mut cur_start = start;
             let mut cur_end = end;
             while let Some(vmop) = cur {
                 let mut p = vmop.inner.borrow_mut();
                 for idx in cur_start..cur_end {
-                    // Check if we have a local frame that shadows this parent page
                     let has_local = inner.frames.contains_key(&(idx - start));
                     if !has_local {
                         if let Some(page) = p.frames.get_mut(&idx) {
