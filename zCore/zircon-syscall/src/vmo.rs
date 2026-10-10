@@ -272,8 +272,9 @@ impl Syscall<'_> {
             }
         } else {
             if options.contains(VmoCloneFlags::SNAPSHOT) {
-                // SNAPSHOT is not supported on pager-backed VMOs.
-                if vmo.has_pager() {
+                // SNAPSHOT is not supported on pager-backed VMOs
+                // or any VMO in a pager-backed clone tree.
+                if vmo.is_in_pager_tree() {
                     return Err(ZxError::NOT_SUPPORTED);
                 }
                 // TODO: implement true ZX_VMO_CHILD_SNAPSHOT (full CoW
