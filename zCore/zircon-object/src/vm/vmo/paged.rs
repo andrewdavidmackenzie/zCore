@@ -323,6 +323,20 @@ impl VMObjectTrait for VMObjectPaged {
             if inner.pin_count > 0 {
                 return Err(ZxError::BAD_STATE);
             }
+            // Check for overflow: the new size plus accumulated parent
+            // offsets must not overflow 64-bit.
+            if len > inner.size {
+                let mut total = inner.parent_offset.checked_add(len);
+                let mut cur = inner.parent.clone();
+                while let (Some(t), Some(vmop)) = (total, cur) {
+                    let p = vmop.inner.borrow();
+                    total = t.checked_add(p.parent_offset);
+                    cur = p.parent.clone();
+                }
+                if total.is_none() {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+            }
             inner.resize(len)
         };
         drop(old_parent);
@@ -956,6 +970,22 @@ impl VMObjectPagedInner {
         if self.cache_policy != CachePolicy::Cached || self.pin_count != 0 {
             return Err(ZxError::BAD_STATE);
         }
+        // Check for overflow in accumulated parent offsets.
+        // Walk up the parent chain to compute the total offset from
+        // the root VMO. If adding this child's offset overflows,
+        // reject with INVALID_ARGS.
+        {
+            let mut total = offset.checked_add(self.parent_offset);
+            let mut cur = self.parent.clone();
+            while let (Some(t), Some(vmop)) = (total, cur) {
+                let inner = vmop.inner.borrow();
+                total = t.checked_add(inner.parent_offset);
+                cur = inner.parent.clone();
+            }
+            if total.is_none() {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        }
         // create child VMO
         let child = VMObjectPaged::wrap(
             VMObjectPagedInner {
@@ -1238,18 +1268,32 @@ impl VMObjectPagedInner {
             if self.parent_limit <= i * PAGE_SIZE {
                 continue;
             }
-            // Case 2: walk up the parent chain to find the owning node,
-            // then count leaves from that owner downward.
+            // Case 2: walk up the parent chain to find the TOPMOST node
+            // that has this page. Intermediate COW forks create copies
+            // at multiple levels — all copies represent the same logical
+            // data. We need to count all leaf VMOs that see ANY copy.
+            //
+            // Walk up until we find the highest ancestor that has a
+            // frame at the corresponding index. Then count all leaves
+            // from that ancestor downward (ignoring split tags, since
+            // split just means "has a copy below").
             let mut current = self.parent.clone();
             let mut current_idx = i + self.parent_offset / PAGE_SIZE;
+            let mut topmost_vmop: Option<Arc<VMObjectPaged>> = None;
+            let mut topmost_idx = current_idx;
             while let Some(vmop) = current {
                 let inner = vmop.inner.borrow();
-                if let Some(frame) = inner.frames.get(&current_idx) {
-                    // Found the owning node. Count how many leaf VMOs
-                    // see this frame by walking down from this node.
-                    let count = Self::count_leaves_seeing_page(&inner, current_idx, &frame.tag);
-                    if count > 0 {
-                        result.add_page(count as u64);
+                if inner.frames.contains_key(&current_idx) {
+                    topmost_vmop = Some(vmop.clone());
+                    topmost_idx = current_idx;
+                    // Keep walking up to find higher copies.
+                    if inner.parent.is_some() && inner.parent_limit > 0 {
+                        let next = current_idx + inner.parent_offset / PAGE_SIZE;
+                        if next * PAGE_SIZE < inner.parent_limit {
+                            current_idx = next;
+                            current = inner.parent.clone();
+                            continue;
+                        }
                     }
                     break;
                 }
@@ -1262,6 +1306,18 @@ impl VMObjectPagedInner {
                 }
                 current_idx = next;
                 current = inner.parent.clone();
+            }
+            if let Some(vmop) = topmost_vmop {
+                let inner = vmop.inner.borrow();
+                // Count all leaves from the topmost owner, treating
+                // the page as Owned (shared by all children) since
+                // split tags just indicate intermediate copies exist
+                // below — those copies serve the same logical data.
+                let count =
+                    Self::count_leaves_seeing_page(&inner, topmost_idx, &PageStateTag::Owned);
+                if count > 0 {
+                    result.add_page(count as u64);
+                }
             }
         }
         result
@@ -1291,63 +1347,52 @@ impl VMObjectPagedInner {
 
             if check_left {
                 if let Some(arc_left) = left.upgrade() {
-                    let child = arc_left.inner.borrow();
-                    let start = child.parent_offset / PAGE_SIZE;
-                    let end = child.parent_limit / PAGE_SIZE;
-                    if page_idx >= start && page_idx < end {
-                        let child_idx = page_idx - start;
-                        // If the child has its own frame, it doesn't see
-                        // the parent's frame.
-                        if child.frames.contains_key(&child_idx) {
-                            // Child has its own copy — doesn't count as
-                            // seeing the parent's page. But the child's
-                            // own page is private to it (counted when
-                            // attribution is computed for the child).
-                        } else if child.type_.is_hidden() {
-                            // Recurse into hidden child. The child
-                            // doesn't have a local frame, so its
-                            // children might see this page. Use Owned
-                            // tag since from the child's perspective,
-                            // both of its children might see the page
-                            // (unless the child has its own split tags,
-                            // but those would be in the child's frames
-                            // which we already checked).
-                            count += Self::count_leaves_seeing_page(
-                                &child,
-                                child_idx,
-                                &PageStateTag::Owned,
-                            );
-                        } else {
-                            // Leaf node that can see this page.
-                            count += 1;
-                        }
-                    }
+                    count += Self::count_child_viewers(&arc_left, page_idx);
                 }
             }
 
             if check_right {
                 if let Some(arc_right) = right.upgrade() {
-                    let child = arc_right.inner.borrow();
-                    let start = child.parent_offset / PAGE_SIZE;
-                    let end = child.parent_limit / PAGE_SIZE;
-                    if page_idx >= start && page_idx < end {
-                        let child_idx = page_idx - start;
-                        if child.frames.contains_key(&child_idx) {
-                            // Child has its own copy.
-                        } else if child.type_.is_hidden() {
-                            count += Self::count_leaves_seeing_page(
-                                &child,
-                                child_idx,
-                                &PageStateTag::Owned,
-                            );
-                        } else {
-                            count += 1;
-                        }
-                    }
+                    count += Self::count_child_viewers(&arc_right, page_idx);
                 }
             }
         }
         count
+    }
+
+    /// Count how many leaf VMOs in this child's subtree can see a page
+    /// at `page_idx` (in the parent's coordinate space).
+    ///
+    /// - Leaf with no local frame → sees parent's page → count 1
+    /// - Leaf with local frame → has own private copy → count 0
+    ///   (attributed separately when computing that leaf's own info)
+    /// - Hidden child with local frame → intermediate COW copy →
+    ///   recursively count its subtree viewers using its frame's tag
+    /// - Hidden child with no local frame → transparent → recurse
+    fn count_child_viewers(child_arc: &Arc<VMObjectPaged>, page_idx: usize) -> usize {
+        let child = child_arc.inner.borrow();
+        let start = child.parent_offset / PAGE_SIZE;
+        let end = child.parent_limit / PAGE_SIZE;
+        if page_idx < start || page_idx >= end {
+            return 0;
+        }
+        let child_idx = page_idx - start;
+        if let Some(frame) = child.frames.get(&child_idx) {
+            if child.type_.is_hidden() {
+                // Hidden child has an intermediate COW copy — count
+                // its subtree viewers.
+                Self::count_leaves_seeing_page(&child, child_idx, &frame.tag)
+            } else {
+                // Leaf with local frame — has its own private copy.
+                // Don't count as viewer of parent's data.
+                0
+            }
+        } else if child.type_.is_hidden() {
+            Self::count_leaves_seeing_page(&child, child_idx, &PageStateTag::Owned)
+        } else {
+            // Leaf without local frame — sees parent's page.
+            1
+        }
     }
 
     fn release_unwanted_pages_in_parent(&mut self, mut unwanted: VecDeque<usize>) {
