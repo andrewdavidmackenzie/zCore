@@ -422,7 +422,7 @@ fn unset_git_proxy(global: bool) {
 
 /// Checks code style and runs clippy on all code:
 ///   - workspace format check
-///   - host tools (xtask, region-alloc, zircon-abi)
+///   - host tools (xtask, zircon-abi)
 ///   - libos (linux and zircon flavours, from targets/libos.toml)
 ///   - bare-metal kernel for each architecture and flavour (from targets/qemu-<arch>.toml)
 ///   - userspace programs (petal, userstart) for each architecture
@@ -435,7 +435,7 @@ fn check_style() {
 
     println!("==> Clippy: host tools...");
     Cargo::clippy()
-        .args(["-p", "xtask", "-p", "region-alloc", "-p", "zircon-abi"])
+        .args(["-p", "xtask", "-p", "zircon-abi"])
         .arg("--no-deps")
         .args(["--", "--deny", "warnings"])
         .invoke();
@@ -499,15 +499,15 @@ fn check_style() {
     }
 
     println!("==> Tests: host-buildable crates...");
-    // region-alloc and zircon-abi have no special feature requirements.
+    // zircon-abi has no special feature requirements.
     let output = std::process::Command::new("cargo")
-        .args(["test", "-p", "region-alloc", "-p", "zircon-abi"])
+        .args(["test", "-p", "zircon-abi"])
         .output()
         .expect("failed to run cargo test");
     if !output.status.success() {
         eprintln!("{}", String::from_utf8_lossy(&output.stdout));
         eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-        panic!("Tests failed (region-alloc, zircon-abi)");
+        panic!("Tests failed (zircon-abi)");
     }
     let output = std::process::Command::new("cargo")
         .args([

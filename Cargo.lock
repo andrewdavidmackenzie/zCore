@@ -675,9 +675,9 @@ dependencies = [
  "log",
  "raw-cpuid 10.6.0",
  "riscv 0.8.0",
+ "slab",
  "spin 0.9.4",
  "tock-registers",
- "unicycle",
  "woke",
  "x86_64",
 ]
@@ -1600,10 +1600,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3f87b73ce11b1619a3c6332f45341e0047173771e8b8b73f87bfeefb7b56244"
 
 [[package]]
-name = "region-alloc"
-version = "0.1.0"
-
-[[package]]
 name = "remove_dir_all"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1979,19 +1975,6 @@ name = "unicode-xid"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f962df74c8c05a667b5ee8bcf162993134c104e96440b663c8daa176dc772d8c"
-
-[[package]]
-name = "unicycle"
-version = "0.7.1"
-source = "git+https://github.com/pleasewhy/unicycle?rev=904f1c061d4784a5642e092d308cf523a9270c6e#904f1c061d4784a5642e092d308cf523a9270c6e"
-dependencies = [
- "uniset",
-]
-
-[[package]]
-name = "uniset"
-version = "0.2.0"
-source = "git+https://github.com/pleasewhy/uniset?rev=40edbd7506979daa1d49f935b568873a6a21c5c0#40edbd7506979daa1d49f935b568873a6a21c5c0"
 
 [[package]]
 name = "url"

@@ -188,9 +188,7 @@ Yes, both are used. `memory.rs` (aarch64/riscv64) provides a UNIFIED buddy
 allocator (`customizable-buddy`) that serves as both `#[global_allocator]`
 (heap for Vec, Box, etc.) AND the physical frame allocator. `memory_x86_64.rs`
 uses TWO separate allocators: `buddy_system_allocator` for the heap and
-`bitmap-allocator` for frame tracking. `region-alloc` (third-party) is used
-only by `zircon-object` for PCI BAR address space management, not for general
-memory allocation. The per-arch split exists because x86_64 gets memory info
+`bitmap-allocator` for frame tracking. The per-arch split exists because x86_64 gets memory info
 from UEFI (bitmap-friendly) while aarch64/riscv64 discover memory at runtime
 (buddy-friendly).
 
@@ -494,7 +492,7 @@ overrides for `get_child()`, `peer()`, etc.
 - Interior mutability via `lock::Mutex` throughout
 - Async/await for blocking operations (wait_signal, Port::wait, Futex::wait)
 
-**Workspace dependencies:** `hal-impl`, `region-alloc`
+**Workspace dependencies:** `hal-impl`
 
 **Status:** Actively used. Foundation crate for the entire kernel.
 
@@ -925,33 +923,6 @@ kernels.
 
 
 ---
-
-### `third-party/region-alloc/` -- Region Allocator
-
-**Purpose:** A `no_std` BTreeSet-based memory region allocator supporting add,
-subtract, allocate-by-address, and allocate-by-size with alignment.
-
-**Workspace dependencies:** None
-
-**Status:** Actively used. Depended on by `zircon-object` (for VMAR address
-allocation).
-
-`region-alloc` is used ONLY for PCI BAR (Base Address Register) allocation in
-`zCore/zircon-object/src/dev/pci/bus.rs` and `nodes.rs`. Methods actually called:
-- `add(base, size)` -- add an address region
-- `add_or_subtract(base, size, is_add)` -- add or remove regions
-- `allocate_by_addr(base, size)` -- allocate a specific address range
-- `allocate_by_size(size, alignment)` -- allocate by size with alignment Three
-  instances manage MMIO-low (32-bit), MMIO-high (64-bit), and PIO (port I/O)
-  spaces.
-
-
-The PCI code in zircon-object is always compiled (not feature-gated). However,
-it's only exercised at runtime when the machine has PCI support (controlled by
-`pci_support` in `[workspace.metadata.machines]`). QEMU virt machines have PCI;
-embedded boards (nezha, cr1825, visionfive) do not. The `pci` feature in the
-drivers crate skips PCI bus scanning. The region-alloc code is dormant on non-
-PCI machines.
 
 ---
 
