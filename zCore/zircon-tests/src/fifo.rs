@@ -243,7 +243,11 @@ fn non_power_of_two_count_supported() {
     assert_eq!(n, 10);
 
     for i in 0u32..10 {
-        let val = u32::from_ne_bytes(buf[i as usize * 4..(i as usize + 1) * 4].try_into().unwrap());
+        let val = u32::from_ne_bytes(
+            buf[i as usize * 4..(i as usize + 1) * 4]
+                .try_into()
+                .unwrap(),
+        );
         assert_eq!(val, i);
     }
 }

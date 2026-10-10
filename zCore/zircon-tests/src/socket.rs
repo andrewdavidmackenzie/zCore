@@ -338,7 +338,10 @@ fn empty_socket_should_wait() {
     let (local, _remote) = Socket::create(0).unwrap();
 
     let mut buf = [0u8; 4];
-    assert_eq!(local.read(false, &mut buf).unwrap_err(), ZxError::SHOULD_WAIT);
+    assert_eq!(
+        local.read(false, &mut buf).unwrap_err(),
+        ZxError::SHOULD_WAIT
+    );
 }
 
 /// C++: TEST(SocketTest, WriteReadDataVerify)
@@ -408,7 +411,10 @@ fn peeking_into_empty() {
     let (local, _remote) = Socket::create(0).unwrap();
 
     let mut buf = [0u8; 4];
-    assert_eq!(local.read(true, &mut buf).unwrap_err(), ZxError::SHOULD_WAIT);
+    assert_eq!(
+        local.read(true, &mut buf).unwrap_err(),
+        ZxError::SHOULD_WAIT
+    );
 }
 
 /// C++: TEST(SocketTest, Signals)
@@ -491,7 +497,10 @@ fn zero_size() {
 
     // Zero-length read when empty returns SHOULD_WAIT
     let mut buf = [0u8; 0];
-    assert_eq!(remote.read(false, &mut buf).unwrap_err(), ZxError::SHOULD_WAIT);
+    assert_eq!(
+        remote.read(false, &mut buf).unwrap_err(),
+        ZxError::SHOULD_WAIT
+    );
 }
 
 /// C++: TEST(SocketTest, SetDispositionNoneSucceeds)

@@ -178,11 +178,15 @@ fn clone_is_cow_flag() {
 
     let child = parent.create_child(false, 0, PAGE_SIZE).unwrap();
     let info = child.get_info();
-    assert!(info.flags.contains(zircon_object::vm::VmoInfoFlags::IS_COW_CLONE));
+    assert!(info
+        .flags
+        .contains(zircon_object::vm::VmoInfoFlags::IS_COW_CLONE));
 
     // Parent does NOT have IS_COW_CLONE
     let parent_info = parent.get_info();
-    assert!(!parent_info.flags.contains(zircon_object::vm::VmoInfoFlags::IS_COW_CLONE));
+    assert!(!parent_info
+        .flags
+        .contains(zircon_object::vm::VmoInfoFlags::IS_COW_CLONE));
 }
 
 /// Dropping child restores VMO_ZERO_CHILDREN on parent.

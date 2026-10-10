@@ -7,7 +7,6 @@ use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::vm::{VmObject, VmoInfoFlags, PAGE_SIZE};
 
-
 /// C++: TEST(VmoReference, Write)
 /// Reference sees parent writes and vice versa.
 #[test]

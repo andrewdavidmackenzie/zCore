@@ -59,7 +59,7 @@ fn write_to_endpoint_causes_other_to_become_readable() {
 /// Fuchsia expects ZX_ERR_OUT_OF_RANGE for > ZX_CHANNEL_MAX_MSG_HANDLES (64).
 /// KNOWN ISSUE: zCore does not enforce the handle count limit.
 #[test]
-#[should_panic] // TODO: fix kernel to enforce ZX_CHANNEL_MAX_MSG_HANDLES
+#[should_panic(expected = "unwrap_err")] // TODO: fix kernel to enforce ZX_CHANNEL_MAX_MSG_HANDLES
 fn write_consumes_all_handles() {
     let _ctx = TestContext::new();
     let (local, _remote) = Channel::create();
@@ -271,15 +271,21 @@ fn write_self_handle_returns_not_supported() {
     let (local, _remote) = Channel::create();
     let h = Handle::new(local.clone(), Rights::DEFAULT_CHANNEL);
 
-    // Writing the channel's own handle through itself should fail
+    // Writing the channel's own handle through itself.
+    // At the kernel object level, zCore accepts this (the handle is
+    // consumed into the message). The NOT_SUPPORTED check is enforced
+    // in the syscall layer (sys_channel_write). Here we verify it
+    // doesn't deadlock or panic, and the write succeeds at this level.
     let result = local.write(MessagePacket {
         data: vec![],
         handles: vec![h],
     });
-    // The exact error depends on implementation — some return
-    // NOT_SUPPORTED, others return OK but the handle is consumed.
-    // The important thing is it doesn't deadlock or panic.
-    let _ = result;
+    // zCore's kernel object layer accepts self-handle writes
+    assert!(
+        result.is_ok() || result == Err(ZxError::NOT_SUPPORTED),
+        "expected Ok or NOT_SUPPORTED, got {:?}",
+        result
+    );
 }
 
 /// C++: TEST(ChannelTest, OnFlightHandlesSignalledWhenPeerIsClosed)
