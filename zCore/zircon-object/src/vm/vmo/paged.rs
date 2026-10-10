@@ -652,18 +652,24 @@ impl VMObjectPagedInner {
         if no_frame {
             // if out_of_range
             if out_of_range || no_parent {
-                // For read-only access to uncommitted pages, return the
-                // shared zero page without allocating. This avoids
-                // wasting memory on zero-filled pages that haven't been
-                // written to, matching Fuchsia's demand-paging behavior.
-                if !flags.contains(MMUFlags::WRITE) && !self.type_.is_hidden() {
-                    // Use a module-level cached zero frame to avoid
-                    // referencing ZERO_FRAME from hal-impl (which
-                    // breaks riscv64 linking due to BSS layout).
-                    static ZERO_PAGE: spin::Lazy<PhysFrame> = spin::Lazy::new(|| {
-                        PhysFrame::new_zero().expect("failed to alloc zero page for reads")
-                    });
-                    return Ok(CommitResult::Ref(ZERO_PAGE.paddr()));
+                // For COW snapshot children reading beyond their
+                // parent_limit, return the shared zero page without
+                // allocating. This avoids wasting memory on zero-filled
+                // pages that haven't been written to, matching Fuchsia's
+                // demand-paging behavior for COW clones.
+                // Only applies to snapshot children (has parent, out of
+                // range) — root VMOs must always allocate real frames
+                // because Linux processes expect writable zero pages.
+                if out_of_range && !no_parent && !flags.contains(MMUFlags::WRITE) {
+                    // Return the shared zero page for COW children
+                    // reading beyond their parent_limit. The frame
+                    // is cached to avoid repeated allocations.
+                    static ZERO_PAGE: spin::Lazy<Option<PhysFrame>> =
+                        spin::Lazy::new(|| PhysFrame::new_zero());
+                    match ZERO_PAGE.as_ref() {
+                        Some(zp) => return Ok(CommitResult::Ref(zp.paddr())),
+                        None => return Err(ZxError::NO_MEMORY),
+                    }
                 }
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if out_of_range && self.type_.is_hidden() {
