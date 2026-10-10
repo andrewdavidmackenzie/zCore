@@ -7,8 +7,7 @@
 //! # Architecture
 //!
 //! Each test creates a minimal Zircon process context using
-//! [`test_setup()`], then dispatches syscalls via the
-//! [`zircon_syscall::Syscall`] struct. This exercises the same
+//! [`helpers::TestContext::new()`], which exercises the same
 //! kernel code path as real Zircon userspace programs.
 
 #[cfg(test)]

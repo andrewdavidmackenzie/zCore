@@ -59,8 +59,10 @@ fn handle_replace() {
         proc.get_object::<Channel>(h).unwrap_err(),
         ZxError::BAD_HANDLE
     );
-    // New handle works
-    assert!(proc.get_object::<Channel>(h2).is_ok());
+    // New handle works and references the same object with reduced rights
+    let (obj, rights) = proc.get_object_and_rights::<Channel>(h2).unwrap();
+    assert_eq!(obj.id(), ch0.id());
+    assert_eq!(rights, Rights::READ);
 }
 
 #[test]

@@ -61,7 +61,7 @@ fn reference_child_snapshot() {
     let parent = VmObject::new_paged(1);
     parent.write(0, &[0xAA]).unwrap();
 
-    let reference = parent.create_reference_slice(0, 0, false).unwrap();
+    let _reference = parent.create_reference_slice(0, 0, false).unwrap();
 
     // Create COW child of the reference — should work on the
     // underlying parent VMO
