@@ -5,7 +5,7 @@ use alloc::{boxed::Box, string::String, sync::Arc};
 use async_trait::async_trait;
 use lock::RwLock;
 
-use rcore_fs::vfs::{FileType, FsError, INode, Metadata, PollStatus};
+use zcore_fs::vfs::{FileType, FsError, INode, Metadata, PollStatus};
 use zircon_object::object::*;
 use zircon_object::vm::{pages, VmObject};
 

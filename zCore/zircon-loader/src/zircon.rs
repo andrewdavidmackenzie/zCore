@@ -558,7 +558,7 @@ pub fn zircon_spawn_config() -> zircon_object::task::spawn::SpawnConfig {
 ///
 /// `extra_args` are appended to argv after the program name.
 pub fn run_from_rootfs(
-    rootfs: Arc<dyn rcore_fs::vfs::FileSystem>,
+    rootfs: Arc<dyn zcore_fs::vfs::FileSystem>,
     init_path: &str,
     extra_args: alloc::vec::Vec<alloc::string::String>,
 ) -> Arc<Process> {

@@ -6,8 +6,8 @@ use lock::Mutex;
 
 use hal_impl::device_registry::prelude::input::{Mouse, MouseFlags, MouseState};
 use hal::{EventScheme, InputScheme};
-use rcore_fs::vfs::*;
-use rcore_fs_devfs::DevFS;
+use zcore_fs::vfs::*;
+use zcore_devfs::DevFS;
 
 const MAX_MOUSE_DEVICES: usize = 30;
 const PACKET_SIZE: usize = 3;

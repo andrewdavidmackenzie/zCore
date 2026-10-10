@@ -432,9 +432,9 @@ pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
     }
 
     use crate::sfs_image::zip_dir;
-    use rcore_fs::vfs::FileSystem;
-    use rcore_fs_sfs::SimpleFileSystem;
     use std::sync::{Arc, Mutex};
+    use zcore_fs::vfs::FileSystem;
+    use zcore_sfs::SimpleFileSystem;
 
     let file = std::fs::OpenOptions::new()
         .read(true)

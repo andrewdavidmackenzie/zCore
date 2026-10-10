@@ -22,7 +22,7 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use lock::Mutex;
-use rcore_fs::vfs::PollStatus;
+use zcore_fs::vfs::PollStatus;
 use zircon_object::impl_kobject;
 use zircon_object::object::*;
 

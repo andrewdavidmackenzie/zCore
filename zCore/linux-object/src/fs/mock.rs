@@ -56,7 +56,7 @@ impl Default for MockBlock {
     }
 }
 
-use rcore_fs::dev::{Device, Result};
+use zcore_fs::dev::{Device, Result};
 
 #[allow(unsafe_code)]
 impl Device for MockBlock {

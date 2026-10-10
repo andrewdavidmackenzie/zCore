@@ -1,14 +1,14 @@
-//! Device wrappers that implement `rcore_fs::dev::Device`, which can loaded
-//! file systems on (e.g. `rcore_fs_sfs::SimpleFileSystem::open()`).
+//! Device wrappers that implement `zcore_fs::dev::Device`, which can loaded
+//! file systems on (e.g. `zcore_sfs::SimpleFileSystem::open()`).
 
 use alloc::sync::Arc;
 
 use hal::BlockScheme;
 use lock::RwLock;
-use rcore_fs::dev::{BlockDevice, DevError, Device, Result};
+use zcore_fs::dev::{BlockDevice, DevError, Device, Result};
 
-/// A naive LRU cache layer for `BlockDevice`, re-exported from `rcore-fs`.
-pub use rcore_fs::dev::block_cache::BlockCache;
+/// A naive LRU cache layer for `BlockDevice`, re-exported from `vfs`.
+pub use zcore_fs::dev::block_cache::BlockCache;
 
 /// Memory buffer for device.
 pub struct MemBuf(RwLock<&'static mut [u8]>);

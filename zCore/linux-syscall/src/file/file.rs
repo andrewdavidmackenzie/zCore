@@ -556,7 +556,7 @@ impl Syscall<'_> {
             if times[0].nsec == UTIME_NOW {
                 times[0] = TimeSpec::now();
             }
-            metadata.atime = rcore_fs::vfs::Timespec {
+            metadata.atime = zcore_fs::vfs::Timespec {
                 sec: times[0].sec as i64,
                 nsec: times[0].nsec as i32,
             };
@@ -565,7 +565,7 @@ impl Syscall<'_> {
             if times[1].nsec == UTIME_NOW {
                 times[1] = TimeSpec::now();
             }
-            metadata.mtime = rcore_fs::vfs::Timespec {
+            metadata.mtime = zcore_fs::vfs::Timespec {
                 sec: times[1].sec as i64,
                 nsec: times[1].nsec as i32,
             };
@@ -686,9 +686,9 @@ numeric_enum_macro::numeric_enum! {
 impl Syscall<'_> {
     /// Mount a filesystem at a target path.
     ///
-    /// Not yet fully implemented: the rcore-fs INode trait does not
+    /// Not yet fully implemented: the vfs INode trait does not
     /// expose a mount() method, so runtime mounting requires either
-    /// upstream rcore-fs changes or storing the root as MNode.
+    /// upstream vfs changes or storing the root as MNode.
     /// Returns ENOSYS. Initial mounts (devfs at /dev, ramfs at /tmp)
     /// are set up at boot time in create_root_fs().
     /// Mount a filesystem at a target path.
@@ -719,8 +719,8 @@ impl Syscall<'_> {
                 // with init scripts that mount them.
                 //
                 // Mounting additional tmpfs instances requires downcasting
-                // Arc<dyn INode> to MNode, which rcore-fs-mountfs doesn't
-                // support via the INode trait. Deferred until rcore-fs
+                // Arc<dyn INode> to MNode, which mountfs doesn't
+                // support via the INode trait. Deferred until vfs
                 // adds mount() to the INode trait.
                 debug!("mount: {:?} at {:?} — accepted", fstype, target);
                 Ok(0)
@@ -734,7 +734,7 @@ impl Syscall<'_> {
 
     /// Unmount a filesystem from a target path.
     ///
-    /// Currently a no-op — the rcore-fs MountFS crate does not expose
+    /// Currently a no-op — the vfs MountFS crate does not expose
     /// an unmount API. Returns Ok(0) for compatibility.
     pub fn sys_umount2(&self, target: UserInPtr<u8>, _flags: usize) -> SysResult {
         let target = target.read_c_string()?;

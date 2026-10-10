@@ -1,6 +1,6 @@
 //! Linux error codes
 use core::fmt;
-use rcore_fs::vfs::FsError;
+use zcore_fs::vfs::FsError;
 use zircon_object::ZxError;
 
 /// Linux Result defination

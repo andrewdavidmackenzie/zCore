@@ -6,8 +6,8 @@ use core::{any::Any, convert::From};
 use hal::scheme::display::{ColorFormat, DisplayInfo};
 use hal::DisplayScheme;
 use hal_impl::vm::{GenericPageTable, PageTable};
-use rcore_fs::vfs::*;
-use rcore_fs_devfs::DevFS;
+use zcore_devfs::DevFS;
+use zcore_fs::vfs::*;
 use zircon_object::vm::{page_aligned, pages, VmObject};
 
 use crate::error::{LxError, LxResult};

@@ -11,7 +11,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 use hal_impl::console::{self, ConsoleWinSize};
 use lock::Mutex;
-use rcore_fs::vfs::*;
+use zcore_fs::vfs::*;
 
 /// STDIN global reference.
 ///

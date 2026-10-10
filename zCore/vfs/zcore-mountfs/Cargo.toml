@@ -1,0 +1,14 @@
+[package]
+name = "zcore-mountfs"
+version = "0.1.0"
+authors = ["gjz010 <gjz010944@gmail.com>", "WangRunji <wangrunji0408@163.com>"]
+edition = "2018"
+
+[dependencies]
+zcore-fs = { path = "../zcore-fs" }
+spin = "0.9"
+log = "0.4"
+lazy_static = { version = "1.4", features = ["spin_no_std"] }
+
+[dev-dependencies]
+zcore-ramfs = { path = "../zcore-ramfs" }

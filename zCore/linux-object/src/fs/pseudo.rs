@@ -3,7 +3,7 @@
 use alloc::vec::Vec;
 use core::any::Any;
 
-use rcore_fs::vfs::*;
+use zcore_fs::vfs::*;
 
 /// Pseudo INode struct
 pub struct Pseudo {

@@ -3,7 +3,7 @@
 //! Provides a unified rootfs interface for the kernel. On bare-metal,
 //! the rootfs is an SFS image loaded from initrd or a block device.
 //! In libOS mode, `read_rootfs_file` reads directly from the host
-//! filesystem via `std::fs::read`. HostFS (rcore-fs VFS adapter) is
+//! filesystem via `std::fs::read`. HostFS (vfs VFS adapter) is
 //! only used when both `libos` and `linux` features are active, since
 //! Linux needs full POSIX filesystem semantics.
 
@@ -13,7 +13,7 @@
 /// and no host directory). Tries initrd first, then block device.
 ///
 /// In libOS mode, uses HostFS backed by a host directory.
-pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
+pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn zcore_fs::vfs::FileSystem>> {
     // LibOS + Linux mode: use HostFS from the rootfs directory on the host.
     // Linux needs a full FileSystem for POSIX operations (create, write, etc.).
     // In libos + Zircon-only mode, read_rootfs_file() uses std::fs::read()
@@ -30,8 +30,8 @@ pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
 
     // Bare-metal: try initrd or block device.
     use alloc::sync::Arc;
-    use rcore_fs::vfs::FileSystem;
-    use rcore_fs_sfs::SimpleFileSystem;
+    use zcore_fs::vfs::FileSystem;
+    use zcore_sfs::SimpleFileSystem;
 
     if let Some(initrd) = hal_impl::boot::init_ram_disk() {
         info!("Trying rootfs from initrd...");
@@ -45,7 +45,7 @@ pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
 
     if let Some(block) = hal_impl::device_registry::all_block().first() {
         info!("Trying rootfs from block device...");
-        let dev: Arc<dyn rcore_fs::dev::Device> = Arc::new(BlockDevice(block));
+        let dev: Arc<dyn zcore_fs::dev::Device> = Arc::new(BlockDevice(block));
         if let Ok(fs) = SimpleFileSystem::open(dev) {
             let fs: Arc<dyn FileSystem> = fs;
             return Some(fs);
@@ -63,7 +63,7 @@ pub fn try_rootfs() -> Option<alloc::sync::Arc<dyn rcore_fs::vfs::FileSystem>> {
 /// for process creation and dynamic linking.
 ///
 /// In libos mode, reads directly from the host filesystem via `std::fs::read`,
-/// bypassing the rcore-fs VFS layer entirely.
+/// bypassing the vfs VFS layer entirely.
 /// On bare-metal, goes through the SFS rootfs via INode trait.
 pub fn read_rootfs_file(path: &str) -> Option<alloc::vec::Vec<u8>> {
     #[cfg(feature = "libos")]
@@ -93,8 +93,8 @@ pub fn read_rootfs_file(path: &str) -> Option<alloc::vec::Vec<u8>> {
 /// In-memory device backed by a static byte slice (used for initrd).
 struct MemBufDevice(spin::Mutex<&'static mut [u8]>);
 
-impl rcore_fs::dev::Device for MemBufDevice {
-    fn read_at(&self, offset: usize, buf: &mut [u8]) -> rcore_fs::dev::Result<usize> {
+impl zcore_fs::dev::Device for MemBufDevice {
+    fn read_at(&self, offset: usize, buf: &mut [u8]) -> zcore_fs::dev::Result<usize> {
         let data = self.0.lock();
         if offset >= data.len() {
             return Ok(0);
@@ -103,7 +103,7 @@ impl rcore_fs::dev::Device for MemBufDevice {
         buf[..len].copy_from_slice(&data[offset..offset + len]);
         Ok(len)
     }
-    fn write_at(&self, offset: usize, buf: &[u8]) -> rcore_fs::dev::Result<usize> {
+    fn write_at(&self, offset: usize, buf: &[u8]) -> zcore_fs::dev::Result<usize> {
         let mut data = self.0.lock();
         if offset >= data.len() {
             return Ok(0);
@@ -112,17 +112,17 @@ impl rcore_fs::dev::Device for MemBufDevice {
         data[offset..offset + len].copy_from_slice(&buf[..len]);
         Ok(len)
     }
-    fn sync(&self) -> rcore_fs::dev::Result<()> {
+    fn sync(&self) -> zcore_fs::dev::Result<()> {
         Ok(())
     }
 }
 
 /// Block device adapter from [`hal_impl::device_registry::scheme::BlockScheme`]
-/// to [`rcore_fs::dev::Device`].
+/// to [`zcore_fs::dev::Device`].
 struct BlockDevice(alloc::sync::Arc<dyn hal_impl::device_registry::scheme::BlockScheme>);
 
-impl rcore_fs::dev::Device for BlockDevice {
-    fn read_at(&self, offset: usize, buf: &mut [u8]) -> rcore_fs::dev::Result<usize> {
+impl zcore_fs::dev::Device for BlockDevice {
+    fn read_at(&self, offset: usize, buf: &mut [u8]) -> zcore_fs::dev::Result<usize> {
         if buf.is_empty() {
             return Ok(0);
         }
@@ -132,18 +132,18 @@ impl rcore_fs::dev::Device for BlockDevice {
             .checked_add(buf.len())
             .and_then(|end| end.checked_add(BLK_SIZE - 1))
             .map(|v| v / BLK_SIZE)
-            .ok_or(rcore_fs::dev::DevError)?;
+            .ok_or(zcore_fs::dev::DevError)?;
         let mut tmp = alloc::vec![0u8; (end_blk - start_blk) * BLK_SIZE];
         for (i, blk) in (start_blk..end_blk).enumerate() {
             self.0
                 .read_block(blk, &mut tmp[i * BLK_SIZE..(i + 1) * BLK_SIZE])
-                .map_err(|_| rcore_fs::dev::DevError)?;
+                .map_err(|_| zcore_fs::dev::DevError)?;
         }
         let skip = offset % BLK_SIZE;
         buf.copy_from_slice(&tmp[skip..skip + buf.len()]);
         Ok(buf.len())
     }
-    fn write_at(&self, offset: usize, buf: &[u8]) -> rcore_fs::dev::Result<usize> {
+    fn write_at(&self, offset: usize, buf: &[u8]) -> zcore_fs::dev::Result<usize> {
         if buf.is_empty() {
             return Ok(0);
         }
@@ -153,23 +153,23 @@ impl rcore_fs::dev::Device for BlockDevice {
             .checked_add(buf.len())
             .and_then(|end| end.checked_add(BLK_SIZE - 1))
             .map(|v| v / BLK_SIZE)
-            .ok_or(rcore_fs::dev::DevError)?;
+            .ok_or(zcore_fs::dev::DevError)?;
         let skip = offset % BLK_SIZE;
         let mut tmp = alloc::vec![0u8; (end_blk - start_blk) * BLK_SIZE];
         for (i, blk) in (start_blk..end_blk).enumerate() {
             self.0
                 .read_block(blk, &mut tmp[i * BLK_SIZE..(i + 1) * BLK_SIZE])
-                .map_err(|_| rcore_fs::dev::DevError)?;
+                .map_err(|_| zcore_fs::dev::DevError)?;
         }
         tmp[skip..skip + buf.len()].copy_from_slice(buf);
         for (i, blk) in (start_blk..end_blk).enumerate() {
             self.0
                 .write_block(blk, &tmp[i * BLK_SIZE..(i + 1) * BLK_SIZE])
-                .map_err(|_| rcore_fs::dev::DevError)?;
+                .map_err(|_| zcore_fs::dev::DevError)?;
         }
         Ok(buf.len())
     }
-    fn sync(&self) -> rcore_fs::dev::Result<()> {
+    fn sync(&self) -> zcore_fs::dev::Result<()> {
         Ok(())
     }
 }

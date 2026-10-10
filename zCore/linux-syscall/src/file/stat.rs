@@ -100,13 +100,13 @@ impl Syscall<'_> {
         buf[24..28].copy_from_slice(&(meta.gid as u32).to_ne_bytes());
         // stx_mode: u16 at offset 28 (file type + permissions)
         let file_type: u16 = match meta.type_ {
-            rcore_fs::vfs::FileType::File => 0o100000,
-            rcore_fs::vfs::FileType::Dir => 0o040000,
-            rcore_fs::vfs::FileType::SymLink => 0o120000,
-            rcore_fs::vfs::FileType::CharDevice => 0o020000,
-            rcore_fs::vfs::FileType::BlockDevice => 0o060000,
-            rcore_fs::vfs::FileType::NamedPipe => 0o010000,
-            rcore_fs::vfs::FileType::Socket => 0o140000,
+            zcore_fs::vfs::FileType::File => 0o100000,
+            zcore_fs::vfs::FileType::Dir => 0o040000,
+            zcore_fs::vfs::FileType::SymLink => 0o120000,
+            zcore_fs::vfs::FileType::CharDevice => 0o020000,
+            zcore_fs::vfs::FileType::BlockDevice => 0o060000,
+            zcore_fs::vfs::FileType::NamedPipe => 0o010000,
+            zcore_fs::vfs::FileType::Socket => 0o140000,
         };
         #[allow(clippy::unnecessary_cast)]
         let mode = file_type | (meta.mode as u16 & 0o7777);

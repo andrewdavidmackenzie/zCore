@@ -15,22 +15,18 @@ by role.
 These are large, complex crates that provide significant functionality to
 zCore. A change or update in any of these would have broad impact.
 
-**`rcore-fs` family** (git, rev `1a3246b`) Virtual filesystem framework from
-the rCore project. Seven crates from one repo:
+**`rcore-fs` family** (vendored in `zCore/vfs/`, originally from `rcore-os/rcore-fs`
+rev `1a3246b`) Virtual filesystem framework from the rCore project. Five crates:
   - `rcore-fs` -- VFS trait definitions. Used by
-    `linux-object`, `linux-syscall`, `zCore`, `xtask`.
+    `linux-object`, `linux-syscall`, `kernel`, `zircon-loader`, `xtask`.
   - `rcore-fs-sfs` -- Simple File System. Used by
-    `linux-object`, `zCore`, `xtask`.
+    `kernel`, `xtask`.
   - `rcore-fs-ramfs` -- RAM filesystem. Used by
     `linux-object`.
   - `rcore-fs-mountfs` -- Mount overlay FS. Used by
     `linux-object`.
   - `rcore-fs-devfs` -- Device FS (`/dev/null`,
     `/dev/zero`). Used by `linux-object`.
-  - `rcore-fs-hostfs` -- Host filesystem passthrough
-    (libos mode). Used by `loader` (dev), `zCore`.
-  - `rcore-fs-fuse` -- FUSE adapter for image creation.
-    Used by `xtask`.
 
 The FS API is `rcore-fs`'s `FileSystem` and `INode` traits (open, read, write,
 stat, lookup, readdir). Any FS implementing these traits works. Options: (1)
