@@ -32,23 +32,14 @@ PortTest.TooManyObservers
 ChannelTest.ChannelFullException
 DefaultExceptionHandlerTest.UnhandledPolicyException
 
-# ── COW populated_bytes / fractional attribution (#577) ──────────────
-# Tree-walking attribution now handles most tests. Remaining skips
-# are for tests that still hang due to populated_bytes polling or
-# COW attribution edge cases not yet fixed.
-# NoPhysical: boot_options crash (UD2 abort)
+# ── COW populated_bytes / fractional attribution (#577, #603) ────────
+# NoPhysical: boot_options crash (UD2 abort kills runner)
 VmoClone2TestCase.NoPhysical
-# NoSnapshotPager: missing pager-VMO SNAPSHOT rejection
-VmoClone2TestCase.NoSnapshotPager
-# Offset: populated_bytes polling hang
+# Offset: populated_bytes polling hang (intermediate COW copies)
 VmoClone2TestCase.Offset
-# SnapshotAtLeastOnWriteSliceInChain: SALOW not implemented
-VmoClone2TestCase.SnapshotAtLeastOnWriteSliceInChain
-# ZeroPageWrite: zero page committed when reading beyond parent_limit
-VmoClone2TestCase.ZeroPageWrite
-VmoCloneResizeTests.*
-VmoZeroTestCase.*
-ProgressiveCloneDiscardTests.ProgressiveCloneTruncate
+# WriteCowParent, AllocateAfterMergeMultipleChildren: polling hang
+VmoZeroTestCase.WriteCowParent
+VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 
 # ── VmoTestCase (multiple root causes) ───────────────────────────────
 # boot_options uninitialized, VMAR map failures, contiguous VMO stubs.
