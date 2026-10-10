@@ -1101,7 +1101,7 @@ impl VMObjectPagedInner {
                                 // intermediate copy that shadows a parent
                                 // frame — if so, remove it and un-tag
                                 // the parent's frame.
-                                let has_parent_frame = self.parent.as_ref().map_or(false, |p| {
+                                let has_parent_frame = self.parent.as_ref().is_some_and(|p| {
                                     let pi = i + self.parent_offset / PAGE_SIZE;
                                     p.inner.borrow().frames.contains_key(&pi)
                                 });
