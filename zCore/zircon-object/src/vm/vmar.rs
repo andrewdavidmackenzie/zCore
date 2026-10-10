@@ -1506,14 +1506,23 @@ impl VmMapping {
             let mut page_table = self.page_table.lock();
             let page_num = inner.size / PAGE_SIZE;
             let vmo_offset = inner.vmo_offset / PAGE_SIZE;
+            // For COW children, commit with READ-only to avoid
+            // allocating private zero frames for uncommitted pages.
+            // Root VMOs need WRITE to work correctly with eager map.
+            let is_cow = self.vmo.parent().is_some();
             for i in 0..page_num {
-                let paddr = commit(vmo_offset + i, inner.page_flags(i))?;
-                // Perform page table mapping via GenericPageTable's hal_pt_map
+                let flags = inner.page_flags(i);
+                let commit_flags = if is_cow {
+                    flags - MMUFlags::WRITE
+                } else {
+                    flags
+                };
+                let paddr = commit(vmo_offset + i, commit_flags)?;
                 page_table
                     .map(
                         Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::Size4K),
                         paddr,
-                        inner.page_flags(i),
+                        commit_flags,
                     )
                     .expect("failed to map");
             }

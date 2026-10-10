@@ -766,18 +766,9 @@ impl VMObjectPagedInner {
         }
         let frame = self.frames.get_mut(&page_idx).unwrap();
         if frame.tag.is_split() {
-            // The page was split during a previous COW fork. The
-            // requesting child can still read the data. For WRITE,
-            // a COW copy is needed. Don't remove the frame — keep
-            // it in the hidden node so the other child's subtree
-            // can still find it (avoiding broken sharing for
-            // attribution).
-            if flags.contains(MMUFlags::WRITE) {
-                let target_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
-                hal_impl::mem::pmem_copy(target_frame.paddr(), frame.frame.paddr(), PAGE_SIZE);
-                return Ok(CommitResult::CopyOnWrite(target_frame, true));
-            }
-            return Ok(CommitResult::Ref(frame.frame.paddr()));
+            // has split, take out
+            let target_frame = self.frames.remove(&page_idx).unwrap().take();
+            return Ok(CommitResult::CopyOnWrite(target_frame, need_unmap));
         } else if flags.contains(MMUFlags::WRITE) && child_tag.is_split() {
             // copy-on-write: the requesting child gets a private copy
             let target_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
