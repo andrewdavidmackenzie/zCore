@@ -657,7 +657,13 @@ impl VMObjectPagedInner {
                 // wasting memory on zero-filled pages that haven't been
                 // written to, matching Fuchsia's demand-paging behavior.
                 if !flags.contains(MMUFlags::WRITE) && !self.type_.is_hidden() {
-                    return Ok(CommitResult::Ref(PhysFrame::zero_frame_addr()));
+                    // Use a module-level cached zero frame to avoid
+                    // referencing ZERO_FRAME from hal-impl (which
+                    // breaks riscv64 linking due to BSS layout).
+                    static ZERO_PAGE: spin::Lazy<PhysFrame> = spin::Lazy::new(|| {
+                        PhysFrame::new_zero().expect("failed to alloc zero page for reads")
+                    });
+                    return Ok(CommitResult::Ref(ZERO_PAGE.paddr()));
                 }
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if out_of_range && self.type_.is_hidden() {

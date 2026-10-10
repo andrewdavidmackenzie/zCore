@@ -86,11 +86,3 @@ impl Drop for PhysFrame {
 /// The global physical frame contains all zeros.
 pub static ZERO_FRAME: spin::Lazy<PhysFrame> =
     spin::Lazy::new(|| PhysFrame::new_zero().expect("failed to alloc zero frame"));
-
-impl PhysFrame {
-    /// Get the physical address of the global shared zero frame.
-    /// This page is always zero-filled and must never be written to.
-    pub fn zero_frame_addr() -> PhysAddr {
-        ZERO_FRAME.paddr()
-    }
-}
