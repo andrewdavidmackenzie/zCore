@@ -7,6 +7,24 @@ use {
     zircon_object::{dev::*, ipc::*, signal::Clock, signal::Port, signal::Timer, task::*, vm::*},
 };
 
+/// View a `#[repr(C)]` struct as a byte slice.
+///
+/// # Safety (internal)
+///
+/// Uses `from_raw_parts` which requires `T` to be `#[repr(C)]` with no
+/// padding that could leak uninitialized memory. All callers use this
+/// with Zircon ABI structs that satisfy this requirement.
+#[allow(unsafe_code)]
+fn as_bytes<T: Sized>(val: &T) -> &[u8] {
+    unsafe { core::slice::from_raw_parts(val as *const T as *const u8, core::mem::size_of::<T>()) }
+}
+
+/// View a `#[repr(C)]` struct slice as a byte slice.
+#[allow(unsafe_code)]
+fn slice_as_bytes<T: Sized>(vals: &[T]) -> &[u8] {
+    unsafe { core::slice::from_raw_parts(vals.as_ptr() as *const u8, core::mem::size_of_val(vals)) }
+}
+
 /// Check if an x86_64 address is canonical (bits 48..63 are copies of bit 47).
 #[cfg(target_arch = "x86_64")]
 fn is_canonical(addr: usize) -> bool {
@@ -558,12 +576,7 @@ impl Syscall<'_> {
                     if entry_size == full_size {
                         UserOutPtr::<VmoInfo>::from(buffer).write_array(&vmo_infos[..count])?;
                     } else {
-                        let src = unsafe {
-                            core::slice::from_raw_parts(
-                                vmo_infos.as_ptr() as *const u8,
-                                vmo_infos.len() * full_size,
-                            )
-                        };
+                        let src = slice_as_bytes(&vmo_infos);
                         for i in 0..count {
                             let entry_bytes = &src[i * full_size..i * full_size + entry_size];
                             let mut dst = UserOutPtr::<u8>::from(buffer + i * entry_size);
@@ -592,9 +605,7 @@ impl Syscall<'_> {
                     avail.write_if_not_null(1)?;
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
-                let info_bytes = unsafe {
-                    core::slice::from_raw_parts(&info as *const VmoInfo as *const u8, full_size)
-                };
+                let info_bytes = as_bytes(&info);
                 UserOutPtr::<u8>::from(buffer).write_array(&info_bytes[..entry_size])?;
                 actual.write_if_not_null(1)?;
                 avail.write_if_not_null(1)?;
@@ -999,12 +1010,7 @@ impl Syscall<'_> {
                         UserOutPtr::<InfoMapsEntry>::from(buffer).write_array(&entries[..count])?;
                     } else {
                         // Write truncated entries at the versioned stride.
-                        let src = unsafe {
-                            core::slice::from_raw_parts(
-                                entries.as_ptr() as *const u8,
-                                entries.len() * full_size,
-                            )
-                        };
+                        let src = slice_as_bytes(&entries);
                         for i in 0..count {
                             let entry_bytes = &src[i * full_size..i * full_size + entry_size];
                             let mut dst = UserOutPtr::<u8>::from(buffer + i * entry_size);
@@ -1030,12 +1036,7 @@ impl Syscall<'_> {
                     if entry_size == full_size {
                         UserOutPtr::<InfoMapsEntry>::from(buffer).write_array(&entries[..count])?;
                     } else {
-                        let src = unsafe {
-                            core::slice::from_raw_parts(
-                                entries.as_ptr() as *const u8,
-                                entries.len() * full_size,
-                            )
-                        };
+                        let src = slice_as_bytes(&entries);
                         for i in 0..count {
                             let entry_bytes = &src[i * full_size..i * full_size + entry_size];
                             let mut dst = UserOutPtr::<u8>::from(buffer + i * entry_size);
