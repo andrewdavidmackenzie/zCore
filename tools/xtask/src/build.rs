@@ -143,6 +143,16 @@ impl BuildConfig {
         // Used by hal-impl and executor to size per-CPU data structures.
         env.insert("ZCORE_MAX_CPUS".into(), target.cores.to_string().into());
 
+        // Pass the linker script path so build.rs can track it for
+        // rebuild-on-change. Without this, linker script edits would
+        // not trigger a kernel rebuild.
+        if !target.linker_script.is_empty() {
+            env.insert(
+                "ZCORE_LINKER_SCRIPT".into(),
+                target.linker_script.clone().into(),
+            );
+        }
+
         // Generate the rustc target spec JSON (not needed for libos).
         let target_json = if is_libos {
             // LibOS uses the host's native target -- no JSON needed.

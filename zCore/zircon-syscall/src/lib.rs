@@ -26,7 +26,9 @@ use self::consts::SyscallType as Sys;
 use self::time::Deadline;
 
 mod channel;
-mod consts;
+mod consts {
+    include!(concat!(env!("OUT_DIR"), "/consts.rs"));
+}
 mod cprng;
 mod ddk;
 mod debug;
