@@ -79,8 +79,8 @@ linux-object = { path = "../linux-object", optional = true }
 
 lock = { path = "../lock" }
 executor = { path = "../executor" }
-rcore-fs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
-rcore-fs-sfs = { git = "https://github.com/rcore-os/rcore-fs", rev = "1a3246b" }
+rcore-fs = { path = "../vfs/rcore-fs" }
+rcore-fs-sfs = { path = "../vfs/rcore-fs-sfs" }
 
 # LibOS mode
 [target.'cfg(not(target_os = "none"))'.dependencies]

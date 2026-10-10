@@ -15,6 +15,11 @@ members = [
     "tools/xtask",
     "zCore/executor",
     "zCore/lock",
+    "zCore/vfs/rcore-fs",
+    "zCore/vfs/rcore-fs-sfs",
+    "zCore/vfs/rcore-fs-ramfs",
+    "zCore/vfs/rcore-fs-mountfs",
+    "zCore/vfs/rcore-fs-devfs",
     # Cross-compiled for bare-metal userspace by xtask.
     # Not in default-members (require explicit --target to build).
     "zCore/zx",
