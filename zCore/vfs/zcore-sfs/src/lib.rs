@@ -49,7 +49,7 @@ trait DeviceExt: Device {
     }
     /// Load struct `T` from given block in device
     fn load_struct<T: AsBuf>(&self, id: BlockId) -> vfs::Result<T> {
-        let mut s: T = unsafe { uninit_memory() };
+        let mut s: T = zeroed_memory();
         self.read_block(id, 0, s.as_buf_mut())?;
         Ok(s)
     }
@@ -188,7 +188,7 @@ impl INodeImpl {
         Ok(())
     }
     fn read_direntry(&self, id: usize) -> vfs::Result<DiskEntry> {
-        let mut direntry: DiskEntry = unsafe { uninit_memory() };
+        let mut direntry: DiskEntry = zeroed_memory();
         self._read_at(DIRENT_SIZE * id, direntry.as_buf_mut())?;
         Ok(direntry)
     }

@@ -158,11 +158,16 @@ fn scan_bus(access: &PciAccess) -> Vec<PciDeviceInfo> {
 
 /// Enable the PCI device and its MSI interrupt.
 /// Returns the assigned MSI interrupt number when applicable.
+///
+/// # Safety
+///
+/// Caller must ensure PCI config space access is valid for `address`.
 unsafe fn enable_msi(address: PciAddress, access: &PciAccess) -> Option<usize> {
+    use core::sync::atomic::{AtomicU32, Ordering};
     use pci_types::capability::TriggerMode;
 
-    // 23 and lower are used
-    static mut MSI_IRQ: u32 = 23;
+    // 23 and lower are used by legacy IRQs
+    static MSI_IRQ: AtomicU32 = AtomicU32::new(23);
 
     let header = PciHeader::new(address);
     let endpoint = EndpointHeader::from_header(header, access)?;
@@ -172,8 +177,7 @@ unsafe fn enable_msi(address: PciAddress, access: &PciAccess) -> Option<usize> {
 
     for capability in endpoint.capabilities(access) {
         if let PciCapability::Msi(msi) = capability {
-            unsafe { MSI_IRQ += 1 };
-            let irq = unsafe { MSI_IRQ };
+            let irq = MSI_IRQ.fetch_add(1, Ordering::Relaxed) + 1;
             assigned_irq = Some(irq as usize);
 
             // Configure MSI: target BSP LAPIC, edge-triggered, vector = irq + 32

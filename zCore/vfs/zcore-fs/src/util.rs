@@ -57,17 +57,16 @@ impl Iterator for BlockIter {
     }
 }
 
-// 声明一块未初始化的内存
-/// Declares a block of uninitialized memory.
+/// Returns a zero-initialized value of type T.
 ///
-/// # Safety
-///
-/// Never read from uninitialized memory!
+/// Used as a buffer to be filled by disk reads. Previously used
+/// `MaybeUninit::uninit().assume_init()` which is instant UB.
 #[inline(always)]
-pub unsafe fn uninit_memory<T>() -> T {
-    // 这个写法十分恐怖，但实际上是死灵书的正牌写法
-    #[allow(clippy::uninit_assumed_init)]
-    core::mem::MaybeUninit::uninit().assume_init()
+pub fn zeroed_memory<T>() -> T {
+    // SAFETY: zeroed memory is valid for any POD type (u8 arrays,
+    // integer structs). All callers use this for disk block buffers
+    // that are immediately overwritten by read operations.
+    unsafe { core::mem::zeroed() }
 }
 
 #[cfg(test)]

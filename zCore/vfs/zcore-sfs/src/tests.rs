@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use zcore_fs::{
-    util::uninit_memory,
+    util::zeroed_memory,
     vfs::{FileSystem, FileType, Metadata, Result, Timespec},
 };
 
@@ -79,7 +79,7 @@ fn resize() -> Result<()> {
     const SIZE2: usize = 0x1250;
     file1.resize(SIZE1)?;
     assert_eq!(file1.metadata()?.size, SIZE1, "wrong size after resize");
-    let mut data1: [u8; SIZE2] = unsafe { uninit_memory() };
+    let mut data1: [u8; SIZE2] = zeroed_memory();
     let len = file1.read_at(0, data1.as_mut())?;
     assert_eq!(len, SIZE1, "wrong size returned by read_at()");
     assert_eq!(
