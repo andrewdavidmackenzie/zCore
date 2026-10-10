@@ -74,3 +74,106 @@ fn eventpair_signal_peer() {
     assert!(ep1.signal().contains(Signal::USER_SIGNAL_0));
     assert!(!ep0.signal().contains(Signal::USER_SIGNAL_0));
 }
+
+/// C++: TEST(EventTest, MultipleSignals)
+#[test]
+fn event_multiple_signals() {
+    let _ctx = TestContext::new();
+    let event = Event::new();
+
+    event.signal_set(Signal::USER_SIGNAL_0 | Signal::USER_SIGNAL_1 | Signal::USER_SIGNAL_2);
+    let sig = event.signal();
+    assert!(sig.contains(Signal::USER_SIGNAL_0));
+    assert!(sig.contains(Signal::USER_SIGNAL_1));
+    assert!(sig.contains(Signal::USER_SIGNAL_2));
+    assert!(!sig.contains(Signal::USER_SIGNAL_3));
+}
+
+/// C++: TEST(EventTest, SignaledBit)
+#[test]
+fn event_signaled_bit() {
+    let _ctx = TestContext::new();
+    let event = Event::new();
+
+    // Events also support the SIGNALED bit (not just USER signals)
+    event.signal_set(Signal::SIGNALED);
+    assert!(event.signal().contains(Signal::SIGNALED));
+
+    event.signal_clear(Signal::SIGNALED);
+    assert!(!event.signal().contains(Signal::SIGNALED));
+}
+
+/// C++: TEST(EventTest, Name)
+#[test]
+fn event_name() {
+    let _ctx = TestContext::new();
+    let event = Event::new();
+
+    event.set_name("test-event");
+    assert_eq!(event.name(), "test-event");
+}
+
+/// C++: TEST(EventPairTest, BothEndpointsSignalable)
+#[test]
+fn eventpair_both_endpoints_signalable() {
+    let _ctx = TestContext::new();
+    let (ep0, ep1) = EventPair::create();
+
+    // Signal ep0 directly (not through peer)
+    ep0.signal_set(Signal::USER_SIGNAL_0);
+    assert!(ep0.signal().contains(Signal::USER_SIGNAL_0));
+    assert!(!ep1.signal().contains(Signal::USER_SIGNAL_0));
+
+    // Signal ep1 directly
+    ep1.signal_set(Signal::USER_SIGNAL_1);
+    assert!(ep1.signal().contains(Signal::USER_SIGNAL_1));
+    assert!(!ep0.signal().contains(Signal::USER_SIGNAL_1));
+}
+
+/// C++: TEST(EventPairTest, PeerClosedClearsOnSurvivingEnd)
+#[test]
+fn eventpair_peer_closed_signal_details() {
+    let _ctx = TestContext::new();
+    let (ep0, ep1) = EventPair::create();
+
+    // Set some signals on ep0 before closing ep1
+    ep0.signal_set(Signal::USER_SIGNAL_0);
+
+    drop(ep1);
+
+    // PEER_CLOSED should be set, but user signals should remain
+    let sig = ep0.signal();
+    assert!(sig.contains(Signal::PEER_CLOSED));
+    assert!(sig.contains(Signal::USER_SIGNAL_0));
+}
+
+/// C++: TEST(EventPairTest, RelatedKoidBecomesZero)
+#[test]
+fn eventpair_related_koid_becomes_zero() {
+    let _ctx = TestContext::new();
+    let (ep0, ep1) = EventPair::create();
+    let ep1_id = ep1.id();
+    assert_eq!(ep0.related_koid(), ep1_id);
+
+    drop(ep1);
+    assert_eq!(ep0.related_koid(), 0);
+}
+
+/// C++: TEST(EventPairTest, SignalPeerMultipleSignals)
+#[test]
+fn eventpair_signal_peer_multiple() {
+    let _ctx = TestContext::new();
+    let (ep0, ep1) = EventPair::create();
+
+    // Signal peer with multiple signals at once
+    ep0.peer()
+        .unwrap()
+        .signal_set(Signal::USER_SIGNAL_0 | Signal::USER_SIGNAL_1);
+    assert!(ep1.signal().contains(Signal::USER_SIGNAL_0));
+    assert!(ep1.signal().contains(Signal::USER_SIGNAL_1));
+
+    // Clear one signal on the peer
+    ep0.peer().unwrap().signal_clear(Signal::USER_SIGNAL_0);
+    assert!(!ep1.signal().contains(Signal::USER_SIGNAL_0));
+    assert!(ep1.signal().contains(Signal::USER_SIGNAL_1));
+}
