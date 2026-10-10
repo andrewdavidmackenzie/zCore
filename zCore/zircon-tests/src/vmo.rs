@@ -671,3 +671,61 @@ fn vmo_commit_decommit_round_trip() {
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 99);
 }
+
+// -- Faithful 1:1 ports from VmoSignalTestCase (vmo-signal.cc) --
+
+/// C++: TEST(VmoSignalTestCase, SignalSanity)
+/// VMO handles support user signals; initial state has VMO_ZERO_CHILDREN.
+#[test]
+fn signal_sanity() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+
+    // Initial signals: VMO_ZERO_CHILDREN should be set (no children)
+    let sig = vmo.signal();
+    assert!(sig.contains(Signal::VMO_ZERO_CHILDREN));
+    assert!(!sig.contains(Signal::USER_SIGNAL_0));
+
+    // Set a user signal
+    vmo.signal_set(Signal::USER_SIGNAL_0);
+    let sig = vmo.signal();
+    assert!(sig.contains(Signal::USER_SIGNAL_0));
+    assert!(sig.contains(Signal::VMO_ZERO_CHILDREN));
+}
+
+/// C++: TEST(VmoSignalTestCase, ChildSignalClone)
+/// VMO_ZERO_CHILDREN signal tracks clone lifecycle.
+/// Creates snapshot clones in a loop, verifying signal transitions.
+#[test]
+fn child_signal_clone() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(2);
+
+    for _ in 0..10 {
+        // No children — signal set
+        assert!(vmo.signal().contains(Signal::VMO_ZERO_CHILDREN));
+
+        let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+
+        // Has child — ZERO_CHILDREN cleared on parent
+        assert!(clone.signal().contains(Signal::VMO_ZERO_CHILDREN));
+        assert!(!vmo.signal().contains(Signal::VMO_ZERO_CHILDREN));
+
+        let clone2 = clone.create_child(false, 0, PAGE_SIZE).unwrap();
+
+        // clone2 has no children, clone has children, vmo has children
+        assert!(clone2.signal().contains(Signal::VMO_ZERO_CHILDREN));
+        assert!(!clone.signal().contains(Signal::VMO_ZERO_CHILDREN));
+        assert!(!vmo.signal().contains(Signal::VMO_ZERO_CHILDREN));
+
+        // Close clone first — vmo still has grandchild
+        drop(clone);
+        assert!(!vmo.signal().contains(Signal::VMO_ZERO_CHILDREN));
+        assert!(clone2.signal().contains(Signal::VMO_ZERO_CHILDREN));
+
+        // Close clone2 — vmo has no children again
+        drop(clone2);
+    }
+
+    assert!(vmo.signal().contains(Signal::VMO_ZERO_CHILDREN));
+}
