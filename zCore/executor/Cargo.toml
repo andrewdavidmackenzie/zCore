@@ -12,7 +12,7 @@ baremetal-test = []
 sched-priority = []
 
 [dependencies]
-unicycle = { git = "https://github.com/pleasewhy/unicycle", rev = "904f1c061d4784a5642e092d308cf523a9270c6e", default-features = false }
+slab = { version = "0.4", default-features = false }
 bit-iter = "1.0.0"
 spin = "0.9"
 hashbrown = "0.14"

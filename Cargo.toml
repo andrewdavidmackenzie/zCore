@@ -14,7 +14,6 @@ members = [
 
     "tools/xtask",
     "zCore/executor",
-    "zCore/region-alloc",
     "zCore/lock",
     # Cross-compiled for bare-metal userspace by xtask.
     # Not in default-members (require explicit --target to build).

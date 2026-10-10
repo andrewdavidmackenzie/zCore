@@ -23,8 +23,6 @@ drivers/              (zcore-drivers)
   -- links to kernel via extern "C" FFI
 third-party/executor/ (executor)
   -- bare-metal async task executor
-third-party/region-alloc/ (region-alloc)
-  -- BTreeSet-based region/range allocator
 z-config/             (z-config)
   -- machine target config parser
 
@@ -50,11 +48,8 @@ DeviceList<T>, and exposes `all_block()`,
 
 zCore/zircon-object/
  +-- hal-impl/
- +-- third-party/region-alloc/
 
-Confirmed. `zircon-object` uses `region-alloc`
-only for PCI BAR allocation, not for general
-memory. The main frame and heap allocators are
+The main frame and heap allocators are
 in the `zCore` binary crate (`memory.rs` /
 `memory_x86_64.rs`). The HAL accesses them via
 `KernelHandler` callbacks. All allocation runs
@@ -280,8 +275,6 @@ Arrows point from dependant -> dependency ("A --> B" means A depends on B).
 |                    | communicate with kernel |
 | `executor`         | Vendored fork. Uses     |
 |                    | only external crates    |
-| `region-alloc`     | Pure data structure,    |
-|                    | zero external deps      |
 | `z-config`         | Uses only serde + toml  |
 
 #### Level 1
@@ -295,8 +288,6 @@ Arrows point from dependant -> dependency ("A --> B" means A depends on B).
 | `zircon-object` | `hal-impl`   | UserContext,  |
 |                 |                | PageTable,    |
 |                 |                | MMUFlags      |
-|                 | `region-alloc` | VMAR address  |
-|                 |                | allocation    |
 
 #### Level 2
 

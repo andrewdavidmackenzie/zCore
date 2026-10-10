@@ -3,10 +3,9 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use bit_iter::BitIter;
-use core::ops::{Coroutine, CoroutineState};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use slab::Slab;
 use spin::{Mutex, MutexGuard};
-use unicycle::pin_slab::PinSlab;
 use {
     alloc::boxed::Box,
     core::future::Future,
@@ -83,7 +82,7 @@ impl Task {
 }
 
 pub struct FutureCollection {
-    pub slab: PinSlab<Arc<Task>>,
+    pub slab: Slab<Arc<Task>>,
     // pub vec: VecDeque<Key>,
     pub pages: Vec<Arc<WakerPage>>,
     pub priority: usize,
@@ -92,7 +91,7 @@ pub struct FutureCollection {
 impl FutureCollection {
     pub fn new(priority: usize) -> Self {
         Self {
-            slab: PinSlab::new(),
+            slab: Slab::new(),
             // vec: VecDeque::new(),
             pages: vec![],
             priority,
@@ -121,10 +120,16 @@ impl FutureCollection {
         key
     }
 
-    pub fn remove(&mut self, key: Key) {
+    pub fn remove(&mut self, key: Key) -> bool {
         let (page, subpage_idx) = self.page(key);
         page.clear(subpage_idx);
-        self.slab.remove(unmask_priority(key));
+        let slab_key = unmask_priority(key);
+        if self.slab.contains(slab_key) {
+            self.slab.remove(slab_key);
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -164,9 +169,10 @@ impl TaskCollection {
         // Lock ordering: sched_state first, then future_collections.
         let mut sched = self.sched_state.lock();
         let mut inner = self.get_mut_inner(key >> PRIORITY_SHIFT);
-        inner.remove(unmask_priority(key));
-        crate::sched::on_task_removed(&mut sched, key);
-        self.task_num.fetch_sub(1, Ordering::Relaxed);
+        if inner.remove(unmask_priority(key)) {
+            crate::sched::on_task_removed(&mut sched, key);
+            self.task_num.fetch_sub(1, Ordering::Relaxed);
+        }
     }
 
     pub fn priority_add_task<F: Future<Output = ()> + 'static + Send>(
@@ -218,9 +224,10 @@ impl TaskCollection {
                 if dropped != 0 {
                     for subpage_idx in BitIter::from(dropped) {
                         let key = pack_key(priority, page_idx, subpage_idx);
-                        self.task_num.fetch_sub(1, Ordering::Relaxed);
-                        crate::sched::on_task_removed(&mut sched, key);
-                        inner.remove(key);
+                        if inner.remove(key) {
+                            self.task_num.fetch_sub(1, Ordering::Relaxed);
+                            crate::sched::on_task_removed(&mut sched, key);
+                        }
                     }
                 }
             }
@@ -246,7 +253,7 @@ impl TaskCollection {
         }
         let key = crate::sched::pick_next(&mut self.sched_state.lock())?;
         let (priority, page_idx, subpage_idx) = unpack_key(key);
-        let mut inner = self.get_mut_inner(priority);
+        let inner = self.get_mut_inner(priority);
         let task = inner.slab.get(unmask_priority(key))?.clone();
         let waker = inner.pages[page_idx].make_waker(subpage_idx, &task.finish);
         let droper = waker.clone();
