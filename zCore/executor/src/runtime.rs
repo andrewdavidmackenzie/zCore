@@ -65,8 +65,13 @@ impl ExecutorRuntime {
     }
 
     fn downgrade_strong_executor(&mut self) {
-        // SAFETY: runs on a single core only; no synchronization needed
         let mut old = self.strong_executor.clone();
+        // SAFETY: downgrade_strong_executor is called from
+        // run_until_idle, which runs with interrupts disabled
+        // on a single CPU. No other code path can access this
+        // Arc clone concurrently. mark_weak() sets an AtomicBool
+        // on the Executor, which does not invalidate any
+        // references — it only affects future scheduling decisions.
         unsafe {
             Arc::get_mut_unchecked(&mut old).mark_weak();
         }

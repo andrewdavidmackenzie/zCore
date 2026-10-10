@@ -8,11 +8,17 @@ type IRQueue = MpscQueue<'static, IpiEntry>;
 
 /// Static buffer pool for per-CPU IPI queues.
 /// Sized by `MAX_CORE_NUM` (from target config's `cores` field).
+///
+/// SAFETY: Each element is borrowed exactly once (by its corresponding
+/// IPI_QUEUE entry) during the Lazy initialization, which runs once.
+/// The per-element borrows are non-overlapping (each `i` is unique).
 static mut IPI_REASON_POOL: [[IpiEntry; REASON_SIZE]; MAX_CORE_NUM] =
     [[0; REASON_SIZE]; MAX_CORE_NUM];
 
-static IPI_QUEUE: spin::Lazy<[IRQueue; MAX_CORE_NUM]> =
-    spin::Lazy::new(|| core::array::from_fn(|i| IRQueue::new(unsafe { &mut IPI_REASON_POOL[i] })));
+static IPI_QUEUE: spin::Lazy<[IRQueue; MAX_CORE_NUM]> = spin::Lazy::new(|| {
+    // SAFETY: Lazy runs once; each element [i] is borrowed exclusively.
+    core::array::from_fn(|i| IRQueue::new(unsafe { &mut IPI_REASON_POOL[i] }))
+});
 
 pub(crate) fn ipi_queue(cpuid: usize) -> &'static IRQueue {
     &IPI_QUEUE[cpuid]

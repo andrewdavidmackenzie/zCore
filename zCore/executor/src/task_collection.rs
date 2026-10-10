@@ -151,7 +151,7 @@ impl TaskCollection {
             sched_state: Mutex::new(crate::sched::new(cpu_id)),
             pending_yield: Mutex::new(None),
         });
-        let tc = unsafe { Arc::get_mut_unchecked(&mut task_collection) };
+        let tc = Arc::get_mut(&mut task_collection).expect("Arc just created, must be unique");
         for priority in 0..MAX_PRIORITY {
             tc.future_collections
                 .push(Mutex::new(FutureCollection::new(priority)));

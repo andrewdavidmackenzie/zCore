@@ -78,32 +78,17 @@ pub struct DevINode {
 
 impl DevINode {
     fn new_with_parent(parent: Weak<DevINode>) -> Arc<Self> {
-        Self {
-            this: Weak::default(),
+        Arc::new_cyclic(|weak| Self {
+            this: weak.clone(),
             parent,
             fs: RwLock::new(Weak::default()),
             children: RwLock::new(BTreeMap::new()),
             inode_id: DevFS::new_inode_id(),
-        }
-        .wrap()
+        })
     }
 
     fn new() -> Arc<Self> {
         Self::new_with_parent(Weak::default())
-    }
-
-    /// Wrap pure DevFS with Arc
-    /// Used in constructors
-    fn wrap(self) -> Arc<Self> {
-        // Create an Arc, make a Weak from it, then put it into the struct.
-        // It's a little tricky.
-        let this = Arc::new(self);
-        let weak = Arc::downgrade(&this);
-        let ptr = Arc::into_raw(this) as *mut Self;
-        unsafe {
-            (*ptr).this = weak;
-        }
-        unsafe { Arc::from_raw(ptr) }
     }
 
     pub fn add_dir(&self, name: &str) -> Result<Arc<DevINode>> {
