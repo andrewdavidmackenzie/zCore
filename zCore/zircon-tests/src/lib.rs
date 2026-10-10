@@ -43,3 +43,24 @@ mod job;
 
 #[cfg(test)]
 mod process;
+
+#[cfg(test)]
+mod thread;
+
+#[cfg(test)]
+mod futex;
+
+#[cfg(test)]
+mod stream;
+
+#[cfg(test)]
+mod vmo_clone;
+
+#[cfg(test)]
+mod vmo_slice;
+
+#[cfg(test)]
+mod vmo_reference;
+
+#[cfg(test)]
+mod vmar;
