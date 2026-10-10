@@ -50,6 +50,18 @@ VmoTestCase.*
 #  VmoCloneTestCase.Commit, VmoCloneDisjointClonesTests.DisjointCloneLateClose,
 #  VmoSignalTestCase.ChildSignalMap, VmoZeroTestcase.ZeroFreesAndAllocates
 #  removed — now pass thanks to COW attribution fix #575)
+# (VmoSliceTestCase.AttributedCounts, VmoReference.AttributedCounts,
+#  VmoTransferDataTestCase.SnapshotChildSrc — now pass thanks to #508 fixes)
+
+# ── VmoReference: remaining failures needing new infrastructure ──────
+# ChildSnapshotAtLeastOnWrite: needs true SNAPSHOT_AT_LEAST_ON_WRITE
+#   semantics (parent writes visible until child writes). Also uses
+#   pager-backed VMO. Currently both SNAPSHOT types create full COW.
+VmoReference.ChildSnapshotAtLeastOnWrite
+# MappingUpdateNestedRootDestroy: mapping invalidation doesn't propagate
+#   up through reference/slice parents when decommitting after root
+#   handle is closed.
+VmoReference.MappingUpdateNestedRootDestroy
 
 # ── Pager infrastructure (#498, #499) ────────────────────────────────
 # Pager tests need preemptive scheduling + TRAP_DIRTY support.
@@ -90,6 +102,8 @@ MemoryMappingTest.MmapProtExecTest
 
 # ── Unimplemented hardware / missing binaries ───────────────────────
 ProcessTest.ProcessHwTraceContextIdProperty
+# InvalidInputs: test accesses boot_options->test_ram_reserve which is
+# uninitialized, causing trap 0x6 (invalid opcode).
 VmoTransferDataTestCase.InvalidInputs
 
 # ── BTI (Bus Transaction Initiator) ─────────────────────────────────
