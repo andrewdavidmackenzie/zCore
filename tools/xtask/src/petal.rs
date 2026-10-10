@@ -340,13 +340,12 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
         .join("core-tests-standalone");
     let has_cts = prebuilt_cts.is_file();
 
-    // Check if rootfs petal binaries are already built.
-    // Prebuilt files (core-tests-standalone, shared libs) are always
-    // re-copied to avoid stale versions when prebuilts are updated.
-    let petal_built = PETAL_BINS.iter().all(|name| bin_dir.join(name).is_file());
-    if petal_built && !has_cts {
-        return rootfs_dir;
-    }
+    // Always run the build steps below. Cargo handles caching
+    // internally (skipping compilation if sources haven't changed),
+    // so calling build_petal() is cheap when nothing changed. The
+    // previous check (exit if output files exist) skipped rebuilds
+    // even when petal source code had changed, causing stale
+    // binaries in the rootfs.
 
     std::fs::create_dir_all(&bin_dir)
         .unwrap_or_else(|e| panic!("failed to create {}: {}", bin_dir.display(), e));
@@ -415,17 +414,20 @@ pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
     std::fs::create_dir_all(&dir).ok();
     let image = dir.join(format!("{}-zircon.img", arch.name()));
 
-    // Skip if image exists and is newer than all rootfs binaries
+    // Skip if image exists and is newer than all rootfs files.
+    // Check both bin/ and lib/ directories so that updated prebuilt
+    // shared libraries also trigger an image rebuild.
     if image.is_file() {
         let img_mtime = image.metadata().and_then(|m| m.modified()).ok();
-        let newest_bin = rootfs_dir.join("bin").read_dir().ok().and_then(|entries| {
-            entries
-                .flatten()
-                .filter_map(|e| e.metadata().ok()?.modified().ok())
-                .max()
-        });
-        if let (Some(img_t), Some(bin_t)) = (img_mtime, newest_bin) {
-            if img_t >= bin_t {
+        let newest_file = ["bin", "lib"]
+            .iter()
+            .filter_map(|sub| rootfs_dir.join(sub).read_dir().ok())
+            .flatten()
+            .flatten()
+            .filter_map(|e| e.metadata().ok()?.modified().ok())
+            .max();
+        if let (Some(img_t), Some(file_t)) = (img_mtime, newest_file) {
+            if img_t >= file_t {
                 return image;
             }
         }
