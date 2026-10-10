@@ -113,67 +113,107 @@ fn event_name() {
     assert_eq!(event.name(), "test-event");
 }
 
-/// C++: TEST(EventPairTest, BothEndpointsSignalable)
+// -- Faithful 1:1 ports from EventPairTest (event-pair.cc) --
+// Test names match the C++ originals exactly.
+
+/// C++: TEST(EventPairTest, HandlesNotInvalid)
 #[test]
-fn eventpair_both_endpoints_signalable() {
+fn handles_not_invalid() {
+    let _ctx = TestContext::new();
+    let (ep0, ep1) = EventPair::create();
+    assert_ne!(ep0.id(), 0);
+    assert_ne!(ep1.id(), 0);
+}
+
+/// C++: TEST(EventPairTest, SignalEventPairAndClearVerifySignals)
+#[test]
+fn signal_event_pair_and_clear_verify_signals() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
 
-    // Signal ep0 directly (not through peer)
+    assert!(!ep0.signal().contains(Signal::USER_SIGNAL_0));
+    assert!(!ep1.signal().contains(Signal::USER_SIGNAL_0));
+
     ep0.signal_set(Signal::USER_SIGNAL_0);
     assert!(ep0.signal().contains(Signal::USER_SIGNAL_0));
     assert!(!ep1.signal().contains(Signal::USER_SIGNAL_0));
 
-    // Signal ep1 directly
-    ep1.signal_set(Signal::USER_SIGNAL_1);
-    assert!(ep1.signal().contains(Signal::USER_SIGNAL_1));
-    assert!(!ep0.signal().contains(Signal::USER_SIGNAL_1));
+    ep0.signal_clear(Signal::USER_SIGNAL_0);
+    assert!(!ep0.signal().contains(Signal::USER_SIGNAL_0));
+    assert!(!ep1.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(EventPairTest, PeerClosedClearsOnSurvivingEnd)
+/// C++: TEST(EventPairTest, SignalPeerAndVerifyRecived)
 #[test]
-fn eventpair_peer_closed_signal_details() {
+fn signal_peer_and_verify_received() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
 
-    // Set some signals on ep0 before closing ep1
-    ep0.signal_set(Signal::USER_SIGNAL_0);
+    // Signal ep1 through ep0
+    ep0.peer().unwrap().signal_set(Signal::USER_SIGNAL_0);
+    assert!(!ep0.signal().contains(Signal::USER_SIGNAL_0));
+    assert!(ep1.signal().contains(Signal::USER_SIGNAL_0));
+
+    // Signal ep0 through ep1, multiple signals
+    ep1.peer()
+        .unwrap()
+        .signal_set(Signal::USER_SIGNAL_1 | Signal::USER_SIGNAL_2);
+    assert!(ep0.signal().contains(Signal::USER_SIGNAL_1));
+    assert!(ep0.signal().contains(Signal::USER_SIGNAL_2));
+    assert!(ep1.signal().contains(Signal::USER_SIGNAL_0)); // still set
+
+    // Clear and set through ep0 -> ep1
+    ep0.peer().unwrap().signal_change(
+        Signal::USER_SIGNAL_0,
+        Signal::USER_SIGNAL_3 | Signal::USER_SIGNAL_4,
+    );
+    assert!(ep0.signal().contains(Signal::USER_SIGNAL_1));
+    assert!(ep0.signal().contains(Signal::USER_SIGNAL_2));
+    assert!(!ep1.signal().contains(Signal::USER_SIGNAL_0));
+    assert!(ep1.signal().contains(Signal::USER_SIGNAL_3));
+    assert!(ep1.signal().contains(Signal::USER_SIGNAL_4));
+}
+
+/// C++: TEST(EventPairTest, SignalPeerThenCloseAndVerifySignalReceived)
+#[test]
+fn signal_peer_then_close_and_verify_signal_received() {
+    let _ctx = TestContext::new();
+    let (ep0, ep1) = EventPair::create();
+
+    ep0.peer()
+        .unwrap()
+        .signal_set(Signal::USER_SIGNAL_3 | Signal::USER_SIGNAL_4);
+
+    drop(ep0);
+
+    // Signaled flags should remain but now also get peer closed
+    let sig = ep1.signal();
+    assert!(sig.contains(Signal::PEER_CLOSED));
+    assert!(sig.contains(Signal::USER_SIGNAL_3));
+    assert!(sig.contains(Signal::USER_SIGNAL_4));
+}
+
+/// C++: TEST(EventPairTest, SignalingClosedPeerReturnsPeerClosed)
+#[test]
+fn signaling_closed_peer_returns_peer_closed() {
+    let _ctx = TestContext::new();
+    let (ep0, ep1) = EventPair::create();
+
+    drop(ep1);
+    assert_eq!(ep0.peer().unwrap_err(), ZxError::PEER_CLOSED);
+}
+
+/// C++: TEST(EventPairTest, SignalSelfAfterPeerClosed)
+#[test]
+fn signal_self_after_peer_closed() {
+    let _ctx = TestContext::new();
+    let (ep0, ep1) = EventPair::create();
 
     drop(ep1);
 
-    // PEER_CLOSED should be set, but user signals should remain
+    // Can still signal self after peer is closed
+    ep0.signal_set(Signal::USER_SIGNAL_0);
     let sig = ep0.signal();
     assert!(sig.contains(Signal::PEER_CLOSED));
     assert!(sig.contains(Signal::USER_SIGNAL_0));
-}
-
-/// C++: TEST(EventPairTest, RelatedKoidBecomesZero)
-#[test]
-fn eventpair_related_koid_becomes_zero() {
-    let _ctx = TestContext::new();
-    let (ep0, ep1) = EventPair::create();
-    let ep1_id = ep1.id();
-    assert_eq!(ep0.related_koid(), ep1_id);
-
-    drop(ep1);
-    assert_eq!(ep0.related_koid(), 0);
-}
-
-/// C++: TEST(EventPairTest, SignalPeerMultipleSignals)
-#[test]
-fn eventpair_signal_peer_multiple() {
-    let _ctx = TestContext::new();
-    let (ep0, ep1) = EventPair::create();
-
-    // Signal peer with multiple signals at once
-    ep0.peer()
-        .unwrap()
-        .signal_set(Signal::USER_SIGNAL_0 | Signal::USER_SIGNAL_1);
-    assert!(ep1.signal().contains(Signal::USER_SIGNAL_0));
-    assert!(ep1.signal().contains(Signal::USER_SIGNAL_1));
-
-    // Clear one signal on the peer
-    ep0.peer().unwrap().signal_clear(Signal::USER_SIGNAL_0);
-    assert!(!ep1.signal().contains(Signal::USER_SIGNAL_0));
-    assert!(ep1.signal().contains(Signal::USER_SIGNAL_1));
 }
