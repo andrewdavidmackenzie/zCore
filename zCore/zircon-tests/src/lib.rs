@@ -62,6 +62,9 @@ mod vmo_slice;
 mod vmo_reference;
 
 #[cfg(test)]
+mod vmo_zero;
+
+#[cfg(test)]
 mod vmar;
 
 #[cfg(test)]
