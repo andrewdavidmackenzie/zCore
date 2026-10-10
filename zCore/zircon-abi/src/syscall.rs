@@ -1092,14 +1092,8 @@ pub unsafe fn zx_fifo_create(
 // --- Clock syscalls ---
 
 /// Get the current time for a clock.
-///
-/// `clock_id`: 0 = monotonic, 1 = UTC, 2 = thread.
-///
-/// # Safety
-/// `time` must be a valid pointer.
-pub unsafe fn zx_clock_get(clock_id: u32, time: *mut i64) -> ZxStatus {
-    syscall2(crate::consts::SYS_CLOCK_GET, clock_id as u64, time as u64)
-}
+// zx_clock_get removed — deprecated in Zircon, replaced by
+// zx_clock_get_monotonic and zx_clock_get_boot.
 
 // --- Timer syscalls ---
 
@@ -1543,16 +1537,7 @@ pub unsafe fn zx_ktrace_control(
     )
 }
 
-/// Write a user trace event (removed upstream in Fuchsia).
-pub unsafe fn zx_ktrace_write(handle: HandleValue, id: u32, arg0: u32, arg1: u32) -> ZxStatus {
-    syscall4(
-        crate::consts::SYS_KTRACE_WRITE,
-        handle as u64,
-        id as u64,
-        arg0 as u64,
-        arg1 as u64,
-    )
-}
+// zx_ktrace_write removed — deprecated in Zircon.
 
 // ── Process memory access ────────────────────────────────────────────
 
