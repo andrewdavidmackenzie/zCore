@@ -196,12 +196,20 @@ impl DiskINode {
     }
 }
 
-/// Convert structs to [u8] slice
+/// Convert `#[repr(C)]` structs to `[u8]` slices for disk I/O.
+///
+/// # Safety (internal)
+///
+/// Uses `from_raw_parts` which requires the type to be `#[repr(C)]`
+/// with no padding containing uninitialized bytes. All implementors
+/// (`SuperBlock`, `DiskINode`, `DiskEntry`, `u32`) satisfy this.
 pub trait AsBuf {
     fn as_buf(&self) -> &[u8] {
+        // SAFETY: all implementors are #[repr(C)] POD types.
         unsafe { slice::from_raw_parts(self as *const _ as *const u8, size_of_val(self)) }
     }
     fn as_buf_mut(&mut self) -> &mut [u8] {
+        // SAFETY: all implementors are #[repr(C)] POD types.
         unsafe { slice::from_raw_parts_mut(self as *mut _ as *mut u8, size_of_val(self)) }
     }
 }

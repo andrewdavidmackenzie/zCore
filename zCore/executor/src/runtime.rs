@@ -65,8 +65,11 @@ impl ExecutorRuntime {
     }
 
     fn downgrade_strong_executor(&mut self) {
-        // SAFETY: runs on a single core only; no synchronization needed
         let mut old = self.strong_executor.clone();
+        // SAFETY: The executor runs on a single CPU. Although
+        // strong_count > 1 (we cloned above), no other thread
+        // can access `old` concurrently. mark_weak() only sets
+        // an AtomicBool, so the mutation is benign.
         unsafe {
             Arc::get_mut_unchecked(&mut old).mark_weak();
         }

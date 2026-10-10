@@ -135,11 +135,15 @@ const CORE_NUM: usize = 4;
 const QUEUE_SIZE: usize = 0x100 * CORE_NUM;
 static MOCK_DISK_READY: AtomicBool = AtomicBool::new(false);
 const ENTRY: Entry = Entry::new();
+// SAFETY: QUEUE_BUF is only accessed once, in mocking(), which is
+// called exactly once during initialization. The &'static mut
+// reference is required by SubmitQueue::new's API.
 static mut QUEUE_BUF: [Entry; QUEUE_SIZE] = [ENTRY; QUEUE_SIZE];
 
 /// Start simulating
 #[allow(unsafe_code)]
 pub fn mocking(initrd: &'static mut [u8]) -> ! {
+    // SAFETY: mocking() is called exactly once; no aliasing.
     SQ.init_by(Arc::new(SubmitQueue::new(unsafe { &mut QUEUE_BUF })));
     let mut mock = Mocking::new(initrd, SQ.clone());
     MOCK_DISK_READY.store(true, Ordering::Release);

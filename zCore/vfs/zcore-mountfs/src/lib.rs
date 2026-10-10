@@ -44,27 +44,12 @@ pub struct MNode {
 impl MountFS {
     /// Create a `MountFS` wrapper for file system `fs`
     pub fn new(fs: Arc<dyn FileSystem>) -> Arc<Self> {
-        MountFS {
+        Arc::new_cyclic(|weak| MountFS {
             inner: fs,
             mountpoints: RwLock::new(BTreeMap::new()),
             self_mountpoint: None,
-            self_ref: Weak::default(),
-        }
-        .wrap()
-    }
-
-    /// Wrap pure `MountFS` with `Arc<..>`.
-    /// Used in constructors.
-    fn wrap(self) -> Arc<Self> {
-        // Create an Arc, make a Weak from it, then put it into the struct.
-        // It's a little tricky.
-        let fs = Arc::new(self);
-        let weak = Arc::downgrade(&fs);
-        let ptr = Arc::into_raw(fs) as *mut Self;
-        unsafe {
-            (*ptr).self_ref = weak;
-            Arc::from_raw(ptr)
-        }
+            self_ref: weak.clone(),
+        })
     }
 
     /// Strong type version of `root_inode`
@@ -79,18 +64,13 @@ impl MountFS {
 }
 
 impl MNode {
-    /// Wrap pure `INode` with `Arc<..>`.
-    /// Used in constructors.
+    /// Wrap an `MNode` with `Arc`, setting the self-referential `self_ref`.
     fn wrap(self) -> Arc<Self> {
-        // Create an Arc, make a Weak from it, then put it into the struct.
-        // It's a little tricky.
-        let inode = Arc::new(self);
-        let weak = Arc::downgrade(&inode);
-        let ptr = Arc::into_raw(inode) as *mut Self;
-        unsafe {
-            (*ptr).self_ref = weak;
-            Arc::from_raw(ptr)
-        }
+        Arc::new_cyclic(|weak| MNode {
+            inode: self.inode,
+            vfs: self.vfs,
+            self_ref: weak.clone(),
+        })
     }
 
     /// Mount file system `fs` at this INode
@@ -99,13 +79,13 @@ impl MNode {
         if metadata.type_ != FileType::Dir {
             return Err(FsError::NotDir);
         }
-        let new_fs = MountFS {
+        let mount_point = self.self_ref.upgrade().unwrap();
+        let new_fs = Arc::new_cyclic(|weak| MountFS {
             inner: fs,
             mountpoints: RwLock::new(BTreeMap::new()),
-            self_mountpoint: Some(self.self_ref.upgrade().unwrap()),
-            self_ref: Weak::default(),
-        }
-        .wrap();
+            self_mountpoint: Some(mount_point),
+            self_ref: weak.clone(),
+        });
         self.vfs
             .mountpoints
             .write()
