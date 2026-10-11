@@ -11,10 +11,15 @@
 
 # ── Multi-threaded / cooperative scheduler ───────────────────────────
 # These tests spawn real OS threads and require preemptive scheduling.
-PortStressTest.*
+# PortStressTest: 2 pass, rest hang (multi-threaded stress)
+PortStressTest.ChannelCallWaitQueuePanicRepro
+PortStressTest.CancelKeyDuringMatchRace
+PortStressTest.SignalCloseWait
+PortStressTest.CancelKeyCloseRace
 ChannelTest.NoSpuriousReadableSignalWhenRacing
 ChannelCallMutexTest.*
-ChannelInternalTest.*
+# ChannelInternalTest: 3 tests pass, 1 hangs
+ChannelInternalTest.TransferChannelWithPendingCall
 ProcessTest.ProcessWaitAsyncCancelSelf
 ProcessTest.GetInfoRuntime
 ProcessTest.GetInfoRuntimeV1
@@ -76,11 +81,8 @@ Pager.*
 PagerProcess.*
 PagerWriteback.*
 Snapshot.*
-StreamTestCase.AppendSuppliesZeroes
-StreamTestCase.ContentSizeUpdatedOnPartialWrite
-StreamTestCase.PartialVmoDirty
-StreamTestCase.WriteShrinkRace
-StreamTestCase.FaultBeyondStreamSizeResizeDownRace
+# StreamTestCase: most fail without hanging — removed from skip.
+# NoStreamFromContiguousOrPhysicalVmo crashes (boot_options) — keep.
 StreamTestCase.NoStreamFromContiguousOrPhysicalVmo
 
 # ── Memory probe — crashes the runner (UD2 abort) ────────────────────
@@ -92,7 +94,7 @@ StreamTestCase.NoStreamFromContiguousOrPhysicalVmo
 Vmar.ProtectLargeUncomittedTest
 Vmar.UnmapLargeUncommittedTest
 Vmar.ProtectOverDemandPagedTest
-Vmar.ProtectReadIfXomUnsupported
+# Vmar.ProtectReadIfXomUnsupported: fails without crashing — removed
 Vmar.MapRangeResizable
 Vmar.FaultBeyondStreamSize
 Vmar.FaultBeyondReducedStreamSize
@@ -147,8 +149,8 @@ Resource.Ioports
 # ── System events / suspend / wake reports ───────────────────────────
 # ExactlyOneMemoryEventSignaled hangs — polls all pressure events.
 SystemEvent.ExactlyOneMemoryEventSignaled
-# WakeReport tests hang — wake source reporting not implemented.
-WakeReportTestsPortBound.*
+# WakeReport: PortBound fails without hanging (removed from skip).
+# ThreadBound hangs.
 WakeReportTestsThreadBound.*
 # SuspendAndResumeByTimer: now passes — removed from skip.
 
