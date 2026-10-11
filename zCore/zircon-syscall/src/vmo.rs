@@ -529,7 +529,11 @@ impl Syscall<'_> {
                     let mut state = [0u8; 32];
                     state[0..8].copy_from_slice(&(offset as u64).to_le_bytes());
                     state[8..16].copy_from_slice(&(len as u64).to_le_bytes());
-                    buf.write_array(&state)?;
+                    if let Err(e) = buf.write_array(&state) {
+                        // Undo the lock if the output write fails.
+                        let _ = vmo.unlock_discardable();
+                        return Err(e.into());
+                    }
                 }
                 Ok(())
             }
