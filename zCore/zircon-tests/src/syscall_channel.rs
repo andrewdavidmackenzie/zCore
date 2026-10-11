@@ -226,6 +226,65 @@ fn write_handle_transfer_via_syscall() {
     assert_eq!(received_event.id(), event.id());
 }
 
+/// C++: TEST(ChannelTest, ReadWithoutReadRightReturnsAccessDenied) — syscall level
+#[test]
+fn read_without_read_right() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Create channel and add handle without READ right
+    let (ch0, ch1) = zircon_object::ipc::Channel::create();
+    let h0 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        ch0,
+        zircon_object::object::Rights::WRITE, // no READ
+    ));
+    let _h1 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        ch1,
+        zircon_object::object::Rights::DEFAULT_CHANNEL,
+    ));
+
+    let mut buf = [0u8; 64];
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = sc.sys_channel_read(
+        h0,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        0,
+        buf.len() as u32,
+        0,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        false,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(ChannelTest, WriteWithoutWriteRightReturnsAccessDenied) — syscall level
+#[test]
+fn write_without_write_right() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Create channel and add handle without WRITE right
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let h0 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        ch0,
+        zircon_object::object::Rights::READ, // no WRITE
+    ));
+
+    let data = b"test";
+    let result = sc.sys_channel_write(
+        h0,
+        0,
+        UserInPtr::from(data.as_ptr() as usize),
+        data.len() as u32,
+        UserInPtr::from(0usize),
+        0,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
 /// C++: TEST(ChannelTest, WriteDataTooLargeReturnsOutOfRange) — syscall level
 /// Data exceeding ZX_CHANNEL_MAX_MSG_BYTES (65536) is rejected.
 #[test]

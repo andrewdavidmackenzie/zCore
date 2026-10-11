@@ -95,6 +95,9 @@ mod syscall_object;
 mod syscall_signal;
 
 #[cfg(test)]
+mod syscall_port;
+
+#[cfg(test)]
 mod syscall_socket;
 
 #[cfg(test)]
