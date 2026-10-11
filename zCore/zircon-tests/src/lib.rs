@@ -74,6 +74,9 @@ mod vmar;
 mod clock;
 
 #[cfg(test)]
+mod counter;
+
+#[cfg(test)]
 mod resource;
 
 #[cfg(test)]
@@ -81,6 +84,12 @@ mod interrupt;
 
 #[cfg(test)]
 mod bti;
+
+#[cfg(test)]
+mod exception;
+
+#[cfg(test)]
+mod pager;
 
 #[cfg(test)]
 mod skipped;
@@ -111,3 +120,9 @@ mod syscall_task;
 
 #[cfg(test)]
 mod syscall_vmo;
+
+#[cfg(test)]
+mod vmo_transfer_data;
+
+#[cfg(test)]
+mod syscall_transfer_data;

@@ -7,9 +7,13 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
+use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
+use zircon_object::object::{Handle, Rights};
 use zircon_object::task::{CurrentThread, Job, Process, Thread};
 
 extern crate alloc;
+
+type HandleValue = u32;
 
 /// One-time HAL initialization for libos mode.
 static INIT: std::sync::Once = std::sync::Once::new();
@@ -24,6 +28,34 @@ pub fn ensure_hal_init() {
 /// In test mode, we never actually spawn user threads through this.
 fn dummy_thread_fn(_thread: CurrentThread) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
     Box::pin(async {})
+}
+
+/// Thread function that simulates a real userspace execution loop.
+///
+/// Like the real `run_user()` in zircon-loader, this loops:
+/// 1. `wait_for_run()` — takes context (blocks if suspended)
+/// 2. yield — gives the test harness a chance to act
+/// 3. `put_context()` — returns context (enables read/write_state)
+///
+/// The thread exits when killed (state becomes Dying).
+pub fn test_loop_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        loop {
+            let ctx = thread.wait_for_run().await;
+            // Check if the thread was killed while we were waiting.
+            if thread.state() == zircon_object::task::ThreadState::Dying {
+                thread.put_context(ctx);
+                break;
+            }
+            // Simulate brief "execution" then yield back to the scheduler.
+            async_std::task::yield_now().await;
+            thread.put_context(ctx);
+        }
+        // CurrentThread drop calls terminate() → state becomes Dead,
+        // THREAD_TERMINATED signal is asserted.
+    })
 }
 
 /// A test context providing a Zircon process and current thread.
@@ -49,5 +81,22 @@ impl TestContext {
             thread: &self.current,
             thread_fn: dummy_thread_fn,
         }
+    }
+
+    /// Create a root resource and add it to the process handle table.
+    ///
+    /// Returns the handle value. The root resource validates as any
+    /// resource kind and bypasses range checks, matching the behavior
+    /// of the root resource created during Zircon boot.
+    pub fn add_root_resource(&self) -> HandleValue {
+        let resource = Resource::create(
+            "root",
+            ResourceKind::ROOT,
+            0,
+            0x1_0000_0000, // 4 GiB range, same as boot path
+            ResourceFlags::empty(),
+        );
+        self.proc
+            .add_handle(Handle::new(resource, Rights::DEFAULT_RESOURCE))
     }
 }

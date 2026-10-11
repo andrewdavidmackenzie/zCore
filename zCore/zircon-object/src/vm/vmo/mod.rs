@@ -534,8 +534,8 @@ impl VmObject {
             base,
             resizable,
             is_slice: false,
-            immutable: core::sync::atomic::AtomicBool::new(false),
-            discardable: core::sync::atomic::AtomicBool::new(false), // Caller sets this after creation if needed
+            immutable: core::sync::atomic::AtomicBool::new(false), // Caller sets this after creation if needed
+            discardable: core::sync::atomic::AtomicBool::new(false),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_,

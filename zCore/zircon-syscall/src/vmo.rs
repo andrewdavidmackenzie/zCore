@@ -510,15 +510,16 @@ impl Syscall<'_> {
                 vmo.zero(offset, len)
             }
             VmoOpType::Lock | VmoOpType::TryLock => {
-                // Lock/TryLock requires a discardable VMO.
-                // We don't fully implement discardable state, so return
-                // NOT_SUPPORTED for non-discardable VMOs.
-                if !vmo.is_discardable() {
-                    return Err(ZxError::NOT_SUPPORTED);
-                }
+                // Lock/TryLock a discardable VMO to prevent eviction.
                 if !rights.intersects(Rights::READ | Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
+                // LOCK requires buffer for zx_vmo_lock_state_t (32 bytes).
+                // Lock/TryLock requires a discardable VMO.
+                if !vmo.is_discardable() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
+                // TRY_LOCK does not require a buffer.
                 if matches!(op, VmoOpType::Lock) && _buffer_size < 32 {
                     return Err(ZxError::INVALID_ARGS);
                 }
