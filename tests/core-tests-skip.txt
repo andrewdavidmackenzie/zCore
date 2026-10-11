@@ -157,3 +157,8 @@ WakeReportTestsThreadBound.*
 # actually sample, causing the test to crash (UD2 abort) when it
 # tries to read samples. Kills the test runner process.
 ThreadSampler.*
+
+# ── BadAccessTest — crashes test runner ──────────────────────────────
+# Deliberately accesses invalid memory; our kernel demand-pages
+# instead of faulting, leading to a page-fault crash.
+BadAccessTest.*
