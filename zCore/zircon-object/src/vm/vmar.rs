@@ -309,17 +309,16 @@ impl VmAddressRegion {
         // `map_range || vmo.name() != ""` forced eager commit for named VMOs,
         // but Fuchsia's Scudo allocator names its VMOs and requires lazy commit.
         // Page faults on uncommitted pages are handled by handle_page_fault.
-        if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
-            warn!(
-                "map_ext: INVALID_ARGS: vmo '{}' len={:#x} < offset={:#x}+len={:#x}, map_range={}",
-                vmo.name(),
-                vmo.len(),
-                vmo_offset,
-                len,
-                map_range
-            );
-            return Err(ZxError::INVALID_ARGS);
-        }
+        // Fuchsia allows mapping beyond VMO size — the excess pages
+        // fault on access. If map_range would try to commit beyond
+        // the VMO, truncate the eager commit range. The mapping
+        // itself is still created at the full requested size.
+        let map_range = if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
+            // Can't eagerly commit all pages — fall back to lazy.
+            false
+        } else {
+            map_range
+        };
         let mut guard = self.inner.lock();
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         let offset = if overwrite {
@@ -2057,15 +2056,11 @@ mod tests {
         let vmo = VmObject::new_paged(4);
         let flags = MMUFlags::READ | MMUFlags::WRITE;
 
-        // invalid argument
-        assert_eq!(
-            vmar.map_at(0, vmo.clone(), 0x4000, 0x1000, flags),
-            Err(ZxError::INVALID_ARGS)
-        );
-        assert_eq!(
-            vmar.map_at(0, vmo.clone(), 0, 0x5000, flags),
-            Err(ZxError::INVALID_ARGS)
-        );
+        // Fuchsia allows mapping beyond VMO size (pages fault on access).
+        let a1 = vmar.map_at(0, vmo.clone(), 0x4000, 0x1000, flags).unwrap();
+        vmar.unmap(a1, 0x1000).unwrap();
+        let a2 = vmar.map_at(0, vmo.clone(), 0, 0x5000, flags).unwrap();
+        vmar.unmap(a2, 0x5000).unwrap();
         assert_eq!(
             vmar.map_at(0, vmo.clone(), 0x1000, 1, flags),
             Err(ZxError::INVALID_ARGS)
