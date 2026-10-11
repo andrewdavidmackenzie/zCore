@@ -25,7 +25,7 @@ jobs:
         run: cargo test --no-fail-fast
 
       - name: Run Zircon syscall tests (libos)
-        run: cargo test -p zircon-tests --no-fail-fast
+        run: cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
 
   boot-smoke-test:
     name: Boot Smoke Test (aarch64)
