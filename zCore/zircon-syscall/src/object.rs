@@ -537,20 +537,15 @@ impl Syscall<'_> {
             }
             Topic::ProcessVmos => {
                 let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
-                // Collect VMO info from all handles that reference VMOs.
-                let raw_entries = target.get_handle_table_entries();
                 let mut vmo_infos: Vec<VmoInfo> = Vec::new();
-                // Iterate process handles looking for VMO-typed objects.
+                // Phase 1: VMOs accessible via handles.
                 let inner_handles = target.get_handle_table_entries();
                 for &(obj_type, hv, rights_bits, _koid, _related) in &inner_handles {
-                    // obj_type 3 = VmObject
                     if obj_type == 3 {
                         if let Ok(vmo) = target.get_object::<VmObject>(hv) {
                             let mut info = vmo.get_info();
                             info.flags |= VmoInfoFlags::VIA_HANDLE;
                             info.rights |= Rights::from_bits_truncate(rights_bits);
-                            // For VMOs accessed via handle, share_count is at least 1
-                            // (the owning process has a handle reference).
                             if info.share_count == 0 {
                                 info.share_count = 1;
                             }
@@ -558,7 +553,21 @@ impl Syscall<'_> {
                         }
                     }
                 }
-                drop(raw_entries);
+                // Phase 2: VMOs accessible via VMAR mappings.
+                let mapped_vmos = target.vmar().collect_mapped_vmos();
+                for (vmo, _num_mappings) in mapped_vmos {
+                    let koid = vmo.id();
+                    if let Some(existing) = vmo_infos.iter_mut().find(|i| i.koid() == koid) {
+                        existing.flags |= VmoInfoFlags::VIA_MAPPING;
+                    } else {
+                        let mut info = vmo.get_info();
+                        info.flags |= VmoInfoFlags::VIA_MAPPING;
+                        if info.share_count == 0 {
+                            info.share_count = 1;
+                        }
+                        vmo_infos.push(info);
+                    }
+                }
                 let full_size = core::mem::size_of::<VmoInfo>();
                 // Versioned VmoInfo entry sizes:
                 // V0: 104 bytes (original without attribution)
@@ -567,8 +576,8 @@ impl Syscall<'_> {
                 // V3+: full VmoInfo (168 bytes)
                 let entry_size = match topic_version {
                     0 => 104,
-                    1 => 128,
-                    2 => 152,
+                    1 => 120,
+                    2 => 128,
                     _ => full_size,
                 };
                 let count = (buffer_size / entry_size).min(vmo_infos.len());
@@ -596,8 +605,8 @@ impl Syscall<'_> {
                 // Versioned VmoInfo: write only the bytes the caller expects.
                 let entry_size = match topic_version {
                     0 => 104,
-                    1 => 128,
-                    2 => 152,
+                    1 => 120,
+                    2 => 128,
                     _ => full_size,
                 };
                 if buffer_size < entry_size {
