@@ -4,7 +4,8 @@
 
 use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
-use zircon_object::vm::{VmObject, PAGE_SIZE};
+use zircon_object::task::{Job, Process};
+use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 use zircon_object::ZxError;
 
 /// vmo_create: basic creation with correct size.
@@ -727,5 +728,50 @@ fn child_signal_clone() {
         drop(clone2);
     }
 
+    assert!(vmo.signal().contains(Signal::VMO_ZERO_CHILDREN));
+}
+
+// ── VMAR-dependent signal test (unblocked by #619 gap 1) ────────────
+
+/// C++: TEST(VmoSignalTestCase, ChildSignalMap)
+/// VMAR mapping keeps child VMO alive — ZERO_CHILDREN stays cleared
+/// until unmap, even after child handle is closed.
+#[test]
+fn child_signal_map() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "vmo-signal-test").unwrap();
+    let vmar = proc.vmar();
+
+    let vmo = VmObject::new_paged(2);
+    let flags = MMUFlags::READ | MMUFlags::WRITE;
+
+    for _ in 0..10 {
+        // No children — ZERO_CHILDREN set.
+        assert!(vmo.signal().contains(Signal::VMO_ZERO_CHILDREN));
+
+        // Create snapshot child.
+        let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+
+        // Map the child into the VMAR.
+        let map_addr = vmar.map(None, clone.clone(), 0, PAGE_SIZE, flags).unwrap();
+
+        // Parent has child — ZERO_CHILDREN cleared.
+        assert!(!vmo.signal().contains(Signal::VMO_ZERO_CHILDREN));
+
+        // Close the child handle — mapping still keeps it alive.
+        drop(clone);
+
+        // Parent should STILL have children (mapping keeps child alive).
+        assert!(
+            !vmo.signal().contains(Signal::VMO_ZERO_CHILDREN),
+            "ZERO_CHILDREN should stay cleared while mapping exists"
+        );
+
+        // Unmap — child VMO is now truly gone.
+        vmar.unmap(map_addr, PAGE_SIZE).unwrap();
+    }
+
+    // All children gone.
     assert!(vmo.signal().contains(Signal::VMO_ZERO_CHILDREN));
 }

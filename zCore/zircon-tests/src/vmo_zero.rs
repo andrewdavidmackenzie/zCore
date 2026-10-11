@@ -4,7 +4,8 @@
 //! Test names match the C++ originals exactly.
 
 use crate::helpers::TestContext;
-use zircon_object::vm::{VmObject, PAGE_SIZE};
+use zircon_object::task::{Job, Process};
+use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE, PAGE_SIZE_LOG2};
 
 /// C++: TEST(VmoZeroTestCase, UnalignedUnCommitted)
 /// Zero across page boundaries on uncommitted pages should not commit pages.
@@ -177,4 +178,126 @@ fn nested() {
     assert_eq!(buf[0], 0xAA);
     child2.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0xAA);
+}
+
+// ── BTI-dependent VmoZero test (unblocked by #619 gap 4) ────────────
+
+/// C++: TEST(VmoZeroTestCase, Contiguous)
+/// Zero on a contiguous VMO should zero page contents in-place
+/// without decommitting (pages must stay allocated for contiguity).
+#[test]
+fn contiguous() {
+    let _ctx = TestContext::new();
+
+    let vmo = VmObject::new_contiguous(2, PAGE_SIZE_LOG2).unwrap();
+    assert!(vmo.is_contiguous());
+
+    // Fill both pages with 0xFF.
+    let fill = vec![0xFFu8; 2 * PAGE_SIZE];
+    vmo.write(0, &fill).unwrap();
+
+    // Zero the first page.
+    vmo.zero(0, PAGE_SIZE).unwrap();
+
+    // First page should be zero.
+    let mut buf = vec![0xFFu8; PAGE_SIZE];
+    vmo.read(0, &mut buf).unwrap();
+    assert!(
+        buf.iter().all(|&b| b == 0),
+        "first page should be all zeros after zero op"
+    );
+
+    // Second page should still be 0xFF.
+    vmo.read(PAGE_SIZE, &mut buf).unwrap();
+    assert!(
+        buf.iter().all(|&b| b == 0xFF),
+        "second page should be untouched"
+    );
+
+    // Contiguous VMO should still report committed bytes for both pages
+    // (zero does NOT decommit on contiguous VMOs).
+    let info = vmo.get_info();
+    assert!(
+        info.committed_bytes >= (2 * PAGE_SIZE) as u64,
+        "contiguous VMO should keep both pages committed after zero"
+    );
+}
+
+// ── VMAR-dependent VmoZero tests (unblocked by #619 gap 1) ──────────
+
+/// C++: TEST(VmoZeroTestCase, UnalignedSubPage)
+/// Zero a sub-page range and verify via VMAR mapping.
+#[test]
+fn unaligned_sub_page() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "vmo-zero-test").unwrap();
+    let vmar = proc.vmar();
+
+    let vmo = VmObject::new_paged(1);
+    // Fill with 0xFF.
+    let fill = vec![0xFFu8; PAGE_SIZE];
+    vmo.write(0, &fill).unwrap();
+
+    // Zero bytes 100..200 (sub-page, unaligned).
+    vmo.zero(100, 100).unwrap();
+
+    // Map and verify through pointer.
+    let flags = MMUFlags::READ | MMUFlags::WRITE;
+    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
+
+    let ptr = addr as *const u8;
+    // Bytes 0..100 should be 0xFF.
+    for i in 0..100 {
+        let val = unsafe { core::ptr::read_volatile(ptr.add(i)) };
+        assert_eq!(val, 0xFF, "byte {} should be 0xFF", i);
+    }
+    // Bytes 100..200 should be 0.
+    for i in 100..200 {
+        let val = unsafe { core::ptr::read_volatile(ptr.add(i)) };
+        assert_eq!(val, 0, "byte {} should be 0", i);
+    }
+    // Bytes 200..PAGE_SIZE should be 0xFF.
+    for i in 200..PAGE_SIZE {
+        let val = unsafe { core::ptr::read_volatile(ptr.add(i)) };
+        assert_eq!(val, 0xFF, "byte {} should be 0xFF", i);
+    }
+
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
+}
+
+/// C++: TEST(VmoZeroTestCase, DecommitMiddle)
+/// Zero the middle page of a 3-page VMO, verify via mapping.
+#[test]
+fn decommit_middle() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "vmo-zero-test").unwrap();
+    let vmar = proc.vmar();
+
+    let vmo = VmObject::new_paged(3);
+    // Fill all 3 pages with 0xFF.
+    let fill = vec![0xFFu8; 3 * PAGE_SIZE];
+    vmo.write(0, &fill).unwrap();
+
+    // Zero the middle page.
+    vmo.zero(PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    // Map and verify.
+    let flags = MMUFlags::READ;
+    let addr = vmar.map(None, vmo, 0, 3 * PAGE_SIZE, flags).unwrap();
+
+    // First page: 0xFF.
+    let val = unsafe { core::ptr::read_volatile(addr as *const u8) };
+    assert_eq!(val, 0xFF, "first page should be 0xFF");
+
+    // Middle page: 0x00.
+    let val = unsafe { core::ptr::read_volatile((addr + PAGE_SIZE) as *const u8) };
+    assert_eq!(val, 0x00, "middle page should be 0x00");
+
+    // Last page: 0xFF.
+    let val = unsafe { core::ptr::read_volatile((addr + 2 * PAGE_SIZE) as *const u8) };
+    assert_eq!(val, 0xFF, "last page should be 0xFF");
+
+    vmar.unmap(addr, 3 * PAGE_SIZE).unwrap();
 }

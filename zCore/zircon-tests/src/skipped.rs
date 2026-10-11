@@ -13,15 +13,7 @@
 
 // ── Tests that need VMAR mapping (#619 gap 1) ──────────────────────
 
-/// C++: TEST(VmoSignalTestCase, ChildSignalMap)
-/// Needs VMAR mapping to keep VMO alive while mapped.
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_signal_child_signal_map() {
-    // Creates clones and maps them with zx_vmar_map.
-    // VMO stays alive while mapped (ZERO_CHILDREN not asserted until unmap).
-    todo!("needs VMAR mapping infrastructure")
-}
+// vmo_signal_child_signal_map: moved to vmo.rs (child_signal_map)
 
 /// C++: TEST(VmoReference, MappingUpdate)
 /// Maps reference, writes, decommits, verifies mapping reads zeros.
@@ -180,12 +172,7 @@ fn vmo_zero_allocate_after_merge() {
 
 // ── VmoZero tests that need VMAR mapping ────────────────────────────
 
-/// C++: TEST(VmoZeroTestCase, UnalignedSubPage)
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_zero_unaligned_sub_page() {
-    todo!("needs VMAR mapping for pointer verification")
-}
+// vmo_zero_unaligned_sub_page: moved to vmo_zero.rs (unaligned_sub_page)
 
 /// C++: TEST(VmoZeroTestCase, UnalignedCommitted)
 #[cfg(not(feature = "libos"))]
@@ -194,21 +181,11 @@ fn vmo_zero_unaligned_committed() {
     todo!("needs VMAR mapping for cross-page verification")
 }
 
-/// C++: TEST(VmoZeroTestCase, DecommitMiddle)
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_zero_decommit_middle() {
-    todo!("needs VMAR mapping for memset + verify")
-}
+// vmo_zero_decommit_middle: moved to vmo_zero.rs (decommit_middle)
 
 // ── VmoZero tests that need special infrastructure ──────────────────
 
-/// C++: TEST(VmoZeroTestCase, Contiguous)
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_zero_contiguous() {
-    todo!("needs BTI/IOMMU for contiguous VMO")
-}
+// vmo_zero_contiguous: moved to vmo_zero.rs (contiguous test)
 
 /// C++: TEST(VmoZeroTestcase, ZeroHiddenNoContent)
 #[cfg(not(feature = "libos"))]
@@ -219,21 +196,9 @@ fn vmo_zero_hidden_no_content() {
 
 // ── VmoClone tests that need VMAR/handle rights ─────────────────────
 
-/// C++: TEST(VmoCloneTestCase, Commit)
-/// Needs VMAR mapping to verify clone data via mapped pointers.
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_clone_commit() {
-    todo!("needs VMAR mapping")
-}
+// vmo_clone_commit: moved to vmo_clone.rs (clone_commit_via_mapping)
 
-/// C++: TEST(VmoCloneTestCase, Rights)
-/// Needs handle rights checking via get_info(ZX_INFO_HANDLE_BASIC).
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_clone_rights() {
-    todo!("needs handle rights + get_info infrastructure")
-}
+// vmo_clone_rights: moved to vmo_clone.rs (clone_rights)
 
 /// C++: TEST(VmoCloneTestCase, NoResize) — VMAR portion
 /// The set_size rejection is tested; the VMAR mapping portion is not.
@@ -245,19 +210,8 @@ fn vmo_clone_no_resize_with_mapping() {
 
 // ── VmoSlice tests that need BTI/IOMMU ──────────────────────────────
 
-/// C++: TEST(VmoSliceTestCase, ChildSliceOfContiguousParentIsContiguous)
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_slice_contiguous_parent() {
-    todo!("needs BTI/IOMMU for contiguous VMO")
-}
-
-/// C++: TEST(VmoSliceTestCase, Pin)
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_slice_pin() {
-    todo!("needs BTI/IOMMU for pin operations")
-}
+// vmo_slice_contiguous_parent: moved to vmo_slice.rs (contiguous_parent_slice_is_contiguous)
+// vmo_slice_pin: moved to vmo_slice.rs (pin_slice)
 
 /// C++: TEST(VmoSliceTestCase, RoundUpSizePhysical)
 #[cfg(not(feature = "libos"))]
@@ -266,12 +220,7 @@ fn vmo_slice_round_up_size_physical() {
     todo!("needs BTI/IOMMU for physical VMO")
 }
 
-/// C++: TEST(VmoSliceTestCase, ParentContiguousVmoStaysPinnedWithoutHandle)
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_slice_parent_contiguous_stays_pinned() {
-    todo!("needs BTI/IOMMU for pin/unpin + contiguous VMO")
-}
+// vmo_slice_parent_contiguous_stays_pinned: moved to vmo_slice.rs (parent_contiguous_stays_pinned)
 
 // ── VmoClone2 tests that need populated_bytes (fractional COW attribution) ──
 
