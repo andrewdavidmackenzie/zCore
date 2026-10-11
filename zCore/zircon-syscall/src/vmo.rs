@@ -48,6 +48,9 @@ impl Syscall<'_> {
             pages(size_usize)
         };
         let vmo = VmObject::new_paged_with_resizable(resizable, vmo_pages);
+        if options & ZX_VMO_DISCARDABLE != 0 {
+            vmo.set_discardable();
+        }
         // Set content_size to the exact user-requested size.
         vmo.set_content_size(size_usize)?;
         // Default VMO rights do not include EXECUTE. The caller must
@@ -382,7 +385,7 @@ impl Syscall<'_> {
             "vmo.create_contiguous: handle={:#x?}, size={:#x?}, align={}, out={:#x?}",
             bti, size, align_log2, out
         );
-        if size == 0 {
+        if size == 0 || !page_aligned(size) {
             return Err(ZxError::INVALID_ARGS);
         }
         let align_log2 = if align_log2 == 0 {
@@ -435,7 +438,9 @@ impl Syscall<'_> {
     ) -> ZxResult {
         info!("vmo.get_stream_size: handle={:#x}", handle);
         let proc = self.thread.proc();
-        let vmo = proc.get_object_with_rights::<VmObject>(handle, Rights::READ)?;
+        // get_stream_size doesn't require specific rights — any valid
+        // handle is sufficient (matches Fuchsia behavior).
+        let vmo = proc.get_object::<VmObject>(handle)?;
         size.write(vmo.content_size())?;
         Ok(())
     }
@@ -448,6 +453,10 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle, Rights::WRITE)?;
+        // stream size cannot exceed VMO size
+        if size > vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         vmo.set_content_size(size)
     }
 
@@ -501,12 +510,15 @@ impl Syscall<'_> {
                 vmo.zero(offset, len)
             }
             VmoOpType::Lock | VmoOpType::TryLock => {
-                // Lock/TryLock a discardable VMO to prevent eviction.
+                // Lock/TryLock requires a discardable VMO.
+                // We don't fully implement discardable state, so return
+                // NOT_SUPPORTED for non-discardable VMOs.
+                if !vmo.is_discardable() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
                 if !rights.intersects(Rights::READ | Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
-                // LOCK requires buffer for zx_vmo_lock_state_t (32 bytes).
-                // TRY_LOCK does not require a buffer.
                 if matches!(op, VmoOpType::Lock) && _buffer_size < 32 {
                     return Err(ZxError::INVALID_ARGS);
                 }
