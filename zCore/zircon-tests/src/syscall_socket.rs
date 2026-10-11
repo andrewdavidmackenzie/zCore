@@ -267,3 +267,89 @@ fn peeking_leaves_data() {
     );
     assert_eq!(result.unwrap_err(), ZxError::SHOULD_WAIT);
 }
+
+/// C++: TEST(SocketTest, WriteRights) — syscall level
+/// Writing without WRITE right returns ACCESS_DENIED.
+#[test]
+fn write_without_write_right() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let (s0, _s1) = zircon_object::ipc::Socket::create(0).unwrap();
+    let h0 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        s0,
+        zircon_object::object::Rights::READ, // no WRITE
+    ));
+
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(b"test".as_ptr() as usize),
+        4,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(SocketTest, ReadRights) — syscall level
+/// Reading without READ right returns ACCESS_DENIED.
+#[test]
+fn read_without_read_right() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let (s0, _s1) = zircon_object::ipc::Socket::create(0).unwrap();
+    let h0 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        s0,
+        zircon_object::object::Rights::WRITE, // no READ
+    ));
+
+    let mut buf = [0u8; 16];
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_read(
+        h0,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        buf.len(),
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(SocketTest, WriteInvalidOptions) — syscall level
+#[test]
+fn write_invalid_options() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h0,
+        0xFF, // invalid options
+        UserInPtr::from(b"test".as_ptr() as usize),
+        4,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, ReadInvalidOptions) — syscall level
+#[test]
+fn read_invalid_options() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    let mut buf = [0u8; 16];
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_read(
+        h0,
+        0xFF, // invalid options
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        buf.len(),
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}

@@ -148,3 +148,51 @@ fn invalid_parameters() {
     );
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
+
+/// C++: TEST(FifoTest, WriteNoWriteRights) — syscall level
+#[test]
+fn write_no_write_rights() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let (f0, _f1) = zircon_object::ipc::Fifo::create(16, 4);
+    let h0 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        f0,
+        zircon_object::object::Rights::READ, // no WRITE
+    ));
+
+    let data = [0u8; 4];
+    let mut actual: usize = 0;
+    let result = sc.sys_fifo_write(
+        h0,
+        4,
+        UserInPtr::from(data.as_ptr() as usize),
+        1,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(FifoTest, ReadNoReadRights) — syscall level
+#[test]
+fn read_no_read_rights() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let (f0, _f1) = zircon_object::ipc::Fifo::create(16, 4);
+    let h0 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        f0,
+        zircon_object::object::Rights::WRITE, // no READ
+    ));
+
+    let mut buf = [0u8; 4];
+    let mut actual: usize = 0;
+    let result = sc.sys_fifo_read(
+        h0,
+        4,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        1,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
