@@ -93,6 +93,25 @@ pub struct VmAddressRegion {
 impl_kobject!(VmAddressRegion);
 define_count_helper!(VmAddressRegion);
 
+impl Drop for VmAddressRegion {
+    fn drop(&mut self) {
+        // Recycle the address space ID for root VMARs so that
+        // long-running test suites don't exhaust the host VA space.
+        #[cfg(feature = "aspace-separate")]
+        if self.parent.is_none() {
+            #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+            let base = 0x4_0000_0000usize;
+            #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
+            let base = 0x2_0000_0000usize;
+            let stride = 0x100_0000_0000usize;
+            if self.addr >= base {
+                let id = (self.addr - base) / stride;
+                aspace_id::free(id);
+            }
+        }
+    }
+}
+
 /// The mutable part of `VmAddressRegion`.
 #[derive(Default)]
 struct VmarInner {
@@ -100,14 +119,43 @@ struct VmarInner {
     mappings: Vec<Arc<VmMapping>>,
 }
 
+/// Address space ID allocator for `aspace-separate` mode.
+///
+/// Each root VMAR gets a unique ID that determines its base address.
+/// IDs are recycled when root VMARs are dropped, preventing address
+/// space exhaustion in long-running test suites.
+#[cfg(feature = "aspace-separate")]
+mod aspace_id {
+    use alloc::collections::BTreeSet;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use lock::Mutex;
+
+    static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+    static FREE_IDS: Mutex<BTreeSet<usize>> = Mutex::new(BTreeSet::new());
+
+    /// Allocate an address space ID, preferring recycled IDs.
+    pub fn alloc() -> usize {
+        let mut free = FREE_IDS.lock();
+        if let Some(&id) = free.iter().next() {
+            free.remove(&id);
+            id
+        } else {
+            NEXT_ID.fetch_add(1, Ordering::SeqCst)
+        }
+    }
+
+    /// Return an address space ID for reuse.
+    pub fn free(id: usize) {
+        FREE_IDS.lock().insert(id);
+    }
+}
+
 impl VmAddressRegion {
     /// Create a new root VMAR.
     pub fn new_root() -> Arc<Self> {
         #[cfg(feature = "aspace-separate")]
         let (addr, size) = {
-            use core::sync::atomic::*;
-            static VMAR_ID: AtomicUsize = AtomicUsize::new(0);
-            let i = VMAR_ID.fetch_add(1, Ordering::SeqCst);
+            let i = aspace_id::alloc();
             // On aarch64 macOS, mmap MAP_FIXED fails below 0x400000000.
             // Use a higher base address for separate address spaces.
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]

@@ -524,6 +524,24 @@ fn check_style() {
         eprintln!("{}", String::from_utf8_lossy(&output.stderr));
         panic!("zircon-object tests failed");
     }
+
+    println!("==> Tests: zircon-tests (libos syscall test suite)...");
+    let output = std::process::Command::new("cargo")
+        .args([
+            "test",
+            "-p",
+            "zircon-tests",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=1",
+        ])
+        .output()
+        .expect("failed to run cargo test");
+    if !output.status.success() {
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        panic!("zircon-tests failed");
+    }
 }
 
 mod libos {

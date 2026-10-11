@@ -327,8 +327,16 @@ impl MockMemory {
         let hps = host_page_size();
         let aligned_vaddr = vaddr & !(hps - 1);
         let aligned_len = ((vaddr + len + hps - 1) & !(hps - 1)) - aligned_vaddr;
-        unsafe { mman::munmap(aligned_vaddr as _, aligned_len) }
-            .unwrap_or_else(|err| panic!("munmap failed: vaddr={:#x}: {:?}", aligned_vaddr, err));
+        // POSIX munmap on an already-unmapped range is a no-op (not an error).
+        // Don't panic — the VMAR allocator calls unmap_cont to clear stale
+        // entries, which may target addresses that were never mapped.
+        if let Err(err) = unsafe { mman::munmap(aligned_vaddr as _, aligned_len) } {
+            warn!(
+                "munmap non-fatal: vaddr={:#x}, len={:#x}: {:?}",
+                aligned_vaddr, aligned_len, err
+            );
+            return;
+        }
 
         // Remove host page tracking entries for the unmapped pages.
         let mut pages = self.host_pages.lock().unwrap();
