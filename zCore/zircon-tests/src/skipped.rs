@@ -272,3 +272,61 @@ fn vmo_slice_round_up_size_physical() {
 fn vmo_slice_parent_contiguous_stays_pinned() {
     todo!("needs BTI/IOMMU for pin/unpin + contiguous VMO")
 }
+
+// ── VmoClone2 tests that need populated_bytes (fractional COW attribution) ──
+
+/// C++: TEST_F(VmoClone2TestCase, ResizeOffsetChild)
+/// Resize parent to 0 with offset clone — needs populated_bytes checks.
+#[cfg(not(feature = "libos"))]
+#[test]
+fn vmo_clone2_resize_offset_child() {
+    todo!("populated_bytes polling — COW fractional attribution")
+}
+
+/// C++: TEST_F(VmoClone2TestCase, ResizeDisjointChild)
+/// Resize with 3 disjoint single-page clones, all 6 permutations — needs populated_bytes.
+#[cfg(not(feature = "libos"))]
+#[test]
+fn vmo_clone2_resize_disjoint_child() {
+    todo!("populated_bytes polling — COW fractional attribution + CallPermutations")
+}
+
+/// C++: TEST_F(VmoClone2TestCase, ResizeMultipleProgressive)
+/// Resize with progressive writes + two clones — needs populated_bytes.
+#[cfg(not(feature = "libos"))]
+#[test]
+fn vmo_clone2_resize_multiple_progressive() {
+    todo!("populated_bytes polling — COW fractional attribution")
+}
+
+/// C++: TEST_F(ProgressiveCloneDiscardTests, ProgressiveCloneClose)
+/// 6 progressive clones, discard by close — needs populated_bytes.
+#[cfg(not(feature = "libos"))]
+#[test]
+fn vmo_clone2_progressive_clone_close() {
+    todo!("populated_bytes polling — COW fractional attribution")
+}
+
+/// C++: TEST_F(ProgressiveCloneDiscardTests, ProgressiveCloneTruncate)
+/// 6 progressive clones, discard by truncate — needs populated_bytes.
+#[cfg(not(feature = "libos"))]
+#[test]
+fn vmo_clone2_progressive_clone_truncate() {
+    todo!("populated_bytes polling — COW fractional attribution")
+}
+
+/// C++: TEST_F(VmoCloneResizeTests, ResizeChild)
+/// Resize child and check populated_bytes attribution.
+#[cfg(not(feature = "libos"))]
+#[test]
+fn vmo_clone_resize_child() {
+    todo!("populated_bytes polling — COW fractional attribution")
+}
+
+/// C++: TEST_F(VmoCloneResizeTests, ResizeOriginal)
+/// Resize original and check populated_bytes attribution.
+#[cfg(not(feature = "libos"))]
+#[test]
+fn vmo_clone_resize_original() {
+    todo!("populated_bytes polling — COW fractional attribution")
+}
