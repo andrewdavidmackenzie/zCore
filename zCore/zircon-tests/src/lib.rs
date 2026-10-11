@@ -83,4 +83,16 @@ mod bti;
 mod syscall_channel;
 
 #[cfg(test)]
+mod syscall_fifo;
+
+#[cfg(test)]
 mod syscall_handle;
+
+#[cfg(test)]
+mod syscall_signal;
+
+#[cfg(test)]
+mod syscall_socket;
+
+#[cfg(test)]
+mod syscall_vmo;

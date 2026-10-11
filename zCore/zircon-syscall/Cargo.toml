@@ -10,6 +10,7 @@ description = "Zircon syscalls implementation"
 [features]
 # hypervisor = ["zircon-object/hypervisor"]
 deny-page-fault = []
+libos = []
 
 [package.metadata.cargo-all-features]
 # Depends on hal-impl (default-features = false) with no libos feature

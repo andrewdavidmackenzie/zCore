@@ -86,9 +86,18 @@ impl Syscall<'_> {
         if len == 0 {
             return Ok(());
         }
-        let vmar = self.thread.proc().vmar();
-        vmar.check_user_access(addr, len, MMUFlags::READ)
-            .map_err(|_| ZxError::INVALID_ARGS)
+        #[cfg(feature = "libos")]
+        {
+            // In libos mode, all host memory is accessible — skip VMAR validation.
+            let _ = (addr, len);
+            Ok(())
+        }
+        #[cfg(not(feature = "libos"))]
+        {
+            let vmar = self.thread.proc().vmar();
+            vmar.check_user_access(addr, len, MMUFlags::READ)
+                .map_err(|_| ZxError::INVALID_ARGS)
+        }
     }
 
     /// Validate that a user-space buffer is fully mapped with write
@@ -98,9 +107,18 @@ impl Syscall<'_> {
         if len == 0 {
             return Ok(());
         }
-        let vmar = self.thread.proc().vmar();
-        vmar.check_user_access(addr, len, MMUFlags::WRITE)
-            .map_err(|_| ZxError::INVALID_ARGS)
+        #[cfg(feature = "libos")]
+        {
+            // In libos mode, all host memory is accessible — skip VMAR validation.
+            let _ = (addr, len);
+            Ok(())
+        }
+        #[cfg(not(feature = "libos"))]
+        {
+            let vmar = self.thread.proc().vmar();
+            vmar.check_user_access(addr, len, MMUFlags::WRITE)
+                .map_err(|_| ZxError::INVALID_ARGS)
+        }
     }
 
     /// Resolve a handle value that may be a pseudo-handle.
