@@ -250,6 +250,10 @@ impl Syscall<'_> {
         if !parent_rights.contains(Rights::DUPLICATE | Rights::READ) {
             return Err(ZxError::ACCESS_DENIED);
         }
+        // Discardable VMOs cannot have children.
+        if vmo.is_discardable() {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         let child_vmo = if options.contains(VmoCloneFlags::REFERENCE) {
             // A reference child is a transparent alias that shares
             // pages with the parent. offset and size must both be 0.
@@ -360,8 +364,7 @@ impl Syscall<'_> {
         proc.check_policy(PolicyCondition::NewVMO)?;
         proc.get_resource(resource)?
             .validate_ranged_resource(ResourceKind::MMIO, paddr, size)?;
-        let size = roundup_pages(size);
-        if size == 0 || !page_aligned(paddr) {
+        if size == 0 || !page_aligned(size) || !page_aligned(paddr) {
             return Err(ZxError::INVALID_ARGS);
         }
         if paddr.overflowing_add(size).1 {

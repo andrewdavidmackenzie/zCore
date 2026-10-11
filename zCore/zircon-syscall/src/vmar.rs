@@ -165,6 +165,8 @@ impl Syscall<'_> {
         if overwrite && options.contains(VmOptions::MAP_RANGE) {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Explicit MAP_RANGE with mapping beyond VMO is OUT_OF_RANGE.
+        let explicit_map_range = options.contains(VmOptions::MAP_RANGE);
         let map_range = if cfg!(any(feature = "deny-page-fault", not(target_os = "none"))) {
             // On platforms that don't support page faults, reject
             // FAULT_BEYOND_STREAM_SIZE since it requires lazy mapping.
@@ -179,6 +181,13 @@ impl Syscall<'_> {
             // Default: eagerly commit pages to avoid stale page table issues
             true
         };
+        // Reject explicit MAP_RANGE when the mapping extends past the VMO.
+        if explicit_map_range {
+            let vmo_len = vmo.len();
+            if vmo_offset > vmo_len || len > vmo_len.saturating_sub(vmo_offset) {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+        }
 
         info!(
             "mmuflags: {:?}, is_specific {:?}, overwrite {:?}, map_range {:?}",
@@ -190,9 +199,18 @@ impl Syscall<'_> {
         // but since zCore use different memory layout from zircon,
         // we should not reject them and round up them instead
         // TODO: reject non-page-aligned length after we have the same memory layout with zircon
+        // Check for overflow before rounding up: if rounding would
+        // wrap to 0, the original size is too large.
+        let raw_len = len;
         let len = roundup_pages(len);
         if len == 0 {
-            return Err(ZxError::INVALID_ARGS);
+            // A raw len of 0 is INVALID_ARGS; a non-zero len that
+            // rounds to 0 (overflow) is OUT_OF_RANGE.
+            return Err(if raw_len == 0 {
+                ZxError::INVALID_ARGS
+            } else {
+                ZxError::OUT_OF_RANGE
+            });
         }
         let vmar_offset = if is_specific { Some(vmar_offset) } else { None };
         let fault_beyond = options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE);

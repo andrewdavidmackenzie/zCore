@@ -35,7 +35,12 @@ impl Syscall<'_> {
         let pager = proc.get_object::<Pager>(pager_handle)?;
         let port = proc.get_object_with_rights::<Port>(port_handle, Rights::WRITE)?;
         let vmo = pager.create_vmo(options, &port, key, size)?;
-        let handle = proc.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO));
+        let mut vmo_rights = Rights::DEFAULT_VMO;
+        if options & 1 != 0 {
+            // ZX_VMO_RESIZABLE
+            vmo_rights.insert(Rights::RESIZE);
+        }
+        let handle = proc.add_handle(Handle::new(vmo, vmo_rights));
         out.write(handle)?;
         Ok(())
     }

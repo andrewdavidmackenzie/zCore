@@ -893,6 +893,9 @@ impl VmObject {
                 if self.immutable.load(core::sync::atomic::Ordering::Relaxed) {
                     f |= VmoInfoFlags::IMMUTABLE;
                 }
+                if self.discardable.load(core::sync::atomic::Ordering::Relaxed) {
+                    f |= VmoInfoFlags::DISCARDABLE;
+                }
                 f
             },
             cache_policy: self.trait_.cache_policy() as u32,

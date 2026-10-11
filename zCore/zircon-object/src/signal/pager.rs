@@ -56,11 +56,17 @@ impl Pager {
         key: u64,
         size: u64,
     ) -> ZxResult<Arc<VmObject>> {
+        const ZX_VMO_RESIZABLE: u32 = 1;
         const ZX_VMO_TRAP_DIRTY: u32 = 1 << 3;
+        const ZX_VMO_DISCARDABLE: u32 = 1 << 2;
+        // Discardable pager-backed VMOs are not allowed.
+        if options & ZX_VMO_DISCARDABLE != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let resizable = options & ZX_VMO_RESIZABLE != 0;
         let trap_dirty = options & ZX_VMO_TRAP_DIRTY != 0;
         let pages = (size as usize).div_ceil(PAGE_SIZE);
-        // Pager-backed VMOs are always resizable in Fuchsia.
-        let vmo = VmObject::new_paged_with_resizable(true, pages);
+        let vmo = VmObject::new_paged_with_resizable(resizable, pages);
         vmo.set_content_size(vmo.len())?;
         vmo.set_name("pager-vmo");
         // Associate the pager's port and key with the VMO for
