@@ -99,8 +99,12 @@ impl BusTransactionInitiator {
 #[repr(C)]
 #[derive(Default)]
 pub struct BtiInfo {
-    minimum_contiguity: u64,
-    aspace_size: u64,
-    pmo_count: u64,
-    quarantine_count: u64,
+    /// Minimum contiguity guaranteed by the IOMMU.
+    pub minimum_contiguity: u64,
+    /// Size of the address space managed by the IOMMU.
+    pub aspace_size: u64,
+    /// Number of pinned memory objects (PMTs).
+    pub pmo_count: u64,
+    /// Number of quarantined PMTs (dropped without unpin).
+    pub quarantine_count: u64,
 }

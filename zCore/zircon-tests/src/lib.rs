@@ -86,6 +86,9 @@ mod interrupt;
 mod bti;
 
 #[cfg(test)]
+mod exception;
+
+#[cfg(test)]
 mod skipped;
 
 #[cfg(test)]
