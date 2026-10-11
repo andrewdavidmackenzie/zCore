@@ -80,6 +80,9 @@ mod interrupt;
 mod bti;
 
 #[cfg(test)]
+mod skipped;
+
+#[cfg(test)]
 mod syscall_channel;
 
 #[cfg(test)]
