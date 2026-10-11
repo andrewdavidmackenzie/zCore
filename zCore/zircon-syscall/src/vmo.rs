@@ -74,6 +74,13 @@ impl Syscall<'_> {
             "vmo.read: handle={:#x?}, offset={:#x?}, buf=({:#x?}; {:#x?})",
             handle_value, offset, buf, buf_size,
         );
+        let proc = self.thread.proc();
+        let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::READ)?;
+        // Check VMO bounds first — Fuchsia returns OUT_OF_RANGE for
+        // reads beyond the VMO size, even if the buffer is also bad.
+        if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         // Fuchsia returns NOT_FOUND for null, kernel-space, or
         // boundary-spanning user buffers.
         if buf_size > 0 && buf.is_null() {
@@ -88,12 +95,6 @@ impl Syscall<'_> {
             }
             None => return Err(ZxError::NOT_FOUND),
             _ => {}
-        }
-        let proc = self.thread.proc();
-        let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::READ)?;
-        // in case integer addition overflows
-        if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
-            return Err(ZxError::OUT_OF_RANGE);
         }
         // Chunked VMO read: read page-sized chunks from the VMO and
         // copy each chunk to user space, avoiding a single huge kernel
@@ -128,6 +129,12 @@ impl Syscall<'_> {
             "vmo.write: handle={:#x?}, offset={:#x?}, buf=({:#x?}; {:#x?})",
             handle_value, offset, buf, buf_size,
         );
+        let proc = self.thread.proc();
+        let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?;
+        // Check VMO bounds first.
+        if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         if buf_size > 0 && buf.is_null() {
             return Err(ZxError::NOT_FOUND);
         }
@@ -140,11 +147,6 @@ impl Syscall<'_> {
             }
             None => return Err(ZxError::NOT_FOUND),
             _ => {}
-        }
-        let proc = self.thread.proc();
-        let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?;
-        if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
-            return Err(ZxError::OUT_OF_RANGE);
         }
         // Chunked VMO write: copy user data in page-sized chunks and
         // write each chunk to the VMO, avoiding a single huge kernel
@@ -230,6 +232,10 @@ impl Syscall<'_> {
         }
 
         let resizable = options.contains(VmoCloneFlags::RESIZABLE);
+        // NO_WRITE + RESIZABLE is not allowed for snapshot children.
+        if no_write && resizable {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let child_size = roundup_pages(size);
         if child_size < size {
             return Err(ZxError::OUT_OF_RANGE);
@@ -399,7 +405,16 @@ impl Syscall<'_> {
     /// Resize a VMO object.
     pub fn sys_vmo_set_size(&self, handle_value: HandleValue, size: usize) -> ZxResult {
         let proc = self.thread.proc();
-        let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?;
+        let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
+        // Check resizability FIRST — non-resizable VMOs always return
+        // UNAVAILABLE regardless of handle rights.
+        if !vmo.is_resizable() {
+            return Err(ZxError::UNAVAILABLE);
+        }
+        // Then check rights — need both WRITE and RESIZE.
+        if !rights.contains(Rights::WRITE | Rights::RESIZE) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
         info!(
             "vmo.set_size: handle={:#x}, size={:#x}, current_size={:#x}",
             handle_value,
@@ -455,6 +470,10 @@ impl Syscall<'_> {
         let op = VmoOpType::try_from(op).or(Err(ZxError::INVALID_ARGS))?;
         let proc = self.thread.proc();
         let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
+        // Check for offset+len overflow or beyond VMO size.
+        if offset.checked_add(len).is_none() || offset + len > vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         match op {
             VmoOpType::Commit => {
                 if !rights.contains(Rights::WRITE) {
@@ -481,13 +500,14 @@ impl Syscall<'_> {
                 }
                 vmo.zero(offset, len)
             }
-            VmoOpType::Lock => {
-                // Lock (TRY_LOCK) a discardable VMO to prevent eviction.
+            VmoOpType::Lock | VmoOpType::TryLock => {
+                // Lock/TryLock a discardable VMO to prevent eviction.
                 if !rights.intersects(Rights::READ | Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
-                // Buffer must hold zx_vmo_lock_state_t (32 bytes).
-                if _buffer_size < 32 {
+                // LOCK requires buffer for zx_vmo_lock_state_t (32 bytes).
+                // TRY_LOCK does not require a buffer.
+                if matches!(op, VmoOpType::Lock) && _buffer_size < 32 {
                     return Err(ZxError::INVALID_ARGS);
                 }
                 // Validate range.
@@ -495,14 +515,14 @@ impl Syscall<'_> {
                 if end > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
-                // Write zx_vmo_lock_state_t to buffer:
-                // { offset: u64, size: u64, discarded_offset: u64, discarded_size: u64 }
-                let mut buf = _buffer;
-                let mut state = [0u8; 32];
-                state[0..8].copy_from_slice(&(offset as u64).to_le_bytes());
-                state[8..16].copy_from_slice(&(len as u64).to_le_bytes());
-                // discarded_offset and discarded_size are 0 (bytes 16..32)
-                buf.write_array(&state)?;
+                // Write zx_vmo_lock_state_t to buffer (LOCK only, not TRY_LOCK):
+                if matches!(op, VmoOpType::Lock) {
+                    let mut buf = _buffer;
+                    let mut state = [0u8; 32];
+                    state[0..8].copy_from_slice(&(offset as u64).to_le_bytes());
+                    state[8..16].copy_from_slice(&(len as u64).to_le_bytes());
+                    buf.write_array(&state)?;
+                }
                 Ok(())
             }
             VmoOpType::Unlock => {
@@ -699,9 +719,9 @@ numeric_enum! {
         CacheClean = 8,
         CacheCleanInvalidate = 9,
         Zero = 10,
-        AlwaysNeed = 11,
+        TryLock = 11,
         DontNeed = 12,
-        // 13 is unused
+        AlwaysNeed = 13,
         Prefetch = 14,
     }
 }

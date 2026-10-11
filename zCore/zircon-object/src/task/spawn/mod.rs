@@ -34,6 +34,7 @@ use crate::ipc::Channel;
 use crate::object::KernelObject;
 use crate::object::{Handle, Rights};
 use crate::vm::{MMUFlags, VmObject, VmarFlags, PAGE_SIZE};
+use hal_impl::mem::PhysFrame;
 
 /// Global spawn config, set once at kernel init by `zircon-loader`.
 /// Allows `linux-syscall` to spawn Zircon processes without a direct
@@ -479,9 +480,31 @@ pub fn spawn_process(
     }
     zbi_vmo.set_name("zbi");
 
-    // Create boot-options.txt VMO (empty, no boot options).
+    // Create boot-options.txt VMO with test RAM reservation.
+    // Reserve 64KB of contiguous physical RAM for tests that need
+    // physical/contiguous VMOs (VmoTestCase.Physical*, etc.).
     let boot_opts_vmo = VmObject::new_paged(1);
     boot_opts_vmo.set_name("boot-options.txt");
+    {
+        const TEST_RAM_SIZE: usize = 64 * 1024; // 64KB
+        const TEST_RAM_PAGES: usize = TEST_RAM_SIZE / PAGE_SIZE;
+        let test_frames = PhysFrame::new_contiguous(TEST_RAM_PAGES, 0);
+        if !test_frames.is_empty() {
+            let test_ram_paddr = test_frames[0].paddr();
+            // Write the boot option string.
+            let opt = alloc::format!(
+                "kernel.test.ram.reserve=0x{:x},0x{:x}\n",
+                TEST_RAM_SIZE,
+                test_ram_paddr
+            );
+            boot_opts_vmo.write(0, opt.as_bytes()).unwrap();
+            let _ = boot_opts_vmo.set_content_size(opt.len());
+            // Leak the frames so they stay allocated (reserved for tests).
+            for frame in test_frames {
+                core::mem::forget(frame);
+            }
+        }
+    }
 
     // Create a UTC clock for libc's clock_gettime(CLOCK_REALTIME).
     // Auto-started so it's immediately readable.
