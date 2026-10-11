@@ -56,6 +56,9 @@ mod stream;
 mod vmo_clone;
 
 #[cfg(test)]
+mod vmo_clone2;
+
+#[cfg(test)]
 mod vmo_slice;
 
 #[cfg(test)]
