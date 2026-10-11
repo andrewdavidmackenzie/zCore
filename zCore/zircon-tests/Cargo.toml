@@ -7,6 +7,13 @@ description = "Rust-native Zircon syscall test suite"
 # This crate only contains tests — no library.
 # Run with: cargo test -p zircon-tests
 
+[features]
+default = ["libos"]
+# libos: tests run on the host via kernel object / syscall dispatch.
+# When disabled (bare-metal mode), additional tests that require VMAR
+# mapping, threads, pager etc. become active.
+libos = []
+
 [dependencies]
 
 [dev-dependencies]
