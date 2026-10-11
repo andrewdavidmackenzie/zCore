@@ -104,4 +104,7 @@ mod syscall_port;
 mod syscall_socket;
 
 #[cfg(test)]
+mod syscall_task;
+
+#[cfg(test)]
 mod syscall_vmo;
