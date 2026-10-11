@@ -37,7 +37,7 @@ pub const PA_VMO_EXECUTABLE: u32 = 0x14;
 /// Boot data VMO (ZBI, boot-options, etc.).
 pub const PA_VMO_BOOTDATA: u32 = 0x1A;
 /// Kernel file VMO (named files like "boot-options.txt").
-pub const PA_VMO_KERNEL_FILE: u32 = 0x23;
+pub const PA_VMO_KERNEL_FILE: u32 = 0x1C;
 /// Root resource handle.
 pub const PA_RESOURCE: u32 = 0x3F;
 /// MMIO sub-resource.
@@ -47,7 +47,7 @@ pub const PA_IRQ_RESOURCE: u32 = 0x51;
 /// System sub-resource.
 pub const PA_SYSTEM_RESOURCE: u32 = 0x54;
 /// UTC clock handle.
-pub const PA_CLOCK_UTC: u32 = 0x56;
+pub const PA_CLOCK_UTC: u32 = 0x40;
 
 // ── Wire format ────────────────────────────────────────────────────
 

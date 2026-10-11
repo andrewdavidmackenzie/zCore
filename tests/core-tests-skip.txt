@@ -38,7 +38,7 @@ ChannelTest.ChannelFullException
 DefaultExceptionHandlerTest.UnhandledPolicyException
 
 # ── COW populated_bytes / fractional attribution (#577, #603) ────────
-# NoPhysical: boot_options crash (UD2 abort kills runner)
+# NoPhysical: test_ram_reserve not configured (UD2 abort)
 VmoClone2TestCase.NoPhysical
 # Offset: now passes — removed from skip
 # WriteCowParent, AllocateAfterMergeMultipleChildren: polling hang
@@ -49,13 +49,14 @@ VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 # ~28 pass, ~18 fail without hanging. Skip only tests that hang or
 # crash the runner (kernel panic, boot_options UD2, memory-probe UD2).
 # Crash: kernel panic (assertion failure in paged.rs)
-# VmoTestCase.Commit: no longer crashes — fails at op_range check, removed
 VmoTestCase.PinTests
 VmoTestCase.UnmapLoanedcontiguousWhileFaulting
-# Crash: boot_options_vmo uninitialized (UD2 abort)
+# Crash: test_ram_reserve not configured (UD2 abort)
 VmoTestCase.ProtectToWrite
-VmoTestCase.Physical*
+VmoTestCase.PhysicalSlice
 VmoTestCase.FaultBeyondStreamSizeNoPhysOrContig
+# Physical*: PhysicalVmoInvalidInitialSize and PhysicalVmoOobMapping now
+# pass — removed from skip. PhysicalSlice still crashes (test_ram_reserve).
 # Crash: memory-probe.cc assertion (demand-pages instead of faulting)
 VmoTestCase.NoPermProtect
 VmoTestCase.ReadOnlyMap
