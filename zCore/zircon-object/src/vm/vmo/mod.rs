@@ -139,6 +139,7 @@ pub struct VmObject {
     is_slice: bool,
     /// True if the VMO was created with SNAPSHOT + NO_WRITE.
     immutable: core::sync::atomic::AtomicBool,
+    discardable: core::sync::atomic::AtomicBool,
     /// True if all handles are closed (for slice VMOs, commit_page
     /// returns NOT_FOUND to prevent re-mapping parent data).
     dead: core::sync::atomic::AtomicBool,
@@ -194,6 +195,7 @@ impl VmObject {
             resizable,
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
+            discardable: core::sync::atomic::AtomicBool::new(false),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new(pages),
@@ -209,6 +211,7 @@ impl VmObject {
             resizable: false,
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
+            discardable: core::sync::atomic::AtomicBool::new(false),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPhysical::new(paddr, pages),
@@ -223,6 +226,7 @@ impl VmObject {
             resizable: false,
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
+            discardable: core::sync::atomic::AtomicBool::new(false),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new_contiguous(pages, align_log2)?,
@@ -531,6 +535,7 @@ impl VmObject {
             resizable,
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false), // Caller sets this after creation if needed
+            discardable: core::sync::atomic::AtomicBool::new(false),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_,
@@ -602,6 +607,7 @@ impl VmObject {
             resizable,
             is_slice: true,
             immutable: core::sync::atomic::AtomicBool::new(false),
+            discardable: core::sync::atomic::AtomicBool::new(false),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: if allow_resizable_parent {
@@ -708,6 +714,17 @@ impl VmObject {
     pub fn set_immutable(&self) {
         self.immutable
             .store(true, core::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Mark this VMO as discardable.
+    pub fn set_discardable(&self) {
+        self.discardable
+            .store(true, core::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Check if this VMO is discardable.
+    pub fn is_discardable(&self) -> bool {
+        self.discardable.load(core::sync::atomic::Ordering::Relaxed)
     }
 
     /// content_size is properly initialized.

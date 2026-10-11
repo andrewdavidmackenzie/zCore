@@ -847,11 +847,28 @@ impl VmAddressRegion {
         if !check_aligned(len, align) {
             Err(ZxError::INVALID_ARGS)
         } else if let Some(offset) = offset {
-            if check_aligned(offset, align) && self.test_map(inner, offset, len, align) {
-                Ok(offset)
-            } else {
-                Err(ZxError::INVALID_ARGS)
+            if !check_aligned(offset, align) {
+                return Err(ZxError::INVALID_ARGS);
             }
+            // Check if the range is within bounds.
+            let begin = self.addr + offset;
+            let end = begin + len;
+            if end > self.addr + self.size {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Check for overlapping children — Fuchsia returns
+            // ALREADY_EXISTS for SPECIFIC allocations that overlap.
+            for vmar in inner.children.iter() {
+                if vmar.overlap(begin, end) {
+                    return Err(ZxError::ALREADY_EXISTS);
+                }
+            }
+            for mapping in inner.mappings.iter() {
+                if mapping.overlap(begin, end) {
+                    return Err(ZxError::ALREADY_EXISTS);
+                }
+            }
+            Ok(offset)
         } else if len > self.size {
             if len > 0x1_0000_0000 {
                 hal_impl::console::console_write_fmt(format_args!(
@@ -2031,11 +2048,13 @@ mod tests {
                 .err(),
             Some(ZxError::INVALID_ARGS)
         );
+        // Overlapping SPECIFIC allocation returns ALREADY_EXISTS
+        // (matching Fuchsia semantics).
         assert_eq!(
             root_vmar
                 .allocate_at(0, 0x1000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
                 .err(),
-            Some(ZxError::INVALID_ARGS)
+            Some(ZxError::ALREADY_EXISTS)
         );
         assert_eq!(
             child
