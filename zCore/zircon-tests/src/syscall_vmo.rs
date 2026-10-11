@@ -218,3 +218,101 @@ fn create_child_snapshot() {
         .unwrap();
     assert_eq!(buf[0], 0xAA); // still old value
 }
+
+/// C++: TEST(VmoTestCase, ReadWithoutReadRight) — syscall level
+#[test]
+fn read_without_read_right() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let vmo = zircon_object::vm::VmObject::new_paged(1);
+    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmo,
+        zircon_object::object::Rights::WRITE, // no READ
+    ));
+
+    let mut buf = [0u8; 8];
+    let result = sc.sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, 8);
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(VmoTestCase, WriteWithoutWriteRight) — syscall level
+#[test]
+fn write_without_write_right() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let vmo = zircon_object::vm::VmObject::new_paged(1);
+    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmo,
+        zircon_object::object::Rights::READ, // no WRITE
+    ));
+
+    let result = sc.sys_vmo_write(h, UserInPtr::from(b"test".as_ptr() as usize), 0, 4);
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(VmoTestCase, Cache) — syscall level
+/// Set cache policy via syscall.
+#[test]
+fn cache_policy_via_syscall() {
+    let ctx = TestContext::new();
+    let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, 0);
+    let sc = ctx.syscall();
+
+    // ZX_CACHE_POLICY_CACHED = 0
+    sc.sys_vmo_cache_policy(h, 0).unwrap();
+
+    // ZX_CACHE_POLICY_UNCACHED = 1
+    sc.sys_vmo_cache_policy(h, 1).unwrap();
+
+    // ZX_CACHE_POLICY_WRITE_COMBINING = 3
+    sc.sys_vmo_cache_policy(h, 3).unwrap();
+
+    // Invalid policy
+    assert_eq!(
+        sc.sys_vmo_cache_policy(h, 99).unwrap_err(),
+        ZxError::INVALID_ARGS
+    );
+}
+
+/// C++: TEST(VmoTestCase, StreamSize) — syscall level
+/// Get/set stream size via syscall.
+#[test]
+fn stream_size_via_syscall() {
+    let ctx = TestContext::new();
+    let h = syscall_vmo_create(&ctx, (PAGE_SIZE * 4) as u64, 0);
+    let sc = ctx.syscall();
+
+    // Set stream size
+    sc.sys_vmo_set_stream_size(h, PAGE_SIZE * 2).unwrap();
+
+    // Get stream size
+    let mut size: usize = 0;
+    sc.sys_vmo_get_stream_size(h, UserOutPtr::from(&mut size as *mut _ as usize))
+        .unwrap();
+    assert_eq!(size, PAGE_SIZE * 2);
+}
+
+/// C++: TEST(VmoTestCase, OpRangeOutOfBounds) — syscall level
+/// Op range past VMO end returns OUT_OF_RANGE.
+#[test]
+fn op_range_out_of_bounds() {
+    let ctx = TestContext::new();
+    let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, 0);
+    let sc = ctx.syscall();
+
+    // DECOMMIT past end (op=2)
+    assert_eq!(
+        sc.sys_vmo_op_range(h, 2, 0, PAGE_SIZE * 2, UserOutPtr::from(0usize), 0)
+            .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+
+    // ZERO past end (op=10)
+    assert_eq!(
+        sc.sys_vmo_op_range(h, 10, 0, PAGE_SIZE * 2, UserOutPtr::from(0usize), 0)
+            .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+}
