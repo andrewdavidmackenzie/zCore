@@ -6,7 +6,9 @@
 
 use crate::helpers::TestContext;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
+use zircon_object::object::{KernelObject, Signal};
 use zircon_object::vm::{VmObject, PAGE_SIZE};
 
 extern crate alloc;
@@ -368,4 +370,219 @@ fn no_accumulated_overflow() {
     // Grandchild at offset 0 of child (= offset PAGE_SIZE of parent)
     let grandchild = child.create_child(false, 0, PAGE_SIZE).unwrap();
     vmo_check(&grandchild, 2, 0);
+}
+
+// ── Additional VmoClone2 tests ported from vmo-clone2.cc ────────────
+
+/// Helper: create a resizable, page-tagged VMO (each page tagged with index+1).
+fn init_page_tagged_vmo_resizable(pages: usize) -> Arc<VmObject> {
+    let vmo = VmObject::new_paged_with_resizable(true, pages);
+    for i in 0..pages {
+        vmo_write(&vmo, (i + 1) as u32, i * PAGE_SIZE);
+    }
+    vmo
+}
+
+/// C++: TEST_F(VmoClone2TestCase, ResizeOverSiblingRange)
+/// Regression test for Fuchsia bug 53710. When a COW child is resized,
+/// its `parent_limit_` must be correctly updated even when the resize
+/// crosses a sibling's range. After shrink+grow, new pages must be zero.
+#[test]
+fn resize_over_sibling_range() {
+    let _ctx = TestContext::new();
+    // Parent must be resizable since we call set_len on it.
+    let vmo = init_page_tagged_vmo_resizable(4);
+
+    // Create an intermediate hidden parent (non-resizable snapshot).
+    let _intermediate = vmo.create_child(false, 0, 4 * PAGE_SIZE).unwrap();
+
+    // Create a resizable sibling as a one-page hole at offset 2*PAGE_SIZE.
+    let _sibling = vmo.create_child(true, 2 * PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    // Resize the vmo down to 1 page then back up to 4 pages.
+    vmo.set_len(PAGE_SIZE).unwrap();
+    vmo.set_len(4 * PAGE_SIZE).unwrap();
+
+    // First page should retain original data.
+    vmo_check(&vmo, 1, 0);
+    // Pages 1-3 should be zero (not see-through to parent).
+    vmo_check(&vmo, 0, PAGE_SIZE);
+    vmo_check(&vmo, 0, 2 * PAGE_SIZE);
+    vmo_check(&vmo, 0, 3 * PAGE_SIZE);
+
+    // Writing to newly visible pages should fork fresh zero pages.
+    vmo_write(&vmo, 2, PAGE_SIZE);
+    vmo_write(&vmo, 3, 2 * PAGE_SIZE);
+    vmo_write(&vmo, 4, 3 * PAGE_SIZE);
+}
+
+/// Helper for ManyChildren / ManyChildrenRevClose tests.
+fn many_children_test_helper(reverse_close: bool) {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(1);
+
+    const CLONE_COUNT: usize = 5;
+    let mut clones: Vec<Arc<VmObject>> = Vec::new();
+
+    // Initially no children.
+    assert!(
+        parent.signal().contains(Signal::VMO_ZERO_CHILDREN),
+        "expected ZERO_CHILDREN before creating any clones"
+    );
+
+    for _i in 0..CLONE_COUNT {
+        let child = parent.create_child(false, 0, PAGE_SIZE).unwrap();
+        clones.push(child);
+        // After creating at least one child, ZERO_CHILDREN should be cleared.
+        assert!(
+            !parent.signal().contains(Signal::VMO_ZERO_CHILDREN),
+            "expected ZERO_CHILDREN cleared after creating clones"
+        );
+    }
+
+    if reverse_close {
+        for _i in (1..CLONE_COUNT).rev() {
+            clones.pop(); // drops the last (highest index) clone
+                          // Still has children remaining.
+            assert!(
+                !parent.signal().contains(Signal::VMO_ZERO_CHILDREN),
+                "expected ZERO_CHILDREN still cleared with children remaining"
+            );
+        }
+        // Drop the last clone.
+        clones.pop();
+    } else {
+        // Forward close: drop from index 0 upward.
+        for _i in 0..CLONE_COUNT - 1 {
+            clones.remove(0);
+            // Still has children remaining.
+            assert!(
+                !parent.signal().contains(Signal::VMO_ZERO_CHILDREN),
+                "expected ZERO_CHILDREN still cleared with children remaining"
+            );
+        }
+        // Drop the last clone.
+        clones.remove(0);
+    }
+
+    // All children gone — ZX_VMO_ZERO_CHILDREN should be asserted.
+    assert!(
+        parent.signal().contains(Signal::VMO_ZERO_CHILDREN),
+        "expected ZERO_CHILDREN signal after all children dropped"
+    );
+}
+
+/// C++: TEST_F(VmoClone2TestCase, ManyChildren)
+/// Child count tracking with forward close order.
+#[test]
+fn many_children() {
+    many_children_test_helper(false);
+}
+
+/// C++: TEST_F(VmoClone2TestCase, ManyChildrenRevClose)
+/// Child count tracking with reverse close order.
+#[test]
+fn many_children_rev_close() {
+    many_children_test_helper(true);
+}
+
+/// C++: TEST_F(VmoClone2TestCase, ManyCloneOffset)
+/// Clone chain with non-zero offsets, page migration on drop.
+#[test]
+fn many_clone_offset() {
+    let _ctx = TestContext::new();
+
+    let vmo = VmObject::new_paged(1);
+    vmo_write(&vmo, 1, 0);
+
+    let clone1 = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+    // clone2 at offset PAGE_SIZE of clone1 — sees nothing from original page.
+    let clone2 = clone1.create_child(false, PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    vmo_write(&clone1, 1, 0);
+
+    drop(clone1);
+
+    // Original VMO should still read correctly after clone1 is dropped.
+    vmo_check(&vmo, 1, 0);
+
+    // clone2 exists but has no valid pages (offset is beyond clone1's data).
+    drop(clone2);
+}
+
+/// C++: TEST_F(VmoClone2TestCase, MarkerClearsSplitBits)
+/// When a COW page is forked and then zeroed (via zero()), a marker is
+/// inserted. When the child holding the marker is dropped, the split bits
+/// on the original page must be cleared so a subsequent clone can fork
+/// the same page again.
+#[test]
+fn marker_clears_split_bits() {
+    let _ctx = TestContext::new();
+
+    // Need three pages so we can zero the middle without adjusting parent limits.
+    let vmo = VmObject::new_paged(3);
+
+    // Commit a page in what will become the hidden parent.
+    let val: u32 = 42;
+    vmo.write(PAGE_SIZE, &val.to_ne_bytes()).unwrap();
+
+    let child = vmo.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
+
+    // Fork the page into this child.
+    child.write(PAGE_SIZE, &val.to_ne_bytes()).unwrap();
+    // Zero the middle page — forces a marker.
+    child.zero(PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    // Reset the child, merging hidden parent back. Split bits should be cleared.
+    drop(child);
+
+    // Create another child and fork the same page again. Should succeed.
+    let child2 = vmo.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
+    child2.write(PAGE_SIZE, &val.to_ne_bytes()).unwrap();
+}
+
+/// C++: TEST_F(VmoClone2TestCase, ParentStartLimitRegression)
+/// Regression test: `parent_start_limit` was computed as offset in parent
+/// rather than in the VMO itself during hidden-node merge.
+///
+/// Tree:       R
+///             |
+///         |-------|
+///         M       S
+///         |
+///      |-----|
+///      C     H
+///
+/// S: offset 2 in R, length 1
+/// M: offset 1 in R, length 2
+/// C: offset 0 in M, length 1
+/// H: offset 1 in M, length 1
+#[test]
+fn parent_start_limit_regression() {
+    let _ctx = TestContext::new();
+
+    // Create root R (3 pages = 0x3000 bytes).
+    let vmo_r = VmObject::new_paged(3);
+
+    // M: snapshot of R at offset PAGE_SIZE, size 2*PAGE_SIZE.
+    let vmo_m = vmo_r.create_child(false, PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
+
+    // C: snapshot of M at offset 0, size PAGE_SIZE.
+    let vmo_c = vmo_m.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // S: snapshot of R at offset 2*PAGE_SIZE, size PAGE_SIZE.
+    // Then close R to make S a child of the hidden parent.
+    let _vmo_s = vmo_r.create_child(false, 2 * PAGE_SIZE, PAGE_SIZE).unwrap();
+    drop(vmo_r);
+
+    // H: snapshot of M at offset PAGE_SIZE, size PAGE_SIZE.
+    // Then close M to make H a child of the hidden parent.
+    let vmo_h = vmo_m.create_child(false, PAGE_SIZE, PAGE_SIZE).unwrap();
+    drop(vmo_m);
+
+    // Turn H into a hidden parent by creating a child.
+    let _vmo_hc = vmo_h.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // This is where the kernel would assert/panic without the fix.
+    drop(vmo_c);
 }
