@@ -140,6 +140,8 @@ pub struct VmObject {
     /// True if the VMO was created with SNAPSHOT + NO_WRITE.
     immutable: core::sync::atomic::AtomicBool,
     discardable: core::sync::atomic::AtomicBool,
+    /// Lock count for discardable VMOs (0 = unlocked, >0 = locked).
+    lock_count: core::sync::atomic::AtomicU32,
     /// True if all handles are closed (for slice VMOs, commit_page
     /// returns NOT_FOUND to prevent re-mapping parent data).
     dead: core::sync::atomic::AtomicBool,
@@ -196,6 +198,7 @@ impl VmObject {
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),
+            lock_count: core::sync::atomic::AtomicU32::new(0),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new(pages),
@@ -212,6 +215,7 @@ impl VmObject {
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),
+            lock_count: core::sync::atomic::AtomicU32::new(0),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPhysical::new(paddr, pages),
@@ -227,6 +231,7 @@ impl VmObject {
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),
+            lock_count: core::sync::atomic::AtomicU32::new(0),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: VMObjectPaged::new_contiguous(pages, align_log2)?,
@@ -536,6 +541,7 @@ impl VmObject {
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false), // Caller sets this after creation if needed
             discardable: core::sync::atomic::AtomicBool::new(false),
+            lock_count: core::sync::atomic::AtomicU32::new(0),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_,
@@ -598,16 +604,17 @@ impl VmObject {
         if self.trait_.cache_policy() != CachePolicy::Cached && !self.trait_.is_contiguous() {
             return Err(ZxError::BAD_STATE);
         }
-        // Copy content_size from parent (clamped to slice range) so
-        // streams on REFERENCE children see the correct size.
-        let parent_content_size = self.content_size();
-        let child_content_size = parent_content_size.saturating_sub(offset).min(size);
+        // Slices get their own independent content_size equal to the
+        // slice's own size.  REFERENCE children share the parent's
+        // content_size via delegation in content_size()/set_content_size().
+        let child_content_size = size;
         let child = Arc::new(VmObject {
             base: KObjectBase::with(&self.base.name(), Signal::VMO_ZERO_CHILDREN),
             resizable,
             is_slice: true,
             immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),
+            lock_count: core::sync::atomic::AtomicU32::new(0),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
             trait_: if allow_resizable_parent {
@@ -725,6 +732,35 @@ impl VmObject {
     /// Check if this VMO is discardable.
     pub fn is_discardable(&self) -> bool {
         self.discardable.load(core::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Lock a discardable VMO, incrementing its lock count.
+    pub fn lock_discardable(&self) -> ZxResult {
+        self.lock_count
+            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        Ok(())
+    }
+
+    /// Unlock a discardable VMO. Returns BAD_STATE if already unlocked.
+    pub fn unlock_discardable(&self) -> ZxResult {
+        loop {
+            let current = self.lock_count.load(core::sync::atomic::Ordering::Relaxed);
+            if current == 0 {
+                return Err(ZxError::BAD_STATE);
+            }
+            if self
+                .lock_count
+                .compare_exchange_weak(
+                    current,
+                    current - 1,
+                    core::sync::atomic::Ordering::Relaxed,
+                    core::sync::atomic::Ordering::Relaxed,
+                )
+                .is_ok()
+            {
+                return Ok(());
+            }
+        }
     }
 
     /// content_size is properly initialized.
@@ -882,13 +918,20 @@ impl VmObject {
 
     /// Set the cache policy.
     pub fn set_cache_policy(&self, policy: CachePolicy) -> ZxResult {
-        let inner = self.inner.lock();
+        let mut inner = self.inner.lock();
+        // Clean up dead weak refs before checking.
+        inner.children.retain(|c| c.strong_count() > 0);
         if !inner.children.is_empty() {
             return Err(ZxError::BAD_STATE);
         }
+        let before = inner.mappings.len();
+        inner.mappings.retain(|m| m.strong_count() > 0);
+        let removed = before - inner.mappings.len();
+        inner.mapping_count = inner.mapping_count.saturating_sub(removed);
         if inner.mapping_count != 0 {
             return Err(ZxError::BAD_STATE);
         }
+        drop(inner);
         self.trait_.set_cache_policy(policy)
     }
 
@@ -913,7 +956,10 @@ impl VmObject {
     /// Remove expired weak mapping references.
     pub fn cleanup_stale_mappings(&self) {
         let mut inner = self.inner.lock();
+        let before = inner.mappings.len();
         inner.mappings.retain(|m| m.strong_count() > 0);
+        let removed = before - inner.mappings.len();
+        inner.mapping_count = inner.mapping_count.saturating_sub(removed);
     }
 
     /// Returns an estimate of the number of unique VmAspaces that this object
@@ -924,7 +970,17 @@ impl VmObject {
     }
 
     /// Returns true if the object size can be changed.
+    /// For REFERENCE children, this delegates to the parent because
+    /// a reference is a transparent alias — the parent's resizability
+    /// determines whether the underlying VMO can be resized. Handle
+    /// rights then control whether a particular handle is allowed to
+    /// invoke the resize.
     pub fn is_resizable(&self) -> bool {
+        if self.is_reference() {
+            if let Some(parent) = self.inner.lock().parent.upgrade() {
+                return parent.is_resizable();
+            }
+        }
         self.resizable
     }
 
