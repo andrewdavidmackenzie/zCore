@@ -89,6 +89,9 @@ mod bti;
 mod exception;
 
 #[cfg(test)]
+mod pager;
+
+#[cfg(test)]
 mod skipped;
 
 #[cfg(test)]
