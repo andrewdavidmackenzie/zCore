@@ -30,6 +30,34 @@ fn dummy_thread_fn(_thread: CurrentThread) -> Pin<Box<dyn Future<Output = ()> + 
     Box::pin(async {})
 }
 
+/// Thread function that simulates a real userspace execution loop.
+///
+/// Like the real `run_user()` in zircon-loader, this loops:
+/// 1. `wait_for_run()` — takes context (blocks if suspended)
+/// 2. yield — gives the test harness a chance to act
+/// 3. `put_context()` — returns context (enables read/write_state)
+///
+/// The thread exits when killed (state becomes Dying).
+pub fn test_loop_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        loop {
+            let ctx = thread.wait_for_run().await;
+            // Check if the thread was killed while we were waiting.
+            if thread.state() == zircon_object::task::ThreadState::Dying {
+                thread.put_context(ctx);
+                break;
+            }
+            // Simulate brief "execution" then yield back to the scheduler.
+            async_std::task::yield_now().await;
+            thread.put_context(ctx);
+        }
+        // CurrentThread drop calls terminate() → state becomes Dead,
+        // THREAD_TERMINATED signal is asserted.
+    })
+}
+
 /// A test context providing a Zircon process and current thread.
 pub struct TestContext {
     pub proc: Arc<Process>,
