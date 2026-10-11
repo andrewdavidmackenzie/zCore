@@ -1341,16 +1341,25 @@ impl VMObjectPagedInner {
                 // if the frame is in other_inner's range, check if it can be move to other_inner
                 if start <= idx && idx < end {
                     if parent_inner.frames.contains_key(&idx) {
-                        let mut to_insert = parent_inner.frames.remove(&idx).unwrap();
-                        if parent_inner.contiguous
-                            && !other_inner.contiguous
-                            && to_insert.pin_count >= 1
-                        {
-                            to_insert.pin_count -= 1;
-                        }
-                        if to_insert.tag != tag.negate() {
-                            to_insert.tag = PageStateTag::Owned;
-                            other_inner.frames.insert(idx - start, to_insert);
+                        let new_key = idx - start;
+                        // Only move to the other child if it doesn't
+                        // already have a local frame (COW copy) there.
+                        if other_inner.frames.contains_key(&new_key) {
+                            // Other child has its own copy — just
+                            // remove the parent frame (no longer needed).
+                            parent_inner.frames.remove(&idx);
+                        } else {
+                            let mut to_insert = parent_inner.frames.remove(&idx).unwrap();
+                            if parent_inner.contiguous
+                                && !other_inner.contiguous
+                                && to_insert.pin_count >= 1
+                            {
+                                to_insert.pin_count -= 1;
+                            }
+                            if to_insert.tag != tag.negate() {
+                                to_insert.tag = PageStateTag::Owned;
+                                other_inner.frames.insert(new_key, to_insert);
+                            }
                         }
                         unwanted.push_back(idx + parent_inner.parent_offset / PAGE_SIZE);
                     }
@@ -1650,6 +1659,47 @@ mod tests {
             PAGE_SIZE / 2,
             "c2 populated_scaled_bytes"
         );
+    }
+
+    #[test]
+    fn resize_child_data_isolation() {
+        // Mimics VmoCloneResizeTests::ResizeChild
+        let vmo = VmObject::new_paged_with_resizable(true, 4);
+        for i in 0..4u8 {
+            vmo.test_write(i as usize, i + 1);
+        }
+        let clone = vmo.create_child(true, 0, 4 * PAGE_SIZE).unwrap();
+
+        // Write to parent page 1 and clone page 2
+        vmo.write(PAGE_SIZE, &[5u8]).unwrap();
+        clone.write(2 * PAGE_SIZE, &[5u8]).unwrap();
+
+        // Verify data isolation
+        assert_eq!(vmo.test_read(0), 1, "parent page 0");
+        assert_eq!(vmo.test_read(1), 5, "parent page 1 (written)");
+        assert_eq!(vmo.test_read(2), 3, "parent page 2 (should be original)");
+        assert_eq!(vmo.test_read(3), 4, "parent page 3");
+
+        assert_eq!(clone.test_read(0), 1, "clone page 0");
+        assert_eq!(clone.test_read(1), 2, "clone page 1 (original)");
+        assert_eq!(clone.test_read(2), 5, "clone page 2 (written)");
+        assert_eq!(clone.test_read(3), 4, "clone page 3");
+
+        // Resize clone to 1 page
+        clone.set_len(PAGE_SIZE).unwrap();
+
+        // After resize, parent should still see all 4 pages correctly
+        println!(
+            "After resize: vmo reads: p0={} p1={} p2={} p3={}",
+            vmo.test_read(0),
+            vmo.test_read(1),
+            vmo.test_read(2),
+            vmo.test_read(3)
+        );
+        assert_eq!(vmo.test_read(0), 1, "parent page 0 after resize");
+        assert_eq!(vmo.test_read(1), 5, "parent page 1 after resize");
+        assert_eq!(vmo.test_read(2), 3, "parent page 2 after resize");
+        assert_eq!(vmo.test_read(3), 4, "parent page 3 after resize");
     }
 
     #[test]

@@ -38,8 +38,7 @@ ChannelTest.ChannelFullException
 DefaultExceptionHandlerTest.UnhandledPolicyException
 
 # ── COW populated_bytes / fractional attribution (#577, #603) ────────
-# NoPhysical: test_ram_reserve not configured (UD2 abort)
-VmoClone2TestCase.NoPhysical
+# NoPhysical: now passes with test_ram_reserve — removed.
 # Offset: now passes — removed from skip
 # WriteCowParent, AllocateAfterMergeMultipleChildren: polling hang
 VmoZeroTestCase.WriteCowParent
@@ -51,12 +50,9 @@ VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 # Crash: kernel panic (assertion failure in paged.rs)
 VmoTestCase.PinTests
 VmoTestCase.UnmapLoanedcontiguousWhileFaulting
-# Crash: test_ram_reserve not configured (UD2 abort)
-VmoTestCase.ProtectToWrite
-VmoTestCase.PhysicalSlice
-VmoTestCase.FaultBeyondStreamSizeNoPhysOrContig
-# Physical*: PhysicalVmoInvalidInitialSize and PhysicalVmoOobMapping now
-# pass — removed from skip. PhysicalSlice still crashes (test_ram_reserve).
+# ProtectToWrite and NoPhysical: now pass with test_ram_reserve — removed.
+# PhysicalSlice and FaultBeyondStreamSizeNoPhysOrContig: fail (no crash)
+# — removed from skip.
 # Crash: memory-probe.cc assertion (demand-pages instead of faulting)
 VmoTestCase.NoPermProtect
 VmoTestCase.ReadOnlyMap
@@ -114,9 +110,7 @@ Vmar.FaultBeyondStreamSizeForceWritable
 
 # ── Unimplemented hardware / missing binaries ───────────────────────
 # ProcessTest.ProcessHwTraceContextIdProperty: now passes — removed.
-# InvalidInputs: test accesses boot_options->test_ram_reserve which is
-# uninitialized, causing trap 0x6 (invalid opcode).
-VmoTransferDataTestCase.InvalidInputs
+# InvalidInputs: now fails without crashing (test_ram_reserve set) — removed.
 
 # ── BTI (Bus Transaction Initiator) ─────────────────────────────────
 # Kernel panics in paged.rs:1161 assertion during pin operations.
