@@ -22,7 +22,7 @@ jobs:
           components: rust-src, llvm-tools-preview
 
       - name: Run unit test
-        run: cargo test --no-fail-fast --workspace --exclude zircon-tests
+        run: cargo test --no-fail-fast
 
       - name: Run Zircon syscall tests (libos)
         run: cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
