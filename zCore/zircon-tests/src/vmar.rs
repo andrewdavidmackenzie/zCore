@@ -47,11 +47,7 @@ fn vmar_allocate_child() {
 
 /// Map a VMO into a VMAR and verify data can be read/written through the mapping.
 ///
-/// NOTE: This test is ignored in the full suite because the mock page table
-/// shares host address space across tests. Run with `--ignored` to test
-/// VMAR mapping in isolation.
 #[test]
-#[ignore = "VMAR map tests need isolated address space (run with --ignored)"]
 fn vmar_map_and_access() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -93,7 +89,6 @@ fn vmar_map_and_access() {
 
 /// Unmap a previously mapped region.
 #[test]
-#[ignore = "VMAR map tests need isolated address space (run with --ignored)"]
 fn vmar_unmap() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -110,7 +105,6 @@ fn vmar_unmap() {
 
 /// Map multiple pages and verify each page has correct data.
 #[test]
-#[ignore = "VMAR map tests need isolated address space (run with --ignored)"]
 fn vmar_map_multi_page() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -148,7 +142,6 @@ fn vmar_map_multi_page() {
 
 /// Map a VMO at a specific offset within the VMO.
 #[test]
-#[ignore = "VMAR map tests need isolated address space (run with --ignored)"]
 fn vmar_map_with_vmo_offset() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -173,7 +166,6 @@ fn vmar_map_with_vmo_offset() {
 
 /// Protect a mapped region — change permissions.
 #[test]
-#[ignore = "VMAR map tests need isolated address space (run with --ignored)"]
 fn vmar_protect() {
     let _ctx = TestContext::new();
     let job = Job::root();
