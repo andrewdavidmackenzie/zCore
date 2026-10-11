@@ -149,6 +149,113 @@ fn invalid_parameters() {
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 
+/// C++: TEST(FifoTest, CreateZeroSize) — syscall level
+#[test]
+fn create_zero_size() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let mut h0: HandleValue = 0;
+    let mut h1: HandleValue = 0;
+
+    // Zero count
+    assert_eq!(
+        sc.sys_fifo_create(
+            0,
+            4,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+
+    // Zero elem_size
+    assert_eq!(
+        sc.sys_fifo_create(
+            16,
+            0,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+}
+
+/// C++: TEST(FifoTest, EndpointCloseSignalsPeerClosed) — syscall level
+#[test]
+fn endpoint_close_signals_peer_closed() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_fifo_create(&ctx, 16, 4);
+    let sc = ctx.syscall();
+
+    // Write data before closing
+    let data = [42u32.to_ne_bytes()].concat();
+    let mut actual: usize = 0;
+    sc.sys_fifo_write(
+        h0,
+        4,
+        UserInPtr::from(data.as_ptr() as usize),
+        1,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+
+    // Close h0
+    sc.sys_handle_close(h0).unwrap();
+
+    // h1 can still read the buffered data
+    let mut buf = [0u8; 4];
+    sc.sys_fifo_read(
+        h1,
+        4,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        1,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 42);
+
+    // After draining, read returns PEER_CLOSED
+    assert_eq!(
+        sc.sys_fifo_read(
+            h1,
+            4,
+            UserOutPtr::from(buf.as_mut_ptr() as usize),
+            1,
+            UserOutPtr::from(&mut actual as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::PEER_CLOSED
+    );
+}
+
+/// C++: TEST(FifoTest, WritePeerClosedReturnsPeerClosed) — syscall level
+#[test]
+fn write_peer_closed_returns_peer_closed() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_fifo_create(&ctx, 16, 4);
+    let sc = ctx.syscall();
+
+    sc.sys_handle_close(h1).unwrap();
+
+    let data = [0u8; 4];
+    let mut actual: usize = 0;
+    assert_eq!(
+        sc.sys_fifo_write(
+            h0,
+            4,
+            UserInPtr::from(data.as_ptr() as usize),
+            1,
+            UserOutPtr::from(&mut actual as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::PEER_CLOSED
+    );
+}
+
 /// C++: TEST(FifoTest, WriteNoWriteRights) — syscall level
 #[test]
 fn write_no_write_rights() {
