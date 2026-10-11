@@ -89,6 +89,9 @@ mod syscall_fifo;
 mod syscall_handle;
 
 #[cfg(test)]
+mod syscall_object;
+
+#[cfg(test)]
 mod syscall_signal;
 
 #[cfg(test)]
