@@ -301,3 +301,47 @@ fn decommit_middle() {
 
     vmar.unmap(addr, 3 * PAGE_SIZE).unwrap();
 }
+
+/// C++: TEST(VmoZeroTestCase, UnalignedCommitted)
+/// Zero an unaligned range crossing a page boundary on committed pages.
+#[test]
+fn unaligned_committed() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "vmo-zero-test").unwrap();
+    let vmar = proc.vmar();
+
+    let vmo = VmObject::new_paged(2);
+    // Fill both pages with 0xFF.
+    let fill = vec![0xFFu8; 2 * PAGE_SIZE];
+    vmo.write(0, &fill).unwrap();
+
+    // Zero a range crossing the page boundary: last 100 bytes of page 0
+    // + first 100 bytes of page 1.
+    let zero_start = PAGE_SIZE - 100;
+    let zero_len = 200;
+    vmo.zero(zero_start, zero_len).unwrap();
+
+    // Map and verify.
+    let flags = MMUFlags::READ;
+    let addr = vmar.map(None, vmo, 0, 2 * PAGE_SIZE, flags).unwrap();
+    let ptr = addr as *const u8;
+
+    // Bytes before zero range should be 0xFF.
+    for i in 0..zero_start {
+        let val = unsafe { core::ptr::read_volatile(ptr.add(i)) };
+        assert_eq!(val, 0xFF, "byte {} should be 0xFF", i);
+    }
+    // Zeroed range.
+    for i in zero_start..zero_start + zero_len {
+        let val = unsafe { core::ptr::read_volatile(ptr.add(i)) };
+        assert_eq!(val, 0, "byte {} should be 0", i);
+    }
+    // Bytes after zero range should be 0xFF.
+    for i in (zero_start + zero_len)..2 * PAGE_SIZE {
+        let val = unsafe { core::ptr::read_volatile(ptr.add(i)) };
+        assert_eq!(val, 0xFF, "byte {} should be 0xFF", i);
+    }
+
+    vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
+}

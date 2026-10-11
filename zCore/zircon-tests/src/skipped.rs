@@ -174,12 +174,7 @@ fn vmo_zero_allocate_after_merge() {
 
 // vmo_zero_unaligned_sub_page: moved to vmo_zero.rs (unaligned_sub_page)
 
-/// C++: TEST(VmoZeroTestCase, UnalignedCommitted)
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_zero_unaligned_committed() {
-    todo!("needs VMAR mapping for cross-page verification")
-}
+// vmo_zero_unaligned_committed: moved to vmo_zero.rs (unaligned_committed)
 
 // vmo_zero_decommit_middle: moved to vmo_zero.rs (decommit_middle)
 
@@ -200,13 +195,7 @@ fn vmo_zero_hidden_no_content() {
 
 // vmo_clone_rights: moved to vmo_clone.rs (clone_rights)
 
-/// C++: TEST(VmoCloneTestCase, NoResize) — VMAR portion
-/// The set_size rejection is tested; the VMAR mapping portion is not.
-#[cfg(not(feature = "libos"))]
-#[test]
-fn vmo_clone_no_resize_with_mapping() {
-    todo!("needs VMAR mapping with ZX_VM_REQUIRE_NON_RESIZABLE")
-}
+// vmo_clone_no_resize_with_mapping: moved to vmo_clone.rs (clone_no_resize_with_mapping)
 
 // ── VmoSlice tests that need BTI/IOMMU ──────────────────────────────
 
