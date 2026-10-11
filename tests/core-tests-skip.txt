@@ -81,6 +81,10 @@ PagerProcess.*
 PagerWriteback.*
 Snapshot.*
 # StreamTestCase: most fail without hanging — removed from skip.
+# These StreamTestCase tests hang (pager-backed VMO or retry loops).
+StreamTestCase.AppendSuppliesZeroes
+StreamTestCase.ContentSizeUpdatedOnPartialWrite
+StreamTestCase.PartialVmoDirty
 # NoStreamFromContiguousOrPhysicalVmo crashes (boot_options) — keep.
 StreamTestCase.NoStreamFromContiguousOrPhysicalVmo
 
