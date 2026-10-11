@@ -353,3 +353,51 @@ fn read_invalid_options() {
     );
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
+
+/// C++: TEST(SocketTest, WriteWrongType) — syscall level
+/// Writing to a non-socket handle returns WRONG_TYPE.
+#[test]
+fn write_wrong_type() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let vmo = zircon_object::vm::VmObject::new_paged(1);
+    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmo,
+        zircon_object::object::Rights::DEFAULT_VMO,
+    ));
+
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h,
+        0,
+        UserInPtr::from(b"test".as_ptr() as usize),
+        4,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
+}
+
+/// C++: TEST(SocketTest, ReadWrongType) — syscall level
+#[test]
+fn read_wrong_type() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let vmo = zircon_object::vm::VmObject::new_paged(1);
+    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmo,
+        zircon_object::object::Rights::DEFAULT_VMO,
+    ));
+
+    let mut buf = [0u8; 16];
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_read(
+        h,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        buf.len(),
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
+}
