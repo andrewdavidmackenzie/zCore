@@ -639,20 +639,22 @@ endif
 # Fast pre-push: clippy + fmt + builds (no QEMU tests).
 # Catches ~90% of CI failures in ~3 minutes.
 pre-push-quick:
-	@echo "==> [1/7] Clippy (all targets + personalities)..."
+	@echo "==> [1/8] Clippy (all targets + personalities)..."
 	cargo check-style
-	@echo "==> [2/7] Workspace build..."
+	@echo "==> [2/8] Workspace build..."
 	cargo build
-	@echo "==> [3/7] Unit tests..."
+	@echo "==> [3/8] Unit tests..."
 	cargo test --no-fail-fast
-	@echo "==> [4/7] Bare-metal aarch64..."
+	@echo "==> [4/8] Zircon syscall tests (libos)..."
+	cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
+	@echo "==> [5/8] Bare-metal aarch64..."
 	$(MAKE) build ARCH=aarch64
-	@echo "==> [5/7] Bare-metal x86_64..."
+	@echo "==> [6/8] Bare-metal x86_64..."
 	$(MAKE) build ARCH=x86_64
-	@echo "==> [6/7] Hardware targets..."
+	@echo "==> [7/8] Hardware targets..."
 	cargo bin -m raspi400
 	cargo bin -m x86-laptop
-	@echo "==> [7/7] Done."
+	@echo "==> [8/8] Done."
 	@echo "==> Quick pre-push checks passed."
 
 # Full pre-push: everything CI checks (slow — includes QEMU boot tests).
@@ -664,6 +666,8 @@ pre-push:
 	cargo build
 	@echo "==> [3/15] Unit tests..."
 	cargo test --no-fail-fast
+	@echo "==> [3.5/15] Zircon syscall tests (libos)..."
+	cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
 	@echo "==> [4/15] Bare-metal aarch64 (build + rootfs)..."
 	$(MAKE) build ARCH=aarch64
 	@echo "==> [5/15] Boot smoke test (aarch64)..."
