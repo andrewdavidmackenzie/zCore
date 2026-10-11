@@ -15,6 +15,7 @@ members = [
     "tools/xtask",
     "zCore/executor",
     "zCore/lock",
+    "zCore/zircon-tests",
     "zCore/vfs/zcore-fs",
     "zCore/vfs/zcore-sfs",
     "zCore/vfs/zcore-ramfs",

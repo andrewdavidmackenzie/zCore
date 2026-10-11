@@ -17,6 +17,8 @@ elf = ["xmas-elf"]
 linux = []
 #hypervisor = ["rvm"]
 hypervisor = []
+## Expose test-only constructors (e.g., CurrentThread::new_for_test).
+testing = []
 
 libos = [
     "hal-impl/libos",

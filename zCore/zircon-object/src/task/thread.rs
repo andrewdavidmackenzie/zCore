@@ -599,6 +599,16 @@ impl Task for Thread {
 pub struct CurrentThread(Arc<Thread>);
 
 impl CurrentThread {
+    /// Create a `CurrentThread` wrapper for testing.
+    ///
+    /// This bypasses the normal `Thread::start()` flow and allows
+    /// constructing a `Syscall` struct directly for syscall-level
+    /// tests in libos mode.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn new_for_test(thread: Arc<Thread>) -> Self {
+        CurrentThread(thread)
+    }
+
     /// Returns the inner structure `Arc<Thread>`.
     pub fn inner(&self) -> Arc<Thread> {
         self.0.clone()

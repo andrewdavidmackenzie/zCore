@@ -1,0 +1,27 @@
+[package]
+name = "zircon-tests"
+version = "0.1.0"
+edition = "2021"
+description = "Rust-native Zircon syscall test suite"
+
+# This crate only contains tests — no library.
+# Run with: cargo test -p zircon-tests
+
+[features]
+default = ["libos"]
+# libos: tests run on the host via kernel object / syscall dispatch.
+# When disabled (bare-metal mode), additional tests that require VMAR
+# mapping, threads, pager etc. become active.
+libos = [
+    "zircon-object/libos",
+    "zircon-syscall/libos",
+    "hal-impl/libos",
+]
+
+[dependencies]
+
+[dev-dependencies]
+zircon-object = { path = "../zircon-object", default-features = false, features = ["testing", "elf"] }
+zircon-syscall = { path = "../zircon-syscall", default-features = false }
+hal-impl = { path = "../hal-impl", default-features = false }
+async-std = { version = "1.10", features = ["attributes"] }
