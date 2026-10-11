@@ -1061,7 +1061,7 @@ pub struct VmoInfo {
     /// The number of clones of this VMO, if any.
     num_children: u64,
     /// The number of times this VMO is currently mapped into VMARs.
-    num_mappings: u64,
+    pub num_mappings: u64,
     /// The number of unique address space we're mapped into.
     pub share_count: u64,
     /// Flags.
@@ -1096,6 +1096,13 @@ pub struct VmoInfo {
     /// Fractional remainder of `populated_scaled_bytes` (fixed-point, 63-bit precision).
     /// Set to `u64::MAX` when fractional scaling is not supported.
     pub populated_fractional_scaled_bytes: u64,
+}
+
+impl VmoInfo {
+    /// Get the koid of this VMO info entry.
+    pub fn koid(&self) -> KoID {
+        self.koid
+    }
 }
 
 bitflags! {

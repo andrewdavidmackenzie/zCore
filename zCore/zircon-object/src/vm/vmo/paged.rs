@@ -440,7 +440,10 @@ impl VMObjectTrait for VMObjectPaged {
         // 4) vmo has no children (TODO)
         // 5) vmo is not a child
         let (_guard, mut inner) = self.get_inner_mut();
-        if !inner.frames.is_empty() && inner.cache_policy != CachePolicy::Cached {
+        if !inner.frames.is_empty()
+            && inner.cache_policy != CachePolicy::Cached
+            && policy != CachePolicy::Cached
+        {
             return Err(ZxError::BAD_STATE);
         }
         inner.clear_invalild_mappings();
@@ -1255,7 +1258,7 @@ impl VMObjectPagedInner {
             info.flags |= VmoInfoFlags::CONTIGUOUS;
         }
         info.num_mappings = self.mappings.len() as u64;
-        info.share_count = self.mappings.len() as u64;
+        info.share_count = if self.mappings.is_empty() { 0 } else { 1 };
 
         let total_pages = self.size / PAGE_SIZE;
         let committed = (self.committed_pages_in_range(0, total_pages) * PAGE_SIZE) as u64;
