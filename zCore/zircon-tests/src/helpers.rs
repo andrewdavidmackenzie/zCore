@@ -7,9 +7,13 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
+use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
+use zircon_object::object::{Handle, Rights};
 use zircon_object::task::{CurrentThread, Job, Process, Thread};
 
 extern crate alloc;
+
+type HandleValue = u32;
 
 /// One-time HAL initialization for libos mode.
 static INIT: std::sync::Once = std::sync::Once::new();
@@ -49,5 +53,22 @@ impl TestContext {
             thread: &self.current,
             thread_fn: dummy_thread_fn,
         }
+    }
+
+    /// Create a root resource and add it to the process handle table.
+    ///
+    /// Returns the handle value. The root resource validates as any
+    /// resource kind and bypasses range checks, matching the behavior
+    /// of the root resource created during Zircon boot.
+    pub fn add_root_resource(&self) -> HandleValue {
+        let resource = Resource::create(
+            "root",
+            ResourceKind::ROOT,
+            0,
+            0x1_0000_0000, // 4 GiB range, same as boot path
+            ResourceFlags::empty(),
+        );
+        self.proc
+            .add_handle(Handle::new(resource, Rights::DEFAULT_RESOURCE))
     }
 }
