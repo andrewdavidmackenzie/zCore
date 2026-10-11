@@ -74,6 +74,9 @@ mod vmar;
 mod clock;
 
 #[cfg(test)]
+mod counter;
+
+#[cfg(test)]
 mod resource;
 
 #[cfg(test)]
