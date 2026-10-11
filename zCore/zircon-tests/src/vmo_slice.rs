@@ -345,3 +345,18 @@ fn parent_contiguous_stays_pinned() {
     slice.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0, "zero op should have zeroed the data");
 }
+
+/// C++: TEST(VmoSliceTestCase, RoundUpSizePhysical)
+/// Physical VMO slice with sub-page size rounds up.
+#[test]
+fn round_up_size_physical() {
+    let _ctx = TestContext::new();
+
+    // Physical VMOs are contiguous and report is_contiguous() == true,
+    // which bypasses the cache policy check in create_slice.
+    let physical = VmObject::new_physical(0x1000, 2);
+
+    // Create slice with sub-page size — should round up to PAGE_SIZE.
+    let slice = physical.create_slice(0, 1).unwrap();
+    assert_eq!(slice.len(), PAGE_SIZE);
+}

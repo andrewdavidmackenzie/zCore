@@ -4,6 +4,7 @@
 //! Test names match the C++ originals exactly.
 
 use crate::helpers::TestContext;
+use zircon_object::signal::{Pager, Port};
 use zircon_object::task::{Job, Process};
 use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE, PAGE_SIZE_LOG2};
 
@@ -347,4 +348,43 @@ fn unaligned_committed() {
     }
 
     vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
+}
+
+// ── Pager-backed VmoZero test ───────────────────────────────────────
+
+/// C++: TEST(VmoZeroTestCase, HiddenNoContent)
+/// Zero pages in a pager-backed VMO (pre-supplied, no faulting).
+#[test]
+fn hidden_no_content() {
+    let _ctx = TestContext::new();
+    let pager = Pager::new();
+    let port = Port::new(0).unwrap();
+
+    let vmo = pager
+        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+        .unwrap();
+
+    // Supply pages with data.
+    let src = VmObject::new_paged(2);
+    src.write(0, &[0xAA; 8]).unwrap();
+    src.write(PAGE_SIZE, &[0xBB; 8]).unwrap();
+    pager
+        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+        .unwrap();
+
+    // Verify data is present.
+    let mut buf = [0u8; 8];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(buf, [0xAA; 8]);
+
+    // Zero the first page.
+    vmo.zero(0, PAGE_SIZE).unwrap();
+
+    // First page should be zero.
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(buf, [0u8; 8], "first page should be zero");
+
+    // Second page should still have data.
+    vmo.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(buf, [0xBB; 8], "second page should be unchanged");
 }
