@@ -398,6 +398,10 @@ impl VMObjectTrait for VMObjectPaged {
     fn create_child(&self, offset: usize, len: usize) -> ZxResult<Arc<dyn VMObjectTrait>> {
         assert!(page_aligned(offset));
         assert!(page_aligned(len));
+        // Reject offset+len overflow.
+        if offset.checked_add(len).is_none() {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let (_guard, mut inner) = self.get_inner_mut();
         let child = inner.create_child(offset, len, &self.lock)?;
         Ok(child)
@@ -1020,7 +1024,7 @@ impl VMObjectPagedInner {
                 type_: VMOType::Snapshot,
                 parent: None, // set later
                 parent_offset: offset,
-                parent_limit: (offset + len).min(self.size),
+                parent_limit: offset.saturating_add(len).min(self.size),
                 size: len,
                 frames: BTreeMap::new(),
                 mappings: Vec::new(),

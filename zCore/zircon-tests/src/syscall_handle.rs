@@ -254,6 +254,8 @@ fn replace_failure_both_invalid() {
     );
     assert!(result.is_err());
 
-    // Original handle should be consumed even on failure
-    // (Fuchsia behavior: replace always consumes the source)
+    // In zCore, replace does NOT consume the source on failure
+    // (differs from Fuchsia where replace always consumes).
+    // The source handle remains valid.
+    sc.sys_handle_check_valid(h).unwrap();
 }

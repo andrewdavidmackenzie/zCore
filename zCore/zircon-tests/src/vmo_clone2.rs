@@ -166,16 +166,13 @@ fn offset_test2() {
 }
 
 /// C++: TEST_F(VmoClone2TestCase, Overflow)
-/// Clone with huge offset that would overflow.
-/// NOTE: zCore panics on arithmetic overflow instead of returning
-/// INVALID_ARGS. This is a kernel bug. Gated behind not(libos)
-/// until fixed, because the panic kills the test runner.
-#[cfg(not(feature = "libos"))]
+/// Clone with huge offset that would overflow returns error.
 #[test]
 fn overflow() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
 
+    // Page-aligned offset that causes offset+len overflow
     let huge_offset = usize::MAX - PAGE_SIZE + 1;
     let result = parent.create_child(false, huge_offset, PAGE_SIZE);
     assert!(result.is_err());
