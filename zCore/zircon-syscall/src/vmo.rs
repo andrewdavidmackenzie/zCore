@@ -385,7 +385,7 @@ impl Syscall<'_> {
             "vmo.create_contiguous: handle={:#x?}, size={:#x?}, align={}, out={:#x?}",
             bti, size, align_log2, out
         );
-        if size == 0 {
+        if size == 0 || !page_aligned(size) {
             return Err(ZxError::INVALID_ARGS);
         }
         let align_log2 = if align_log2 == 0 {
@@ -438,7 +438,7 @@ impl Syscall<'_> {
     ) -> ZxResult {
         info!("vmo.get_stream_size: handle={:#x}", handle);
         let proc = self.thread.proc();
-        let vmo = proc.get_object_with_rights::<VmObject>(handle, Rights::READ)?;
+        let vmo = proc.get_object::<VmObject>(handle)?;
         size.write(vmo.content_size())?;
         Ok(())
     }
@@ -451,6 +451,9 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle, Rights::WRITE)?;
+        if size > vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         vmo.set_content_size(size)
     }
 

@@ -1050,6 +1050,34 @@ impl VmAddressRegion {
         self.flags
     }
 
+    /// Collect all VMOs mapped in this VMAR and its children.
+    /// Returns a list of (VMO Arc, num_mappings) pairs, deduplicated by KoID.
+    pub fn collect_mapped_vmos(&self) -> alloc::vec::Vec<(Arc<VmObject>, usize)> {
+        use alloc::collections::BTreeMap;
+        let mut vmo_map: BTreeMap<KoID, (Arc<VmObject>, usize)> = BTreeMap::new();
+        self.collect_mapped_vmos_inner(&mut vmo_map);
+        vmo_map.into_values().collect()
+    }
+
+    fn collect_mapped_vmos_inner(
+        &self,
+        vmo_map: &mut alloc::collections::BTreeMap<KoID, (Arc<VmObject>, usize)>,
+    ) {
+        let guard = self.inner.lock();
+        if let Some(inner) = guard.as_ref() {
+            for mapping in &inner.mappings {
+                let koid = mapping.vmo.id();
+                vmo_map
+                    .entry(koid)
+                    .and_modify(|(_, count)| *count += 1)
+                    .or_insert_with(|| (mapping.vmo.clone(), 1));
+            }
+            for child in &inner.children {
+                child.collect_mapped_vmos_inner(vmo_map);
+            }
+        }
+    }
+
     /// Get the mapping flags for a virtual address, searching all mappings.
     pub fn get_mapping_flags(&self, vaddr: VirtAddr) -> ZxResult<MMUFlags> {
         let guard = self.inner.lock();
