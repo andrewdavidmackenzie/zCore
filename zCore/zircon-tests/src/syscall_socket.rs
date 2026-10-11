@@ -401,3 +401,147 @@ fn read_wrong_type() {
     );
     assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
 }
+
+/// C++: TEST(SocketTest, DisableWriteLocal) — syscall level
+#[test]
+fn disable_write_local() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    // Disable write on h0 (disposition=1 = WRITE_DISABLED)
+    sc.sys_socket_set_disposition(h0, 1, 0).unwrap();
+
+    // h0 can no longer write
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(b"fail".as_ptr() as usize),
+        4,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BAD_STATE);
+
+    // h1 can still write
+    sc.sys_socket_write(
+        h1,
+        0,
+        UserInPtr::from(b"ok".as_ptr() as usize),
+        2,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+}
+
+/// C++: TEST(SocketTest, DisableWritePeer) — syscall level
+#[test]
+fn disable_write_peer() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    // Disable write on peer (disposition_peer=1)
+    sc.sys_socket_set_disposition(h0, 0, 1).unwrap();
+
+    // h1 can no longer write
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h1,
+        0,
+        UserInPtr::from(b"fail".as_ptr() as usize),
+        4,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BAD_STATE);
+
+    // h0 can still write
+    sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(b"ok".as_ptr() as usize),
+        2,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+}
+
+/// C++: TEST(SocketTest, SetDispositionWrongType) — syscall level
+#[test]
+fn set_disposition_wrong_type() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let vmo = zircon_object::vm::VmObject::new_paged(1);
+    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmo,
+        zircon_object::object::Rights::DEFAULT_VMO,
+    ));
+
+    let result = sc.sys_socket_set_disposition(h, 0, 0);
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
+}
+
+/// C++: TEST(SocketTest, InvalidHandles) — syscall level
+#[test]
+fn invalid_handles() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Read from invalid handle
+    let mut buf = [0u8; 16];
+    let mut actual: usize = 0;
+    assert_eq!(
+        sc.sys_socket_read(
+            0,
+            0,
+            UserOutPtr::from(buf.as_mut_ptr() as usize),
+            buf.len(),
+            UserOutPtr::from(&mut actual as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::BAD_HANDLE
+    );
+
+    // Write to invalid handle
+    assert_eq!(
+        sc.sys_socket_write(
+            0,
+            0,
+            UserInPtr::from(b"test".as_ptr() as usize),
+            4,
+            UserOutPtr::from(&mut actual as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::BAD_HANDLE
+    );
+
+    // Set disposition on invalid handle
+    assert_eq!(
+        sc.sys_socket_set_disposition(0, 0, 0).unwrap_err(),
+        ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(SocketTest, SetDispositionNoOpAndClosedPeer) — syscall level
+#[test]
+fn set_disposition_noop_and_closed_peer() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    // No-op disposition succeeds
+    sc.sys_socket_set_disposition(h0, 0, 0).unwrap();
+
+    // Close peer
+    sc.sys_handle_close(h1).unwrap();
+
+    // No-op on self still succeeds
+    sc.sys_socket_set_disposition(h0, 0, 0).unwrap();
+
+    // Disposition on closed peer fails
+    assert_eq!(
+        sc.sys_socket_set_disposition(h0, 0, 1).unwrap_err(),
+        ZxError::PEER_CLOSED
+    );
+}

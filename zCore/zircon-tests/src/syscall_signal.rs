@@ -121,6 +121,40 @@ fn timer_cancel_via_syscall() {
     sc.sys_timer_cancel(h).unwrap();
 }
 
+/// C++: TEST(Timer, InvalidCalls) — syscall level
+/// Invalid clock_id or options rejected.
+#[test]
+fn timer_invalid_calls() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let mut h: HandleValue = 0;
+
+    // Invalid clock_id (99)
+    let result = sc.sys_timer_create(0, 99, UserOutPtr::from(&mut h as *mut _ as usize));
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+
+    // Invalid options (ZX_TIMER_SLACK_LATE + 1 = 3)
+    let result = sc.sys_timer_create(3, 0, UserOutPtr::from(&mut h as *mut _ as usize));
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(Timer, UserSignal) — syscall level
+/// User signals work on timer handles.
+#[test]
+fn timer_user_signal() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let mut h: HandleValue = 0;
+    sc.sys_timer_create(0, 0, UserOutPtr::from(&mut h as *mut _ as usize))
+        .unwrap();
+
+    // Set user signal
+    sc.sys_object_signal(h, 0, 1 << 24).unwrap();
+
+    // Clear user signal
+    sc.sys_object_signal(h, 1 << 24, 0).unwrap();
+}
+
 /// C++: TEST(EventPairTest, CheckNoFlagsSupported) — syscall level
 #[test]
 fn eventpair_invalid_options() {
