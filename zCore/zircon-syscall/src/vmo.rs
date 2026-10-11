@@ -485,10 +485,12 @@ impl Syscall<'_> {
                 if !rights.contains(Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
-                if !page_aligned(offset) || !page_aligned(len) {
-                    return Err(ZxError::INVALID_ARGS);
-                }
-                vmo.commit(offset, len)?;
+                // Fuchsia rounds commit range to page boundaries.
+                let page_mask = PAGE_SIZE - 1;
+                let aligned_offset = offset & !page_mask;
+                let aligned_end = (offset + len + page_mask) & !page_mask;
+                let aligned_len = aligned_end - aligned_offset;
+                vmo.commit(aligned_offset, aligned_len)?;
                 Ok(())
             }
             VmoOpType::Decommit => {
@@ -507,24 +509,20 @@ impl Syscall<'_> {
                 vmo.zero(offset, len)
             }
             VmoOpType::Lock | VmoOpType::TryLock => {
-                // Lock/TryLock a discardable VMO to prevent eviction.
-                if !rights.intersects(Rights::READ | Rights::WRITE) {
-                    return Err(ZxError::ACCESS_DENIED);
-                }
-                // LOCK requires buffer for zx_vmo_lock_state_t (32 bytes).
-                // Lock/TryLock requires a discardable VMO.
                 if !vmo.is_discardable() {
                     return Err(ZxError::NOT_SUPPORTED);
                 }
-                // TRY_LOCK does not require a buffer.
-                if matches!(op, VmoOpType::Lock) && _buffer_size < 32 {
-                    return Err(ZxError::INVALID_ARGS);
+                if !rights.intersects(Rights::READ | Rights::WRITE) {
+                    return Err(ZxError::ACCESS_DENIED);
                 }
-                // Validate range.
-                let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
-                if end > vmo.len() {
+                // Lock/Unlock must cover the entire VMO.
+                if offset != 0 || len != vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
+                if matches!(op, VmoOpType::Lock) && (_buffer_size < 32 || _buffer.is_null()) {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                vmo.lock_discardable()?;
                 // Write zx_vmo_lock_state_t to buffer (LOCK only, not TRY_LOCK):
                 if matches!(op, VmoOpType::Lock) {
                     let mut buf = _buffer;
@@ -536,11 +534,17 @@ impl Syscall<'_> {
                 Ok(())
             }
             VmoOpType::Unlock => {
-                // Unlock a discardable VMO, allowing eviction.
+                if !vmo.is_discardable() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
                 if !rights.intersects(Rights::READ | Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
-                Ok(())
+                // Unlock must cover the entire VMO.
+                if offset != 0 || len != vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                vmo.unlock_discardable()
             }
             VmoOpType::CacheSync | VmoOpType::CacheClean | VmoOpType::CacheCleanInvalidate => {
                 // These require READ rights per the Zircon ABI.
