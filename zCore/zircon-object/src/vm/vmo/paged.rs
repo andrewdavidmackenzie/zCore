@@ -642,8 +642,15 @@ impl VMObjectPagedInner {
     ) -> ZxResult<CommitResult> {
         let no_parent = self.parent.is_none();
         let no_frame = !self.frames.contains_key(&page_idx);
-        let out_of_range = if self.type_.is_hidden() || self.parent.is_none() {
+        let out_of_range = if self.type_.is_hidden() {
             page_idx >= self.size / PAGE_SIZE
+        } else if self.parent.is_none() {
+            // For merged Snapshot VMOs (no parent but parent_limit
+            // retained from merge), check against parent_limit too.
+            let beyond_size = page_idx >= self.size / PAGE_SIZE;
+            let beyond_parent = self.parent_limit > 0
+                && (self.parent_offset + page_idx * PAGE_SIZE) >= self.parent_limit;
+            beyond_size || beyond_parent
         } else {
             (self.parent_offset + page_idx * PAGE_SIZE) >= self.parent_limit
         };
@@ -651,8 +658,15 @@ impl VMObjectPagedInner {
         if no_frame {
             if out_of_range || no_parent {
                 // COW children reading beyond parent_limit: return
-                // shared zero page without allocating.
-                if out_of_range && !no_parent && !flags.contains(MMUFlags::WRITE) {
+                // shared zero page without allocating. This covers:
+                // - Active COW children (has parent, out of range)
+                // - Merged COW children (parent=None after merge, but
+                //   parent_limit still set from the merge)
+                let is_cow_out_of_range = out_of_range
+                    && !flags.contains(MMUFlags::WRITE)
+                    && !self.type_.is_hidden()
+                    && (self.parent.is_some() || matches!(self.type_, VMOType::Snapshot));
+                if is_cow_out_of_range {
                     static ZERO_PAGE: spin::Lazy<Option<PhysFrame>> =
                         spin::Lazy::new(PhysFrame::new_zero);
                     return match ZERO_PAGE.as_ref() {
@@ -1631,6 +1645,70 @@ mod tests {
             c2.get_info().populated_scaled_bytes as usize,
             PAGE_SIZE / 2,
             "c2 populated_scaled_bytes"
+        );
+    }
+
+    #[test]
+    fn offset_test() {
+        // Mimics VmoClone2TestCase.Offset
+        let vmo = VmObject::new_paged(3);
+        vmo.test_write(0, 1);
+        vmo.test_write(1, 2);
+        vmo.test_write(2, 3);
+
+        let clone = vmo.create_child(false, PAGE_SIZE, 3 * PAGE_SIZE).unwrap();
+
+        // Check data
+        assert_eq!(clone.test_read(0), 2);
+        assert_eq!(clone.test_read(1), 3);
+        assert_eq!(clone.test_read(2), 0); // zero page
+
+        // Check attribution before any writes
+        let vmo_info = vmo.get_info();
+        let clone_info = clone.get_info();
+        println!(
+            "Before write: vmo scaled={}, clone scaled={}",
+            vmo_info.populated_scaled_bytes, clone_info.populated_scaled_bytes
+        );
+        assert_eq!(
+            vmo_info.populated_scaled_bytes as usize,
+            2 * PAGE_SIZE,
+            "vmo should be 1 + 1/2 + 1/2 = 2 pages"
+        );
+        assert_eq!(
+            clone_info.populated_scaled_bytes as usize, PAGE_SIZE,
+            "clone should be 1/2 + 1/2 = 1 page"
+        );
+
+        // Write to clone page 1, drop vmo
+        clone.write(PAGE_SIZE, &[4]).unwrap();
+        drop(vmo);
+
+        // Check data after drop
+        assert_eq!(clone.test_read(0), 2);
+        assert_eq!(clone.test_read(1), 4);
+        assert_eq!(clone.test_read(2), 0);
+
+        // Check attribution after drop — clone should own 2 pages
+        let info = clone.get_info();
+        println!(
+            "After drop: clone scaled={} committed={} private={} pop={}",
+            info.populated_scaled_bytes,
+            info.committed_bytes,
+            info.committed_private_bytes,
+            info.populated_bytes
+        );
+        for p in 0..3 {
+            println!(
+                "  page {}: committed={}",
+                p,
+                clone.committed_pages_in_range(p, p + 1)
+            );
+        }
+        assert_eq!(
+            info.populated_scaled_bytes as usize,
+            2 * PAGE_SIZE,
+            "clone should own 2 pages after parent drops"
         );
     }
 
