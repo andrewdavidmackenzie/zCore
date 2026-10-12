@@ -1637,3 +1637,292 @@ fn pager_vmo_content_size() {
     let _ctx = TestContext::new();
     panic!("needs demand-paging");
 }
+
+// ── PagerProcess tests (require process + VMAR mapping) ─────────────
+//
+// These tests correspond to the C++ PagerProcess fixture that creates
+// a child process, maps a pager-backed VMO into it, and faults via
+// real memory access. zCore libos mode cannot create real user-space
+// mappings, so these are all #[should_panic].
+
+/// C++: TEST(PagerProcess, CreateProcess)
+///
+/// Create a process with a pager-backed VMO mapped into it. Requires
+/// real VMAR mapping and process execution.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_process_create_process() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerProcess, DestroyProcess)
+///
+/// Destroy a process while it has a pager-backed VMO mapped. The pager
+/// should receive no further requests. Requires process lifecycle.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_process_destroy_process() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerProcess, ReadThroughMapping)
+///
+/// Read from a pager-backed VMO through a user-space mapping. The read
+/// triggers a page fault resolved by pager supply. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_process_read_through_mapping() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerProcess, WriteThroughMapping)
+///
+/// Write to a pager-backed VMO through a user-space mapping. The write
+/// triggers a page fault resolved by pager supply. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_process_write_through_mapping() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerProcess, FaultAndSupply)
+///
+/// A thread faults on a mapped pager VMO page, the pager reads the
+/// request from the port and supplies pages. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_process_fault_and_supply() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+// ── PagerWriteback tests (require TRAP_DIRTY + async writeback) ─────
+
+/// C++: TEST(PagerWriteback, WritebackBeginEnd)
+///
+/// WRITEBACK_BEGIN followed by WRITEBACK_END on dirty pages. Requires
+/// TRAP_DIRTY faults and async writeback infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_begin_end() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackDirtyRange)
+///
+/// Verify dirty range reporting after writeback cycle. Requires
+/// TRAP_DIRTY page fault handling.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_dirty_range() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackPartial)
+///
+/// Writeback only a subset of dirty pages. Remaining pages should
+/// still be dirty. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_partial() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackAfterDetach)
+///
+/// Writeback after pager detach should fail. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_after_detach() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackMultipleRanges)
+///
+/// Multiple dirty ranges from non-contiguous writes, each written
+/// back separately. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_multiple_ranges() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+// ── More Pager validation (TRAP_DIRTY variants) ─────────────────────
+
+/// C++: TEST(PagerTest, TrapDirtyCreate)
+///
+/// Create a VMO with TRAP_DIRTY and verify it is pager-backed with
+/// dirty trap enabled. Requires demand-paging for fault handling.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_trap_dirty_create() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, TrapDirtyWrite)
+///
+/// Write to a TRAP_DIRTY VMO via mapping — should trigger a dirty
+/// trap fault on the pager port. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_trap_dirty_write() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, TrapDirtyRead)
+///
+/// Read from a TRAP_DIRTY VMO — should trigger a normal read fault,
+/// not a dirty trap. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_trap_dirty_read() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, TrapDirtyQueryAfterWrite)
+///
+/// After writing to a TRAP_DIRTY VMO and granting dirty permission,
+/// query_dirty_ranges should show the dirty pages. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_trap_dirty_query_after_write() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, TrapDirtyWritebackCycle)
+///
+/// Full dirty cycle: write → dirty trap → grant dirty → writeback begin
+/// → writeback end. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_trap_dirty_writeback_cycle() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+// ── Pager stress tests (require concurrent threads) ─────────────────
+
+/// C++: TEST(PagerTest, MultipleVmosFaultConcurrent)
+///
+/// Multiple VMOs fault concurrently from different threads. The pager
+/// must resolve each independently. Requires demand-paging + threads.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_multiple_vmos_fault_concurrent() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ConcurrentSupplyAndFault)
+///
+/// One thread faults while another supplies pages concurrently.
+/// Tests thread-safety of supply_pages. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_concurrent_supply_and_fault() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SupplyRace)
+///
+/// Multiple threads race to supply the same page. Only one should
+/// win; others should be no-ops. Requires demand-paging + threads.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_supply_race() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, DetachRace)
+///
+/// Detach races with a concurrent fault. The faulting thread should
+/// get an error, not hang. Requires demand-paging + threads.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_detach_race() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, CloseRace)
+///
+/// Drop the pager while a fault is in progress. The faulting thread
+/// should get an error, not hang. Requires demand-paging + threads.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_close_race() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+// ── ResizeWithPager tests ───────────────────────────────────────────
+
+/// C++: TEST(PagerTest, ResizeShrinkWithPager)
+///
+/// Shrink a resizable pager VMO while a fault is pending on a page
+/// that is being removed. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_resize_shrink_with_pager() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ResizeGrowWithPager)
+///
+/// Grow a resizable pager VMO and fault on the new pages. The pager
+/// must handle requests for the grown region. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_resize_grow_with_pager() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ResizeThenFault)
+///
+/// Resize a pager VMO (grow), then fault on the new region. The pager
+/// port should receive a request for the new offset. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_resize_then_fault() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ResizeDuringFault)
+///
+/// Resize while a fault is in progress. The fault should either
+/// complete or fail cleanly. Requires demand-paging + threads.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_resize_during_fault() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ResizeAndDetach)
+///
+/// Resize a pager VMO, then detach. Faults on the VMO should return
+/// errors, not hang. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_resize_and_detach() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}

@@ -128,6 +128,9 @@ mod syscall_vmo;
 mod object_info;
 
 #[cfg(test)]
+mod property;
+
+#[cfg(test)]
 mod vmo_transfer_data;
 
 #[cfg(test)]

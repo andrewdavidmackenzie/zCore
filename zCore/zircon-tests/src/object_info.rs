@@ -3884,3 +3884,244 @@ fn process_info_handle_table_zero_buffer() {
     // avail reports how many handles the process has
     assert!(avail >= 1, "process should have at least 1 handle");
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// ZX_INFO_PROCESS_MAPS (topic 13) — 10 tests
+//
+// PROCESS_MAPS returns an array of zx_info_maps_t entries describing
+// the VMAR/mapping tree of a process. Not yet implemented in zCore
+// (returns NOT_SUPPORTED), so all tests are #[should_panic].
+// ═══════════════════════════════════════════════════════════════════
+
+const TOPIC_PROCESS_MAPS: u32 = 13;
+// zx_info_maps_t: name(32) + base(8) + size(8) + depth(8) + type-specific(48) = 104
+const PROCESS_MAPS_ENTRY_SIZE: usize = 104;
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsUnstartedSucceeds)
+///
+/// Query PROCESS_MAPS on an unstarted process. Should succeed with
+/// at least the root VMAR entry. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_maps_unstarted_succeeds() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsSmokeTest)
+///
+/// Query PROCESS_MAPS on a process with mappings. Should return
+/// multiple entries describing the VMAR tree. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_maps_smoke_test() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsInvalidHandleFails)
+///
+/// PROCESS_MAPS with an invalid handle should return BAD_HANDLE.
+/// Not implemented in zCore (returns NOT_SUPPORTED before handle check).
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_maps_invalid_handle() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsNullAvail)
+///
+/// PROCESS_MAPS with null avail pointer should succeed.
+/// Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_maps_null_avail() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsNullActual)
+///
+/// PROCESS_MAPS with null actual pointer should succeed.
+/// Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_maps_null_actual() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsNullActualAndAvail)
+///
+/// PROCESS_MAPS with both null actual and avail pointers should succeed.
+/// Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_maps_null_actual_and_avail() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsInvalidBuffer)
+///
+/// PROCESS_MAPS with null buffer pointer and non-zero size should
+/// return INVALID_ARGS. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_maps_invalid_buffer() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsBadActual)
+///
+/// PROCESS_MAPS with misaligned actual pointer should return
+/// INVALID_ARGS. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_maps_bad_actual() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsBadAvail)
+///
+/// PROCESS_MAPS with misaligned avail pointer should return
+/// INVALID_ARGS. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_maps_bad_avail() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsZeroBuffer)
+///
+/// PROCESS_MAPS with zero-length buffer should succeed with actual=0
+/// and avail reporting the number of entries. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_maps_zero_buffer() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ZX_INFO_PROCESS_VMOS (topic 14) — 10 tests
+//
+// PROCESS_VMOS returns an array of zx_info_vmo_t entries for all
+// VMOs mapped into a process. Not yet implemented in zCore.
+// ═══════════════════════════════════════════════════════════════════
+
+const TOPIC_PROCESS_VMOS: u32 = 14;
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosOnSelfSucceeds)
+///
+/// Query PROCESS_VMOS on self. Should return at least the VMOs backing
+/// the process's VMAR tree. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_vmos_on_self_succeeds() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosSmokeTest)
+///
+/// Query PROCESS_VMOS on a process that has VMOs mapped. Should return
+/// multiple VMO info entries. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_vmos_smoke_test() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosInvalidHandleFails)
+///
+/// PROCESS_VMOS with an invalid handle should return BAD_HANDLE.
+/// Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_vmos_invalid_handle() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosNullAvail)
+///
+/// PROCESS_VMOS with null avail pointer should succeed.
+/// Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_vmos_null_avail() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosNullActual)
+///
+/// PROCESS_VMOS with null actual pointer should succeed.
+/// Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_vmos_null_actual() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosNullActualAndAvail)
+///
+/// PROCESS_VMOS with both null actual and avail pointers should succeed.
+/// Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_vmos_null_actual_and_avail() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosInvalidBuffer)
+///
+/// PROCESS_VMOS with null buffer pointer and non-zero size should
+/// return INVALID_ARGS. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_vmos_invalid_buffer() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosBadActual)
+///
+/// PROCESS_VMOS with misaligned actual pointer should return
+/// INVALID_ARGS. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_vmos_bad_actual() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosBadAvail)
+///
+/// PROCESS_VMOS with misaligned avail pointer should return
+/// INVALID_ARGS. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_vmos_bad_avail() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosZeroBuffer)
+///
+/// PROCESS_VMOS with zero-length buffer should succeed with actual=0
+/// and avail reporting the number of VMOs. Not implemented in zCore.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn process_info_vmos_zero_buffer() {
+    let _ctx = TestContext::new();
+    panic!("not yet implemented");
+}
