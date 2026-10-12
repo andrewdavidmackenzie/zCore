@@ -257,14 +257,19 @@ impl Syscall<'_> {
         addr: u64,
         len: u64,
     ) -> ZxResult {
-        let options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
+        let mut options =
+            VmOptions::from_bits(options & 0x00FF_FFFF).ok_or(ZxError::INVALID_ARGS)?;
+        // On architectures without XOM (execute-only memory) support
+        // (x86_64), PERM_READ_IF_XOM_UNSUPPORTED is treated as PERM_READ.
+        if options.contains(VmOptions::PERM_READ_IF_XOM_UNSUPPORTED) {
+            options.remove(VmOptions::PERM_READ_IF_XOM_UNSUPPORTED);
+            options.insert(VmOptions::PERM_READ);
+        }
         info!(
             "vmar.protect: handle={:#x}, options={:#x}, addr={:#x}, len={:#x}",
             handle_value, options, addr, len
         );
         let proc = self.thread.proc();
-        // Fuchsia checks handle rights: the VMAR handle must have
-        // READ/WRITE/EXECUTE rights matching the PERM_* flags.
         let required_rights = options.to_required_rights();
         let (vmar, vmar_rights) = proc.get_object_and_rights::<VmAddressRegion>(handle_value)?;
         if !vmar_rights.contains(required_rights) {
