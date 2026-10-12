@@ -327,3 +327,128 @@ fn process_wait_async_cancel_self() {
     // mini-process, which requires preemptive scheduling.
     unimplemented!("not yet implemented");
 }
+
+/// C++: TEST(ProcessTest, HandleTableSelfDetailed)
+/// Enumerate handles and check types are correct.
+#[test]
+fn process_handle_table_self_detailed() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "detailed-ht").unwrap();
+
+    // Add a channel handle
+    let (ch0, _ch1) = Channel::create();
+    let ch0_id = ch0.id();
+    let h_ch = proc.add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
+
+    // Add an event handle
+    let event = zircon_object::signal::Event::new();
+    let event_id = event.id();
+    let h_ev = proc.add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    let entries = proc.get_handle_table_entries();
+    assert_eq!(entries.len(), 2);
+
+    // Find the channel entry
+    let ch_entry = entries.iter().find(|e| e.3 == ch0_id);
+    assert!(ch_entry.is_some(), "should find channel in handle table");
+    let ch_entry = ch_entry.unwrap();
+    assert_eq!(ch_entry.1, h_ch);
+
+    // Find the event entry
+    let ev_entry = entries.iter().find(|e| e.3 == event_id);
+    assert!(ev_entry.is_some(), "should find event in handle table");
+    let ev_entry = ev_entry.unwrap();
+    assert_eq!(ev_entry.1, h_ev);
+}
+
+/// C++: TEST(ProcessTest, GetChild)
+/// Get a child thread by its koid.
+#[test]
+fn process_get_child() {
+    use zircon_object::object::KernelObject;
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "get-child-test").unwrap();
+
+    let thread = Thread::create(&proc, "child-thread").unwrap();
+    let thread_koid = thread.id();
+
+    // get_child should find the thread by koid
+    let found = proc.get_child(thread_koid).unwrap();
+    assert_eq!(found.id(), thread_koid);
+    assert_eq!(found.type_name(), "Thread");
+
+    // Non-existent koid should fail
+    let err = proc.get_child(0xDEAD_BEEF);
+    assert!(err.is_err());
+}
+
+/// C++: TEST(ProcessTest, CreateDestroyed)
+/// Creating a process on a dead (killed) job should fail.
+#[test]
+fn process_create_destroyed() {
+    use zircon_object::task::Task;
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let child_job = job.create_child().unwrap();
+
+    // Kill the child job
+    child_job.kill();
+
+    // Creating a process on the dead job should fail
+    let result = Process::create(&child_job, "should-fail");
+    assert!(result.is_err(), "creating process on dead job should fail");
+}
+
+/// C++: TEST(ProcessTest, KillProcess)
+/// Kill a process and check it transitions to terminated.
+#[test]
+fn process_kill_process() {
+    use zircon_object::task::Task;
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "kill-test").unwrap();
+
+    // Process should not be terminated initially
+    assert!(
+        !proc.signal().contains(Signal::PROCESS_TERMINATED),
+        "process should not be terminated initially"
+    );
+
+    // Kill the process
+    proc.kill();
+
+    // Should now be terminated
+    assert!(
+        proc.signal().contains(Signal::PROCESS_TERMINATED),
+        "process should be terminated after kill"
+    );
+
+    // Info should show exited
+    let info = proc.get_info();
+    assert_ne!(info.flags & 2, 0, "EXITED flag should be set after kill");
+    assert_eq!(
+        info.return_code,
+        zircon_object::task::TASK_RETCODE_SYSCALL_KILL,
+        "return code should be TASK_RETCODE_SYSCALL_KILL"
+    );
+}
+
+/// C++: TEST(ProcessTest, VmarInfo)
+/// Query VMAR info for a process's root VMAR.
+#[test]
+fn process_vmar_info() {
+    use zircon_object::object::KernelObject;
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "vmar-info-test").unwrap();
+
+    let vmar = proc.vmar();
+    let info = vmar.get_info();
+
+    // The root VMAR should have a non-zero base and length
+    assert_ne!(info.len, 0, "root VMAR should have non-zero length");
+    // The VMAR's koid should be non-zero
+    assert_ne!(vmar.id(), 0, "VMAR koid should be non-zero");
+}

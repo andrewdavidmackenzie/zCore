@@ -201,7 +201,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
     let stack_top = stack_base + stack_size;
 
     // Step 7b: Map vDSO into the init process.
-    // Map as a single contiguous block (VMAR allocator chooses address).
+    // Map as a single contiguous block (VMAR allocator chooses the address).
     let mut vdso_code_addr: usize = 0;
     let s = unsafe {
         zx_vmar_map(
@@ -393,7 +393,7 @@ fn apply_elf_relocations(
         return; // No RELA entries.
     }
 
-    // The DT_RELA value is a virtual address. Convert to file offset
+    // The DT_RELA value is a virtual address. Convert to the file offset
     // by finding which PT_LOAD segment contains it.
     let mut rela_file_offset = rela_vaddr; // fallback
     for i in 0..e_phnum {
@@ -529,7 +529,7 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
     // computed as mapped_addr + (e_entry - elf_base). For PIE binaries
     // (elf_base=0), any address works because relocations are applied.
     // For non-PIE binaries, this only works if the link base matches
-    // the VMAR's allocation (which it does when link base equals
+    // the VMAR's allocation (which it does when the link base equals
     // USER_ASPACE_BASE and the VMAR is empty).
     let vm_flags = ZX_VM_MAP_RANGE | ZX_VM_PERM_READ | ZX_VM_PERM_WRITE | ZX_VM_PERM_EXECUTE;
 
