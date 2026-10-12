@@ -28,7 +28,7 @@ ProcessTest.GetInfoRuntimeV1
 # 43/57 Threads tests hang — they suspend child threads, write
 # register state, or use exception channels. Only ~14 are safe.
 Threads.*
-ProcessTest.SuspendSelf
+# ProcessTest.SuspendSelf — removed, fixed self-suspend check
 
 # ── Policy exception infrastructure ─────────────────────────────────
 # Need ZX_EXCP_POLICY_CODE_CHANNEL_FULL_WRITE and exception delivery.

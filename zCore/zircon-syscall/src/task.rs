@@ -301,6 +301,10 @@ impl Syscall<'_> {
             return Ok(());
         }
         if let Ok(process) = proc.get_object_with_rights::<Process>(handle, Rights::WRITE) {
+            // Cannot suspend the calling process.
+            if process.id() == proc.id() {
+                return Err(ZxError::NOT_SUPPORTED);
+            }
             let process: Arc<dyn Task> = process;
             let token_handle = Handle::new(
                 SuspendToken::create(&process),
