@@ -122,6 +122,9 @@ mod syscall_task;
 mod syscall_vmo;
 
 #[cfg(test)]
+mod object_info;
+
+#[cfg(test)]
 mod vmo_transfer_data;
 
 #[cfg(test)]
