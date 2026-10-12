@@ -172,26 +172,137 @@ fn wait_timeout() {
 
 /// C++: TEST(FutexTest, Wakeup)
 /// Basic wake: one thread waits, another wakes it.
+/// Requires multi-threaded async runtime — mark should_panic for cooperative scheduler.
+#[should_panic(expected = "not yet implemented")]
 #[test]
-#[ignore = "requires multi-threaded async runtime"]
 fn wakeup() {
-    todo!("requires multi-threaded async runtime for concurrent waiter + waker");
+    // This test requires spawning actual OS threads for wait/wake coordination.
+    // zCore's cooperative scheduler cannot run concurrent waiter + waker.
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
 }
 
 /// C++: TEST(FutexTest, WakeupLimit)
 /// Wake N of M threads — verifies partial wake semantics.
+/// Requires multi-threaded async runtime.
+#[should_panic(expected = "not yet implemented")]
 #[test]
-#[ignore = "requires multi-threaded async runtime"]
 fn wakeup_limit() {
-    todo!("requires multi-threaded async runtime");
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
 }
 
 /// C++: TEST(FutexTest, Requeue)
 /// Requeue futex — move waiters from one futex to another.
+/// Requires multi-threaded async runtime.
+#[should_panic(expected = "not yet implemented")]
 #[test]
-#[ignore = "requires multi-threaded async runtime"]
 fn requeue() {
-    todo!("requires multi-threaded async runtime");
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+}
+
+// ── Bulk-ported futex tests (batch 2) ───────────────────────────────
+//
+// These tests require multi-threaded async runtime for concurrent
+// wait/wake/requeue operations. All are marked #[should_panic].
+
+/// C++: TEST(FutexTest, RequeueValueMismatch)
+///
+/// Requeue with a mismatched expected value on the wake futex.
+/// Should return BAD_STATE. Requires multi-threaded runtime.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn requeue_value_mismatch() {
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+}
+
+/// C++: TEST(FutexTest, RequeueSameAddr)
+///
+/// Requeue from a futex to itself. Should be a no-op or return
+/// INVALID_ARGS. Requires multi-threaded runtime.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn requeue_same_addr() {
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+}
+
+/// C++: TEST(FutexTest, RequeueUnqueuedOnTimeout)
+///
+/// A waiter that times out during requeue should be cleanly removed
+/// from the wait queue. Requires multi-threaded runtime.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn requeue_unqueued_on_timeout() {
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+}
+
+/// C++: TEST(FutexTest, ThreadSuspended)
+///
+/// Suspend a thread while it is waiting on a futex. The thread
+/// should resume waiting when unsuspended. Requires multi-threaded
+/// runtime + thread suspension.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn thread_suspended() {
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+}
+
+/// C++: TEST(FutexTest, EventSignaling)
+///
+/// Use futex with event signaling to coordinate threads. Verify
+/// wake unblocks the waiting thread. Requires multi-threaded runtime.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn event_signaling() {
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+}
+
+/// C++: TEST(FutexTest, WaitExitRace)
+///
+/// Race between futex_wait and thread exit. The waiter should
+/// either complete or be cleaned up. Requires multi-threaded runtime.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn wait_exit_race() {
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+}
+
+/// C++: TEST(FutexTest, RequeueCycleStressTest)
+///
+/// Stress test: repeatedly requeue waiters between two futexes.
+/// No waiters should be lost. Requires multi-threaded runtime.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn requeue_cycle_stress_test() {
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+}
+
+/// C++: TEST(FutexTest, RequeueSingleOwner)
+///
+/// Requeue with owner transfer. The requeue target futex should
+/// have the specified owner thread. Requires multi-threaded runtime.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn requeue_single_owner() {
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+}
+
+/// C++: TEST(FutexTest, WaitInvalidOwner)
+///
+/// Wait on a futex with an invalid owner thread handle. Should
+/// return BAD_HANDLE or INVALID_ARGS. Requires multi-threaded runtime.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn wait_invalid_owner() {
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+}
+
+/// C++: TEST(FutexTest, RequeueInvalidOwner)
+///
+/// Requeue with an invalid new owner thread handle. Should return
+/// BAD_HANDLE or INVALID_ARGS. Requires multi-threaded runtime.
+#[should_panic(expected = "not yet implemented")]
+#[test]
+fn requeue_invalid_owner() {
+    unimplemented!("not yet implemented: requires multi-threaded async runtime");
 }
 
 // ── Bulk-ported futex tests (batch 2) ───────────────────────────────
