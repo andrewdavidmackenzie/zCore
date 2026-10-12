@@ -56,18 +56,37 @@ impl Pager {
         key: u64,
         size: u64,
     ) -> ZxResult<Arc<VmObject>> {
+        const ZX_VMO_RESIZABLE: u32 = 1 << 1;
+        const ZX_VMO_DISCARDABLE: u32 = 1 << 2;
         const ZX_VMO_TRAP_DIRTY: u32 = 1 << 3;
+        const ZX_VMO_UNBOUNDED: u32 = 1 << 4;
+        // Discardable pager-backed VMOs are not allowed.
+        if options & ZX_VMO_DISCARDABLE != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let resizable = options & ZX_VMO_RESIZABLE != 0;
+        let unbounded = options & ZX_VMO_UNBOUNDED != 0;
         let trap_dirty = options & ZX_VMO_TRAP_DIRTY != 0;
-        let pages = (size as usize).div_ceil(PAGE_SIZE);
-        // Pager-backed VMOs are always resizable in Fuchsia.
-        let vmo = VmObject::new_paged_with_resizable(true, pages);
-        vmo.set_content_size(vmo.len())?;
+        // UNBOUNDED and RESIZABLE are mutually exclusive.
+        if unbounded && resizable {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let vmo_pages = if unbounded {
+            // UNBOUNDED: VMO capacity is maximum; size arg is just content_size.
+            256 * 1024 // 1GB
+        } else {
+            (size as usize).div_ceil(PAGE_SIZE)
+        };
+        let vmo = VmObject::new_paged_with_resizable(resizable, vmo_pages);
+        // Set content_size: for UNBOUNDED, this is the user's requested size;
+        // for regular VMOs, it's the VMO's actual (page-rounded) size.
+        vmo.set_content_size(if unbounded { size as usize } else { vmo.len() })?;
         vmo.set_name("pager-vmo");
         // Associate the pager's port and key with the VMO for
         // demand-paging notifications.
         vmo.set_pager(port.clone(), key);
         if trap_dirty {
-            vmo.set_trap_dirty(pages);
+            vmo.set_trap_dirty(vmo_pages);
         }
 
         let mut inner = self.inner.lock();

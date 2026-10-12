@@ -893,22 +893,26 @@ impl VmObject {
                 if self.immutable.load(core::sync::atomic::Ordering::Relaxed) {
                     f |= VmoInfoFlags::IMMUTABLE;
                 }
+                if self.discardable.load(core::sync::atomic::Ordering::Relaxed) {
+                    f |= VmoInfoFlags::DISCARDABLE;
+                }
                 f
             },
             cache_policy: self.trait_.cache_policy() as u32,
             share_count: inner.mapping_count as u64,
             // metadata_bytes: kernel overhead for VMO tracking.
-            // Approximate as the VMO struct size + per-page BTreeMap entries.
+            // 0 when no pages are committed; non-zero once pages exist.
             metadata_bytes: {
-                let base_overhead = 256u64; // VmObject + VmObjectInner + paged inner
-                let pages = self.trait_.len() as u64 / PAGE_SIZE as u64;
-                // Each committed page has a BTreeMap entry (~64 bytes)
-                base_overhead
-                    + pages.min(
-                        self.trait_
-                            .committed_pages_in_range(0, self.trait_.len() / PAGE_SIZE)
-                            as u64,
-                    ) * 64
+                let committed = self
+                    .trait_
+                    .committed_pages_in_range(0, self.trait_.len() / PAGE_SIZE)
+                    as u64;
+                if committed > 0 {
+                    // Base overhead + per-page tracking
+                    256 + committed * 64
+                } else {
+                    0
+                }
             },
             ..Default::default()
         };
