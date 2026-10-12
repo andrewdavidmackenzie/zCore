@@ -9,7 +9,6 @@ use zircon_object::signal::{PayloadRepr, Port, PortPacket, PortPacketRepr};
 
 extern crate alloc;
 
-/// C++: TEST(PortStressTest, QueueMany)
 ///
 /// Queue many packets to a port and dequeue them all.
 #[test]
@@ -34,7 +33,6 @@ fn queue_many() {
     }
 }
 
-/// C++: TEST(PortStressTest, QueueAndCancel)
 ///
 /// Queue packets then cancel. Cancellation should remove matching
 /// packets.
@@ -45,7 +43,6 @@ fn queue_and_cancel() {
     panic!("port cancel stress needs async");
 }
 
-/// C++: TEST(PortStressTest, MultipleObservers)
 ///
 /// Multiple objects observed on the same port. Each signal should
 /// generate the correct packet.
@@ -56,7 +53,6 @@ fn multiple_observers() {
     panic!("multiple observers needs async");
 }
 
-/// C++: TEST(PortStressTest, PortFIFOOrder)
 ///
 /// Packets should be dequeued in FIFO order.
 #[test]
@@ -80,7 +76,6 @@ fn port_fifo_order() {
     }
 }
 
-/// C++: TEST(PortStressTest, PortQueueLimit)
 ///
 /// Queue up to the port packet limit (4096). Verify all are dequeueable.
 #[test]
@@ -101,7 +96,6 @@ fn port_queue_limit() {
     assert_eq!(PortPacketRepr::from(&first).key, 0);
 }
 
-/// C++: TEST(PortStressTest, PortDrainAll)
 ///
 /// Queue N packets, drain all, verify port is empty.
 #[test]
@@ -126,7 +120,6 @@ fn port_drain_all() {
     assert!(!port.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(PortStressTest, PortQueueAfterDrain)
 ///
 /// Drain a port, then queue more packets. The new packets should
 /// be dequeueable.
@@ -153,7 +146,6 @@ fn port_queue_after_drain() {
     assert_eq!(PortPacketRepr::from(&pkt).key, 2);
 }
 
-/// C++: TEST(PortStressTest, PortMultipleCreation)
 ///
 /// Create many ports. Each should have a unique KOID.
 #[test]
@@ -170,7 +162,6 @@ fn port_multiple_creation() {
     }
 }
 
-/// C++: TEST(PortStressTest, PortPacketPayload)
 ///
 /// Queue a packet with specific payload data and verify it is
 /// preserved on dequeue.
@@ -192,7 +183,6 @@ fn port_packet_payload() {
     // status field is ZxError type — verified by type system
 }
 
-/// C++: TEST(PortStressTest, PortInterleaveQueueDequeue)
 ///
 /// Interleave queue and dequeue operations. Each dequeue should
 /// return the oldest packet.
@@ -211,4 +201,88 @@ fn port_interleave_queue_dequeue() {
         let pkt = async_std::task::block_on(port.wait());
         assert_eq!(PortPacketRepr::from(&pkt).key, i);
     }
+}
+
+/// C++: TEST(PortStressTest, CancelKeyActiveObserverRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_active_observer_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CancelKeyCloseRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_close_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CancelKeyDestructorReentersPortLock)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_destructor_reenters_port_lock() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CancelKeyDuringMatchRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_during_match_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CancelKeyDuringRegistrationRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_during_registration_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CancelKeySharedKeyRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_shared_key_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, ChannelCallWaitQueuePanicRepro)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn channel_call_wait_queue_panic_repro() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CloseWaitRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn close_wait_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, MatchHandleCloseRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn match_handle_close_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, QueuePacketAfterPortClosedConcurrentRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn queue_packet_after_port_closed_concurrent_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, SignalCloseWait)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn signal_close_wait() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, WaitSignalCancel)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn wait_signal_cancel() {
+    todo!("requires multi-threaded stress testing");
 }

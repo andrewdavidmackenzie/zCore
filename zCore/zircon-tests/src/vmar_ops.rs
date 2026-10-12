@@ -10,7 +10,6 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 
 extern crate alloc;
 
-/// C++: TEST(VmarOpsTest, AllocateSubVmar)
 ///
 /// Allocate a sub-VMAR within the process root VMAR. The sub-VMAR
 /// should have a valid KOID and be within the parent's range.
@@ -24,7 +23,6 @@ fn allocate_sub_vmar() {
     assert_ne!(root_vmar.id(), 0);
 }
 
-/// C++: TEST(VmarOpsTest, MapVmo)
 ///
 /// Map a VMO into the process VMAR. The mapping should succeed and
 /// return a valid address within the VMAR range.
@@ -42,7 +40,6 @@ fn map_vmo() {
     assert!(result.is_ok(), "mapping should succeed");
 }
 
-/// C++: TEST(VmarOpsTest, UnmapVmo)
 ///
 /// Map then unmap a VMO. After unmapping, the address range should
 /// be free for reuse.
@@ -63,7 +60,6 @@ fn unmap_vmo() {
     assert!(result.is_ok(), "unmapping should succeed");
 }
 
-/// C++: TEST(VmarOpsTest, MapMultipleVmos)
 ///
 /// Map multiple VMOs into the same VMAR. All mappings should coexist
 /// at different addresses.
@@ -91,7 +87,6 @@ fn map_multiple_vmos() {
     }
 }
 
-/// C++: TEST(VmarOpsTest, MapLargeVmo)
 ///
 /// Map a multi-page VMO into the VMAR.
 #[test]
@@ -108,7 +103,6 @@ fn map_large_vmo() {
     assert!(result.is_ok());
 }
 
-/// C++: TEST(VmarOpsTest, MapWithOffset)
 ///
 /// Map a VMO at a non-zero offset within the VMO.
 #[test]
@@ -126,7 +120,6 @@ fn map_with_offset() {
     assert!(result.is_ok());
 }
 
-/// C++: TEST(VmarOpsTest, DestroySubVmar)
 ///
 /// Create and destroy a sub-VMAR. All mappings within should be
 /// unmapped.
@@ -137,7 +130,6 @@ fn destroy_sub_vmar() {
     panic!("sub-VMAR destroy needs real VMAR");
 }
 
-/// C++: TEST(VmarOpsTest, ProtectRange)
 ///
 /// Change the protection of a mapped range. Requires real page table
 /// manipulation.
@@ -148,7 +140,6 @@ fn protect_range() {
     panic!("protect needs real page tables");
 }
 
-/// C++: TEST(VmarOpsTest, MapOverlapping)
 ///
 /// Map a VMO over an existing mapping. The new mapping should
 /// replace the old one (VMAR_FLAG_SPECIFIC_OVERWRITE).
@@ -159,7 +150,6 @@ fn map_overlapping() {
     panic!("overlapping map needs SPECIFIC_OVERWRITE");
 }
 
-/// C++: TEST(VmarOpsTest, VmarInfo)
 ///
 /// Query VMAR info and verify the address range.
 #[test]

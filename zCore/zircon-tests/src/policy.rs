@@ -11,7 +11,6 @@ use zircon_object::task::Job;
 
 extern crate alloc;
 
-/// C++: TEST(PolicyTest, DefaultPolicy)
 ///
 /// A newly created job should have a default permissive policy.
 #[test]
@@ -23,7 +22,6 @@ fn default_policy() {
     assert_ne!(child.id(), 0);
 }
 
-/// C++: TEST(PolicyTest, SetBasicPolicy)
 ///
 /// Set a basic policy on a job. Children should inherit the policy.
 #[should_panic(expected = "policy enforcement not testable in libos")]
@@ -33,7 +31,6 @@ fn set_basic_policy() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyInheritance)
 ///
 /// Policies set on a parent job are inherited by child jobs.
 #[should_panic(expected = "policy enforcement not testable in libos")]
@@ -43,7 +40,6 @@ fn policy_inheritance() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyDenyNewVmo)
 ///
 /// Set policy to deny VMO creation. Creating a VMO in a process
 /// under this job should fail. Requires policy enforcement.
@@ -54,7 +50,6 @@ fn policy_deny_new_vmo() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyDenyNewChannel)
 ///
 /// Set policy to deny channel creation. Creating a channel should
 /// fail with POLICY_DENIED. Requires policy enforcement.
@@ -65,7 +60,6 @@ fn policy_deny_new_channel() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyDenyNewEvent)
 ///
 /// Set policy to deny event creation. Creating an event should
 /// fail with POLICY_DENIED. Requires policy enforcement.
@@ -76,7 +70,6 @@ fn policy_deny_new_event() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyDenyNewSocket)
 ///
 /// Set policy to deny socket creation. Creating a socket should
 /// fail with POLICY_DENIED. Requires policy enforcement.
@@ -87,7 +80,6 @@ fn policy_deny_new_socket() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyDenyNewFifo)
 ///
 /// Set policy to deny FIFO creation. Creating a FIFO should fail
 /// with POLICY_DENIED. Requires policy enforcement.
@@ -98,7 +90,6 @@ fn policy_deny_new_fifo() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyDenyNewTimer)
 ///
 /// Set policy to deny timer creation. Creating a timer should fail
 /// with POLICY_DENIED. Requires policy enforcement.
@@ -109,7 +100,6 @@ fn policy_deny_new_timer() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyDenyNewPort)
 ///
 /// Set policy to deny port creation. Creating a port should fail
 /// with POLICY_DENIED. Requires policy enforcement.
@@ -120,7 +110,6 @@ fn policy_deny_new_port() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyOverrideDeny)
 ///
 /// Set override policy to DENY on a parent, then try to set ALLOW
 /// on a child. The child should not be able to relax the policy.
@@ -131,7 +120,6 @@ fn policy_override_deny() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyOverrideAllow)
 ///
 /// Set override policy to ALLOW on a parent. Child jobs should be
 /// able to set their own policies freely.
@@ -142,7 +130,6 @@ fn policy_override_allow() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyAmbientMarkVmoExec)
 ///
 /// Set policy to allow ambient VMO exec marking. VMOs created under
 /// this job should get EXECUTE right. Tests ZX_POL_AMBIENT_MARK_VMO_EXEC.
@@ -153,7 +140,6 @@ fn policy_ambient_mark_vmo_exec() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyOnEmptyJobOnly)
 ///
 /// Policies can only be set on jobs with no children. Setting a
 /// policy on a non-empty job should return BAD_STATE.
@@ -164,7 +150,6 @@ fn policy_on_empty_job_only() {
     panic!("policy enforcement not testable in libos");
 }
 
-/// C++: TEST(PolicyTest, PolicyBatchApplication)
 ///
 /// Set multiple policy conditions atomically in a single batch.
 /// All conditions should be applied together or none.

@@ -342,7 +342,6 @@ fn write_to_peer_closed_consumes_moved_handles() {
     // handle consumption in libos mode, but we verify the error.
 }
 
-/// C++: TEST(ChannelTest, ReadRemainingMessagesPreservesSignals)
 /// When peer is closed but messages remain, both READABLE and PEER_CLOSED
 /// should be set simultaneously.
 #[test]
@@ -370,7 +369,6 @@ fn read_remaining_messages_preserves_signals() {
     assert!(remote.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(ChannelTest, CheckAndReadPreservesMessageOnFailure)
 /// When check_and_read's checker rejects a message, the message stays.
 #[test]
 fn check_and_read_preserves_message_on_failure() {
@@ -394,7 +392,6 @@ fn check_and_read_preserves_message_on_failure() {
     assert_eq!(msg.data, vec![1, 2, 3]);
 }
 
-/// C++: TEST(ChannelTest, MultipleHandlesTransferred)
 /// Writing multiple handles in a single message, all received correctly.
 #[test]
 fn multiple_handles_transferred() {
@@ -427,7 +424,6 @@ fn multiple_handles_transferred() {
     assert_eq!(msg.handles[2].object.id(), id3);
 }
 
-/// C++: TEST(ChannelTest, MessageFIFOOrder)
 /// Messages are delivered in FIFO order even with mixed sizes.
 #[test]
 fn message_fifo_order() {
@@ -451,7 +447,6 @@ fn message_fifo_order() {
     }
 }
 
-/// C++: TEST(ChannelTest, BidirectionalCommunication)
 /// Both endpoints can write and read independently.
 #[test]
 fn bidirectional_communication() {
@@ -482,7 +477,6 @@ fn bidirectional_communication() {
     assert_eq!(msg.data, vec![1, 2, 3]);
 }
 
-/// C++: TEST(ChannelTest, LargeMessage)
 /// A message near the maximum size can be written and read.
 #[test]
 fn large_message() {
@@ -503,7 +497,6 @@ fn large_message() {
     assert_eq!(msg.data, data);
 }
 
-/// C++: TEST(ChannelTest, WriteAfterReadDrainsQueue)
 /// After reading all messages, the READABLE signal should be cleared.
 #[test]
 fn write_after_read_drains_queue() {
@@ -534,7 +527,6 @@ fn write_after_read_drains_queue() {
     assert_eq!(msg.data, vec![2]);
 }
 
-/// C++: TEST(ChannelTest, HandleTransferPreservesRights)
 /// A handle transferred through a channel retains its rights.
 #[test]
 fn handle_transfer_preserves_rights() {
@@ -559,7 +551,6 @@ fn handle_transfer_preserves_rights() {
     assert_eq!(msg.handles[0].rights, rights);
 }
 
-/// C++: TEST(ChannelTest, NestedChannelDeepHierarchy)
 /// Channels can be nested multiple levels deep.
 #[test]
 fn nested_channel_deep_hierarchy() {
@@ -599,7 +590,6 @@ fn nested_channel_deep_hierarchy() {
     assert_eq!(inner_msg.handles.len(), 1);
 }
 
-/// C++: TEST(ChannelTest, CheckWriteCapacityPeerClosed)
 /// check_write_capacity returns PEER_CLOSED when peer is gone.
 #[test]
 fn check_write_capacity_peer_closed() {
@@ -613,7 +603,6 @@ fn check_write_capacity_peer_closed() {
     );
 }
 
-/// C++: TEST(ChannelTest, RelatedKoidBecomesZeroOnPeerClose)
 /// After the peer is closed, related_koid should return 0.
 #[test]
 fn related_koid_becomes_zero_on_peer_close() {
@@ -757,7 +746,6 @@ fn read_may_discard_with_zero_size_buffers() {
 
 // ── Bulk-ported channel tests (batch 2) ─────────────────────────────
 
-/// C++: TEST(ChannelTest, WriteMaxMessageSize)
 ///
 /// Write a message at the maximum allowed size (64 KiB). Should
 /// succeed without error.
@@ -775,7 +763,6 @@ fn write_max_message_size() {
     assert_eq!(received.data, data);
 }
 
-/// C++: TEST(ChannelTest, WriteExceedsMaxMessageSize)
 ///
 /// Write a message exceeding the maximum allowed size. In Fuchsia,
 /// this returns OUT_OF_RANGE. zCore's Channel::write at the object
@@ -797,7 +784,6 @@ fn write_exceeds_max_message_size() {
     let _ = result;
 }
 
-/// C++: TEST(ChannelTest, ReadMayDiscardEmptyMessage)
 ///
 /// Read with MAY_DISCARD flag on an empty channel returns
 /// SHOULD_WAIT (no messages to discard).
@@ -809,7 +795,6 @@ fn read_may_discard_empty_message() {
     assert_eq!(result.unwrap_err(), ZxError::SHOULD_WAIT);
 }
 
-/// C++: TEST(ChannelTest, MultipleReadersWriters)
 ///
 /// Multiple messages written before any reads — all should be
 /// readable in FIFO order from the other endpoint.
@@ -832,7 +817,6 @@ fn multiple_readers_writers() {
     }
 }
 
-/// C++: TEST(ChannelTest, WriteAfterPeerClosedFailsCleanly)
 ///
 /// Writing to a channel whose peer has been closed should return
 /// PEER_CLOSED and the handles in the message should be consumed
@@ -856,7 +840,6 @@ fn write_after_peer_closed_fails_cleanly() {
     let _ = event_id;
 }
 
-/// C++: TEST(ChannelTest, SignalMaskUserSignals)
 ///
 /// Set user signals on a channel endpoint and verify they are
 /// visible through the signal mask.
@@ -870,7 +853,6 @@ fn signal_mask_user_signals() {
     assert!(local.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(ChannelTest, PeerClosedClearsWritable)
 ///
 /// When the peer is closed, WRITABLE should be cleared and
 /// PEER_CLOSED should be set.
@@ -885,7 +867,6 @@ fn peer_closed_clears_writable() {
     assert!(!local.signal().contains(Signal::WRITABLE));
 }
 
-/// C++: TEST(ChannelTest, EmptyHandleArrayTransfer)
 ///
 /// Write a message with data but an empty handles array. Read should
 /// return the data with zero handles.
@@ -903,7 +884,6 @@ fn empty_handle_array_transfer() {
     assert!(received.handles.is_empty());
 }
 
-/// C++: TEST(ChannelTest, CallTimeoutNoReply)
 ///
 /// Channel call with no reply should time out. Requires async
 /// infrastructure for the call wait loop.
@@ -914,7 +894,6 @@ fn call_timeout_no_reply() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelTest, CallReplyMismatchedTxid)
 ///
 /// Channel call receives a reply with a mismatched transaction ID.
 /// The call should ignore it and continue waiting. Requires async.

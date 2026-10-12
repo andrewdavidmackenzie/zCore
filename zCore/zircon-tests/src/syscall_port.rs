@@ -17,7 +17,6 @@ fn port_create_via_syscall() {
     assert_ne!(h, 0);
 }
 
-/// C++: TEST(PortTest, CreateWithBindToInterrupt) — syscall level
 #[test]
 fn port_create_bind_to_interrupt() {
     let ctx = TestContext::new();
@@ -39,7 +38,6 @@ fn port_create_invalid_options() {
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(PortTest, QueueUserPacket) — syscall level
 #[test]
 fn port_queue_user_packet() {
     let ctx = TestContext::new();
@@ -408,7 +406,6 @@ fn port_wait_async_target_access_denied() {
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
-/// C++: TEST(PortTest, QueueBadHandle)
 /// Queueing on an invalid handle returns BAD_HANDLE.
 #[test]
 fn port_queue_bad_handle() {
@@ -420,7 +417,6 @@ fn port_queue_bad_handle() {
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(PortTest, WaitBadHandle)
 /// Waiting on an invalid handle returns BAD_HANDLE.
 #[async_std::test]
 async fn port_wait_bad_handle() {
@@ -438,7 +434,6 @@ async fn port_wait_bad_handle() {
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(PortTest, CancelBadHandle)
 /// Cancelling with an invalid port handle returns BAD_HANDLE.
 #[test]
 fn port_cancel_bad_handle() {
@@ -455,7 +450,6 @@ fn port_cancel_bad_handle() {
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(PortTest, CancelKeyBadHandle)
 /// port_cancel_key with an invalid handle returns BAD_HANDLE.
 #[test]
 fn port_cancel_key_bad_handle() {

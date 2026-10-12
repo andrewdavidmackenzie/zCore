@@ -5,7 +5,6 @@ use hal_impl::user::UserOutPtr;
 use zircon_object::object::HandleValue;
 use zircon_object::ZxError;
 
-/// C++: TEST(EventTest, Create) — syscall level
 #[test]
 fn event_create_via_syscall() {
     let ctx = TestContext::new();
@@ -80,7 +79,6 @@ fn eventpair_signal_closed_peer() {
     );
 }
 
-/// C++: TEST(EventTest, SignalSelf) — syscall level
 #[test]
 fn event_signal_self() {
     let ctx = TestContext::new();
@@ -96,7 +94,6 @@ fn event_signal_self() {
     sc.sys_object_signal(h, 1 << 24, 0).unwrap();
 }
 
-/// C++: TEST(TimerTest, Create) — syscall level
 #[test]
 fn timer_create_via_syscall() {
     let ctx = TestContext::new();
@@ -108,7 +105,6 @@ fn timer_create_via_syscall() {
     assert_ne!(h, 0);
 }
 
-/// C++: TEST(TimerTest, Cancel) — syscall level
 #[test]
 fn timer_cancel_via_syscall() {
     let ctx = TestContext::new();
@@ -354,7 +350,6 @@ fn eventpair_duplicate_handles_and_peer_closed() {
     );
 }
 
-/// C++: TEST(EventPairTest, InvalidSignalBits) — syscall level (full)
 #[test]
 fn eventpair_invalid_signal_bits_full() {
     let ctx = TestContext::new();

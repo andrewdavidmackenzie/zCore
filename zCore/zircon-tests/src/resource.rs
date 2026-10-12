@@ -9,7 +9,6 @@ use crate::helpers::TestContext;
 use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
 use zircon_object::object::KernelObject;
 
-/// C++: TEST(ResourceTest, Create)
 ///
 /// Create a resource with valid kind and verify it has a valid KOID.
 #[test]
@@ -25,7 +24,6 @@ fn resource_create() {
     assert_ne!(res.id(), 0);
 }
 
-/// C++: TEST(ResourceTest, CreateInvalid)
 ///
 /// ResourceKind::COUNT is the sentinel value (one past the last valid
 /// kind). Creating a resource with COUNT is allowed at the kernel
@@ -40,7 +38,6 @@ fn resource_create_invalid() {
     assert_ne!(res.id(), 0);
 }
 
-/// C++: TEST(ResourceTest, CreateExclusive)
 ///
 /// Create a resource with the EXCLUSIVE flag.
 #[test]
@@ -57,7 +54,6 @@ fn resource_create_exclusive() {
     assert_ne!(res.id(), 0);
 }
 
-/// C++: TEST(ResourceTest, CreateOverlapping)
 ///
 /// Two non-exclusive resources with overlapping ranges should both
 /// pass the overlap check (only exclusive resources block overlap).
@@ -86,7 +82,6 @@ fn resource_create_overlapping() {
     drop(res1);
 }
 
-/// C++: TEST(ResourceTest, GetInfo)
 ///
 /// Verify resource info fields match creation parameters.
 #[test]
@@ -109,7 +104,6 @@ fn resource_get_info() {
     assert_eq!(&info.name[..11], b"my-resource");
 }
 
-/// C++: TEST(ResourceTest, Validate)
 ///
 /// A resource validates against its own kind and rejects other kinds.
 #[test]
@@ -128,7 +122,6 @@ fn resource_validate() {
     );
 }
 
-/// C++: TEST(ResourceTest, ValidateRanged)
 ///
 /// validate_ranged_resource checks both kind and range coverage.
 #[test]
@@ -176,7 +169,6 @@ fn resource_validate_ranged() {
     );
 }
 
-/// C++: TEST(ResourceTest, CreateChild)
 ///
 /// A root resource can create child sub-resources of any kind because
 /// ROOT bypasses kind and range checks.
@@ -209,7 +201,6 @@ fn resource_create_child() {
     assert_ne!(child.id(), 0);
 }
 
-/// C++: TEST(ResourceTest, ChildValidation)
 ///
 /// A child resource validates only against its own kind.
 #[test]
@@ -234,7 +225,6 @@ fn resource_child_validation() {
     );
 }
 
-/// C++: TEST(ResourceTest, ExclusiveOverlapFails)
 ///
 /// Creating an exclusive resource that overlaps an existing resource
 /// (or vice versa) should be rejected.
@@ -292,7 +282,6 @@ fn resource_exclusive_overlap_fails() {
     drop(res2);
 }
 
-/// C++: TEST(ResourceTest, RootBypassesRange)
 ///
 /// ROOT resources bypass range checks in validate_ranged_resource.
 #[test]
@@ -312,7 +301,6 @@ fn resource_root_bypasses_range() {
         .is_ok());
 }
 
-/// C++: TEST(ResourceTest, SystemResource)
 ///
 /// A SYSTEM resource validates as SYSTEM and covers the system
 /// sub-resource base IDs.
@@ -348,7 +336,6 @@ fn resource_system_resource() {
         .is_ok());
 }
 
-/// C++: TEST(ResourceTest, InvalidKind)
 ///
 /// A resource with a kind beyond COUNT is not representable by the
 /// ResourceKind enum. Attempting to create one via numeric_enum would
@@ -363,7 +350,6 @@ fn resource_invalid_kind() {
     assert_eq!(info.kind, ResourceKind::COUNT as u32);
 }
 
-/// C++: TEST(ResourceTest, NameSupport)
 ///
 /// Resource name is stored and returned in info.
 #[test]
@@ -384,7 +370,6 @@ fn resource_name_support() {
     assert_eq!(res.name(), "hello-resource");
 }
 
-/// C++: TEST(ResourceTest, RegisterRegion)
 ///
 /// Registering a region and then checking overlap works correctly.
 /// Region cleanup happens via on_zero_handles (handle table lifecycle),
@@ -454,4 +439,261 @@ fn resource_register_region() {
         result.is_ok(),
         "after unregister, region should be available"
     );
+}
+
+// ============================================================================
+// Missing Fuchsia core-tests: Resource suite (36 tests)
+// All require system/MMIO/IRQ resources not available in libos mode.
+// ============================================================================
+
+/// C++: TEST(Resource, BasicActions)
+#[test]
+#[ignore = "requires MMIO resource and zx_object_get_info with ZX_INFO_RESOURCE"]
+fn basic_actions() {
+    todo!("requires MMIO resource and zx_object_get_info with ZX_INFO_RESOURCE");
+}
+
+/// C++: TEST(Resource, CreateArithmeticOverflow)
+#[test]
+#[ignore = "requires resource creation with base+size overflow validation"]
+fn create_arithmetic_overflow() {
+    todo!("requires resource creation with base+size overflow validation");
+}
+
+/// C++: TEST(Resource, CreateBadNamePointerReturnsInvalidArgs)
+#[test]
+#[ignore = "requires resource creation with bad name pointer validation"]
+fn create_bad_name_pointer_returns_invalid_args() {
+    todo!("requires resource creation with bad name pointer validation");
+}
+
+/// C++: TEST(Resource, CreateFromRangedRoot)
+#[test]
+#[ignore = "requires MMIO ranged root resource for exclusive creation"]
+fn create_from_ranged_root() {
+    todo!("requires MMIO ranged root resource for exclusive creation");
+}
+
+/// C++: TEST(Resource, CreateFromRangedRootKinds)
+#[test]
+#[ignore = "requires MMIO/IRQ/SYSTEM ranged root resources"]
+fn create_from_ranged_root_kinds() {
+    todo!("requires MMIO/IRQ/SYSTEM ranged root resources");
+}
+
+/// C++: TEST(Resource, CreateInvalidOptionsAndFlags)
+#[test]
+#[ignore = "requires resource creation with invalid options/flags validation"]
+fn create_invalid_options_and_flags() {
+    todo!("requires resource creation with invalid options/flags validation");
+}
+
+/// C++: TEST(Resource, CreateInvalidParentReturnsBadHandle)
+#[test]
+#[ignore = "requires resource creation with ZX_HANDLE_INVALID parent"]
+fn create_invalid_parent_returns_bad_handle() {
+    todo!("requires resource creation with ZX_HANDLE_INVALID parent");
+}
+
+/// C++: TEST(Resource, CreateNameHandlingAndTruncation)
+#[test]
+#[ignore = "requires resource creation with name truncation validation"]
+fn create_name_handling_and_truncation() {
+    todo!("requires resource creation with name truncation validation");
+}
+
+/// C++: TEST(Resource, CreateParentHandleValidation)
+#[test]
+#[ignore = "requires resource creation with various parent handle types"]
+fn create_parent_handle_validation() {
+    todo!("requires resource creation with various parent handle types");
+}
+
+/// C++: TEST(Resource, CreateParentMissingWriteRightsReturnsAccessDenied)
+#[test]
+#[ignore = "requires resource creation with reduced parent rights"]
+fn create_parent_missing_write_rights_returns_access_denied() {
+    todo!("requires resource creation with reduced parent rights");
+}
+
+/// C++: TEST(Resource, CreateResourceSlice)
+#[test]
+#[ignore = "requires MMIO resource slicing with kind/flag validation"]
+fn create_resource_slice() {
+    todo!("requires MMIO resource slicing with kind/flag validation");
+}
+
+/// C++: TEST(Resource, CreatedHandlePropertiesAndRights)
+#[test]
+#[ignore = "requires resource handle properties and rights validation"]
+fn created_handle_properties_and_rights() {
+    todo!("requires resource handle properties and rights validation");
+}
+
+/// C++: TEST(Resource, ExclusiveRegionReleaseLifecycle)
+#[test]
+#[ignore = "requires MMIO exclusive region allocation and release lifecycle"]
+fn exclusive_region_release_lifecycle() {
+    todo!("requires MMIO exclusive region allocation and release lifecycle");
+}
+
+/// C++: TEST(Resource, ExclusiveShared)
+#[test]
+#[ignore = "requires MMIO resource exclusive/shared conflict validation"]
+fn exclusive_shared() {
+    todo!("requires MMIO resource exclusive/shared conflict validation");
+}
+
+/// C++: TEST(Resource, GetInfoResourceValidation)
+#[test]
+#[ignore = "requires ZX_INFO_RESOURCE with buffer/rights validation"]
+fn get_info_resource_validation() {
+    todo!("requires ZX_INFO_RESOURCE with buffer/rights validation");
+}
+
+/// C++: TEST(Resource, HierarchySlicingBoundaries)
+#[test]
+#[ignore = "requires MMIO resource hierarchy slicing boundary validation"]
+fn hierarchy_slicing_boundaries() {
+    todo!("requires MMIO resource hierarchy slicing boundary validation");
+}
+
+/// C++: TEST(Resource, InvalidArgs)
+#[test]
+#[ignore = "requires resource creation with privilege inversion validation"]
+fn invalid_args() {
+    todo!("requires resource creation with privilege inversion validation");
+}
+
+/// C++: TEST(Resource, IoportDeniedByDefault)
+#[test]
+#[ignore = "requires x86_64 I/O port access and crash detection"]
+fn ioport_denied_by_default() {
+    todo!("requires x86_64 I/O port access and crash detection");
+}
+
+/// C++: TEST(Resource, Ioports)
+#[test]
+#[ignore = "requires x86_64 I/O port resource and ioports_request syscall"]
+fn ioports() {
+    todo!("requires x86_64 I/O port resource and ioports_request syscall");
+}
+
+/// C++: TEST(Resource, MexecBadZbiHeaderLength)
+#[test]
+#[ignore = "requires MEXEC resource and ZBI header validation"]
+fn mexec_bad_zbi_header_length() {
+    todo!("requires MEXEC resource and ZBI header validation");
+}
+
+/// C++: TEST(Resource, MexecEmptyZbi)
+#[test]
+#[ignore = "requires MEXEC resource and empty ZBI validation"]
+fn mexec_empty_zbi() {
+    todo!("requires MEXEC resource and empty ZBI validation");
+}
+
+/// C++: TEST(Resource, MexecMemoryLeakOnFailure)
+#[test]
+#[ignore = "requires MEXEC resource and memory leak detection"]
+fn mexec_memory_leak_on_failure() {
+    todo!("requires MEXEC resource and memory leak detection");
+}
+
+/// C++: TEST(Resource, MexecPagerPanic)
+#[test]
+#[ignore = "requires MEXEC resource and pager-backed VMO"]
+fn mexec_pager_panic() {
+    todo!("requires MEXEC resource and pager-backed VMO");
+}
+
+/// C++: TEST(Resource, MexecPayloadTooSmall)
+#[test]
+#[ignore = "requires MEXEC resource and payload buffer validation"]
+fn mexec_payload_too_small() {
+    todo!("requires MEXEC resource and payload buffer validation");
+}
+
+/// C++: TEST(Resource, MexecZeroSizedVmo)
+#[test]
+#[ignore = "requires MEXEC resource and zero-sized VMO validation"]
+fn mexec_zero_sized_vmo() {
+    todo!("requires MEXEC resource and zero-sized VMO validation");
+}
+
+/// C++: TEST(Resource, PcInterruptVectorPoolLeak)
+#[test]
+#[ignore = "requires x86_64 IRQ resource and interrupt vector pool"]
+fn pc_interrupt_vector_pool_leak() {
+    todo!("requires x86_64 IRQ resource and interrupt vector pool");
+}
+
+/// C++: TEST(Resource, ProbeAddressSpace)
+#[test]
+#[ignore = "requires MMIO resource and physical address space probing"]
+fn probe_address_space() {
+    todo!("requires MMIO resource and physical address space probing");
+}
+
+/// C++: TEST(Resource, SharedExclusive)
+#[test]
+#[ignore = "requires MMIO resource shared/exclusive conflict validation"]
+fn shared_exclusive() {
+    todo!("requires MMIO resource shared/exclusive conflict validation");
+}
+
+/// C++: TEST(Resource, StrictMmioRangeValidation)
+#[test]
+#[ignore = "requires MMIO resource with unaligned range and strict validation"]
+fn strict_mmio_range_validation() {
+    todo!("requires MMIO resource with unaligned range and strict validation");
+}
+
+/// C++: TEST(Resource, SystemResourceSubBasesAndSyscallValidation)
+#[test]
+#[ignore = "requires system resource sub-bases and syscall enforcement"]
+fn system_resource_sub_bases_and_syscall_validation() {
+    todo!("requires system resource sub-bases and syscall enforcement");
+}
+
+/// C++: TEST(Resource, ValidateRangedResourceWithWrongKindReturnsAccessDenied)
+#[test]
+#[ignore = "requires ranged resource validation with wrong kind"]
+fn validate_ranged_resource_with_wrong_kind_returns_access_denied() {
+    todo!("requires ranged resource validation with wrong kind");
+}
+
+/// C++: TEST(Resource, ValidateResourceKindBaseWithWrongTypeOrKindReturnsError)
+#[test]
+#[ignore = "requires resource kind/base validation with wrong type"]
+fn validate_resource_kind_base_with_wrong_type_or_kind_returns_error() {
+    todo!("requires resource kind/base validation with wrong type");
+}
+
+/// C++: TEST(Resource, VmoCreation)
+#[test]
+#[ignore = "requires MMIO resource and zx_vmo_create_physical"]
+fn vmo_creation() {
+    todo!("requires MMIO resource and zx_vmo_create_physical");
+}
+
+/// C++: TEST(Resource, VmoCreationSmaller)
+#[test]
+#[ignore = "requires MMIO resource smaller than page with physical VMO"]
+fn vmo_creation_smaller() {
+    todo!("requires MMIO resource smaller than page with physical VMO");
+}
+
+/// C++: TEST(Resource, VmoCreationUnaligned)
+#[test]
+#[ignore = "requires MMIO resource with unaligned base and physical VMO"]
+fn vmo_creation_unaligned() {
+    todo!("requires MMIO resource with unaligned base and physical VMO");
+}
+
+/// C++: TEST(Resource, VmoReplaceAsExecutable)
+#[test]
+#[ignore = "requires system resource and vmo_replace_as_executable"]
+fn vmo_replace_as_executable() {
+    todo!("requires system resource and vmo_replace_as_executable");
 }

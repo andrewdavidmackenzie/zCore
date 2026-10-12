@@ -50,7 +50,6 @@ fn timer_cancel_clears_signal() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, CreateWithSlack)
 #[test]
 fn timer_create_with_slack() {
     let _ctx = TestContext::new();
@@ -65,7 +64,6 @@ fn timer_create_with_slack() {
     assert_ne!(timer_late.id(), 0);
 }
 
-/// C++: TEST(TimerTest, OneShotConvenience)
 #[test]
 fn timer_one_shot() {
     let _ctx = TestContext::new();
@@ -74,7 +72,6 @@ fn timer_one_shot() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, SetReplacesDeadline)
 #[test]
 fn timer_set_replaces_deadline() {
     let _ctx = TestContext::new();
@@ -89,7 +86,6 @@ fn timer_set_replaces_deadline() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, GetInfo)
 #[test]
 fn timer_get_info() {
     let _ctx = TestContext::new();
@@ -101,7 +97,6 @@ fn timer_get_info() {
     assert_eq!(slack, 0);
 }
 
-/// C++: TEST(TimerTest, GetInfoAfterSet)
 #[test]
 fn timer_get_info_after_set() {
     let _ctx = TestContext::new();
@@ -114,7 +109,6 @@ fn timer_get_info_after_set() {
     assert_eq!(slack, 500);
 }
 
-/// C++: TEST(TimerTest, CancelTwiceIsOk)
 #[test]
 fn timer_cancel_twice_is_ok() {
     let _ctx = TestContext::new();
@@ -126,7 +120,6 @@ fn timer_cancel_twice_is_ok() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, Name)
 #[test]
 fn timer_name() {
     let _ctx = TestContext::new();
@@ -136,7 +129,6 @@ fn timer_name() {
     assert_eq!(timer.name(), "my-timer");
 }
 
-/// C++: TEST(TimerTest, DeadlineAfter)
 ///
 /// Set a timer with a deadline computed via `zx_deadline_after()`,
 /// then verify the SIGNALED bit fires. Since we can't easily wait
@@ -153,7 +145,6 @@ fn timer_deadline_after() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, CoalesceAndCancel)
 ///
 /// Set a far-future timer, cancel it, then set a new one that fires
 /// immediately. Verifies that cancel truly resets state and a
@@ -176,7 +167,6 @@ fn timer_coalesce_and_cancel() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, InvalidArgs)
 ///
 /// Creating a timer with an invalid slack mode should fail.
 /// At the object level, `Slack` is a Rust enum so invalid values
@@ -199,4 +189,102 @@ fn timer_invalid_args() {
     // options=0xFF is also invalid
     let result = sc.sys_timer_create(0xFF, 0, UserOutPtr::from(&mut h as *mut _ as usize));
     assert_eq!(result.unwrap_err(), zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(Timer, AlreadyPassedDeadlineOnWaitOne)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn already_passed_deadline_on_wait_one() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, Basic)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn basic() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, BasicInfo)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn basic_info() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, BootTimersElapseDuringSuspend)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn boot_timers_elapse_during_suspend() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, DISABLED_CoalesceTestEarly)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn disabled_coalesce_test_early() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, DISABLED_CoalesceTestLate)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn disabled_coalesce_test_late() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, DeadlineAfter)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn deadline_after() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, EdgeCases)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn edge_cases() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, Restart)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn restart() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, RestartRace)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn restart_race() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, SetNegativeDeadline)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn set_negative_deadline() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, SetNegativeDeadlineMax)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn set_negative_deadline_max() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, SetNegativeSlack)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn set_negative_slack() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, SignalsAssertedImmediately)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn signals_asserted_immediately() {
+    todo!("requires timer/wait infrastructure");
 }

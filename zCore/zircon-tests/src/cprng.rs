@@ -6,7 +6,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(CprngTest, DrawNonZero)
 ///
 /// Draw random bytes and verify at least some are non-zero (with
 /// overwhelming probability). Tests zx_cprng_draw basic functionality.
@@ -17,7 +16,6 @@ fn draw_non_zero() {
     panic!("cprng syscalls not implemented");
 }
 
-/// C++: TEST(CprngTest, DrawDifferent)
 ///
 /// Draw two buffers and verify they differ (with overwhelming
 /// probability). Tests randomness quality.
@@ -28,7 +26,6 @@ fn draw_different() {
     panic!("cprng syscalls not implemented");
 }
 
-/// C++: TEST(CprngTest, DrawZeroLength)
 ///
 /// Draw zero bytes — should succeed without error (no-op).
 #[should_panic(expected = "cprng syscalls not implemented")]
@@ -38,7 +35,6 @@ fn draw_zero_length() {
     panic!("cprng syscalls not implemented");
 }
 
-/// C++: TEST(CprngTest, DrawMaxLength)
 ///
 /// Draw the maximum allowed number of bytes (ZX_CPRNG_DRAW_MAX_LEN).
 /// Should succeed.
@@ -49,7 +45,6 @@ fn draw_max_length() {
     panic!("cprng syscalls not implemented");
 }
 
-/// C++: TEST(CprngTest, DrawExceedsMaxLength)
 ///
 /// Draw more than the maximum allowed bytes. Should return
 /// INVALID_ARGS.
@@ -60,7 +55,6 @@ fn draw_exceeds_max_length() {
     panic!("cprng syscalls not implemented");
 }
 
-/// C++: TEST(CprngTest, DrawNullBuffer)
 ///
 /// Draw with a null buffer pointer. Should return INVALID_ARGS.
 #[should_panic(expected = "cprng syscalls not implemented")]
@@ -70,7 +64,6 @@ fn draw_null_buffer() {
     panic!("cprng syscalls not implemented");
 }
 
-/// C++: TEST(CprngTest, AddEntropyValid)
 ///
 /// Add entropy from a valid buffer. Should succeed (no-op from
 /// kernel perspective — just mixes into the pool).
@@ -81,7 +74,6 @@ fn add_entropy_valid() {
     panic!("cprng syscalls not implemented");
 }
 
-/// C++: TEST(CprngTest, AddEntropyNullBuffer)
 ///
 /// Add entropy with a null buffer. Should return INVALID_ARGS.
 #[should_panic(expected = "cprng syscalls not implemented")]
@@ -91,7 +83,6 @@ fn add_entropy_null_buffer() {
     panic!("cprng syscalls not implemented");
 }
 
-/// C++: TEST(CprngTest, AddEntropyZeroLength)
 ///
 /// Add zero-length entropy. Should succeed (no-op).
 #[should_panic(expected = "cprng syscalls not implemented")]
@@ -101,7 +92,6 @@ fn add_entropy_zero_length() {
     panic!("cprng syscalls not implemented");
 }
 
-/// C++: TEST(CprngTest, AddEntropyNoResource)
 ///
 /// Add entropy without root resource. Should return ACCESS_DENIED.
 #[should_panic(expected = "cprng syscalls not implemented")]

@@ -9,7 +9,6 @@ use zircon_object::task::Job;
 
 extern crate alloc;
 
-/// C++: TEST(TaskLifecycleTest, JobCreateAndDestroy)
 ///
 /// Create a child job and destroy it. The parent should signal
 /// JOB_NO_CHILDREN when all children are gone.
@@ -24,7 +23,6 @@ fn job_create_and_destroy() {
     // After dropping the child, it should be cleaned up.
 }
 
-/// C++: TEST(TaskLifecycleTest, NestedJobHierarchy)
 ///
 /// Create a deep job hierarchy (job → child → grandchild). Each
 /// level should have the correct parent KOID.
@@ -40,7 +38,6 @@ fn nested_job_hierarchy() {
     assert_ne!(grandchild.id(), great_grandchild.id());
 }
 
-/// C++: TEST(TaskLifecycleTest, KillJobKillsChildren)
 ///
 /// Kill a job and verify all child jobs and processes are also
 /// killed. Requires process execution for full verification.
@@ -51,7 +48,6 @@ fn kill_job_kills_children() {
     panic!("kill propagation needs real execution");
 }
 
-/// C++: TEST(TaskLifecycleTest, ProcessCreateInJob)
 ///
 /// Create a process within a job. The process should be a child
 /// of the job.
@@ -64,7 +60,6 @@ fn process_create_in_job() {
     assert_ne!(proc.id(), 0);
 }
 
-/// C++: TEST(TaskLifecycleTest, ThreadCreateInProcess)
 ///
 /// Create a thread within a process. The thread should belong to
 /// the process.
@@ -80,7 +75,6 @@ fn thread_create_in_process() {
     assert_ne!(thread.id(), 0);
 }
 
-/// C++: TEST(TaskLifecycleTest, KillEmptyProcess)
 ///
 /// Kill a process with no running threads. Should succeed
 /// and signal TERMINATED.
@@ -94,7 +88,6 @@ fn kill_empty_process() {
     // After kill, process should be dying or dead
 }
 
-/// C++: TEST(TaskLifecycleTest, KillJobWithProcess)
 ///
 /// Kill a job that contains a process. The process should also
 /// be killed.
@@ -108,7 +101,6 @@ fn kill_job_with_process() {
     // After kill, job should be dying
 }
 
-/// C++: TEST(TaskLifecycleTest, MultipleProcessesInJob)
 ///
 /// Create multiple processes in the same job. All should coexist.
 #[test]
@@ -123,7 +115,6 @@ fn multiple_processes_in_job() {
     assert_ne!(p2.id(), p3.id());
 }
 
-/// C++: TEST(TaskLifecycleTest, CreateProcessInDeadJob)
 ///
 /// Try to create a process in a killed job. Should return BAD_STATE.
 #[test]
@@ -136,7 +127,6 @@ fn create_process_in_dead_job() {
     assert!(result.is_err());
 }
 
-/// C++: TEST(TaskLifecycleTest, CreateChildJobInDeadJob)
 ///
 /// Try to create a child job in a killed job. Should return BAD_STATE.
 #[test]
@@ -149,7 +139,6 @@ fn create_child_job_in_dead_job() {
     assert!(result.is_err());
 }
 
-/// C++: TEST(TaskLifecycleTest, JobMaxHeight)
 ///
 /// Fuchsia limits job hierarchy depth to 32. Verify we can create
 /// at least a moderately deep hierarchy.
@@ -165,7 +154,6 @@ fn job_max_height() {
     assert_ne!(current.id(), 0);
 }
 
-/// C++: TEST(TaskLifecycleTest, ProcessReturnCodeTracking)
 ///
 /// Verify process return code is tracked on exit. Requires real
 /// process execution.
@@ -176,7 +164,6 @@ fn process_return_code_tracking() {
     panic!("return code needs real execution");
 }
 
-/// C++: TEST(TaskLifecycleTest, JobNoProcessesSignal)
 ///
 /// The JOB_NO_PROCESSES signal should be asserted when a job has
 /// no processes. Requires process lifecycle tracking.
@@ -187,7 +174,6 @@ fn job_no_processes_signal() {
     panic!("job signals need process lifecycle");
 }
 
-/// C++: TEST(TaskLifecycleTest, JobNoJobsSignal)
 ///
 /// The JOB_NO_JOBS signal should be asserted when a job has no
 /// child jobs. Requires job lifecycle tracking.

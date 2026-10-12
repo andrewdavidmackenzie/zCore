@@ -12,7 +12,6 @@ extern crate alloc;
 
 type HandleValue = u32;
 
-/// C++: TEST(BadSyscallTest, InvalidSyscallNumber)
 ///
 /// Issuing a syscall with an invalid/unrecognized number should return
 /// NOT_SUPPORTED. In zCore, syscall dispatch uses a match statement;
@@ -35,7 +34,6 @@ fn bad_syscall_invalid_number() {
     );
 }
 
-/// C++: TEST(BadSyscallTest, TooFewArgs)
 ///
 /// Syscalls with too few arguments are caught at the Rust type level
 /// (compile-time enforcement). In the C++ test, the kernel returns
@@ -49,7 +47,6 @@ fn bad_syscall_too_few_args() {
     panic!("Rust type system prevents too-few-args at compile time");
 }
 
-/// C++: TEST(BadSyscallTest, InvalidHandle)
 ///
 /// Common pattern: passing an invalid handle value to various syscalls
 /// should consistently return BAD_HANDLE.
@@ -72,7 +69,6 @@ fn bad_syscall_invalid_handle() {
     assert_eq!(result, Err(zircon_object::ZxError::BAD_HANDLE));
 }
 
-/// C++: TEST(BadSyscallTest, ZeroSyscall)
 ///
 /// Syscall number 0 is typically zx_clock_get_monotonic in Fuchsia.
 /// Handle value 0 is ZX_HANDLE_INVALID. In Fuchsia (and zCore),
@@ -102,7 +98,6 @@ fn bad_syscall_zero_handle() {
     );
 }
 
-/// C++: TEST(BadSyscallTest, NegativeSyscall)
 ///
 /// Negative syscall numbers are invalid. In the C++ test, the kernel
 /// returns NOT_SUPPORTED. In zCore, syscall numbers are u32 (unsigned)

@@ -7,7 +7,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(AddressTaggingTest, BasicTagging)
 ///
 /// Set a tag on a user-space address and verify the kernel strips
 /// the tag before using the address. Requires TBI support.
@@ -18,7 +17,6 @@ fn basic_tagging() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedPointerRead)
 ///
 /// Read through a tagged pointer. The kernel must strip the tag
 /// and resolve the actual virtual address. Requires TBI support.
@@ -29,7 +27,6 @@ fn tagged_pointer_read() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedPointerWrite)
 ///
 /// Write through a tagged pointer. The kernel must strip the tag
 /// and resolve the actual virtual address. Requires TBI support.
@@ -40,7 +37,6 @@ fn tagged_pointer_write() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedVmarMap)
 ///
 /// Map a VMO at a tagged address via VMAR. The kernel should strip
 /// the tag from the hint address. Requires TBI support.
@@ -51,7 +47,6 @@ fn tagged_vmar_map() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedVmarUnmap)
 ///
 /// Unmap a region specified by a tagged address. The kernel should
 /// strip the tag before unmapping. Requires TBI support.
@@ -62,7 +57,6 @@ fn tagged_vmar_unmap() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedFutexAddress)
 ///
 /// Use a tagged pointer as a futex address. The kernel should strip
 /// the tag for futex wait/wake operations. Requires TBI support.
@@ -73,7 +67,6 @@ fn tagged_futex_address() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedChannelBuffer)
 ///
 /// Pass a tagged buffer pointer to channel read/write. The kernel
 /// should strip the tag before copying. Requires TBI support.
@@ -84,7 +77,6 @@ fn tagged_channel_buffer() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedVmoRead)
 ///
 /// Read from a VMO into a tagged buffer pointer. The kernel should
 /// strip the tag before copying. Requires TBI support.
@@ -95,7 +87,6 @@ fn tagged_vmo_read() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedVmoWrite)
 ///
 /// Write to a VMO from a tagged buffer pointer. The kernel should
 /// strip the tag before copying. Requires TBI support.
@@ -106,7 +97,6 @@ fn tagged_vmo_write() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TagPreservation)
 ///
 /// Verify that the tag bits are preserved in user-space pointers
 /// returned by the kernel (e.g., VMAR map return values). Requires
@@ -116,4 +106,74 @@ fn tagged_vmo_write() {
 fn tag_preservation() {
     let _ctx = TestContext::new();
     panic!("address tagging not implemented");
+}
+
+/// C++: TEST(TopByteIgnoreTests, AddressTaggingGetSystemFeaturesAArch64)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn address_tagging_get_system_features_a_arch64() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, AddressTaggingGetSystemFeaturesX86_64)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn address_tagging_get_system_features_x86_64() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, FutexWaitWake)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn futex_wait_wake() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, InstructionAbortNoTag)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn instruction_abort_no_tag() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, ProcessStartTaggedAddress)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn process_start_tagged_address() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, TaggedFARSegfault)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn tagged_far_segfault() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, TaggedFARWatchpoint)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn tagged_far_watchpoint() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, ThreadStartTaggedAddress)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn thread_start_tagged_address() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, VmarTaggedAddress)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn vmar_tagged_address() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, VmmPageFaultHandlerDataAbort)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn vmm_page_fault_handler_data_abort() {
+    todo!("requires TBI/address tagging hardware");
 }

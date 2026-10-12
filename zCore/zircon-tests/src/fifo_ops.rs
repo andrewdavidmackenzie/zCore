@@ -8,7 +8,6 @@ use zircon_object::ipc::Fifo;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::ZxError;
 
-/// C++: TEST(FifoOpsTest, CreateVariousSizes)
 ///
 /// Create FIFOs with various depths and element sizes.
 #[test]
@@ -22,7 +21,6 @@ fn create_various_sizes() {
     assert_ne!(f3.id(), 0);
 }
 
-/// C++: TEST(FifoOpsTest, WriteAndReadBack)
 ///
 /// Write elements to a FIFO and read them back. Elements should
 /// be in FIFO order.
@@ -40,7 +38,6 @@ fn write_and_read_back() {
     assert_eq!(buf, [1, 2, 3, 4]);
 }
 
-/// C++: TEST(FifoOpsTest, MultipleElements)
 ///
 /// Write multiple elements and read them back in FIFO order.
 #[test]
@@ -59,7 +56,6 @@ fn multiple_elements() {
     assert_eq!(buf, data);
 }
 
-/// C++: TEST(FifoOpsTest, ReadFromEmpty)
 ///
 /// Read from an empty FIFO should return SHOULD_WAIT.
 #[test]
@@ -71,7 +67,6 @@ fn read_from_empty() {
     assert_eq!(result.unwrap_err(), ZxError::SHOULD_WAIT);
 }
 
-/// C++: TEST(FifoOpsTest, PeerClosedOnDrop)
 ///
 /// Dropping one end should set PEER_CLOSED on the other.
 #[test]
@@ -82,7 +77,6 @@ fn peer_closed_on_drop() {
     assert!(local.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(FifoOpsTest, WriteToPeerClosed)
 ///
 /// Writing to a FIFO whose peer has been closed should return
 /// PEER_CLOSED.
@@ -96,7 +90,6 @@ fn write_to_peer_closed() {
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-/// C++: TEST(FifoOpsTest, ReadRemainingAfterClose)
 ///
 /// Write data, close the writer, then read remaining data from
 /// the reader side.
@@ -115,7 +108,6 @@ fn read_remaining_after_close() {
     assert_eq!(buf, data);
 }
 
-/// C++: TEST(FifoOpsTest, FifoName)
 ///
 /// Set and get the name of a FIFO.
 #[test]
@@ -126,7 +118,6 @@ fn fifo_name() {
     assert_eq!(local.name(), "my-fifo");
 }
 
-/// C++: TEST(FifoOpsTest, FifoRelatedKoid)
 ///
 /// Each FIFO endpoint's related_koid should be the other's koid.
 #[test]
@@ -137,7 +128,6 @@ fn fifo_related_koid() {
     assert_eq!(remote.related_koid(), local.id());
 }
 
-/// C++: TEST(FifoOpsTest, FifoSignals)
 ///
 /// Verify WRITABLE is set initially, READABLE after write.
 #[test]
@@ -153,7 +143,6 @@ fn fifo_signals() {
     assert!(remote.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(FifoOpsTest, FifoKoid)
 ///
 /// Each FIFO endpoint should have a unique non-zero KOID.
 #[test]

@@ -8,7 +8,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(SystemEventTest, MemPressureCritical)
 ///
 /// Signal a critical memory pressure system event. The kernel
 /// broadcasts this to all registered observers. Requires root
@@ -20,7 +19,6 @@ fn mem_pressure_critical() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, MemPressureWarning)
 ///
 /// Signal a memory pressure warning system event. Observers
 /// registered for warning level are notified. Requires root
@@ -32,7 +30,6 @@ fn mem_pressure_warning() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, MemPressureNormal)
 ///
 /// Signal a normal (no pressure) memory system event. Clears
 /// any previous pressure signals. Requires root resource.
@@ -43,7 +40,6 @@ fn mem_pressure_normal() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, MemPressureInvalid)
 ///
 /// Signal with an invalid memory pressure level. Should return
 /// INVALID_ARGS. Requires root resource.
@@ -54,7 +50,6 @@ fn mem_pressure_invalid() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, MemPressureNoResource)
 ///
 /// Signal memory pressure without root resource handle. Should
 /// return ACCESS_DENIED. Tests privilege validation.
@@ -65,7 +60,6 @@ fn mem_pressure_no_resource() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, MemPressureSignals)
 ///
 /// Register for memory pressure signals on a port, trigger the
 /// event, and verify the port receives the expected packet.
@@ -77,7 +71,6 @@ fn mem_pressure_signals() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, ImmutableEvent)
 ///
 /// System events cannot have user signals set on them. Calling
 /// object_signal on a system event should return ACCESS_DENIED.
@@ -88,7 +81,6 @@ fn immutable_event() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, UserSignalsOnSystemEvent)
 ///
 /// Verify user signal bits cannot be set on system events. Only
 /// kernel-defined signals are valid. Should return ACCESS_DENIED.
@@ -99,7 +91,6 @@ fn user_signals_on_system_event() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, SystemEventClose)
 ///
 /// Close a system event handle. The event should no longer be
 /// observable after the last handle is closed.
@@ -110,7 +101,6 @@ fn system_event_close() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, SystemEventDuplicate)
 ///
 /// Duplicate a system event handle. Both handles should observe
 /// the same signals. Requires system event infrastructure.
@@ -119,4 +109,102 @@ fn system_event_close() {
 fn system_event_duplicate() {
     let _ctx = TestContext::new();
     panic!("system events not implemented");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalImminentOomFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_imminent_oom_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalMemoryStallEventFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_memory_stall_event_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalMempressureCriticalFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_mempressure_critical_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalMempressureNormalFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_mempressure_normal_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalMempressureWarningFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_mempressure_warning_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalOomFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_oom_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, DISABLED_MemoryStallEvent)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn disabled_memory_stall_event() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, ExactlyOneMemoryEventSignaled)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn exactly_one_memory_event_signaled() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, MemoryStallThresholds)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn memory_stall_thresholds() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, RetreiveMempressureWarning)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn retreive_mempressure_warning() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, RetrieveImminentOom)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn retrieve_imminent_oom() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, RetrieveMempressureCritical)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn retrieve_mempressure_critical() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, RetrieveMempressureNormal)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn retrieve_mempressure_normal() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, RetrieveOom)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn retrieve_oom() {
+    todo!("requires system event infrastructure");
 }

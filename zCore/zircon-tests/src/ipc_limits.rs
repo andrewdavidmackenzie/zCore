@@ -11,7 +11,6 @@ use zircon_object::ZxError;
 
 extern crate alloc;
 
-/// C++: TEST(IpcLimitsTest, ChannelMaxHandles)
 ///
 /// Transfer the maximum number of handles in a single channel message.
 /// Fuchsia allows up to 64 handles per message.
@@ -36,7 +35,6 @@ fn channel_max_handles() {
     assert_eq!(received.handles.len(), 64);
 }
 
-/// C++: TEST(IpcLimitsTest, ChannelQueueDepth)
 ///
 /// Queue many messages on a channel. All should be readable in FIFO.
 #[test]
@@ -58,7 +56,6 @@ fn channel_queue_depth() {
     }
 }
 
-/// C++: TEST(IpcLimitsTest, SocketStreamCapacity)
 ///
 /// Write data until the socket buffer is full. Writing more should
 /// return SHOULD_WAIT.
@@ -69,7 +66,6 @@ fn socket_stream_capacity() {
     panic!("socket capacity varies by implementation");
 }
 
-/// C++: TEST(IpcLimitsTest, ChannelMessageDataAndHandles)
 ///
 /// Send a message with both data and handles. Verify both are
 /// received correctly.
@@ -94,7 +90,6 @@ fn channel_message_data_and_handles() {
     assert_eq!(received.handles[0].object.id(), event_id);
 }
 
-/// C++: TEST(IpcLimitsTest, FifoElementCount)
 ///
 /// Verify FIFO element count tracking as elements are written and
 /// read.
@@ -111,7 +106,6 @@ fn fifo_element_count() {
     assert_eq!(buf, [1, 2, 3, 4]);
 }
 
-/// C++: TEST(IpcLimitsTest, ChannelZeroBytesZeroHandles)
 ///
 /// Write a completely empty message (zero bytes, zero handles).
 /// Should succeed.
@@ -129,7 +123,6 @@ fn channel_zero_bytes_zero_handles() {
     assert!(received.handles.is_empty());
 }
 
-/// C++: TEST(IpcLimitsTest, SocketDataIntegrity)
 ///
 /// Write a specific pattern through a socket and verify it is
 /// received identically.
@@ -147,7 +140,6 @@ fn socket_data_integrity() {
     assert_eq!(buf, pattern);
 }
 
-/// C++: TEST(IpcLimitsTest, ChannelHandleTransferPreservesType)
 ///
 /// Transfer different object types through a channel. Each should
 /// retain its type and KOID.
@@ -181,7 +173,6 @@ fn channel_handle_transfer_preserves_type() {
     let _ = s2;
 }
 
-/// C++: TEST(IpcLimitsTest, ChannelMultipleReadsClears)
 ///
 /// Multiple reads from a channel. After draining all messages,
 /// READABLE should be cleared.

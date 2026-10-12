@@ -8,7 +8,6 @@ use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::Event;
 
-/// C++: TEST(ObjectSignalTest, EventSetSignal)
 ///
 /// Set a user signal on an event and verify it is visible.
 #[test]
@@ -19,7 +18,6 @@ fn event_set_signal() {
     assert!(event.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(ObjectSignalTest, EventClearSignal)
 ///
 /// Clear a user signal on an event and verify it is gone.
 #[test]
@@ -31,7 +29,6 @@ fn event_clear_signal() {
     assert!(!event.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(ObjectSignalTest, EventMultipleSignals)
 ///
 /// Set multiple signals on an event and verify all are visible.
 #[test]
@@ -45,7 +42,6 @@ fn event_multiple_signals() {
     assert!(sig.contains(Signal::USER_SIGNAL_2));
 }
 
-/// C++: TEST(ObjectSignalTest, EventClearSubset)
 ///
 /// Set multiple signals, clear a subset, verify remaining.
 #[test]
@@ -60,7 +56,6 @@ fn event_clear_subset() {
     assert!(sig.contains(Signal::USER_SIGNAL_2));
 }
 
-/// C++: TEST(ObjectSignalTest, ChannelSignals)
 ///
 /// Channel endpoints have default signals (WRITABLE). Writing makes
 /// the peer READABLE. Closing sets PEER_CLOSED.
@@ -82,7 +77,6 @@ fn channel_signals() {
     assert!(remote.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(ObjectSignalTest, SocketSignals)
 ///
 /// Socket signals: WRITABLE by default, READABLE after write,
 /// PEER_CLOSED on close.
@@ -100,7 +94,6 @@ fn socket_signals() {
     assert!(local.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(ObjectSignalTest, PortQueueSignals)
 ///
 /// A port with queued packets should be READABLE.
 #[test]
@@ -118,7 +111,6 @@ fn port_queue_signals() {
     assert!(port.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(ObjectSignalTest, TimerSignals)
 ///
 /// A timer starts with no signals. Setting a deadline may signal
 /// SIGNALED when the deadline passes. Canceling clears SIGNALED.
@@ -132,7 +124,6 @@ fn timer_signals() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(ObjectSignalTest, FifoSignals)
 ///
 /// FIFO signals: WRITABLE by default, READABLE after write,
 /// PEER_CLOSED on close.
@@ -148,7 +139,6 @@ fn fifo_signals() {
     assert!(remote.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(ObjectSignalTest, SetSignalIdempotent)
 ///
 /// Setting a signal that is already set should be a no-op.
 #[test]
@@ -160,7 +150,6 @@ fn set_signal_idempotent() {
     assert!(event.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(ObjectSignalTest, ClearUnsetSignal)
 ///
 /// Clearing a signal that is not set should be a no-op.
 #[test]
@@ -172,7 +161,6 @@ fn clear_unset_signal() {
     assert!(!event.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(ObjectSignalTest, AllUserSignals)
 ///
 /// Set all 8 user signals and verify all are set.
 #[test]
@@ -192,7 +180,6 @@ fn all_user_signals() {
     assert!(sig.contains(all_user));
 }
 
-/// C++: TEST(ObjectSignalTest, ClearAllSignals)
 ///
 /// Set all user signals then clear all. Should be empty.
 #[test]
@@ -214,7 +201,6 @@ fn clear_all_signals() {
     assert!(!sig.contains(Signal::USER_SIGNAL_7));
 }
 
-/// C++: TEST(ObjectSignalTest, SignalOnNewEvent)
 ///
 /// A newly created event should have no user signals set.
 #[test]

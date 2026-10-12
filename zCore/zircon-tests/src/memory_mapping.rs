@@ -7,7 +7,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(MemoryMappingTest, BasicMapping)
 ///
 /// Map a VMO into the process VMAR and verify the virtual address
 /// is valid. Requires real VMAR mapping infrastructure.
@@ -18,7 +17,6 @@ fn basic_mapping() {
     panic!("memory mapping needs real VMAR");
 }
 
-/// C++: TEST(MemoryMappingTest, ReadMapping)
 ///
 /// Map a VMO read-only and read through the mapping. Verifies data
 /// written via VMO is visible through the mapping. Requires real VMAR.
@@ -29,7 +27,6 @@ fn read_mapping() {
     panic!("memory mapping needs real VMAR");
 }
 
-/// C++: TEST(MemoryMappingTest, WriteMapping)
 ///
 /// Map a VMO read-write and write through the mapping. Verifies
 /// data is visible via VMO read. Requires real VMAR mapping.
@@ -40,7 +37,6 @@ fn write_mapping() {
     panic!("memory mapping needs real VMAR");
 }
 
-/// C++: TEST(MemoryMappingTest, UnmapMapping)
 ///
 /// Unmap a previously mapped region. Accessing the unmapped address
 /// should cause a fault. Requires real VMAR mapping.
@@ -51,7 +47,6 @@ fn unmap_mapping() {
     panic!("memory mapping needs real VMAR");
 }
 
-/// C++: TEST(MemoryMappingTest, ProtectMapping)
 ///
 /// Change the protection of a mapped region (e.g., from RW to RO).
 /// Writing to a protected-RO mapping should fault. Requires real VMAR.
@@ -62,7 +57,6 @@ fn protect_mapping() {
     panic!("memory mapping needs real VMAR");
 }
 
-/// C++: TEST(MemoryMappingTest, SharedMapping)
 ///
 /// Map the same VMO into two VMAR regions. Writes through one
 /// mapping should be visible through the other. Requires real VMAR.
@@ -73,7 +67,6 @@ fn shared_mapping() {
     panic!("memory mapping needs real VMAR");
 }
 
-/// C++: TEST(MemoryMappingTest, PrivateMapping)
 ///
 /// Create a private (COW) mapping of a VMO. Writes through the
 /// mapping should not affect the original VMO. Requires real VMAR.
@@ -84,7 +77,6 @@ fn private_mapping() {
     panic!("memory mapping needs real VMAR");
 }
 
-/// C++: TEST(MemoryMappingTest, MappingPermissions)
 ///
 /// Verify that mapping permission flags (READ, WRITE, EXECUTE) are
 /// enforced correctly. Accessing without permission should fault.
@@ -94,4 +86,60 @@ fn private_mapping() {
 fn mapping_permissions() {
     let _ctx = TestContext::new();
     panic!("memory mapping needs real VMAR");
+}
+
+/// C++: TEST(MemoryMappingTest, AddressSpaceLimitsTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn address_space_limits_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapFlagsTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_flags_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapLenTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_len_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapOffsetTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_offset_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapProtExecTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_prot_exec_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapProtTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_prot_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapZerofilledTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_zerofilled_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MprotectTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mprotect_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
 }

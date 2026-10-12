@@ -7,7 +7,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(ChannelCallTest, BasicCallReply)
 ///
 /// Send a call message and receive a reply. Requires concurrent
 /// thread to respond. Requires async infrastructure.
@@ -18,7 +17,6 @@ fn basic_call_reply() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallTimeoutExpired)
 ///
 /// Send a call with no responder. The call should time out and
 /// return TIMED_OUT. Requires async + deadline.
@@ -29,7 +27,6 @@ fn call_timeout_expired() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallPeerClosed)
 ///
 /// Send a call after the peer is closed. Should return PEER_CLOSED
 /// immediately.
@@ -40,7 +37,6 @@ fn call_peer_closed() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallWithHandles)
 ///
 /// Send a call message that includes handle transfers. The reply
 /// should also be able to include handles.
@@ -51,7 +47,6 @@ fn call_with_handles() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallMultiplePending)
 ///
 /// Multiple concurrent calls on the same channel. Each should
 /// receive its own reply based on transaction ID matching.
@@ -62,7 +57,6 @@ fn call_multiple_pending() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallWrongTxidIgnored)
 ///
 /// A reply with a wrong transaction ID should be ignored. The call
 /// should continue waiting for the correct reply.
@@ -73,7 +67,6 @@ fn call_wrong_txid_ignored() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallZeroTxid)
 ///
 /// A call with transaction ID zero. The reply should also have
 /// transaction ID zero.
@@ -84,7 +77,6 @@ fn call_zero_txid() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallLargeMessage)
 ///
 /// Send a call with a large message payload. The reply should
 /// also support large payloads.
@@ -95,7 +87,6 @@ fn call_large_message() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallNoData)
 ///
 /// Send a call with no data payload (zero-byte message). The call
 /// infrastructure should handle this correctly.
@@ -106,7 +97,6 @@ fn call_no_data() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallCancelOnClose)
 ///
 /// Close the channel while a call is pending. The caller should
 /// receive PEER_CLOSED and unblock.
@@ -117,7 +107,6 @@ fn call_cancel_on_close() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallReplyBeforeRead)
 ///
 /// Reply arrives before the caller reads — should still match
 /// the correct transaction ID.
@@ -128,7 +117,6 @@ fn call_reply_before_read() {
     panic!("channel call needs async runtime");
 }
 
-/// C++: TEST(ChannelCallTest, CallEtcVariant)
 ///
 /// Use the channel_call_etc variant that returns handle info.
 /// Requires async runtime.

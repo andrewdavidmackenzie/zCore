@@ -8,7 +8,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(KcounterTest, ReadKcounters)
 ///
 /// Read kernel counter values. Requires root resource and the
 /// kcounter VMO.
@@ -19,7 +18,6 @@ fn read_kcounters() {
     panic!("kcounters need root resource");
 }
 
-/// C++: TEST(KcounterTest, KcounterDescriptors)
 ///
 /// Read kernel counter descriptors (names, types). Requires root
 /// resource.
@@ -30,7 +28,6 @@ fn kcounter_descriptors() {
     panic!("kcounters need root resource");
 }
 
-/// C++: TEST(KcounterTest, KcounterVmo)
 ///
 /// Get the kcounter VMO handle. Requires root resource.
 #[should_panic(expected = "kcounters need root resource")]
@@ -40,7 +37,6 @@ fn kcounter_vmo() {
     panic!("kcounters need root resource");
 }
 
-/// C++: TEST(KcounterTest, KcounterDescVmo)
 ///
 /// Get the kcounter descriptor VMO handle. Requires root resource.
 #[should_panic(expected = "kcounters need root resource")]
@@ -50,7 +46,6 @@ fn kcounter_desc_vmo() {
     panic!("kcounters need root resource");
 }
 
-/// C++: TEST(KcounterTest, KcounterNoResource)
 ///
 /// Try to get kcounter VMO without root resource. Should return
 /// ACCESS_DENIED.

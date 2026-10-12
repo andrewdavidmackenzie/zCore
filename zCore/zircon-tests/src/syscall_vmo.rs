@@ -144,7 +144,6 @@ fn no_resize_via_syscall() {
     assert_eq!(size, PAGE_SIZE * 2);
 }
 
-/// C++: TEST(VmoTestCase, OpRange — COMMIT/DECOMMIT) — syscall level
 #[test]
 fn op_range_commit_decommit() {
     let ctx = TestContext::new();
@@ -160,7 +159,6 @@ fn op_range_commit_decommit() {
         .unwrap();
 }
 
-/// C++: TEST(VmoTestCase, OpRange — ZERO) — syscall level
 #[test]
 fn op_range_zero() {
     let ctx = TestContext::new();
@@ -219,7 +217,6 @@ fn create_child_snapshot() {
     assert_eq!(buf[0], 0xAA); // still old value
 }
 
-/// C++: TEST(VmoTestCase, ReadWithoutReadRight) — syscall level
 #[test]
 fn read_without_read_right() {
     let ctx = TestContext::new();
@@ -236,7 +233,6 @@ fn read_without_read_right() {
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
-/// C++: TEST(VmoTestCase, WriteWithoutWriteRight) — syscall level
 #[test]
 fn write_without_write_right() {
     let ctx = TestContext::new();
@@ -294,7 +290,6 @@ fn stream_size_via_syscall() {
     assert_eq!(size, PAGE_SIZE * 2);
 }
 
-/// C++: TEST(VmoTestCase, OpRangeOutOfBounds) — syscall level
 /// Op range past VMO end returns OUT_OF_RANGE.
 #[test]
 fn op_range_out_of_bounds() {

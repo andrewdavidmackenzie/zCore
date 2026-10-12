@@ -11,7 +11,6 @@ use zircon_object::task::Job;
 
 extern crate alloc;
 
-/// C++: TEST(HandleDupTest, DuplicateEventHandle)
 ///
 /// Duplicate an event handle. Both handles should reference the
 /// same underlying object.
@@ -28,7 +27,6 @@ fn duplicate_event_handle() {
     assert_eq!(h1.rights, h2.rights);
 }
 
-/// C++: TEST(HandleDupTest, DuplicateWithReducedRights)
 ///
 /// Duplicate a handle with fewer rights. The duplicate should have
 /// only the requested rights.
@@ -44,7 +42,6 @@ fn duplicate_with_reduced_rights() {
     assert!(!h2.rights.contains(Rights::SIGNAL));
 }
 
-/// C++: TEST(HandleDupTest, DuplicateChannelHandle)
 ///
 /// Duplicate a channel handle. Both handles should be usable.
 #[test]
@@ -58,7 +55,6 @@ fn duplicate_channel_handle() {
     assert_eq!(h2.object.id(), local_id);
 }
 
-/// C++: TEST(HandleDupTest, DuplicateJobHandle)
 ///
 /// Duplicate a job handle. Both should reference the same job.
 #[test]
@@ -73,7 +69,6 @@ fn duplicate_job_handle() {
     assert_eq!(h2.object.id(), child_id);
 }
 
-/// C++: TEST(HandleDupTest, ReplaceHandle)
 ///
 /// Replace a handle with new rights. The original handle should be
 /// invalidated and the new one should have the requested rights.
@@ -91,7 +86,6 @@ fn replace_handle() {
     assert_eq!(h2.rights, Rights::WAIT);
 }
 
-/// C++: TEST(HandleDupTest, DuplicatePreservesObjectIdentity)
 ///
 /// Two handles from duplication should have the same object identity
 /// (same KOID).
@@ -109,7 +103,6 @@ fn duplicate_preserves_object_identity() {
     assert_eq!(h2.object.id(), h3.object.id());
 }
 
-/// C++: TEST(HandleDupTest, DuplicateAllRights)
 ///
 /// Duplicate with Rights::all() — should preserve all possible rights.
 #[test]
@@ -124,7 +117,6 @@ fn duplicate_all_rights() {
     assert!(h2.rights.contains(Rights::EXECUTE));
 }
 
-/// C++: TEST(HandleDupTest, DuplicateEmptyRights)
 ///
 /// Duplicate with empty rights. The duplicate should have no rights.
 #[test]
@@ -136,7 +128,6 @@ fn duplicate_empty_rights() {
     assert!(h2.rights.is_empty());
 }
 
-/// C++: TEST(HandleDupTest, ManyDuplicates)
 ///
 /// Create many duplicates of the same handle. All should share the
 /// same object identity.
@@ -157,7 +148,6 @@ fn many_duplicates() {
     }
 }
 
-/// C++: TEST(HandleDupTest, DuplicateAndDropOriginal)
 ///
 /// Duplicate a handle, then drop the original. The duplicate should
 /// still be valid and usable.

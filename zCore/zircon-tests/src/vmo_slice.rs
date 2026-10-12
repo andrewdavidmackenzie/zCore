@@ -360,3 +360,52 @@ fn round_up_size_physical() {
     let slice = physical.create_slice(0, 1).unwrap();
     assert_eq!(slice.len(), PAGE_SIZE);
 }
+
+/// C++: TEST(VmoSliceTestCase, AttributedCounts)
+#[test]
+#[ignore = "requires VMO slice infrastructure"]
+fn attributed_counts() {
+    todo!("requires VMO slice infrastructure");
+}
+
+/// C++: TEST(VmoSliceTestCase, CowPageSourceThroughSlices)
+#[test]
+#[ignore = "requires VMO slice infrastructure"]
+fn cow_page_source_through_slices() {
+    todo!("requires VMO slice infrastructure");
+}
+
+/// C++: TEST(VmoSliceTestCase, DecommitParent)
+#[test]
+#[ignore = "requires VMO slice infrastructure"]
+fn decommit_parent() {
+    todo!("requires VMO slice infrastructure");
+}
+
+/// C++: TEST(VmoSliceTestCase, DeepHierarchy)
+#[test]
+#[ignore = "requires VMO slice infrastructure"]
+fn deep_hierarchy() {
+    todo!("requires VMO slice infrastructure");
+}
+
+/// C++: TEST(VmoSliceTestCase, Nested)
+#[test]
+#[ignore = "requires VMO slice infrastructure"]
+fn nested() {
+    todo!("requires VMO slice infrastructure");
+}
+
+/// C++: TEST(VmoSliceTestCase, WriteThrough)
+#[test]
+#[ignore = "requires VMO slice infrastructure"]
+fn write_through() {
+    todo!("requires VMO slice infrastructure");
+}
+
+/// C++: TEST(VmoSliceTestCase, ZeroSized)
+#[test]
+#[ignore = "requires VMO slice infrastructure"]
+fn zero_sized() {
+    todo!("requires VMO slice infrastructure");
+}

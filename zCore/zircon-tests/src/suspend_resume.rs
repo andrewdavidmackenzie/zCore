@@ -6,7 +6,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(SuspendResumeTest, SuspendThread)
 ///
 /// Suspend a running thread. The thread should stop executing.
 /// Requires real thread execution.
@@ -17,7 +16,6 @@ fn suspend_thread() {
     panic!("suspend needs real thread execution");
 }
 
-/// C++: TEST(SuspendResumeTest, ResumeThread)
 ///
 /// Suspend then resume a thread. The thread should continue
 /// executing from where it stopped.
@@ -28,7 +26,6 @@ fn resume_thread() {
     panic!("suspend needs real thread execution");
 }
 
-/// C++: TEST(SuspendResumeTest, SuspendMultipleThreads)
 ///
 /// Suspend multiple threads in the same process simultaneously.
 /// All should stop and be resumable.
@@ -39,7 +36,6 @@ fn suspend_multiple_threads() {
     panic!("suspend needs real thread execution");
 }
 
-/// C++: TEST(SuspendResumeTest, SuspendTokenDrop)
 ///
 /// Drop a suspend token. The thread should automatically resume.
 #[should_panic(expected = "suspend needs real thread execution")]
@@ -49,7 +45,6 @@ fn suspend_token_drop() {
     panic!("suspend needs real thread execution");
 }
 
-/// C++: TEST(SuspendResumeTest, MultipleSuspendTokens)
 ///
 /// Issue multiple suspend tokens for the same thread. The thread
 /// should resume only after all tokens are dropped.
@@ -60,7 +55,6 @@ fn multiple_suspend_tokens() {
     panic!("suspend needs real thread execution");
 }
 
-/// C++: TEST(SuspendResumeTest, SuspendInSyscall)
 ///
 /// Suspend a thread while it is blocked in a syscall (e.g.,
 /// channel_read). The thread should suspend after the syscall
@@ -72,7 +66,6 @@ fn suspend_in_syscall() {
     panic!("suspend needs real thread execution");
 }
 
-/// C++: TEST(SuspendResumeTest, KillWhileSuspended)
 ///
 /// Kill a suspended thread. The thread should die without resuming.
 #[should_panic(expected = "suspend needs real thread execution")]
@@ -82,7 +75,6 @@ fn kill_while_suspended() {
     panic!("suspend needs real thread execution");
 }
 
-/// C++: TEST(SuspendResumeTest, SuspendedThreadState)
 ///
 /// While a thread is suspended, its state should be SUSPENDED.
 /// Read state should succeed.
@@ -93,7 +85,6 @@ fn suspended_thread_state() {
     panic!("suspend needs real thread execution");
 }
 
-/// C++: TEST(SuspendResumeTest, WriteStateWhileSuspended)
 ///
 /// Write to a thread's register state while it is suspended.
 /// The new state should take effect when the thread resumes.
@@ -104,7 +95,6 @@ fn write_state_while_suspended() {
     panic!("suspend needs real thread execution");
 }
 
-/// C++: TEST(SuspendResumeTest, SuspendProcess)
 ///
 /// Suspend all threads in a process simultaneously.
 #[should_panic(expected = "suspend needs real thread execution")]

@@ -9,7 +9,6 @@ use crate::helpers::TestContext;
 
 extern crate alloc;
 
-/// C++: TEST(SyncMutexTest, BasicLockUnlock)
 ///
 /// Basic mutex lock/unlock cycle. A futex-based mutex is created in
 /// shared memory, locked by one thread, and unlocked. Requires
@@ -21,7 +20,6 @@ fn sync_mutex_basic_lock_unlock() {
     panic!("needs multi-threaded userspace");
 }
 
-/// C++: TEST(SyncMutexTest, TryLock)
 ///
 /// Non-blocking try-lock on a futex-based mutex. If the mutex is
 /// unlocked, try-lock succeeds; if locked, it fails immediately
@@ -33,7 +31,6 @@ fn sync_mutex_try_lock() {
     panic!("needs multi-threaded userspace");
 }
 
-/// C++: TEST(SyncMutexTest, ContendedLock)
 ///
 /// Multiple threads contend for the same mutex. Only one thread
 /// should hold the lock at a time; others block on the futex.
@@ -45,7 +42,6 @@ fn sync_mutex_contended_lock() {
     panic!("needs multi-threaded userspace");
 }
 
-/// C++: TEST(SyncMutexTest, RecursiveFails)
 ///
 /// Attempting to lock a non-recursive mutex twice from the same
 /// thread should deadlock (or fail in a debug build). This tests
@@ -58,7 +54,6 @@ fn sync_mutex_recursive_fails() {
     panic!("needs multi-threaded userspace");
 }
 
-/// C++: TEST(SyncMutexTest, OwnerDiesReleasesLock)
 ///
 /// When a thread that holds a mutex dies (is killed), the kernel
 /// should release the mutex (via futex owner tracking). Waiting
@@ -68,4 +63,39 @@ fn sync_mutex_recursive_fails() {
 fn sync_mutex_owner_dies_releases_lock() {
     let _ctx = TestContext::new();
     panic!("needs multi-threaded userspace");
+}
+
+/// C++: TEST(SyncMutex, AssertHeld)
+#[test]
+#[ignore = "requires sync mutex with threads"]
+fn assert_held() {
+    todo!("requires sync mutex with threads");
+}
+
+/// C++: TEST(SyncMutex, Mutexes)
+#[test]
+#[ignore = "requires sync mutex with threads"]
+fn mutexes() {
+    todo!("requires sync mutex with threads");
+}
+
+/// C++: TEST(SyncMutex, NoRecursion)
+#[test]
+#[ignore = "requires sync mutex with threads"]
+fn no_recursion() {
+    todo!("requires sync mutex with threads");
+}
+
+/// C++: TEST(SyncMutex, TimeoutElapsed)
+#[test]
+#[ignore = "requires sync mutex with threads"]
+fn timeout_elapsed() {
+    todo!("requires sync mutex with threads");
+}
+
+/// C++: TEST(SyncMutex, TryMutexes)
+#[test]
+#[ignore = "requires sync mutex with threads"]
+fn try_mutexes() {
+    todo!("requires sync mutex with threads");
 }

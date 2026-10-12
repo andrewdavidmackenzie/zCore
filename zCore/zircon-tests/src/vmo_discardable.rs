@@ -7,7 +7,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(VmoDiscardableTest, CreateDiscardable)
 ///
 /// Create a discardable VMO (ZX_VMO_DISCARDABLE flag). The VMO
 /// should be created successfully.
@@ -18,7 +17,6 @@ fn create_discardable() {
     panic!("discardable VMOs not implemented");
 }
 
-/// C++: TEST(VmoDiscardableTest, LockUnlock)
 ///
 /// Lock a discardable VMO (prevent reclamation), then unlock it.
 /// While locked, the VMO's pages should not be reclaimable.
@@ -29,7 +27,6 @@ fn lock_unlock() {
     panic!("discardable VMOs not implemented");
 }
 
-/// C++: TEST(VmoDiscardableTest, ReadWriteWhileLocked)
 ///
 /// Read and write to a locked discardable VMO. Should behave like
 /// a normal VMO while locked.
@@ -40,7 +37,6 @@ fn read_write_while_locked() {
     panic!("discardable VMOs not implemented");
 }
 
-/// C++: TEST(VmoDiscardableTest, ReadAfterDiscard)
 ///
 /// After the kernel reclaims pages from an unlocked discardable VMO,
 /// reading should return zeroed pages. The VMO transitions to
@@ -52,7 +48,6 @@ fn read_after_discard() {
     panic!("discardable VMOs not implemented");
 }
 
-/// C++: TEST(VmoDiscardableTest, LockDiscarded)
 ///
 /// Lock a discardable VMO that has been discarded. The lock should
 /// succeed but return a flag indicating the pages were reclaimed.
@@ -63,7 +58,6 @@ fn lock_discarded() {
     panic!("discardable VMOs not implemented");
 }
 
-/// C++: TEST(VmoDiscardableTest, DoubleUnlock)
 ///
 /// Unlock a discardable VMO that is not locked. Should return
 /// BAD_STATE.
@@ -74,7 +68,6 @@ fn double_unlock() {
     panic!("discardable VMOs not implemented");
 }
 
-/// C++: TEST(VmoDiscardableTest, DiscardableNotResizable)
 ///
 /// Discardable VMOs should not be resizable. Resize should fail
 /// with UNAVAILABLE.
@@ -85,7 +78,6 @@ fn discardable_not_resizable() {
     panic!("discardable VMOs not implemented");
 }
 
-/// C++: TEST(VmoDiscardableTest, DiscardableNotClonable)
 ///
 /// Discardable VMOs should not support snapshot clones.
 #[should_panic(expected = "discardable VMOs not implemented")]
@@ -95,7 +87,6 @@ fn discardable_not_clonable() {
     panic!("discardable VMOs not implemented");
 }
 
-/// C++: TEST(VmoDiscardableTest, DiscardableInfo)
 ///
 /// Query VMO info on a discardable VMO. Should report the
 /// DISCARDABLE flag in flags.
@@ -106,7 +97,6 @@ fn discardable_info() {
     panic!("discardable VMOs not implemented");
 }
 
-/// C++: TEST(VmoDiscardableTest, NestedLock)
 ///
 /// Lock a discardable VMO multiple times. Each lock increments
 /// a reference count; the VMO becomes unlockable only after all

@@ -445,3 +445,22 @@ fn signal() {
     assert!(!sig.contains(Signal::USER_SIGNAL_0));
     assert!(sig.contains(Signal::COUNTER_NON_POSITIVE));
 }
+
+/// C++: TEST(CounterTest, ReadInvalidPointer)
+/// Reading a counter with an invalid output pointer should return INVALID_ARGS.
+/// In the C++ test, an empty VMAR mapping (no read/write) and a null pointer
+/// are both tested. Here we test the null pointer path through the syscall layer.
+#[test]
+fn read_invalid_pointer() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let handle = syscall_counter_create(&ctx, 0).unwrap();
+
+    // Pass a null pointer for the output value — should return INVALID_ARGS.
+    let result = sc.sys_counter_read(handle, UserOutPtr::from(0usize));
+    assert_eq!(
+        result,
+        Err(zircon_object::ZxError::INVALID_ARGS),
+        "reading counter with null output pointer should fail"
+    );
+}

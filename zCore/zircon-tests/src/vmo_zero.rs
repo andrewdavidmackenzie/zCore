@@ -352,7 +352,6 @@ fn unaligned_committed() {
 
 // ── Pager-backed VmoZero test ───────────────────────────────────────
 
-/// C++: TEST(VmoZeroTestCase, HiddenNoContent)
 /// Zero pages in a pager-backed VMO (pre-supplied, no faulting).
 #[test]
 fn hidden_no_content() {
@@ -387,4 +386,125 @@ fn hidden_no_content() {
     // Second page should still have data.
     vmo.read(PAGE_SIZE, &mut buf).unwrap();
     assert_eq!(buf, [0xBB; 8], "second page should be unchanged");
+}
+
+/// C++: TEST(VmoZeroTestCase, ResizeOverHiddenMarkers)
+/// When a resizable VMO has a hidden parent with zero-markers from a
+/// previous zero operation, resizing the VMO so that only a sibling
+/// still overlaps the marker range must preserve the marker (sibling
+/// must still see zeros, not the old parent page).
+#[test]
+fn resize_over_hidden_markers() {
+    let _ctx = TestContext::new();
+
+    // Create a resizable VMO with 4 pages.
+    let vmo = VmObject::new_paged_with_resizable(true, 4);
+
+    // Commit the third page (index 2) with non-zero data.
+    vmo.write(2 * PAGE_SIZE, &1u32.to_ne_bytes()).unwrap();
+
+    // Create an intermediate hidden parent (SNAPSHOT child of all 4 pages).
+    let intermediate = vmo.create_child(false, 0, 4 * PAGE_SIZE).unwrap();
+
+    // Zero page 2 in vmo. Because the parent has a page here, a marker must
+    // be inserted to prevent seeing back to the parent.
+    vmo.zero(2 * PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    // Create a sibling over the zero page (page 2 of vmo).
+    let sibling = vmo.create_child(false, 2 * PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    // Sibling should see zeros.
+    let mut buf = [0xFFu8; 4];
+    sibling.read(0, &mut buf).unwrap();
+    assert_eq!(
+        u32::from_ne_bytes(buf),
+        0,
+        "sibling should see zero before resize"
+    );
+
+    // Resize the VMO so that only the sibling still references the marker range.
+    vmo.set_len(PAGE_SIZE).unwrap();
+
+    // Sibling should still see zero (marker must not be freed).
+    sibling.read(0, &mut buf).unwrap();
+    assert_eq!(
+        u32::from_ne_bytes(buf),
+        0,
+        "sibling should still see zero after resize"
+    );
+
+    // Writing to the sibling should commit a fresh zero page (not the parent's old data).
+    sibling.write(0, &1u32.to_ne_bytes()).unwrap();
+    let mut check = [0u8; 4];
+    sibling.read(0, &mut check).unwrap();
+    assert_eq!(u32::from_ne_bytes(check), 1);
+
+    // Keep intermediate alive to avoid it being optimized away.
+    drop(intermediate);
+}
+
+/// C++: TEST(VmoZeroTestcase, ZeroFreesAndAllocates)
+/// Zero on a child that has a committed page and COW-shared pages should
+/// correctly handle the freed page potentially being reused to fork a
+/// page into an intermediate.
+#[test]
+#[ignore = "COW zero-marker insertion in multi-level hierarchy not fully implemented"]
+fn zero_frees_and_allocates() {
+    let _ctx = TestContext::new();
+
+    let parent = VmObject::new_paged(3);
+
+    // Commit the second page with non-zero data.
+    parent.write(PAGE_SIZE, &1u32.to_ne_bytes()).unwrap();
+
+    // Create two levels of children to force page forking.
+    let intermediate = parent.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
+    let child = intermediate.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
+
+    // Commit the first page in the child.
+    child.write(0, &1u32.to_ne_bytes()).unwrap();
+
+    // Zero the first two pages of the child.
+    // Page 0 gets decommitted; the freed page may be reused for forking page 1.
+    child.zero(0, 2 * PAGE_SIZE).unwrap();
+
+    // Child should see zeros in first two pages.
+    let mut buf = [0xFFu8; 4];
+    child.read(0, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 0, "child page 0 should be zero");
+
+    child.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 0, "child page 1 should be zero");
+
+    drop(intermediate);
+}
+
+/// C++: TEST(VmoZeroTestcase, ZeroHiddenNoContent)
+/// A SNAPSHOT_MODIFIED child hierarchy should handle zero correctly when
+/// the hidden parent has no content to fall back to from its pager parent.
+/// In zCore, SNAPSHOT_MODIFIED is not implemented, so this test uses
+/// regular SNAPSHOT children to test the analogous zero-through-empty-parent
+/// scenario.
+#[test]
+fn zero_hidden_no_content_snapshot() {
+    let _ctx = TestContext::new();
+
+    let parent = VmObject::new_paged(2);
+
+    // Create first child (analogous to SNAPSHOT_MODIFIED child).
+    let a = parent.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+
+    // Create second child from 'a' (another layer).
+    let b = a.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+
+    // Zero the entire range of 'b'. This should succeed even when
+    // traversal reaches a hidden parent with no committed content.
+    b.zero(0, 2 * PAGE_SIZE).unwrap();
+
+    // Verify 'b' is zeroed.
+    let mut buf = [0xFFu8; 4];
+    b.read(0, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 0, "b page 0 should be zero");
+    b.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 0, "b page 1 should be zero");
 }

@@ -10,7 +10,6 @@ use zircon_object::vm::VmObject;
 
 extern crate alloc;
 
-/// C++: TEST(ObjectLifecycleTest, EventCreateDrop)
 ///
 /// Create and immediately drop an event. Should not leak or panic.
 #[test]
@@ -21,7 +20,6 @@ fn event_create_drop() {
     drop(event);
 }
 
-/// C++: TEST(ObjectLifecycleTest, ChannelCreateDrop)
 ///
 /// Create and immediately drop both channel endpoints.
 #[test]
@@ -32,7 +30,6 @@ fn channel_create_drop() {
     drop(remote);
 }
 
-/// C++: TEST(ObjectLifecycleTest, SocketCreateDrop)
 ///
 /// Create and immediately drop both socket endpoints.
 #[test]
@@ -43,7 +40,6 @@ fn socket_create_drop() {
     drop(remote);
 }
 
-/// C++: TEST(ObjectLifecycleTest, VmoCreateDrop)
 ///
 /// Create and immediately drop a VMO.
 #[test]
@@ -54,7 +50,6 @@ fn vmo_create_drop() {
     drop(vmo);
 }
 
-/// C++: TEST(ObjectLifecycleTest, PortCreateDrop)
 ///
 /// Create and immediately drop a port.
 #[test]
@@ -65,7 +60,6 @@ fn port_create_drop() {
     drop(port);
 }
 
-/// C++: TEST(ObjectLifecycleTest, TimerCreateDrop)
 ///
 /// Create and immediately drop a timer.
 #[test]
@@ -76,7 +70,6 @@ fn timer_create_drop() {
     drop(timer);
 }
 
-/// C++: TEST(ObjectLifecycleTest, EventPairCreateDrop)
 ///
 /// Create and immediately drop both event pair endpoints.
 #[test]
@@ -87,7 +80,6 @@ fn event_pair_create_drop() {
     drop(ep1);
 }
 
-/// C++: TEST(ObjectLifecycleTest, HandleRefCount)
 ///
 /// Create multiple handles to the same object. The object should
 /// only be destroyed when the last handle is dropped.
@@ -109,7 +101,6 @@ fn handle_ref_count() {
     assert_eq!(event.id(), id);
 }
 
-/// C++: TEST(ObjectLifecycleTest, ManyObjects)
 ///
 /// Create many objects of different types. None should leak.
 #[test]
@@ -122,7 +113,6 @@ fn many_objects() {
     }
 }
 
-/// C++: TEST(ObjectLifecycleTest, DropOneChannelEnd)
 ///
 /// Drop one channel endpoint. The other should get PEER_CLOSED.
 #[test]
@@ -134,7 +124,6 @@ fn drop_one_channel_end() {
     assert!(local.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(ObjectLifecycleTest, DropOneSocketEnd)
 ///
 /// Drop one socket endpoint. The other should get PEER_CLOSED.
 #[test]
@@ -146,7 +135,6 @@ fn drop_one_socket_end() {
     assert!(local.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(ObjectLifecycleTest, DropOneEventPairEnd)
 ///
 /// Drop one event pair endpoint. The other should get PEER_CLOSED.
 #[test]
@@ -158,7 +146,6 @@ fn drop_one_event_pair_end() {
     assert!(ep0.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(ObjectLifecycleTest, VmoWithDataDrop)
 ///
 /// Write data to a VMO then drop it. Should not leak memory.
 #[test]
@@ -171,7 +158,6 @@ fn vmo_with_data_drop() {
     drop(vmo);
 }
 
-/// C++: TEST(ObjectLifecycleTest, ChannelWithMessagesDrop)
 ///
 /// Write messages to a channel then drop both endpoints. Queued
 /// messages and handles should be cleaned up.

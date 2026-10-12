@@ -8,7 +8,6 @@ use core::time::Duration;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::Timer;
 
-/// C++: TEST(TimerOpsTest, CreateTimer)
 ///
 /// Create a timer and verify it has a valid KOID.
 #[test]
@@ -18,7 +17,6 @@ fn create_timer() {
     assert_ne!(timer.id(), 0);
 }
 
-/// C++: TEST(TimerOpsTest, TimerName)
 ///
 /// Set and get the name of a timer.
 #[test]
@@ -29,7 +27,6 @@ fn timer_name() {
     assert_eq!(timer.name(), "test-timer");
 }
 
-/// C++: TEST(TimerOpsTest, TimerNotSignaledInitially)
 ///
 /// A newly created timer should not be signaled.
 #[test]
@@ -39,7 +36,6 @@ fn timer_not_signaled_initially() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerOpsTest, TimerSetDeadline)
 ///
 /// Set a deadline on a timer. If the deadline is in the past, the
 /// timer should signal immediately.
@@ -50,7 +46,6 @@ fn timer_set_deadline() {
     timer.set(Duration::from_secs(0), Duration::default());
 }
 
-/// C++: TEST(TimerOpsTest, TimerCancel)
 ///
 /// Set a deadline then cancel the timer. The timer should not be
 /// signaled after cancellation.
@@ -63,7 +58,6 @@ fn timer_cancel() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerOpsTest, TimerSetThenReset)
 ///
 /// Set a timer, then set it again with a different deadline. The
 /// new deadline should replace the old one.
@@ -75,7 +69,6 @@ fn timer_set_then_reset() {
     timer.set(Duration::from_secs(999998), Duration::default());
 }
 
-/// C++: TEST(TimerOpsTest, TimerMultipleCreation)
 ///
 /// Create multiple timers. Each should have a unique KOID.
 #[test]
@@ -88,7 +81,6 @@ fn timer_multiple_creation() {
     assert_ne!(t2.id(), t3.id());
 }
 
-/// C++: TEST(TimerOpsTest, TimerSlackModes)
 ///
 /// Create timers with different slack modes (Center, Early, Late).
 #[test]
@@ -100,7 +92,6 @@ fn timer_slack_modes() {
     let _late = Timer::with_slack(Slack::Late);
 }
 
-/// C++: TEST(TimerOpsTest, TimerCancelWhenNotSet)
 ///
 /// Cancel a timer that has never been set. Should be a no-op.
 #[test]
@@ -111,7 +102,6 @@ fn timer_cancel_when_not_set() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerOpsTest, TimerDoubleCancelSafe)
 ///
 /// Cancel a timer twice. Second cancel should be a no-op.
 #[test]

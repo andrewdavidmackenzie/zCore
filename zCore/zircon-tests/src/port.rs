@@ -71,7 +71,6 @@ async fn port_fifo_order() {
     }
 }
 
-/// C++: TEST(PortTest, CreateInvalidOptionsReturnsInvalidArgs)
 #[test]
 fn port_create_invalid_options() {
     let _ctx = TestContext::new();
@@ -79,7 +78,6 @@ fn port_create_invalid_options() {
     assert_eq!(Port::new(0xFF).unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(PortTest, QueueUserPacketLimit)
 /// Port should enforce per-port packet limit.
 #[test]
 fn port_queue_user_packet_limit() {
@@ -108,7 +106,6 @@ fn port_queue_user_packet_limit() {
     );
 }
 
-/// C++: TEST(PortTest, SignalReadable)
 /// Port should have READABLE signal when packets are queued.
 #[test]
 fn port_signal_readable() {
@@ -143,7 +140,6 @@ fn port_cannot_bind_to_interrupt_by_default() {
     assert!(!port.can_bind_to_interrupt());
 }
 
-/// C++: TEST(PortTest, UserPacketStatusPreserved)
 /// The status field in a user packet is preserved through queue/dequeue.
 #[async_std::test]
 async fn port_user_packet_status_preserved() {
@@ -168,7 +164,6 @@ async fn port_user_packet_status_preserved() {
     }
 }
 
-/// C++: TEST(PortTest, CancelByKeyNotFound)
 #[test]
 fn port_cancel_by_key_not_found() {
     let _ctx = TestContext::new();
@@ -522,4 +517,74 @@ async fn port_cancel_event_key_after() {
         result.is_err(),
         "cancel after delivery should return NOT_FOUND"
     );
+}
+
+/// C++: TEST(PortTest, AsyncWaitChannelTimedOut)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn async_wait_channel_timed_out() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, CancelKey)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn cancel_key() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, CancelKeyAccessDenied)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn cancel_key_access_denied() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, CancelKeyInvalidOptions)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn cancel_key_invalid_options() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, CancelKeyQueuedUserPacket)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn cancel_key_queued_user_packet() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, CloseQueueRace)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn close_queue_race() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, EdgeTriggerTimeout)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn edge_trigger_timeout() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, ThreadEvents)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn thread_events() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, Timestamp)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn timestamp() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, WaitAsyncBootTimestamp)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn wait_async_boot_timestamp() {
+    todo!("requires async wait or thread infrastructure");
 }

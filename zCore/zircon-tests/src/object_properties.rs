@@ -9,7 +9,6 @@ use zircon_object::signal::Event;
 
 extern crate alloc;
 
-/// C++: TEST(ObjectPropertiesTest, SetName)
 ///
 /// Set the name of an object and read it back.
 #[test]
@@ -20,7 +19,6 @@ fn set_name() {
     assert_eq!(event.name(), "test-event");
 }
 
-/// C++: TEST(ObjectPropertiesTest, GetDefaultName)
 ///
 /// A newly created object should have an empty or default name.
 #[test]
@@ -32,7 +30,6 @@ fn get_default_name() {
     assert!(name.is_empty() || name == "");
 }
 
-/// C++: TEST(ObjectPropertiesTest, SetNameTruncation)
 ///
 /// Set a name longer than ZX_MAX_NAME_LEN. In Fuchsia this truncates,
 /// but zCore stores the full name. Document the difference.
@@ -48,7 +45,6 @@ fn set_name_truncation() {
     assert!(!name.is_empty(), "name should be non-empty after setting");
 }
 
-/// C++: TEST(ObjectPropertiesTest, SetNameEmpty)
 ///
 /// Set the name to an empty string. Should succeed.
 #[test]
@@ -60,7 +56,6 @@ fn set_name_empty() {
     assert_eq!(event.name(), "");
 }
 
-/// C++: TEST(ObjectPropertiesTest, SetNameOverwrite)
 ///
 /// Set the name, then overwrite it with a different name.
 #[test]
@@ -73,7 +68,6 @@ fn set_name_overwrite() {
     assert_eq!(event.name(), "second");
 }
 
-/// C++: TEST(ObjectPropertiesTest, ChannelName)
 ///
 /// Set and get the name of a channel endpoint.
 #[test]
@@ -85,7 +79,6 @@ fn channel_name() {
     assert_eq!(local.name(), "my-channel");
 }
 
-/// C++: TEST(ObjectPropertiesTest, VmoName)
 ///
 /// Set and get the name of a VMO.
 #[test]
@@ -97,7 +90,6 @@ fn vmo_name() {
     assert_eq!(vmo.name(), "my-vmo");
 }
 
-/// C++: TEST(ObjectPropertiesTest, ProcessName)
 ///
 /// Set and get the name of a process.
 #[test]
@@ -112,7 +104,6 @@ fn process_name() {
     assert_eq!(proc.name(), "renamed");
 }
 
-/// C++: TEST(ObjectPropertiesTest, ThreadName)
 ///
 /// Set and get the name of a thread.
 #[test]
@@ -129,7 +120,6 @@ fn thread_name() {
     assert_eq!(thread.name(), "renamed-thread");
 }
 
-/// C++: TEST(ObjectPropertiesTest, JobName)
 ///
 /// Set and get the name of a job.
 #[test]
@@ -142,7 +132,6 @@ fn job_name() {
     assert_eq!(child.name(), "test-job");
 }
 
-/// C++: TEST(ObjectPropertiesTest, SocketName)
 ///
 /// Set and get the name of a socket.
 #[test]
@@ -154,7 +143,6 @@ fn socket_name() {
     assert_eq!(local.name(), "my-socket");
 }
 
-/// C++: TEST(ObjectPropertiesTest, TimerName)
 ///
 /// Set and get the name of a timer.
 #[test]
@@ -166,7 +154,6 @@ fn timer_name() {
     assert_eq!(timer.name(), "my-timer");
 }
 
-/// C++: TEST(ObjectPropertiesTest, KoidIsNonZero)
 ///
 /// Every kernel object should have a non-zero KOID.
 #[test]
@@ -176,7 +163,6 @@ fn koid_is_non_zero() {
     assert_ne!(event.id(), 0);
 }
 
-/// C++: TEST(ObjectPropertiesTest, KoidsAreUnique)
 ///
 /// KOIDs should be unique across objects.
 #[test]

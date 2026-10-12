@@ -304,3 +304,34 @@ fn wait_invalid_owner() {
 fn requeue_invalid_owner() {
     unimplemented!("not yet implemented: requires multi-threaded async runtime");
 }
+
+// ── Bulk-ported futex tests (batch 2) ───────────────────────────────
+//
+
+/// C++: TEST(FutexTest, FutexRequeueTbiReturnsInvalidArgs)
+#[test]
+#[ignore = "requires TBI (Top Byte Ignore) hardware support"]
+fn futex_requeue_tbi_returns_invalid_args() {
+    todo!("requires TBI hardware support");
+}
+
+/// C++: TEST(FutexTest, RequeueWithWakeCountZero)
+#[test]
+#[ignore = "futex requeue needs valid user-space addresses"]
+fn requeue_with_wake_count_zero() {
+    todo!("futex requeue needs valid user-space addresses");
+}
+
+/// C++: TEST(FutexTest, UnmappedAddress)
+#[test]
+#[ignore = "requires VMAR unmapped address validation"]
+fn unmapped_address() {
+    todo!("requires VMAR unmapped address validation");
+}
+
+/// C++: TEST(FutexTest, WaitTimeoutElapsed)
+#[test]
+#[ignore = "futex wait is async and needs valid user-space addresses"]
+fn wait_timeout_elapsed() {
+    todo!("futex wait is async and needs valid user-space addresses");
+}
