@@ -59,11 +59,38 @@ fn channel_queue_depth() {
 ///
 /// Write data until the socket buffer is full. Writing more should
 /// return SHOULD_WAIT.
-#[should_panic(expected = "socket capacity varies by implementation")]
 #[test]
 fn socket_stream_capacity() {
     let _ctx = TestContext::new();
-    panic!("socket capacity varies by implementation");
+    let (s0, s1) = Socket::create(0).unwrap();
+
+    // Write data until full
+    let chunk = vec![0xAA_u8; 4096];
+    let mut total_written = 0usize;
+    loop {
+        match s0.write(&chunk) {
+            Ok(n) => total_written += n,
+            Err(ZxError::SHOULD_WAIT) => break,
+            Err(e) => panic!("unexpected error: {:?}", e),
+        }
+    }
+
+    // Verify we wrote approximately SOCKET_SIZE bytes
+    assert!(total_written > 0);
+    assert!(total_written <= 262144, "should not exceed socket capacity");
+
+    // Writing more should return SHOULD_WAIT
+    assert_eq!(s0.write(&[42]).unwrap_err(), ZxError::SHOULD_WAIT);
+
+    // WRITABLE should be cleared on s0
+    assert!(!s0.signal().contains(Signal::WRITABLE));
+
+    // Reading should make space
+    let mut buf = vec![0u8; 4096];
+    s1.read(false, &mut buf).unwrap();
+
+    // Now writing should succeed
+    assert!(s0.write(&[42]).is_ok());
 }
 
 ///
