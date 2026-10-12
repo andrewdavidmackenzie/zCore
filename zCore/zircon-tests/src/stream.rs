@@ -226,3 +226,246 @@ fn stream_name() {
     stream.set_name("my-stream");
     assert_eq!(stream.name(), "my-stream");
 }
+
+/// C++: TEST(StreamTestCase, Create)
+/// Basic stream creation with properties verified.
+#[test]
+fn stream_create_verify_properties() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let stream = Stream::create(vmo.clone(), 0, 0x3); // MODE_READ | MODE_WRITE
+
+    let info = stream.get_info();
+    assert_eq!(info.options, 0x3);
+    assert_eq!(info.seek, 0);
+    assert_eq!(info.content_size, 0);
+    assert_ne!(stream.id(), 0);
+}
+
+/// C++: TEST(StreamTestCase, Seek)
+/// Seek to beginning, current, and end positions.
+#[test]
+fn stream_seek_all_origins() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let stream = Stream::create(vmo, 0, 0x3);
+
+    stream.write(b"0123456789ABCDEF", false).unwrap(); // 16 bytes
+
+    // Seek to beginning
+    let pos = stream.seek(SeekOrigin::Start, 0).unwrap();
+    assert_eq!(pos, 0);
+
+    // Seek to absolute position 8
+    let pos = stream.seek(SeekOrigin::Start, 8).unwrap();
+    assert_eq!(pos, 8);
+
+    // Seek +4 from current (8 + 4 = 12)
+    let pos = stream.seek(SeekOrigin::Current, 4).unwrap();
+    assert_eq!(pos, 12);
+
+    // Seek -2 from current (12 - 2 = 10)
+    let pos = stream.seek(SeekOrigin::Current, -2).unwrap();
+    assert_eq!(pos, 10);
+
+    // Seek to end (content_size = 16)
+    let pos = stream.seek(SeekOrigin::End, 0).unwrap();
+    assert_eq!(pos, 16);
+
+    // Seek -5 from end (16 - 5 = 11)
+    let pos = stream.seek(SeekOrigin::End, -5).unwrap();
+    assert_eq!(pos, 11);
+}
+
+/// C++: TEST(StreamTestCase, WriteExtendsContentSize)
+/// Writing extends content_size but not VMO size.
+#[test]
+fn stream_write_extends_content_size() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(2); // 2 pages = 8192 bytes
+    vmo.set_content_size(0).unwrap();
+
+    let stream = Stream::create(vmo.clone(), 0, 0x3);
+
+    assert_eq!(vmo.content_size(), 0);
+
+    stream.write(b"hello", false).unwrap();
+    assert_eq!(vmo.content_size(), 5);
+
+    stream.write(b" world!", false).unwrap();
+    assert_eq!(vmo.content_size(), 12);
+
+    // Write at offset beyond current content — gap is zero-filled
+    stream.seek(SeekOrigin::Start, 20).unwrap();
+    stream.write(b"XX", false).unwrap();
+    assert_eq!(vmo.content_size(), 22);
+
+    // Verify the gap is zeroed
+    stream.seek(SeekOrigin::Start, 12).unwrap();
+    let mut gap = [0xFFu8; 8];
+    stream.read(&mut gap).unwrap();
+    assert!(gap.iter().all(|&b| b == 0), "gap should be zeroed");
+}
+
+/// C++: TEST(StreamTestCase, WriteDoesntExtendVMOSize)
+/// Writing does not extend the VMO size past the original allocation.
+#[test]
+fn stream_write_doesnt_extend_vmo_size() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1); // 1 page = 4096 bytes
+    let original_vmo_len = vmo.len();
+
+    let stream = Stream::create(vmo.clone(), 0, 0x3);
+
+    // Write data — content_size grows but VMO size stays the same
+    let data = [0xAA; 2048];
+    stream.write(&data, false).unwrap();
+
+    assert_eq!(vmo.len(), original_vmo_len);
+
+    // Try to write past the VMO boundary — clamped to VMO size
+    stream.seek(SeekOrigin::Start, 4090).unwrap();
+    let n = stream.write(&[0xBB; 100], false).unwrap();
+    assert_eq!(n, 6); // only 6 bytes fit (4096 - 4090)
+    assert_eq!(vmo.len(), original_vmo_len);
+}
+
+/// C++: TEST(StreamTestCase, ReadV)
+/// Vectored read: multiple buffers filled from the stream.
+#[test]
+fn stream_read_v() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let stream = Stream::create(vmo, 0, 0x3);
+
+    stream.write(b"AAABBBCCC", false).unwrap();
+    stream.seek(SeekOrigin::Start, 0).unwrap();
+
+    // Read into three separate buffers (simulates readv iovec)
+    let mut buf1 = [0u8; 3];
+    let mut buf2 = [0u8; 3];
+    let mut buf3 = [0u8; 3];
+
+    let n1 = stream.read(&mut buf1).unwrap();
+    let n2 = stream.read(&mut buf2).unwrap();
+    let n3 = stream.read(&mut buf3).unwrap();
+
+    assert_eq!(n1, 3);
+    assert_eq!(n2, 3);
+    assert_eq!(n3, 3);
+    assert_eq!(&buf1, b"AAA");
+    assert_eq!(&buf2, b"BBB");
+    assert_eq!(&buf3, b"CCC");
+}
+
+/// C++: TEST(StreamTestCase, WriteV)
+/// Vectored write: multiple buffers written to the stream.
+#[test]
+fn stream_write_v() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let stream = Stream::create(vmo, 0, 0x3);
+
+    // Write from multiple "iov" segments
+    stream.write(b"AAA", false).unwrap();
+    stream.write(b"BBB", false).unwrap();
+    stream.write(b"CCC", false).unwrap();
+
+    // Read back the combined result
+    stream.seek(SeekOrigin::Start, 0).unwrap();
+    let mut buf = [0u8; 9];
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(n, 9);
+    assert_eq!(&buf, b"AAABBBCCC");
+}
+
+/// C++: TEST(StreamTestCase, ReadVAt)
+/// Read at specific offsets without moving seek position.
+#[test]
+fn stream_read_v_at() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let stream = Stream::create(vmo, 0, 0x3);
+
+    stream.write(b"0123456789ABCDEF", false).unwrap();
+
+    // read_at at various offsets
+    let mut buf1 = [0u8; 4];
+    let n = stream.read_at(&mut buf1, 0).unwrap();
+    assert_eq!(n, 4);
+    assert_eq!(&buf1, b"0123");
+
+    let mut buf2 = [0u8; 4];
+    let n = stream.read_at(&mut buf2, 8).unwrap();
+    assert_eq!(n, 4);
+    assert_eq!(&buf2, b"89AB");
+
+    let mut buf3 = [0u8; 4];
+    let n = stream.read_at(&mut buf3, 12).unwrap();
+    assert_eq!(n, 4);
+    assert_eq!(&buf3, b"CDEF");
+}
+
+/// C++: TEST(StreamTestCase, WriteVAt)
+/// Write at specific offsets without moving seek position.
+#[test]
+fn stream_write_v_at() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let stream = Stream::create(vmo, 0, 0x3);
+
+    // Fill with zeros first
+    stream.write(&[0u8; 16], false).unwrap();
+
+    // Write at specific offsets
+    stream.write_at(b"AAAA", 0).unwrap();
+    stream.write_at(b"BBBB", 4).unwrap();
+    stream.write_at(b"CCCC", 8).unwrap();
+
+    // Read back the whole thing
+    stream.seek(SeekOrigin::Start, 0).unwrap();
+    let mut buf = [0u8; 12];
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(n, 12);
+    assert_eq!(&buf, b"AAAABBBBCCCC");
+}
+
+/// C++: TEST(StreamTestCase, SyscallInvalidArgs)
+/// Bad args to stream operations.
+#[test]
+fn stream_syscall_invalid_args() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+
+    // Seek before start should fail
+    let stream = Stream::create(vmo, 0, 0x3);
+    let result = stream.seek(SeekOrigin::Start, -1);
+    assert!(result.is_err());
+
+    // Seek with overflow should fail
+    let result = stream.seek(SeekOrigin::End, -100);
+    assert!(result.is_err());
+}
+
+/// C++: TEST(StreamTestCase, NoStreamFromContiguousOrPhysicalVmo)
+/// Cannot create a stream from a contiguous or physical VMO.
+/// This is enforced at the syscall layer, so we test the VMO
+/// properties that the syscall checks.
+#[test]
+fn stream_no_contiguous_or_physical_vmo() {
+    let _ctx = TestContext::new();
+
+    // A contiguous VMO should be rejected by sys_stream_create's check:
+    // `!vmo.is_paged() || vmo.is_contiguous()` → NOT_SUPPORTED
+    // We verify the predicates here at the object level.
+    if let Ok(contiguous) = VmObject::new_contiguous(1, 12) {
+        // Contiguous VMOs are paged but contiguous — should be rejected
+        assert!(contiguous.is_contiguous());
+        // The syscall would return NOT_SUPPORTED
+    }
+
+    // A physical VMO should not be paged
+    let physical = VmObject::new_physical(0x1000, 1);
+    assert!(!physical.is_paged());
+    // The syscall would return NOT_SUPPORTED
+}

@@ -23,7 +23,7 @@ use zircon_object::task::{CurrentThread, PolicyCondition, Thread, ThreadFn};
 use zircon_object::{ZxError, ZxResult};
 
 use self::consts::SyscallType as Sys;
-use self::time::Deadline;
+pub use self::time::Deadline;
 
 mod channel;
 mod consts {

@@ -215,13 +215,14 @@ impl Stream {
 #[derive(Default)]
 pub struct StreamInfo {
     /// The options passed to `Stream::create()`.
-    options: u32,
-    padding1: u32,
+    pub options: u32,
+    /// Padding for alignment.
+    pub padding1: u32,
     /// The current seek offset.
     ///
     /// Used by stream_readv and stream_writev to determine where to read
     /// and write the stream.
-    seek: u64,
+    pub seek: u64,
     /// The current size of the stream.
     ///
     /// The number of bytes in the stream that store data. The stream itself
@@ -229,7 +230,7 @@ pub struct StreamInfo {
     /// as the stream grows or shrinks.
     /// NOTE: in fact, this value is store in the VmObject associated and can be
     /// get/set through 'object_[get/set]_property(vmo_handle, ...)'
-    content_size: u64,
+    pub content_size: u64,
 }
 
 #[cfg(test)]
