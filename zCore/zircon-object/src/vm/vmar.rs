@@ -1446,8 +1446,9 @@ impl VmAddressRegion {
         let map = self.find_mapping(vaddr).ok_or(ZxError::NOT_FOUND)?;
         let map_inner = map.inner.lock();
         // Reject writes to mappings without WRITE permission (e.g., VDSO).
-        let page_idx = (vaddr - map_inner.addr) / PAGE_SIZE;
-        if !map_inner.page_flags(page_idx).contains(MMUFlags::WRITE) {
+        // Use the mapping's permissions field which reflects the intended
+        // access rights, not the page-table flags (which may be lazy sentinels).
+        if !map.permissions.contains(MMUFlags::WRITE) {
             return Err(ZxError::ACCESS_DENIED);
         }
         let vmo_offset = vaddr - map_inner.addr + map_inner.vmo_offset;
