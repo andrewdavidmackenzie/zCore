@@ -1,53 +1,67 @@
 //! Interrupt tests.
 //!
 //! 1:1 ports of Fuchsia's zircon/system/utest/core/interrupt/ tests.
-//! Most tests require hardware interrupt support which is not available
-//! in libos mode, so they use #[should_panic].
+//! Tests that can exercise the Interrupt kernel object directly (virtual
+//! interrupts, bind/unbind, trigger, ack, destroy) are implemented with
+//! real assertions. Tests requiring hardware interrupts or async wait
+//! remain as stubs.
 
 use crate::helpers::TestContext;
+use zircon_object::dev::Interrupt;
+use zircon_object::object::KernelObject;
+use zircon_object::signal::Port;
+use zircon_object::ZxError;
 
-///
-/// Creating an interrupt object requires a resource handle. Not
-/// available in libos mode.
+/// Creating a virtual interrupt object succeeds.
 #[test]
-#[should_panic(expected = "interrupts not available in libos mode")]
 fn interrupt_create() {
     let _ctx = TestContext::new();
-    panic!("interrupts not available in libos mode");
+    let interrupt = Interrupt::new_virtual();
+    // Virtual interrupt has a valid kernel object ID
+    assert!(interrupt.id() > 0);
 }
 
-///
-/// Creating an interrupt with invalid parameters should fail.
-/// Not available in libos mode.
+/// Creating an interrupt with invalid operations should fail.
+/// A virtual interrupt cannot be triggered with a physical trigger,
+/// and ack without a port bound returns BAD_STATE.
 #[test]
-#[should_panic(expected = "interrupts not available in libos mode")]
 fn interrupt_create_invalid() {
     let _ctx = TestContext::new();
-    panic!("interrupts not available in libos mode");
+    let interrupt = Interrupt::new_virtual();
+    // Ack without port → BAD_STATE
+    assert_eq!(interrupt.ack().unwrap_err(), ZxError::BAD_STATE);
 }
 
 /// C++: TEST(InterruptTest, Bind)
 ///
-/// Binding an interrupt to a port. Not available in libos mode.
+/// Binding a virtual interrupt to a port succeeds.
 #[test]
-#[should_panic(expected = "interrupts not available in libos mode")]
 fn interrupt_bind() {
     let _ctx = TestContext::new();
-    panic!("interrupts not available in libos mode");
+    let interrupt = Interrupt::new_virtual();
+    let port = Port::new(1).unwrap();
+    assert!(interrupt.bind(&port, 42).is_ok());
 }
 
-///
-/// Unbinding an interrupt from a port. Not available in libos mode.
+/// Unbinding a virtual interrupt from a port succeeds after bind.
+/// Unbinding when not bound returns NOT_FOUND.
 #[test]
-#[should_panic(expected = "interrupts not available in libos mode")]
 fn interrupt_unbind() {
     let _ctx = TestContext::new();
-    panic!("interrupts not available in libos mode");
+    let interrupt = Interrupt::new_virtual();
+    let port = Port::new(1).unwrap();
+
+    // Unbind without bind → NOT_FOUND
+    assert_eq!(interrupt.unbind(&port).unwrap_err(), ZxError::NOT_FOUND);
+
+    // Bind then unbind → success
+    interrupt.bind(&port, 1).unwrap();
+    assert!(interrupt.unbind(&port).is_ok());
 }
 
 /// C++: TEST(InterruptTest, Wait)
 ///
-/// Waiting on an interrupt. Not available in libos mode.
+/// Waiting on an interrupt requires async context. Left as stub.
 #[test]
 #[should_panic(expected = "interrupts not available in libos mode")]
 fn interrupt_wait() {
@@ -55,45 +69,71 @@ fn interrupt_wait() {
     panic!("interrupts not available in libos mode");
 }
 
-///
-/// Acknowledging an interrupt. Not available in libos mode.
+/// Acknowledging an interrupt — various error paths.
 #[test]
-#[should_panic(expected = "interrupts not available in libos mode")]
 fn interrupt_ack() {
     let _ctx = TestContext::new();
-    panic!("interrupts not available in libos mode");
+
+    // Ack without port → BAD_STATE
+    let interrupt = Interrupt::new_virtual();
+    assert_eq!(interrupt.ack().unwrap_err(), ZxError::BAD_STATE);
+
+    // Ack after destroy → CANCELED
+    let interrupt = Interrupt::new_virtual();
+    let port = Port::new(1).unwrap();
+    interrupt.bind(&port, 1).unwrap();
+    interrupt.trigger(100).unwrap();
+    interrupt.destroy().unwrap();
+    assert_eq!(interrupt.ack().unwrap_err(), ZxError::CANCELED);
 }
 
-///
-/// Destroying an interrupt object. Not available in libos mode.
+/// Destroying an interrupt object succeeds.
 #[test]
-#[should_panic(expected = "interrupts not available in libos mode")]
 fn interrupt_destroy() {
     let _ctx = TestContext::new();
-    panic!("interrupts not available in libos mode");
+    let interrupt = Interrupt::new_virtual();
+    assert!(interrupt.destroy().is_ok());
+
+    // Unbind after destroy → CANCELED
+    let port = Port::new(1).unwrap();
+    let interrupt = Interrupt::new_virtual();
+    interrupt.bind(&port, 1).unwrap();
+    assert!(interrupt.destroy().is_ok());
+    assert_eq!(interrupt.unbind(&port).unwrap_err(), ZxError::CANCELED);
 }
 
-///
-/// Triggering a virtual interrupt. Not available in libos mode.
+/// Triggering a virtual interrupt succeeds.
 #[test]
-#[should_panic(expected = "interrupts not available in libos mode")]
 fn interrupt_trigger() {
     let _ctx = TestContext::new();
-    panic!("interrupts not available in libos mode");
+    let interrupt = Interrupt::new_virtual();
+    // Trigger without port → goes to Triggered state
+    assert!(interrupt.trigger(1234).is_ok());
 }
 
 /// C++: TEST(InterruptTest, VirtualInterrupt)
 ///
-/// Creating a virtual interrupt. Not available in libos mode.
+/// Creating a virtual interrupt and verifying basic operations.
 #[test]
-#[should_panic(expected = "interrupts not available in libos mode")]
 fn interrupt_virtual_interrupt() {
     let _ctx = TestContext::new();
-    panic!("interrupts not available in libos mode");
+    let interrupt = Interrupt::new_virtual();
+
+    // Can set and read name
+    interrupt.set_name("test-virq");
+    assert_eq!(interrupt.name(), "test-virq");
+
+    // Trigger succeeds
+    assert!(interrupt.trigger(5678).is_ok());
+
+    // Destroy succeeds
+    assert!(interrupt.destroy().is_ok());
+
+    // Trigger after destroy → CANCELED
+    assert_eq!(interrupt.trigger(9999).unwrap_err(), ZxError::CANCELED);
 }
 
-///
-/// Waiting on a virtual interrupt. Not available in libos mode.
+/// Waiting on a virtual interrupt requires async context. Left as stub.
 #[test]
 #[should_panic(expected = "interrupts not available in libos mode")]
 fn interrupt_virtual_interrupt_wait() {

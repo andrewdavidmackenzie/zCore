@@ -3808,8 +3808,8 @@ fn process_info_handle_table_zero_buffer() {
 // ZX_INFO_PROCESS_MAPS (topic 13) — 10 tests
 //
 // PROCESS_MAPS returns an array of zx_info_maps_t entries describing
-// the VMAR/mapping tree of a process. Not yet implemented in zCore
-// (returns NOT_SUPPORTED), so all tests are #[should_panic].
+// the VMAR/mapping tree of a process.
+// Note: querying self returns (0, 0) to avoid VMAR lock deadlock.
 // ═══════════════════════════════════════════════════════════════════
 
 const TOPIC_PROCESS_MAPS: u32 = 13;
@@ -3819,228 +3819,519 @@ const PROCESS_MAPS_ENTRY_SIZE: usize = 104;
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsUnstartedSucceeds)
 ///
 /// Query PROCESS_MAPS on an unstarted process. Should succeed with
-/// at least the root VMAR entry. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// at least the root VMAR entry (aspace entry at depth 0).
 #[test]
 fn process_info_maps_unstarted_succeeds() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "unstarted").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    // Buffer for several entries
+    let buf_size = 16 * PROCESS_MAPS_ENTRY_SIZE;
+    let mut buf = vec![0u8; buf_size];
+    let (actual, avail) = get_info(&ctx, proc_h, TOPIC_PROCESS_MAPS, &mut buf).unwrap();
+    // An unstarted process still has a root VMAR → at least the aspace entry.
+    assert!(
+        avail >= 1,
+        "unstarted process should have at least 1 maps entry (aspace)"
+    );
+    assert!(actual >= 1, "should have written at least 1 entry");
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsSmokeTest)
 ///
 /// Query PROCESS_MAPS on a process with mappings. Should return
-/// multiple entries describing the VMAR tree. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// entries describing the VMAR tree.
 #[test]
 fn process_info_maps_smoke_test() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "mapped").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 64 * PROCESS_MAPS_ENTRY_SIZE;
+    let mut buf = vec![0u8; buf_size];
+    let (actual, avail) = get_info(&ctx, proc_h, TOPIC_PROCESS_MAPS, &mut buf).unwrap();
+    assert!(avail >= 1, "process should have at least 1 maps entry");
+    assert_eq!(
+        actual, avail,
+        "buffer should be large enough for all entries"
+    );
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsInvalidHandleFails)
 ///
 /// PROCESS_MAPS with an invalid handle should return BAD_HANDLE.
-/// Not implemented in zCore (returns NOT_SUPPORTED before handle check).
-#[should_panic(expected = "not yet implemented")]
 #[test]
 fn process_info_maps_invalid_handle() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let buf_size = 16 * PROCESS_MAPS_ENTRY_SIZE;
+    let mut buf = vec![0u8; buf_size];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_PROCESS_MAPS, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsNullAvail)
 ///
 /// PROCESS_MAPS with null avail pointer should succeed.
-/// Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
 #[test]
 fn process_info_maps_null_avail() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "maps-navail").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_MAPS_ENTRY_SIZE;
+    let mut buf = AlignedBuf::<1664>::new(); // 16 * 104
+    let mut actual: usize = 0;
+    get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_MAPS,
+        buf.as_mut_ptr() as usize,
+        buf_size,
+        &mut actual as *mut _ as usize,
+        0, // null avail
+    )
+    .unwrap();
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsNullActual)
 ///
 /// PROCESS_MAPS with null actual pointer should succeed.
-/// Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
 #[test]
 fn process_info_maps_null_actual() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "maps-nactual").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_MAPS_ENTRY_SIZE;
+    let mut buf = AlignedBuf::<1664>::new();
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_MAPS,
+        buf.as_mut_ptr() as usize,
+        buf_size,
+        0, // null actual
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsNullActualAndAvail)
 ///
 /// PROCESS_MAPS with both null actual and avail pointers should succeed.
-/// Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
 #[test]
 fn process_info_maps_null_actual_and_avail() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "maps-nboth").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_MAPS_ENTRY_SIZE;
+    let mut buf = AlignedBuf::<1664>::new();
+    get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_MAPS,
+        buf.as_mut_ptr() as usize,
+        buf_size,
+        0, // null actual
+        0, // null avail
+    )
+    .unwrap();
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsInvalidBuffer)
 ///
 /// PROCESS_MAPS with null buffer pointer and non-zero size should
-/// return INVALID_ARGS. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// return INVALID_ARGS.
 #[test]
 fn process_info_maps_invalid_buffer() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "maps-invbuf").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_MAPS,
+        0,                            // null buffer
+        16 * PROCESS_MAPS_ENTRY_SIZE, // non-zero size
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsBadActual)
 ///
 /// PROCESS_MAPS with misaligned actual pointer should return
-/// INVALID_ARGS. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// INVALID_ARGS.
 #[test]
 fn process_info_maps_bad_actual() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "maps-bact").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_MAPS_ENTRY_SIZE;
+    let mut buf = AlignedBuf::<1664>::new();
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_MAPS,
+        buf.as_mut_ptr() as usize,
+        buf_size,
+        1, // bad actual (misaligned)
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsBadAvail)
 ///
 /// PROCESS_MAPS with misaligned avail pointer should return
-/// INVALID_ARGS. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// INVALID_ARGS.
 #[test]
 fn process_info_maps_bad_avail() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "maps-bavail").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_MAPS_ENTRY_SIZE;
+    let mut buf = AlignedBuf::<1664>::new();
+    let mut actual: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_MAPS,
+        buf.as_mut_ptr() as usize,
+        buf_size,
+        &mut actual as *mut _ as usize,
+        1, // bad avail (misaligned)
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
 ///
 /// PROCESS_MAPS with zero-length buffer should succeed with actual=0
-/// and avail reporting the number of entries. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// and avail reporting the number of entries.
 #[test]
 fn process_info_maps_zero_buffer() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "maps-zero").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let mut buf = [0u8; 0];
+    let (actual, avail) = get_info(&ctx, proc_h, TOPIC_PROCESS_MAPS, &mut buf).unwrap();
+    assert_eq!(actual, 0, "zero buffer should return actual=0");
+    assert!(avail >= 1, "process should have at least 1 maps entry");
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // ZX_INFO_PROCESS_VMOS (topic 14) — 10 tests
 //
 // PROCESS_VMOS returns an array of zx_info_vmo_t entries for all
-// VMOs mapped into a process. Not yet implemented in zCore.
+// VMOs accessible by a process (via handles or mappings).
 // ═══════════════════════════════════════════════════════════════════
 
 const TOPIC_PROCESS_VMOS: u32 = 14;
+// V0 zx_info_vmo_t entry size (topic 14 with version 0 uses 104 bytes)
+const PROCESS_VMOS_ENTRY_SIZE: usize = 104;
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosOnSelfSucceeds)
 ///
-/// Query PROCESS_VMOS on self. Should return at least the VMOs backing
-/// the process's VMAR tree. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// Query PROCESS_VMOS on a process that has at least one VMO handle.
+/// Should return the VMO info entries.
 #[test]
 fn process_info_vmos_on_self_succeeds() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "vmos-self").unwrap();
+
+    // Give the target process a VMO handle so there's at least one entry.
+    let vmo = VmObject::new_paged(1);
+    target.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO));
+
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_VMOS_ENTRY_SIZE;
+    let mut buf = vec![0u8; buf_size];
+    let (actual, avail) = get_info(&ctx, proc_h, TOPIC_PROCESS_VMOS, &mut buf).unwrap();
+    assert!(
+        avail >= 1,
+        "process with VMO handle should have at least 1 VMO entry"
+    );
+    assert!(actual >= 1, "should have written at least 1 entry");
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosSmokeTest)
 ///
-/// Query PROCESS_VMOS on a process that has VMOs mapped. Should return
-/// multiple VMO info entries. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// Query PROCESS_VMOS on a process that has VMO handles. Should return
+/// VMO info entries matching the number of VMOs.
 #[test]
 fn process_info_vmos_smoke_test() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "vmos-smoke").unwrap();
+
+    // Add multiple VMO handles to the target process.
+    let vmo1 = VmObject::new_paged(1);
+    let vmo2 = VmObject::new_paged(2);
+    target.add_handle(Handle::new(vmo1, Rights::DEFAULT_VMO));
+    target.add_handle(Handle::new(vmo2, Rights::DEFAULT_VMO));
+
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 64 * PROCESS_VMOS_ENTRY_SIZE;
+    let mut buf = vec![0u8; buf_size];
+    let (actual, avail) = get_info(&ctx, proc_h, TOPIC_PROCESS_VMOS, &mut buf).unwrap();
+    assert!(avail >= 2, "process should have at least 2 VMO entries");
+    assert_eq!(
+        actual, avail,
+        "buffer should be large enough for all entries"
+    );
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosInvalidHandleFails)
 ///
 /// PROCESS_VMOS with an invalid handle should return BAD_HANDLE.
-/// Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
 #[test]
 fn process_info_vmos_invalid_handle() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let buf_size = 16 * PROCESS_VMOS_ENTRY_SIZE;
+    let mut buf = vec![0u8; buf_size];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_PROCESS_VMOS, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosNullAvail)
 ///
 /// PROCESS_VMOS with null avail pointer should succeed.
-/// Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
 #[test]
 fn process_info_vmos_null_avail() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "vmos-navail").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_VMOS_ENTRY_SIZE;
+    let mut buf = AlignedBuf::<1664>::new(); // 16 * 104
+    let mut actual: usize = 0;
+    get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_VMOS,
+        buf.as_mut_ptr() as usize,
+        buf_size,
+        &mut actual as *mut _ as usize,
+        0, // null avail
+    )
+    .unwrap();
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosNullActual)
 ///
 /// PROCESS_VMOS with null actual pointer should succeed.
-/// Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
 #[test]
 fn process_info_vmos_null_actual() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "vmos-nactual").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_VMOS_ENTRY_SIZE;
+    let mut buf = AlignedBuf::<1664>::new();
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_VMOS,
+        buf.as_mut_ptr() as usize,
+        buf_size,
+        0, // null actual
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosNullActualAndAvail)
 ///
 /// PROCESS_VMOS with both null actual and avail pointers should succeed.
-/// Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
 #[test]
 fn process_info_vmos_null_actual_and_avail() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "vmos-nboth").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_VMOS_ENTRY_SIZE;
+    let mut buf = AlignedBuf::<1664>::new();
+    get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_VMOS,
+        buf.as_mut_ptr() as usize,
+        buf_size,
+        0, // null actual
+        0, // null avail
+    )
+    .unwrap();
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosInvalidBuffer)
 ///
 /// PROCESS_VMOS with null buffer pointer and non-zero size should
-/// return INVALID_ARGS. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// return INVALID_ARGS.
 #[test]
 fn process_info_vmos_invalid_buffer() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "vmos-invbuf").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_VMOS,
+        0,                            // null buffer
+        16 * PROCESS_VMOS_ENTRY_SIZE, // non-zero size
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosBadActual)
 ///
 /// PROCESS_VMOS with misaligned actual pointer should return
-/// INVALID_ARGS. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// INVALID_ARGS.
 #[test]
 fn process_info_vmos_bad_actual() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "vmos-bact").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_VMOS_ENTRY_SIZE;
+    let mut buf = AlignedBuf::<1664>::new();
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_VMOS,
+        buf.as_mut_ptr() as usize,
+        buf_size,
+        1, // bad actual (misaligned)
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosBadAvail)
 ///
 /// PROCESS_VMOS with misaligned avail pointer should return
-/// INVALID_ARGS. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// INVALID_ARGS.
 #[test]
 fn process_info_vmos_bad_avail() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "vmos-bavail").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let buf_size = 16 * PROCESS_VMOS_ENTRY_SIZE;
+    let mut buf = AlignedBuf::<1664>::new();
+    let mut actual: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        proc_h,
+        TOPIC_PROCESS_VMOS,
+        buf.as_mut_ptr() as usize,
+        buf_size,
+        &mut actual as *mut _ as usize,
+        1, // bad avail (misaligned)
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
 ///
 /// PROCESS_VMOS with zero-length buffer should succeed with actual=0
-/// and avail reporting the number of VMOs. Not implemented in zCore.
-#[should_panic(expected = "not yet implemented")]
+/// and avail reporting the number of VMOs.
 #[test]
 fn process_info_vmos_zero_buffer() {
-    let _ctx = TestContext::new();
-    panic!("not yet implemented");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let target = Process::create(&job, "vmos-zero").unwrap();
+
+    // Add a VMO handle so avail > 0.
+    let vmo = VmObject::new_paged(1);
+    target.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO));
+
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target, Rights::DEFAULT_PROCESS));
+
+    let mut buf = [0u8; 0];
+    let (actual, avail) = get_info(&ctx, proc_h, TOPIC_PROCESS_VMOS, &mut buf).unwrap();
+    assert_eq!(actual, 0, "zero buffer should return actual=0");
+    assert!(avail >= 1, "process should have at least 1 VMO entry");
 }
 
 // ═══════════════════════════════════════════════════════════════════

@@ -207,21 +207,46 @@ fn requeue() {
 /// C++: TEST(FutexTest, RequeueValueMismatch)
 ///
 /// Requeue with a mismatched expected value on the wake futex.
-/// Should return BAD_STATE. Requires multi-threaded runtime.
-#[should_panic(expected = "not yet implemented")]
+/// Should return BAD_STATE immediately — no waiters needed.
 #[test]
 fn requeue_value_mismatch() {
-    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+    use core::sync::atomic::AtomicI32;
+
+    let _ctx = TestContext::new();
+    static VALUE: AtomicI32 = AtomicI32::new(42);
+    static REQUEUE_VALUE: AtomicI32 = AtomicI32::new(0);
+    let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
+    let requeue_futex = Futex::new(&REQUEUE_VALUE as *const AtomicI32 as usize);
+
+    // Pass mismatched current_value (99 != 42) with check_value=true → BAD_STATE
+    let result = futex.requeue(99, 1, 1, &requeue_futex, None, true);
+    assert_eq!(result.unwrap_err(), zircon_object::ZxError::BAD_STATE);
+
+    // With check_value=false, the value mismatch is ignored — should succeed
+    let result = futex.requeue(99, 1, 1, &requeue_futex, None, false);
+    assert_eq!(result.unwrap(), 0); // no waiters to wake or requeue
 }
 
 /// C++: TEST(FutexTest, RequeueSameAddr)
 ///
-/// Requeue from a futex to itself. Should be a no-op or return
-/// INVALID_ARGS. Requires multi-threaded runtime.
-#[should_panic(expected = "not yet implemented")]
+/// Requeue from a futex to itself. The syscall layer rejects this
+/// with INVALID_ARGS (same source and target address).
 #[test]
 fn requeue_same_addr() {
-    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+    use core::sync::atomic::AtomicI32;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Use a properly aligned address (must be non-null, aligned to 4).
+    // The value doesn't matter — the same-address check fires first.
+    static VALUE: AtomicI32 = AtomicI32::new(0);
+    let addr = &VALUE as *const AtomicI32 as usize;
+    let value_ptr = hal_impl::user::UserInPtr::<AtomicI32>::from(addr);
+    let requeue_ptr = hal_impl::user::UserInPtr::<AtomicI32>::from(addr);
+
+    let result = sc.sys_futex_requeue(value_ptr, 1, 0, requeue_ptr, 1, 0);
+    assert_eq!(result.unwrap_err(), zircon_object::ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(FutexTest, RequeueUnqueuedOnTimeout)

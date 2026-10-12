@@ -2309,7 +2309,6 @@ fn call_etc_invalid_args() {
 /// Since libos mode is single-threaded, the call will time out waiting
 /// for a reply.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2341,7 +2340,6 @@ fn call_etc_success() {
     ));
     // Peer is open but no responder → TIMED_OUT on immediate deadline
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelTest, CallConsumesHandlesOnError) — syscall level
@@ -2402,7 +2400,6 @@ fn call_consumes_handles_on_error() {
 /// the call in libos mode (no async responder), this verifies the write
 /// side consumed the handles before timing out.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_consumes_handles_on_success() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2441,14 +2438,12 @@ fn call_consumes_handles_on_success() {
     ));
     // No responder → times out
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelTest, CallDeadlineExceededReturnsTimedOut) — syscall level
 /// An immediate deadline (0) with an open but unresponsive peer should
 /// return TIMED_OUT.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_deadline_exceeded_returns_timed_out() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2479,7 +2474,6 @@ fn call_deadline_exceeded_returns_timed_out() {
         UserOutPtr::from(&mut actual_handles as *mut _ as usize),
     ));
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelTest, CallBytesFitIsOk) — syscall level
@@ -2487,7 +2481,6 @@ fn call_deadline_exceeded_returns_timed_out() {
 /// verifies that exactly 4 bytes is accepted (the call will time out
 /// waiting for a reply, which is expected).
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_bytes_fit_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2519,14 +2512,12 @@ fn call_bytes_fit_is_ok() {
     ));
     // Write succeeds but no reply → TIMED_OUT
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelTest, CallHandlesFitIsOk) — syscall level
 /// channel_call with handles should succeed on the write side.
 /// Times out waiting for reply.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_handles_fit_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2564,13 +2555,11 @@ fn call_handles_fit_is_ok() {
         UserOutPtr::from(&mut actual_handles as *mut _ as usize),
     ));
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelTest, CallHandleAndBytesFitsIsOk) — syscall level
 /// channel_call with both data and handles should succeed on write side.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_handle_and_bytes_fits_is_ok() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2608,7 +2597,6 @@ fn call_handle_and_bytes_fits_is_ok() {
         UserOutPtr::from(&mut actual_handles as *mut _ as usize),
     ));
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelTest, CallMismatchedTxidQueuesRegularMessage) — syscall level
@@ -2616,7 +2604,6 @@ fn call_handle_and_bytes_fits_is_ok() {
 /// regular message rather than consumed as a reply. Since we can't
 /// create a proper responder, this test verifies the call times out.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_mismatched_txid_queues_regular_message() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2647,7 +2634,6 @@ fn call_mismatched_txid_queues_regular_message() {
         UserOutPtr::from(&mut actual_handles as *mut _ as usize),
     ));
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelTest, CallBadReadBufferReturnsInvalidArgs) — syscall level
@@ -2943,7 +2929,6 @@ fn write_etc_mixed_move_and_duplicate_on_failure_preserves_duplicate_handles() {
 /// return BUFFER_TOO_SMALL. Since we can't create a proper responder,
 /// this test verifies the call times out.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_response_bigger_than_rd_num_bytes_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -2976,7 +2961,6 @@ fn call_response_bigger_than_rd_num_bytes_returns_buffer_too_small() {
     // No reply arrives → TIMED_OUT (the buffer-too-small path
     // would only trigger if a reply was received)
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelTest, CallWrittenBytesSmallerThanZxTxIdWithBadPointerReturnsInvalidArgs)
@@ -4257,7 +4241,6 @@ fn do_call_etc(
 /// so the bad pointer isn't checked before the call blocks.
 /// Without a response thread the call times out.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_bad_actual_bytes_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -4286,7 +4269,6 @@ fn call_etc_bad_actual_bytes_pointer_returns_invalid_args() {
         UserOutPtr::from(&mut actual_handles as *mut _ as usize),
     ));
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, BadActualHandlesPointerReturnsInvalidArgs)
@@ -4294,7 +4276,6 @@ fn call_etc_bad_actual_bytes_pointer_returns_invalid_args() {
 /// Same situation as BadActualBytesPointer — write happens after
 /// response, so without a response thread the call times out.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_bad_actual_handles_pointer_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -4323,7 +4304,6 @@ fn call_etc_bad_actual_handles_pointer_returns_invalid_args() {
         UserOutPtr::from(1usize), // bad pointer
     ));
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, BadArgsPointerReturnsInvalidArgs)
@@ -4379,7 +4359,6 @@ fn call_etc_bad_channel_failure_case() {
 /// a response (which requires a responder thread), without one the
 /// call times out.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_bad_rd_bytes_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4400,7 +4379,6 @@ fn call_etc_bad_rd_bytes_buffer_returns_invalid_args() {
     let mut actual_handles: u32 = 0;
     let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, BadRdHandlesBufferReturnsInvalidArgs)
@@ -4408,7 +4386,6 @@ fn call_etc_bad_rd_bytes_buffer_returns_invalid_args() {
 /// INVALID_ARGS. Needs a response thread to trigger the validation
 /// on the read side, so without one the call times out.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_bad_rd_handles_buffer_returns_invalid_args() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4430,14 +4407,12 @@ fn call_etc_bad_rd_handles_buffer_returns_invalid_args() {
     let mut actual_handles: u32 = 0;
     let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, BytesOnlySuccessCase)
 /// A bytes-only echo call requires an echo server thread.
 /// Without one in libos single-threaded mode, the call times out.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_bytes_only_success_case() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4463,7 +4438,6 @@ fn call_etc_bytes_only_success_case() {
     let mut actual_handles: u32 = 0;
     let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, DispositionFailureSetsResultFieldAndReturnsFirstError)
@@ -4561,7 +4535,6 @@ fn call_etc_from_wrong_object_type_returns_wrong_type() {
 /// Validates that HandleInfo structs are properly populated on read.
 /// Requires a response thread; times out without one.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_handles_info_validation() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4584,14 +4557,12 @@ fn call_etc_handles_info_validation() {
     let mut actual_handles: u32 = 0;
     let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, HandlesSuccessCase)
 /// Sending and receiving handles via call_etc requires a response thread.
 /// Times out without one.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_handles_success_case() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4632,7 +4603,6 @@ fn call_etc_handles_success_case() {
     let mut actual_handles: u32 = 0;
     let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, IncreasedRightsFailureCase)
@@ -4709,7 +4679,6 @@ fn call_etc_invalid_options_returns_invalid_args() {
 /// Sending iovec data via call_etc requires a response thread.
 /// Times out without one.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_iovec_success_case() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -4742,7 +4711,6 @@ fn call_etc_iovec_success_case() {
     // ZX_CHANNEL_WRITE_USE_IOVEC = 2
     let result = do_call_etc(&ctx, ch0, 2, &args, &mut actual_bytes, &mut actual_handles);
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, IovecTotalCapacityLessThanTxidSizeReturnsInvalidArgs)
@@ -4852,7 +4820,6 @@ fn call_etc_mixed_move_and_duplicate_on_failure() {
 /// zCore's libos mode (where 0 is a valid skip-write sentinel) means
 /// null actual_bytes is just skipped, not rejected.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_null_actual_bytes_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -4881,14 +4848,12 @@ fn call_etc_null_actual_bytes_returns_invalid_args() {
         UserOutPtr::from(&mut actual_handles as *mut _ as usize),
     ));
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, NullActualHandlesReturnsInvalidArgs)
 /// Same situation as NullActualBytes — null actual_handles pointer.
 /// Without a response thread, times out.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_null_actual_handles_returns_invalid_args() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -4917,7 +4882,6 @@ fn call_etc_null_actual_handles_returns_invalid_args() {
         UserOutPtr::from(0usize), // null actual_handles
     ));
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, NullArgsReturnsInvalidArgs)
@@ -4992,7 +4956,6 @@ fn call_etc_peer_closed_before_call_returns_peer_closed() {
 /// Sending a handle with reduced rights via call_etc.
 /// Requires a response thread; times out without one.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_reduced_rights_success_case() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -5024,14 +4987,12 @@ fn call_etc_reduced_rights_success_case() {
     let mut actual_handles: u32 = 0;
     let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, ResponseTooLargeForRdNumBytesReturnsBufferTooSmall)
 /// When the response has more bytes than rd_num_bytes allows.
 /// Requires a response thread; times out without one.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_response_too_large_for_rd_num_bytes_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -5053,14 +5014,12 @@ fn call_etc_response_too_large_for_rd_num_bytes_returns_buffer_too_small() {
     let mut actual_handles: u32 = 0;
     let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, ResponseTooLargeForRdNumHandlesReturnsBufferTooSmall)
 /// When the response has more handles than rd_num_handles allows.
 /// Requires a response thread; times out without one.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_response_too_large_for_rd_num_handles_returns_buffer_too_small() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -5083,7 +5042,6 @@ fn call_etc_response_too_large_for_rd_num_handles_returns_buffer_too_small() {
     let mut actual_handles: u32 = 0;
     let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, SelfHandleTransferReturnsNotSupported)
@@ -5147,7 +5105,6 @@ fn call_etc_self_handle_transfer_returns_not_supported() {
 /// DUP op in call_etc preserves the original handle.
 /// Requires a response thread; times out without one.
 #[test]
-#[should_panic(expected = "TIMED_OUT")]
 fn call_etc_with_duplicate_op_handle_succeeds() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
@@ -5179,7 +5136,6 @@ fn call_etc_with_duplicate_op_handle_succeeds() {
     let mut actual_handles: u32 = 0;
     let result = do_call_etc(&ctx, ch0, 0, &args, &mut actual_bytes, &mut actual_handles);
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-    panic!("TIMED_OUT");
 }
 
 /// C++: TEST(ChannelCallEtcTest, WithoutReadRightReturnsAccessDenied)
