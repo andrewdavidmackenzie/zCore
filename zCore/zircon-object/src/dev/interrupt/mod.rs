@@ -49,7 +49,9 @@ struct InterruptInner {
 
 impl Drop for Interrupt {
     fn drop(&mut self) {
-        self.destroy().unwrap();
+        // Ignore errors during cleanup — the interrupt may already
+        // be destroyed or in an inconsistent state.
+        let _ = self.destroy();
     }
 }
 
@@ -343,6 +345,8 @@ bitflags! {
         const MODE_EDGE_BOTH = 5 << 1;
         /// Virtual interrupt.
         const VIRTUAL = 0x10;
+        /// Wake vector — interrupt can wake from suspend.
+        const WAKE_VECTOR = 0x20;
     }
 }
 
