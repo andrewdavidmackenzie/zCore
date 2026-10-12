@@ -245,12 +245,15 @@ fn process_get_info_runtime() {
 }
 
 /// C++: TEST(ProcessTest, GetInfoRuntimeV1)
-/// Same as GetInfoRuntime but for V1 runtime info.
+/// V1 backwards-compat API — zCore implements V2 only, will not implement V1.
+/// Permanently skipped.
 #[test]
-#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
-#[should_panic(expected = "not yet implemented")]
+#[ignore = "V1 backwards-compat API — zCore implements V2 only, will not implement"]
 fn process_get_info_runtime_v1() {
-    unimplemented!("not yet implemented");
+    // ZX_INFO_TASK_RUNTIME_V1 is a backwards-compatibility topic for the V1
+    // task runtime info struct. zCore only implements V2. This test will never
+    // pass and should remain permanently ignored.
+    unreachable!("V1 API not implemented and will not be");
 }
 
 /// Process status transitions: Init -> Exited.

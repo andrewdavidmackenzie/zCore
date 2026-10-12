@@ -22,6 +22,7 @@ ChannelTest.NoSpuriousReadableSignalWhenRacing
 ChannelInternalTest.TransferChannelWithPendingCall
 ProcessTest.ProcessWaitAsyncCancelSelf
 ProcessTest.GetInfoRuntime
+# V1 backwards-compat API — zCore implements V2 only, will not implement V1
 ProcessTest.GetInfoRuntimeV1
 
 # ── Thread suspend / register state (cooperative scheduler) ─────────
