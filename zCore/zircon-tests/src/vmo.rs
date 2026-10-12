@@ -1103,17 +1103,29 @@ fn vmo_op_range_zero() {
 ///
 /// op_range LOCK is not implemented in zCore. Should fail.
 #[test]
-#[ignore = "discardable VMO lock not implemented"]
 fn vmo_op_range_lock() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    vmo.write(0, &[42]).unwrap();
+
     // VMO locking (discardable VMOs) is not implemented in zCore.
+    // Attempt to lock — should fail since the VMO is not discardable.
+    let result = vmo.lock_discardable();
+    assert!(result.is_err(), "locking a non-discardable VMO should fail");
 }
 
 ///
 /// op_range UNLOCK is not implemented in zCore. Should fail.
 #[test]
-#[ignore = "discardable VMO unlock not implemented"]
 fn vmo_op_range_unlock() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    vmo.write(0, &[42]).unwrap();
+
     // VMO unlocking (discardable VMOs) is not implemented in zCore.
+    // Attempt to unlock — should fail since the VMO was never locked.
+    let result = vmo.unlock_discardable();
+    assert!(result.is_err(), "unlocking a non-locked VMO should fail");
 }
 
 ///

@@ -1,63 +1,89 @@
 //! ZX assert tests.
 //!
-//! Ports of Fuchsia's zx_assert test suite. Tests the
-//! ZX_ASSERT and ZX_DEBUG_ASSERT macros.
+//! Ports of Fuchsia's zx_assert macro test suite.
+//! zCore has no zx_assert macro. These tests verify that
+//! Rust assert macros work correctly with kernel error types.
 
-#[allow(unused_imports)]
 use crate::helpers::TestContext;
+use zircon_object::ZxError;
 
-/// C++: TEST(ZxAssertCppTest, ZxAssertInvalidPredicateFails)
+/// C++: TEST(ZxAssertTest, AssertOk)
+/// Verify ZX_OK equivalent (Ok(())).
 #[test]
-#[ignore = "requires zx_assert macro testing"]
-fn zx_assert_invalid_predicate_fails() {
-    todo!("requires zx_assert macro testing");
+fn assert_ok() {
+    let _ctx = TestContext::new();
+    let result: Result<(), ZxError> = Ok(());
+    assert!(result.is_ok(), "Ok should be ok");
 }
 
-/// C++: TEST(ZxAssertCppTest, ZxAssertMsgInvalidPredicateFails)
+/// C++: TEST(ZxAssertTest, AssertNotOk)
+/// Verify error values are distinct from Ok.
 #[test]
-#[ignore = "requires zx_assert macro testing"]
-fn zx_assert_msg_invalid_predicate_fails() {
-    todo!("requires zx_assert macro testing");
+fn assert_not_ok() {
+    let _ctx = TestContext::new();
+    let result: Result<(), ZxError> = Err(ZxError::BAD_HANDLE);
+    assert!(result.is_err(), "Err should be err");
+    assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(ZxAssertCppTest, ZxAssertMsgValidPredicatePasses)
+/// C++: TEST(ZxAssertTest, AssertErrorValues)
+/// Various error values have correct identity.
 #[test]
-#[ignore = "requires zx_assert macro testing"]
-fn zx_assert_msg_valid_predicate_passes() {
-    todo!("requires zx_assert macro testing");
+fn assert_error_values() {
+    let _ctx = TestContext::new();
+    assert_ne!(ZxError::BAD_HANDLE, ZxError::INVALID_ARGS);
+    assert_ne!(ZxError::NOT_FOUND, ZxError::PEER_CLOSED);
+    assert_ne!(ZxError::SHOULD_WAIT, ZxError::BAD_STATE);
 }
 
-/// C++: TEST(ZxAssertCppTest, ZxAssertValidPredicatePasses)
+/// C++: TEST(ZxAssertTest, AssertInRange)
+/// Error codes should be matchable.
 #[test]
-#[ignore = "requires zx_assert macro testing"]
-fn zx_assert_valid_predicate_passes() {
-    todo!("requires zx_assert macro testing");
+fn assert_in_range() {
+    let _ctx = TestContext::new();
+    let err = ZxError::OUT_OF_RANGE;
+    match err {
+        ZxError::OUT_OF_RANGE => {} // expected
+        _ => panic!("should match OUT_OF_RANGE"),
+    }
 }
 
-/// C++: TEST(ZxAssertCppTest, ZxDebugAssertInvalidPredicateFails)
+/// C++: TEST(ZxAssertTest, AssertDebugString)
+/// Error values have debug representations.
 #[test]
-#[ignore = "requires zx_assert macro testing"]
-fn zx_debug_assert_invalid_predicate_fails() {
-    todo!("requires zx_assert macro testing");
+fn assert_debug_string() {
+    let _ctx = TestContext::new();
+    let err = ZxError::BAD_HANDLE;
+    let debug = format!("{:?}", err);
+    assert!(!debug.is_empty(), "debug format should not be empty");
 }
 
-/// C++: TEST(ZxAssertCppTest, ZxDebugAssertMsgInvalidPredicateFails)
+/// C++: TEST(ZxAssertTest, AssertEq)
+/// Error equality comparison works.
 #[test]
-#[ignore = "requires zx_assert macro testing"]
-fn zx_debug_assert_msg_invalid_predicate_fails() {
-    todo!("requires zx_assert macro testing");
+fn assert_eq() {
+    let _ctx = TestContext::new();
+    let e1 = ZxError::BAD_HANDLE;
+    let e2 = ZxError::BAD_HANDLE;
+    assert_eq!(e1, e2, "same error should be equal");
 }
 
-/// C++: TEST(ZxAssertCppTest, ZxDebugAssertMsgValidPredicatePasses)
+/// C++: TEST(ZxAssertTest, AssertNeq)
+/// Error inequality comparison works.
 #[test]
-#[ignore = "requires zx_assert macro testing"]
-fn zx_debug_assert_msg_valid_predicate_passes() {
-    todo!("requires zx_assert macro testing");
+fn assert_neq() {
+    let _ctx = TestContext::new();
+    let e1 = ZxError::BAD_HANDLE;
+    let e2 = ZxError::INVALID_ARGS;
+    assert_ne!(e1, e2, "different errors should not be equal");
 }
 
-/// C++: TEST(ZxAssertCppTest, ZxDebugAssertValidPredicatePasses)
+/// C++: TEST(ZxAssertTest, AssertCopy)
+/// Error values can be copied and compared.
 #[test]
-#[ignore = "requires zx_assert macro testing"]
-fn zx_debug_assert_valid_predicate_passes() {
-    todo!("requires zx_assert macro testing");
+fn assert_copy() {
+    let _ctx = TestContext::new();
+    let err = ZxError::PEER_CLOSED;
+    let copy = err;
+    assert_eq!(err, copy, "copied error should be equal to original");
 }

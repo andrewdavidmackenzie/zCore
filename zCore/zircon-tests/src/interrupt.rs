@@ -63,9 +63,10 @@ fn interrupt_unbind() {
 ///
 /// Waiting on an interrupt requires async context. Left as stub.
 #[test]
-#[ignore = "interrupt wait not available in libos mode"]
+#[ignore = "would hang: interrupt.wait() blocks indefinitely without a trigger source in libos mode"]
 fn interrupt_wait() {
     // Requires async context and real interrupt delivery.
+    // This test would block forever waiting for an interrupt.
 }
 
 /// Acknowledging an interrupt — various error paths.
@@ -134,9 +135,10 @@ fn interrupt_virtual_interrupt() {
 
 /// Waiting on a virtual interrupt requires async context. Left as stub.
 #[test]
-#[ignore = "interrupt wait not available in libos mode"]
+#[ignore = "would hang: interrupt.wait() blocks indefinitely without a trigger source in libos mode"]
 fn interrupt_virtual_interrupt_wait() {
     // Requires async context and real interrupt delivery.
+    // This test would block forever waiting for a virtual interrupt.
 }
 
 /// C++: TEST(InterruptTest, BindPort)
