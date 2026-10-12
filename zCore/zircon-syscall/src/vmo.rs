@@ -250,6 +250,10 @@ impl Syscall<'_> {
         if !parent_rights.contains(Rights::DUPLICATE | Rights::READ) {
             return Err(ZxError::ACCESS_DENIED);
         }
+        // Discardable VMOs cannot have children.
+        if vmo.is_discardable() {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         let child_vmo = if options.contains(VmoCloneFlags::REFERENCE) {
             // A reference child is a transparent alias that shares
             // pages with the parent. offset and size must both be 0.
@@ -360,8 +364,7 @@ impl Syscall<'_> {
         proc.check_policy(PolicyCondition::NewVMO)?;
         proc.get_resource(resource)?
             .validate_ranged_resource(ResourceKind::MMIO, paddr, size)?;
-        let size = roundup_pages(size);
-        if size == 0 || !page_aligned(paddr) {
+        if size == 0 || !page_aligned(size) || !page_aligned(paddr) {
             return Err(ZxError::INVALID_ARGS);
         }
         if paddr.overflowing_add(size).1 {
@@ -529,7 +532,11 @@ impl Syscall<'_> {
                     let mut state = [0u8; 32];
                     state[0..8].copy_from_slice(&(offset as u64).to_le_bytes());
                     state[8..16].copy_from_slice(&(len as u64).to_le_bytes());
-                    buf.write_array(&state)?;
+                    if let Err(e) = buf.write_array(&state) {
+                        // Undo the lock if the output write fails.
+                        let _ = vmo.unlock_discardable();
+                        return Err(e.into());
+                    }
                 }
                 Ok(())
             }
