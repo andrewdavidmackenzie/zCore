@@ -370,7 +370,7 @@ fn write_bad_bytes_pointer_returns_invalid_args() {
         h0,
         0,
         UserInPtr::from(0usize), // null bytes pointer
-        10,                       // non-zero size
+        10,                      // non-zero size
         UserInPtr::from(0usize),
         0,
     );
@@ -389,7 +389,7 @@ fn write_null_bytes_with_non_zero_size_returns_invalid_args() {
         h0,
         0,
         UserInPtr::from(0usize), // null
-        1,                        // non-zero
+        1,                       // non-zero
         UserInPtr::from(0usize),
         0,
     );
@@ -411,7 +411,7 @@ fn write_null_handles_with_non_zero_count_returns_invalid_args() {
         UserInPtr::from(data.as_ptr() as usize),
         data.len() as u32,
         UserInPtr::from(0usize), // null handles pointer
-        1,                        // non-zero handle count
+        1,                       // non-zero handle count
     );
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
@@ -727,7 +727,7 @@ fn read_may_discard_with_null_buffer_discards_data_returns_buffer_too_small() {
     let mut actual_handles: u32 = 0;
     let result = sc.sys_channel_read(
         h1,
-        1, // MAY_DISCARD
+        1,                        // MAY_DISCARD
         UserOutPtr::from(0usize), // null buffer
         0,
         0, // num_bytes = 0, too small for 5-byte message
@@ -1007,7 +1007,7 @@ fn write_etc_bad_handles_pointer_returns_invalid_args() {
         UserInPtr::from(data.as_ptr() as usize),
         data.len() as u32,
         hal_impl::user::UserInOutPtr::from(0usize), // null handles pointer
-        1,                                            // non-zero handle count
+        1,                                          // non-zero handle count
     );
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }

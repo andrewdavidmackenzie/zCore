@@ -235,9 +235,9 @@ fn port_async_wait_invalid_option() {
     let result = sc.sys_object_wait_async(
         event_h,
         port_h,
-        0,                                       // key
+        0,                                              // key
         zircon_object::object::Signal::READABLE.bits(), // signals
-        0xFF,                                    // invalid options
+        0xFF,                                           // invalid options
     );
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }

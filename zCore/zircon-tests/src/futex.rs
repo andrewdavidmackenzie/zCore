@@ -148,8 +148,13 @@ fn wait_timeout() {
     // Create a no-op waker for polling
     fn noop_raw_waker() -> RawWaker {
         fn no_op(_: *const ()) {}
-        fn clone_fn(_: *const ()) -> RawWaker { noop_raw_waker() }
-        RawWaker::new(core::ptr::null(), &RawWakerVTable::new(clone_fn, no_op, no_op, no_op))
+        fn clone_fn(_: *const ()) -> RawWaker {
+            noop_raw_waker()
+        }
+        RawWaker::new(
+            core::ptr::null(),
+            &RawWakerVTable::new(clone_fn, no_op, no_op, no_op),
+        )
     }
     let waker = unsafe { Waker::from_raw(noop_raw_waker()) };
     let mut cx = Context::from_waker(&waker);

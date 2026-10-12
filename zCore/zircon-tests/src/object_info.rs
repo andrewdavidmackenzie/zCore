@@ -349,10 +349,9 @@ fn vmo_info_invalid_handle() {
 #[test]
 fn process_info_handle_basic() {
     let ctx = TestContext::new();
-    let proc_h = ctx.proc.add_handle(Handle::new(
-        ctx.proc.clone(),
-        Rights::DEFAULT_PROCESS,
-    ));
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(ctx.proc.clone(), Rights::DEFAULT_PROCESS));
 
     let mut buf = [0u8; HANDLE_BASIC_SIZE];
     let (actual, avail) = get_info(&ctx, proc_h, TOPIC_HANDLE_BASIC, &mut buf).unwrap();
@@ -375,10 +374,9 @@ fn process_info_handle_basic_invalid_handle() {
 #[test]
 fn process_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
-    let proc_h = ctx.proc.add_handle(Handle::new(
-        ctx.proc.clone(),
-        Rights::DEFAULT_PROCESS,
-    ));
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(ctx.proc.clone(), Rights::DEFAULT_PROCESS));
 
     let mut buf = [0u8; 0];
     let err = get_info_err(&ctx, proc_h, TOPIC_HANDLE_BASIC, &mut buf);
@@ -395,9 +393,7 @@ const JOB_INFO_SIZE: usize = 16; // zx_info_job_t
 fn job_info_on_self() {
     let ctx = TestContext::new();
     let job = Job::root();
-    let job_h = ctx
-        .proc
-        .add_handle(Handle::new(job, Rights::DEFAULT_JOB));
+    let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
 
     let mut buf = [0u8; JOB_INFO_SIZE];
     let (actual, avail) = get_info(&ctx, job_h, TOPIC_JOB, &mut buf).unwrap();
@@ -421,9 +417,7 @@ fn job_info_invalid_handle() {
 fn job_info_zero_buffer() {
     let ctx = TestContext::new();
     let job = Job::root();
-    let job_h = ctx
-        .proc
-        .add_handle(Handle::new(job, Rights::DEFAULT_JOB));
+    let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
 
     let mut buf = [0u8; 0];
     let err = get_info_err(&ctx, job_h, TOPIC_JOB, &mut buf);
@@ -439,7 +433,9 @@ const TOPIC_HANDLE_VALID: u32 = 1;
 fn handle_valid_open_succeeds() {
     let ctx = TestContext::new();
     let event = Event::new();
-    let event_h = ctx.proc.add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
 
     // HandleValid does not use a buffer — pass empty.
     let mut buf = [0u8; 0];
@@ -452,7 +448,9 @@ fn handle_valid_open_succeeds() {
 fn handle_valid_closed_fails() {
     let ctx = TestContext::new();
     let event = Event::new();
-    let event_h = ctx.proc.add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
 
     // Remove the handle to simulate close.
     ctx.proc.remove_handle(event_h).unwrap();
@@ -515,7 +513,9 @@ const TIMER_INFO_SIZE: usize = 24; // zx_info_timer_t
 fn timer_info_on_self() {
     let ctx = TestContext::new();
     let timer = Timer::new();
-    let timer_h = ctx.proc.add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
+    let timer_h = ctx
+        .proc
+        .add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
 
     let mut buf = [0u8; TIMER_INFO_SIZE];
     let (actual, avail) = get_info(&ctx, timer_h, TOPIC_TIMER, &mut buf).unwrap();
@@ -539,7 +539,9 @@ fn timer_info_invalid_handle() {
 fn timer_info_zero_buffer() {
     let ctx = TestContext::new();
     let timer = Timer::new();
-    let timer_h = ctx.proc.add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
+    let timer_h = ctx
+        .proc
+        .add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
 
     let mut buf = [0u8; 0];
     let err = get_info_err(&ctx, timer_h, TOPIC_TIMER, &mut buf);
@@ -557,7 +559,9 @@ fn stream_info_on_self() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
     let stream = Stream::create(vmo, 0, 0);
-    let stream_h = ctx.proc.add_handle(Handle::new(stream, Rights::DEFAULT_STREAM));
+    let stream_h = ctx
+        .proc
+        .add_handle(Handle::new(stream, Rights::DEFAULT_STREAM));
 
     let mut buf = [0u8; STREAM_INFO_SIZE];
     let (actual, avail) = get_info(&ctx, stream_h, TOPIC_STREAM, &mut buf).unwrap();
@@ -582,7 +586,9 @@ fn stream_info_zero_buffer() {
     let ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
     let stream = Stream::create(vmo, 0, 0);
-    let stream_h = ctx.proc.add_handle(Handle::new(stream, Rights::DEFAULT_STREAM));
+    let stream_h = ctx
+        .proc
+        .add_handle(Handle::new(stream, Rights::DEFAULT_STREAM));
 
     let mut buf = [0u8; 0];
     let err = get_info_err(&ctx, stream_h, TOPIC_STREAM, &mut buf);

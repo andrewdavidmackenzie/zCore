@@ -763,8 +763,16 @@ fn get_info_socket_buffer_too_small() {
     // Object-level get_info always succeeds and returns full info
     let info = local.get_info();
     let dbg = format!("{:?}", info);
-    assert!(dbg.contains("rx_buf_max:"), "should contain rx_buf_max: {}", dbg);
-    assert!(dbg.contains("tx_buf_max:"), "should contain tx_buf_max: {}", dbg);
+    assert!(
+        dbg.contains("rx_buf_max:"),
+        "should contain rx_buf_max: {}",
+        dbg
+    );
+    assert!(
+        dbg.contains("tx_buf_max:"),
+        "should contain tx_buf_max: {}",
+        dbg
+    );
 }
 
 /// C++: TEST(SocketTest, GetInfoSocketWithoutInspectRightReturnsAccessDenied)
