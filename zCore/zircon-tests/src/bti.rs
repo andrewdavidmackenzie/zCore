@@ -193,3 +193,116 @@ fn name_support() {
     bti.set_name("test-bti");
     assert_eq!(bti.name(), "test-bti");
 }
+
+// ── Additional BTI tests ────────────────────────────────────────────
+
+/// C++: TEST(Bti, PinReadWrite)
+///
+/// Pin a VMO with both READ and WRITE permissions.
+#[test]
+fn pin_read_write() {
+    let _ctx = TestContext::new();
+    let (_iommu, bti) = create_iommu_bti();
+    let vmo = VmObject::new_paged(1);
+    vmo.write(0, b"rw data").unwrap();
+
+    let pmt = bti
+        .pin(
+            vmo,
+            0,
+            PAGE_SIZE,
+            IommuPerms::PERM_READ | IommuPerms::PERM_WRITE,
+        )
+        .unwrap();
+    assert_ne!(pmt.id(), 0);
+    pmt.unpin();
+}
+
+/// C++: TEST(Bti, PinMultipleVmos)
+///
+/// Pin multiple VMOs on the same BTI. All should coexist.
+#[test]
+fn pin_multiple_vmos() {
+    let _ctx = TestContext::new();
+    let (_iommu, bti) = create_iommu_bti();
+
+    let vmo1 = VmObject::new_paged(1);
+    let vmo2 = VmObject::new_paged(1);
+    let pmt1 = bti.pin(vmo1, 0, PAGE_SIZE, IommuPerms::PERM_READ).unwrap();
+    let pmt2 = bti.pin(vmo2, 0, PAGE_SIZE, IommuPerms::PERM_READ).unwrap();
+
+    assert_eq!(bti.get_info().pmo_count, 2);
+
+    pmt1.unpin();
+    assert_eq!(bti.get_info().pmo_count, 1);
+    pmt2.unpin();
+    assert_eq!(bti.get_info().pmo_count, 0);
+}
+
+/// C++: TEST(Bti, BtiKoidUnique)
+///
+/// Each BTI should have a unique KOID.
+#[test]
+fn bti_koid_unique() {
+    let _ctx = TestContext::new();
+    let (_iommu1, bti1) = create_iommu_bti();
+    let (_iommu2, bti2) = create_iommu_bti();
+    assert_ne!(bti1.id(), bti2.id());
+}
+
+/// C++: TEST(Bti, PmtKoid)
+///
+/// Each PMT (Pinned Memory Token) should have a unique KOID.
+#[test]
+fn pmt_koid() {
+    let _ctx = TestContext::new();
+    let (_iommu, bti) = create_iommu_bti();
+    let vmo1 = VmObject::new_paged(1);
+    let vmo2 = VmObject::new_paged(1);
+
+    let pmt1 = bti.pin(vmo1, 0, PAGE_SIZE, IommuPerms::PERM_READ).unwrap();
+    let pmt2 = bti.pin(vmo2, 0, PAGE_SIZE, IommuPerms::PERM_READ).unwrap();
+    assert_ne!(pmt1.id(), pmt2.id());
+
+    pmt1.unpin();
+    pmt2.unpin();
+}
+
+/// C++: TEST(Bti, IommuKoid)
+///
+/// Each IOMMU object should have a valid non-zero KOID.
+#[test]
+fn iommu_koid() {
+    let _ctx = TestContext::new();
+    let (_iommu, _bti) = create_iommu_bti();
+    assert_ne!(_iommu.id(), 0);
+}
+
+/// C++: TEST(Bti, PinZeroLengthFails)
+///
+/// Pinning with zero length should fail with INVALID_ARGS.
+#[test]
+fn pin_zero_length_fails() {
+    let _ctx = TestContext::new();
+    let (_iommu, bti) = create_iommu_bti();
+    let vmo = VmObject::new_paged(1);
+
+    let result = bti.pin(vmo, 0, 0, IommuPerms::PERM_READ);
+    assert!(result.is_err(), "pinning zero length should fail");
+}
+
+/// C++: TEST(Bti, PinLargeVmo)
+///
+/// Pin a large (multi-page) VMO. All pages should be pinned.
+#[test]
+fn pin_large_vmo() {
+    let _ctx = TestContext::new();
+    let (_iommu, bti) = create_iommu_bti();
+    let vmo = VmObject::new_paged(8); // 8 pages
+
+    let pmt = bti
+        .pin(vmo, 0, 8 * PAGE_SIZE, IommuPerms::PERM_READ)
+        .unwrap();
+    assert_ne!(pmt.id(), 0);
+    pmt.unpin();
+}
