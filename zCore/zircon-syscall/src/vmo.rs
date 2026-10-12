@@ -554,21 +554,30 @@ impl Syscall<'_> {
                 vmo.unlock_discardable()
             }
             VmoOpType::CacheSync | VmoOpType::CacheClean | VmoOpType::CacheCleanInvalidate => {
-                // These require READ rights per the Zircon ABI.
+                // Physical VMOs do not support kernel-managed cache ops.
+                if vmo.is_physical() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
                 if !rights.contains(Rights::READ) {
                     return Err(ZxError::ACCESS_DENIED);
+                }
+                if len == 0 {
+                    return Err(ZxError::INVALID_ARGS);
                 }
                 if offset.checked_add(len).is_none() || offset + len > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
-                // Cache operations are no-ops on most architectures;
-                // return success so callers can proceed.
                 Ok(())
             }
             VmoOpType::CacheInvalidate => {
-                // CACHE_INVALIDATE requires WRITE rights per the Zircon ABI.
+                if vmo.is_physical() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
                 if !rights.contains(Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
+                }
+                if len == 0 {
+                    return Err(ZxError::INVALID_ARGS);
                 }
                 if offset.checked_add(len).is_none() || offset + len > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
