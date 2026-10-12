@@ -1011,3 +1011,849 @@ fn write_etc_bad_handles_pointer_returns_invalid_args() {
     );
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
+
+// ============================================================
+// ChannelWriteEtcTest — write_etc with HandleDisposition
+// ============================================================
+
+/// Helper: build a HandleDisposition in a mutable buffer and return
+/// a UserInOutPtr to it. The caller keeps the buffer alive.
+///
+/// HandleDisposition layout: [op: u32, handle: u32, type_: u32, rights: u32, result: i32]
+fn make_disposition_buf(op: u32, handle: HandleValue, type_: u32, rights: u32) -> [u32; 5] {
+    let result: i32 = 0;
+    [op, handle, type_, rights, result as u32]
+}
+
+/// Helper: create a channel pair through kernel objects and add
+/// both endpoints to the process handle table with DEFAULT_CHANNEL
+/// rights.
+fn channel_pair_via_objects(ctx: &TestContext) -> (HandleValue, HandleValue) {
+    let (ch0, ch1) = zircon_object::ipc::Channel::create();
+    let h0 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        ch0,
+        zircon_object::object::Rights::DEFAULT_CHANNEL,
+    ));
+    let h1 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        ch1,
+        zircon_object::object::Rights::DEFAULT_CHANNEL,
+    ));
+    (h0, h1)
+}
+
+/// C++: TEST(ChannelWriteEtcTest, MoveSuccess) — syscall level
+/// write_etc with ZX_HANDLE_OP_MOVE transfers a handle to the peer.
+#[test]
+fn write_etc_move_success() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, ch1) = channel_pair_via_objects(&ctx);
+
+    // Create an event to transfer
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event.clone(),
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+
+    // Build disposition: MOVE, type=0 (any), rights=SAME_RIGHTS
+    let mut disp = make_disposition_buf(
+        0, // ZX_HANDLE_OP_MOVE
+        event_handle,
+        0, // type = don't care
+        zircon_object::object::Rights::SAME_RIGHTS.bits(),
+    );
+
+    let result = sc.sys_channel_write_etc(
+        ch0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        hal_impl::user::UserInOutPtr::from(disp.as_mut_ptr() as usize),
+        1,
+    );
+    assert!(result.is_ok());
+
+    // Event handle should be consumed from sender
+    assert!(ctx
+        .proc
+        .get_object::<zircon_object::signal::Event>(event_handle)
+        .is_err());
+
+    // Read the handle from ch1
+    let mut recv_handles = [0u32; 1];
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    sc.sys_channel_read(
+        ch1,
+        0,
+        UserOutPtr::from(0usize),
+        recv_handles.as_mut_ptr() as usize,
+        0,
+        1,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        false,
+    )
+    .unwrap();
+    assert_eq!(actual_handles, 1);
+
+    let received = ctx
+        .proc
+        .get_object::<zircon_object::signal::Event>(recv_handles[0])
+        .unwrap();
+    assert_eq!(received.id(), event.id());
+}
+
+/// C++: TEST(ChannelWriteEtcTest, DuplicateSuccess) — syscall level
+/// write_etc with ZX_HANDLE_OP_DUPLICATE keeps original and sends copy.
+#[test]
+fn write_etc_duplicate_success() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, ch1) = channel_pair_via_objects(&ctx);
+
+    // Create an event with DUPLICATE right
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event.clone(),
+        zircon_object::object::Rights::DEFAULT_EVENT, // includes DUPLICATE + TRANSFER
+    ));
+
+    // Build disposition: DUP, type=0, rights=SAME_RIGHTS
+    let mut disp = make_disposition_buf(
+        1, // ZX_HANDLE_OP_DUP
+        event_handle,
+        0,
+        zircon_object::object::Rights::SAME_RIGHTS.bits(),
+    );
+
+    let result = sc.sys_channel_write_etc(
+        ch0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        hal_impl::user::UserInOutPtr::from(disp.as_mut_ptr() as usize),
+        1,
+    );
+    assert!(result.is_ok());
+
+    // Original handle should still be valid
+    assert!(ctx
+        .proc
+        .get_object::<zircon_object::signal::Event>(event_handle)
+        .is_ok());
+
+    // Read the duplicated handle from ch1
+    let mut recv_handles = [0u32; 1];
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    sc.sys_channel_read(
+        ch1,
+        0,
+        UserOutPtr::from(0usize),
+        recv_handles.as_mut_ptr() as usize,
+        0,
+        1,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        false,
+    )
+    .unwrap();
+    assert_eq!(actual_handles, 1);
+
+    let received = ctx
+        .proc
+        .get_object::<zircon_object::signal::Event>(recv_handles[0])
+        .unwrap();
+    assert_eq!(received.id(), event.id());
+}
+
+/// C++: TEST(ChannelWriteEtcTest, ReducedRightsSuccess) — syscall level
+/// write_etc with MOVE and reduced rights succeeds.
+#[test]
+fn write_etc_reduced_rights_success() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, ch1) = channel_pair_via_objects(&ctx);
+
+    // Create event with full DEFAULT_EVENT rights
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event.clone(),
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+
+    // Request only TRANSFER right (a subset of DEFAULT_EVENT)
+    let reduced = zircon_object::object::Rights::TRANSFER;
+    let mut disp = make_disposition_buf(
+        0, // MOVE
+        event_handle,
+        0,
+        reduced.bits(),
+    );
+
+    let result = sc.sys_channel_write_etc(
+        ch0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        hal_impl::user::UserInOutPtr::from(disp.as_mut_ptr() as usize),
+        1,
+    );
+    assert!(result.is_ok());
+
+    // Read from ch1 using etc to verify reduced rights
+    let mut handle_info_raw = [0u32; 4]; // [handle, obj_type, rights, unused]
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    sc.sys_channel_read(
+        ch1,
+        0,
+        UserOutPtr::from(0usize),
+        handle_info_raw.as_mut_ptr() as usize,
+        0,
+        1,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        true, // is_etc
+    )
+    .unwrap();
+    assert_eq!(actual_handles, 1);
+    assert_eq!(handle_info_raw[2], reduced.bits()); // rights match
+}
+
+/// C++: TEST(ChannelWriteEtcTest, ExpandedRightsFailure) — syscall level
+/// write_etc requesting rights not in the source handle fails with INVALID_ARGS.
+#[test]
+fn write_etc_expanded_rights_failure() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = channel_pair_via_objects(&ctx);
+
+    // Create event with only TRANSFER + WAIT rights
+    let event = zircon_object::signal::Event::new();
+    let src_rights = zircon_object::object::Rights::TRANSFER | zircon_object::object::Rights::WAIT;
+    let event_handle = ctx
+        .proc
+        .add_handle(zircon_object::object::Handle::new(event, src_rights));
+
+    // Request TRANSFER + WAIT + READ — READ is not in src_rights
+    let expanded = src_rights | zircon_object::object::Rights::READ;
+    let mut disp = make_disposition_buf(
+        0, // MOVE
+        event_handle,
+        0,
+        expanded.bits(),
+    );
+
+    let result = sc.sys_channel_write_etc(
+        ch0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        hal_impl::user::UserInOutPtr::from(disp.as_mut_ptr() as usize),
+        1,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelWriteEtcTest, MissingDuplicateRightFailure) — syscall level
+/// DUP operation on a handle without DUPLICATE right fails with ACCESS_DENIED.
+#[test]
+fn write_etc_missing_duplicate_right_failure() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = channel_pair_via_objects(&ctx);
+
+    // Create event with TRANSFER but without DUPLICATE
+    let event = zircon_object::signal::Event::new();
+    let no_dup_rights =
+        zircon_object::object::Rights::TRANSFER | zircon_object::object::Rights::WAIT;
+    let event_handle = ctx
+        .proc
+        .add_handle(zircon_object::object::Handle::new(event, no_dup_rights));
+
+    // DUP with SAME_RIGHTS — should fail because source lacks DUPLICATE
+    let mut disp = make_disposition_buf(
+        1, // ZX_HANDLE_OP_DUP
+        event_handle,
+        0,
+        zircon_object::object::Rights::SAME_RIGHTS.bits(),
+    );
+
+    let result = sc.sys_channel_write_etc(
+        ch0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        hal_impl::user::UserInOutPtr::from(disp.as_mut_ptr() as usize),
+        1,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(ChannelWriteEtcTest, MissingTransferRightFailure) — syscall level
+/// MOVE operation on a handle without TRANSFER right fails with ACCESS_DENIED.
+#[test]
+fn write_etc_missing_transfer_right_failure() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = channel_pair_via_objects(&ctx);
+
+    // Create event WITHOUT TRANSFER right
+    let event = zircon_object::signal::Event::new();
+    let no_transfer = zircon_object::object::Rights::READ | zircon_object::object::Rights::WRITE;
+    let event_handle = ctx
+        .proc
+        .add_handle(zircon_object::object::Handle::new(event, no_transfer));
+
+    let mut disp = make_disposition_buf(
+        0, // MOVE
+        event_handle,
+        0,
+        zircon_object::object::Rights::SAME_RIGHTS.bits(),
+    );
+
+    let result = sc.sys_channel_write_etc(
+        ch0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        hal_impl::user::UserInOutPtr::from(disp.as_mut_ptr() as usize),
+        1,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(ChannelWriteEtcTest, TransferSelfFailure) — syscall level
+/// Attempting to transfer the channel's own handle returns NOT_SUPPORTED.
+#[test]
+fn write_etc_transfer_self_failure() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Create channel — we need the raw handle value
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let ch_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        ch0,
+        zircon_object::object::Rights::DEFAULT_CHANNEL,
+    ));
+
+    // Disposition points to the channel's own handle
+    let mut disp = make_disposition_buf(
+        0, // MOVE
+        ch_handle,
+        0,
+        zircon_object::object::Rights::SAME_RIGHTS.bits(),
+    );
+
+    let result = sc.sys_channel_write_etc(
+        ch_handle,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        hal_impl::user::UserInOutPtr::from(disp.as_mut_ptr() as usize),
+        1,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::NOT_SUPPORTED);
+}
+
+/// C++: TEST(ChannelWriteEtcTest, WrongTypeFailure) — syscall level
+/// Disposition specifies type=Channel but handle is an Event → WRONG_TYPE.
+#[test]
+fn write_etc_wrong_type_failure() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = channel_pair_via_objects(&ctx);
+
+    // Create an event
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+
+    // Disposition says type=4 (Channel), but handle is Event (type=5)
+    let mut disp = make_disposition_buf(
+        0, // MOVE
+        event_handle,
+        4, // Channel type — mismatch
+        zircon_object::object::Rights::SAME_RIGHTS.bits(),
+    );
+
+    let result = sc.sys_channel_write_etc(
+        ch0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        hal_impl::user::UserInOutPtr::from(disp.as_mut_ptr() as usize),
+        1,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
+}
+
+/// C++: TEST(ChannelWriteEtcTest, InvalidOperationFailure) — syscall level
+/// An invalid handle operation (not MOVE=0 or DUP=1) returns INVALID_ARGS.
+#[test]
+fn write_etc_invalid_operation_failure() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = channel_pair_via_objects(&ctx);
+
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+
+    // op=99 is invalid (neither MOVE=0 nor DUP=1)
+    let mut disp = make_disposition_buf(
+        99, // invalid op
+        event_handle,
+        0,
+        zircon_object::object::Rights::SAME_RIGHTS.bits(),
+    );
+
+    let result = sc.sys_channel_write_etc(
+        ch0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        hal_impl::user::UserInOutPtr::from(disp.as_mut_ptr() as usize),
+        1,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelWriteTest, MoveHandlesWithRightsCheckFailure) — syscall level
+/// channel_write (not write_etc) with a handle that lacks TRANSFER right
+/// fails with ACCESS_DENIED, and the handle is still consumed.
+#[test]
+fn write_move_handles_with_rights_check_failure() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Create event without TRANSFER right
+    let event = zircon_object::signal::Event::new();
+    let no_transfer = zircon_object::object::Rights::READ | zircon_object::object::Rights::WRITE;
+    let event_handle = ctx
+        .proc
+        .add_handle(zircon_object::object::Handle::new(event, no_transfer));
+
+    let handles_to_write = [event_handle];
+    let result = sc.sys_channel_write(
+        h0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        UserInPtr::from(handles_to_write.as_ptr() as usize),
+        1,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+
+    // Handle should be consumed regardless of the error
+    assert!(ctx
+        .proc
+        .get_object::<zircon_object::signal::Event>(event_handle)
+        .is_err());
+}
+
+// ============================================================
+// ChannelTest — channel_call argument validation tests
+// ============================================================
+
+/// Helper: build a ChannelCallArgs struct in memory and return
+/// a pointer suitable for UserInPtr<ChannelCallArgs>.
+///
+/// ChannelCallArgs layout (all usize-aligned pointers + u32 counts):
+/// ```
+/// wr_bytes:       UserInPtr<u8>       (usize)
+/// wr_handles:     UserInPtr<u32>      (usize)
+/// rd_bytes:       UserOutPtr<u8>      (usize)
+/// rd_handles:     UserOutPtr<u32>     (usize)
+/// wr_num_bytes:   u32
+/// wr_num_handles: u32
+/// rd_num_bytes:   u32
+/// rd_num_handles: u32
+/// ```
+#[repr(C)]
+#[derive(Debug)]
+struct TestChannelCallArgs {
+    wr_bytes: usize,
+    wr_handles: usize,
+    rd_bytes: usize,
+    rd_handles: usize,
+    wr_num_bytes: u32,
+    wr_num_handles: u32,
+    rd_num_bytes: u32,
+    rd_num_handles: u32,
+}
+
+/// C++: TEST(ChannelTest, CallFromWrongObjectTypeReturnsWrongType) — syscall level
+/// Passing an event handle to channel_call should return WRONG_TYPE.
+#[test]
+fn call_from_wrong_object_type_returns_wrong_type() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Create an event — not a channel
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT
+            | zircon_object::object::Rights::READ
+            | zircon_object::object::Rights::WRITE,
+    ));
+
+    let wr_data = [0u8; 4]; // minimum 4 bytes for txid
+    let mut rd_buf = [0u8; 64];
+    let mut rd_handles = [0u32; 4];
+    let args = TestChannelCallArgs {
+        wr_bytes: wr_data.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 4,
+        wr_num_handles: 0,
+        rd_num_bytes: 64,
+        rd_num_handles: 4,
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        event_handle,
+        0,
+        zircon_syscall::Deadline::from(0usize), // immediate deadline
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
+}
+
+/// C++: TEST(ChannelTest, CallInvalidOptionsReturnsInvalidArgs) — syscall level
+/// Non-zero invalid options should return INVALID_ARGS.
+#[test]
+fn call_invalid_options_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = syscall_channel_create(&ctx);
+
+    let wr_data = [0u8; 4];
+    let mut rd_buf = [0u8; 64];
+    let mut rd_handles = [0u32; 4];
+    let args = TestChannelCallArgs {
+        wr_bytes: wr_data.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 4,
+        wr_num_handles: 0,
+        rd_num_bytes: 64,
+        rd_num_handles: 4,
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        ch0,
+        0xFFFF, // invalid options
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, CallWithoutWriteRightReturnsAccessDenied) — syscall level
+/// Channel handle without WRITE right should return ACCESS_DENIED.
+#[test]
+fn call_without_write_right_returns_access_denied() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Create channel with READ only (no WRITE)
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let h0 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        ch0,
+        zircon_object::object::Rights::READ, // no WRITE
+    ));
+
+    let wr_data = [0u8; 4];
+    let mut rd_buf = [0u8; 64];
+    let mut rd_handles = [0u32; 4];
+    let args = TestChannelCallArgs {
+        wr_bytes: wr_data.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 4,
+        wr_num_handles: 0,
+        rd_num_bytes: 64,
+        rd_num_handles: 4,
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        h0,
+        0,
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(ChannelTest, CallWithoutReadRightReturnsAccessDenied) — syscall level
+/// Channel handle without READ right should return ACCESS_DENIED.
+#[test]
+fn call_without_read_right_returns_access_denied() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Create channel with WRITE only (no READ)
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let h0 = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        ch0,
+        zircon_object::object::Rights::WRITE, // no READ
+    ));
+
+    let wr_data = [0u8; 4];
+    let mut rd_buf = [0u8; 64];
+    let mut rd_handles = [0u32; 4];
+    let args = TestChannelCallArgs {
+        wr_bytes: wr_data.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 4,
+        wr_num_handles: 0,
+        rd_num_bytes: 64,
+        rd_num_handles: 4,
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        h0,
+        0,
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(ChannelTest, CallPayloadTooSmallReturnsInvalidArgs) — syscall level
+/// wr_num_bytes < 4 (txid header) should return INVALID_ARGS.
+#[test]
+fn call_payload_too_small_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = syscall_channel_create(&ctx);
+
+    let wr_data = [0u8; 2]; // only 2 bytes — too small for txid
+    let mut rd_buf = [0u8; 64];
+    let mut rd_handles = [0u32; 4];
+    let args = TestChannelCallArgs {
+        wr_bytes: wr_data.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 2, // < 4
+        wr_num_handles: 0,
+        rd_num_bytes: 64,
+        rd_num_handles: 4,
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        ch0,
+        0,
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, CallNullptrNumBytesIsInvalidArgs) — syscall level
+/// rd_num_bytes < 4 should return INVALID_ARGS (read buffer too small
+/// for the mandatory txid header).
+#[test]
+fn call_nullptr_num_bytes_is_invalid_args() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = syscall_channel_create(&ctx);
+
+    let wr_data = [0u8; 4];
+    let mut rd_buf = [0u8; 64];
+    let mut rd_handles = [0u32; 4];
+    let args = TestChannelCallArgs {
+        wr_bytes: wr_data.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 4,
+        wr_num_handles: 0,
+        rd_num_bytes: 0, // < 4 — invalid
+        rd_num_handles: 4,
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        ch0,
+        0,
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, CallNullptrNumHandlesInvalidArgs) — syscall level
+/// This C++ test checks that null actual_handles pointer triggers
+/// INVALID_ARGS. In zCore, rd_num_bytes < 4 is checked first and
+/// returns INVALID_ARGS before any pointer validation. We test the
+/// same code path: rd_num_bytes = 0 → INVALID_ARGS.
+#[test]
+fn call_nullptr_num_handles_invalid_args() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = syscall_channel_create(&ctx);
+
+    let wr_data = [0u8; 4];
+    let mut rd_buf = [0u8; 64];
+    let mut rd_handles = [0u32; 4];
+    let args = TestChannelCallArgs {
+        wr_bytes: wr_data.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 4,
+        wr_num_handles: 0,
+        rd_num_bytes: 2, // < 4 — triggers INVALID_ARGS early
+        rd_num_handles: 0,
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        ch0,
+        0,
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, CallInvalidArgsPointerReturnsInvalidArgs) — syscall level
+/// Null args pointer should return INVALID_ARGS when trying to read
+/// the ChannelCallArgs struct.
+#[test]
+fn call_invalid_args_pointer_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = syscall_channel_create(&ctx);
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        ch0,
+        0,
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(0usize), // null args pointer
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, CallWrittenBytesSmallerThanZxTxIdReturnsInvalidArgs) — syscall level
+/// wr_num_bytes = 3 (less than sizeof(zx_txid_t) = 4) should return
+/// INVALID_ARGS.
+#[test]
+fn call_written_bytes_smaller_than_zx_tx_id_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = syscall_channel_create(&ctx);
+
+    let wr_data = [0u8; 3]; // 3 < 4
+    let mut rd_buf = [0u8; 64];
+    let mut rd_handles = [0u32; 4];
+    let args = TestChannelCallArgs {
+        wr_bytes: wr_data.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 3, // < 4
+        wr_num_handles: 0,
+        rd_num_bytes: 64,
+        rd_num_handles: 4,
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        ch0,
+        0,
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, CallNotifiedOnPeerClosed) — syscall level
+/// When the peer is closed before channel_call, the call should
+/// return PEER_CLOSED (since the write succeeds but there is nobody
+/// to read/reply, and the peer-closed signal is already set).
+#[test]
+fn call_notified_on_peer_closed() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, ch1) = syscall_channel_create(&ctx);
+
+    // Close peer before calling
+    sc.sys_handle_close(ch1).unwrap();
+
+    let wr_data = [0u8; 4];
+    let mut rd_buf = [0u8; 64];
+    let mut rd_handles = [0u32; 4];
+    let args = TestChannelCallArgs {
+        wr_bytes: wr_data.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 4,
+        wr_num_handles: 0,
+        rd_num_bytes: 64,
+        rd_num_handles: 4,
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        ch0,
+        0,
+        zircon_syscall::Deadline::from(0usize), // immediate deadline
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
+}
