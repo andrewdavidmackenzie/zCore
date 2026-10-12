@@ -230,7 +230,7 @@ fn info_process_maps() {
     let mut avail: usize = 0;
     sc.sys_object_get_info(
         child_h,
-        12, // ZX_INFO_PROCESS_MAPS
+        13, // ZX_INFO_PROCESS_MAPS
         buf.as_mut_ptr() as usize,
         buf.len(),
         UserOutPtr::from(&mut actual as *mut _ as usize),
@@ -270,7 +270,7 @@ fn info_process_vmos() {
 
     // Query process VMOs. VmoInfo is 168 bytes (full size, V3+).
     // Use full-size entries via topic version 3 (upper 4 bits = 3).
-    let topic = 13 | (3 << 28); // ZX_INFO_PROCESS_VMOS, version 3
+    let topic = 14 | (3 << 28); // ZX_INFO_PROCESS_VMOS, version 3
     let entry_size = 168;
     let mut buf = vec![0u8; entry_size * 4]; // room for 4 entries
     let mut actual: usize = 0;

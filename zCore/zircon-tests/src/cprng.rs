@@ -11,9 +11,11 @@ use hal_impl::user::{UserInPtr, UserOutPtr};
 /// overwhelming probability). Tests zx_cprng_draw basic functionality.
 #[test]
 fn draw_non_zero() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let mut buf = [0u8; 32];
-    hal_impl::rand::fill_random(&mut buf);
+    let out = UserOutPtr::from(buf.as_mut_ptr() as usize);
+    sc.sys_cprng_draw_once(out, 32).unwrap();
     assert!(
         buf.iter().any(|&b| b != 0),
         "random buffer should contain at least one non-zero byte"
@@ -25,11 +27,14 @@ fn draw_non_zero() {
 /// probability). Tests randomness quality.
 #[test]
 fn draw_different() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let mut buf1 = [0u8; 32];
     let mut buf2 = [0u8; 32];
-    hal_impl::rand::fill_random(&mut buf1);
-    hal_impl::rand::fill_random(&mut buf2);
+    sc.sys_cprng_draw_once(UserOutPtr::from(buf1.as_mut_ptr() as usize), 32)
+        .unwrap();
+    sc.sys_cprng_draw_once(UserOutPtr::from(buf2.as_mut_ptr() as usize), 32)
+        .unwrap();
     assert_ne!(
         buf1, buf2,
         "two random buffers should differ (with overwhelming probability)"
@@ -40,10 +45,11 @@ fn draw_different() {
 /// Draw zero bytes -- should succeed without error (no-op).
 #[test]
 fn draw_zero_length() {
-    let _ctx = TestContext::new();
-    let mut buf = [0u8; 0];
-    // Should not panic.
-    hal_impl::rand::fill_random(&mut buf);
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    // Drawing zero bytes should succeed (no-op).
+    let out = UserOutPtr::from(0usize); // null is fine for zero length
+    sc.sys_cprng_draw_once(out, 0).unwrap();
 }
 
 ///
@@ -51,9 +57,11 @@ fn draw_zero_length() {
 /// Should succeed.
 #[test]
 fn draw_max_length() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let mut buf = [0u8; 256];
-    hal_impl::rand::fill_random(&mut buf);
+    let out = UserOutPtr::from(buf.as_mut_ptr() as usize);
+    sc.sys_cprng_draw_once(out, 256).unwrap();
     // With 256 random bytes, at least some should be non-zero.
     assert!(
         buf.iter().any(|&b| b != 0),

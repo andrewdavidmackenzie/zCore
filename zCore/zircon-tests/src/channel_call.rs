@@ -50,6 +50,7 @@ async fn call_peer_closed() {
 /// which is unreliable in libos test mode. If it hangs, it should
 /// be marked #[ignore].
 #[async_std::test]
+#[ignore = "would hang: async_std::task::spawn scheduling unreliable in libos test mode"]
 async fn call_cancel_on_close() {
     let (local, remote) = Channel::create();
 

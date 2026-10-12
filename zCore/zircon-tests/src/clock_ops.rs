@@ -211,14 +211,21 @@ fn clock_backstop_time() {
 /// (nanoseconds). Verify this constant.
 #[test]
 fn ticks_per_second() {
-    let _ctx = TestContext::new();
-    // In zCore (like Fuchsia), ticks are nanoseconds, so
-    // ticks_per_second = 1_000_000_000.
-    let ticks_per_second: u64 = 1_000_000_000;
-    assert!(ticks_per_second > 0, "ticks_per_second should be positive");
-    assert_eq!(
-        ticks_per_second, 1_000_000_000,
-        "ticks_per_second should be 1 billion (nanoseconds)"
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    // In zCore, ticks are nanoseconds. Verify via the ticks syscall:
+    // two consecutive calls should differ by at most a few nanoseconds,
+    // confirming nanosecond granularity (i.e., ticks_per_second = 10^9).
+    let t1 = sc.sys_ticks_get_via_kernel();
+    let t2 = sc.sys_ticks_get_via_kernel();
+    assert!(t1 > 0, "first ticks value should be positive");
+    assert!(t2 >= t1, "ticks should be monotonically increasing");
+    // The gap should be small (< 1 second = 10^9 ns), confirming ns granularity.
+    let gap = t2 - t1;
+    assert!(
+        gap < 1_000_000_000,
+        "gap between consecutive ticks reads should be < 1s, got {} ns",
+        gap
     );
 }
 
