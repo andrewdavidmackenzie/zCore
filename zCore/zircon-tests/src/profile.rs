@@ -1,102 +1,143 @@
 //! Profile tests.
 //!
 //! 1:1 ports of Fuchsia's zircon/system/utest/core/profile/ tests.
-//! Profiles require scheduler support which is limited in libos mode,
-//! so most tests use #[should_panic].
+//! Tests that can exercise the Profile kernel object directly are
+//! implemented with real assertions. Tests requiring scheduler
+//! integration (priority application, affinity, deadline) remain
+//! as stubs.
 
 use crate::helpers::TestContext;
+use zircon_object::object::KernelObject;
+use zircon_object::task::{Profile, ProfileInfo, ProfileInfoFlags};
+use zircon_object::ZxError;
 
 /// C++: TEST(ProfileTest, Create)
 ///
-/// Creating a profile requires a root job resource handle. Not fully
-/// available in libos mode.
+/// Creating a profile with valid parameters succeeds.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
 fn profile_create() {
     let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 16);
+    let profile = Profile::create(info).unwrap();
+    assert_eq!(profile.info.priority(), 16);
+    assert!(profile.info.flags().contains(ProfileInfoFlags::PRIORITY));
 }
 
-///
 /// Creating a profile with invalid parameters should fail.
-/// Not available in libos mode.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
 fn profile_create_invalid() {
     let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // No flags at all → INVALID_ARGS
+    let info = ProfileInfo::default();
+    assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
+
+    // Combining PRIORITY and DEADLINE → INVALID_ARGS
+    let info = ProfileInfo::with_priority(
+        (ProfileInfoFlags::PRIORITY | ProfileInfoFlags::DEADLINE).bits(),
+        10,
+    );
+    assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-///
-/// Setting a profile on a thread. Not available in libos mode.
+/// Setting a profile on a thread. Requires scheduler integration.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
+#[ignore = "profile application requires scheduler integration (not available in libos)"]
 fn profile_set_on_thread() {
-    let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // Requires real scheduler to apply priority/affinity.
 }
 
-///
-/// Setting a profile on a job. Not available in libos mode.
+/// Setting a profile on a job. Requires scheduler integration.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
+#[ignore = "profile application requires scheduler integration (not available in libos)"]
 fn profile_set_on_job() {
-    let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // Requires real scheduler to apply priority/affinity.
 }
 
-///
-/// Getting info from a profile. Not available in libos mode.
+/// Getting info from a profile — read back the stored ProfileInfo.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
 fn profile_get_info() {
     let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 24);
+    let profile = Profile::create(info).unwrap();
+
+    // Verify the info is retrievable
+    assert_eq!(profile.info.priority(), 24);
+    assert_eq!(profile.info.flags_raw, ProfileInfoFlags::PRIORITY.bits());
 }
 
-///
-/// Setting priority via profile. Not available in libos mode.
+/// Setting priority via profile. Requires scheduler integration.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
+#[ignore = "profile priority requires scheduler integration (not available in libos)"]
 fn profile_priority() {
-    let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // Requires real scheduler to apply priority.
 }
 
-///
-/// Setting CPU affinity via profile. Not available in libos mode.
+/// Setting CPU affinity via profile. Requires scheduler integration.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
+#[ignore = "profile affinity requires scheduler integration (not available in libos)"]
 fn profile_affinity() {
-    let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // Requires real scheduler to apply CPU affinity.
 }
 
-///
-/// Setting deadline parameters via profile. Not available in libos mode.
+/// Setting deadline parameters via profile. Requires scheduler integration.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
+#[ignore = "profile deadline requires scheduler integration (not available in libos)"]
 fn profile_deadline_parameters() {
-    let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // Requires real scheduler to apply deadline parameters.
 }
 
-///
-/// Profile with invalid parameters should fail. Not available in libos mode.
+/// Profile with invalid parameters should fail — various error paths.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
 fn profile_invalid_params() {
     let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+
+    // Priority out of range (> 31) → INVALID_ARGS
+    let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 100);
+    assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
+
+    // Negative priority → INVALID_ARGS
+    let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), -1);
+    assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
+
+    // CRITICAL without DEADLINE → INVALID_ARGS
+    let info = ProfileInfo::with_priority(
+        (ProfileInfoFlags::PRIORITY | ProfileInfoFlags::CRITICAL).bits(),
+        10,
+    );
+    assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
+
+    // NO_INHERIT with DEADLINE → INVALID_ARGS
+    let info = ProfileInfo::with_priority(
+        (ProfileInfoFlags::DEADLINE | ProfileInfoFlags::NO_INHERIT).bits(),
+        0,
+    );
+    assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
+
+    // MEMORY_PRIORITY combined with PRIORITY → INVALID_ARGS
+    let info = ProfileInfo::with_priority(
+        (ProfileInfoFlags::MEMORY_PRIORITY | ProfileInfoFlags::PRIORITY).bits(),
+        5,
+    );
+    assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
+
+    // Invalid flags bits → INVALID_ARGS
+    let info = ProfileInfo::with_priority(0xFFFF_FFFF, 0);
+    assert_eq!(Profile::create(info).unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-///
-/// Profile name property support. Not available in libos mode.
+/// Profile name property support — verify set_name/name via KernelObject.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
 fn profile_name_support() {
     let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 8);
+    let profile = Profile::create(info).unwrap();
+
+    // Default name is empty
+    assert!(profile.name().is_empty());
+
+    // Set and read back a name
+    profile.set_name("my-profile");
+    assert_eq!(profile.name(), "my-profile");
 }
 
 /// C++: TEST(ProfileTest, ApplySchedulingProfileToVmarIsOk)

@@ -1103,21 +1103,17 @@ fn vmo_op_range_zero() {
 ///
 /// op_range LOCK is not implemented in zCore. Should fail.
 #[test]
-#[should_panic(expected = "lock not implemented")]
+#[ignore = "discardable VMO lock not implemented"]
 fn vmo_op_range_lock() {
-    let _ctx = TestContext::new();
     // VMO locking (discardable VMOs) is not implemented in zCore.
-    panic!("lock not implemented");
 }
 
 ///
 /// op_range UNLOCK is not implemented in zCore. Should fail.
 #[test]
-#[should_panic(expected = "unlock not implemented")]
+#[ignore = "discardable VMO unlock not implemented"]
 fn vmo_op_range_unlock() {
-    let _ctx = TestContext::new();
     // VMO unlocking (discardable VMOs) is not implemented in zCore.
-    panic!("unlock not implemented");
 }
 
 ///

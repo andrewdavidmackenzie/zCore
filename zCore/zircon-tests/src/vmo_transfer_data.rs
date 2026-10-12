@@ -335,13 +335,11 @@ fn snapshot_child_dst() {
 /// so a true race cannot occur. This test verifies the basic scenario:
 /// create a snapshot child, then close the parent, then transfer from child.
 #[test]
-#[should_panic(expected = "not implemented")]
+#[ignore = "needs concurrent threads to race parent drop against transfer_data"]
 fn racy_drop_parent() {
     // The real C++ test uses std::thread to race a parent.reset() against
     // dst_vmo.transfer_data(). zCore's cooperative scheduler cannot reproduce
-    // this race, and the transfer_data syscall itself isn't implemented at the
-    // kernel-object level with page-move semantics.
-    unimplemented!("not implemented: threaded race in transfer_data");
+    // this race.
 }
 
 /// C++: TEST(VmoTransferDataTestCase, ReferenceChildSrc)

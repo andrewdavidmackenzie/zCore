@@ -216,21 +216,18 @@ fn clock_adjust_needs_resource() {
 /// with INVALID_ARGS. This requires mappable clock support which is not
 /// implemented in zCore.
 #[test]
-#[should_panic(expected = "not implemented")]
+#[ignore = "mappable clocks (ZX_CLOCK_OPT_MAPPABLE) not implemented"]
 fn fault_beyond_stream_size_returns_error() {
     // zCore does not implement ZX_CLOCK_OPT_MAPPABLE or vmar.map_clock.
-    // This test documents the expected behavior.
-    unimplemented!("not implemented: mappable clocks and map_clock syscall");
 }
 
 /// C++: TEST(ClockTest, MappableClockPaddingLeak)
 /// Verifies that padding bytes in a mapped clock structure are zeroed
 /// (not leaking kernel memory). Requires mappable clock support.
 #[test]
-#[should_panic(expected = "not implemented")]
+#[ignore = "mappable clocks (ZX_CLOCK_OPT_MAPPABLE) not implemented"]
 fn mappable_clock_padding_leak() {
     // zCore does not implement ZX_CLOCK_OPT_MAPPABLE or map_clock.
-    unimplemented!("not implemented: mappable clocks and map_clock syscall");
 }
 
 /// C++: TEST(ClockTest, MultithreadedContentionClockMonotonic)
@@ -238,9 +235,8 @@ fn mappable_clock_padding_leak() {
 /// always observe monotonically increasing values. Requires preemptive
 /// multi-threading which is not available in zCore's cooperative scheduler.
 #[test]
-#[should_panic(expected = "not implemented")]
+#[ignore = "requires preemptive multi-threaded scheduling"]
 fn multithreaded_contention_clock_monotonic() {
     // zCore uses a cooperative scheduler; it cannot run multiple threads
     // contending over clock reads in a stress test.
-    unimplemented!("not implemented: preemptive multi-threaded clock stress test");
 }

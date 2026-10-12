@@ -6,7 +6,7 @@
 
 use crate::helpers::{self, TestContext};
 use alloc::sync::Arc;
-use zircon_object::object::{KernelObject, Signal};
+use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::task::{Job, Process, Task, Thread, ThreadState, ThreadStateKind};
 
 extern crate alloc;
@@ -244,19 +244,33 @@ fn thread_read_state_not_suspended_fails() {
 
 ///
 /// Creates a thread and starts it with a basic entry function.
-/// zCore cannot run real userspace code in libos test mode, so this
-/// verifies that `start` transitions the thread to Running state.
-#[should_panic(expected = "zCore cannot execute real user entry in libos test mode")]
-#[test]
-fn thread_create_and_start() {
-    let _ctx = TestContext::new();
+/// Verifies that `start` transitions the thread to Running state
+/// using the test loop thread function.
+#[async_std::test]
+async fn thread_create_and_start() {
+    helpers::ensure_hal_init();
     let job = Job::root();
     let proc = Process::create(&job, "proc").unwrap();
-    let _thread = Thread::create(&proc, "t1").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
 
-    // In real Fuchsia this would start with a user entry point.
-    // zCore's libos mode can't execute real user code.
-    panic!("zCore cannot execute real user entry in libos test mode");
+    assert_eq!(thread.state(), ThreadState::New);
+
+    // Start the thread using the test loop.
+    thread.start(helpers::test_loop_thread_fn).unwrap();
+
+    async_std::task::yield_now().await;
+    assert!(
+        thread.signal().contains(Signal::THREAD_RUNNING),
+        "thread should be running after start"
+    );
+    assert_eq!(thread.state(), ThreadState::Running);
+
+    // Clean up.
+    thread.kill();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_TERMINATED)
+        .await;
+    assert_eq!(thread.state(), ThreadState::Dead);
 }
 
 ///
@@ -308,13 +322,43 @@ fn thread_name_property() {
 }
 
 ///
-/// Multiple threads in a process, wait on them all. Requires async
-/// infrastructure that zCore's libos test mode doesn't fully support.
-#[should_panic(expected = "multi-thread wait not supported in libos test mode")]
-#[test]
-fn thread_process_wait_many_threads() {
-    let _ctx = TestContext::new();
-    panic!("multi-thread wait not supported in libos test mode");
+/// Multiple threads in a process: start them all, kill them all,
+/// wait for each to terminate.
+#[async_std::test]
+async fn thread_process_wait_many_threads() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+
+    let t1 = Thread::create(&proc, "t1").unwrap();
+    let t2 = Thread::create(&proc, "t2").unwrap();
+    let t3 = Thread::create(&proc, "t3").unwrap();
+
+    // Start all three.
+    t1.start(helpers::test_loop_thread_fn).unwrap();
+    t2.start(helpers::test_loop_thread_fn).unwrap();
+    t3.start(helpers::test_loop_thread_fn).unwrap();
+
+    async_std::task::yield_now().await;
+
+    // All should be running.
+    assert!(t1.signal().contains(Signal::THREAD_RUNNING));
+    assert!(t2.signal().contains(Signal::THREAD_RUNNING));
+    assert!(t3.signal().contains(Signal::THREAD_RUNNING));
+
+    // Kill all.
+    t1.kill();
+    t2.kill();
+    t3.kill();
+
+    // Wait for all to terminate.
+    as_kobject(&t1).wait_signal(Signal::THREAD_TERMINATED).await;
+    as_kobject(&t2).wait_signal(Signal::THREAD_TERMINATED).await;
+    as_kobject(&t3).wait_signal(Signal::THREAD_TERMINATED).await;
+
+    assert_eq!(t1.state(), ThreadState::Dead);
+    assert_eq!(t2.state(), ThreadState::Dead);
+    assert_eq!(t3.state(), ThreadState::Dead);
 }
 
 ///
@@ -497,15 +541,40 @@ async fn thread_suspend_multiple() {
 }
 
 ///
-/// A thread suspending itself requires the thread to be running
-/// with actual execution context. In zCore's cooperative test mode,
-/// suspend on self is only meaningful for running threads — here we
-/// verify it works from the test harness side.
-#[should_panic(expected = "self-suspend requires preemptive scheduling")]
-#[test]
-fn thread_suspend_self() {
-    let _ctx = TestContext::new();
-    panic!("self-suspend requires preemptive scheduling");
+/// Suspend a running thread from the test harness, verify it enters
+/// Suspended state, then resume and clean up. This tests the suspend
+/// mechanism on a thread that has been started (the cooperative
+/// equivalent of self-suspend).
+#[async_std::test]
+async fn thread_suspend_self() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    thread.start(helpers::test_loop_thread_fn).unwrap();
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+
+    // Suspend the running thread.
+    thread.suspend();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_SUSPENDED)
+        .await;
+
+    assert!(thread.signal().contains(Signal::THREAD_SUSPENDED));
+    assert!(!thread.signal().contains(Signal::THREAD_RUNNING));
+
+    // Resume and clean up.
+    thread.resume();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_RUNNING)
+        .await;
+
+    thread.kill();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_TERMINATED)
+        .await;
 }
 
 ///
@@ -588,14 +657,37 @@ async fn thread_start_with_entry() {
 }
 
 ///
-/// Starting a thread that is already running should fail.
-/// zCore's Thread::start() doesn't currently guard against
-/// double-start — it unconditionally transitions to Running.
-#[should_panic(expected = "zCore does not guard against double-start")]
-#[test]
-fn thread_double_start_fails() {
-    let _ctx = TestContext::new();
-    panic!("zCore does not guard against double-start");
+/// Starting a thread that is already running should ideally fail
+/// with BAD_STATE (Fuchsia behavior). zCore's Thread::start()
+/// doesn't currently guard against this — it unconditionally
+/// transitions to Running. This test documents the current behavior:
+/// double-start succeeds (a known gap).
+#[async_std::test]
+async fn thread_double_start_fails() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    // First start should succeed.
+    thread.start(helpers::test_loop_thread_fn).unwrap();
+    async_std::task::yield_now().await;
+    assert_eq!(thread.state(), ThreadState::Running);
+
+    // Second start — zCore currently allows this (known gap).
+    // Fuchsia would return BAD_STATE here.
+    let result = thread.start(helpers::test_loop_thread_fn);
+    // Document: start() returns Ok even on double-start.
+    assert!(
+        result.is_ok(),
+        "zCore currently allows double-start (known gap vs Fuchsia)"
+    );
+
+    // Clean up.
+    thread.kill();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_TERMINATED)
+        .await;
 }
 
 ///
@@ -699,321 +791,414 @@ async fn thread_invalid_handle_start() {
 ///
 /// Suspend a thread blocked in zx_channel_call. Requires a real
 /// running thread blocked in a syscall — not possible in libos mode.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_suspend_in_channel_call() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_suspend_in_channel_call() {}
 
 ///
 /// Suspend a thread blocked in zx_port_wait. Requires preemptive
 /// scheduling to interrupt the blocked thread.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_suspend_in_port_wait() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_suspend_in_port_wait() {}
 
 ///
 /// Suspend a thread blocked in zx_nanosleep. Requires preemptive
 /// scheduling to interrupt the sleeping thread.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_suspend_in_sleep() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_suspend_in_sleep() {}
 
 ///
 /// Suspend a running thread, verify it stops executing, then resume
 /// it and verify it continues. Requires real concurrent execution.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_suspend_then_resume() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_suspend_then_resume() {}
 
 ///
 /// Suspend a thread N times, verify it requires N resumes. Requires
 /// concurrent thread execution to verify actual suspension.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_suspend_multiple_times() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_suspend_multiple_times() {}
 
 ///
 /// Set and get thread priority. zCore's cooperative scheduler does
 /// not implement priority-based scheduling.
-#[should_panic(expected = "thread priority not implemented")]
 #[test]
-fn thread_priority() {
-    let _ctx = TestContext::new();
-    panic!("thread priority not implemented");
-}
+#[ignore = "thread priority not implemented"]
+fn thread_priority() {}
 
 ///
 /// Set CPU affinity mask on a thread. zCore's cooperative scheduler
 /// does not support CPU affinity.
-#[should_panic(expected = "CPU affinity not implemented")]
 #[test]
-fn thread_affinity() {
-    let _ctx = TestContext::new();
-    panic!("CPU affinity not implemented");
-}
+#[ignore = "CPU affinity not implemented"]
+fn thread_affinity() {}
 
 ///
 /// Get/set the CPU mask for a thread. Requires multi-CPU support
 /// not available in zCore's cooperative scheduler.
-#[should_panic(expected = "CPU affinity not implemented")]
 #[test]
-fn thread_cpu_mask() {
-    let _ctx = TestContext::new();
-    panic!("CPU affinity not implemented");
-}
+#[ignore = "CPU affinity not implemented"]
+fn thread_cpu_mask() {}
 
 ///
 /// Set explicit CPU affinity via the profile API. Requires scheduler
 /// profile support not implemented in zCore.
-#[should_panic(expected = "CPU affinity not implemented")]
 #[test]
-fn thread_set_cpu_affinity() {
-    let _ctx = TestContext::new();
-    panic!("CPU affinity not implemented");
-}
+#[ignore = "CPU affinity not implemented"]
+fn thread_set_cpu_affinity() {}
 
 ///
 /// Register an exception channel, start a thread that immediately
 /// faults, verify the exception is delivered. Requires exception
 /// channel infrastructure with real thread execution.
-#[should_panic(expected = "needs exception channel with real execution")]
 #[test]
-fn thread_exception_on_start() {
-    let _ctx = TestContext::new();
-    panic!("needs exception channel with real execution");
-}
+#[ignore = "needs exception channel with real execution"]
+fn thread_exception_on_start() {}
 
 ///
-/// Verify default rights on a thread handle. Handle rights are a
-/// syscall-layer concept — the kernel object layer doesn't track
-/// per-handle rights directly.
-#[should_panic(expected = "handle rights are syscall-layer concept")]
+/// Verify default rights on a thread handle. Thread handles should
+/// have DEFAULT_THREAD rights which include BASIC, IO, PROPERTY,
+/// DESTROY, SIGNAL, and MANAGE_THREAD.
 #[test]
 fn thread_rights_basic() {
     let _ctx = TestContext::new();
-    panic!("handle rights are syscall-layer concept");
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    // Create a handle with default thread rights.
+    let handle = Handle::new(thread.clone(), Rights::DEFAULT_THREAD);
+    assert_eq!(handle.rights, Rights::DEFAULT_THREAD);
+
+    // Verify expected rights are present.
+    assert!(handle.rights.contains(Rights::DUPLICATE));
+    assert!(handle.rights.contains(Rights::TRANSFER));
+    assert!(handle.rights.contains(Rights::WAIT));
+    assert!(handle.rights.contains(Rights::INSPECT));
+    assert!(handle.rights.contains(Rights::READ));
+    assert!(handle.rights.contains(Rights::WRITE));
+    assert!(handle.rights.contains(Rights::GET_PROPERTY));
+    assert!(handle.rights.contains(Rights::SET_PROPERTY));
+    assert!(handle.rights.contains(Rights::DESTROY));
+    assert!(handle.rights.contains(Rights::SIGNAL));
+    assert!(handle.rights.contains(Rights::MANAGE_THREAD));
+
+    // Verify rights NOT expected on threads.
+    assert!(!handle.rights.contains(Rights::ENUMERATE));
+    assert!(!handle.rights.contains(Rights::MANAGE_PROCESS));
+    assert!(!handle.rights.contains(Rights::MANAGE_JOB));
+
+    // Add the thread handle to the process handle table and verify
+    // we can retrieve it with the correct rights.
+    let hv = proc.add_handle(Handle::new(thread.clone(), Rights::DEFAULT_THREAD));
+    let retrieved = proc
+        .get_object_with_rights::<Thread>(hv, Rights::MANAGE_THREAD)
+        .unwrap();
+    assert_eq!(retrieved.id(), thread.id());
+
+    // Retrieving with a right not in DEFAULT_THREAD should fail.
+    let result = proc.get_object_with_rights::<Thread>(hv, Rights::MANAGE_JOB);
+    assert_eq!(result.unwrap_err(), zircon_object::ZxError::ACCESS_DENIED);
 }
 
 ///
-/// A thread gets its own info via zx_object_get_info. Requires
-/// the calling thread to be a real Zircon thread with a handle
-/// to itself.
-#[should_panic(expected = "needs real Zircon thread context")]
+/// Verify that get_thread_info returns a valid ThreadInfo struct
+/// reflecting the thread's current state. While in real Fuchsia
+/// this is done via zx_object_get_info from the thread itself,
+/// we test the underlying kernel API directly.
 #[test]
 fn thread_get_info_self() {
     let _ctx = TestContext::new();
-    panic!("needs real Zircon thread context");
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    // ThreadInfo struct is returned without error on a New thread.
+    let _info = thread.get_thread_info();
+
+    // The thread state should be New (0).
+    assert_eq!(thread.state(), ThreadState::New);
+
+    // Kill the thread and verify info still works on a Dying thread.
+    thread.kill();
+    let _info = thread.get_thread_info();
+    let state = thread.state();
+    assert!(
+        state == ThreadState::Dying || state == ThreadState::Dead,
+        "state after kill should be Dying or Dead, got {:?}",
+        state
+    );
 }
 
 ///
 /// Verify all state transitions: New -> Running -> Suspended ->
-/// Running -> Dying -> Dead. Requires preemptive scheduling for
-/// reliable state observation during transitions.
-#[should_panic(expected = "needs preemptive scheduling")]
-#[test]
-fn thread_state_transitions() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
+/// Running -> Dying -> Dead using the async test infrastructure.
+#[async_std::test]
+async fn thread_state_transitions() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    // 1. New
+    assert_eq!(thread.state(), ThreadState::New);
+
+    // 2. New -> Running
+    thread.start(helpers::test_loop_thread_fn).unwrap();
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+    assert_eq!(thread.state(), ThreadState::Running);
+
+    // 3. Running -> Suspended
+    thread.suspend();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_SUSPENDED)
+        .await;
+    assert_eq!(thread.state(), ThreadState::Suspended);
+
+    // 4. Suspended -> Running
+    thread.resume();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_RUNNING)
+        .await;
+    assert_eq!(thread.state(), ThreadState::Running);
+
+    // 5. Running -> Dying -> Dead
+    thread.kill();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_TERMINATED)
+        .await;
+    assert_eq!(thread.state(), ThreadState::Dead);
 }
 
 ///
 /// Use zx_object_wait_async on a thread handle for TERMINATED signal.
 /// Requires a port + async wait infrastructure with real execution.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_wait_async() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_wait_async() {}
 
 ///
 /// Cancel an async wait on a thread handle. Requires port + async
 /// wait infrastructure with real execution.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_cancel_wait_async() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_cancel_wait_async() {}
 
 ///
 /// Obtain a suspend token and verify suspension. Drop the token to
 /// resume. Requires real concurrent execution.
-#[should_panic(expected = "suspend tokens not implemented")]
 #[test]
-fn thread_suspend_token() {
-    let _ctx = TestContext::new();
-    panic!("suspend tokens not implemented");
-}
+#[ignore = "suspend tokens not implemented"]
+fn thread_suspend_token() {}
 
 ///
 /// Kill a thread while it holds a suspend token. Thread should
 /// transition to Dead regardless. Requires concurrent execution.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_kill_in_suspend() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_kill_in_suspend() {}
 
 ///
 /// A thread exits (returns from entry) while suspended. The exit
 /// should take priority over the suspension. Requires real execution.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_exit_while_suspended() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_exit_while_suspended() {}
 
 ///
 /// Resume a thread that is stopped in an exception handler. Requires
 /// exception channel infrastructure with real thread execution.
-#[should_panic(expected = "needs exception channel with real execution")]
 #[test]
-fn thread_resume_from_exception() {
-    let _ctx = TestContext::new();
-    panic!("needs exception channel with real execution");
-}
+#[ignore = "needs exception channel with real execution"]
+fn thread_resume_from_exception() {}
 
 ///
-/// Create a thread with invalid arguments. In zCore, Thread::create
-/// takes a Process reference and a name — there are no invalid
-/// combinations at the kernel object level. This is a syscall-layer
-/// validation concern (bad handles, invalid options flags).
-#[should_panic(expected = "invalid args are syscall-layer validation")]
+/// Create a thread with invalid arguments via the syscall layer.
+/// Non-zero options should return INVALID_ARGS.
 #[test]
 fn thread_create_invalid_args() {
-    let _ctx = TestContext::new();
-    panic!("invalid args are syscall-layer validation");
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Add a process handle to create threads on.
+    let job = Job::root();
+    let target_proc = Process::create(&job, "target").unwrap();
+    let proc_h = ctx
+        .proc
+        .add_handle(Handle::new(target_proc, Rights::DEFAULT_PROCESS));
+
+    let name = b"test-thread";
+    let mut thread_h: zircon_object::object::HandleValue = 0;
+
+    // Non-zero options should fail with INVALID_ARGS.
+    let result = sc.sys_thread_create(
+        proc_h,
+        hal_impl::user::UserInPtr::from(name.as_ptr() as usize),
+        name.len(),
+        1, // invalid options
+        hal_impl::user::UserOutPtr::from(&mut thread_h as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), zircon_object::ZxError::INVALID_ARGS);
+
+    // Zero options should succeed.
+    let result = sc.sys_thread_create(
+        proc_h,
+        hal_impl::user::UserInPtr::from(name.as_ptr() as usize),
+        name.len(),
+        0,
+        hal_impl::user::UserOutPtr::from(&mut thread_h as *mut _ as usize),
+    );
+    assert!(result.is_ok());
+    assert_ne!(thread_h, 0);
 }
 
 // ── Bulk-ported thread tests (batch 2) ──────────────────────────────
 //
 // These tests require exception channels, suspension tokens, and
 // concurrent thread execution — features not available in libos
-// test mode. All are marked #[should_panic].
+// test mode. All are marked #[ignore].
 
 ///
 /// Suspend a thread that is stopped in an exception handler. The
 /// thread should remain suspended after the exception is resolved.
 /// Requires exception channel + real thread execution.
-#[should_panic(expected = "needs exception channel infrastructure")]
 #[test]
-fn thread_suspend_in_exception() {
-    let _ctx = TestContext::new();
-    panic!("needs exception channel infrastructure");
-}
+#[ignore = "needs exception channel infrastructure"]
+fn thread_suspend_in_exception() {}
 
 ///
 /// Trigger an exception while a thread is suspended. The exception
 /// should be queued and delivered when the thread is resumed.
 /// Requires exception channel + suspension infrastructure.
-#[should_panic(expected = "needs exception channel infrastructure")]
 #[test]
-fn thread_exception_during_suspend() {
-    let _ctx = TestContext::new();
-    panic!("needs exception channel infrastructure");
+#[ignore = "needs exception channel infrastructure"]
+fn thread_exception_during_suspend() {}
+
+///
+/// Suspend a thread before starting it, then start it. The thread
+/// should enter Suspended state rather than Running, and resume
+/// only after an explicit resume call.
+#[async_std::test]
+async fn thread_start_suspended_thread() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    // Suspend before starting.
+    thread.suspend();
+
+    // Start the thread — it should become suspended because
+    // suspend_count > 0.
+    thread.start(helpers::test_loop_thread_fn).unwrap();
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+
+    // Thread should be suspended (not running).
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_SUSPENDED)
+        .await;
+    assert!(thread.signal().contains(Signal::THREAD_SUSPENDED));
+    assert!(!thread.signal().contains(Signal::THREAD_RUNNING));
+
+    // Resume — now it should run.
+    thread.resume();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_RUNNING)
+        .await;
+    assert!(thread.signal().contains(Signal::THREAD_RUNNING));
+
+    // Clean up.
+    thread.kill();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_TERMINATED)
+        .await;
 }
 
 ///
-/// Create a thread in suspended state and start it. The thread
-/// should not execute until explicitly resumed. Requires real
-/// thread execution infrastructure.
-#[should_panic(expected = "needs real thread execution")]
-#[test]
-fn thread_start_suspended_thread() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
-
-///
-/// Create a thread with bad arguments at the syscall level (invalid
-/// process handle, null name). Should return INVALID_ARGS or
-/// BAD_HANDLE. Requires syscall dispatch.
-#[should_panic(expected = "needs syscall-level validation")]
+/// Create a thread with bad arguments at the syscall level.
+/// Invalid process handle should return BAD_HANDLE. Using a
+/// non-process handle should return WRONG_TYPE.
 #[test]
 fn thread_create_with_bad_args() {
-    let _ctx = TestContext::new();
-    panic!("needs syscall-level validation");
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let name = b"bad-thread";
+    let mut thread_h: zircon_object::object::HandleValue = 0;
+
+    // Invalid handle value (0xDEAD) should return BAD_HANDLE.
+    let result = sc.sys_thread_create(
+        0xDEAD,
+        hal_impl::user::UserInPtr::from(name.as_ptr() as usize),
+        name.len(),
+        0,
+        hal_impl::user::UserOutPtr::from(&mut thread_h as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), zircon_object::ZxError::BAD_HANDLE);
+
+    // Use a job handle (wrong type) instead of a process handle.
+    let job = Job::root();
+    let job_h = ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB));
+    let result = sc.sys_thread_create(
+        job_h,
+        hal_impl::user::UserInPtr::from(name.as_ptr() as usize),
+        name.len(),
+        0,
+        hal_impl::user::UserOutPtr::from(&mut thread_h as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), zircon_object::ZxError::WRONG_TYPE);
 }
 
 ///
 /// Register multiple exception channels on a thread. Exceptions
 /// should be delivered to the most recently registered channel
 /// first. Requires exception channel infrastructure.
-#[should_panic(expected = "needs exception channel infrastructure")]
 #[test]
-fn thread_multiple_exception_channels() {
-    let _ctx = TestContext::new();
-    panic!("needs exception channel infrastructure");
-}
+#[ignore = "needs exception channel infrastructure"]
+fn thread_multiple_exception_channels() {}
 
 ///
 /// Close a suspend token while the thread is suspended. The thread
 /// should resume execution. Requires suspend token lifecycle.
-#[should_panic(expected = "needs real thread execution")]
 #[test]
-fn thread_close_suspend_token() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
+#[ignore = "needs real thread execution"]
+fn thread_close_suspend_token() {}
 
 ///
 /// Verify suspend token lifetime semantics: multiple tokens can be
 /// active, and the thread resumes only when all tokens are closed.
 /// Requires real thread execution.
-#[should_panic(expected = "needs real thread execution")]
 #[test]
-fn thread_suspend_token_lifetime() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
+#[ignore = "needs real thread execution"]
+fn thread_suspend_token_lifetime() {}
 
 ///
 /// Write to a suspended thread's register state and verify the
 /// modified state takes effect when the thread resumes. Requires
 /// real thread execution + register state.
-#[should_panic(expected = "needs real thread execution")]
 #[test]
-fn thread_write_state_modifies_execution() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
+#[ignore = "needs real thread execution"]
+fn thread_write_state_modifies_execution() {}
 
 ///
 /// Read the floating-point register state of a suspended thread.
 /// Requires real thread execution with FP state tracking.
-#[should_panic(expected = "needs real thread execution")]
 #[test]
-fn thread_read_state_float_point() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
+#[ignore = "needs real thread execution"]
+fn thread_read_state_float_point() {}
 
 ///
 /// Read the vector (SIMD) register state of a suspended thread.
 /// Requires real thread execution with vector state tracking.
-#[should_panic(expected = "needs real thread execution")]
 #[test]
-fn thread_read_state_vector() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
+#[ignore = "needs real thread execution"]
+fn thread_read_state_vector() {}
 
 // ============================================================================
 // Missing Fuchsia core-tests: Threads suite (56 tests)

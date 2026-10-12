@@ -672,11 +672,11 @@ fn stream_write_vector_with_append_mode() {
 /// content). This tests a race condition between resize and read.
 /// In libos mode, there are no true races, but we verify the
 /// boundary behavior.
-#[should_panic(expected = "needs resize-down race")]
 #[test]
+#[ignore = "needs concurrent resize-down race between threads"]
 fn stream_fault_beyond_stream_size_resize_down_race() {
-    let _ctx = TestContext::new();
-    panic!("needs resize-down race");
+    // This test needs concurrent threads to race a VMO resize-down against
+    // a stream read at a seek position beyond the new size.
 }
 
 /// C++: TEST(StreamTestCase, AppendSuppliesZeroes)

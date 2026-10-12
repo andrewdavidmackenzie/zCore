@@ -40,12 +40,28 @@ fn nested_job_hierarchy() {
 
 ///
 /// Kill a job and verify all child jobs and processes are also
-/// killed. Requires process execution for full verification.
-#[should_panic(expected = "kill propagation needs real execution")]
+/// killed.
 #[test]
 fn kill_job_kills_children() {
+    use zircon_object::task::{Process, Task};
     let _ctx = TestContext::new();
-    panic!("kill propagation needs real execution");
+    let root = Job::root();
+    let parent = root.create_child().unwrap();
+    let child = parent.create_child().unwrap();
+    let grandchild = child.create_child().unwrap();
+    let proc = Process::create(&child, "proc-in-child").unwrap();
+
+    // Kill the parent job
+    parent.kill();
+
+    // Parent should be terminated
+    assert!(parent.signal().contains(Signal::JOB_TERMINATED));
+    // Child job should also be terminated
+    assert!(child.signal().contains(Signal::JOB_TERMINATED));
+    // Grandchild should also be terminated
+    assert!(grandchild.signal().contains(Signal::JOB_TERMINATED));
+    // Process should be terminated
+    assert!(proc.signal().contains(Signal::PROCESS_TERMINATED));
 }
 
 ///
@@ -155,31 +171,68 @@ fn job_max_height() {
 }
 
 ///
-/// Verify process return code is tracked on exit. Requires real
-/// process execution.
-#[should_panic(expected = "return code needs real execution")]
+/// Verify process return code is tracked on exit.
 #[test]
 fn process_return_code_tracking() {
     let _ctx = TestContext::new();
-    panic!("return code needs real execution");
+    let root = Job::root();
+    let job = root.create_child().unwrap();
+    let proc = zircon_object::task::Process::create(&job, "retcode-test").unwrap();
+
+    // Exit code before exit should be None
+    assert_eq!(proc.exit_code(), None);
+
+    // Exit with specific code
+    proc.exit(42);
+
+    // Return code should be tracked
+    assert_eq!(proc.exit_code(), Some(42));
+    let info = proc.get_info();
+    assert_eq!(info.return_code, 42);
 }
 
 ///
 /// The JOB_NO_PROCESSES signal should be asserted when a job has
-/// no processes. Requires process lifecycle tracking.
-#[should_panic(expected = "job signals need process lifecycle")]
+/// no processes.
 #[test]
 fn job_no_processes_signal() {
     let _ctx = TestContext::new();
-    panic!("job signals need process lifecycle");
+    let root = Job::root();
+    let job = root.create_child().unwrap();
+
+    // Initially: no processes, signal should be set
+    assert!(job.signal().contains(Signal::JOB_NO_PROCESSES));
+
+    // Add a process
+    let proc = zircon_object::task::Process::create(&job, "proc1").unwrap();
+    // JOB_NO_PROCESSES should be cleared
+    assert!(!job.signal().contains(Signal::JOB_NO_PROCESSES));
+
+    // Drop/exit the process
+    proc.exit(0);
+    // JOB_NO_PROCESSES should be set again
+    assert!(job.signal().contains(Signal::JOB_NO_PROCESSES));
 }
 
 ///
 /// The JOB_NO_JOBS signal should be asserted when a job has no
-/// child jobs. Requires job lifecycle tracking.
-#[should_panic(expected = "job signals need process lifecycle")]
+/// child jobs.
 #[test]
 fn job_no_jobs_signal() {
     let _ctx = TestContext::new();
-    panic!("job signals need process lifecycle");
+    let root = Job::root();
+    let job = root.create_child().unwrap();
+
+    // Initially: no child jobs, signal should be set
+    assert!(job.signal().contains(Signal::JOB_NO_JOBS));
+
+    // Add a child job
+    let child = job.create_child().unwrap();
+    // JOB_NO_JOBS should be cleared
+    assert!(!job.signal().contains(Signal::JOB_NO_JOBS));
+
+    // Drop the child job
+    drop(child);
+    // JOB_NO_JOBS should be set again
+    assert!(job.signal().contains(Signal::JOB_NO_JOBS));
 }

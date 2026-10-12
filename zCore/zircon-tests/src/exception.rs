@@ -509,12 +509,10 @@ fn exception_double_bind_process() {
 /// process and triggering a hardware exception, which needs mini-process
 /// infrastructure and preemptive scheduling.
 #[test]
-#[ignore = "DefaultExceptionHandlerTest.UnhandledHardwareException in core-tests-skip.txt"]
-#[should_panic(expected = "not implemented")]
+#[ignore = "requires mini-process with hardware trap execution"]
 fn unhandled_hardware_exception() {
     // Requires mini-process spawning and hardware trap execution,
     // which is not available in zCore's unit test environment.
-    unimplemented!("not implemented: mini-process with hardware trap");
 }
 
 /// C++: TEST(DefaultExceptionHandlerTest, UnhandledPolicyException)
@@ -524,10 +522,8 @@ fn unhandled_hardware_exception() {
 /// with ZX_POL_NEW_ANY / ZX_POL_ACTION_ALLOW_EXCEPTION policy, then
 /// triggering an event creation in the child.
 #[test]
-#[ignore = "DefaultExceptionHandlerTest.UnhandledPolicyException in core-tests-skip.txt"]
-#[should_panic(expected = "not implemented")]
+#[ignore = "requires mini-process with policy exception infrastructure"]
 fn unhandled_policy_exception() {
     // Requires mini-process spawning and policy exception infrastructure,
     // which is not available in zCore's unit test environment.
-    unimplemented!("not implemented: mini-process with policy exception");
 }

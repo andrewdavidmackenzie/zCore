@@ -131,14 +131,12 @@ fn property_get_name_invalid_handle() {
 /// should return WRONG_TYPE. However, in zCore most objects support
 /// names, so this tests with an object that explicitly doesn't.
 /// Currently all zCore kernel objects support naming, so we document
-/// the gap by panicking.
-#[should_panic(expected = "all zCore objects support names")]
+/// the gap.
 #[test]
+#[ignore = "all zCore objects support names (no WRONG_TYPE path exists)"]
 fn property_set_name_wrong_type() {
-    let _ctx = TestContext::new();
     // In Fuchsia, certain objects (like BTI) don't support names.
     // zCore's KernelObject trait provides name support for all objects.
-    panic!("all zCore objects support names");
 }
 
 // ── ZX_PROP_PROCESS_DEBUG_ADDR (property 5) ────────────────────────
@@ -324,11 +322,10 @@ const PROP_EXCEPTION_STRATEGY: u32 = 18;
 /// Set and get ZX_PROP_EXCEPTION_STRATEGY on an exception channel.
 /// In test mode, we cannot create real exception channels, so this
 /// test documents the gap.
-#[should_panic(expected = "exception channels require real thread execution")]
 #[test]
+#[ignore = "exception channels require real thread execution for exception delivery"]
 fn property_exception_strategy() {
-    let _ctx = TestContext::new();
-    panic!("exception channels require real thread execution");
+    // Cannot create real exception channels in test mode.
 }
 
 // ── Invalid property ID ────────────────────────────────────────────
