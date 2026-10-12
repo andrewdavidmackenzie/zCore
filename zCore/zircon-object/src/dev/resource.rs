@@ -247,9 +247,14 @@ pub const ZX_RSRC_SYSTEM_SAMPLING_BASE: usize = 15;
 #[repr(C)]
 #[derive(Default)]
 pub struct ResourceInfo {
-    kind: u32,
-    flags: u32,
-    base: u64,
-    size: u64,
-    name: [u8; 32], // should be [char; 32], but I cannot compile it
+    /// Resource kind (MMIO, IRQ, IOPORT, SMC, SYSTEM, etc.).
+    pub kind: u32,
+    /// Resource flags (e.g. EXCLUSIVE).
+    pub flags: u32,
+    /// Base address of the resource range.
+    pub base: u64,
+    /// Size of the resource range.
+    pub size: u64,
+    /// NUL-terminated resource name (up to 31 characters + NUL).
+    pub name: [u8; 32],
 }

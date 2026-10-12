@@ -92,6 +92,9 @@ mod exception;
 mod pager;
 
 #[cfg(test)]
+mod debuglog;
+
+#[cfg(test)]
 mod skipped;
 
 #[cfg(test)]

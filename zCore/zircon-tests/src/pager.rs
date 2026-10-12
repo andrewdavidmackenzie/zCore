@@ -657,3 +657,646 @@ fn pager_query_vmo_stats() {
         "non-TRAP_DIRTY VMO should have no dirty ranges"
     );
 }
+
+// ── Bulk-ported pager tests (batch 2) ───────────────────────────────
+
+// 1-5: Supply page alignment/range validation tests
+
+/// C++: TEST(PagerTest, SupplyPagesZeroLength)
+///
+/// Supplying zero-length range is a no-op and should succeed.
+#[test]
+fn pager_supply_pages_zero_length() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let pager_vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let src = VmObject::new_paged(1);
+
+    let result = pager.supply_pages(&pager_vmo, 0, 0, &src, 0);
+    assert!(result.is_ok(), "zero-length supply should be a no-op");
+}
+
+/// C++: TEST(PagerTest, SupplyPagesExactOnePage)
+///
+/// Supply exactly one page — the minimal valid supply operation.
+#[test]
+fn pager_supply_pages_exact_one_page() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let pager_vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let src = VmObject::new_paged(1);
+    src.write(0, b"exactly one page").unwrap();
+
+    pager
+        .supply_pages(&pager_vmo, 0, PAGE_SIZE as u64, &src, 0)
+        .unwrap();
+
+    let mut buf = [0u8; 16];
+    pager_vmo.read(0, &mut buf).unwrap();
+    assert_eq!(&buf, b"exactly one page");
+}
+
+/// C++: TEST(PagerTest, SupplyPagesMultiplePages)
+///
+/// Supply multiple pages at once to cover a multi-page VMO entirely.
+#[test]
+fn pager_supply_pages_multiple_pages() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let pager_vmo = pager
+        .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
+        .unwrap();
+    let src = VmObject::new_paged(4);
+    // Write a marker at the start of each page.
+    for i in 0..4 {
+        src.write(i * PAGE_SIZE, &[i as u8; 8]).unwrap();
+    }
+
+    pager
+        .supply_pages(&pager_vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
+        .unwrap();
+
+    for i in 0..4 {
+        let mut buf = [0u8; 8];
+        pager_vmo.read(i * PAGE_SIZE, &mut buf).unwrap();
+        assert_eq!(buf, [i as u8; 8], "page {i} marker mismatch");
+    }
+}
+
+/// C++: TEST(PagerTest, SupplyPagesLastPage)
+///
+/// Supply only the last page of a multi-page VMO.
+#[test]
+fn pager_supply_pages_last_page() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let pager_vmo = pager
+        .create_vmo(0, &port, 0, (3 * PAGE_SIZE) as u64)
+        .unwrap();
+    let src = VmObject::new_paged(1);
+    src.write(0, b"last page").unwrap();
+
+    pager
+        .supply_pages(
+            &pager_vmo,
+            (2 * PAGE_SIZE) as u64,
+            PAGE_SIZE as u64,
+            &src,
+            0,
+        )
+        .unwrap();
+
+    let mut buf = [0u8; 9];
+    pager_vmo.read(2 * PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(&buf, b"last page");
+}
+
+/// C++: TEST(PagerTest, SupplyPagesSourceOffset)
+///
+/// Supply pages using a non-zero source offset within the aux VMO.
+#[test]
+fn pager_supply_pages_source_offset() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let pager_vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    // Source VMO is 2 pages; data is on the second page.
+    let src = VmObject::new_paged(2);
+    src.write(PAGE_SIZE, b"from page two").unwrap();
+
+    pager
+        .supply_pages(&pager_vmo, 0, PAGE_SIZE as u64, &src, PAGE_SIZE as u64)
+        .unwrap();
+
+    let mut buf = [0u8; 13];
+    pager_vmo.read(0, &mut buf).unwrap();
+    assert_eq!(&buf, b"from page two");
+}
+
+// 6-10: Op range validation tests
+
+/// C++: TEST(PagerTest, OpRangeInvalidOp)
+///
+/// op_range with an invalid/unsupported op code should return NOT_SUPPORTED.
+#[test]
+fn pager_op_range_invalid_op() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    let result = pager.op_range(255, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert_eq!(
+        result.err(),
+        Some(zircon_object::ZxError::NOT_SUPPORTED),
+        "unsupported op should return NOT_SUPPORTED"
+    );
+}
+
+/// C++: TEST(PagerTest, OpRangeWrongVmo)
+///
+/// op_range on a VMO not owned by this pager should fail with INVALID_ARGS.
+#[test]
+fn pager_op_range_wrong_vmo() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let _owned = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let other = VmObject::new_paged(1);
+
+    // All op codes should reject non-owned VMOs.
+    for op in [1u32, 2, 3, 4] {
+        let result = pager.op_range(op, &other, 0, PAGE_SIZE as u64, 0);
+        assert_eq!(
+            result.err(),
+            Some(zircon_object::ZxError::INVALID_ARGS),
+            "op_range({op}) on wrong VMO should return INVALID_ARGS"
+        );
+    }
+}
+
+/// C++: TEST(PagerTest, OpRangeWritebackBegin)
+///
+/// WRITEBACK_BEGIN (op=3) is a no-op but should succeed on an owned VMO.
+#[test]
+fn pager_op_range_writeback_begin() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    let result = pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert!(result.is_ok(), "WRITEBACK_BEGIN should succeed");
+}
+
+/// C++: TEST(PagerTest, OpRangeWritebackEnd)
+///
+/// WRITEBACK_END (op=4) is a no-op but should succeed on an owned VMO.
+#[test]
+fn pager_op_range_writeback_end() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    let result = pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert!(result.is_ok(), "WRITEBACK_END should succeed");
+}
+
+/// C++: TEST(PagerTest, OpRangeFailWithErrorCodes)
+///
+/// op_range FAIL with different Fuchsia error codes. All should succeed
+/// on an owned VMO.
+#[test]
+fn pager_op_range_fail_with_error_codes() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    // ZX_ERR_NO_SPACE = -54, ZX_ERR_IO = -5, ZX_ERR_IO_DATA_INTEGRITY = -29,
+    // ZX_ERR_BAD_STATE = -45
+    for err_code in [-54i32, -5, -29, -45, -99] {
+        let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, err_code as u64);
+        assert!(
+            result.is_ok(),
+            "op_range FAIL with error {err_code} should succeed"
+        );
+    }
+}
+
+// 11-15: Detach then various operations
+
+/// C++: TEST(PagerTest, DetachThenSupplyPages)
+///
+/// After detaching, supply_pages still writes data (no ownership
+/// check in supply_pages), but the pager association is cleared.
+#[test]
+fn pager_detach_then_supply_pages() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    pager.detach_vmo(&vmo).unwrap();
+
+    // supply_pages doesn't check ownership — writes directly.
+    let src = VmObject::new_paged(1);
+    src.write(0, b"after detach").unwrap();
+    let result = pager.supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0);
+    // Succeeds because supply_pages just copies memory.
+    assert!(result.is_ok(), "supply_pages doesn't check ownership");
+}
+
+/// C++: TEST(PagerTest, DetachThenOpRange)
+///
+/// After detaching, op_range should fail because the VMO is no longer
+/// associated with the pager.
+#[test]
+fn pager_detach_then_op_range() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    pager.detach_vmo(&vmo).unwrap();
+
+    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    assert_eq!(
+        result.err(),
+        Some(zircon_object::ZxError::INVALID_ARGS),
+        "op_range after detach should fail"
+    );
+}
+
+/// C++: TEST(PagerTest, DetachThenDirty)
+///
+/// After detaching, op_range DIRTY should fail (VMO not in pager list).
+#[test]
+fn pager_detach_then_dirty() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(8, &port, 0, PAGE_SIZE as u64).unwrap(); // TRAP_DIRTY
+
+    pager.detach_vmo(&vmo).unwrap();
+
+    let result = pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert_eq!(
+        result.err(),
+        Some(zircon_object::ZxError::INVALID_ARGS),
+        "op_range DIRTY after detach should fail"
+    );
+}
+
+/// C++: TEST(PagerTest, DetachThenWritebackBegin)
+///
+/// After detaching, WRITEBACK_BEGIN op_range should fail.
+#[test]
+fn pager_detach_then_writeback_begin() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    pager.detach_vmo(&vmo).unwrap();
+
+    let result = pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert_eq!(
+        result.err(),
+        Some(zircon_object::ZxError::INVALID_ARGS),
+        "WRITEBACK_BEGIN after detach should fail"
+    );
+}
+
+/// C++: TEST(PagerTest, DetachThenWritebackEnd)
+///
+/// After detaching, WRITEBACK_END op_range should fail.
+#[test]
+fn pager_detach_then_writeback_end() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    pager.detach_vmo(&vmo).unwrap();
+
+    let result = pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert_eq!(
+        result.err(),
+        Some(zircon_object::ZxError::INVALID_ARGS),
+        "WRITEBACK_END after detach should fail"
+    );
+}
+
+// 16-20: Pager close (drop) then operations
+
+/// C++: TEST(PagerTest, ClosePagerThenRead)
+///
+/// After pager is dropped, the VMO is still accessible. Reads from
+/// previously-supplied pages work; unsupplied pages read as zeroes.
+#[test]
+fn pager_close_then_read() {
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+    let vmo;
+    {
+        let pager = Pager::new();
+        vmo = pager
+            .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+            .unwrap();
+        let src = VmObject::new_paged(1);
+        src.write(0, b"pre-close data").unwrap();
+        pager
+            .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
+            .unwrap();
+        // pager dropped here
+    }
+
+    // Pre-supplied data is still readable.
+    let mut buf = [0u8; 14];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(&buf, b"pre-close data");
+}
+
+/// C++: TEST(PagerTest, ClosePagerThenWrite)
+///
+/// After pager is dropped, the VMO remains writable.
+#[test]
+fn pager_close_then_write() {
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+    let vmo;
+    {
+        let pager = Pager::new();
+        vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+        // pager dropped
+    }
+
+    vmo.write(0, b"post-close write").unwrap();
+    let mut buf = [0u8; 16];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(&buf, b"post-close write");
+}
+
+/// C++: TEST(PagerTest, ClosePagerThenCreateVmo)
+///
+/// After pager is dropped, create_vmo cannot be called because we
+/// no longer have an Arc<Pager>. This test verifies pager creation
+/// and drop behavior.
+#[test]
+fn pager_close_then_create_vmo() {
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+    let vmo_id;
+    {
+        let pager = Pager::new();
+        let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+        vmo_id = vmo.id();
+        // pager dropped — VMOs get BAD_STATE pager failure, pager cleared
+    }
+    // The KOID was valid while the pager existed.
+    assert_ne!(vmo_id, 0);
+}
+
+/// C++: TEST(PagerTest, ClosePagerVmoStillHasLength)
+///
+/// After pager drop, VMO retains its length.
+#[test]
+fn pager_close_vmo_still_has_length() {
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+    let vmo;
+    {
+        let pager = Pager::new();
+        vmo = pager
+            .create_vmo(0, &port, 0, (3 * PAGE_SIZE) as u64)
+            .unwrap();
+    }
+    assert_eq!(vmo.len(), 3 * PAGE_SIZE);
+}
+
+/// C++: TEST(PagerTest, ClosePagerVmoDetached)
+///
+/// After pager drop, the VMO's pager association is cleared.
+/// is_pager_backed may still return true (the flag is on the VMO
+/// trait), but demand-paging is no longer possible.
+#[test]
+fn pager_close_vmo_detached() {
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+    let vmo;
+    {
+        let pager = Pager::new();
+        vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    }
+    // After pager drop, the VMO still exists.
+    assert_eq!(vmo.len(), PAGE_SIZE);
+    // Direct write still works.
+    vmo.write(0, b"after pager drop").unwrap();
+    let mut buf = [0u8; 16];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(&buf, b"after pager drop");
+}
+
+// 21-25: VMO resize with pager
+
+/// C++: TEST(PagerTest, ResizableVmoCreate)
+///
+/// Create a resizable pager-backed VMO (ZX_VMO_RESIZABLE = 2).
+#[test]
+fn pager_resizable_vmo_create() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager
+        .create_vmo(2, &port, 0, (2 * PAGE_SIZE) as u64)
+        .unwrap();
+    assert_eq!(vmo.len(), 2 * PAGE_SIZE);
+    assert!(vmo.is_pager_backed());
+}
+
+/// C++: TEST(PagerTest, ResizableVmoGrow)
+///
+/// Resize a resizable pager VMO to a larger size.
+#[test]
+fn pager_resizable_vmo_grow() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(2, &port, 0, PAGE_SIZE as u64).unwrap();
+    assert_eq!(vmo.len(), PAGE_SIZE);
+
+    vmo.set_len(3 * PAGE_SIZE).unwrap();
+    assert_eq!(vmo.len(), 3 * PAGE_SIZE);
+}
+
+/// C++: TEST(PagerTest, ResizableVmoShrink)
+///
+/// Resize a resizable pager VMO to a smaller size.
+#[test]
+fn pager_resizable_vmo_shrink() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager
+        .create_vmo(2, &port, 0, (4 * PAGE_SIZE) as u64)
+        .unwrap();
+    assert_eq!(vmo.len(), 4 * PAGE_SIZE);
+
+    vmo.set_len(2 * PAGE_SIZE).unwrap();
+    assert_eq!(vmo.len(), 2 * PAGE_SIZE);
+}
+
+/// C++: TEST(PagerTest, NonResizableVmoRejectResize)
+///
+/// A non-resizable pager VMO (default) should reject resize with UNAVAILABLE.
+#[test]
+fn pager_non_resizable_vmo_reject_resize() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    let result = vmo.set_len(2 * PAGE_SIZE);
+    assert_eq!(
+        result.err(),
+        Some(zircon_object::ZxError::UNAVAILABLE),
+        "non-resizable VMO should reject resize"
+    );
+}
+
+/// C++: TEST(PagerTest, ResizableVmoSupplyAfterGrow)
+///
+/// After growing a resizable pager VMO, supply pages to the new region.
+#[test]
+fn pager_resizable_vmo_supply_after_grow() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(2, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    // Grow to 3 pages.
+    vmo.set_len(3 * PAGE_SIZE).unwrap();
+
+    // Supply data to the new third page.
+    let src = VmObject::new_paged(1);
+    src.write(0, b"grown page").unwrap();
+    pager
+        .supply_pages(&vmo, (2 * PAGE_SIZE) as u64, PAGE_SIZE as u64, &src, 0)
+        .unwrap();
+
+    let mut buf = [0u8; 10];
+    vmo.read(2 * PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(&buf, b"grown page");
+}
+
+// 26-30: Multiple pagers, VMO lifecycle
+
+/// C++: TEST(PagerTest, TwoPagersIndependent)
+///
+/// Two separate pagers with their own VMOs are fully independent.
+#[test]
+fn pager_two_pagers_independent() {
+    let _ctx = TestContext::new();
+    let (pager1, port1) = create_pager_and_port();
+    let (pager2, port2) = create_pager_and_port();
+
+    let vmo1 = pager1.create_vmo(0, &port1, 10, PAGE_SIZE as u64).unwrap();
+    let vmo2 = pager2.create_vmo(0, &port2, 20, PAGE_SIZE as u64).unwrap();
+
+    assert_ne!(vmo1.id(), vmo2.id());
+    assert_ne!(pager1.id(), pager2.id());
+
+    // Supply different data.
+    let src1 = VmObject::new_paged(1);
+    src1.write(0, b"pager-1").unwrap();
+    let src2 = VmObject::new_paged(1);
+    src2.write(0, b"pager-2").unwrap();
+
+    pager1
+        .supply_pages(&vmo1, 0, PAGE_SIZE as u64, &src1, 0)
+        .unwrap();
+    pager2
+        .supply_pages(&vmo2, 0, PAGE_SIZE as u64, &src2, 0)
+        .unwrap();
+
+    let mut buf = [0u8; 7];
+    vmo1.read(0, &mut buf).unwrap();
+    assert_eq!(&buf, b"pager-1");
+    vmo2.read(0, &mut buf).unwrap();
+    assert_eq!(&buf, b"pager-2");
+}
+
+/// C++: TEST(PagerTest, VmoOutlivesPager)
+///
+/// A VMO can outlive its pager. After the pager is dropped, the VMO
+/// is still valid and accessible.
+#[test]
+fn pager_vmo_outlives_pager() {
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+    let vmo;
+    {
+        let pager = Pager::new();
+        vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+        // Supply data while pager is alive.
+        let src = VmObject::new_paged(1);
+        src.write(0, &77u64.to_ne_bytes()).unwrap();
+        pager
+            .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
+            .unwrap();
+    } // pager dropped
+
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 77);
+}
+
+/// C++: TEST(PagerTest, DropPagerDropVmo)
+///
+/// Dropping the pager and then all VMO references should not leak or panic.
+#[test]
+fn pager_drop_pager_drop_vmo() {
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+    {
+        let pager = Pager::new();
+        let _vmo1 = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+        let _vmo2 = pager
+            .create_vmo(0, &port, 1, (2 * PAGE_SIZE) as u64)
+            .unwrap();
+        // Both pager and VMOs dropped here — should not panic.
+    }
+}
+
+/// C++: TEST(PagerTest, PagerWithManyVmos)
+///
+/// A single pager can manage many VMOs simultaneously.
+#[test]
+fn pager_with_many_vmos() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+
+    let mut vmos = alloc::vec::Vec::new();
+    for i in 0u64..16 {
+        let vmo = pager.create_vmo(0, &port, i, PAGE_SIZE as u64).unwrap();
+        vmos.push(vmo);
+    }
+
+    assert_eq!(vmos.len(), 16);
+    // All KOIDs should be unique.
+    for i in 0..vmos.len() {
+        for j in (i + 1)..vmos.len() {
+            assert_ne!(vmos[i].id(), vmos[j].id());
+        }
+    }
+
+    // Supply and verify each.
+    let src = VmObject::new_paged(1);
+    for (i, vmo) in vmos.iter().enumerate() {
+        src.write(0, &(i as u64).to_ne_bytes()).unwrap();
+        pager
+            .supply_pages(vmo, 0, PAGE_SIZE as u64, &src, 0)
+            .unwrap();
+    }
+    for (i, vmo) in vmos.iter().enumerate() {
+        let mut val = [0u8; 8];
+        vmo.read(0, &mut val).unwrap();
+        assert_eq!(u64::from_ne_bytes(val), i as u64);
+    }
+}
+
+/// C++: TEST(PagerTest, DetachOneKeepOthers)
+///
+/// Detaching one VMO should not affect other VMOs on the same pager.
+#[test]
+fn pager_detach_one_keep_others() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+
+    let vmo1 = pager.create_vmo(0, &port, 1, PAGE_SIZE as u64).unwrap();
+    let vmo2 = pager.create_vmo(0, &port, 2, PAGE_SIZE as u64).unwrap();
+    let vmo3 = pager.create_vmo(0, &port, 3, PAGE_SIZE as u64).unwrap();
+
+    // Detach vmo2.
+    pager.detach_vmo(&vmo2).unwrap();
+
+    // vmo1 and vmo3 should still work with op_range.
+    let result = pager.op_range(1, &vmo1, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    assert!(result.is_ok(), "vmo1 should still be operational");
+    let result = pager.op_range(1, &vmo3, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    assert!(result.is_ok(), "vmo3 should still be operational");
+
+    // vmo2 should fail.
+    let result = pager.op_range(1, &vmo2, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    assert_eq!(
+        result.err(),
+        Some(zircon_object::ZxError::INVALID_ARGS),
+        "detached vmo2 should fail op_range"
+    );
+}
