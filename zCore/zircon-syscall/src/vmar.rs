@@ -5,10 +5,14 @@ fn amount_of_alignments(options: u32) -> ZxResult<usize> {
     if align_pow2 == 0 {
         align_pow2 = PAGE_SIZE_LOG2;
     }
-    if !(PAGE_SIZE_LOG2..=32).contains(&align_pow2) {
+    // Fuchsia allows alignment from 2^10 (1KB) to 2^32.
+    // Sub-page alignments (10, 11) are accepted but effectively
+    // rounded up to page alignment by the allocator.
+    if !(10..=32).contains(&align_pow2) {
         Err(ZxError::INVALID_ARGS)
     } else {
-        Ok(1 << align_pow2)
+        // Ensure alignment is at least page-aligned.
+        Ok(1usize << align_pow2.max(PAGE_SIZE_LOG2))
     }
 }
 
@@ -25,7 +29,9 @@ impl Syscall<'_> {
         mut out_child_vmar: UserOutPtr<HandleValue>,
         mut out_child_addr: UserOutPtr<usize>,
     ) -> ZxResult {
-        let vm_options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
+        // Strip alignment bits (24-31) before parsing VmOptions.
+        let vm_options =
+            VmOptions::from_bits(options & 0x00FF_FFFF).ok_or(ZxError::INVALID_ARGS)?;
         info!(
             "vmar.allocate: parent={:#x?}, options={:#x?}, offset={:#x?}, size={:#x?}",
             parent_vmar, options, offset, size,
@@ -102,7 +108,8 @@ impl Syscall<'_> {
         len: usize,
         mut mapped_addr: UserOutPtr<VirtAddr>,
     ) -> ZxResult {
-        let options = match VmOptions::from_bits(options) {
+        // Strip alignment bits (24-31) before parsing VmOptions.
+        let options = match VmOptions::from_bits(options & 0x00FF_FFFF) {
             Some(o) => o,
             None => {
                 return Err(ZxError::INVALID_ARGS);
