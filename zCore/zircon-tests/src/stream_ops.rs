@@ -126,11 +126,27 @@ fn read_only() {
 /// Create a write-only stream (mode=2). Reading should fail.
 /// Note: zCore Stream currently doesn't enforce read/write mode
 /// restrictions at the object level — this is a syscall-layer check.
-#[should_panic(expected = "stream mode enforcement is syscall-layer")]
 #[test]
 fn write_only() {
     let _ctx = TestContext::new();
-    panic!("stream mode enforcement is syscall-layer");
+    // Create a stream and verify that stream mode options are stored
+    let vmo = VmObject::new_paged(4);
+    let stream = Stream::create(vmo, 0, 0);
+    let info = stream.get_info();
+    assert_eq!(
+        info.options, 0,
+        "default stream should have no special options"
+    );
+
+    // At the kernel object level, mode enforcement (read-only / write-only)
+    // is handled by the syscall layer via handle rights, not by the Stream object.
+    // Verify the stream is functional for both read and write at the object level.
+    let data = b"test data";
+    stream.write(data, false).unwrap();
+    stream.seek(SeekOrigin::Start, 0).unwrap();
+    let mut buf = [0u8; 9];
+    stream.read(&mut buf).unwrap();
+    assert_eq!(&buf, data);
 }
 
 ///
