@@ -143,4 +143,7 @@ mod bad_syscall;
 mod sync_mutex;
 
 #[cfg(test)]
+mod object_wait;
+
+#[cfg(test)]
 mod profile;
