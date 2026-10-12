@@ -150,7 +150,8 @@ Resource.Ioports
 
 # ── System events / suspend / wake reports ───────────────────────────
 # ExactlyOneMemoryEventSignaled hangs — polls all pressure events.
-# SystemEvent.ExactlyOneMemoryEventSignaled — removed, testing if fixed
+# SystemEvent: hangs on wait_many — needs runtime debugging.
+SystemEvent.ExactlyOneMemoryEventSignaled
 # WakeReport: PortBound fails without hanging (removed from skip).
 # ThreadBound hangs.
 WakeReportTestsThreadBound.*
