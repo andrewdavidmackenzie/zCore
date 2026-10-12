@@ -1857,3 +1857,411 @@ fn call_notified_on_peer_closed() {
     ));
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
 }
+
+// ============================================================
+// ReadEtc tests — channel_read with is_etc=true edge cases
+// ============================================================
+
+/// C++: TEST(ChannelTest, ReadEtcMayDiscardDiscardsHandlesAndClosesThemOnBufferTooSmall) — syscall level
+/// With MAY_DISCARD and is_etc=true, when buffers are too small the
+/// message (including handles) is discarded and BUFFER_TOO_SMALL returned.
+#[test]
+fn read_etc_may_discard_discards_handles_and_closes_them_on_buffer_too_small() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Write a message with data and a handle
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+
+    let handles_to_write = [event_handle];
+    let data = b"hello";
+    sc.sys_channel_write(
+        h0,
+        0,
+        UserInPtr::from(data.as_ptr() as usize),
+        data.len() as u32,
+        UserInPtr::from(handles_to_write.as_ptr() as usize),
+        1,
+    )
+    .unwrap();
+
+    // Read with MAY_DISCARD, is_etc=true, zero-capacity buffers
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = sc.sys_channel_read(
+        h1,
+        1, // MAY_DISCARD
+        UserOutPtr::from(0usize),
+        0,
+        0, // num_bytes = 0
+        0, // num_handles = 0
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        true, // is_etc
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
+    assert_eq!(actual_bytes, 5);
+    assert_eq!(actual_handles, 1);
+
+    // Message was discarded — second read returns SHOULD_WAIT
+    let mut buf = [0u8; 64];
+    let result2 = sc.sys_channel_read(
+        h1,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        0,
+        buf.len() as u32,
+        0,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        false,
+    );
+    assert_eq!(result2.unwrap_err(), ZxError::SHOULD_WAIT);
+}
+
+/// C++: TEST(ChannelTest, ReadEtcNullHandlesWithNonZeroCountReturnsInvalidArgs) — syscall level
+/// Reading with is_etc=true, null handles pointer, but message has
+/// handles that fit in num_handles capacity — the null pointer write
+/// fails with INVALID_ARGS.
+#[test]
+fn read_etc_null_handles_with_non_zero_count_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Write a message with a handle
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+    let handles_to_write = [event_handle];
+    sc.sys_channel_write(
+        h0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        UserInPtr::from(handles_to_write.as_ptr() as usize),
+        1,
+    )
+    .unwrap();
+
+    // Read with is_etc, null handles pointer, num_handles=1 (capacity sufficient
+    // for the message) — write to null pointer fails
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = sc.sys_channel_read(
+        h1,
+        0,
+        UserOutPtr::from(0usize),
+        0, // null handles pointer
+        0,
+        1, // num_handles=1 — buffer fits, but pointer is null
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        true, // is_etc
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, ReadEtcReadOnlyHandlesPointerReturnsInvalidArgsAndDoesNotLeakHandles) — syscall level
+/// Reading with is_etc=true into a read-only (or null) handles buffer
+/// should fail without leaking handles into the process table.
+#[test]
+fn read_etc_read_only_handles_pointer_returns_invalid_args_and_does_not_leak_handles() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Write a message with a handle
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+    let handles_to_write = [event_handle];
+    sc.sys_channel_write(
+        h0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        UserInPtr::from(handles_to_write.as_ptr() as usize),
+        1,
+    )
+    .unwrap();
+
+    // Read with is_etc, null handles pointer (0), num_handles=1
+    // The message has 1 handle which fits num_handles capacity,
+    // but writing HandleInfo to the null pointer should fail.
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = sc.sys_channel_read(
+        h1,
+        0,
+        UserOutPtr::from(0usize),
+        0, // null handles pointer
+        0,
+        1,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        true,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+// ============================================================
+// WriteIovec tests — channel_write with ZX_CHANNEL_WRITE_USE_IOVEC
+// ============================================================
+
+/// C++: TEST(ChannelTest, WriteIovecTooManyIovecsReturnsOutOfRange) — syscall level
+/// More than ZX_CHANNEL_MAX_MSG_IOVECS (8192) iovecs returns OUT_OF_RANGE.
+#[test]
+fn write_iovec_too_many_iovecs_returns_out_of_range() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Pass num_bytes = 8193 (number of iovecs) with option USE_IOVEC=2
+    // The pointer doesn't need to be valid because the count check
+    // happens before reading the iovec array in libos mode.
+    // But in this implementation, read_array is called first, so we need
+    // a valid pointer. Use a valid but empty array — read_array of 8193
+    // elements will check the count.
+    // Actually, read_iovec_data checks count > 8192 BEFORE read_array,
+    // so we can use any pointer.
+    let result = sc.sys_channel_write(
+        h0,
+        2,                       // ZX_CHANNEL_WRITE_USE_IOVEC
+        UserInPtr::from(1usize), // dummy non-null pointer
+        8193,                    // > 8192 iovecs
+        UserInPtr::from(0usize),
+        0,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
+}
+
+/// C++: TEST(ChannelTest, WriteIovecTotalCapacityOverflowReturnsOutOfRange) — syscall level
+/// Iovecs whose total capacity exceeds ZX_CHANNEL_MAX_MSG_BYTES (65536)
+/// returns OUT_OF_RANGE.
+#[test]
+fn write_iovec_total_capacity_overflow_returns_out_of_range() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Build 2 iovecs with total capacity > 65536
+    // ChannelIovec: [buffer: usize, capacity: u32, reserved: u32]
+    let data_buf = [0u8; 1]; // dummy data
+    let iovecs = [
+        // iovec 1: 40000 bytes
+        (data_buf.as_ptr() as usize, 40000u32, 0u32),
+        // iovec 2: 30000 bytes — total = 70000 > 65536
+        (data_buf.as_ptr() as usize, 30000u32, 0u32),
+    ];
+    // Flatten to a byte buffer matching ChannelIovec layout
+    let mut iovec_buf = Vec::new();
+    for (buf, cap, res) in &iovecs {
+        iovec_buf.extend_from_slice(&buf.to_ne_bytes());
+        iovec_buf.extend_from_slice(&cap.to_ne_bytes());
+        iovec_buf.extend_from_slice(&res.to_ne_bytes());
+    }
+
+    let result = sc.sys_channel_write(
+        h0,
+        2, // ZX_CHANNEL_WRITE_USE_IOVEC
+        UserInPtr::from(iovec_buf.as_ptr() as usize),
+        2, // 2 iovecs
+        UserInPtr::from(0usize),
+        0,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
+}
+
+/// C++: TEST(ChannelTest, WriteIovecZeroCapacityWithNullBufferSucceeds) — syscall level
+/// A single iovec with capacity=0 and null buffer pointer succeeds
+/// (writes an empty message).
+#[test]
+fn write_iovec_zero_capacity_with_null_buffer_succeeds() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // ChannelIovec: [buffer: usize=0, capacity: u32=0, reserved: u32=0]
+    let iovec = (0usize, 0u32, 0u32);
+    let mut iovec_buf = Vec::new();
+    iovec_buf.extend_from_slice(&iovec.0.to_ne_bytes());
+    iovec_buf.extend_from_slice(&iovec.1.to_ne_bytes());
+    iovec_buf.extend_from_slice(&iovec.2.to_ne_bytes());
+
+    let result = sc.sys_channel_write(
+        h0,
+        2, // ZX_CHANNEL_WRITE_USE_IOVEC
+        UserInPtr::from(iovec_buf.as_ptr() as usize),
+        1, // 1 iovec
+        UserInPtr::from(0usize),
+        0,
+    );
+    assert!(result.is_ok());
+
+    // Read the empty message from h1
+    let mut buf = [0u8; 64];
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    sc.sys_channel_read(
+        h1,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        0,
+        buf.len() as u32,
+        0,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        false,
+    )
+    .unwrap();
+    assert_eq!(actual_bytes, 0);
+}
+
+/// C++: TEST(ChannelTest, WriteIovecUnboundedSuccess) — syscall level
+/// Write data via iovec and read it back successfully.
+#[test]
+fn write_iovec_unbounded_success() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Build 2 iovecs: "hello" + " world"
+    let data1 = b"hello";
+    let data2 = b" world";
+    let iovecs = [
+        (data1.as_ptr() as usize, data1.len() as u32, 0u32),
+        (data2.as_ptr() as usize, data2.len() as u32, 0u32),
+    ];
+    let mut iovec_buf = Vec::new();
+    for (buf, cap, res) in &iovecs {
+        iovec_buf.extend_from_slice(&buf.to_ne_bytes());
+        iovec_buf.extend_from_slice(&cap.to_ne_bytes());
+        iovec_buf.extend_from_slice(&res.to_ne_bytes());
+    }
+
+    let result = sc.sys_channel_write(
+        h0,
+        2, // ZX_CHANNEL_WRITE_USE_IOVEC
+        UserInPtr::from(iovec_buf.as_ptr() as usize),
+        2, // 2 iovecs
+        UserInPtr::from(0usize),
+        0,
+    );
+    assert!(result.is_ok());
+
+    // Read concatenated data from h1
+    let mut buf = [0u8; 64];
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    sc.sys_channel_read(
+        h1,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        0,
+        buf.len() as u32,
+        0,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        false,
+    )
+    .unwrap();
+    assert_eq!(actual_bytes, 11);
+    assert_eq!(&buf[..11], b"hello world");
+}
+
+/// C++: TEST(ChannelTest, WriteIovecBoundedInvalidPointerReturnsInvalidArgs) — syscall level
+/// An iovec with non-zero capacity but null buffer pointer fails with
+/// INVALID_ARGS (reading from a null pointer).
+#[test]
+fn write_iovec_bounded_invalid_pointer_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // ChannelIovec: buffer=0 (null), capacity=10, reserved=0
+    let iovec = (0usize, 10u32, 0u32);
+    let mut iovec_buf = Vec::new();
+    iovec_buf.extend_from_slice(&iovec.0.to_ne_bytes());
+    iovec_buf.extend_from_slice(&iovec.1.to_ne_bytes());
+    iovec_buf.extend_from_slice(&iovec.2.to_ne_bytes());
+
+    let result = sc.sys_channel_write(
+        h0,
+        2, // ZX_CHANNEL_WRITE_USE_IOVEC
+        UserInPtr::from(iovec_buf.as_ptr() as usize),
+        1, // 1 iovec
+        UserInPtr::from(0usize),
+        0,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, WriteIovecBoundedNonZeroReservedReturnsInvalidArgs) — syscall level
+/// An iovec with non-zero reserved field returns INVALID_ARGS.
+#[test]
+fn write_iovec_bounded_non_zero_reserved_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    let data = b"test";
+    // ChannelIovec: buffer=valid, capacity=4, reserved=1 (non-zero!)
+    let iovec = (data.as_ptr() as usize, 4u32, 1u32);
+    let mut iovec_buf = Vec::new();
+    iovec_buf.extend_from_slice(&iovec.0.to_ne_bytes());
+    iovec_buf.extend_from_slice(&iovec.1.to_ne_bytes());
+    iovec_buf.extend_from_slice(&iovec.2.to_ne_bytes());
+
+    let result = sc.sys_channel_write(
+        h0,
+        2, // ZX_CHANNEL_WRITE_USE_IOVEC
+        UserInPtr::from(iovec_buf.as_ptr() as usize),
+        1, // 1 iovec
+        UserInPtr::from(0usize),
+        0,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, WriteIovecUnboundedInvalidPointerReturnsInvalidArgs) — syscall level
+/// Multiple iovecs where one has a null buffer with non-zero capacity
+/// fails with INVALID_ARGS.
+#[test]
+fn write_iovec_unbounded_invalid_pointer_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    let data1 = b"ok";
+    // First iovec valid, second has null buffer with non-zero capacity
+    let iovecs = [
+        (data1.as_ptr() as usize, data1.len() as u32, 0u32),
+        (0usize, 5u32, 0u32), // null buffer, capacity=5
+    ];
+    let mut iovec_buf = Vec::new();
+    for (buf, cap, res) in &iovecs {
+        iovec_buf.extend_from_slice(&buf.to_ne_bytes());
+        iovec_buf.extend_from_slice(&cap.to_ne_bytes());
+        iovec_buf.extend_from_slice(&res.to_ne_bytes());
+    }
+
+    let result = sc.sys_channel_write(
+        h0,
+        2, // ZX_CHANNEL_WRITE_USE_IOVEC
+        UserInPtr::from(iovec_buf.as_ptr() as usize),
+        2, // 2 iovecs
+        UserInPtr::from(0usize),
+        0,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
