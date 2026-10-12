@@ -103,6 +103,9 @@ pub trait VMObjectTrait: Sync + Send {
     fn is_contiguous(&self) -> bool {
         false
     }
+    fn is_physical(&self) -> bool {
+        false
+    }
     fn is_reference(&self) -> bool {
         false
     }
@@ -1009,6 +1012,10 @@ impl VmObject {
 
     pub fn is_contiguous(&self) -> bool {
         self.trait_.is_contiguous()
+    }
+
+    pub fn is_physical(&self) -> bool {
+        self.trait_.is_physical()
     }
 
     /// Returns true if this VMO is a REFERENCE child.

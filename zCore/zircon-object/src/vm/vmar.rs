@@ -1014,9 +1014,23 @@ impl VmAddressRegion {
                 );
             }
         }
-        candidates
-            .into_iter()
-            .find(|&offset| self.test_map(inner, offset, len, align))
+        candidates.into_iter().find_map(|offset| {
+            // Round up the candidate to the requested alignment.
+            let aligned = if align > 0 {
+                let mask = align - 1;
+                // Align the absolute address, then convert back to offset.
+                let abs = self.addr + offset;
+                let aligned_abs = (abs + mask) & !mask;
+                aligned_abs - self.addr
+            } else {
+                offset
+            };
+            if self.test_map(inner, aligned, len, align) {
+                Some(aligned)
+            } else {
+                None
+            }
+        })
     }
 
     fn end_addr(&self) -> VirtAddr {
@@ -1221,9 +1235,9 @@ impl VmAddressRegion {
     /// - depth 0: the VMAR itself
     /// - depth 1+: child VMARs and mappings
     pub fn get_info_maps(&self, base_depth: usize) -> ZxResult<Vec<InfoMapsEntry>> {
-        // Check if the VMAR is alive (not destroyed).
+        // If the VMAR is destroyed, return empty entries (no mappings).
         if self.inner.lock().is_none() {
-            return Err(ZxError::BAD_STATE);
+            return Ok(Vec::new());
         }
         let mut result = Vec::new();
         self.walk_info_maps(base_depth, &mut result);

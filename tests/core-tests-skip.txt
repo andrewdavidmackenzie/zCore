@@ -57,8 +57,7 @@ VmoTestCase.UnmapLoanedcontiguousWhileFaulting
 # Crash: memory-probe.cc assertion (demand-pages instead of faulting)
 VmoTestCase.NoPermProtect
 VmoTestCase.ReadOnlyMap
-# Hang: polling or waiting forever
-VmoTestCase.Prefetch
+# VmoTestCase.Prefetch — removed, now passes
 
 # ── VMO clone/slice/signal — previously skipped, most now pass ───────
 # (VmoReference.ChildSlice, VmoSliceTestCase.ZeroChildrenGrandchildClosedLast,
