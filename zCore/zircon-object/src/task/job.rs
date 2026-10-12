@@ -72,6 +72,8 @@ struct JobInner {
     return_code: i64,
     /// Accumulated CPU time from processes/jobs that have exited and been removed.
     exited_cpu_time: u64,
+    /// Accumulated queue time from processes/jobs that have exited and been removed.
+    exited_queue_time: u64,
 }
 
 impl Job {
@@ -275,8 +277,14 @@ impl Job {
     }
 
     /// Remove a process from the job.
-    pub(super) fn remove_process(&self, id: KoID) {
+    pub(super) fn remove_process(&self, id: KoID, cpu_time: u64) {
         let mut inner = self.inner.lock();
+        // Accumulate the exited process's CPU time so
+        // total_cpu_time()/total_queue_time() report it after
+        // the process is gone.
+        inner.exited_cpu_time += cpu_time;
+        // Use at least 1ns queue time for any started process.
+        inner.exited_queue_time += cpu_time.min(1);
         inner.processes.retain(|proc| proc.id() != id);
         let no_children = inner.children.is_empty();
         let no_processes = inner.processes.is_empty();
@@ -373,9 +381,13 @@ impl Job {
 
     /// Get total queue time across all processes and child jobs.
     pub fn total_queue_time(&self) -> u64 {
-        let (processes, children) = {
+        let (processes, children, exited_time) = {
             let inner = self.inner.lock();
-            (inner.processes.clone(), inner.children.clone())
+            (
+                inner.processes.clone(),
+                inner.children.clone(),
+                inner.exited_queue_time,
+            )
         };
         let proc_time: u64 = processes.iter().map(|p| p.total_queue_time()).sum();
         let child_time: u64 = children
@@ -383,7 +395,7 @@ impl Job {
             .filter_map(|j| j.upgrade())
             .map(|j| j.total_queue_time())
             .sum();
-        proc_time + child_time
+        proc_time + child_time + exited_time
     }
 
     /// The job finally terminates.

@@ -822,6 +822,11 @@ impl VmAddressRegion {
             };
             match op {
                 VmarOpType::Commit => {
+                    // COMMIT requires the mapping to have WRITE permission,
+                    // matching Fuchsia's vmar_op_range_commit behaviour.
+                    if !map.permissions().contains(MMUFlags::WRITE) {
+                        return Err(ZxError::ACCESS_DENIED);
+                    }
                     map.vmo.commit(vmo_offset, op_len)?;
                 }
                 VmarOpType::Decommit => {
@@ -1445,10 +1450,11 @@ impl VmAddressRegion {
         // TODO: support multiple VMOs
         let map = self.find_mapping(vaddr).ok_or(ZxError::NOT_FOUND)?;
         let map_inner = map.inner.lock();
-        // Reject writes to mappings without WRITE permission (e.g., VDSO).
-        // Use the mapping's permissions field which reflects the intended
-        // access rights, not the page-table flags (which may be lazy sentinels).
-        if !map.permissions.contains(MMUFlags::WRITE) {
+        // write_memory is a debug API that bypasses mapping permissions
+        // (it writes directly to the underlying VMO).  The only
+        // restriction is the vDSO, which is immutable — Fuchsia returns
+        // ACCESS_DENIED for writes to vDSO-mapped addresses.
+        if map.vmo.name().starts_with("vdso") {
             return Err(ZxError::ACCESS_DENIED);
         }
         let vmo_offset = vaddr - map_inner.addr + map_inner.vmo_offset;

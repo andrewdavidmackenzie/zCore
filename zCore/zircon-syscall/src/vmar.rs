@@ -123,13 +123,9 @@ impl Syscall<'_> {
         len: usize,
         mut mapped_addr: UserOutPtr<VirtAddr>,
     ) -> ZxResult {
-        // Strip alignment bits (24-31) before parsing VmOptions.
-        let options = match VmOptions::from_bits(options & 0x00FF_FFFF) {
-            Some(o) => o,
-            None => {
-                return Err(ZxError::INVALID_ARGS);
-            }
-        };
+        // vmar_map does not use alignment bits — reject any unknown
+        // bits (Fuchsia returns INVALID_ARGS for reserved bits).
+        let options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
         let proc = self.thread.proc();
         let (vmar, vmar_rights) = proc.get_object_and_rights::<VmAddressRegion>(vmar_handle)?;
         let (vmo, vmo_rights) = proc.get_object_and_rights::<VmObject>(vmo_handle)?;
@@ -291,8 +287,9 @@ impl Syscall<'_> {
         addr: u64,
         len: u64,
     ) -> ZxResult {
-        let mut options =
-            VmOptions::from_bits(options & 0x00FF_FFFF).ok_or(ZxError::INVALID_ARGS)?;
+        // vmar_protect does not use alignment bits — reject any
+        // unknown/reserved bits.
+        let mut options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
         // On architectures without XOM (execute-only memory) support
         // (x86_64), PERM_READ_IF_XOM_UNSUPPORTED is treated as PERM_READ.
         if options.contains(VmOptions::PERM_READ_IF_XOM_UNSUPPORTED) {
