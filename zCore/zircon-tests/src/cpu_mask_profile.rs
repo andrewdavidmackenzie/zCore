@@ -1,44 +1,48 @@
 //! CPU mask profile tests.
 //!
-//! Ports of Fuchsia's CPU mask profile test suite. Tests CPU
-//! affinity mask profiles for thread scheduling.
-//! zCore has no profile infrastructure. These tests verify thread
-//! creation and basic scheduling properties.
+//! 1:1 ports of Fuchsia's zircon/system/utest/core/profile/profile.cc
+//! (CpuMaskProfile test suite).
+//!
+//! CPU mask profiles set thread CPU affinity via zx_profile_create
+//! with ZX_PROFILE_INFO_FLAG_CPU_MASK. zCore does not implement the
+//! profile object. All tests are marked `#[ignore]`.
 
 use crate::helpers::TestContext;
-use zircon_object::object::KernelObject;
-use zircon_object::task::{Job, Process, Thread};
-
-/// C++: TEST(CpuMaskProfile, ApplyProfile)
-/// Verify that a thread can be created and configured (the closest
-/// analog to "applying a CPU mask profile" without actual profile
-/// infrastructure).
-#[test]
-fn apply_profile() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "profile-test").unwrap();
-    let thread = Thread::create(&proc, "profiled").unwrap();
-
-    // In zCore, there is no profile object, but we can verify the
-    // thread is created successfully and can be configured.
-    assert_ne!(thread.id(), 0);
-    assert_eq!(thread.name(), "profiled");
-}
 
 /// C++: TEST(CpuMaskProfile, EmptyMaskIsValid)
-/// Verify that a thread with default (no explicit) affinity mask works.
+/// Creates a profile with mask=0 (no valid CPUs), applies it to a
+/// background thread, and verifies the thread still runs (kernel
+/// falls back to its own CPU choice). Checks affinity mask is 0
+/// and last_scheduled_cpu != ZX_INFO_INVALID_CPU.
 #[test]
+#[ignore = "profile infrastructure (zx_profile_create) not implemented in zCore"]
 fn empty_mask_is_valid() {
     let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "empty-mask").unwrap();
-    let thread = Thread::create(&proc, "t1").unwrap();
+    // C++ test:
+    //   1. Create profile with MakeCpuMaskProfile(0)
+    //   2. RunThreadWithProfile(profile, || {
+    //        EXPECT_EQ(GetAffinityMask(*zx::thread::self()), 0);
+    //        EXPECT_NE(GetLastScheduledCpu(*zx::thread::self()), ZX_INFO_INVALID_CPU);
+    //      })
+}
 
-    // No CPU mask is set — thread should still be valid.
-    assert_ne!(thread.id(), 0);
-    // Thread can have its context set up without any affinity.
-    thread
-        .with_context(|ctx| ctx.setup_uspace(0x1000, 0x8000, &[0, 0, 0]))
-        .unwrap();
+/// C++: TEST(CpuMaskProfile, ApplyProfile)
+/// For each CPU i (0..num_cpus), creates a profile with mask = (1 << i),
+/// applies it to a background thread, and verifies both the affinity
+/// mask and last_scheduled_cpu match.
+#[test]
+#[ignore = "profile infrastructure (zx_profile_create) not implemented in zCore"]
+fn apply_profile() {
+    let _ctx = TestContext::new();
+    // C++ test:
+    //   const size_t num_cpus = GetCpuCount();
+    //   ASSERT_LT(num_cpus, ZX_CPU_SET_BITS_PER_WORD);
+    //   for (i in 0..num_cpus) {
+    //     profile_info = MakeCpuMaskProfile(1 << i);
+    //     zx::profile::create(rsrc, 0, &info, &profile);
+    //     RunThreadWithProfile(profile, [i]() {
+    //       EXPECT_EQ(GetAffinityMask(*zx::thread::self()), (1 << i));
+    //       EXPECT_EQ(GetLastScheduledCpu(*zx::thread::self()), i);
+    //     });
+    //   }
 }

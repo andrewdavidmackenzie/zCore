@@ -1,48 +1,53 @@
 //! Stack tests.
 //!
-//! Ports of Fuchsia's stack test suite. Tests stack address
-//! and size queries for main and spawned threads.
-
-use crate::helpers::TestContext;
-use zircon_object::object::KernelObject;
-use zircon_object::task::{Job, Process, Thread};
+//! 1:1 ports of Fuchsia's zircon/system/utest/core/stack/stack-test.cc.
+//!
+//! These tests verify that safe stack, unsafe stack, TLS, thread pointer,
+//! shadow call stack, and environ occupy non-overlapping pages. They use
+//! Clang's safe-stack and shadow-call-stack sanitizers, pthread APIs,
+//! and architecture-specific inline asm — none of which are available
+//! in zCore's libos mode. Both tests are marked `#[ignore]`.
 
 /// C++: TEST(StackTest, MainThreadStack)
-/// Verify that a thread can be created and its initial stack pointer
-/// can be configured. In zCore, stack is set via the thread context.
+/// Runs DoStackTest on the main thread, then calls CheckThreadStackInfo
+/// to verify that safe_stack, unsafe_stack, tls_buf, tp, and environ
+/// all occupy different pages.
+///
+/// This is "lossy" because the main thread's stack may span multiple
+/// pages. The C++ test acknowledges this.
 #[test]
+#[ignore = "requires safe-stack sanitizer, pthread TLS, inline asm — not available in libos"]
 fn main_thread_stack() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "stack-test").unwrap();
-    let thread = Thread::create(&proc, "main").unwrap();
-
-    // Set up a context with a stack pointer.
-    let stack_top: usize = 0x8000_0000;
-    thread
-        .with_context(|ctx| ctx.setup_uspace(0x1000, stack_top, &[0, 0, 0]))
-        .unwrap();
-
-    // Verify the thread was created successfully.
-    assert_ne!(thread.id(), 0);
-    assert_eq!(thread.name(), "main");
+    // C++ test:
+    //   StackTestInfo info;
+    //   info.is_pthread = false;
+    //   DoStackTest(&info);
+    //   CheckThreadStackInfo(&info);
+    //
+    // DoStackTest records:
+    //   - safe_stack = __builtin_frame_address(0)
+    //   - unsafe_stack = address of a local (escapes, so on unsafe stack)
+    //   - tls_buf = address of thread_local variable
+    //   - tp = thread pointer (__builtin_thread_pointer or fs:0)
+    //   - environ = environ pointer
+    //   - unsafe_start/ptr/end (if safe-stack enabled)
+    //   - scs_ptr (if shadow-call-stack enabled)
+    //
+    // CheckThreadStackInfo verifies all pages are distinct.
 }
 
 /// C++: TEST(StackTest, ThreadStack)
-/// Verify that multiple threads can each have their own stack pointer.
+/// Spawns a pthread with PTHREAD_STACK_MIN (one page) stack,
+/// runs DoStackTest, then verifies all stack/TLS pages are distinct.
 #[test]
+#[ignore = "requires pthread_create with 1-page stack, safe-stack sanitizer — not available in libos"]
 fn thread_stack() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "stack-test").unwrap();
-    let t1 = Thread::create(&proc, "t1").unwrap();
-    let t2 = Thread::create(&proc, "t2").unwrap();
-
-    // Each thread gets its own stack.
-    t1.with_context(|ctx| ctx.setup_uspace(0x1000, 0x8000_0000, &[0, 0, 0]))
-        .unwrap();
-    t2.with_context(|ctx| ctx.setup_uspace(0x1000, 0x9000_0000, &[0, 0, 0]))
-        .unwrap();
-
-    assert_ne!(t1.id(), t2.id());
+    // C++ test:
+    //   EXPECT_LE(PTHREAD_STACK_MIN, zx_system_get_page_size());
+    //   pthread_attr_init(&attr);
+    //   pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN);
+    //   info.is_pthread = true;
+    //   pthread_create(&thread, &attr, &DoStackTest, &info);
+    //   pthread_join(thread, nullptr);
+    //   CheckThreadStackInfo(&info);
 }

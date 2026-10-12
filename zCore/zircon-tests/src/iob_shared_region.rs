@@ -1,82 +1,71 @@
 //! IOB shared region tests.
 //!
-//! Ports of Fuchsia's IOB shared region test suite. IOB shared
-//! regions provide shared memory between kernel and userspace.
-//! zCore has no IOB kernel object. These tests verify the VMO-based
-//! shared memory that would underlie IOB.
+//! 1:1 ports of Fuchsia's zircon/system/utest/core/iob/iob.cc
+//! (IobSharedRegion test suite).
+//!
+//! IOB shared regions (zx_iob_create_shared_region) provide shared
+//! memory regions for ring-buffer style communication. zCore does not
+//! implement the IOB kernel object or any of the zx_iob_* syscalls.
+//! All tests are marked `#[ignore]`.
 
 use crate::helpers::TestContext;
-use zircon_object::object::KernelObject;
-use zircon_object::task::{Job, Process};
-use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
-
-/// C++: TEST(IobSharedRegion, CreateSucceeds)
-/// Create a VMO for shared memory (simulating IOB region creation).
-#[test]
-fn create_succeeds() {
-    let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1);
-    assert_ne!(vmo.id(), 0);
-    assert_eq!(vmo.len(), PAGE_SIZE);
-}
-
-/// C++: TEST(IobSharedRegion, HandleInfoAndLifetime)
-/// Verify VMO handle info and lifecycle management.
-#[test]
-fn handle_info_and_lifetime() {
-    use zircon_object::object::{Handle, Rights};
-
-    let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1);
-    let id = vmo.id();
-
-    let h = Handle::new(vmo.clone(), Rights::DEFAULT_VMO);
-    assert_eq!(h.object.id(), id);
-    assert!(h.rights.contains(Rights::READ));
-    assert!(h.rights.contains(Rights::WRITE));
-
-    // Drop handle — VMO should still be accessible via Arc.
-    drop(h);
-    assert_eq!(vmo.id(), id);
-}
 
 /// C++: TEST(IobSharedRegion, InvalidArgs)
-/// Verify that invalid operations on VMOs return proper errors.
+/// Tests invalid arguments to zx_iob_create_shared_region:
+///   - Non-zero options → ZX_ERR_INVALID_ARGS
+///   - Zero size → ZX_ERR_INVALID_ARGS
+///   - Non-page-aligned size → ZX_ERR_INVALID_ARGS
 #[test]
+#[ignore = "IOB infrastructure (zx_iob_create_shared_region) not implemented in zCore"]
 fn invalid_args() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1);
-
-    // Read past end should fail.
-    let mut buf = [0u8; 4];
-    let result = vmo.read(2 * PAGE_SIZE, &mut buf);
-    assert!(result.is_err(), "read past VMO end should fail");
-
-    // Decommit past end should fail.
-    let result = vmo.decommit(0, 2 * PAGE_SIZE);
-    assert!(result.is_err(), "decommit past end should fail");
+    // C++ test:
+    //   EXPECT_STATUS(zx_iob_create_shared_region(1, page_size, &handle), ZX_ERR_INVALID_ARGS);
+    //   EXPECT_STATUS(zx_iob_create_shared_region(0, 0, &handle), ZX_ERR_INVALID_ARGS);
+    //   EXPECT_STATUS(zx_iob_create_shared_region(0, page_size + 3, &handle), ZX_ERR_INVALID_ARGS);
 }
 
 /// C++: TEST(IobSharedRegion, OutOfRange)
-/// Map and verify that accessing beyond the mapped range fails.
+/// Tests out-of-range sizes for zx_iob_create_shared_region:
+///   - Near integer limit → ZX_ERR_OUT_OF_RANGE
+///   - Larger than max VMO size → ZX_ERR_OUT_OF_RANGE
 #[test]
+#[ignore = "IOB infrastructure (zx_iob_create_shared_region) not implemented in zCore"]
 fn out_of_range() {
     let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "iob-test").unwrap();
-    let vmar = proc.vmar();
+    // C++ test:
+    //   const uint64_t large_size = UINT64_MAX - page_size + 1;
+    //   EXPECT_STATUS(zx_iob_create_shared_region(0, large_size, &handle), ZX_ERR_OUT_OF_RANGE);
+    //
+    //   // Get max VMO size from an unbounded VMO
+    //   zx::vmo::create(0, ZX_VMO_UNBOUNDED, &vmo);
+    //   vmo.get_size(&max_vmo_size);
+    //   EXPECT_STATUS(zx_iob_create_shared_region(0, max_vmo_size + page_size, &handle),
+    //                 ZX_ERR_OUT_OF_RANGE);
+}
 
-    let vmo = VmObject::new_paged(1);
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
+/// C++: TEST(IobSharedRegion, CreateSucceeds)
+/// Successfully creates a shared region with valid arguments.
+#[test]
+#[ignore = "IOB infrastructure (zx_iob_create_shared_region) not implemented in zCore"]
+fn create_succeeds() {
+    let _ctx = TestContext::new();
+    // C++ test:
+    //   EXPECT_OK(zx_iob_create_shared_region(0, page_size, &handle));
+    //   zx_handle_close(handle);
+}
 
-    // Map exactly 1 page — should succeed.
-    let addr = vmar.map(None, vmo.clone(), 0, PAGE_SIZE, flags).unwrap();
-    assert_ne!(addr, 0);
-
-    // Mapping beyond VMO size should fail.
-    let vmo_small = VmObject::new_paged(1);
-    let result = vmar.map(None, vmo_small, 0, 2 * PAGE_SIZE, flags);
-    assert!(result.is_err(), "mapping beyond VMO size should fail");
-
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
+/// C++: TEST(Iob, SharedRegionWithNonRingBufferDiscipline)
+/// Creating an IOB with shared region and non-ring-buffer discipline
+/// (NONE or ID_ALLOCATOR) returns ZX_ERR_INVALID_ARGS.
+#[test]
+#[ignore = "IOB infrastructure not implemented in zCore"]
+fn shared_region_with_non_ring_buffer_discipline() {
+    let _ctx = TestContext::new();
+    // C++ test:
+    //   zx_iob_create_shared_region(0, 2 * page_size, &shared_region);
+    //   for (type : {ZX_IOB_DISCIPLINE_TYPE_NONE, ZX_IOB_DISCIPLINE_TYPE_ID_ALLOCATOR}) {
+    //     config = { .type = ZX_IOB_REGION_TYPE_SHARED, .discipline = {.type = type}, ... };
+    //     EXPECT_STATUS(zx::iob::create(0, &config, 1, &ep0, &ep1), ZX_ERR_INVALID_ARGS);
+    //   }
 }

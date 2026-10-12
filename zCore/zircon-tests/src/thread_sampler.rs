@@ -1,131 +1,105 @@
 //! Thread sampler tests.
 //!
-//! Ports of Fuchsia's thread sampler test suite.
-//! zCore has no thread sampler infrastructure. These tests verify
-//! thread state read API which is the basis for sampling.
+//! 1:1 ports of Fuchsia's zircon/system/utest/core/thread-sampler/thread-sampler.cc.
+//!
+//! The thread sampler (zx_sampler_create/start/stop/read) is a kernel-level
+//! profiling facility that periodically samples thread register state.
+//! zCore does not implement the sampler syscalls or the sampling resource.
+//! All tests are marked `#[ignore]`.
 
 use crate::helpers::TestContext;
-use zircon_object::object::KernelObject;
-use zircon_object::task::{Job, Process, Thread, ThreadState};
-
-/// C++: TEST(ThreadSampler, CreateSampler)
-/// Create a thread and verify it can be inspected.
-#[test]
-fn create_sampler() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "sampler").unwrap();
-    let thread = Thread::create(&proc, "sample-thread").unwrap();
-    assert_ne!(thread.id(), 0);
-    assert_eq!(thread.state(), ThreadState::New);
-}
 
 /// C++: TEST(ThreadSampler, StartStop)
-/// Verify thread lifecycle: create, start, kill.
-#[async_std::test]
-async fn start_stop() {
-    use crate::helpers;
-    use zircon_object::object::{KernelObject, Signal};
-    use zircon_object::task::Task;
-
-    helpers::ensure_hal_init();
-    let job = Job::root();
-    let proc = Process::create(&job, "sampler").unwrap();
-    let thread = Thread::create(&proc, "t1").unwrap();
-
-    thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-
-    assert!(thread.signal().contains(Signal::THREAD_RUNNING));
-
-    thread.kill();
-    let ko: alloc::sync::Arc<dyn KernelObject> = thread.clone();
-    ko.wait_signal(Signal::THREAD_TERMINATED).await;
-}
-
-/// C++: TEST(ThreadSampler, ReadState)
-/// Read thread general register state while suspended.
-#[async_std::test]
-async fn read_state() {
-    use crate::helpers;
-    use zircon_object::object::{KernelObject, Signal};
-    use zircon_object::task::{Task, ThreadStateKind};
-
-    helpers::ensure_hal_init();
-    let job = Job::root();
-    let proc = Process::create(&job, "sampler").unwrap();
-    let thread = Thread::create(&proc, "t1").unwrap();
-
-    thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
-
-    thread.suspend();
-    let ko: alloc::sync::Arc<dyn KernelObject> = thread.clone();
-    ko.wait_signal(Signal::THREAD_SUSPENDED).await;
-
-    let mut buf = vec![0u8; 1024];
-    let size = thread
-        .read_state(ThreadStateKind::General, &mut buf)
-        .unwrap();
-    assert!(size > 0);
-
-    thread.resume();
-    thread.kill();
-    ko.wait_signal(Signal::THREAD_TERMINATED).await;
-}
-
-/// C++: TEST(ThreadSampler, InvalidArgs)
-/// Verify thread creation with various names.
+/// Creates a sampler, spawns a thread, starts sampling, reads at least
+/// 10 records containing the thread's TID, stops, and cleans up.
 #[test]
-fn invalid_args() {
+#[ignore = "sampler infrastructure (zx_sampler_create/start/stop/read) not implemented in zCore"]
+fn start_stop() {
     let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "sampler").unwrap();
-
-    let t1 = Thread::create(&proc, "").unwrap();
-    assert_ne!(t1.id(), 0);
-
-    let t2 = Thread::create(&proc, "a-very-long-thread-name-for-testing").unwrap();
-    assert_ne!(t2.id(), 0);
+    // C++ test:
+    //   1. Get sampling resource via standalone::GetSystemResourceWithBase(ZX_RSRC_SYSTEM_SAMPLING_BASE)
+    //   2. zx_sampler_create(sampling_resource, 0, &config{period=1ms, buffer_size=page_size}, &sampler)
+    //   3. Create event, spawn thread running TestFn (signals event, busy-loops)
+    //   4. Wait for event signal
+    //   5. zx_sampler_start(sampler)
+    //   6. ReadNRecordsContainingTid(sampler, tid, 10) — polls for 30s
+    //   7. zx_sampler_stop(sampler)
+    //   8. Signal thread to exit, join
+    //   9. zx_handle_close(sampler)
 }
 
-/// C++: TEST(ThreadSampler, MultipleThreads)
-/// Sample multiple threads.
+/// C++: TEST(ThreadSampler, SamplerLifetime)
+/// Verifies that only one sampler can exist at a time. Creating a
+/// second sampler while the first exists returns ZX_ERR_ALREADY_EXISTS.
+/// After closing the first, a new one can be created.
 #[test]
-fn multiple_threads() {
+#[ignore = "sampler infrastructure (zx_sampler_create) not implemented in zCore"]
+fn sampler_lifetime() {
     let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "sampler").unwrap();
-
-    let threads: Vec<_> = (0..5)
-        .map(|i| Thread::create(&proc, &format!("t{}", i)).unwrap())
-        .collect();
-
-    for (i, t) in threads.iter().enumerate() {
-        assert_ne!(t.id(), 0);
-        assert_eq!(t.name(), format!("t{}", i));
-    }
+    // C++ test:
+    //   1. zx_sampler_create → sampler1 (OK)
+    //   2. zx_sampler_create → sampler2 (ZX_ERR_ALREADY_EXISTS)
+    //   3. zx_handle_close(sampler1)
+    //   4. zx_sampler_create → sampler3 (OK)
+    //   5. zx_handle_close(sampler3)
 }
 
-/// C++: TEST(ThreadSampler, BufferOverflow)
-/// Verify thread identity is unique.
+/// C++: TEST(ThreadSampler, InvalidOptions)
+/// Creating a sampler with non-zero options returns ZX_ERR_INVALID_ARGS.
 #[test]
-fn buffer_overflow() {
+#[ignore = "sampler infrastructure (zx_sampler_create) not implemented in zCore"]
+fn invalid_options() {
     let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "sampler").unwrap();
-
-    let mut ids = alloc::vec::Vec::new();
-    for _ in 0..10 {
-        let t = Thread::create(&proc, "t").unwrap();
-        ids.push(t.id());
-    }
-
-    // All IDs should be unique.
-    ids.sort();
-    ids.dedup();
-    assert_eq!(ids.len(), 10, "all thread IDs should be unique");
+    // C++ test:
+    //   zx_sampler_create(sampling_resource, 1 /*non-zero options*/, &config, &sampler)
+    //   ASSERT_EQ(create_res, ZX_ERR_INVALID_ARGS);
 }
 
-extern crate alloc;
+/// C++: TEST(ThreadSampler, DroppedSampler)
+/// Drops a sampler mid-session (close handle while sampling is active),
+/// then creates a new one and verifies it works.
+#[test]
+#[ignore = "sampler infrastructure (zx_sampler_create/start/stop) not implemented in zCore"]
+fn dropped_sampler() {
+    let _ctx = TestContext::new();
+    // C++ test:
+    //   1. Create sampler, spawn thread, start sampling
+    //   2. zx_handle_close(sampler) — drop mid-session
+    //   3. Create new sampler
+    //   4. Start, read 10 records, stop
+    //   5. Clean up thread
+}
+
+/// C++: TEST(ThreadSampler, NonRunningThread)
+/// Creates a sampler, creates a thread (Init but not Start), starts
+/// sampling, then starts the thread. Samples from the now-running
+/// thread should appear.
+#[test]
+#[ignore = "sampler infrastructure and TestThread::Init/Start not available in zCore"]
+fn non_running_thread() {
+    let _ctx = TestContext::new();
+    // C++ test:
+    //   1. zx_sampler_create
+    //   2. TestThread::Init("NonRunningThread") — thread created but not started
+    //   3. zx_sampler_start(sampler)
+    //   4. TestThread::Start(threads_test_wait_loop, event_handle)
+    //   5. Wait for event signal
+    //   6. ReadNRecordsContainingTid(sampler, tid, 10)
+    //   7. Stop, signal thread, wait
+}
+
+/// C++: TEST(ThreadSampler, HighFrequency)
+/// Stress test: 4 threads, 50us sample period, 1024-page buffer.
+/// Reads at least 10 records total.
+#[test]
+#[ignore = "sampler infrastructure not implemented in zCore"]
+fn high_frequency() {
+    let _ctx = TestContext::new();
+    // C++ test:
+    //   1. config.period = 50us, buffer_size = 1024 * page_size
+    //   2. Create sampler
+    //   3. Spawn 4 threads (TestFn), wait for each event
+    //   4. Start sampler
+    //   5. ReadNRecords(sampler, 10)
+    //   6. Stop, signal all threads, join all
+}
