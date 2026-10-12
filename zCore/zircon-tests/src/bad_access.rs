@@ -24,10 +24,10 @@ type HandleValue = u32;
 /// ```
 ///
 /// Writing from an unmapped address (0x1000) to a channel should fail.
-/// In real Fuchsia this is a page fault caught by the kernel. In zCore
-/// libos mode, the pointer dereference may or may not fault depending on
-/// the host OS. We call the same syscall and verify it returns an error.
+/// In real Fuchsia this is a page fault caught by the kernel. In libos mode,
+/// dereferencing 0x1000 causes SIGSEGV which kills the test runner.
 #[test]
+#[ignore = "would crash: reading from unmapped address causes SIGSEGV in libos mode"]
 fn invalid_mapped_address_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -74,7 +74,9 @@ fn invalid_mapped_address_fails() {
 /// ```
 ///
 /// Writing from a kernel-space address should fail.
+/// In libos mode, dereferencing kernel-space address causes SIGSEGV.
 #[test]
+#[ignore = "would crash: reading from kernel-space address causes SIGSEGV in libos mode"]
 fn kernel_mapped_address_channel_write_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -208,7 +210,10 @@ fn syscall_num_test() {
 /// ```
 ///
 /// Reading handles into an unmapped address should return INVALID_ARGS.
+/// In libos mode, writing to unmapped memory causes SIGSEGV which kills the
+/// test runner. The C++ test uses ASSERT_DEATH for this.
 #[test]
+#[ignore = "would crash: writing to unmapped handle pointer causes SIGSEGV in libos mode"]
 fn channel_read_handle() {
     use zircon_object::object::{Handle, Rights};
 
