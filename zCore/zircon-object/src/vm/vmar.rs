@@ -1221,9 +1221,9 @@ impl VmAddressRegion {
     /// - depth 0: the VMAR itself
     /// - depth 1+: child VMARs and mappings
     pub fn get_info_maps(&self, base_depth: usize) -> ZxResult<Vec<InfoMapsEntry>> {
-        // Check if the VMAR is alive (not destroyed).
+        // If the VMAR is destroyed, return empty entries (no mappings).
         if self.inner.lock().is_none() {
-            return Err(ZxError::BAD_STATE);
+            return Ok(Vec::new());
         }
         let mut result = Vec::new();
         self.walk_info_maps(base_depth, &mut result);
