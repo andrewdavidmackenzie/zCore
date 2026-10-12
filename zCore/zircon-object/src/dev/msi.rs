@@ -57,4 +57,17 @@ impl MsiAllocation {
         *used |= mask;
         Ok(self.base_irq + msi_id as usize)
     }
+
+    /// Release a vector (called when the interrupt object is dropped).
+    pub fn release_vector(&self, msi_id: u32) {
+        if msi_id < self.count {
+            let mut used = self.used.lock();
+            *used &= !(1u32 << msi_id);
+        }
+    }
+
+    /// Number of currently active interrupt objects.
+    pub fn interrupt_count(&self) -> u32 {
+        self.used.lock().count_ones()
+    }
 }
