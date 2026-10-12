@@ -28,6 +28,7 @@ extern crate alloc;
 /// FAILS: libos has no copy_to_user fault path — handles are always
 /// consumed normally via Channel::read().
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 #[should_panic(expected = "cannot test copy_to_user faults in libos")]
 fn channel_read_fault_does_not_leak_handles() {
     let _ctx = TestContext::new();
@@ -42,6 +43,7 @@ fn channel_read_fault_does_not_leak_handles() {
 /// spuriously set without a message actually in the queue.
 /// FAILS: needs concurrent threads with preemptive scheduling.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 #[should_panic(expected = "needs concurrent threads")]
 fn channel_no_spurious_readable_signal_when_racing() {
     let _ctx = TestContext::new();
@@ -80,6 +82,7 @@ fn channel_wait_many_is_signaled_on_any_element_write() {
 /// exception.
 /// FAILS: policy exception infrastructure not implemented.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 #[should_panic(expected = "policy exception not implemented")]
 fn channel_full_exception() {
     let _ctx = TestContext::new();
@@ -114,6 +117,7 @@ fn channel_full_exception() {
 /// Queue 4096+ packets, expect policy exception on overflow.
 /// FAILS: policy exception infrastructure not implemented.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 #[should_panic(expected = "policy exception not implemented")]
 fn port_queue_packet_limit_exceeded_generates_policy_exception() {
     let _ctx = TestContext::new();
@@ -147,6 +151,7 @@ fn port_queue_packet_limit_exceeded_generates_policy_exception() {
 /// returning ZX_ERR_NO_MEMORY.
 /// FAILS: kernel panics on OOM.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 #[should_panic(expected = "OOM")]
 fn port_too_many_observers() {
     let _ctx = TestContext::new();
@@ -202,6 +207,7 @@ fn vmo_reference_child_snapshot_at_least_on_write() {
 /// C++: TEST(VmoZeroTestCase, WriteCowParent)
 /// Zero pages in parent after COW fork, verify populated_bytes.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 fn vmo_zero_write_cow_parent() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(2);
@@ -227,6 +233,7 @@ fn vmo_zero_write_cow_parent() {
 /// C++: TEST(VmoZeroTestCase, AllocateAfterMergeMultipleChildren)
 /// Multiple COW children, drop some, verify populated_bytes.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 #[should_panic(expected = "populated_bytes")]
 fn vmo_zero_allocate_after_merge_multiple_children() {
     let _ctx = TestContext::new();

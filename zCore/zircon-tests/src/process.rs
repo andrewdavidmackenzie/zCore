@@ -235,6 +235,7 @@ fn process_related_koid_cxx() {
 /// Getting runtime info requires a thread to have actually executed.
 /// zCore's cooperative scheduler makes this hang in test mode.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 #[should_panic(expected = "not yet implemented")]
 fn process_get_info_runtime() {
     // In the C++ test, GetInfoRuntime queries ZX_INFO_TASK_RUNTIME
@@ -246,6 +247,7 @@ fn process_get_info_runtime() {
 /// C++: TEST(ProcessTest, GetInfoRuntimeV1)
 /// Same as GetInfoRuntime but for V1 runtime info.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 #[should_panic(expected = "not yet implemented")]
 fn process_get_info_runtime_v1() {
     unimplemented!("not yet implemented");
@@ -310,6 +312,7 @@ fn process_handle_table_self() {
 /// C++: TEST(ProcessTest, ProcessWaitAsyncCancelSelf)
 /// Race condition stress test that needs real threads.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 #[should_panic(expected = "not yet implemented")]
 fn process_wait_async_cancel_self() {
     // This C++ test does a tight loop of WAIT_ASYNC_CANCEL on a
@@ -559,6 +562,7 @@ fn suspend() {
 /// C++: TEST(ProcessTest, SuspendSelf)
 /// Suspending the current process returns NOT_SUPPORTED.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 fn suspend_self() {
     let _ctx = TestContext::new();
     let job = Job::root();

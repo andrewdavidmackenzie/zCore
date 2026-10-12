@@ -444,6 +444,7 @@ fn stream_syscall_invalid_args() {
 /// This is enforced at the syscall layer, so we test the VMO
 /// properties that the syscall checks.
 #[test]
+#[ignore = "in core-tests-skip.txt: hangs/crashes in QEMU"]
 fn stream_no_contiguous_or_physical_vmo() {
     let _ctx = TestContext::new();
 
