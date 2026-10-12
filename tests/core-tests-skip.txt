@@ -17,7 +17,7 @@ PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.CancelKeyCloseRace
 ChannelTest.NoSpuriousReadableSignalWhenRacing
-ChannelCallMutexTest.*
+# ChannelCallMutexTest.* — removed, 1/1 passes (MutexHeldAcrossCallChain)
 # ChannelInternalTest: 3 tests pass, 1 hangs
 ChannelInternalTest.TransferChannelWithPendingCall
 ProcessTest.ProcessWaitAsyncCancelSelf
@@ -118,9 +118,13 @@ Bti.*
 
 # ── Interrupt / MSI tests ────────────────────────────────────────────
 # Multiple tests panic (interrupt/mod.rs:55 unwrap) or hang.
-# MsiTest crashes on boot_options_vmo (test_ram_reserve).
+# MsiTest — 2/6 pass (AllocateSyscall, ContiguousNotSupported).
+# Remaining 4 fail (Msi, CreateSyscallArgs, AllocatedHandleRights, Msix).
 InterruptTest.*
-MsiTest.*
+MsiTest.Msi
+MsiTest.CreateSyscallArgs
+MsiTest.AllocatedHandleRights
+MsiTest.Msix
 
 # ── Channel fault handling ───────────────────────────────────────────
 # Reads from a faulting buffer — hangs (needs exception infrastructure).
@@ -158,7 +162,8 @@ WakeReportTestsThreadBound.*
 # tries to read samples. Kills the test runner process.
 ThreadSampler.*
 
-# ── BadAccessTest — crashes test runner ──────────────────────────────
-# Deliberately accesses invalid memory; our kernel demand-pages
-# instead of faulting, leading to a page-fault crash.
-BadAccessTest.*
+# ── BadAccessTest — 4/5 pass, 1 fails ────────────────────────────────
+# InvalidMappedAddressFails, ChannelReadHandle,
+# NormalMappedAddressChannelWriteSucceeds, KernelMappedAddressChannelWriteFails
+# all pass. Only SyscallNumTest fails.
+BadAccessTest.SyscallNumTest

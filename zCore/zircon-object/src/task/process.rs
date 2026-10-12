@@ -102,13 +102,21 @@ impl_kobject!(Process
     }
     fn on_zero_handles(&self) {
         // When all handles to the process are closed and it was never
-        // started (or has already exited), destroy the root VMAR.
-        // Skip for shared processes — the VMAR is used by another
-        // process and must remain alive.
-        let status = self.inner.lock().status;
-        if !self.is_shared()
-            && (status == Status::Init || matches!(status, Status::Exited(_)))
-        {
+        // started (no threads), remove it from the job (firing
+        // JOB_NO_PROCESSES) and destroy the VMAR. Already-exited
+        // processes just need VMAR cleanup.
+        let inner = self.inner.lock();
+        let status = inner.status;
+        let has_threads = !inner.threads.is_empty();
+        drop(inner);
+        if self.is_shared() {
+            return;
+        }
+        if status == Status::Init && !has_threads {
+            // Never started, no threads — remove from job and destroy VMAR.
+            self.job.remove_process(self.base.id);
+            let _ = self.vmar.destroy();
+        } else if matches!(status, Status::Exited(_)) {
             let _ = self.vmar.destroy();
         }
     }
