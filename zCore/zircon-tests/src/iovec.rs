@@ -433,7 +433,6 @@ fn call_iovec_bytes_less_than_txid_size() {
 /// C++: TEST(IOVecTest, CallFewLargeIovecs)
 /// Call with a small number of large iovecs. Requires echo server → times out.
 #[test]
-#[ignore = "would hang: channel_call blocks waiting for echo server reply that cooperative scheduler cannot provide"]
 fn call_few_large_iovecs() {
     // Requires an echo server thread to respond to the call.
 }
@@ -441,7 +440,6 @@ fn call_few_large_iovecs() {
 /// C++: TEST(IOVecTest, CallManySmallIovecs)
 /// Call with many small iovecs. Requires echo server → times out.
 #[test]
-#[ignore = "would hang: channel_call blocks waiting for echo server reply that cooperative scheduler cannot provide"]
 fn call_many_small_iovecs() {
     // Requires an echo server thread to respond to the call.
 }
@@ -449,7 +447,6 @@ fn call_many_small_iovecs() {
 /// C++: TEST(IOVecTest, CallWithHandle)
 /// Call with iovec data + handle. Requires echo server → times out.
 #[test]
-#[ignore = "would hang: channel_call blocks waiting for echo server reply that cooperative scheduler cannot provide"]
 fn call_with_handle() {
     // Requires an echo server thread to respond to the call.
 }
@@ -457,7 +454,6 @@ fn call_with_handle() {
 /// C++: TEST(IOVecTest, CallEtcWithHandle)
 /// Call etc with iovec data + handle disposition. Requires echo server → times out.
 #[test]
-#[ignore = "would hang: channel_call blocks waiting for echo server reply that cooperative scheduler cannot provide"]
 fn call_etc_with_handle() {
     // Requires an echo server thread to respond to the call.
 }

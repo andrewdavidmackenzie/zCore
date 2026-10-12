@@ -3550,7 +3550,6 @@ fn pager_bulk_single_supply_test_vmar() {
 
 /// C++: VMO_VMAR_TEST(Pager, CancelKeyDoesNotWedgeThePager) — Vmo variant
 #[test]
-#[ignore = "requires concurrent port cancel infrastructure"]
 fn pager_cancel_key_does_not_wedge_the_pager_vmo() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -3560,7 +3559,6 @@ fn pager_cancel_key_does_not_wedge_the_pager_vmo() {
 
 /// C++: VMO_VMAR_TEST(Pager, CancelKeyDoesNotWedgeThePager) — Vmar variant
 #[test]
-#[ignore = "requires concurrent port cancel infrastructure"]
 fn pager_cancel_key_does_not_wedge_the_pager_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -3886,7 +3884,6 @@ fn pager_clone_shrink_grow_parent() {
 
 /// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousChildReadTest) — Vmo variant
 #[test]
-#[ignore = "requires concurrent threads for simultaneous access"]
 fn pager_clone_simultaneous_child_read_test_vmo() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -3896,7 +3893,6 @@ fn pager_clone_simultaneous_child_read_test_vmo() {
 
 /// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousChildReadTest) — Vmar variant
 #[test]
-#[ignore = "requires concurrent threads for simultaneous access"]
 fn pager_clone_simultaneous_child_read_test_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -3906,7 +3902,6 @@ fn pager_clone_simultaneous_child_read_test_vmar() {
 
 /// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousReadTest) — Vmo variant
 #[test]
-#[ignore = "requires concurrent threads for simultaneous access"]
 fn pager_clone_simultaneous_read_test_vmo() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -3916,7 +3911,6 @@ fn pager_clone_simultaneous_read_test_vmo() {
 
 /// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousReadTest) — Vmar variant
 #[test]
-#[ignore = "requires concurrent threads for simultaneous access"]
 fn pager_clone_simultaneous_read_test_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4340,7 +4334,6 @@ fn pager_early_supply_test_vmar() {
 
 /// C++: TEST(Pager, EarlyWakeCloneRace)
 #[test]
-#[ignore = "requires concurrent thread wake infrastructure"]
 fn pager_early_wake_clone_race() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4350,7 +4343,6 @@ fn pager_early_wake_clone_race() {
 
 /// C++: TEST(Pager, EarlyWakeNonLinearSupply)
 #[test]
-#[ignore = "requires concurrent thread wake infrastructure"]
 fn pager_early_wake_non_linear_supply() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4360,7 +4352,6 @@ fn pager_early_wake_non_linear_supply() {
 
 /// C++: TEST(Pager, EarlyWakeOnSupply)
 #[test]
-#[ignore = "requires concurrent thread wake infrastructure"]
 fn pager_early_wake_on_supply() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4370,7 +4361,6 @@ fn pager_early_wake_on_supply() {
 
 /// C++: TEST(Pager, EarlyWakeOverlappingRequests)
 #[test]
-#[ignore = "requires concurrent thread wake infrastructure"]
 fn pager_early_wake_overlapping_requests() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4380,7 +4370,6 @@ fn pager_early_wake_overlapping_requests() {
 
 /// C++: TEST(Pager, EarlyWakeWithResize)
 #[test]
-#[ignore = "requires concurrent thread wake infrastructure"]
 fn pager_early_wake_with_resize() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4400,7 +4389,6 @@ fn pager_eviction_hint_always_need() {
 
 /// C++: TEST(Pager, EvictionHintsCloneVmar)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_eviction_hints_clone_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4410,7 +4398,6 @@ fn pager_eviction_hints_clone_vmar() {
 
 /// C++: TEST(Pager, EvictionHintsNestedVmar)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_eviction_hints_nested_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4433,7 +4420,6 @@ fn pager_eviction_hints_op_range() {
 
 /// C++: TEST(Pager, EvictionHintsVmar)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_eviction_hints_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4478,7 +4464,6 @@ fn pager_fail_after_detach() {
 
 /// C++: TEST(Pager, FailEarlyWake)
 #[test]
-#[ignore = "requires concurrent thread wake infrastructure"]
 fn pager_fail_early_wake() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4683,7 +4668,6 @@ fn pager_many_request_test_vmar() {
 
 /// C++: TEST(Pager, MappedSupplyPages)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_mapped_supply_pages() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4715,7 +4699,6 @@ fn pager_multicommit_supply_test() {
 
 /// C++: TEST(Pager, MultipleConcurrentVmoTest)
 #[test]
-#[ignore = "requires concurrent thread infrastructure"]
 fn pager_multiple_concurrent_vmo_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4747,7 +4730,6 @@ fn pager_multisupply_commit_test() {
 
 /// C++: TEST(Pager, OpCommitCloneVmar)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_op_commit_clone_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4757,7 +4739,6 @@ fn pager_op_commit_clone_vmar() {
 
 /// C++: TEST(Pager, OpCommitVmar)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_op_commit_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4879,7 +4860,6 @@ fn pager_overlap_supply_test_vmar() {
 
 /// C++: TEST(Pager, PageRequestBatchingChecksAncestorPages)
 #[test]
-#[ignore = "requires demand-paging with ancestor page checks"]
 fn pager_page_request_batching_checks_ancestor_pages() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4889,7 +4869,6 @@ fn pager_page_request_batching_checks_ancestor_pages() {
 
 /// C++: TEST(Pager, PagerDetachPinned)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_pager_detach_pinned() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4899,7 +4878,6 @@ fn pager_pager_detach_pinned() {
 
 /// C++: TEST(Pager, PinPagerVmoWithLoanedPages)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_pin_pager_vmo_with_loaned_pages() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4909,7 +4887,6 @@ fn pager_pin_pager_vmo_with_loaned_pages() {
 
 /// C++: TEST(Pager, PinnedSupplyPages)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_pinned_supply_pages() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4919,7 +4896,6 @@ fn pager_pinned_supply_pages() {
 
 /// C++: TEST(Pager, Prefetch)
 #[test]
-#[ignore = "requires demand-paging prefetch infrastructure"]
 fn pager_prefetch() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4929,7 +4905,6 @@ fn pager_prefetch() {
 
 /// C++: TEST(Pager, PresentPageSplitsRange)
 #[test]
-#[ignore = "requires demand-paging page presence tracking"]
 fn pager_present_page_splits_range() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4975,7 +4950,6 @@ fn pager_presupply_test_vmar() {
 
 /// C++: TEST(Pager, ProxyUseAfterFree)
 #[test]
-#[ignore = "requires concurrent thread races"]
 fn pager_proxy_use_after_free() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4985,7 +4959,6 @@ fn pager_proxy_use_after_free() {
 
 /// C++: TEST(Pager, RacyPortDequeue)
 #[test]
-#[ignore = "requires concurrent thread races"]
 fn pager_racy_port_dequeue() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -4995,7 +4968,6 @@ fn pager_racy_port_dequeue() {
 
 /// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptEarlyTest) — Vmo variant
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn pager_read_close_interrupt_early_test_vmo() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5005,7 +4977,6 @@ fn pager_read_close_interrupt_early_test_vmo() {
 
 /// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptEarlyTest) — Vmar variant
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn pager_read_close_interrupt_early_test_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5015,7 +4986,6 @@ fn pager_read_close_interrupt_early_test_vmar() {
 
 /// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptLateTest) — Vmo variant
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn pager_read_close_interrupt_late_test_vmo() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5025,7 +4995,6 @@ fn pager_read_close_interrupt_late_test_vmo() {
 
 /// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptLateTest) — Vmar variant
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn pager_read_close_interrupt_late_test_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5035,7 +5004,6 @@ fn pager_read_close_interrupt_late_test_vmar() {
 
 /// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptEarlyTest) — Vmo variant
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn pager_read_detach_interrupt_early_test_vmo() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5045,7 +5013,6 @@ fn pager_read_detach_interrupt_early_test_vmo() {
 
 /// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptEarlyTest) — Vmar variant
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn pager_read_detach_interrupt_early_test_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5055,7 +5022,6 @@ fn pager_read_detach_interrupt_early_test_vmar() {
 
 /// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptLateTest) — Vmo variant
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn pager_read_detach_interrupt_late_test_vmo() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5065,7 +5031,6 @@ fn pager_read_detach_interrupt_late_test_vmo() {
 
 /// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptLateTest) — Vmar variant
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn pager_read_detach_interrupt_late_test_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5075,7 +5040,6 @@ fn pager_read_detach_interrupt_late_test_vmar() {
 
 /// C++: VMO_VMAR_TEST(Pager, ReadResizeTest) — Vmo variant
 #[test]
-#[ignore = "requires concurrent thread resize+read"]
 fn pager_read_resize_test_vmo() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5085,7 +5049,6 @@ fn pager_read_resize_test_vmo() {
 
 /// C++: VMO_VMAR_TEST(Pager, ReadResizeTest) — Vmar variant
 #[test]
-#[ignore = "requires concurrent thread resize+read"]
 fn pager_read_resize_test_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5095,7 +5058,6 @@ fn pager_read_resize_test_vmar() {
 
 /// C++: TEST(Pager, ResizeBlockedPin)
 #[test]
-#[ignore = "requires concurrent thread blocking"]
 fn pager_resize_blocked_pin() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5312,7 +5274,6 @@ fn pager_supply_after_fail() {
 
 /// C++: TEST(Pager, SuspendCommitTest)
 #[test]
-#[ignore = "requires thread suspend infrastructure"]
 fn pager_suspend_commit_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5322,7 +5283,6 @@ fn pager_suspend_commit_test() {
 
 /// C++: TEST(Pager, SuspendInKernelCaptureFaultsTest)
 #[test]
-#[ignore = "requires real process execution"]
 fn pager_suspend_in_kernel_capture_faults_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5332,7 +5292,6 @@ fn pager_suspend_in_kernel_capture_faults_test() {
 
 /// C++: TEST(Pager, SuspendInKernelTest)
 #[test]
-#[ignore = "requires real process execution + thread suspend"]
 fn pager_suspend_in_kernel_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5342,7 +5301,6 @@ fn pager_suspend_in_kernel_test() {
 
 /// C++: VMO_VMAR_TEST(Pager, SuspendReadTest) — Vmo variant
 #[test]
-#[ignore = "requires thread suspend infrastructure"]
 fn pager_suspend_read_test_vmo() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5352,7 +5310,6 @@ fn pager_suspend_read_test_vmo() {
 
 /// C++: VMO_VMAR_TEST(Pager, SuspendReadTest) — Vmar variant
 #[test]
-#[ignore = "requires thread suspend infrastructure"]
 fn pager_suspend_read_test_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5416,7 +5373,6 @@ fn pager_uncommitted_supply() {
 
 /// C++: TEST(Pager, VmarMapRangeTest)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_vmar_map_range_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5426,7 +5382,6 @@ fn pager_vmar_map_range_test() {
 
 /// C++: TEST(Pager, VmarRemapTest)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_vmar_remap_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5436,7 +5391,6 @@ fn pager_vmar_remap_test() {
 
 /// C++: TEST(Pager, VmarUnmapTest)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_vmar_unmap_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5457,7 +5411,6 @@ fn pager_vmo_info_pager_test() {
 
 /// C++: TEST(Pager, ZeroHandlesRace)
 #[test]
-#[ignore = "requires concurrent thread races"]
 fn pager_zero_handles_race() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5651,7 +5604,6 @@ fn pager_wb_delayed_dirty_zero_range() {
 
 /// C++: TEST(PagerWriteback, DelayedPinAwaitingClean)
 #[test]
-#[ignore = "requires BTI pinning + blocking infrastructure"]
 fn pager_wb_delayed_pin_awaiting_clean() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5661,7 +5613,6 @@ fn pager_wb_delayed_pin_awaiting_clean() {
 
 /// C++: TEST(PagerWriteback, DelayedReadZeroRange)
 #[test]
-#[ignore = "requires blocking page fault infrastructure"]
 fn pager_wb_delayed_read_zero_range() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5709,7 +5660,6 @@ fn pager_wb_detach_with_pending_dirty_request_vmar() {
 
 /// C++: TEST(PagerWriteback, DirtyAfterMapProtectNoTrapDirty)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_wb_dirty_after_map_protect_no_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5719,7 +5669,6 @@ fn pager_wb_dirty_after_map_protect_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, DirtyAfterMapProtectTrapDirty)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_wb_dirty_after_map_protect_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -5937,7 +5886,6 @@ fn pager_wb_dirty_requests_repeated_writes() {
 
 /// C++: TEST(PagerWriteback, DirtyRequestsViaMapping)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_wb_dirty_requests_via_mapping() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -6004,7 +5952,6 @@ fn pager_wb_fail_dirty_requests_for_zero_pages() {
 
 /// C++: TEST(PagerWriteback, FailedPinAwaitingClean)
 #[test]
-#[ignore = "requires BTI pinning + blocking infrastructure"]
 fn pager_wb_failed_pin_awaiting_clean() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -6101,7 +6048,6 @@ fn pager_wb_modified_no_reset_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, ModifiedOnMappingWriteNoTrapDirty)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_wb_modified_on_mapping_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -6111,7 +6057,6 @@ fn pager_wb_modified_on_mapping_write_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, ModifiedOnMappingWriteTrapDirty)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_wb_modified_on_mapping_write_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -6478,7 +6423,6 @@ fn pager_wb_not_modified_clone_write_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, NotModifiedFailedPinWrite)
 #[test]
-#[ignore = "requires BTI pinning + blocking infrastructure"]
 fn pager_wb_not_modified_failed_pin_write() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -6571,7 +6515,6 @@ fn pager_wb_not_modified_on_failed_vmo_write_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, NotModifiedOnMappingReadNoTrapDirty)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_wb_not_modified_on_mapping_read_no_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -6581,7 +6524,6 @@ fn pager_wb_not_modified_on_mapping_read_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, NotModifiedOnMappingReadTrapDirty)
 #[test]
-#[ignore = "requires real VMAR mapping"]
 fn pager_wb_not_modified_on_mapping_read_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -6623,7 +6565,6 @@ fn pager_wb_not_modified_on_vmo_read_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, NotModifiedPartialFailedPinWrite)
 #[test]
-#[ignore = "requires BTI pinning + blocking infrastructure"]
 fn pager_wb_not_modified_partial_failed_pin_write() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7003,7 +6944,6 @@ fn pager_wb_op_zero_writeback_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, PinAfterDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_pin_after_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7013,7 +6953,6 @@ fn pager_wb_pin_after_dirty() {
 
 /// C++: TEST(PagerWriteback, PinForReadNoTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_pin_for_read_no_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7023,7 +6962,6 @@ fn pager_wb_pin_for_read_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, PinForReadTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_pin_for_read_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7033,7 +6971,6 @@ fn pager_wb_pin_for_read_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, PinForWriteNoTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_pin_for_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7043,7 +6980,6 @@ fn pager_wb_pin_for_write_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, PinForWriteTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_pin_for_write_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7053,7 +6989,6 @@ fn pager_wb_pin_for_write_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, PinForWriteUnpopulatedNoTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_pin_for_write_unpopulated_no_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7063,7 +6998,6 @@ fn pager_wb_pin_for_write_unpopulated_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, PinForWriteUnpopulatedTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_pin_for_write_unpopulated_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7073,7 +7007,6 @@ fn pager_wb_pin_for_write_unpopulated_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, PinnedWritebackNoTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_pinned_writeback_no_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7083,7 +7016,6 @@ fn pager_wb_pinned_writeback_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, PinnedWritebackTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_pinned_writeback_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7150,7 +7082,6 @@ fn pager_wb_query_vmo_stats_invalid_pointer() {
 
 /// C++: TEST(PagerWriteback, ReadPinAwaitingCleanNoTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning + blocking infrastructure"]
 fn pager_wb_read_pin_awaiting_clean_no_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7160,7 +7091,6 @@ fn pager_wb_read_pin_awaiting_clean_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, ReadPinAwaitingCleanTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning + blocking infrastructure"]
 fn pager_wb_read_pin_awaiting_clean_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7886,7 +7816,6 @@ fn pager_wb_slice_op_zero_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, SlicePinWriteNoTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_slice_pin_write_no_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7896,7 +7825,6 @@ fn pager_wb_slice_pin_write_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, SlicePinWriteTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning infrastructure"]
 fn pager_wb_slice_pin_write_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7938,7 +7866,6 @@ fn pager_wb_slice_write_trap_dirty() {
 
 /// C++: VMO_VMAR_TEST(PagerWriteback, SuspendDirtyTest) — Vmo variant
 #[test]
-#[ignore = "requires thread suspend + TRAP_DIRTY infrastructure"]
 fn pager_wb_suspend_dirty_test_vmo() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -7948,7 +7875,6 @@ fn pager_wb_suspend_dirty_test_vmo() {
 
 /// C++: VMO_VMAR_TEST(PagerWriteback, SuspendDirtyTest) — Vmar variant
 #[test]
-#[ignore = "requires thread suspend + TRAP_DIRTY infrastructure"]
 fn pager_wb_suspend_dirty_test_vmar() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -8024,7 +7950,6 @@ fn pager_wb_untracked_beyond_stream_size() {
 
 /// C++: TEST(PagerWriteback, WritePinAwaitingCleanNoTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning + blocking infrastructure"]
 fn pager_wb_write_pin_awaiting_clean_no_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -8034,7 +7959,6 @@ fn pager_wb_write_pin_awaiting_clean_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, WritePinAwaitingCleanTrapDirty)
 #[test]
-#[ignore = "requires BTI pinning + blocking infrastructure"]
 fn pager_wb_write_pin_awaiting_clean_trap_dirty() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -8931,7 +8855,6 @@ fn bulk_single_supply_test() {
 
 /// C++: TEST(Pager, CancelKeyDoesNotWedgeThePager)
 #[test]
-#[ignore = "requires concurrent port cancel infrastructure"]
 fn cancel_key_does_not_wedge_the_pager() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -8975,7 +8898,6 @@ fn clone_read_from_parent_test() {
 
 /// C++: TEST(Pager, CloneSimultaneousChildReadTest)
 #[test]
-#[ignore = "requires concurrent threads for simultaneous access"]
 fn clone_simultaneous_child_read_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -8985,7 +8907,6 @@ fn clone_simultaneous_child_read_test() {
 
 /// C++: TEST(Pager, CloneSimultaneousReadTest)
 #[test]
-#[ignore = "requires concurrent threads for simultaneous access"]
 fn clone_simultaneous_read_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9174,7 +9095,6 @@ fn presupply_test() {
 
 /// C++: TEST(Pager, ReadCloseInterruptEarlyTest)
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn read_close_interrupt_early_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9184,7 +9104,6 @@ fn read_close_interrupt_early_test() {
 
 /// C++: TEST(Pager, ReadCloseInterruptLateTest)
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn read_close_interrupt_late_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9194,7 +9113,6 @@ fn read_close_interrupt_late_test() {
 
 /// C++: TEST(Pager, ReadDetachInterruptEarlyTest)
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn read_detach_interrupt_early_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9204,7 +9122,6 @@ fn read_detach_interrupt_early_test() {
 
 /// C++: TEST(Pager, ReadDetachInterruptLateTest)
 #[test]
-#[ignore = "requires concurrent thread interrupt infrastructure"]
 fn read_detach_interrupt_late_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9214,7 +9131,6 @@ fn read_detach_interrupt_late_test() {
 
 /// C++: TEST(Pager, ReadResizeTest)
 #[test]
-#[ignore = "requires concurrent thread resize+read"]
 fn read_resize_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9264,7 +9180,6 @@ fn single_page_test() {
 
 /// C++: TEST(Pager, SuspendReadTest)
 #[test]
-#[ignore = "requires thread suspend infrastructure"]
 fn suspend_read_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9292,7 +9207,6 @@ fn uncommitted_single_page_test() {
 
 /// C++: TEST(PagerProcess, KillAfterSuspendPageFault)
 #[test]
-#[ignore = "requires real process execution"]
 fn pager_process_kill_after_suspend_page_fault() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9302,7 +9216,6 @@ fn pager_process_kill_after_suspend_page_fault() {
 
 /// C++: TEST(PagerProcess, KillAfterSuspendUsercopy)
 #[test]
-#[ignore = "requires real process execution"]
 fn pager_process_kill_after_suspend_usercopy() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9312,7 +9225,6 @@ fn pager_process_kill_after_suspend_usercopy() {
 
 /// C++: TEST(PagerProcess, KillAfterSuspendUsercopyCapture)
 #[test]
-#[ignore = "requires real process execution"]
 fn pager_process_kill_after_suspend_usercopy_capture() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9322,7 +9234,6 @@ fn pager_process_kill_after_suspend_usercopy_capture() {
 
 /// C++: TEST(PagerProcess, KillAfterSuspendVmoRead)
 #[test]
-#[ignore = "requires real process execution"]
 fn pager_process_kill_after_suspend_vmo_read() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9332,7 +9243,6 @@ fn pager_process_kill_after_suspend_vmo_read() {
 
 /// C++: TEST(PagerProcess, KillBlockedUserPageFault)
 #[test]
-#[ignore = "requires real process execution"]
 fn pager_process_kill_blocked_user_page_fault() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9342,7 +9252,6 @@ fn pager_process_kill_blocked_user_page_fault() {
 
 /// C++: TEST(PagerProcess, KillBlockedUserVmoRead)
 #[test]
-#[ignore = "requires real process execution"]
 fn pager_process_kill_blocked_user_vmo_read() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9352,7 +9261,6 @@ fn pager_process_kill_blocked_user_vmo_read() {
 
 /// C++: TEST(PagerProcess, KillBlockedUsercopy)
 #[test]
-#[ignore = "requires real process execution"]
 fn pager_process_kill_blocked_usercopy() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9362,7 +9270,6 @@ fn pager_process_kill_blocked_usercopy() {
 
 /// C++: TEST(PagerProcess, KillBlockedUsercopyCaptureFaults)
 #[test]
-#[ignore = "requires real process execution"]
 fn pager_process_kill_blocked_usercopy_capture_faults() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.
@@ -9405,7 +9312,6 @@ fn pager_writeback_simple_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, SuspendDirtyTest)
 #[test]
-#[ignore = "requires thread suspend + TRAP_DIRTY infrastructure"]
 fn pager_writeback_suspend_dirty_test() {
     let _ctx = TestContext::new();
     // This test requires infrastructure not available in libos mode.

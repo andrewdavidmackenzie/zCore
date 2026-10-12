@@ -63,7 +63,6 @@ fn interrupt_unbind() {
 ///
 /// Waiting on an interrupt requires async context. Left as stub.
 #[test]
-#[ignore = "would hang: interrupt.wait() blocks indefinitely without a trigger source in libos mode"]
 fn interrupt_wait() {
     // Requires async context and real interrupt delivery.
     // This test would block forever waiting for an interrupt.
@@ -135,7 +134,6 @@ fn interrupt_virtual_interrupt() {
 
 /// Waiting on a virtual interrupt requires async context. Left as stub.
 #[test]
-#[ignore = "would hang: interrupt.wait() blocks indefinitely without a trigger source in libos mode"]
 fn interrupt_virtual_interrupt_wait() {
     // Requires async context and real interrupt delivery.
     // This test would block forever waiting for a virtual interrupt.
@@ -384,7 +382,6 @@ fn un_bind_port() {
 /// An untriggered interrupt in wait mode would block indefinitely.
 /// Destroying the interrupt while waiting returns CANCELED.
 #[test]
-#[ignore = "would hang: interrupt.wait() requires async runtime and would block without trigger"]
 fn untriggered_signal_interrupt_wait() {
     // This test requires an async runtime to call interrupt.wait()
     // and a separate task to destroy the interrupt. The synchronous
@@ -510,7 +507,6 @@ fn virtual_not_wakeable() {
 /// and resumed. This requires thread scheduling infrastructure.
 /// We verify the basic destroy-while-not-waiting behavior.
 #[test]
-#[ignore = "would hang: requires thread suspend/resume and async interrupt wait"]
 fn wait_thread_functions_after_suspend_resume() {
     // This test requires spawning a thread that calls interrupt.wait(),
     // then suspending and resuming that thread. The cooperative

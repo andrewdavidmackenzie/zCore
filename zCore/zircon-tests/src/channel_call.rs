@@ -80,7 +80,6 @@ async fn call_cancel_on_close() {
 /// thread to respond. Deadlocks in libos test mode because
 /// async_std::task::spawn tasks are not reliably co-scheduled.
 #[test]
-#[ignore = "would hang: channel call needs concurrent responder task (deadlocks in libos test mode)"]
 fn basic_call_reply() {
     // This test needs a concurrent responder thread that reads the
     // call message, extracts the txid, and writes a reply with the
@@ -92,7 +91,6 @@ fn basic_call_reply() {
 /// Send a call with no responder. The call should time out and
 /// return TIMED_OUT. Requires async + deadline infrastructure.
 #[test]
-#[ignore = "would hang: channel call timeout requires blocking_run deadline support"]
 fn call_timeout_expired() {
     // Channel::call blocks until a reply with a matching txid arrives.
     // Without deadline support, the future never resolves.
@@ -102,7 +100,6 @@ fn call_timeout_expired() {
 /// Send a call message that includes handle transfers. The reply
 /// should also be able to include handles.
 #[test]
-#[ignore = "would hang: channel call with handles needs concurrent responder task"]
 fn call_with_handles() {
     // Requires a responder thread to read the handles, create a reply
     // with handles, and write it back with the correct txid.
@@ -112,7 +109,6 @@ fn call_with_handles() {
 /// Multiple concurrent calls on the same channel. Each should
 /// receive its own reply based on transaction ID matching.
 #[test]
-#[ignore = "would hang: channel call needs concurrent responder task"]
 fn call_multiple_pending() {
     // Requires multiple concurrent call futures and a responder
     // that replies to each with the correct txid.
@@ -122,7 +118,6 @@ fn call_multiple_pending() {
 /// A reply with a wrong transaction ID should be ignored. The call
 /// should continue waiting for the correct reply.
 #[test]
-#[ignore = "would hang: channel call needs concurrent responder task"]
 fn call_wrong_txid_ignored() {
     // Requires a responder that first writes a reply with the wrong
     // txid, then the correct one. The call should only complete on
@@ -133,7 +128,6 @@ fn call_wrong_txid_ignored() {
 /// A call with transaction ID zero. The reply should also have
 /// transaction ID zero.
 #[test]
-#[ignore = "would hang: channel call needs concurrent responder task"]
 fn call_zero_txid() {
     // Requires a responder that echoes the zero txid back.
 }
@@ -142,7 +136,6 @@ fn call_zero_txid() {
 /// Send a call with a large message payload. The reply should
 /// also support large payloads.
 #[test]
-#[ignore = "would hang: channel call needs concurrent responder task"]
 fn call_large_message() {
     // Requires a responder to echo a large payload back.
 }
@@ -172,7 +165,6 @@ fn call_no_data() {
 /// Reply arrives before the caller reads -- should still match
 /// the correct transaction ID.
 #[test]
-#[ignore = "would hang: channel call needs concurrent responder task"]
 fn call_reply_before_read() {
     // Requires a responder that writes the reply before the caller
     // starts reading.
@@ -182,7 +174,6 @@ fn call_reply_before_read() {
 /// Use the channel_call_etc variant that returns handle info.
 /// Requires async runtime with concurrent responder.
 #[test]
-#[ignore = "would hang: channel call etc needs concurrent responder task"]
 fn call_etc_variant() {
     // Requires a responder thread for the call_etc flow.
 }

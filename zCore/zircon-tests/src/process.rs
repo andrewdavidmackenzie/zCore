@@ -309,7 +309,6 @@ fn process_handle_table_self() {
 /// C++: TEST(ProcessTest, ProcessWaitAsyncCancelSelf)
 /// Race condition stress test that needs real threads.
 #[test]
-#[ignore = "would hang: WAIT_ASYNC_CANCEL stress test requires preemptive scheduling with real concurrent threads"]
 fn process_wait_async_cancel_self() {}
 
 /// Enumerate handles and check types are correct.
@@ -1217,7 +1216,6 @@ fn forbid_destroy_root_vmar() {
 /// HW trace context ID property. This property is architecture-
 /// specific and may not be supported.
 #[test]
-#[ignore = "would hang: HW trace context ID requires x86_64 debugging syscalls that block waiting for hardware"]
 fn process_hw_trace_context_id_property() {}
 
 /// C++: TEST(ProcessTest, InfoProcessNoProcessHandles)

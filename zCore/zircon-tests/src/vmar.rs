@@ -1552,7 +1552,6 @@ fn protect_read_if_xom_unsupported() {
 /// in libos mode (raw pointer write in write_memory bypasses
 /// permission check).
 #[test]
-#[ignore = "write_memory to read-only-protected mapping causes SIGBUS in libos"]
 fn protect_split_test() {
     let _ctx = TestContext::new();
     let job = Job::root();

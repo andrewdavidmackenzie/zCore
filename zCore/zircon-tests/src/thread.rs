@@ -792,21 +792,18 @@ async fn thread_invalid_handle_start() {
 /// Suspend a thread blocked in zx_channel_call. Requires a real
 /// running thread blocked in a syscall — not possible in libos mode.
 #[test]
-#[ignore = "would hang: needs preemptive scheduling to interrupt thread blocked in channel_call"]
 fn thread_suspend_in_channel_call() {}
 
 ///
 /// Suspend a thread blocked in zx_port_wait. Requires preemptive
 /// scheduling to interrupt the blocked thread.
 #[test]
-#[ignore = "would hang: needs preemptive scheduling to interrupt thread blocked in port_wait"]
 fn thread_suspend_in_port_wait() {}
 
 ///
 /// Suspend a thread blocked in zx_nanosleep. Requires preemptive
 /// scheduling to interrupt the sleeping thread.
 #[test]
-#[ignore = "would hang: needs preemptive scheduling to interrupt thread in nanosleep"]
 fn thread_suspend_in_sleep() {}
 
 ///
@@ -1013,7 +1010,6 @@ fn thread_set_cpu_affinity() {
 /// faults, verify the exception is delivered. Requires exception
 /// channel infrastructure with real thread execution.
 #[test]
-#[ignore = "would hang: needs exception channel with real execution that triggers faults"]
 fn thread_exception_on_start() {}
 
 ///
@@ -1136,14 +1132,12 @@ async fn thread_state_transitions() {
 /// Use zx_object_wait_async on a thread handle for TERMINATED signal.
 /// Requires a port + async wait infrastructure with real execution.
 #[test]
-#[ignore = "would hang: needs preemptive scheduling for port-based wait_async"]
 fn thread_wait_async() {}
 
 ///
 /// Cancel an async wait on a thread handle. Requires port + async
 /// wait infrastructure with real execution.
 #[test]
-#[ignore = "would hang: needs preemptive scheduling for port-based cancel_wait"]
 fn thread_cancel_wait_async() {}
 
 ///
@@ -1236,7 +1230,6 @@ async fn thread_exit_while_suspended() {
 /// Resume a thread that is stopped in an exception handler. Requires
 /// exception channel infrastructure with real thread execution.
 #[test]
-#[ignore = "would hang: needs exception channel infrastructure to stop thread in exception handler"]
 fn thread_resume_from_exception() {}
 
 ///
@@ -1286,7 +1279,6 @@ fn thread_create_invalid_args() {
 /// thread should remain suspended after the exception is resolved.
 /// Requires exception channel + real thread execution.
 #[test]
-#[ignore = "would hang: needs exception channel infrastructure with real execution"]
 fn thread_suspend_in_exception() {}
 
 ///
@@ -1294,7 +1286,6 @@ fn thread_suspend_in_exception() {}
 /// should be queued and delivered when the thread is resumed.
 /// Requires exception channel + suspension infrastructure.
 #[test]
-#[ignore = "would hang: needs exception channel infrastructure with real execution"]
 fn thread_exception_during_suspend() {}
 
 ///
@@ -1378,7 +1369,6 @@ fn thread_create_with_bad_args() {
 /// should be delivered to the most recently registered channel
 /// first. Requires exception channel infrastructure.
 #[test]
-#[ignore = "would hang: needs exception channel infrastructure with real thread faults"]
 fn thread_multiple_exception_channels() {}
 
 ///
@@ -1579,12 +1569,10 @@ async fn thread_read_state_vector() {
 
 /// C++: TEST(Threads, BadSyscallCaller)
 #[test]
-#[ignore = "would hang: requires real thread execution with bad syscall and exception handling"]
 fn bad_syscall_caller() {}
 
 /// C++: TEST(Threads, BadSyscallNumber)
 #[test]
-#[ignore = "would hang: requires real thread execution with bad syscall and exception handling"]
 fn bad_syscall_number() {}
 
 /// C++: TEST(Threads, Basics)
@@ -1616,12 +1604,10 @@ async fn basics() {
 
 /// C++: TEST(Threads, DebugRegistersDr6CorrectAfterBreakpointRemoval)
 #[test]
-#[ignore = "would hang: requires debug register state and hardware breakpoints"]
 fn debug_registers_dr6_correct_after_breakpoint_removal() {}
 
 /// C++: TEST(Threads, DebugRegistersDr6ResetOnDebugException)
 #[test]
-#[ignore = "would hang: requires debug register state and hardware breakpoints"]
 fn debug_registers_dr6_reset_on_debug_exception() {}
 
 /// C++: TEST(Threads, DebugRegistersValidation)
@@ -1648,7 +1634,6 @@ fn debug_registers_validation() {
 
 /// C++: TEST(Threads, DebugRegistersWatchpointSyscallPanicRepro)
 #[test]
-#[ignore = "would hang: requires debug register watchpoint and syscall interaction"]
 fn debug_registers_watchpoint_syscall_panic_repro() {}
 
 /// C++: TEST(Threads, EmptyNameSucceeds)
@@ -1685,7 +1670,6 @@ fn empty_name_succeeds() {
 
 /// C++: TEST(Threads, ExitViaException)
 #[test]
-#[ignore = "would hang: requires real thread execution with exception-based exit"]
 fn exit_via_exception() {}
 
 /// C++: TEST(Threads, GetAffinity)
@@ -1847,12 +1831,10 @@ fn long_name_succeeds() {
 
 /// C++: TEST(Threads, NoncanonicalRipAddressIRETQ)
 #[test]
-#[ignore = "would hang: requires x86_64 non-canonical address exception handling with real execution"]
 fn noncanonical_rip_address_iretq() {}
 
 /// C++: TEST(Threads, NoncanonicalRipAddressSyscall)
 #[test]
-#[ignore = "would hang: requires x86_64 non-canonical address exception handling with real execution"]
 fn noncanonical_rip_address_syscall() {}
 
 /// C++: TEST(Threads, NonstartedThread)
@@ -2073,7 +2055,6 @@ fn start_regs() {
 
 /// C++: TEST(Threads, StartRegsNoncanonicalTp)
 #[test]
-#[ignore = "would hang: requires thread start with non-canonical thread pointer and exception delivery"]
 fn start_regs_noncanonical_tp() {}
 
 /// C++: TEST(Threads, StartRegsSuspended)
@@ -2207,7 +2188,6 @@ async fn suspend_after_death() {
 
 /// C++: TEST(Threads, SuspendChannelCall)
 #[test]
-#[ignore = "would hang: requires real thread blocked in channel_call"]
 fn suspend_channel_call() {}
 
 /// C++: TEST(Threads, SuspendInvalidTargets)
@@ -2277,17 +2257,14 @@ async fn suspend_multiple() {
 
 /// C++: TEST(Threads, SuspendPortCall)
 #[test]
-#[ignore = "would hang: requires real thread blocked in port_wait"]
 fn suspend_port_call() {}
 
 /// C++: TEST(Threads, SuspendSingleWaitAsyncSignalDelivery)
 #[test]
-#[ignore = "would hang: requires real thread with async signal delivery via port"]
 fn suspend_single_wait_async_signal_delivery() {}
 
 /// C++: TEST(Threads, SuspendSleeping)
 #[test]
-#[ignore = "would hang: requires real thread blocked in nanosleep"]
 fn suspend_sleeping() {}
 
 /// C++: TEST(Threads, SuspendStopsThread)
@@ -2323,7 +2300,6 @@ async fn suspend_stops_thread() {
 
 /// C++: TEST(Threads, SyscallDebuggerModifyResult)
 #[test]
-#[ignore = "would hang: requires debugger exception channel with syscall result modification"]
 fn syscall_debugger_modify_result() {}
 
 /// C++: TEST(Threads, SyscallSuspendedRegisterState)
@@ -2365,7 +2341,6 @@ async fn syscall_suspended_register_state() {
 
 /// C++: TEST(Threads, ThreadLocalRegisterState)
 #[test]
-#[ignore = "would hang: requires thread-local storage register state (TP/TPIDR) with real execution"]
 fn thread_local_register_state() {}
 
 /// C++: TEST(Threads, ThreadStartInvalidEntry)
@@ -2450,7 +2425,6 @@ fn thread_start_with_zero_instruction_pointer() {
 
 /// C++: TEST(Threads, WatchpointSyscallPanic)
 #[test]
-#[ignore = "would hang: requires hardware watchpoint and syscall interaction"]
 fn watchpoint_syscall_panic() {}
 
 /// C++: TEST(Threads, WriteReadDebugRegisterState)
@@ -2477,7 +2451,6 @@ fn write_read_debug_register_state() {
 
 /// C++: TEST(Threads, WriteThreadStateWithInvalidMxcsrIsInvalidArgs)
 #[test]
-#[ignore = "would hang: requires x86_64 MXCSR validation with real FP state write and exception"]
 fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {}
 
 /// C++: TEST(Threads, WritingArmFlagsRegister)
@@ -2662,7 +2635,6 @@ fn writing_vector_register_state_unsupported_fields_ignored() {
 
 /// C++: TEST(Threads, X86AcFlagUserCopy)
 #[test]
-#[ignore = "would hang: requires x86_64 AC flag handling during user copy with real execution"]
 fn x86_ac_flag_user_copy() {}
 
 /// C++: TEST(Threads, YieldWithNonZeroOptionIsInvalidArgs)
