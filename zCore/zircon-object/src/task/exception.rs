@@ -428,6 +428,28 @@ impl Exception {
         })
     }
 
+    /// Create an `Exception` for an architectural exception with a synth_code.
+    /// Used for page faults where the VMM error code is reported.
+    pub fn new_with_synth(
+        thread: &Arc<Thread>,
+        type_: ExceptionType,
+        cx: Option<&UserContext>,
+        synth_code: u32,
+    ) -> Arc<Self> {
+        let mut report = ExceptionReport::new(type_, cx);
+        report.synth_code = synth_code;
+        Arc::new(Exception {
+            thread: thread.clone(),
+            type_,
+            report,
+            inner: Mutex::new(ExceptionInner {
+                current_channel_type: ExceptionChannelType::None,
+                handled: false,
+                second_chance: false,
+            }),
+        })
+    }
+
     /// Create an `Exception` for a user-raised exception with synthetic fields.
     pub fn new_user(thread: &Arc<Thread>, synth_code: u32, synth_data: u32) -> Arc<Self> {
         Arc::new(Exception {

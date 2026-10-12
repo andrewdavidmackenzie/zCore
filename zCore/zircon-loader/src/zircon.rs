@@ -315,10 +315,16 @@ async fn run_user(thread: CurrentThread) {
 
         // handle trap/interrupt/syscall
         if let Err(e) = handler_user_trap(&thread, ctx).await {
-            if let ExceptionType::ThreadExiting = e {
+            if let ExceptionType::ThreadExiting = e.type_ {
                 break;
             }
-            thread.handle_exception(e).await;
+            if e.synth_code != 0 {
+                thread
+                    .handle_exception_with_synth(e.type_, e.synth_code)
+                    .await;
+            } else {
+                thread.handle_exception(e.type_).await;
+            }
         }
         // Mark when the thread becomes ready again (for queue_time tracking).
         ready_since = hal_impl::timer::timer_now().as_nanos();
@@ -336,10 +342,17 @@ async fn run_user(thread: CurrentThread) {
     }
 }
 
+/// Exception info returned from the trap handler.
+/// `synth_code` carries the VMM error code for page faults (e.g., ZxError as u32).
+struct ExceptionInfo {
+    type_: ExceptionType,
+    synth_code: u32,
+}
+
 async fn handler_user_trap(
     thread: &CurrentThread,
     mut ctx: Box<UserContext>,
-) -> Result<(), ExceptionType> {
+) -> Result<(), ExceptionInfo> {
     let reason = ctx.trap_reason();
 
     if let TrapReason::Syscall = reason {
@@ -351,7 +364,10 @@ async fn handler_user_trap(
         let ret = syscall.syscall(num as u32, args).await as usize;
         thread
             .with_context(|ctx| ctx.set_field(UserContextField::ReturnValue, ret))
-            .map_err(|_| ExceptionType::ThreadExiting)?;
+            .map_err(|_| ExceptionInfo {
+                type_: ExceptionType::ThreadExiting,
+                synth_code: 0,
+            })?;
         // Preemptive yield after syscalls: ensures other threads
         // get a chance to run even when this thread is in a tight
         // syscall loop. Uses preempt_yield (not yield_now) so
@@ -397,7 +413,10 @@ async fn handler_user_trap(
                                 // Drop the future — the oneshot Receiver
                                 // is dropped, and the stale waiter entry
                                 // will be cleaned up on the next supply.
-                                return Err(ExceptionType::ThreadExiting);
+                                return Err(ExceptionInfo {
+                                    type_: ExceptionType::ThreadExiting,
+                                    synth_code: 0,
+                                });
                             }
                             // Poll the page future in a scoped block so
                             // Context doesn't live across the yield.
@@ -410,7 +429,10 @@ async fn handler_user_trap(
                                 core::task::Poll::Ready(Ok(())) => break Ok(()),
                                 core::task::Poll::Ready(Err(e)) => {
                                     warn!("pager wait failed: {:?}", e);
-                                    break Err(ExceptionType::FatalPageFault);
+                                    break Err(ExceptionInfo {
+                                        type_: ExceptionType::FatalPageFault,
+                                        synth_code: 0,
+                                    });
                                 }
                                 core::task::Poll::Pending => {
                                     hal_impl::thread::yield_now().await;
@@ -481,15 +503,33 @@ async fn handler_user_trap(
                             }
                         }
                     }
-                    Err(ExceptionType::FatalPageFault)
+                    Err(ExceptionInfo {
+                        type_: ExceptionType::FatalPageFault,
+                        synth_code: err as u32,
+                    })
                 }
             }
         }
-        TrapReason::UndefinedInstruction => Err(ExceptionType::UndefinedInstruction),
-        TrapReason::SoftwareBreakpoint => Err(ExceptionType::SoftwareBreakpoint),
-        TrapReason::HardwareBreakpoint => Err(ExceptionType::HardwareBreakpoint),
-        TrapReason::UnalignedAccess => Err(ExceptionType::UnalignedAccess),
-        TrapReason::GeneralFault(_) => Err(ExceptionType::General),
+        TrapReason::UndefinedInstruction => Err(ExceptionInfo {
+            type_: ExceptionType::UndefinedInstruction,
+            synth_code: 0,
+        }),
+        TrapReason::SoftwareBreakpoint => Err(ExceptionInfo {
+            type_: ExceptionType::SoftwareBreakpoint,
+            synth_code: 0,
+        }),
+        TrapReason::HardwareBreakpoint => Err(ExceptionInfo {
+            type_: ExceptionType::HardwareBreakpoint,
+            synth_code: 0,
+        }),
+        TrapReason::UnalignedAccess => Err(ExceptionInfo {
+            type_: ExceptionType::UnalignedAccess,
+            synth_code: 0,
+        }),
+        TrapReason::GeneralFault(_) => Err(ExceptionInfo {
+            type_: ExceptionType::General,
+            synth_code: 0,
+        }),
         _ => unreachable!(),
     }
 }

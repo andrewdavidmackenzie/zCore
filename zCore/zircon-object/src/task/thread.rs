@@ -754,6 +754,28 @@ impl CurrentThread {
         self.handle_exception_dispatch(type_, exception).await;
     }
 
+    /// Raise an architectural exception with a synthetic code.
+    /// Used for page faults where the VMM error code should be
+    /// reported in the exception report's synth_code field.
+    pub async fn handle_exception_with_synth(&self, type_: ExceptionType, synth_code: u32) {
+        let exception = {
+            let mut inner = self.inner.lock();
+            let cx = inner.context.as_ref().map(|cx| cx.as_ref());
+            if !type_.is_synth() {
+                error!(
+                    "User mode exception with synth_code: {:?} code={} {:#x?}",
+                    type_,
+                    synth_code,
+                    cx.expect("Architectural exception should have context")
+                );
+            }
+            let exception = Exception::new_with_synth(&self.0, type_, cx, synth_code);
+            inner.exception = Some(exception.clone());
+            exception
+        };
+        self.handle_exception_dispatch(type_, exception).await;
+    }
+
     /// Raise a user exception with synthetic code and data fields.
     pub async fn handle_exception_user(&self, synth_code: u32, synth_data: u32) {
         let exception = {
