@@ -334,6 +334,11 @@ impl VmAddressRegion {
         if vmo_offset.overflowing_add(len).1 {
             return Err(ZxError::OUT_OF_RANGE);
         }
+        // Discardable VMOs can only be mapped with lazy commit (ALLOW_FAULTS).
+        // Eager commit (map_range=true) on a discardable VMO is NOT_SUPPORTED.
+        if vmo.is_discardable() && map_range {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         if !permissions.contains(flags & MMUFlags::RXW) {
             return Err(ZxError::ACCESS_DENIED);
         }
@@ -361,8 +366,9 @@ impl VmAddressRegion {
         // fault on access. If map_range would try to commit beyond
         // the VMO, truncate the eager commit range. The mapping
         // itself is still created at the full requested size.
+        // When map_range is set but the mapping extends past the VMO,
+        // fall back to lazy mapping to avoid committing non-existent pages.
         let map_range = if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
-            // Can't eagerly commit all pages — fall back to lazy.
             false
         } else {
             map_range
