@@ -255,3 +255,6 @@ mod object_wait_ops;
 
 #[cfg(test)]
 mod clock_ops;
+
+#[cfg(test)]
+mod iovec;
