@@ -85,7 +85,10 @@ impl VMObjectTrait for VMObjectSlice {
         &self,
         f: &mut dyn FnMut(&mut dyn FnMut(usize, MMUFlags) -> ZxResult<PhysAddr>) -> ZxResult,
     ) -> ZxResult {
-        self.parent.commit_pages_with(f)
+        let offset_pages = self.offset / PAGE_SIZE;
+        self.parent.commit_pages_with(&mut |parent_commit| {
+            f(&mut |page_idx, flags| parent_commit(page_idx + offset_pages, flags))
+        })
     }
 
     fn commit(&self, offset: usize, len: usize) -> ZxResult {
