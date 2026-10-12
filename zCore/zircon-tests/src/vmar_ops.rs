@@ -27,7 +27,6 @@ fn allocate_sub_vmar() {
 /// Map a VMO into the process VMAR. The mapping should succeed and
 /// return a valid address within the VMAR range.
 #[test]
-#[ignore = "VMAR mapping segfaults in full suite (address space exhaustion)"]
 fn map_vmo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -44,7 +43,6 @@ fn map_vmo() {
 /// Map then unmap a VMO. After unmapping, the address range should
 /// be free for reuse.
 #[test]
-#[ignore = "VMAR mapping segfaults in full suite"]
 fn unmap_vmo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -64,7 +62,6 @@ fn unmap_vmo() {
 /// Map multiple VMOs into the same VMAR. All mappings should coexist
 /// at different addresses.
 #[test]
-#[ignore = "VMAR mapping segfaults in full suite"]
 fn map_multiple_vmos() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -90,7 +87,6 @@ fn map_multiple_vmos() {
 ///
 /// Map a multi-page VMO into the VMAR.
 #[test]
-#[ignore = "VMAR mapping segfaults in full suite"]
 fn map_large_vmo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -106,7 +102,6 @@ fn map_large_vmo() {
 ///
 /// Map a VMO at a non-zero offset within the VMO.
 #[test]
-#[ignore = "VMAR mapping segfaults in full suite"]
 fn map_with_offset() {
     let _ctx = TestContext::new();
     let root = Job::root();

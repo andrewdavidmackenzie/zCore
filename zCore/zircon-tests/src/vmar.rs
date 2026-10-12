@@ -48,7 +48,6 @@ fn vmar_allocate_child() {
 /// Map a VMO into a VMAR and verify data can be read/written through the mapping.
 ///
 #[test]
-#[ignore = "VMAR mapping segfaults on Ubuntu CI (address space issue)"]
 fn vmar_map_and_access() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -90,7 +89,6 @@ fn vmar_map_and_access() {
 
 /// Unmap a previously mapped region.
 #[test]
-#[ignore = "VMAR mapping segfaults on Ubuntu CI (address space issue)"]
 fn vmar_unmap() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -107,7 +105,6 @@ fn vmar_unmap() {
 
 /// Map multiple pages and verify each page has correct data.
 #[test]
-#[ignore = "VMAR mapping segfaults on Ubuntu CI (address space issue)"]
 fn vmar_map_multi_page() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -145,7 +142,6 @@ fn vmar_map_multi_page() {
 
 /// Map a VMO at a specific offset within the VMO.
 #[test]
-#[ignore = "VMAR mapping segfaults on Ubuntu CI (address space issue)"]
 fn vmar_map_with_vmo_offset() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -170,7 +166,6 @@ fn vmar_map_with_vmo_offset() {
 
 /// Protect a mapped region — change permissions.
 #[test]
-#[ignore = "VMAR mapping segfaults on Ubuntu CI (address space issue)"]
 fn vmar_protect() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -482,7 +477,6 @@ fn unmap_not_mapped() {
 
 /// Unmapping part of a mapping splits it.
 #[test]
-#[ignore = "VMAR mapping exhausts page table memory when run in parallel"]
 fn unmap_partial() {
     let _ctx = TestContext::new();
     let job = Job::root();

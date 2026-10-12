@@ -229,7 +229,6 @@ fn contiguous() {
 /// C++: TEST(VmoZeroTestCase, UnalignedSubPage)
 /// Zero a sub-page range and verify via VMAR mapping.
 #[test]
-#[ignore = "VMAR mapping tests segfault on Ubuntu CI (address space issue)"]
 fn unaligned_sub_page() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -271,7 +270,6 @@ fn unaligned_sub_page() {
 /// C++: TEST(VmoZeroTestCase, DecommitMiddle)
 /// Zero the middle page of a 3-page VMO, verify via mapping.
 #[test]
-#[ignore = "VMAR mapping tests segfault on Ubuntu CI (address space issue)"]
 fn decommit_middle() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -308,7 +306,6 @@ fn decommit_middle() {
 /// C++: TEST(VmoZeroTestCase, UnalignedCommitted)
 /// Zero an unaligned range crossing a page boundary on committed pages.
 #[test]
-#[ignore = "VMAR mapping tests segfault on Ubuntu CI (address space issue)"]
 fn unaligned_committed() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -448,7 +445,6 @@ fn resize_over_hidden_markers() {
 /// correctly handle the freed page potentially being reused to fork a
 /// page into an intermediate.
 #[test]
-#[ignore = "COW zero-marker insertion in multi-level hierarchy not fully implemented"]
 fn zero_frees_and_allocates() {
     let _ctx = TestContext::new();
 

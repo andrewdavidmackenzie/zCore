@@ -1210,7 +1210,6 @@ fn vmo_op_range_dont_need() {
 /// VMAR mapping keeps child VMO alive — ZERO_CHILDREN stays cleared
 /// until unmap, even after child handle is closed.
 #[test]
-#[ignore = "VMAR mapping tests segfault on Ubuntu CI (address space issue)"]
 fn child_signal_map() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1306,7 +1305,6 @@ fn vmo_read_write_offset() {
 /// In zCore, VMO read/write auto-commits pages without range checking,
 /// so this test is currently ignored.
 #[test]
-#[ignore = "zCore VMO read/write auto-commits pages without bounds checking"]
 fn vmo_read_write_beyond_end() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1395,7 +1393,6 @@ fn vmo_signal_user() {
 }
 
 #[test]
-#[ignore = "set_len with huge size panics on overflow instead of returning error"]
 fn vmo_resize_no_memory() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged_with_resizable(true, 1);
@@ -1495,7 +1492,6 @@ fn vmo_commit_range() {
 }
 
 #[test]
-#[ignore = "VMAR mapping panics with NoMemory on host (libos address space issue)"]
 fn vmo_map_rights() {
     let _ctx = TestContext::new();
     let job = Job::root();

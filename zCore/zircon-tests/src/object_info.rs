@@ -6235,7 +6235,6 @@ fn pager_info_handle_basic_bad_avail() {
 // ═══════════════════════════════════════════════════════════════════
 
 #[test]
-#[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_on_self() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -6270,7 +6269,6 @@ fn bti_info_handle_basic_invalid_handle() {
 }
 
 #[test]
-#[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -6283,7 +6281,6 @@ fn bti_info_handle_basic_zero_buffer() {
 }
 
 #[test]
-#[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -6305,7 +6302,6 @@ fn bti_info_handle_basic_null_avail() {
 }
 
 #[test]
-#[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -6327,7 +6323,6 @@ fn bti_info_handle_basic_null_actual() {
 }
 
 #[test]
-#[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -6348,7 +6343,6 @@ fn bti_info_handle_basic_null_actual_and_avail() {
 }
 
 #[test]
-#[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -6371,7 +6365,6 @@ fn bti_info_handle_basic_invalid_buffer() {
 }
 
 #[test]
-#[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
@@ -6394,7 +6387,6 @@ fn bti_info_handle_basic_bad_actual() {
 }
 
 #[test]
-#[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
     let iommu = Iommu::create();
