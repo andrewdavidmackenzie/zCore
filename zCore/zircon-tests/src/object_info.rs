@@ -6,8 +6,12 @@
 use crate::helpers::TestContext;
 
 use hal_impl::user::UserOutPtr;
+use zircon_object::dev::{BusTransactionInitiator, Iommu};
+use zircon_object::ipc::Socket;
 use zircon_object::object::{Handle, KernelObject, Rights};
+use zircon_object::signal::{Event, Timer};
 use zircon_object::task::{Job, Process, Thread};
+use zircon_object::vm::{Stream, VmObject};
 
 extern crate alloc;
 
@@ -337,4 +341,293 @@ fn vmo_info_invalid_handle() {
         get_info_err(&ctx, 0xDEAD, TOPIC_VMO, &mut buf),
         zircon_object::ZxError::BAD_HANDLE
     );
+}
+
+// ── HANDLE_BASIC on Process (topic 2) ───────────────────────────────
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicOnSelfSucceeds)
+#[test]
+fn process_info_handle_basic() {
+    let ctx = TestContext::new();
+    let proc_h = ctx.proc.add_handle(Handle::new(
+        ctx.proc.clone(),
+        Rights::DEFAULT_PROCESS,
+    ));
+
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    let (actual, avail) = get_info(&ctx, proc_h, TOPIC_HANDLE_BASIC, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicInvalidHandleFails)
+#[test]
+fn process_info_handle_basic_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_HANDLE_BASIC, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicZeroSizedFails)
+#[test]
+fn process_info_handle_basic_zero_buffer() {
+    let ctx = TestContext::new();
+    let proc_h = ctx.proc.add_handle(Handle::new(
+        ctx.proc.clone(),
+        Rights::DEFAULT_PROCESS,
+    ));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, proc_h, TOPIC_HANDLE_BASIC, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+// ── ZX_INFO_JOB (topic 24) ─────────────────────────────────────────
+
+const TOPIC_JOB: u32 = 24;
+const JOB_INFO_SIZE: usize = 16; // zx_info_job_t
+
+/// C++: TEST_F(JobGetInfoTest, InfoJobOnSelfSucceeds)
+#[test]
+fn job_info_on_self() {
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let job_h = ctx
+        .proc
+        .add_handle(Handle::new(job, Rights::DEFAULT_JOB));
+
+    let mut buf = [0u8; JOB_INFO_SIZE];
+    let (actual, avail) = get_info(&ctx, job_h, TOPIC_JOB, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST_F(JobGetInfoTest, InfoJobInvalidHandleFails)
+#[test]
+fn job_info_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; JOB_INFO_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_JOB, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST_F(JobGetInfoTest, InfoJobZeroSizedBufferFails)
+#[test]
+fn job_info_zero_buffer() {
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let job_h = ctx
+        .proc
+        .add_handle(Handle::new(job, Rights::DEFAULT_JOB));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, job_h, TOPIC_JOB, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+// ── ZX_INFO_HANDLE_VALID (topic 1) ─────────────────────────────────
+
+const TOPIC_HANDLE_VALID: u32 = 1;
+
+/// C++: TEST(ObjectGetInfoTest, OpenValidHandleSucceeds)
+#[test]
+fn handle_valid_open_succeeds() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx.proc.add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    // HandleValid does not use a buffer — pass empty.
+    let mut buf = [0u8; 0];
+    let result = get_info(&ctx, event_h, TOPIC_HANDLE_VALID, &mut buf);
+    assert!(result.is_ok(), "handle_valid on open handle should succeed");
+}
+
+/// C++: TEST(ObjectGetInfoTest, ClosedValidHandleFails)
+#[test]
+fn handle_valid_closed_fails() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx.proc.add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    // Remove the handle to simulate close.
+    ctx.proc.remove_handle(event_h).unwrap();
+
+    let mut buf = [0u8; 0];
+    assert_eq!(
+        get_info_err(&ctx, event_h, TOPIC_HANDLE_VALID, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+// ── ZX_INFO_SOCKET (topic 22) ──────────────────────────────────────
+
+const TOPIC_SOCKET: u32 = 22;
+const SOCKET_INFO_SIZE: usize = 48; // zx_info_socket_t
+
+/// C++: TEST(SocketGetInfoTest, InfoSocketOnSelfSucceeds)
+#[test]
+fn socket_info_on_self() {
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let socket_h = ctx.proc.add_handle(Handle::new(s0, Rights::DEFAULT_SOCKET));
+
+    let mut buf = [0u8; SOCKET_INFO_SIZE];
+    let (actual, avail) = get_info(&ctx, socket_h, TOPIC_SOCKET, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST(SocketGetInfoTest, InfoSocketInvalidHandleFails)
+#[test]
+fn socket_info_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; SOCKET_INFO_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_SOCKET, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(SocketGetInfoTest, InfoSocketZeroSizedBufferFails)
+#[test]
+fn socket_info_zero_buffer() {
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let socket_h = ctx.proc.add_handle(Handle::new(s0, Rights::DEFAULT_SOCKET));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, socket_h, TOPIC_SOCKET, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+// ── ZX_INFO_TIMER (topic 25) ───────────────────────────────────────
+
+const TOPIC_TIMER: u32 = 25;
+const TIMER_INFO_SIZE: usize = 24; // zx_info_timer_t
+
+/// C++: TEST(TimerGetInfoTest, InfoTimerOnSelfSucceeds)
+#[test]
+fn timer_info_on_self() {
+    let ctx = TestContext::new();
+    let timer = Timer::new();
+    let timer_h = ctx.proc.add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
+
+    let mut buf = [0u8; TIMER_INFO_SIZE];
+    let (actual, avail) = get_info(&ctx, timer_h, TOPIC_TIMER, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST(TimerGetInfoTest, InfoTimerInvalidHandleFails)
+#[test]
+fn timer_info_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; TIMER_INFO_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_TIMER, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(TimerGetInfoTest, InfoTimerZeroSizedBufferFails)
+#[test]
+fn timer_info_zero_buffer() {
+    let ctx = TestContext::new();
+    let timer = Timer::new();
+    let timer_h = ctx.proc.add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, timer_h, TOPIC_TIMER, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+// ── ZX_INFO_STREAM (topic 26) ──────────────────────────────────────
+
+const TOPIC_STREAM: u32 = 26;
+const STREAM_INFO_SIZE: usize = 24; // zx_info_stream_t
+
+/// C++: TEST(StreamGetInfoTest, InfoStreamOnSelfSucceeds)
+#[test]
+fn stream_info_on_self() {
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let stream = Stream::create(vmo, 0, 0);
+    let stream_h = ctx.proc.add_handle(Handle::new(stream, Rights::DEFAULT_STREAM));
+
+    let mut buf = [0u8; STREAM_INFO_SIZE];
+    let (actual, avail) = get_info(&ctx, stream_h, TOPIC_STREAM, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST(StreamGetInfoTest, InfoStreamInvalidHandleFails)
+#[test]
+fn stream_info_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; STREAM_INFO_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_STREAM, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(StreamGetInfoTest, InfoStreamZeroSizedBufferFails)
+#[test]
+fn stream_info_zero_buffer() {
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let stream = Stream::create(vmo, 0, 0);
+    let stream_h = ctx.proc.add_handle(Handle::new(stream, Rights::DEFAULT_STREAM));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, stream_h, TOPIC_STREAM, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+// ── ZX_INFO_BTI (topic 20) ─────────────────────────────────────────
+
+const TOPIC_BTI: u32 = 20;
+const BTI_INFO_SIZE: usize = 32; // zx_info_bti_t
+
+/// C++: TEST(BtiGetInfoTest, InfoBtiOnSelfSucceeds)
+#[test]
+fn bti_info_on_self() {
+    let ctx = TestContext::new();
+    let iommu = Iommu::create();
+    let bti = BusTransactionInitiator::create(iommu, 0);
+    let bti_h = ctx.proc.add_handle(Handle::new(bti, Rights::DEFAULT_BTI));
+
+    let mut buf = [0u8; BTI_INFO_SIZE];
+    let (actual, avail) = get_info(&ctx, bti_h, TOPIC_BTI, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST(BtiGetInfoTest, InfoBtiInvalidHandleFails)
+#[test]
+fn bti_info_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; BTI_INFO_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_BTI, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(BtiGetInfoTest, InfoBtiZeroSizedBufferFails)
+#[test]
+fn bti_info_zero_buffer() {
+    let ctx = TestContext::new();
+    let iommu = Iommu::create();
+    let bti = BusTransactionInitiator::create(iommu, 0);
+    let bti_h = ctx.proc.add_handle(Handle::new(bti, Rights::DEFAULT_BTI));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, bti_h, TOPIC_BTI, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
