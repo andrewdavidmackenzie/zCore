@@ -616,7 +616,8 @@ fn non_allowed_signals() {
 }
 
 /// C++: TEST(SocketTest, PeerClosedSetProperty)
-/// set_write_threshold / set_read_threshold after peer closed returns PEER_CLOSED.
+/// set_write_threshold after peer closed returns PEER_CLOSED;
+/// set_read_threshold still succeeds.
 #[test]
 fn peer_closed_set_property() {
     let _ctx = TestContext::new();

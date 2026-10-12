@@ -172,29 +172,24 @@ fn wait_timeout() {
 
 /// C++: TEST(FutexTest, Wakeup)
 /// Basic wake: one thread waits, another wakes it.
-/// Requires multi-threaded async runtime — mark should_panic for cooperative scheduler.
-#[should_panic(expected = "not yet implemented")]
 #[test]
+#[ignore = "requires multi-threaded async runtime"]
 fn wakeup() {
-    // This test requires spawning actual OS threads for wait/wake coordination.
-    // zCore's cooperative scheduler cannot run concurrent waiter + waker.
-    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+    todo!("requires multi-threaded async runtime for concurrent waiter + waker");
 }
 
 /// C++: TEST(FutexTest, WakeupLimit)
 /// Wake N of M threads — verifies partial wake semantics.
-/// Requires multi-threaded async runtime.
-#[should_panic(expected = "not yet implemented")]
 #[test]
+#[ignore = "requires multi-threaded async runtime"]
 fn wakeup_limit() {
-    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+    todo!("requires multi-threaded async runtime");
 }
 
 /// C++: TEST(FutexTest, Requeue)
 /// Requeue futex — move waiters from one futex to another.
-/// Requires multi-threaded async runtime.
-#[should_panic(expected = "not yet implemented")]
 #[test]
+#[ignore = "requires multi-threaded async runtime"]
 fn requeue() {
-    unimplemented!("not yet implemented: requires multi-threaded async runtime");
+    todo!("requires multi-threaded async runtime");
 }
