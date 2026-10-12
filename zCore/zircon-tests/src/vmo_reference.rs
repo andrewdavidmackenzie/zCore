@@ -4,7 +4,6 @@
 //! Test names match the C++ originals exactly.
 
 use crate::helpers::TestContext;
-use alloc::sync::Arc;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::{Pager, Port};
 use zircon_object::vm::{Stream, VmObject, VmoInfoFlags, PAGE_SIZE};

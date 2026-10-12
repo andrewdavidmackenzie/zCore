@@ -64,8 +64,8 @@ fn arm_mops() {
     #[cfg(target_arch = "aarch64")]
     {
         let mut mem: u64 = 0xaaaa_aaaa_aaaa_aaaa;
-        let mut dst = &mut mem as *mut u64;
-        let mut count: u64 = core::mem::size_of::<u64>() as u64;
+        let mut _dst = &mut mem as *mut u64;
+        let mut _count: u64 = core::mem::size_of::<u64>() as u64;
         let byte: u64 = 0xbb;
 
         unsafe {
@@ -74,8 +74,8 @@ fn arm_mops() {
                 "setp [{dst}]!, {count}!, {byte}",
                 "setm [{dst}]!, {count}!, {byte}",
                 "sete [{dst}]!, {count}!, {byte}",
-                dst = inout(reg) dst,
-                count = inout(reg) count,
+                dst = inout(reg) _dst,
+                count = inout(reg) _count,
                 byte = in(reg) byte,
                 options(nostack),
             );

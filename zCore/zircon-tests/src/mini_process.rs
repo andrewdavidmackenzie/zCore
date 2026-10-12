@@ -8,7 +8,7 @@
 
 use crate::helpers::TestContext;
 use zircon_object::ipc::{Channel, MessagePacket};
-use zircon_object::object::{Handle, KernelObject, Rights, Signal};
+use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::task::{Job, Process, Thread};
 
 extern crate alloc;
@@ -131,7 +131,7 @@ fn create_thread() {
 /// accessible after creation.
 #[test]
 fn map_vmo() {
-    use zircon_object::vm::{VmObject, PAGE_SIZE};
+    use zircon_object::vm::VmObject;
 
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);

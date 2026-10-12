@@ -15,8 +15,8 @@
 extern crate alloc;
 
 use crate::helpers::TestContext;
-use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
-use zircon_object::object::{Handle, KernelObject, Rights};
+use zircon_object::dev::Resource;
+use zircon_object::object::{Handle, Rights};
 
 /// C++: TEST_F(MsiTest, AllocateSyscall)
 /// Test `zx::msi::allocate(resource, count, &msi)` with various

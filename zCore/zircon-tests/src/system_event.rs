@@ -17,7 +17,7 @@ extern crate alloc;
 use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::Event;
-use zircon_object::task::{Job, Process};
+use zircon_object::task::Job;
 use zircon_object::ZxError;
 
 /// C++: TEST(SystemEvent, RetrieveOom)

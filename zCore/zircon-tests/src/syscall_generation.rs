@@ -5,7 +5,7 @@
 //! we verify the Rust syscall layer argument handling and validation.
 
 use crate::helpers::TestContext;
-use zircon_object::object::{Handle, KernelObject, Rights};
+use zircon_object::object::{Handle, Rights};
 use zircon_object::ZxError;
 
 extern crate alloc;

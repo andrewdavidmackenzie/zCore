@@ -7,7 +7,7 @@
 
 use crate::helpers::TestContext;
 use zircon_object::object::{Handle, Rights};
-use zircon_object::task::{Job, Thread};
+use zircon_object::task::Thread;
 
 /// C++: TEST(UserExceptionsTest, Delivered)
 /// Verify exception channel creation succeeds and has valid handles.

@@ -15,8 +15,6 @@ use zircon_object::ZxError;
 
 extern crate alloc;
 
-type HandleValue = u32;
-
 /// zx_rseq_t size: 4 fields × 8 bytes = 32 bytes.
 const RSEQ_STRUCT_SIZE: u64 = 32;
 

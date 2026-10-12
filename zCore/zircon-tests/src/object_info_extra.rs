@@ -104,7 +104,6 @@ fn info_handle_basic_process() {
 /// Query ZX_INFO_HANDLE_BASIC on a thread. Should return type THREAD.
 #[test]
 fn info_handle_basic_thread() {
-    use crate::helpers::test_loop_thread_fn;
     use zircon_object::task::{Process, Thread};
     let _ctx = TestContext::new();
     let root = Job::root();
