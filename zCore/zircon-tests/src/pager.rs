@@ -2471,3 +2471,2477 @@ fn pager_vmo_op_dont_need() {
     let _ctx = TestContext::new();
     panic!("needs demand-paging");
 }
+
+// ── Missing Pager tests (from pager.cc) ─────────────────────────────
+//
+// 109 tests that require demand-paging infrastructure (fault-supply-resume
+// loop with concurrent threads). Each is marked #[ignore] until the
+// demand-paging infrastructure is implemented.
+
+/// C++: VMO_VMAR_TEST(Pager, BulkOddLengthSupplyTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_bulk_odd_length_supply_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, BulkOddLengthSupplyTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_bulk_odd_length_supply_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, BulkOddOffsetSupplyTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_bulk_odd_offset_supply_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, BulkOddOffsetSupplyTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_bulk_odd_offset_supply_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, BulkSingleSupplyTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_bulk_single_supply_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, BulkSingleSupplyTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_bulk_single_supply_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CancelKeyDoesNotWedgeThePager) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_cancel_key_does_not_wedge_the_pager_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CancelKeyDoesNotWedgeThePager) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_cancel_key_does_not_wedge_the_pager_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneChainCommitTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_chain_commit_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneCommitMultipleBatches)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_commit_multiple_batches() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneCommitRandomBatches)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_commit_random_batches() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneCommitSingleBatch)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_commit_single_batch() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneCommitTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_commit_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneCommitTwoBatches)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_commit_two_batches() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneDetachTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_detach_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneMightSeeIntermediateForks)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_might_see_intermediate_forks() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CloneReadFromCloneTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_read_from_clone_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CloneReadFromCloneTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_read_from_clone_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CloneReadFromParentTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_read_from_parent_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CloneReadFromParentTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_read_from_parent_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneResizeCloneHazard)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_resize_clone_hazard() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneResizeParentOK)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_resize_parent_ok() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneSeesCorrectParentPages)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_sees_correct_parent_pages() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneShrinkGrowParent)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_shrink_grow_parent() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousChildReadTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_simultaneous_child_read_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousChildReadTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_simultaneous_child_read_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousReadTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_simultaneous_read_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousReadTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_simultaneous_read_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CloneSplitCommitTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_split_commit_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CloneWriteToCloneTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_write_to_clone_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, CloneWriteToCloneTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_clone_write_to_clone_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, ClosePageCompleteTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_close_page_complete_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, ClosePagerTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_close_pager_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, ClosePortTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_close_port_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CommitRedundantSupplyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_commit_redundant_supply_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ConcurrentMultipageAccessTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_concurrent_multipage_access_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ConcurrentMultipageAccessTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_concurrent_multipage_access_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ConcurrentOverlappingAccessTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_concurrent_overlapping_access_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ConcurrentOverlappingAccessTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_concurrent_overlapping_access_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, CreateVmoUnboundedInvalidStreamSize)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_create_vmo_unbounded_invalid_stream_size() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, DecommitOnDetachTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_decommit_on_detach_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, DecommitOnDetachTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_decommit_on_detach_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, DecommitTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_decommit_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, DeepHierarchy)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_deep_hierarchy() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, DetachAndAlwaysNeed)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_detach_and_always_need() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, DetachClosePagerTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_detach_close_pager_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, DetachNonMappingAccess)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_detach_non_mapping_access() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, DetachPageCompleteTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_detach_page_complete_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, EarlySupplyTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_early_supply_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, EarlySupplyTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_early_supply_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EarlyWakeCloneRace)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_early_wake_clone_race() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EarlyWakeNonLinearSupply)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_early_wake_non_linear_supply() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EarlyWakeOnSupply)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_early_wake_on_supply() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EarlyWakeOverlappingRequests)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_early_wake_overlapping_requests() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EarlyWakeWithResize)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_early_wake_with_resize() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EvictionHintAlwaysNeed)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_eviction_hint_always_need() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EvictionHintsCloneVmar)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_eviction_hints_clone_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EvictionHintsNestedVmar)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_eviction_hints_nested_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EvictionHintsOpRange)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_eviction_hints_op_range() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EvictionHintsVmar)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_eviction_hints_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EvictionHintsWithClones)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_eviction_hints_with_clones() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, EvictionHintsWithResize)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_eviction_hints_with_resize() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, FailAfterDetach)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_after_detach() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, FailEarlyWake)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_early_wake() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, FailErrorCode)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_error_code() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, FailExactRange)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_exact_range() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, FailMultipleCommits)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_multiple_commits() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, FailMultipleVmos)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_multiple_vmos() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, FailOverlapRequest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_overlap_request() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, FailOverlappingRangeCommit)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_overlapping_range_commit() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, FailOverlappingRangeRead)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_overlapping_range_read() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, FailRedundant)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_redundant() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, FailSinglePage) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_single_page_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, FailSinglePage) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_fail_single_page_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, InvalidPagerCreate)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_invalid_pager_create() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, InvalidPagerCreateVmo)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_invalid_pager_create_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, InvalidPagerDetachVmo)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_invalid_pager_detach_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, InvalidPagerSupplyPages)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_invalid_pager_supply_pages() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ManyRequestTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_many_request_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ManyRequestTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_many_request_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, MappedSupplyPages)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_mapped_supply_pages() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, MulticommitSupplyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_multicommit_supply_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, MultipleConcurrentVmoTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_multiple_concurrent_vmo_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, MultisupplyCommitTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_multisupply_commit_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, OpCommitCloneVmar)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_op_commit_clone_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, OpCommitVmar)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_op_commit_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, OverlapCommitSupplyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_overlap_commit_supply_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, OverlapCommitTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_overlap_commit_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, OverlapSupplyTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_overlap_supply_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, OverlapSupplyTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_overlap_supply_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, PageRequestBatchingChecksAncestorPages)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_page_request_batching_checks_ancestor_pages() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, PagerDetachPinned)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_pager_detach_pinned() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, PinPagerVmoWithLoanedPages)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_pin_pager_vmo_with_loaned_pages() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, PinnedSupplyPages)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_pinned_supply_pages() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, Prefetch)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_prefetch() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, PresentPageSplitsRange)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_present_page_splits_range() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, PresupplyTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_presupply_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, PresupplyTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_presupply_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, ProxyUseAfterFree)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_proxy_use_after_free() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, RacyPortDequeue)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_racy_port_dequeue() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptEarlyTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_read_close_interrupt_early_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptEarlyTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_read_close_interrupt_early_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptLateTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_read_close_interrupt_late_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptLateTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_read_close_interrupt_late_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptEarlyTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_read_detach_interrupt_early_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptEarlyTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_read_detach_interrupt_early_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptLateTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_read_detach_interrupt_late_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptLateTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_read_detach_interrupt_late_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ReadResizeTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_read_resize_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, ReadResizeTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_read_resize_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, ResizeBlockedPin)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_resize_blocked_pin() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, ResizeCommitTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_resize_commit_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, ResizeNonresizableVmo)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_resize_nonresizable_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, SequentialMultipageTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_sequential_multipage_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, SequentialMultipageTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_sequential_multipage_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, SimpleCommitTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_simple_commit_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, SinglePageTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_single_page_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, SinglePageTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_single_page_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, SplitCommitTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_split_commit_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, SuccessiveVmoTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_successive_vmo_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, SupplyAfterDetach)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_supply_after_detach() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, SupplyAfterFail)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_supply_after_fail() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, SuspendCommitTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_suspend_commit_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, SuspendInKernelCaptureFaultsTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_suspend_in_kernel_capture_faults_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, SuspendInKernelTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_suspend_in_kernel_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, SuspendReadTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_suspend_read_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, SuspendReadTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_suspend_read_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, UncommittedSinglePageTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_uncommitted_single_page_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(Pager, UncommittedSinglePageTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_uncommitted_single_page_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, UncommittedSupply)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_uncommitted_supply() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, VmarMapRangeTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_vmar_map_range_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, VmarRemapTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_vmar_remap_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, VmarUnmapTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_vmar_unmap_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, VmoInfoPagerTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_vmo_info_pager_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Pager, ZeroHandlesRace)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_zero_handles_race() {
+    todo!("requires demand-paging");
+}
+
+// ── Missing PagerWriteback tests (from pager-writeback.cc) ──────────
+//
+// 175 tests that require demand-paging infrastructure with TRAP_DIRTY
+// and async writeback support. Each is marked #[ignore] until the
+// demand-paging infrastructure is implemented.
+
+/// C++: TEST(PagerWriteback, CannotOverwriteZeroPageNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_cannot_overwrite_zero_page_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, CannotOverwriteZeroPageTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_cannot_overwrite_zero_page_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ChildAttributedCounts)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_child_attributed_counts() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, CommitExtendedTailNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_commit_extended_tail_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, CommitExtendedTailTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_commit_extended_tail_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, CommitResizeRaceNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_commit_resize_race_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, CommitResizeRaceTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_commit_resize_race_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DecommitCleanOnDetachNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_decommit_clean_on_detach_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DecommitCleanOnDetachTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_decommit_clean_on_detach_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DelayedDirtyNotFound)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_delayed_dirty_not_found() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DelayedDirtyZeroRange)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_delayed_dirty_zero_range() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DelayedPinAwaitingClean)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_delayed_pin_awaiting_clean() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DelayedReadZeroRange)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_delayed_read_zero_range() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(PagerWriteback, DetachWithPendingDirtyRequest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_detach_with_pending_dirty_request_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(PagerWriteback, DetachWithPendingDirtyRequest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_detach_with_pending_dirty_request_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyAfterMapProtectNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_after_map_protect_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyAfterMapProtectTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_after_map_protect_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyAfterPin)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_after_pin() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyDuringWriteback)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_during_writeback() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyLargeRange)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_large_range() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyNoTrapRandomOffsets)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_no_trap_random_offsets() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyRequestsForZeroPages)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_requests_for_zero_pages() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyRequestsForZeroRanges)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_requests_for_zero_ranges() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyRequestsOnVmoWrite)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_requests_on_vmo_write() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyRequestsOnWriteAfterRead)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_requests_on_write_after_read() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyRequestsOverlap)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_requests_overlap() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyRequestsRandomOffsets)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_requests_random_offsets() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyRequestsRepeatedWrites)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_requests_repeated_writes() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyRequestsViaMapping)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_requests_via_mapping() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, DirtyZeroAndNonZeroPages)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_dirty_zero_and_non_zero_pages() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, FailDirtyRequests)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_fail_dirty_requests() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, FailDirtyRequestsForZeroPages)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_fail_dirty_requests_for_zero_pages() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, FailedPinAwaitingClean)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_failed_pin_awaiting_clean() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, InvalidPagerOpRange)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_invalid_pager_op_range() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, InvalidQuery)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_invalid_query() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, LargeWriteBatched)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_large_write_batched() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedNoResetNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_no_reset_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedNoResetTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_no_reset_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedOnMappingWriteNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_on_mapping_write_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedOnMappingWriteTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_on_mapping_write_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedOnOpZeroNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_on_op_zero_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedOnOpZeroTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_on_op_zero_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedOnPartialVmoWriteNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_on_partial_vmo_write_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedOnPartialVmoWriteTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_on_partial_vmo_write_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedOnResizeNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_on_resize_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedOnResizeTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_on_resize_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedOnVmoWriteNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_on_vmo_write_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ModifiedOnVmoWriteTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_modified_on_vmo_write_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NoDirtyOnCommitNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_dirty_on_commit_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NoDirtyOnCommitTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_dirty_on_commit_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(PagerWriteback, NoDirtyRequestsAfterDetach) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_dirty_requests_after_detach_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(PagerWriteback, NoDirtyRequestsAfterDetach) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_dirty_requests_after_detach_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NoDirtyRequestsForClones)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_dirty_requests_for_clones() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NoDirtyRequestsMapExistingDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_dirty_requests_map_existing_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NoDirtyRequestsOnCommit)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_dirty_requests_on_commit() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NoDirtyRequestsOnMapRange)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_dirty_requests_on_map_range() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NoDirtyRequestsOnRead)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_dirty_requests_on_read() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NoQueryOnCloneNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_query_on_clone_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NoQueryOnCloneTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_no_query_on_clone_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedCloneWriteNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_clone_write_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedCloneWriteTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_clone_write_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedFailedPinWrite)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_failed_pin_write() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedOnFailedDirtyRequest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_on_failed_dirty_request() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedOnFailedResizeNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_on_failed_resize_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedOnFailedResizeTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_on_failed_resize_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedOnFailedVmoWriteNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_on_failed_vmo_write_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedOnFailedVmoWriteTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_on_failed_vmo_write_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedOnMappingReadNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_on_mapping_read_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedOnMappingReadTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_on_mapping_read_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedOnVmoReadNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_on_vmo_read_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedOnVmoReadTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_on_vmo_read_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, NotModifiedPartialFailedPinWrite)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_not_modified_partial_failed_pin_write() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpDirtyNoWrite)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_dirty_no_write() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZero)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroCloneNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_clone_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroCloneTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_clone_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroDecommitNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_decommit_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroDecommitTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_decommit_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroExpandsTailNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_expands_tail_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroExpandsTailTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_expands_tail_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroPartialPageNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_partial_page_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroPartialPageTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_partial_page_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroPinnedNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_pinned_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroPinnedTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_pinned_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroResizeNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_resize_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroResizeTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_resize_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroTailNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_tail_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroTailTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_tail_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroUnblocksReadRequestNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_unblocks_read_request_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroUnblocksReadRequestTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_unblocks_read_request_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroWithMarkersNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_with_markers_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroWithMarkersTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_with_markers_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroWritebackNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_writeback_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, OpZeroWritebackTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_op_zero_writeback_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, PinAfterDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_pin_after_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, PinForReadNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_pin_for_read_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, PinForReadTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_pin_for_read_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, PinForWriteNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_pin_for_write_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, PinForWriteTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_pin_for_write_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, PinForWriteUnpopulatedNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_pin_for_write_unpopulated_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, PinForWriteUnpopulatedTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_pin_for_write_unpopulated_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, PinnedWritebackNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_pinned_writeback_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, PinnedWritebackTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_pinned_writeback_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, QueryDirtyRangesInvalidBuffer)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_query_dirty_ranges_invalid_buffer() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, QueryEarlyTermination)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_query_early_termination() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, QueryVmoStatsInvalidPointer)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_query_vmo_stats_invalid_pointer() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ReadPinAwaitingCleanNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_read_pin_awaiting_clean_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ReadPinAwaitingCleanTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_read_pin_awaiting_clean_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeDirtyRequest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_dirty_request() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizePartialWritebackIntersectingRandomWritesNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_partial_writeback_intersecting_random_writes_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizePartialWritebackIntersectingRandomWritesTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_partial_writeback_intersecting_random_writes_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeSupplyZeroNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_supply_zero_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeSupplyZeroTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_supply_zero_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWithOutstandingDirtyRequests)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_with_outstanding_dirty_requests() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackAfterGapNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_after_gap_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackAfterGapTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_after_gap_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackDirtyAfterQueryNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_dirty_after_query_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackDirtyAfterQueryTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_dirty_after_query_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackInterleavedWriteWithMappingNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_interleaved_write_with_mapping_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackInterleavedWriteWithMappingTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_interleaved_write_with_mapping_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackIntersectingRandomWritesNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_intersecting_random_writes_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackIntersectingRandomWritesTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_intersecting_random_writes_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackIntersectingResizeNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_intersecting_resize_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackIntersectingResizeTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_intersecting_resize_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackIntersectingWriteNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_intersecting_write_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackIntersectingWriteTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_intersecting_write_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackMulipleGapsNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_muliple_gaps_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackMulipleGapsTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_muliple_gaps_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackNewDirtyRequests)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_new_dirty_requests() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackNewDirtyRequestsInterleaved)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_new_dirty_requests_interleaved() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingResizeNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_non_intersecting_resize_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingResizeTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_non_intersecting_resize_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingWriteNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_non_intersecting_write_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingWriteTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_non_intersecting_write_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackPartialEndNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_partial_end_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackPartialEndTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_partial_end_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackRepeatedNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_repeated_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackRepeatedTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_repeated_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackSequentialNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_sequential_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackSequentialTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_sequential_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackWithMappingNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_with_mapping_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackWithMappingTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_with_mapping_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResizeWritebackWithOutstandingDirtyRequests)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resize_writeback_with_outstanding_dirty_requests() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, ResolveDirtyRequestAfterDetach)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_resolve_dirty_request_after_detach() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, SimpleDirtyNoTrap)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_simple_dirty_no_trap() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(PagerWriteback, SimpleTrapDirty) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_simple_trap_dirty_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(PagerWriteback, SimpleTrapDirty) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_simple_trap_dirty_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, SimpleWritebackNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_simple_writeback_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, SimpleWritebackTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_simple_writeback_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, SliceOpZeroNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_slice_op_zero_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, SliceOpZeroTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_slice_op_zero_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, SlicePinWriteNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_slice_pin_write_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, SlicePinWriteTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_slice_pin_write_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, SliceWriteNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_slice_write_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, SliceWriteTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_slice_write_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(PagerWriteback, SuspendDirtyTest) — Vmo variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_suspend_dirty_test_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: VMO_VMAR_TEST(PagerWriteback, SuspendDirtyTest) — Vmar variant
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_suspend_dirty_test_vmar() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, Unbounded)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_unbounded() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, UntrackedAbsorbsIntervalSlots)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_untracked_absorbs_interval_slots() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, UntrackedAbsorbsPages)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_untracked_absorbs_pages() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, UntrackedBeyondStreamSize)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_untracked_beyond_stream_size() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritePinAwaitingCleanNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_write_pin_awaiting_clean_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritePinAwaitingCleanTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_write_pin_awaiting_clean_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackCombinedNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_combined_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackCombinedTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_combined_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackDirtyPagesAfterDetachNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_dirty_pages_after_detach_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackDirtyPagesAfterDetachTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_dirty_pages_after_detach_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedBeginNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_out_of_order_combined_begin_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedBeginTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_out_of_order_combined_begin_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedEndNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_out_of_order_combined_end_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedEndTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_out_of_order_combined_end_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackOutOfOrderNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_out_of_order_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackOutOfOrderTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_out_of_order_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackResizedRangeAfterDetachNoTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_resized_range_after_detach_no_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackResizedRangeAfterDetachTrapDirty)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_resized_range_after_detach_trap_dirty() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackWithMapping)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_wb_writeback_with_mapping() {
+    todo!("requires demand-paging");
+}
+
+// ── Snapshot tests (from snapshot.cc) ────────────────────────────────
+//
+// Snapshot tests for pager-backed VMOs. These test COW snapshot behavior
+// with pager infrastructure. All require demand-paging.
+
+/// C++: TEST(Snapshot, Smoke)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_smoke() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, AtLeastOnWriteAfterSnapshotModified)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_at_least_on_write_after_snapshot_modified() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, SnapshotModifiedAfterAtLeastOnWrite)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_snapshot_modified_after_at_least_on_write() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, DropVmos)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_drop_vmos() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ResizeShrinkSnapshot)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_resize_shrink_snapshot() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ResizeShrinkSnapshotWithEmptyParent)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_resize_shrink_snapshot_with_empty_parent() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, SnapshotReadOnlyVmo)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_snapshot_read_only_vmo() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ReleaseCowParentPagesRight)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_release_cow_parent_pages_right() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ReleaseCowParentPagesLeft)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_release_cow_parent_pages_left() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ReleaseCowParentPagesLeftAndRight)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_release_cow_parent_pages_left_and_right() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ReleaseCowParentPagesRightInHiddenNode)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_release_cow_parent_pages_right_in_hidden_node() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ZeroRangeFromEndOfParent)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_zero_range_from_end_of_parent() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ZeroRangeLeftInSnapshotNoPagesInParent)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_zero_range_left_in_snapshot_no_pages_in_parent() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ZeroRangeLeftInSnapshotPageInParent)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_zero_range_left_in_snapshot_page_in_parent() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ZeroRangeLeftInSnapshotNoPagesInParentChain)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_zero_range_left_in_snapshot_no_pages_in_parent_chain() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ZeroRangeLeftInSnapshotPagesInParentChain)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_zero_range_left_in_snapshot_pages_in_parent_chain() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ZeroRangeLeftInSnapshotPageInSnapshot)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_zero_range_left_in_snapshot_page_in_snapshot() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ZeroRangeLeftInSnapshotPageInClone)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_zero_range_left_in_snapshot_page_in_clone() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ZeroRangeLeftInSnapshotPageInHiddenNode)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_zero_range_left_in_snapshot_page_in_hidden_node() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, AlowSlice)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_alow_slice() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, SnapshotSlice)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_snapshot_slice() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, SnapshotSliceAtLeastOnWrite)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_snapshot_slice_at_least_on_write() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, SnapshotVmoWithSlice)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_snapshot_vmo_with_slice() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, CloneAfterSliceRoot)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_clone_after_slice_root() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, CommitRangeInSnapshot)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_commit_range_in_snapshot() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, Read)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_read_test() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, SnapshotModifiedClone)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_snapshot_modified_clone() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, WriteAfterDropSibling)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_write_after_drop_sibling() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, CloneModifyChain)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_clone_modify_chain() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ObjMemAccounting)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_obj_mem_accounting() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, RootVmoWrite)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_root_vmo_write() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, CloneVmoWrite)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_clone_vmo_write() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, SnapshotVmoWrite)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_snapshot_vmo_write() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, CloseClone)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_close_clone() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, CloseSnapshot)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_close_snapshot() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, CloseRoot)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_close_root() {
+    todo!("requires demand-paging");
+}
+
+/// C++: TEST(Snapshot, ResizeSnapshotRace)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn pager_snapshot_resize_snapshot_race() {
+    todo!("requires demand-paging");
+}
