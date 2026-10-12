@@ -67,10 +67,22 @@ impl Syscall<'_> {
             for (i, value) in values.iter().enumerate() {
                 handle_infos[i].handle = *value;
             }
-            UserOutPtr::<HandleInfo>::from(handles).write_array(&handle_infos)?;
+            if let Err(e) = UserOutPtr::<HandleInfo>::from(handles).write_array(&handle_infos) {
+                // Copy-out failed — remove handles to prevent leaking.
+                for &v in &values {
+                    let _ = proc.remove_handle(v);
+                }
+                return Err(e.into());
+            }
         } else {
             let values = proc.add_handles(msg.handles);
-            UserOutPtr::<HandleValue>::from(handles).write_array(&values)?;
+            if let Err(e) = UserOutPtr::<HandleValue>::from(handles).write_array(&values) {
+                // Copy-out failed — remove handles to prevent leaking.
+                for &v in &values {
+                    let _ = proc.remove_handle(v);
+                }
+                return Err(e.into());
+            }
         }
         Ok(())
     }

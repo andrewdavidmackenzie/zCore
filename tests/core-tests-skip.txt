@@ -128,7 +128,7 @@ MsiTest.Msix
 
 # ── Channel fault handling ───────────────────────────────────────────
 # Reads from a faulting buffer — hangs (needs exception infrastructure).
-ChannelTest.ReadFaultDoesNotLeakHandles
+# ChannelTest.ReadFaultDoesNotLeakHandles — removed, fixed handle leak
 
 # ── Resource tests ───────────────────────────────────────────────────
 # Mexec* triggers platform reset. Ioports crashes — needs boot
@@ -150,7 +150,7 @@ Resource.Ioports
 
 # ── System events / suspend / wake reports ───────────────────────────
 # ExactlyOneMemoryEventSignaled hangs — polls all pressure events.
-SystemEvent.ExactlyOneMemoryEventSignaled
+# SystemEvent.ExactlyOneMemoryEventSignaled — removed, testing if fixed
 # WakeReport: PortBound fails without hanging (removed from skip).
 # ThreadBound hangs.
 WakeReportTestsThreadBound.*
