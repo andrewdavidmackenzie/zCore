@@ -536,7 +536,8 @@ impl Syscall<'_> {
                 avail.write_if_not_null(entries.len())?;
             }
             Topic::Msi => {
-                let alloc = proc.get_object::<MsiAllocation>(handle)?;
+                let alloc =
+                    proc.get_object_with_rights::<MsiAllocation>(handle, Rights::INSPECT)?;
                 #[repr(C)]
                 #[derive(Default)]
                 struct InfoMsi {
@@ -554,21 +555,17 @@ impl Syscall<'_> {
                     interrupt_count: alloc.interrupt_count(),
                 };
                 let entry_size = core::mem::size_of::<InfoMsi>();
-                let count = if buffer_size >= entry_size {
-                    let mut out = UserOutPtr::<u8>::from(buffer);
-                    let info_bytes: &[u8] = unsafe {
-                        core::slice::from_raw_parts(
-                            &info as *const InfoMsi as *const u8,
-                            entry_size,
-                        )
-                    };
-                    out.write_array(info_bytes)?;
-                    1
-                } else {
-                    0
-                };
-                actual.write_if_not_null(count)?;
+                actual.write_if_not_null(0)?;
                 avail.write_if_not_null(1)?;
+                if buffer_size < entry_size {
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let mut out = UserOutPtr::<u8>::from(buffer);
+                let info_bytes: &[u8] = unsafe {
+                    core::slice::from_raw_parts(&info as *const InfoMsi as *const u8, entry_size)
+                };
+                out.write_array(info_bytes)?;
+                actual.write_if_not_null(1)?;
             }
             Topic::ProcessVmos => {
                 let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;

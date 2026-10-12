@@ -407,8 +407,7 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let alloc = proc.get_object::<MsiAllocation>(handle)?;
         // Validate the VMO handle.
-        let vmo =
-            proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::READ | Rights::MAP)?;
+        let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::MAP)?;
         // Validate msi_id is within the allocation.
         if msi_id >= alloc.count() {
             return Err(ZxError::INVALID_ARGS);
