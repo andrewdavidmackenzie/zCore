@@ -457,6 +457,18 @@ impl Syscall<'_> {
         if size > vmo.len() {
             return Err(ZxError::OUT_OF_RANGE);
         }
+        // When changing stream_size, zero the range between the old
+        // and new sizes. On decrease: zero [new, vmo_len). On
+        // increase: zero [old, new) so data beyond old stream_size
+        // reads as zero even if previously written.
+        let old_size = vmo.content_size();
+        if size != old_size {
+            let zero_start = size.min(old_size);
+            let zero_end = if size < old_size { vmo.len() } else { size };
+            if zero_end > zero_start {
+                let _ = vmo.zero(zero_start, zero_end - zero_start);
+            }
+        }
         vmo.set_content_size(size)
     }
 
@@ -554,21 +566,30 @@ impl Syscall<'_> {
                 vmo.unlock_discardable()
             }
             VmoOpType::CacheSync | VmoOpType::CacheClean | VmoOpType::CacheCleanInvalidate => {
-                // These require READ rights per the Zircon ABI.
+                // Physical VMOs do not support kernel-managed cache ops.
+                if vmo.is_physical() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
                 if !rights.contains(Rights::READ) {
                     return Err(ZxError::ACCESS_DENIED);
+                }
+                if len == 0 {
+                    return Err(ZxError::INVALID_ARGS);
                 }
                 if offset.checked_add(len).is_none() || offset + len > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
-                // Cache operations are no-ops on most architectures;
-                // return success so callers can proceed.
                 Ok(())
             }
             VmoOpType::CacheInvalidate => {
-                // CACHE_INVALIDATE requires WRITE rights per the Zircon ABI.
+                if vmo.is_physical() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
                 if !rights.contains(Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
+                }
+                if len == 0 {
+                    return Err(ZxError::INVALID_ARGS);
                 }
                 if offset.checked_add(len).is_none() || offset + len > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
@@ -639,8 +660,15 @@ impl Syscall<'_> {
         {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        // Pager-backed VMOs cannot participate in transfer_data.
-        if src.is_pager_backed() || dst.is_pager_backed() {
+        // Physical, contiguous, and pager-backed VMOs cannot participate
+        // in transfer_data.
+        if src.is_physical()
+            || dst.is_physical()
+            || src.is_contiguous()
+            || dst.is_contiguous()
+            || src.is_pager_backed()
+            || dst.is_pager_backed()
+        {
             return Err(ZxError::NOT_SUPPORTED);
         }
         // Reject pinned pages in either transfer range.
