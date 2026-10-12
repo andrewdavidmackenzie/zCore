@@ -87,3 +87,59 @@ fn mapping_permissions() {
     let _ctx = TestContext::new();
     panic!("memory mapping needs real VMAR");
 }
+
+/// C++: TEST(MemoryMappingTest, AddressSpaceLimitsTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn address_space_limits_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapFlagsTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_flags_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapLenTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_len_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapOffsetTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_offset_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapProtExecTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_prot_exec_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapProtTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_prot_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MmapZerofilledTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mmap_zerofilled_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}
+
+/// C++: TEST(MemoryMappingTest, MprotectTest)
+#[test]
+#[ignore = "requires mmap/VMAR mapping infrastructure"]
+fn mprotect_test() {
+    todo!("requires mmap/VMAR mapping infrastructure");
+}

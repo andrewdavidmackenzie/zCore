@@ -6310,3 +6310,885 @@ fn resource_info_handle_basic_bad_avail() {
     .unwrap_err();
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
+
+/// C++: TEST(JobGetInfoTest, InfoJobChildJobsGetChild)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_child_jobs_get_child() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobChildrenJobHandleIsBadHandle)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_children_job_handle_is_bad_handle() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobChildrenPartiallyUnmappedBufferIsInvalidArgs)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_children_partially_unmapped_buffer_is_invalid_args() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobChildrenRequiresEnumerateRights)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_children_requires_enumerate_rights() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobChildrenSmallBufferIsOk)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_children_small_buffer_is_ok() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobChildrenThreadHandleIsBadHandle)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_children_thread_handle_is_bad_handle() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobProcessesGetChild)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_processes_get_child() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobProcessesPartiallyUnmappedBufferIsInvalidArgs)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_processes_partially_unmapped_buffer_is_invalid_args() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobProcessesProcessbHandleIsBadHandle)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_processes_processb_handle_is_bad_handle() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobProcessesRequiresEnumerateRights)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_processes_requires_enumerate_rights() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobProcessesSmallBufferIsOk)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_processes_small_buffer_is_ok() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(JobGetInfoTest, InfoJobProcessesThreadHandleIsBadHandle)
+#[test]
+#[ignore = "requires job children/processes enumeration"]
+fn job_get_info_info_job_processes_thread_handle_is_bad_handle() {
+    todo!("requires job children/processes enumeration");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, CpuStats)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_cpu_stats() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, CpuStatsArraySize)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_cpu_stats_array_size() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, CpuStatsBadHandleType)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_cpu_stats_bad_handle_type() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, CpuStatsInvalidHandle)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_cpu_stats_invalid_handle() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, CpuStatsMonotonicValues)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_cpu_stats_monotonic_values() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, CpuStatsNullBuffer)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_cpu_stats_null_buffer() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, GuestStatsArraySize)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_guest_stats_array_size() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, KmemStats)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_kmem_stats() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, KmemStatsBadHandleType)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_kmem_stats_bad_handle_type() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, KmemStatsExtended)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_kmem_stats_extended() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, KmemStatsExtendedBadHandleType)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_kmem_stats_extended_bad_handle_type() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, KmemStatsExtendedInvalidHandle)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_kmem_stats_extended_invalid_handle() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, KmemStatsExtendedNullBuffer)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_kmem_stats_extended_null_buffer() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, KmemStatsExtendedSmallBuffer)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_kmem_stats_extended_small_buffer() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, KmemStatsInvalidHandle)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_kmem_stats_invalid_handle() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, KmemStatsNullBuffer)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_kmem_stats_null_buffer() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(KernelStatsGetInfoTest, KmemStatsSmallBuffer)
+#[test]
+#[ignore = "requires kernel stats infrastructure"]
+fn kernel_stats_kmem_stats_small_buffer() {
+    todo!("requires kernel stats infrastructure");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessHandleTable)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_handle_table() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessHandleTableInsufficientRights)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_handle_table_insufficient_rights() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessHandleTableNullActualAvailSucceeds)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_handle_table_null_actual_avail_succeeds() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessJobHandleIsBadHandle)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_job_handle_is_bad_handle() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsBadActualIsInvalidArg)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_bad_actual_is_invalid_arg() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsBadAvailIsInvalidArg)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_bad_avail_is_invalid_arg() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsInvalidBufferPointerFails)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_invalid_buffer_pointer_fails() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsJobHandleIsBadHandle)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_job_handle_is_bad_handle() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsNullActualAndAvailSucceeds)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_null_actual_and_avail_succeeds() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsNullActualSucceeds)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_null_actual_succeeds() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsNullAvailSucceeds)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_null_avail_succeeds() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsOnSelfFails)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_on_self_fails() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsPartiallyUnmappedBufferIsInvalidArgs)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_partially_unmapped_buffer_is_invalid_args() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsRequiresInspectRights)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_requires_inspect_rights() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsSmallBufferIsOk)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_small_buffer_is_ok() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsSmokeTestV1)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_smoke_test_v1() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsSmokeTestV2)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_smoke_test_v2() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsThreadHandleIsBadHandle)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_thread_handle_is_bad_handle() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsZeroSizedBufferIsOk)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_maps_zero_sized_buffer_is_ok() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessThreadHandleIsBadHandle)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_thread_handle_is_bad_handle() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessThreadsZeroSizedBufferSucceeds)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_threads_zero_sized_buffer_succeeds() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosBadActualIsInvalidArg)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_bad_actual_is_invalid_arg() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosBadAvailIsInvalidArg)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_bad_avail_is_invalid_arg() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosInvalidBufferPointerFails)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_invalid_buffer_pointer_fails() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosJobHandleIsBadHandle)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_job_handle_is_bad_handle() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosNullActualAndAvailSucceeds)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_null_actual_and_avail_succeeds() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosNullActualSucceeds)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_null_actual_succeeds() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosNullAvailSucceeds)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_null_avail_succeeds() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosPartiallyUnmappedBufferIsInvalidArgs)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_partially_unmapped_buffer_is_invalid_args() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosRequiresInspectRights)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_requires_inspect_rights() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosSmallBufferIsOk)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_small_buffer_is_ok() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosSmokeTestV1)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_smoke_test_v1() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosSmokeTestV2)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_smoke_test_v2() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosSmokeTestV3)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_smoke_test_v3() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosThreadHandleIsBadHandle)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_thread_handle_is_bad_handle() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosZeroSizedBufferIsOk)
+#[test]
+#[ignore = "requires process maps/VMO enumeration"]
+fn process_get_info_info_process_vmos_zero_sized_buffer_is_ok() {
+    todo!("requires process maps/VMO enumeration");
+}
+
+/// C++: TEST(StallGetInfoTest, MemoryStallBadActualIsInvalidArg)
+#[test]
+#[ignore = "requires memory stall info infrastructure"]
+fn stall_get_info_memory_stall_bad_actual_is_invalid_arg() {
+    todo!("requires memory stall info infrastructure");
+}
+
+/// C++: TEST(StallGetInfoTest, MemoryStallBadAvailIsInvalidArg)
+#[test]
+#[ignore = "requires memory stall info infrastructure"]
+fn stall_get_info_memory_stall_bad_avail_is_invalid_arg() {
+    todo!("requires memory stall info infrastructure");
+}
+
+/// C++: TEST(StallGetInfoTest, MemoryStallInvalidBufferPointerFails)
+#[test]
+#[ignore = "requires memory stall info infrastructure"]
+fn stall_get_info_memory_stall_invalid_buffer_pointer_fails() {
+    todo!("requires memory stall info infrastructure");
+}
+
+/// C++: TEST(StallGetInfoTest, MemoryStallInvalidHandleFails)
+#[test]
+#[ignore = "requires memory stall info infrastructure"]
+fn stall_get_info_memory_stall_invalid_handle_fails() {
+    todo!("requires memory stall info infrastructure");
+}
+
+/// C++: TEST(StallGetInfoTest, MemoryStallNullActualAndAvailSucceeds)
+#[test]
+#[ignore = "requires memory stall info infrastructure"]
+fn stall_get_info_memory_stall_null_actual_and_avail_succeeds() {
+    todo!("requires memory stall info infrastructure");
+}
+
+/// C++: TEST(StallGetInfoTest, MemoryStallNullActualSucceeds)
+#[test]
+#[ignore = "requires memory stall info infrastructure"]
+fn stall_get_info_memory_stall_null_actual_succeeds() {
+    todo!("requires memory stall info infrastructure");
+}
+
+/// C++: TEST(StallGetInfoTest, MemoryStallNullAvailSucceeds)
+#[test]
+#[ignore = "requires memory stall info infrastructure"]
+fn stall_get_info_memory_stall_null_avail_succeeds() {
+    todo!("requires memory stall info infrastructure");
+}
+
+/// C++: TEST(StallGetInfoTest, MemoryStallSmokeTest)
+#[test]
+#[ignore = "requires memory stall info infrastructure"]
+fn stall_get_info_memory_stall_smoke_test() {
+    todo!("requires memory stall info infrastructure");
+}
+
+/// C++: TEST(StallGetInfoTest, MemoryStallZeroSizedBufferIsTooSmall)
+#[test]
+#[ignore = "requires memory stall info infrastructure"]
+fn stall_get_info_memory_stall_zero_sized_buffer_is_too_small() {
+    todo!("requires memory stall info infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoStatsSmokeTest)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_stats_smoke_test() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoStatsSmokeTestV1)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_stats_smoke_test_v1() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoStatsUnstartedSucceeds)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_stats_unstarted_succeeds() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoTaskStatsBadActualIsInvalidArg)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_task_stats_bad_actual_is_invalid_arg() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoTaskStatsBadAvailIsInvalidArg)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_task_stats_bad_avail_is_invalid_arg() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoTaskStatsInvalidBufferPointerFails)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_task_stats_invalid_buffer_pointer_fails() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoTaskStatsInvalidHandleFails)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_task_stats_invalid_handle_fails() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoTaskStatsJobHandleIsBadHandle)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_task_stats_job_handle_is_bad_handle() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoTaskStatsNullActualAndAvailSucceeds)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_task_stats_null_actual_and_avail_succeeds() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoTaskStatsNullActualSucceeds)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_task_stats_null_actual_succeeds() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoTaskStatsNullAvailSucceeds)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_task_stats_null_avail_succeeds() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoTaskStatsThreadHandleIsBadHandle)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_task_stats_thread_handle_is_bad_handle() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, InfoTaskStatsZeroSizedBufferIsTooSmall)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_info_task_stats_zero_sized_buffer_is_too_small() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(TaskGetInfoTest, SharedMemAccounting)
+#[test]
+#[ignore = "requires task stats infrastructure"]
+fn task_get_info_shared_mem_accounting() {
+    todo!("requires task stats infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoHandleCountBadActualIsInvalidArg)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_handle_count_bad_actual_is_invalid_arg() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoHandleCountBadAvailIsInvalidArg)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_handle_count_bad_avail_is_invalid_arg() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoHandleCountInvalidBufferPointerFails)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_handle_count_invalid_buffer_pointer_fails() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoHandleCountNullActualAndAvailSucceeds)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_handle_count_null_actual_and_avail_succeeds() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoHandleCountNullActualSucceeds)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_handle_count_null_actual_succeeds() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoHandleCountNullAvailSucceeds)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_handle_count_null_avail_succeeds() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoThreadExceptionReportInvalidHandleFails)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_thread_exception_report_invalid_handle_fails() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoThreadJobHandleIsBadHandle)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_thread_job_handle_is_bad_handle() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoThreadProcessHandleIsBadHandle)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_thread_process_handle_is_bad_handle() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoThreadStatsJobHandleIsBadHandle)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_thread_stats_job_handle_is_bad_handle() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoThreadStatsProcessHandleIsBadHandle)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_thread_stats_process_handle_is_bad_handle() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(ThreadGetInfoTest, InfoThreadStatsRuntime)
+#[test]
+#[ignore = "requires thread info infrastructure"]
+fn thread_get_info_info_thread_stats_runtime() {
+    todo!("requires thread info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_handle_basic_bad_actual_is_invalid_arg() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_handle_basic_bad_avail_is_invalid_arg() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_handle_basic_invalid_buffer_pointer_fails() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoHandleBasicInvalidHandleFails)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_handle_basic_invalid_handle_fails() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_handle_basic_null_actual_and_avail_succeeds() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoHandleBasicNullActualSucceeds)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_handle_basic_null_actual_succeeds() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoHandleBasicNullAvailSucceeds)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_handle_basic_null_avail_succeeds() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoHandleBasicOnSelfSucceeds)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_handle_basic_on_self_succeeds() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_handle_basic_zero_sized_buffer_fails() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoVmarJobHandleIsBadHandle)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_vmar_job_handle_is_bad_handle() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoVmarProcessHandleIsBadHandle)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_vmar_process_handle_is_bad_handle() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarGetInfoTest, InfoVmarThreadHandleIsBadHandle)
+#[test]
+#[ignore = "requires VMAR info infrastructure"]
+fn vmar_get_info_info_vmar_thread_handle_is_bad_handle() {
+    todo!("requires VMAR info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsBadActualIsInvalidArg)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_bad_actual_is_invalid_arg() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsBadAvailIsInvalidArg)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_bad_avail_is_invalid_arg() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsInvalidBufferPointerFails)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_invalid_buffer_pointer_fails() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsInvalidHandleFails)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_invalid_handle_fails() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsNullActualAndAvailSucceeds)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_null_actual_and_avail_succeeds() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsNullActualSucceeds)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_null_actual_succeeds() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsNullAvailSucceeds)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_null_avail_succeeds() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsOnSelfSucceeds)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_on_self_succeeds() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsProcessDestroyedFails)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_process_destroyed_fails() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsRequiresInspectRights)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_requires_inspect_rights() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsSmokeTest)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_smoke_test() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsUnstartedSucceeds)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_unstarted_succeeds() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsVmarDestroyedFails)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_vmar_destroyed_fails() {
+    todo!("requires VMAR maps info infrastructure");
+}
+
+/// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsZeroSizedBufferIsOk)
+#[test]
+#[ignore = "requires VMAR maps info infrastructure"]
+fn vmar_maps_get_info_info_vmar_maps_zero_sized_buffer_is_ok() {
+    todo!("requires VMAR maps info infrastructure");
+}

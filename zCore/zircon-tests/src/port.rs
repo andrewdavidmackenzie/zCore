@@ -518,3 +518,73 @@ async fn port_cancel_event_key_after() {
         "cancel after delivery should return NOT_FOUND"
     );
 }
+
+/// C++: TEST(PortTest, AsyncWaitChannelTimedOut)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn async_wait_channel_timed_out() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, CancelKey)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn cancel_key() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, CancelKeyAccessDenied)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn cancel_key_access_denied() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, CancelKeyInvalidOptions)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn cancel_key_invalid_options() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, CancelKeyQueuedUserPacket)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn cancel_key_queued_user_packet() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, CloseQueueRace)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn close_queue_race() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, EdgeTriggerTimeout)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn edge_trigger_timeout() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, ThreadEvents)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn thread_events() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, Timestamp)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn timestamp() {
+    todo!("requires async wait or thread infrastructure");
+}
+
+/// C++: TEST(PortTest, WaitAsyncBootTimestamp)
+#[test]
+#[ignore = "requires async wait or thread infrastructure"]
+fn wait_async_boot_timestamp() {
+    todo!("requires async wait or thread infrastructure");
+}

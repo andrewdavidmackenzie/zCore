@@ -78,3 +78,45 @@ fn exit() {
     let _ctx = TestContext::new();
     panic!("C11 threads are userspace library");
 }
+
+/// C++: TEST(C11ThreadTest, CreateAndVerifyThreadHandle)
+#[test]
+#[ignore = "requires C11 thread infrastructure"]
+fn create_and_verify_thread_handle() {
+    todo!("requires C11 thread infrastructure");
+}
+
+/// C++: TEST(C11ThreadTest, DetachedThreadKeepsRunning)
+#[test]
+#[ignore = "requires C11 thread infrastructure"]
+fn detached_thread_keeps_running() {
+    todo!("requires C11 thread infrastructure");
+}
+
+/// C++: TEST(C11ThreadTest, LongNameSucceeds)
+#[test]
+#[ignore = "requires C11 thread infrastructure"]
+fn long_name_succeeds() {
+    todo!("requires C11 thread infrastructure");
+}
+
+/// C++: TEST(C11ThreadTest, NullNameThreadShouldSucceed)
+#[test]
+#[ignore = "requires C11 thread infrastructure"]
+fn null_name_thread_should_succeed() {
+    todo!("requires C11 thread infrastructure");
+}
+
+/// C++: TEST(C11ThreadTest, SelfDetachAndFree)
+#[test]
+#[ignore = "requires C11 thread infrastructure"]
+fn self_detach_and_free() {
+    todo!("requires C11 thread infrastructure");
+}
+
+/// C++: TEST(C11ThreadTest, ThreadLocalErrno)
+#[test]
+#[ignore = "requires C11 thread infrastructure"]
+fn thread_local_errno() {
+    todo!("requires C11 thread infrastructure");
+}

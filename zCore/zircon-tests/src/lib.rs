@@ -261,3 +261,137 @@ mod iovec;
 
 #[cfg(test)]
 mod iob;
+
+// ── New test modules ported from Fuchsia C++ core-tests ────────────
+
+#[cfg(test)]
+mod bad_access;
+
+#[cfg(test)]
+mod bad_segsel;
+
+#[cfg(test)]
+mod channel_call_mutex;
+
+#[cfg(test)]
+mod channel_internal;
+
+#[cfg(test)]
+mod completion_wrapper;
+
+#[cfg(test)]
+mod conditional_variable;
+
+#[cfg(test)]
+mod cpp_thread;
+
+#[cfg(test)]
+mod cpu_features;
+
+#[cfg(test)]
+mod cpu_mask_profile;
+
+#[cfg(test)]
+mod datagram_socket_bad_buffer;
+
+#[cfg(test)]
+mod exceptions_arch;
+
+#[cfg(test)]
+mod executable_tls;
+
+#[cfg(test)]
+mod hotplug;
+
+#[cfg(test)]
+mod interrupt_crash;
+
+#[cfg(test)]
+mod iob_shared_region;
+
+#[cfg(test)]
+mod membarrier;
+
+#[cfg(test)]
+mod memory_priority_profile;
+
+#[cfg(test)]
+mod msi;
+
+#[cfg(test)]
+mod mutex_wrapper;
+
+#[cfg(test)]
+mod next_vdso;
+
+#[cfg(test)]
+mod object_child;
+
+#[cfg(test)]
+mod page_size;
+
+#[cfg(test)]
+mod process_debug;
+
+#[cfg(test)]
+mod process_shared;
+
+#[cfg(test)]
+mod protect;
+
+#[cfg(test)]
+mod pthread_barrier;
+
+#[cfg(test)]
+mod register_context_switch;
+
+#[cfg(test)]
+mod register_state;
+
+#[cfg(test)]
+mod restricted_mode;
+
+#[cfg(test)]
+mod rseq;
+
+#[cfg(test)]
+mod stack;
+
+#[cfg(test)]
+mod standalone_elf_load;
+
+#[cfg(test)]
+mod sync_completion;
+
+#[cfg(test)]
+mod sync_condition;
+
+#[cfg(test)]
+mod syscall_generation;
+
+#[cfg(test)]
+mod system_cpu;
+
+#[cfg(test)]
+mod system_suspend;
+
+#[cfg(test)]
+mod thread_initial_state;
+
+#[cfg(test)]
+mod thread_sampler;
+
+#[cfg(test)]
+mod ticks;
+
+#[cfg(test)]
+mod user_exceptions;
+
+#[cfg(test)]
+mod version_test;
+
+#[cfg(test)]
+mod wake_reports;
+
+#[cfg(test)]
+mod zx_assert;

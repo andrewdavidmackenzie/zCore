@@ -56,3 +56,38 @@ fn destroy() {
     let _ctx = TestContext::new();
     panic!("C11 mutexes are userspace library");
 }
+
+/// C++: TEST(C11MutexTest, InitalizeLocalMutex)
+#[test]
+#[ignore = "requires C11 mutex with threads"]
+fn initalize_local_mutex() {
+    todo!("requires C11 mutex with threads");
+}
+
+/// C++: TEST(C11MutexTest, MultiThreadedContention)
+#[test]
+#[ignore = "requires C11 mutex with threads"]
+fn multi_threaded_contention() {
+    todo!("requires C11 mutex with threads");
+}
+
+/// C++: TEST(C11MutexTest, StaticInitalizerSameBytesAsAuto)
+#[test]
+#[ignore = "requires C11 mutex with threads"]
+fn static_initalizer_same_bytes_as_auto() {
+    todo!("requires C11 mutex with threads");
+}
+
+/// C++: TEST(C11MutexTest, TimeoutElapsed)
+#[test]
+#[ignore = "requires C11 mutex with threads"]
+fn timeout_elapsed() {
+    todo!("requires C11 mutex with threads");
+}
+
+/// C++: TEST(C11MutexTest, TryMutexMultiThreadedContention)
+#[test]
+#[ignore = "requires C11 mutex with threads"]
+fn try_mutex_multi_threaded_contention() {
+    todo!("requires C11 mutex with threads");
+}

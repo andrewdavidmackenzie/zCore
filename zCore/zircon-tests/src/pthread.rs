@@ -106,3 +106,45 @@ fn attr_stack_size() {
     let _ctx = TestContext::new();
     panic!("pthreads are userspace library");
 }
+
+/// C++: TEST(PthreadTest, Basic)
+#[test]
+#[ignore = "requires pthread infrastructure"]
+fn basic() {
+    todo!("requires pthread infrastructure");
+}
+
+/// C++: TEST(PthreadTest, BigStackSize)
+#[test]
+#[ignore = "requires pthread infrastructure"]
+fn big_stack_size() {
+    todo!("requires pthread infrastructure");
+}
+
+/// C++: TEST(PthreadTest, GetstackMainThread)
+#[test]
+#[ignore = "requires pthread infrastructure"]
+fn getstack_main_thread() {
+    todo!("requires pthread infrastructure");
+}
+
+/// C++: TEST(PthreadTest, GetstackOtherThread)
+#[test]
+#[ignore = "requires pthread infrastructure"]
+fn getstack_other_thread() {
+    todo!("requires pthread infrastructure");
+}
+
+/// C++: TEST(PthreadTest, GetstackOtherThreadExplicitSize)
+#[test]
+#[ignore = "requires pthread infrastructure"]
+fn getstack_other_thread_explicit_size() {
+    todo!("requires pthread infrastructure");
+}
+
+/// C++: TEST(PthreadTest, SelfMainThread)
+#[test]
+#[ignore = "requires pthread infrastructure"]
+fn self_main_thread() {
+    todo!("requires pthread infrastructure");
+}

@@ -678,3 +678,94 @@ fn stream_fault_beyond_stream_size_resize_down_race() {
     let _ctx = TestContext::new();
     panic!("needs resize-down race");
 }
+
+/// C++: TEST(StreamTestCase, AppendSuppliesZeroes)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn append_supplies_zeroes() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, AppendWithMultipleThreads)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn append_with_multiple_threads() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, ContentSizeUpdatedOnPartialWrite)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn content_size_updated_on_partial_write() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, PartialVmoDirty)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn partial_vmo_dirty() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, RaceReadResizeVecLarger)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn race_read_resize_vec_larger() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, RaceReadResizeVecSmaller)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn race_read_resize_vec_smaller() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, RaceWriteResizeVecLarger)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn race_write_resize_vec_larger() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, RaceWriteResizeVecSmaller)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn race_write_resize_vec_smaller() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, ReadShrinkRace)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn read_shrink_race() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, ReadVectorAlias)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn read_vector_alias() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, ReadWriteShrinkRace)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn read_write_shrink_race() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, WriteShrinkRace)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn write_shrink_race() {
+    todo!("requires multi-threaded runtime or pager");
+}
+
+/// C++: TEST(StreamTestCase, WriteVectorUnmappedUserBufferCancelsOperation)
+#[test]
+#[ignore = "requires multi-threaded runtime or pager"]
+fn write_vector_unmapped_user_buffer_cancels_operation() {
+    todo!("requires multi-threaded runtime or pager");
+}

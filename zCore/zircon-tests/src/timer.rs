@@ -190,3 +190,101 @@ fn timer_invalid_args() {
     let result = sc.sys_timer_create(0xFF, 0, UserOutPtr::from(&mut h as *mut _ as usize));
     assert_eq!(result.unwrap_err(), zircon_object::ZxError::INVALID_ARGS);
 }
+
+/// C++: TEST(Timer, AlreadyPassedDeadlineOnWaitOne)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn already_passed_deadline_on_wait_one() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, Basic)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn basic() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, BasicInfo)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn basic_info() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, BootTimersElapseDuringSuspend)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn boot_timers_elapse_during_suspend() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, DISABLED_CoalesceTestEarly)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn disabled_coalesce_test_early() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, DISABLED_CoalesceTestLate)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn disabled_coalesce_test_late() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, DeadlineAfter)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn deadline_after() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, EdgeCases)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn edge_cases() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, Restart)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn restart() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, RestartRace)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn restart_race() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, SetNegativeDeadline)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn set_negative_deadline() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, SetNegativeDeadlineMax)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn set_negative_deadline_max() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, SetNegativeSlack)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn set_negative_slack() {
+    todo!("requires timer/wait infrastructure");
+}
+
+/// C++: TEST(Timer, SignalsAssertedImmediately)
+#[test]
+#[ignore = "requires timer/wait infrastructure"]
+fn signals_asserted_immediately() {
+    todo!("requires timer/wait infrastructure");
+}

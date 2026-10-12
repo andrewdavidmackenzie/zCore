@@ -909,3 +909,73 @@ fn set_job_oom_kill_bit() {
     root.set_kill_on_oom(false);
     assert!(!root.get_kill_on_oom());
 }
+
+/// C++: TEST(JobTest, GetInfoRuntime)
+#[test]
+#[ignore = "requires process lifecycle or multi-threaded runtime"]
+fn get_info_runtime() {
+    todo!("requires process lifecycle or multi-threaded runtime");
+}
+
+/// C++: TEST(JobTest, GetInfoRuntimeV1)
+#[test]
+#[ignore = "requires process lifecycle or multi-threaded runtime"]
+fn get_info_runtime_v1() {
+    todo!("requires process lifecycle or multi-threaded runtime");
+}
+
+/// C++: TEST(JobTest, KillTest)
+#[test]
+#[ignore = "requires process lifecycle or multi-threaded runtime"]
+fn kill_test() {
+    todo!("requires process lifecycle or multi-threaded runtime");
+}
+
+/// C++: TEST(JobTest, OneCriticalProcessKillsOneJobIfRetcodeNonzero)
+#[test]
+#[ignore = "requires process lifecycle or multi-threaded runtime"]
+fn one_critical_process_kills_one_job_if_retcode_nonzero() {
+    todo!("requires process lifecycle or multi-threaded runtime");
+}
+
+/// C++: TEST(JobTest, PolicyInvalidTopicTest)
+#[test]
+#[ignore = "requires process lifecycle or multi-threaded runtime"]
+fn policy_invalid_topic_test() {
+    todo!("requires process lifecycle or multi-threaded runtime");
+}
+
+/// C++: TEST(JobTest, PolicyTimerSlackInvalidCountTest)
+#[test]
+#[ignore = "requires process lifecycle or multi-threaded runtime"]
+fn policy_timer_slack_invalid_count_test() {
+    todo!("requires process lifecycle or multi-threaded runtime");
+}
+
+/// C++: TEST(JobTest, PolicyTimerSlackInvalidOptionsTest)
+#[test]
+#[ignore = "requires process lifecycle or multi-threaded runtime"]
+fn policy_timer_slack_invalid_options_test() {
+    todo!("requires process lifecycle or multi-threaded runtime");
+}
+
+/// C++: TEST(JobTest, PolicyTimerSlackInvalidPolicyTest)
+#[test]
+#[ignore = "requires process lifecycle or multi-threaded runtime"]
+fn policy_timer_slack_invalid_policy_test() {
+    todo!("requires process lifecycle or multi-threaded runtime");
+}
+
+/// C++: TEST(JobTest, PolicyTimerSlackValid)
+#[test]
+#[ignore = "requires process lifecycle or multi-threaded runtime"]
+fn policy_timer_slack_valid() {
+    todo!("requires process lifecycle or multi-threaded runtime");
+}
+
+/// C++: TEST(JobTest, WaitTest)
+#[test]
+#[ignore = "requires process lifecycle or multi-threaded runtime"]
+fn wait_test() {
+    todo!("requires process lifecycle or multi-threaded runtime");
+}

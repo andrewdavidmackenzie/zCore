@@ -202,3 +202,87 @@ fn port_interleave_queue_dequeue() {
         assert_eq!(PortPacketRepr::from(&pkt).key, i);
     }
 }
+
+/// C++: TEST(PortStressTest, CancelKeyActiveObserverRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_active_observer_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CancelKeyCloseRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_close_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CancelKeyDestructorReentersPortLock)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_destructor_reenters_port_lock() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CancelKeyDuringMatchRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_during_match_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CancelKeyDuringRegistrationRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_during_registration_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CancelKeySharedKeyRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn cancel_key_shared_key_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, ChannelCallWaitQueuePanicRepro)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn channel_call_wait_queue_panic_repro() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, CloseWaitRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn close_wait_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, MatchHandleCloseRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn match_handle_close_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, QueuePacketAfterPortClosedConcurrentRace)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn queue_packet_after_port_closed_concurrent_race() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, SignalCloseWait)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn signal_close_wait() {
+    todo!("requires multi-threaded stress testing");
+}
+
+/// C++: TEST(PortStressTest, WaitSignalCancel)
+#[test]
+#[ignore = "requires multi-threaded stress testing"]
+fn wait_signal_cancel() {
+    todo!("requires multi-threaded stress testing");
+}

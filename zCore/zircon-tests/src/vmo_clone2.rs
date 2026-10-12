@@ -586,3 +586,129 @@ fn parent_start_limit_regression() {
     // This is where the kernel would assert/panic without the fix.
     drop(vmo_c);
 }
+
+/// C++: TEST(VmoClone2TestCase, CloneVmarWrite)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn clone_vmar_write() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, DisjointCloneProgressive)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn disjoint_clone_progressive() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, DisjointCloneTest2)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn disjoint_clone_test2() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, DropChildrenInParallel)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn drop_children_in_parallel() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, DropParentCommittedBytes)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn drop_parent_committed_bytes() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, ForbidContiguousVmo)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn forbid_contiguous_vmo() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, ManyCloneMapping)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn many_clone_mapping() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, ManyCloneMappingOffset)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn many_clone_mapping_offset() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, MapRangeReadOnly)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn map_range_read_only() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, NoPhysical)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn no_physical() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, NoSnapshotPager)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn no_snapshot_pager() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, ObjMemAccounting)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn obj_mem_accounting() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, Offset)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn offset() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, OffsetProgressiveWrite)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn offset_progressive_write() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, ParentVmarWrite)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn parent_vmar_write() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, PinBeforeCreateFailure)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn pin_before_create_failure() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, PinClonePages)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn pin_clone_pages() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}
+
+/// C++: TEST(VmoClone2TestCase, SnapshotAtLeastOnWriteSliceInChain)
+#[test]
+#[ignore = "requires VMAR mapping or multi-threaded runtime"]
+fn snapshot_at_least_on_write_slice_in_chain() {
+    todo!("requires VMAR mapping or multi-threaded runtime");
+}

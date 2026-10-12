@@ -331,3 +331,115 @@ fn peer_closed_read_returns_peer_closed() {
     let mut buf = [0u8; 4];
     assert_eq!(fb.read(4, &mut buf, 1).unwrap_err(), ZxError::PEER_CLOSED);
 }
+
+/// C++: TEST(FifoTest, DefaultRightsAndType)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn default_rights_and_type() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, EndpointsAreRelated)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn endpoints_are_related() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, FifoOrderIsPreserved)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn fifo_order_is_preserved() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, IndividualReadsPreserveOrder)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn individual_reads_preserve_order() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, InvalidHandleAndWrongType)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn invalid_handle_and_wrong_type() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, ReadBadBuffer)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn read_bad_buffer() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, ReadNullBuffer)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn read_null_buffer() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, ReadPartialBadBuffer)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn read_partial_bad_buffer() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, ReadRollbackOnWrapAroundFault)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn read_rollback_on_wrap_around_fault() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, ReadWriteBadActualCount)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn read_write_bad_actual_count() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, ReadWriteBadActualCountReturnsInvalidArgs)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn read_write_bad_actual_count_returns_invalid_args() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, ReadWriteKernelAddressBufferReturnsInvalidArgs)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn read_write_kernel_address_buffer_returns_invalid_args() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, WriteBadBuffer)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn write_bad_buffer() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, WriteNullBuffer)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn write_null_buffer() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, WritePartialBadBuffer)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn write_partial_bad_buffer() {
+    todo!("requires user-buffer fault injection");
+}
+
+/// C++: TEST(FifoTest, WriteRollbackOnWrapAroundFault)
+#[test]
+#[ignore = "requires user-buffer fault injection"]
+fn write_rollback_on_wrap_around_fault() {
+    todo!("requires user-buffer fault injection");
+}

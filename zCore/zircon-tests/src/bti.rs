@@ -299,3 +299,73 @@ fn pin_large_vmo() {
     assert_ne!(pmt.id(), 0);
     pmt.unpin();
 }
+
+/// C++: TEST(Bti, Clone)
+#[test]
+#[ignore = "requires BTI/IOMMU infrastructure"]
+fn clone() {
+    todo!("requires BTI/IOMMU infrastructure");
+}
+
+/// C++: TEST(Bti, DecommitRace)
+#[test]
+#[ignore = "requires BTI/IOMMU infrastructure"]
+fn decommit_race() {
+    todo!("requires BTI/IOMMU infrastructure");
+}
+
+/// C++: TEST(Bti, InvalidPinArgs)
+#[test]
+#[ignore = "requires BTI/IOMMU infrastructure"]
+fn invalid_pin_args() {
+    todo!("requires BTI/IOMMU infrastructure");
+}
+
+/// C++: TEST(Bti, NoDelayedUnpin)
+#[test]
+#[ignore = "requires BTI/IOMMU infrastructure"]
+fn no_delayed_unpin() {
+    todo!("requires BTI/IOMMU infrastructure");
+}
+
+/// C++: TEST(Bti, Pin)
+#[test]
+#[ignore = "requires BTI/IOMMU infrastructure"]
+fn pin() {
+    todo!("requires BTI/IOMMU infrastructure");
+}
+
+/// C++: TEST(Bti, PinContigFlag)
+#[test]
+#[ignore = "requires BTI/IOMMU infrastructure"]
+fn pin_contig_flag() {
+    todo!("requires BTI/IOMMU infrastructure");
+}
+
+/// C++: TEST(Bti, PinContiguous)
+#[test]
+#[ignore = "requires BTI/IOMMU infrastructure"]
+fn pin_contiguous() {
+    todo!("requires BTI/IOMMU infrastructure");
+}
+
+/// C++: TEST(Bti, PinTooManyAddresses)
+#[test]
+#[ignore = "requires BTI/IOMMU infrastructure"]
+fn pin_too_many_addresses() {
+    todo!("requires BTI/IOMMU infrastructure");
+}
+
+/// C++: TEST(Bti, QuarantineDisallowsPin)
+#[test]
+#[ignore = "requires BTI/IOMMU infrastructure"]
+fn quarantine_disallows_pin() {
+    todo!("requires BTI/IOMMU infrastructure");
+}
+
+/// C++: TEST(Bti, Resize)
+#[test]
+#[ignore = "requires BTI/IOMMU infrastructure"]
+fn resize() {
+    todo!("requires BTI/IOMMU infrastructure");
+}

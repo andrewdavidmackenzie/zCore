@@ -4945,3 +4945,269 @@ fn pager_snapshot_close_root() {
 fn pager_snapshot_resize_snapshot_race() {
     todo!("requires demand-paging");
 }
+
+/// C++: TEST(Pager, BulkOddLengthSupplyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn bulk_odd_length_supply_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, BulkOddOffsetSupplyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn bulk_odd_offset_supply_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, BulkSingleSupplyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn bulk_single_supply_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, CancelKeyDoesNotWedgeThePager)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn cancel_key_does_not_wedge_the_pager() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, CloneReadFromCloneTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn clone_read_from_clone_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, CloneReadFromParentTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn clone_read_from_parent_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, CloneSimultaneousChildReadTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn clone_simultaneous_child_read_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, CloneSimultaneousReadTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn clone_simultaneous_read_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, CloneWriteToCloneTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn clone_write_to_clone_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, ConcurrentMultipageAccessTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn concurrent_multipage_access_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, ConcurrentOverlappingAccessTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn concurrent_overlapping_access_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, DecommitOnDetachTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn decommit_on_detach_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, EarlySupplyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn early_supply_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, FailSinglePage)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn fail_single_page() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, ManyRequestTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn many_request_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, OverlapSupplyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn overlap_supply_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, PresupplyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn presupply_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, ReadCloseInterruptEarlyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn read_close_interrupt_early_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, ReadCloseInterruptLateTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn read_close_interrupt_late_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, ReadDetachInterruptEarlyTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn read_detach_interrupt_early_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, ReadDetachInterruptLateTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn read_detach_interrupt_late_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, ReadResizeTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn read_resize_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, SequentialMultipageTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn sequential_multipage_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, SinglePageTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn single_page_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, SuspendReadTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn suspend_read_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(Pager, UncommittedSinglePageTest)
+#[test]
+#[ignore = "requires demand-paging infrastructure"]
+fn uncommitted_single_page_test() {
+    todo!("requires demand-paging infrastructure");
+}
+
+/// C++: TEST(PagerProcess, KillAfterSuspendPageFault)
+#[test]
+#[ignore = "requires pager with real process execution"]
+fn pager_process_kill_after_suspend_page_fault() {
+    todo!("requires pager with real process execution");
+}
+
+/// C++: TEST(PagerProcess, KillAfterSuspendUsercopy)
+#[test]
+#[ignore = "requires pager with real process execution"]
+fn pager_process_kill_after_suspend_usercopy() {
+    todo!("requires pager with real process execution");
+}
+
+/// C++: TEST(PagerProcess, KillAfterSuspendUsercopyCapture)
+#[test]
+#[ignore = "requires pager with real process execution"]
+fn pager_process_kill_after_suspend_usercopy_capture() {
+    todo!("requires pager with real process execution");
+}
+
+/// C++: TEST(PagerProcess, KillAfterSuspendVmoRead)
+#[test]
+#[ignore = "requires pager with real process execution"]
+fn pager_process_kill_after_suspend_vmo_read() {
+    todo!("requires pager with real process execution");
+}
+
+/// C++: TEST(PagerProcess, KillBlockedUserPageFault)
+#[test]
+#[ignore = "requires pager with real process execution"]
+fn pager_process_kill_blocked_user_page_fault() {
+    todo!("requires pager with real process execution");
+}
+
+/// C++: TEST(PagerProcess, KillBlockedUserVmoRead)
+#[test]
+#[ignore = "requires pager with real process execution"]
+fn pager_process_kill_blocked_user_vmo_read() {
+    todo!("requires pager with real process execution");
+}
+
+/// C++: TEST(PagerProcess, KillBlockedUsercopy)
+#[test]
+#[ignore = "requires pager with real process execution"]
+fn pager_process_kill_blocked_usercopy() {
+    todo!("requires pager with real process execution");
+}
+
+/// C++: TEST(PagerProcess, KillBlockedUsercopyCaptureFaults)
+#[test]
+#[ignore = "requires pager with real process execution"]
+fn pager_process_kill_blocked_usercopy_capture_faults() {
+    todo!("requires pager with real process execution");
+}
+
+/// C++: TEST(PagerWriteback, DetachWithPendingDirtyRequest)
+#[test]
+#[ignore = "requires pager writeback infrastructure"]
+fn pager_writeback_detach_with_pending_dirty_request() {
+    todo!("requires pager writeback infrastructure");
+}
+
+/// C++: TEST(PagerWriteback, NoDirtyRequestsAfterDetach)
+#[test]
+#[ignore = "requires pager writeback infrastructure"]
+fn pager_writeback_no_dirty_requests_after_detach() {
+    todo!("requires pager writeback infrastructure");
+}
+
+/// C++: TEST(PagerWriteback, SimpleTrapDirty)
+#[test]
+#[ignore = "requires pager writeback infrastructure"]
+fn pager_writeback_simple_trap_dirty() {
+    todo!("requires pager writeback infrastructure");
+}
+
+/// C++: TEST(PagerWriteback, SuspendDirtyTest)
+#[test]
+#[ignore = "requires pager writeback infrastructure"]
+fn pager_writeback_suspend_dirty_test() {
+    todo!("requires pager writeback infrastructure");
+}

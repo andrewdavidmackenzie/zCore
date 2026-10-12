@@ -299,3 +299,59 @@ fn wait_invalid_owner() {
 fn requeue_invalid_owner() {
     unimplemented!("not yet implemented: requires multi-threaded async runtime");
 }
+
+/// C++: TEST(FutexTest, FutexRequeueTbiReturnsInvalidArgs)
+#[test]
+#[ignore = "requires futex infrastructure"]
+fn futex_requeue_tbi_returns_invalid_args() {
+    todo!("requires futex infrastructure");
+}
+
+/// C++: TEST(FutexTest, RequeueWithFirstNullIdReturnsInvalidArgs)
+#[test]
+#[ignore = "requires futex infrastructure"]
+fn requeue_with_first_null_id_returns_invalid_args() {
+    todo!("requires futex infrastructure");
+}
+
+/// C++: TEST(FutexTest, RequeueWithSecondNullIdReturnsInvalidArgs)
+#[test]
+#[ignore = "requires futex infrastructure"]
+fn requeue_with_second_null_id_returns_invalid_args() {
+    todo!("requires futex infrastructure");
+}
+
+/// C++: TEST(FutexTest, RequeueWithWakeCountZero)
+#[test]
+#[ignore = "requires futex infrastructure"]
+fn requeue_with_wake_count_zero() {
+    todo!("requires futex infrastructure");
+}
+
+/// C++: TEST(FutexTest, UnmappedAddress)
+#[test]
+#[ignore = "requires futex infrastructure"]
+fn unmapped_address() {
+    todo!("requires futex infrastructure");
+}
+
+/// C++: TEST(FutexTest, WaitTimeoutElapsed)
+#[test]
+#[ignore = "requires futex infrastructure"]
+fn wait_timeout_elapsed() {
+    todo!("requires futex infrastructure");
+}
+
+/// C++: TEST(FutexTest, WaitWithNullIdReturnsInvalidArgs)
+#[test]
+#[ignore = "requires futex infrastructure"]
+fn wait_with_null_id_returns_invalid_args() {
+    todo!("requires futex infrastructure");
+}
+
+/// C++: TEST(FutexTest, WakeWithNullIdReturnsInvalidArgs)
+#[test]
+#[ignore = "requires futex infrastructure"]
+fn wake_with_null_id_returns_invalid_args() {
+    todo!("requires futex infrastructure");
+}

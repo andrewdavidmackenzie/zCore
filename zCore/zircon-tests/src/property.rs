@@ -360,3 +360,143 @@ fn property_invalid_property() {
         "invalid property should return INVALID_ARGS"
     );
 }
+
+/// C++: TEST(Property, JobName)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn job_name() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, NameWrongType)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn name_wrong_type() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, ProcessName)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn process_name() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterFs)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_fs() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterFsFault)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_fs_fault() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterFsNonThread)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_fs_non_thread() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterFsNoncanonical)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_fs_noncanonical() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterFsNonuser)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_fs_nonuser() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterFsOtherThread)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_fs_other_thread() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterFsTooSmall)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_fs_too_small() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterGs)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_gs() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterGsFault)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_gs_fault() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterGsNonThread)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_gs_non_thread() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterGsNoncanonical)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_gs_noncanonical() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterGsNonuser)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_gs_nonuser() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterGsOtherThread)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_gs_other_thread() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, RegisterGsTooSmall)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn register_gs_too_small() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, SocketBuffer)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn socket_buffer() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, ThreadName)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn thread_name() {
+    todo!("requires property infrastructure");
+}
+
+/// C++: TEST(Property, VmoName)
+#[test]
+#[ignore = "requires property infrastructure"]
+fn vmo_name() {
+    todo!("requires property infrastructure");
+}

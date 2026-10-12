@@ -276,3 +276,73 @@ fn handle_replace_invalid_rights() {
     });
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
+
+/// C++: TEST(HandleCloseTest, ManyDuplicateTest)
+#[test]
+#[ignore = "requires handle close infrastructure"]
+fn handle_close_many_duplicate_test() {
+    todo!("requires handle close infrastructure");
+}
+
+/// C++: TEST(HandleCloseTest, ManyInvalidHandlesShouldNotFail)
+#[test]
+#[ignore = "requires handle close infrastructure"]
+fn handle_close_many_invalid_handles_should_not_fail() {
+    todo!("requires handle close infrastructure");
+}
+
+/// C++: TEST(HandleCloseTest, RegressionTest_479281267)
+#[test]
+#[ignore = "requires handle close infrastructure"]
+fn handle_close_regression_test_479281267() {
+    todo!("requires handle close infrastructure");
+}
+
+/// C++: TEST(HandleInfoTest, CheckHandleValid)
+#[test]
+#[ignore = "requires handle info infrastructure"]
+fn handle_info_check_handle_valid() {
+    todo!("requires handle info infrastructure");
+}
+
+/// C++: TEST(HandleInfoTest, DupAndInfoRights)
+#[test]
+#[ignore = "requires handle info infrastructure"]
+fn handle_info_dup_and_info_rights() {
+    todo!("requires handle info infrastructure");
+}
+
+/// C++: TEST(HandleInfoTest, DuplicateRights)
+#[test]
+#[ignore = "requires handle info infrastructure"]
+fn handle_info_duplicate_rights() {
+    todo!("requires handle info infrastructure");
+}
+
+/// C++: TEST(HandleInfoTest, RelatedKoid)
+#[test]
+#[ignore = "requires handle info infrastructure"]
+fn handle_info_related_koid() {
+    todo!("requires handle info infrastructure");
+}
+
+/// C++: TEST(HandleInfoTest, ReplaceRights)
+#[test]
+#[ignore = "requires handle info infrastructure"]
+fn handle_info_replace_rights() {
+    todo!("requires handle info infrastructure");
+}
+
+/// C++: TEST(HandleTransferTest, CancelsWait)
+#[test]
+#[ignore = "requires handle transfer over channel"]
+fn handle_transfer_cancels_wait() {
+    todo!("requires handle transfer over channel");
+}
+
+/// C++: TEST(HandleTransferTest, OverChannelThenRead)
+#[test]
+#[ignore = "requires handle transfer over channel"]
+fn handle_transfer_over_channel_then_read() {
+    todo!("requires handle transfer over channel");
+}

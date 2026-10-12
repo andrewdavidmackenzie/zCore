@@ -396,3 +396,87 @@ async fn wait_one_channel_peer_closed() {
         Err(e) => panic!("unexpected error: {:?}", e),
     }
 }
+
+/// C++: TEST(ObjectWaitManyTest, InvalidHandle)
+#[test]
+#[ignore = "requires object wait many infrastructure"]
+fn wait_many_invalid_handle() {
+    todo!("requires object wait many infrastructure");
+}
+
+/// C++: TEST(ObjectWaitManyTest, TooManyObjects)
+#[test]
+#[ignore = "requires object wait many infrastructure"]
+fn wait_many_too_many_objects() {
+    todo!("requires object wait many infrastructure");
+}
+
+/// C++: TEST(ObjectWaitManyTest, TransientSignalsNotReturned)
+#[test]
+#[ignore = "requires object wait many infrastructure"]
+fn wait_many_transient_signals_not_returned() {
+    todo!("requires object wait many infrastructure");
+}
+
+/// C++: TEST(ObjectWaitManyTest, WaitForEventsSignaled)
+#[test]
+#[ignore = "requires object wait many infrastructure"]
+fn wait_many_wait_for_events_signaled() {
+    todo!("requires object wait many infrastructure");
+}
+
+/// C++: TEST(ObjectWaitManyTest, WaitForEventsThenSignal)
+#[test]
+#[ignore = "requires object wait many infrastructure"]
+fn wait_many_wait_for_events_then_signal() {
+    todo!("requires object wait many infrastructure");
+}
+
+/// C++: TEST(ObjectWaitManyTest, WaitOnZeroThings)
+#[test]
+#[ignore = "requires object wait many infrastructure"]
+fn wait_many_wait_on_zero_things() {
+    todo!("requires object wait many infrastructure");
+}
+
+/// C++: TEST(ObjectWaitOneTest, EmptySignalSet)
+#[test]
+#[ignore = "requires object wait infrastructure"]
+fn wait_one_empty_signal_set() {
+    todo!("requires object wait infrastructure");
+}
+
+/// C++: TEST(ObjectWaitOneTest, TransientSignalsNotReturned)
+#[test]
+#[ignore = "requires object wait infrastructure"]
+fn wait_one_transient_signals_not_returned() {
+    todo!("requires object wait infrastructure");
+}
+
+/// C++: TEST(ObjectWaitOneTest, WaitForEventSignaled)
+#[test]
+#[ignore = "requires object wait infrastructure"]
+fn wait_one_wait_for_event_signaled() {
+    todo!("requires object wait infrastructure");
+}
+
+/// C++: TEST(ObjectWaitOneTest, WaitForEventThenSignal)
+#[test]
+#[ignore = "requires object wait infrastructure"]
+fn wait_one_wait_for_event_then_signal() {
+    todo!("requires object wait infrastructure");
+}
+
+/// C++: TEST(ObjectWaitOneTest, WaitForEventTimeout)
+#[test]
+#[ignore = "requires object wait infrastructure"]
+fn wait_one_wait_for_event_timeout() {
+    todo!("requires object wait infrastructure");
+}
+
+/// C++: TEST(ObjectWaitOneTest, WaitForEventTimeoutPreSignalClear)
+#[test]
+#[ignore = "requires object wait infrastructure"]
+fn wait_one_wait_for_event_timeout_pre_signal_clear() {
+    todo!("requires object wait infrastructure");
+}

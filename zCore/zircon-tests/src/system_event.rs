@@ -110,3 +110,101 @@ fn system_event_duplicate() {
     let _ctx = TestContext::new();
     panic!("system events not implemented");
 }
+
+/// C++: TEST(SystemEvent, CannotSignalImminentOomFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_imminent_oom_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalMemoryStallEventFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_memory_stall_event_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalMempressureCriticalFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_mempressure_critical_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalMempressureNormalFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_mempressure_normal_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalMempressureWarningFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_mempressure_warning_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, CannotSignalOomFromUserspace)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn cannot_signal_oom_from_userspace() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, DISABLED_MemoryStallEvent)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn disabled_memory_stall_event() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, ExactlyOneMemoryEventSignaled)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn exactly_one_memory_event_signaled() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, MemoryStallThresholds)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn memory_stall_thresholds() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, RetreiveMempressureWarning)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn retreive_mempressure_warning() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, RetrieveImminentOom)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn retrieve_imminent_oom() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, RetrieveMempressureCritical)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn retrieve_mempressure_critical() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, RetrieveMempressureNormal)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn retrieve_mempressure_normal() {
+    todo!("requires system event infrastructure");
+}
+
+/// C++: TEST(SystemEvent, RetrieveOom)
+#[test]
+#[ignore = "requires system event infrastructure"]
+fn retrieve_oom() {
+    todo!("requires system event infrastructure");
+}

@@ -64,3 +64,38 @@ fn sync_mutex_owner_dies_releases_lock() {
     let _ctx = TestContext::new();
     panic!("needs multi-threaded userspace");
 }
+
+/// C++: TEST(SyncMutex, AssertHeld)
+#[test]
+#[ignore = "requires sync mutex with threads"]
+fn assert_held() {
+    todo!("requires sync mutex with threads");
+}
+
+/// C++: TEST(SyncMutex, Mutexes)
+#[test]
+#[ignore = "requires sync mutex with threads"]
+fn mutexes() {
+    todo!("requires sync mutex with threads");
+}
+
+/// C++: TEST(SyncMutex, NoRecursion)
+#[test]
+#[ignore = "requires sync mutex with threads"]
+fn no_recursion() {
+    todo!("requires sync mutex with threads");
+}
+
+/// C++: TEST(SyncMutex, TimeoutElapsed)
+#[test]
+#[ignore = "requires sync mutex with threads"]
+fn timeout_elapsed() {
+    todo!("requires sync mutex with threads");
+}
+
+/// C++: TEST(SyncMutex, TryMutexes)
+#[test]
+#[ignore = "requires sync mutex with threads"]
+fn try_mutexes() {
+    todo!("requires sync mutex with threads");
+}

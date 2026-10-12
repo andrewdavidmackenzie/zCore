@@ -107,3 +107,73 @@ fn tag_preservation() {
     let _ctx = TestContext::new();
     panic!("address tagging not implemented");
 }
+
+/// C++: TEST(TopByteIgnoreTests, AddressTaggingGetSystemFeaturesAArch64)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn address_tagging_get_system_features_a_arch64() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, AddressTaggingGetSystemFeaturesX86_64)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn address_tagging_get_system_features_x86_64() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, FutexWaitWake)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn futex_wait_wake() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, InstructionAbortNoTag)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn instruction_abort_no_tag() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, ProcessStartTaggedAddress)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn process_start_tagged_address() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, TaggedFARSegfault)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn tagged_far_segfault() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, TaggedFARWatchpoint)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn tagged_far_watchpoint() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, ThreadStartTaggedAddress)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn thread_start_tagged_address() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, VmarTaggedAddress)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn vmar_tagged_address() {
+    todo!("requires TBI/address tagging hardware");
+}
+
+/// C++: TEST(TopByteIgnoreTests, VmmPageFaultHandlerDataAbort)
+#[test]
+#[ignore = "requires TBI/address tagging hardware"]
+fn vmm_page_fault_handler_data_abort() {
+    todo!("requires TBI/address tagging hardware");
+}
