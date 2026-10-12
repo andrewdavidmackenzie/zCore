@@ -353,12 +353,23 @@ impl Process {
 
     /// Check whether `condition` is allowed in the parent job's policy.
     ///
-    /// This is the simple version that does not deliver policy exceptions.
-    /// Use [`enforce_basic_policy`](Syscall::enforce_policy) in the
-    /// syscall layer for full Fuchsia-compatible behaviour including
-    /// exception delivery on `AllowException`/`DenyException`.
+    /// This is the synchronous version that does **not** deliver policy
+    /// exceptions.  For `AllowException` the operation is allowed
+    /// silently; for `DenyException` the process is killed (same end
+    /// result as an unhandled policy exception).
+    ///
+    /// Use [`Syscall::enforce_policy`] in the async syscall layer for
+    /// full Fuchsia-compatible behaviour including exception delivery
+    /// on `AllowException`/`DenyException`.
     pub fn check_policy(&self, condition: PolicyCondition) -> ZxResult {
-        self.check_policy_with_exception(condition).0
+        let (result, _synth_code) = self.check_policy_with_exception(condition);
+        // When an exception should be delivered but we can't (sync
+        // context), DenyException must still kill — an unhandled policy
+        // exception kills the process in Fuchsia too.
+        if _synth_code.is_some() && result.is_err() {
+            self.exit(super::TASK_RETCODE_POLICY_KILL);
+        }
+        result
     }
 
     /// Like [`check_policy`] but also returns the `synth_code` for

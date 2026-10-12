@@ -523,12 +523,14 @@ impl Exception {
                     .await
             }
         };
-        if result == Err(ZxError::NEXT) {
+        if result.is_err() {
             // Lifecycle exceptions (thread starting/exiting, process starting)
             // are informational — if nobody handles them the thread just
             // continues.  All other exceptions (hardware, policy, user) kill
             // the process when unhandled, matching Fuchsia's
-            // `dispatch_user_exception` behaviour.
+            // `dispatch_user_exception` behaviour.  This covers both the
+            // `NEXT` case (no handler) and delivery failures such as
+            // `SHOULD_WAIT` (exception channel full).
             let is_lifecycle = matches!(
                 self.type_,
                 ExceptionType::ThreadStarting
