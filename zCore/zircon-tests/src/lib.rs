@@ -395,3 +395,12 @@ mod wake_reports;
 
 #[cfg(test)]
 mod zx_assert;
+
+#[cfg(test)]
+mod zx_assert_c;
+
+#[cfg(test)]
+mod handle_wait;
+
+#[cfg(test)]
+mod pthread_tls;

@@ -1033,3 +1033,33 @@ fn disable_write_both() {
     assert_eq!(actual, 6);
     assert_eq!(&buf[..6], b"abcdef");
 }
+
+// ── Parameterized DatagramSocketBadBufferTest (TEST_P) ──────────────
+
+/// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/0)
+#[test]
+#[ignore = "requires user-buffer fault injection for datagram sockets"]
+fn datagram_socket_bad_buffer_test_read_0() {
+    todo!("requires user-buffer fault injection for datagram sockets");
+}
+
+/// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/1)
+#[test]
+#[ignore = "requires user-buffer fault injection for datagram sockets"]
+fn datagram_socket_bad_buffer_test_read_1() {
+    todo!("requires user-buffer fault injection for datagram sockets");
+}
+
+/// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/2)
+#[test]
+#[ignore = "requires user-buffer fault injection for datagram sockets"]
+fn datagram_socket_bad_buffer_test_read_2() {
+    todo!("requires user-buffer fault injection for datagram sockets");
+}
+
+/// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/3)
+#[test]
+#[ignore = "requires user-buffer fault injection for datagram sockets"]
+fn datagram_socket_bad_buffer_test_read_3() {
+    todo!("requires user-buffer fault injection for datagram sockets");
+}
