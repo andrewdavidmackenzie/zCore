@@ -370,7 +370,8 @@ impl Syscall<'_> {
             .map(|range| range.start)
             .unwrap_or(0);
         let alloc = MsiAllocation::create(count, base_irq);
-        let handle = proc.add_handle(Handle::new(alloc, Rights::DEFAULT_INTERRUPT));
+        // MSI allocation objects get BASIC rights (TRANSFER | DUPLICATE | WAIT | INSPECT).
+        let handle = proc.add_handle(Handle::new(alloc, Rights::BASIC));
         out.write(handle)?;
         Ok(())
     }
@@ -385,23 +386,48 @@ impl Syscall<'_> {
         handle: HandleValue,
         options: u32,
         msi_id: u32,
-        _vmo: HandleValue,
-        _vmo_offset: usize,
+        vmo_handle: HandleValue,
+        vmo_offset: usize,
         mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
         info!(
-            "msi.create: handle={:#x}, options={}, msi_id={}",
-            handle, options, msi_id
+            "msi.create: handle={:#x}, options={}, msi_id={}, vmo={:#x}, vmo_off={:#x}",
+            handle, options, msi_id, vmo_handle, vmo_offset
         );
-        if options != 0 {
+        const ZX_MSI_MODE_MSI_X: u32 = 1;
+        if options & !ZX_MSI_MODE_MSI_X != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
         let alloc = proc.get_object::<MsiAllocation>(handle)?;
+        // Validate the VMO handle.
+        let vmo =
+            proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::READ | Rights::MAP)?;
+        // Validate msi_id is within the allocation.
+        if msi_id >= alloc.count() {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let is_msix = options & ZX_MSI_MODE_MSI_X != 0;
+        // Validate vmo_offset: must have enough space for the capability
+        // structure (MSI: 24 bytes, MSI-X: 16 bytes per entry).
+        let cap_size = if is_msix {
+            16 * (msi_id as usize + 1) // MSI-X table entry per vector
+        } else {
+            24 // MSI capability structure
+        };
+        if vmo_offset >= vmo.len() || vmo.len() - vmo_offset < cap_size {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // For MSI (non-MSI-X), validate the capability ID in the VMO.
+        if !is_msix {
+            let mut id_buf = [0u8; 1];
+            vmo.read(vmo_offset, &mut id_buf)?;
+            if id_buf[0] != 0x05 {
+                // MSI capability ID
+                return Err(ZxError::INVALID_ARGS);
+            }
+        }
         let irq = alloc.use_vector(msi_id)?;
-        // Create a virtual interrupt backed by the MSI vector.
-        // On platforms with real MSI support, this would be a
-        // physical interrupt wired to the allocated IRQ.
         let interrupt = if irq > 0 {
             Interrupt::new_physical(irq, InterruptOptions::empty())?
         } else {

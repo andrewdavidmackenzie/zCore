@@ -535,6 +535,41 @@ impl Syscall<'_> {
                 actual.write_if_not_null(count)?;
                 avail.write_if_not_null(entries.len())?;
             }
+            Topic::Msi => {
+                let alloc = proc.get_object::<MsiAllocation>(handle)?;
+                #[repr(C)]
+                #[derive(Default)]
+                struct InfoMsi {
+                    target_addr: u64,
+                    target_data: u32,
+                    base_irq_id: u32,
+                    num_irq: u32,
+                    interrupt_count: u32,
+                }
+                let info = InfoMsi {
+                    target_addr: 0,
+                    target_data: 0,
+                    base_irq_id: alloc.base_irq() as u32,
+                    num_irq: alloc.count(),
+                    interrupt_count: alloc.interrupt_count(),
+                };
+                let entry_size = core::mem::size_of::<InfoMsi>();
+                let count = if buffer_size >= entry_size {
+                    let mut out = UserOutPtr::<u8>::from(buffer);
+                    let info_bytes: &[u8] = unsafe {
+                        core::slice::from_raw_parts(
+                            &info as *const InfoMsi as *const u8,
+                            entry_size,
+                        )
+                    };
+                    out.write_array(info_bytes)?;
+                    1
+                } else {
+                    0
+                };
+                actual.write_if_not_null(count)?;
+                avail.write_if_not_null(1)?;
+            }
             Topic::ProcessVmos => {
                 let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
                 let mut vmo_infos: Vec<VmoInfo> = Vec::new();
@@ -1236,6 +1271,7 @@ numeric_enum! {
         Timer = 25,
         Stream = 26,
         HandleTable = 27,
+        Msi = 28,
         GuestStats = 29,
         TaskRuntime = 30,
         KmemStatsExtended = 31,
