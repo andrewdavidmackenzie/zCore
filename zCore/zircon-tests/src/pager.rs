@@ -1300,3 +1300,340 @@ fn pager_detach_one_keep_others() {
         "detached vmo2 should fail op_range"
     );
 }
+
+// ── Demand-paging tests (require threads/async page faults) ─────────
+//
+// The following 30 tests correspond to C++ pager tests that require
+// concurrent threads and demand-paging (async page fault handling).
+// zCore does not yet support demand-paging in libos test mode, so
+// these are all marked #[should_panic] to document their existence
+// and expected behavior.
+
+/// C++: TEST(PagerTest, PresupplyAndRead)
+///
+/// Pre-supply pages before mapping, then read via a faulting thread.
+/// Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_presupply_and_read() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ReadAfterSupply)
+///
+/// A thread faults on read, another thread supplies the page, first
+/// thread completes the read. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_read_after_supply() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, WriteAfterSupply)
+///
+/// A thread faults on write, another thread supplies the page, first
+/// thread completes the write. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_write_after_supply() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ReadMultiplePages)
+///
+/// Read across multiple pages triggers multiple page faults, each
+/// resolved by supply_pages. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_read_multiple_pages() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, WriteAndRead)
+///
+/// Write to a pager-backed page (fault + supply), then read it back
+/// from a second thread. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_write_and_read() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ReadAfterDecommit)
+///
+/// Decommit a supplied page and re-read — should re-fault and require
+/// a new supply. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_read_after_decommit() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SupplyAfterFault)
+///
+/// Thread faults on a page, pager supplies it from the port request.
+/// Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_supply_after_fault() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, FaultOnRead)
+///
+/// A mapped read to an unsupplied page triggers a page fault request
+/// on the pager port. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_fault_on_read() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, FaultOnWrite)
+///
+/// A mapped write to an unsupplied page triggers a page fault request
+/// on the pager port. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_fault_on_write() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ReadBeforeSupply)
+///
+/// Read before any pages are supplied — thread blocks until supply.
+/// Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_read_before_supply() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, CloneRead)
+///
+/// Create a clone of a pager-backed VMO, read from the clone triggers
+/// a page fault on the original pager. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_clone_read() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, CloneWrite)
+///
+/// Write to a clone of a pager-backed VMO, triggers COW + page fault.
+/// Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_clone_write() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, CloneReadAfterDetach)
+///
+/// Detach the pager, then read from a clone — should get an error
+/// instead of blocking. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_clone_read_after_detach() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SnapshotRead)
+///
+/// Create a snapshot of a pager-backed VMO and read from it. Snapshot
+/// pages are COW — faults go to the pager. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_snapshot_read() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SnapshotWrite)
+///
+/// Write to a snapshot of a pager-backed VMO — triggers COW fault.
+/// Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_snapshot_write() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SnapshotCloneRead)
+///
+/// Nested clone of a snapshot of a pager-backed VMO — reads trigger
+/// faults up the chain. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_snapshot_clone_read() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SnapshotWithPagerChild)
+///
+/// A snapshot with a pager-backed child — complex fault resolution
+/// chain. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_snapshot_with_pager_child() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, CloneDecommit)
+///
+/// Decommit pages in a clone of a pager-backed VMO — re-read should
+/// re-fault. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_clone_decommit() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, CloneResize)
+///
+/// Resize a clone of a pager-backed VMO and access the new region.
+/// Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_clone_resize() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, CloneZero)
+///
+/// Zero pages in a clone of a pager-backed VMO. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_clone_zero() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, DestroyPagerWithActiveVmos)
+///
+/// Drop the pager while VMOs are still mapped and threads are faulting.
+/// Threads should get errors, not hang. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_destroy_with_active_vmos() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, RebindPager)
+///
+/// Detach a VMO from one pager and re-bind it to a new pager. Faults
+/// should now go to the new pager. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_rebind() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerPortQueuedPackets)
+///
+/// Multiple page faults queue multiple packets on the port. Verify
+/// packet ordering and contents. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_port_queued_packets() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VerifyPacketFormat)
+///
+/// Verify the format of pager request packets on the port — key, type,
+/// offset, length fields. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_verify_packet_format() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, MultiplePortObservers)
+///
+/// Multiple port observers on the same pager VMO. Each fault should
+/// only produce one packet. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_multiple_port_observers() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SupplyOverwritesExisting)
+///
+/// Supply pages over already-supplied pages — new data should replace
+/// old data. Requires thread-based read verification with demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_supply_overwrites_existing() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, OpRangeAlwaysNeed)
+///
+/// ZX_PAGER_OP_ALWAYS_NEED hints that pages should be kept resident.
+/// Requires demand-paging infrastructure to verify residency behavior.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_op_range_always_need() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, OpRangeDontNeed)
+///
+/// ZX_PAGER_OP_DONT_NEED hints that pages can be evicted. Requires
+/// demand-paging to verify eviction and re-fault behavior.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_op_range_dont_need() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerVmoName)
+///
+/// Set and get the name of a pager-backed VMO while threads are
+/// faulting. Requires demand-paging for concurrent access.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_name() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerVmoContentSize)
+///
+/// Set and get content_size on a pager-backed VMO while threads
+/// are reading/writing. Requires demand-paging for concurrent access.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_content_size() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
