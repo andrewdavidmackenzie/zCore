@@ -8,7 +8,6 @@ use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::EventPair;
 
-/// C++: TEST(EventPairTest, Create)
 ///
 /// Create an event pair and verify both endpoints have valid KOIDs.
 #[test]
@@ -43,7 +42,6 @@ fn signal_self() {
     assert!(ep0.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(EventPairTest, PeerClosed)
 ///
 /// Drop one endpoint and verify PEER_CLOSED is set on the other.
 #[test]
@@ -54,7 +52,6 @@ fn peer_closed() {
     assert!(ep0.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(EventPairTest, SignalPeerClear)
 ///
 /// Signal the peer, then clear the signal on the peer.
 #[test]
@@ -67,7 +64,6 @@ fn signal_peer_clear() {
     assert!(!ep1.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(EventPairTest, BidirectionalSignaling)
 ///
 /// Both endpoints signal each other simultaneously.
 #[test]
@@ -80,7 +76,6 @@ fn bidirectional_signaling() {
     assert!(ep0.signal().contains(Signal::USER_SIGNAL_1));
 }
 
-/// C++: TEST(EventPairTest, MultipleSignals)
 ///
 /// Set multiple signals on the peer and verify all are visible.
 #[test]
@@ -95,7 +90,6 @@ fn multiple_signals() {
     assert!(sig.contains(Signal::USER_SIGNAL_2));
 }
 
-/// C++: TEST(EventPairTest, SignalPeerAfterClose)
 ///
 /// Try to signal the peer after it has been closed. peer() returns
 /// Err when the peer is dropped.
@@ -112,7 +106,6 @@ fn signal_peer_after_close() {
     assert!(ep0.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(EventPairTest, Name)
 ///
 /// Set and get the name of an event pair endpoint.
 #[test]
@@ -123,7 +116,6 @@ fn name() {
     assert_eq!(ep0.name(), "my-ep");
 }
 
-/// C++: TEST(EventPairTest, RelatedKoid)
 ///
 /// Each endpoint's related_koid should be the other's koid.
 #[test]

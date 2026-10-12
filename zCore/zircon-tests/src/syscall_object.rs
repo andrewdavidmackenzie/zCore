@@ -9,7 +9,6 @@ use zircon_object::ipc::Channel;
 use zircon_object::object::{Handle, HandleBasicInfo, Rights};
 use zircon_object::ZxError;
 
-/// C++: TEST(HandleTest, GetInfoBasic) — syscall level
 /// ZX_INFO_HANDLE_BASIC returns correct type, koid, rights.
 #[test]
 fn get_info_handle_basic() {
@@ -38,7 +37,6 @@ fn get_info_handle_basic() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(HandleTest, GetInfoWrongType) — syscall level
 /// ZX_INFO_HANDLE_BASIC on invalid handle returns BAD_HANDLE.
 #[test]
 fn get_info_bad_handle() {
@@ -59,7 +57,6 @@ fn get_info_bad_handle() {
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(ObjectTest, SetPropertyName) — syscall level
 /// ZX_PROP_NAME get/set through syscall.
 #[test]
 fn set_get_property_name() {
@@ -84,7 +81,6 @@ fn set_get_property_name() {
     assert_eq!(&buf[..12], b"test-channel");
 }
 
-/// C++: TEST(ObjectTest, SignalSelf) — syscall level
 #[test]
 fn object_signal_self() {
     let ctx = TestContext::new();
@@ -102,7 +98,6 @@ fn object_signal_self() {
     sc.sys_object_signal(h, 1 << 24, 0).unwrap();
 }
 
-/// C++: TEST(ObjectTest, SignalInvalidBits) — syscall level
 /// Signaling with non-user bits returns INVALID_ARGS.
 #[test]
 fn object_signal_invalid_bits() {
@@ -119,7 +114,6 @@ fn object_signal_invalid_bits() {
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(HandleTest, CloseMany) — syscall level
 #[test]
 fn close_many() {
     let ctx = TestContext::new();
@@ -149,7 +143,6 @@ fn close_many() {
     assert!(ctx.proc.get_object::<Channel>(h2).is_err());
 }
 
-/// C++: TEST(HandleTest, CheckValid) — syscall level
 #[test]
 fn handle_check_valid() {
     let ctx = TestContext::new();

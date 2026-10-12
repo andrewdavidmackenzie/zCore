@@ -8,7 +8,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(C11ThreadTest, CreateJoin)
 ///
 /// Create a C11 thread and join it. C11 threads are a userspace
 /// library abstraction over Zircon threads + futexes.
@@ -30,7 +29,6 @@ fn detach() {
     panic!("C11 threads are userspace library");
 }
 
-/// C++: TEST(C11ThreadTest, CreateMultiple)
 ///
 /// Create multiple C11 threads and join them all. Verifies thread
 /// creation doesn't exhaust resources. Requires C11 runtime.
@@ -41,7 +39,6 @@ fn create_multiple() {
     panic!("C11 threads are userspace library");
 }
 
-/// C++: TEST(C11ThreadTest, SelfId)
 ///
 /// Get the current thread ID from within a C11 thread. Verifies
 /// thrd_current() returns a valid handle. Requires C11 runtime.
@@ -52,7 +49,6 @@ fn self_id() {
     panic!("C11 threads are userspace library");
 }
 
-/// C++: TEST(C11ThreadTest, Sleep)
 ///
 /// Sleep within a C11 thread using thrd_sleep_until. Verifies the
 /// sleep duration is approximately correct. Requires C11 runtime.
@@ -63,7 +59,6 @@ fn sleep() {
     panic!("C11 threads are userspace library");
 }
 
-/// C++: TEST(C11ThreadTest, Yield)
 ///
 /// Yield the CPU from a C11 thread using thrd_yield. Verifies the
 /// call doesn't crash. Requires C11 runtime.
@@ -74,7 +69,6 @@ fn c11_yield() {
     panic!("C11 threads are userspace library");
 }
 
-/// C++: TEST(C11ThreadTest, Exit)
 ///
 /// Exit a C11 thread with thrd_exit and verify the return code is
 /// propagated to the joining thread. Requires C11 runtime.

@@ -84,14 +84,12 @@ fn socket_datagram() {
     assert_eq!(&buf[..8], b"message2");
 }
 
-/// C++: TEST(SocketTest, CreateInvalidOptionsReturnsInvalidArgs)
 #[test]
 fn socket_create_invalid_options() {
     let _ctx = TestContext::new();
     assert_eq!(Socket::create(0xFF).unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(SocketTest, IsWritableByDefault)
 #[test]
 fn socket_is_writable_by_default() {
     let _ctx = TestContext::new();
@@ -100,7 +98,6 @@ fn socket_is_writable_by_default() {
     assert!(s1.signal().contains(Signal::WRITABLE));
 }
 
-/// C++: TEST(SocketTest, WriteToEndpointCausesOtherToBeReadable)
 #[test]
 fn socket_write_causes_readable() {
     let _ctx = TestContext::new();
@@ -111,7 +108,6 @@ fn socket_write_causes_readable() {
     assert!(!s0.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(SocketTest, ReadClearsReadableSignal)
 #[test]
 fn socket_read_clears_readable() {
     let _ctx = TestContext::new();
@@ -125,7 +121,6 @@ fn socket_read_clears_readable() {
     assert!(!s1.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(SocketTest, PeerClosedSignal)
 #[test]
 fn socket_peer_closed_signal() {
     let _ctx = TestContext::new();
@@ -137,7 +132,6 @@ fn socket_peer_closed_signal() {
     assert!(!s0.signal().contains(Signal::WRITABLE));
 }
 
-/// C++: TEST(SocketTest, ReadAfterPeerClosedWithData)
 #[test]
 fn socket_read_after_peer_closed_with_data() {
     let _ctx = TestContext::new();
@@ -156,7 +150,6 @@ fn socket_read_after_peer_closed_with_data() {
     assert_eq!(s1.read(false, &mut buf).unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-/// C++: TEST(SocketTest, BidirectionalCommunication)
 #[test]
 fn socket_bidirectional() {
     let _ctx = TestContext::new();
@@ -173,7 +166,6 @@ fn socket_bidirectional() {
     assert_eq!(&buf[..n], b"world");
 }
 
-/// C++: TEST(SocketTest, StreamPartialRead)
 #[test]
 fn socket_stream_partial_read() {
     let _ctx = TestContext::new();
@@ -194,7 +186,6 @@ fn socket_stream_partial_read() {
     assert_eq!(&buf[..5], b"defgh");
 }
 
-/// C++: TEST(SocketTest, StreamMultipleWrites)
 #[test]
 fn socket_stream_multiple_writes() {
     let _ctx = TestContext::new();
@@ -211,7 +202,6 @@ fn socket_stream_multiple_writes() {
     assert_eq!(&buf[..9], b"aaabbbccc");
 }
 
-/// C++: TEST(SocketTest, DatagramBoundaryPreserved)
 #[test]
 fn socket_datagram_boundary_preserved() {
     let _ctx = TestContext::new();
@@ -231,7 +221,6 @@ fn socket_datagram_boundary_preserved() {
     assert_eq!(&buf[..14], b"longer_message");
 }
 
-/// C++: TEST(SocketTest, DatagramTruncation)
 /// In datagram mode, if the read buffer is too small, extra bytes are discarded.
 #[test]
 fn socket_datagram_truncation() {
@@ -251,7 +240,6 @@ fn socket_datagram_truncation() {
     assert_eq!(s1.read(false, &mut buf).unwrap_err(), ZxError::SHOULD_WAIT);
 }
 
-/// C++: TEST(SocketTest, DatagramEmptyWriteIsInvalidArgs)
 #[test]
 fn socket_datagram_empty_write() {
     let _ctx = TestContext::new();
@@ -260,7 +248,6 @@ fn socket_datagram_empty_write() {
     assert_eq!(s0.write(b"").unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(SocketTest, ShutdownWrite)
 #[test]
 fn socket_shutdown_write() {
     let _ctx = TestContext::new();
@@ -278,7 +265,6 @@ fn socket_shutdown_write() {
     assert_eq!(&buf[..n], b"from_s1");
 }
 
-/// C++: TEST(SocketTest, ShutdownRead)
 #[test]
 fn socket_shutdown_read() {
     let _ctx = TestContext::new();
@@ -316,7 +302,6 @@ fn socket_get_info() {
     );
 }
 
-/// C++: TEST(SocketTest, RelatedKoid)
 #[test]
 fn socket_related_koid() {
     let _ctx = TestContext::new();
@@ -871,7 +856,6 @@ fn write_invalid_options() {
 
 // ── Bulk-ported socket tests (batch 2) ──────────────────────────────
 
-/// C++: TEST(SocketTest, DatagramMultipleMessages)
 ///
 /// Write multiple datagrams and verify each is preserved as a
 /// separate message on read (datagram boundary semantics).
@@ -893,7 +877,6 @@ fn datagram_multiple_messages() {
     assert_eq!(&buf[..n], b"m3");
 }
 
-/// C++: TEST(SocketTest, StreamLargeTransfer)
 ///
 /// Write and read a large block of data through a stream socket.
 /// Verifies data integrity for larger transfers.
@@ -911,7 +894,6 @@ fn stream_large_transfer() {
     assert_eq!(buf, data);
 }
 
-/// C++: TEST(SocketTest, ShutdownBothDirections)
 ///
 /// Shut down both read and write directions. Neither side should
 /// be able to read or write after both shutdowns.
@@ -930,7 +912,6 @@ fn shutdown_both_directions() {
     assert!(remote.write(b"test").is_err());
 }
 
-/// C++: TEST(SocketTest, ReadAfterShutdownWrite)
 ///
 /// After shutting down the write direction, existing data in the
 /// buffer should still be readable.
@@ -959,7 +940,6 @@ fn write_zero_bytes() {
     assert!(result.is_ok() || result.unwrap_err() == ZxError::SHOULD_WAIT);
 }
 
-/// C++: TEST(SocketTest, PeekDoesNotConsume)
 ///
 /// Peek at data without consuming it. Subsequent read should
 /// return the same data.
@@ -979,7 +959,6 @@ fn peek_does_not_consume() {
     assert_eq!(&buf2[..n2], b"peek data");
 }
 
-/// C++: TEST(SocketTest, MultipleWritesSingleRead)
 ///
 /// Multiple small writes to a stream socket, then one large read
 /// should concatenate all data.
@@ -997,7 +976,6 @@ fn multiple_writes_single_read() {
     assert_eq!(&buf[..n], b"aaabbbccc");
 }
 
-/// C++: TEST(SocketTest, SocketInfoAfterPeerClose)
 ///
 /// After closing the peer, the remaining socket should report
 /// PEER_CLOSED in its signal set.
@@ -1010,7 +988,6 @@ fn socket_info_after_peer_close() {
     assert!(local.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(SocketTest, DatagramReadTooSmallBuffer)
 ///
 /// Read from a datagram socket with a buffer smaller than the
 /// message. Should truncate the message and discard the rest.
@@ -1027,7 +1004,6 @@ fn datagram_read_too_small_buffer() {
     // The rest of the datagram is discarded
 }
 
-/// C++: TEST(SocketTest, BidirectionalStreamVerify)
 ///
 /// Both endpoints write and read data simultaneously. Verify data
 /// integrity in both directions.

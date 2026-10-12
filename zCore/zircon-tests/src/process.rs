@@ -74,7 +74,6 @@ fn process_handle_table() {
     assert!(proc.get_object::<zircon_object::ipc::Channel>(h).is_err());
 }
 
-/// C++: TEST(ProcessTest, TypeName)
 #[test]
 fn process_type_name() {
     let _ctx = TestContext::new();
@@ -83,7 +82,6 @@ fn process_type_name() {
     assert_eq!(proc.type_name(), "Process");
 }
 
-/// C++: TEST(ProcessTest, SetName)
 #[test]
 fn process_set_name() {
     let _ctx = TestContext::new();
@@ -95,7 +93,6 @@ fn process_set_name() {
     assert_eq!(proc.name(), "renamed");
 }
 
-/// C++: TEST(ProcessTest, RelatedKoid)
 #[test]
 fn process_related_koid() {
     let _ctx = TestContext::new();
@@ -105,7 +102,6 @@ fn process_related_koid() {
     assert_eq!(proc.related_koid(), job.id());
 }
 
-/// C++: TEST(ProcessTest, MultipleHandles)
 #[test]
 fn process_multiple_handles() {
     let _ctx = TestContext::new();
@@ -134,7 +130,6 @@ fn process_multiple_handles() {
     assert!(proc.get_object::<zircon_object::ipc::Channel>(h2).is_ok());
 }
 
-/// C++: TEST(ProcessTest, GetInfoExited)
 #[test]
 fn process_get_info_exited() {
     let _ctx = TestContext::new();
@@ -149,7 +144,6 @@ fn process_get_info_exited() {
     assert_ne!(info.flags & 2, 0, "EXITED flag should be set");
 }
 
-/// C++: TEST(ProcessTest, ExitCode)
 /// Process exit code is retrievable after exit.
 #[test]
 fn process_exit_code() {
@@ -170,7 +164,6 @@ fn process_exit_code() {
     assert_eq!(info.return_code, 99);
 }
 
-/// C++: TEST(ProcessTest, TypeName)
 /// (Additional verification that type_name returns "Process".)
 #[test]
 fn process_type_name_check() {
@@ -180,7 +173,6 @@ fn process_type_name_check() {
     assert_eq!(proc.type_name(), "Process");
 }
 
-/// C++: TEST(ProcessTest, MultipleHandles)
 /// Multiple handles to different objects in the same process.
 #[test]
 fn process_multiple_handles_dup() {
@@ -209,7 +201,6 @@ fn process_multiple_handles_dup() {
     assert_eq!(obj2.id(), ch0_id);
 }
 
-/// C++: TEST(ProcessTest, SetName)
 /// Set and retrieve process name (already tested, but C++ exact name).
 #[test]
 fn process_set_name_cxx() {
@@ -226,7 +217,6 @@ fn process_set_name_cxx() {
     assert_eq!(proc.name(), "final");
 }
 
-/// C++: TEST(ProcessTest, RelatedKoid)
 /// Process related_koid is the parent job's koid.
 #[test]
 fn process_related_koid_cxx() {
@@ -260,7 +250,6 @@ fn process_get_info_runtime_v1() {
     unimplemented!("not yet implemented");
 }
 
-/// C++: TEST(ProcessTest, Status)
 /// Process status transitions: Init -> Exited.
 #[test]
 fn process_status() {
@@ -285,7 +274,6 @@ fn process_status() {
     assert!(proc.signal().contains(Signal::PROCESS_TERMINATED));
 }
 
-/// C++: TEST(ProcessTest, HandleTableSelf)
 /// Enumerate the process's own handle table.
 #[test]
 fn process_handle_table_self() {
@@ -328,7 +316,6 @@ fn process_wait_async_cancel_self() {
     unimplemented!("not yet implemented");
 }
 
-/// C++: TEST(ProcessTest, HandleTableSelfDetailed)
 /// Enumerate handles and check types are correct.
 #[test]
 fn process_handle_table_self_detailed() {
@@ -362,7 +349,6 @@ fn process_handle_table_self_detailed() {
     assert_eq!(ev_entry.1, h_ev);
 }
 
-/// C++: TEST(ProcessTest, GetChild)
 /// Get a child thread by its koid.
 #[test]
 fn process_get_child() {
@@ -384,7 +370,6 @@ fn process_get_child() {
     assert!(err.is_err());
 }
 
-/// C++: TEST(ProcessTest, CreateDestroyed)
 /// Creating a process on a dead (killed) job should fail.
 #[test]
 fn process_create_destroyed() {
@@ -401,7 +386,6 @@ fn process_create_destroyed() {
     assert!(result.is_err(), "creating process on dead job should fail");
 }
 
-/// C++: TEST(ProcessTest, KillProcess)
 /// Kill a process and check it transitions to terminated.
 #[test]
 fn process_kill_process() {
@@ -435,7 +419,6 @@ fn process_kill_process() {
     );
 }
 
-/// C++: TEST(ProcessTest, VmarInfo)
 /// Query VMAR info for a process's root VMAR.
 #[test]
 fn process_vmar_info() {

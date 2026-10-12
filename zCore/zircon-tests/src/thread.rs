@@ -39,7 +39,6 @@ fn thread_related_koid() {
     assert_eq!(thread.related_koid(), proc.id());
 }
 
-/// C++: TEST(ThreadTest, MultipleThreadsInProcess)
 #[test]
 fn thread_multiple_in_process() {
     let _ctx = TestContext::new();
@@ -60,7 +59,6 @@ fn thread_multiple_in_process() {
     assert_eq!(t3.related_koid(), proc.id());
 }
 
-/// C++: TEST(ThreadTest, SetName)
 #[test]
 fn thread_set_name() {
     let _ctx = TestContext::new();
@@ -73,7 +71,6 @@ fn thread_set_name() {
     assert_eq!(thread.name(), "renamed");
 }
 
-/// C++: TEST(ThreadTest, TypeName)
 #[test]
 fn thread_type_name() {
     let _ctx = TestContext::new();
@@ -245,7 +242,6 @@ fn thread_read_state_not_suspended_fails() {
 
 // ── Bulk-ported thread tests ────────────────────────────────────────
 
-/// C++: TEST(ThreadTest, CreateAndStart)
 ///
 /// Creates a thread and starts it with a basic entry function.
 /// zCore cannot run real userspace code in libos test mode, so this
@@ -263,7 +259,6 @@ fn thread_create_and_start() {
     panic!("zCore cannot execute real user entry in libos test mode");
 }
 
-/// C++: TEST(ThreadTest, Kill)
 ///
 /// Kill a newly created thread. Killing a New thread transitions
 /// it to Dying. The thread should be findable as a child of the
@@ -289,7 +284,6 @@ fn thread_kill() {
     );
 }
 
-/// C++: TEST(ThreadTest, NameProperty)
 ///
 /// Verify get/set of the thread name property.
 #[test]
@@ -313,7 +307,6 @@ fn thread_name_property() {
     assert_eq!(thread.name(), "a-very-long-thread-name-for-testing");
 }
 
-/// C++: TEST(ThreadTest, ProcessWaitManyThreads)
 ///
 /// Multiple threads in a process, wait on them all. Requires async
 /// infrastructure that zCore's libos test mode doesn't fully support.
@@ -324,7 +317,6 @@ fn thread_process_wait_many_threads() {
     panic!("multi-thread wait not supported in libos test mode");
 }
 
-/// C++: TEST(ThreadTest, ReadStateBeforeStart)
 ///
 /// Reading thread state on a New (not-yet-started) thread should
 /// return BAD_STATE because the thread hasn't been suspended.
@@ -346,7 +338,6 @@ fn thread_read_state_before_start() {
     );
 }
 
-/// C++: TEST(ThreadTest, ReadStateInvalidKind)
 ///
 /// Reading thread state with an unsupported kind should fail.
 /// FloatPoint/Vector/Debug/SingleStep are not supported — they
@@ -371,7 +362,6 @@ fn thread_read_state_invalid_kind() {
     );
 }
 
-/// C++: TEST(ThreadTest, WriteStateInvalidKind)
 ///
 /// Writing thread state with an unsupported kind should fail.
 #[test]
@@ -392,7 +382,6 @@ fn thread_write_state_invalid_kind() {
     );
 }
 
-/// C++: TEST(ThreadTest, ReadStateSuspended)
 ///
 /// A suspended thread should allow read_state for General registers.
 #[async_std::test]
@@ -425,7 +414,6 @@ async fn thread_read_state_suspended() {
         .await;
 }
 
-/// C++: TEST(ThreadTest, WriteStateSuspended)
 ///
 /// A suspended thread should allow write_state for General registers.
 #[async_std::test]
@@ -462,7 +450,6 @@ async fn thread_write_state_suspended() {
         .await;
 }
 
-/// C++: TEST(ThreadTest, SuspendMultiple)
 ///
 /// Multiple suspends require matching number of resumes.
 #[async_std::test]
@@ -509,7 +496,6 @@ async fn thread_suspend_multiple() {
         .await;
 }
 
-/// C++: TEST(ThreadTest, SuspendSelf)
 ///
 /// A thread suspending itself requires the thread to be running
 /// with actual execution context. In zCore's cooperative test mode,
@@ -522,7 +508,6 @@ fn thread_suspend_self() {
     panic!("self-suspend requires preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, KillSuspendedThread)
 ///
 /// A thread that is suspended can be killed, and transitions to
 /// Dying/Dead.
@@ -555,7 +540,6 @@ async fn thread_kill_suspended() {
     );
 }
 
-/// C++: TEST(ThreadTest, GetExceptionReport)
 ///
 /// Getting an exception report on a thread not in exception state
 /// should return BAD_STATE.
@@ -575,7 +559,6 @@ fn thread_get_exception_report_no_exception() {
     );
 }
 
-/// C++: TEST(ThreadTest, StartWithEntry)
 ///
 /// Start a thread with explicit entry point and stack pointer.
 /// Verifies that the context is set up correctly before the
@@ -604,7 +587,6 @@ async fn thread_start_with_entry() {
         .await;
 }
 
-/// C++: TEST(ThreadTest, DoubleStartFails)
 ///
 /// Starting a thread that is already running should fail.
 /// zCore's Thread::start() doesn't currently guard against
@@ -616,7 +598,6 @@ fn thread_double_start_fails() {
     panic!("zCore does not guard against double-start");
 }
 
-/// C++: TEST(ThreadTest, ThreadInfoState)
 ///
 /// get_thread_info returns a ThreadInfo struct. We verify the thread's
 /// state via thread.state() since ThreadInfo fields are private to
@@ -642,7 +623,6 @@ fn thread_info_state() {
     );
 }
 
-/// C++: TEST(ThreadTest, WaitForTermination)
 ///
 /// Start a thread, kill it, and wait for the THREAD_TERMINATED signal.
 #[async_std::test]
@@ -665,7 +645,6 @@ async fn thread_wait_for_termination() {
     assert!(thread.signal().contains(Signal::THREAD_TERMINATED));
 }
 
-/// C++: TEST(ThreadTest, ThreadStatsRuntime)
 ///
 /// Thread runtime stats require actual CPU execution time tracking.
 /// In zCore's cooperative scheduler, runtime is simulated via
@@ -688,7 +667,6 @@ fn thread_stats_runtime() {
     assert_eq!(thread.get_time(), 1500);
 }
 
-/// C++: TEST(ThreadTest, InvalidHandleStart)
 ///
 /// Starting a thread with an invalid handle is a process-level
 /// concern — Process::start() takes a handle arg. Here we verify
@@ -718,7 +696,6 @@ async fn thread_invalid_handle_start() {
 // require preemptive scheduling, real user-mode execution, or
 // exception infrastructure not available in zCore's libos test mode.
 
-/// C++: TEST(ThreadTest, SuspendInChannelCall)
 ///
 /// Suspend a thread blocked in zx_channel_call. Requires a real
 /// running thread blocked in a syscall — not possible in libos mode.
@@ -729,7 +706,6 @@ fn thread_suspend_in_channel_call() {
     panic!("needs preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, SuspendInPortWait)
 ///
 /// Suspend a thread blocked in zx_port_wait. Requires preemptive
 /// scheduling to interrupt the blocked thread.
@@ -740,7 +716,6 @@ fn thread_suspend_in_port_wait() {
     panic!("needs preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, SuspendInSleep)
 ///
 /// Suspend a thread blocked in zx_nanosleep. Requires preemptive
 /// scheduling to interrupt the sleeping thread.
@@ -751,7 +726,6 @@ fn thread_suspend_in_sleep() {
     panic!("needs preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, SuspendThenResume)
 ///
 /// Suspend a running thread, verify it stops executing, then resume
 /// it and verify it continues. Requires real concurrent execution.
@@ -762,7 +736,6 @@ fn thread_suspend_then_resume() {
     panic!("needs preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, SuspendMultipleTimes)
 ///
 /// Suspend a thread N times, verify it requires N resumes. Requires
 /// concurrent thread execution to verify actual suspension.
@@ -773,7 +746,6 @@ fn thread_suspend_multiple_times() {
     panic!("needs preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, ThreadPriority)
 ///
 /// Set and get thread priority. zCore's cooperative scheduler does
 /// not implement priority-based scheduling.
@@ -784,7 +756,6 @@ fn thread_priority() {
     panic!("thread priority not implemented");
 }
 
-/// C++: TEST(ThreadTest, ThreadAffinity)
 ///
 /// Set CPU affinity mask on a thread. zCore's cooperative scheduler
 /// does not support CPU affinity.
@@ -795,7 +766,6 @@ fn thread_affinity() {
     panic!("CPU affinity not implemented");
 }
 
-/// C++: TEST(ThreadTest, ThreadCpuMask)
 ///
 /// Get/set the CPU mask for a thread. Requires multi-CPU support
 /// not available in zCore's cooperative scheduler.
@@ -806,7 +776,6 @@ fn thread_cpu_mask() {
     panic!("CPU affinity not implemented");
 }
 
-/// C++: TEST(ThreadTest, ThreadSetCpuAffinity)
 ///
 /// Set explicit CPU affinity via the profile API. Requires scheduler
 /// profile support not implemented in zCore.
@@ -817,7 +786,6 @@ fn thread_set_cpu_affinity() {
     panic!("CPU affinity not implemented");
 }
 
-/// C++: TEST(ThreadTest, ExceptionOnThreadStart)
 ///
 /// Register an exception channel, start a thread that immediately
 /// faults, verify the exception is delivered. Requires exception
@@ -829,7 +797,6 @@ fn thread_exception_on_start() {
     panic!("needs exception channel with real execution");
 }
 
-/// C++: TEST(ThreadTest, ThreadRightsBasic)
 ///
 /// Verify default rights on a thread handle. Handle rights are a
 /// syscall-layer concept — the kernel object layer doesn't track
@@ -841,7 +808,6 @@ fn thread_rights_basic() {
     panic!("handle rights are syscall-layer concept");
 }
 
-/// C++: TEST(ThreadTest, ThreadGetInfoSelf)
 ///
 /// A thread gets its own info via zx_object_get_info. Requires
 /// the calling thread to be a real Zircon thread with a handle
@@ -853,7 +819,6 @@ fn thread_get_info_self() {
     panic!("needs real Zircon thread context");
 }
 
-/// C++: TEST(ThreadTest, ThreadStateTransitions)
 ///
 /// Verify all state transitions: New -> Running -> Suspended ->
 /// Running -> Dying -> Dead. Requires preemptive scheduling for
@@ -865,7 +830,6 @@ fn thread_state_transitions() {
     panic!("needs preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, ThreadWaitAsync)
 ///
 /// Use zx_object_wait_async on a thread handle for TERMINATED signal.
 /// Requires a port + async wait infrastructure with real execution.
@@ -876,7 +840,6 @@ fn thread_wait_async() {
     panic!("needs preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, ThreadCancelWaitAsync)
 ///
 /// Cancel an async wait on a thread handle. Requires port + async
 /// wait infrastructure with real execution.
@@ -887,7 +850,6 @@ fn thread_cancel_wait_async() {
     panic!("needs preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, ThreadSuspendToken)
 ///
 /// Obtain a suspend token and verify suspension. Drop the token to
 /// resume. Requires real concurrent execution.
@@ -898,7 +860,6 @@ fn thread_suspend_token() {
     panic!("suspend tokens not implemented");
 }
 
-/// C++: TEST(ThreadTest, ThreadKillInSuspend)
 ///
 /// Kill a thread while it holds a suspend token. Thread should
 /// transition to Dead regardless. Requires concurrent execution.
@@ -909,7 +870,6 @@ fn thread_kill_in_suspend() {
     panic!("needs preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, ThreadExitWhileSuspended)
 ///
 /// A thread exits (returns from entry) while suspended. The exit
 /// should take priority over the suspension. Requires real execution.
@@ -920,7 +880,6 @@ fn thread_exit_while_suspended() {
     panic!("needs preemptive scheduling");
 }
 
-/// C++: TEST(ThreadTest, ThreadResumeFromException)
 ///
 /// Resume a thread that is stopped in an exception handler. Requires
 /// exception channel infrastructure with real thread execution.
@@ -931,7 +890,6 @@ fn thread_resume_from_exception() {
     panic!("needs exception channel with real execution");
 }
 
-/// C++: TEST(ThreadTest, ThreadCreateInvalidArgs)
 ///
 /// Create a thread with invalid arguments. In zCore, Thread::create
 /// takes a Process reference and a name — there are no invalid
@@ -950,7 +908,6 @@ fn thread_create_invalid_args() {
 // concurrent thread execution — features not available in libos
 // test mode. All are marked #[should_panic].
 
-/// C++: TEST(ThreadTest, SuspendInException)
 ///
 /// Suspend a thread that is stopped in an exception handler. The
 /// thread should remain suspended after the exception is resolved.
@@ -962,7 +919,6 @@ fn thread_suspend_in_exception() {
     panic!("needs exception channel infrastructure");
 }
 
-/// C++: TEST(ThreadTest, ExceptionDuringSuspend)
 ///
 /// Trigger an exception while a thread is suspended. The exception
 /// should be queued and delivered when the thread is resumed.
@@ -974,7 +930,6 @@ fn thread_exception_during_suspend() {
     panic!("needs exception channel infrastructure");
 }
 
-/// C++: TEST(ThreadTest, StartSuspendedThread)
 ///
 /// Create a thread in suspended state and start it. The thread
 /// should not execute until explicitly resumed. Requires real
@@ -986,7 +941,6 @@ fn thread_start_suspended_thread() {
     panic!("needs real thread execution");
 }
 
-/// C++: TEST(ThreadTest, CreateWithBadArgs)
 ///
 /// Create a thread with bad arguments at the syscall level (invalid
 /// process handle, null name). Should return INVALID_ARGS or
@@ -998,7 +952,6 @@ fn thread_create_with_bad_args() {
     panic!("needs syscall-level validation");
 }
 
-/// C++: TEST(ThreadTest, MultipleExceptionChannels)
 ///
 /// Register multiple exception channels on a thread. Exceptions
 /// should be delivered to the most recently registered channel
@@ -1010,7 +963,6 @@ fn thread_multiple_exception_channels() {
     panic!("needs exception channel infrastructure");
 }
 
-/// C++: TEST(ThreadTest, CloseSuspendToken)
 ///
 /// Close a suspend token while the thread is suspended. The thread
 /// should resume execution. Requires suspend token lifecycle.
@@ -1021,7 +973,6 @@ fn thread_close_suspend_token() {
     panic!("needs real thread execution");
 }
 
-/// C++: TEST(ThreadTest, SuspendTokenLifetime)
 ///
 /// Verify suspend token lifetime semantics: multiple tokens can be
 /// active, and the thread resumes only when all tokens are closed.
@@ -1033,7 +984,6 @@ fn thread_suspend_token_lifetime() {
     panic!("needs real thread execution");
 }
 
-/// C++: TEST(ThreadTest, WriteStateModifiesExecution)
 ///
 /// Write to a suspended thread's register state and verify the
 /// modified state takes effect when the thread resumes. Requires
@@ -1045,7 +995,6 @@ fn thread_write_state_modifies_execution() {
     panic!("needs real thread execution");
 }
 
-/// C++: TEST(ThreadTest, ReadStateFloatPoint)
 ///
 /// Read the floating-point register state of a suspended thread.
 /// Requires real thread execution with FP state tracking.
@@ -1056,7 +1005,6 @@ fn thread_read_state_float_point() {
     panic!("needs real thread execution");
 }
 
-/// C++: TEST(ThreadTest, ReadStateVector)
 ///
 /// Read the vector (SIMD) register state of a suspended thread.
 /// Requires real thread execution with vector state tracking.

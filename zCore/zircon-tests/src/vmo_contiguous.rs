@@ -7,7 +7,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(VmoContiguousTest, CreateContiguous)
 ///
 /// Create a contiguous VMO. Requires a BTI handle and real
 /// physical memory allocation.
@@ -18,7 +17,6 @@ fn create_contiguous() {
     panic!("contiguous VMO needs BTI");
 }
 
-/// C++: TEST(VmoContiguousTest, ReadWriteContiguous)
 ///
 /// Read and write to a contiguous VMO. The underlying memory
 /// should be physically contiguous. Requires BTI.
@@ -29,7 +27,6 @@ fn read_write_contiguous() {
     panic!("contiguous VMO needs BTI");
 }
 
-/// C++: TEST(VmoContiguousTest, PinContiguous)
 ///
 /// Pin a contiguous VMO and verify the physical addresses are
 /// contiguous. Requires BTI + real hardware.
@@ -40,7 +37,6 @@ fn pin_contiguous() {
     panic!("contiguous VMO needs BTI");
 }
 
-/// C++: TEST(VmoContiguousTest, ContiguousLargeAlloc)
 ///
 /// Allocate a large contiguous VMO. Requires sufficient physically
 /// contiguous memory. Requires BTI.
@@ -51,7 +47,6 @@ fn contiguous_large_alloc() {
     panic!("contiguous VMO needs BTI");
 }
 
-/// C++: TEST(VmoContiguousTest, ContiguousNotResizable)
 ///
 /// Contiguous VMOs should not be resizable. Attempting to resize
 /// should return UNAVAILABLE. Requires BTI.
@@ -62,7 +57,6 @@ fn contiguous_not_resizable() {
     panic!("contiguous VMO needs BTI");
 }
 
-/// C++: TEST(VmoContiguousTest, ContiguousNotClonable)
 ///
 /// Contiguous VMOs should not be clonable (snapshot). Attempting
 /// to create a snapshot should fail. Requires BTI.
@@ -73,7 +67,6 @@ fn contiguous_not_clonable() {
     panic!("contiguous VMO needs BTI");
 }
 
-/// C++: TEST(VmoContiguousTest, ContiguousDecommit)
 ///
 /// Decommit pages from a contiguous VMO. Should fail because
 /// contiguous VMOs cannot have gaps. Requires BTI.
@@ -84,7 +77,6 @@ fn contiguous_decommit() {
     panic!("contiguous VMO needs BTI");
 }
 
-/// C++: TEST(VmoContiguousTest, ContiguousAlignment)
 ///
 /// Create a contiguous VMO with alignment requirements. The
 /// physical base should be aligned. Requires BTI.
@@ -95,7 +87,6 @@ fn contiguous_alignment() {
     panic!("contiguous VMO needs BTI");
 }
 
-/// C++: TEST(VmoContiguousTest, ContiguousNoResource)
 ///
 /// Create a contiguous VMO without a BTI handle. Should return
 /// BAD_HANDLE or ACCESS_DENIED. Requires BTI check.
@@ -106,7 +97,6 @@ fn contiguous_no_resource() {
     panic!("contiguous VMO needs BTI");
 }
 
-/// C++: TEST(VmoContiguousTest, ContiguousZeroSize)
 ///
 /// Create a contiguous VMO with zero size. Should return
 /// INVALID_ARGS. Requires BTI.

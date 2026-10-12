@@ -7,7 +7,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(AddressTaggingTest, BasicTagging)
 ///
 /// Set a tag on a user-space address and verify the kernel strips
 /// the tag before using the address. Requires TBI support.
@@ -18,7 +17,6 @@ fn basic_tagging() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedPointerRead)
 ///
 /// Read through a tagged pointer. The kernel must strip the tag
 /// and resolve the actual virtual address. Requires TBI support.
@@ -29,7 +27,6 @@ fn tagged_pointer_read() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedPointerWrite)
 ///
 /// Write through a tagged pointer. The kernel must strip the tag
 /// and resolve the actual virtual address. Requires TBI support.
@@ -40,7 +37,6 @@ fn tagged_pointer_write() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedVmarMap)
 ///
 /// Map a VMO at a tagged address via VMAR. The kernel should strip
 /// the tag from the hint address. Requires TBI support.
@@ -51,7 +47,6 @@ fn tagged_vmar_map() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedVmarUnmap)
 ///
 /// Unmap a region specified by a tagged address. The kernel should
 /// strip the tag before unmapping. Requires TBI support.
@@ -62,7 +57,6 @@ fn tagged_vmar_unmap() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedFutexAddress)
 ///
 /// Use a tagged pointer as a futex address. The kernel should strip
 /// the tag for futex wait/wake operations. Requires TBI support.
@@ -73,7 +67,6 @@ fn tagged_futex_address() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedChannelBuffer)
 ///
 /// Pass a tagged buffer pointer to channel read/write. The kernel
 /// should strip the tag before copying. Requires TBI support.
@@ -84,7 +77,6 @@ fn tagged_channel_buffer() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedVmoRead)
 ///
 /// Read from a VMO into a tagged buffer pointer. The kernel should
 /// strip the tag before copying. Requires TBI support.
@@ -95,7 +87,6 @@ fn tagged_vmo_read() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TaggedVmoWrite)
 ///
 /// Write to a VMO from a tagged buffer pointer. The kernel should
 /// strip the tag before copying. Requires TBI support.
@@ -106,7 +97,6 @@ fn tagged_vmo_write() {
     panic!("address tagging not implemented");
 }
 
-/// C++: TEST(AddressTaggingTest, TagPreservation)
 ///
 /// Verify that the tag bits are preserved in user-space pointers
 /// returned by the kernel (e.g., VMAR map return values). Requires

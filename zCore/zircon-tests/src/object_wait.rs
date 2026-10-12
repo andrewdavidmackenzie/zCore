@@ -9,7 +9,6 @@ use zircon_object::object::{Handle, HandleValue, Rights, Signal};
 use zircon_object::signal::{PayloadRepr, Port, PortPacket, PortPacketRepr};
 use zircon_object::ZxError;
 
-/// C++: TEST(ObjectWaitTest, WaitOneAlreadySignaled)
 /// wait_one returns immediately when the signal is already set.
 #[async_std::test]
 async fn wait_one_already_signaled() {
@@ -36,7 +35,6 @@ async fn wait_one_already_signaled() {
     assert!(observed.contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(ObjectWaitTest, WaitOneTimeout)
 /// wait_one with an unsatisfied signal and deadline=0 returns TIMED_OUT.
 #[async_std::test]
 async fn wait_one_timeout() {
@@ -60,7 +58,6 @@ async fn wait_one_timeout() {
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 
-/// C++: TEST(ObjectWaitTest, WaitOneInvalidHandle)
 /// wait_one on an invalid handle returns BAD_HANDLE.
 #[async_std::test]
 async fn wait_one_invalid_handle() {
@@ -79,7 +76,6 @@ async fn wait_one_invalid_handle() {
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(ObjectWaitTest, WaitOneAccessDenied)
 /// wait_one without WAIT right returns ACCESS_DENIED.
 #[async_std::test]
 async fn wait_one_access_denied() {
@@ -105,7 +101,6 @@ async fn wait_one_access_denied() {
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
-/// C++: TEST(ObjectWaitTest, WaitOneNullObserved)
 /// wait_one with null observed pointer still works when signal is set.
 #[async_std::test]
 async fn wait_one_null_observed() {
@@ -129,7 +124,6 @@ async fn wait_one_null_observed() {
     .unwrap();
 }
 
-/// C++: TEST(ObjectWaitTest, WaitAsyncBasic)
 /// wait_async registers a subscription that fires when signaled.
 #[async_std::test]
 async fn wait_async_basic() {
@@ -172,7 +166,6 @@ async fn wait_async_basic() {
     assert_eq!(repr.key, 42);
 }
 
-/// C++: TEST(ObjectWaitTest, WaitAsyncCancel)
 /// Cancelling wait_async removes the subscription.
 #[test]
 fn wait_async_cancel() {
@@ -199,7 +192,6 @@ fn wait_async_cancel() {
         .unwrap();
 }
 
-/// C++: TEST(ObjectWaitTest, WaitAsyncInvalidOptions)
 /// wait_async with invalid options returns INVALID_ARGS.
 #[test]
 fn wait_async_invalid_options() {
@@ -225,7 +217,6 @@ fn wait_async_invalid_options() {
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(ObjectWaitTest, WaitAsyncBadPortHandle)
 /// wait_async with invalid port handle returns BAD_HANDLE.
 #[test]
 fn wait_async_bad_port_handle() {
@@ -246,7 +237,6 @@ fn wait_async_bad_port_handle() {
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(ObjectWaitTest, WaitAsyncBadSourceHandle)
 /// wait_async with invalid source handle returns BAD_HANDLE.
 #[test]
 fn wait_async_bad_source_handle() {
@@ -267,7 +257,6 @@ fn wait_async_bad_source_handle() {
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(ObjectWaitTest, WaitAsyncTimestamp)
 /// wait_async with TIMESTAMP option.
 #[async_std::test]
 async fn wait_async_timestamp() {
@@ -308,7 +297,6 @@ async fn wait_async_timestamp() {
     assert_eq!(repr.key, 33);
 }
 
-/// C++: TEST(ObjectWaitTest, WaitAsyncEdge)
 /// wait_async with EDGE option.
 #[async_std::test]
 async fn wait_async_edge() {
@@ -349,7 +337,6 @@ async fn wait_async_edge() {
     assert_eq!(repr.key, 44);
 }
 
-/// C++: TEST(ObjectWaitTest, WaitAsyncTimestampAndBootTimestampMutuallyExclusive)
 /// TIMESTAMP and BOOT_TIMESTAMP options cannot both be set.
 #[test]
 fn wait_async_timestamp_and_boot_timestamp_exclusive() {
@@ -369,7 +356,6 @@ fn wait_async_timestamp_and_boot_timestamp_exclusive() {
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(ObjectWaitTest, WaitOneChannelPeerClosed)
 /// wait_one on a channel whose peer is closed returns with PEER_CLOSED.
 #[async_std::test]
 async fn wait_one_channel_peer_closed() {

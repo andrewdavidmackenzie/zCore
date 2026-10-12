@@ -191,7 +191,6 @@ fn pager_vmo_is_pager_backed() {
 
 // ── Bulk-ported pager tests ─────────────────────────────────────────
 
-/// C++: TEST(PagerTest, InvalidPagerCreate)
 ///
 /// Pager::new() always succeeds — there are no invalid options on
 /// the pager itself. This test documents that creation is infallible.
@@ -203,7 +202,6 @@ fn pager_invalid_create() {
     assert_ne!(pager.id(), 0);
 }
 
-/// C++: TEST(PagerTest, InvalidPagerCreateVmo)
 ///
 /// create_vmo with DISCARDABLE option should fail with INVALID_ARGS.
 /// RESIZABLE + UNBOUNDED together should also fail.
@@ -230,7 +228,6 @@ fn pager_invalid_create_vmo() {
     );
 }
 
-/// C++: TEST(PagerTest, InvalidPagerDetachVmo)
 ///
 /// Detaching a VMO that doesn't belong to the pager should fail.
 #[test]
@@ -249,7 +246,6 @@ fn pager_invalid_detach_vmo() {
     );
 }
 
-/// C++: TEST(PagerTest, InvalidPagerSupplyPages)
 ///
 /// Verify invalid create_vmo options are rejected. zCore's VMO layer
 /// auto-commits pages on write, so out-of-bounds supply doesn't fail
@@ -282,7 +278,6 @@ fn pager_invalid_supply_pages() {
     assert!(result.is_ok(), "zero-length supply should succeed (no-op)");
 }
 
-/// C++: TEST(PagerTest, SupplyPagesPartial)
 ///
 /// Supply only a subset of pages in a multi-page VMO.
 #[test]
@@ -306,7 +301,6 @@ fn pager_supply_pages_partial() {
     assert_eq!(&buf, b"partial page data");
 }
 
-/// C++: TEST(PagerTest, SupplyPagesFromClone)
 ///
 /// Supply pages from a snapshot (clone) of a VMO. The clone should
 /// contain the original data and supply it correctly.
@@ -331,7 +325,6 @@ fn pager_supply_pages_from_clone() {
     assert_eq!(&buf, b"original data");
 }
 
-/// C++: TEST(PagerTest, DetachAndSupplyFails)
 ///
 /// After detaching a VMO, supply_pages should fail because the VMO
 /// has been disconnected from the pager.
@@ -362,7 +355,6 @@ fn pager_detach_and_supply_fails() {
     );
 }
 
-/// C++: TEST(PagerTest, DoubleDetachFails)
 ///
 /// Detaching the same VMO twice should fail the second time.
 #[test]
@@ -383,7 +375,6 @@ fn pager_double_detach_fails() {
     );
 }
 
-/// C++: TEST(PagerTest, CreateMultipleVmos)
 ///
 /// Multiple VMOs can be created on the same pager with different keys.
 #[test]
@@ -415,7 +406,6 @@ fn pager_create_multiple_vmos() {
     assert_eq!(vmo3.len(), 3 * PAGE_SIZE);
 }
 
-/// C++: TEST(PagerTest, VmoInfo)
 ///
 /// A pager-backed VMO should report is_pager_backed = true.
 /// A regular VMO should report false.
@@ -438,7 +428,6 @@ fn pager_vmo_info() {
     );
 }
 
-/// C++: TEST(PagerTest, SupplyBeyondVmoEnd)
 ///
 /// zCore's VMO layer auto-commits pages on write, so writing beyond
 /// the nominal size doesn't fail like in Fuchsia. This test verifies
@@ -469,7 +458,6 @@ fn pager_supply_beyond_vmo_end() {
     );
 }
 
-/// C++: TEST(PagerTest, SupplyUnaligned)
 ///
 /// Supply with a non-page-aligned source offset. The supply_pages
 /// implementation works at page granularity internally, so sub-page
@@ -499,7 +487,6 @@ fn pager_supply_unaligned() {
     assert_eq!(&buf, b"offset data");
 }
 
-/// C++: TEST(PagerTest, DetachClosesExistingWaiters)
 ///
 /// Detaching a VMO should wake threads blocked on pager faults.
 /// This requires async infrastructure to create waiters.
@@ -510,7 +497,6 @@ fn pager_detach_closes_existing_waiters() {
     panic!("async pager waiter test not supported in sync mode");
 }
 
-/// C++: TEST(PagerTest, SupplyAfterClose)
 ///
 /// After the pager is dropped, the VMO still exists but is no longer
 /// pager-backed (pager association is cleared in Drop).
@@ -536,7 +522,6 @@ fn pager_supply_after_close() {
     assert_eq!(&buf, b"post-pager data");
 }
 
-/// C++: TEST(PagerTest, CreateVmoInvalidPort)
 ///
 /// In zCore, Port::new(0) always succeeds, and create_vmo takes
 /// an already-validated Arc<Port>. There is no "bad port handle"
@@ -552,7 +537,6 @@ fn pager_create_vmo_valid_port() {
     assert!(result.is_ok(), "create_vmo with valid port should succeed");
 }
 
-/// C++: TEST(PagerTest, SupplyPagesWrongVmo)
 ///
 /// supply_pages with a VMO not owned by this pager. supply_pages
 /// itself doesn't check ownership (it writes directly), but op_range
@@ -580,7 +564,6 @@ fn pager_supply_pages_wrong_vmo() {
     assert!(result.is_ok(), "supply_pages doesn't check VMO ownership");
 }
 
-/// C++: TEST(PagerTest, OpRangeFail)
 ///
 /// op_range with ZX_PAGER_OP_FAIL on an owned VMO should succeed.
 /// It wakes waiters with an error code.
@@ -595,7 +578,6 @@ fn pager_op_range_fail() {
     assert!(result.is_ok(), "op_range FAIL should succeed on owned VMO");
 }
 
-/// C++: TEST(PagerTest, OpRangeDirty)
 ///
 /// op_range with ZX_PAGER_OP_DIRTY grants dirty permission.
 #[test]
@@ -611,7 +593,6 @@ fn pager_op_range_dirty() {
     assert!(result.is_ok(), "op_range DIRTY should succeed");
 }
 
-/// C++: TEST(PagerTest, QueryDirtyRanges)
 ///
 /// After marking pages dirty via op_range, query_dirty_ranges should
 /// return the dirty ranges.
@@ -640,7 +621,6 @@ fn pager_query_dirty_ranges() {
     assert_eq!(length, (2 * PAGE_SIZE) as u64);
 }
 
-/// C++: TEST(PagerTest, QueryVmoStats)
 ///
 /// query_vmo_stats is not yet implemented in zCore. This test
 /// documents the expected behavior.
@@ -662,7 +642,6 @@ fn pager_query_vmo_stats() {
 
 // 1-5: Supply page alignment/range validation tests
 
-/// C++: TEST(PagerTest, SupplyPagesZeroLength)
 ///
 /// Supplying zero-length range is a no-op and should succeed.
 #[test]
@@ -676,7 +655,6 @@ fn pager_supply_pages_zero_length() {
     assert!(result.is_ok(), "zero-length supply should be a no-op");
 }
 
-/// C++: TEST(PagerTest, SupplyPagesExactOnePage)
 ///
 /// Supply exactly one page — the minimal valid supply operation.
 #[test]
@@ -696,7 +674,6 @@ fn pager_supply_pages_exact_one_page() {
     assert_eq!(&buf, b"exactly one page");
 }
 
-/// C++: TEST(PagerTest, SupplyPagesMultiplePages)
 ///
 /// Supply multiple pages at once to cover a multi-page VMO entirely.
 #[test]
@@ -723,7 +700,6 @@ fn pager_supply_pages_multiple_pages() {
     }
 }
 
-/// C++: TEST(PagerTest, SupplyPagesLastPage)
 ///
 /// Supply only the last page of a multi-page VMO.
 #[test]
@@ -751,7 +727,6 @@ fn pager_supply_pages_last_page() {
     assert_eq!(&buf, b"last page");
 }
 
-/// C++: TEST(PagerTest, SupplyPagesSourceOffset)
 ///
 /// Supply pages using a non-zero source offset within the aux VMO.
 #[test]
@@ -774,7 +749,6 @@ fn pager_supply_pages_source_offset() {
 
 // 6-10: Op range validation tests
 
-/// C++: TEST(PagerTest, OpRangeInvalidOp)
 ///
 /// op_range with an invalid/unsupported op code should return NOT_SUPPORTED.
 #[test]
@@ -791,7 +765,6 @@ fn pager_op_range_invalid_op() {
     );
 }
 
-/// C++: TEST(PagerTest, OpRangeWrongVmo)
 ///
 /// op_range on a VMO not owned by this pager should fail with INVALID_ARGS.
 #[test]
@@ -812,7 +785,6 @@ fn pager_op_range_wrong_vmo() {
     }
 }
 
-/// C++: TEST(PagerTest, OpRangeWritebackBegin)
 ///
 /// WRITEBACK_BEGIN (op=3) is a no-op but should succeed on an owned VMO.
 #[test]
@@ -825,7 +797,6 @@ fn pager_op_range_writeback_begin() {
     assert!(result.is_ok(), "WRITEBACK_BEGIN should succeed");
 }
 
-/// C++: TEST(PagerTest, OpRangeWritebackEnd)
 ///
 /// WRITEBACK_END (op=4) is a no-op but should succeed on an owned VMO.
 #[test]
@@ -838,7 +809,6 @@ fn pager_op_range_writeback_end() {
     assert!(result.is_ok(), "WRITEBACK_END should succeed");
 }
 
-/// C++: TEST(PagerTest, OpRangeFailWithErrorCodes)
 ///
 /// op_range FAIL with different Fuchsia error codes. All should succeed
 /// on an owned VMO.
@@ -861,7 +831,6 @@ fn pager_op_range_fail_with_error_codes() {
 
 // 11-15: Detach then various operations
 
-/// C++: TEST(PagerTest, DetachThenSupplyPages)
 ///
 /// After detaching, supply_pages still writes data (no ownership
 /// check in supply_pages), but the pager association is cleared.
@@ -881,7 +850,6 @@ fn pager_detach_then_supply_pages() {
     assert!(result.is_ok(), "supply_pages doesn't check ownership");
 }
 
-/// C++: TEST(PagerTest, DetachThenOpRange)
 ///
 /// After detaching, op_range should fail because the VMO is no longer
 /// associated with the pager.
@@ -901,7 +869,6 @@ fn pager_detach_then_op_range() {
     );
 }
 
-/// C++: TEST(PagerTest, DetachThenDirty)
 ///
 /// After detaching, op_range DIRTY should fail (VMO not in pager list).
 #[test]
@@ -920,7 +887,6 @@ fn pager_detach_then_dirty() {
     );
 }
 
-/// C++: TEST(PagerTest, DetachThenWritebackBegin)
 ///
 /// After detaching, WRITEBACK_BEGIN op_range should fail.
 #[test]
@@ -939,7 +905,6 @@ fn pager_detach_then_writeback_begin() {
     );
 }
 
-/// C++: TEST(PagerTest, DetachThenWritebackEnd)
 ///
 /// After detaching, WRITEBACK_END op_range should fail.
 #[test]
@@ -960,7 +925,6 @@ fn pager_detach_then_writeback_end() {
 
 // 16-20: Pager close (drop) then operations
 
-/// C++: TEST(PagerTest, ClosePagerThenRead)
 ///
 /// After pager is dropped, the VMO is still accessible. Reads from
 /// previously-supplied pages work; unsupplied pages read as zeroes.
@@ -988,7 +952,6 @@ fn pager_close_then_read() {
     assert_eq!(&buf, b"pre-close data");
 }
 
-/// C++: TEST(PagerTest, ClosePagerThenWrite)
 ///
 /// After pager is dropped, the VMO remains writable.
 #[test]
@@ -1008,7 +971,6 @@ fn pager_close_then_write() {
     assert_eq!(&buf, b"post-close write");
 }
 
-/// C++: TEST(PagerTest, ClosePagerThenCreateVmo)
 ///
 /// After pager is dropped, create_vmo cannot be called because we
 /// no longer have an Arc<Pager>. This test verifies pager creation
@@ -1028,7 +990,6 @@ fn pager_close_then_create_vmo() {
     assert_ne!(vmo_id, 0);
 }
 
-/// C++: TEST(PagerTest, ClosePagerVmoStillHasLength)
 ///
 /// After pager drop, VMO retains its length.
 #[test]
@@ -1045,7 +1006,6 @@ fn pager_close_vmo_still_has_length() {
     assert_eq!(vmo.len(), 3 * PAGE_SIZE);
 }
 
-/// C++: TEST(PagerTest, ClosePagerVmoDetached)
 ///
 /// After pager drop, the VMO's pager association is cleared.
 /// is_pager_backed may still return true (the flag is on the VMO
@@ -1070,7 +1030,6 @@ fn pager_close_vmo_detached() {
 
 // 21-25: VMO resize with pager
 
-/// C++: TEST(PagerTest, ResizableVmoCreate)
 ///
 /// Create a resizable pager-backed VMO (ZX_VMO_RESIZABLE = 2).
 #[test]
@@ -1084,7 +1043,6 @@ fn pager_resizable_vmo_create() {
     assert!(vmo.is_pager_backed());
 }
 
-/// C++: TEST(PagerTest, ResizableVmoGrow)
 ///
 /// Resize a resizable pager VMO to a larger size.
 #[test]
@@ -1098,7 +1056,6 @@ fn pager_resizable_vmo_grow() {
     assert_eq!(vmo.len(), 3 * PAGE_SIZE);
 }
 
-/// C++: TEST(PagerTest, ResizableVmoShrink)
 ///
 /// Resize a resizable pager VMO to a smaller size.
 #[test]
@@ -1114,7 +1071,6 @@ fn pager_resizable_vmo_shrink() {
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
 }
 
-/// C++: TEST(PagerTest, NonResizableVmoRejectResize)
 ///
 /// A non-resizable pager VMO (default) should reject resize with UNAVAILABLE.
 #[test]
@@ -1131,7 +1087,6 @@ fn pager_non_resizable_vmo_reject_resize() {
     );
 }
 
-/// C++: TEST(PagerTest, ResizableVmoSupplyAfterGrow)
 ///
 /// After growing a resizable pager VMO, supply pages to the new region.
 #[test]
@@ -1157,7 +1112,6 @@ fn pager_resizable_vmo_supply_after_grow() {
 
 // 26-30: Multiple pagers, VMO lifecycle
 
-/// C++: TEST(PagerTest, TwoPagersIndependent)
 ///
 /// Two separate pagers with their own VMOs are fully independent.
 #[test]
@@ -1192,7 +1146,6 @@ fn pager_two_pagers_independent() {
     assert_eq!(&buf, b"pager-2");
 }
 
-/// C++: TEST(PagerTest, VmoOutlivesPager)
 ///
 /// A VMO can outlive its pager. After the pager is dropped, the VMO
 /// is still valid and accessible.
@@ -1217,7 +1170,6 @@ fn pager_vmo_outlives_pager() {
     assert_eq!(u64::from_ne_bytes(val), 77);
 }
 
-/// C++: TEST(PagerTest, DropPagerDropVmo)
 ///
 /// Dropping the pager and then all VMO references should not leak or panic.
 #[test]
@@ -1234,7 +1186,6 @@ fn pager_drop_pager_drop_vmo() {
     }
 }
 
-/// C++: TEST(PagerTest, PagerWithManyVmos)
 ///
 /// A single pager can manage many VMOs simultaneously.
 #[test]
@@ -1271,7 +1222,6 @@ fn pager_with_many_vmos() {
     }
 }
 
-/// C++: TEST(PagerTest, DetachOneKeepOthers)
 ///
 /// Detaching one VMO should not affect other VMOs on the same pager.
 #[test]
@@ -1309,7 +1259,6 @@ fn pager_detach_one_keep_others() {
 // these are all marked #[should_panic] to document their existence
 // and expected behavior.
 
-/// C++: TEST(PagerTest, PresupplyAndRead)
 ///
 /// Pre-supply pages before mapping, then read via a faulting thread.
 /// Requires demand-paging infrastructure.
@@ -1320,7 +1269,6 @@ fn pager_presupply_and_read() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ReadAfterSupply)
 ///
 /// A thread faults on read, another thread supplies the page, first
 /// thread completes the read. Requires demand-paging infrastructure.
@@ -1331,7 +1279,6 @@ fn pager_read_after_supply() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, WriteAfterSupply)
 ///
 /// A thread faults on write, another thread supplies the page, first
 /// thread completes the write. Requires demand-paging infrastructure.
@@ -1342,7 +1289,6 @@ fn pager_write_after_supply() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ReadMultiplePages)
 ///
 /// Read across multiple pages triggers multiple page faults, each
 /// resolved by supply_pages. Requires demand-paging infrastructure.
@@ -1353,7 +1299,6 @@ fn pager_read_multiple_pages() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, WriteAndRead)
 ///
 /// Write to a pager-backed page (fault + supply), then read it back
 /// from a second thread. Requires demand-paging infrastructure.
@@ -1364,7 +1309,6 @@ fn pager_write_and_read() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ReadAfterDecommit)
 ///
 /// Decommit a supplied page and re-read — should re-fault and require
 /// a new supply. Requires demand-paging infrastructure.
@@ -1375,7 +1319,6 @@ fn pager_read_after_decommit() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SupplyAfterFault)
 ///
 /// Thread faults on a page, pager supplies it from the port request.
 /// Requires demand-paging infrastructure.
@@ -1386,7 +1329,6 @@ fn pager_supply_after_fault() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, FaultOnRead)
 ///
 /// A mapped read to an unsupplied page triggers a page fault request
 /// on the pager port. Requires demand-paging infrastructure.
@@ -1397,7 +1339,6 @@ fn pager_fault_on_read() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, FaultOnWrite)
 ///
 /// A mapped write to an unsupplied page triggers a page fault request
 /// on the pager port. Requires demand-paging infrastructure.
@@ -1408,7 +1349,6 @@ fn pager_fault_on_write() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ReadBeforeSupply)
 ///
 /// Read before any pages are supplied — thread blocks until supply.
 /// Requires demand-paging infrastructure.
@@ -1419,7 +1359,6 @@ fn pager_read_before_supply() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, CloneRead)
 ///
 /// Create a clone of a pager-backed VMO, read from the clone triggers
 /// a page fault on the original pager. Requires demand-paging.
@@ -1430,7 +1369,6 @@ fn pager_clone_read() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, CloneWrite)
 ///
 /// Write to a clone of a pager-backed VMO, triggers COW + page fault.
 /// Requires demand-paging infrastructure.
@@ -1441,7 +1379,6 @@ fn pager_clone_write() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, CloneReadAfterDetach)
 ///
 /// Detach the pager, then read from a clone — should get an error
 /// instead of blocking. Requires demand-paging infrastructure.
@@ -1452,7 +1389,6 @@ fn pager_clone_read_after_detach() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SnapshotRead)
 ///
 /// Create a snapshot of a pager-backed VMO and read from it. Snapshot
 /// pages are COW — faults go to the pager. Requires demand-paging.
@@ -1463,7 +1399,6 @@ fn pager_snapshot_read() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SnapshotWrite)
 ///
 /// Write to a snapshot of a pager-backed VMO — triggers COW fault.
 /// Requires demand-paging infrastructure.
@@ -1474,7 +1409,6 @@ fn pager_snapshot_write() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SnapshotCloneRead)
 ///
 /// Nested clone of a snapshot of a pager-backed VMO — reads trigger
 /// faults up the chain. Requires demand-paging infrastructure.
@@ -1485,7 +1419,6 @@ fn pager_snapshot_clone_read() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SnapshotWithPagerChild)
 ///
 /// A snapshot with a pager-backed child — complex fault resolution
 /// chain. Requires demand-paging infrastructure.
@@ -1496,7 +1429,6 @@ fn pager_snapshot_with_pager_child() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, CloneDecommit)
 ///
 /// Decommit pages in a clone of a pager-backed VMO — re-read should
 /// re-fault. Requires demand-paging infrastructure.
@@ -1507,7 +1439,6 @@ fn pager_clone_decommit() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, CloneResize)
 ///
 /// Resize a clone of a pager-backed VMO and access the new region.
 /// Requires demand-paging infrastructure.
@@ -1518,7 +1449,6 @@ fn pager_clone_resize() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, CloneZero)
 ///
 /// Zero pages in a clone of a pager-backed VMO. Requires demand-paging.
 #[should_panic(expected = "needs demand-paging")]
@@ -1528,7 +1458,6 @@ fn pager_clone_zero() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, DestroyPagerWithActiveVmos)
 ///
 /// Drop the pager while VMOs are still mapped and threads are faulting.
 /// Threads should get errors, not hang. Requires demand-paging.
@@ -1539,7 +1468,6 @@ fn pager_destroy_with_active_vmos() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, RebindPager)
 ///
 /// Detach a VMO from one pager and re-bind it to a new pager. Faults
 /// should now go to the new pager. Requires demand-paging.
@@ -1550,7 +1478,6 @@ fn pager_rebind() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerPortQueuedPackets)
 ///
 /// Multiple page faults queue multiple packets on the port. Verify
 /// packet ordering and contents. Requires demand-paging.
@@ -1561,7 +1488,6 @@ fn pager_port_queued_packets() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VerifyPacketFormat)
 ///
 /// Verify the format of pager request packets on the port — key, type,
 /// offset, length fields. Requires demand-paging.
@@ -1572,7 +1498,6 @@ fn pager_verify_packet_format() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, MultiplePortObservers)
 ///
 /// Multiple port observers on the same pager VMO. Each fault should
 /// only produce one packet. Requires demand-paging.
@@ -1583,7 +1508,6 @@ fn pager_multiple_port_observers() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SupplyOverwritesExisting)
 ///
 /// Supply pages over already-supplied pages — new data should replace
 /// old data. Requires thread-based read verification with demand-paging.
@@ -1594,7 +1518,6 @@ fn pager_supply_overwrites_existing() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, OpRangeAlwaysNeed)
 ///
 /// ZX_PAGER_OP_ALWAYS_NEED hints that pages should be kept resident.
 /// Requires demand-paging infrastructure to verify residency behavior.
@@ -1605,7 +1528,6 @@ fn pager_op_range_always_need() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, OpRangeDontNeed)
 ///
 /// ZX_PAGER_OP_DONT_NEED hints that pages can be evicted. Requires
 /// demand-paging to verify eviction and re-fault behavior.
@@ -1616,7 +1538,6 @@ fn pager_op_range_dont_need() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerVmoName)
 ///
 /// Set and get the name of a pager-backed VMO while threads are
 /// faulting. Requires demand-paging for concurrent access.
@@ -1627,7 +1548,6 @@ fn pager_vmo_name() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerVmoContentSize)
 ///
 /// Set and get content_size on a pager-backed VMO while threads
 /// are reading/writing. Requires demand-paging for concurrent access.
@@ -1645,7 +1565,6 @@ fn pager_vmo_content_size() {
 // real memory access. zCore libos mode cannot create real user-space
 // mappings, so these are all #[should_panic].
 
-/// C++: TEST(PagerProcess, CreateProcess)
 ///
 /// Create a process with a pager-backed VMO mapped into it. Requires
 /// real VMAR mapping and process execution.
@@ -1656,7 +1575,6 @@ fn pager_process_create_process() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerProcess, DestroyProcess)
 ///
 /// Destroy a process while it has a pager-backed VMO mapped. The pager
 /// should receive no further requests. Requires process lifecycle.
@@ -1667,7 +1585,6 @@ fn pager_process_destroy_process() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerProcess, ReadThroughMapping)
 ///
 /// Read from a pager-backed VMO through a user-space mapping. The read
 /// triggers a page fault resolved by pager supply. Requires demand-paging.
@@ -1678,7 +1595,6 @@ fn pager_process_read_through_mapping() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerProcess, WriteThroughMapping)
 ///
 /// Write to a pager-backed VMO through a user-space mapping. The write
 /// triggers a page fault resolved by pager supply. Requires demand-paging.
@@ -1689,7 +1605,6 @@ fn pager_process_write_through_mapping() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerProcess, FaultAndSupply)
 ///
 /// A thread faults on a mapped pager VMO page, the pager reads the
 /// request from the port and supplies pages. Requires demand-paging.
@@ -1702,7 +1617,6 @@ fn pager_process_fault_and_supply() {
 
 // ── PagerWriteback tests (require TRAP_DIRTY + async writeback) ─────
 
-/// C++: TEST(PagerWriteback, WritebackBeginEnd)
 ///
 /// WRITEBACK_BEGIN followed by WRITEBACK_END on dirty pages. Requires
 /// TRAP_DIRTY faults and async writeback infrastructure.
@@ -1713,7 +1627,6 @@ fn pager_writeback_begin_end() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerWriteback, WritebackDirtyRange)
 ///
 /// Verify dirty range reporting after writeback cycle. Requires
 /// TRAP_DIRTY page fault handling.
@@ -1724,7 +1637,6 @@ fn pager_writeback_dirty_range() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerWriteback, WritebackPartial)
 ///
 /// Writeback only a subset of dirty pages. Remaining pages should
 /// still be dirty. Requires demand-paging infrastructure.
@@ -1735,7 +1647,6 @@ fn pager_writeback_partial() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerWriteback, WritebackAfterDetach)
 ///
 /// Writeback after pager detach should fail. Requires demand-paging.
 #[should_panic(expected = "needs demand-paging")]
@@ -1745,7 +1656,6 @@ fn pager_writeback_after_detach() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerWriteback, WritebackMultipleRanges)
 ///
 /// Multiple dirty ranges from non-contiguous writes, each written
 /// back separately. Requires demand-paging infrastructure.
@@ -1758,7 +1668,6 @@ fn pager_writeback_multiple_ranges() {
 
 // ── More Pager validation (TRAP_DIRTY variants) ─────────────────────
 
-/// C++: TEST(PagerTest, TrapDirtyCreate)
 ///
 /// Create a VMO with TRAP_DIRTY and verify it is pager-backed with
 /// dirty trap enabled. Requires demand-paging for fault handling.
@@ -1769,7 +1678,6 @@ fn pager_trap_dirty_create() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, TrapDirtyWrite)
 ///
 /// Write to a TRAP_DIRTY VMO via mapping — should trigger a dirty
 /// trap fault on the pager port. Requires demand-paging.
@@ -1780,7 +1688,6 @@ fn pager_trap_dirty_write() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, TrapDirtyRead)
 ///
 /// Read from a TRAP_DIRTY VMO — should trigger a normal read fault,
 /// not a dirty trap. Requires demand-paging infrastructure.
@@ -1791,7 +1698,6 @@ fn pager_trap_dirty_read() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, TrapDirtyQueryAfterWrite)
 ///
 /// After writing to a TRAP_DIRTY VMO and granting dirty permission,
 /// query_dirty_ranges should show the dirty pages. Requires demand-paging.
@@ -1802,7 +1708,6 @@ fn pager_trap_dirty_query_after_write() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, TrapDirtyWritebackCycle)
 ///
 /// Full dirty cycle: write → dirty trap → grant dirty → writeback begin
 /// → writeback end. Requires demand-paging infrastructure.
@@ -1815,7 +1720,6 @@ fn pager_trap_dirty_writeback_cycle() {
 
 // ── Pager stress tests (require concurrent threads) ─────────────────
 
-/// C++: TEST(PagerTest, MultipleVmosFaultConcurrent)
 ///
 /// Multiple VMOs fault concurrently from different threads. The pager
 /// must resolve each independently. Requires demand-paging + threads.
@@ -1826,7 +1730,6 @@ fn pager_multiple_vmos_fault_concurrent() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ConcurrentSupplyAndFault)
 ///
 /// One thread faults while another supplies pages concurrently.
 /// Tests thread-safety of supply_pages. Requires demand-paging.
@@ -1837,7 +1740,6 @@ fn pager_concurrent_supply_and_fault() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SupplyRace)
 ///
 /// Multiple threads race to supply the same page. Only one should
 /// win; others should be no-ops. Requires demand-paging + threads.
@@ -1848,7 +1750,6 @@ fn pager_supply_race() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, DetachRace)
 ///
 /// Detach races with a concurrent fault. The faulting thread should
 /// get an error, not hang. Requires demand-paging + threads.
@@ -1859,7 +1760,6 @@ fn pager_detach_race() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, CloseRace)
 ///
 /// Drop the pager while a fault is in progress. The faulting thread
 /// should get an error, not hang. Requires demand-paging + threads.
@@ -1872,7 +1772,6 @@ fn pager_close_race() {
 
 // ── ResizeWithPager tests ───────────────────────────────────────────
 
-/// C++: TEST(PagerTest, ResizeShrinkWithPager)
 ///
 /// Shrink a resizable pager VMO while a fault is pending on a page
 /// that is being removed. Requires demand-paging infrastructure.
@@ -1883,7 +1782,6 @@ fn pager_resize_shrink_with_pager() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ResizeGrowWithPager)
 ///
 /// Grow a resizable pager VMO and fault on the new pages. The pager
 /// must handle requests for the grown region. Requires demand-paging.
@@ -1894,7 +1792,6 @@ fn pager_resize_grow_with_pager() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ResizeThenFault)
 ///
 /// Resize a pager VMO (grow), then fault on the new region. The pager
 /// port should receive a request for the new offset. Requires demand-paging.
@@ -1905,7 +1802,6 @@ fn pager_resize_then_fault() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ResizeDuringFault)
 ///
 /// Resize while a fault is in progress. The fault should either
 /// complete or fail cleanly. Requires demand-paging + threads.
@@ -1916,7 +1812,6 @@ fn pager_resize_during_fault() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ResizeAndDetach)
 ///
 /// Resize a pager VMO, then detach. Faults on the VMO should return
 /// errors, not hang. Requires demand-paging infrastructure.
@@ -1932,7 +1827,6 @@ fn pager_resize_and_detach() {
 // These tests verify snapshot behavior on modified pager-backed VMOs.
 // All require demand-paging infrastructure (async page faults).
 
-/// C++: TEST(PagerTest, SnapshotModified)
 ///
 /// Create a snapshot of a pager-backed VMO after modifying supplied
 /// pages. The snapshot should see the modified data. Requires
@@ -1944,7 +1838,6 @@ fn pager_snapshot_modified() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SnapshotModifiedWrite)
 ///
 /// Write to a snapshot of a modified pager-backed VMO. The snapshot
 /// should COW the page and the original should be unaffected.
@@ -1956,7 +1849,6 @@ fn pager_snapshot_modified_write() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SnapshotModifiedClone)
 ///
 /// Create a nested clone of a snapshot of a modified pager-backed VMO.
 /// Reads should propagate through the clone chain. Requires
@@ -1968,7 +1860,6 @@ fn pager_snapshot_modified_clone() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SnapshotModifiedDecommit)
 ///
 /// Decommit pages from a snapshot of a modified pager-backed VMO.
 /// Re-reading should re-fault and require a new supply. Requires
@@ -1980,7 +1871,6 @@ fn pager_snapshot_modified_decommit() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, SnapshotModifiedResize)
 ///
 /// Resize a snapshot of a modified pager-backed VMO. The snapshot
 /// should reflect the new size. Requires demand-paging infrastructure.
@@ -1993,7 +1883,6 @@ fn pager_snapshot_modified_resize() {
 
 // ── Writeback-complete pager tests ──────────────────────────────────
 
-/// C++: TEST(PagerWriteback, WritebackComplete)
 ///
 /// Full writeback cycle: dirty pages, begin writeback, end writeback.
 /// After completion, pages should no longer be dirty. Requires
@@ -2005,7 +1894,6 @@ fn pager_writeback_complete() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerWriteback, WritebackCompleteMultiple)
 ///
 /// Complete writeback on multiple dirty ranges independently. Each
 /// range should transition from dirty to clean. Requires demand-paging.
@@ -2016,7 +1904,6 @@ fn pager_writeback_complete_multiple() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerWriteback, WritebackCompleteAfterDetach)
 ///
 /// Attempt writeback after pager detach. Should fail cleanly.
 /// Requires demand-paging infrastructure.
@@ -2027,7 +1914,6 @@ fn pager_writeback_complete_after_detach() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerWriteback, WritebackCompletePartial)
 ///
 /// Complete writeback on only a subset of dirty pages. Remaining
 /// pages should still be dirty. Requires demand-paging.
@@ -2038,7 +1924,6 @@ fn pager_writeback_complete_partial() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerWriteback, WritebackAndDirty)
 ///
 /// Pages dirtied during writeback should remain dirty after the
 /// writeback cycle completes. Requires demand-paging + TRAP_DIRTY.
@@ -2051,7 +1936,6 @@ fn pager_writeback_and_dirty() {
 
 // ── Pager close lifecycle tests ─────────────────────────────────────
 
-/// C++: TEST(PagerTest, ClosePagerPortStillWorks)
 ///
 /// After closing the pager, the port should still be usable for
 /// other operations (queue, wait). The port is independent of the
@@ -2063,7 +1947,6 @@ fn pager_close_port_still_works() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ClosePagerAllVmosDetached)
 ///
 /// Closing the pager should detach all VMOs. Subsequent page faults
 /// on those VMOs should return errors. Requires demand-paging.
@@ -2074,7 +1957,6 @@ fn pager_close_all_vmos_detached() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerDropAllReferences)
 ///
 /// Drop all references (pager, port, VMOs). Nothing should leak or
 /// panic. Requires demand-paging for waiter cleanup verification.
@@ -2085,7 +1967,6 @@ fn pager_drop_all_references() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerMultiplePortsOneVmo)
 ///
 /// Create multiple VMOs on the same pager using different ports.
 /// Each port should receive requests only for its VMO. Requires
@@ -2097,7 +1978,6 @@ fn pager_multiple_ports_one_vmo() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerPortClose)
 ///
 /// Close the port while VMOs are still active. Page faults should
 /// fail gracefully. Requires demand-paging infrastructure.
@@ -2110,7 +1990,6 @@ fn pager_port_close() {
 
 // ── Pager VMO operation tests ───────────────────────────────────────
 
-/// C++: TEST(PagerTest, VmoCloneWithPager)
 ///
 /// Create a snapshot clone of a pager-backed VMO. Reads from the
 /// clone should trigger faults on the original pager. Requires
@@ -2122,7 +2001,6 @@ fn pager_vmo_clone_with_pager() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VmoSliceWithPager)
 ///
 /// Create a slice of a pager-backed VMO. Reads from the slice
 /// should trigger faults on the original pager. Requires
@@ -2134,7 +2012,6 @@ fn pager_vmo_slice_with_pager() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VmoReferenceWithPager)
 ///
 /// Create a reference child of a pager-backed VMO. Reads through
 /// the reference should fault the original pager. Requires
@@ -2146,7 +2023,6 @@ fn pager_vmo_reference_with_pager() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VmoChildSnapshotWithPager)
 ///
 /// Create a child snapshot of a pager-backed VMO and verify COW
 /// behavior on page faults. Requires demand-paging infrastructure.
@@ -2157,7 +2033,6 @@ fn pager_vmo_child_snapshot_with_pager() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VmoChildSliceWithPager)
 ///
 /// Create a child slice of a pager-backed VMO. The slice shares
 /// the parent's pages and triggers faults on the parent's pager.
@@ -2171,7 +2046,6 @@ fn pager_vmo_child_slice_with_pager() {
 
 // ── Advanced pager tests ────────────────────────────────────────────
 
-/// C++: TEST(PagerTest, PagerUnboundedVmo)
 ///
 /// Create an unbounded pager-backed VMO (ZX_VMO_UNBOUNDED). The VMO
 /// has no fixed size limit. Faults at any offset are forwarded to
@@ -2183,7 +2057,6 @@ fn pager_unbounded_vmo() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerBoundedVmo)
 ///
 /// Create a bounded pager-backed VMO with a fixed size. Faults beyond
 /// the size should fail. Requires demand-paging infrastructure.
@@ -2194,7 +2067,6 @@ fn pager_bounded_vmo() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerContentSizeTracking)
 ///
 /// Verify content_size is properly tracked on a pager-backed VMO as
 /// pages are supplied and written. Requires demand-paging for mapped
@@ -2206,7 +2078,6 @@ fn pager_content_size_tracking() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerQueryStats)
 ///
 /// Query pager statistics (modified/dirty page counts) on a
 /// pager-backed VMO. Requires demand-paging + TRAP_DIRTY.
@@ -2217,7 +2088,6 @@ fn pager_query_stats() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerQueryStatsAfterDetach)
 ///
 /// Query pager statistics after detaching the VMO. The stats should
 /// reflect the final state. Requires demand-paging infrastructure.
@@ -2230,7 +2100,6 @@ fn pager_query_stats_after_detach() {
 
 // ── Concurrent pager tests ──────────────────────────────────────────
 
-/// C++: TEST(PagerTest, PagerConcurrentSupply)
 ///
 /// Multiple threads supply pages to different offsets concurrently.
 /// All supplies should complete without data corruption. Requires
@@ -2242,7 +2111,6 @@ fn pager_concurrent_supply() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerConcurrentDetach)
 ///
 /// Detach multiple VMOs from a pager concurrently. Each detach should
 /// complete exactly once. Requires demand-paging + concurrent threads.
@@ -2253,7 +2121,6 @@ fn pager_concurrent_detach() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerConcurrentClose)
 ///
 /// Close the pager while multiple VMOs are faulting concurrently.
 /// All faulting threads should unblock with errors. Requires
@@ -2265,7 +2132,6 @@ fn pager_concurrent_close() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerConcurrentFault)
 ///
 /// Multiple threads fault on different pages of the same VMO
 /// concurrently. The pager should receive one request per page.
@@ -2277,7 +2143,6 @@ fn pager_concurrent_fault() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PagerConcurrentResize)
 ///
 /// Resize a pager-backed VMO while faults are in progress. Faults on
 /// removed pages should fail; faults on remaining pages should
@@ -2295,7 +2160,6 @@ fn pager_concurrent_resize() {
 // decommit, dirty traps, writeback lifecycle, page requests, watermarks,
 // and VMO info queries. All require demand-paging infrastructure.
 
-/// C++: TEST(PagerTest, EvictPages)
 ///
 /// Evict supplied pages from a pager-backed VMO. Re-reading those
 /// pages should trigger new page faults. Requires demand-paging.
@@ -2306,7 +2170,6 @@ fn pager_evict_pages() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, EvictPagesRange)
 ///
 /// Evict a specific range of pages from a pager-backed VMO. Only
 /// the evicted range should re-fault. Requires demand-paging.
@@ -2317,7 +2180,6 @@ fn pager_evict_pages_range() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, EvictClone)
 ///
 /// Evict pages from a clone of a pager-backed VMO. The clone should
 /// re-fault through the parent pager. Requires demand-paging.
@@ -2328,7 +2190,6 @@ fn pager_evict_clone() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, EvictAfterDetach)
 ///
 /// Evict pages after the pager has been detached. The eviction should
 /// succeed but re-faults should fail with BAD_STATE. Requires
@@ -2340,7 +2201,6 @@ fn pager_evict_after_detach() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ReadPinnedPages)
 ///
 /// Read from pinned pages in a pager-backed VMO. Pinned pages are
 /// locked in memory and should not be evicted. Requires demand-paging.
@@ -2351,7 +2211,6 @@ fn pager_read_pinned_pages() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, WritePinnedPages)
 ///
 /// Write to pinned pages in a pager-backed VMO. Pinned pages are
 /// locked in memory. Requires demand-paging + BTI pinning.
@@ -2362,7 +2221,6 @@ fn pager_write_pinned_pages() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PinBeforeSupply)
 ///
 /// Pin pages before they are supplied by the pager. The pin should
 /// block until the pages are supplied. Requires demand-paging + BTI.
@@ -2373,7 +2231,6 @@ fn pager_pin_before_supply() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PinAfterSupply)
 ///
 /// Pin pages after they have been supplied. The pin should succeed
 /// immediately. Requires demand-paging + BTI pinning.
@@ -2384,7 +2241,6 @@ fn pager_pin_after_supply() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, DecommitPages)
 ///
 /// Decommit pages from a pager-backed VMO. The decommitted pages
 /// should re-fault on next access. Requires demand-paging.
@@ -2395,7 +2251,6 @@ fn pager_decommit_pages() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, DecommitPagerRange)
 ///
 /// Decommit a specific range of pages from a pager-backed VMO.
 /// Only the decommitted range should re-fault. Requires demand-paging.
@@ -2406,7 +2261,6 @@ fn pager_decommit_pager_range() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, CommitRange)
 ///
 /// Commit a range of pages in a pager-backed VMO. This should trigger
 /// page faults that the pager resolves. Requires demand-paging.
@@ -2417,7 +2271,6 @@ fn pager_commit_range() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, CommitBeforeSupply)
 ///
 /// Commit pages before the pager has supplied them. The commit should
 /// block until the pager supplies the data. Requires demand-paging.
@@ -2428,7 +2281,6 @@ fn pager_commit_before_supply() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, TrapDirtyPinned)
 ///
 /// Write to a pinned page in a TRAP_DIRTY VMO. The dirty trap should
 /// fire even for pinned pages. Requires demand-paging + BTI + TRAP_DIRTY.
@@ -2439,7 +2291,6 @@ fn pager_trap_dirty_pinned() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, TrapDirtyAfterDetach)
 ///
 /// Write to a TRAP_DIRTY VMO after detaching the pager. The write
 /// should fail since the pager can no longer grant dirty permission.
@@ -2451,7 +2302,6 @@ fn pager_trap_dirty_after_detach() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, TrapDirtyClone)
 ///
 /// Write to a clone of a TRAP_DIRTY VMO. The dirty trap should fire
 /// on the parent pager. Requires demand-paging + TRAP_DIRTY.
@@ -2462,7 +2312,6 @@ fn pager_trap_dirty_clone() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, DirtyRangesMultiplePages)
 ///
 /// Dirty multiple non-contiguous pages and verify query_dirty_ranges
 /// returns all dirty ranges. Requires demand-paging + TRAP_DIRTY.
@@ -2473,7 +2322,6 @@ fn pager_dirty_ranges_multiple_pages() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, WritebackInProgress)
 ///
 /// Start a writeback (WRITEBACK_BEGIN) and verify pages are marked
 /// as writeback-in-progress. New dirty traps during writeback should
@@ -2485,7 +2333,6 @@ fn pager_writeback_in_progress() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, WritebackClean)
 ///
 /// Complete a writeback cycle and verify pages transition from dirty
 /// to clean state. Requires demand-paging + TRAP_DIRTY.
@@ -2496,7 +2343,6 @@ fn pager_writeback_clean() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, WritebackDirtyDuringWriteback)
 ///
 /// Dirty a page while writeback is in progress. The page should remain
 /// dirty after the writeback cycle completes. Requires demand-paging.
@@ -2507,7 +2353,6 @@ fn pager_writeback_dirty_during_writeback() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, ConcurrentWritebackAndFault)
 ///
 /// Concurrent writeback and page fault on different pages. Both
 /// operations should complete independently. Requires demand-paging
@@ -2519,7 +2364,6 @@ fn pager_concurrent_writeback_and_fault() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VerifyPageRequestPacket)
 ///
 /// Verify the format and contents of a page request packet received
 /// on the pager port. The packet should contain the correct key,
@@ -2531,7 +2375,6 @@ fn pager_verify_page_request_packet() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PageRequestKey)
 ///
 /// Verify the key field in page request packets matches the key
 /// passed to create_vmo. Requires demand-paging.
@@ -2542,7 +2385,6 @@ fn pager_page_request_key() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, MultiplePageRequests)
 ///
 /// Trigger multiple page faults and verify each generates a separate
 /// page request packet on the port. Requires demand-paging.
@@ -2553,7 +2395,6 @@ fn pager_multiple_page_requests() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, PageRequestAfterDetach)
 ///
 /// Trigger a page fault after the pager has been detached. The fault
 /// should fail immediately without generating a packet. Requires
@@ -2565,7 +2406,6 @@ fn pager_page_request_after_detach() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, WatermarkSignals)
 ///
 /// Set watermark thresholds on a pager-backed VMO and verify the
 /// appropriate signals are asserted when memory usage crosses
@@ -2577,7 +2417,6 @@ fn pager_watermark_signals() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VmoInfoFlags)
 ///
 /// Query VMO info flags on a pager-backed VMO. The flags should
 /// indicate pager-backed status and any additional attributes.
@@ -2589,7 +2428,6 @@ fn pager_vmo_info_flags() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VmoInfoAfterDetach)
 ///
 /// Query VMO info after the pager has been detached. The flags
 /// should no longer indicate pager-backed status. Requires
@@ -2601,7 +2439,6 @@ fn pager_vmo_info_after_detach() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VmoInfoCommittedBytes)
 ///
 /// Query committed bytes on a pager-backed VMO. Only supplied pages
 /// should be counted as committed. Requires demand-paging for
@@ -2613,7 +2450,6 @@ fn pager_vmo_info_committed_bytes() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VmoOpAlwaysNeed)
 ///
 /// Issue ZX_VMO_OP_ALWAYS_NEED on a pager-backed VMO. This hints
 /// the kernel to keep pages resident. The operation should trigger
@@ -2625,7 +2461,6 @@ fn pager_vmo_op_always_need() {
     panic!("needs demand-paging");
 }
 
-/// C++: TEST(PagerTest, VmoOpDontNeed)
 ///
 /// Issue ZX_VMO_OP_DONT_NEED on a pager-backed VMO. This hints
 /// the kernel that pages can be evicted. Re-accessing evicted

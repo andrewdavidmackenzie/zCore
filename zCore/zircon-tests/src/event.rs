@@ -75,7 +75,6 @@ fn eventpair_signal_peer() {
     assert!(!ep0.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(EventTest, MultipleSignals)
 #[test]
 fn event_multiple_signals() {
     let _ctx = TestContext::new();
@@ -89,7 +88,6 @@ fn event_multiple_signals() {
     assert!(!sig.contains(Signal::USER_SIGNAL_3));
 }
 
-/// C++: TEST(EventTest, SignaledBit)
 #[test]
 fn event_signaled_bit() {
     let _ctx = TestContext::new();
@@ -103,7 +101,6 @@ fn event_signaled_bit() {
     assert!(!event.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(EventTest, Name)
 #[test]
 fn event_name() {
     let _ctx = TestContext::new();
@@ -218,7 +215,6 @@ fn signal_self_after_peer_closed() {
     assert!(sig.contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(EventPairTest, UserSignals)
 ///
 /// All eight USER_SIGNAL bits (0..7) can be independently set and
 /// cleared on an eventpair endpoint.

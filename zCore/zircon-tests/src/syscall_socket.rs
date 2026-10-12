@@ -97,7 +97,6 @@ fn peer_closed_error() {
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-/// C++: TEST(SocketTest, Shutdown) — syscall level
 #[test]
 fn shutdown_write() {
     let ctx = TestContext::new();

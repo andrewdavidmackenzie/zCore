@@ -320,7 +320,6 @@ fn vmo_info_basic() {
     assert_eq!(size, (2 * PAGE_SIZE) as u64);
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoVmoZeroSizedBufferFails)
 #[test]
 fn vmo_info_zero_buffer() {
     let ctx = TestContext::new();
@@ -332,7 +331,6 @@ fn vmo_info_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoVmoInvalidHandleFails)
 #[test]
 fn vmo_info_invalid_handle() {
     let ctx = TestContext::new();
@@ -388,7 +386,6 @@ fn process_info_handle_basic_zero_buffer() {
 const TOPIC_JOB: u32 = 24;
 const JOB_INFO_SIZE: usize = 16; // zx_info_job_t
 
-/// C++: TEST_F(JobGetInfoTest, InfoJobOnSelfSucceeds)
 #[test]
 fn job_info_on_self() {
     let ctx = TestContext::new();
@@ -401,7 +398,6 @@ fn job_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST_F(JobGetInfoTest, InfoJobInvalidHandleFails)
 #[test]
 fn job_info_invalid_handle() {
     let ctx = TestContext::new();
@@ -412,7 +408,6 @@ fn job_info_invalid_handle() {
     );
 }
 
-/// C++: TEST_F(JobGetInfoTest, InfoJobZeroSizedBufferFails)
 #[test]
 fn job_info_zero_buffer() {
     let ctx = TestContext::new();
@@ -467,7 +462,6 @@ fn handle_valid_closed_fails() {
 const TOPIC_SOCKET: u32 = 22;
 const SOCKET_INFO_SIZE: usize = 48; // zx_info_socket_t
 
-/// C++: TEST(SocketGetInfoTest, InfoSocketOnSelfSucceeds)
 #[test]
 fn socket_info_on_self() {
     let ctx = TestContext::new();
@@ -480,7 +474,6 @@ fn socket_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoSocketInvalidHandleFails)
 #[test]
 fn socket_info_invalid_handle() {
     let ctx = TestContext::new();
@@ -491,7 +484,6 @@ fn socket_info_invalid_handle() {
     );
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoSocketZeroSizedBufferFails)
 #[test]
 fn socket_info_zero_buffer() {
     let ctx = TestContext::new();
@@ -508,7 +500,6 @@ fn socket_info_zero_buffer() {
 const TOPIC_TIMER: u32 = 25;
 const TIMER_INFO_SIZE: usize = 24; // zx_info_timer_t
 
-/// C++: TEST(TimerGetInfoTest, InfoTimerOnSelfSucceeds)
 #[test]
 fn timer_info_on_self() {
     let ctx = TestContext::new();
@@ -523,7 +514,6 @@ fn timer_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoTimerInvalidHandleFails)
 #[test]
 fn timer_info_invalid_handle() {
     let ctx = TestContext::new();
@@ -534,7 +524,6 @@ fn timer_info_invalid_handle() {
     );
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoTimerZeroSizedBufferFails)
 #[test]
 fn timer_info_zero_buffer() {
     let ctx = TestContext::new();
@@ -553,7 +542,6 @@ fn timer_info_zero_buffer() {
 const TOPIC_STREAM: u32 = 26;
 const STREAM_INFO_SIZE: usize = 24; // zx_info_stream_t
 
-/// C++: TEST(StreamGetInfoTest, InfoStreamOnSelfSucceeds)
 #[test]
 fn stream_info_on_self() {
     let ctx = TestContext::new();
@@ -569,7 +557,6 @@ fn stream_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(StreamGetInfoTest, InfoStreamInvalidHandleFails)
 #[test]
 fn stream_info_invalid_handle() {
     let ctx = TestContext::new();
@@ -580,7 +567,6 @@ fn stream_info_invalid_handle() {
     );
 }
 
-/// C++: TEST(StreamGetInfoTest, InfoStreamZeroSizedBufferFails)
 #[test]
 fn stream_info_zero_buffer() {
     let ctx = TestContext::new();
@@ -600,7 +586,6 @@ fn stream_info_zero_buffer() {
 const TOPIC_BTI: u32 = 20;
 const BTI_INFO_SIZE: usize = 32; // zx_info_bti_t
 
-/// C++: TEST(BtiGetInfoTest, InfoBtiOnSelfSucceeds)
 #[test]
 fn bti_info_on_self() {
     let ctx = TestContext::new();
@@ -614,7 +599,6 @@ fn bti_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoBtiInvalidHandleFails)
 #[test]
 fn bti_info_invalid_handle() {
     let ctx = TestContext::new();
@@ -625,7 +609,6 @@ fn bti_info_invalid_handle() {
     );
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoBtiZeroSizedBufferFails)
 #[test]
 fn bti_info_zero_buffer() {
     let ctx = TestContext::new();
@@ -829,7 +812,6 @@ fn process_info_handle_stats() {
 const TOPIC_RESOURCE: u32 = 18;
 const RESOURCE_INFO_SIZE: usize = 56; // zx_info_resource_t
 
-/// C++: TEST_F(ResourceGetInfoTest, InfoResourceOnSelfSucceeds)
 #[test]
 fn resource_info_on_self() {
     let ctx = TestContext::new();
@@ -841,7 +823,6 @@ fn resource_info_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST_F(ResourceGetInfoTest, InfoResourceInvalidHandleFails)
 #[test]
 fn resource_info_invalid_handle() {
     let ctx = TestContext::new();
@@ -1468,7 +1449,6 @@ fn process_info_threads_invalid_handle() {
     );
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessThreadsZeroSizedBufferIsOk)
 #[test]
 fn process_info_threads_zero_buffer() {
     let ctx = TestContext::new();
@@ -1759,7 +1739,6 @@ fn thread_info_bad_avail() {
 
 const VMO_INFO_SIZE: usize = 168;
 
-/// C++: TEST(VmoGetInfoTest, InfoVmoNullAvailSucceeds)
 #[test]
 fn vmo_info_null_avail() {
     let ctx = TestContext::new();
@@ -1782,7 +1761,6 @@ fn vmo_info_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoVmoNullActualSucceeds)
 #[test]
 fn vmo_info_null_actual() {
     let ctx = TestContext::new();
@@ -1805,7 +1783,6 @@ fn vmo_info_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoVmoNullActualAndAvailSucceeds)
 #[test]
 fn vmo_info_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -1827,7 +1804,6 @@ fn vmo_info_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoVmoInvalidBufferPointerFails)
 #[test]
 fn vmo_info_invalid_buffer() {
     let ctx = TestContext::new();
@@ -1851,7 +1827,6 @@ fn vmo_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoVmoBadActualIsInvalidArg)
 #[test]
 fn vmo_info_bad_actual() {
     let ctx = TestContext::new();
@@ -1875,7 +1850,6 @@ fn vmo_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoVmoBadAvailIsInvalidArg)
 #[test]
 fn vmo_info_bad_avail() {
     let ctx = TestContext::new();
@@ -2161,7 +2135,6 @@ fn job_info_handle_basic_bad_avail() {
 
 // ── SOCKET (topic 22) — missing tests ──────────────────────────────
 
-/// C++: TEST(SocketGetInfoTest, InfoSocketNullAvailSucceeds)
 #[test]
 fn socket_info_null_avail() {
     let ctx = TestContext::new();
@@ -2182,7 +2155,6 @@ fn socket_info_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoSocketNullActualSucceeds)
 #[test]
 fn socket_info_null_actual() {
     let ctx = TestContext::new();
@@ -2203,7 +2175,6 @@ fn socket_info_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoSocketNullActualAndAvailSucceeds)
 #[test]
 fn socket_info_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -2223,7 +2194,6 @@ fn socket_info_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoSocketInvalidBufferPointerFails)
 #[test]
 fn socket_info_invalid_buffer() {
     let ctx = TestContext::new();
@@ -2245,7 +2215,6 @@ fn socket_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoSocketBadActualIsInvalidArg)
 #[test]
 fn socket_info_bad_actual() {
     let ctx = TestContext::new();
@@ -2267,7 +2236,6 @@ fn socket_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoSocketBadAvailIsInvalidArg)
 #[test]
 fn socket_info_bad_avail() {
     let ctx = TestContext::new();
@@ -2291,7 +2259,6 @@ fn socket_info_bad_avail() {
 
 // ── BTI (topic 20) — missing tests ─────────────────────────────────
 
-/// C++: TEST(BtiGetInfoTest, InfoBtiNullAvailSucceeds)
 #[test]
 fn bti_info_null_avail() {
     let ctx = TestContext::new();
@@ -2313,7 +2280,6 @@ fn bti_info_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoBtiNullActualSucceeds)
 #[test]
 fn bti_info_null_actual() {
     let ctx = TestContext::new();
@@ -2335,7 +2301,6 @@ fn bti_info_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoBtiNullActualAndAvailSucceeds)
 #[test]
 fn bti_info_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -2356,7 +2321,6 @@ fn bti_info_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoBtiInvalidBufferPointerFails)
 #[test]
 fn bti_info_invalid_buffer() {
     let ctx = TestContext::new();
@@ -2379,7 +2343,6 @@ fn bti_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoBtiBadActualIsInvalidArg)
 #[test]
 fn bti_info_bad_actual() {
     let ctx = TestContext::new();
@@ -2402,7 +2365,6 @@ fn bti_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoBtiBadAvailIsInvalidArg)
 #[test]
 fn bti_info_bad_avail() {
     let ctx = TestContext::new();
@@ -2427,7 +2389,6 @@ fn bti_info_bad_avail() {
 
 // ── TIMER (topic 25) — remaining 6 tests ──────────────────────────
 
-/// C++: TEST(TimerGetInfoTest, InfoTimerNullAvailSucceeds)
 #[test]
 fn timer_info_null_avail() {
     let ctx = TestContext::new();
@@ -2450,7 +2411,6 @@ fn timer_info_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoTimerNullActualSucceeds)
 #[test]
 fn timer_info_null_actual() {
     let ctx = TestContext::new();
@@ -2473,7 +2433,6 @@ fn timer_info_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoTimerNullActualAndAvailSucceeds)
 #[test]
 fn timer_info_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -2495,7 +2454,6 @@ fn timer_info_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoTimerInvalidBufferPointerFails)
 #[test]
 fn timer_info_invalid_buffer() {
     let ctx = TestContext::new();
@@ -2519,7 +2477,6 @@ fn timer_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoTimerBadActualIsInvalidArg)
 #[test]
 fn timer_info_bad_actual() {
     let ctx = TestContext::new();
@@ -2543,7 +2500,6 @@ fn timer_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoTimerBadAvailIsInvalidArg)
 #[test]
 fn timer_info_bad_avail() {
     let ctx = TestContext::new();
@@ -2569,7 +2525,6 @@ fn timer_info_bad_avail() {
 
 // ── STREAM (topic 26) — remaining 6 tests ─────────────────────────
 
-/// C++: TEST(StreamGetInfoTest, InfoStreamNullAvailSucceeds)
 #[test]
 fn stream_info_null_avail() {
     let ctx = TestContext::new();
@@ -2593,7 +2548,6 @@ fn stream_info_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(StreamGetInfoTest, InfoStreamNullActualSucceeds)
 #[test]
 fn stream_info_null_actual() {
     let ctx = TestContext::new();
@@ -2617,7 +2571,6 @@ fn stream_info_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(StreamGetInfoTest, InfoStreamNullActualAndAvailSucceeds)
 #[test]
 fn stream_info_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -2640,7 +2593,6 @@ fn stream_info_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(StreamGetInfoTest, InfoStreamInvalidBufferPointerFails)
 #[test]
 fn stream_info_invalid_buffer() {
     let ctx = TestContext::new();
@@ -2665,7 +2617,6 @@ fn stream_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(StreamGetInfoTest, InfoStreamBadActualIsInvalidArg)
 #[test]
 fn stream_info_bad_actual() {
     let ctx = TestContext::new();
@@ -2690,7 +2641,6 @@ fn stream_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(StreamGetInfoTest, InfoStreamBadAvailIsInvalidArg)
 #[test]
 fn stream_info_bad_avail() {
     let ctx = TestContext::new();
@@ -2717,7 +2667,6 @@ fn stream_info_bad_avail() {
 
 // ── RESOURCE (topic 18) — remaining 7 tests ───────────────────────
 
-/// C++: TEST_F(ResourceGetInfoTest, InfoResourceZeroSizedBufferFails)
 #[test]
 fn resource_info_zero_buffer() {
     let ctx = TestContext::new();
@@ -2728,7 +2677,6 @@ fn resource_info_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST_F(ResourceGetInfoTest, InfoResourceNullAvailSucceeds)
 #[test]
 fn resource_info_null_avail() {
     let ctx = TestContext::new();
@@ -2748,7 +2696,6 @@ fn resource_info_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(ResourceGetInfoTest, InfoResourceNullActualSucceeds)
 #[test]
 fn resource_info_null_actual() {
     let ctx = TestContext::new();
@@ -2768,7 +2715,6 @@ fn resource_info_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST_F(ResourceGetInfoTest, InfoResourceNullActualAndAvailSucceeds)
 #[test]
 fn resource_info_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -2787,7 +2733,6 @@ fn resource_info_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(ResourceGetInfoTest, InfoResourceInvalidBufferPointerFails)
 #[test]
 fn resource_info_invalid_buffer() {
     let ctx = TestContext::new();
@@ -2808,7 +2753,6 @@ fn resource_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ResourceGetInfoTest, InfoResourceBadActualIsInvalidArg)
 #[test]
 fn resource_info_bad_actual() {
     let ctx = TestContext::new();
@@ -2829,7 +2773,6 @@ fn resource_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ResourceGetInfoTest, InfoResourceBadAvailIsInvalidArg)
 #[test]
 fn resource_info_bad_avail() {
     let ctx = TestContext::new();
@@ -2982,7 +2925,6 @@ fn thread_info_thread_stats_bad_avail() {
 
 // ── HANDLE_COUNT (topic 19) — remaining 8 tests ──────────────────
 
-/// C++: TEST(ObjectGetInfoTest, InfoHandleCountInvalidHandleFails)
 #[test]
 fn handle_count_invalid_handle() {
     let ctx = TestContext::new();
@@ -2993,7 +2935,6 @@ fn handle_count_invalid_handle() {
     );
 }
 
-/// C++: TEST(ObjectGetInfoTest, InfoHandleCountZeroSizedBufferFails)
 #[test]
 fn handle_count_zero_buffer() {
     let ctx = TestContext::new();
@@ -3007,7 +2948,6 @@ fn handle_count_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(ObjectGetInfoTest, InfoHandleCountNullAvailSucceeds)
 #[test]
 fn handle_count_null_avail() {
     let ctx = TestContext::new();
@@ -3030,7 +2970,6 @@ fn handle_count_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(ObjectGetInfoTest, InfoHandleCountNullActualSucceeds)
 #[test]
 fn handle_count_null_actual() {
     let ctx = TestContext::new();
@@ -3053,7 +2992,6 @@ fn handle_count_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(ObjectGetInfoTest, InfoHandleCountNullActualAndAvailSucceeds)
 #[test]
 fn handle_count_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -3075,7 +3013,6 @@ fn handle_count_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(ObjectGetInfoTest, InfoHandleCountInvalidBufferPointerFails)
 #[test]
 fn handle_count_invalid_buffer() {
     let ctx = TestContext::new();
@@ -3099,7 +3036,6 @@ fn handle_count_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(ObjectGetInfoTest, InfoHandleCountBadActualIsInvalidArg)
 #[test]
 fn handle_count_bad_actual() {
     let ctx = TestContext::new();
@@ -3123,7 +3059,6 @@ fn handle_count_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(ObjectGetInfoTest, InfoHandleCountBadAvailIsInvalidArg)
 #[test]
 fn handle_count_bad_avail() {
     let ctx = TestContext::new();
@@ -3427,7 +3362,6 @@ fn thread_info_handle_basic_bad_avail() {
 
 // ── JOB (topic 24) — remaining 6 tests ────────────────────────────
 
-/// C++: TEST_F(JobGetInfoTest, InfoJobNullAvailSucceeds)
 #[test]
 fn job_info_null_avail() {
     let ctx = TestContext::new();
@@ -3448,7 +3382,6 @@ fn job_info_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(JobGetInfoTest, InfoJobNullActualSucceeds)
 #[test]
 fn job_info_null_actual() {
     let ctx = TestContext::new();
@@ -3469,7 +3402,6 @@ fn job_info_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST_F(JobGetInfoTest, InfoJobNullActualAndAvailSucceeds)
 #[test]
 fn job_info_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -3489,7 +3421,6 @@ fn job_info_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(JobGetInfoTest, InfoJobInvalidBufferPointerFails)
 #[test]
 fn job_info_invalid_buffer() {
     let ctx = TestContext::new();
@@ -3511,7 +3442,6 @@ fn job_info_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(JobGetInfoTest, InfoJobBadActualIsInvalidArg)
 #[test]
 fn job_info_bad_actual() {
     let ctx = TestContext::new();
@@ -3533,7 +3463,6 @@ fn job_info_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(JobGetInfoTest, InfoJobBadAvailIsInvalidArg)
 #[test]
 fn job_info_bad_avail() {
     let ctx = TestContext::new();
@@ -3557,7 +3486,6 @@ fn job_info_bad_avail() {
 
 // ── PROCESS_HANDLE_STATS (topic 21) — remaining 8 tests ──────────
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleStatsInvalidHandleFails)
 #[test]
 fn process_info_handle_stats_invalid_handle() {
     let ctx = TestContext::new();
@@ -3568,7 +3496,6 @@ fn process_info_handle_stats_invalid_handle() {
     );
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleStatsZeroSizedBufferFails)
 #[test]
 fn process_info_handle_stats_zero_buffer() {
     let ctx = TestContext::new();
@@ -3582,7 +3509,6 @@ fn process_info_handle_stats_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleStatsNullAvailSucceeds)
 #[test]
 fn process_info_handle_stats_null_avail() {
     let ctx = TestContext::new();
@@ -3605,7 +3531,6 @@ fn process_info_handle_stats_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleStatsNullActualSucceeds)
 #[test]
 fn process_info_handle_stats_null_actual() {
     let ctx = TestContext::new();
@@ -3628,7 +3553,6 @@ fn process_info_handle_stats_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleStatsNullActualAndAvailSucceeds)
 #[test]
 fn process_info_handle_stats_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -3650,7 +3574,6 @@ fn process_info_handle_stats_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleStatsInvalidBufferPointerFails)
 #[test]
 fn process_info_handle_stats_invalid_buffer() {
     let ctx = TestContext::new();
@@ -3674,7 +3597,6 @@ fn process_info_handle_stats_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleStatsBadActualIsInvalidArg)
 #[test]
 fn process_info_handle_stats_bad_actual() {
     let ctx = TestContext::new();
@@ -3698,7 +3620,6 @@ fn process_info_handle_stats_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleStatsBadAvailIsInvalidArg)
 #[test]
 fn process_info_handle_stats_bad_avail() {
     let ctx = TestContext::new();
@@ -3748,7 +3669,6 @@ fn process_info_handle_table_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableNullActualSucceeds)
 #[test]
 fn process_info_handle_table_null_actual() {
     let ctx = TestContext::new();
@@ -3772,7 +3692,6 @@ fn process_info_handle_table_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableNullActualAndAvailSucceeds)
 #[test]
 fn process_info_handle_table_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -3819,7 +3738,6 @@ fn process_info_handle_table_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableBadActualIsInvalidArg)
 #[test]
 fn process_info_handle_table_bad_actual() {
     let ctx = TestContext::new();
@@ -3844,7 +3762,6 @@ fn process_info_handle_table_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableBadAvailIsInvalidArg)
 #[test]
 fn process_info_handle_table_bad_avail() {
     let ctx = TestContext::new();
@@ -3869,7 +3786,6 @@ fn process_info_handle_table_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableZeroSizedBufferIsOk)
 #[test]
 fn process_info_handle_table_zero_buffer() {
     let ctx = TestContext::new();
@@ -3996,7 +3912,6 @@ fn process_info_maps_bad_avail() {
     panic!("not yet implemented");
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsZeroBuffer)
 ///
 /// PROCESS_MAPS with zero-length buffer should succeed with actual=0
 /// and avail reporting the number of entries. Not implemented in zCore.
@@ -4115,7 +4030,6 @@ fn process_info_vmos_bad_avail() {
     panic!("not yet implemented");
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosZeroBuffer)
 ///
 /// PROCESS_VMOS with zero-length buffer should succeed with actual=0
 /// and avail reporting the number of VMOs. Not implemented in zCore.
@@ -4130,7 +4044,6 @@ fn process_info_vmos_zero_buffer() {
 // HANDLE_BASIC on Event (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(EventGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn event_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -4156,7 +4069,6 @@ fn event_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(EventGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn event_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -4167,7 +4079,6 @@ fn event_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(EventGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn event_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -4181,7 +4092,6 @@ fn event_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(EventGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn event_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -4204,7 +4114,6 @@ fn event_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(EventGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn event_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -4227,7 +4136,6 @@ fn event_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(EventGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn event_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -4249,7 +4157,6 @@ fn event_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(EventGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn event_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -4273,7 +4180,6 @@ fn event_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(EventGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn event_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -4297,7 +4203,6 @@ fn event_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(EventGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn event_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
@@ -4325,7 +4230,6 @@ fn event_info_handle_basic_bad_avail() {
 // HANDLE_BASIC on EventPair (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn eventpair_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -4351,7 +4255,6 @@ fn eventpair_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn eventpair_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -4362,7 +4265,6 @@ fn eventpair_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn eventpair_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -4376,7 +4278,6 @@ fn eventpair_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn eventpair_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -4399,7 +4300,6 @@ fn eventpair_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn eventpair_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -4422,7 +4322,6 @@ fn eventpair_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn eventpair_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -4444,7 +4343,6 @@ fn eventpair_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn eventpair_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -4468,7 +4366,6 @@ fn eventpair_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn eventpair_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -4492,7 +4389,6 @@ fn eventpair_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn eventpair_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
@@ -4520,7 +4416,6 @@ fn eventpair_info_handle_basic_bad_avail() {
 // HANDLE_BASIC on Channel (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn channel_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -4546,7 +4441,6 @@ fn channel_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn channel_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -4557,7 +4451,6 @@ fn channel_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn channel_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -4571,7 +4464,6 @@ fn channel_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn channel_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -4594,7 +4486,6 @@ fn channel_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn channel_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -4617,7 +4508,6 @@ fn channel_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn channel_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -4639,7 +4529,6 @@ fn channel_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn channel_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -4663,7 +4552,6 @@ fn channel_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn channel_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -4687,7 +4575,6 @@ fn channel_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn channel_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
@@ -4719,7 +4606,6 @@ fn channel_info_handle_basic_bad_avail() {
 // HANDLE_BASIC on VMO (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(VmoGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn vmo_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -4746,7 +4632,6 @@ fn vmo_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn vmo_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -4757,7 +4642,6 @@ fn vmo_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn vmo_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -4769,7 +4653,6 @@ fn vmo_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn vmo_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -4790,7 +4673,6 @@ fn vmo_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn vmo_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -4811,7 +4693,6 @@ fn vmo_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn vmo_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -4831,7 +4712,6 @@ fn vmo_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn vmo_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -4853,7 +4733,6 @@ fn vmo_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn vmo_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -4875,7 +4754,6 @@ fn vmo_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(VmoGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn vmo_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
@@ -4901,7 +4779,6 @@ fn vmo_info_handle_basic_bad_avail() {
 // HANDLE_BASIC on Socket (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(SocketGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn socket_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -4925,7 +4802,6 @@ fn socket_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn socket_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -4936,7 +4812,6 @@ fn socket_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn socket_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -4948,7 +4823,6 @@ fn socket_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn socket_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -4969,7 +4843,6 @@ fn socket_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn socket_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -4990,7 +4863,6 @@ fn socket_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn socket_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -5010,7 +4882,6 @@ fn socket_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn socket_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -5032,7 +4903,6 @@ fn socket_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn socket_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -5054,7 +4924,6 @@ fn socket_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(SocketGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn socket_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
@@ -5081,7 +4950,6 @@ fn socket_info_handle_basic_bad_avail() {
 // (OnSelf, InvalidHandle, ZeroBuffer already exist above)
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(TimerGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn timer_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -5104,7 +4972,6 @@ fn timer_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn timer_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -5127,7 +4994,6 @@ fn timer_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn timer_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -5149,7 +5015,6 @@ fn timer_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn timer_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -5173,7 +5038,6 @@ fn timer_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn timer_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -5197,7 +5061,6 @@ fn timer_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn timer_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
@@ -5221,7 +5084,6 @@ fn timer_info_handle_basic_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(ObjectGetInfoTest, HandleValidNullAvailSucceeds)
 #[test]
 fn handle_valid_null_avail() {
     let ctx = TestContext::new();
@@ -5233,7 +5095,6 @@ fn handle_valid_null_avail() {
     get_info_raw(&ctx, event_h, TOPIC_HANDLE_VALID, 0, 0, 0, 0).unwrap();
 }
 
-/// C++: TEST(ObjectGetInfoTest, HandleValidNullActualSucceeds)
 #[test]
 fn handle_valid_null_actual() {
     let ctx = TestContext::new();
@@ -5245,7 +5106,6 @@ fn handle_valid_null_actual() {
     get_info_raw(&ctx, event_h, TOPIC_HANDLE_VALID, 0, 0, 0, 0).unwrap();
 }
 
-/// C++: TEST(ObjectGetInfoTest, HandleValidNullActualAndAvailSucceeds)
 #[test]
 fn handle_valid_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -5261,7 +5121,6 @@ fn handle_valid_null_actual_and_avail() {
 // HANDLE_BASIC on Timer (topic 2) — 3 missing tests (on_self, invalid_handle, zero_buffer)
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(TimerGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn timer_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -5287,7 +5146,6 @@ fn timer_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn timer_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -5298,7 +5156,6 @@ fn timer_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(TimerGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn timer_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -5371,7 +5228,6 @@ fn thread_info_handle_basic_zero_buffer() {
 // HANDLE_BASIC on Fifo (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(FifoGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn fifo_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -5395,7 +5251,6 @@ fn fifo_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(FifoGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn fifo_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -5406,7 +5261,6 @@ fn fifo_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(FifoGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn fifo_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -5418,7 +5272,6 @@ fn fifo_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(FifoGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn fifo_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -5439,7 +5292,6 @@ fn fifo_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(FifoGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn fifo_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -5460,7 +5312,6 @@ fn fifo_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(FifoGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn fifo_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -5480,7 +5331,6 @@ fn fifo_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(FifoGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn fifo_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -5502,7 +5352,6 @@ fn fifo_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(FifoGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn fifo_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -5524,7 +5373,6 @@ fn fifo_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(FifoGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn fifo_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
@@ -5550,7 +5398,6 @@ fn fifo_info_handle_basic_bad_avail() {
 // HANDLE_BASIC on Port (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(PortGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn port_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -5574,7 +5421,6 @@ fn port_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(PortGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn port_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -5585,7 +5431,6 @@ fn port_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(PortGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn port_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -5597,7 +5442,6 @@ fn port_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(PortGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn port_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -5618,7 +5462,6 @@ fn port_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(PortGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn port_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -5639,7 +5482,6 @@ fn port_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(PortGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn port_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -5659,7 +5501,6 @@ fn port_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(PortGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn port_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -5681,7 +5522,6 @@ fn port_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(PortGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn port_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -5703,7 +5543,6 @@ fn port_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(PortGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn port_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
@@ -5729,7 +5568,6 @@ fn port_info_handle_basic_bad_avail() {
 // HANDLE_BASIC on Counter (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(CounterGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn counter_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -5755,7 +5593,6 @@ fn counter_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(CounterGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn counter_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -5766,7 +5603,6 @@ fn counter_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(CounterGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn counter_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -5780,7 +5616,6 @@ fn counter_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(CounterGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn counter_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -5803,7 +5638,6 @@ fn counter_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(CounterGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn counter_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -5826,7 +5660,6 @@ fn counter_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(CounterGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn counter_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -5848,7 +5681,6 @@ fn counter_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(CounterGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn counter_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -5872,7 +5704,6 @@ fn counter_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(CounterGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn counter_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -5896,7 +5727,6 @@ fn counter_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(CounterGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn counter_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
@@ -5924,7 +5754,6 @@ fn counter_info_handle_basic_bad_avail() {
 // HANDLE_BASIC on Pager (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(PagerGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn pager_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -5950,7 +5779,6 @@ fn pager_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(PagerGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn pager_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -5961,7 +5789,6 @@ fn pager_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(PagerGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn pager_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -5975,7 +5802,6 @@ fn pager_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(PagerGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn pager_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -5998,7 +5824,6 @@ fn pager_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(PagerGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn pager_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -6021,7 +5846,6 @@ fn pager_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(PagerGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn pager_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -6043,7 +5867,6 @@ fn pager_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(PagerGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn pager_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -6067,7 +5890,6 @@ fn pager_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(PagerGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn pager_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -6091,7 +5913,6 @@ fn pager_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(PagerGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn pager_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();
@@ -6119,7 +5940,6 @@ fn pager_info_handle_basic_bad_avail() {
 // HANDLE_BASIC on BTI (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(BtiGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 #[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_on_self() {
@@ -6145,7 +5965,6 @@ fn bti_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn bti_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -6156,7 +5975,6 @@ fn bti_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 #[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_zero_buffer() {
@@ -6170,7 +5988,6 @@ fn bti_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 #[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_null_avail() {
@@ -6193,7 +6010,6 @@ fn bti_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 #[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_null_actual() {
@@ -6216,7 +6032,6 @@ fn bti_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 #[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_null_actual_and_avail() {
@@ -6238,7 +6053,6 @@ fn bti_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 #[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_invalid_buffer() {
@@ -6262,7 +6076,6 @@ fn bti_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 #[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_bad_actual() {
@@ -6286,7 +6099,6 @@ fn bti_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(BtiGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 #[ignore = "BTI type not in HANDLE_BASIC type mapping (panics with 'unknown type')"]
 fn bti_info_handle_basic_bad_avail() {
@@ -6314,7 +6126,6 @@ fn bti_info_handle_basic_bad_avail() {
 // HANDLE_BASIC on Resource (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// C++: TEST(ResourceGetInfoTest, InfoHandleBasicOnSelfSucceeds)
 #[test]
 fn resource_info_handle_basic_on_self() {
     let ctx = TestContext::new();
@@ -6340,7 +6151,6 @@ fn resource_info_handle_basic_on_self() {
     assert_eq!(avail, 1);
 }
 
-/// C++: TEST(ResourceGetInfoTest, InfoHandleBasicInvalidHandleFails)
 #[test]
 fn resource_info_handle_basic_invalid_handle() {
     let ctx = TestContext::new();
@@ -6351,7 +6161,6 @@ fn resource_info_handle_basic_invalid_handle() {
     );
 }
 
-/// C++: TEST(ResourceGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
 #[test]
 fn resource_info_handle_basic_zero_buffer() {
     let ctx = TestContext::new();
@@ -6365,7 +6174,6 @@ fn resource_info_handle_basic_zero_buffer() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(ResourceGetInfoTest, InfoHandleBasicNullAvailSucceeds)
 #[test]
 fn resource_info_handle_basic_null_avail() {
     let ctx = TestContext::new();
@@ -6388,7 +6196,6 @@ fn resource_info_handle_basic_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST(ResourceGetInfoTest, InfoHandleBasicNullActualSucceeds)
 #[test]
 fn resource_info_handle_basic_null_actual() {
     let ctx = TestContext::new();
@@ -6411,7 +6218,6 @@ fn resource_info_handle_basic_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST(ResourceGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
 #[test]
 fn resource_info_handle_basic_null_actual_and_avail() {
     let ctx = TestContext::new();
@@ -6433,7 +6239,6 @@ fn resource_info_handle_basic_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST(ResourceGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
 #[test]
 fn resource_info_handle_basic_invalid_buffer() {
     let ctx = TestContext::new();
@@ -6457,7 +6262,6 @@ fn resource_info_handle_basic_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(ResourceGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
 #[test]
 fn resource_info_handle_basic_bad_actual() {
     let ctx = TestContext::new();
@@ -6481,7 +6285,6 @@ fn resource_info_handle_basic_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(ResourceGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
 #[test]
 fn resource_info_handle_basic_bad_avail() {
     let ctx = TestContext::new();

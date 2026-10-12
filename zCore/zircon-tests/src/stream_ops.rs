@@ -7,7 +7,6 @@ use crate::helpers::TestContext;
 use zircon_object::object::KernelObject;
 use zircon_object::vm::{SeekOrigin, Stream, VmObject, PAGE_SIZE};
 
-/// C++: TEST(StreamOpsTest, CreateStream)
 ///
 /// Create a stream on a VMO and verify it has a valid KOID.
 #[test]
@@ -18,7 +17,6 @@ fn create_stream() {
     assert_ne!(stream.id(), 0);
 }
 
-/// C++: TEST(StreamOpsTest, WriteAndRead)
 ///
 /// Write data through a stream and read it back.
 #[test]
@@ -37,7 +35,6 @@ fn write_and_read() {
     assert_eq!(&buf, b"hello stream");
 }
 
-/// C++: TEST(StreamOpsTest, SeekFromStart)
 ///
 /// Seek to absolute offset from start.
 #[test]
@@ -54,7 +51,6 @@ fn seek_from_start() {
     assert_eq!(&buf, b"fghij");
 }
 
-/// C++: TEST(StreamOpsTest, ReadPastEnd)
 ///
 /// Read beyond the content_size. Should return fewer bytes than
 /// requested.
@@ -72,7 +68,6 @@ fn read_past_end() {
     assert_eq!(&buf[..5], b"short");
 }
 
-/// C++: TEST(StreamOpsTest, WriteAtOffset)
 ///
 /// Seek to a specific offset and write. Data before the offset
 /// should be unmodified.
@@ -94,7 +89,6 @@ fn write_at_offset() {
     assert_eq!(&buf[5..8], b"BBB");
 }
 
-/// C++: TEST(StreamOpsTest, StreamName)
 ///
 /// Set and get the name of a stream.
 #[test]
@@ -106,7 +100,6 @@ fn stream_name() {
     assert_eq!(stream.name(), "my-stream");
 }
 
-/// C++: TEST(StreamOpsTest, ReadOnly)
 ///
 /// Create a read-only stream (mode=1). Writing should fail.
 #[test]
@@ -129,7 +122,6 @@ fn read_only() {
     // In Fuchsia, this would fail with ACCESS_DENIED.
 }
 
-/// C++: TEST(StreamOpsTest, WriteOnly)
 ///
 /// Create a write-only stream (mode=2). Reading should fail.
 /// Note: zCore Stream currently doesn't enforce read/write mode
@@ -141,7 +133,6 @@ fn write_only() {
     panic!("stream mode enforcement is syscall-layer");
 }
 
-/// C++: TEST(StreamOpsTest, SeekToEnd)
 ///
 /// Seek to the end of the stream (SEEK_END).
 #[test]
@@ -155,7 +146,6 @@ fn seek_to_end() {
     assert_eq!(pos, 9);
 }
 
-/// C++: TEST(StreamOpsTest, MultipleStreamsOnSameVmo)
 ///
 /// Create multiple streams on the same VMO. Each should have its
 /// own seek position.
@@ -180,7 +170,6 @@ fn multiple_streams_on_same_vmo() {
     assert_eq!(&buf2, b"shared data");
 }
 
-/// C++: TEST(StreamOpsTest, InvalidMode)
 ///
 /// Create a stream with an invalid mode (0 = no READ or WRITE).
 /// Should fail or be useless.

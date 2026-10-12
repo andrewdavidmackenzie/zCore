@@ -6,7 +6,6 @@
 
 use crate::helpers::TestContext;
 
-/// C++: TEST(InterruptTest, Create)
 ///
 /// Creating an interrupt object requires a resource handle. Not
 /// available in libos mode.
@@ -17,7 +16,6 @@ fn interrupt_create() {
     panic!("interrupts not available in libos mode");
 }
 
-/// C++: TEST(InterruptTest, CreateInvalid)
 ///
 /// Creating an interrupt with invalid parameters should fail.
 /// Not available in libos mode.
@@ -38,7 +36,6 @@ fn interrupt_bind() {
     panic!("interrupts not available in libos mode");
 }
 
-/// C++: TEST(InterruptTest, Unbind)
 ///
 /// Unbinding an interrupt from a port. Not available in libos mode.
 #[test]
@@ -58,7 +55,6 @@ fn interrupt_wait() {
     panic!("interrupts not available in libos mode");
 }
 
-/// C++: TEST(InterruptTest, Ack)
 ///
 /// Acknowledging an interrupt. Not available in libos mode.
 #[test]
@@ -68,7 +64,6 @@ fn interrupt_ack() {
     panic!("interrupts not available in libos mode");
 }
 
-/// C++: TEST(InterruptTest, Destroy)
 ///
 /// Destroying an interrupt object. Not available in libos mode.
 #[test]
@@ -78,7 +73,6 @@ fn interrupt_destroy() {
     panic!("interrupts not available in libos mode");
 }
 
-/// C++: TEST(InterruptTest, Trigger)
 ///
 /// Triggering a virtual interrupt. Not available in libos mode.
 #[test]
@@ -98,7 +92,6 @@ fn interrupt_virtual_interrupt() {
     panic!("interrupts not available in libos mode");
 }
 
-/// C++: TEST(InterruptTest, VirtualInterruptWait)
 ///
 /// Waiting on a virtual interrupt. Not available in libos mode.
 #[test]

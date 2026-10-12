@@ -8,7 +8,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(NamespaceTest, CreateEmpty)
 ///
 /// Create an empty namespace. Should succeed with zero entries.
 #[should_panic(expected = "namespaces are component model")]
@@ -18,7 +17,6 @@ fn create_empty() {
     panic!("namespaces are component model");
 }
 
-/// C++: TEST(NamespaceTest, AddEntry)
 ///
 /// Add a directory entry to a namespace. Requires fidl/component.
 #[should_panic(expected = "namespaces are component model")]
@@ -28,7 +26,6 @@ fn add_entry() {
     panic!("namespaces are component model");
 }
 
-/// C++: TEST(NamespaceTest, LookupEntry)
 ///
 /// Look up an entry in a namespace by path. Requires fidl/component.
 #[should_panic(expected = "namespaces are component model")]
@@ -38,7 +35,6 @@ fn lookup_entry() {
     panic!("namespaces are component model");
 }
 
-/// C++: TEST(NamespaceTest, RemoveEntry)
 ///
 /// Remove an entry from a namespace. Requires fidl/component.
 #[should_panic(expected = "namespaces are component model")]
@@ -48,7 +44,6 @@ fn remove_entry() {
     panic!("namespaces are component model");
 }
 
-/// C++: TEST(NamespaceTest, InvalidPath)
 ///
 /// Add an entry with an invalid path (empty, no leading slash).
 /// Should return INVALID_ARGS.
@@ -59,7 +54,6 @@ fn invalid_path() {
     panic!("namespaces are component model");
 }
 
-/// C++: TEST(NamespaceTest, DuplicatePath)
 ///
 /// Add two entries with the same path. Should return ALREADY_EXISTS.
 #[should_panic(expected = "namespaces are component model")]
@@ -69,7 +63,6 @@ fn duplicate_path() {
     panic!("namespaces are component model");
 }
 
-/// C++: TEST(NamespaceTest, NestedPaths)
 ///
 /// Add entries with nested paths (/svc, /svc/fuchsia.logger.Log).
 /// Both should be independently resolvable.
@@ -80,7 +73,6 @@ fn nested_paths() {
     panic!("namespaces are component model");
 }
 
-/// C++: TEST(NamespaceTest, EnumerateEntries)
 ///
 /// Enumerate all entries in a namespace. Should return them in
 /// insertion order. Requires fidl/component.
@@ -91,7 +83,6 @@ fn enumerate_entries() {
     panic!("namespaces are component model");
 }
 
-/// C++: TEST(NamespaceTest, NamespaceLifecycle)
 ///
 /// Create, populate, use, and destroy a namespace. All entries
 /// should be properly cleaned up on destruction.
@@ -102,7 +93,6 @@ fn namespace_lifecycle() {
     panic!("namespaces are component model");
 }
 
-/// C++: TEST(NamespaceTest, TransferNamespace)
 ///
 /// Transfer a namespace to a child process via process_create.
 /// The child should see the same entries. Requires process execution.

@@ -8,7 +8,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(MiniProcessTest, CreateAndDestroy)
 ///
 /// Create a mini-process and immediately destroy it. The process
 /// should terminate cleanly. Requires process execution infrastructure.
@@ -19,7 +18,6 @@ fn create_and_destroy() {
     panic!("mini-process needs real execution");
 }
 
-/// C++: TEST(MiniProcessTest, SendCommand)
 ///
 /// Send a command to a mini-process via its command channel. The
 /// process should execute the command and reply. Requires process
@@ -31,7 +29,6 @@ fn send_command() {
     panic!("mini-process needs real execution");
 }
 
-/// C++: TEST(MiniProcessTest, GetKoid)
 ///
 /// Get the KOID of a mini-process. Should be non-zero and unique.
 /// Requires process execution infrastructure.
@@ -42,7 +39,6 @@ fn get_koid() {
     panic!("mini-process needs real execution");
 }
 
-/// C++: TEST(MiniProcessTest, GetHandleInfo)
 ///
 /// Query handle info from within a mini-process. The mini-process
 /// uses the command channel to relay the info. Requires process
@@ -54,7 +50,6 @@ fn get_handle_info() {
     panic!("mini-process needs real execution");
 }
 
-/// C++: TEST(MiniProcessTest, DuplicateHandle)
 ///
 /// Duplicate a handle within a mini-process. Requires handle table
 /// manipulation within a real process.
@@ -65,7 +60,6 @@ fn duplicate_handle() {
     panic!("mini-process needs real execution");
 }
 
-/// C++: TEST(MiniProcessTest, CreateThread)
 ///
 /// Create a new thread within a mini-process. The new thread should
 /// be visible in the process's thread list. Requires process execution.
@@ -76,7 +70,6 @@ fn create_thread() {
     panic!("mini-process needs real execution");
 }
 
-/// C++: TEST(MiniProcessTest, MapVmo)
 ///
 /// Map a VMO within a mini-process's address space. Requires VMAR
 /// mapping + process execution.
@@ -87,7 +80,6 @@ fn map_vmo() {
     panic!("mini-process needs real execution");
 }
 
-/// C++: TEST(MiniProcessTest, ChannelCommunication)
 ///
 /// Bidirectional channel communication with a mini-process. Send
 /// data, receive reply. Requires process execution.
@@ -98,7 +90,6 @@ fn channel_communication() {
     panic!("mini-process needs real execution");
 }
 
-/// C++: TEST(MiniProcessTest, KillProcess)
 ///
 /// Kill a mini-process and verify it terminates. The process handle
 /// should signal TERMINATED. Requires process execution.
@@ -109,7 +100,6 @@ fn kill_process() {
     panic!("mini-process needs real execution");
 }
 
-/// C++: TEST(MiniProcessTest, ProcessReturnCode)
 ///
 /// Get the return code of a terminated mini-process. The return
 /// code should match the exit value. Requires process execution.

@@ -9,7 +9,6 @@ use zircon_object::vm::{VmObject, PAGE_SIZE};
 
 extern crate alloc;
 
-/// C++: TEST(VmoOpsTest, CommitPages)
 ///
 /// Commit pages in a VMO. The committed pages should be backed by
 /// physical memory.
@@ -23,7 +22,6 @@ fn commit_pages() {
     vmo.read(0, &mut buf).unwrap();
 }
 
-/// C++: TEST(VmoOpsTest, DecommitPages)
 ///
 /// Decommit pages from a VMO. The pages are returned to the kernel
 /// and read as zeroes on next access.
@@ -38,7 +36,6 @@ fn decommit_pages() {
     assert_eq!(&buf, &[0u8; 12], "decommitted pages should read as zeroes");
 }
 
-/// C++: TEST(VmoOpsTest, ZeroRange)
 ///
 /// Zero a range of a VMO. The zeroed range should read as all zeroes.
 #[test]
@@ -52,7 +49,6 @@ fn zero_range() {
     assert_eq!(&buf, &[0u8; 14]);
 }
 
-/// C++: TEST(VmoOpsTest, ZeroPartial)
 ///
 /// Zero only part of a page. The rest should be untouched.
 #[test]
@@ -69,7 +65,6 @@ fn zero_partial() {
     assert_eq!(&buf[8..], b"ijklmnop");
 }
 
-/// C++: TEST(VmoOpsTest, CommitAlreadyCommitted)
 ///
 /// Commit pages that are already committed. Should be a no-op.
 #[test]
@@ -83,7 +78,6 @@ fn commit_already_committed() {
     assert_eq!(&buf, b"data");
 }
 
-/// C++: TEST(VmoOpsTest, DecommitAndRewrite)
 ///
 /// Decommit pages then write new data. The new data should be
 /// readable.
@@ -99,7 +93,6 @@ fn decommit_and_rewrite() {
     assert_eq!(&buf, b"new data");
 }
 
-/// C++: TEST(VmoOpsTest, CommitLargeRange)
 ///
 /// Commit a large range of pages at once.
 #[test]
@@ -114,7 +107,6 @@ fn commit_large_range() {
     assert_eq!(&buf, b"end");
 }
 
-/// C++: TEST(VmoOpsTest, DecommitPartial)
 ///
 /// Decommit only some pages of a multi-page VMO. Non-decommitted
 /// pages should retain their data.
@@ -136,7 +128,6 @@ fn decommit_partial() {
     assert_eq!(&buf, b"page2", "page 2 should be untouched");
 }
 
-/// C++: TEST(VmoOpsTest, VmoContentSize)
 ///
 /// Get and set content_size on a VMO. Content size tracks the
 /// logical data size within the VMO.
@@ -152,7 +143,6 @@ fn vmo_content_size() {
     assert_eq!(vmo.content_size(), 0);
 }
 
-/// C++: TEST(VmoOpsTest, VmoCommittedBytes)
 ///
 /// Query the committed bytes of a VMO. Should reflect how many
 /// pages are actually backed by physical memory.
@@ -169,7 +159,6 @@ fn vmo_committed_bytes() {
     let _ = initial;
 }
 
-/// C++: TEST(VmoOpsTest, VmoKoid)
 ///
 /// Every VMO should have a unique non-zero KOID.
 #[test]
@@ -182,7 +171,6 @@ fn vmo_koid() {
     assert_ne!(v1.id(), v2.id());
 }
 
-/// C++: TEST(VmoOpsTest, VmoLen)
 ///
 /// VMO length should be page-aligned and match the requested size.
 #[test]
@@ -192,7 +180,6 @@ fn vmo_len() {
     assert_eq!(vmo.len(), 5 * PAGE_SIZE);
 }
 
-/// C++: TEST(VmoOpsTest, ResizableVmo)
 ///
 /// Create a resizable VMO, resize it, and verify the new length.
 #[test]
@@ -204,7 +191,6 @@ fn resizable_vmo() {
     assert_eq!(vmo.len(), 5 * PAGE_SIZE);
 }
 
-/// C++: TEST(VmoOpsTest, ResizeShrink)
 ///
 /// Shrink a resizable VMO. Data beyond the new end is lost.
 #[test]
@@ -216,7 +202,6 @@ fn resize_shrink() {
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
 }
 
-/// C++: TEST(VmoOpsTest, NonResizableRejectResize)
 ///
 /// A non-resizable VMO should reject resize with UNAVAILABLE.
 #[test]

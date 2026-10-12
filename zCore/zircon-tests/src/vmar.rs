@@ -220,7 +220,6 @@ fn vmar_destroy_child() {
 // Ported from Fuchsia's zircon/system/utest/core/vmar/vmar.cc
 // ============================================================
 
-/// C++: TEST(VmarTest, CreateDestroy)
 /// Create a child VMAR and destroy it.
 #[test]
 fn create_destroy() {
@@ -239,7 +238,6 @@ fn create_destroy() {
     assert!(child.is_dead());
 }
 
-/// C++: TEST(VmarTest, CreateInvalidArgs)
 /// Bad size/alignment should fail with INVALID_ARGS.
 #[test]
 fn create_invalid_args() {
@@ -263,7 +261,6 @@ fn create_invalid_args() {
     );
 }
 
-/// C++: TEST(VmarTest, CreateOutOfBounds)
 /// Offset + size beyond parent should fail.
 #[test]
 fn create_out_of_bounds() {
@@ -277,7 +274,6 @@ fn create_out_of_bounds() {
         .is_err());
 }
 
-/// C++: TEST(VmarTest, DestroyTwice)
 /// Destroying an already-destroyed VMAR returns BAD_STATE.
 #[test]
 fn destroy_twice() {
@@ -297,7 +293,6 @@ fn destroy_twice() {
     );
 }
 
-/// C++: TEST(VmarTest, DestroyRoot)
 /// Cannot destroy the root VMAR of a process (it has no parent to
 /// remove itself from, which panics in zCore; the C++ test expects
 /// ACCESS_DENIED). We test the raw root VMAR API instead: destroying
@@ -314,7 +309,6 @@ fn destroy_root() {
     assert!(root_vmar.is_dead());
 }
 
-/// C++: TEST(VmarTest, AllocateWithinChild)
 /// Nested allocation within a child VMAR.
 #[test]
 fn allocate_within_child() {
@@ -335,7 +329,6 @@ fn allocate_within_child() {
     assert!(grandchild.addr() + PAGE_SIZE <= child.addr() + 4 * PAGE_SIZE);
 }
 
-/// C++: TEST(VmarTest, AllocateOverlap)
 /// Overlapping SPECIFIC allocations fail with ALREADY_EXISTS.
 #[test]
 fn allocate_overlap() {
@@ -355,7 +348,6 @@ fn allocate_overlap() {
     );
 }
 
-/// C++: TEST(VmarTest, AllocateSpecificOffset)
 /// Allocate at a specific offset within the parent.
 #[test]
 fn allocate_specific_offset() {
@@ -371,7 +363,6 @@ fn allocate_specific_offset() {
     assert_eq!(child.addr(), base + offset);
 }
 
-/// C++: TEST(VmarTest, AllocateAlign)
 /// Alignment requirements are enforced.
 #[test]
 fn allocate_align() {
@@ -388,7 +379,6 @@ fn allocate_align() {
     assert_eq!(child.addr() % align, 0);
 }
 
-/// C++: TEST(VmarTest, AllocateTooLarge)
 /// Allocating more than the parent's size fails.
 #[test]
 fn allocate_too_large() {
@@ -403,7 +393,6 @@ fn allocate_too_large() {
         .is_err());
 }
 
-/// C++: TEST(VmarTest, NestedDestroy)
 /// Destroying a parent destroys all children recursively.
 #[test]
 fn nested_destroy() {
@@ -424,7 +413,6 @@ fn nested_destroy() {
     assert!(grandchild.is_dead());
 }
 
-/// C++: TEST(VmarTest, MapInvalidVmo)
 /// Mapping with non-page-aligned offset or size fails.
 #[test]
 fn map_invalid_vmo() {
@@ -449,7 +437,6 @@ fn map_invalid_vmo() {
     );
 }
 
-/// C++: TEST(VmarTest, MapBadOffset)
 /// Mapping at a non-page-aligned VMO offset fails.
 #[test]
 fn map_bad_offset() {
@@ -465,7 +452,6 @@ fn map_bad_offset() {
     );
 }
 
-/// C++: TEST(VmarTest, MapBadSize)
 /// Mapping with a non-page-aligned size fails.
 #[test]
 fn map_bad_size() {
@@ -483,7 +469,6 @@ fn map_bad_size() {
     );
 }
 
-/// C++: TEST(VmarTest, UnmapNotMapped)
 /// Unmapping a range with no mappings succeeds (no-op).
 #[test]
 fn unmap_not_mapped() {
@@ -495,7 +480,6 @@ fn unmap_not_mapped() {
     root_vmar.unmap(base, PAGE_SIZE).unwrap();
 }
 
-/// C++: TEST(VmarTest, UnmapPartial)
 /// Unmapping part of a mapping splits it.
 #[test]
 #[ignore = "VMAR mapping exhausts page table memory when run in parallel"]
@@ -513,7 +497,6 @@ fn unmap_partial() {
     root_vmar.unmap(addr + PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
 }
 
-/// C++: TEST(VmarTest, ProtectNotMapped)
 /// Protecting a range with no mapping fails with NOT_FOUND.
 #[test]
 fn protect_not_mapped() {
@@ -529,7 +512,6 @@ fn protect_not_mapped() {
     );
 }
 
-/// C++: TEST(VmarTest, GetInfo)
 /// get_info returns correct base and len.
 #[test]
 fn get_info() {
@@ -545,7 +527,6 @@ fn get_info() {
     assert_eq!(info.len, 4 * PAGE_SIZE);
 }
 
-/// C++: TEST(VmarTest, Flags)
 /// Check VMAR flags on creation.
 #[test]
 fn flags() {
@@ -565,7 +546,6 @@ fn flags() {
     assert!(!child.flags().contains(VmarFlags::CAN_MAP_EXECUTE));
 }
 
-/// C++: TEST(VmarTest, AddrAndSize)
 /// Verify addr/size on a child VMAR match allocation parameters.
 #[test]
 fn addr_and_size() {

@@ -7,7 +7,6 @@ use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::{Event, EventPair, Port};
 
-/// C++: TEST(ObjectWaitOpsTest, WaitOneAlreadySignaled)
 ///
 /// Wait on an object that is already signaled. Should return
 /// immediately.
@@ -21,7 +20,6 @@ fn wait_one_already_signaled() {
     assert!(sig.contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, WaitOneMultipleSignals)
 ///
 /// Wait for any of multiple signals. Should return when any one
 /// is asserted.
@@ -35,7 +33,6 @@ fn wait_one_multiple_signals() {
     assert!(sig.intersects(desired));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, EventPairWait)
 ///
 /// Wait on an event pair endpoint for a peer signal. The signal
 /// should be visible after the peer sets it.
@@ -47,7 +44,6 @@ fn event_pair_wait() {
     assert!(ep1.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, ChannelWaitReadable)
 ///
 /// Wait for a channel to become readable. Writing to the peer
 /// should make it readable.
@@ -66,7 +62,6 @@ fn channel_wait_readable() {
     assert!(remote.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, SocketWaitReadable)
 ///
 /// Wait for a socket to become readable. Writing to the peer
 /// should make it readable.
@@ -81,7 +76,6 @@ fn socket_wait_readable() {
     assert!(remote.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, WaitAsyncPort)
 ///
 /// Set up a wait_async on a port for an event signal. When the
 /// signal fires, the port should receive a packet.
@@ -103,7 +97,6 @@ fn wait_async_port() {
     assert_eq!(repr.key, 42);
 }
 
-/// C++: TEST(ObjectWaitOpsTest, WaitAsyncCancelBeforeSignal)
 ///
 /// Set up a wait_async then cancel it before the signal fires.
 /// No packet should be delivered to the port.
@@ -128,7 +121,6 @@ fn wait_async_cancel_before_signal() {
     assert!(!port.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, WaitManyEvents)
 ///
 /// Wait on multiple events simultaneously. The first to be signaled
 /// should be detected.
@@ -147,7 +139,6 @@ fn wait_many_events() {
     assert!(!e3.signal().contains(Signal::USER_SIGNAL_0));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, WaitOnClosedChannel)
 ///
 /// Waiting on a channel whose peer is closed should see PEER_CLOSED.
 #[test]
@@ -159,7 +150,6 @@ fn wait_on_closed_channel() {
     assert!(local.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, WaitOnClosedSocket)
 ///
 /// Waiting on a socket whose peer is closed should see PEER_CLOSED.
 #[test]
@@ -171,7 +161,6 @@ fn wait_on_closed_socket() {
     assert!(local.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, WaitOnFifo)
 ///
 /// Wait for a FIFO to become readable after writing to the peer.
 #[test]
@@ -184,7 +173,6 @@ fn wait_on_fifo() {
     assert!(remote.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, WaitAsyncOnceRepeated)
 ///
 /// Set up wait_async with ONCE flag. After the signal fires and the
 /// packet is delivered, re-signaling should not deliver another packet.
@@ -210,7 +198,6 @@ fn wait_async_once_repeated() {
     assert!(!port.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, EventPairPeerClosedWait)
 ///
 /// Wait on an event pair for PEER_CLOSED after dropping the peer.
 #[test]
@@ -221,7 +208,6 @@ fn event_pair_peer_closed_wait() {
     assert!(ep0.signal().contains(Signal::PEER_CLOSED));
 }
 
-/// C++: TEST(ObjectWaitOpsTest, TimerWaitSignaled)
 ///
 /// Wait for a timer to be signaled. Setting a past deadline should
 /// signal immediately.

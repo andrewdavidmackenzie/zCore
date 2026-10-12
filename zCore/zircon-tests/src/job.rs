@@ -76,7 +76,6 @@ fn job_get_info() {
     // JobInfo has private fields; just verify it returns successfully
 }
 
-/// C++: TEST(JobTest, NestedJobs)
 #[test]
 fn job_nested() {
     let _ctx = TestContext::new();
@@ -88,7 +87,6 @@ fn job_nested() {
     assert_eq!(child.parent().unwrap().id(), root.id());
 }
 
-/// C++: TEST(JobTest, KillTerminatesChildren)
 #[test]
 fn job_kill_terminates_children() {
     let _ctx = TestContext::new();
@@ -100,7 +98,6 @@ fn job_kill_terminates_children() {
     assert!(child.signal().contains(Signal::JOB_TERMINATED));
 }
 
-/// C++: TEST(JobTest, CannotCreateChildOnDeadJob)
 #[test]
 fn job_cannot_create_child_on_dead_job() {
     let _ctx = TestContext::new();
@@ -114,7 +111,6 @@ fn job_cannot_create_child_on_dead_job() {
     assert!(result.is_err());
 }
 
-/// C++: TEST(JobTest, TypeName)
 #[test]
 fn job_type_name() {
     let _ctx = TestContext::new();
@@ -122,7 +118,6 @@ fn job_type_name() {
     assert_eq!(root.type_name(), "Job");
 }
 
-/// C++: TEST(JobTest, Name)
 #[test]
 fn job_name() {
     let _ctx = TestContext::new();
@@ -131,7 +126,6 @@ fn job_name() {
     assert_eq!(root.name(), "test-job");
 }
 
-/// C++: TEST(JobTest, CreateInvalid)
 /// Creating a child on a dead (killed) job must fail with BAD_STATE.
 #[test]
 fn job_create_invalid() {
@@ -150,7 +144,6 @@ fn job_create_invalid() {
     );
 }
 
-/// C++: TEST(JobTest, KillJobTerminatesChildren)
 /// Killing a job terminates its child processes.
 #[test]
 fn job_kill_terminates_child_processes() {
@@ -200,7 +193,6 @@ fn job_policy_basic_override() {
     );
 }
 
-/// C++: TEST(JobTest, JobKillRemovesFromTree)
 /// Killing a child job removes it from the parent's child list.
 #[test]
 fn job_kill_removes_from_tree() {
@@ -261,7 +253,6 @@ fn job_max_height() {
     );
 }
 
-/// C++: TEST(JobTest, ReturnCode)
 /// Job return code tracking — killed jobs propagate the code to child processes.
 #[test]
 fn job_return_code() {
@@ -281,7 +272,6 @@ fn job_return_code() {
     assert!(job.signal().contains(Signal::JOB_TERMINATED));
 }
 
-/// C++: TEST(JobTest, SetGetPolicy)
 /// Set and get job policies.
 #[test]
 fn job_set_get_policy() {
@@ -356,7 +346,6 @@ fn job_critical_process() {
     assert!(root.signal().contains(Signal::JOB_TERMINATED));
 }
 
-/// C++: TEST(JobTest, SetPolicyInvalidTopic)
 /// Setting policy with an invalid topic should fail.
 #[test]
 fn job_set_policy_invalid_topic() {
@@ -376,7 +365,6 @@ fn job_set_policy_invalid_topic() {
     drop(child);
 }
 
-/// C++: TEST(JobTest, SetPolicyInvalidAction)
 /// Setting policy with an invalid action combination.
 #[test]
 fn job_set_policy_invalid_action() {
@@ -406,7 +394,6 @@ fn job_set_policy_invalid_action() {
     assert_eq!(result.unwrap_err(), ZxError::ALREADY_EXISTS);
 }
 
-/// C++: TEST(JobTest, SetPolicyOnChild)
 /// Policy set on parent is inherited by child.
 #[test]
 fn job_set_policy_on_child() {
@@ -436,7 +423,6 @@ fn job_set_policy_on_child() {
     );
 }
 
-/// C++: TEST(JobTest, GetPolicyInherited)
 /// Verify that child job's policy reflects what was set on the parent.
 #[test]
 fn job_get_policy_inherited() {
@@ -480,7 +466,6 @@ fn job_get_policy_inherited() {
     assert_eq!(child.policy().get_action(PolicyCondition::NewSocket), None);
 }
 
-/// C++: TEST(JobTest, JobReturnCodeAfterKill)
 /// After killing a job with a specific code, the return code is
 /// propagated to child processes.
 #[test]
@@ -506,7 +491,6 @@ fn job_return_code_after_kill() {
     assert!(job.signal().contains(Signal::JOB_TERMINATED));
 }
 
-/// C++: TEST(JobTest, NoChildren)
 /// A job with no children has the ZERO_CHILDREN-related signals set.
 #[test]
 fn job_no_children() {

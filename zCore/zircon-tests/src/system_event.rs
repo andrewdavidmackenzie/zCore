@@ -8,7 +8,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(SystemEventTest, MemPressureCritical)
 ///
 /// Signal a critical memory pressure system event. The kernel
 /// broadcasts this to all registered observers. Requires root
@@ -20,7 +19,6 @@ fn mem_pressure_critical() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, MemPressureWarning)
 ///
 /// Signal a memory pressure warning system event. Observers
 /// registered for warning level are notified. Requires root
@@ -32,7 +30,6 @@ fn mem_pressure_warning() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, MemPressureNormal)
 ///
 /// Signal a normal (no pressure) memory system event. Clears
 /// any previous pressure signals. Requires root resource.
@@ -43,7 +40,6 @@ fn mem_pressure_normal() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, MemPressureInvalid)
 ///
 /// Signal with an invalid memory pressure level. Should return
 /// INVALID_ARGS. Requires root resource.
@@ -54,7 +50,6 @@ fn mem_pressure_invalid() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, MemPressureNoResource)
 ///
 /// Signal memory pressure without root resource handle. Should
 /// return ACCESS_DENIED. Tests privilege validation.
@@ -65,7 +60,6 @@ fn mem_pressure_no_resource() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, MemPressureSignals)
 ///
 /// Register for memory pressure signals on a port, trigger the
 /// event, and verify the port receives the expected packet.
@@ -77,7 +71,6 @@ fn mem_pressure_signals() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, ImmutableEvent)
 ///
 /// System events cannot have user signals set on them. Calling
 /// object_signal on a system event should return ACCESS_DENIED.
@@ -88,7 +81,6 @@ fn immutable_event() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, UserSignalsOnSystemEvent)
 ///
 /// Verify user signal bits cannot be set on system events. Only
 /// kernel-defined signals are valid. Should return ACCESS_DENIED.
@@ -99,7 +91,6 @@ fn user_signals_on_system_event() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, SystemEventClose)
 ///
 /// Close a system event handle. The event should no longer be
 /// observable after the last handle is closed.
@@ -110,7 +101,6 @@ fn system_event_close() {
     panic!("system events not implemented");
 }
 
-/// C++: TEST(SystemEventTest, SystemEventDuplicate)
 ///
 /// Duplicate a system event handle. Both handles should observe
 /// the same signals. Requires system event infrastructure.

@@ -50,7 +50,6 @@ fn timer_cancel_clears_signal() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, CreateWithSlack)
 #[test]
 fn timer_create_with_slack() {
     let _ctx = TestContext::new();
@@ -65,7 +64,6 @@ fn timer_create_with_slack() {
     assert_ne!(timer_late.id(), 0);
 }
 
-/// C++: TEST(TimerTest, OneShotConvenience)
 #[test]
 fn timer_one_shot() {
     let _ctx = TestContext::new();
@@ -74,7 +72,6 @@ fn timer_one_shot() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, SetReplacesDeadline)
 #[test]
 fn timer_set_replaces_deadline() {
     let _ctx = TestContext::new();
@@ -89,7 +86,6 @@ fn timer_set_replaces_deadline() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, GetInfo)
 #[test]
 fn timer_get_info() {
     let _ctx = TestContext::new();
@@ -101,7 +97,6 @@ fn timer_get_info() {
     assert_eq!(slack, 0);
 }
 
-/// C++: TEST(TimerTest, GetInfoAfterSet)
 #[test]
 fn timer_get_info_after_set() {
     let _ctx = TestContext::new();
@@ -114,7 +109,6 @@ fn timer_get_info_after_set() {
     assert_eq!(slack, 500);
 }
 
-/// C++: TEST(TimerTest, CancelTwiceIsOk)
 #[test]
 fn timer_cancel_twice_is_ok() {
     let _ctx = TestContext::new();
@@ -126,7 +120,6 @@ fn timer_cancel_twice_is_ok() {
     assert!(!timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, Name)
 #[test]
 fn timer_name() {
     let _ctx = TestContext::new();
@@ -136,7 +129,6 @@ fn timer_name() {
     assert_eq!(timer.name(), "my-timer");
 }
 
-/// C++: TEST(TimerTest, DeadlineAfter)
 ///
 /// Set a timer with a deadline computed via `zx_deadline_after()`,
 /// then verify the SIGNALED bit fires. Since we can't easily wait
@@ -153,7 +145,6 @@ fn timer_deadline_after() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, CoalesceAndCancel)
 ///
 /// Set a far-future timer, cancel it, then set a new one that fires
 /// immediately. Verifies that cancel truly resets state and a
@@ -176,7 +167,6 @@ fn timer_coalesce_and_cancel() {
     assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
-/// C++: TEST(TimerTest, InvalidArgs)
 ///
 /// Creating a timer with an invalid slack mode should fail.
 /// At the object level, `Slack` is a Rust enum so invalid values

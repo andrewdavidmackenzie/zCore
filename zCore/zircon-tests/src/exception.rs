@@ -250,7 +250,6 @@ fn double_bind_fails() {
 
 // ── Bulk-ported exception tests ─────────────────────────────────────
 
-/// C++: TEST(ExceptionTest, CreateOnDeadTask)
 ///
 /// Creating an exception channel on a dead job should fail. A dead
 /// task (killed job) no longer accepts exception channel bindings.
@@ -284,7 +283,6 @@ fn create_on_dead_task() {
     );
 }
 
-/// C++: TEST(ExceptionTest, ChannelClosedOnTaskDeath)
 ///
 /// When a task dies, the exception channel endpoint held by the
 /// kernel should be closed, signaling PEER_CLOSED on the user's end.
@@ -319,7 +317,6 @@ fn channel_closed_on_task_death() {
     assert_ne!(channel_h, 0);
 }
 
-/// C++: TEST(ExceptionTest, BadOption)
 ///
 /// Passing an invalid option value (not 0 or 1) should fail with
 /// INVALID_ARGS.
@@ -350,7 +347,6 @@ fn exception_bad_option() {
     );
 }
 
-/// C++: TEST(ExceptionTest, WrongTypeThread)
 ///
 /// Passing a non-task handle (e.g., an event with full rights) should
 /// fail with WRONG_TYPE for exception channel creation.
@@ -378,7 +374,6 @@ fn exception_wrong_type_thread() {
     );
 }
 
-/// C++: TEST(ExceptionTest, MissingManageThread)
 ///
 /// A handle without MANAGE_THREAD right should fail with ACCESS_DENIED.
 #[test]
@@ -400,7 +395,6 @@ fn exception_missing_manage_thread() {
     );
 }
 
-/// C++: TEST(ExceptionTest, ProcessDebuggerChannel)
 ///
 /// Creating a debugger exception channel (option=1) on a process
 /// should succeed.
@@ -416,7 +410,6 @@ fn exception_process_debugger_channel() {
     assert_ne!(channel_h, 0, "debugger channel on process should succeed");
 }
 
-/// C++: TEST(ExceptionTest, JobDebuggerChannel)
 ///
 /// Creating a debugger exception channel (option=1) on a job should
 /// succeed.
@@ -432,7 +425,6 @@ fn exception_job_debugger_channel() {
     assert_ne!(channel_h, 0, "debugger channel on job should succeed");
 }
 
-/// C++: TEST(ExceptionTest, ThreadChannelNotDebugger)
 ///
 /// Threads cannot have debugger exception channels (option=1).
 /// Only processes and jobs support the debugger option.
@@ -452,7 +444,6 @@ fn exception_thread_channel_not_debugger() {
     );
 }
 
-/// C++: TEST(ExceptionTest, DoubleBindThread)
 ///
 /// Binding an exception channel twice on the same thread should fail
 /// with ALREADY_BOUND.
@@ -478,7 +469,6 @@ fn exception_double_bind_thread() {
     );
 }
 
-/// C++: TEST(ExceptionTest, DoubleBindProcess)
 ///
 /// Binding an exception channel twice on the same process should fail
 /// with ALREADY_BOUND. This test uses a fresh process handle each time

@@ -71,7 +71,6 @@ async fn port_fifo_order() {
     }
 }
 
-/// C++: TEST(PortTest, CreateInvalidOptionsReturnsInvalidArgs)
 #[test]
 fn port_create_invalid_options() {
     let _ctx = TestContext::new();
@@ -79,7 +78,6 @@ fn port_create_invalid_options() {
     assert_eq!(Port::new(0xFF).unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(PortTest, QueueUserPacketLimit)
 /// Port should enforce per-port packet limit.
 #[test]
 fn port_queue_user_packet_limit() {
@@ -108,7 +106,6 @@ fn port_queue_user_packet_limit() {
     );
 }
 
-/// C++: TEST(PortTest, SignalReadable)
 /// Port should have READABLE signal when packets are queued.
 #[test]
 fn port_signal_readable() {
@@ -143,7 +140,6 @@ fn port_cannot_bind_to_interrupt_by_default() {
     assert!(!port.can_bind_to_interrupt());
 }
 
-/// C++: TEST(PortTest, UserPacketStatusPreserved)
 /// The status field in a user packet is preserved through queue/dequeue.
 #[async_std::test]
 async fn port_user_packet_status_preserved() {
@@ -168,7 +164,6 @@ async fn port_user_packet_status_preserved() {
     }
 }
 
-/// C++: TEST(PortTest, CancelByKeyNotFound)
 #[test]
 fn port_cancel_by_key_not_found() {
     let _ctx = TestContext::new();

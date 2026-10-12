@@ -83,7 +83,6 @@ fn stream_append() {
     assert_eq!(&buf, b"hello world");
 }
 
-/// C++: TEST(StreamTestCase, WriteAt)
 /// Write at specific offset without moving seek position.
 #[test]
 fn stream_write_at() {
@@ -105,7 +104,6 @@ fn stream_write_at() {
     assert_eq!(&buf, b"01234XXXXX");
 }
 
-/// C++: TEST(StreamTestCase, SeekCurrent)
 /// Seek relative to current position.
 #[test]
 fn stream_seek_current() {
@@ -133,7 +131,6 @@ fn stream_seek_current() {
     assert_eq!(&buf, b"56789");
 }
 
-/// C++: TEST(StreamTestCase, SeekEnd)
 /// Seek relative to content end.
 #[test]
 fn stream_seek_end() {
@@ -153,7 +150,6 @@ fn stream_seek_end() {
     assert_eq!(&buf, b"789");
 }
 
-/// C++: TEST(StreamTestCase, ReadBeyondContent)
 /// Reading beyond content_size returns 0 bytes.
 #[test]
 fn stream_read_beyond_content() {
@@ -171,7 +167,6 @@ fn stream_read_beyond_content() {
     assert_eq!(n, 0);
 }
 
-/// C++: TEST(StreamTestCase, ZeroLengthWrite)
 /// Zero-length write returns Ok(0).
 #[test]
 fn stream_zero_length_write() {
@@ -183,7 +178,6 @@ fn stream_zero_length_write() {
     assert_eq!(n, 0);
 }
 
-/// C++: TEST(StreamTestCase, ContentSizeTracking)
 /// Stream write updates content_size when it extends past current value.
 #[test]
 fn stream_content_size_tracking() {
@@ -205,7 +199,6 @@ fn stream_content_size_tracking() {
     );
 }
 
-/// C++: TEST(StreamTestCase, Koid)
 /// Stream has a valid koid.
 #[test]
 fn stream_koid() {
@@ -215,7 +208,6 @@ fn stream_koid() {
     assert_ne!(stream.id(), 0);
 }
 
-/// C++: TEST(StreamTestCase, Name)
 /// Stream name get/set.
 #[test]
 fn stream_name() {

@@ -8,7 +8,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(PthreadTest, CreateJoin)
 ///
 /// Create a POSIX thread and join it. Pthreads are a userspace
 /// library abstraction over Zircon threads.
@@ -19,7 +18,6 @@ fn create_join() {
     panic!("pthreads are userspace library");
 }
 
-/// C++: TEST(PthreadTest, CreateDetached)
 ///
 /// Create a detached POSIX thread. The thread runs independently.
 /// Requires C runtime + pthread library.
@@ -30,7 +28,6 @@ fn create_detached() {
     panic!("pthreads are userspace library");
 }
 
-/// C++: TEST(PthreadTest, MutexBasic)
 ///
 /// Lock and unlock a POSIX mutex. Verifies basic mutual exclusion.
 /// Built on futexes in userspace.
@@ -41,7 +38,6 @@ fn mutex_basic() {
     panic!("pthreads are userspace library");
 }
 
-/// C++: TEST(PthreadTest, ConditionVariable)
 ///
 /// Wait and signal a POSIX condition variable. Built on futexes.
 #[should_panic(expected = "pthreads are userspace library")]
@@ -51,7 +47,6 @@ fn condition_variable() {
     panic!("pthreads are userspace library");
 }
 
-/// C++: TEST(PthreadTest, RwLock)
 ///
 /// Test POSIX read-write lock semantics (multiple readers, single
 /// writer). Built on futexes in userspace.
@@ -62,7 +57,6 @@ fn rw_lock() {
     panic!("pthreads are userspace library");
 }
 
-/// C++: TEST(PthreadTest, ThreadSpecific)
 ///
 /// Set and get thread-specific data using pthread_key_create.
 /// Requires C runtime + pthread library.
@@ -73,7 +67,6 @@ fn thread_specific() {
     panic!("pthreads are userspace library");
 }
 
-/// C++: TEST(PthreadTest, Once)
 ///
 /// Execute a function exactly once using pthread_once. Built on
 /// atomics and futexes.
@@ -84,7 +77,6 @@ fn once() {
     panic!("pthreads are userspace library");
 }
 
-/// C++: TEST(PthreadTest, Cancel)
 ///
 /// Cancel a running POSIX thread. The thread should respond to
 /// cancellation at the next cancellation point.
@@ -95,7 +87,6 @@ fn cancel() {
     panic!("pthreads are userspace library");
 }
 
-/// C++: TEST(PthreadTest, Barrier)
 ///
 /// Synchronize threads at a POSIX barrier. All threads must reach
 /// the barrier before any proceed. Built on futexes.
@@ -106,7 +97,6 @@ fn barrier() {
     panic!("pthreads are userspace library");
 }
 
-/// C++: TEST(PthreadTest, AttrStackSize)
 ///
 /// Set and get the stack size attribute for pthread creation.
 /// Verifies the attribute is properly propagated to thread creation.

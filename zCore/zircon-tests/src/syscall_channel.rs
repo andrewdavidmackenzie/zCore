@@ -50,7 +50,6 @@ fn create_invalid_options() {
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST(ChannelTest, WriteAndRead) — syscall level
 /// Write data through syscall, read it back through syscall.
 #[test]
 fn write_and_read_via_syscall() {
@@ -176,7 +175,6 @@ fn read_closed_peer_via_syscall() {
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-/// C++: TEST(ChannelTest, WriteWithHandleTransfer) — syscall level
 /// Write a handle through a channel, read it back on the other end.
 #[test]
 fn write_handle_transfer_via_syscall() {
@@ -263,7 +261,6 @@ fn read_without_read_right() {
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
-/// C++: TEST(ChannelTest, WriteWithoutWriteRightReturnsAccessDenied) — syscall level
 #[test]
 fn write_without_write_right() {
     let ctx = TestContext::new();
@@ -288,7 +285,6 @@ fn write_without_write_right() {
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
-/// C++: TEST(ChannelTest, WriteDataTooLargeReturnsOutOfRange) — syscall level
 /// Data exceeding ZX_CHANNEL_MAX_MSG_BYTES (65536) is rejected.
 #[test]
 fn write_data_too_large_via_syscall() {

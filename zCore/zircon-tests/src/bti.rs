@@ -196,7 +196,6 @@ fn name_support() {
 
 // ── Additional BTI tests ────────────────────────────────────────────
 
-/// C++: TEST(Bti, PinReadWrite)
 ///
 /// Pin a VMO with both READ and WRITE permissions.
 #[test]
@@ -218,7 +217,6 @@ fn pin_read_write() {
     pmt.unpin();
 }
 
-/// C++: TEST(Bti, PinMultipleVmos)
 ///
 /// Pin multiple VMOs on the same BTI. All should coexist.
 #[test]
@@ -239,7 +237,6 @@ fn pin_multiple_vmos() {
     assert_eq!(bti.get_info().pmo_count, 0);
 }
 
-/// C++: TEST(Bti, BtiKoidUnique)
 ///
 /// Each BTI should have a unique KOID.
 #[test]
@@ -250,7 +247,6 @@ fn bti_koid_unique() {
     assert_ne!(bti1.id(), bti2.id());
 }
 
-/// C++: TEST(Bti, PmtKoid)
 ///
 /// Each PMT (Pinned Memory Token) should have a unique KOID.
 #[test]
@@ -268,7 +264,6 @@ fn pmt_koid() {
     pmt2.unpin();
 }
 
-/// C++: TEST(Bti, IommuKoid)
 ///
 /// Each IOMMU object should have a valid non-zero KOID.
 #[test]
@@ -278,7 +273,6 @@ fn iommu_koid() {
     assert_ne!(_iommu.id(), 0);
 }
 
-/// C++: TEST(Bti, PinZeroLengthFails)
 ///
 /// Pinning with zero length should fail with INVALID_ARGS.
 #[test]
@@ -291,7 +285,6 @@ fn pin_zero_length_fails() {
     assert!(result.is_err(), "pinning zero length should fail");
 }
 
-/// C++: TEST(Bti, PinLargeVmo)
 ///
 /// Pin a large (multi-page) VMO. All pages should be pinned.
 #[test]

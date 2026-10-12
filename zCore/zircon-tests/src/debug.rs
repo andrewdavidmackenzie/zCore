@@ -7,7 +7,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(DebugTest, ReadProcessMemory)
 ///
 /// Read memory from a target process. Requires debug rights on the
 /// process handle and real process execution.
@@ -18,7 +17,6 @@ fn read_process_memory() {
     panic!("debug syscalls need real process");
 }
 
-/// C++: TEST(DebugTest, WriteProcessMemory)
 ///
 /// Write to a target process's memory. Requires debug rights and
 /// real process execution.
@@ -29,7 +27,6 @@ fn write_process_memory() {
     panic!("debug syscalls need real process");
 }
 
-/// C++: TEST(DebugTest, ReadProcessMemoryBadHandle)
 ///
 /// Read memory with an invalid process handle. Should return
 /// BAD_HANDLE or WRONG_TYPE.
@@ -40,7 +37,6 @@ fn read_process_memory_bad_handle() {
     panic!("debug syscalls need real process");
 }
 
-/// C++: TEST(DebugTest, WriteProcessMemoryBadHandle)
 ///
 /// Write memory with an invalid process handle. Should return
 /// BAD_HANDLE or WRONG_TYPE.
@@ -51,7 +47,6 @@ fn write_process_memory_bad_handle() {
     panic!("debug syscalls need real process");
 }
 
-/// C++: TEST(DebugTest, ReadProcessMemoryNoRights)
 ///
 /// Read memory without READ rights on the process handle. Should
 /// return ACCESS_DENIED.
@@ -62,7 +57,6 @@ fn read_process_memory_no_rights() {
     panic!("debug syscalls need real process");
 }
 
-/// C++: TEST(DebugTest, WriteProcessMemoryNoRights)
 ///
 /// Write memory without WRITE rights on the process handle. Should
 /// return ACCESS_DENIED.
@@ -73,7 +67,6 @@ fn write_process_memory_no_rights() {
     panic!("debug syscalls need real process");
 }
 
-/// C++: TEST(DebugTest, ReadProcessMemoryInvalidAddr)
 ///
 /// Read from an invalid/unmapped address in the target process.
 /// Should return NOT_FOUND.
@@ -84,7 +77,6 @@ fn read_process_memory_invalid_addr() {
     panic!("debug syscalls need real process");
 }
 
-/// C++: TEST(DebugTest, WriteProcessMemoryReadOnly)
 ///
 /// Write to a read-only mapped page in the target process. Should
 /// return ACCESS_DENIED.
@@ -95,7 +87,6 @@ fn write_process_memory_read_only() {
     panic!("debug syscalls need real process");
 }
 
-/// C++: TEST(DebugTest, SetSoftwareBreakpoint)
 ///
 /// Set a software breakpoint at an address in a target process.
 /// Requires debug infrastructure.
@@ -106,7 +97,6 @@ fn set_software_breakpoint() {
     panic!("debug syscalls need real process");
 }
 
-/// C++: TEST(DebugTest, DebugSendCommand)
 ///
 /// Send a debug command to a running process. The process should
 /// execute the command and reply. Requires process execution.

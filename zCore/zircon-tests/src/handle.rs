@@ -83,7 +83,6 @@ fn handle_invalid() {
     );
 }
 
-/// C++: TEST(HandleTest, Close)
 /// Closing a handle makes it invalid.
 #[test]
 fn handle_close_cxx() {
@@ -101,7 +100,6 @@ fn handle_close_cxx() {
     );
 }
 
-/// C++: TEST(HandleTest, CloseMany)
 /// Closing multiple handles at once.
 #[test]
 fn handle_close_many() {
@@ -134,7 +132,6 @@ fn handle_close_many() {
     );
 }
 
-/// C++: TEST(HandleTest, CloseBadHandle)
 /// Closing an invalid handle returns BAD_HANDLE.
 #[test]
 fn handle_close_bad_handle() {
@@ -148,7 +145,6 @@ fn handle_close_bad_handle() {
     );
 }
 
-/// C++: TEST(HandleTest, DuplicateInvalidHandle)
 /// Duplicating an invalid handle fails.
 #[test]
 fn handle_duplicate_invalid() {
@@ -159,7 +155,6 @@ fn handle_duplicate_invalid() {
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(HandleTest, DuplicateSameRights)
 /// Duplicating a handle with the same rights preserves them.
 #[test]
 fn handle_duplicate_same_rights() {
@@ -179,7 +174,6 @@ fn handle_duplicate_same_rights() {
     assert_eq!(rights, original_rights);
 }
 
-/// C++: TEST(HandleTest, DuplicateReducedRights)
 /// Duplicating a handle with a subset of rights succeeds.
 #[test]
 fn handle_duplicate_reduced_rights() {
@@ -201,7 +195,6 @@ fn handle_duplicate_reduced_rights() {
     assert_eq!(rights, Rights::READ);
 }
 
-/// C++: TEST(HandleTest, DuplicateExpandedRightsFails)
 /// Duplicating with rights not in the original fails (at the object level).
 #[test]
 fn handle_duplicate_expanded_rights_fails() {
@@ -224,7 +217,6 @@ fn handle_duplicate_expanded_rights_fails() {
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
-/// C++: TEST(HandleTest, Replace)
 /// Replace a handle with new rights.
 #[test]
 fn handle_replace_cxx() {
@@ -253,7 +245,6 @@ fn handle_replace_cxx() {
     assert_eq!(rights, Rights::READ);
 }
 
-/// C++: TEST(HandleTest, ReplaceBadHandle)
 /// Replacing an invalid handle fails.
 #[test]
 fn handle_replace_bad_handle() {
@@ -264,7 +255,6 @@ fn handle_replace_bad_handle() {
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(HandleTest, ReplaceInvalidRights)
 /// Replacing with rights that exceed the original fails.
 #[test]
 fn handle_replace_invalid_rights() {

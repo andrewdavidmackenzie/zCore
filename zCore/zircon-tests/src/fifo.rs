@@ -61,7 +61,6 @@ fn fifo_elem_size_mismatch() {
     assert_eq!(err, ZxError::OUT_OF_RANGE);
 }
 
-/// C++: TEST(FifoTest, ReadElemSizeMismatch)
 #[test]
 fn fifo_read_elem_size_mismatch() {
     let _ctx = TestContext::new();
@@ -75,7 +74,6 @@ fn fifo_read_elem_size_mismatch() {
     assert_eq!(f1.read(8, &mut buf, 1).unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 
-/// C++: TEST(FifoTest, WritableSignal)
 #[test]
 fn fifo_writable_signal() {
     let _ctx = TestContext::new();
@@ -92,7 +90,6 @@ fn fifo_writable_signal() {
     assert!(!f0.signal().contains(Signal::WRITABLE));
 }
 
-/// C++: TEST(FifoTest, ReadableSignal)
 #[test]
 fn fifo_readable_signal() {
     let _ctx = TestContext::new();
@@ -108,7 +105,6 @@ fn fifo_readable_signal() {
     assert!(!f1.signal().contains(Signal::READABLE));
 }
 
-/// C++: TEST(FifoTest, PeerClosedSignal)
 #[test]
 fn fifo_peer_closed_signal() {
     let _ctx = TestContext::new();
@@ -136,7 +132,6 @@ fn fifo_partial_write() {
     assert_eq!(n, 1);
 }
 
-/// C++: TEST(FifoTest, ReadAfterPeerClosed)
 #[test]
 fn fifo_read_after_peer_closed() {
     let _ctx = TestContext::new();
@@ -156,7 +151,6 @@ fn fifo_read_after_peer_closed() {
     assert_eq!(f1.read(4, &mut buf, 1).unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-/// C++: TEST(FifoTest, RelatedKoid)
 #[test]
 fn fifo_related_koid() {
     let _ctx = TestContext::new();
@@ -294,7 +288,6 @@ fn user_signals_and_signal_peer() {
     assert!(!fa.signal().contains(Signal::USER_SIGNAL_1));
 }
 
-/// C++: TEST(FifoTest, ZeroSizeCount)
 /// Creating a FIFO with 0 count at the syscall level fails.
 /// At the object level, Fifo::create does not validate — this is tested
 /// in syscall_fifo.rs (create_zero_size / invalid_parameters).
@@ -312,7 +305,6 @@ fn zero_size_count() {
     assert!(err == ZxError::SHOULD_WAIT || err == ZxError::OUT_OF_RANGE);
 }
 
-/// C++: TEST(FifoTest, InvalidElemSize)
 /// Creating a FIFO with 0 elem_size at the syscall level fails.
 /// At the object level, Fifo::create does not validate — this is tested
 /// in syscall_fifo.rs (invalid_parameters).
@@ -327,7 +319,6 @@ fn invalid_elem_size() {
     assert_eq!(err, ZxError::OUT_OF_RANGE);
 }
 
-/// C++: TEST(FifoTest, PeerClosedReadReturnsPeerClosed)
 /// Reading from a FIFO whose peer is closed and buffer is empty
 /// returns PEER_CLOSED immediately.
 #[test]

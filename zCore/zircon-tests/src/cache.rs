@@ -8,7 +8,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(CacheTest, FlushDataCache)
 ///
 /// Flush the data cache for a range of memory. Should succeed
 /// for valid mapped addresses. Requires real memory mapping.
@@ -19,7 +18,6 @@ fn flush_data_cache() {
     panic!("cache ops need real mapping");
 }
 
-/// C++: TEST(CacheTest, FlushInstructionCache)
 ///
 /// Flush the instruction cache for a range. Required after writing
 /// code into a VMO before execution. Requires real mapping.
@@ -30,7 +28,6 @@ fn flush_instruction_cache() {
     panic!("cache ops need real mapping");
 }
 
-/// C++: TEST(CacheTest, SyncCaches)
 ///
 /// Synchronize data and instruction caches. Required for JIT
 /// compilation scenarios. Requires real mapping.
@@ -41,7 +38,6 @@ fn sync_caches() {
     panic!("cache ops need real mapping");
 }
 
-/// C++: TEST(CacheTest, FlushNullAddress)
 ///
 /// Flush cache with a null address. Should return INVALID_ARGS.
 #[should_panic(expected = "cache ops need real mapping")]
@@ -51,7 +47,6 @@ fn flush_null_address() {
     panic!("cache ops need real mapping");
 }
 
-/// C++: TEST(CacheTest, FlushZeroLength)
 ///
 /// Flush cache with zero length — should be a no-op and succeed.
 #[should_panic(expected = "cache ops need real mapping")]
@@ -61,7 +56,6 @@ fn flush_zero_length() {
     panic!("cache ops need real mapping");
 }
 
-/// C++: TEST(CacheTest, FlushUnmappedAddress)
 ///
 /// Flush cache for an unmapped address range. Should return
 /// NOT_FOUND or cause a fault.
@@ -72,7 +66,6 @@ fn flush_unmapped_address() {
     panic!("cache ops need real mapping");
 }
 
-/// C++: TEST(CacheTest, FlushLargeRange)
 ///
 /// Flush cache for a large contiguous range. Should succeed
 /// without hanging. Requires real mapping.
@@ -83,7 +76,6 @@ fn flush_large_range() {
     panic!("cache ops need real mapping");
 }
 
-/// C++: TEST(CacheTest, InvalidOperation)
 ///
 /// Call zx_cache_flush with an invalid operation code. Should
 /// return INVALID_ARGS.

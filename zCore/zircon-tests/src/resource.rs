@@ -9,7 +9,6 @@ use crate::helpers::TestContext;
 use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
 use zircon_object::object::KernelObject;
 
-/// C++: TEST(ResourceTest, Create)
 ///
 /// Create a resource with valid kind and verify it has a valid KOID.
 #[test]
@@ -25,7 +24,6 @@ fn resource_create() {
     assert_ne!(res.id(), 0);
 }
 
-/// C++: TEST(ResourceTest, CreateInvalid)
 ///
 /// ResourceKind::COUNT is the sentinel value (one past the last valid
 /// kind). Creating a resource with COUNT is allowed at the kernel
@@ -40,7 +38,6 @@ fn resource_create_invalid() {
     assert_ne!(res.id(), 0);
 }
 
-/// C++: TEST(ResourceTest, CreateExclusive)
 ///
 /// Create a resource with the EXCLUSIVE flag.
 #[test]
@@ -57,7 +54,6 @@ fn resource_create_exclusive() {
     assert_ne!(res.id(), 0);
 }
 
-/// C++: TEST(ResourceTest, CreateOverlapping)
 ///
 /// Two non-exclusive resources with overlapping ranges should both
 /// pass the overlap check (only exclusive resources block overlap).
@@ -86,7 +82,6 @@ fn resource_create_overlapping() {
     drop(res1);
 }
 
-/// C++: TEST(ResourceTest, GetInfo)
 ///
 /// Verify resource info fields match creation parameters.
 #[test]
@@ -109,7 +104,6 @@ fn resource_get_info() {
     assert_eq!(&info.name[..11], b"my-resource");
 }
 
-/// C++: TEST(ResourceTest, Validate)
 ///
 /// A resource validates against its own kind and rejects other kinds.
 #[test]
@@ -128,7 +122,6 @@ fn resource_validate() {
     );
 }
 
-/// C++: TEST(ResourceTest, ValidateRanged)
 ///
 /// validate_ranged_resource checks both kind and range coverage.
 #[test]
@@ -176,7 +169,6 @@ fn resource_validate_ranged() {
     );
 }
 
-/// C++: TEST(ResourceTest, CreateChild)
 ///
 /// A root resource can create child sub-resources of any kind because
 /// ROOT bypasses kind and range checks.
@@ -209,7 +201,6 @@ fn resource_create_child() {
     assert_ne!(child.id(), 0);
 }
 
-/// C++: TEST(ResourceTest, ChildValidation)
 ///
 /// A child resource validates only against its own kind.
 #[test]
@@ -234,7 +225,6 @@ fn resource_child_validation() {
     );
 }
 
-/// C++: TEST(ResourceTest, ExclusiveOverlapFails)
 ///
 /// Creating an exclusive resource that overlaps an existing resource
 /// (or vice versa) should be rejected.
@@ -292,7 +282,6 @@ fn resource_exclusive_overlap_fails() {
     drop(res2);
 }
 
-/// C++: TEST(ResourceTest, RootBypassesRange)
 ///
 /// ROOT resources bypass range checks in validate_ranged_resource.
 #[test]
@@ -312,7 +301,6 @@ fn resource_root_bypasses_range() {
         .is_ok());
 }
 
-/// C++: TEST(ResourceTest, SystemResource)
 ///
 /// A SYSTEM resource validates as SYSTEM and covers the system
 /// sub-resource base IDs.
@@ -348,7 +336,6 @@ fn resource_system_resource() {
         .is_ok());
 }
 
-/// C++: TEST(ResourceTest, InvalidKind)
 ///
 /// A resource with a kind beyond COUNT is not representable by the
 /// ResourceKind enum. Attempting to create one via numeric_enum would
@@ -363,7 +350,6 @@ fn resource_invalid_kind() {
     assert_eq!(info.kind, ResourceKind::COUNT as u32);
 }
 
-/// C++: TEST(ResourceTest, NameSupport)
 ///
 /// Resource name is stored and returned in info.
 #[test]
@@ -384,7 +370,6 @@ fn resource_name_support() {
     assert_eq!(res.name(), "hello-resource");
 }
 
-/// C++: TEST(ResourceTest, RegisterRegion)
 ///
 /// Registering a region and then checking overlap works correctly.
 /// Region cleanup happens via on_zero_handles (handle table lifecycle),

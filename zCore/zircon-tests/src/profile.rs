@@ -17,7 +17,6 @@ fn profile_create() {
     panic!("profiles not available in libos mode");
 }
 
-/// C++: TEST(ProfileTest, CreateInvalid)
 ///
 /// Creating a profile with invalid parameters should fail.
 /// Not available in libos mode.
@@ -28,7 +27,6 @@ fn profile_create_invalid() {
     panic!("profiles not available in libos mode");
 }
 
-/// C++: TEST(ProfileTest, SetOnThread)
 ///
 /// Setting a profile on a thread. Not available in libos mode.
 #[test]
@@ -38,7 +36,6 @@ fn profile_set_on_thread() {
     panic!("profiles not available in libos mode");
 }
 
-/// C++: TEST(ProfileTest, SetOnJob)
 ///
 /// Setting a profile on a job. Not available in libos mode.
 #[test]
@@ -48,7 +45,6 @@ fn profile_set_on_job() {
     panic!("profiles not available in libos mode");
 }
 
-/// C++: TEST(ProfileTest, GetInfo)
 ///
 /// Getting info from a profile. Not available in libos mode.
 #[test]
@@ -58,7 +54,6 @@ fn profile_get_info() {
     panic!("profiles not available in libos mode");
 }
 
-/// C++: TEST(ProfileTest, Priority)
 ///
 /// Setting priority via profile. Not available in libos mode.
 #[test]
@@ -68,7 +63,6 @@ fn profile_priority() {
     panic!("profiles not available in libos mode");
 }
 
-/// C++: TEST(ProfileTest, Affinity)
 ///
 /// Setting CPU affinity via profile. Not available in libos mode.
 #[test]
@@ -78,7 +72,6 @@ fn profile_affinity() {
     panic!("profiles not available in libos mode");
 }
 
-/// C++: TEST(ProfileTest, DeadlineParameters)
 ///
 /// Setting deadline parameters via profile. Not available in libos mode.
 #[test]
@@ -88,7 +81,6 @@ fn profile_deadline_parameters() {
     panic!("profiles not available in libos mode");
 }
 
-/// C++: TEST(ProfileTest, InvalidParams)
 ///
 /// Profile with invalid parameters should fail. Not available in libos mode.
 #[test]
@@ -98,7 +90,6 @@ fn profile_invalid_params() {
     panic!("profiles not available in libos mode");
 }
 
-/// C++: TEST(ProfileTest, NameSupport)
 ///
 /// Profile name property support. Not available in libos mode.
 #[test]

@@ -7,7 +7,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(C11MutexTest, BasicLockUnlock)
 ///
 /// Lock and unlock a C11 mutex. Verifies basic mutual exclusion
 /// semantics. C11 mutexes are built on futexes in userspace.
@@ -18,7 +17,6 @@ fn basic_lock_unlock() {
     panic!("C11 mutexes are userspace library");
 }
 
-/// C++: TEST(C11MutexTest, TryLock)
 ///
 /// Try to lock a C11 mutex without blocking. Returns thrd_busy if
 /// already held. C11 mutexes are built on futexes in userspace.
@@ -29,7 +27,6 @@ fn try_lock() {
     panic!("C11 mutexes are userspace library");
 }
 
-/// C++: TEST(C11MutexTest, TimedLock)
 ///
 /// Lock a C11 mutex with a timeout. Returns thrd_timedout if the
 /// lock is not acquired within the deadline. Requires C11 runtime.
@@ -40,7 +37,6 @@ fn timed_lock() {
     panic!("C11 mutexes are userspace library");
 }
 
-/// C++: TEST(C11MutexTest, Recursive)
 ///
 /// Lock a C11 recursive mutex multiple times from the same thread.
 /// Each lock must be matched by an unlock. Requires C11 runtime.
@@ -51,7 +47,6 @@ fn recursive() {
     panic!("C11 mutexes are userspace library");
 }
 
-/// C++: TEST(C11MutexTest, Destroy)
 ///
 /// Destroy a C11 mutex. The mutex must not be held when destroyed.
 /// Requires C11 runtime.

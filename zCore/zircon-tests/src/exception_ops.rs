@@ -6,7 +6,6 @@
 #[allow(unused_imports)]
 use crate::helpers::TestContext;
 
-/// C++: TEST(ExceptionOpsTest, CreateExceptionChannel)
 ///
 /// Create an exception channel on a process. The channel should
 /// receive exception packets when threads in the process fault.
@@ -17,7 +16,6 @@ fn create_exception_channel() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, ThreadExceptionChannel)
 ///
 /// Create an exception channel on a specific thread. Only exceptions
 /// from that thread should be delivered.
@@ -28,7 +26,6 @@ fn thread_exception_channel() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, JobExceptionChannel)
 ///
 /// Create an exception channel on a job. Exceptions from all
 /// processes in the job should be delivered.
@@ -39,7 +36,6 @@ fn job_exception_channel() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, ExceptionTypeArchitecture)
 ///
 /// Trigger an architecture-specific exception (e.g., illegal
 /// instruction). The exception channel should receive the correct
@@ -51,7 +47,6 @@ fn exception_type_architecture() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, ExceptionResumeTried)
 ///
 /// Receive an exception and resume the thread with TRIED disposition.
 /// The thread should continue executing.
@@ -62,7 +57,6 @@ fn exception_resume_tried() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, ExceptionResumeHandled)
 ///
 /// Receive an exception and resume the thread with HANDLED
 /// disposition. The exception is considered resolved.
@@ -73,7 +67,6 @@ fn exception_resume_handled() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, UnhandledException)
 ///
 /// An unhandled exception (no handler closes the channel) should
 /// propagate up the exception chain (thread → process → job).
@@ -84,7 +77,6 @@ fn unhandled_exception() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, ExceptionChannelClose)
 ///
 /// Close an exception channel while an exception is pending. The
 /// exception should propagate to the next handler.
@@ -95,7 +87,6 @@ fn exception_channel_close() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, MultipleExceptionHandlers)
 ///
 /// Register exception handlers at thread, process, and job level.
 /// Exceptions should be delivered to the most specific handler first.
@@ -106,7 +97,6 @@ fn multiple_exception_handlers() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, ExceptionGetThread)
 ///
 /// Get the thread handle from an exception object. The thread
 /// should be the one that faulted.
@@ -117,7 +107,6 @@ fn exception_get_thread() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, ExceptionGetProcess)
 ///
 /// Get the process handle from an exception object.
 #[should_panic(expected = "exception channels need real execution")]
@@ -127,7 +116,6 @@ fn exception_get_process() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, DebugException)
 ///
 /// Trigger a debug exception (breakpoint). The exception should
 /// have type ZX_EXCP_SW_BREAKPOINT.
@@ -138,7 +126,6 @@ fn debug_exception() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, PolicyException)
 ///
 /// Trigger a policy exception (e.g., creating a disallowed object).
 /// The exception should have type ZX_EXCP_POLICY_ERROR.
@@ -149,7 +136,6 @@ fn policy_exception() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, SecondChanceException)
 ///
 /// An exception not handled at the debug level gets a second chance
 /// at the process/job level.
@@ -160,7 +146,6 @@ fn second_chance_exception() {
     panic!("exception channels need real execution");
 }
 
-/// C++: TEST(ExceptionOpsTest, ExceptionThreadState)
 ///
 /// While a thread is in an exception, its state should be
 /// BLOCKED_IN_EXCEPTION.

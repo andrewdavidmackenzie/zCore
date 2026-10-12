@@ -11,7 +11,6 @@ use zircon_object::signal::Event;
 
 extern crate alloc;
 
-/// C++: TEST(RightsTest, DefaultEventRights)
 ///
 /// A newly created event should have all default rights.
 #[test]
@@ -26,7 +25,6 @@ fn default_event_rights() {
     assert!(handle.rights.contains(Rights::TRANSFER));
 }
 
-/// C++: TEST(RightsTest, ReduceRights)
 ///
 /// Reducing rights on a handle should remove the specified rights.
 #[test]
@@ -40,7 +38,6 @@ fn reduce_rights() {
     assert!(handle.rights.contains(Rights::WAIT));
 }
 
-/// C++: TEST(RightsTest, DuplicatePreservesRights)
 ///
 /// Duplicating a handle should preserve the original rights.
 #[test]
@@ -54,7 +51,6 @@ fn duplicate_preserves_rights() {
     assert_eq!(dup.rights, handle.rights);
 }
 
-/// C++: TEST(RightsTest, DuplicateReduceRights)
 ///
 /// Duplicate a handle with reduced rights. The duplicate should
 /// have only the requested subset.
@@ -70,7 +66,6 @@ fn duplicate_reduce_rights() {
     assert!(!dup.rights.contains(Rights::SIGNAL));
 }
 
-/// C++: TEST(RightsTest, RightsContains)
 ///
 /// Verify the contains method on Rights works correctly.
 #[test]
@@ -83,7 +78,6 @@ fn rights_contains() {
     assert!(r.contains(Rights::READ | Rights::WRITE));
 }
 
-/// C++: TEST(RightsTest, ChannelDefaultRights)
 ///
 /// Channel endpoints should have their default rights set.
 #[test]
@@ -97,7 +91,6 @@ fn channel_default_rights() {
     assert!(handle.rights.contains(Rights::TRANSFER));
 }
 
-/// C++: TEST(RightsTest, NoRights)
 ///
 /// A handle with no rights should reject all operations.
 #[test]
@@ -110,7 +103,6 @@ fn no_rights() {
     assert!(!handle.rights.contains(Rights::SIGNAL));
 }
 
-/// C++: TEST(RightsTest, AllRights)
 ///
 /// A handle with all rights should pass all rights checks.
 #[test]
@@ -125,7 +117,6 @@ fn all_rights() {
     assert!(handle.rights.contains(Rights::DUPLICATE));
 }
 
-/// C++: TEST(RightsTest, TransferRightsViaChannel)
 ///
 /// Transfer a handle with specific rights through a channel. The
 /// received handle should retain the original rights.
@@ -148,7 +139,6 @@ fn transfer_rights_via_channel() {
     assert_eq!(received.handles[0].rights, rights);
 }
 
-/// C++: TEST(RightsTest, RightsBitOperations)
 ///
 /// Verify bitwise operations on rights (union, intersection, difference).
 #[test]
@@ -167,7 +157,6 @@ fn rights_bit_operations() {
     assert!(!intersection.contains(Rights::EXECUTE));
 }
 
-/// C++: TEST(RightsTest, RightsEmpty)
 ///
 /// Empty rights should contain nothing.
 #[test]

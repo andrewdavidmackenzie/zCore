@@ -44,7 +44,6 @@ fn empty_queue_should_wait() {
     assert_eq!(result.unwrap_err(), ZxError::SHOULD_WAIT);
 }
 
-/// C++: TEST(FifoTest, WriteAndRead) — syscall level
 #[test]
 fn write_and_read() {
     let ctx = TestContext::new();
@@ -80,7 +79,6 @@ fn write_and_read() {
     assert_eq!(&buf[8..12], &3u32.to_ne_bytes());
 }
 
-/// C++: TEST(FifoTest, ElemSizeMismatch) — syscall level
 #[test]
 fn elem_size_mismatch() {
     let ctx = TestContext::new();
@@ -99,7 +97,6 @@ fn elem_size_mismatch() {
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 
-/// C++: TEST(FifoTest, PeerClosed) — syscall level
 #[test]
 fn peer_closed() {
     let ctx = TestContext::new();

@@ -10,7 +10,6 @@ use zircon_object::task::Job;
 
 extern crate alloc;
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleValid)
 ///
 /// Query ZX_INFO_HANDLE_VALID on a valid handle. Should succeed.
 #[test]
@@ -20,7 +19,6 @@ fn info_handle_valid() {
     assert_ne!(event.id(), 0, "valid object should have non-zero KOID");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicEvent)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on an event. Should return type EVENT.
 #[test]
@@ -30,7 +28,6 @@ fn info_handle_basic_event() {
     assert_eq!(event.type_name(), "Event");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicChannel)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a channel. Should return type CHANNEL.
 #[test]
@@ -41,7 +38,6 @@ fn info_handle_basic_channel() {
     assert_eq!(local.type_name(), "Channel");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicSocket)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a socket. Should return type SOCKET.
 #[test]
@@ -52,7 +48,6 @@ fn info_handle_basic_socket() {
     assert_eq!(local.type_name(), "Socket");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicVmo)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a VMO. Should return type VMO.
 #[test]
@@ -63,7 +58,6 @@ fn info_handle_basic_vmo() {
     assert_eq!(vmo.type_name(), "VmObject");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicPort)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a port. Should return type PORT.
 #[test]
@@ -74,7 +68,6 @@ fn info_handle_basic_port() {
     assert_eq!(port.type_name(), "Port");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicTimer)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a timer. Should return type TIMER.
 #[test]
@@ -85,7 +78,6 @@ fn info_handle_basic_timer() {
     assert_eq!(timer.type_name(), "Timer");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicJob)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a job. Should return type JOB.
 #[test]
@@ -96,7 +88,6 @@ fn info_handle_basic_job() {
     assert_eq!(child.type_name(), "Job");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicProcess)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a process. Should return type PROCESS.
 #[test]
@@ -109,7 +100,6 @@ fn info_handle_basic_process() {
     assert_eq!(proc.type_name(), "Process");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicThread)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a thread. Should return type THREAD.
 #[test]
@@ -124,7 +114,6 @@ fn info_handle_basic_thread() {
     assert_eq!(thread.type_name(), "Thread");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicFifo)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on a FIFO. Should return type FIFO.
 #[test]
@@ -135,7 +124,6 @@ fn info_handle_basic_fifo() {
     assert_eq!(local.type_name(), "Fifo");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleBasicEventPair)
 ///
 /// Query ZX_INFO_HANDLE_BASIC on an event pair. Should return type
 /// EVENT_PAIR.
@@ -147,7 +135,6 @@ fn info_handle_basic_event_pair() {
     assert_eq!(ep0.type_name(), "EventPair");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, UniqueKoidsAcrossTypes)
 ///
 /// KOIDs should be unique across different object types.
 #[test]
@@ -179,7 +166,6 @@ fn unique_koids_across_types() {
     }
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoHandleCount)
 ///
 /// Verify handle count tracking. Multiple handles to the same object
 /// should increase the count.
@@ -190,7 +176,6 @@ fn info_handle_count() {
     panic!("handle count needs handle table");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoProcessMaps)
 ///
 /// Query ZX_INFO_PROCESS_MAPS. Returns the memory map of a process.
 /// Requires real process execution.
@@ -201,7 +186,6 @@ fn info_process_maps() {
     panic!("process maps need real execution");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoProcessVmos)
 ///
 /// Query ZX_INFO_PROCESS_VMOS. Returns all VMOs in a process.
 /// Requires real process execution.
@@ -212,7 +196,6 @@ fn info_process_vmos() {
     panic!("process VMO list needs real execution");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoCpuStats)
 ///
 /// Query ZX_INFO_CPU_STATS. Returns per-CPU statistics. Requires
 /// root resource.
@@ -223,7 +206,6 @@ fn info_cpu_stats() {
     panic!("CPU stats need root resource");
 }
 
-/// C++: TEST(ObjectInfoExtraTest, InfoKmemStats)
 ///
 /// Query ZX_INFO_KMEM_STATS. Returns kernel memory statistics.
 /// Requires root resource.

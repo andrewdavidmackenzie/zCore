@@ -10,7 +10,6 @@ use zircon_object::ipc::Channel;
 use zircon_object::object::{Handle, HandleValue, KernelObject, Rights};
 use zircon_object::ZxError;
 
-/// C++: TEST(HandleTest, Close) — syscall level
 #[test]
 fn close_via_syscall() {
     let ctx = TestContext::new();
@@ -28,7 +27,6 @@ fn close_via_syscall() {
     assert!(ctx.proc.get_object::<Channel>(h).is_err());
 }
 
-/// C++: TEST(HandleTest, CloseInvalidHandle) — syscall level
 /// Closing handle 0 (INVALID_HANDLE) is OK in Fuchsia.
 #[test]
 fn close_invalid_handle() {
@@ -39,7 +37,6 @@ fn close_invalid_handle() {
     sc.sys_handle_close(0).unwrap();
 }
 
-/// C++: TEST(HandleTest, Duplicate) — syscall level
 #[test]
 fn duplicate_via_syscall() {
     let ctx = TestContext::new();
@@ -69,7 +66,6 @@ fn duplicate_via_syscall() {
     assert_eq!(obj1.id(), obj2.id());
 }
 
-/// C++: TEST(HandleTest, DuplicateWithReducedRights) — syscall level
 #[test]
 fn duplicate_reduced_rights() {
     let ctx = TestContext::new();
@@ -96,7 +92,6 @@ fn duplicate_reduced_rights() {
     assert_eq!(rights, Rights::READ);
 }
 
-/// C++: TEST(HandleTest, Replace) — syscall level
 #[test]
 fn replace_via_syscall() {
     let ctx = TestContext::new();
@@ -127,7 +122,6 @@ fn replace_via_syscall() {
     assert_eq!(rights, Rights::READ);
 }
 
-/// C++: TEST(HandleTest, DuplicateExpandedRightsFails) — syscall level
 /// Cannot escalate rights via duplicate.
 #[test]
 fn duplicate_expanded_rights_fails() {
@@ -148,7 +142,6 @@ fn duplicate_expanded_rights_fails() {
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
-/// C++: TEST(HandleTest, DuplicateRequiresDuplicateRight) — syscall level
 /// Handle must have DUPLICATE right to be duplicated.
 #[test]
 fn duplicate_requires_duplicate_right() {
@@ -260,7 +253,6 @@ fn replace_failure_both_invalid() {
     sc.sys_handle_check_valid(h).unwrap();
 }
 
-/// C++: TEST(HandleTest, CloseBadHandle) — syscall level
 /// Closing a non-existent (but non-zero) handle fails.
 #[test]
 fn close_bad_handle_syscall() {
@@ -272,7 +264,6 @@ fn close_bad_handle_syscall() {
     assert!(result.is_err());
 }
 
-/// C++: TEST(HandleTest, DuplicateInvalidHandle) — syscall level
 /// Duplicating a non-existent handle fails.
 #[test]
 fn duplicate_invalid_handle_syscall() {
@@ -289,7 +280,6 @@ fn duplicate_invalid_handle_syscall() {
     assert_eq!(h2, 0, "output handle should not be written on failure");
 }
 
-/// C++: TEST(HandleTest, DuplicateSameRights) — syscall level
 /// Duplicating with SAME_RIGHTS preserves the original rights.
 #[test]
 fn duplicate_same_rights_syscall() {
@@ -314,7 +304,6 @@ fn duplicate_same_rights_syscall() {
     assert_eq!(rights, original_rights);
 }
 
-/// C++: TEST(HandleTest, ReplaceBadHandle) — syscall level
 /// Replacing a non-existent handle fails.
 #[test]
 fn replace_bad_handle_syscall() {
@@ -330,7 +319,6 @@ fn replace_bad_handle_syscall() {
     assert!(result.is_err());
 }
 
-/// C++: TEST(HandleTest, ReplaceInvalidRights) — syscall level
 /// Replace with rights that exceed the original handle's rights fails.
 #[test]
 fn replace_invalid_rights_syscall() {

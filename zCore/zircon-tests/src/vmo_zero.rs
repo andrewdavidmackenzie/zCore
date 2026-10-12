@@ -352,7 +352,6 @@ fn unaligned_committed() {
 
 // ── Pager-backed VmoZero test ───────────────────────────────────────
 
-/// C++: TEST(VmoZeroTestCase, HiddenNoContent)
 /// Zero pages in a pager-backed VMO (pre-supplied, no faulting).
 #[test]
 fn hidden_no_content() {

@@ -14,7 +14,6 @@ use zircon_object::object::{KernelObject, Signal};
 #[allow(unused_imports)]
 use zircon_object::ZxError;
 
-/// C++: TEST(SocketDispositionTest, SetDispositionWriteDisabled)
 ///
 /// Disable writes on a socket using set_disposition. Writing should
 /// fail with BAD_STATE.
@@ -25,7 +24,6 @@ fn set_disposition_write_disabled() {
     panic!("disposition API semantics differ");
 }
 
-/// C++: TEST(SocketDispositionTest, SetDispositionWriteEnabled)
 ///
 /// Disable then re-enable writes on a socket.
 #[should_panic(expected = "disposition API semantics differ")]
@@ -35,7 +33,6 @@ fn set_disposition_write_enabled() {
     panic!("disposition API semantics differ");
 }
 
-/// C++: TEST(SocketDispositionTest, PeerWriteDisabled)
 ///
 /// Disable writes on one end, verify the peer sees the correct
 /// signals.
@@ -46,7 +43,6 @@ fn peer_write_disabled() {
     panic!("disposition API semantics differ");
 }
 
-/// C++: TEST(SocketDispositionTest, DispositionInvalidBits)
 ///
 /// Set disposition with invalid bits. Should return INVALID_ARGS.
 #[should_panic(expected = "disposition API semantics differ")]
@@ -56,7 +52,6 @@ fn disposition_invalid_bits() {
     panic!("disposition API semantics differ");
 }
 
-/// C++: TEST(SocketDispositionTest, DispositionOnDatagramSocket)
 ///
 /// Set disposition on a datagram socket.
 #[should_panic(expected = "disposition API semantics differ")]
@@ -66,7 +61,6 @@ fn disposition_on_datagram_socket() {
     panic!("disposition API semantics differ");
 }
 
-/// C++: TEST(SocketDispositionTest, DispositionPeerClosed)
 ///
 /// Set disposition after the peer is closed. Should return
 /// PEER_CLOSED.
@@ -77,7 +71,6 @@ fn disposition_peer_closed() {
     panic!("disposition API semantics differ");
 }
 
-/// C++: TEST(SocketDispositionTest, ReadAfterWriteDisabled)
 ///
 /// Disable writes, but data written before disable should still
 /// be readable.
@@ -88,7 +81,6 @@ fn read_after_write_disabled() {
     panic!("disposition API semantics differ");
 }
 
-/// C++: TEST(SocketDispositionTest, BothEndsDisabled)
 ///
 /// Disable writes on both ends.
 #[should_panic(expected = "disposition API semantics differ")]
