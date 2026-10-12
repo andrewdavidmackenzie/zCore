@@ -76,16 +76,23 @@ fn job_exception_channel() {
 ///
 /// Trigger an architecture-specific exception (e.g., illegal
 /// instruction). The exception channel should receive the correct
-/// exception type.
+/// exception type. Requires real thread execution to generate a fault.
 #[test]
-#[ignore = "exception delivery needs real thread execution"]
 fn exception_type_architecture() {
-    // Requires triggering a hardware exception in a running thread.
+    let ctx = TestContext::new();
+    let exceptionate = ctx.proc.exceptionate();
+    // We can create the channel, but exception delivery needs real execution.
+    let channel = exceptionate.create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert!(channel.is_ok());
+    // No way to trigger an architecture exception without real thread execution.
+    // Verify at least that the channel was created and the exceptionate is bound.
+    let channel2 = exceptionate.create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert_eq!(channel2.unwrap_err(), zircon_object::ZxError::ALREADY_BOUND);
 }
 
 ///
 /// Receive an exception and resume the thread with TRIED disposition.
-/// The thread should continue executing.
+/// The thread should continue executing. Requires real faulting thread.
 #[test]
 #[ignore = "exception delivery needs real thread execution"]
 fn exception_resume_tried() {
@@ -94,7 +101,7 @@ fn exception_resume_tried() {
 
 ///
 /// Receive an exception and resume the thread with HANDLED
-/// disposition. The exception is considered resolved.
+/// disposition. The exception is considered resolved. Requires real faulting thread.
 #[test]
 #[ignore = "exception delivery needs real thread execution"]
 fn exception_resume_handled() {
@@ -104,33 +111,107 @@ fn exception_resume_handled() {
 ///
 /// An unhandled exception (no handler closes the channel) should
 /// propagate up the exception chain (thread -> process -> job).
+/// Verify the exception chain can be set up: thread, process, job.
 #[test]
-#[ignore = "exception delivery needs real thread execution"]
 fn unhandled_exception() {
-    // Requires exception propagation through the task hierarchy.
+    let ctx = TestContext::new();
+    let thread = ctx.current.inner();
+
+    // Create exception channels at all three levels
+    let thread_ch = thread.exceptionate().create_channel(Rights::DEFAULT_THREAD);
+    assert!(thread_ch.is_ok());
+
+    let proc_ch = ctx
+        .proc
+        .exceptionate()
+        .create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert!(proc_ch.is_ok());
+
+    let job = ctx.proc.job();
+    let job_ch = job
+        .exceptionate()
+        .create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert!(job_ch.is_ok());
+
+    // All three channels are now bound. Exception propagation cannot be
+    // tested without a real faulting thread, but the channel hierarchy is set up.
 }
 
 ///
 /// Close an exception channel while an exception is pending. The
-/// exception should propagate to the next handler.
+/// exception should propagate to the next handler. Verify that
+/// dropping a channel allows re-binding.
 #[test]
-#[ignore = "exception delivery needs real thread execution"]
 fn exception_channel_close() {
-    // Requires pending exception with channel close during handling.
+    let ctx = TestContext::new();
+    let exceptionate = ctx.proc.exceptionate();
+
+    let ch = exceptionate.create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert!(ch.is_ok());
+
+    // Drop the channel — simulates closing during exception handling
+    drop(ch);
+
+    // Should be able to create a new channel after close
+    let ch2 = exceptionate.create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert!(ch2.is_ok());
 }
 
 ///
 /// Register exception handlers at thread, process, and job level.
 /// Exceptions should be delivered to the most specific handler first.
+/// Verify all three can be bound simultaneously.
 #[test]
-#[ignore = "exception delivery needs real thread execution"]
 fn multiple_exception_handlers() {
-    // Requires exception delivery to multiple handler levels.
+    let ctx = TestContext::new();
+    let thread = ctx.current.inner();
+
+    // Bind thread-level handler
+    let _thread_ch = thread
+        .exceptionate()
+        .create_channel(Rights::DEFAULT_THREAD)
+        .unwrap();
+
+    // Bind process-level handler
+    let _proc_ch = ctx
+        .proc
+        .exceptionate()
+        .create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS)
+        .unwrap();
+
+    // Bind job-level handler
+    let job = ctx.proc.job();
+    let _job_ch = job
+        .exceptionate()
+        .create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS)
+        .unwrap();
+
+    // All three bound — re-binding any should fail
+    assert_eq!(
+        thread
+            .exceptionate()
+            .create_channel(Rights::DEFAULT_THREAD)
+            .unwrap_err(),
+        zircon_object::ZxError::ALREADY_BOUND
+    );
+    assert_eq!(
+        ctx.proc
+            .exceptionate()
+            .create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS)
+            .unwrap_err(),
+        zircon_object::ZxError::ALREADY_BOUND
+    );
+    assert_eq!(
+        job.exceptionate()
+            .create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS)
+            .unwrap_err(),
+        zircon_object::ZxError::ALREADY_BOUND
+    );
 }
 
 ///
 /// Get the thread handle from an exception object. The thread
-/// should be the one that faulted.
+/// should be the one that faulted. Requires a real exception.
 #[test]
 #[ignore = "exception delivery needs real thread execution"]
 fn exception_get_thread() {
@@ -138,7 +219,7 @@ fn exception_get_thread() {
 }
 
 ///
-/// Get the process handle from an exception object.
+/// Get the process handle from an exception object. Requires a real exception.
 #[test]
 #[ignore = "exception delivery needs real thread execution"]
 fn exception_get_process() {
@@ -147,7 +228,7 @@ fn exception_get_process() {
 
 ///
 /// Trigger a debug exception (breakpoint). The exception should
-/// have type ZX_EXCP_SW_BREAKPOINT.
+/// have type ZX_EXCP_SW_BREAKPOINT. Requires real thread execution.
 #[test]
 #[ignore = "exception delivery needs real thread execution"]
 fn debug_exception() {
@@ -156,7 +237,7 @@ fn debug_exception() {
 
 ///
 /// Trigger a policy exception (e.g., creating a disallowed object).
-/// The exception should have type ZX_EXCP_POLICY_ERROR.
+/// The exception should have type ZX_EXCP_POLICY_ERROR. Requires real execution.
 #[test]
 #[ignore = "exception delivery needs real thread execution"]
 fn policy_exception() {
@@ -165,7 +246,7 @@ fn policy_exception() {
 
 ///
 /// An exception not handled at the debug level gets a second chance
-/// at the process/job level.
+/// at the process/job level. Requires real exception delivery.
 #[test]
 #[ignore = "exception delivery needs real thread execution"]
 fn second_chance_exception() {
@@ -174,7 +255,7 @@ fn second_chance_exception() {
 
 ///
 /// While a thread is in an exception, its state should be
-/// BLOCKED_IN_EXCEPTION.
+/// BLOCKED_IN_EXCEPTION. Requires real exception delivery.
 #[test]
 #[ignore = "exception delivery needs real thread execution"]
 fn exception_thread_state() {

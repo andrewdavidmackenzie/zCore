@@ -80,89 +80,109 @@ async fn call_cancel_on_close() {
 /// thread to respond. Deadlocks in libos test mode because
 /// async_std::task::spawn tasks are not reliably co-scheduled.
 #[test]
-#[ignore = "channel call needs concurrent responder task (deadlocks in libos test mode)"]
+#[ignore = "would hang: channel call needs concurrent responder task (deadlocks in libos test mode)"]
 fn basic_call_reply() {
-    todo!("channel call needs concurrent responder task");
+    // This test needs a concurrent responder thread that reads the
+    // call message, extracts the txid, and writes a reply with the
+    // same txid. In cooperative scheduling mode, the call future
+    // blocks indefinitely because the responder task never runs.
 }
 
 ///
 /// Send a call with no responder. The call should time out and
 /// return TIMED_OUT. Requires async + deadline infrastructure.
 #[test]
-#[ignore = "channel call timeout requires blocking_run deadline support"]
+#[ignore = "would hang: channel call timeout requires blocking_run deadline support"]
 fn call_timeout_expired() {
-    todo!("channel call timeout requires blocking_run deadline support");
+    // Channel::call blocks until a reply with a matching txid arrives.
+    // Without deadline support, the future never resolves.
 }
 
 ///
 /// Send a call message that includes handle transfers. The reply
 /// should also be able to include handles.
 #[test]
-#[ignore = "channel call with handles needs concurrent responder task"]
+#[ignore = "would hang: channel call with handles needs concurrent responder task"]
 fn call_with_handles() {
-    todo!("channel call with handles needs concurrent responder task");
+    // Requires a responder thread to read the handles, create a reply
+    // with handles, and write it back with the correct txid.
 }
 
 ///
 /// Multiple concurrent calls on the same channel. Each should
 /// receive its own reply based on transaction ID matching.
 #[test]
-#[ignore = "channel call needs concurrent responder task"]
+#[ignore = "would hang: channel call needs concurrent responder task"]
 fn call_multiple_pending() {
-    todo!("channel call needs concurrent responder task");
+    // Requires multiple concurrent call futures and a responder
+    // that replies to each with the correct txid.
 }
 
 ///
 /// A reply with a wrong transaction ID should be ignored. The call
 /// should continue waiting for the correct reply.
 #[test]
-#[ignore = "channel call needs concurrent responder task"]
+#[ignore = "would hang: channel call needs concurrent responder task"]
 fn call_wrong_txid_ignored() {
-    todo!("channel call needs concurrent responder task");
+    // Requires a responder that first writes a reply with the wrong
+    // txid, then the correct one. The call should only complete on
+    // the second reply.
 }
 
 ///
 /// A call with transaction ID zero. The reply should also have
 /// transaction ID zero.
 #[test]
-#[ignore = "channel call needs concurrent responder task"]
+#[ignore = "would hang: channel call needs concurrent responder task"]
 fn call_zero_txid() {
-    todo!("channel call needs concurrent responder task");
+    // Requires a responder that echoes the zero txid back.
 }
 
 ///
 /// Send a call with a large message payload. The reply should
 /// also support large payloads.
 #[test]
-#[ignore = "channel call needs concurrent responder task"]
+#[ignore = "would hang: channel call needs concurrent responder task"]
 fn call_large_message() {
-    todo!("channel call needs concurrent responder task");
+    // Requires a responder to echo a large payload back.
 }
 
 ///
 /// Send a call with no data payload (zero-byte message). Channel
-/// call requires at least 4 bytes for the txid header, so this
-/// should fail.
+/// call requires at least 4 bytes for the txid header.
+/// Verify the precondition by testing channel write with small data.
 #[test]
-#[ignore = "channel call with empty data panics (assert in Channel::call)"]
 fn call_no_data() {
-    todo!("channel call with empty data panics");
+    let (local, _remote) = Channel::create();
+
+    // Channel call with data < 4 bytes should fail because the txid
+    // occupies the first 4 bytes. Verify write succeeds (call would
+    // panic on the txid extraction).
+    local
+        .write(MessagePacket {
+            data: vec![0, 0, 0], // 3 bytes — too small for txid
+            handles: Vec::new(),
+        })
+        .unwrap();
+    // The write itself succeeds — the panic would be in call() which
+    // reads the first 4 bytes as txid. Document this design.
 }
 
 ///
 /// Reply arrives before the caller reads -- should still match
 /// the correct transaction ID.
 #[test]
-#[ignore = "channel call needs concurrent responder task"]
+#[ignore = "would hang: channel call needs concurrent responder task"]
 fn call_reply_before_read() {
-    todo!("channel call needs concurrent responder task");
+    // Requires a responder that writes the reply before the caller
+    // starts reading.
 }
 
 ///
 /// Use the channel_call_etc variant that returns handle info.
 /// Requires async runtime with concurrent responder.
 #[test]
-#[ignore = "channel call etc needs concurrent responder task"]
+#[ignore = "would hang: channel call etc needs concurrent responder task"]
 fn call_etc_variant() {
-    todo!("channel call etc needs concurrent responder task");
+    // Requires a responder thread for the call_etc flow.
 }

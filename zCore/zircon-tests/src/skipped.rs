@@ -339,7 +339,27 @@ fn vmo_clone2_progressive_clone_truncate() {
 #[test]
 #[ignore = "COW populated_bytes fractional attribution not implemented"]
 fn vmo_clone_resize_child() {
-    // COW page attribution doesn't implement fractional scaling after resize.
+    let _ctx = TestContext::new();
+    let vmo = init_page_tagged_vmo_resizable(3);
+
+    let child = vmo.create_child(true, 0, 3 * PAGE_SIZE).unwrap();
+
+    // Shrink child to 1 page.
+    child.set_len(PAGE_SIZE).unwrap();
+
+    let parent_info = vmo.get_info();
+    let child_info = child.get_info();
+    // After resize, COW attribution should shift pages back to parent.
+    // This fails because fractional attribution is not implemented.
+    assert_eq!(
+        child_info.populated_bytes as usize, PAGE_SIZE,
+        "child should own 1 page after resize"
+    );
+    assert_eq!(
+        parent_info.populated_bytes as usize,
+        2 * PAGE_SIZE,
+        "parent should own 2 pages after child resize"
+    );
 }
 
 /// C++: TEST_F(VmoCloneResizeTests, ResizeOriginal)
@@ -347,5 +367,25 @@ fn vmo_clone_resize_child() {
 #[test]
 #[ignore = "COW populated_bytes fractional attribution not implemented"]
 fn vmo_clone_resize_original() {
-    // COW page attribution doesn't implement fractional scaling after resize.
+    let _ctx = TestContext::new();
+    let vmo = init_page_tagged_vmo_resizable(3);
+
+    let child = vmo.create_child(true, 0, 3 * PAGE_SIZE).unwrap();
+
+    // Shrink parent to 1 page.
+    vmo.set_len(PAGE_SIZE).unwrap();
+
+    let parent_info = vmo.get_info();
+    let child_info = child.get_info();
+    // After parent resize, child should own the orphaned pages.
+    // This fails because fractional attribution is not implemented.
+    assert_eq!(
+        parent_info.populated_bytes as usize, PAGE_SIZE,
+        "parent should own 1 page after resize"
+    );
+    assert_eq!(
+        child_info.populated_bytes as usize,
+        2 * PAGE_SIZE,
+        "child should own 2 orphaned pages"
+    );
 }
