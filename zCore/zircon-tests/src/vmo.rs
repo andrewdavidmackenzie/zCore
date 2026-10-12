@@ -1524,3 +1524,378 @@ fn vmo_info_not_paged() {
     // Size should match (via len(), not info.size which is private).
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
 }
+
+// ============================================================================
+// Missing Fuchsia core-tests: VmoTestCase suite (53 tests)
+// ============================================================================
+
+/// C++: TEST(VmoTestCase, CacheFlush)
+#[test]
+#[ignore = "requires VMAR mapping and cache flush operations"]
+fn cache_flush() {
+    todo!("requires VMAR mapping and cache flush operations");
+}
+
+/// C++: TEST(VmoTestCase, CacheOp)
+#[test]
+#[ignore = "requires VMO cache operations (ZX_VMO_OP_CACHE_*)"]
+fn cache_op() {
+    todo!("requires VMO cache operations (ZX_VMO_OP_CACHE_*)");
+}
+
+/// C++: TEST(VmoTestCase, CacheOpLargeVmo)
+#[test]
+#[ignore = "requires VMO cache operations on large VMO"]
+fn cache_op_large_vmo() {
+    todo!("requires VMO cache operations on large VMO");
+}
+
+/// C++: TEST(VmoTestCase, CacheOpOutOfRange)
+#[test]
+#[ignore = "requires VMO cache operations out-of-range validation"]
+fn cache_op_out_of_range() {
+    todo!("requires VMO cache operations out-of-range validation");
+}
+
+/// C++: TEST(VmoTestCase, CacheOpPhys)
+#[test]
+#[ignore = "requires physical VMO cache operations"]
+fn cache_op_phys() {
+    todo!("requires physical VMO cache operations");
+}
+
+/// C++: TEST(VmoTestCase, CachePolicyRace)
+#[test]
+#[ignore = "requires threads racing cache policy changes"]
+fn cache_policy_race() {
+    todo!("requires threads racing cache policy changes");
+}
+
+/// C++: TEST(VmoTestCase, ChildResizeRight)
+#[test]
+#[ignore = "requires child VMO resize right validation with pager"]
+fn child_resize_right() {
+    todo!("requires child VMO resize right validation with pager");
+}
+
+/// C++: TEST(VmoTestCase, Commit)
+#[test]
+#[ignore = "requires VMAR mapping to verify VMO commit behavior"]
+fn commit() {
+    todo!("requires VMAR mapping to verify VMO commit behavior");
+}
+
+/// C++: TEST(VmoTestCase, CompressedContiguous)
+#[test]
+#[ignore = "requires BTI and contiguous VMO with compression"]
+fn compressed_contiguous() {
+    todo!("requires BTI and contiguous VMO with compression");
+}
+
+/// C++: TEST(VmoTestCase, ContiguousRequireAlignedSize)
+#[test]
+#[ignore = "requires BTI and contiguous VMO creation"]
+fn contiguous_require_aligned_size() {
+    todo!("requires BTI and contiguous VMO creation");
+}
+
+/// C++: TEST(VmoTestCase, ContiguousRequireNonzeroSize)
+#[test]
+#[ignore = "requires BTI and contiguous VMO creation"]
+fn contiguous_require_nonzero_size() {
+    todo!("requires BTI and contiguous VMO creation");
+}
+
+/// C++: TEST(VmoTestCase, CreateChildMintResize)
+#[test]
+#[ignore = "requires child VMO with mint resize right"]
+fn create_child_mint_resize() {
+    todo!("requires child VMO with mint resize right");
+}
+
+/// C++: TEST(VmoTestCase, CreateVmoUnboundedInvalidStreamSize)
+#[test]
+#[ignore = "requires ZX_VMO_UNBOUNDED with invalid stream size validation"]
+fn create_vmo_unbounded_invalid_stream_size() {
+    todo!("requires ZX_VMO_UNBOUNDED with invalid stream size validation");
+}
+
+/// C++: TEST(VmoTestCase, DecommitChildSliceTests)
+#[test]
+#[ignore = "requires decommit on child slice VMO"]
+fn decommit_child_slice_tests() {
+    todo!("requires decommit on child slice VMO");
+}
+
+/// C++: TEST(VmoTestCase, DecommitMisaligned)
+#[test]
+#[ignore = "requires decommit with misaligned offset/size validation"]
+fn decommit_misaligned() {
+    todo!("requires decommit with misaligned offset/size validation");
+}
+
+/// C++: TEST(VmoTestCase, Discardable)
+#[test]
+#[ignore = "requires discardable VMO lock/unlock/discard"]
+fn discardable() {
+    todo!("requires discardable VMO lock/unlock/discard");
+}
+
+/// C++: TEST(VmoTestCase, FaultBeyondStreamSizeNoPhysOrContig)
+#[test]
+#[ignore = "requires VMAR mapping with stream size fault handling"]
+fn fault_beyond_stream_size_no_phys_or_contig() {
+    todo!("requires VMAR mapping with stream size fault handling");
+}
+
+/// C++: TEST(VmoTestCase, GrowMappedVmo)
+#[test]
+#[ignore = "requires VMAR mapping with resizable VMO growth"]
+fn grow_mapped_vmo() {
+    todo!("requires VMAR mapping with resizable VMO growth");
+}
+
+/// C++: TEST(VmoTestCase, LockUnlock)
+#[test]
+#[ignore = "requires discardable VMO lock/unlock operations"]
+fn lock_unlock() {
+    todo!("requires discardable VMO lock/unlock operations");
+}
+
+/// C++: TEST(VmoTestCase, Map)
+#[test]
+#[ignore = "requires VMAR mapping with various options"]
+fn map() {
+    todo!("requires VMAR mapping with various options");
+}
+
+/// C++: TEST(VmoTestCase, MapRead)
+#[test]
+#[ignore = "requires VMAR mapping and VMO read from second page"]
+fn map_read() {
+    todo!("requires VMAR mapping and VMO read from second page");
+}
+
+/// C++: TEST(VmoTestCase, MappedVmoSmallerThanMapping)
+#[test]
+#[ignore = "requires VMAR mapping larger than VMO with fault probing"]
+fn mapped_vmo_smaller_than_mapping() {
+    todo!("requires VMAR mapping larger than VMO with fault probing");
+}
+
+/// C++: TEST(VmoTestCase, MetadataBytes)
+#[test]
+#[ignore = "requires VMO metadata bytes accounting"]
+fn metadata_bytes() {
+    todo!("requires VMO metadata bytes accounting");
+}
+
+/// C++: TEST(VmoTestCase, NoPermMap)
+#[test]
+#[ignore = "requires VMAR mapping with zero permissions and probing"]
+fn no_perm_map() {
+    todo!("requires VMAR mapping with zero permissions and probing");
+}
+
+/// C++: TEST(VmoTestCase, NoPermProtect)
+#[test]
+#[ignore = "requires VMAR mapping with protect to zero permissions"]
+fn no_perm_protect() {
+    todo!("requires VMAR mapping with protect to zero permissions");
+}
+
+/// C++: TEST(VmoTestCase, NoWriteResizable)
+#[test]
+#[ignore = "requires VMO REQUIRE_NON_RESIZABLE mapping validation"]
+fn no_write_resizable() {
+    todo!("requires VMO REQUIRE_NON_RESIZABLE mapping validation");
+}
+
+/// C++: TEST(VmoTestCase, OpOutOfBounds)
+#[test]
+#[ignore = "requires VMO op_range out-of-bounds validation"]
+fn op_out_of_bounds() {
+    todo!("requires VMO op_range out-of-bounds validation");
+}
+
+/// C++: TEST(VmoTestCase, ParallelRead)
+#[test]
+#[ignore = "requires threads and VMAR mapping for parallel VMO reads"]
+fn parallel_read() {
+    todo!("requires threads and VMAR mapping for parallel VMO reads");
+}
+
+/// C++: TEST(VmoTestCase, ParallelWriteAndDecommit)
+#[test]
+#[ignore = "requires threads and VMAR mapping for parallel write/decommit"]
+fn parallel_write_and_decommit() {
+    todo!("requires threads and VMAR mapping for parallel write/decommit");
+}
+
+/// C++: TEST(VmoTestCase, PhysicalSlice)
+#[test]
+#[ignore = "requires physical VMO slice creation"]
+fn physical_slice() {
+    todo!("requires physical VMO slice creation");
+}
+
+/// C++: TEST(VmoTestCase, PhysicalVmoInvalidInitialSize)
+#[test]
+#[ignore = "requires zx_vmo_create_physical with MMIO resource"]
+fn physical_vmo_invalid_initial_size() {
+    todo!("requires zx_vmo_create_physical with MMIO resource");
+}
+
+/// C++: TEST(VmoTestCase, PhysicalVmoOobMapping)
+#[test]
+#[ignore = "requires physical VMO with out-of-bounds mapping rejection"]
+fn physical_vmo_oob_mapping() {
+    todo!("requires physical VMO with out-of-bounds mapping rejection");
+}
+
+/// C++: TEST(VmoTestCase, PinTests)
+#[test]
+#[ignore = "requires BTI pin/unpin operations"]
+fn pin_tests() {
+    todo!("requires BTI pin/unpin operations");
+}
+
+/// C++: TEST(VmoTestCase, Prefetch)
+#[test]
+#[ignore = "requires VMAR mapping with OP_PREFETCH"]
+fn prefetch() {
+    todo!("requires VMAR mapping with OP_PREFETCH");
+}
+
+/// C++: TEST(VmoTestCase, ProtectToWrite)
+#[test]
+#[ignore = "requires VMAR protect to add write permission"]
+fn protect_to_write() {
+    todo!("requires VMAR protect to add write permission");
+}
+
+/// C++: TEST(VmoTestCase, ReadOnlyMap)
+#[test]
+#[ignore = "requires VMAR read-only mapping with write fault probing"]
+fn read_only_map() {
+    todo!("requires VMAR read-only mapping with write fault probing");
+}
+
+/// C++: TEST(VmoTestCase, ReadWriteInvalidKernelBuffer)
+#[test]
+#[ignore = "requires kernel address space detection in VMO read/write"]
+fn read_write_invalid_kernel_buffer() {
+    todo!("requires kernel address space detection in VMO read/write");
+}
+
+/// C++: TEST(VmoTestCase, ReadWriteInvalidNullBuffer)
+#[test]
+#[ignore = "requires null buffer detection in VMO read/write"]
+fn read_write_invalid_null_buffer() {
+    todo!("requires null buffer detection in VMO read/write");
+}
+
+/// C++: TEST(VmoTestCase, ReadWriteInvalidUserBuffer)
+#[test]
+#[ignore = "requires unmapped user buffer detection in VMO read/write"]
+fn read_write_invalid_user_buffer() {
+    todo!("requires unmapped user buffer detection in VMO read/write");
+}
+
+/// C++: TEST(VmoTestCase, ResizeHazard)
+#[test]
+#[ignore = "requires VMAR mapping with concurrent resize hazard"]
+fn resize_hazard() {
+    todo!("requires VMAR mapping with concurrent resize hazard");
+}
+
+/// C++: TEST(VmoTestCase, ResizeRight)
+#[test]
+#[ignore = "requires VMO resize right validation with pager"]
+fn resize_right() {
+    todo!("requires VMO resize right validation with pager");
+}
+
+/// C++: TEST(VmoTestCase, Rights)
+#[test]
+#[ignore = "requires VMO handle rights validation"]
+fn rights() {
+    todo!("requires VMO handle rights validation");
+}
+
+/// C++: TEST(VmoTestCase, RightsExec)
+#[test]
+#[ignore = "requires VMO execute right via vmo_replace_as_executable"]
+fn rights_exec() {
+    todo!("requires VMO execute right via vmo_replace_as_executable");
+}
+
+/// C++: TEST(VmoTestCase, SetStreamSizePinnedPages)
+#[test]
+#[ignore = "requires BTI pinning with set_stream_size"]
+fn set_stream_size_pinned_pages() {
+    todo!("requires BTI pinning with set_stream_size");
+}
+
+/// C++: TEST(VmoTestCase, StreamSizeRights)
+#[test]
+#[ignore = "requires stream size get/set rights validation"]
+fn stream_size_rights() {
+    todo!("requires stream size get/set rights validation");
+}
+
+/// C++: TEST(VmoTestCase, StreamSizeSlicesAndReferences)
+#[test]
+#[ignore = "requires unbounded VMO with slice/reference stream size"]
+fn stream_size_slices_and_references() {
+    todo!("requires unbounded VMO with slice/reference stream size");
+}
+
+/// C++: TEST(VmoTestCase, UncachedContiguous)
+#[test]
+#[ignore = "requires BTI and uncached contiguous VMO"]
+fn uncached_contiguous() {
+    todo!("requires BTI and uncached contiguous VMO");
+}
+
+/// C++: TEST(VmoTestCase, UnmapLoanedcontiguousWhileFaulting)
+#[test]
+#[ignore = "requires loaned contiguous VMO with concurrent fault/unmap"]
+fn unmap_loaned_contiguous_while_faulting() {
+    todo!("requires loaned contiguous VMO with concurrent fault/unmap");
+}
+
+/// C++: TEST(VmoTestCase, V1Info)
+#[test]
+#[ignore = "requires ZX_INFO_VMO V1 layout validation"]
+fn v1_info() {
+    todo!("requires ZX_INFO_VMO V1 layout validation");
+}
+
+/// C++: TEST(VmoTestCase, V2Info)
+#[test]
+#[ignore = "requires ZX_INFO_VMO V2 layout validation"]
+fn v2_info() {
+    todo!("requires ZX_INFO_VMO V2 layout validation");
+}
+
+/// C++: TEST(VmoTestCase, V3Info)
+#[test]
+#[ignore = "requires ZX_INFO_VMO V3 layout validation"]
+fn v3_info() {
+    todo!("requires ZX_INFO_VMO V3 layout validation");
+}
+
+/// C++: TEST(VmoTestCase, VmoUnbounded)
+#[test]
+#[ignore = "requires ZX_VMO_UNBOUNDED creation and stream size"]
+fn vmo_unbounded() {
+    todo!("requires ZX_VMO_UNBOUNDED creation and stream size");
+}
+
+/// C++: TEST(VmoTestCase, ZeroRangeOnSetStreamSize)
+#[test]
+#[ignore = "requires unbounded VMO with set_stream_size zeroing"]
+fn zero_range_on_set_stream_size() {
+    todo!("requires unbounded VMO with set_stream_size zeroing");
+}

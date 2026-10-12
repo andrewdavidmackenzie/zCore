@@ -563,3 +563,414 @@ fn addr_and_size() {
     let info = child.get_info();
     assert_eq!(info.len, size);
 }
+
+// ============================================================================
+// Missing Fuchsia core-tests: Vmar suite (58 tests)
+// All require VMAR mapping, threads, or process memory operations.
+// ============================================================================
+
+/// C++: TEST(Vmar, AlignmentVmarAllocateTest)
+#[test]
+#[ignore = "requires VMAR alignment flags not implemented in zCore"]
+fn alignment_vmar_allocate_test() {
+    todo!("requires VMAR alignment flags not implemented in zCore");
+}
+
+/// C++: TEST(Vmar, AlignmentVmarMapTest)
+#[test]
+#[ignore = "requires VMAR alignment flags not implemented in zCore"]
+fn alignment_vmar_map_test() {
+    todo!("requires VMAR alignment flags not implemented in zCore");
+}
+
+/// C++: TEST(Vmar, AllocateAtLowAddressTest)
+#[test]
+#[ignore = "requires process memory mapping and VMAR info query"]
+fn allocate_at_low_address_test() {
+    todo!("requires process memory mapping and VMAR info query");
+}
+
+/// C++: TEST(Vmar, AllocateOobTest)
+#[test]
+#[ignore = "requires VMAR SPECIFIC flag and out-of-bounds validation"]
+fn allocate_oob_test() {
+    todo!("requires VMAR SPECIFIC flag and out-of-bounds validation");
+}
+
+/// C++: TEST(Vmar, AllocateUnsatisfiableTest)
+#[test]
+#[ignore = "requires VMAR SPECIFIC flag and capacity exhaustion"]
+fn allocate_unsatisfiable_test() {
+    todo!("requires VMAR SPECIFIC flag and capacity exhaustion");
+}
+
+/// C++: TEST(Vmar, AllowFaultsTest)
+#[test]
+#[ignore = "requires VMAR fault-handling infrastructure"]
+fn allow_faults_test() {
+    todo!("requires VMAR fault-handling infrastructure");
+}
+
+/// C++: TEST(Vmar, BadRangeOpNestedVmar)
+#[test]
+#[ignore = "requires VMAR op_range with nested subregions"]
+fn bad_range_op_nested_vmar() {
+    todo!("requires VMAR op_range with nested subregions");
+}
+
+/// C++: TEST(Vmar, BasicAllocateTest)
+#[test]
+#[ignore = "requires process_create and full VMAR hierarchy"]
+fn basic_allocate_test() {
+    todo!("requires process_create and full VMAR hierarchy");
+}
+
+/// C++: TEST(Vmar, ConcurrentUnmapReadMemory)
+#[test]
+#[ignore = "requires threads and process_read_memory"]
+fn concurrent_unmap_read_memory() {
+    todo!("requires threads and process_read_memory");
+}
+
+/// C++: TEST(Vmar, DestroyTest)
+#[test]
+#[ignore = "requires process_create with VMAR handle rights"]
+fn destroy_test() {
+    todo!("requires process_create with VMAR handle rights");
+}
+
+/// C++: TEST(Vmar, DestroyedVmarTest)
+#[test]
+#[ignore = "requires process_create and process_read/write_memory"]
+fn destroyed_vmar_test() {
+    todo!("requires process_create and process_read/write_memory");
+}
+
+/// C++: TEST(Vmar, FaultBeyondReducedStreamSize)
+#[test]
+#[ignore = "requires stream size and VMAR mapping with fault handling"]
+fn fault_beyond_reduced_stream_size() {
+    todo!("requires stream size and VMAR mapping with fault handling");
+}
+
+/// C++: TEST(Vmar, FaultBeyondStreamSize)
+#[test]
+#[ignore = "requires stream size and VMAR mapping with fault handling"]
+fn fault_beyond_stream_size() {
+    todo!("requires stream size and VMAR mapping with fault handling");
+}
+
+/// C++: TEST(Vmar, FaultBeyondStreamSizeForceWritable)
+#[test]
+#[ignore = "requires stream size and VMAR mapping with fault handling"]
+fn fault_beyond_stream_size_force_writable() {
+    todo!("requires stream size and VMAR mapping with fault handling");
+}
+
+/// C++: TEST(Vmar, FaultBeyondStreamSizeRange)
+#[test]
+#[ignore = "requires stream size and VMAR mapping with fault handling"]
+fn fault_beyond_stream_size_range() {
+    todo!("requires stream size and VMAR mapping with fault handling");
+}
+
+/// C++: TEST(Vmar, InvalidArgsTest)
+#[test]
+#[ignore = "requires full syscall-level VMAR argument validation"]
+fn invalid_args_test() {
+    todo!("requires full syscall-level VMAR argument validation");
+}
+
+/// C++: TEST(Vmar, MapInCompactTest)
+#[test]
+#[ignore = "requires VMAR COMPACT flag and VMO mapping"]
+fn map_in_compact_test() {
+    todo!("requires VMAR COMPACT flag and VMO mapping");
+}
+
+/// C++: TEST(Vmar, MapInUpperLimitTest)
+#[test]
+#[ignore = "requires VMAR OFFSET_IS_UPPER_LIMIT flag"]
+fn map_in_upper_limit_test() {
+    todo!("requires VMAR OFFSET_IS_UPPER_LIMIT flag");
+}
+
+/// C++: TEST(Vmar, MapOverDestroyedTest)
+#[test]
+#[ignore = "requires process_create and VMAR SPECIFIC mapping"]
+fn map_over_destroyed_test() {
+    todo!("requires process_create and VMAR SPECIFIC mapping");
+}
+
+/// C++: TEST(Vmar, MapRangeResizable)
+#[test]
+#[ignore = "requires VMAR MAP_RANGE with resizable VMO"]
+fn map_range_resizable() {
+    todo!("requires VMAR MAP_RANGE with resizable VMO");
+}
+
+/// C++: TEST(Vmar, MapRangeStreamSizeWraparound)
+#[test]
+#[ignore = "requires VMAR MAP_RANGE with stream size wraparound"]
+fn map_range_stream_size_wraparound() {
+    todo!("requires VMAR MAP_RANGE with stream size wraparound");
+}
+
+/// C++: TEST(Vmar, MapReadIfXomUnsupported)
+#[test]
+#[ignore = "requires XOM (execute-only memory) feature detection"]
+fn map_read_if_xom_unsupported() {
+    todo!("requires XOM (execute-only memory) feature detection");
+}
+
+/// C++: TEST(Vmar, MapSpecificOverwriteTest)
+#[test]
+#[ignore = "requires VMAR SPECIFIC_OVERWRITE flag"]
+fn map_specific_overwrite_test() {
+    todo!("requires VMAR SPECIFIC_OVERWRITE flag");
+}
+
+/// C++: TEST(Vmar, NestedRegionPermsTest)
+#[test]
+#[ignore = "requires process_create and VMAR permission hierarchy"]
+fn nested_region_perms_test() {
+    todo!("requires process_create and VMAR permission hierarchy");
+}
+
+/// C++: TEST(Vmar, ObjectInfoTest)
+#[test]
+#[ignore = "requires ZX_INFO_VMAR and process VMAR handle"]
+fn object_info_test() {
+    todo!("requires ZX_INFO_VMAR and process VMAR handle");
+}
+
+/// C++: TEST(Vmar, OpOnRangeWithChildVmarNextToIt)
+#[test]
+#[ignore = "requires VMAR op_range adjacent to child VMAR"]
+fn op_on_range_with_child_vmar_next_to_it() {
+    todo!("requires VMAR op_range adjacent to child VMAR");
+}
+
+/// C++: TEST(Vmar, OpRangeRights)
+#[test]
+#[ignore = "requires VMAR op_range rights validation"]
+fn op_range_rights() {
+    todo!("requires VMAR op_range rights validation");
+}
+
+/// C++: TEST(Vmar, OvermappingTest)
+#[test]
+#[ignore = "requires VMAR SPECIFIC flag and ALREADY_EXISTS validation"]
+fn overmapping_test() {
+    todo!("requires VMAR SPECIFIC flag and ALREADY_EXISTS validation");
+}
+
+/// C++: TEST(Vmar, PartialUnmapAndRead)
+#[test]
+#[ignore = "requires process_read_memory after partial unmap"]
+fn partial_unmap_and_read() {
+    todo!("requires process_read_memory after partial unmap");
+}
+
+/// C++: TEST(Vmar, PartialUnmapAndWrite)
+#[test]
+#[ignore = "requires process_write_memory after partial unmap"]
+fn partial_unmap_and_write() {
+    todo!("requires process_write_memory after partial unmap");
+}
+
+/// C++: TEST(Vmar, PartialUnmapWithVmarOffset)
+#[test]
+#[ignore = "requires VMAR unmap with specific offset"]
+fn partial_unmap_with_vmar_offset() {
+    todo!("requires VMAR unmap with specific offset");
+}
+
+/// C++: TEST(Vmar, Prefetch)
+#[test]
+#[ignore = "requires VMAR OP_PREFETCH"]
+fn prefetch() {
+    todo!("requires VMAR OP_PREFETCH");
+}
+
+/// C++: TEST(Vmar, ProtectCowWritable)
+#[test]
+#[ignore = "requires VMAR protect with COW clone writability"]
+fn protect_cow_writable() {
+    todo!("requires VMAR protect with COW clone writability");
+}
+
+/// C++: TEST(Vmar, ProtectLargeUncomittedTest)
+#[test]
+#[ignore = "requires VMAR protect on large uncommitted mapping"]
+fn protect_large_uncommitted_test() {
+    todo!("requires VMAR protect on large uncommitted mapping");
+}
+
+/// C++: TEST(Vmar, ProtectMultipleTest)
+#[test]
+#[ignore = "requires VMAR protect across multiple mappings"]
+fn protect_multiple_test() {
+    todo!("requires VMAR protect across multiple mappings");
+}
+
+/// C++: TEST(Vmar, ProtectOverDemandPagedTest)
+#[test]
+#[ignore = "requires VMAR protect over demand-paged VMO mapping"]
+fn protect_over_demand_paged_test() {
+    todo!("requires VMAR protect over demand-paged VMO mapping");
+}
+
+/// C++: TEST(Vmar, ProtectReadIfXomUnsupported)
+#[test]
+#[ignore = "requires XOM feature detection and VMAR protect"]
+fn protect_read_if_xom_unsupported() {
+    todo!("requires XOM feature detection and VMAR protect");
+}
+
+/// C++: TEST(Vmar, ProtectSplitTest)
+#[test]
+#[ignore = "requires VMAR protect that splits a mapping"]
+fn protect_split_test() {
+    todo!("requires VMAR protect that splits a mapping");
+}
+
+/// C++: TEST(Vmar, ProtectSubregionTest)
+#[test]
+#[ignore = "requires VMAR protect on subregion with OP_CHILDREN rights"]
+fn protect_subregion_test() {
+    todo!("requires VMAR protect on subregion with OP_CHILDREN rights");
+}
+
+/// C++: TEST(Vmar, ProtectTest)
+#[test]
+#[ignore = "requires VMAR protect with VMO handle rights"]
+fn protect_test() {
+    todo!("requires VMAR protect with VMO handle rights");
+}
+
+/// C++: TEST(Vmar, RangeOpCommit)
+#[test]
+#[ignore = "requires VMAR OP_COMMIT on mapped range"]
+fn range_op_commit() {
+    todo!("requires VMAR OP_COMMIT on mapped range");
+}
+
+/// C++: TEST(Vmar, RangeOpCommitVmoPages)
+#[test]
+#[ignore = "requires VMAR OP_COMMIT verifying VMO page commitment"]
+fn range_op_commit_vmo_pages() {
+    todo!("requires VMAR OP_COMMIT verifying VMO page commitment");
+}
+
+/// C++: TEST(Vmar, RangeOpCommitVmoPages2)
+#[test]
+#[ignore = "requires VMAR OP_COMMIT verifying VMO page commitment (variant 2)"]
+fn range_op_commit_vmo_pages_2() {
+    todo!("requires VMAR OP_COMMIT verifying VMO page commitment (variant 2)");
+}
+
+/// C++: TEST(Vmar, RangeOpMapRange)
+#[test]
+#[ignore = "requires VMAR OP_MAP_RANGE"]
+fn range_op_map_range() {
+    todo!("requires VMAR OP_MAP_RANGE");
+}
+
+/// C++: TEST(Vmar, RangeOpStreamSizeWraparound)
+#[test]
+#[ignore = "requires VMAR op_range with stream size wraparound"]
+fn range_op_stream_size_wraparound() {
+    todo!("requires VMAR op_range with stream size wraparound");
+}
+
+/// C++: TEST(Vmar, RangeOpSubRegions)
+#[test]
+#[ignore = "requires VMAR op_range spanning subregions"]
+fn range_op_sub_regions() {
+    todo!("requires VMAR op_range spanning subregions");
+}
+
+/// C++: TEST(Vmar, RangeOpZero)
+#[test]
+#[ignore = "requires VMAR OP_ZERO on mapped range"]
+fn range_op_zero() {
+    todo!("requires VMAR OP_ZERO on mapped range");
+}
+
+/// C++: TEST(Vmar, RightsDropTest)
+#[test]
+#[ignore = "requires VMAR handle rights dropping and validation"]
+fn rights_drop_test() {
+    todo!("requires VMAR handle rights dropping and validation");
+}
+
+/// C++: TEST(Vmar, SpecificOverwriteMergeMappings)
+#[test]
+#[ignore = "requires VMAR SPECIFIC_OVERWRITE with mapping merge"]
+fn specific_overwrite_merge_mappings() {
+    todo!("requires VMAR SPECIFIC_OVERWRITE with mapping merge");
+}
+
+/// C++: TEST(Vmar, UnalignedLenMapTest)
+#[test]
+#[ignore = "requires VMAR map with unaligned length and process_read_memory"]
+fn unaligned_len_map_test() {
+    todo!("requires VMAR map with unaligned length and process_read_memory");
+}
+
+/// C++: TEST(Vmar, UnalignedLenTest)
+#[test]
+#[ignore = "requires VMAR unmap/protect with unaligned length"]
+fn unaligned_len_test() {
+    todo!("requires VMAR unmap/protect with unaligned length");
+}
+
+/// C++: TEST(Vmar, UnmapBaseNotMappedTest)
+#[test]
+#[ignore = "requires VMAR unmap of unmapped base address"]
+fn unmap_base_not_mapped_test() {
+    todo!("requires VMAR unmap of unmapped base address");
+}
+
+/// C++: TEST(Vmar, UnmapLargeUncommittedTest)
+#[test]
+#[ignore = "requires VMAR unmap of large uncommitted region"]
+fn unmap_large_uncommitted_test() {
+    todo!("requires VMAR unmap of large uncommitted region");
+}
+
+/// C++: TEST(Vmar, UnmapMultipleTest)
+#[test]
+#[ignore = "requires VMAR unmap spanning multiple mappings"]
+fn unmap_multiple_test() {
+    todo!("requires VMAR unmap spanning multiple mappings");
+}
+
+/// C++: TEST(Vmar, UnmapOpChildren)
+#[test]
+#[ignore = "requires VMAR unmap with OP_CHILDREN rights"]
+fn unmap_op_children() {
+    todo!("requires VMAR unmap with OP_CHILDREN rights");
+}
+
+/// C++: TEST(Vmar, UnmapSplitTest)
+#[test]
+#[ignore = "requires VMAR unmap that splits a mapping"]
+fn unmap_split_test() {
+    todo!("requires VMAR unmap that splits a mapping");
+}
+
+/// C++: TEST(Vmar, VmarMapRangeOffsetTest)
+#[test]
+#[ignore = "requires VMAR MAP_RANGE with VMO offset"]
+fn vmar_map_range_offset_test() {
+    todo!("requires VMAR MAP_RANGE with VMO offset");
+}
+
+/// C++: TEST(Vmar, WriteReadOnlyMemory)
+#[test]
+#[ignore = "requires VMAR read-only mapping with write fault detection"]
+fn write_read_only_memory() {
+    todo!("requires VMAR read-only mapping with write fault detection");
+}

@@ -1014,3 +1014,400 @@ fn thread_read_state_vector() {
     let _ctx = TestContext::new();
     panic!("needs real thread execution");
 }
+
+// ============================================================================
+// Missing Fuchsia core-tests: Threads suite (56 tests)
+// All require real thread execution, register state, or mini-process.
+// ============================================================================
+
+/// C++: TEST(Threads, BadSyscallCaller)
+#[test]
+#[ignore = "requires real thread execution with bad syscall and exception handling"]
+fn bad_syscall_caller() {
+    todo!("requires real thread execution with bad syscall and exception handling");
+}
+
+/// C++: TEST(Threads, BadSyscallNumber)
+#[test]
+#[ignore = "requires real thread execution with bad syscall and exception handling"]
+fn bad_syscall_number() {
+    todo!("requires real thread execution with bad syscall and exception handling");
+}
+
+/// C++: TEST(Threads, Basics)
+#[test]
+#[ignore = "requires real thread execution with sleep and wait"]
+fn basics() {
+    todo!("requires real thread execution with sleep and wait");
+}
+
+/// C++: TEST(Threads, DebugRegistersDr6CorrectAfterBreakpointRemoval)
+#[test]
+#[ignore = "requires debug register state and hardware breakpoints"]
+fn debug_registers_dr6_correct_after_breakpoint_removal() {
+    todo!("requires debug register state and hardware breakpoints");
+}
+
+/// C++: TEST(Threads, DebugRegistersDr6ResetOnDebugException)
+#[test]
+#[ignore = "requires debug register state and hardware breakpoints"]
+fn debug_registers_dr6_reset_on_debug_exception() {
+    todo!("requires debug register state and hardware breakpoints");
+}
+
+/// C++: TEST(Threads, DebugRegistersValidation)
+#[test]
+#[ignore = "requires debug register state validation"]
+fn debug_registers_validation() {
+    todo!("requires debug register state validation");
+}
+
+/// C++: TEST(Threads, DebugRegistersWatchpointSyscallPanicRepro)
+#[test]
+#[ignore = "requires debug register watchpoint and syscall interaction"]
+fn debug_registers_watchpoint_syscall_panic_repro() {
+    todo!("requires debug register watchpoint and syscall interaction");
+}
+
+/// C++: TEST(Threads, EmptyNameSucceeds)
+#[test]
+#[ignore = "requires thread creation with empty name via syscall"]
+fn empty_name_succeeds() {
+    todo!("requires thread creation with empty name via syscall");
+}
+
+/// C++: TEST(Threads, ExitViaException)
+#[test]
+#[ignore = "requires real thread execution with exception-based exit"]
+fn exit_via_exception() {
+    todo!("requires real thread execution with exception-based exit");
+}
+
+/// C++: TEST(Threads, GetAffinity)
+#[test]
+#[ignore = "requires thread CPU affinity mask query"]
+fn get_affinity() {
+    todo!("requires thread CPU affinity mask query");
+}
+
+/// C++: TEST(Threads, GetInfoRuntime)
+#[test]
+#[ignore = "requires real thread execution with ZX_INFO_TASK_RUNTIME"]
+fn get_info_runtime() {
+    todo!("requires real thread execution with ZX_INFO_TASK_RUNTIME");
+}
+
+/// C++: TEST(Threads, GetInfoRuntimeV1)
+#[test]
+#[ignore = "requires real thread execution with ZX_INFO_TASK_RUNTIME_V1"]
+fn get_info_runtime_v1() {
+    todo!("requires real thread execution with ZX_INFO_TASK_RUNTIME_V1");
+}
+
+/// C++: TEST(Threads, GetLastScheduledCpu)
+#[test]
+#[ignore = "requires real thread execution with ZX_INFO_THREAD_STATS"]
+fn get_last_scheduled_cpu() {
+    todo!("requires real thread execution with ZX_INFO_THREAD_STATS");
+}
+
+/// C++: TEST(Threads, InfoTaskStatsFails)
+#[test]
+#[ignore = "requires real thread execution and ZX_INFO_TASK_STATS check"]
+fn info_task_stats_fails() {
+    todo!("requires real thread execution and ZX_INFO_TASK_STATS check");
+}
+
+/// C++: TEST(Threads, InfoThreadStatsFails)
+#[test]
+#[ignore = "requires real thread execution and ZX_INFO_THREAD_STATS after exit"]
+fn info_thread_stats_fails() {
+    todo!("requires real thread execution and ZX_INFO_THREAD_STATS after exit");
+}
+
+/// C++: TEST(Threads, InvalidRights)
+#[test]
+#[ignore = "requires handle duplication with reduced rights"]
+fn invalid_rights() {
+    todo!("requires handle duplication with reduced rights");
+}
+
+/// C++: TEST(Threads, LongNameSucceeds)
+#[test]
+#[ignore = "requires thread creation with long name truncation via syscall"]
+fn long_name_succeeds() {
+    todo!("requires thread creation with long name truncation via syscall");
+}
+
+/// C++: TEST(Threads, NoncanonicalRipAddressIRETQ)
+#[test]
+#[ignore = "requires x86_64 non-canonical address exception handling"]
+fn noncanonical_rip_address_iretq() {
+    todo!("requires x86_64 non-canonical address exception handling");
+}
+
+/// C++: TEST(Threads, NoncanonicalRipAddressSyscall)
+#[test]
+#[ignore = "requires x86_64 non-canonical address exception handling"]
+fn noncanonical_rip_address_syscall() {
+    todo!("requires x86_64 non-canonical address exception handling");
+}
+
+/// C++: TEST(Threads, NonstartedThread)
+#[test]
+#[ignore = "requires thread creation without start via syscall"]
+fn nonstarted_thread() {
+    todo!("requires thread creation without start via syscall");
+}
+
+/// C++: TEST(Threads, ProcessStartOnSecondThread)
+#[test]
+#[ignore = "requires process_start rejection of second thread"]
+fn process_start_on_second_thread() {
+    todo!("requires process_start rejection of second thread");
+}
+
+/// C++: TEST(Threads, ReadingFpRegisterState)
+#[test]
+#[ignore = "requires real thread execution with FP register state"]
+fn reading_fp_register_state() {
+    todo!("requires real thread execution with FP register state");
+}
+
+/// C++: TEST(Threads, ReadingGeneralRegisterState)
+#[test]
+#[ignore = "requires real thread execution with general register state"]
+fn reading_general_register_state() {
+    todo!("requires real thread execution with general register state");
+}
+
+/// C++: TEST(Threads, ReadingVectorRegisterState)
+#[test]
+#[ignore = "requires real thread execution with vector register state"]
+fn reading_vector_register_state() {
+    todo!("requires real thread execution with vector register state");
+}
+
+/// C++: TEST(Threads, ResumeSuspended)
+#[test]
+#[ignore = "requires real thread execution with suspend/resume"]
+fn resume_suspended() {
+    todo!("requires real thread execution with suspend/resume");
+}
+
+/// C++: TEST(Threads, StartRegs)
+#[test]
+#[ignore = "requires thread start with specific initial register values"]
+fn start_regs() {
+    todo!("requires thread start with specific initial register values");
+}
+
+/// C++: TEST(Threads, StartRegsNoncanonicalTp)
+#[test]
+#[ignore = "requires thread start with non-canonical thread pointer"]
+fn start_regs_noncanonical_tp() {
+    todo!("requires thread start with non-canonical thread pointer");
+}
+
+/// C++: TEST(Threads, StartRegsSuspended)
+#[test]
+#[ignore = "requires thread start while suspended with register verification"]
+fn start_regs_suspended() {
+    todo!("requires thread start while suspended with register verification");
+}
+
+/// C++: TEST(Threads, StartSuspendedAndResumedThread)
+#[test]
+#[ignore = "requires real thread execution with suspend before start"]
+fn start_suspended_and_resumed_thread() {
+    todo!("requires real thread execution with suspend before start");
+}
+
+/// C++: TEST(Threads, StartSuspendedThread)
+#[test]
+#[ignore = "requires real thread execution with suspend before start"]
+fn start_suspended_thread() {
+    todo!("requires real thread execution with suspend before start");
+}
+
+/// C++: TEST(Threads, SuspendAfterDeath)
+#[test]
+#[ignore = "requires real thread execution with post-death suspend"]
+fn suspend_after_death() {
+    todo!("requires real thread execution with post-death suspend");
+}
+
+/// C++: TEST(Threads, SuspendChannelCall)
+#[test]
+#[ignore = "requires real thread execution with channel call suspension"]
+fn suspend_channel_call() {
+    todo!("requires real thread execution with channel call suspension");
+}
+
+/// C++: TEST(Threads, SuspendInvalidTargets)
+#[test]
+#[ignore = "requires suspend validation on self/process/wrong-type"]
+fn suspend_invalid_targets() {
+    todo!("requires suspend validation on self/process/wrong-type");
+}
+
+/// C++: TEST(Threads, SuspendMultiple)
+#[test]
+#[ignore = "requires real thread execution with multiple suspend tokens"]
+fn suspend_multiple() {
+    todo!("requires real thread execution with multiple suspend tokens");
+}
+
+/// C++: TEST(Threads, SuspendPortCall)
+#[test]
+#[ignore = "requires real thread execution with port wait suspension"]
+fn suspend_port_call() {
+    todo!("requires real thread execution with port wait suspension");
+}
+
+/// C++: TEST(Threads, SuspendSingleWaitAsyncSignalDelivery)
+#[test]
+#[ignore = "requires real thread execution with async signal delivery"]
+fn suspend_single_wait_async_signal_delivery() {
+    todo!("requires real thread execution with async signal delivery");
+}
+
+/// C++: TEST(Threads, SuspendSleeping)
+#[test]
+#[ignore = "requires real thread execution with nanosleep suspension"]
+fn suspend_sleeping() {
+    todo!("requires real thread execution with nanosleep suspension");
+}
+
+/// C++: TEST(Threads, SuspendStopsThread)
+#[test]
+#[ignore = "requires real thread execution with atomic store verification"]
+fn suspend_stops_thread() {
+    todo!("requires real thread execution with atomic store verification");
+}
+
+/// C++: TEST(Threads, SyscallDebuggerModifyResult)
+#[test]
+#[ignore = "requires debugger exception channel with syscall result modification"]
+fn syscall_debugger_modify_result() {
+    todo!("requires debugger exception channel with syscall result modification");
+}
+
+/// C++: TEST(Threads, SyscallSuspendedRegisterState)
+#[test]
+#[ignore = "requires real thread execution with syscall-suspended register reading"]
+fn syscall_suspended_register_state() {
+    todo!("requires real thread execution with syscall-suspended register reading");
+}
+
+/// C++: TEST(Threads, ThreadLocalRegisterState)
+#[test]
+#[ignore = "requires thread-local storage register state (TP/TPIDR)"]
+fn thread_local_register_state() {
+    todo!("requires thread-local storage register state (TP/TPIDR)");
+}
+
+/// C++: TEST(Threads, ThreadStartInvalidEntry)
+#[test]
+#[ignore = "requires thread_start with invalid entry point validation"]
+fn thread_start_invalid_entry() {
+    todo!("requires thread_start with invalid entry point validation");
+}
+
+/// C++: TEST(Threads, ThreadStartOnInitialThread)
+#[test]
+#[ignore = "requires process_create and thread_start on first thread"]
+fn thread_start_on_initial_thread() {
+    todo!("requires process_create and thread_start on first thread");
+}
+
+/// C++: TEST(Threads, ThreadStartWithZeroInstructionPointer)
+#[test]
+#[ignore = "requires thread_start with zero IP and exception handling"]
+fn thread_start_with_zero_instruction_pointer() {
+    todo!("requires thread_start with zero IP and exception handling");
+}
+
+/// C++: TEST(Threads, WatchpointSyscallPanic)
+#[test]
+#[ignore = "requires hardware watchpoint and syscall interaction"]
+fn watchpoint_syscall_panic() {
+    todo!("requires hardware watchpoint and syscall interaction");
+}
+
+/// C++: TEST(Threads, WriteReadDebugRegisterState)
+#[test]
+#[ignore = "requires debug register read/write state"]
+fn write_read_debug_register_state() {
+    todo!("requires debug register read/write state");
+}
+
+/// C++: TEST(Threads, WriteThreadStateWithInvalidMxcsrIsInvalidArgs)
+#[test]
+#[ignore = "requires x86_64 MXCSR validation in thread state write"]
+fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
+    todo!("requires x86_64 MXCSR validation in thread state write");
+}
+
+/// C++: TEST(Threads, WritingArmFlagsRegister)
+#[test]
+#[ignore = "requires ARM flags register write validation"]
+fn writing_arm_flags_register() {
+    todo!("requires ARM flags register write validation");
+}
+
+/// C++: TEST(Threads, WritingFpRegisterState)
+#[test]
+#[ignore = "requires real thread execution with FP register write/read"]
+fn writing_fp_register_state() {
+    todo!("requires real thread execution with FP register write/read");
+}
+
+/// C++: TEST(Threads, WritingGeneralRegisterState)
+#[test]
+#[ignore = "requires real thread execution with general register write/read"]
+fn writing_general_register_state() {
+    todo!("requires real thread execution with general register write/read");
+}
+
+/// C++: TEST(Threads, WritingSingleStepState)
+#[test]
+#[ignore = "requires single-step state write validation"]
+fn writing_single_step_state() {
+    todo!("requires single-step state write validation");
+}
+
+/// C++: TEST(Threads, WritingVectorRegisterState)
+#[test]
+#[ignore = "requires real thread execution with vector register write/read"]
+fn writing_vector_register_state() {
+    todo!("requires real thread execution with vector register write/read");
+}
+
+/// C++: TEST(Threads, WritingVectorRegisterStateUnsupportedFieldsIgnored)
+#[test]
+#[ignore = "requires vector register write with unsupported field zeroing"]
+fn writing_vector_register_state_unsupported_fields_ignored() {
+    todo!("requires vector register write with unsupported field zeroing");
+}
+
+/// C++: TEST(Threads, X86AcFlagUserCopy)
+#[test]
+#[ignore = "requires x86_64 AC flag handling during user copy"]
+fn x86_ac_flag_user_copy() {
+    todo!("requires x86_64 AC flag handling during user copy");
+}
+
+/// C++: TEST(Threads, YieldWithNonZeroOptionIsInvalidArgs)
+#[test]
+#[ignore = "requires thread_legacy_yield with non-zero option validation"]
+fn yield_with_non_zero_option_is_invalid_args() {
+    todo!("requires thread_legacy_yield with non-zero option validation");
+}
+
+/// C++: TEST(Threads, YieldWithZeroOptionIsOk)
+#[test]
+#[ignore = "requires thread_legacy_yield with zero option"]
+fn yield_with_zero_option_is_ok() {
+    todo!("requires thread_legacy_yield with zero option");
+}
