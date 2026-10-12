@@ -77,118 +77,106 @@ fn job_exception_channel() {
 /// Trigger an architecture-specific exception (e.g., illegal
 /// instruction). The exception channel should receive the correct
 /// exception type.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn exception_type_architecture() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires triggering a hardware exception in a running thread.
 }
 
 ///
 /// Receive an exception and resume the thread with TRIED disposition.
 /// The thread should continue executing.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn exception_resume_tried() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires a running thread to generate and handle an exception.
 }
 
 ///
 /// Receive an exception and resume the thread with HANDLED
 /// disposition. The exception is considered resolved.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn exception_resume_handled() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires a running thread to generate and handle an exception.
 }
 
 ///
 /// An unhandled exception (no handler closes the channel) should
-/// propagate up the exception chain (thread → process → job).
-#[should_panic(expected = "exception channels need real execution")]
+/// propagate up the exception chain (thread -> process -> job).
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn unhandled_exception() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires exception propagation through the task hierarchy.
 }
 
 ///
 /// Close an exception channel while an exception is pending. The
 /// exception should propagate to the next handler.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn exception_channel_close() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires pending exception with channel close during handling.
 }
 
 ///
 /// Register exception handlers at thread, process, and job level.
 /// Exceptions should be delivered to the most specific handler first.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn multiple_exception_handlers() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires exception delivery to multiple handler levels.
 }
 
 ///
 /// Get the thread handle from an exception object. The thread
 /// should be the one that faulted.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn exception_get_thread() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires a real exception to extract the faulting thread.
 }
 
 ///
 /// Get the process handle from an exception object.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn exception_get_process() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires a real exception to extract the process.
 }
 
 ///
 /// Trigger a debug exception (breakpoint). The exception should
 /// have type ZX_EXCP_SW_BREAKPOINT.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn debug_exception() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires triggering a software breakpoint in a running thread.
 }
 
 ///
 /// Trigger a policy exception (e.g., creating a disallowed object).
 /// The exception should have type ZX_EXCP_POLICY_ERROR.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn policy_exception() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires policy exception generation from syscall layer.
 }
 
 ///
 /// An exception not handled at the debug level gets a second chance
 /// at the process/job level.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn second_chance_exception() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires second-chance exception delivery through handler chain.
 }
 
 ///
 /// While a thread is in an exception, its state should be
 /// BLOCKED_IN_EXCEPTION.
-#[should_panic(expected = "exception channels need real execution")]
 #[test]
+#[ignore = "exception delivery needs real thread execution"]
 fn exception_thread_state() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    // Requires a running thread in exception state.
 }

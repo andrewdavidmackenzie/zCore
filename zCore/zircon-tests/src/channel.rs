@@ -59,7 +59,7 @@ fn write_to_endpoint_causes_other_to_become_readable() {
 /// Fuchsia expects ZX_ERR_OUT_OF_RANGE for > ZX_CHANNEL_MAX_MSG_HANDLES (64).
 /// KNOWN ISSUE: zCore does not enforce the handle count limit.
 #[test]
-#[should_panic(expected = "unwrap_err")] // TODO: fix kernel to enforce ZX_CHANNEL_MAX_MSG_HANDLES
+#[ignore = "zCore does not enforce ZX_CHANNEL_MAX_MSG_HANDLES limit"]
 fn write_consumes_all_handles() {
     let _ctx = TestContext::new();
     let (local, _remote) = Channel::create();
@@ -887,19 +887,17 @@ fn empty_handle_array_transfer() {
 ///
 /// Channel call with no reply should time out. Requires async
 /// infrastructure for the call wait loop.
-#[should_panic(expected = "channel call needs async runtime")]
 #[test]
+#[ignore = "channel call needs async runtime with echo server"]
 fn call_timeout_no_reply() {
-    let _ctx = TestContext::new();
-    panic!("channel call needs async runtime");
+    // Channel call requires a responder thread to send a reply.
 }
 
 ///
 /// Channel call receives a reply with a mismatched transaction ID.
 /// The call should ignore it and continue waiting. Requires async.
-#[should_panic(expected = "channel call needs async runtime")]
 #[test]
+#[ignore = "channel call needs async runtime with echo server"]
 fn call_reply_mismatched_txid() {
-    let _ctx = TestContext::new();
-    panic!("channel call needs async runtime");
+    // Channel call requires a responder thread to send replies.
 }

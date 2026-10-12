@@ -2831,37 +2831,29 @@ fn write_etc_first_error_latched_and_returned() {
 /// A suspended thread that calls channel_call should resume and succeed.
 /// Not testable in single-threaded libos mode.
 #[test]
-#[should_panic(expected = "requires multi-threaded scheduler")]
-fn call_suspended_thread_resumes_and_succeeds() {
-    panic!("requires multi-threaded scheduler");
-}
+#[ignore = "requires multi-threaded scheduler"]
+fn call_suspended_thread_resumes_and_succeeds() {}
 
 /// C++: TEST(ChannelTest, CallEtcSuspendedThreadResumesAndSucceeds) — syscall level
 /// A suspended thread that calls channel_call_etc should resume and succeed.
 /// Not testable in single-threaded libos mode.
 #[test]
-#[should_panic(expected = "requires multi-threaded scheduler")]
-fn call_etc_suspended_thread_resumes_and_succeeds() {
-    panic!("requires multi-threaded scheduler");
-}
+#[ignore = "requires multi-threaded scheduler"]
+fn call_etc_suspended_thread_resumes_and_succeeds() {}
 
 /// C++: TEST(ChannelTest, CallPendingTransactionsUseDifferentIds) — syscall level
 /// Multiple pending channel_call transactions should use different txids.
 /// Not testable in single-threaded libos mode.
 #[test]
-#[should_panic(expected = "requires multi-threaded scheduler")]
-fn call_pending_transactions_use_different_ids() {
-    panic!("requires multi-threaded scheduler");
-}
+#[ignore = "requires multi-threaded scheduler"]
+fn call_pending_transactions_use_different_ids() {}
 
 /// C++: TEST(ChannelTest, CallResponseBiggerThanRdNumHandlesReturnsBufferTooSmall) — syscall level
 /// When a reply arrives with more handles than rd_num_handles, the call
 /// should return BUFFER_TOO_SMALL. Not testable without async responder.
 #[test]
-#[should_panic(expected = "requires multi-threaded scheduler")]
-fn call_response_bigger_than_rd_num_handles_returns_buffer_too_small() {
-    panic!("requires multi-threaded scheduler");
-}
+#[ignore = "requires multi-threaded scheduler"]
+fn call_response_bigger_than_rd_num_handles_returns_buffer_too_small() {}
 
 /// C++: TEST(ChannelTest, WriteEtcMixedMoveAndDuplicateOnFailurePreservesDuplicateHandles) — syscall level
 /// When a mixed MOVE+DUP write_etc fails, MOVE handles are consumed

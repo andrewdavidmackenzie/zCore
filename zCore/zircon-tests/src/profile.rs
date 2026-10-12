@@ -41,18 +41,16 @@ fn profile_create_invalid() {
 
 /// Setting a profile on a thread. Requires scheduler integration.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
+#[ignore = "profile application requires scheduler integration (not available in libos)"]
 fn profile_set_on_thread() {
-    let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // Requires real scheduler to apply priority/affinity.
 }
 
 /// Setting a profile on a job. Requires scheduler integration.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
+#[ignore = "profile application requires scheduler integration (not available in libos)"]
 fn profile_set_on_job() {
-    let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // Requires real scheduler to apply priority/affinity.
 }
 
 /// Getting info from a profile — read back the stored ProfileInfo.
@@ -69,26 +67,23 @@ fn profile_get_info() {
 
 /// Setting priority via profile. Requires scheduler integration.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
+#[ignore = "profile priority requires scheduler integration (not available in libos)"]
 fn profile_priority() {
-    let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // Requires real scheduler to apply priority.
 }
 
 /// Setting CPU affinity via profile. Requires scheduler integration.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
+#[ignore = "profile affinity requires scheduler integration (not available in libos)"]
 fn profile_affinity() {
-    let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // Requires real scheduler to apply CPU affinity.
 }
 
 /// Setting deadline parameters via profile. Requires scheduler integration.
 #[test]
-#[should_panic(expected = "profiles not available in libos mode")]
+#[ignore = "profile deadline requires scheduler integration (not available in libos)"]
 fn profile_deadline_parameters() {
-    let _ctx = TestContext::new();
-    panic!("profiles not available in libos mode");
+    // Requires real scheduler to apply deadline parameters.
 }
 
 /// Profile with invalid parameters should fail — various error paths.

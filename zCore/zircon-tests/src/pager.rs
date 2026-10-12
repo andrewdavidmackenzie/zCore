@@ -490,12 +490,9 @@ fn pager_supply_unaligned() {
 ///
 /// Detaching a VMO should wake threads blocked on pager faults.
 /// This requires async infrastructure to create waiters.
-#[should_panic(expected = "async pager waiter test not supported in sync mode")]
 #[test]
-fn pager_detach_closes_existing_waiters() {
-    let _ctx = TestContext::new();
-    panic!("async pager waiter test not supported in sync mode");
-}
+#[ignore = "async pager waiter test not supported in sync mode"]
+fn pager_detach_closes_existing_waiters() {}
 
 ///
 /// After the pager is dropped, the VMO still exists but is no longer
@@ -1256,571 +1253,406 @@ fn pager_detach_one_keep_others() {
 // The following 30 tests correspond to C++ pager tests that require
 // concurrent threads and demand-paging (async page fault handling).
 // zCore does not yet support demand-paging in libos test mode, so
-// these are all marked #[should_panic] to document their existence
+// these are all marked #[ignore] to document their existence
 // and expected behavior.
 
 ///
 /// Pre-supply pages before mapping, then read via a faulting thread.
 /// Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_presupply_and_read() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_presupply_and_read() {}
 
 ///
 /// A thread faults on read, another thread supplies the page, first
 /// thread completes the read. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_read_after_supply() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_read_after_supply() {}
 
 ///
 /// A thread faults on write, another thread supplies the page, first
 /// thread completes the write. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_write_after_supply() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_write_after_supply() {}
 
 ///
 /// Read across multiple pages triggers multiple page faults, each
 /// resolved by supply_pages. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_read_multiple_pages() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_read_multiple_pages() {}
 
 ///
 /// Write to a pager-backed page (fault + supply), then read it back
 /// from a second thread. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_write_and_read() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_write_and_read() {}
 
 ///
 /// Decommit a supplied page and re-read — should re-fault and require
 /// a new supply. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_read_after_decommit() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_read_after_decommit() {}
 
 ///
 /// Thread faults on a page, pager supplies it from the port request.
 /// Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_supply_after_fault() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_supply_after_fault() {}
 
 ///
 /// A mapped read to an unsupplied page triggers a page fault request
 /// on the pager port. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_fault_on_read() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_fault_on_read() {}
 
 ///
 /// A mapped write to an unsupplied page triggers a page fault request
 /// on the pager port. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_fault_on_write() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_fault_on_write() {}
 
 ///
 /// Read before any pages are supplied — thread blocks until supply.
 /// Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_read_before_supply() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_read_before_supply() {}
 
 ///
 /// Create a clone of a pager-backed VMO, read from the clone triggers
 /// a page fault on the original pager. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_clone_read() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_clone_read() {}
 
 ///
 /// Write to a clone of a pager-backed VMO, triggers COW + page fault.
 /// Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_clone_write() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_clone_write() {}
 
 ///
 /// Detach the pager, then read from a clone — should get an error
 /// instead of blocking. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_clone_read_after_detach() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_clone_read_after_detach() {}
 
 ///
 /// Create a snapshot of a pager-backed VMO and read from it. Snapshot
 /// pages are COW — faults go to the pager. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_snapshot_read() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_snapshot_read() {}
 
 ///
 /// Write to a snapshot of a pager-backed VMO — triggers COW fault.
 /// Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_snapshot_write() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_snapshot_write() {}
 
 ///
 /// Nested clone of a snapshot of a pager-backed VMO — reads trigger
 /// faults up the chain. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_snapshot_clone_read() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_snapshot_clone_read() {}
 
 ///
 /// A snapshot with a pager-backed child — complex fault resolution
 /// chain. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_snapshot_with_pager_child() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_snapshot_with_pager_child() {}
 
 ///
 /// Decommit pages in a clone of a pager-backed VMO — re-read should
 /// re-fault. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_clone_decommit() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_clone_decommit() {}
 
 ///
 /// Resize a clone of a pager-backed VMO and access the new region.
 /// Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_clone_resize() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_clone_resize() {}
 
 ///
 /// Zero pages in a clone of a pager-backed VMO. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_clone_zero() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_clone_zero() {}
 
 ///
 /// Drop the pager while VMOs are still mapped and threads are faulting.
 /// Threads should get errors, not hang. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_destroy_with_active_vmos() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_destroy_with_active_vmos() {}
 
 ///
 /// Detach a VMO from one pager and re-bind it to a new pager. Faults
 /// should now go to the new pager. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_rebind() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_rebind() {}
 
 ///
 /// Multiple page faults queue multiple packets on the port. Verify
 /// packet ordering and contents. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_port_queued_packets() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_port_queued_packets() {}
 
 ///
 /// Verify the format of pager request packets on the port — key, type,
 /// offset, length fields. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_verify_packet_format() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_verify_packet_format() {}
 
 ///
 /// Multiple port observers on the same pager VMO. Each fault should
 /// only produce one packet. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_multiple_port_observers() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_multiple_port_observers() {}
 
 ///
 /// Supply pages over already-supplied pages — new data should replace
 /// old data. Requires thread-based read verification with demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_supply_overwrites_existing() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_supply_overwrites_existing() {}
 
 ///
 /// ZX_PAGER_OP_ALWAYS_NEED hints that pages should be kept resident.
 /// Requires demand-paging infrastructure to verify residency behavior.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_op_range_always_need() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_op_range_always_need() {}
 
 ///
 /// ZX_PAGER_OP_DONT_NEED hints that pages can be evicted. Requires
 /// demand-paging to verify eviction and re-fault behavior.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_op_range_dont_need() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_op_range_dont_need() {}
 
 ///
 /// Set and get the name of a pager-backed VMO while threads are
 /// faulting. Requires demand-paging for concurrent access.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_name() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_name() {}
 
 ///
 /// Set and get content_size on a pager-backed VMO while threads
 /// are reading/writing. Requires demand-paging for concurrent access.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_content_size() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_content_size() {}
 
 // ── PagerProcess tests (require process + VMAR mapping) ─────────────
 //
 // These tests correspond to the C++ PagerProcess fixture that creates
 // a child process, maps a pager-backed VMO into it, and faults via
 // real memory access. zCore libos mode cannot create real user-space
-// mappings, so these are all #[should_panic].
+// mappings, so these are all #[ignore].
 
 ///
 /// Create a process with a pager-backed VMO mapped into it. Requires
 /// real VMAR mapping and process execution.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_process_create_process() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_process_create_process() {}
 
 ///
 /// Destroy a process while it has a pager-backed VMO mapped. The pager
 /// should receive no further requests. Requires process lifecycle.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_process_destroy_process() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_process_destroy_process() {}
 
 ///
 /// Read from a pager-backed VMO through a user-space mapping. The read
 /// triggers a page fault resolved by pager supply. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_process_read_through_mapping() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_process_read_through_mapping() {}
 
 ///
 /// Write to a pager-backed VMO through a user-space mapping. The write
 /// triggers a page fault resolved by pager supply. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_process_write_through_mapping() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_process_write_through_mapping() {}
 
 ///
 /// A thread faults on a mapped pager VMO page, the pager reads the
 /// request from the port and supplies pages. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_process_fault_and_supply() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_process_fault_and_supply() {}
 
 // ── PagerWriteback tests (require TRAP_DIRTY + async writeback) ─────
 
 ///
 /// WRITEBACK_BEGIN followed by WRITEBACK_END on dirty pages. Requires
 /// TRAP_DIRTY faults and async writeback infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_begin_end() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_begin_end() {}
 
 ///
 /// Verify dirty range reporting after writeback cycle. Requires
 /// TRAP_DIRTY page fault handling.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_dirty_range() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_dirty_range() {}
 
 ///
 /// Writeback only a subset of dirty pages. Remaining pages should
 /// still be dirty. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_partial() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_partial() {}
 
 ///
 /// Writeback after pager detach should fail. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_after_detach() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_after_detach() {}
 
 ///
 /// Multiple dirty ranges from non-contiguous writes, each written
 /// back separately. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_multiple_ranges() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_multiple_ranges() {}
 
 // ── More Pager validation (TRAP_DIRTY variants) ─────────────────────
 
 ///
 /// Create a VMO with TRAP_DIRTY and verify it is pager-backed with
 /// dirty trap enabled. Requires demand-paging for fault handling.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_trap_dirty_create() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_trap_dirty_create() {}
 
 ///
 /// Write to a TRAP_DIRTY VMO via mapping — should trigger a dirty
 /// trap fault on the pager port. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_trap_dirty_write() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_trap_dirty_write() {}
 
 ///
 /// Read from a TRAP_DIRTY VMO — should trigger a normal read fault,
 /// not a dirty trap. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_trap_dirty_read() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_trap_dirty_read() {}
 
 ///
 /// After writing to a TRAP_DIRTY VMO and granting dirty permission,
 /// query_dirty_ranges should show the dirty pages. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_trap_dirty_query_after_write() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_trap_dirty_query_after_write() {}
 
 ///
 /// Full dirty cycle: write → dirty trap → grant dirty → writeback begin
 /// → writeback end. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_trap_dirty_writeback_cycle() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_trap_dirty_writeback_cycle() {}
 
 // ── Pager stress tests (require concurrent threads) ─────────────────
 
 ///
 /// Multiple VMOs fault concurrently from different threads. The pager
 /// must resolve each independently. Requires demand-paging + threads.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_multiple_vmos_fault_concurrent() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_multiple_vmos_fault_concurrent() {}
 
 ///
 /// One thread faults while another supplies pages concurrently.
 /// Tests thread-safety of supply_pages. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_concurrent_supply_and_fault() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_concurrent_supply_and_fault() {}
 
 ///
 /// Multiple threads race to supply the same page. Only one should
 /// win; others should be no-ops. Requires demand-paging + threads.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_supply_race() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_supply_race() {}
 
 ///
 /// Detach races with a concurrent fault. The faulting thread should
 /// get an error, not hang. Requires demand-paging + threads.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_detach_race() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_detach_race() {}
 
 ///
 /// Drop the pager while a fault is in progress. The faulting thread
 /// should get an error, not hang. Requires demand-paging + threads.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_close_race() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_close_race() {}
 
 // ── ResizeWithPager tests ───────────────────────────────────────────
 
 ///
 /// Shrink a resizable pager VMO while a fault is pending on a page
 /// that is being removed. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_resize_shrink_with_pager() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_resize_shrink_with_pager() {}
 
 ///
 /// Grow a resizable pager VMO and fault on the new pages. The pager
 /// must handle requests for the grown region. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_resize_grow_with_pager() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_resize_grow_with_pager() {}
 
 ///
 /// Resize a pager VMO (grow), then fault on the new region. The pager
 /// port should receive a request for the new offset. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_resize_then_fault() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_resize_then_fault() {}
 
 ///
 /// Resize while a fault is in progress. The fault should either
 /// complete or fail cleanly. Requires demand-paging + threads.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_resize_during_fault() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_resize_during_fault() {}
 
 ///
 /// Resize a pager VMO, then detach. Faults on the VMO should return
 /// errors, not hang. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_resize_and_detach() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_resize_and_detach() {}
 
 // ── Snapshot-modified pager tests ───────────────────────────────────
 //
@@ -1831,55 +1663,40 @@ fn pager_resize_and_detach() {
 /// Create a snapshot of a pager-backed VMO after modifying supplied
 /// pages. The snapshot should see the modified data. Requires
 /// demand-paging for the fault/supply loop.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_snapshot_modified() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_snapshot_modified() {}
 
 ///
 /// Write to a snapshot of a modified pager-backed VMO. The snapshot
 /// should COW the page and the original should be unaffected.
 /// Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_snapshot_modified_write() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_snapshot_modified_write() {}
 
 ///
 /// Create a nested clone of a snapshot of a modified pager-backed VMO.
 /// Reads should propagate through the clone chain. Requires
 /// demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_snapshot_modified_clone() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_snapshot_modified_clone() {}
 
 ///
 /// Decommit pages from a snapshot of a modified pager-backed VMO.
 /// Re-reading should re-fault and require a new supply. Requires
 /// demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_snapshot_modified_decommit() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_snapshot_modified_decommit() {}
 
 ///
 /// Resize a snapshot of a modified pager-backed VMO. The snapshot
 /// should reflect the new size. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_snapshot_modified_resize() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_snapshot_modified_resize() {}
 
 // ── Writeback-complete pager tests ──────────────────────────────────
 
@@ -1887,52 +1704,37 @@ fn pager_snapshot_modified_resize() {
 /// Full writeback cycle: dirty pages, begin writeback, end writeback.
 /// After completion, pages should no longer be dirty. Requires
 /// demand-paging + TRAP_DIRTY fault handling.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_complete() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_complete() {}
 
 ///
 /// Complete writeback on multiple dirty ranges independently. Each
 /// range should transition from dirty to clean. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_complete_multiple() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_complete_multiple() {}
 
 ///
 /// Attempt writeback after pager detach. Should fail cleanly.
 /// Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_complete_after_detach() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_complete_after_detach() {}
 
 ///
 /// Complete writeback on only a subset of dirty pages. Remaining
 /// pages should still be dirty. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_complete_partial() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_complete_partial() {}
 
 ///
 /// Pages dirtied during writeback should remain dirty after the
 /// writeback cycle completes. Requires demand-paging + TRAP_DIRTY.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_and_dirty() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_and_dirty() {}
 
 // ── Pager close lifecycle tests ─────────────────────────────────────
 
@@ -1940,53 +1742,38 @@ fn pager_writeback_and_dirty() {
 /// After closing the pager, the port should still be usable for
 /// other operations (queue, wait). The port is independent of the
 /// pager lifecycle. Requires demand-paging for full verification.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_close_port_still_works() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_close_port_still_works() {}
 
 ///
 /// Closing the pager should detach all VMOs. Subsequent page faults
 /// on those VMOs should return errors. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_close_all_vmos_detached() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_close_all_vmos_detached() {}
 
 ///
 /// Drop all references (pager, port, VMOs). Nothing should leak or
 /// panic. Requires demand-paging for waiter cleanup verification.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_drop_all_references() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_drop_all_references() {}
 
 ///
 /// Create multiple VMOs on the same pager using different ports.
 /// Each port should receive requests only for its VMO. Requires
 /// demand-paging for fault routing verification.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_multiple_ports_one_vmo() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_multiple_ports_one_vmo() {}
 
 ///
 /// Close the port while VMOs are still active. Page faults should
 /// fail gracefully. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_port_close() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_port_close() {}
 
 // ── Pager VMO operation tests ───────────────────────────────────────
 
@@ -1994,55 +1781,40 @@ fn pager_port_close() {
 /// Create a snapshot clone of a pager-backed VMO. Reads from the
 /// clone should trigger faults on the original pager. Requires
 /// demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_clone_with_pager() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_clone_with_pager() {}
 
 ///
 /// Create a slice of a pager-backed VMO. Reads from the slice
 /// should trigger faults on the original pager. Requires
 /// demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_slice_with_pager() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_slice_with_pager() {}
 
 ///
 /// Create a reference child of a pager-backed VMO. Reads through
 /// the reference should fault the original pager. Requires
 /// demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_reference_with_pager() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_reference_with_pager() {}
 
 ///
 /// Create a child snapshot of a pager-backed VMO and verify COW
 /// behavior on page faults. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_child_snapshot_with_pager() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_child_snapshot_with_pager() {}
 
 ///
 /// Create a child slice of a pager-backed VMO. The slice shares
 /// the parent's pages and triggers faults on the parent's pager.
 /// Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_child_slice_with_pager() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_child_slice_with_pager() {}
 
 // ── Advanced pager tests ────────────────────────────────────────────
 
@@ -2050,53 +1822,38 @@ fn pager_vmo_child_slice_with_pager() {
 /// Create an unbounded pager-backed VMO (ZX_VMO_UNBOUNDED). The VMO
 /// has no fixed size limit. Faults at any offset are forwarded to
 /// the pager. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_unbounded_vmo() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_unbounded_vmo() {}
 
 ///
 /// Create a bounded pager-backed VMO with a fixed size. Faults beyond
 /// the size should fail. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_bounded_vmo() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_bounded_vmo() {}
 
 ///
 /// Verify content_size is properly tracked on a pager-backed VMO as
 /// pages are supplied and written. Requires demand-paging for mapped
 /// write tracking.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_content_size_tracking() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_content_size_tracking() {}
 
 ///
 /// Query pager statistics (modified/dirty page counts) on a
 /// pager-backed VMO. Requires demand-paging + TRAP_DIRTY.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_query_stats() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_query_stats() {}
 
 ///
 /// Query pager statistics after detaching the VMO. The stats should
 /// reflect the final state. Requires demand-paging infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_query_stats_after_detach() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_query_stats_after_detach() {}
 
 // ── Concurrent pager tests ──────────────────────────────────────────
 
@@ -2104,55 +1861,40 @@ fn pager_query_stats_after_detach() {
 /// Multiple threads supply pages to different offsets concurrently.
 /// All supplies should complete without data corruption. Requires
 /// demand-paging + concurrent thread execution.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_concurrent_supply() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_concurrent_supply() {}
 
 ///
 /// Detach multiple VMOs from a pager concurrently. Each detach should
 /// complete exactly once. Requires demand-paging + concurrent threads.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_concurrent_detach() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_concurrent_detach() {}
 
 ///
 /// Close the pager while multiple VMOs are faulting concurrently.
 /// All faulting threads should unblock with errors. Requires
 /// demand-paging + concurrent threads.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_concurrent_close() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_concurrent_close() {}
 
 ///
 /// Multiple threads fault on different pages of the same VMO
 /// concurrently. The pager should receive one request per page.
 /// Requires demand-paging + concurrent threads.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_concurrent_fault() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_concurrent_fault() {}
 
 ///
 /// Resize a pager-backed VMO while faults are in progress. Faults on
 /// removed pages should fail; faults on remaining pages should
 /// succeed. Requires demand-paging + concurrent threads.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_concurrent_resize() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_concurrent_resize() {}
 
 // ── Bulk-ported pager tests (batch 3) ───────────────────────────────
 //
@@ -2163,314 +1905,224 @@ fn pager_concurrent_resize() {
 ///
 /// Evict supplied pages from a pager-backed VMO. Re-reading those
 /// pages should trigger new page faults. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_evict_pages() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_evict_pages() {}
 
 ///
 /// Evict a specific range of pages from a pager-backed VMO. Only
 /// the evicted range should re-fault. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_evict_pages_range() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_evict_pages_range() {}
 
 ///
 /// Evict pages from a clone of a pager-backed VMO. The clone should
 /// re-fault through the parent pager. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_evict_clone() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_evict_clone() {}
 
 ///
 /// Evict pages after the pager has been detached. The eviction should
 /// succeed but re-faults should fail with BAD_STATE. Requires
 /// demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_evict_after_detach() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_evict_after_detach() {}
 
 ///
 /// Read from pinned pages in a pager-backed VMO. Pinned pages are
 /// locked in memory and should not be evicted. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_read_pinned_pages() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_read_pinned_pages() {}
 
 ///
 /// Write to pinned pages in a pager-backed VMO. Pinned pages are
 /// locked in memory. Requires demand-paging + BTI pinning.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_write_pinned_pages() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_write_pinned_pages() {}
 
 ///
 /// Pin pages before they are supplied by the pager. The pin should
 /// block until the pages are supplied. Requires demand-paging + BTI.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_pin_before_supply() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_pin_before_supply() {}
 
 ///
 /// Pin pages after they have been supplied. The pin should succeed
 /// immediately. Requires demand-paging + BTI pinning.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_pin_after_supply() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_pin_after_supply() {}
 
 ///
 /// Decommit pages from a pager-backed VMO. The decommitted pages
 /// should re-fault on next access. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_decommit_pages() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_decommit_pages() {}
 
 ///
 /// Decommit a specific range of pages from a pager-backed VMO.
 /// Only the decommitted range should re-fault. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_decommit_pager_range() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_decommit_pager_range() {}
 
 ///
 /// Commit a range of pages in a pager-backed VMO. This should trigger
 /// page faults that the pager resolves. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_commit_range() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_commit_range() {}
 
 ///
 /// Commit pages before the pager has supplied them. The commit should
 /// block until the pager supplies the data. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_commit_before_supply() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_commit_before_supply() {}
 
 ///
 /// Write to a pinned page in a TRAP_DIRTY VMO. The dirty trap should
 /// fire even for pinned pages. Requires demand-paging + BTI + TRAP_DIRTY.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_trap_dirty_pinned() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_trap_dirty_pinned() {}
 
 ///
 /// Write to a TRAP_DIRTY VMO after detaching the pager. The write
 /// should fail since the pager can no longer grant dirty permission.
 /// Requires demand-paging + TRAP_DIRTY.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_trap_dirty_after_detach() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_trap_dirty_after_detach() {}
 
 ///
 /// Write to a clone of a TRAP_DIRTY VMO. The dirty trap should fire
 /// on the parent pager. Requires demand-paging + TRAP_DIRTY.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_trap_dirty_clone() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_trap_dirty_clone() {}
 
 ///
 /// Dirty multiple non-contiguous pages and verify query_dirty_ranges
 /// returns all dirty ranges. Requires demand-paging + TRAP_DIRTY.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_dirty_ranges_multiple_pages() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_dirty_ranges_multiple_pages() {}
 
 ///
 /// Start a writeback (WRITEBACK_BEGIN) and verify pages are marked
 /// as writeback-in-progress. New dirty traps during writeback should
 /// be deferred. Requires demand-paging + TRAP_DIRTY.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_in_progress() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_in_progress() {}
 
 ///
 /// Complete a writeback cycle and verify pages transition from dirty
 /// to clean state. Requires demand-paging + TRAP_DIRTY.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_clean() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_clean() {}
 
 ///
 /// Dirty a page while writeback is in progress. The page should remain
 /// dirty after the writeback cycle completes. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_writeback_dirty_during_writeback() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_writeback_dirty_during_writeback() {}
 
 ///
 /// Concurrent writeback and page fault on different pages. Both
 /// operations should complete independently. Requires demand-paging
 /// + concurrent threads.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_concurrent_writeback_and_fault() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_concurrent_writeback_and_fault() {}
 
 ///
 /// Verify the format and contents of a page request packet received
 /// on the pager port. The packet should contain the correct key,
 /// type, offset, and length. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_verify_page_request_packet() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_verify_page_request_packet() {}
 
 ///
 /// Verify the key field in page request packets matches the key
 /// passed to create_vmo. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_page_request_key() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_page_request_key() {}
 
 ///
 /// Trigger multiple page faults and verify each generates a separate
 /// page request packet on the port. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_multiple_page_requests() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_multiple_page_requests() {}
 
 ///
 /// Trigger a page fault after the pager has been detached. The fault
 /// should fail immediately without generating a packet. Requires
 /// demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_page_request_after_detach() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_page_request_after_detach() {}
 
 ///
 /// Set watermark thresholds on a pager-backed VMO and verify the
 /// appropriate signals are asserted when memory usage crosses
 /// the thresholds. Requires demand-paging + watermark infrastructure.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_watermark_signals() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_watermark_signals() {}
 
 ///
 /// Query VMO info flags on a pager-backed VMO. The flags should
 /// indicate pager-backed status and any additional attributes.
 /// Requires demand-paging for full flag verification.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_info_flags() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_info_flags() {}
 
 ///
 /// Query VMO info after the pager has been detached. The flags
 /// should no longer indicate pager-backed status. Requires
 /// demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_info_after_detach() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_info_after_detach() {}
 
 ///
 /// Query committed bytes on a pager-backed VMO. Only supplied pages
 /// should be counted as committed. Requires demand-paging for
 /// accurate committed page tracking.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_info_committed_bytes() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_info_committed_bytes() {}
 
 ///
 /// Issue ZX_VMO_OP_ALWAYS_NEED on a pager-backed VMO. This hints
 /// the kernel to keep pages resident. The operation should trigger
 /// page faults for unsupplied pages. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_op_always_need() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_op_always_need() {}
 
 ///
 /// Issue ZX_VMO_OP_DONT_NEED on a pager-backed VMO. This hints
 /// the kernel that pages can be evicted. Re-accessing evicted
 /// pages should trigger new faults. Requires demand-paging.
-#[should_panic(expected = "needs demand-paging")]
 #[test]
-fn pager_vmo_op_dont_need() {
-    let _ctx = TestContext::new();
-    panic!("needs demand-paging");
-}
+#[ignore = "demand paging not implemented"]
+fn pager_vmo_op_dont_need() {}
 
 // ── Missing Pager tests (from pager.cc) ─────────────────────────────
 //
