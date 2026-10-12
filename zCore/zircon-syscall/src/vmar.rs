@@ -68,25 +68,40 @@ impl Syscall<'_> {
         // get align
         let align = amount_of_alignments(options)?;
 
-        // get offest with options
+        let upper_limit = if vm_options.contains(VmOptions::OFFSET_IS_UPPER_LIMIT) {
+            Some(offset as usize)
+        } else {
+            None
+        };
+        // get offset with options
         let offset = if vm_options.contains(VmOptions::SPECIFIC) {
             Some(offset as usize)
         } else if vm_options.contains(VmOptions::SPECIFIC_OVERWRITE) {
-            // SPECIFIC_OVERWRITE is only valid for vmar_map, not vmar_allocate.
             return Err(ZxError::INVALID_ARGS);
-        } else {
+        } else if !vm_options.contains(VmOptions::OFFSET_IS_UPPER_LIMIT) {
             if offset != 0 {
                 return Err(ZxError::INVALID_ARGS);
             }
             None
+        } else {
+            None
         };
 
         let size = roundup_pages(size as usize);
-        // check `size`
         if size == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let child = parent.allocate(offset, size, vmar_flags, align)?;
+        // OFFSET_IS_UPPER_LIMIT validation.
+        if let Some(limit) = upper_limit {
+            if limit > parent.get_info().len {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            if size > limit {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        }
+        let child =
+            parent.allocate_with_upper_limit(offset, size, vmar_flags, align, upper_limit)?;
         let child_addr = child.addr();
         let child_handle = proc.add_handle(Handle::new(child, Rights::DEFAULT_VMAR | perm_rights));
         out_child_vmar.write(child_handle)?;
@@ -144,7 +159,8 @@ impl Syscall<'_> {
         // check SPECIFIC options with offset
         let is_specific = options.contains(VmOptions::SPECIFIC)
             || options.contains(VmOptions::SPECIFIC_OVERWRITE);
-        if !is_specific && vmar_offset != 0 {
+        let is_upper_limit = options.contains(VmOptions::OFFSET_IS_UPPER_LIMIT);
+        if !is_specific && !is_upper_limit && vmar_offset != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
         // SPECIFIC/SPECIFIC_OVERWRITE requires CAN_MAP_SPECIFIC on the VMAR.
@@ -219,9 +235,24 @@ impl Syscall<'_> {
                 ZxError::OUT_OF_RANGE
             });
         }
+        let upper_limit = if is_upper_limit {
+            Some(vmar_offset)
+        } else {
+            None
+        };
         let vmar_offset = if is_specific { Some(vmar_offset) } else { None };
         let fault_beyond = options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE);
-        let vaddr = vmar.map_ext(
+        // Validate upper limit.
+        if let Some(limit) = upper_limit {
+            let vmar_info = vmar.get_info();
+            if limit > vmar_info.len {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            if len > limit {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        }
+        let vaddr = vmar.map_ext_with_limit(
             vmar_offset,
             vmo.clone(),
             vmo_offset,
@@ -231,6 +262,7 @@ impl Syscall<'_> {
             overwrite,
             map_range,
             fault_beyond,
+            upper_limit,
         )?;
         mapped_addr.write(vaddr)?;
         Ok(())

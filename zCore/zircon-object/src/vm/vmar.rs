@@ -247,6 +247,18 @@ impl VmAddressRegion {
         flags: VmarFlags,
         align: usize,
     ) -> ZxResult<Arc<Self>> {
+        self.allocate_with_upper_limit(offset, len, flags, align, None)
+    }
+
+    /// Allocate a new child VMAR with an optional upper limit.
+    pub fn allocate_with_upper_limit(
+        self: &Arc<Self>,
+        offset: Option<usize>,
+        len: usize,
+        flags: VmarFlags,
+        align: usize,
+        upper_limit: Option<usize>,
+    ) -> ZxResult<Arc<Self>> {
         // A child VMAR cannot have CAN_MAP privileges the parent lacks.
         let child_can_map = flags & VmarFlags::CAN_MAP_RXW;
         let parent_can_map = self.flags & VmarFlags::CAN_MAP_RXW;
@@ -260,7 +272,11 @@ impl VmAddressRegion {
         }
         let mut guard = self.inner.lock();
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
-        let offset = self.determine_offset(inner, offset, len, align)?;
+        let offset = if let Some(limit) = upper_limit {
+            self.determine_offset_with_limit(inner, len, align, limit)?
+        } else {
+            self.determine_offset(inner, offset, len, align)?
+        };
         // Clear any stale page table entries in the allocated range.
         // Previous mappings may have left page table entries that would
         // cause lazy mappings to read stale physical page content.
@@ -328,6 +344,35 @@ impl VmAddressRegion {
         map_range: bool,
         fault_beyond_stream_size: bool,
     ) -> ZxResult<VirtAddr> {
+        self.map_ext_with_limit(
+            vmar_offset,
+            vmo,
+            vmo_offset,
+            len,
+            permissions,
+            flags,
+            overwrite,
+            map_range,
+            fault_beyond_stream_size,
+            None,
+        )
+    }
+
+    /// Map the `vmo` into this VMAR with an optional upper limit.
+    #[allow(clippy::too_many_arguments)]
+    pub fn map_ext_with_limit(
+        &self,
+        vmar_offset: Option<usize>,
+        vmo: Arc<VmObject>,
+        vmo_offset: usize,
+        len: usize,
+        permissions: MMUFlags,
+        flags: MMUFlags,
+        overwrite: bool,
+        map_range: bool,
+        fault_beyond_stream_size: bool,
+        upper_limit: Option<usize>,
+    ) -> ZxResult<VirtAddr> {
         if !page_aligned(vmo_offset) || !page_aligned(len) {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -390,21 +435,25 @@ impl VmAddressRegion {
                     return Err(ZxError::INVALID_ARGS);
                 }
             }
-            self.determine_offset(inner, vmar_offset, len, PAGE_SIZE)
-                .map_err(|e| {
-                    // For SPECIFIC maps (offset is Some), convert overlap errors
-                    // to ALREADY_EXISTS per Fuchsia's zx_vmar_map semantics.
-                    if e == ZxError::INVALID_ARGS && vmar_offset.is_some() {
-                        if let Some(off) = vmar_offset {
-                            if check_aligned(off, PAGE_SIZE)
-                                && !self.test_map(inner, off, len, PAGE_SIZE)
-                            {
-                                return ZxError::ALREADY_EXISTS;
-                            }
+            if let Some(limit) = upper_limit {
+                self.determine_offset_with_limit(inner, len, PAGE_SIZE, limit)
+            } else {
+                self.determine_offset(inner, vmar_offset, len, PAGE_SIZE)
+            }
+            .map_err(|e| {
+                // For SPECIFIC maps (offset is Some), convert overlap errors
+                // to ALREADY_EXISTS per Fuchsia's zx_vmar_map semantics.
+                if e == ZxError::INVALID_ARGS && vmar_offset.is_some() {
+                    if let Some(off) = vmar_offset {
+                        if check_aligned(off, PAGE_SIZE)
+                            && !self.test_map(inner, off, len, PAGE_SIZE)
+                        {
+                            return ZxError::ALREADY_EXISTS;
                         }
                     }
-                    e
-                })?
+                }
+                e
+            })?
         };
         let addr = self.addr + offset;
         let mut flags = flags;
@@ -939,6 +988,24 @@ impl VmAddressRegion {
         }
     }
 
+    /// Like `determine_offset` but with an upper limit: the allocation
+    /// must be placed at an offset below `upper_limit`.
+    fn determine_offset_with_limit(
+        &self,
+        inner: &VmarInner,
+        len: usize,
+        align: usize,
+        upper_limit: usize,
+    ) -> ZxResult<VirtAddr> {
+        if len > self.size || len > upper_limit {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        match self.find_free_area_with_limit(inner, 0, len, align, upper_limit) {
+            Some(offset) => Ok(offset),
+            None => Err(ZxError::NO_RESOURCES),
+        }
+    }
+
     /// Test if can create a new mapping at `offset` with `len`.
     fn test_map(&self, inner: &VmarInner, offset: usize, len: usize, align: usize) -> bool {
         debug_assert!(check_aligned(offset, align));
@@ -1014,17 +1081,36 @@ impl VmAddressRegion {
                 );
             }
         }
+        self.find_free_area_with_limit(inner, offset_hint, len, align, self.size)
+    }
+
+    /// Find a free area with `len`, constrained to offsets where
+    /// `offset + len <= upper_limit`.
+    fn find_free_area_with_limit(
+        &self,
+        inner: &VmarInner,
+        offset_hint: usize,
+        len: usize,
+        align: usize,
+        upper_limit: usize,
+    ) -> Option<usize> {
+        let candidates: alloc::vec::Vec<usize> = core::iter::once(offset_hint)
+            .chain(inner.children.iter().map(|map| map.end_addr() - self.addr))
+            .chain(inner.mappings.iter().map(|map| map.end_addr() - self.addr))
+            .collect();
         candidates.into_iter().find_map(|offset| {
-            // Round up the candidate to the requested alignment.
             let aligned = if align > 0 {
                 let mask = align - 1;
-                // Align the absolute address, then convert back to offset.
                 let abs = self.addr + offset;
                 let aligned_abs = (abs + mask) & !mask;
                 aligned_abs - self.addr
             } else {
                 offset
             };
+            // Check upper limit: offset + len must not exceed it.
+            if aligned + len > upper_limit {
+                return None;
+            }
             if self.test_map(inner, aligned, len, align) {
                 Some(aligned)
             } else {
