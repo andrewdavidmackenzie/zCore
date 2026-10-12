@@ -141,3 +141,6 @@ mod bad_syscall;
 
 #[cfg(test)]
 mod sync_mutex;
+
+#[cfg(test)]
+mod profile;

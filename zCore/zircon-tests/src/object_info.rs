@@ -4125,3 +4125,1134 @@ fn process_info_vmos_zero_buffer() {
     let _ctx = TestContext::new();
     panic!("not yet implemented");
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE_BASIC on Event (topic 2) — 9 tests
+// ═══════════════════════════════════════════════════════════════════
+
+/// C++: TEST(EventGetInfoTest, InfoHandleBasicOnSelfSucceeds)
+#[test]
+fn event_info_handle_basic_on_self() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        event_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST(EventGetInfoTest, InfoHandleBasicInvalidHandleFails)
+#[test]
+fn event_info_handle_basic_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_HANDLE_BASIC, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(EventGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
+#[test]
+fn event_info_handle_basic_zero_buffer() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, event_h, TOPIC_HANDLE_BASIC, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+/// C++: TEST(EventGetInfoTest, InfoHandleBasicNullAvailSucceeds)
+#[test]
+fn event_info_handle_basic_null_avail() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    get_info_raw(
+        &ctx,
+        event_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(EventGetInfoTest, InfoHandleBasicNullActualSucceeds)
+#[test]
+fn event_info_handle_basic_null_actual() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        event_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(EventGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
+#[test]
+fn event_info_handle_basic_null_actual_and_avail() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    get_info_raw(
+        &ctx,
+        event_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(EventGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
+#[test]
+fn event_info_handle_basic_invalid_buffer() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        event_h,
+        TOPIC_HANDLE_BASIC,
+        0,
+        HANDLE_BASIC_SIZE,
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(EventGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
+#[test]
+fn event_info_handle_basic_bad_actual() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        event_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        1,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(EventGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
+#[test]
+fn event_info_handle_basic_bad_avail() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        event_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        1,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE_BASIC on EventPair (topic 2) — 9 tests
+// ═══════════════════════════════════════════════════════════════════
+
+/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicOnSelfSucceeds)
+#[test]
+fn eventpair_info_handle_basic_on_self() {
+    let ctx = TestContext::new();
+    let (ep0, _ep1) = zircon_object::signal::EventPair::create();
+    let ep_h = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        ep_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicInvalidHandleFails)
+#[test]
+fn eventpair_info_handle_basic_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xBEEF, TOPIC_HANDLE_BASIC, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
+#[test]
+fn eventpair_info_handle_basic_zero_buffer() {
+    let ctx = TestContext::new();
+    let (ep0, _ep1) = zircon_object::signal::EventPair::create();
+    let ep_h = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, ep_h, TOPIC_HANDLE_BASIC, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicNullAvailSucceeds)
+#[test]
+fn eventpair_info_handle_basic_null_avail() {
+    let ctx = TestContext::new();
+    let (ep0, _ep1) = zircon_object::signal::EventPair::create();
+    let ep_h = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    get_info_raw(
+        &ctx,
+        ep_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicNullActualSucceeds)
+#[test]
+fn eventpair_info_handle_basic_null_actual() {
+    let ctx = TestContext::new();
+    let (ep0, _ep1) = zircon_object::signal::EventPair::create();
+    let ep_h = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        ep_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
+#[test]
+fn eventpair_info_handle_basic_null_actual_and_avail() {
+    let ctx = TestContext::new();
+    let (ep0, _ep1) = zircon_object::signal::EventPair::create();
+    let ep_h = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    get_info_raw(
+        &ctx,
+        ep_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
+#[test]
+fn eventpair_info_handle_basic_invalid_buffer() {
+    let ctx = TestContext::new();
+    let (ep0, _ep1) = zircon_object::signal::EventPair::create();
+    let ep_h = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        ep_h,
+        TOPIC_HANDLE_BASIC,
+        0,
+        HANDLE_BASIC_SIZE,
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
+#[test]
+fn eventpair_info_handle_basic_bad_actual() {
+    let ctx = TestContext::new();
+    let (ep0, _ep1) = zircon_object::signal::EventPair::create();
+    let ep_h = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        ep_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        1,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(EventPairGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
+#[test]
+fn eventpair_info_handle_basic_bad_avail() {
+    let ctx = TestContext::new();
+    let (ep0, _ep1) = zircon_object::signal::EventPair::create();
+    let ep_h = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        ep_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        1,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE_BASIC on Channel (topic 2) — 9 tests
+// ═══════════════════════════════════════════════════════════════════
+
+/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicOnSelfSucceeds)
+#[test]
+fn channel_info_handle_basic_on_self() {
+    let ctx = TestContext::new();
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let ch_h = ctx
+        .proc
+        .add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        ch_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicInvalidHandleFails)
+#[test]
+fn channel_info_handle_basic_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xCAFE, TOPIC_HANDLE_BASIC, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
+#[test]
+fn channel_info_handle_basic_zero_buffer() {
+    let ctx = TestContext::new();
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let ch_h = ctx
+        .proc
+        .add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, ch_h, TOPIC_HANDLE_BASIC, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicNullAvailSucceeds)
+#[test]
+fn channel_info_handle_basic_null_avail() {
+    let ctx = TestContext::new();
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let ch_h = ctx
+        .proc
+        .add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    get_info_raw(
+        &ctx,
+        ch_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicNullActualSucceeds)
+#[test]
+fn channel_info_handle_basic_null_actual() {
+    let ctx = TestContext::new();
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let ch_h = ctx
+        .proc
+        .add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        ch_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
+#[test]
+fn channel_info_handle_basic_null_actual_and_avail() {
+    let ctx = TestContext::new();
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let ch_h = ctx
+        .proc
+        .add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    get_info_raw(
+        &ctx,
+        ch_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
+#[test]
+fn channel_info_handle_basic_invalid_buffer() {
+    let ctx = TestContext::new();
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let ch_h = ctx
+        .proc
+        .add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
+
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        ch_h,
+        TOPIC_HANDLE_BASIC,
+        0,
+        HANDLE_BASIC_SIZE,
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
+#[test]
+fn channel_info_handle_basic_bad_actual() {
+    let ctx = TestContext::new();
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let ch_h = ctx
+        .proc
+        .add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        ch_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        1,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
+#[test]
+fn channel_info_handle_basic_bad_avail() {
+    let ctx = TestContext::new();
+    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
+    let ch_h = ctx
+        .proc
+        .add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        ch_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        1,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE_VALID (topic 1) — NullAvail, NullActual, NullActualAndAvail
+// ═══════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE_BASIC on VMO (topic 2) — 9 tests
+// ═══════════════════════════════════════════════════════════════════
+
+/// C++: TEST(VmoGetInfoTest, InfoHandleBasicOnSelfSucceeds)
+#[test]
+fn vmo_info_handle_basic_on_self() {
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let vmo_h = ctx.proc.add_handle(Handle::new(
+        vmo,
+        Rights::READ | Rights::WRITE | Rights::INSPECT,
+    ));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        vmo_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST(VmoGetInfoTest, InfoHandleBasicInvalidHandleFails)
+#[test]
+fn vmo_info_handle_basic_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xF00D, TOPIC_HANDLE_BASIC, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(VmoGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
+#[test]
+fn vmo_info_handle_basic_zero_buffer() {
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let vmo_h = ctx.proc.add_handle(Handle::new(vmo, Rights::INSPECT));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, vmo_h, TOPIC_HANDLE_BASIC, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+/// C++: TEST(VmoGetInfoTest, InfoHandleBasicNullAvailSucceeds)
+#[test]
+fn vmo_info_handle_basic_null_avail() {
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let vmo_h = ctx.proc.add_handle(Handle::new(vmo, Rights::INSPECT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    get_info_raw(
+        &ctx,
+        vmo_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(VmoGetInfoTest, InfoHandleBasicNullActualSucceeds)
+#[test]
+fn vmo_info_handle_basic_null_actual() {
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let vmo_h = ctx.proc.add_handle(Handle::new(vmo, Rights::INSPECT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        vmo_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(VmoGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
+#[test]
+fn vmo_info_handle_basic_null_actual_and_avail() {
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let vmo_h = ctx.proc.add_handle(Handle::new(vmo, Rights::INSPECT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    get_info_raw(
+        &ctx,
+        vmo_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(VmoGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
+#[test]
+fn vmo_info_handle_basic_invalid_buffer() {
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let vmo_h = ctx.proc.add_handle(Handle::new(vmo, Rights::INSPECT));
+
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        vmo_h,
+        TOPIC_HANDLE_BASIC,
+        0,
+        HANDLE_BASIC_SIZE,
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(VmoGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
+#[test]
+fn vmo_info_handle_basic_bad_actual() {
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let vmo_h = ctx.proc.add_handle(Handle::new(vmo, Rights::INSPECT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        vmo_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        1,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(VmoGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
+#[test]
+fn vmo_info_handle_basic_bad_avail() {
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let vmo_h = ctx.proc.add_handle(Handle::new(vmo, Rights::INSPECT));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        vmo_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        1,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE_BASIC on Socket (topic 2) — 9 tests
+// ═══════════════════════════════════════════════════════════════════
+
+/// C++: TEST(SocketGetInfoTest, InfoHandleBasicOnSelfSucceeds)
+#[test]
+fn socket_info_handle_basic_on_self() {
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let s_h = ctx.proc.add_handle(Handle::new(s0, Rights::DEFAULT_SOCKET));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        s_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST(SocketGetInfoTest, InfoHandleBasicInvalidHandleFails)
+#[test]
+fn socket_info_handle_basic_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xBABE, TOPIC_HANDLE_BASIC, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(SocketGetInfoTest, InfoHandleBasicZeroSizedBufferFails)
+#[test]
+fn socket_info_handle_basic_zero_buffer() {
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let s_h = ctx.proc.add_handle(Handle::new(s0, Rights::DEFAULT_SOCKET));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, s_h, TOPIC_HANDLE_BASIC, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+/// C++: TEST(SocketGetInfoTest, InfoHandleBasicNullAvailSucceeds)
+#[test]
+fn socket_info_handle_basic_null_avail() {
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let s_h = ctx.proc.add_handle(Handle::new(s0, Rights::DEFAULT_SOCKET));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    get_info_raw(
+        &ctx,
+        s_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(SocketGetInfoTest, InfoHandleBasicNullActualSucceeds)
+#[test]
+fn socket_info_handle_basic_null_actual() {
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let s_h = ctx.proc.add_handle(Handle::new(s0, Rights::DEFAULT_SOCKET));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        s_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(SocketGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
+#[test]
+fn socket_info_handle_basic_null_actual_and_avail() {
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let s_h = ctx.proc.add_handle(Handle::new(s0, Rights::DEFAULT_SOCKET));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    get_info_raw(
+        &ctx,
+        s_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(SocketGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
+#[test]
+fn socket_info_handle_basic_invalid_buffer() {
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let s_h = ctx.proc.add_handle(Handle::new(s0, Rights::DEFAULT_SOCKET));
+
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        s_h,
+        TOPIC_HANDLE_BASIC,
+        0,
+        HANDLE_BASIC_SIZE,
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
+#[test]
+fn socket_info_handle_basic_bad_actual() {
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let s_h = ctx.proc.add_handle(Handle::new(s0, Rights::DEFAULT_SOCKET));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        s_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        1,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
+#[test]
+fn socket_info_handle_basic_bad_avail() {
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let s_h = ctx.proc.add_handle(Handle::new(s0, Rights::DEFAULT_SOCKET));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        s_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        1,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE_BASIC on Timer (topic 2) — 6 additional tests
+// (OnSelf, InvalidHandle, ZeroBuffer already exist above)
+// ═══════════════════════════════════════════════════════════════════
+
+/// C++: TEST(TimerGetInfoTest, InfoHandleBasicNullAvailSucceeds)
+#[test]
+fn timer_info_handle_basic_null_avail() {
+    let ctx = TestContext::new();
+    let timer = Timer::new();
+    let timer_h = ctx
+        .proc
+        .add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    get_info_raw(
+        &ctx,
+        timer_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(TimerGetInfoTest, InfoHandleBasicNullActualSucceeds)
+#[test]
+fn timer_info_handle_basic_null_actual() {
+    let ctx = TestContext::new();
+    let timer = Timer::new();
+    let timer_h = ctx
+        .proc
+        .add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    get_info_raw(
+        &ctx,
+        timer_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(TimerGetInfoTest, InfoHandleBasicNullActualAndAvailSucceeds)
+#[test]
+fn timer_info_handle_basic_null_actual_and_avail() {
+    let ctx = TestContext::new();
+    let timer = Timer::new();
+    let timer_h = ctx
+        .proc
+        .add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    get_info_raw(
+        &ctx,
+        timer_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        0,
+    )
+    .unwrap();
+}
+
+/// C++: TEST(TimerGetInfoTest, InfoHandleBasicInvalidBufferPointerFails)
+#[test]
+fn timer_info_handle_basic_invalid_buffer() {
+    let ctx = TestContext::new();
+    let timer = Timer::new();
+    let timer_h = ctx
+        .proc
+        .add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
+
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        timer_h,
+        TOPIC_HANDLE_BASIC,
+        0,
+        HANDLE_BASIC_SIZE,
+        &mut actual as *mut _ as usize,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(TimerGetInfoTest, InfoHandleBasicBadActualIsInvalidArg)
+#[test]
+fn timer_info_handle_basic_bad_actual() {
+    let ctx = TestContext::new();
+    let timer = Timer::new();
+    let timer_h = ctx
+        .proc
+        .add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut avail: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        timer_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        1,
+        &mut avail as *mut _ as usize,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(TimerGetInfoTest, InfoHandleBasicBadAvailIsInvalidArg)
+#[test]
+fn timer_info_handle_basic_bad_avail() {
+    let ctx = TestContext::new();
+    let timer = Timer::new();
+    let timer_h = ctx
+        .proc
+        .add_handle(Handle::new(timer, Rights::DEFAULT_TIMER));
+
+    let mut buf = AlignedBuf::<HANDLE_BASIC_SIZE>::new();
+    let mut actual: usize = 0;
+    let err = get_info_raw(
+        &ctx,
+        timer_h,
+        TOPIC_HANDLE_BASIC,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        &mut actual as *mut _ as usize,
+        1,
+    )
+    .unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ObjectGetInfoTest, HandleValidNullAvailSucceeds)
+#[test]
+fn handle_valid_null_avail() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    get_info_raw(&ctx, event_h, TOPIC_HANDLE_VALID, 0, 0, 0, 0).unwrap();
+}
+
+/// C++: TEST(ObjectGetInfoTest, HandleValidNullActualSucceeds)
+#[test]
+fn handle_valid_null_actual() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    get_info_raw(&ctx, event_h, TOPIC_HANDLE_VALID, 0, 0, 0, 0).unwrap();
+}
+
+/// C++: TEST(ObjectGetInfoTest, HandleValidNullActualAndAvailSucceeds)
+#[test]
+fn handle_valid_null_actual_and_avail() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    get_info_raw(&ctx, event_h, TOPIC_HANDLE_VALID, 0, 0, 0, 0).unwrap();
+}

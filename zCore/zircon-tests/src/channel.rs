@@ -689,6 +689,38 @@ fn read_may_discard_with_smaller_buffer() {
     assert_eq!(msg.handles.len(), 1);
 }
 
+/// C++: TEST(ChannelTest, ReadMayDiscardWithNullBufferDiscardHandlesReturnsBufferTooSmall)
+/// When check_and_read rejects a message because the caller has no buffer
+/// for handles, BUFFER_TOO_SMALL is returned and the message is preserved.
+#[test]
+fn read_may_discard_with_null_buffer_discard_handles_returns_buffer_too_small() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Channel::create();
+
+    // Write a message with a handle.
+    let event = Event::new();
+    local
+        .write(MessagePacket {
+            data: vec![],
+            handles: vec![Handle::new(event, Rights::DEFAULT_EVENT)],
+        })
+        .unwrap();
+
+    // Simulate "null buffer" by rejecting via check_and_read.
+    let result = remote.check_and_read(|msg| {
+        if !msg.handles.is_empty() {
+            return Err(ZxError::BUFFER_TOO_SMALL);
+        }
+        Ok(())
+    });
+    assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
+
+    // Message should still be queued.
+    assert!(remote.signal().contains(Signal::READABLE));
+    let msg = remote.read().unwrap();
+    assert_eq!(msg.handles.len(), 1);
+}
+
 /// C++: TEST(ChannelTest, ReadMayDiscardWithZeroSizeBuffersDiscardHandlesAndDataReturnsBufferTooSmall)
 /// When check_and_read rejects a non-empty message with zero-size buffers,
 /// BUFFER_TOO_SMALL is returned and the message is preserved.
