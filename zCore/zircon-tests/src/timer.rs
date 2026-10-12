@@ -135,3 +135,68 @@ fn timer_name() {
     timer.set_name("my-timer");
     assert_eq!(timer.name(), "my-timer");
 }
+
+/// C++: TEST(TimerTest, DeadlineAfter)
+///
+/// Set a timer with a deadline computed via `zx_deadline_after()`,
+/// then verify the SIGNALED bit fires. Since we can't easily wait
+/// in a unit test, we use deadline=0 (past) which fires immediately.
+#[test]
+fn timer_deadline_after() {
+    let _ctx = TestContext::new();
+    let timer = Timer::new();
+
+    // zx_deadline_after(0) returns current monotonic time — already in the past
+    let deadline = Duration::from_nanos(0);
+    timer.set(deadline, Duration::from_nanos(0));
+
+    assert!(timer.signal().contains(Signal::SIGNALED));
+}
+
+/// C++: TEST(TimerTest, CoalesceAndCancel)
+///
+/// Set a far-future timer, cancel it, then set a new one that fires
+/// immediately. Verifies that cancel truly resets state and a
+/// subsequent set works correctly.
+#[test]
+fn timer_coalesce_and_cancel() {
+    let _ctx = TestContext::new();
+    let timer = Timer::new();
+
+    // Set a far-future deadline
+    timer.set(Duration::from_secs(1000), Duration::from_nanos(0));
+    assert!(!timer.signal().contains(Signal::SIGNALED));
+
+    // Cancel
+    timer.cancel();
+    assert!(!timer.signal().contains(Signal::SIGNALED));
+
+    // Set again with a past deadline — should fire immediately
+    timer.set(Duration::from_nanos(0), Duration::from_nanos(0));
+    assert!(timer.signal().contains(Signal::SIGNALED));
+}
+
+/// C++: TEST(TimerTest, InvalidArgs)
+///
+/// Creating a timer with an invalid slack mode should fail.
+/// At the object level, `Slack` is a Rust enum so invalid values
+/// can't be constructed. This test verifies the syscall rejects
+/// invalid options (slack mode >= 3).
+#[test]
+fn timer_invalid_args() {
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::HandleValue;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let mut h: HandleValue = 0;
+
+    // Valid options: 0 (Center), 1 (Early), 2 (Late)
+    // options=3 is invalid
+    let result = sc.sys_timer_create(3, 0, UserOutPtr::from(&mut h as *mut _ as usize));
+    assert_eq!(result.unwrap_err(), zircon_object::ZxError::INVALID_ARGS);
+
+    // options=0xFF is also invalid
+    let result = sc.sys_timer_create(0xFF, 0, UserOutPtr::from(&mut h as *mut _ as usize));
+    assert_eq!(result.unwrap_err(), zircon_object::ZxError::INVALID_ARGS);
+}

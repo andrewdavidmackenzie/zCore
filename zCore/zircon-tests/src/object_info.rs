@@ -637,3 +637,278 @@ fn bti_info_zero_buffer() {
     let err = get_info_err(&ctx, bti_h, TOPIC_BTI, &mut buf);
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
+
+// ── ZX_INFO_HANDLE_COUNT on Thread (topic 19) ──────────────────────
+
+const TOPIC_HANDLE_COUNT: u32 = 19;
+const HANDLE_COUNT_SIZE: usize = 4; // u32
+
+/// C++: TEST_F(ThreadGetInfoTest, InfoHandleCountOnSelfSucceeds)
+#[test]
+fn thread_info_handle_count_on_self() {
+    let ctx = TestContext::new();
+    let thread = Thread::create(&ctx.proc, "hc-thread").unwrap();
+    let thread_h = ctx
+        .proc
+        .add_handle(Handle::new(thread, Rights::DEFAULT_THREAD));
+
+    let mut buf = [0u8; HANDLE_COUNT_SIZE];
+    let (actual, avail) = get_info(&ctx, thread_h, TOPIC_HANDLE_COUNT, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+    let count = u32::from_ne_bytes(buf.try_into().unwrap());
+    assert_eq!(count, 1, "single handle should have count 1");
+}
+
+/// C++: TEST_F(ThreadGetInfoTest, InfoHandleCountInvalidHandleFails)
+#[test]
+fn thread_info_handle_count_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; HANDLE_COUNT_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_HANDLE_COUNT, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST_F(ThreadGetInfoTest, InfoHandleCountZeroSizedBufferFails)
+#[test]
+fn thread_info_handle_count_zero_buffer() {
+    let ctx = TestContext::new();
+    let thread = Thread::create(&ctx.proc, "hc-thread").unwrap();
+    let thread_h = ctx
+        .proc
+        .add_handle(Handle::new(thread, Rights::DEFAULT_THREAD));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, thread_h, TOPIC_HANDLE_COUNT, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+// ── ZX_INFO_THREAD_STATS (topic 15) ────────────────────────────────
+
+const TOPIC_THREAD_STATS: u32 = 15;
+const THREAD_STATS_SIZE: usize = 16; // zx_info_thread_stats_t
+
+/// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsOnSelfSucceeds)
+#[test]
+fn thread_info_thread_stats_on_self() {
+    let ctx = TestContext::new();
+    let thread = Thread::create(&ctx.proc, "stats-thread").unwrap();
+    let thread_h = ctx.proc.add_handle(Handle::new(thread, Rights::INSPECT));
+
+    let mut buf = [0u8; THREAD_STATS_SIZE];
+    let (actual, avail) = get_info(&ctx, thread_h, TOPIC_THREAD_STATS, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsInvalidHandleFails)
+#[test]
+fn thread_info_thread_stats_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; THREAD_STATS_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_THREAD_STATS, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST_F(ThreadGetInfoTest, InfoThreadStatsZeroSizedBufferFails)
+#[test]
+fn thread_info_thread_stats_zero_buffer() {
+    let ctx = TestContext::new();
+    let thread = Thread::create(&ctx.proc, "stats-thread").unwrap();
+    let thread_h = ctx.proc.add_handle(Handle::new(thread, Rights::INSPECT));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, thread_h, TOPIC_THREAD_STATS, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+// ── ZX_INFO_VMAR (topic 7) ─────────────────────────────────────────
+
+const TOPIC_VMAR: u32 = 7;
+const VMAR_INFO_SIZE: usize = 16; // zx_info_vmar_t = { base: usize, len: usize }
+
+/// C++: TEST_F(VmarGetInfoTest, InfoVmarOnSelfSucceeds)
+#[test]
+fn vmar_info_on_self() {
+    let ctx = TestContext::new();
+    let vmar = ctx.proc.vmar();
+    let vmar_h = ctx.proc.add_handle(Handle::new(vmar, Rights::DEFAULT_VMAR));
+
+    let mut buf = [0u8; VMAR_INFO_SIZE];
+    let (actual, avail) = get_info(&ctx, vmar_h, TOPIC_VMAR, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST_F(VmarGetInfoTest, InfoVmarInvalidHandleFails)
+#[test]
+fn vmar_info_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; VMAR_INFO_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_VMAR, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST_F(VmarGetInfoTest, InfoVmarZeroSizedBufferFails)
+#[test]
+fn vmar_info_zero_buffer() {
+    let ctx = TestContext::new();
+    let vmar = ctx.proc.vmar();
+    let vmar_h = ctx.proc.add_handle(Handle::new(vmar, Rights::DEFAULT_VMAR));
+
+    let mut buf = [0u8; 0];
+    let err = get_info_err(&ctx, vmar_h, TOPIC_VMAR, &mut buf);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
+}
+
+// ── ZX_INFO_TASK_RUNTIME (topic 30) ────────────────────────────────
+
+const TOPIC_TASK_RUNTIME: u32 = 30;
+const TASK_RUNTIME_V1_SIZE: usize = 16; // cpu_time + queue_time
+
+/// C++: TEST_F(TaskGetInfoTest, InfoTaskRuntimeWrongType)
+///
+/// Querying TASK_RUNTIME on a non-task object (Event) returns WRONG_TYPE.
+#[test]
+fn task_info_runtime_wrong_type() {
+    let ctx = TestContext::new();
+    let event = Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    let mut buf = [0u8; TASK_RUNTIME_V1_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, event_h, TOPIC_TASK_RUNTIME, &mut buf),
+        zircon_object::ZxError::WRONG_TYPE
+    );
+}
+
+/// C++: TEST_F(TaskGetInfoTest, InfoTaskRuntimeInvalidHandle)
+#[test]
+fn task_info_runtime_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; TASK_RUNTIME_V1_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_TASK_RUNTIME, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+// ── ZX_INFO_PROCESS_HANDLE_STATS (topic 21) ────────────────────────
+
+const TOPIC_PROCESS_HANDLE_STATS: u32 = 21;
+const PROCESS_HANDLE_STATS_SIZE: usize = 256; // [u32; 64]
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleStats)
+///
+/// Query handle stats for a process. The process has handles added
+/// by TestContext, so the stats array should be non-trivial.
+#[test]
+fn process_info_handle_stats() {
+    let ctx = TestContext::new();
+    let proc_h = ctx.proc.add_handle(Handle::new(
+        ctx.proc.clone(),
+        Rights::INSPECT | Rights::ENUMERATE,
+    ));
+
+    let mut buf = [0u8; PROCESS_HANDLE_STATS_SIZE];
+    let (actual, avail) = get_info(&ctx, proc_h, TOPIC_PROCESS_HANDLE_STATS, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+// ── ZX_INFO_RESOURCE (topic 18) ────────────────────────────────────
+
+const TOPIC_RESOURCE: u32 = 18;
+const RESOURCE_INFO_SIZE: usize = 56; // zx_info_resource_t
+
+/// C++: TEST_F(ResourceGetInfoTest, InfoResourceOnSelfSucceeds)
+#[test]
+fn resource_info_on_self() {
+    let ctx = TestContext::new();
+    let res_h = ctx.add_root_resource();
+
+    let mut buf = [0u8; RESOURCE_INFO_SIZE];
+    let (actual, avail) = get_info(&ctx, res_h, TOPIC_RESOURCE, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+}
+
+/// C++: TEST_F(ResourceGetInfoTest, InfoResourceInvalidHandleFails)
+#[test]
+fn resource_info_invalid_handle() {
+    let ctx = TestContext::new();
+    let mut buf = [0u8; RESOURCE_INFO_SIZE];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_RESOURCE, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
+
+// ── ZX_INFO_HANDLE_TABLE (topic 27) ────────────────────────────────
+
+const TOPIC_HANDLE_TABLE: u32 = 27;
+const HANDLE_EXTENDED_SIZE: usize = 40; // zx_info_handle_extended_t
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableSelf)
+///
+/// Query the handle table of a process that has at least one handle
+/// (the process handle itself that we just added).
+#[test]
+fn process_info_handle_table_self() {
+    let ctx = TestContext::new();
+    let proc_h = ctx.proc.add_handle(Handle::new(
+        ctx.proc.clone(),
+        Rights::DEFAULT_PROCESS | Rights::MANAGE_PROCESS,
+    ));
+
+    // Buffer for up to 16 entries
+    let buf_size = 16 * HANDLE_EXTENDED_SIZE;
+    let mut buf = vec![0u8; buf_size];
+    let (actual, avail) = get_info(&ctx, proc_h, TOPIC_HANDLE_TABLE, &mut buf).unwrap();
+    // Process should have at least the handle we just added
+    assert!(avail >= 1, "process should have at least 1 handle");
+    assert!(actual >= 1);
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableEmpty)
+///
+/// A freshly-created process with no handles added should report
+/// an empty handle table.
+#[test]
+fn process_info_handle_table_empty() {
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let empty_proc = Process::create(&job, "empty").unwrap();
+
+    // Add the empty proc as a handle with MANAGE_PROCESS
+    let proc_h = ctx.proc.add_handle(Handle::new(
+        empty_proc,
+        Rights::DEFAULT_PROCESS | Rights::MANAGE_PROCESS,
+    ));
+
+    let buf_size = 16 * HANDLE_EXTENDED_SIZE;
+    let mut buf = vec![0u8; buf_size];
+    let (actual, avail) = get_info(&ctx, proc_h, TOPIC_HANDLE_TABLE, &mut buf).unwrap();
+    assert_eq!(avail, 0, "empty process should have 0 handles");
+    assert_eq!(actual, 0);
+}
+
+/// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableInvalidHandleFails)
+#[test]
+fn process_info_handle_table_invalid_handle() {
+    let ctx = TestContext::new();
+    let buf_size = 16 * HANDLE_EXTENDED_SIZE;
+    let mut buf = vec![0u8; buf_size];
+    assert_eq!(
+        get_info_err(&ctx, 0xDEAD, TOPIC_HANDLE_TABLE, &mut buf),
+        zircon_object::ZxError::BAD_HANDLE
+    );
+}
