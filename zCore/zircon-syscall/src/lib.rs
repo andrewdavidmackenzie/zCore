@@ -625,9 +625,12 @@ impl Syscall<'_> {
             Sys::CACHE_FLUSH => self.sys_cache_flush(a0, a1, a2 as _),
             // --- Additional upstream syscalls (stubs) ---
             Sys::THREAD_LEGACY_YIELD => {
-                // Yield CPU. In Fuchsia this is a hint to the scheduler.
-                // We treat it as a no-op (correct behavior per Zircon docs).
-                Ok(())
+                // Yield CPU. Options (a0) must be 0.
+                if a0 != 0 {
+                    Err(ZxError::INVALID_ARGS)
+                } else {
+                    Ok(())
+                }
             }
             Sys::THREAD_RAISE_EXCEPTION => {
                 self.sys_thread_raise_exception(a0 as _, a1 as _, a2).await
