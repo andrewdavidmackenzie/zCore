@@ -3,37 +3,74 @@
 //! Additional exception tests covering exception channels, exception
 //! types, and process/thread exception handling.
 
-#[allow(unused_imports)]
 use crate::helpers::TestContext;
+use zircon_object::object::Rights;
+use zircon_object::task::Task;
 
 ///
-/// Create an exception channel on a process. The channel should
-/// receive exception packets when threads in the process fault.
-#[should_panic(expected = "exception channels need real execution")]
+/// Create an exception channel on a process. Verify the channel is
+/// created successfully. Exception delivery requires real execution,
+/// but channel creation is testable at the object level.
 #[test]
 fn create_exception_channel() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    let ctx = TestContext::new();
+    let exceptionate = ctx.proc.exceptionate();
+    let channel = exceptionate.create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert!(
+        channel.is_ok(),
+        "process exception channel creation should succeed"
+    );
+
+    // Creating a second channel while the first is alive should fail with ALREADY_BOUND
+    let channel2 = exceptionate.create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert_eq!(channel2.unwrap_err(), zircon_object::ZxError::ALREADY_BOUND,);
+
+    // Drop the first channel's peer, then creating a new one should succeed again
+    drop(channel);
+    let channel3 = exceptionate.create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert!(
+        channel3.is_ok(),
+        "channel creation should succeed after prior channel dropped"
+    );
 }
 
 ///
-/// Create an exception channel on a specific thread. Only exceptions
-/// from that thread should be delivered.
-#[should_panic(expected = "exception channels need real execution")]
+/// Create an exception channel on a specific thread. Verify the
+/// channel is created successfully at the object level.
 #[test]
 fn thread_exception_channel() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    let ctx = TestContext::new();
+    // The current thread's inner Thread object
+    let thread = ctx.current.inner();
+    let exceptionate = thread.exceptionate();
+    let channel = exceptionate.create_channel(Rights::DEFAULT_THREAD);
+    assert!(
+        channel.is_ok(),
+        "thread exception channel creation should succeed"
+    );
+
+    // Second binding should fail
+    let channel2 = exceptionate.create_channel(Rights::DEFAULT_THREAD);
+    assert_eq!(channel2.unwrap_err(), zircon_object::ZxError::ALREADY_BOUND);
 }
 
 ///
-/// Create an exception channel on a job. Exceptions from all
-/// processes in the job should be delivered.
-#[should_panic(expected = "exception channels need real execution")]
+/// Create an exception channel on a job. Verify the channel is
+/// created successfully at the object level.
 #[test]
 fn job_exception_channel() {
-    let _ctx = TestContext::new();
-    panic!("exception channels need real execution");
+    let ctx = TestContext::new();
+    let job = ctx.proc.job();
+    let exceptionate = job.exceptionate();
+    let channel = exceptionate.create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert!(
+        channel.is_ok(),
+        "job exception channel creation should succeed"
+    );
+
+    // Second binding should fail
+    let channel2 = exceptionate.create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS);
+    assert_eq!(channel2.unwrap_err(), zircon_object::ZxError::ALREADY_BOUND);
 }
 
 ///
