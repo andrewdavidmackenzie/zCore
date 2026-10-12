@@ -457,6 +457,18 @@ impl Syscall<'_> {
         if size > vmo.len() {
             return Err(ZxError::OUT_OF_RANGE);
         }
+        // When changing stream_size, zero the range between the old
+        // and new sizes. On decrease: zero [new, vmo_len). On
+        // increase: zero [old, new) so data beyond old stream_size
+        // reads as zero even if previously written.
+        let old_size = vmo.content_size();
+        if size != old_size {
+            let zero_start = size.min(old_size);
+            let zero_end = if size < old_size { vmo.len() } else { size };
+            if zero_end > zero_start {
+                let _ = vmo.zero(zero_start, zero_end - zero_start);
+            }
+        }
         vmo.set_content_size(size)
     }
 
