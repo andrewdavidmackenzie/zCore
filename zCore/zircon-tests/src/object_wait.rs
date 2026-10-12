@@ -440,10 +440,27 @@ fn wait_many_wait_on_zero_things() {
 }
 
 /// C++: TEST(ObjectWaitOneTest, EmptySignalSet)
-#[test]
-#[ignore = "requires object wait infrastructure"]
-fn wait_one_empty_signal_set() {
-    todo!("requires object wait infrastructure");
+/// Waiting with signals=0 and deadline=past should time out immediately.
+#[async_std::test]
+async fn wait_one_empty_signal_set() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let mut event_h: HandleValue = 0;
+    sc.sys_event_create(0, UserOutPtr::from(&mut event_h as *mut _ as usize))
+        .unwrap();
+
+    // Wait with empty signal set and deadline=0 (past).
+    let mut observed = Signal::empty();
+    let result = sc
+        .sys_object_wait_one(
+            event_h,
+            0, // empty signal set
+            zircon_syscall::Deadline::from(0usize),
+            UserOutPtr::from(&mut observed as *mut _ as usize),
+        )
+        .await;
+    assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 
 /// C++: TEST(ObjectWaitOneTest, TransientSignalsNotReturned)
@@ -454,10 +471,31 @@ fn wait_one_transient_signals_not_returned() {
 }
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventSignaled)
-#[test]
-#[ignore = "requires object wait infrastructure"]
-fn wait_one_wait_for_event_signaled() {
-    todo!("requires object wait infrastructure");
+/// Signal the event first, then wait with deadline=past — should return OK.
+#[async_std::test]
+async fn wait_one_wait_for_event_signaled() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let mut event_h: HandleValue = 0;
+    sc.sys_event_create(0, UserOutPtr::from(&mut event_h as *mut _ as usize))
+        .unwrap();
+
+    // Signal the event before waiting.
+    sc.sys_object_signal(event_h, 0, Signal::USER_SIGNAL_0.bits())
+        .unwrap();
+
+    // Wait with deadline=0 — signal already set, should succeed immediately.
+    let mut observed = Signal::empty();
+    sc.sys_object_wait_one(
+        event_h,
+        Signal::USER_SIGNAL_0.bits(),
+        zircon_syscall::Deadline::from(0usize),
+        UserOutPtr::from(&mut observed as *mut _ as usize),
+    )
+    .await
+    .unwrap();
+    assert!(observed.contains(Signal::USER_SIGNAL_0));
 }
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventThenSignal)
@@ -468,10 +506,27 @@ fn wait_one_wait_for_event_then_signal() {
 }
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventTimeout)
-#[test]
-#[ignore = "requires object wait infrastructure"]
-fn wait_one_wait_for_event_timeout() {
-    todo!("requires object wait infrastructure");
+/// Wait on an unsignaled event with deadline=past — should return TIMED_OUT.
+#[async_std::test]
+async fn wait_one_wait_for_event_timeout() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let mut event_h: HandleValue = 0;
+    sc.sys_event_create(0, UserOutPtr::from(&mut event_h as *mut _ as usize))
+        .unwrap();
+
+    // Event is not signaled — should time out immediately.
+    let mut observed = Signal::empty();
+    let result = sc
+        .sys_object_wait_one(
+            event_h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            UserOutPtr::from(&mut observed as *mut _ as usize),
+        )
+        .await;
+    assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventTimeoutPreSignalClear)

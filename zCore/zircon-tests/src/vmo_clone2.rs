@@ -616,10 +616,26 @@ fn drop_children_in_parallel() {
 }
 
 /// C++: TEST(VmoClone2TestCase, DropParentCommittedBytes)
+/// Create a snapshot, drop the parent, verify the child's committed_bytes
+/// reflects that it now owns the pages.
 #[test]
-#[ignore = "requires VMAR mapping or multi-threaded runtime"]
 fn drop_parent_committed_bytes() {
-    todo!("requires VMAR mapping or multi-threaded runtime");
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(1);
+    vmo_write(&parent, 42, 0);
+
+    let child = parent.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // Drop parent — child should still have the page committed.
+    drop(parent);
+
+    // Child should have committed bytes (it inherited the page).
+    assert!(
+        child.get_info().committed_bytes > 0,
+        "child should have committed bytes after parent drop"
+    );
+    // Data should still be readable.
+    vmo_check(&child, 42, 0);
 }
 
 /// C++: TEST(VmoClone2TestCase, ForbidContiguousVmo)
@@ -651,10 +667,16 @@ fn map_range_read_only() {
 }
 
 /// C++: TEST(VmoClone2TestCase, NoPhysical)
+/// A physical VMO cannot be snapshot-cloned.
 #[test]
-#[ignore = "requires VMAR mapping or multi-threaded runtime"]
 fn no_physical() {
-    todo!("requires VMAR mapping or multi-threaded runtime");
+    let _ctx = TestContext::new();
+    // Create a physical VMO at address 0 (test-mode only, no real HW backing).
+    let physical = VmObject::new_physical(0, 1);
+
+    // Attempting to create a snapshot child should fail.
+    let result = physical.create_child(false, 0, PAGE_SIZE);
+    assert!(result.is_err(), "physical VMO snapshot should fail");
 }
 
 /// C++: TEST(VmoClone2TestCase, NoSnapshotPager)
@@ -665,17 +687,44 @@ fn no_snapshot_pager() {
 }
 
 /// C++: TEST(VmoClone2TestCase, ObjMemAccounting)
+/// Create a VMO, write to it, create a snapshot, and verify
+/// committed_bytes on both parent and child.
 #[test]
-#[ignore = "requires VMAR mapping or multi-threaded runtime"]
 fn obj_mem_accounting() {
-    todo!("requires VMAR mapping or multi-threaded runtime");
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(1);
+    vmo_write(&parent, 42, 0);
+
+    // Parent should have 1 page committed.
+    assert_eq!(parent.get_info().committed_bytes as usize, PAGE_SIZE);
+
+    // Create a snapshot child.
+    let child = parent.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // Both parent and child should report committed bytes (the page is
+    // shared via COW but still counted as committed for each).
+    assert!(parent.get_info().committed_bytes > 0);
+    assert!(child.get_info().committed_bytes > 0);
 }
 
 /// C++: TEST(VmoClone2TestCase, Offset)
+/// Create a VMO, write data, create a snapshot at an offset, then read
+/// from the child at offset 0 — should see the parent's data at that offset.
 #[test]
-#[ignore = "requires VMAR mapping or multi-threaded runtime"]
 fn offset() {
-    todo!("requires VMAR mapping or multi-threaded runtime");
+    let _ctx = TestContext::new();
+    let parent = init_page_tagged_vmo(2);
+
+    // Clone starting at page 1 of parent.
+    let child = parent.create_child(false, PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    // Child offset 0 should see parent page 1 (tagged as 2).
+    vmo_check(&child, 2, 0);
+
+    // Write to child doesn't affect parent.
+    vmo_write(&child, 99, 0);
+    vmo_check(&child, 99, 0);
+    vmo_check(&parent, 2, PAGE_SIZE); // parent unchanged
 }
 
 /// C++: TEST(VmoClone2TestCase, OffsetProgressiveWrite)

@@ -333,38 +333,134 @@ fn peer_closed_read_returns_peer_closed() {
 }
 
 /// C++: TEST(FifoTest, DefaultRightsAndType)
+/// Create a FIFO pair, verify type_name and initial signals.
 #[test]
-#[ignore = "requires user-buffer fault injection"]
 fn default_rights_and_type() {
-    todo!("requires user-buffer fault injection");
+    let _ctx = TestContext::new();
+    let (f0, f1) = Fifo::create(16, 4);
+
+    assert_eq!(f0.type_name(), "Fifo");
+    assert_eq!(f1.type_name(), "Fifo");
+
+    // Initially both endpoints should be writable, neither readable
+    assert!(f0.signal().contains(Signal::WRITABLE));
+    assert!(f1.signal().contains(Signal::WRITABLE));
+    assert!(!f0.signal().contains(Signal::READABLE));
+    assert!(!f1.signal().contains(Signal::READABLE));
 }
 
 /// C++: TEST(FifoTest, EndpointsAreRelated)
+/// Create a FIFO pair, verify related_koid links the two endpoints.
 #[test]
-#[ignore = "requires user-buffer fault injection"]
 fn endpoints_are_related() {
-    todo!("requires user-buffer fault injection");
+    let _ctx = TestContext::new();
+    let (f0, f1) = Fifo::create(16, 4);
+
+    assert_eq!(f0.related_koid(), f1.id());
+    assert_eq!(f1.related_koid(), f0.id());
+    assert_ne!(f0.id(), f1.id());
 }
 
 /// C++: TEST(FifoTest, FifoOrderIsPreserved)
+/// Write N elements, read all back in one call, verify FIFO order.
 #[test]
-#[ignore = "requires user-buffer fault injection"]
 fn fifo_order_is_preserved() {
-    todo!("requires user-buffer fault injection");
+    let _ctx = TestContext::new();
+    let (f0, f1) = Fifo::create(16, 4);
+
+    // Write 8 elements in order
+    let data: Vec<u8> = (0u32..8).flat_map(|x| x.to_ne_bytes()).collect();
+    let n = f0.write(4, &data, 8).unwrap();
+    assert_eq!(n, 8);
+
+    // Read all 8 back in a single call
+    let mut buf = vec![0u8; 32];
+    let n = f1.read(4, &mut buf, 8).unwrap();
+    assert_eq!(n, 8);
+
+    for i in 0u32..8 {
+        let val = u32::from_ne_bytes(
+            buf[i as usize * 4..(i as usize + 1) * 4]
+                .try_into()
+                .unwrap(),
+        );
+        assert_eq!(val, i, "element {} should match", i);
+    }
 }
 
 /// C++: TEST(FifoTest, IndividualReadsPreserveOrder)
+/// Write N elements, read one at a time, verify FIFO order.
 #[test]
-#[ignore = "requires user-buffer fault injection"]
 fn individual_reads_preserve_order() {
-    todo!("requires user-buffer fault injection");
+    let _ctx = TestContext::new();
+    let (f0, f1) = Fifo::create(16, 4);
+
+    // Write 8 elements
+    let data: Vec<u8> = (0u32..8).flat_map(|x| x.to_ne_bytes()).collect();
+    let n = f0.write(4, &data, 8).unwrap();
+    assert_eq!(n, 8);
+
+    // Read one at a time
+    for i in 0u32..8 {
+        let mut buf = [0u8; 4];
+        let n = f1.read(4, &mut buf, 1).unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(u32::from_ne_bytes(buf), i, "element {} should match", i);
+    }
 }
 
 /// C++: TEST(FifoTest, InvalidHandleAndWrongType)
+/// Using a bad handle returns BAD_HANDLE; using wrong type returns WRONG_TYPE.
 #[test]
-#[ignore = "requires user-buffer fault injection"]
 fn invalid_handle_and_wrong_type() {
-    todo!("requires user-buffer fault injection");
+    use hal_impl::user::{UserInPtr, UserOutPtr};
+    use zircon_object::object::{Handle, Rights};
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Read with invalid handle → BAD_HANDLE
+    let mut buf = [0u8; 4];
+    let mut actual: usize = 0;
+    let err = sc
+        .sys_fifo_read(
+            0xDEAD,
+            4,
+            UserOutPtr::from(buf.as_mut_ptr() as usize),
+            1,
+            UserOutPtr::from(&mut actual as *mut _ as usize),
+        )
+        .unwrap_err();
+    assert_eq!(err, ZxError::BAD_HANDLE);
+
+    // Write with invalid handle → BAD_HANDLE
+    let data = [0u8; 4];
+    let err = sc
+        .sys_fifo_write(
+            0xDEAD,
+            4,
+            UserInPtr::from(data.as_ptr() as usize),
+            1,
+            UserOutPtr::from(&mut actual as *mut _ as usize),
+        )
+        .unwrap_err();
+    assert_eq!(err, ZxError::BAD_HANDLE);
+
+    // Using an Event handle (wrong type) for FIFO read → WRONG_TYPE
+    let event = zircon_object::signal::Event::new();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+    let err = sc
+        .sys_fifo_read(
+            event_h,
+            4,
+            UserOutPtr::from(buf.as_mut_ptr() as usize),
+            1,
+            UserOutPtr::from(&mut actual as *mut _ as usize),
+        )
+        .unwrap_err();
+    assert_eq!(err, ZxError::WRONG_TYPE);
 }
 
 /// C++: TEST(FifoTest, ReadBadBuffer)

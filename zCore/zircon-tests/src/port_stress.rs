@@ -34,21 +34,70 @@ fn queue_many() {
 }
 
 ///
-/// Queue packets then cancel. Cancellation should remove matching
-/// packets.
+/// Queue a signal packet via wait_async, then cancel and verify
+/// the subscription is removed. Sequential version — no threads needed.
 #[test]
-#[ignore = "port cancel stress test needs async runtime with concurrent threads"]
 fn queue_and_cancel() {
-    // Requires concurrent queue + cancel operations.
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+    let event = zircon_object::signal::Event::new();
+
+    use zircon_object::object::Signal;
+
+    // Register an async wait for USER_SIGNAL_0.
+    let event_obj = event.clone() as alloc::sync::Arc<dyn KernelObject>;
+    event_obj
+        .send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 77, false)
+        .unwrap();
+
+    // Cancel the wait before signaling.
+    port.cancel_async_and_drain(event.id(), 77).unwrap();
+
+    // Signal the event — no packet should be delivered since we cancelled.
+    event.signal_set(Signal::USER_SIGNAL_0);
+
+    // Port should not be readable (no packets queued).
+    assert!(
+        !port.signal().contains(Signal::READABLE),
+        "port should be empty after cancel"
+    );
 }
 
 ///
-/// Multiple objects observed on the same port. Each signal should
-/// generate the correct packet.
+/// Multiple objects observed on the same port. Each signal generates
+/// the correct packet. Sequential: signal each event, then drain.
 #[test]
-#[ignore = "multiple observers needs async runtime with concurrent threads"]
 fn multiple_observers() {
-    // Requires concurrent signal + wait operations.
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+
+    use zircon_object::object::Signal;
+
+    // Create three events and register async waits on the same port.
+    let events: alloc::vec::Vec<_> = (0..3)
+        .map(|_| zircon_object::signal::Event::new())
+        .collect();
+
+    for (i, event) in events.iter().enumerate() {
+        let event_obj = event.clone() as alloc::sync::Arc<dyn KernelObject>;
+        event_obj
+            .send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, i as u64, false)
+            .unwrap();
+    }
+
+    // Signal all events sequentially.
+    for event in &events {
+        event.signal_set(Signal::USER_SIGNAL_0);
+    }
+
+    // Drain the port — should get one packet per event.
+    let mut keys = alloc::vec::Vec::new();
+    for _ in 0..3 {
+        let pkt = async_std::task::block_on(port.wait());
+        keys.push(PortPacketRepr::from(&pkt).key);
+    }
+    keys.sort();
+    assert_eq!(keys, alloc::vec![0, 1, 2]);
 }
 
 ///

@@ -10,7 +10,7 @@ use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::ipc::Socket;
 use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::signal::Event;
-use zircon_object::task::{Job, Process};
+use zircon_object::task::{Job, Process, Thread};
 use zircon_object::vm::VmObject;
 
 extern crate alloc;
@@ -359,10 +359,24 @@ fn property_invalid_property() {
 }
 
 /// C++: TEST(Property, JobName)
+/// Set and get ZX_PROP_NAME on a Job.
 #[test]
-#[ignore = "requires property infrastructure"]
 fn job_name() {
-    todo!("requires property infrastructure");
+    let ctx = TestContext::new();
+    let job = Job::root();
+    let job_h = ctx.proc.add_handle(Handle::new(
+        job,
+        Rights::GET_PROPERTY | Rights::SET_PROPERTY,
+    ));
+
+    let name = b"my-job\0";
+    set_property(&ctx, job_h, PROP_NAME, name).unwrap();
+
+    let mut buf = [0u8; MAX_NAME_LEN];
+    get_property(&ctx, job_h, PROP_NAME, &mut buf).unwrap();
+
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    assert_eq!(&buf[..end], b"my-job");
 }
 
 /// C++: TEST(Property, NameWrongType)
@@ -373,10 +387,23 @@ fn name_wrong_type() {
 }
 
 /// C++: TEST(Property, ProcessName)
+/// Set and get ZX_PROP_NAME on a Process.
 #[test]
-#[ignore = "requires property infrastructure"]
 fn process_name() {
-    todo!("requires property infrastructure");
+    let ctx = TestContext::new();
+    let proc_h = ctx.proc.add_handle(Handle::new(
+        ctx.proc.clone(),
+        Rights::GET_PROPERTY | Rights::SET_PROPERTY,
+    ));
+
+    let name = b"my-process\0";
+    set_property(&ctx, proc_h, PROP_NAME, name).unwrap();
+
+    let mut buf = [0u8; MAX_NAME_LEN];
+    get_property(&ctx, proc_h, PROP_NAME, &mut buf).unwrap();
+
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    assert_eq!(&buf[..end], b"my-process");
 }
 
 /// C++: TEST(Property, RegisterFs)
@@ -478,22 +505,83 @@ fn register_gs_too_small() {
 }
 
 /// C++: TEST(Property, SocketBuffer)
+/// Set and get socket thresholds, including oversized threshold rejection.
 #[test]
-#[ignore = "requires property infrastructure"]
 fn socket_buffer() {
-    todo!("requires property infrastructure");
+    let ctx = TestContext::new();
+    let (s0, _s1) = Socket::create(0).unwrap();
+    let socket_h = ctx
+        .proc
+        .add_handle(Handle::new(s0, Rights::GET_PROPERTY | Rights::SET_PROPERTY));
+
+    // Set a reasonable rx threshold
+    let threshold: usize = 128;
+    let thresh_bytes = threshold.to_ne_bytes();
+    set_property(&ctx, socket_h, PROP_SOCKET_RX_THRESHOLD, &thresh_bytes).unwrap();
+
+    let mut buf = [0u8; core::mem::size_of::<usize>()];
+    get_property(&ctx, socket_h, PROP_SOCKET_RX_THRESHOLD, &mut buf).unwrap();
+    let read_threshold = usize::from_ne_bytes(buf.try_into().unwrap());
+    assert_eq!(read_threshold, threshold);
+
+    // Set a reasonable tx threshold
+    let threshold: usize = 64;
+    let thresh_bytes = threshold.to_ne_bytes();
+    set_property(&ctx, socket_h, PROP_SOCKET_TX_THRESHOLD, &thresh_bytes).unwrap();
+
+    let mut buf = [0u8; core::mem::size_of::<usize>()];
+    get_property(&ctx, socket_h, PROP_SOCKET_TX_THRESHOLD, &mut buf).unwrap();
+    let read_threshold = usize::from_ne_bytes(buf.try_into().unwrap());
+    assert_eq!(read_threshold, threshold);
+
+    // Setting a threshold larger than socket buffer should fail
+    let huge: usize = 1024 * 1024 * 1024; // 1 GiB
+    let huge_bytes = huge.to_ne_bytes();
+    let err = set_property(&ctx, socket_h, PROP_SOCKET_RX_THRESHOLD, &huge_bytes).unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+
+    let err = set_property(&ctx, socket_h, PROP_SOCKET_TX_THRESHOLD, &huge_bytes).unwrap_err();
+    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
 /// C++: TEST(Property, ThreadName)
+/// Set and get ZX_PROP_NAME on a Thread.
 #[test]
-#[ignore = "requires property infrastructure"]
 fn thread_name() {
-    todo!("requires property infrastructure");
+    let ctx = TestContext::new();
+    let thread = Thread::create(&ctx.proc, "initial").unwrap();
+    let thread_h = ctx.proc.add_handle(Handle::new(
+        thread,
+        Rights::GET_PROPERTY | Rights::SET_PROPERTY,
+    ));
+
+    let name = b"my-thread\0";
+    set_property(&ctx, thread_h, PROP_NAME, name).unwrap();
+
+    let mut buf = [0u8; MAX_NAME_LEN];
+    get_property(&ctx, thread_h, PROP_NAME, &mut buf).unwrap();
+
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    assert_eq!(&buf[..end], b"my-thread");
 }
 
 /// C++: TEST(Property, VmoName)
+/// Set and get ZX_PROP_NAME on a VMO.
 #[test]
-#[ignore = "requires property infrastructure"]
 fn vmo_name() {
-    todo!("requires property infrastructure");
+    let ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+    let vmo_h = ctx.proc.add_handle(Handle::new(
+        vmo,
+        Rights::GET_PROPERTY | Rights::SET_PROPERTY,
+    ));
+
+    let name = b"my-vmo\0";
+    set_property(&ctx, vmo_h, PROP_NAME, name).unwrap();
+
+    let mut buf = [0u8; MAX_NAME_LEN];
+    get_property(&ctx, vmo_h, PROP_NAME, &mut buf).unwrap();
+
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    assert_eq!(&buf[..end], b"my-vmo");
 }

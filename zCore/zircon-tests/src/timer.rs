@@ -206,10 +206,24 @@ fn basic() {
 }
 
 /// C++: TEST(Timer, BasicInfo)
+/// Create a timer, verify get_info returns correct initial fields.
 #[test]
-#[ignore = "requires timer/wait infrastructure"]
 fn basic_info() {
-    todo!("requires timer/wait infrastructure");
+    let _ctx = TestContext::new();
+    let timer = Timer::new();
+
+    // Freshly created timer: no deadline, no slack, default options
+    let (options, deadline, slack) = timer.get_info();
+    assert_eq!(options, 0); // Slack::Center = 0
+    assert_eq!(deadline, 0);
+    assert_eq!(slack, 0);
+
+    // After setting, fields should reflect the set values
+    timer.set(Duration::from_secs(100), Duration::from_nanos(1000));
+    let (options, deadline, slack) = timer.get_info();
+    assert_eq!(options, 0);
+    assert!(deadline > 0, "deadline should be set");
+    assert_eq!(slack, 1000);
 }
 
 /// C++: TEST(Timer, BootTimersElapseDuringSuspend)
@@ -241,10 +255,31 @@ fn deadline_after() {
 }
 
 /// C++: TEST(Timer, EdgeCases)
+/// Cancel twice, set after cancel, cancel without set — all should be safe.
 #[test]
-#[ignore = "requires timer/wait infrastructure"]
 fn edge_cases() {
-    todo!("requires timer/wait infrastructure");
+    let _ctx = TestContext::new();
+    let timer = Timer::new();
+
+    // Cancel without ever setting — should be a no-op
+    timer.cancel();
+    assert!(!timer.signal().contains(Signal::SIGNALED));
+
+    // Set, cancel, cancel — double cancel is safe
+    timer.set(Duration::from_secs(1000), Duration::from_nanos(0));
+    timer.cancel();
+    timer.cancel();
+    assert!(!timer.signal().contains(Signal::SIGNALED));
+
+    // Set after cancel — timer should work normally
+    timer.set(Duration::from_nanos(0), Duration::from_nanos(0));
+    assert!(timer.signal().contains(Signal::SIGNALED));
+
+    // Cancel clears signal, then set again
+    timer.cancel();
+    assert!(!timer.signal().contains(Signal::SIGNALED));
+    timer.set(Duration::from_nanos(0), Duration::from_nanos(0));
+    assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
 /// C++: TEST(Timer, Restart)
@@ -262,17 +297,26 @@ fn restart_race() {
 }
 
 /// C++: TEST(Timer, SetNegativeDeadline)
+/// Setting deadline=0 (past) fires immediately.
 #[test]
-#[ignore = "requires timer/wait infrastructure"]
 fn set_negative_deadline() {
-    todo!("requires timer/wait infrastructure");
+    let _ctx = TestContext::new();
+    let timer = Timer::new();
+
+    timer.set(Duration::from_nanos(0), Duration::from_nanos(0));
+    assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
 /// C++: TEST(Timer, SetNegativeDeadlineMax)
+/// Setting deadline=0 with max slack still fires immediately.
 #[test]
-#[ignore = "requires timer/wait infrastructure"]
 fn set_negative_deadline_max() {
-    todo!("requires timer/wait infrastructure");
+    let _ctx = TestContext::new();
+    let timer = Timer::new();
+
+    // Even with large slack, deadline=0 is in the past and fires immediately
+    timer.set(Duration::from_nanos(0), Duration::from_secs(1000));
+    assert!(timer.signal().contains(Signal::SIGNALED));
 }
 
 /// C++: TEST(Timer, SetNegativeSlack)
@@ -283,8 +327,16 @@ fn set_negative_slack() {
 }
 
 /// C++: TEST(Timer, SignalsAssertedImmediately)
+/// Set deadline to 0 (past), SIGNALED should be asserted immediately.
 #[test]
-#[ignore = "requires timer/wait infrastructure"]
 fn signals_asserted_immediately() {
-    todo!("requires timer/wait infrastructure");
+    let _ctx = TestContext::new();
+    let timer = Timer::new();
+
+    // deadline=0 is already in the past
+    timer.set(Duration::from_nanos(0), Duration::from_nanos(0));
+    assert!(
+        timer.signal().contains(Signal::SIGNALED),
+        "SIGNALED should be asserted immediately for a past deadline"
+    );
 }
