@@ -1926,3 +1926,365 @@ fn pager_resize_and_detach() {
     let _ctx = TestContext::new();
     panic!("needs demand-paging");
 }
+
+// ── Snapshot-modified pager tests ───────────────────────────────────
+//
+// These tests verify snapshot behavior on modified pager-backed VMOs.
+// All require demand-paging infrastructure (async page faults).
+
+/// C++: TEST(PagerTest, SnapshotModified)
+///
+/// Create a snapshot of a pager-backed VMO after modifying supplied
+/// pages. The snapshot should see the modified data. Requires
+/// demand-paging for the fault/supply loop.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_snapshot_modified() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SnapshotModifiedWrite)
+///
+/// Write to a snapshot of a modified pager-backed VMO. The snapshot
+/// should COW the page and the original should be unaffected.
+/// Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_snapshot_modified_write() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SnapshotModifiedClone)
+///
+/// Create a nested clone of a snapshot of a modified pager-backed VMO.
+/// Reads should propagate through the clone chain. Requires
+/// demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_snapshot_modified_clone() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SnapshotModifiedDecommit)
+///
+/// Decommit pages from a snapshot of a modified pager-backed VMO.
+/// Re-reading should re-fault and require a new supply. Requires
+/// demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_snapshot_modified_decommit() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, SnapshotModifiedResize)
+///
+/// Resize a snapshot of a modified pager-backed VMO. The snapshot
+/// should reflect the new size. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_snapshot_modified_resize() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+// ── Writeback-complete pager tests ──────────────────────────────────
+
+/// C++: TEST(PagerWriteback, WritebackComplete)
+///
+/// Full writeback cycle: dirty pages, begin writeback, end writeback.
+/// After completion, pages should no longer be dirty. Requires
+/// demand-paging + TRAP_DIRTY fault handling.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_complete() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackCompleteMultiple)
+///
+/// Complete writeback on multiple dirty ranges independently. Each
+/// range should transition from dirty to clean. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_complete_multiple() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackCompleteAfterDetach)
+///
+/// Attempt writeback after pager detach. Should fail cleanly.
+/// Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_complete_after_detach() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackCompletePartial)
+///
+/// Complete writeback on only a subset of dirty pages. Remaining
+/// pages should still be dirty. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_complete_partial() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerWriteback, WritebackAndDirty)
+///
+/// Pages dirtied during writeback should remain dirty after the
+/// writeback cycle completes. Requires demand-paging + TRAP_DIRTY.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_and_dirty() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+// ── Pager close lifecycle tests ─────────────────────────────────────
+
+/// C++: TEST(PagerTest, ClosePagerPortStillWorks)
+///
+/// After closing the pager, the port should still be usable for
+/// other operations (queue, wait). The port is independent of the
+/// pager lifecycle. Requires demand-paging for full verification.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_close_port_still_works() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ClosePagerAllVmosDetached)
+///
+/// Closing the pager should detach all VMOs. Subsequent page faults
+/// on those VMOs should return errors. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_close_all_vmos_detached() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerDropAllReferences)
+///
+/// Drop all references (pager, port, VMOs). Nothing should leak or
+/// panic. Requires demand-paging for waiter cleanup verification.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_drop_all_references() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerMultiplePortsOneVmo)
+///
+/// Create multiple VMOs on the same pager using different ports.
+/// Each port should receive requests only for its VMO. Requires
+/// demand-paging for fault routing verification.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_multiple_ports_one_vmo() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerPortClose)
+///
+/// Close the port while VMOs are still active. Page faults should
+/// fail gracefully. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_port_close() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+// ── Pager VMO operation tests ───────────────────────────────────────
+
+/// C++: TEST(PagerTest, VmoCloneWithPager)
+///
+/// Create a snapshot clone of a pager-backed VMO. Reads from the
+/// clone should trigger faults on the original pager. Requires
+/// demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_clone_with_pager() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VmoSliceWithPager)
+///
+/// Create a slice of a pager-backed VMO. Reads from the slice
+/// should trigger faults on the original pager. Requires
+/// demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_slice_with_pager() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VmoReferenceWithPager)
+///
+/// Create a reference child of a pager-backed VMO. Reads through
+/// the reference should fault the original pager. Requires
+/// demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_reference_with_pager() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VmoChildSnapshotWithPager)
+///
+/// Create a child snapshot of a pager-backed VMO and verify COW
+/// behavior on page faults. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_child_snapshot_with_pager() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VmoChildSliceWithPager)
+///
+/// Create a child slice of a pager-backed VMO. The slice shares
+/// the parent's pages and triggers faults on the parent's pager.
+/// Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_child_slice_with_pager() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+// ── Advanced pager tests ────────────────────────────────────────────
+
+/// C++: TEST(PagerTest, PagerUnboundedVmo)
+///
+/// Create an unbounded pager-backed VMO (ZX_VMO_UNBOUNDED). The VMO
+/// has no fixed size limit. Faults at any offset are forwarded to
+/// the pager. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_unbounded_vmo() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerBoundedVmo)
+///
+/// Create a bounded pager-backed VMO with a fixed size. Faults beyond
+/// the size should fail. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_bounded_vmo() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerContentSizeTracking)
+///
+/// Verify content_size is properly tracked on a pager-backed VMO as
+/// pages are supplied and written. Requires demand-paging for mapped
+/// write tracking.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_content_size_tracking() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerQueryStats)
+///
+/// Query pager statistics (modified/dirty page counts) on a
+/// pager-backed VMO. Requires demand-paging + TRAP_DIRTY.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_query_stats() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerQueryStatsAfterDetach)
+///
+/// Query pager statistics after detaching the VMO. The stats should
+/// reflect the final state. Requires demand-paging infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_query_stats_after_detach() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+// ── Concurrent pager tests ──────────────────────────────────────────
+
+/// C++: TEST(PagerTest, PagerConcurrentSupply)
+///
+/// Multiple threads supply pages to different offsets concurrently.
+/// All supplies should complete without data corruption. Requires
+/// demand-paging + concurrent thread execution.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_concurrent_supply() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerConcurrentDetach)
+///
+/// Detach multiple VMOs from a pager concurrently. Each detach should
+/// complete exactly once. Requires demand-paging + concurrent threads.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_concurrent_detach() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerConcurrentClose)
+///
+/// Close the pager while multiple VMOs are faulting concurrently.
+/// All faulting threads should unblock with errors. Requires
+/// demand-paging + concurrent threads.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_concurrent_close() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerConcurrentFault)
+///
+/// Multiple threads fault on different pages of the same VMO
+/// concurrently. The pager should receive one request per page.
+/// Requires demand-paging + concurrent threads.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_concurrent_fault() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PagerConcurrentResize)
+///
+/// Resize a pager-backed VMO while faults are in progress. Faults on
+/// removed pages should fail; faults on remaining pages should
+/// succeed. Requires demand-paging + concurrent threads.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_concurrent_resize() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}

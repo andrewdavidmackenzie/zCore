@@ -135,3 +135,9 @@ mod vmo_transfer_data;
 
 #[cfg(test)]
 mod syscall_transfer_data;
+
+#[cfg(test)]
+mod bad_syscall;
+
+#[cfg(test)]
+mod sync_mutex;
