@@ -114,7 +114,7 @@ impl_kobject!(Process
         }
         if status == Status::Init && !has_threads {
             // Never started, no threads — remove from job and destroy VMAR.
-            self.job.remove_process(self.base.id);
+            self.job.remove_process(self.base.id, 0);
             let _ = self.vmar.destroy();
         } else if matches!(status, Status::Exited(_)) {
             let _ = self.vmar.destroy();
@@ -342,7 +342,11 @@ impl Process {
         // (get_info returns BAD_STATE), matching Fuchsia behavior.
         let _ = self.vmar.destroy();
 
-        self.job.remove_process(self.base.id);
+        // Propagate accumulated CPU/queue time to the parent job so
+        // job.total_cpu_time()/total_queue_time() include exited
+        // processes.  Use at least 1ns for started processes.
+        let proc_cpu_time = inner.exited_cpu_time.max(1);
+        self.job.remove_process(self.base.id, proc_cpu_time);
         // If we are critical to a job, we need to take action.
         if let Some((job, retcode_nonzero)) = &inner.critical_to_job {
             if !retcode_nonzero || retcode != 0 {

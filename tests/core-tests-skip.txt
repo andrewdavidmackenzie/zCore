@@ -94,6 +94,12 @@ DefaultExceptionHandlerTest.UnhandledHardwareException
 # InvalidArgs passes (validates args before raising).
 UserExceptionsTest.NonFatal
 UserExceptionsTest.Delivered
+# Property.RegisterFs/GsNoncanonical: QEMU TCG doesn't emulate #GP on
+# wrfsbase/wrgsbase with non-canonical addresses — GPF fires at the
+# wrong instruction (LoadFromGs instead of WrGsBase), causing wrong
+# RIP in exception report and missing second exception.
+Property.RegisterFsNoncanonical
+Property.RegisterGsNoncanonical
 
 # ── COW populated_bytes / fractional attribution (#577, #603) ────────
 # NoPhysical: now passes with test_ram_reserve — removed.
