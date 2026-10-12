@@ -5,7 +5,7 @@
 
 use crate::helpers::TestContext;
 use zircon_object::object::KernelObject;
-use zircon_object::vm::{SeekOrigin, Stream, VmObject, PAGE_SIZE};
+use zircon_object::vm::{SeekOrigin, Stream, VmObject};
 
 ///
 /// Create a stream on a VMO and verify it has a valid KOID.

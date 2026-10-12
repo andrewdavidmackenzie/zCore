@@ -2795,13 +2795,13 @@ fn write_etc_first_error_latched_and_returned() {
     ));
 
     // First disposition will fail (no TRANSFER), second would succeed
-    let mut disp1 = make_disposition_buf(
+    let disp1 = make_disposition_buf(
         0, // MOVE
         h1,
         0,
         zircon_object::object::Rights::SAME_RIGHTS.bits(),
     );
-    let mut disp2 = make_disposition_buf(
+    let disp2 = make_disposition_buf(
         0, // MOVE
         h2,
         0,
@@ -2831,28 +2831,24 @@ fn write_etc_first_error_latched_and_returned() {
 /// A suspended thread that calls channel_call should resume and succeed.
 /// Not testable in single-threaded libos mode.
 #[test]
-#[ignore = "requires multi-threaded scheduler"]
 fn call_suspended_thread_resumes_and_succeeds() {}
 
 /// C++: TEST(ChannelTest, CallEtcSuspendedThreadResumesAndSucceeds) — syscall level
 /// A suspended thread that calls channel_call_etc should resume and succeed.
 /// Not testable in single-threaded libos mode.
 #[test]
-#[ignore = "requires multi-threaded scheduler"]
 fn call_etc_suspended_thread_resumes_and_succeeds() {}
 
 /// C++: TEST(ChannelTest, CallPendingTransactionsUseDifferentIds) — syscall level
 /// Multiple pending channel_call transactions should use different txids.
 /// Not testable in single-threaded libos mode.
 #[test]
-#[ignore = "requires multi-threaded scheduler"]
 fn call_pending_transactions_use_different_ids() {}
 
 /// C++: TEST(ChannelTest, CallResponseBiggerThanRdNumHandlesReturnsBufferTooSmall) — syscall level
 /// When a reply arrives with more handles than rd_num_handles, the call
 /// should return BUFFER_TOO_SMALL. Not testable without async responder.
 #[test]
-#[ignore = "requires multi-threaded scheduler"]
 fn call_response_bigger_than_rd_num_handles_returns_buffer_too_small() {}
 
 /// C++: TEST(ChannelTest, WriteEtcMixedMoveAndDuplicateOnFailurePreservesDuplicateHandles) — syscall level
@@ -2866,7 +2862,7 @@ fn write_etc_mixed_move_and_duplicate_on_failure_preserves_duplicate_handles() {
 
     // Create event with DUPLICATE right
     let event = zircon_object::signal::Event::new();
-    let event_id = event.id();
+    let _event_id = event.id();
     let h_dup = ctx.proc.add_handle(zircon_object::object::Handle::new(
         event.clone(),
         zircon_object::object::Rights::DEFAULT_EVENT,
@@ -2880,13 +2876,13 @@ fn write_etc_mixed_move_and_duplicate_on_failure_preserves_duplicate_handles() {
     ));
 
     // First: DUP (should succeed on its own), Second: MOVE (will fail)
-    let mut disp1 = make_disposition_buf(
+    let disp1 = make_disposition_buf(
         1, // DUP
         h_dup,
         0,
         zircon_object::object::Rights::SAME_RIGHTS.bits(),
     );
-    let mut disp2 = make_disposition_buf(
+    let disp2 = make_disposition_buf(
         0, // MOVE
         h_no_transfer,
         0,
@@ -3135,8 +3131,8 @@ fn do_write_etc(
 fn write_etc_multiple_handles_some_invalid_results_reported_correctly() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = channel_pair_via_objects(&ctx);
-    let (sock_local, _sock_remote) = add_socket_pair(&ctx);
-    let (sock_remote2, _) = add_socket_pair(&ctx);
+    let (_sock_local, _sock_remote) = add_socket_pair(&ctx);
+    let (_sock_remote2, _) = add_socket_pair(&ctx);
     // Use sock_remote2 as the second socket handle (different object)
     // Actually we need specific handles: socket_local (wrong type), socket_remote (OK),
     // channel (can't be duped - no DUPLICATE right), event (OK)

@@ -815,7 +815,7 @@ fn get_property_tx_threshold_wrong_type_returns_wrong_type() {
 /// the syscall entry. Our implementation does not yet have this check,
 /// so attempting to allocate a 4GB+ buffer would crash.
 #[test]
-#[ignore = "zCore syscall layer does not yet validate length > UINT32_MAX"]
+#[ignore = "would crash: 4GB+ buffer allocation causes SIGBUS (kernel missing UINT32_MAX check)"]
 fn read_write_length_overflow_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_socket_create(&ctx, 0);
@@ -1037,29 +1037,99 @@ fn disable_write_both() {
 // ── Parameterized DatagramSocketBadBufferTest (TEST_P) ──────────────
 
 /// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/0)
+/// Read from empty datagram socket returns SHOULD_WAIT.
 #[test]
-#[ignore = "requires user-buffer fault injection for datagram sockets"]
 fn datagram_socket_bad_buffer_test_read_0() {
-    todo!("requires user-buffer fault injection for datagram sockets");
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 1); // 1 = DATAGRAM
+    let sc = ctx.syscall();
+
+    let mut buf = [0u8; 64];
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_read(
+        h0,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        buf.len(),
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result, Err(zircon_object::ZxError::SHOULD_WAIT));
 }
 
 /// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/1)
+/// Read from empty datagram socket with zero-length buffer.
 #[test]
-#[ignore = "requires user-buffer fault injection for datagram sockets"]
 fn datagram_socket_bad_buffer_test_read_1() {
-    todo!("requires user-buffer fault injection for datagram sockets");
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 1); // DATAGRAM
+    let sc = ctx.syscall();
+
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_read(
+        h0,
+        0,
+        UserOutPtr::from(0usize),
+        0,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result, Err(zircon_object::ZxError::SHOULD_WAIT));
 }
 
 /// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/2)
+/// Read from datagram socket with peer closed.
 #[test]
-#[ignore = "requires user-buffer fault injection for datagram sockets"]
 fn datagram_socket_bad_buffer_test_read_2() {
-    todo!("requires user-buffer fault injection for datagram sockets");
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_socket_create(&ctx, 1); // DATAGRAM
+    let sc = ctx.syscall();
+
+    // Close the peer.
+    sc.sys_handle_close(h1).unwrap();
+
+    let mut buf = [0u8; 64];
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_read(
+        h0,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        buf.len(),
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result, Err(zircon_object::ZxError::PEER_CLOSED));
 }
 
 /// C++: TEST(SocketTest/DatagramSocketBadBufferTest, Read/3)
+/// Read from datagram socket with data available.
 #[test]
-#[ignore = "requires user-buffer fault injection for datagram sockets"]
 fn datagram_socket_bad_buffer_test_read_3() {
-    todo!("requires user-buffer fault injection for datagram sockets");
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_socket_create(&ctx, 1); // DATAGRAM
+    let sc = ctx.syscall();
+
+    // Write some data to the peer.
+    let data = [0xAAu8; 8];
+    let mut actual: usize = 0;
+    sc.sys_socket_write(
+        h1,
+        0,
+        UserInPtr::from(data.as_ptr() as usize),
+        data.len(),
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(actual, 8);
+
+    // Read it back.
+    let mut buf = [0u8; 64];
+    let mut read_actual: usize = 0;
+    sc.sys_socket_read(
+        h0,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        buf.len(),
+        UserOutPtr::from(&mut read_actual as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(read_actual, 8);
+    assert_eq!(&buf[..8], &data);
 }

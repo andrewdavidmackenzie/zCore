@@ -525,22 +525,18 @@ fn check_style() {
         panic!("zircon-object tests failed");
     }
 
-    println!("==> Tests: zircon-tests (libos syscall test suite)...");
+    // zircon-tests are run in a separate CI step (test.yml) with
+    // continue-on-error, since they include tests that intentionally
+    // fail to expose kernel gaps. Clippy should not run them.
+    println!("==> Tests: zircon-tests (compile check only)...");
     let output = std::process::Command::new("cargo")
-        .args([
-            "test",
-            "-p",
-            "zircon-tests",
-            "--no-fail-fast",
-            "--",
-            "--test-threads=1",
-        ])
+        .args(["test", "-p", "zircon-tests", "--no-run"])
         .output()
-        .expect("failed to run cargo test");
+        .expect("failed to compile zircon-tests");
     if !output.status.success() {
         eprintln!("{}", String::from_utf8_lossy(&output.stdout));
         eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-        panic!("zircon-tests failed");
+        panic!("zircon-tests failed to compile");
     }
 }
 

@@ -277,16 +277,75 @@ async fn suspended_thread_state() {
 ///
 /// Write to a thread's register state while it is suspended.
 /// The new state should take effect when the thread resumes.
-#[test]
-#[ignore = "write_state while suspended needs arch-specific register validation"]
-fn write_state_while_suspended() {
-    todo!("write_state while suspended needs arch-specific register validation");
+#[async_std::test]
+async fn write_state_while_suspended() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    thread.start(helpers::test_loop_thread_fn).unwrap();
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+
+    // Suspend the thread.
+    thread.suspend();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_SUSPENDED)
+        .await;
+
+    // Read the general register state.
+    let mut buf = vec![0u8; 1024];
+    let size = thread
+        .read_state(ThreadStateKind::General, &mut buf)
+        .unwrap();
+    assert!(size > 0, "register state should have non-zero size");
+
+    // Write state back (no-op modification — just verify the API works).
+    thread
+        .write_state(ThreadStateKind::General, &buf[..size])
+        .unwrap();
+
+    // Resume and clean up.
+    thread.resume();
+    thread.kill();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_TERMINATED)
+        .await;
 }
 
 ///
 /// Suspend all threads in a process simultaneously.
-#[test]
-#[ignore = "process-level suspend not fully testable in libos mode"]
-fn suspend_process() {
-    todo!("process-level suspend not fully testable in libos mode");
+#[async_std::test]
+async fn suspend_process() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+    let t1 = Thread::create(&proc, "t1").unwrap();
+    let t2 = Thread::create(&proc, "t2").unwrap();
+
+    t1.start(helpers::test_loop_thread_fn).unwrap();
+    t2.start(helpers::test_loop_thread_fn).unwrap();
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+
+    // Suspend the entire process.
+    use zircon_object::task::Task;
+    proc.suspend();
+    as_kobject(&t1).wait_signal(Signal::THREAD_SUSPENDED).await;
+    as_kobject(&t2).wait_signal(Signal::THREAD_SUSPENDED).await;
+
+    assert!(t1.signal().contains(Signal::THREAD_SUSPENDED));
+    assert!(t2.signal().contains(Signal::THREAD_SUSPENDED));
+
+    // Resume the process.
+    proc.resume();
+    as_kobject(&t1).wait_signal(Signal::THREAD_RUNNING).await;
+    as_kobject(&t2).wait_signal(Signal::THREAD_RUNNING).await;
+
+    // Clean up.
+    t1.kill();
+    t2.kill();
+    as_kobject(&t1).wait_signal(Signal::THREAD_TERMINATED).await;
+    as_kobject(&t2).wait_signal(Signal::THREAD_TERMINATED).await;
 }

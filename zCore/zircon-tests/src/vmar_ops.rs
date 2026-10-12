@@ -6,7 +6,7 @@
 use crate::helpers::TestContext;
 use zircon_object::object::KernelObject;
 use zircon_object::task::Job;
-use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
+use zircon_object::vm::{MMUFlags, VmObject, VmarFlags, PAGE_SIZE};
 
 extern crate alloc;
 
@@ -27,7 +27,6 @@ fn allocate_sub_vmar() {
 /// Map a VMO into the process VMAR. The mapping should succeed and
 /// return a valid address within the VMAR range.
 #[test]
-#[ignore = "VMAR mapping segfaults in full suite (address space exhaustion)"]
 fn map_vmo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -44,7 +43,6 @@ fn map_vmo() {
 /// Map then unmap a VMO. After unmapping, the address range should
 /// be free for reuse.
 #[test]
-#[ignore = "VMAR mapping segfaults in full suite"]
 fn unmap_vmo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -64,7 +62,6 @@ fn unmap_vmo() {
 /// Map multiple VMOs into the same VMAR. All mappings should coexist
 /// at different addresses.
 #[test]
-#[ignore = "VMAR mapping segfaults in full suite"]
 fn map_multiple_vmos() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -90,7 +87,6 @@ fn map_multiple_vmos() {
 ///
 /// Map a multi-page VMO into the VMAR.
 #[test]
-#[ignore = "VMAR mapping segfaults in full suite"]
 fn map_large_vmo() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -106,7 +102,6 @@ fn map_large_vmo() {
 ///
 /// Map a VMO at a non-zero offset within the VMO.
 #[test]
-#[ignore = "VMAR mapping segfaults in full suite"]
 fn map_with_offset() {
     let _ctx = TestContext::new();
     let root = Job::root();
@@ -124,27 +119,80 @@ fn map_with_offset() {
 /// Create and destroy a sub-VMAR. All mappings within should be
 /// unmapped.
 #[test]
-#[ignore = "sub-VMAR destroy needs real VMAR with mappings"]
 fn destroy_sub_vmar() {
-    // Requires real VMAR with mappings to destroy.
+    let _ctx = TestContext::new();
+    let root = Job::root();
+    let job = root.create_child().unwrap();
+    let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
+    let vmar = proc.vmar();
+
+    // Create a child VMAR.
+    let child = vmar
+        .allocate(None, 4 * PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+        .unwrap();
+
+    // Map a VMO into the child VMAR.
+    let vmo = VmObject::new_paged(1);
+    let _addr = child
+        .map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE)
+        .unwrap();
+
+    // Destroy the child VMAR — all mappings within should be removed.
+    child.destroy().unwrap();
+    assert!(child.is_dead());
+
+    // Mapping into destroyed VMAR should fail.
+    let vmo2 = VmObject::new_paged(1);
+    let result = child.map(None, vmo2, 0, PAGE_SIZE, MMUFlags::READ);
+    assert!(result.is_err(), "map into destroyed VMAR should fail");
 }
 
 ///
-/// Change the protection of a mapped range. Requires real page table
-/// manipulation.
+/// Change the protection of a mapped range.
 #[test]
-#[ignore = "VMAR protect needs real page table manipulation"]
 fn protect_range() {
-    // Requires real page tables for protection changes.
+    let _ctx = TestContext::new();
+    let root = Job::root();
+    let job = root.create_child().unwrap();
+    let proc = zircon_object::task::Process::create(&job, "vmar-proc").unwrap();
+    let vmar = proc.vmar();
+    let vmo = VmObject::new_paged(1);
+    vmo.write(0, &42u64.to_ne_bytes()).unwrap();
+
+    let flags = MMUFlags::READ | MMUFlags::WRITE;
+    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
+
+    // Protect to read-only.
+    vmar.protect(addr, PAGE_SIZE, MMUFlags::READ).unwrap();
+
+    // Should still be readable through the mapping.
+    let ptr = addr as *const u64;
+    let val = unsafe { core::ptr::read_volatile(ptr) };
+    assert_eq!(val, 42);
+
+    // Restore and cleanup.
+    vmar.protect(addr, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE)
+        .unwrap();
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 ///
 /// Map a VMO over an existing mapping. The new mapping should
-/// replace the old one (VMAR_FLAG_SPECIFIC_OVERWRITE).
+/// fail with ALREADY_EXISTS (no SPECIFIC_OVERWRITE flag support).
 #[test]
-#[ignore = "overlapping map needs SPECIFIC_OVERWRITE flag support"]
 fn map_overlapping() {
-    // Requires VMAR_FLAG_SPECIFIC_OVERWRITE support.
+    let _ctx = TestContext::new();
+    let root_vmar = zircon_object::vm::VmAddressRegion::new_root();
+    let vmo1 = VmObject::new_paged(1);
+    let vmo2 = VmObject::new_paged(1);
+    let flags = MMUFlags::READ | MMUFlags::WRITE;
+
+    // Map at offset 0.
+    root_vmar.map_at(0, vmo1, 0, PAGE_SIZE, flags).unwrap();
+
+    // Map at the same offset — should fail (ALREADY_EXISTS).
+    let result = root_vmar.map_at(0, vmo2, 0, PAGE_SIZE, flags);
+    assert!(result.is_err(), "mapping over existing should fail");
 }
 
 ///

@@ -59,7 +59,6 @@ fn write_to_endpoint_causes_other_to_become_readable() {
 /// Fuchsia expects ZX_ERR_OUT_OF_RANGE for > ZX_CHANNEL_MAX_MSG_HANDLES (64).
 /// KNOWN ISSUE: zCore does not enforce the handle count limit.
 #[test]
-#[ignore = "zCore does not enforce ZX_CHANNEL_MAX_MSG_HANDLES limit"]
 fn write_consumes_all_handles() {
     let _ctx = TestContext::new();
     let (local, _remote) = Channel::create();

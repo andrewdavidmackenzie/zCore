@@ -431,35 +431,59 @@ fn call_iovec_bytes_less_than_txid_size() {
 }
 
 /// C++: TEST(IOVecTest, CallFewLargeIovecs)
-/// Call with a small number of large iovecs. Requires echo server → times out.
+/// call_iovecs<3, 8000>(): Creates an EchoServer that reads one message
+/// and writes it back. Client creates 3 iovecs of 8000 bytes each (filled
+/// with distinct patterns), calls channel_call with USE_IOVEC, and verifies
+/// the echoed response matches (skipping first 4 bytes = txid).
 #[test]
-#[ignore = "channel call needs echo server thread (cooperative scheduler cannot provide one)"]
+#[ignore = "requires concurrent echo server thread — cooperative scheduling cannot run it"]
 fn call_few_large_iovecs() {
-    // Requires an echo server thread to respond to the call.
+    // C++ test: call_iovecs<3, 8000>()
+    //   1. EchoServer: spawns thread that wait_one(READABLE), reads, wait_one(WRITABLE), writes back
+    //   2. Fill 3 iovec buffers with pattern i + (i/256)
+    //   3. channel_call(USE_IOVEC, iovecs, 3, ...) → blocks until echo reply
+    //   4. Assert actual_bytes == 3 * 8000, actual_handles == 0
+    //   5. Assert output matches input (skipping txid bytes)
 }
 
 /// C++: TEST(IOVecTest, CallManySmallIovecs)
-/// Call with many small iovecs. Requires echo server → times out.
+/// call_iovecs<1000, 10>(): Same pattern as CallFewLargeIovecs but with
+/// 1000 iovecs of 10 bytes each (tests kernel paging for large iovec arrays).
 #[test]
-#[ignore = "channel call needs echo server thread (cooperative scheduler cannot provide one)"]
+#[ignore = "requires concurrent echo server thread — cooperative scheduling cannot run it"]
 fn call_many_small_iovecs() {
-    // Requires an echo server thread to respond to the call.
+    // C++ test: call_iovecs<1000, 10>()
+    // Same as CallFewLargeIovecs but exercises the code path where iovecs
+    // don't fit in the kernel's stack buffer and require heap allocation.
 }
 
 /// C++: TEST(IOVecTest, CallWithHandle)
-/// Call with iovec data + handle. Requires echo server → times out.
+/// Creates an EchoServer, creates an event handle, calls channel_call
+/// with USE_IOVEC (1 iovec of 8 bytes + 1 handle). Verifies the echoed
+/// response contains the handle.
 #[test]
-#[ignore = "channel call needs echo server thread (cooperative scheduler cannot provide one)"]
+#[ignore = "requires concurrent echo server thread — cooperative scheduling cannot run it"]
 fn call_with_handle() {
-    // Requires an echo server thread to respond to the call.
+    // C++ test:
+    //   1. EchoServer echoes bytes + handles
+    //   2. Create event handle
+    //   3. channel_call(USE_IOVEC, 1 iovec of 8 bytes, 1 handle)
+    //   4. Assert actual_bytes == 8, actual_handles == 1
+    //   5. Assert output handle is valid
 }
 
 /// C++: TEST(IOVecTest, CallEtcWithHandle)
-/// Call etc with iovec data + handle disposition. Requires echo server → times out.
+/// Same as CallWithHandle but uses channel_call_etc with handle
+/// disposition (ZX_HANDLE_OP_MOVE, ZX_OBJ_TYPE_EVENT).
 #[test]
-#[ignore = "channel call_etc needs echo server thread (cooperative scheduler cannot provide one)"]
+#[ignore = "requires concurrent echo server thread — cooperative scheduling cannot run it"]
 fn call_etc_with_handle() {
-    // Requires an echo server thread to respond to the call.
+    // C++ test:
+    //   1. EchoServer echoes bytes + handles
+    //   2. Create event, build handle_disposition_t (MOVE, EVENT, SAME_RIGHTS)
+    //   3. channel_call_etc(USE_IOVEC, 1 iovec, 1 handle_disposition)
+    //   4. Assert actual_bytes == 8, actual_handles == 1
+    //   5. Assert output handle_info type == ZX_OBJ_TYPE_EVENT
 }
 
 /// Helper: check that call with too many iovecs or too many bytes returns OUT_OF_RANGE.

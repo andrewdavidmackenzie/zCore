@@ -41,11 +41,17 @@ fn bad_syscall_invalid_number() {
 /// layer always receives the correct number of arguments from the
 /// Rust type system. This test documents the gap.
 #[test]
-#[ignore = "Rust type system prevents too-few-args at compile time"]
 fn bad_syscall_too_few_args() {
     // In C++, calling a syscall with too few arguments returns NOT_SUPPORTED.
     // In Rust, the type system enforces the correct number of arguments at
-    // compile time, so this error path cannot be exercised.
+    // compile time, so this error path cannot be exercised. Instead, verify
+    // that a syscall with wrong argument VALUES (not count) returns an error.
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Wrong handle value = BAD_HANDLE (correct arg count, wrong value).
+    let result = sc.sys_handle_close(0xBAD_FACE);
+    assert_eq!(result, Err(zircon_object::ZxError::BAD_HANDLE));
 }
 
 ///

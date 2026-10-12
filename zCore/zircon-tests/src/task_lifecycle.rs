@@ -81,7 +81,6 @@ fn process_create_in_job() {
 /// the process.
 #[test]
 fn thread_create_in_process() {
-    use crate::helpers::test_loop_thread_fn;
     use zircon_object::task::{Process, Thread};
     let _ctx = TestContext::new();
     let root = Job::root();

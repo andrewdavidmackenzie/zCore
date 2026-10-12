@@ -108,7 +108,6 @@ fn process_name() {
 /// Set and get the name of a thread.
 #[test]
 fn thread_name() {
-    use crate::helpers::test_loop_thread_fn;
     use zircon_object::task::{Job, Process, Thread};
     let _ctx = TestContext::new();
     let root = Job::root();
