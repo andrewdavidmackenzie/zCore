@@ -121,6 +121,23 @@ impl Syscall<'_> {
         }
     }
 
+    /// Enforce a job basic policy, delivering a policy exception if the
+    /// action requires it.
+    ///
+    /// This is the async wrapper around `Process::check_policy`.  When
+    /// the policy action is `AllowException` or `DenyException`, this
+    /// method delivers a `ZX_EXCP_POLICY_ERROR` exception on the current
+    /// thread (matching Fuchsia's `SignalPolicyException` + deferred
+    /// delivery in `ProcessPendingSignals`).
+    #[allow(dead_code)]
+    async fn enforce_policy(&self, condition: PolicyCondition) -> ZxResult {
+        let (result, synth_code) = self.thread.proc().check_policy_with_exception(condition);
+        if let Some(code) = synth_code {
+            self.thread.handle_exception_policy(code, 0).await;
+        }
+        result
+    }
+
     /// Resolve a handle value that may be a pseudo-handle.
     ///
     /// Fuchsia defines pseudo-handles for the current thread, process, and
@@ -625,9 +642,12 @@ impl Syscall<'_> {
             Sys::CACHE_FLUSH => self.sys_cache_flush(a0, a1, a2 as _),
             // --- Additional upstream syscalls (stubs) ---
             Sys::THREAD_LEGACY_YIELD => {
-                // Yield CPU. In Fuchsia this is a hint to the scheduler.
-                // We treat it as a no-op (correct behavior per Zircon docs).
-                Ok(())
+                // Yield CPU. Options (a0) must be 0.
+                if a0 != 0 {
+                    Err(ZxError::INVALID_ARGS)
+                } else {
+                    Ok(())
+                }
             }
             Sys::THREAD_RAISE_EXCEPTION => {
                 self.sys_thread_raise_exception(a0 as _, a1 as _, a2).await
@@ -785,7 +805,11 @@ impl Syscall<'_> {
                 Err(ZxError::NOT_SUPPORTED)
             }
         };
-        // Log debug I/O syscalls at trace level to avoid flooding the
+        // Deliver any pending deferred policy exception before returning
+        // to userspace, matching Fuchsia's ProcessPendingSignals check
+        // for THREAD_SIGNAL_POLICY_EXCEPTION.
+        self.thread.deliver_pending_policy_exception().await;
+
         // Log debug I/O syscalls at trace level to avoid flooding the
         // serial console during interactive shell sessions.
         // Log errors at error level, success at info/trace.

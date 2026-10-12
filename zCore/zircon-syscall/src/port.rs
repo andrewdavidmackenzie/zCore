@@ -52,8 +52,19 @@ impl Syscall<'_> {
             "port.queue: handle={:#x}, packet={:?}",
             handle_value, packet
         );
-        port.push_user(packet)?;
-        Ok(())
+        let result = port.push_user(packet);
+        if let Err(ZxError::SHOULD_WAIT) = &result {
+            // Per-port packet limit exceeded — signal a deferred policy
+            // exception matching Fuchsia's
+            // ZX_EXCP_POLICY_CODE_PORT_TOO_MANY_PACKETS.  The exception
+            // will be delivered by the dispatch loop before returning
+            // to userspace.
+            use zircon_object::task::policy_code;
+            self.thread
+                .inner()
+                .signal_policy_exception(policy_code::PORT_TOO_MANY_PACKETS, 0);
+        }
+        result
     }
 
     /// Cancel async port notifications on an object.

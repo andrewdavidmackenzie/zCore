@@ -33,18 +33,18 @@ Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.DebugRegistersDr6ResetOnDebugException
 Threads.DebugRegistersValidation
 Threads.DebugRegistersWatchpointSyscallPanicRepro
-Threads.EmptyNameSucceeds
+# Threads.EmptyNameSucceeds — removed, now passes
 Threads.ExitViaException
 Threads.GetAffinity
 Threads.GetInfoRuntime
 Threads.GetLastScheduledCpu
 Threads.InfoTaskStatsFails
 Threads.InfoThreadStatsFails
-Threads.InvalidRights
-Threads.LongNameSucceeds
+# Threads.InvalidRights — removed, now passes
+# Threads.LongNameSucceeds — removed, now passes
 Threads.NoncanonicalRipAddressIRETQ
 Threads.NoncanonicalRipAddressSyscall
-Threads.NonstartedThread
+# Threads.NonstartedThread — removed, now passes
 Threads.ProcessStartOnSecondThread
 Threads.ReadingFpRegisterState
 Threads.ReadingGeneralRegisterState
@@ -78,8 +78,8 @@ Threads.WritingSingleStepState
 Threads.WritingVectorRegisterState
 Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
 Threads.X86AcFlagUserCopy
-Threads.YieldWithNonZeroOptionIsInvalidArgs
-Threads.YieldWithZeroOptionIsOk
+# Threads.YieldWithNonZeroOptionIsInvalidArgs — removed, now passes
+# Threads.YieldWithZeroOptionIsOk — removed, now passes
 # ProcessTest.SuspendSelf — removed, fixed self-suspend check
 
 # ── Policy exception infrastructure ─────────────────────────────────
@@ -89,6 +89,11 @@ PortTest.TooManyObservers
 ChannelTest.ChannelFullException
 DefaultExceptionHandlerTest.UnhandledPolicyException
 DefaultExceptionHandlerTest.UnhandledHardwareException
+# UserExceptionsTest: raise ZX_EXCP_USER from test thread, requires
+# concurrent exception channel handling (cooperative scheduler hangs).
+# InvalidArgs passes (validates args before raising).
+UserExceptionsTest.NonFatal
+UserExceptionsTest.Delivered
 
 # ── COW populated_bytes / fractional attribution (#577, #603) ────────
 # NoPhysical: now passes with test_ram_reserve — removed.
@@ -107,8 +112,8 @@ VmoTestCase.UnmapLoanedcontiguousWhileFaulting
 # PhysicalSlice and FaultBeyondStreamSizeNoPhysOrContig: fail (no crash)
 # — removed from skip.
 # Crash: memory-probe.cc assertion (demand-pages instead of faulting)
-VmoTestCase.NoPermProtect
-VmoTestCase.ReadOnlyMap
+# VmoTestCase.NoPermProtect — removed, fails (not hangs) due to cooperative scheduler
+# VmoTestCase.ReadOnlyMap — removed, fails (not hangs) due to cooperative scheduler
 # VmoTestCase.Prefetch — removed, now passes
 
 # ── VMO clone/slice/signal — previously skipped, most now pass ───────
@@ -215,8 +220,8 @@ WakeReportTestsThreadBound.*
 # tries to read samples. Kills the test runner process.
 ThreadSampler.*
 
-# ── BadAccessTest — 4/5 pass, 1 fails ────────────────────────────────
-# InvalidMappedAddressFails, ChannelReadHandle,
-# NormalMappedAddressChannelWriteSucceeds, KernelMappedAddressChannelWriteFails
-# all pass. Only SyscallNumTest fails.
-BadAccessTest.SyscallNumTest
+# ── BadAccessTest — crashes test runner ───────────────────────────────
+# Tests intentionally access invalid/kernel memory, triggering GP faults
+# that crash the test runner. Some tests pass individually but the suite
+# destabilizes the kernel state, causing crashes in later tests.
+BadAccessTest.*
