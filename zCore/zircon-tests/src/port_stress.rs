@@ -36,21 +36,19 @@ fn queue_many() {
 ///
 /// Queue packets then cancel. Cancellation should remove matching
 /// packets.
-#[should_panic(expected = "port cancel stress needs async")]
 #[test]
+#[ignore = "port cancel stress test needs async runtime with concurrent threads"]
 fn queue_and_cancel() {
-    let _ctx = TestContext::new();
-    panic!("port cancel stress needs async");
+    // Requires concurrent queue + cancel operations.
 }
 
 ///
 /// Multiple objects observed on the same port. Each signal should
 /// generate the correct packet.
-#[should_panic(expected = "multiple observers needs async")]
 #[test]
+#[ignore = "multiple observers needs async runtime with concurrent threads"]
 fn multiple_observers() {
-    let _ctx = TestContext::new();
-    panic!("multiple observers needs async");
+    // Requires concurrent signal + wait operations.
 }
 
 ///

@@ -11,47 +11,42 @@ use crate::helpers::TestContext;
 ///
 /// Read kernel counter values. Requires root resource and the
 /// kcounter VMO.
-#[should_panic(expected = "kcounters need root resource")]
 #[test]
+#[ignore = "kcounters require root resource and kcounter VMO (not implemented)"]
 fn read_kcounters() {
-    let _ctx = TestContext::new();
-    panic!("kcounters need root resource");
+    // Kernel counters are not implemented in zCore.
 }
 
 ///
 /// Read kernel counter descriptors (names, types). Requires root
 /// resource.
-#[should_panic(expected = "kcounters need root resource")]
 #[test]
+#[ignore = "kcounters require root resource and kcounter VMO (not implemented)"]
 fn kcounter_descriptors() {
-    let _ctx = TestContext::new();
-    panic!("kcounters need root resource");
+    // Kernel counters are not implemented in zCore.
 }
 
 ///
 /// Get the kcounter VMO handle. Requires root resource.
-#[should_panic(expected = "kcounters need root resource")]
 #[test]
+#[ignore = "kcounters require root resource and kcounter VMO (not implemented)"]
 fn kcounter_vmo() {
-    let _ctx = TestContext::new();
-    panic!("kcounters need root resource");
+    // Kernel counters are not implemented in zCore.
 }
 
 ///
 /// Get the kcounter descriptor VMO handle. Requires root resource.
-#[should_panic(expected = "kcounters need root resource")]
 #[test]
+#[ignore = "kcounters require root resource and kcounter VMO (not implemented)"]
 fn kcounter_desc_vmo() {
-    let _ctx = TestContext::new();
-    panic!("kcounters need root resource");
+    // Kernel counters are not implemented in zCore.
 }
 
 ///
 /// Try to get kcounter VMO without root resource. Should return
 /// ACCESS_DENIED.
-#[should_panic(expected = "kcounters need root resource")]
 #[test]
+#[ignore = "kcounters require root resource and kcounter VMO (not implemented)"]
 fn kcounter_no_resource() {
-    let _ctx = TestContext::new();
-    panic!("kcounters need root resource");
+    // Kernel counters are not implemented in zCore.
 }

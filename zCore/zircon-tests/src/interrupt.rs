@@ -63,10 +63,9 @@ fn interrupt_unbind() {
 ///
 /// Waiting on an interrupt requires async context. Left as stub.
 #[test]
-#[should_panic(expected = "interrupts not available in libos mode")]
+#[ignore = "interrupt wait not available in libos mode"]
 fn interrupt_wait() {
-    let _ctx = TestContext::new();
-    panic!("interrupts not available in libos mode");
+    // Requires async context and real interrupt delivery.
 }
 
 /// Acknowledging an interrupt — various error paths.
@@ -135,10 +134,9 @@ fn interrupt_virtual_interrupt() {
 
 /// Waiting on a virtual interrupt requires async context. Left as stub.
 #[test]
-#[should_panic(expected = "interrupts not available in libos mode")]
+#[ignore = "interrupt wait not available in libos mode"]
 fn interrupt_virtual_interrupt_wait() {
-    let _ctx = TestContext::new();
-    panic!("interrupts not available in libos mode");
+    // Requires async context and real interrupt delivery.
 }
 
 /// C++: TEST(InterruptTest, BindPort)

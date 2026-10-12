@@ -123,31 +123,28 @@ fn map_with_offset() {
 ///
 /// Create and destroy a sub-VMAR. All mappings within should be
 /// unmapped.
-#[should_panic(expected = "sub-VMAR destroy needs real VMAR")]
 #[test]
+#[ignore = "sub-VMAR destroy needs real VMAR with mappings"]
 fn destroy_sub_vmar() {
-    let _ctx = TestContext::new();
-    panic!("sub-VMAR destroy needs real VMAR");
+    // Requires real VMAR with mappings to destroy.
 }
 
 ///
 /// Change the protection of a mapped range. Requires real page table
 /// manipulation.
-#[should_panic(expected = "protect needs real page tables")]
 #[test]
+#[ignore = "VMAR protect needs real page table manipulation"]
 fn protect_range() {
-    let _ctx = TestContext::new();
-    panic!("protect needs real page tables");
+    // Requires real page tables for protection changes.
 }
 
 ///
 /// Map a VMO over an existing mapping. The new mapping should
 /// replace the old one (VMAR_FLAG_SPECIFIC_OVERWRITE).
-#[should_panic(expected = "overlapping map needs SPECIFIC_OVERWRITE")]
 #[test]
+#[ignore = "overlapping map needs SPECIFIC_OVERWRITE flag support"]
 fn map_overlapping() {
-    let _ctx = TestContext::new();
-    panic!("overlapping map needs SPECIFIC_OVERWRITE");
+    // Requires VMAR_FLAG_SPECIFIC_OVERWRITE support.
 }
 
 ///

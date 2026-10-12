@@ -10,99 +10,89 @@ use crate::helpers::TestContext;
 ///
 /// Create a contiguous VMO. Requires a BTI handle and real
 /// physical memory allocation.
-#[should_panic(expected = "contiguous VMO needs BTI")]
 #[test]
+#[ignore = "contiguous VMO requires BTI"]
 fn create_contiguous() {
-    let _ctx = TestContext::new();
-    panic!("contiguous VMO needs BTI");
+    // Contiguous VMO requires BTI handle.
 }
 
 ///
 /// Read and write to a contiguous VMO. The underlying memory
 /// should be physically contiguous. Requires BTI.
-#[should_panic(expected = "contiguous VMO needs BTI")]
 #[test]
+#[ignore = "contiguous VMO requires BTI"]
 fn read_write_contiguous() {
-    let _ctx = TestContext::new();
-    panic!("contiguous VMO needs BTI");
+    // Contiguous VMO requires BTI handle.
 }
 
 ///
 /// Pin a contiguous VMO and verify the physical addresses are
 /// contiguous. Requires BTI + real hardware.
-#[should_panic(expected = "contiguous VMO needs BTI")]
 #[test]
+#[ignore = "contiguous VMO requires BTI"]
 fn pin_contiguous() {
-    let _ctx = TestContext::new();
-    panic!("contiguous VMO needs BTI");
+    // Contiguous VMO requires BTI handle.
 }
 
 ///
 /// Allocate a large contiguous VMO. Requires sufficient physically
 /// contiguous memory. Requires BTI.
-#[should_panic(expected = "contiguous VMO needs BTI")]
 #[test]
+#[ignore = "contiguous VMO requires BTI"]
 fn contiguous_large_alloc() {
-    let _ctx = TestContext::new();
-    panic!("contiguous VMO needs BTI");
+    // Contiguous VMO requires BTI handle.
 }
 
 ///
 /// Contiguous VMOs should not be resizable. Attempting to resize
 /// should return UNAVAILABLE. Requires BTI.
-#[should_panic(expected = "contiguous VMO needs BTI")]
 #[test]
+#[ignore = "contiguous VMO requires BTI"]
 fn contiguous_not_resizable() {
-    let _ctx = TestContext::new();
-    panic!("contiguous VMO needs BTI");
+    // Contiguous VMO requires BTI handle.
 }
 
 ///
 /// Contiguous VMOs should not be clonable (snapshot). Attempting
 /// to create a snapshot should fail. Requires BTI.
-#[should_panic(expected = "contiguous VMO needs BTI")]
 #[test]
+#[ignore = "contiguous VMO requires BTI"]
 fn contiguous_not_clonable() {
-    let _ctx = TestContext::new();
-    panic!("contiguous VMO needs BTI");
+    // Contiguous VMO requires BTI handle.
 }
 
 ///
 /// Decommit pages from a contiguous VMO. Should fail because
 /// contiguous VMOs cannot have gaps. Requires BTI.
-#[should_panic(expected = "contiguous VMO needs BTI")]
 #[test]
+#[ignore = "contiguous VMO requires BTI"]
 fn contiguous_decommit() {
-    let _ctx = TestContext::new();
-    panic!("contiguous VMO needs BTI");
+    // Contiguous VMO requires BTI handle.
 }
 
 ///
 /// Create a contiguous VMO with alignment requirements. The
 /// physical base should be aligned. Requires BTI.
-#[should_panic(expected = "contiguous VMO needs BTI")]
 #[test]
+#[ignore = "contiguous VMO requires BTI"]
 fn contiguous_alignment() {
-    let _ctx = TestContext::new();
-    panic!("contiguous VMO needs BTI");
+    // Contiguous VMO requires BTI handle.
 }
 
 ///
 /// Create a contiguous VMO without a BTI handle. Should return
 /// BAD_HANDLE or ACCESS_DENIED. Requires BTI check.
-#[should_panic(expected = "contiguous VMO needs BTI")]
 #[test]
+#[ignore = "contiguous VMO requires BTI"]
 fn contiguous_no_resource() {
-    let _ctx = TestContext::new();
-    panic!("contiguous VMO needs BTI");
+    // Contiguous VMO requires BTI handle.
 }
 
 ///
 /// Create a contiguous VMO with zero size. Should return
 /// INVALID_ARGS. Requires BTI.
-#[should_panic(expected = "contiguous VMO needs BTI")]
 #[test]
+#[ignore = "contiguous VMO requires BTI"]
 fn contiguous_zero_size() {
-    let _ctx = TestContext::new();
-    panic!("contiguous VMO needs BTI");
+    // Contiguous VMO requires BTI handle.
 }

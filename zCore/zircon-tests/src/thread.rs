@@ -791,103 +791,73 @@ async fn thread_invalid_handle_start() {
 ///
 /// Suspend a thread blocked in zx_channel_call. Requires a real
 /// running thread blocked in a syscall — not possible in libos mode.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_suspend_in_channel_call() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_suspend_in_channel_call() {}
 
 ///
 /// Suspend a thread blocked in zx_port_wait. Requires preemptive
 /// scheduling to interrupt the blocked thread.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_suspend_in_port_wait() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_suspend_in_port_wait() {}
 
 ///
 /// Suspend a thread blocked in zx_nanosleep. Requires preemptive
 /// scheduling to interrupt the sleeping thread.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_suspend_in_sleep() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_suspend_in_sleep() {}
 
 ///
 /// Suspend a running thread, verify it stops executing, then resume
 /// it and verify it continues. Requires real concurrent execution.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_suspend_then_resume() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_suspend_then_resume() {}
 
 ///
 /// Suspend a thread N times, verify it requires N resumes. Requires
 /// concurrent thread execution to verify actual suspension.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_suspend_multiple_times() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_suspend_multiple_times() {}
 
 ///
 /// Set and get thread priority. zCore's cooperative scheduler does
 /// not implement priority-based scheduling.
-#[should_panic(expected = "thread priority not implemented")]
 #[test]
-fn thread_priority() {
-    let _ctx = TestContext::new();
-    panic!("thread priority not implemented");
-}
+#[ignore = "thread priority not implemented"]
+fn thread_priority() {}
 
 ///
 /// Set CPU affinity mask on a thread. zCore's cooperative scheduler
 /// does not support CPU affinity.
-#[should_panic(expected = "CPU affinity not implemented")]
 #[test]
-fn thread_affinity() {
-    let _ctx = TestContext::new();
-    panic!("CPU affinity not implemented");
-}
+#[ignore = "CPU affinity not implemented"]
+fn thread_affinity() {}
 
 ///
 /// Get/set the CPU mask for a thread. Requires multi-CPU support
 /// not available in zCore's cooperative scheduler.
-#[should_panic(expected = "CPU affinity not implemented")]
 #[test]
-fn thread_cpu_mask() {
-    let _ctx = TestContext::new();
-    panic!("CPU affinity not implemented");
-}
+#[ignore = "CPU affinity not implemented"]
+fn thread_cpu_mask() {}
 
 ///
 /// Set explicit CPU affinity via the profile API. Requires scheduler
 /// profile support not implemented in zCore.
-#[should_panic(expected = "CPU affinity not implemented")]
 #[test]
-fn thread_set_cpu_affinity() {
-    let _ctx = TestContext::new();
-    panic!("CPU affinity not implemented");
-}
+#[ignore = "CPU affinity not implemented"]
+fn thread_set_cpu_affinity() {}
 
 ///
 /// Register an exception channel, start a thread that immediately
 /// faults, verify the exception is delivered. Requires exception
 /// channel infrastructure with real thread execution.
-#[should_panic(expected = "needs exception channel with real execution")]
 #[test]
-fn thread_exception_on_start() {
-    let _ctx = TestContext::new();
-    panic!("needs exception channel with real execution");
-}
+#[ignore = "needs exception channel with real execution"]
+fn thread_exception_on_start() {}
 
 ///
 /// Verify default rights on a thread handle. Thread handles should
@@ -1008,62 +978,44 @@ async fn thread_state_transitions() {
 ///
 /// Use zx_object_wait_async on a thread handle for TERMINATED signal.
 /// Requires a port + async wait infrastructure with real execution.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_wait_async() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_wait_async() {}
 
 ///
 /// Cancel an async wait on a thread handle. Requires port + async
 /// wait infrastructure with real execution.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_cancel_wait_async() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_cancel_wait_async() {}
 
 ///
 /// Obtain a suspend token and verify suspension. Drop the token to
 /// resume. Requires real concurrent execution.
-#[should_panic(expected = "suspend tokens not implemented")]
 #[test]
-fn thread_suspend_token() {
-    let _ctx = TestContext::new();
-    panic!("suspend tokens not implemented");
-}
+#[ignore = "suspend tokens not implemented"]
+fn thread_suspend_token() {}
 
 ///
 /// Kill a thread while it holds a suspend token. Thread should
 /// transition to Dead regardless. Requires concurrent execution.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_kill_in_suspend() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_kill_in_suspend() {}
 
 ///
 /// A thread exits (returns from entry) while suspended. The exit
 /// should take priority over the suspension. Requires real execution.
-#[should_panic(expected = "needs preemptive scheduling")]
 #[test]
-fn thread_exit_while_suspended() {
-    let _ctx = TestContext::new();
-    panic!("needs preemptive scheduling");
-}
+#[ignore = "needs preemptive scheduling"]
+fn thread_exit_while_suspended() {}
 
 ///
 /// Resume a thread that is stopped in an exception handler. Requires
 /// exception channel infrastructure with real thread execution.
-#[should_panic(expected = "needs exception channel with real execution")]
 #[test]
-fn thread_resume_from_exception() {
-    let _ctx = TestContext::new();
-    panic!("needs exception channel with real execution");
-}
+#[ignore = "needs exception channel with real execution"]
+fn thread_resume_from_exception() {}
 
 ///
 /// Create a thread with invalid arguments via the syscall layer.
@@ -1109,29 +1061,23 @@ fn thread_create_invalid_args() {
 //
 // These tests require exception channels, suspension tokens, and
 // concurrent thread execution — features not available in libos
-// test mode. All are marked #[should_panic].
+// test mode. All are marked #[ignore].
 
 ///
 /// Suspend a thread that is stopped in an exception handler. The
 /// thread should remain suspended after the exception is resolved.
 /// Requires exception channel + real thread execution.
-#[should_panic(expected = "needs exception channel infrastructure")]
 #[test]
-fn thread_suspend_in_exception() {
-    let _ctx = TestContext::new();
-    panic!("needs exception channel infrastructure");
-}
+#[ignore = "needs exception channel infrastructure"]
+fn thread_suspend_in_exception() {}
 
 ///
 /// Trigger an exception while a thread is suspended. The exception
 /// should be queued and delivered when the thread is resumed.
 /// Requires exception channel + suspension infrastructure.
-#[should_panic(expected = "needs exception channel infrastructure")]
 #[test]
-fn thread_exception_during_suspend() {
-    let _ctx = TestContext::new();
-    panic!("needs exception channel infrastructure");
-}
+#[ignore = "needs exception channel infrastructure"]
+fn thread_exception_during_suspend() {}
 
 ///
 /// Suspend a thread before starting it, then start it. The thread
@@ -1213,64 +1159,46 @@ fn thread_create_with_bad_args() {
 /// Register multiple exception channels on a thread. Exceptions
 /// should be delivered to the most recently registered channel
 /// first. Requires exception channel infrastructure.
-#[should_panic(expected = "needs exception channel infrastructure")]
 #[test]
-fn thread_multiple_exception_channels() {
-    let _ctx = TestContext::new();
-    panic!("needs exception channel infrastructure");
-}
+#[ignore = "needs exception channel infrastructure"]
+fn thread_multiple_exception_channels() {}
 
 ///
 /// Close a suspend token while the thread is suspended. The thread
 /// should resume execution. Requires suspend token lifecycle.
-#[should_panic(expected = "needs real thread execution")]
 #[test]
-fn thread_close_suspend_token() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
+#[ignore = "needs real thread execution"]
+fn thread_close_suspend_token() {}
 
 ///
 /// Verify suspend token lifetime semantics: multiple tokens can be
 /// active, and the thread resumes only when all tokens are closed.
 /// Requires real thread execution.
-#[should_panic(expected = "needs real thread execution")]
 #[test]
-fn thread_suspend_token_lifetime() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
+#[ignore = "needs real thread execution"]
+fn thread_suspend_token_lifetime() {}
 
 ///
 /// Write to a suspended thread's register state and verify the
 /// modified state takes effect when the thread resumes. Requires
 /// real thread execution + register state.
-#[should_panic(expected = "needs real thread execution")]
 #[test]
-fn thread_write_state_modifies_execution() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
+#[ignore = "needs real thread execution"]
+fn thread_write_state_modifies_execution() {}
 
 ///
 /// Read the floating-point register state of a suspended thread.
 /// Requires real thread execution with FP state tracking.
-#[should_panic(expected = "needs real thread execution")]
 #[test]
-fn thread_read_state_float_point() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
+#[ignore = "needs real thread execution"]
+fn thread_read_state_float_point() {}
 
 ///
 /// Read the vector (SIMD) register state of a suspended thread.
 /// Requires real thread execution with vector state tracking.
-#[should_panic(expected = "needs real thread execution")]
 #[test]
-fn thread_read_state_vector() {
-    let _ctx = TestContext::new();
-    panic!("needs real thread execution");
-}
+#[ignore = "needs real thread execution"]
+fn thread_read_state_vector() {}
 
 // ============================================================================
 // Missing Fuchsia core-tests: Threads suite (56 tests)

@@ -40,11 +40,12 @@ fn bad_syscall_invalid_number() {
 /// NOT_SUPPORTED for a truncated syscall. In zCore, the dispatch
 /// layer always receives the correct number of arguments from the
 /// Rust type system. This test documents the gap.
-#[should_panic(expected = "Rust type system prevents too-few-args at compile time")]
 #[test]
+#[ignore = "Rust type system prevents too-few-args at compile time"]
 fn bad_syscall_too_few_args() {
-    let _ctx = TestContext::new();
-    panic!("Rust type system prevents too-few-args at compile time");
+    // In C++, calling a syscall with too few arguments returns NOT_SUPPORTED.
+    // In Rust, the type system enforces the correct number of arguments at
+    // compile time, so this error path cannot be exercised.
 }
 
 ///
