@@ -352,33 +352,52 @@ impl Process {
     }
 
     /// Check whether `condition` is allowed in the parent job's policy.
+    ///
+    /// This is the simple version that does not deliver policy exceptions.
+    /// Use [`enforce_basic_policy`](Syscall::enforce_policy) in the
+    /// syscall layer for full Fuchsia-compatible behaviour including
+    /// exception delivery on `AllowException`/`DenyException`.
     pub fn check_policy(&self, condition: PolicyCondition) -> ZxResult {
+        self.check_policy_with_exception(condition).0
+    }
+
+    /// Like [`check_policy`] but also returns the `synth_code` for
+    /// policy exception delivery.
+    ///
+    /// Returns `(ZxResult, Option<synth_code>)`.  When the second
+    /// element is `Some(code)`, the caller **must** deliver a
+    /// `ZX_EXCP_POLICY_ERROR` exception with that `synth_code` (via
+    /// `CurrentThread::handle_exception_policy`).
+    ///
+    /// The `synth_code` maps 1:1 to the `PolicyCondition` discriminant,
+    /// matching Fuchsia's `kPolicyIdToPolicyException` table.
+    pub fn check_policy_with_exception(
+        &self,
+        condition: PolicyCondition,
+    ) -> (ZxResult, Option<u32>) {
+        let synth_code = condition as u32;
         match self
             .policy
             .get_action(condition)
             .unwrap_or(PolicyAction::Allow)
         {
-            PolicyAction::Allow => Ok(()),
-            PolicyAction::Deny => Err(ZxError::ACCESS_DENIED),
+            PolicyAction::Allow => (Ok(()), None),
+            PolicyAction::Deny => (Err(ZxError::ACCESS_DENIED), None),
             PolicyAction::AllowException => {
-                // Allow the operation but a policy exception should be
-                // generated.  We don't yet deliver exceptions here (it
-                // would require async), so just allow the operation.
-                // TODO: deliver policy exception asynchronously
-                Ok(())
+                // Allow the operation AND signal a policy exception.
+                (Ok(()), Some(synth_code))
             }
             PolicyAction::DenyException => {
-                // Deny and generate a policy exception.  If there is no
-                // exception handler the process is killed.  Since we
-                // can't deliver exceptions synchronously, kill
-                // immediately — same end result when no handler exists.
-                self.exit(super::TASK_RETCODE_POLICY_KILL);
-                Err(ZxError::ACCESS_DENIED)
+                // Deny the operation AND signal a policy exception.
+                // The exception handler may resume the thread; if nobody
+                // handles it the exception infrastructure kills the
+                // process with TASK_RETCODE_EXCEPTION_KILL.
+                (Err(ZxError::ACCESS_DENIED), Some(synth_code))
             }
             PolicyAction::Kill => {
-                // Kill the process outright.
+                // Kill the process outright — no exception, just die.
                 self.exit(super::TASK_RETCODE_POLICY_KILL);
-                Err(ZxError::ACCESS_DENIED)
+                (Err(ZxError::ACCESS_DENIED), None)
             }
         }
     }

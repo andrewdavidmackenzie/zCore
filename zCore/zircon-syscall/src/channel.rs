@@ -137,8 +137,19 @@ impl Syscall<'_> {
                 return Err(ZxError::ACCESS_DENIED);
             }
         }
-        channel.write(MessagePacket { data, handles })?;
-        Ok(())
+        let result = channel.write(MessagePacket { data, handles });
+        if let Err(ZxError::SHOULD_WAIT) = &result {
+            // Channel message queue is full — signal a deferred policy
+            // exception matching Fuchsia's
+            // ZX_EXCP_POLICY_CODE_CHANNEL_FULL_WRITE.  The exception
+            // will be delivered by the dispatch loop before returning
+            // to userspace.
+            use zircon_object::task::policy_code;
+            self.thread
+                .inner()
+                .signal_policy_exception(policy_code::CHANNEL_FULL_WRITE, 0);
+        }
+        result
     }
     /// Create a new channel.
     pub fn sys_channel_create(
@@ -331,8 +342,17 @@ impl Syscall<'_> {
         }
         ret?;
         let channel = proc.get_object_with_rights::<Channel>(handle, Rights::WRITE)?;
-        channel.write(MessagePacket { data, handles })?;
-        Ok(())
+        let result = channel.write(MessagePacket { data, handles });
+        if let Err(ZxError::SHOULD_WAIT) = &result {
+            // Channel message queue is full — signal a deferred policy
+            // exception matching Fuchsia's
+            // ZX_EXCP_POLICY_CODE_CHANNEL_FULL_WRITE.
+            use zircon_object::task::policy_code;
+            self.thread
+                .inner()
+                .signal_policy_exception(policy_code::CHANNEL_FULL_WRITE, 0);
+        }
+        result
     }
 
     /// Send a message to a channel and await a reply (extended version).

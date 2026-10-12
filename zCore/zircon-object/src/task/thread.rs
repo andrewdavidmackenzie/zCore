@@ -142,6 +142,11 @@ struct ThreadInner {
     restricted_state_vmo: Option<Arc<crate::vm::VmObject>>,
     /// Whether a kick is pending (forces exit from restricted mode).
     restricted_kick_pending: bool,
+    /// Pending policy exception to deliver when returning to userspace.
+    /// `Some((synth_code, synth_data))` when a policy exception has been
+    /// signalled but not yet delivered, matching Fuchsia's
+    /// `THREAD_SIGNAL_POLICY_EXCEPTION` deferred delivery model.
+    pending_policy_exception: Option<(u32, u32)>,
 }
 
 impl ThreadInner {
@@ -259,6 +264,25 @@ impl Thread {
     /// Get the extension info.
     pub fn ext(&self) -> &Box<dyn Any + Send + Sync> {
         &self.ext
+    }
+
+    /// Signal a deferred policy exception, matching Fuchsia's
+    /// `Thread::Current::SignalPolicyException`.
+    ///
+    /// The exception is stored and delivered later when
+    /// [`CurrentThread::deliver_pending_policy_exception`] is called
+    /// (typically by the syscall dispatch loop before returning to
+    /// userspace).
+    pub fn signal_policy_exception(&self, synth_code: u32, synth_data: u32) {
+        self.inner.lock().pending_policy_exception = Some((synth_code, synth_data));
+    }
+
+    /// Take the pending policy exception, if any.
+    ///
+    /// Returns `Some((synth_code, synth_data))` and clears the pending
+    /// state, or `None` if no exception is pending.
+    pub fn take_pending_policy_exception(&self) -> Option<(u32, u32)> {
+        self.inner.lock().pending_policy_exception.take()
     }
 
     /// Returns a copy of saved context of current thread, or `Err(ZxError::BAD_STATE)`
@@ -786,6 +810,18 @@ impl CurrentThread {
         };
         self.handle_exception_dispatch(ExceptionType::User, exception)
             .await;
+    }
+
+    /// Deliver any pending deferred policy exception.
+    ///
+    /// This should be called by the syscall dispatch loop after a sync
+    /// syscall returns, before the result is delivered to userspace.
+    /// Mirrors Fuchsia's `ProcessPendingSignals` which checks
+    /// `THREAD_SIGNAL_POLICY_EXCEPTION`.
+    pub async fn deliver_pending_policy_exception(&self) {
+        if let Some((code, data)) = self.0.take_pending_policy_exception() {
+            self.handle_exception_policy(code, data).await;
+        }
     }
 
     /// Raise a policy error exception (e.g. handle leak).

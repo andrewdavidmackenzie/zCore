@@ -278,6 +278,32 @@ impl ExceptionType {
     }
 }
 
+/// Policy exception synth_code constants, matching Fuchsia's
+/// `zircon/syscalls/exception.h` ZX_EXCP_POLICY_CODE_* values.
+#[allow(missing_docs)]
+pub mod policy_code {
+    pub const BAD_HANDLE: u32 = 0;
+    pub const WRONG_OBJECT: u32 = 1;
+    pub const VMAR_WX: u32 = 2;
+    pub const NEW_ANY: u32 = 3;
+    pub const NEW_VMO: u32 = 4;
+    pub const NEW_CHANNEL: u32 = 5;
+    pub const NEW_EVENT: u32 = 6;
+    pub const NEW_EVENTPAIR: u32 = 7;
+    pub const NEW_PORT: u32 = 8;
+    pub const NEW_SOCKET: u32 = 9;
+    pub const NEW_FIFO: u32 = 10;
+    pub const NEW_TIMER: u32 = 11;
+    pub const NEW_PROCESS: u32 = 12;
+    pub const NEW_PROFILE: u32 = 13;
+    pub const AMBIENT_MARK_VMO_EXEC: u32 = 14;
+    pub const CHANNEL_FULL_WRITE: u32 = 16;
+    pub const PORT_TOO_MANY_PACKETS: u32 = 17;
+    pub const BAD_SYSCALL: u32 = 18;
+    pub const PORT_TOO_MANY_OBSERVERS: u32 = 19;
+    pub const HANDLE_LEAK: u32 = 20;
+}
+
 /// Type of the exception channel
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -497,10 +523,21 @@ impl Exception {
                     .await
             }
         };
-        if result == Err(ZxError::NEXT) && !self.type_.is_synth() {
-            // Nobody handled the exception, kill the process with the
-            // exception-specific return code.
-            self.thread.proc().exit(super::TASK_RETCODE_EXCEPTION_KILL);
+        if result == Err(ZxError::NEXT) {
+            // Lifecycle exceptions (thread starting/exiting, process starting)
+            // are informational — if nobody handles them the thread just
+            // continues.  All other exceptions (hardware, policy, user) kill
+            // the process when unhandled, matching Fuchsia's
+            // `dispatch_user_exception` behaviour.
+            let is_lifecycle = matches!(
+                self.type_,
+                ExceptionType::ThreadStarting
+                    | ExceptionType::ThreadExiting
+                    | ExceptionType::ProcessStarting
+            );
+            if !is_lifecycle {
+                self.thread.proc().exit(super::TASK_RETCODE_EXCEPTION_KILL);
+            }
         }
     }
 
