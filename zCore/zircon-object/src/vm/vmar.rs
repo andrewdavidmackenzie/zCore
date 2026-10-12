@@ -1359,6 +1359,11 @@ impl VmAddressRegion {
         // TODO: support multiple VMOs
         let map = self.find_mapping(vaddr).ok_or(ZxError::NOT_FOUND)?;
         let map_inner = map.inner.lock();
+        // Reject writes to mappings without WRITE permission (e.g., VDSO).
+        let page_idx = (vaddr - map_inner.addr) / PAGE_SIZE;
+        if !map_inner.page_flags(page_idx).contains(MMUFlags::WRITE) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
         let vmo_offset = vaddr - map_inner.addr + map_inner.vmo_offset;
         let size_limit = map_inner.addr + map_inner.size - vaddr;
         let actual_size = buf.len().min(size_limit);
