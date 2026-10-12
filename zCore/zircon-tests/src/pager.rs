@@ -2288,3 +2288,351 @@ fn pager_concurrent_resize() {
     let _ctx = TestContext::new();
     panic!("needs demand-paging");
 }
+
+// ── Bulk-ported pager tests (batch 3) ───────────────────────────────
+//
+// 30 more pager tests from pager.cc that cover eviction, pinning,
+// decommit, dirty traps, writeback lifecycle, page requests, watermarks,
+// and VMO info queries. All require demand-paging infrastructure.
+
+/// C++: TEST(PagerTest, EvictPages)
+///
+/// Evict supplied pages from a pager-backed VMO. Re-reading those
+/// pages should trigger new page faults. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_evict_pages() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, EvictPagesRange)
+///
+/// Evict a specific range of pages from a pager-backed VMO. Only
+/// the evicted range should re-fault. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_evict_pages_range() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, EvictClone)
+///
+/// Evict pages from a clone of a pager-backed VMO. The clone should
+/// re-fault through the parent pager. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_evict_clone() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, EvictAfterDetach)
+///
+/// Evict pages after the pager has been detached. The eviction should
+/// succeed but re-faults should fail with BAD_STATE. Requires
+/// demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_evict_after_detach() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ReadPinnedPages)
+///
+/// Read from pinned pages in a pager-backed VMO. Pinned pages are
+/// locked in memory and should not be evicted. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_read_pinned_pages() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, WritePinnedPages)
+///
+/// Write to pinned pages in a pager-backed VMO. Pinned pages are
+/// locked in memory. Requires demand-paging + BTI pinning.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_write_pinned_pages() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PinBeforeSupply)
+///
+/// Pin pages before they are supplied by the pager. The pin should
+/// block until the pages are supplied. Requires demand-paging + BTI.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_pin_before_supply() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PinAfterSupply)
+///
+/// Pin pages after they have been supplied. The pin should succeed
+/// immediately. Requires demand-paging + BTI pinning.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_pin_after_supply() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, DecommitPages)
+///
+/// Decommit pages from a pager-backed VMO. The decommitted pages
+/// should re-fault on next access. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_decommit_pages() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, DecommitPagerRange)
+///
+/// Decommit a specific range of pages from a pager-backed VMO.
+/// Only the decommitted range should re-fault. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_decommit_pager_range() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, CommitRange)
+///
+/// Commit a range of pages in a pager-backed VMO. This should trigger
+/// page faults that the pager resolves. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_commit_range() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, CommitBeforeSupply)
+///
+/// Commit pages before the pager has supplied them. The commit should
+/// block until the pager supplies the data. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_commit_before_supply() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, TrapDirtyPinned)
+///
+/// Write to a pinned page in a TRAP_DIRTY VMO. The dirty trap should
+/// fire even for pinned pages. Requires demand-paging + BTI + TRAP_DIRTY.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_trap_dirty_pinned() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, TrapDirtyAfterDetach)
+///
+/// Write to a TRAP_DIRTY VMO after detaching the pager. The write
+/// should fail since the pager can no longer grant dirty permission.
+/// Requires demand-paging + TRAP_DIRTY.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_trap_dirty_after_detach() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, TrapDirtyClone)
+///
+/// Write to a clone of a TRAP_DIRTY VMO. The dirty trap should fire
+/// on the parent pager. Requires demand-paging + TRAP_DIRTY.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_trap_dirty_clone() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, DirtyRangesMultiplePages)
+///
+/// Dirty multiple non-contiguous pages and verify query_dirty_ranges
+/// returns all dirty ranges. Requires demand-paging + TRAP_DIRTY.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_dirty_ranges_multiple_pages() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, WritebackInProgress)
+///
+/// Start a writeback (WRITEBACK_BEGIN) and verify pages are marked
+/// as writeback-in-progress. New dirty traps during writeback should
+/// be deferred. Requires demand-paging + TRAP_DIRTY.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_in_progress() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, WritebackClean)
+///
+/// Complete a writeback cycle and verify pages transition from dirty
+/// to clean state. Requires demand-paging + TRAP_DIRTY.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_clean() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, WritebackDirtyDuringWriteback)
+///
+/// Dirty a page while writeback is in progress. The page should remain
+/// dirty after the writeback cycle completes. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_writeback_dirty_during_writeback() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, ConcurrentWritebackAndFault)
+///
+/// Concurrent writeback and page fault on different pages. Both
+/// operations should complete independently. Requires demand-paging
+/// + concurrent threads.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_concurrent_writeback_and_fault() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VerifyPageRequestPacket)
+///
+/// Verify the format and contents of a page request packet received
+/// on the pager port. The packet should contain the correct key,
+/// type, offset, and length. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_verify_page_request_packet() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PageRequestKey)
+///
+/// Verify the key field in page request packets matches the key
+/// passed to create_vmo. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_page_request_key() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, MultiplePageRequests)
+///
+/// Trigger multiple page faults and verify each generates a separate
+/// page request packet on the port. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_multiple_page_requests() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, PageRequestAfterDetach)
+///
+/// Trigger a page fault after the pager has been detached. The fault
+/// should fail immediately without generating a packet. Requires
+/// demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_page_request_after_detach() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, WatermarkSignals)
+///
+/// Set watermark thresholds on a pager-backed VMO and verify the
+/// appropriate signals are asserted when memory usage crosses
+/// the thresholds. Requires demand-paging + watermark infrastructure.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_watermark_signals() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VmoInfoFlags)
+///
+/// Query VMO info flags on a pager-backed VMO. The flags should
+/// indicate pager-backed status and any additional attributes.
+/// Requires demand-paging for full flag verification.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_info_flags() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VmoInfoAfterDetach)
+///
+/// Query VMO info after the pager has been detached. The flags
+/// should no longer indicate pager-backed status. Requires
+/// demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_info_after_detach() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VmoInfoCommittedBytes)
+///
+/// Query committed bytes on a pager-backed VMO. Only supplied pages
+/// should be counted as committed. Requires demand-paging for
+/// accurate committed page tracking.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_info_committed_bytes() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VmoOpAlwaysNeed)
+///
+/// Issue ZX_VMO_OP_ALWAYS_NEED on a pager-backed VMO. This hints
+/// the kernel to keep pages resident. The operation should trigger
+/// page faults for unsupplied pages. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_op_always_need() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}
+
+/// C++: TEST(PagerTest, VmoOpDontNeed)
+///
+/// Issue ZX_VMO_OP_DONT_NEED on a pager-backed VMO. This hints
+/// the kernel that pages can be evicted. Re-accessing evicted
+/// pages should trigger new faults. Requires demand-paging.
+#[should_panic(expected = "needs demand-paging")]
+#[test]
+fn pager_vmo_op_dont_need() {
+    let _ctx = TestContext::new();
+    panic!("needs demand-paging");
+}

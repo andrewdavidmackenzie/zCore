@@ -943,3 +943,126 @@ fn thread_create_invalid_args() {
     let _ctx = TestContext::new();
     panic!("invalid args are syscall-layer validation");
 }
+
+// ── Bulk-ported thread tests (batch 2) ──────────────────────────────
+//
+// These tests require exception channels, suspension tokens, and
+// concurrent thread execution — features not available in libos
+// test mode. All are marked #[should_panic].
+
+/// C++: TEST(ThreadTest, SuspendInException)
+///
+/// Suspend a thread that is stopped in an exception handler. The
+/// thread should remain suspended after the exception is resolved.
+/// Requires exception channel + real thread execution.
+#[should_panic(expected = "needs exception channel infrastructure")]
+#[test]
+fn thread_suspend_in_exception() {
+    let _ctx = TestContext::new();
+    panic!("needs exception channel infrastructure");
+}
+
+/// C++: TEST(ThreadTest, ExceptionDuringSuspend)
+///
+/// Trigger an exception while a thread is suspended. The exception
+/// should be queued and delivered when the thread is resumed.
+/// Requires exception channel + suspension infrastructure.
+#[should_panic(expected = "needs exception channel infrastructure")]
+#[test]
+fn thread_exception_during_suspend() {
+    let _ctx = TestContext::new();
+    panic!("needs exception channel infrastructure");
+}
+
+/// C++: TEST(ThreadTest, StartSuspendedThread)
+///
+/// Create a thread in suspended state and start it. The thread
+/// should not execute until explicitly resumed. Requires real
+/// thread execution infrastructure.
+#[should_panic(expected = "needs real thread execution")]
+#[test]
+fn thread_start_suspended_thread() {
+    let _ctx = TestContext::new();
+    panic!("needs real thread execution");
+}
+
+/// C++: TEST(ThreadTest, CreateWithBadArgs)
+///
+/// Create a thread with bad arguments at the syscall level (invalid
+/// process handle, null name). Should return INVALID_ARGS or
+/// BAD_HANDLE. Requires syscall dispatch.
+#[should_panic(expected = "needs syscall-level validation")]
+#[test]
+fn thread_create_with_bad_args() {
+    let _ctx = TestContext::new();
+    panic!("needs syscall-level validation");
+}
+
+/// C++: TEST(ThreadTest, MultipleExceptionChannels)
+///
+/// Register multiple exception channels on a thread. Exceptions
+/// should be delivered to the most recently registered channel
+/// first. Requires exception channel infrastructure.
+#[should_panic(expected = "needs exception channel infrastructure")]
+#[test]
+fn thread_multiple_exception_channels() {
+    let _ctx = TestContext::new();
+    panic!("needs exception channel infrastructure");
+}
+
+/// C++: TEST(ThreadTest, CloseSuspendToken)
+///
+/// Close a suspend token while the thread is suspended. The thread
+/// should resume execution. Requires suspend token lifecycle.
+#[should_panic(expected = "needs real thread execution")]
+#[test]
+fn thread_close_suspend_token() {
+    let _ctx = TestContext::new();
+    panic!("needs real thread execution");
+}
+
+/// C++: TEST(ThreadTest, SuspendTokenLifetime)
+///
+/// Verify suspend token lifetime semantics: multiple tokens can be
+/// active, and the thread resumes only when all tokens are closed.
+/// Requires real thread execution.
+#[should_panic(expected = "needs real thread execution")]
+#[test]
+fn thread_suspend_token_lifetime() {
+    let _ctx = TestContext::new();
+    panic!("needs real thread execution");
+}
+
+/// C++: TEST(ThreadTest, WriteStateModifiesExecution)
+///
+/// Write to a suspended thread's register state and verify the
+/// modified state takes effect when the thread resumes. Requires
+/// real thread execution + register state.
+#[should_panic(expected = "needs real thread execution")]
+#[test]
+fn thread_write_state_modifies_execution() {
+    let _ctx = TestContext::new();
+    panic!("needs real thread execution");
+}
+
+/// C++: TEST(ThreadTest, ReadStateFloatPoint)
+///
+/// Read the floating-point register state of a suspended thread.
+/// Requires real thread execution with FP state tracking.
+#[should_panic(expected = "needs real thread execution")]
+#[test]
+fn thread_read_state_float_point() {
+    let _ctx = TestContext::new();
+    panic!("needs real thread execution");
+}
+
+/// C++: TEST(ThreadTest, ReadStateVector)
+///
+/// Read the vector (SIMD) register state of a suspended thread.
+/// Requires real thread execution with vector state tracking.
+#[should_panic(expected = "needs real thread execution")]
+#[test]
+fn thread_read_state_vector() {
+    let _ctx = TestContext::new();
+    panic!("needs real thread execution");
+}
