@@ -25,9 +25,61 @@ ProcessTest.GetInfoRuntime
 ProcessTest.GetInfoRuntimeV1
 
 # ── Thread suspend / register state (cooperative scheduler) ─────────
-# 43/57 Threads tests hang — they suspend child threads, write
-# register state, or use exception channels. Only ~14 are safe.
-Threads.*
+# 3/55 Threads tests pass: Basics, GetInfoRuntimeV1,
+# SuspendSingleWaitAsyncSignalDelivery. Rest hang or fail.
+Threads.BadSyscallCaller
+Threads.BadSyscallNumber
+Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
+Threads.DebugRegistersDr6ResetOnDebugException
+Threads.DebugRegistersValidation
+Threads.DebugRegistersWatchpointSyscallPanicRepro
+Threads.EmptyNameSucceeds
+Threads.ExitViaException
+Threads.GetAffinity
+Threads.GetInfoRuntime
+Threads.GetLastScheduledCpu
+Threads.InfoTaskStatsFails
+Threads.InfoThreadStatsFails
+Threads.InvalidRights
+Threads.LongNameSucceeds
+Threads.NoncanonicalRipAddressIRETQ
+Threads.NoncanonicalRipAddressSyscall
+Threads.NonstartedThread
+Threads.ProcessStartOnSecondThread
+Threads.ReadingFpRegisterState
+Threads.ReadingGeneralRegisterState
+Threads.ReadingVectorRegisterState
+Threads.ResumeSuspended
+Threads.StartRegs
+Threads.StartRegsNoncanonicalTp
+Threads.StartRegsSuspended
+Threads.StartSuspendedAndResumedThread
+Threads.StartSuspendedThread
+Threads.SuspendAfterDeath
+Threads.SuspendChannelCall
+Threads.SuspendInvalidTargets
+Threads.SuspendMultiple
+Threads.SuspendPortCall
+Threads.SuspendSleeping
+Threads.SuspendStopsThread
+Threads.SyscallDebuggerModifyResult
+Threads.SyscallSuspendedRegisterState
+Threads.ThreadLocalRegisterState
+Threads.ThreadStartInvalidEntry
+Threads.ThreadStartOnInitialThread
+Threads.ThreadStartWithZeroInstructionPointer
+Threads.WatchpointSyscallPanic
+Threads.WriteReadDebugRegisterState
+Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
+Threads.WritingArmFlagsRegister
+Threads.WritingFpRegisterState
+Threads.WritingGeneralRegisterState
+Threads.WritingSingleStepState
+Threads.WritingVectorRegisterState
+Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
+Threads.X86AcFlagUserCopy
+Threads.YieldWithNonZeroOptionIsInvalidArgs
+Threads.YieldWithZeroOptionIsOk
 # ProcessTest.SuspendSelf — removed, fixed self-suspend check
 
 # ── Policy exception infrastructure ─────────────────────────────────

@@ -314,3 +314,154 @@ async fn port_timeout() {
         .await;
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Additional port syscall tests — faithful ports from port.cc
+// ═══════════════════════════════════════════════════════════════════
+
+/// C++: TEST(PortTest, WaitAsyncPortAccessDenied)
+/// wait_async with a port handle lacking WRITE right returns ACCESS_DENIED.
+#[test]
+fn port_wait_async_port_access_denied() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Create port with only READ right (no WRITE).
+    let port = zircon_object::signal::Port::new(0).unwrap();
+    let port_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        port,
+        zircon_object::object::Rights::READ, // no WRITE
+    ));
+
+    // Create a valid event to wait on.
+    let event = zircon_object::signal::Event::new();
+    let event_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+
+    let result = sc.sys_object_wait_async(
+        event_h,
+        port_h,
+        0,
+        zircon_object::object::Signal::READABLE.bits(),
+        0,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(PortTest, WaitAsyncPortWrongType)
+/// wait_async with a non-port handle for the port argument returns WRONG_TYPE.
+#[test]
+fn port_wait_async_port_wrong_type() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Use a channel as the "port" argument.
+    let (ch, _) = zircon_object::ipc::Channel::create();
+    let ch_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        ch,
+        zircon_object::object::Rights::DEFAULT_CHANNEL,
+    ));
+
+    let event = zircon_object::signal::Event::new();
+    let event_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+
+    let result = sc.sys_object_wait_async(
+        event_h,
+        ch_h,
+        0,
+        zircon_object::object::Signal::READABLE.bits(),
+        0,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
+}
+
+/// C++: TEST(PortTest, WaitAsyncTargetAccessDenied)
+/// wait_async on a handle without WAIT right returns ACCESS_DENIED.
+#[test]
+fn port_wait_async_target_access_denied() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let mut port_h: HandleValue = 0;
+    sc.sys_port_create(0, UserOutPtr::from(&mut port_h as *mut _ as usize))
+        .unwrap();
+
+    // Create event with no WAIT right.
+    let event = zircon_object::signal::Event::new();
+    let event_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::SIGNAL, // no WAIT
+    ));
+
+    let result = sc.sys_object_wait_async(
+        event_h,
+        port_h,
+        0,
+        zircon_object::object::Signal::READABLE.bits(),
+        0,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
+
+/// C++: TEST(PortTest, QueueBadHandle)
+/// Queueing on an invalid handle returns BAD_HANDLE.
+#[test]
+fn port_queue_bad_handle() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let packet = unsafe { core::mem::zeroed::<PortPacket>() };
+    let result = sc.sys_port_queue(0xDEAD, UserInPtr::from(&packet as *const _ as usize));
+    assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
+}
+
+/// C++: TEST(PortTest, WaitBadHandle)
+/// Waiting on an invalid handle returns BAD_HANDLE.
+#[async_std::test]
+async fn port_wait_bad_handle() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let mut packet = unsafe { core::mem::zeroed::<PortPacket>() };
+    let result = sc
+        .sys_port_wait(
+            0xDEAD,
+            zircon_syscall::Deadline::from(0usize),
+            UserOutPtr::from(&mut packet as *mut _ as usize),
+        )
+        .await;
+    assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
+}
+
+/// C++: TEST(PortTest, CancelBadHandle)
+/// Cancelling with an invalid port handle returns BAD_HANDLE.
+#[test]
+fn port_cancel_bad_handle() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let event = zircon_object::signal::Event::new();
+    let event_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+
+    let result = sc.sys_port_cancel(0xDEAD, event_h, 0);
+    assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
+}
+
+/// C++: TEST(PortTest, CancelKeyBadHandle)
+/// port_cancel_key with an invalid handle returns BAD_HANDLE.
+#[test]
+fn port_cancel_key_bad_handle() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let result = sc.sys_port_cancel_key(0xDEAD, 0, 0);
+    assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
+}

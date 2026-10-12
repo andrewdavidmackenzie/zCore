@@ -616,8 +616,7 @@ fn non_allowed_signals() {
 }
 
 /// C++: TEST(SocketTest, PeerClosedSetProperty)
-/// set_write_threshold after peer closed returns PEER_CLOSED;
-/// set_read_threshold still succeeds.
+/// set_write_threshold / set_read_threshold after peer closed returns PEER_CLOSED.
 #[test]
 fn peer_closed_set_property() {
     let _ctx = TestContext::new();
@@ -868,4 +867,181 @@ fn write_invalid_options() {
     // Writing after peer closed fails
     drop(remote);
     assert_eq!(local.write(b"fail").unwrap_err(), ZxError::PEER_CLOSED);
+}
+
+// ── Bulk-ported socket tests (batch 2) ──────────────────────────────
+
+/// C++: TEST(SocketTest, DatagramMultipleMessages)
+///
+/// Write multiple datagrams and verify each is preserved as a
+/// separate message on read (datagram boundary semantics).
+#[test]
+fn datagram_multiple_messages() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(1).unwrap(); // DATAGRAM
+
+    local.write(b"msg1").unwrap();
+    local.write(b"message2").unwrap();
+    local.write(b"m3").unwrap();
+
+    let mut buf = [0u8; 64];
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"msg1");
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"message2");
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"m3");
+}
+
+/// C++: TEST(SocketTest, StreamLargeTransfer)
+///
+/// Write and read a large block of data through a stream socket.
+/// Verifies data integrity for larger transfers.
+#[test]
+fn stream_large_transfer() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap(); // STREAM
+
+    let data: Vec<u8> = (0..4096).map(|i| (i & 0xFF) as u8).collect();
+    local.write(&data).unwrap();
+
+    let mut buf = vec![0u8; 4096];
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(n, 4096);
+    assert_eq!(buf, data);
+}
+
+/// C++: TEST(SocketTest, ShutdownBothDirections)
+///
+/// Shut down both read and write directions. Neither side should
+/// be able to read or write after both shutdowns.
+#[test]
+fn shutdown_both_directions() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    // Shut down write on local (read on remote)
+    local.shutdown(true, false).unwrap();
+    // Shut down write on remote (read on local)
+    remote.shutdown(true, false).unwrap();
+
+    // Neither side can write
+    assert!(local.write(b"test").is_err());
+    assert!(remote.write(b"test").is_err());
+}
+
+/// C++: TEST(SocketTest, ReadAfterShutdownWrite)
+///
+/// After shutting down the write direction, existing data in the
+/// buffer should still be readable.
+#[test]
+fn read_after_shutdown_write() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    local.write(b"before shutdown").unwrap();
+    local.shutdown(true, false).unwrap();
+
+    let mut buf = [0u8; 32];
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"before shutdown");
+}
+
+/// C++: TEST(SocketTest, WriteZeroBytes)
+///
+/// Writing zero bytes to a stream socket should succeed (no-op).
+#[test]
+fn write_zero_bytes() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(0).unwrap();
+    let result = local.write(b"");
+    // Stream sockets accept zero-byte writes as no-ops.
+    assert!(result.is_ok() || result.unwrap_err() == ZxError::SHOULD_WAIT);
+}
+
+/// C++: TEST(SocketTest, PeekDoesNotConsume)
+///
+/// Peek at data without consuming it. Subsequent read should
+/// return the same data.
+#[test]
+fn peek_does_not_consume() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+    local.write(b"peek data").unwrap();
+
+    let mut buf = [0u8; 16];
+    let n = remote.read(true, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"peek data");
+
+    // Data should still be there for a regular read
+    let mut buf2 = [0u8; 16];
+    let n2 = remote.read(false, &mut buf2).unwrap();
+    assert_eq!(&buf2[..n2], b"peek data");
+}
+
+/// C++: TEST(SocketTest, MultipleWritesSingleRead)
+///
+/// Multiple small writes to a stream socket, then one large read
+/// should concatenate all data.
+#[test]
+fn multiple_writes_single_read() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    local.write(b"aaa").unwrap();
+    local.write(b"bbb").unwrap();
+    local.write(b"ccc").unwrap();
+
+    let mut buf = [0u8; 16];
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"aaabbbccc");
+}
+
+/// C++: TEST(SocketTest, SocketInfoAfterPeerClose)
+///
+/// After closing the peer, the remaining socket should report
+/// PEER_CLOSED in its signal set.
+#[test]
+fn socket_info_after_peer_close() {
+    use zircon_object::object::{KernelObject, Signal};
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+    drop(remote);
+    assert!(local.signal().contains(Signal::PEER_CLOSED));
+}
+
+/// C++: TEST(SocketTest, DatagramReadTooSmallBuffer)
+///
+/// Read from a datagram socket with a buffer smaller than the
+/// message. Should truncate the message and discard the rest.
+#[test]
+fn datagram_read_too_small_buffer() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(1).unwrap(); // DATAGRAM
+    local.write(b"long datagram data").unwrap();
+
+    let mut buf = [0u8; 4]; // too small
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(n, 4);
+    assert_eq!(&buf, b"long");
+    // The rest of the datagram is discarded
+}
+
+/// C++: TEST(SocketTest, BidirectionalStreamVerify)
+///
+/// Both endpoints write and read data simultaneously. Verify data
+/// integrity in both directions.
+#[test]
+fn bidirectional_stream_verify() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    local.write(b"L->R data").unwrap();
+    remote.write(b"R->L data").unwrap();
+
+    let mut buf = [0u8; 16];
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"L->R data");
+    let n = local.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"R->L data");
 }

@@ -128,7 +128,130 @@ mod syscall_vmo;
 mod object_info;
 
 #[cfg(test)]
+mod property;
+
+#[cfg(test)]
 mod vmo_transfer_data;
 
 #[cfg(test)]
 mod syscall_transfer_data;
+
+#[cfg(test)]
+mod bad_syscall;
+
+#[cfg(test)]
+mod sync_mutex;
+
+#[cfg(test)]
+mod object_wait;
+
+#[cfg(test)]
+mod profile;
+
+#[cfg(test)]
+mod address_tagging;
+
+#[cfg(test)]
+mod c11_thread;
+
+#[cfg(test)]
+mod c11_mutex;
+
+#[cfg(test)]
+mod system_event;
+
+#[cfg(test)]
+mod memory_mapping;
+
+#[cfg(test)]
+mod cprng;
+
+#[cfg(test)]
+mod mini_process;
+
+#[cfg(test)]
+mod policy;
+
+#[cfg(test)]
+mod rights;
+
+#[cfg(test)]
+mod debug;
+
+#[cfg(test)]
+mod namespace;
+
+#[cfg(test)]
+mod pthread;
+
+#[cfg(test)]
+mod cache;
+
+#[cfg(test)]
+mod object_signal;
+
+#[cfg(test)]
+mod object_properties;
+
+#[cfg(test)]
+mod event_pair;
+
+#[cfg(test)]
+mod handle_dup;
+
+#[cfg(test)]
+mod vmo_contiguous;
+
+#[cfg(test)]
+mod vmo_discardable;
+
+#[cfg(test)]
+mod task_lifecycle;
+
+#[cfg(test)]
+mod vmar_ops;
+
+#[cfg(test)]
+mod port_stress;
+
+#[cfg(test)]
+mod channel_call;
+
+#[cfg(test)]
+mod vmo_ops;
+
+#[cfg(test)]
+mod fifo_ops;
+
+#[cfg(test)]
+mod timer_ops;
+
+#[cfg(test)]
+mod stream_ops;
+
+#[cfg(test)]
+mod socket_disposition;
+
+#[cfg(test)]
+mod exception_ops;
+
+#[cfg(test)]
+mod object_lifecycle;
+
+#[cfg(test)]
+mod ipc_limits;
+
+#[cfg(test)]
+mod suspend_resume;
+
+#[cfg(test)]
+mod kcounter;
+
+#[cfg(test)]
+mod object_info_extra;
+
+#[cfg(test)]
+mod object_wait_ops;
+
+#[cfg(test)]
+mod clock_ops;
