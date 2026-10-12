@@ -294,6 +294,9 @@ fn thread_info_zero_buffer() {
 
 // ── VMO info (topic 16) ─────────────────────────────────────────────
 
+// Note: Fuchsia uses version 3 (0x3000_0017) for full-size VmoInfo.
+// zCore currently only handles the base topic (23) which writes the
+// full struct regardless of version. Using base topic for now.
 const TOPIC_VMO: u32 = 23;
 
 /// C++: VmoGetInfoTest — basic VMO info query.

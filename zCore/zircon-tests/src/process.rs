@@ -232,22 +232,18 @@ fn process_related_koid_cxx() {
 
 /// C++: TEST(ProcessTest, GetInfoRuntime)
 /// Getting runtime info requires a thread to have actually executed.
-/// zCore's cooperative scheduler makes this hang in test mode.
 #[test]
-#[should_panic(expected = "not yet implemented")]
+#[ignore = "requires thread execution for runtime accumulation"]
 fn process_get_info_runtime() {
-    // In the C++ test, GetInfoRuntime queries ZX_INFO_TASK_RUNTIME
-    // after starting a thread. In zCore's cooperative scheduler,
-    // the child process thread never gets CPU time in unit test mode.
-    unimplemented!("not yet implemented");
+    todo!("requires thread execution for runtime accumulation");
 }
 
 /// C++: TEST(ProcessTest, GetInfoRuntimeV1)
 /// Same as GetInfoRuntime but for V1 runtime info.
 #[test]
-#[should_panic(expected = "not yet implemented")]
+#[ignore = "requires thread execution for runtime accumulation"]
 fn process_get_info_runtime_v1() {
-    unimplemented!("not yet implemented");
+    todo!("requires thread execution for runtime accumulation");
 }
 
 /// Process status transitions: Init -> Exited.
@@ -309,11 +305,9 @@ fn process_handle_table_self() {
 /// C++: TEST(ProcessTest, ProcessWaitAsyncCancelSelf)
 /// Race condition stress test that needs real threads.
 #[test]
-#[should_panic(expected = "not yet implemented")]
+#[ignore = "requires preemptive scheduling for WAIT_ASYNC_CANCEL stress"]
 fn process_wait_async_cancel_self() {
-    // This C++ test does a tight loop of WAIT_ASYNC_CANCEL on a
-    // mini-process, which requires preemptive scheduling.
-    unimplemented!("not yet implemented");
+    todo!("requires preemptive scheduling for WAIT_ASYNC_CANCEL stress");
 }
 
 /// Enumerate handles and check types are correct.
