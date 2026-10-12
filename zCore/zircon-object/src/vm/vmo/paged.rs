@@ -300,8 +300,20 @@ impl VMObjectTrait for VMObjectPaged {
             //let paddr = self.commit_page(block.block, MMUFlags::READ)?;
             if block.len() == PAGE_SIZE && !inner.is_contiguous() {
                 let _ = inner.commit_page(block.block, MMUFlags::WRITE)?;
-                unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
-                inner.frames.remove(&block.block);
+                // Only decommit if the page is not pinned.
+                let pinned = inner
+                    .frames
+                    .get(&block.block)
+                    .is_some_and(|f| f.pin_count > 0);
+                if pinned {
+                    // Can't decommit pinned pages — just zero in place.
+                    if let Some(frame) = inner.frames.get(&block.block) {
+                        hal_impl::mem::pmem_zero(frame.frame.paddr(), PAGE_SIZE);
+                    }
+                } else {
+                    unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
+                    inner.frames.remove(&block.block);
+                }
             } else if inner.committed_pages_in_range(block.block, block.block + 1) != 0 {
                 // check whether this page is initialized, otherwise nothing should be done
                 let paddr = inner.commit_page(block.block, MMUFlags::WRITE)?;
