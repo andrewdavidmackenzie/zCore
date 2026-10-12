@@ -204,8 +204,10 @@ impl Syscall<'_> {
             // Default: eagerly commit pages to avoid stale page table issues
             true
         };
-        // Reject explicit MAP_RANGE when the mapping extends past the VMO.
-        if explicit_map_range {
+        // Reject explicit MAP_RANGE when the mapping extends past the VMO,
+        // UNLESS the VMO is resizable (Fuchsia allows this — commits
+        // only existing pages, the rest are demand-paged after resize).
+        if explicit_map_range && !vmo.is_resizable() {
             let vmo_len = vmo.len();
             if vmo_offset > vmo_len || len > vmo_len.saturating_sub(vmo_offset) {
                 return Err(ZxError::OUT_OF_RANGE);

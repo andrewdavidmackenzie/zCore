@@ -80,7 +80,7 @@ Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
 Threads.X86AcFlagUserCopy
 Threads.YieldWithNonZeroOptionIsInvalidArgs
 Threads.YieldWithZeroOptionIsOk
-ProcessTest.SuspendSelf
+# ProcessTest.SuspendSelf — removed, fixed self-suspend check
 
 # ── Policy exception infrastructure ─────────────────────────────────
 # Need ZX_EXCP_POLICY_CODE_CHANNEL_FULL_WRITE and exception delivery.
@@ -180,7 +180,7 @@ MsiTest.Msix
 
 # ── Channel fault handling ───────────────────────────────────────────
 # Reads from a faulting buffer — hangs (needs exception infrastructure).
-ChannelTest.ReadFaultDoesNotLeakHandles
+# ChannelTest.ReadFaultDoesNotLeakHandles — removed, fixed handle leak
 
 # ── Resource tests ───────────────────────────────────────────────────
 # Mexec* triggers platform reset. Ioports crashes — needs boot
@@ -202,6 +202,7 @@ Resource.Ioports
 
 # ── System events / suspend / wake reports ───────────────────────────
 # ExactlyOneMemoryEventSignaled hangs — polls all pressure events.
+# SystemEvent: hangs on wait_many — needs runtime debugging.
 SystemEvent.ExactlyOneMemoryEventSignaled
 # WakeReport: PortBound fails without hanging (removed from skip).
 # ThreadBound hangs.

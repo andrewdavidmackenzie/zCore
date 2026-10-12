@@ -44,7 +44,7 @@ impl Syscall<'_> {
         let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, vmo_rights)?;
         // Fuchsia rejects contiguous and physical VMOs for streams.
         if !vmo.is_paged() || vmo.is_contiguous() {
-            return Err(ZxError::NOT_SUPPORTED);
+            return Err(ZxError::WRONG_TYPE);
         }
         let stream = Stream::create(vmo, seek, options.bits());
         let handle = proc.add_handle(Handle::new(stream, rights));
