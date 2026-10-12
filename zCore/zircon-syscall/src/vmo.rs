@@ -660,8 +660,15 @@ impl Syscall<'_> {
         {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        // Pager-backed VMOs cannot participate in transfer_data.
-        if src.is_pager_backed() || dst.is_pager_backed() {
+        // Physical, contiguous, and pager-backed VMOs cannot participate
+        // in transfer_data.
+        if src.is_physical()
+            || dst.is_physical()
+            || src.is_contiguous()
+            || dst.is_contiguous()
+            || src.is_pager_backed()
+            || dst.is_pager_backed()
+        {
             return Err(ZxError::NOT_SUPPORTED);
         }
         // Reject pinned pages in either transfer range.

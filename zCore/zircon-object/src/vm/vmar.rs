@@ -1014,9 +1014,23 @@ impl VmAddressRegion {
                 );
             }
         }
-        candidates
-            .into_iter()
-            .find(|&offset| self.test_map(inner, offset, len, align))
+        candidates.into_iter().find_map(|offset| {
+            // Round up the candidate to the requested alignment.
+            let aligned = if align > 0 {
+                let mask = align - 1;
+                // Align the absolute address, then convert back to offset.
+                let abs = self.addr + offset;
+                let aligned_abs = (abs + mask) & !mask;
+                aligned_abs - self.addr
+            } else {
+                offset
+            };
+            if self.test_map(inner, aligned, len, align) {
+                Some(aligned)
+            } else {
+                None
+            }
+        })
     }
 
     fn end_addr(&self) -> VirtAddr {
