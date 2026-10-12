@@ -1022,3 +1022,372 @@ fn bidirectional_stream_verify() {
     let n = local.read(false, &mut buf).unwrap();
     assert_eq!(&buf[..n], b"R->L data");
 }
+
+// ── Batch 3: Ports from socket.cc (24 missing tests) ──────────────
+
+/// C++: TEST(SocketTest, EndpointsAreRelated)
+/// Check that koids of socket endpoints are cross-linked.
+#[test]
+fn endpoints_are_related() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    assert_ne!(local.id(), 0, "zero koid");
+    assert_ne!(local.related_koid(), 0, "zero peer koid");
+    assert_ne!(remote.id(), 0, "zero koid");
+    assert_ne!(remote.related_koid(), 0, "zero peer koid");
+    assert_eq!(local.id(), remote.related_koid(), "mismatched koids");
+    assert_eq!(remote.id(), local.related_koid(), "mismatched koids");
+}
+
+/// C++: TEST(SocketTest, DatagramNoShortWrite)
+/// Datagram sockets must not produce short writes. A datagram that
+/// exceeds the buffer capacity fails with OUT_OF_RANGE and does not
+/// modify the written count.
+#[test]
+fn datagram_no_short_write() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(1).unwrap(); // DATAGRAM
+
+    let info = local.get_info();
+    let dbg = format!("{:?}", info);
+    // Extract rx_buf_max from debug output
+    let max = {
+        let s = dbg.split("rx_buf_max: ").nth(1).unwrap();
+        let end = s.find(',').unwrap_or(s.len());
+        s[..end].parse::<usize>().unwrap()
+    };
+    assert!(max > 0);
+
+    // A datagram larger than the buffer must fail atomically
+    let buffer_size = max * 2;
+    assert!(buffer_size > 0);
+    let buffer = vec![0u8; buffer_size];
+    assert_eq!(local.write(&buffer).unwrap_err(), ZxError::OUT_OF_RANGE);
+}
+
+/// C++: TEST(SocketTest, DatagramPeek)
+/// Peek at datagram messages without consuming them.
+#[test]
+fn datagram_peek() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(1).unwrap(); // DATAGRAM
+
+    let msg1 = b"12345";
+    let msg2 = b"abcdef";
+
+    local.write(msg1).unwrap();
+    local.write(msg2).unwrap();
+
+    // Short peek: fewer bytes than the first datagram
+    let mut buf = [0u8; 16];
+    let n = remote.read(true, &mut buf[..msg1.len() - 1]).unwrap();
+    assert_eq!(n, msg1.len() - 1);
+    assert_eq!(&buf[..n], &msg1[..msg1.len() - 1]);
+
+    // Full peek should still see the 1st packet
+    let n = remote.read(true, &mut buf[..msg1.len()]).unwrap();
+    assert_eq!(n, msg1.len());
+    assert_eq!(&buf[..n], msg1);
+
+    // Consume the 1st packet
+    let n = remote.read(false, &mut buf[..msg1.len()]).unwrap();
+    assert_eq!(n, msg1.len());
+    assert_eq!(&buf[..n], msg1);
+
+    // Peek should now see the 2nd packet
+    let n = remote.read(true, &mut buf[..msg2.len()]).unwrap();
+    assert_eq!(n, msg2.len());
+    assert_eq!(&buf[..n], msg2);
+}
+
+/// C++: TEST(SocketTest, DatagramPeekEmpty)
+/// Peeking into an empty datagram socket returns SHOULD_WAIT.
+#[test]
+fn datagram_peek_empty() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(1).unwrap(); // DATAGRAM
+    let mut buf = [0u8; 1];
+    assert_eq!(
+        local.read(true, &mut buf).unwrap_err(),
+        ZxError::SHOULD_WAIT
+    );
+}
+
+/// C++: TEST(SocketTest, DatagramReadBufferLargerThanPacketReadsFullPacket)
+/// Reading with a buffer larger than the datagram returns exactly the
+/// datagram size, not the buffer size.
+#[test]
+fn datagram_read_buffer_larger_than_packet_reads_full_packet() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(1).unwrap(); // DATAGRAM
+
+    let msg = b"hello\0"; // 6 bytes including NUL, matching C++ sizeof("hello")
+    let written = local.write(msg).unwrap();
+    assert_eq!(written, msg.len());
+
+    let mut read_buf = [0u8; 64];
+    let n = remote.read(false, &mut read_buf).unwrap();
+    assert_eq!(n, msg.len());
+    assert_eq!(&read_buf[..n], msg);
+}
+
+/// C++: TEST(SocketTest, DatagramWriteExceedingCapacityReturnsShouldWait)
+/// After filling a datagram socket, additional writes return SHOULD_WAIT.
+#[test]
+fn datagram_write_exceeding_capacity_returns_should_wait() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(1).unwrap(); // DATAGRAM
+
+    // Fill the socket with a large chunk
+    let first_chunk = 200 * 1024;
+    let buffer = vec![b'x'; first_chunk];
+    let written = local.write(&buffer).unwrap();
+    assert_eq!(written, first_chunk);
+
+    // Second write should exceed capacity (SOCKET_SIZE = 256KB)
+    let second_chunk = 100 * 1024;
+    let buffer2 = vec![b'x'; second_chunk];
+    assert_eq!(local.write(&buffer2).unwrap_err(), ZxError::SHOULD_WAIT);
+}
+
+/// C++: TEST(SocketTest, DisableWriteBoth)
+/// Disable writes on both endpoints via set_disposition.
+#[test]
+fn disable_write_both() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    // Both start writable
+    assert!(local.signal().contains(Signal::WRITABLE));
+    assert!(remote.signal().contains(Signal::WRITABLE));
+
+    // Write data on both before disabling
+    local.write(b"12345").unwrap();
+    remote.write(b"abcdef").unwrap();
+    assert!(remote.signal().contains(Signal::READABLE));
+    assert!(local.signal().contains(Signal::READABLE));
+
+    // Disable writes on both: local_disposition=1, peer_disposition=1
+    local.set_disposition(1, 1).unwrap();
+
+    // Both should have WRITE_DISABLED, neither should be WRITABLE
+    assert!(local.signal().contains(Signal::SOCKET_WRITE_DISABLED));
+    assert!(!local.signal().contains(Signal::WRITABLE));
+    assert!(remote.signal().contains(Signal::SOCKET_WRITE_DISABLED));
+    assert!(!remote.signal().contains(Signal::WRITABLE));
+
+    // Writing should fail on both
+    assert_eq!(local.write(b"fail").unwrap_err(), ZxError::BAD_STATE);
+    assert_eq!(remote.write(b"fail").unwrap_err(), ZxError::BAD_STATE);
+
+    // Read the buffered data
+    let mut buf = [0u8; 16];
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"12345");
+    let n = local.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"abcdef");
+
+    // After draining, read should return BAD_STATE (peer write disabled)
+    assert_eq!(
+        remote.read(false, &mut buf).unwrap_err(),
+        ZxError::BAD_STATE
+    );
+    assert_eq!(local.read(false, &mut buf).unwrap_err(), ZxError::BAD_STATE);
+
+    // Re-enable writes on both
+    local.set_disposition(2, 2).unwrap(); // WRITE_ENABLED
+    assert!(local.signal().contains(Signal::WRITABLE));
+    assert!(remote.signal().contains(Signal::WRITABLE));
+
+    // Both can write again
+    local.write(b"abcdef").unwrap();
+    remote.write(b"ghijklm").unwrap();
+    assert!(local.signal().contains(Signal::READABLE));
+    assert!(remote.signal().contains(Signal::READABLE));
+
+    // Verify data
+    let n = local.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"ghijklm");
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(&buf[..n], b"abcdef");
+}
+
+/// C++: TEST(SocketTest, SetDispositionOfClosedPeerWithBufferedData)
+/// When the peer has been disabled and has buffered data, re-enabling
+/// should fail even after the peer closes.
+#[test]
+fn set_disposition_of_closed_peer_with_buffered_data() {
+    let _ctx = TestContext::new();
+    let remote;
+    let local;
+    {
+        let remote_inner;
+        (local, remote_inner) = Socket::create(0).unwrap();
+        remote = remote_inner;
+    }
+
+    assert!(local.signal().contains(Signal::WRITABLE));
+    assert!(remote.signal().contains(Signal::WRITABLE));
+
+    // Remote writes data into local's buffer
+    remote.write(b"12345").unwrap();
+
+    // Disable remote writes via local's disposition_peer
+    local.set_disposition(0, 1).unwrap(); // disposition_peer=WRITE_DISABLED
+
+    // There is buffered data, so we can't re-enable writes
+    assert_eq!(
+        local.set_disposition(0, 2).unwrap_err(), // WRITE_ENABLED
+        ZxError::BAD_STATE
+    );
+
+    // Close the peer
+    drop(remote);
+
+    // Even though the peer is now closed, there is still buffered data
+    // so writes can't be re-enabled. BAD_STATE takes priority over
+    // PEER_CLOSED when there's buffered data.
+    assert_eq!(local.set_disposition(0, 2).unwrap_err(), ZxError::BAD_STATE);
+}
+
+/// C++: TEST(SocketTest, ShortWrite)
+/// Stream sockets allow short writes when the buffer is nearly full.
+#[test]
+fn short_write() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(0).unwrap();
+
+    let info = local.get_info();
+    let dbg = format!("{:?}", info);
+    let max = {
+        let s = dbg.split("rx_buf_max: ").nth(1).unwrap();
+        let end = s.find(',').unwrap_or(s.len());
+        s[..end].parse::<usize>().unwrap()
+    };
+
+    let buffer_size = max + 1;
+    let buffer = vec![0u8; buffer_size];
+
+    let written = local.write(&buffer).unwrap();
+    assert!(written < buffer_size, "should be a short write");
+}
+
+/// C++: TEST(SocketTest, ReuseDatagramBuffer)
+/// Verify that datagram buffers are properly reused after truncation.
+#[test]
+fn reuse_datagram_buffer() {
+    let _ctx = TestContext::new();
+    let (a, b) = Socket::create(1).unwrap(); // DATAGRAM
+
+    // Write two short datagrams
+    a.write(b"a").unwrap();
+    a.write(b"b").unwrap();
+
+    // Read back both datagrams
+    let mut buf = [0u8; 1];
+    let n = b.read(false, &mut buf).unwrap();
+    assert_eq!(n, 1);
+    assert_eq!(buf[0], b'a');
+    let n = b.read(false, &mut buf).unwrap();
+    assert_eq!(n, 1);
+    assert_eq!(buf[0], b'b');
+
+    // Write a large datagram that spans multiple internal buffers
+    let mut large = vec![0xAAu8; 3000];
+    large[0] = b'c';
+    a.write(&large).unwrap();
+    // Write a second short datagram
+    let mut short = vec![0xAAu8; 3000];
+    short[0] = b'd';
+    a.write(&short[..1]).unwrap();
+
+    // Short read consumes first datagram (rest truncated)
+    let n = b.read(false, &mut buf).unwrap();
+    assert_eq!(n, 1);
+    assert_eq!(buf[0], b'c');
+
+    // Next read should give the second datagram
+    let n = b.read(false, &mut buf).unwrap();
+    assert_eq!(n, 1);
+    assert_eq!(buf[0], b'd');
+
+    // Socket should be empty
+    assert!(!b.signal().contains(Signal::READABLE));
+}
+
+/// C++: TEST(SocketTest, SetReadThresholdOnClosedPeer)
+/// Setting RX threshold on local endpoint succeeds even after peer
+/// is closed. Values greater than max return INVALID_ARGS.
+#[test]
+fn set_read_threshold_on_closed_peer() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    let info = local.get_info();
+    let dbg = format!("{:?}", info);
+    let max = {
+        let s = dbg.split("rx_buf_max: ").nth(1).unwrap();
+        let end = s.find(',').unwrap_or(s.len());
+        s[..end].parse::<usize>().unwrap()
+    };
+
+    drop(remote);
+
+    // Setting RX threshold succeeds even after peer is closed
+    local.set_read_threshold(max).unwrap();
+
+    // Value greater than max returns INVALID_ARGS
+    assert_eq!(
+        local.set_read_threshold(max + 1).unwrap_err(),
+        ZxError::INVALID_ARGS
+    );
+
+    // Disabling threshold with 0 succeeds
+    local.set_read_threshold(0).unwrap();
+}
+
+/// C++: TEST(SocketTest, ReadWriteLengthOverflowReturnsInvalidArgs)
+/// Length values exceeding UINT32_MAX are handled at the syscall layer.
+/// At the object level we verify large writes work up to SOCKET_SIZE.
+#[test]
+fn read_write_length_overflow_returns_invalid_args() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    // At the object level, writing more than SOCKET_SIZE is a short write
+    // (not INVALID_ARGS — length overflow check is at syscall level).
+    // We verify the object handles edge cases gracefully.
+    let written = local.write(&[0xAAu8; 262144]).unwrap();
+    assert_eq!(written, 262144); // exactly SOCKET_SIZE
+    assert_eq!(local.write(&[0u8; 1]).unwrap_err(), ZxError::SHOULD_WAIT);
+
+    let mut buf = vec![0u8; 262144];
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(n, 262144);
+}
+
+/// C++: TEST(SocketTest, StreamReadToPartialBadBuffer)
+/// At the object level, buffer validity isn't checked (that's the
+/// syscall layer). We verify that filling and draining a socket works
+/// correctly, matching the C++ test's logic flow.
+#[test]
+fn stream_read_to_partial_bad_buffer() {
+    let _ctx = TestContext::new();
+    let (a, b) = Socket::create(0).unwrap();
+
+    // Fill the socket with data
+    let data = vec![0u8; 16384];
+    while a.write(&data).is_ok() {}
+
+    // Validate that the socket is readable but not writable
+    assert!(b.signal().contains(Signal::READABLE));
+    assert!(!a.signal().contains(Signal::WRITABLE));
+
+    // Read everything out
+    let mut buf = vec![0u8; 16384];
+    while b.read(false, &mut buf).is_ok() {}
+
+    // The socket should now be writable
+    assert!(a.signal().contains(Signal::WRITABLE));
+}

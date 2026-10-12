@@ -701,3 +701,335 @@ fn set_disposition_noop_and_closed_peer() {
         ZxError::PEER_CLOSED
     );
 }
+
+// ── Batch 3: Syscall-level ports from socket.cc (13 missing tests) ──
+
+/// C++: TEST(SocketTest, DatagramWriteBadBufferReturnsInvalidArgs) — syscall level
+/// Writing from a bad (null) buffer pointer on a datagram socket
+/// returns INVALID_ARGS.
+#[test]
+fn datagram_write_bad_buffer_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 1); // DATAGRAM
+    let sc = ctx.syscall();
+
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(0usize), // null/bad buffer
+        64,                      // non-zero count
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, GetPropertyRxThresholdBufferTooSmallReturnsBufferTooSmall) — syscall level
+/// get_property with a buffer smaller than sizeof(size_t) returns
+/// BUFFER_TOO_SMALL.
+#[test]
+fn get_property_rx_threshold_buffer_too_small_returns_buffer_too_small() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    // ZX_PROP_SOCKET_RX_THRESHOLD = 12
+    // Provide only 4 bytes (u32) instead of 8 bytes (usize/u64)
+    let mut val: u32 = 0;
+    let result = sc.sys_object_get_property(
+        h0,
+        12, // ZX_PROP_SOCKET_RX_THRESHOLD
+        &mut val as *mut _ as usize,
+        core::mem::size_of::<u32>(),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
+}
+
+/// C++: TEST(SocketTest, GetPropertyTxThresholdBufferTooSmallReturnsBufferTooSmall) — syscall level
+#[test]
+fn get_property_tx_threshold_buffer_too_small_returns_buffer_too_small() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    // ZX_PROP_SOCKET_TX_THRESHOLD = 13
+    let mut val: u32 = 0;
+    let result = sc.sys_object_get_property(
+        h0,
+        13, // ZX_PROP_SOCKET_TX_THRESHOLD
+        &mut val as *mut _ as usize,
+        core::mem::size_of::<u32>(),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
+}
+
+/// C++: TEST(SocketTest, GetPropertyRxThresholdWrongTypeReturnsWrongType) — syscall level
+/// Calling get_property(ZX_PROP_SOCKET_RX_THRESHOLD) on a VMO returns
+/// WRONG_TYPE.
+#[test]
+fn get_property_rx_threshold_wrong_type_returns_wrong_type() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let vmo = zircon_object::vm::VmObject::new_paged(1);
+    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmo,
+        zircon_object::object::Rights::DEFAULT_VMO,
+    ));
+
+    let mut val: u64 = 0;
+    let result = sc.sys_object_get_property(
+        h,
+        12, // ZX_PROP_SOCKET_RX_THRESHOLD
+        &mut val as *mut _ as usize,
+        core::mem::size_of::<u64>(),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
+}
+
+/// C++: TEST(SocketTest, GetPropertyTxThresholdWrongTypeReturnsWrongType) — syscall level
+#[test]
+fn get_property_tx_threshold_wrong_type_returns_wrong_type() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let vmo = zircon_object::vm::VmObject::new_paged(1);
+    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmo,
+        zircon_object::object::Rights::DEFAULT_VMO,
+    ));
+
+    let mut val: u64 = 0;
+    let result = sc.sys_object_get_property(
+        h,
+        13, // ZX_PROP_SOCKET_TX_THRESHOLD
+        &mut val as *mut _ as usize,
+        core::mem::size_of::<u64>(),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
+}
+
+/// C++: TEST(SocketTest, ReadWriteLengthOverflowReturnsInvalidArgs) — syscall level
+/// Passing a length exceeding UINT32_MAX to socket read/write returns
+/// INVALID_ARGS. The Fuchsia kernel rejects sizes > UINT32_MAX at
+/// the syscall entry. Our implementation does not yet have this check,
+/// so attempting to allocate a 4GB+ buffer would crash.
+#[test]
+#[ignore = "zCore syscall layer does not yet validate length > UINT32_MAX"]
+fn read_write_length_overflow_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    let overflow_len = (u32::MAX as usize) + 1;
+    let write_byte: u8 = b'a';
+    let mut read_byte: u8 = 0;
+    let mut actual: usize = 0;
+
+    let result = sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(&write_byte as *const _ as usize),
+        overflow_len,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+
+    let result = sc.sys_socket_read(
+        h1,
+        0,
+        UserOutPtr::from(&mut read_byte as *mut _ as usize),
+        overflow_len,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, SetPropertyRxThresholdBadBufferReturnsInvalidArgs) — syscall level
+/// set_property with a bad buffer pointer returns INVALID_ARGS.
+#[test]
+fn set_property_rx_threshold_bad_buffer_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let mut sc = ctx.syscall();
+
+    // ZX_PROP_SOCKET_RX_THRESHOLD = 12
+    let result = sc.sys_object_set_property(
+        h0,
+        12, // ZX_PROP_SOCKET_RX_THRESHOLD
+        0,  // null/bad buffer
+        core::mem::size_of::<u64>(),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, SetPropertyRxThresholdBufferTooSmallReturnsBufferTooSmall) — syscall level
+#[test]
+fn set_property_rx_threshold_buffer_too_small_returns_buffer_too_small() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let mut sc = ctx.syscall();
+
+    // ZX_PROP_SOCKET_RX_THRESHOLD = 12
+    let val: u32 = 0;
+    let result = sc.sys_object_set_property(
+        h0,
+        12, // ZX_PROP_SOCKET_RX_THRESHOLD
+        &val as *const _ as usize,
+        core::mem::size_of::<u32>(), // too small
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
+}
+
+/// C++: TEST(SocketTest, SetPropertyRxThresholdWrongTypeReturnsWrongType) — syscall level
+#[test]
+fn set_property_rx_threshold_wrong_type_returns_wrong_type() {
+    let ctx = TestContext::new();
+    let mut sc = ctx.syscall();
+
+    let vmo = zircon_object::vm::VmObject::new_paged(1);
+    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmo,
+        zircon_object::object::Rights::DEFAULT_VMO,
+    ));
+
+    let val: u64 = 0;
+    let result = sc.sys_object_set_property(
+        h,
+        12, // ZX_PROP_SOCKET_RX_THRESHOLD
+        &val as *const _ as usize,
+        core::mem::size_of::<u64>(),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
+}
+
+/// C++: TEST(SocketTest, SetPropertyTxThresholdBadBufferReturnsInvalidArgs) — syscall level
+#[test]
+fn set_property_tx_threshold_bad_buffer_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let mut sc = ctx.syscall();
+
+    // ZX_PROP_SOCKET_TX_THRESHOLD = 13
+    let result = sc.sys_object_set_property(
+        h0,
+        13, // ZX_PROP_SOCKET_TX_THRESHOLD
+        0,  // null/bad buffer
+        core::mem::size_of::<u64>(),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, SetPropertyTxThresholdBufferTooSmallReturnsBufferTooSmall) — syscall level
+#[test]
+fn set_property_tx_threshold_buffer_too_small_returns_buffer_too_small() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let mut sc = ctx.syscall();
+
+    // ZX_PROP_SOCKET_TX_THRESHOLD = 13
+    let val: u32 = 0;
+    let result = sc.sys_object_set_property(
+        h0,
+        13, // ZX_PROP_SOCKET_TX_THRESHOLD
+        &val as *const _ as usize,
+        core::mem::size_of::<u32>(), // too small
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
+}
+
+/// C++: TEST(SocketTest, SetPropertyTxThresholdWrongTypeReturnsWrongType) — syscall level
+#[test]
+fn set_property_tx_threshold_wrong_type_returns_wrong_type() {
+    let ctx = TestContext::new();
+    let mut sc = ctx.syscall();
+
+    let vmo = zircon_object::vm::VmObject::new_paged(1);
+    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmo,
+        zircon_object::object::Rights::DEFAULT_VMO,
+    ));
+
+    let val: u64 = 0;
+    let result = sc.sys_object_set_property(
+        h,
+        13, // ZX_PROP_SOCKET_TX_THRESHOLD
+        &val as *const _ as usize,
+        core::mem::size_of::<u64>(),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
+}
+
+/// C++: TEST(SocketTest, DisableWriteBoth) — syscall level
+/// Disable writes on both endpoints via syscall.
+#[test]
+fn disable_write_both() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    // Write data on both before disabling
+    let mut actual: usize = 0;
+    sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(b"12345".as_ptr() as usize),
+        5,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+    sc.sys_socket_write(
+        h1,
+        0,
+        UserInPtr::from(b"abcdef".as_ptr() as usize),
+        6,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+
+    // Disable writes on both: disposition=1 (WRITE_DISABLED), peer_disposition=1
+    sc.sys_socket_set_disposition(h0, 1, 1).unwrap();
+
+    // Both should fail to write
+    let result = sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(b"fail".as_ptr() as usize),
+        4,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BAD_STATE);
+
+    let result = sc.sys_socket_write(
+        h1,
+        0,
+        UserInPtr::from(b"fail".as_ptr() as usize),
+        4,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BAD_STATE);
+
+    // Read buffered data
+    let mut buf = [0u8; 32];
+    sc.sys_socket_read(
+        h1,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        buf.len(),
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(actual, 5);
+    assert_eq!(&buf[..5], b"12345");
+
+    sc.sys_socket_read(
+        h0,
+        0,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        buf.len(),
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(actual, 6);
+    assert_eq!(&buf[..6], b"abcdef");
+}
