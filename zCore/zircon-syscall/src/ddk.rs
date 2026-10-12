@@ -174,8 +174,14 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let options = InterruptOptions::from_bits_truncate(options);
         let interrupt = if options.contains(InterruptOptions::VIRTUAL) {
-            if options != InterruptOptions::VIRTUAL {
+            // VIRTUAL may be combined with WAKE_VECTOR; reject other flags.
+            let allowed = InterruptOptions::VIRTUAL | InterruptOptions::WAKE_VECTOR;
+            if options & !allowed != InterruptOptions::empty() {
                 return Err(ZxError::INVALID_ARGS);
+            }
+            // WAKE_VECTOR requires a valid resource handle.
+            if options.contains(InterruptOptions::WAKE_VECTOR) {
+                proc.get_resource(resource)?;
             }
             Interrupt::new_virtual()
         } else {
