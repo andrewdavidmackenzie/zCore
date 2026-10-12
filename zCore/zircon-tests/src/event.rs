@@ -250,3 +250,43 @@ fn eventpair_user_signals() {
     assert!(!sig.contains(Signal::USER_SIGNAL_0));
     assert!(!sig.contains(Signal::USER_SIGNAL_7));
 }
+
+/// C++: TEST(EventPairTest, WaitAccessDeniedMissingWaitRight)
+/// Duplicating an eventpair handle without ZX_RIGHT_WAIT, then calling
+/// wait_one on it, should return ACCESS_DENIED.
+#[async_std::test]
+async fn wait_access_denied_missing_wait_right() {
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::{Handle, HandleValue, Rights};
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let (ep0, _ep1) = EventPair::create();
+
+    // Add the eventpair with full rights first.
+    let full_rights = Rights::BASIC | Rights::SIGNAL | Rights::SIGNAL_PEER;
+    let ep0_handle = ctx.proc.add_handle(Handle::new(ep0, full_rights));
+
+    // Duplicate with rights minus WAIT.
+    let reduced_rights = full_rights - Rights::WAIT;
+    let mut reduced_h: HandleValue = 0;
+    sc.sys_handle_duplicate(
+        ep0_handle,
+        reduced_rights.bits(),
+        UserOutPtr::from(&mut reduced_h as *mut _ as usize),
+    )
+    .unwrap();
+
+    // wait_one on the reduced handle should return ACCESS_DENIED.
+    let mut observed = Signal::empty();
+    let result = sc
+        .sys_object_wait_one(
+            reduced_h,
+            Signal::USER_SIGNAL_0.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            UserOutPtr::from(&mut observed as *mut _ as usize),
+        )
+        .await;
+    assert_eq!(result, Err(ZxError::ACCESS_DENIED));
+}

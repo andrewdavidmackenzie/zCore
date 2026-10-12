@@ -2978,3 +2978,119 @@ fn call_response_bigger_than_rd_num_bytes_returns_buffer_too_small() {
     assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
     panic!("TIMED_OUT");
 }
+
+/// C++: TEST(ChannelTest, CallWrittenBytesSmallerThanZxTxIdWithBadPointerReturnsInvalidArgs)
+/// When wr_num_bytes < sizeof(zx_txid_t) and the write pointer is bad,
+/// channel_call should still return INVALID_ARGS (the txid size check
+/// happens even if reading the message data would fail).
+#[test]
+fn call_written_bytes_smaller_than_zx_tx_id_with_bad_pointer_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, _ch1) = syscall_channel_create(&ctx);
+
+    let mut rd_buf = [0u8; 272]; // Message::kMaxSize equivalent
+    let mut rd_handles = [0u32; 10];
+    let args = TestChannelCallArgs {
+        wr_bytes: usize::MAX, // Bad pointer (reinterpret_cast<void*>(-1))
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 3, // sizeof(zx_txid_t) - 1 = 3
+        wr_num_handles: 0,
+        rd_num_bytes: rd_buf.len() as u32,
+        rd_num_handles: 0,
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_channel_call_noretry(
+        ch0,
+        0,
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+    ));
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, ReadEtcInvalidHandlesPointerReturnsInvalidArgs)
+/// Passing a bad pointer for handles to read_etc returns INVALID_ARGS.
+/// The message contains one handle — the kernel should detect the bad
+/// output pointer and reject the read.
+#[test]
+fn read_etc_invalid_handles_pointer_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let (ch0, ch1) = syscall_channel_create(&ctx);
+
+    // Create an event and send it through the channel.
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+
+    // Write a message with one handle.
+    let handles = [event_handle];
+    sc.sys_channel_write(
+        ch0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        UserInPtr::from(handles.as_ptr() as usize),
+        1,
+    )
+    .unwrap();
+
+    // Read with an invalid handle-info pointer (address 1).
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = sc.sys_channel_read(
+        ch1,
+        0,
+        UserOutPtr::from(0usize),
+        1usize, // bad handle-info pointer
+        0,
+        1,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        true, // read_etc = true
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(ChannelTest, WriteIovecUnboundedNonZeroReservedReturnsInvalidArgs)
+/// An iovec with a non-zero reserved field (in the "unbounded" range,
+/// i.e. index >= 16) should return INVALID_ARGS.
+#[test]
+fn write_iovec_unbounded_non_zero_reserved_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Build 20 iovecs, each with 1 byte of data, all reserved=0 except index 18.
+    let data = [0u8; 20];
+    // ChannelIovec layout: [buffer: usize, capacity: u32, reserved: u32]
+    let mut iovec_buf = Vec::new();
+    for i in 0..20u32 {
+        // buffer pointer
+        iovec_buf.extend_from_slice(&(data.as_ptr() as usize + i as usize).to_ne_bytes());
+        // capacity = 1
+        iovec_buf.extend_from_slice(&1u32.to_ne_bytes());
+        // reserved = 1 for index 18, 0 otherwise
+        let reserved = if i == 18 { 1u32 } else { 0u32 };
+        iovec_buf.extend_from_slice(&reserved.to_ne_bytes());
+    }
+
+    let result = sc.sys_channel_write(
+        h0,
+        2, // ZX_CHANNEL_WRITE_USE_IOVEC
+        UserInPtr::from(iovec_buf.as_ptr() as usize),
+        20, // 20 iovecs (unbounded path)
+        UserInPtr::from(0usize),
+        0,
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}

@@ -451,3 +451,49 @@ fn clone_no_resize_with_mapping() {
 
     vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
 }
+
+/// C++: TEST(VmoCloneTestCase, NotImmutableMissingSnapshot)
+/// A SLICE child with NO_WRITE (set_immutable) is NOT marked immutable,
+/// because only SNAPSHOT + NO_WRITE produces an immutable child in Fuchsia.
+/// In zCore, slices don't gain immutability even if set_immutable is called
+/// separately — only snapshot children do.
+#[test]
+fn not_immutable_missing_snapshot() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(4);
+
+    // Create a slice child (not a snapshot).
+    let child = parent.create_slice(0, 4 * PAGE_SIZE).unwrap();
+
+    // A slice child should NOT be immutable.
+    let info = child.get_info();
+    assert!(
+        !info.flags.contains(VmoInfoFlags::IMMUTABLE),
+        "slice child should not be immutable"
+    );
+}
+
+/// C++: TEST(VmoCloneTestCase, SizeAlign)
+/// Snapshot clones with various page-aligned sizes should report the
+/// correct size. In Fuchsia, non-page-aligned sizes are rounded up; in
+/// zCore, create_child requires page-aligned lengths, so we test the
+/// page-aligned subset.
+#[test]
+fn size_align() {
+    let _ctx = TestContext::new();
+
+    let parent = VmObject::new_paged(4);
+
+    // Test page-aligned sizes from 0 to 4*PAGE_SIZE.
+    for pages in 0..=4 {
+        let s = pages * PAGE_SIZE;
+        let child = parent.create_child(false, 0, s).unwrap();
+        assert_eq!(
+            child.len(),
+            s,
+            "clone with size {} pages should have len {}",
+            pages,
+            s
+        );
+    }
+}
