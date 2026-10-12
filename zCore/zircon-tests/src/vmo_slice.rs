@@ -3,9 +3,13 @@
 //! Mirrors VmoSliceTestCase from core-tests.
 
 use crate::helpers::TestContext;
+use alloc::sync::Arc;
+use zircon_object::dev::{BusTransactionInitiator, Iommu, IommuPerms};
 use zircon_object::object::{KernelObject, Signal};
-use zircon_object::vm::{VmObject, VmoInfoFlags, PAGE_SIZE};
+use zircon_object::vm::{VmObject, VmoInfoFlags, PAGE_SIZE, PAGE_SIZE_LOG2};
 use zircon_object::ZxError;
+
+extern crate alloc;
 
 /// Slice write-through: writes to slice visible in parent.
 #[test]
@@ -258,5 +262,101 @@ fn round_up_size() {
 
     // Create slice with sub-page size — should round up to PAGE_SIZE
     let slice = parent.create_slice(0, 1).unwrap();
+    assert_eq!(slice.len(), PAGE_SIZE);
+}
+
+// ── BTI-dependent VmoSlice tests (unblocked by #619 gap 4) ─────────
+
+/// Helper: create an IOMMU + BTI pair.
+fn create_iommu_bti() -> (Arc<Iommu>, Arc<BusTransactionInitiator>) {
+    let iommu = Iommu::create();
+    let bti = BusTransactionInitiator::create(iommu.clone(), 0);
+    (iommu, bti)
+}
+
+/// C++: TEST(VmoSliceTestCase, ChildSliceOfContiguousParentIsContiguous)
+/// Slice of a contiguous VMO should inherit the CONTIGUOUS flag.
+#[test]
+fn contiguous_parent_slice_is_contiguous() {
+    let _ctx = TestContext::new();
+
+    let parent = VmObject::new_contiguous(1, PAGE_SIZE_LOG2).unwrap();
+    assert!(parent.is_contiguous());
+
+    let slice = parent.create_slice(0, PAGE_SIZE).unwrap();
+
+    // The slice should report as contiguous.
+    let info = slice.get_info();
+    assert!(
+        info.flags.contains(VmoInfoFlags::CONTIGUOUS),
+        "slice of contiguous parent should have CONTIGUOUS flag"
+    );
+}
+
+/// C++: TEST(VmoSliceTestCase, Pin)
+/// Pin a slice via BTI, verify PMT lifecycle.
+#[test]
+fn pin_slice() {
+    let _ctx = TestContext::new();
+    let (_iommu, bti) = create_iommu_bti();
+
+    let parent = VmObject::new_paged(1);
+    parent.write(0, &[42u8]).unwrap(); // commit
+
+    let slice = parent.create_slice(0, PAGE_SIZE).unwrap();
+
+    // Pin the slice — should succeed (pins through to parent's pages).
+    let pmt = bti.pin(slice, 0, PAGE_SIZE, IommuPerms::PERM_READ).unwrap();
+    assert_ne!(pmt.id(), 0);
+    assert_eq!(bti.get_info().pmo_count, 1);
+
+    // Unpin.
+    pmt.unpin();
+    assert_eq!(bti.get_info().pmo_count, 0);
+}
+
+/// C++: TEST(VmoSliceTestCase, ParentContiguousVmoStaysPinnedWithoutHandle)
+/// Contiguous VMO pages survive parent handle close + zero op via slice.
+#[test]
+fn parent_contiguous_stays_pinned() {
+    let _ctx = TestContext::new();
+    let (_iommu, bti) = create_iommu_bti();
+
+    let parent = VmObject::new_contiguous(4, PAGE_SIZE_LOG2).unwrap();
+    parent.write(0, &[0xFFu8]).unwrap(); // commit first page
+
+    // Pin to get physical address, then unpin.
+    let pmt = bti
+        .pin(parent.clone(), 0, 4 * PAGE_SIZE, IommuPerms::PERM_READ)
+        .unwrap();
+    pmt.unpin();
+
+    // Create slice covering the full contiguous VMO.
+    let slice = parent.create_slice(0, 4 * PAGE_SIZE).unwrap();
+
+    // Drop parent handle — slice keeps the VMO alive.
+    drop(parent);
+
+    // Zero through the slice — should NOT decommit (contiguous VMO).
+    slice.zero(0, 4 * PAGE_SIZE).unwrap();
+
+    // Verify the data is zeroed.
+    let mut buf = [0xFFu8; 1];
+    slice.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0, "zero op should have zeroed the data");
+}
+
+/// C++: TEST(VmoSliceTestCase, RoundUpSizePhysical)
+/// Physical VMO slice with sub-page size rounds up.
+#[test]
+fn round_up_size_physical() {
+    let _ctx = TestContext::new();
+
+    // Physical VMOs are contiguous and report is_contiguous() == true,
+    // which bypasses the cache policy check in create_slice.
+    let physical = VmObject::new_physical(0x1000, 2);
+
+    // Create slice with sub-page size — should round up to PAGE_SIZE.
+    let slice = physical.create_slice(0, 1).unwrap();
     assert_eq!(slice.len(), PAGE_SIZE);
 }

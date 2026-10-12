@@ -41,6 +41,23 @@ When working on issue #21 (or any batch-fix task):
 - **Never ask "should I continue?"** — always continue unless the user
   explicitly says to stop.
 
+## Merging PRs
+- **NEVER merge a PR until ALL CI checks have completed and passed.**
+  No exceptions. Do not merge with checks still "in progress" or
+  "queued", even if key checks have passed. Wait for every single
+  check to show green.
+- **NEVER merge a PR with unaddressed code review comments.** Check
+  for comments from CodeRabbit and human reviewers before merging.
+  All actionable comments must be resolved.
+- When you have multiple PRs pending in CI, be careful that the merge
+  of an earlier PR may close the branch a later PR is based on,
+  causing closure of the PR and loss of work. Check that dependent
+  PRs are still open after merging, and reopen/recreate them if needed.
+- **NEVER force-push to fix rebases.** Instead, merge master into the
+  branch with a merge commit. Force-pushing rewrites history,
+  re-triggers all CI from scratch, and can cause dependent PRs to
+  show conflicts or close.
+
 ## Problem-solving principles
 - **Never silence errors or warnings without understanding the root cause.**
   Downgrading a log level or suppressing output is not a fix. Investigate

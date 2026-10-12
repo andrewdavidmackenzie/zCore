@@ -4,8 +4,12 @@
 //! Test names match the C++ originals exactly.
 
 use crate::helpers::TestContext;
+use alloc::sync::Arc;
 use zircon_object::object::{KernelObject, Signal};
-use zircon_object::vm::{VmObject, VmoInfoFlags, PAGE_SIZE};
+use zircon_object::signal::{Pager, Port};
+use zircon_object::vm::{Stream, VmObject, VmoInfoFlags, PAGE_SIZE};
+
+extern crate alloc;
 
 /// C++: TEST(VmoReference, Write)
 /// Reference sees parent writes and vice versa.
@@ -219,4 +223,183 @@ fn get_info() {
 
     let info = reference.get_info();
     assert!(!info.flags.contains(VmoInfoFlags::IS_COW_CLONE));
+}
+
+// ── MappingUpdate tests (using read/write instead of VMAR mapping) ──
+// The C++ tests use VMAR mapping; we verify the same semantics
+// through VmObject::read/write which tests the kernel object behavior.
+
+/// C++: TEST(VmoReference, MappingUpdate)
+/// Write to parent, decommit, reference reads zeros.
+#[test]
+fn mapping_update() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(1);
+    parent.write(0, &[0xAA]).unwrap();
+
+    let reference = parent.create_reference_slice(0, 0, false).unwrap();
+
+    // Reference sees parent data.
+    let mut buf = [0u8; 1];
+    reference.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA);
+
+    // Decommit from parent — data should become zero.
+    parent.decommit(0, PAGE_SIZE).unwrap();
+
+    // Reference should now read zeros.
+    reference.read(0, &mut buf).unwrap();
+    assert_eq!(
+        buf[0], 0,
+        "reference should read zeros after parent decommit"
+    );
+}
+
+/// C++: TEST(VmoReference, MappingUpdateAfterDroppingRef)
+/// Write to parent, create reference, drop reference, decommit parent.
+#[test]
+fn mapping_update_after_dropping_ref() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(1);
+    parent.write(0, &[0xAA]).unwrap();
+
+    let reference = parent.create_reference_slice(0, 0, false).unwrap();
+    let mut buf = [0u8; 1];
+    reference.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA);
+
+    // Drop the reference.
+    drop(reference);
+
+    // Decommit parent — should succeed without issues.
+    parent.decommit(0, PAGE_SIZE).unwrap();
+
+    // Parent reads zeros.
+    parent.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0);
+}
+
+/// C++: TEST(VmoReference, MappingUpdateAfterDroppingParent)
+/// Write to parent, create reference, drop parent, read reference.
+#[test]
+fn mapping_update_after_dropping_parent() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(1);
+    parent.write(0, &[0xAA]).unwrap();
+
+    let reference = parent.create_reference_slice(0, 0, false).unwrap();
+
+    // Drop parent — reference keeps data alive.
+    drop(parent);
+
+    // Reference should still see the data.
+    let mut buf = [0u8; 1];
+    reference.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA);
+}
+
+/// C++: TEST(VmoReference, MappingUpdateNestedChildDestroy)
+/// Nested references: destroy inner ref, verify outer still works.
+#[test]
+fn mapping_update_nested_child_destroy() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(1);
+    parent.write(0, &[0xAA]).unwrap();
+
+    let ref1 = parent.create_reference_slice(0, 0, false).unwrap();
+    let ref2 = ref1.create_reference_slice(0, 0, false).unwrap();
+
+    // Both refs see data.
+    let mut buf = [0u8; 1];
+    ref2.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA);
+
+    // Destroy inner ref.
+    drop(ref2);
+
+    // Outer ref still works.
+    ref1.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA);
+
+    // Decommit through parent.
+    parent.decommit(0, PAGE_SIZE).unwrap();
+
+    // Outer ref reads zeros.
+    ref1.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0, "ref1 should read zeros after parent decommit");
+}
+
+/// C++: TEST(VmoReference, MappingUpdateNestedRootDestroy)
+/// Nested references: destroy root parent, verify refs still work.
+#[test]
+fn mapping_update_nested_root_destroy() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(1);
+    parent.write(0, &[0xAA]).unwrap();
+
+    let ref1 = parent.create_reference_slice(0, 0, false).unwrap();
+    let ref2 = ref1.create_reference_slice(0, 0, false).unwrap();
+
+    // Drop root parent.
+    drop(parent);
+
+    // Both refs still see data.
+    let mut buf = [0u8; 1];
+    ref1.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA);
+    ref2.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA);
+}
+
+// ── Stream + pager-backed reference tests ───────────────────────────
+
+/// C++: TEST(VmoReference, Streams)
+/// Stream can be created on a reference VMO.
+#[test]
+fn streams() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged_with_resizable(true, 2);
+    parent.set_content_size(2 * PAGE_SIZE).unwrap();
+    parent.write(0, &[0xAA; 8]).unwrap();
+
+    let reference = parent.create_reference_slice(0, 0, false).unwrap();
+
+    // Create a stream on the reference.
+    // mode 0x3 = read + write
+    let stream = Stream::create(reference.clone(), 0, 0x3);
+
+    // Read from stream — should see parent data.
+    let mut buf = [0u8; 8];
+    let bytes_read = stream.read(&mut buf).unwrap();
+    assert_eq!(bytes_read, 8);
+    assert_eq!(buf, [0xAA; 8]);
+}
+
+/// C++: TEST(VmoReference, UnsupportedChild)
+/// Pager-backed reference: verify that creating snapshot children fails.
+#[test]
+fn unsupported_child() {
+    let _ctx = TestContext::new();
+    let pager = Pager::new();
+    let port = Port::new(0).unwrap();
+
+    // Create pager-backed VMO.
+    let pager_vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    // Supply a page so it's committed.
+    let src = VmObject::new_paged(1);
+    src.write(0, &[0xAA]).unwrap();
+    pager
+        .supply_pages(&pager_vmo, 0, PAGE_SIZE as u64, &src, 0)
+        .unwrap();
+
+    // Create reference of the pager-backed VMO.
+    let reference = pager_vmo.create_reference_slice(0, 0, false).unwrap();
+
+    // Creating a snapshot child of a pager-backed reference should fail.
+    let result = reference.create_child(false, 0, PAGE_SIZE);
+    assert!(
+        result.is_err(),
+        "snapshot child of pager-backed reference should fail"
+    );
 }
