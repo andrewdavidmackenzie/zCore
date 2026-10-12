@@ -625,3 +625,100 @@ fn related_koid_becomes_zero_on_peer_close() {
     drop(remote);
     assert_eq!(local.related_koid(), 0);
 }
+
+/// C++: TEST(ChannelTest, WaitManyIsSignaledForBothWrites)
+/// When both endpoints have messages, both should be READABLE.
+#[test]
+fn wait_many_is_signaled_for_both_writes() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Channel::create();
+
+    // Write from local to remote, and from remote to local.
+    local
+        .write(MessagePacket {
+            data: vec![1],
+            handles: Vec::new(),
+        })
+        .unwrap();
+    remote
+        .write(MessagePacket {
+            data: vec![2],
+            handles: Vec::new(),
+        })
+        .unwrap();
+
+    // Both endpoints should now be READABLE.
+    assert!(local.signal().contains(Signal::READABLE));
+    assert!(remote.signal().contains(Signal::READABLE));
+
+    // Both should still be WRITABLE.
+    assert!(local.signal().contains(Signal::WRITABLE));
+    assert!(remote.signal().contains(Signal::WRITABLE));
+}
+
+/// C++: TEST(ChannelTest, ReadMayDiscardWithSmallerBufferDiscardHandlesAndDateReturnsBufferTooSmall)
+/// When check_and_read's checker rejects a message due to insufficient buffer,
+/// the message is preserved (at the object level, no MAY_DISCARD flag).
+#[test]
+fn read_may_discard_with_smaller_buffer() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Channel::create();
+
+    // Write a message with data and a handle.
+    let event = Event::new();
+    local
+        .write(MessagePacket {
+            data: vec![0xAA; 32],
+            handles: vec![Handle::new(event, Rights::DEFAULT_EVENT)],
+        })
+        .unwrap();
+
+    // Simulate a "smaller buffer" read by rejecting via check_and_read.
+    let result = remote.check_and_read(|msg| {
+        // Caller's buffer is "too small" for the message's data.
+        assert_eq!(msg.data.len(), 32);
+        assert_eq!(msg.handles.len(), 1);
+        Err(ZxError::BUFFER_TOO_SMALL)
+    });
+    assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
+
+    // Message should still be in the queue — READABLE still set.
+    assert!(remote.signal().contains(Signal::READABLE));
+    let msg = remote.read().unwrap();
+    assert_eq!(msg.data.len(), 32);
+    assert_eq!(msg.handles.len(), 1);
+}
+
+/// C++: TEST(ChannelTest, ReadMayDiscardWithZeroSizeBuffersDiscardHandlesAndDataReturnsBufferTooSmall)
+/// When check_and_read rejects a non-empty message with zero-size buffers,
+/// BUFFER_TOO_SMALL is returned and the message is preserved.
+#[test]
+fn read_may_discard_with_zero_size_buffers() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Channel::create();
+
+    // Write a message with data and a handle.
+    let event = Event::new();
+    local
+        .write(MessagePacket {
+            data: vec![0xBB; 16],
+            handles: vec![Handle::new(event, Rights::DEFAULT_EVENT)],
+        })
+        .unwrap();
+
+    // Reject with zero-size buffers.
+    let result = remote.check_and_read(|msg| {
+        // "Zero-size" buffers cannot accommodate anything.
+        if !msg.data.is_empty() || !msg.handles.is_empty() {
+            return Err(ZxError::BUFFER_TOO_SMALL);
+        }
+        Ok(())
+    });
+    assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
+
+    // Message is still queued.
+    assert!(remote.signal().contains(Signal::READABLE));
+    let msg = remote.read().unwrap();
+    assert_eq!(msg.data, vec![0xBB; 16]);
+    assert_eq!(msg.handles.len(), 1);
+}

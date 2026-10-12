@@ -259,3 +259,93 @@ fn replace_failure_both_invalid() {
     // The source handle remains valid.
     sc.sys_handle_check_valid(h).unwrap();
 }
+
+/// C++: TEST(HandleTest, CloseBadHandle) — syscall level
+/// Closing a non-existent (but non-zero) handle fails.
+#[test]
+fn close_bad_handle_syscall() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // A non-zero, non-existent handle should fail
+    let result = sc.sys_handle_close(0xDEAD_BEEF);
+    assert!(result.is_err());
+}
+
+/// C++: TEST(HandleTest, DuplicateInvalidHandle) — syscall level
+/// Duplicating a non-existent handle fails.
+#[test]
+fn duplicate_invalid_handle_syscall() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let mut h2: HandleValue = 0;
+    let result = sc.sys_handle_duplicate(
+        0xDEAD_BEEF,
+        Rights::SAME_RIGHTS.bits(),
+        UserOutPtr::from(&mut h2 as *mut _ as usize),
+    );
+    assert!(result.is_err());
+    assert_eq!(h2, 0, "output handle should not be written on failure");
+}
+
+/// C++: TEST(HandleTest, DuplicateSameRights) — syscall level
+/// Duplicating with SAME_RIGHTS preserves the original rights.
+#[test]
+fn duplicate_same_rights_syscall() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let (ch, _) = Channel::create();
+    let original_rights = Rights::READ | Rights::WRITE | Rights::DUPLICATE;
+    let h = ctx.proc.add_handle(Handle::new(ch, original_rights));
+
+    let mut h2: HandleValue = 0;
+    sc.sys_handle_duplicate(
+        h,
+        Rights::SAME_RIGHTS.bits(),
+        UserOutPtr::from(&mut h2 as *mut _ as usize),
+    )
+    .unwrap();
+    assert_ne!(h2, 0);
+
+    // New handle should have the same rights as the original
+    let (_, rights) = ctx.proc.get_object_and_rights::<Channel>(h2).unwrap();
+    assert_eq!(rights, original_rights);
+}
+
+/// C++: TEST(HandleTest, ReplaceBadHandle) — syscall level
+/// Replacing a non-existent handle fails.
+#[test]
+fn replace_bad_handle_syscall() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let mut h2: HandleValue = 0;
+    let result = sc.sys_handle_replace(
+        0xDEAD_BEEF,
+        Rights::READ.bits(),
+        UserOutPtr::from(&mut h2 as *mut _ as usize),
+    );
+    assert!(result.is_err());
+}
+
+/// C++: TEST(HandleTest, ReplaceInvalidRights) — syscall level
+/// Replace with rights that exceed the original handle's rights fails.
+#[test]
+fn replace_invalid_rights_syscall() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    let (ch, _) = Channel::create();
+    // Only READ right
+    let h = ctx.proc.add_handle(Handle::new(ch, Rights::READ));
+
+    let mut h2: HandleValue = 0;
+    let result = sc.sys_handle_replace(
+        h,
+        (Rights::READ | Rights::WRITE).bits(),
+        UserOutPtr::from(&mut h2 as *mut _ as usize),
+    );
+    assert!(result.is_err());
+}

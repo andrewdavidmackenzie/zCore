@@ -92,6 +92,9 @@ mod exception;
 mod pager;
 
 #[cfg(test)]
+mod debuglog;
+
+#[cfg(test)]
 mod skipped;
 
 #[cfg(test)]
@@ -120,6 +123,9 @@ mod syscall_task;
 
 #[cfg(test)]
 mod syscall_vmo;
+
+#[cfg(test)]
+mod object_info;
 
 #[cfg(test)]
 mod vmo_transfer_data;

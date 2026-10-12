@@ -177,3 +177,92 @@ fn port_cancel_by_key_not_found() {
     // No subscriptions exist — should return NOT_FOUND
     assert_eq!(port.cancel_by_key(999).unwrap_err(), ZxError::NOT_FOUND);
 }
+
+/// C++: TEST(PortTest, QueueWaitVerifyUserPacket)
+/// Queue a user packet, dequeue it, and verify all fields round-trip.
+#[async_std::test]
+async fn port_queue_wait_verify_user_packet() {
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+
+    let mut payload = [0u8; 32];
+    for (i, byte) in payload.iter_mut().enumerate() {
+        *byte = i as u8;
+    }
+    let packet = PortPacketRepr {
+        key: 0xDEAD_BEEF,
+        status: ZxError::OK,
+        data: PayloadRepr::User(payload),
+    };
+    port.push_user(PortPacket::from(packet)).unwrap();
+
+    let received = port.wait().await;
+    let repr = PortPacketRepr::from(&received);
+    assert_eq!(repr.key, 0xDEAD_BEEF);
+    assert_eq!(repr.status, ZxError::OK);
+    if let PayloadRepr::User(data) = repr.data {
+        for (i, &byte) in data.iter().enumerate() {
+            assert_eq!(byte, i as u8, "payload byte {} mismatch", i);
+        }
+    } else {
+        panic!("expected User payload");
+    }
+}
+
+/// C++: TEST(PortTest, QueueAndClose)
+/// Packets are lost when the port is dropped.
+#[test]
+fn port_queue_and_close() {
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+
+    for i in 0..10u64 {
+        let packet = PortPacketRepr {
+            key: i,
+            status: ZxError::OK,
+            data: PayloadRepr::User([0; 32]),
+        };
+        port.push_user(PortPacket::from(packet)).unwrap();
+    }
+
+    // Drop the only Arc — packets are gone with the port.
+    // (No way to observe them after drop; this test verifies no panic.)
+    drop(port);
+}
+
+/// C++: TEST(PortTest, AsyncWaitChannel)
+/// wait_async on a channel: write to the channel, then dequeue the
+/// signal packet from the port.
+#[async_std::test]
+async fn port_async_wait_channel() {
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+    let (ch0, ch1) = zircon_object::ipc::Channel::create();
+
+    use zircon_object::ipc::MessagePacket;
+    use zircon_object::object::Signal;
+
+    // Register async wait for READABLE on ch0, delivered to port with key 77.
+    let ch0_obj = ch0.clone() as std::sync::Arc<dyn KernelObject>;
+    ch0_obj
+        .send_signal_to_port_async(Signal::READABLE, &port, 77, false)
+        .unwrap();
+
+    // Write to ch1 — this makes ch0 READABLE.
+    ch1.write(MessagePacket {
+        data: vec![1, 2, 3],
+        handles: Vec::new(),
+    })
+    .unwrap();
+
+    // Dequeue the signal packet.
+    let received = port.wait().await;
+    let repr = PortPacketRepr::from(&received);
+    assert_eq!(repr.key, 77);
+    assert_eq!(repr.status, ZxError::OK);
+    if let PayloadRepr::Signal(sig) = repr.data {
+        assert!(sig.observed.contains(Signal::READABLE));
+    } else {
+        panic!("expected Signal payload");
+    }
+}

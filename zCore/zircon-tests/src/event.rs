@@ -217,3 +217,40 @@ fn signal_self_after_peer_closed() {
     assert!(sig.contains(Signal::PEER_CLOSED));
     assert!(sig.contains(Signal::USER_SIGNAL_0));
 }
+
+/// C++: TEST(EventPairTest, UserSignals)
+///
+/// All eight USER_SIGNAL bits (0..7) can be independently set and
+/// cleared on an eventpair endpoint.
+#[test]
+fn eventpair_user_signals() {
+    let _ctx = TestContext::new();
+    let (ep0, _ep1) = EventPair::create();
+
+    // Set all user signals
+    let all_user = Signal::USER_SIGNAL_0
+        | Signal::USER_SIGNAL_1
+        | Signal::USER_SIGNAL_2
+        | Signal::USER_SIGNAL_3
+        | Signal::USER_SIGNAL_4
+        | Signal::USER_SIGNAL_5
+        | Signal::USER_SIGNAL_6
+        | Signal::USER_SIGNAL_7;
+    ep0.signal_set(all_user);
+    let sig = ep0.signal();
+    assert!(sig.contains(Signal::USER_SIGNAL_0));
+    assert!(sig.contains(Signal::USER_SIGNAL_7));
+
+    // Clear just USER_SIGNAL_3
+    ep0.signal_clear(Signal::USER_SIGNAL_3);
+    let sig = ep0.signal();
+    assert!(sig.contains(Signal::USER_SIGNAL_0));
+    assert!(!sig.contains(Signal::USER_SIGNAL_3));
+    assert!(sig.contains(Signal::USER_SIGNAL_4));
+
+    // Clear all remaining
+    ep0.signal_clear(all_user);
+    let sig = ep0.signal();
+    assert!(!sig.contains(Signal::USER_SIGNAL_0));
+    assert!(!sig.contains(Signal::USER_SIGNAL_7));
+}

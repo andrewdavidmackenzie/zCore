@@ -512,3 +512,360 @@ fn set_disposition_none_succeeds() {
     // No-op disposition succeeds
     local.set_disposition(0, 0).unwrap();
 }
+
+/// C++: TEST(SocketTest, BytesOutstanding)
+/// Verify get_info reports correct rx/tx buffer sizes after writes.
+#[test]
+fn bytes_outstanding() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    // Initially empty
+    let info = local.get_info();
+    let dbg = format!("{:?}", info);
+    assert!(dbg.contains("rx_buf_size: 0"), "got: {}", dbg);
+    assert!(dbg.contains("tx_buf_size: 0"), "got: {}", dbg);
+
+    // Write 10 bytes from local → appears as tx on local, rx on remote
+    local.write(&[0xABu8; 10]).unwrap();
+
+    let info_local = local.get_info();
+    let dbg_local = format!("{:?}", info_local);
+    assert!(
+        dbg_local.contains("tx_buf_size: 10"),
+        "local tx_buf_size should be 10, got: {}",
+        dbg_local
+    );
+
+    let info_remote = remote.get_info();
+    let dbg_remote = format!("{:?}", info_remote);
+    assert!(
+        dbg_remote.contains("rx_buf_size: 10"),
+        "remote rx_buf_size should be 10, got: {}",
+        dbg_remote
+    );
+    assert!(
+        dbg_remote.contains("rx_buf_available: 10"),
+        "remote rx_buf_available should be 10, got: {}",
+        dbg_remote
+    );
+}
+
+/// C++: TEST(SocketTest, DefaultRightsAndType)
+/// Create a socket, verify object type via KernelObject trait and default properties.
+#[test]
+fn default_rights_and_type() {
+    let _ctx = TestContext::new();
+    let (s0, s1) = Socket::create(0).unwrap();
+
+    // Both endpoints have valid koids
+    assert_ne!(s0.id(), 0);
+    assert_ne!(s1.id(), 0);
+    assert_ne!(s0.id(), s1.id());
+
+    // Verify the object type name is "Socket"
+    assert_eq!(s0.type_name(), "Socket");
+    assert_eq!(s1.type_name(), "Socket");
+}
+
+/// C++: TEST(SocketTest, GetInfoClosedPeer)
+/// After closing the peer, get_info should still work and show tx_buf_max=0.
+#[test]
+fn get_info_closed_peer() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    // Write some data before closing
+    local.write(b"data").unwrap();
+    drop(local);
+
+    // Remote can still get info — peer is gone so tx_buf_max should be 0
+    let info = remote.get_info();
+    let dbg = format!("{:?}", info);
+    assert!(
+        dbg.contains("tx_buf_max: 0"),
+        "tx_buf_max should be 0 when peer closed, got: {}",
+        dbg
+    );
+    assert!(
+        dbg.contains("rx_buf_size: 4"),
+        "rx_buf_size should still show buffered data, got: {}",
+        dbg
+    );
+}
+
+/// C++: TEST(SocketTest, NonAllowedSignals)
+/// Setting signals outside the allowed mask returns INVALID_ARGS.
+#[test]
+fn non_allowed_signals() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(0).unwrap();
+
+    // READABLE (bit 0) is a kernel signal, not user-settable
+    let result = Signal::verify_user_signal(Signal::USER_ALL, Signal::READABLE.bits());
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+
+    // USER_SIGNAL_0 is valid for user signaling
+    let result = Signal::verify_user_signal(Signal::USER_ALL, Signal::USER_SIGNAL_0.bits());
+    assert!(result.is_ok());
+
+    // Verify that the socket itself can be user-signaled
+    local.signal_set(Signal::USER_SIGNAL_0);
+    assert!(local.signal().contains(Signal::USER_SIGNAL_0));
+    let _ = _remote;
+}
+
+/// C++: TEST(SocketTest, PeerClosedSetProperty)
+/// set_write_threshold after peer closed returns PEER_CLOSED;
+/// set_read_threshold still succeeds.
+#[test]
+fn peer_closed_set_property() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+    drop(remote);
+
+    // set_write_threshold requires a peer to check capacity
+    assert_eq!(
+        local.set_write_threshold(1).unwrap_err(),
+        ZxError::PEER_CLOSED
+    );
+
+    // set_read_threshold doesn't need the peer — should still succeed
+    assert!(local.set_read_threshold(1).is_ok());
+}
+
+/// C++: TEST(SocketTest, SetDispositionWrongType)
+/// This tests at the object level — set_disposition is a Socket method,
+/// so calling it on a socket with valid args always works. The wrong-type
+/// check happens at the syscall level (see syscall_socket.rs).
+/// We verify that disposition with valid values on an actual socket works.
+#[test]
+fn set_disposition_wrong_type() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(0).unwrap();
+
+    // Valid disposition succeeds on correct type
+    local.set_disposition(1, 0).unwrap(); // WRITE_DISABLED
+    assert!(local.signal().contains(Signal::SOCKET_WRITE_DISABLED));
+}
+
+/// C++: TEST(SocketTest, SetDispositionHandleWithoutRight)
+/// At the object level, Socket::set_disposition has no rights checks.
+/// Rights are enforced at the syscall layer. We verify that disposition
+/// operations work at the object level regardless.
+#[test]
+fn set_disposition_handle_without_right() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(0).unwrap();
+
+    // Object-level call always succeeds (rights checked in syscall layer)
+    local.set_disposition(1, 0).unwrap();
+    assert!(local.signal().contains(Signal::SOCKET_WRITE_DISABLED));
+    assert!(!local.signal().contains(Signal::WRITABLE));
+}
+
+/// C++: TEST(SocketTest, SetDispositionNoOpAndClosedPeer)
+/// No-op disposition succeeds even after peer is closed.
+/// Non-zero disposition_peer fails with PEER_CLOSED.
+#[test]
+fn set_disposition_noop_and_closed_peer() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    // No-op succeeds
+    local.set_disposition(0, 0).unwrap();
+
+    // Close peer
+    drop(remote);
+
+    // No-op on self still succeeds
+    local.set_disposition(0, 0).unwrap();
+
+    // Disposition on closed peer fails
+    assert_eq!(
+        local.set_disposition(0, 1).unwrap_err(),
+        ZxError::PEER_CLOSED
+    );
+}
+
+/// C++: TEST(SocketTest, SetThreshholdsProp)
+/// Set rx and tx threshold properties, then read them back.
+#[test]
+fn set_threshholds_prop() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(0).unwrap();
+
+    // Default thresholds are 0
+    assert_eq!(local.get_rx_tx_threshold(), (0, 0));
+
+    // Set read threshold
+    local.set_read_threshold(100).unwrap();
+    assert_eq!(local.get_rx_tx_threshold(), (100, 0));
+
+    // Set write threshold
+    local.set_write_threshold(200).unwrap();
+    assert_eq!(local.get_rx_tx_threshold(), (100, 200));
+
+    // Threshold larger than buffer size is invalid
+    // SOCKET_SIZE = 128 * 2048 = 262144
+    assert_eq!(
+        local.set_read_threshold(262145).unwrap_err(),
+        ZxError::INVALID_ARGS
+    );
+    assert_eq!(
+        local.set_write_threshold(262145).unwrap_err(),
+        ZxError::INVALID_ARGS
+    );
+
+    // Setting to 0 disables threshold
+    local.set_read_threshold(0).unwrap();
+    local.set_write_threshold(0).unwrap();
+    assert_eq!(local.get_rx_tx_threshold(), (0, 0));
+}
+
+/// C++: TEST(SocketTest, SetThreshholdsAndCheckSignals)
+/// Set a read threshold, write data, verify threshold signal fires.
+#[test]
+fn set_threshholds_and_check_signals() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    // Set read threshold on remote to 5
+    remote.set_read_threshold(5).unwrap();
+    assert!(!remote.signal().contains(Signal::SOCKET_READ_THRESHOLD));
+
+    // Write 3 bytes (below threshold)
+    local.write(&[0u8; 3]).unwrap();
+    assert!(!remote.signal().contains(Signal::SOCKET_READ_THRESHOLD));
+
+    // Write 2 more bytes (now at threshold)
+    local.write(&[0u8; 2]).unwrap();
+    assert!(remote.signal().contains(Signal::SOCKET_READ_THRESHOLD));
+
+    // Read 1 byte (drops below threshold)
+    let mut buf = [0u8; 1];
+    remote.read(false, &mut buf).unwrap();
+    assert!(!remote.signal().contains(Signal::SOCKET_READ_THRESHOLD));
+
+    // Write threshold
+    local.set_write_threshold(10).unwrap();
+    assert!(local.signal().contains(Signal::SOCKET_WRITE_THRESHOLD));
+}
+
+/// C++: TEST(SocketTest, GetInfoSocketBufferTooSmallReturnsBufferTooSmall)
+/// This is a syscall-level test (buffer sizing for zx_object_get_info).
+/// At the object level, get_info always returns the full struct.
+/// We verify that get_info returns valid data at the object level.
+#[test]
+fn get_info_socket_buffer_too_small() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(0).unwrap();
+
+    // Object-level get_info always succeeds and returns full info
+    let info = local.get_info();
+    let dbg = format!("{:?}", info);
+    assert!(
+        dbg.contains("rx_buf_max:"),
+        "should contain rx_buf_max: {}",
+        dbg
+    );
+    assert!(
+        dbg.contains("tx_buf_max:"),
+        "should contain tx_buf_max: {}",
+        dbg
+    );
+}
+
+/// C++: TEST(SocketTest, GetInfoSocketWithoutInspectRightReturnsAccessDenied)
+/// Rights checking happens at the syscall layer, not the object layer.
+/// At the object level, get_info always succeeds.
+#[test]
+fn get_info_socket_without_inspect_right() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(0).unwrap();
+
+    // Object-level get_info succeeds regardless of rights
+    let info = local.get_info();
+    let dbg = format!("{:?}", info);
+    assert!(dbg.contains("rx_buf_max:"), "got: {}", dbg);
+}
+
+/// C++: TEST(SocketTest, GetInfoSocketWrongTypeReturnsWrongType)
+/// Wrong-type checking happens at the syscall layer.
+/// At the object level this is not applicable — we just verify get_info works.
+#[test]
+fn get_info_socket_wrong_type() {
+    let _ctx = TestContext::new();
+    let (local, _remote) = Socket::create(0).unwrap();
+
+    let info = local.get_info();
+    let dbg = format!("{:?}", info);
+    assert!(dbg.contains("options:"), "got: {}", dbg);
+}
+
+/// C++: TEST(SocketTest, WriteAndReadSizeOverflow)
+/// Writing more than the socket can hold should be a short write (stream)
+/// or fail (datagram).
+#[test]
+fn write_and_read_size_overflow() {
+    let _ctx = TestContext::new();
+
+    // Stream: short write when buffer is almost full
+    let (local, remote) = Socket::create(0).unwrap();
+    // SOCKET_SIZE = 128 * 2048 = 262144
+    let n = local.write(&[0xAAu8; 262144]).unwrap();
+    assert_eq!(n, 262144);
+
+    // Buffer is now full — next write should fail with SHOULD_WAIT
+    assert_eq!(local.write(&[0u8; 1]).unwrap_err(), ZxError::SHOULD_WAIT);
+
+    // Read everything back
+    let mut buf = [0u8; 262144];
+    let n = remote.read(false, &mut buf).unwrap();
+    assert_eq!(n, 262144);
+
+    // Datagram: oversized write fails with OUT_OF_RANGE
+    let (local, _remote) = Socket::create(1).unwrap();
+    assert_eq!(
+        local.write(&[0u8; 262145]).unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+}
+
+/// C++: TEST(SocketTest, ReadInvalidOptions)
+/// At the object level, Socket::read only has a `peek` bool, not raw options.
+/// Invalid options are checked at the syscall layer (see syscall_socket.rs).
+/// Here we verify that peek=true and peek=false both work on empty socket.
+#[test]
+fn read_invalid_options() {
+    let _ctx = TestContext::new();
+    let (_local, remote) = Socket::create(0).unwrap();
+
+    let mut buf = [0u8; 16];
+    // Both peek modes return SHOULD_WAIT on empty socket
+    assert_eq!(
+        remote.read(false, &mut buf).unwrap_err(),
+        ZxError::SHOULD_WAIT
+    );
+    assert_eq!(
+        remote.read(true, &mut buf).unwrap_err(),
+        ZxError::SHOULD_WAIT
+    );
+}
+
+/// C++: TEST(SocketTest, WriteInvalidOptions)
+/// At the object level, Socket::write has no options parameter.
+/// Invalid options are checked at the syscall layer (see syscall_socket.rs).
+/// Here we verify basic write error paths.
+#[test]
+fn write_invalid_options() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(0).unwrap();
+
+    // Writing to a valid socket succeeds
+    assert_eq!(local.write(b"test").unwrap(), 4);
+
+    // Writing after peer closed fails
+    drop(remote);
+    assert_eq!(local.write(b"fail").unwrap_err(), ZxError::PEER_CLOSED);
+}

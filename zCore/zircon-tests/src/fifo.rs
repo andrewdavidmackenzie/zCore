@@ -293,3 +293,50 @@ fn user_signals_and_signal_peer() {
     assert!(fb.signal().contains(Signal::USER_SIGNAL_1));
     assert!(!fa.signal().contains(Signal::USER_SIGNAL_1));
 }
+
+/// C++: TEST(FifoTest, ZeroSizeCount)
+/// Creating a FIFO with 0 count at the syscall level fails.
+/// At the object level, Fifo::create does not validate — this is tested
+/// in syscall_fifo.rs (create_zero_size / invalid_parameters).
+/// Here we verify the object still works if count=0 (degenerate case).
+#[test]
+fn zero_size_count() {
+    let _ctx = TestContext::new();
+    let (fa, _fb) = Fifo::create(0, 4); // zero count
+
+    // Cannot write anything (queue capacity is 0)
+    let data = [0u8; 4];
+    let err = fa.write(4, &data, 1).unwrap_err();
+    // Full queue returns SHOULD_WAIT (no space), same as trying to
+    // write into a capacity-0 queue.
+    assert!(err == ZxError::SHOULD_WAIT || err == ZxError::OUT_OF_RANGE);
+}
+
+/// C++: TEST(FifoTest, InvalidElemSize)
+/// Creating a FIFO with 0 elem_size at the syscall level fails.
+/// At the object level, Fifo::create does not validate — this is tested
+/// in syscall_fifo.rs (invalid_parameters).
+/// Here we verify the object API returns an error when elem_size=0.
+#[test]
+fn invalid_elem_size() {
+    let _ctx = TestContext::new();
+    let (fa, _fb) = Fifo::create(16, 0); // zero elem_size
+
+    // Writing with elem_size=0 should fail
+    let err = fa.write(0, &[], 0).unwrap_err();
+    assert_eq!(err, ZxError::OUT_OF_RANGE);
+}
+
+/// C++: TEST(FifoTest, PeerClosedReadReturnsPeerClosed)
+/// Reading from a FIFO whose peer is closed and buffer is empty
+/// returns PEER_CLOSED immediately.
+#[test]
+fn peer_closed_read_returns_peer_closed() {
+    let _ctx = TestContext::new();
+    let (fa, fb) = Fifo::create(16, 4);
+    drop(fa);
+
+    // No data was written — reading should get PEER_CLOSED
+    let mut buf = [0u8; 4];
+    assert_eq!(fb.read(4, &mut buf, 1).unwrap_err(), ZxError::PEER_CLOSED);
+}

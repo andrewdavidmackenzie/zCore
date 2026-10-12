@@ -523,6 +523,163 @@ fn invalid_handles() {
     );
 }
 
+/// C++: TEST(SocketTest, StreamReadIntoBadBuffer) — syscall level
+/// Reading into a null pointer with non-zero count returns INVALID_ARGS.
+#[test]
+fn stream_read_into_bad_buffer() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    // Write some data so read has something to return
+    let mut actual: usize = 0;
+    sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(b"data".as_ptr() as usize),
+        4,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+
+    // Read into null buffer with non-zero count
+    let result = sc.sys_socket_read(
+        h1,
+        0,
+        UserOutPtr::from(0usize), // null buffer
+        16,                       // non-zero count
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, StreamWriteBadBufferIntoExistingBufferReturnsInvalidArgs) — syscall level
+/// Writing from a null pointer with non-zero count returns INVALID_ARGS.
+#[test]
+fn stream_write_bad_buffer_into_existing_buffer_returns_invalid_args() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(0usize), // null buffer
+        10,                      // non-zero count
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, WriteFromBadBuffer) — syscall level
+/// Writing from a null pointer with non-zero count returns INVALID_ARGS.
+#[test]
+fn write_from_bad_buffer() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(0usize), // null/bad buffer
+        4,                       // non-zero count
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, WriteFromNullBuffer) — syscall level
+/// Writing from a null pointer with non-zero count returns INVALID_ARGS.
+#[test]
+fn write_from_null_buffer() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(0usize), // null
+        8,                       // non-zero
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, WriteFromPartialBadBuffer) — syscall level
+/// Writing from a null pointer with any non-zero count returns INVALID_ARGS.
+#[test]
+fn write_from_partial_bad_buffer() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(0usize), // null
+        1,                       // even 1 byte from null is invalid
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, ReadIntoNullBuffer) — syscall level
+/// Reading into a null buffer with non-zero count returns INVALID_ARGS.
+#[test]
+fn read_into_null_buffer() {
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    // Write data so read has something
+    let mut actual: usize = 0;
+    sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(b"hello".as_ptr() as usize),
+        5,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+
+    // Read into null buffer
+    let result = sc.sys_socket_read(
+        h1,
+        0,
+        UserOutPtr::from(0usize), // null
+        32,                       // non-zero
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
+
+/// C++: TEST(SocketTest, WriteZeroBytesNullBuffer) — syscall level
+/// A zero-length write with a null buffer pointer succeeds for stream sockets.
+#[test]
+fn write_zero_bytes_null_buffer() {
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_socket_create(&ctx, 0);
+    let sc = ctx.syscall();
+
+    let mut actual: usize = 0;
+    let result = sc.sys_socket_write(
+        h0,
+        0,
+        UserInPtr::from(0usize), // null buffer
+        0,                       // zero-length
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    );
+    // Stream: zero-length write with null buffer succeeds
+    assert!(result.is_ok());
+    assert_eq!(actual, 0);
+}
+
 /// C++: TEST(SocketTest, SetDispositionNoOpAndClosedPeer) — syscall level
 #[test]
 fn set_disposition_noop_and_closed_peer() {
