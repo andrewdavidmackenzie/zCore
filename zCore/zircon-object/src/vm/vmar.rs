@@ -2278,38 +2278,24 @@ mod tests {
         );
     }
 
+    /// Magic value for aliased mapping tests.
+    #[cfg(not(target_os = "macos"))]
+    const MAGIC: usize = 0xdead_beaf;
+
     #[test]
     #[allow(unsafe_code)]
     fn map() {
-        use std::io::Write;
-        macro_rules! dbg_step {
-            ($($arg:tt)*) => {{
-                let _ = writeln!(std::io::stderr(), $($arg)*);
-                let _ = std::io::stderr().flush();
-            }};
-        }
-
-        dbg_step!("map test: creating vmar");
         let vmar = VmAddressRegion::new_root();
-        dbg_step!("map test: vmar addr={:#x}", vmar.addr());
         let vmo = VmObject::new_paged(4);
-        dbg_step!("map test: vmo created");
         let flags = MMUFlags::READ | MMUFlags::WRITE;
 
-        // Step 1: map beyond VMO size (lazy — map_range downgraded)
-        dbg_step!("map test: step 1 — map_at lazy");
+        // Fuchsia allows mapping beyond VMO size (pages fault on access).
+        // At the kernel object level, map_range silently downgrades to lazy
+        // mapping. The explicit MAP_RANGE check is in the syscall layer.
         let a1 = vmar.map_at(0, vmo.clone(), 0x4000, 0x1000, flags).unwrap();
-        dbg_step!("map test: step 1 — unmap");
         vmar.unmap(a1, 0x1000).unwrap();
-
-        // Step 2: another lazy map/unmap
-        dbg_step!("map test: step 2 — map_at lazy");
         let a2 = vmar.map_at(0, vmo.clone(), 0, 0x5000, flags).unwrap();
-        dbg_step!("map test: step 2 — unmap");
         vmar.unmap(a2, 0x5000).unwrap();
-
-        // Step 3: error cases
-        dbg_step!("map test: step 3 — error cases");
         assert_eq!(
             vmar.map_at(0, vmo.clone(), 0x1000, 1, flags),
             Err(ZxError::INVALID_ARGS)
@@ -2319,25 +2305,20 @@ mod tests {
             Err(ZxError::INVALID_ARGS)
         );
 
-        // Step 4: eager map within bounds
-        dbg_step!("map test: step 4 — eager map 4 pages");
         vmar.map_at(0, vmo.clone(), 0, 0x4000, flags).unwrap();
-        dbg_step!("map test: step 5 — eager map 1 page at 0x12000");
         vmar.map_at(0x12000, vmo.clone(), 0x2000, 0x1000, flags)
             .unwrap();
 
-        // Step 6: verify data through aliased mapping (Linux only)
+        // Aliased mapping test: write through one virtual address,
+        // read through another mapping of the same VMO page.
+        // On macOS aarch64 (16K host pages) the mock memory backend
+        // uses anonymous mappings that don't support aliasing, so
+        // this is only tested on Linux hosts.
         #[cfg(not(target_os = "macos"))]
-        {
-            dbg_step!("map test: step 6 — aliased pointer access");
-            const MAGIC: usize = 0xdead_beaf;
-            unsafe {
-                ((vmar.addr() + 0x2000) as *mut usize).write(MAGIC);
-                assert_eq!(((vmar.addr() + 0x12000) as *const usize).read(), MAGIC);
-            }
+        unsafe {
+            ((vmar.addr() + 0x2000) as *mut usize).write(MAGIC);
+            assert_eq!(((vmar.addr() + 0x12000) as *const usize).read(), MAGIC);
         }
-
-        dbg_step!("map test: done");
     }
 
     /// ```text
