@@ -516,6 +516,8 @@ fn check_style() {
             "zircon-object",
             "--features",
             "libos,aspace-separate",
+            "--",
+            "--test-threads=1",
         ])
         .output()
         .expect("failed to run cargo test");
