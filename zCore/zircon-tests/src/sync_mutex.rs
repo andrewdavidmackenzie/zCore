@@ -103,7 +103,7 @@ async fn mutexes() {
 #[test]
 fn try_mutexes() {
     let _ctx = TestContext::new();
-    static MUTEX: AtomicI32 = AtomicI32::new(0);
+    let mutex = AtomicI32::new(0);
 
     let mut got_lock_1 = false;
     let mut got_lock_2 = false;
@@ -112,35 +112,35 @@ fn try_mutexes() {
     // Simulate thread 1: trylock loop (300 iterations, 1us delay)
     for _ in 0..300 {
         // sync_mutex_trylock → CAS(0 → 1)
-        if MUTEX
+        if mutex
             .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
         {
             got_lock_1 = true;
             // sync_mutex_unlock → store(0)
-            MUTEX.store(0, Ordering::Release);
+            mutex.store(0, Ordering::Release);
         }
     }
 
     // Simulate thread 2: trylock loop (150 iterations, 2us delay)
     for _ in 0..150 {
-        if MUTEX
+        if mutex
             .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
         {
             got_lock_2 = true;
-            MUTEX.store(0, Ordering::Release);
+            mutex.store(0, Ordering::Release);
         }
     }
 
     // Simulate thread 3: trylock loop (100 iterations, 3us delay)
     for _ in 0..100 {
-        if MUTEX
+        if mutex
             .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
         {
             got_lock_3 = true;
-            MUTEX.store(0, Ordering::Release);
+            mutex.store(0, Ordering::Release);
         }
     }
 
@@ -166,8 +166,8 @@ fn try_mutexes() {
 fn timeout_elapsed() {
     let _ctx = TestContext::new();
     // Mutex is "locked" (non-zero value, simulating another thread holding it)
-    static MUTEX: AtomicI32 = AtomicI32::new(1);
-    let futex = Futex::new(&MUTEX as *const AtomicI32 as usize);
+    let mutex = Box::new(AtomicI32::new(1));
+    let futex = Futex::new(Box::as_ref(&mutex) as *const AtomicI32 as usize);
 
     // C++: sync_mutex_timedlock(&args.mutex, now + kRelativeDeadline)
     // → ZX_ERR_TIMED_OUT
@@ -195,20 +195,20 @@ fn timeout_elapsed() {
 #[test]
 fn no_recursion() {
     let _ctx = TestContext::new();
-    static MUTEX: AtomicI32 = AtomicI32::new(0);
+    let mutex = AtomicI32::new(0);
 
     // First lock: CAS(0 → 1) succeeds
-    MUTEX
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("first lock should succeed");
 
     // Second lock attempt: CAS(0 → 1) fails because value is 1
     // C++: ASSERT_DEATH — this would abort in the real implementation
-    let result = MUTEX.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed);
+    let result = mutex.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed);
     assert!(result.is_err(), "recursive lock should be detected");
 
     // Cleanup
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 }
 
 /// C++: TEST(SyncMutex, AssertHeld)
@@ -223,27 +223,27 @@ fn no_recursion() {
 #[test]
 fn assert_held() {
     let _ctx = TestContext::new();
-    static MUTEX: AtomicI32 = AtomicI32::new(0);
+    let mutex = AtomicI32::new(0);
 
     // C++: sync_mutex_lock(&mutex)
-    MUTEX
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("lock should succeed");
 
     // C++: sync_mutex_assert_held(&mutex) — value is non-zero, so OK
     assert_ne!(
-        MUTEX.load(Ordering::Relaxed),
+        mutex.load(Ordering::Relaxed),
         0,
         "mutex should be held (non-zero)"
     );
 
     // C++: sync_mutex_unlock(&mutex)
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 
     // C++: ASSERT_DEATH(sync_mutex_assert_held on unheld mutex)
     // Value is 0, so assert_held would abort
     assert_eq!(
-        MUTEX.load(Ordering::Relaxed),
+        mutex.load(Ordering::Relaxed),
         0,
         "mutex should be unheld (zero) — assert_held would abort"
     );

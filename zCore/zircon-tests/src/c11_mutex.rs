@@ -94,17 +94,17 @@ async fn multi_threaded_contention() {
 #[test]
 fn try_mutex_multi_threaded_contention() {
     let _ctx = TestContext::new();
-    static MUTEX: AtomicI32 = AtomicI32::new(0);
+    let mutex = AtomicI32::new(0);
 
     // C++: mtx_lock(&lock) on main thread
     // Kernel: CAS 0 → 1
-    MUTEX
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("main thread lock should succeed");
 
     // C++: helper thread does mtx_trylock → thrd_busy
     // Kernel: CAS 0 → 1 fails because value is 1
-    let result = MUTEX.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed);
+    let result = mutex.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed);
     assert!(
         result.is_err(),
         "trylock should fail (thrd_busy) when mutex is held"
@@ -112,18 +112,18 @@ fn try_mutex_multi_threaded_contention() {
 
     // C++: mtx_unlock(&lock) on main thread
     // Kernel: store 0 + futex_wake
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 
     // C++: helper thread does mtx_trylock → thrd_success
     // Kernel: CAS 0 → 1 succeeds
-    let result = MUTEX.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed);
+    let result = mutex.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed);
     assert!(
         result.is_ok(),
         "trylock should succeed (thrd_success) when mutex is free"
     );
 
     // C++: helper thread does mtx_unlock
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 }
 
 /// C++: TEST(C11MutexTest, InitalizeLocalMutex)
@@ -157,13 +157,13 @@ fn initalize_local_mutex() {
 fn static_initalizer_same_bytes_as_auto() {
     let _ctx = TestContext::new();
     // C++: static mtx_t static_mutex = MTX_INIT
-    static STATIC_MUTEX: AtomicI32 = AtomicI32::new(0);
+    let static_mutex = AtomicI32::new(0);
     // C++: mtx_init(&auto_mutex, mtx_plain)
     let auto_mutex = AtomicI32::new(0);
 
     // C++: EXPECT_BYTES_EQ — both should have identical representation
     assert_eq!(
-        STATIC_MUTEX.load(Ordering::Relaxed),
+        static_mutex.load(Ordering::Relaxed),
         auto_mutex.load(Ordering::Relaxed),
         "MTX_INIT and mtx_init should produce identical bytes"
     );
@@ -188,8 +188,8 @@ fn static_initalizer_same_bytes_as_auto() {
 fn timeout_elapsed() {
     let _ctx = TestContext::new();
     // Mutex is "locked" (value = 1)
-    static MUTEX: AtomicI32 = AtomicI32::new(1);
-    let futex = Futex::new(&MUTEX as *const AtomicI32 as usize);
+    let mutex = Box::new(AtomicI32::new(1));
+    let futex = Futex::new(Box::as_ref(&mutex) as *const AtomicI32 as usize);
 
     // C++: mtx_timedlock(&args.lock, &then) → thrd_timedout
     // At kernel level: futex_wait(expected=0, deadline) on a mutex with value=1

@@ -117,17 +117,17 @@ fn timeout_test() {
     // 4. Returns ZX_ERR_TIMED_OUT
 
     // Simulate: condition variable futex word (not signaled = 0)
-    static COND: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&COND as *const AtomicI32 as usize);
+    let cond = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&cond) as *const AtomicI32 as usize);
 
     // Simulate: mutex lock (CAS 0 → 1)
-    static MUTEX: AtomicI32 = AtomicI32::new(0);
-    MUTEX
+    let mutex = AtomicI32::new(0);
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("mutex lock should succeed");
 
     // timedwait: unlock mutex, futex_wait on cond (value mismatch → BAD_STATE)
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
     // futex_wait with value that doesn't match → immediate return
     // (In real code, the value would match and the thread would sleep
     // until the deadline expires, returning TIMED_OUT.)
@@ -139,10 +139,10 @@ fn timeout_test() {
     );
 
     // Re-lock mutex after timedwait returns
-    MUTEX
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("re-lock after timedwait should succeed");
 
     // Unlock
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 }

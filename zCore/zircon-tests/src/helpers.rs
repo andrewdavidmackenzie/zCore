@@ -840,6 +840,19 @@ impl EchoServer {
 pub struct TestContext {
     pub proc: Arc<Process>,
     pub current: CurrentThread,
+    /// The root job for this test. Stored so it stays alive while the
+    /// process exists, and gets killed on drop.
+    job: Arc<Job>,
+}
+
+impl Drop for TestContext {
+    fn drop(&mut self) {
+        // Kill the process and job to release all handles, which drops
+        // all kernel objects (VMOs, channels, etc.) and frees their
+        // physical frames back to the allocator.
+        self.proc.kill();
+        self.job.kill();
+    }
 }
 
 impl TestContext {
@@ -850,7 +863,7 @@ impl TestContext {
         let proc = Process::create(&job, "test-proc").unwrap();
         let thread = Thread::create(&proc, "test-thread").unwrap();
         let current = CurrentThread::new_for_test(thread);
-        TestContext { proc, current }
+        TestContext { proc, current, job }
     }
 
     /// Construct a Syscall dispatcher for this context.
