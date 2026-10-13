@@ -669,14 +669,33 @@ fn stream_write_vector_with_append_mode() {
 ///
 /// Resize a VMO down while a stream has a seek position beyond the
 /// new size. A subsequent read should return 0 bytes (seek is past
-/// content). This tests a race condition between resize and read.
-/// In libos mode, there are no true races, but we verify the
-/// boundary behavior.
+/// content). In libos mode there are no true races, but we verify
+/// the boundary behavior synchronously.
 #[test]
-#[ignore = "needs concurrent resize-down race between threads"]
 fn stream_fault_beyond_stream_size_resize_down_race() {
-    // This test needs concurrent threads to race a VMO resize-down against
-    // a stream read at a seek position beyond the new size.
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged_with_resizable(true, 2);
+    let stream = Stream::create(vmo.clone(), 0, 0x3);
+
+    // Write data into the second page and set content_size.
+    stream.seek(SeekOrigin::Start, 5000).unwrap();
+    stream.write(b"past boundary", false).unwrap();
+
+    // Seek to an offset in the second page.
+    stream.seek(SeekOrigin::Start, 5000).unwrap();
+
+    // Resize down to 1 page — the seek position is now past the VMO.
+    vmo.set_len(4096).unwrap();
+    vmo.set_content_size(4096).unwrap();
+
+    // Read at the stale seek position — should return 0 bytes
+    // because seek is past the content_size.
+    let mut buf = [0u8; 13];
+    let n = stream.read(&mut buf).unwrap();
+    assert_eq!(
+        n, 0,
+        "read past content_size after resize should return 0 bytes"
+    );
 }
 
 /// C++: TEST(StreamTestCase, AppendSuppliesZeroes)
@@ -771,7 +790,7 @@ fn partial_vmo_dirty() {
 #[test]
 fn race_read_resize_vec_larger() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1); // 4096 bytes
+    let vmo = VmObject::new_paged_with_resizable(true, 1);
     let stream = Stream::create(vmo.clone(), 0, 0x3);
 
     // Write initial data.
@@ -793,7 +812,7 @@ fn race_read_resize_vec_larger() {
 #[test]
 fn race_read_resize_vec_smaller() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(2); // 8192 bytes
+    let vmo = VmObject::new_paged_with_resizable(true, 2);
     let stream = Stream::create(vmo.clone(), 0, 0x3);
 
     // Write some data.
@@ -815,7 +834,7 @@ fn race_read_resize_vec_smaller() {
 #[test]
 fn race_write_resize_vec_larger() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1); // 4096 bytes
+    let vmo = VmObject::new_paged_with_resizable(true, 1);
     let stream = Stream::create(vmo.clone(), 0, 0x3);
 
     // Resize VMO larger.
@@ -833,7 +852,7 @@ fn race_write_resize_vec_larger() {
 #[test]
 fn race_write_resize_vec_smaller() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(2); // 8192 bytes
+    let vmo = VmObject::new_paged_with_resizable(true, 2);
     let stream = Stream::create(vmo.clone(), 0, 0x3);
 
     // Resize VMO to 1 page.
@@ -921,7 +940,7 @@ fn read_write_shrink_race() {
 #[test]
 fn write_shrink_race() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(2); // 8192 bytes
+    let vmo = VmObject::new_paged_with_resizable(true, 2);
     let stream = Stream::create(vmo.clone(), 0, 0x3);
 
     // Write data into second page.
