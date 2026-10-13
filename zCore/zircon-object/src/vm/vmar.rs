@@ -2284,13 +2284,20 @@ mod tests {
         let vmo = VmObject::new_paged(4);
         let flags = MMUFlags::READ | MMUFlags::WRITE;
 
-        // Fuchsia allows mapping beyond VMO size (pages fault on access).
-        // At the kernel object level, map_range silently downgrades to lazy
-        // mapping. The explicit MAP_RANGE check is in the syscall layer.
+        eprintln!("map test: vmar addr={:#x}", vmar.addr());
+
+        // map beyond VMO, lazy (map_range downgraded)
+        eprintln!("map test: step 1 — map_at(0, 0x4000, 0x1000) lazy");
         let a1 = vmar.map_at(0, vmo.clone(), 0x4000, 0x1000, flags).unwrap();
+        eprintln!("map test: step 1 — unmap");
         vmar.unmap(a1, 0x1000).unwrap();
+
+        eprintln!("map test: step 2 — map_at(0, 0, 0x5000) lazy");
         let a2 = vmar.map_at(0, vmo.clone(), 0, 0x5000, flags).unwrap();
+        eprintln!("map test: step 2 — unmap");
         vmar.unmap(a2, 0x5000).unwrap();
+
+        eprintln!("map test: step 3 — error cases");
         assert_eq!(
             vmar.map_at(0, vmo.clone(), 0x1000, 1, flags),
             Err(ZxError::INVALID_ARGS)
@@ -2300,21 +2307,12 @@ mod tests {
             Err(ZxError::INVALID_ARGS)
         );
 
+        eprintln!("map test: step 4 — eager map 4 pages at offset 0");
         vmar.map_at(0, vmo.clone(), 0, 0x4000, flags).unwrap();
+        eprintln!("map test: step 5 — eager map 1 page at offset 0x12000");
         vmar.map_at(0x12000, vmo.clone(), 0x2000, 0x1000, flags)
             .unwrap();
-
-        // Aliased mapping test: write through one virtual address,
-        // read through another mapping of the same VMO page.
-        //
-        // Disabled: raw pointer access through host mmap'd pages
-        // SIGSEGVs on some Linux CI runners (address space layout
-        // differences). This tests libos mock memory aliasing, not
-        // Zircon kernel behavior. The equivalent functionality is
-        // covered by the bare-metal QEMU boot tests.
-        //
-        // Previously: #[cfg(not(target_os = "macos"))]
-        // unsafe { write MAGIC to one mapping, read from alias }
+        eprintln!("map test: done");
     }
 
     /// ```text
