@@ -772,6 +772,12 @@ impl Process {
     /// If no more threads left, exit the process.
     pub(super) fn remove_thread(&self, tid: KoID) {
         let mut inner = self.inner.lock();
+        // Bail if the thread was already removed (e.g., Process::exit
+        // removed unstarted threads, then CurrentThread::drop calls
+        // terminate → remove_thread again with the same ID).
+        if !inner.threads.iter().any(|t| t.id() == tid) {
+            return;
+        }
         // Note: we cannot call thread.get_time() here because
         // terminate() already holds the thread's inner lock (deadlock).
         // Instead, mark that threads have exited so total_cpu_time()
