@@ -46,13 +46,25 @@ To maintain coherence between the two views:
   visible via `pmem_read` until a sync point
 - Test isolation: the global `MOCK_PHYS_MEM` state persists across tests
 
-### Future: correct fix
+### Why not PAGE_SIZE = 16K on macOS aarch64?
 
-The proper fix requires the libos frame allocator to be host-page-aware:
+Changing `PAGE_SIZE` to 16K was considered and rejected. Both the C++
+core-tests and the Rust test suite are faithful Fuchsia compatibility
+tests that assume 4K pages in their VMO sizes, offsets, and page count
+calculations. Setting PAGE_SIZE to 16K causes 182 test failures (vs 110
+with 4K).
+
+The Fuchsia ABI requires `zx_system_get_page_size() == 4096`. Changing
+PAGE_SIZE would make zCore ABI-incompatible with Fuchsia userspace.
+The page size must remain 4096 on all platforms.
+
+### Future: host-page-aware frame allocator
+
+A more robust fix would make the libos frame allocator host-page-aware:
 allocate 4K guest frames within 16K host pages such that the in-page
 offset matches the target VA offset. This guarantees
 `vaddr % 16K == paddr % 16K`, making file-backed `MAP_SHARED` work
-for every mapping.
+for every mapping without the sync overhead.
 
 This is complex because guest frames are allocated during VMO commit
 (before the target VA is known) and mapped later by the VMAR. The
@@ -68,4 +80,5 @@ The ARMv8-A architecture supports 4K, 16K, and 64K granules. zCore
 uses 4K because:
 1. Fuchsia uses 4K — ABI compatibility requires it
 2. The C++ core-tests-standalone binary assumes 4K pages
-3. 4K pages provide finer-grained memory protection
+3. The Rust test suite assumes 4K pages (1:1 ports of C++ tests)
+4. 4K pages provide finer-grained memory protection
