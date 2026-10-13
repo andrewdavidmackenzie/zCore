@@ -843,7 +843,17 @@ impl VmObject {
     /// After decommitting, invalidates page table entries in all
     /// mappings (including on child/reference VMOs) so subsequent
     /// reads fault in zero pages.
+    ///
+    /// Returns `NOT_SUPPORTED` for pager-backed VMOs, matching Fuchsia's
+    /// `ZX_VMO_OP_DECOMMIT` which rejects decommit on any VMO in a
+    /// pager-backed tree (the pager owns page lifecycle).
     pub fn decommit(&self, offset: usize, len: usize) -> ZxResult {
+        // Pager-backed VMOs reject decommit — the pager owns
+        // page lifecycle.  After detach (clear_pager), the VMO
+        // is no longer pager-backed and decommit succeeds.
+        if self.is_pager_backed() {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         // Validate range before decommitting.
         let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
         if end > self.len() {

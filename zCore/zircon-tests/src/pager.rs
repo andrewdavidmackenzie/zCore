@@ -1415,7 +1415,13 @@ fn pager_read_after_decommit() {
     let mut val = [0u8; 8];
     vmo.read(0, &mut val).unwrap();
     assert_eq!(u64::from_ne_bytes(val), 42);
-    // Decommit and re-read — zCore auto-commits a zero page.
+    // Decommit on pager-backed VMO → NOT_SUPPORTED (Fuchsia behavior).
+    assert_eq!(
+        vmo.decommit(0, PAGE_SIZE).unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+    );
+    // After detach, decommit succeeds and re-read gives zero.
+    pager.detach_vmo(&vmo).unwrap();
     vmo.decommit(0, PAGE_SIZE).unwrap();
     vmo.read(0, &mut val).unwrap();
     assert_eq!(
@@ -1636,8 +1642,10 @@ fn pager_snapshot_with_pager_child() {
     assert_eq!(&pbuf, b"parent");
 }
 
+/// C++: TEST(Pager, DecommitTest)
 ///
-/// Decommit pages in a clone of a pager-backed VMO.
+/// Decommit is not supported on clones or pager-backed VMOs that
+/// have children.  Matches the Fuchsia C++ pager DecommitTest.
 #[test]
 fn pager_clone_decommit() {
     let _ctx = TestContext::new();
@@ -1648,18 +1656,29 @@ fn pager_clone_decommit() {
     pager
         .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
         .unwrap();
+
+    // Decommit on the pager VMO itself should fail (pager-backed).
+    assert_eq!(
+        vmo.decommit(0, PAGE_SIZE).unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+        "decommit on pager-backed VMO should fail"
+    );
+
     let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    // Write to clone to own the page.
-    clone.write(0, &77u64.to_ne_bytes()).unwrap();
-    // Decommit the clone's page.
-    clone.decommit(0, PAGE_SIZE).unwrap();
-    // After decommit, reading falls through to parent.
-    let mut val = [0u8; 8];
-    clone.read(0, &mut val).unwrap();
-    // Result depends on COW semantics — either parent data or zero.
-    // The page may read as zero or as parent's data.
-    let v = u64::from_ne_bytes(val);
-    assert!(v == 0 || v == 99, "should be zero or parent data, got {v}");
+
+    // Decommit on a clone should fail.
+    assert_eq!(
+        clone.decommit(0, PAGE_SIZE).unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+        "decommit on clone should fail"
+    );
+
+    // Decommit on parent (now has children) should also fail.
+    assert_eq!(
+        vmo.decommit(0, PAGE_SIZE).unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+        "decommit on parent with children should fail"
+    );
 }
 
 ///
@@ -2396,8 +2415,8 @@ fn pager_snapshot_modified_clone() {
     assert_eq!(&buf, b"modified!");
 }
 
-///
-/// Decommit pages from a snapshot of a modified pager-backed VMO.
+/// Decommit on a snapshot of a modified pager VMO returns NOT_SUPPORTED.
+/// The snapshot retains its written data since decommit is rejected.
 #[test]
 fn pager_snapshot_modified_decommit() {
     let _ctx = TestContext::new();
@@ -2411,12 +2430,19 @@ fn pager_snapshot_modified_decommit() {
     vmo.write(0, &77u64.to_ne_bytes()).unwrap();
     let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
     snap.write(0, &88u64.to_ne_bytes()).unwrap();
-    snap.decommit(0, PAGE_SIZE).unwrap();
+    // Decommit on a snapshot is not supported.
+    assert_eq!(
+        snap.decommit(0, PAGE_SIZE).unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+    );
+    // Snapshot retains its written data.
     let mut val = [0u8; 8];
     snap.read(0, &mut val).unwrap();
-    // After decommit, reads zero or falls through to parent.
-    let v = u64::from_ne_bytes(val);
-    assert!(v == 0 || v == 77, "should be zero or parent data, got {v}");
+    assert_eq!(
+        u64::from_ne_bytes(val),
+        88,
+        "snapshot should retain written data"
+    );
 }
 
 ///
@@ -2999,8 +3025,8 @@ fn pager_evict_pages_range() {
     assert_eq!(u64::from_ne_bytes(val), 0);
 }
 
-///
-/// Decommit pages from a clone — parent data preserved.
+/// Decommit on a clone returns NOT_SUPPORTED (matches Fuchsia).
+/// Parent data is always preserved regardless.
 #[test]
 fn pager_evict_clone() {
     let _ctx = TestContext::new();
@@ -3013,7 +3039,11 @@ fn pager_evict_clone() {
         .unwrap();
     let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
     clone.write(0, &77u64.to_ne_bytes()).unwrap();
-    clone.decommit(0, PAGE_SIZE).unwrap();
+    // Decommit on clone is not supported.
+    assert_eq!(
+        clone.decommit(0, PAGE_SIZE).unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+    );
     // Parent still has its data.
     let mut val = [0u8; 8];
     vmo.read(0, &mut val).unwrap();
@@ -3111,8 +3141,9 @@ fn pager_pin_after_supply() {
     assert_eq!(&buf, b"already supplied");
 }
 
-///
-/// Decommit pages from a pager-backed VMO.
+/// Decommit pages from a pager-backed VMO (after detach).
+/// In Fuchsia, decommit is NOT_SUPPORTED while pager-backed;
+/// after detach the VMO is no longer pager-backed and decommit works.
 #[test]
 fn pager_decommit_pages() {
     let _ctx = TestContext::new();
@@ -3123,14 +3154,20 @@ fn pager_decommit_pages() {
     pager
         .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
         .unwrap();
+    // Decommit while pager-backed → NOT_SUPPORTED.
+    assert_eq!(
+        vmo.decommit(0, PAGE_SIZE).unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+    );
+    // After detach, decommit succeeds.
+    pager.detach_vmo(&vmo).unwrap();
     vmo.decommit(0, PAGE_SIZE).unwrap();
     let mut val = [0u8; 8];
     vmo.read(0, &mut val).unwrap();
     assert_eq!(u64::from_ne_bytes(val), 0);
 }
 
-///
-/// Decommit a specific range of pages.
+/// Decommit a specific range of pages (after detach).
 #[test]
 fn pager_decommit_pager_range() {
     let _ctx = TestContext::new();
@@ -3146,6 +3183,8 @@ fn pager_decommit_pager_range() {
     pager
         .supply_pages(&vmo, 0, (3 * PAGE_SIZE) as u64, &src, 0)
         .unwrap();
+    // After detach, decommit succeeds.
+    pager.detach_vmo(&vmo).unwrap();
     // Decommit only page 1.
     vmo.decommit(PAGE_SIZE, PAGE_SIZE).unwrap();
     let mut val = [0u8; 8];
@@ -4245,20 +4284,26 @@ fn pager_decommit_on_detach_test_vmar() {
 }
 
 /// C++: TEST(Pager, DecommitTest)
+/// Decommit is not supported on pager-backed VMOs or their clones.
 #[test]
 fn pager_decommit_test() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, &42u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    vmo.decommit(0, PAGE_SIZE).unwrap();
-    let mut val = [0u8; 8];
-    vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 0);
+
+    // Decommit on pager-backed VMO → NOT_SUPPORTED.
+    assert_eq!(
+        vmo.decommit(0, PAGE_SIZE).unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+    );
+
+    let child = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // Decommit on clone of pager VMO → NOT_SUPPORTED.
+    assert_eq!(
+        child.decommit(0, PAGE_SIZE).unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+    );
 }
 
 /// C++: TEST(Pager, DeepHierarchy)
