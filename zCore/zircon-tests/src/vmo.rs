@@ -2024,7 +2024,16 @@ fn map_read() {
 }
 
 /// C++: TEST(VmoTestCase, MappedVmoSmallerThanMapping)
-/// Attempt to map more than the VMO size — should fail.
+///
+/// The C++ test creates a resizable 1-page VMO, maps 2 pages without
+/// MAP_RANGE (lazy commit), and verifies:
+///   - the map succeeds,
+///   - read/write within the VMO works,
+///   - read/write past the VMO end faults with OUT_OF_RANGE.
+///
+/// In libos mode we cannot trigger real page faults, so we verify the
+/// VMO-level bounds check (which is the same kernel validation the
+/// page-fault handler invokes).
 #[test]
 fn mapped_vmo_smaller_than_mapping() {
     let _ctx = TestContext::new();
@@ -2032,12 +2041,39 @@ fn mapped_vmo_smaller_than_mapping() {
     let proc = Process::create(&job, "small-vmo").unwrap();
     let vmar = proc.vmar();
 
-    let vmo = VmObject::new_paged(1);
+    // C++ creates VMO with ZX_VMO_RESIZABLE.
+    let vmo = VmObject::new_paged_with_resizable(true, 1);
     let flags = MMUFlags::READ | MMUFlags::WRITE;
 
-    // Map 2 pages from a 1-page VMO — should fail.
-    let result = vmar.map(None, vmo, 0, 2 * PAGE_SIZE, flags);
-    assert!(result.is_err(), "mapping beyond VMO size should fail");
+    // C++ maps without MAP_RANGE (lazy commit); map succeeds even
+    // though the mapping extends past the VMO.
+    let addr = vmar
+        .map_ext(
+            None,
+            vmo.clone(),
+            0,
+            2 * PAGE_SIZE,
+            MMUFlags::RXW,
+            flags,
+            false,
+            false,
+            false,
+        )
+        .unwrap();
+
+    // Read within the VMO succeeds.
+    let mut buf = [0u8; 4];
+    assert!(vmo.read(0, &mut buf).is_ok(), "read before end");
+
+    // Read past the VMO end returns OUT_OF_RANGE (same validation
+    // the page-fault handler would invoke on bare metal).
+    assert_eq!(
+        vmo.read(PAGE_SIZE, &mut buf).unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "read past end",
+    );
+
+    vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(VmoTestCase, MetadataBytes)
@@ -2249,7 +2285,10 @@ fn physical_vmo_invalid_initial_size() {
 }
 
 /// C++: TEST(VmoTestCase, PhysicalVmoOobMapping)
-/// Map a physical VMO; mapping beyond its size should fail.
+///
+/// The C++ test creates a 1-page physical VMO from reserved RAM,
+/// then maps 2 pages with MAP_RANGE — expects OUT_OF_RANGE because
+/// eager commit cannot satisfy pages beyond the VMO.
 #[test]
 fn physical_vmo_oob_mapping() {
     let _ctx = TestContext::new();
@@ -2260,15 +2299,16 @@ fn physical_vmo_oob_mapping() {
     let phys = VmObject::new_physical(0x1000, 1);
     let flags = MMUFlags::READ | MMUFlags::WRITE;
 
-    // Map exactly 1 page — should succeed.
-    let result = vmar.map(None, phys.clone(), 0, PAGE_SIZE, flags);
-    if let Ok(addr) = result {
-        vmar.unmap(addr, PAGE_SIZE).unwrap();
-    }
+    // Map exactly 1 page with MAP_RANGE — should succeed.
+    let addr = vmar.map(None, phys.clone(), 0, PAGE_SIZE, flags).unwrap();
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
 
-    // Map 2 pages from 1-page VMO — should fail.
-    let result = vmar.map(None, phys, 0, 2 * PAGE_SIZE, flags);
-    assert!(result.is_err(), "mapping beyond physical VMO should fail");
+    // Map 2 pages with MAP_RANGE from 1-page VMO — C++ expects OUT_OF_RANGE.
+    assert_eq!(
+        vmar.map(None, phys, 0, 2 * PAGE_SIZE, flags).unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "MAP_RANGE mapping beyond physical VMO should fail",
+    );
 }
 
 /// C++: TEST(VmoTestCase, PinTests)

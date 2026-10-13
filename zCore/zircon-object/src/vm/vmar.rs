@@ -415,24 +415,12 @@ impl VmAddressRegion {
         // Note: CAN_MAP_SPECIFIC is checked at the syscall layer (sys_vmar_map),
         // not here, because internal callers (ELF loader, etc.) need to use
         // specific offsets on VMARs without CAN_MAP_SPECIFIC.
-        // When map_range is false (lazy/demand-paged mapping), allow the
-        // mapping to extend past the VMO's current size. Pages are committed
-        // on demand via page faults. This is standard behavior in Fuchsia
-        // Respect the caller's map_range preference. The old workaround
-        // `map_range || vmo.name() != ""` forced eager commit for named VMOs,
-        // but Fuchsia's Scudo allocator names its VMOs and requires lazy commit.
-        // Page faults on uncommitted pages are handled by handle_page_fault.
-        // Fuchsia allows mapping beyond VMO size — the excess pages
-        // fault on access. If map_range would try to commit beyond
-        // the VMO, truncate the eager commit range. The mapping
-        // itself is still created at the full requested size.
-        // When map_range is set but the mapping extends past the VMO,
-        // fall back to lazy mapping to avoid committing non-existent pages.
-        let map_range = if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
-            false
-        } else {
-            map_range
-        };
+        // When MAP_RANGE (eager commit) is requested and the mapping
+        // extends past the VMO, Fuchsia returns OUT_OF_RANGE.  This
+        // matches the C++ core-test PhysicalVmoOobMapping.
+        if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         let mut guard = self.inner.lock();
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         let offset = if overwrite {
@@ -2298,11 +2286,15 @@ mod tests {
         let vmo = VmObject::new_paged(4);
         let flags = MMUFlags::READ | MMUFlags::WRITE;
 
-        // Fuchsia allows mapping beyond VMO size (pages fault on access).
-        let a1 = vmar.map_at(0, vmo.clone(), 0x4000, 0x1000, flags).unwrap();
-        vmar.unmap(a1, 0x1000).unwrap();
-        let a2 = vmar.map_at(0, vmo.clone(), 0, 0x5000, flags).unwrap();
-        vmar.unmap(a2, 0x5000).unwrap();
+        // With MAP_RANGE (eager commit), mapping beyond VMO size fails.
+        assert_eq!(
+            vmar.map_at(0, vmo.clone(), 0x4000, 0x1000, flags),
+            Err(ZxError::OUT_OF_RANGE)
+        );
+        assert_eq!(
+            vmar.map_at(0, vmo.clone(), 0, 0x5000, flags),
+            Err(ZxError::OUT_OF_RANGE)
+        );
         assert_eq!(
             vmar.map_at(0, vmo.clone(), 0x1000, 1, flags),
             Err(ZxError::INVALID_ARGS)
