@@ -215,9 +215,13 @@ Resource.Ioports
 # ExactlyOneMemoryEventSignaled hangs — polls all pressure events.
 # SystemEvent: hangs on wait_many — needs runtime debugging.
 SystemEvent.ExactlyOneMemoryEventSignaled
-# WakeReport: PortBound fails without hanging (removed from skip).
-# ThreadBound hangs.
+# SystemSuspend: all 6 pass individually and as a suite (20s) — removed.
+# WakeReport: ThreadBound hangs.
+# PortBound.SmallReportBuffer hangs — calls DoSuspend with infinite
+# deadline + REPORT_ONLY flag; our stub ignores REPORT_ONLY and
+# busy-waits 5s per iteration, never populates report header.
 WakeReportTestsThreadBound.*
+WakeReportTestsPortBound.SmallReportBuffer
 # SuspendAndResumeByTimer: now passes — removed from skip.
 
 # ── ThreadSampler — crashes test runner ──────────────────────────────
