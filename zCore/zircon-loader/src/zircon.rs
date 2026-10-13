@@ -804,7 +804,8 @@ fn create_vdso_vmo() -> Arc<VmObject> {
         VDSO_ELF.len()
     };
 
-    let total_pages = vdso_memsize.div_ceil(PAGE_SIZE);
+    // +1 page for vDSO data (constants) appended after ELF content.
+    let total_pages = vdso_memsize.div_ceil(PAGE_SIZE) + 1;
     let vdso_vmo = VmObject::new_paged(total_pages);
     vdso_vmo.set_name("vdso/full");
 
