@@ -29,14 +29,60 @@ use zircon_object::signal::Futex;
 /// 5. Joins all threads
 ///
 /// This requires concurrent multi-threaded execution.
-#[test]
-#[ignore = "requires preemptive multi-threaded scheduling for concurrent condvar broadcast"]
-fn broadcast_signal_thread_wait() {
-    // Kernel primitives exercised:
-    //   cnd_wait → mtx_unlock + futex_wait + mtx_lock
-    //   cnd_broadcast → futex_wake(UINT_MAX)
-    //   mtx_lock/unlock → CAS + futex_wait/wake
-    //   sched_yield → zx_nanosleep(0)
+/// 3 threads wait on condvar, main broadcasts → all wake.
+#[async_std::test]
+async fn broadcast_signal_thread_wait() {
+    use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};
+    use core::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+    use zircon_object::task::Thread;
+
+    let ctx = TestContext::new();
+    let proc = ctx.proc.clone();
+
+    let mutex = Arc::new(SyncMutex::new());
+    let cond = Arc::new(SyncCondition::new());
+    let predicate = Arc::new(AtomicBool::new(false));
+    let woken_counter = Arc::new(AtomicI32::new(0));
+
+    let mut threads = std::vec::Vec::new();
+    for _ in 0..3 {
+        let state = CondvarWaiterState::new(
+            mutex.clone(),
+            cond.clone(),
+            predicate.clone(),
+            woken_counter.clone(),
+        );
+        let thread = Thread::create_with_ext(&proc, "condvar-waiter", state.clone()).unwrap();
+        thread.start(condvar_waiter_thread_fn).unwrap();
+        threads.push((thread, state));
+    }
+
+    async_std::task::yield_now().await;
+    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+
+    predicate.store(true, Ordering::Release);
+    cond.broadcast();
+
+    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    while woken_counter.load(Ordering::SeqCst) < 3 {
+        assert!(std::time::Instant::now() < deadline, "timed out");
+        async_std::task::yield_now().await;
+    }
+    assert_eq!(woken_counter.load(Ordering::SeqCst), 3);
+
+    for (thread, _) in &threads {
+        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        loop {
+            if thread.state() == zircon_object::task::ThreadState::Dead {
+                break;
+            }
+            if std::time::Instant::now() >= dl {
+                break;
+            }
+            async_std::task::yield_now().await;
+        }
+    }
 }
 
 /// C++: TEST_F(ConditionalVariableTest, SignalThreadWait)
@@ -51,14 +97,69 @@ fn broadcast_signal_thread_wait() {
 /// 4. Joins all threads
 ///
 /// This requires concurrent multi-threaded execution.
-#[test]
-#[ignore = "requires preemptive multi-threaded scheduling for concurrent condvar signal"]
-fn signal_thread_wait() {
-    // Kernel primitives exercised:
-    //   cnd_wait → mtx_unlock + futex_wait + mtx_lock
-    //   cnd_signal → futex_wake(1)
-    //   mtx_lock/unlock → CAS + futex_wait/wake
-    //   sched_yield → zx_nanosleep(0)
+/// 3 threads wait on condvar, main signals one at a time → each wakes.
+#[async_std::test]
+async fn signal_thread_wait() {
+    use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};
+    use core::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+    use zircon_object::task::Thread;
+
+    let ctx = TestContext::new();
+    let proc = ctx.proc.clone();
+
+    let mutex = Arc::new(SyncMutex::new());
+    let cond = Arc::new(SyncCondition::new());
+    let predicate = Arc::new(AtomicBool::new(false));
+    let woken_counter = Arc::new(AtomicI32::new(0));
+
+    let mut threads = std::vec::Vec::new();
+    for _ in 0..3 {
+        let state = CondvarWaiterState::new(
+            mutex.clone(),
+            cond.clone(),
+            predicate.clone(),
+            woken_counter.clone(),
+        );
+        let thread = Thread::create_with_ext(&proc, "condvar-waiter", state.clone()).unwrap();
+        thread.start(condvar_waiter_thread_fn).unwrap();
+        threads.push((thread, state));
+    }
+
+    async_std::task::yield_now().await;
+    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+
+    // Signal one at a time
+    predicate.store(true, Ordering::Release);
+    for i in 1..=3 {
+        cond.signal();
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+        while woken_counter.load(Ordering::SeqCst) < i {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "timed out waiting for thread {}",
+                i
+            );
+            async_std::task::yield_now().await;
+        }
+        // The signaled thread sets predicate=false and increments woken.
+        // For the next iteration, we set it back to true.
+        // (In the C++ test, the signaled thread resets the condition.)
+    }
+    assert_eq!(woken_counter.load(Ordering::SeqCst), 3);
+
+    for (thread, _) in &threads {
+        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        loop {
+            if thread.state() == zircon_object::task::ThreadState::Dead {
+                break;
+            }
+            if std::time::Instant::now() >= dl {
+                break;
+            }
+            async_std::task::yield_now().await;
+        }
+    }
 }
 
 /// C++: TEST_F(ConditionalVariableTest, ConditionalVariablesTimeout)

@@ -515,11 +515,12 @@ impl Syscall<'_> {
         Ok(())
     }
 
-    /// Apply a profile to a thread.
+    /// Apply a profile to a thread or VMAR.
     ///
-    /// Currently a stub: validates handles and rights but does not
-    /// change the thread's scheduling parameters (the kernel does
-    /// not yet support runtime priority changes).
+    /// For thread targets with a PRIORITY profile, the thread's scheduling
+    /// priority is updated. Deadline profiles are validated but treated
+    /// as priority scheduling (the EDF scheduler is not yet implemented).
+    /// CPU affinity masks are stored but not yet enforced.
     pub fn sys_object_set_profile(
         &self,
         target: HandleValue,
@@ -535,12 +536,23 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         // Validate profile handle with APPLY_PROFILE
-        let _profile_obj =
-            proc.get_object_with_rights::<Profile>(profile, Rights::APPLY_PROFILE)?;
+        let profile_obj = proc.get_object_with_rights::<Profile>(profile, Rights::APPLY_PROFILE)?;
+        let info = &profile_obj.info;
+        let flags = info.flags();
         // Accept Thread (scheduling) or VMAR (memory priority) targets.
         match proc.get_object_with_rights::<Thread>(target, Rights::MANAGE_THREAD) {
-            Ok(_thread) => {
-                // Thread target — scheduling profile. TODO: apply.
+            Ok(thread) => {
+                // Thread target — apply scheduling profile.
+                if flags.contains(ProfileInfoFlags::PRIORITY) {
+                    let priority = info.priority().max(0) as usize;
+                    thread.set_priority(priority);
+                } else if flags.contains(ProfileInfoFlags::DEADLINE) {
+                    // Deadline scheduling not yet implemented — treat
+                    // as a high-priority fair-scheduled thread.
+                    thread.set_priority(31);
+                }
+                // CPU affinity: stored on the profile but not yet
+                // enforced by the scheduler.
             }
             Err(ZxError::WRONG_TYPE) => {
                 // Not a thread — try VMAR (any profile type accepted,

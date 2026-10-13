@@ -28,14 +28,63 @@ extern crate alloc;
 ///
 /// This tests concurrent mutex contention. Requires multi-threaded
 /// execution with blocking futex_wait.
-#[test]
-#[ignore = "requires preemptive multi-threaded scheduling for concurrent mutex contention"]
-fn mutexes() {
-    // Kernel primitives exercised:
-    //   sync_mutex_lock → CAS + futex_wait (contended)
-    //   sync_mutex_unlock → store + futex_wake
-    //   zx_nanosleep (inter-iteration delay)
-    //   zx_thread_create + zx_thread_start (thrd_create_with_name)
+/// 3 threads concurrently lock/unlock a mutex, each incrementing
+/// a shared counter. The total should be the sum of all iterations.
+#[async_std::test]
+async fn mutexes() {
+    use crate::helpers::{mutex_contender_thread_fn, MutexContenderState, SyncMutex};
+    use std::sync::Arc;
+    use zircon_object::task::Thread;
+
+    let ctx = TestContext::new();
+    let proc = ctx.proc.clone();
+
+    let mutex = Arc::new(SyncMutex::new());
+    let counter = Arc::new(AtomicI32::new(0));
+
+    // C++: 3 threads with 300, 150, 100 iterations — scale down for speed
+    let iterations = [30, 15, 10];
+    let mut threads = std::vec::Vec::new();
+    for &iters in &iterations {
+        let state = MutexContenderState::new(mutex.clone(), counter.clone(), iters);
+        let thread = Thread::create_with_ext(&proc, "mutex-contender", state.clone()).unwrap();
+        thread.start(mutex_contender_thread_fn).unwrap();
+        threads.push((thread, state));
+    }
+
+    // Wait for all threads to finish
+    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    for (_, state) in &threads {
+        while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "mutex contender thread timed out"
+            );
+            async_std::task::yield_now().await;
+        }
+    }
+
+    // Wait for threads to terminate
+    for (thread, _) in &threads {
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        loop {
+            if thread.state() == zircon_object::task::ThreadState::Dead {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+            async_std::task::yield_now().await;
+        }
+    }
+
+    // Verify total count
+    let expected: i32 = iterations.iter().map(|&i| i as i32).sum();
+    assert_eq!(
+        counter.load(Ordering::SeqCst),
+        expected,
+        "counter should equal sum of all iterations"
+    );
 }
 
 /// C++: TEST(SyncMutex, TryMutexes)
