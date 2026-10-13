@@ -61,6 +61,8 @@ hal_fn_impl! {
         fn pmem_read(paddr: PhysAddr, buf: &mut [u8]) {
             trace!("pmem read: paddr={:#x}, len={:#x}", paddr, buf.len());
             assert!(paddr + buf.len() <= PMEM_SIZE);
+            // Sync any anonymous user VA writes back to PMEM before reading.
+            MOCK_PHYS_MEM.sync_user_to_pmem(paddr, buf.len());
             let src = (*MOCK_PHYS_MEM).as_ptr::<u8>(paddr);
             unsafe { buf.as_mut_ptr().copy_from_nonoverlapping(src, buf.len()) };
         }
@@ -70,20 +72,28 @@ hal_fn_impl! {
             assert!(paddr + buf.len() <= PMEM_SIZE);
             let dst = (*MOCK_PHYS_MEM).as_mut_ptr::<u8>(paddr);
             unsafe { dst.copy_from_nonoverlapping(buf.as_ptr(), buf.len()) };
+            // Sync the written data to any anonymous user VA pages.
+            MOCK_PHYS_MEM.sync_pmem_to_user(paddr, buf.len());
         }
 
         fn pmem_zero(paddr: PhysAddr, len: usize) {
             trace!("pmem_zero: addr={:#x}, len={:#x}", paddr, len);
             assert!(paddr + len <= PMEM_SIZE);
             unsafe { core::ptr::write_bytes((*MOCK_PHYS_MEM).as_mut_ptr::<u8>(paddr), 0, len) };
+            // Sync zeroed data to any anonymous user VA pages.
+            MOCK_PHYS_MEM.sync_pmem_to_user(paddr, len);
         }
 
         fn pmem_copy(dst: PhysAddr, src: PhysAddr, len: usize) {
             trace!("pmem_copy: {:#x} <- {:#x}, len={:#x}", dst, src, len);
             assert!(src + len <= PMEM_SIZE && dst + len <= PMEM_SIZE);
-            let dst = (*MOCK_PHYS_MEM).as_mut_ptr::<u8>(dst);
-            let src = (*MOCK_PHYS_MEM).as_ptr::<u8>(src);
-            unsafe { dst.copy_from_nonoverlapping(src, len) };
+            // Sync source from user VA first.
+            MOCK_PHYS_MEM.sync_user_to_pmem(src, len);
+            let dst_ptr = (*MOCK_PHYS_MEM).as_mut_ptr::<u8>(dst);
+            let src_ptr = (*MOCK_PHYS_MEM).as_ptr::<u8>(src);
+            unsafe { dst_ptr.copy_from_nonoverlapping(src_ptr, len) };
+            // Sync destination to user VA.
+            MOCK_PHYS_MEM.sync_pmem_to_user(dst, len);
         }
 
         fn frame_flush(_target: PhysAddr) {
