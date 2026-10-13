@@ -491,33 +491,58 @@ fn pager_supply_unaligned() {
 /// C++: TEST(Pager, ClosePagerTest) — adapted
 ///
 /// Detaching a pager VMO should wake any threads blocked waiting for
-/// pages.  We simulate a blocked waiter by spawning wait_for_page()
-/// as an async task, then detaching the VMO, and verifying the waiter
-/// receives an error.
-#[async_std::test]
-async fn pager_detach_closes_existing_waiters() {
+/// pages.  We register a waiter by polling wait_for_page() once (which
+/// inserts a oneshot sender into pager_waiters), then detach the VMO,
+/// and verify the waiter future completes with NOT_FOUND.
+#[test]
+fn pager_detach_closes_existing_waiters() {
+    use core::future::Future;
+    use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+
+    fn noop_raw_waker() -> RawWaker {
+        fn no_op(_: *const ()) {}
+        fn clone_fn(_: *const ()) -> RawWaker {
+            noop_raw_waker()
+        }
+        RawWaker::new(
+            core::ptr::null(),
+            &RawWakerVTable::new(clone_fn, no_op, no_op, no_op),
+        )
+    }
+
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
-    // Spawn a waiter that blocks on an unsupplied page.
-    let vmo2 = vmo.clone();
-    let waiter = async_std::task::spawn(async move { vmo2.wait_for_page(0).await });
+    // Create the wait_for_page future and poll it once to register
+    // the waiter, without blocking.
+    let mut wait_fut = core::pin::pin!(vmo.wait_for_page(0));
+    let waker = unsafe { Waker::from_raw(noop_raw_waker()) };
+    let mut cx = Context::from_waker(&waker);
 
-    // Give the waiter time to register itself.
-    async_std::task::yield_now().await;
+    // First poll registers the oneshot in pager_waiters, returns Pending.
+    assert!(
+        matches!(wait_fut.as_mut().poll(&mut cx), Poll::Pending),
+        "wait_for_page should be pending on unsupplied page"
+    );
 
-    // Detach the VMO — this should wake the waiter with an error.
+    // Detach the VMO — this calls fail_pager_requests(NOT_FOUND),
+    // which sends Err(NOT_FOUND) through the oneshot channel.
     pager.detach_vmo(&vmo).unwrap();
 
-    // The waiter should complete with NOT_FOUND (detach sends NOT_FOUND).
-    let result = waiter.await;
-    assert!(result.is_err(), "waiter should have been woken with error");
-    assert_eq!(
-        result.unwrap_err(),
-        ZxError::NOT_FOUND,
-        "detach should wake waiters with NOT_FOUND"
-    );
+    // Second poll should now complete with the error.
+    match wait_fut.as_mut().poll(&mut cx) {
+        Poll::Ready(result) => {
+            assert_eq!(
+                result.unwrap_err(),
+                ZxError::NOT_FOUND,
+                "detach should wake waiters with NOT_FOUND"
+            );
+        }
+        Poll::Pending => {
+            panic!("wait_for_page should have completed after detach");
+        }
+    }
 }
 
 ///
