@@ -1744,7 +1744,7 @@ impl VmMapping {
                         paddr,
                         commit_flags,
                     )
-                    .expect("failed to map");
+                    .map_err(|_| ZxError::NO_MEMORY)?;
             }
             Ok(())
         })
