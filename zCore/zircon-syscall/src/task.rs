@@ -109,7 +109,7 @@ impl Syscall<'_> {
         let proc = self.thread.proc();
         let process = proc.get_object_with_rights::<Process>(proc_handle, Rights::WRITE)?;
         let thread = proc.get_object_with_rights::<Thread>(thread_handle, Rights::WRITE)?;
-        if !Arc::ptr_eq(thread.proc(), &process) {
+        if !Arc::ptr_eq(&thread.proc(), &process) {
             return Err(ZxError::ACCESS_DENIED);
         }
         // Consume arg1_handle (Fuchsia closes it on both success and failure).

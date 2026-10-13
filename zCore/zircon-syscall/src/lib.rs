@@ -149,7 +149,7 @@ impl Syscall<'_> {
     fn resolve_pseudo_handle(&self, handle_value: HandleValue) -> Option<Arc<dyn KernelObject>> {
         match handle_value {
             ZX_PSEUDO_HANDLE_THREAD_SELF => Some(self.thread.inner()),
-            ZX_PSEUDO_HANDLE_PROCESS_SELF => Some(self.thread.proc().clone()),
+            ZX_PSEUDO_HANDLE_PROCESS_SELF => Some(self.thread.proc()),
             ZX_PSEUDO_HANDLE_VMAR_ROOT_SELF => Some(self.thread.proc().vmar()),
             _ => None,
         }

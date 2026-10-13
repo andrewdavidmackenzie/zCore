@@ -58,9 +58,27 @@ pub struct Syscall<'a> {
     pub thread_fn: ThreadFn,
     /// the entry of current syscall
     pub syscall_entry: VirtAddr,
+    /// Cached strong reference to the owning process.
+    ///
+    /// `Thread::proc()` now upgrades a `Weak<Process>` each time it is
+    /// called. Caching the `Arc<Process>` here avoids repeated upgrades
+    /// during a single syscall dispatch and allows `linux_process()` to
+    /// return `&LinuxProcess` by borrowing from this field.
+    proc: Arc<Process>,
 }
 
-impl Syscall<'_> {
+impl<'a> Syscall<'a> {
+    /// Create a new Syscall context for the given thread.
+    pub fn new(thread: &'a CurrentThread, thread_fn: ThreadFn, syscall_entry: VirtAddr) -> Self {
+        let proc = thread.proc();
+        Self {
+            thread,
+            thread_fn,
+            syscall_entry,
+            proc,
+        }
+    }
+
     /// syscall entry function
     pub async fn syscall(&mut self, num: u32, args: [usize; 6]) -> isize {
         trace!(
@@ -441,11 +459,11 @@ impl Syscall<'_> {
 
     /// get zircon process
     fn zircon_process(&self) -> &Arc<Process> {
-        self.thread.proc()
+        &self.proc
     }
 
     /// get linux process
     fn linux_process(&self) -> &LinuxProcess {
-        self.zircon_process().linux()
+        self.proc.linux()
     }
 }

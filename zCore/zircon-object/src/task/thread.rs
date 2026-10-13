@@ -2,7 +2,7 @@ mod thread_state;
 
 pub use self::thread_state::ThreadStateKind;
 
-use alloc::{boxed::Box, sync::Arc};
+use alloc::{boxed::Box, sync::Arc, sync::Weak};
 use core::task::{Context, Poll, Waker};
 use core::time::Duration;
 use core::{any::Any, future::Future, pin::Pin};
@@ -85,7 +85,14 @@ use crate::{define_count_helper, impl_kobject, ZxError, ZxResult};
 pub struct Thread {
     base: KObjectBase,
     _counter: CountHelper,
-    proc: Arc<Process>,
+    /// Weak reference to the owning process.
+    ///
+    /// Using `Weak` instead of `Arc` breaks the reference cycle between
+    /// `Process::inner.threads` (`Vec<Arc<Thread>>`) and this field.
+    /// Without this, Process and Thread prevent each other from being
+    /// dropped, leaking VMAR address space IDs and eventually exhausting
+    /// the host OS virtual address space.
+    proc: Weak<Process>,
     ext: Box<dyn Any + Send + Sync>,
     inner: Mutex<ThreadInner>,
     exceptionate: Arc<Exceptionate>,
@@ -93,7 +100,7 @@ pub struct Thread {
 
 impl_kobject!(Thread
     fn related_koid(&self) -> KoID {
-        self.proc.id()
+        self.proc.upgrade().map_or(0, |p| p.id())
     }
 );
 define_count_helper!(Thread);
@@ -252,7 +259,7 @@ impl Thread {
         let thread = Arc::new(Thread {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),
-            proc: proc.clone(),
+            proc: Arc::downgrade(proc),
             ext: Box::new(ext),
             exceptionate: Exceptionate::new(ExceptionChannelType::Thread),
             inner: Mutex::new(ThreadInner {
@@ -266,8 +273,17 @@ impl Thread {
     }
 
     /// Get the process.
-    pub fn proc(&self) -> &Arc<Process> {
-        &self.proc
+    ///
+    /// # Panics
+    ///
+    /// Panics if the owning process has already been dropped. This should
+    /// never happen while the thread is alive, since `Process::inner.threads`
+    /// holds a strong `Arc<Thread>` and the process only drops after all
+    /// threads are removed.
+    pub fn proc(&self) -> Arc<Process> {
+        self.proc
+            .upgrade()
+            .expect("Thread::proc(): owning process has been dropped")
     }
 
     /// Get the extension info.
@@ -600,7 +616,11 @@ impl Thread {
         let mut inner = self.inner.lock();
         self.exceptionate.shutdown();
         inner.change_state(ThreadState::Dead, &self.base);
-        self.proc().remove_thread(self.base.id);
+        // If the process has already been dropped (Weak upgrade fails),
+        // there is nothing to remove from — the cycle was already broken.
+        if let Some(proc) = self.proc.upgrade() {
+            proc.remove_thread(self.base.id);
+        }
     }
 }
 
@@ -865,13 +885,11 @@ impl CurrentThread {
 
     async fn handle_exception_dispatch(&self, type_: ExceptionType, exception: Arc<Exception>) {
         if type_ == ExceptionType::ThreadExiting {
-            let handled = self
-                .0
-                .proc()
-                .debug_exceptionate()
-                .send_exception(&exception);
-            if let Ok(future) = handled {
-                self.dying_run(future).await.ok();
+            if let Some(proc) = self.0.proc.upgrade() {
+                let handled = proc.debug_exceptionate().send_exception(&exception);
+                if let Ok(future) = handled {
+                    self.dying_run(future).await.ok();
+                }
             }
         } else {
             let future = exception.handle();
@@ -1008,14 +1026,21 @@ impl ThreadSwitchFuture {
 impl Future for ThreadSwitchFuture {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // If the owning process has been dropped (Weak upgrade fails),
+        // the thread should stop running immediately.
+        let proc = match self.thread.proc.upgrade() {
+            Some(p) => p,
+            None => return Poll::Ready(()),
+        };
         cfg_if! {
             if #[cfg(all(target_os = "none", target_arch = "aarch64"))] {
                 use hal_impl::arch::config::USER_TABLE_FLAG;
-                hal_impl::vm::activate_paging(self.thread.proc().vmar().table_phys() | USER_TABLE_FLAG);
+                hal_impl::vm::activate_paging(proc.vmar().table_phys() | USER_TABLE_FLAG);
             } else {
-                hal_impl::vm::activate_paging(self.thread.proc().vmar().table_phys());
+                hal_impl::vm::activate_paging(proc.vmar().table_phys());
             }
         }
+        drop(proc);
         hal_impl::thread::set_current_thread(Some(self.thread.clone()));
         let ret = self.future.lock().as_mut().poll(cx);
         hal_impl::thread::set_current_thread(None);

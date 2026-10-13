@@ -153,7 +153,7 @@ fn walk_robust_list(thread: &CurrentThread) {
     let pending_addr = head.pending & !ROBUST_LIST_PI_BIT;
     if pending_addr != 0 {
         let futex_addr = (pending_addr as isize + head.off) as usize;
-        handle_robust_entry(futex_addr, tid, proc, true);
+        handle_robust_entry(futex_addr, tid, &proc, true);
     }
 
     // Walk the circular linked list.
@@ -168,7 +168,7 @@ fn walk_robust_list(thread: &CurrentThread) {
         }
         if entry != pending_addr {
             let futex_addr = (entry as isize + head.off) as usize;
-            handle_robust_entry(futex_addr, tid, proc, false);
+            handle_robust_entry(futex_addr, tid, &proc, false);
         }
         let next_ptr: UserInPtr<usize> = entry.into();
         entry = match next_ptr.read() {
