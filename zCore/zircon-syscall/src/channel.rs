@@ -209,18 +209,22 @@ impl Syscall<'_> {
         if wr_data.len() < 4 {
             return Err(ZxError::INVALID_ARGS);
         }
+        let wr_handles = {
+            let handles = args.wr_handles.read_array(args.wr_num_handles as usize)?;
+            let handles = proc.remove_handles(&handles)?;
+            if handles.len() > 64 {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            for handle in handles.iter() {
+                if !handle.rights.contains(Rights::TRANSFER) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+            }
+            handles
+        };
         let wr_msg = MessagePacket {
             data: wr_data,
-            handles: {
-                let handles = args.wr_handles.read_array(args.wr_num_handles as usize)?;
-                let handles = proc.remove_handles(&handles)?;
-                for handle in handles.iter() {
-                    if !handle.rights.contains(Rights::TRANSFER) {
-                        return Err(ZxError::ACCESS_DENIED);
-                    }
-                }
-                handles
-            },
+            handles: wr_handles,
         };
 
         let cancel_token = proc.get_cancel_token(handle_value)?;
@@ -446,6 +450,9 @@ impl Syscall<'_> {
         } else {
             Vec::new()
         };
+        if handles.len() > 64 {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         let wr_msg = MessagePacket { data, handles };
         let cancel_token = proc.get_cancel_token(handle_value)?;
         let future = channel.call(wr_msg);

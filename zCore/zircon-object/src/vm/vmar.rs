@@ -1477,8 +1477,14 @@ impl VmAddressRegion {
         #[cfg(not(target_os = "none"))]
         if hal_impl::platform::needs_user_write_flush() {
             let page_idx = (vaddr - map_inner.addr) / PAGE_SIZE;
-            let is_exec = map_inner.page_flags(page_idx).contains(MMUFlags::EXECUTE);
-            if is_exec {
+            let current_flags = map_inner.page_flags(page_idx);
+            let is_exec = current_flags.contains(MMUFlags::EXECUTE);
+            let is_writable = current_flags.contains(MMUFlags::WRITE);
+            // write_memory is a debug API that bypasses mapping permissions.
+            // If the page isn't currently writable at the host OS level,
+            // temporarily mprotect it to RW so the write doesn't SIGBUS.
+            let needs_unlock = !is_writable || is_exec;
+            if needs_unlock {
                 hal_impl::mem::pmem_mprotect(vaddr, actual_size, MMUFlags::READ | MMUFlags::WRITE);
             }
             for (i, &byte) in buf[..actual_size].iter().enumerate() {
@@ -1486,18 +1492,22 @@ impl VmAddressRegion {
                     core::ptr::write_volatile((vaddr + i) as *mut u8, byte);
                 }
             }
-            if is_exec {
-                hal_impl::mem::pmem_mprotect(
-                    vaddr,
-                    actual_size,
-                    MMUFlags::READ | MMUFlags::EXECUTE,
-                );
+            if needs_unlock {
+                // Restore the original protection.
+                let restore = if is_exec {
+                    MMUFlags::READ | MMUFlags::EXECUTE
+                } else {
+                    current_flags
+                };
+                hal_impl::mem::pmem_mprotect(vaddr, actual_size, restore);
                 #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-                unsafe {
-                    extern "C" {
-                        fn sys_icache_invalidate(start: *mut core::ffi::c_void, size: usize);
+                if is_exec {
+                    unsafe {
+                        extern "C" {
+                            fn sys_icache_invalidate(start: *mut core::ffi::c_void, size: usize);
+                        }
+                        sys_icache_invalidate(vaddr as *mut _, actual_size);
                     }
-                    sys_icache_invalidate(vaddr as *mut _, actual_size);
                 }
             }
         }
