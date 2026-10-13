@@ -140,7 +140,7 @@ VmoTestCase.UnmapLoanedcontiguousWhileFaulting
 # Passing (removed from skip): InvalidPagerCreate, ResizeNonresizableVmo,
 #   DetachClosePagerTest, ZeroHandlesRace, DetachAndAlwaysNeed,
 #   CloneResizeParentOK, DeepHierarchy, PagerDetachPinned.
-# Remaining ~97 all hang — keep wildcard for those.
+# Remaining ~97 all hang — listed individually below.
 Pager.OverlapCommitSupplyTest
 Pager.BulkOddLengthSupplyTest
 Pager.BulkOddOffsetSupplyTest
