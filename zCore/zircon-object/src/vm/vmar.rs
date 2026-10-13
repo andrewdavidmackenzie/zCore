@@ -415,12 +415,15 @@ impl VmAddressRegion {
         // Note: CAN_MAP_SPECIFIC is checked at the syscall layer (sys_vmar_map),
         // not here, because internal callers (ELF loader, etc.) need to use
         // specific offsets on VMARs without CAN_MAP_SPECIFIC.
-        // When MAP_RANGE (eager commit) is requested and the mapping
-        // extends past the VMO, Fuchsia returns OUT_OF_RANGE.  This
-        // matches the C++ core-test PhysicalVmoOobMapping.
-        if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
-            return Err(ZxError::OUT_OF_RANGE);
-        }
+        // When map_range is set but the mapping extends past the VMO,
+        // fall back to lazy mapping to avoid committing non-existent pages.
+        // The explicit MAP_RANGE validation (returning OUT_OF_RANGE for
+        // non-resizable VMOs) is done at the syscall layer in sys_vmar_map.
+        let map_range = if map_range && (vmo_offset > vmo.len() || len > vmo.len() - vmo_offset) {
+            false
+        } else {
+            map_range
+        };
         let mut guard = self.inner.lock();
         let inner = guard.as_mut().ok_or(ZxError::BAD_STATE)?;
         let offset = if overwrite {
@@ -2286,15 +2289,13 @@ mod tests {
         let vmo = VmObject::new_paged(4);
         let flags = MMUFlags::READ | MMUFlags::WRITE;
 
-        // With MAP_RANGE (eager commit), mapping beyond VMO size fails.
-        assert_eq!(
-            vmar.map_at(0, vmo.clone(), 0x4000, 0x1000, flags),
-            Err(ZxError::OUT_OF_RANGE)
-        );
-        assert_eq!(
-            vmar.map_at(0, vmo.clone(), 0, 0x5000, flags),
-            Err(ZxError::OUT_OF_RANGE)
-        );
+        // Fuchsia allows mapping beyond VMO size (pages fault on access).
+        // At the kernel object level, map_range silently downgrades to lazy
+        // mapping. The explicit MAP_RANGE check is in the syscall layer.
+        let a1 = vmar.map_at(0, vmo.clone(), 0x4000, 0x1000, flags).unwrap();
+        vmar.unmap(a1, 0x1000).unwrap();
+        let a2 = vmar.map_at(0, vmo.clone(), 0, 0x5000, flags).unwrap();
+        vmar.unmap(a2, 0x5000).unwrap();
         assert_eq!(
             vmar.map_at(0, vmo.clone(), 0x1000, 1, flags),
             Err(ZxError::INVALID_ARGS)
