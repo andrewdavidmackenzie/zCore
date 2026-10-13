@@ -1113,6 +1113,8 @@ mod tests {
             }),
             Err(ZxError::ACCESS_DENIED)
         );
+        // Clean up self-referential handles to avoid aspace ID leak.
+        proc.exit(0);
     }
 
     #[test]
@@ -1155,6 +1157,8 @@ mod tests {
             .downcast_arc::<Process>()
             .expect("wrong object type");
         assert!(Arc::ptr_eq(&object, &proc));
+        // Clean up self-referential handles to avoid aspace ID leak.
+        proc.exit(0);
     }
 
     #[test]

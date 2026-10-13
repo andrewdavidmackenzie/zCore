@@ -1123,6 +1123,8 @@ mod tests {
         // no other references to `Thread`
         assert_eq!(Arc::strong_count(&thread), 1);
         assert_eq!(thread.state(), ThreadState::Dead);
+        // Clean up self-referential handle added by proc.start().
+        proc.exit(0);
     }
 
     #[async_std::test]
