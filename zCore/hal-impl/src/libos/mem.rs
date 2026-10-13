@@ -16,27 +16,59 @@ pub(super) const PMEM_MAP_VADDR: VirtAddr = 0x8_0000_0000;
 /// Physical memory size = 1GiB
 pub(super) const PMEM_SIZE: usize = 0x4000_0000;
 
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+/// Tracks total frames allocated and deallocated for leak detection.
+static FRAMES_ALLOCATED: AtomicUsize = AtomicUsize::new(0);
+static FRAMES_DEALLOCATED: AtomicUsize = AtomicUsize::new(0);
+
 /// Allocate a single physical frame. Returns the physical address (offset
 /// within mock physical memory), or None if no frames available.
 /// Exposed for use by ZcoreKernelHandler in libos mode.
 pub fn frame_alloc() -> Option<usize> {
-    FRAME_ALLOCATOR
+    let result = FRAME_ALLOCATOR
         .lock()
         .alloc()
-        .map(|id| id * crate::PAGE_SIZE)
+        .map(|id| id * crate::PAGE_SIZE);
+    if result.is_some() {
+        FRAMES_ALLOCATED.fetch_add(1, Ordering::Relaxed);
+    } else {
+        let alloc = FRAMES_ALLOCATED.load(Ordering::Relaxed);
+        let dealloc = FRAMES_DEALLOCATED.load(Ordering::Relaxed);
+        eprintln!(
+            "FRAME EXHAUSTION: allocated={}, deallocated={}, leaked={}",
+            alloc,
+            dealloc,
+            alloc - dealloc
+        );
+    }
+    result
 }
 
 /// Allocate contiguous physical frames.
 pub fn frame_alloc_contiguous(frame_count: usize, align_log2: usize) -> Option<usize> {
-    FRAME_ALLOCATOR
+    let result = FRAME_ALLOCATOR
         .lock()
         .alloc_contiguous(None, frame_count, align_log2)
-        .map(|id| id * crate::PAGE_SIZE)
+        .map(|id| id * crate::PAGE_SIZE);
+    if result.is_some() {
+        FRAMES_ALLOCATED.fetch_add(frame_count, Ordering::Relaxed);
+    }
+    result
 }
 
 /// Deallocate a physical frame by its address.
 pub fn frame_dealloc(paddr: usize) {
     FRAME_ALLOCATOR.lock().dealloc(paddr / crate::PAGE_SIZE);
+    FRAMES_DEALLOCATED.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Return (allocated, deallocated) frame counts for leak detection.
+pub fn frame_stats() -> (usize, usize) {
+    (
+        FRAMES_ALLOCATED.load(Ordering::Relaxed),
+        FRAMES_DEALLOCATED.load(Ordering::Relaxed),
+    )
 }
 
 pub(super) static FRAME_ALLOCATOR: spin::Lazy<Mutex<FrameAlloc>> = spin::Lazy::new(|| {
@@ -61,6 +93,8 @@ hal_fn_impl! {
         fn pmem_read(paddr: PhysAddr, buf: &mut [u8]) {
             trace!("pmem read: paddr={:#x}, len={:#x}", paddr, buf.len());
             assert!(paddr + buf.len() <= PMEM_SIZE);
+            // Sync any anonymous user VA writes back to PMEM before reading.
+            MOCK_PHYS_MEM.sync_user_to_pmem(paddr, buf.len());
             let src = (*MOCK_PHYS_MEM).as_ptr::<u8>(paddr);
             unsafe { buf.as_mut_ptr().copy_from_nonoverlapping(src, buf.len()) };
         }
@@ -70,20 +104,28 @@ hal_fn_impl! {
             assert!(paddr + buf.len() <= PMEM_SIZE);
             let dst = (*MOCK_PHYS_MEM).as_mut_ptr::<u8>(paddr);
             unsafe { dst.copy_from_nonoverlapping(buf.as_ptr(), buf.len()) };
+            // Sync the written data to any anonymous user VA pages.
+            MOCK_PHYS_MEM.sync_pmem_to_user(paddr, buf.len());
         }
 
         fn pmem_zero(paddr: PhysAddr, len: usize) {
             trace!("pmem_zero: addr={:#x}, len={:#x}", paddr, len);
             assert!(paddr + len <= PMEM_SIZE);
             unsafe { core::ptr::write_bytes((*MOCK_PHYS_MEM).as_mut_ptr::<u8>(paddr), 0, len) };
+            // Sync zeroed data to any anonymous user VA pages.
+            MOCK_PHYS_MEM.sync_pmem_to_user(paddr, len);
         }
 
         fn pmem_copy(dst: PhysAddr, src: PhysAddr, len: usize) {
             trace!("pmem_copy: {:#x} <- {:#x}, len={:#x}", dst, src, len);
             assert!(src + len <= PMEM_SIZE && dst + len <= PMEM_SIZE);
-            let dst = (*MOCK_PHYS_MEM).as_mut_ptr::<u8>(dst);
-            let src = (*MOCK_PHYS_MEM).as_ptr::<u8>(src);
-            unsafe { dst.copy_from_nonoverlapping(src, len) };
+            // Sync source from user VA first.
+            MOCK_PHYS_MEM.sync_user_to_pmem(src, len);
+            let dst_ptr = (*MOCK_PHYS_MEM).as_mut_ptr::<u8>(dst);
+            let src_ptr = (*MOCK_PHYS_MEM).as_ptr::<u8>(src);
+            unsafe { dst_ptr.copy_from_nonoverlapping(src_ptr, len) };
+            // Sync destination to user VA.
+            MOCK_PHYS_MEM.sync_pmem_to_user(dst, len);
         }
 
         fn frame_flush(_target: PhysAddr) {

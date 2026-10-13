@@ -37,8 +37,8 @@ fn wait_value_mismatch() {
     use core::sync::atomic::AtomicI32;
 
     let _ctx = TestContext::new();
-    static VALUE: AtomicI32 = AtomicI32::new(42);
-    let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
+    let value = Box::new(AtomicI32::new(42));
+    let futex = Futex::new(Box::as_ref(&value) as *const AtomicI32 as usize);
 
     // Pass a mismatched expected value — should fail immediately
     let result = async_std::task::block_on(futex.wait(99));
@@ -99,8 +99,8 @@ fn wakeup_address() {
     use core::sync::atomic::AtomicI32;
 
     let _ctx = TestContext::new();
-    static VALUE: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
+    let value = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&value) as *const AtomicI32 as usize);
 
     // No waiters — wake returns 0
     assert_eq!(futex.wake(10), 0);
@@ -114,8 +114,8 @@ fn get_owner() {
     use core::sync::atomic::AtomicI32;
 
     let _ctx = TestContext::new();
-    static VALUE: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
+    let value = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&value) as *const AtomicI32 as usize);
 
     // Initially no owner
     assert!(futex.owner().is_none());
@@ -139,8 +139,8 @@ fn wait_timeout() {
     use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
     let _ctx = TestContext::new();
-    static VALUE: AtomicI32 = AtomicI32::new(7);
-    let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
+    let value = Box::new(AtomicI32::new(7));
+    let futex = Futex::new(Box::as_ref(&value) as *const AtomicI32 as usize);
 
     // Create a future for wait — the value matches so it will go Pending
     let mut future = Box::pin(futex.wait(7));
@@ -318,10 +318,10 @@ fn requeue_value_mismatch() {
     use core::sync::atomic::AtomicI32;
 
     let _ctx = TestContext::new();
-    static VALUE: AtomicI32 = AtomicI32::new(42);
-    static REQUEUE_VALUE: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
-    let requeue_futex = Futex::new(&REQUEUE_VALUE as *const AtomicI32 as usize);
+    let value = Box::new(AtomicI32::new(42));
+    let requeue_value = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&value) as *const AtomicI32 as usize);
+    let requeue_futex = Futex::new(Box::as_ref(&requeue_value) as *const AtomicI32 as usize);
 
     // Pass mismatched current_value (99 != 42) with check_value=true → BAD_STATE
     let result = futex.requeue(99, 1, 1, &requeue_futex, None, true);
@@ -345,8 +345,8 @@ fn requeue_same_addr() {
 
     // Use a properly aligned address (must be non-null, aligned to 4).
     // The value doesn't matter — the same-address check fires first.
-    static VALUE: AtomicI32 = AtomicI32::new(0);
-    let addr = &VALUE as *const AtomicI32 as usize;
+    let value = Box::new(AtomicI32::new(0));
+    let addr = Box::as_ref(&value) as *const AtomicI32 as usize;
     let value_ptr = hal_impl::user::UserInPtr::<AtomicI32>::from(addr);
     let requeue_ptr = hal_impl::user::UserInPtr::<AtomicI32>::from(addr);
 
@@ -734,10 +734,10 @@ fn futex_requeue_tbi_returns_invalid_args() {
     // TBI address: top byte set (bit 56+). On systems without TBI,
     // this is just an invalid address. The syscall should reject it.
     // Use an address with high bits set — will fail alignment or mapping check.
-    static VALUE: AtomicI32 = AtomicI32::new(0);
-    static REQUEUE_VALUE: AtomicI32 = AtomicI32::new(0);
-    let addr = &VALUE as *const AtomicI32 as usize;
-    let requeue_addr = &REQUEUE_VALUE as *const AtomicI32 as usize;
+    let value = Box::new(AtomicI32::new(0));
+    let requeue_value = Box::new(AtomicI32::new(0));
+    let addr = Box::as_ref(&value) as *const AtomicI32 as usize;
+    let requeue_addr = Box::as_ref(&requeue_value) as *const AtomicI32 as usize;
     let value_ptr = hal_impl::user::UserInPtr::<AtomicI32>::from(addr);
     let requeue_ptr = hal_impl::user::UserInPtr::<AtomicI32>::from(requeue_addr);
 
@@ -761,10 +761,10 @@ fn requeue_with_wake_count_zero() {
     use core::sync::atomic::AtomicI32;
 
     let _ctx = TestContext::new();
-    static VALUE: AtomicI32 = AtomicI32::new(0);
-    static REQUEUE_VALUE: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
-    let requeue_futex = Futex::new(&REQUEUE_VALUE as *const AtomicI32 as usize);
+    let value = Box::new(AtomicI32::new(0));
+    let requeue_value = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&value) as *const AtomicI32 as usize);
+    let requeue_futex = Futex::new(Box::as_ref(&requeue_value) as *const AtomicI32 as usize);
 
     // wake_count=0, requeue_count=10 — no waiters to move
     let result = futex.requeue(0, 0, 10, &requeue_futex, None, true);
@@ -795,8 +795,8 @@ fn wait_timeout_elapsed() {
     use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
     let _ctx = TestContext::new();
-    static VALUE: AtomicI32 = AtomicI32::new(100);
-    let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
+    let value = Box::new(AtomicI32::new(100));
+    let futex = Futex::new(Box::as_ref(&value) as *const AtomicI32 as usize);
 
     // Create the wait future — value matches so it will pend
     let mut future = Box::pin(futex.wait(100));

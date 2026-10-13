@@ -30,12 +30,12 @@ use zircon_object::signal::Futex;
 #[test]
 fn lock_unlock() {
     let _ctx = TestContext::new();
-    static MUTEX: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&MUTEX as *const AtomicI32 as usize);
+    let mutex = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&mutex) as *const AtomicI32 as usize);
 
     // C++: mutex.lock()
     // sync_mutex_lock: CAS(0 → 1)
-    MUTEX
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("lock should succeed");
 
@@ -50,16 +50,16 @@ fn lock_unlock() {
 
     // C++: mutex.unlock()
     // sync_mutex_unlock: store(0) + futex_wake
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
     futex.wake(1);
 
     // After unlock, another thread could acquire the lock
     // Simulate: the other thread locks, sets flag, unlocks
-    MUTEX
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("second lock after unlock should succeed");
     flag.store(1, Ordering::Release);
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 
     // C++: EXPECT_TRUE(flag.load())
     assert_eq!(
@@ -81,12 +81,12 @@ fn lock_unlock() {
 #[test]
 fn try_lock() {
     let _ctx = TestContext::new();
-    static MUTEX: AtomicI32 = AtomicI32::new(0);
+    let mutex = AtomicI32::new(0);
 
     // C++: ASSERT_TRUE(mutex.try_lock())
     // sync_mutex_trylock: CAS(0 → 1) succeeds
     assert!(
-        MUTEX
+        mutex
             .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
             .is_ok(),
         "Mutex try_lock failed when it should have succeeded"
@@ -95,14 +95,14 @@ fn try_lock() {
     // C++: EXPECT_FALSE(mutex.try_lock())
     // CAS(0 → 1) fails because value is 1
     assert!(
-        MUTEX
+        mutex
             .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
             .is_err(),
         "Mutex try_lock succeeded when it should have failed"
     );
 
     // C++: mutex.unlock()
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 }
 
 /// C++: TEST(MutexWrapper, BasicLockable)
@@ -115,21 +115,21 @@ fn try_lock() {
 #[test]
 fn basic_lockable() {
     let _ctx = TestContext::new();
-    static MUTEX: AtomicI32 = AtomicI32::new(0);
+    let mutex = AtomicI32::new(0);
 
     // C++: std::lock_guard guard(mutex) — lock in constructor
-    MUTEX
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("lock should succeed");
 
     // Guard scope — while held, value is non-zero
-    assert_ne!(MUTEX.load(Ordering::Relaxed), 0);
+    assert_ne!(mutex.load(Ordering::Relaxed), 0);
 
     // C++: guard destructor — unlock
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 
     // After scope, mutex is unlocked
-    assert_eq!(MUTEX.load(Ordering::Relaxed), 0);
+    assert_eq!(mutex.load(Ordering::Relaxed), 0);
 }
 
 /// C++: TEST(MutexWrapper, Get)
@@ -147,32 +147,32 @@ fn basic_lockable() {
 #[test]
 fn get() {
     let _ctx = TestContext::new();
-    static MUTEX: AtomicI32 = AtomicI32::new(0);
+    let mutex = AtomicI32::new(0);
 
     // C++: sync_mutex_lock(c_mutex) — lock via raw API
-    MUTEX
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("raw lock should succeed");
 
     // C++: mutex.try_lock() → should fail (already locked by raw API)
     assert!(
-        MUTEX
+        mutex
             .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
             .is_err(),
         "Mutex try_lock succeeded when it should have failed"
     );
 
     // C++: sync_mutex_unlock(c_mutex) — unlock via raw API
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 
     // C++: mutex.try_lock() → should succeed (unlocked by raw API)
     assert!(
-        MUTEX
+        mutex
             .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
             .is_ok(),
         "Mutex try_lock failed when it should have succeeded"
     );
 
     // C++: mutex.unlock()
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 }

@@ -35,24 +35,24 @@ use zircon_object::signal::Futex;
 #[test]
 fn wait() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
+    let completion = Box::new(AtomicI32::new(0));
 
     // Initially not signaled
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         0,
         "completion should start unsignaled"
     );
 
     // C++: completion.Signal()
     // sync_completion_signal: store(SIGNALED) + futex_wake(UINT_MAX)
-    COMPLETION.store(1, Ordering::Release);
-    let futex = Futex::new(&COMPLETION as *const AtomicI32 as usize);
+    completion.store(1, Ordering::Release);
+    let futex = Futex::new(Box::as_ref(&completion) as *const AtomicI32 as usize);
     futex.wake(usize::MAX);
 
     // C++: completion.Wait() would return immediately since signaled
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         1,
         "completion should be signaled after Signal()"
     );
@@ -69,15 +69,15 @@ fn wait() {
 #[test]
 fn wait_duration_timeout() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&COMPLETION as *const AtomicI32 as usize);
+    let completion = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&completion) as *const AtomicI32 as usize);
 
     // Not signaled (value is 0)
     // C++: completion.Wait(zx::duration::infinite_past()) → TIMED_OUT
     // At kernel level: futex_wait with past deadline
     // In single-threaded mode: check the not-signaled state
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         0,
         "wait with past deadline on unsignaled completion should time out"
     );
@@ -101,16 +101,16 @@ fn wait_duration_timeout() {
 #[test]
 fn wait_duration() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
+    let completion = AtomicI32::new(0);
 
     // C++: completion.Signal()
-    COMPLETION.store(1, Ordering::Release);
+    completion.store(1, Ordering::Release);
 
     // C++: completion.Wait(zx::duration::infinite_past()) → ZX_OK
     // sync_completion_wait checks the signaled flag BEFORE calling futex_wait.
     // If already signaled, returns immediately.
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         1,
         "wait on signaled completion should succeed immediately"
     );
@@ -123,11 +123,11 @@ fn wait_duration() {
 #[test]
 fn wait_deadline_timeout() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
+    let completion = AtomicI32::new(0);
 
     // Not signaled, past deadline → would time out
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         0,
         "wait with past deadline on unsignaled completion should time out"
     );
@@ -140,14 +140,14 @@ fn wait_deadline_timeout() {
 #[test]
 fn wait_deadline() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
+    let completion = AtomicI32::new(0);
 
     // C++: completion.Signal()
-    COMPLETION.store(1, Ordering::Release);
+    completion.store(1, Ordering::Release);
 
     // C++: completion.Wait(zx::time::infinite_past()) → ZX_OK
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         1,
         "wait on signaled completion should succeed"
     );
@@ -167,33 +167,33 @@ fn wait_deadline() {
 #[test]
 fn signaled() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
+    let completion = Box::new(AtomicI32::new(0));
 
     // C++: EXPECT_FALSE(completion.signaled())
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         0,
         "initially not signaled"
     );
 
     // C++: completion.Signal()
-    COMPLETION.store(1, Ordering::Release);
-    let futex = Futex::new(&COMPLETION as *const AtomicI32 as usize);
+    completion.store(1, Ordering::Release);
+    let futex = Futex::new(Box::as_ref(&completion) as *const AtomicI32 as usize);
     futex.wake(usize::MAX);
 
     // C++: EXPECT_TRUE(completion.signaled())
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         1,
         "should be signaled after Signal()"
     );
 
     // C++: completion.Reset()
-    COMPLETION.store(0, Ordering::Release);
+    completion.store(0, Ordering::Release);
 
     // C++: EXPECT_FALSE(completion.signaled())
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         0,
         "should not be signaled after Reset()"
     );

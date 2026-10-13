@@ -180,14 +180,14 @@ fn conditional_variables_timeout() {
     let _ctx = TestContext::new();
 
     // C++: cnd_t cond = CND_INIT — condvar futex word, initially 0
-    static COND: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&COND as *const AtomicI32 as usize);
+    let cond = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&cond) as *const AtomicI32 as usize);
 
     // C++: mtx_t mutex = MTX_INIT — mutex, initially unlocked
-    static MUTEX: AtomicI32 = AtomicI32::new(0);
+    let mutex = AtomicI32::new(0);
 
     // C++: mtx_lock(&mutex)
-    MUTEX
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("mtx_lock should succeed");
 
@@ -195,7 +195,7 @@ fn conditional_variables_timeout() {
     // Internally: mtx_unlock + futex_wait(cond, expected, deadline) + mtx_lock
     // Since no one signals the condvar, this times out.
     // In single-threaded mode: futex_wait with value mismatch → BAD_STATE
-    MUTEX.store(0, Ordering::Release); // mtx_unlock before futex_wait
+    mutex.store(0, Ordering::Release); // mtx_unlock before futex_wait
     let result = async_std::task::block_on(futex.wait(99)); // value mismatch
     assert_eq!(
         result.unwrap_err(),
@@ -203,10 +203,10 @@ fn conditional_variables_timeout() {
         "Lock should have timedout"
     );
     // Re-lock after timedwait returns
-    MUTEX
+    mutex
         .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
         .expect("mtx_lock after timedwait should succeed");
 
     // C++: mtx_unlock(&mutex)
-    MUTEX.store(0, Ordering::Release);
+    mutex.store(0, Ordering::Release);
 }

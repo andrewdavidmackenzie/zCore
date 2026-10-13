@@ -29,12 +29,12 @@ fn initializer() {
     let _ctx = TestContext::new();
     // C++: static sync_completion_t static_completion (bss-zeroed)
     // C++: sync_completion_t completion (stack, also zeroed)
-    static STATIC: AtomicI32 = AtomicI32::new(0);
+    let static_val = AtomicI32::new(0);
     let local = AtomicI32::new(0);
 
     // C++: memcmp == 0
     assert_eq!(
-        STATIC.load(Ordering::Relaxed),
+        static_val.load(Ordering::Relaxed),
         local.load(Ordering::Relaxed),
         "completion's initializer is not all zeroes"
     );
@@ -137,17 +137,17 @@ fn timeout_multi_wait() {
 #[test]
 fn presignal_single_wait() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
+    let completion = Box::new(AtomicI32::new(0));
 
     // C++: sync_completion_signal(&completion) — signal first
-    COMPLETION.store(1, Ordering::Release);
-    let futex = Futex::new(&COMPLETION as *const AtomicI32 as usize);
+    completion.store(1, Ordering::Release);
+    let futex = Futex::new(Box::as_ref(&completion) as *const AtomicI32 as usize);
     futex.wake(usize::MAX);
 
     // C++: thread calls sync_completion_wait_deadline → ZX_OK immediately
     // (flag is already set, no futex_wait needed)
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         1,
         "pre-signaled completion should return ZX_OK"
     );
@@ -159,15 +159,15 @@ fn presignal_single_wait() {
 #[test]
 fn presignal_multi_wait() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
+    let completion = AtomicI32::new(0);
 
     // Signal first
-    COMPLETION.store(1, Ordering::Release);
+    completion.store(1, Ordering::Release);
 
     // Multiple readers should all see the signaled state
     for _ in 0..16 {
         assert_eq!(
-            COMPLETION.load(Ordering::Acquire),
+            completion.load(Ordering::Acquire),
             1,
             "pre-signaled completion should be visible to all waiters"
         );
@@ -183,28 +183,28 @@ fn presignal_multi_wait() {
 #[test]
 fn reset_cycle_single_wait() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&COMPLETION as *const AtomicI32 as usize);
+    let completion = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&completion) as *const AtomicI32 as usize);
 
     // C++: sync_completion_signal + sync_completion_reset
-    COMPLETION.store(1, Ordering::Release);
+    completion.store(1, Ordering::Release);
     futex.wake(usize::MAX);
-    COMPLETION.store(0, Ordering::Release); // reset
+    completion.store(0, Ordering::Release); // reset
 
     // After reset, completion is unsignaled
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         0,
         "should be unsignaled after reset"
     );
 
     // C++: sync_completion_signal (second time)
-    COMPLETION.store(1, Ordering::Release);
+    completion.store(1, Ordering::Release);
     futex.wake(usize::MAX);
 
     // Waiter should now see signaled
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         1,
         "should be signaled after re-signal"
     );
@@ -216,22 +216,22 @@ fn reset_cycle_single_wait() {
 #[test]
 fn reset_cycle_multi_wait() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&COMPLETION as *const AtomicI32 as usize);
+    let completion = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&completion) as *const AtomicI32 as usize);
 
     // Signal and reset
-    COMPLETION.store(1, Ordering::Release);
+    completion.store(1, Ordering::Release);
     futex.wake(usize::MAX);
-    COMPLETION.store(0, Ordering::Release);
-    assert_eq!(COMPLETION.load(Ordering::Acquire), 0);
+    completion.store(0, Ordering::Release);
+    assert_eq!(completion.load(Ordering::Acquire), 0);
 
     // Re-signal
-    COMPLETION.store(1, Ordering::Release);
+    completion.store(1, Ordering::Release);
     futex.wake(usize::MAX);
 
     // All waiters should see signaled
     for _ in 0..16 {
-        assert_eq!(COMPLETION.load(Ordering::Acquire), 1);
+        assert_eq!(completion.load(Ordering::Acquire), 1);
     }
 }
 
@@ -336,50 +336,50 @@ async fn spurious_wakeup_handled() {
 #[test]
 fn completion_signaled() {
     let _ctx = TestContext::new();
-    static COMPLETION: AtomicI32 = AtomicI32::new(0);
-    let futex = Futex::new(&COMPLETION as *const AtomicI32 as usize);
+    let completion = Box::new(AtomicI32::new(0));
+    let futex = Futex::new(Box::as_ref(&completion) as *const AtomicI32 as usize);
 
     // C++: ASSERT_FALSE(sync_completion_signaled(&sync))
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         0,
         "initially not signaled"
     );
 
     // C++: ASSERT_FALSE(sync_completion_signaled(&const_sync))
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         0,
         "const ref also not signaled"
     );
 
     // C++: sync_completion_signal(&sync)
-    COMPLETION.store(1, Ordering::Release);
+    completion.store(1, Ordering::Release);
     futex.wake(usize::MAX);
 
     // C++: ASSERT_TRUE(sync_completion_signaled(&sync))
-    assert_eq!(COMPLETION.load(Ordering::Acquire), 1, "should be signaled");
+    assert_eq!(completion.load(Ordering::Acquire), 1, "should be signaled");
 
     // C++: ASSERT_TRUE(sync_completion_signaled(&const_sync))
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         1,
         "const ref should also be signaled"
     );
 
     // C++: sync_completion_reset(&sync)
-    COMPLETION.store(0, Ordering::Release);
+    completion.store(0, Ordering::Release);
 
     // C++: ASSERT_FALSE(sync_completion_signaled(&sync))
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         0,
         "should be unsignaled after reset"
     );
 
     // C++: ASSERT_FALSE(sync_completion_signaled(&const_sync))
     assert_eq!(
-        COMPLETION.load(Ordering::Acquire),
+        completion.load(Ordering::Acquire),
         0,
         "const ref unsignaled after reset"
     );
