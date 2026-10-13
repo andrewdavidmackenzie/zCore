@@ -111,8 +111,15 @@ impl Channel {
         Ok(())
     }
 
+    /// Maximum number of handles per channel message.
+    /// Matches Fuchsia's `ZX_CHANNEL_MAX_MSG_HANDLES`.
+    const MAX_MSG_HANDLES: usize = 64;
+
     /// Write a packet to the channel
     pub fn write(&self, msg: T) -> ZxResult {
+        if msg.handles.len() > Self::MAX_MSG_HANDLES {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
         // check first 4 bytes: whether it is a call reply?
         let txid = msg.get_txid();

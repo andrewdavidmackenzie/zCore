@@ -1571,17 +1571,19 @@ fn protect_split_test() {
     vmar.protect(addr + PAGE_SIZE, 2 * PAGE_SIZE, MMUFlags::READ)
         .unwrap();
 
-    // Write to middle pages via write_memory — should fail (read-only).
+    // write_memory is a debug API (zx_process_write_memory) that bypasses
+    // mapping permissions — it writes directly to the underlying VMO.
+    // It should succeed even on read-only protected pages.
     let r_w = vmar.write_memory(addr + PAGE_SIZE, &[0xFF; 8]);
     assert!(
-        r_w.is_err(),
-        "write to read-only protected region should fail"
+        r_w.is_ok(),
+        "write_memory (debug API) should bypass read-only protection"
     );
 
-    // VMO data is still readable via VMO API.
+    // The VMO should now contain the written data.
     let mut buf = [0u8; 8];
     vmo.read(PAGE_SIZE, &mut buf).unwrap();
-    assert_eq!(buf[0], 2);
+    assert_eq!(buf[0], 0xFF);
 
     vmar.unmap(addr, 4 * PAGE_SIZE).unwrap();
 }
