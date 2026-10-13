@@ -95,17 +95,26 @@ define_count_helper!(VmAddressRegion);
 
 impl Drop for VmAddressRegion {
     fn drop(&mut self) {
-        // Recycle the address space ID for root VMARs so that
-        // long-running test suites don't exhaust the host VA space.
+        self.free_aspace_id();
+    }
+}
+
+impl VmAddressRegion {
+    /// Free the address space ID if this is a root VMAR created by
+    /// `new_root()`. Idempotent — safe to call from both
+    /// `destroy_internal()` and `Drop`.
+    fn free_aspace_id(&self) {
         #[cfg(feature = "aspace-separate")]
         if self.parent.is_none() {
-            const ASPACE_STRIDE: usize = 0x1000_0000; // must match new_root()
+            const ASPACE_STRIDE: usize = 0x4000_0000; // must match new_root()
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
             let base = 0x4_0000_0000usize;
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize;
             if self.addr >= base {
                 let id = (self.addr - base) / ASPACE_STRIDE;
+                // aspace_id::free inserts into a BTreeSet — idempotent
+                // (inserting the same ID twice is a no-op).
                 aspace_id::free(id);
             }
         }
@@ -158,11 +167,11 @@ impl VmAddressRegion {
             let i = aspace_id::alloc();
             // On aarch64 macOS, mmap MAP_FIXED fails below 0x400000000.
             // Use a higher base address for separate address spaces.
-            // Each address space gets ASPACE_STRIDE bytes of virtual
-            // address space. Use a smaller stride so more address spaces
-            // fit within the 47-bit user VA limit (~128 TB on most OSes).
-            // 256 MB per address space allows 500K+ concurrent processes.
-            const ASPACE_STRIDE: usize = 0x1000_0000; // 256 MB
+            // Each address space gets ASPACE_SIZE bytes of usable virtual
+            // address space, allocated at ASPACE_STRIDE intervals.
+            // 1 GB per process with 1 GB stride gives 128K+ processes
+            // within the 47-bit user VA limit (~128 TB).
+            const ASPACE_STRIDE: usize = 0x4000_0000; // 1 GB
             const ASPACE_SIZE: usize = ASPACE_STRIDE;
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
             let base = 0x4_0000_0000usize; // 16 GB (macOS MAP_FIXED minimum)
@@ -898,18 +907,7 @@ impl VmAddressRegion {
         // Eagerly recycle the address space ID for root VMARs so that
         // the host VA range is available for reuse immediately, without
         // waiting for the Arc<VmAddressRegion> to be fully dropped.
-        #[cfg(feature = "aspace-separate")]
-        if self.parent.is_none() {
-            const ASPACE_STRIDE: usize = 0x1000_0000; // must match new_root()
-            #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-            let base = 0x4_0000_0000usize;
-            #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
-            let base = 0x2_0000_0000usize;
-            if self.addr >= base {
-                let id = (self.addr - base) / ASPACE_STRIDE;
-                aspace_id::free(id);
-            }
-        }
+        self.free_aspace_id();
         Ok(())
     }
 

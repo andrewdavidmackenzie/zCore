@@ -14,9 +14,10 @@ pub struct MockMemory {
     /// how each host page is mapped. Maps host-page-aligned vaddr to
     /// the state of that host page.
     host_pages: std::sync::Mutex<std::collections::HashMap<usize, HostPageState>>,
-    /// Reverse mapping: paddr (4K-aligned) → user vaddr, for anonymous
+    /// Reverse mapping: paddr (4K-aligned) → user vaddrs, for anonymous
     /// pages only. Used to sync data between PMEM and user VA.
-    anon_paddr_to_vaddr: std::sync::Mutex<std::collections::HashMap<usize, usize>>,
+    /// Multiple vaddrs can map the same paddr (shared-frame aliasing).
+    anon_paddr_to_vaddr: std::sync::Mutex<std::collections::HashMap<usize, Vec<usize>>>,
 }
 
 /// State of a host page in the large-page mapping path.
@@ -289,12 +290,15 @@ impl MockMemory {
             unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
 
             // Track paddr→vaddr for anonymous pages so we can sync later.
+            // Multiple vaddrs can map the same paddr (shared-frame aliasing).
             let aligned_paddr = paddr & !(0xFFF); // 4K-align
             let aligned_va = vaddr & !(0xFFF);
             self.anon_paddr_to_vaddr
                 .lock()
                 .unwrap()
-                .insert(aligned_paddr, aligned_va);
+                .entry(aligned_paddr)
+                .or_default()
+                .push(aligned_va);
         }
 
         // Set the requested protection on the host page(s).
@@ -348,15 +352,17 @@ impl MockMemory {
         let end = paddr + len;
         let mut page = start_page;
         while page < end {
-            if let Some(&vaddr) = map.get(&page) {
+            if let Some(vaddrs) = map.get(&page) {
                 let offset_in_page = paddr.saturating_sub(page);
                 let copy_start = page + offset_in_page;
                 let copy_end = (page + page_size).min(end);
                 let copy_len = copy_end - copy_start;
                 if copy_len > 0 {
                     let src = (PMEM_MAP_VADDR + copy_start) as *const u8;
-                    let dst = (vaddr + offset_in_page) as *mut u8;
-                    unsafe { core::ptr::copy_nonoverlapping(src, dst, copy_len) };
+                    for &vaddr in vaddrs {
+                        let dst = (vaddr + offset_in_page) as *mut u8;
+                        unsafe { core::ptr::copy_nonoverlapping(src, dst, copy_len) };
+                    }
                 }
             }
             page += page_size;
@@ -366,7 +372,8 @@ impl MockMemory {
     /// Sync data from user VA to PMEM for anonymous-mapped pages.
     ///
     /// Called before `pmem_read(paddr, buf)` to ensure PMEM has the
-    /// latest data written through anonymous user VAs.
+    /// latest data written through anonymous user VAs. Uses the first
+    /// mapped vaddr as the authoritative source.
     pub fn sync_user_to_pmem(&self, paddr: PhysAddr, len: usize) {
         let map = self.anon_paddr_to_vaddr.lock().unwrap();
         let page_size = 0x1000usize;
@@ -374,15 +381,17 @@ impl MockMemory {
         let end = paddr + len;
         let mut page = start_page;
         while page < end {
-            if let Some(&vaddr) = map.get(&page) {
-                let offset_in_page = paddr.saturating_sub(page);
-                let copy_start = page + offset_in_page;
-                let copy_end = (page + page_size).min(end);
-                let copy_len = copy_end - copy_start;
-                if copy_len > 0 {
-                    let src = (vaddr + offset_in_page) as *const u8;
-                    let dst = (PMEM_MAP_VADDR + copy_start) as *mut u8;
-                    unsafe { core::ptr::copy_nonoverlapping(src, dst, copy_len) };
+            if let Some(vaddrs) = map.get(&page) {
+                if let Some(&vaddr) = vaddrs.first() {
+                    let offset_in_page = paddr.saturating_sub(page);
+                    let copy_start = page + offset_in_page;
+                    let copy_end = (page + page_size).min(end);
+                    let copy_len = copy_end - copy_start;
+                    if copy_len > 0 {
+                        let src = (vaddr + offset_in_page) as *const u8;
+                        let dst = (PMEM_MAP_VADDR + copy_start) as *mut u8;
+                        unsafe { core::ptr::copy_nonoverlapping(src, dst, copy_len) };
+                    }
                 }
             }
             page += page_size;
@@ -393,9 +402,24 @@ impl MockMemory {
         let hps = host_page_size();
         let aligned_vaddr = vaddr & !(hps - 1);
         let aligned_len = ((vaddr + len + hps - 1) & !(hps - 1)) - aligned_vaddr;
+
+        // Acquire the reverse mapping lock BEFORE unmapping, so that
+        // concurrent sync operations cannot read through an address
+        // that we're about to unmap (Comment 3 fix).
+        let mut anon_map = self.anon_paddr_to_vaddr.lock().unwrap();
+
+        // Remove reverse mapping entries for anonymous pages in the
+        // unmapped range. Each paddr maps to a Vec of vaddrs.
+        for vaddrs in anon_map.values_mut() {
+            vaddrs.retain(|&va| {
+                let va_aligned = va & !(hps - 1);
+                va_aligned < aligned_vaddr || va_aligned >= aligned_vaddr + aligned_len
+            });
+        }
+        anon_map.retain(|_, vaddrs| !vaddrs.is_empty());
+
+        // Now safe to unmap — no sync can read through these addresses.
         // POSIX munmap on an already-unmapped range is a no-op (not an error).
-        // Don't panic — the VMAR allocator calls unmap_cont to clear stale
-        // entries, which may target addresses that were never mapped.
         if let Err(err) = unsafe { mman::munmap(aligned_vaddr as _, aligned_len) } {
             warn!(
                 "munmap non-fatal: vaddr={:#x}, len={:#x}: {:?}",
@@ -411,13 +435,6 @@ impl MockMemory {
             pages.remove(&page);
             page += hps;
         }
-
-        // Remove reverse mapping entries for anonymous pages.
-        let mut anon_map = self.anon_paddr_to_vaddr.lock().unwrap();
-        anon_map.retain(|_, &mut va| {
-            let va_aligned = va & !(hps - 1);
-            va_aligned < aligned_vaddr || va_aligned >= aligned_vaddr + aligned_len
-        });
     }
 
     pub fn mprotect(&self, vaddr: VirtAddr, len: usize, prot: MMUFlags) {
