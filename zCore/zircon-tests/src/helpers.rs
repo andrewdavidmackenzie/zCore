@@ -725,6 +725,117 @@ pub fn condvar_waiter_thread_fn(
     })
 }
 
+// ── Echo server helper ───────────────────────────────────────────────
+//
+// A Zircon thread that reads messages from a channel and writes them
+// back (echo). Used by channel_call and iovec tests.
+
+use zircon_object::ipc::{Channel, MessagePacket};
+use zircon_object::object::{KernelObject, Signal};
+
+/// Shared state for an echo server thread.
+pub struct EchoServerState {
+    /// The server's end of the channel.
+    pub channel: Arc<Channel>,
+    /// Thread state tracking.
+    pub state: AtomicU32,
+}
+
+impl EchoServerState {
+    pub fn new(channel: Arc<Channel>) -> Arc<Self> {
+        Arc::new(Self {
+            channel,
+            state: AtomicU32::new(WAITER_STATE_WAITING_TO_START),
+        })
+    }
+}
+
+/// Thread function for echo server.
+///
+/// C++ equivalent: EchoServer in channel_call tests.
+/// Loops: wait_signal(READABLE) → read → write back.
+/// Exits when the channel peer is closed.
+pub fn echo_server_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let inner_thread = thread.inner();
+        let server = inner_thread
+            .ext()
+            .downcast_ref::<Arc<EchoServerState>>()
+            .expect("EchoServerState ext missing")
+            .clone();
+
+        server
+            .state
+            .store(WAITER_STATE_ABOUT_TO_WAIT, Ordering::Release);
+
+        let channel = &server.channel;
+        let channel_obj: Arc<dyn KernelObject> = channel.clone();
+
+        loop {
+            // Wait for a message to arrive
+            let signal = channel_obj
+                .wait_signal(Signal::READABLE | Signal::PEER_CLOSED)
+                .await;
+            if signal.contains(Signal::PEER_CLOSED) {
+                break;
+            }
+
+            // Read all available messages and echo them back
+            while let Ok(msg) = channel.read() {
+                // Echo the message back — the txid in bytes[0..4] is preserved,
+                // which triggers Channel::write's call_reply dispatch.
+                let _ = channel.write(msg);
+            }
+        }
+
+        server
+            .state
+            .store(WAITER_STATE_WAIT_RETURNED, Ordering::Release);
+    })
+}
+
+/// An echo server running on a Zircon thread.
+pub struct EchoServer {
+    pub thread: Arc<Thread>,
+    pub state: Arc<EchoServerState>,
+    /// The client end of the channel (for the test to use).
+    pub client: Arc<Channel>,
+}
+
+impl EchoServer {
+    /// Create a channel pair and start an echo server on the server end.
+    pub fn start(proc: &Arc<Process>) -> Self {
+        let (client, server_channel) = Channel::create();
+        let server_state = EchoServerState::new(server_channel);
+        let thread = Thread::create_with_ext(proc, "echo-server", server_state.clone()).unwrap();
+        thread.start(echo_server_thread_fn).unwrap();
+        EchoServer {
+            thread,
+            state: server_state,
+            client,
+        }
+    }
+
+    /// Shut down the echo server by dropping the client channel
+    /// (causing PEER_CLOSED) and waiting for the thread to exit.
+    pub async fn shutdown(self) {
+        // Drop client to send PEER_CLOSED to server
+        drop(self.client);
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        loop {
+            if self.thread.state() == zircon_object::task::ThreadState::Dead {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+            async_std::task::yield_now().await;
+        }
+    }
+}
+
 /// A test context providing a Zircon process and current thread.
 pub struct TestContext {
     pub proc: Arc<Process>,
