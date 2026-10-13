@@ -389,7 +389,12 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn decommit(&self, offset: usize, len: usize) -> ZxResult {
         let (_guard, mut inner) = self.get_inner_mut();
-        if inner.parent.is_some() {
+        // Contiguous VMOs cannot be decommitted (their pages must
+        // remain physically contiguous).  All other paged VMOs —
+        // including COW snapshot children and reparented origins —
+        // support decommit: removing locally-owned pages so that
+        // subsequent reads fall through to the parent.
+        if inner.is_contiguous() {
             return Err(ZxError::NOT_SUPPORTED);
         }
         // Validate range.
