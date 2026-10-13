@@ -1011,6 +1011,7 @@ mod tests {
 
         assert_eq!(proc.related_koid(), root_job.id());
         assert!(Arc::ptr_eq(&root_job, &proc.job()));
+        proc.exit(0);
     }
 
     #[test]
@@ -1072,6 +1073,7 @@ mod tests {
                 .err(),
             Some(ZxError::BAD_HANDLE)
         );
+        proc.exit(0);
     }
 
     #[test]
@@ -1172,6 +1174,7 @@ mod tests {
 
         let thread1 = Thread::create(&proc, "thread1").expect("failed to create thread");
         assert_eq!(proc.thread_ids(), vec![thread.id(), thread1.id()]);
+        proc.exit(0);
     }
 
     #[test]
@@ -1184,6 +1187,7 @@ mod tests {
 
         proc.set_dyn_break_on_load(2);
         assert_eq!(proc.get_dyn_break_on_load(), 2);
+        proc.exit(0);
     }
 
     #[test]
@@ -1224,6 +1228,9 @@ mod tests {
 
         let inner = proc.inner.lock();
         assert!(inner.contains_thread(&thread) && !inner.contains_thread(&thread1));
+        drop(inner);
+        proc.exit(0);
+        proc1.exit(0);
     }
 
     #[test]
@@ -1257,5 +1264,6 @@ mod tests {
                 .err(),
             Some(ZxError::BAD_STATE)
         );
+        proc.exit(0);
     }
 }
