@@ -646,11 +646,24 @@ impl VmObject {
         }
     }
 
+    /// Maximum VMO size — derived from the user address-space limit.
+    ///
+    /// A VMO cannot be meaningfully larger than the virtual address
+    /// space it could be mapped into.  `USER_ASPACE_SIZE` is
+    /// `(1 << 47) - 4096 - USER_ASPACE_BASE` (~128 TB), which is
+    /// the largest mapping any single process can hold.  Using this
+    /// as the VMO cap rejects astronomically large resize requests
+    /// with `ZX_ERR_NO_MEMORY`, matching Fuchsia behaviour.
+    const MAX_SIZE: usize = super::vmar::USER_ASPACE_SIZE as usize;
+
     /// Set the length of this VMO if resizable.
     pub fn set_len(&self, len: usize) -> ZxResult {
         let size = roundup_pages(len);
         if size < len {
             return Err(ZxError::OUT_OF_RANGE);
+        }
+        if size > Self::MAX_SIZE {
+            return Err(ZxError::NO_MEMORY);
         }
         if !self.resizable {
             // Slices/references return ACCESS_DENIED; regular
@@ -738,7 +751,13 @@ impl VmObject {
     }
 
     /// Lock a discardable VMO, incrementing its lock count.
+    ///
+    /// Returns `NOT_SUPPORTED` if the VMO is not discardable, matching
+    /// Fuchsia's `ZX_VMO_OP_LOCK` behavior.
     pub fn lock_discardable(&self) -> ZxResult {
+        if !self.is_discardable() {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         self.lock_count
             .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         Ok(())
