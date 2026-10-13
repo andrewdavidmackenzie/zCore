@@ -361,7 +361,7 @@ impl ExceptionObject {
             return Err(ZxError::ACCESS_DENIED);
         }
         Ok(Handle {
-            object: self.exception.thread.proc().clone(),
+            object: self.exception.thread.proc(),
             rights: self.rights & Rights::DEFAULT_PROCESS,
         })
     }

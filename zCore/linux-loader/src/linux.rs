@@ -236,11 +236,11 @@ async fn handle_user_trap(thread: &CurrentThread, mut ctx: Box<UserContext>) -> 
         let args = syscall_args(&ctx);
         ctx.advance_pc(reason);
         thread.put_context(ctx);
-        let mut syscall = linux_syscall::Syscall {
+        let mut syscall = linux_syscall::Syscall::new(
             thread,
             thread_fn,
-            syscall_entry: hal_impl::context::syscall_entry as *const () as usize,
-        };
+            hal_impl::context::syscall_entry as *const () as usize,
+        );
         trace!("Syscall : {} {:x?}", num as u32, args);
         run_with_irq_enable! {
             let ret = syscall.syscall(num as u32, args).await as usize
