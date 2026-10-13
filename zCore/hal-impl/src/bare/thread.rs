@@ -97,6 +97,10 @@ hal_fn_impl! {
             executor::spawn(future);
         }
 
+        fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) {
+            executor::spawn_with_priority(future, priority);
+        }
+
         fn set_current_thread(thread: Option<Arc<dyn Any + Send + Sync>>) {
             let idx = super::cpu::cpu_index();
             *CURRENT_THREAD[idx].get_mut() = thread;

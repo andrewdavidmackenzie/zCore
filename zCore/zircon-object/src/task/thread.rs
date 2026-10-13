@@ -147,6 +147,10 @@ struct ThreadInner {
     /// signalled but not yet delivered, matching Fuchsia's
     /// `THREAD_SIGNAL_POLICY_EXCEPTION` deferred delivery model.
     pending_policy_exception: Option<(u32, u32)>,
+    /// Scheduling priority (0 = lowest, 31 = highest).
+    /// Default is `ZIRCON_DEFAULT_PRIORITY` (16), matching Fuchsia.
+    /// Set via `zx_object_set_profile()`.
+    priority: usize,
 }
 
 impl ThreadInner {
@@ -212,6 +216,10 @@ bitflags! {
 type ThreadFuture = dyn Future<Output = ()> + Send;
 type ThreadFuturePinned = Pin<Box<ThreadFuture>>;
 
+/// Default scheduling priority for new threads, matching Fuchsia's
+/// `DEFAULT_PRIORITY` (midpoint of 0-31 range).
+pub const ZIRCON_DEFAULT_PRIORITY: usize = 16;
+
 /// The type of a new thread function.
 pub type ThreadFn = fn(thread: CurrentThread) -> ThreadFuturePinned;
 
@@ -249,6 +257,7 @@ impl Thread {
             exceptionate: Exceptionate::new(ExceptionChannelType::Thread),
             inner: Mutex::new(ThreadInner {
                 context: Some(Box::new(UserContext::new())),
+                priority: ZIRCON_DEFAULT_PRIORITY,
                 ..Default::default()
             }),
         });
@@ -264,6 +273,19 @@ impl Thread {
     /// Get the extension info.
     pub fn ext(&self) -> &Box<dyn Any + Send + Sync> {
         &self.ext
+    }
+
+    /// Get the thread's scheduling priority (0-31).
+    pub fn priority(&self) -> usize {
+        self.inner.lock().priority
+    }
+
+    /// Set the thread's scheduling priority (0-31).
+    ///
+    /// Called when a profile is applied via `zx_object_set_profile()`.
+    /// The priority is clamped to 0-31.
+    pub fn set_priority(&self, priority: usize) {
+        self.inner.lock().priority = priority.min(31);
     }
 
     /// Signal a deferred policy exception, matching Fuchsia's
@@ -319,13 +341,18 @@ impl Thread {
 
     /// Start execution on the thread.
     pub fn start(self: &Arc<Self>, thread_fn: ThreadFn) -> ZxResult {
-        self.inner
-            .lock()
-            .change_state(ThreadState::Running, &self.base);
+        let priority = {
+            let mut inner = self.inner.lock();
+            inner.change_state(ThreadState::Running, &self.base);
+            inner.priority
+        };
         let current = CurrentThread(self.clone());
         let future = thread_fn(current);
 
-        hal_impl::thread::spawn(ThreadSwitchFuture::new(self.clone(), future));
+        hal_impl::thread::spawn_with_priority(
+            ThreadSwitchFuture::new(self.clone(), future),
+            priority,
+        );
         Ok(())
     }
 
@@ -1248,5 +1275,33 @@ mod tests {
         // Calling exit again should be idempotent (not panic).
         current.exit();
         assert_eq!(thread.state(), ThreadState::Dying);
+    }
+
+    #[test]
+    fn priority_default() {
+        let root_job = Job::root();
+        let proc = Process::create(&root_job, "proc").expect("failed to create process");
+        let thread = Thread::create(&proc, "thread").expect("failed to create thread");
+
+        // New threads should have the Zircon default priority (16).
+        assert_eq!(thread.priority(), ZIRCON_DEFAULT_PRIORITY);
+        assert_eq!(thread.priority(), 16);
+    }
+
+    #[test]
+    fn priority_set_get() {
+        let root_job = Job::root();
+        let proc = Process::create(&root_job, "proc").expect("failed to create process");
+        let thread = Thread::create(&proc, "thread").expect("failed to create thread");
+
+        thread.set_priority(0);
+        assert_eq!(thread.priority(), 0);
+
+        thread.set_priority(31);
+        assert_eq!(thread.priority(), 31);
+
+        // Values above 31 are clamped.
+        thread.set_priority(100);
+        assert_eq!(thread.priority(), 31);
     }
 }

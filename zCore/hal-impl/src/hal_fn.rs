@@ -153,6 +153,14 @@ hal_fn_def! {
         /// Spawn a new thread.
         pub fn spawn(future: impl Future<Output = ()> + Send + 'static);
 
+        /// Spawn a new thread with a specific scheduling priority (0-31).
+        ///
+        /// Priority 0 is lowest, 31 is highest. If the platform does not
+        /// support priority scheduling, this falls back to `spawn()`.
+        pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) {
+            spawn(future)
+        }
+
         /// Set tid and pid of current task.
         pub fn set_current_thread(thread: Option<Arc<dyn Any + Send + Sync>>) {}
 
