@@ -15,10 +15,9 @@
 //! scheduler that cannot context-switch between blocking threads.
 
 use crate::helpers::{self, TestContext};
+use core::sync::atomic::Ordering;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::task::{Job, Process, Task, Thread};
-
-extern crate alloc;
 
 /// C++: TEST_F(PthreadTest, Basic)
 ///
@@ -33,23 +32,108 @@ extern crate alloc;
 /// All of this requires concurrent multi-threaded execution with
 /// blocking waits (pthread_cond_wait, pthread_mutex_lock). The
 /// cooperative libos scheduler cannot run this.
-#[test]
-#[ignore = "requires preemptive multi-threaded scheduling for concurrent mutex/condvar waits"]
-fn basic() {
-    // The C++ test exercises:
-    // - Uncontested mutex lock/unlock (futex CAS fast path)
-    // - 3 threads doing pthread_cond_wait (futex_wait) with broadcast (futex_wake_all)
-    //   and individual signal (futex_wake(1))
-    // - poll_waked_threads spin-waiting for thread_waked atomic counter
-    // - pthread_cond_timedwait with 2-second timeout → ETIMEDOUT
-    // - 3 mutex threads with staggered sleep + lock/unlock
-    //
-    // Kernel primitives exercised:
-    //   zx_futex_wait, zx_futex_wake (mutex lock/unlock)
-    //   zx_futex_wait, zx_futex_wake (condvar wait/signal/broadcast)
-    //   zx_nanosleep (for timing delays)
-    //   zx_thread_create, zx_thread_start (thread creation)
-    //   Thread::wait_signal(THREAD_TERMINATED) (join)
+/// C++: TEST_F(PthreadTest, Basic)
+///
+/// Exercises concurrent mutex contention and condvar wait/broadcast/signal
+/// using Zircon threads. Faithful port of the C++ test's key paths:
+/// 1. Uncontested mutex lock/unlock (CAS fast path)
+/// 2. 3 threads doing condvar wait, main broadcasts, all wake
+/// 3. 3 mutex contender threads
+#[async_std::test]
+async fn basic() {
+    use crate::helpers::{
+        condvar_waiter_thread_fn, mutex_contender_thread_fn, CondvarWaiterState,
+        MutexContenderState, SyncCondition, SyncMutex,
+    };
+    use core::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
+    let ctx = TestContext::new();
+    let proc = ctx.proc.clone();
+
+    // Part 1: Uncontested mutex lock/unlock (C++: fast CAS path)
+    let mutex = Arc::new(SyncMutex::new());
+    // Lock and unlock without contention — should succeed immediately
+    async_std::task::block_on(mutex.lock());
+    mutex.unlock();
+
+    // Part 2: 3 condvar threads + broadcast (C++: cond_threads)
+    let cond = Arc::new(SyncCondition::new());
+    let predicate = Arc::new(AtomicBool::new(false));
+    let woken_counter = Arc::new(core::sync::atomic::AtomicI32::new(0));
+
+    let mut cond_threads = std::vec::Vec::new();
+    for _ in 0..3 {
+        let state = CondvarWaiterState::new(
+            mutex.clone(),
+            cond.clone(),
+            predicate.clone(),
+            woken_counter.clone(),
+        );
+        let thread = Thread::create_with_ext(&proc, "pthread-cond", state.clone()).unwrap();
+        thread.start(condvar_waiter_thread_fn).unwrap();
+        cond_threads.push((thread, state));
+    }
+
+    async_std::task::yield_now().await;
+    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+
+    predicate.store(true, Ordering::Release);
+    cond.broadcast();
+
+    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    while woken_counter.load(Ordering::SeqCst) < 3 {
+        assert!(std::time::Instant::now() < deadline, "condvar timed out");
+        async_std::task::yield_now().await;
+    }
+
+    for (thread, _) in &cond_threads {
+        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        loop {
+            if thread.state() == zircon_object::task::ThreadState::Dead {
+                break;
+            }
+            if std::time::Instant::now() >= dl {
+                break;
+            }
+            async_std::task::yield_now().await;
+        }
+    }
+
+    // Part 3: 3 mutex contender threads (C++: mutex_threads)
+    let mutex2 = Arc::new(SyncMutex::new());
+    let counter = Arc::new(core::sync::atomic::AtomicI32::new(0));
+
+    let mut mutex_threads = std::vec::Vec::new();
+    for &iters in &[10usize, 5, 3] {
+        let state = MutexContenderState::new(mutex2.clone(), counter.clone(), iters);
+        let thread = Thread::create_with_ext(&proc, "pthread-mutex", state.clone()).unwrap();
+        thread.start(mutex_contender_thread_fn).unwrap();
+        mutex_threads.push((thread, state));
+    }
+
+    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    for (_, state) in &mutex_threads {
+        while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
+            assert!(std::time::Instant::now() < deadline, "mutex timed out");
+            async_std::task::yield_now().await;
+        }
+    }
+
+    assert_eq!(counter.load(Ordering::SeqCst), 18); // 10+5+3
+
+    for (thread, _) in &mutex_threads {
+        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        loop {
+            if thread.state() == zircon_object::task::ThreadState::Dead {
+                break;
+            }
+            if std::time::Instant::now() >= dl {
+                break;
+            }
+            async_std::task::yield_now().await;
+        }
+    }
 }
 
 /// C++: TEST_F(PthreadTest, SelfMainThread)
@@ -109,7 +193,7 @@ async fn big_stack_size() {
 
     // Kill and wait for termination (simulates pthread_join)
     thread.kill();
-    let thread_obj: alloc::sync::Arc<dyn KernelObject> = thread.clone();
+    let thread_obj: std::sync::Arc<dyn KernelObject> = thread.clone();
     thread_obj.wait_signal(Signal::THREAD_TERMINATED).await;
 
     assert!(
@@ -165,7 +249,7 @@ async fn getstack_other_thread() {
 
     // Kill and join (pthread_join)
     thread.kill();
-    let thread_obj: alloc::sync::Arc<dyn KernelObject> = thread.clone();
+    let thread_obj: std::sync::Arc<dyn KernelObject> = thread.clone();
     thread_obj.wait_signal(Signal::THREAD_TERMINATED).await;
 }
 
@@ -190,6 +274,6 @@ async fn getstack_other_thread_explicit_size() {
 
     // Kill and join (pthread_join)
     thread.kill();
-    let thread_obj: alloc::sync::Arc<dyn KernelObject> = thread.clone();
+    let thread_obj: std::sync::Arc<dyn KernelObject> = thread.clone();
     thread_obj.wait_signal(Signal::THREAD_TERMINATED).await;
 }

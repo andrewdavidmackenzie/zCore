@@ -27,14 +27,53 @@ use zircon_object::signal::Futex;
 ///
 /// This requires concurrent multi-threaded execution with blocking
 /// mutex waits (futex_wait). Cannot run in cooperative libos mode.
-#[test]
-#[ignore = "requires preemptive multi-threaded scheduling for concurrent mutex contention"]
-fn multi_threaded_contention() {
-    // Kernel primitives exercised:
-    //   zx_futex_wait (mtx_lock contended path)
-    //   zx_futex_wake (mtx_unlock wake path)
-    //   zx_nanosleep (delay between lock/unlock cycles)
-    //   zx_thread_create + zx_thread_start (thrd_create)
+/// 3 threads concurrently lock/unlock a C11 mutex (futex-based).
+/// Each increments a shared counter. Total must match.
+#[async_std::test]
+async fn multi_threaded_contention() {
+    use crate::helpers::{mutex_contender_thread_fn, MutexContenderState, SyncMutex};
+    use std::sync::Arc;
+    use zircon_object::task::Thread;
+
+    let ctx = TestContext::new();
+    let proc = ctx.proc.clone();
+
+    let mutex = Arc::new(SyncMutex::new());
+    let counter = Arc::new(AtomicI32::new(0));
+
+    // C++: 3 threads with 300, 150, 100 iterations — scaled down
+    let iterations = [30, 15, 10];
+    let mut threads = std::vec::Vec::new();
+    for &iters in &iterations {
+        let state = MutexContenderState::new(mutex.clone(), counter.clone(), iters);
+        let thread = Thread::create_with_ext(&proc, "c11-mutex-contender", state.clone()).unwrap();
+        thread.start(mutex_contender_thread_fn).unwrap();
+        threads.push((thread, state));
+    }
+
+    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    for (_, state) in &threads {
+        while state.state.load(Ordering::Acquire) != crate::helpers::WAITER_STATE_WAIT_RETURNED {
+            assert!(std::time::Instant::now() < deadline, "timed out");
+            async_std::task::yield_now().await;
+        }
+    }
+
+    for (thread, _) in &threads {
+        let dl = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        loop {
+            if thread.state() == zircon_object::task::ThreadState::Dead {
+                break;
+            }
+            if std::time::Instant::now() >= dl {
+                break;
+            }
+            async_std::task::yield_now().await;
+        }
+    }
+
+    let expected: i32 = iterations.iter().map(|&i| i as i32).sum();
+    assert_eq!(counter.load(Ordering::SeqCst), expected);
 }
 
 /// C++: TEST(C11MutexTest, TryMutexMultiThreadedContention)

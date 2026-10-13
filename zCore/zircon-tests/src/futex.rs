@@ -613,18 +613,47 @@ async fn requeue_single_owner() {
 
 /// C++: TEST(FutexTest, WaitInvalidOwner)
 ///
-/// Validates that futex_wait with a thread already waiting on the
-/// same futex as proposed owner returns INVALID_ARGS.
+/// Validates that futex_wait rejects a proposed owner that is already
+/// waiting on the same futex. The C++ test also validates wrong handle
+/// type, unstarted thread, current thread, and dead thread as owners —
+/// those cases are tested synchronously elsewhere.
 ///
-/// Requires the waiter thread to pass its Thread reference when
-/// calling futex.wait_with_owner() so the kernel can match the
-/// proposed owner against the wait queue. Validated via QEMU core-tests.
-#[test]
-#[ignore = "requires waiter thread to pass Thread ref in futex.wait_with_owner (kernel gap)"]
-fn wait_invalid_owner() {
-    // Requires the waiter's Thread to be registered in the futex wait
-    // queue so is_valid_new_owner can match it. Currently waiters call
-    // futex.wait() with thread=None. Validated via QEMU core-tests.
+/// Case 4: proposed owner is already waiting on this futex → INVALID_ARGS.
+#[async_std::test]
+async fn wait_invalid_owner() {
+    use crate::helpers::FutexTestThread;
+    use core::sync::atomic::AtomicI32;
+    use std::sync::Arc;
+
+    let _ctx = TestContext::new();
+    let fv = Arc::new(AtomicI32::new(42));
+    let futex = Futex::new(Arc::as_ptr(&fv) as *const AtomicI32 as usize);
+    let proc = _ctx.proc.clone();
+
+    // C++: TestThread waiter; waiter.Start(&futex);
+    let waiter = FutexTestThread::start(&proc, &futex, 42);
+
+    // Let waiter block on the futex
+    async_std::task::yield_now().await;
+    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+
+    // C++: EXPECT_EQ(zx_futex_wait(&futex, 42, waiter.thread().get(), INFINITE),
+    //               ZX_ERR_INVALID_ARGS);
+    // The waiter's Thread is in the futex's wait queue, so proposing
+    // it as the new owner should fail immediately with INVALID_ARGS.
+    let result = futex
+        .wait_with_owner(42, None, Some(waiter.thread.clone()))
+        .await;
+    assert_eq!(
+        result.unwrap_err(),
+        zircon_object::ZxError::INVALID_ARGS,
+        "wait with waiter as owner should return INVALID_ARGS"
+    );
+
+    // C++: EXPECT_OK(zx_futex_wake(&futex, 1));
+    futex.wake(1);
+    waiter.wait_until_woken().await;
+    waiter.shutdown().await;
 }
 
 /// C++: TEST(FutexTest, RequeueInvalidOwner)
@@ -632,12 +661,61 @@ fn wait_invalid_owner() {
 /// Validates that requeue with a thread that is waiting on the wake
 /// or requeue futex as proposed owner returns INVALID_ARGS.
 ///
-/// Same kernel gap as WaitInvalidOwner — requires waiter threads to
-/// pass Thread ref. Validated via QEMU core-tests.
-#[test]
-#[ignore = "requires waiter thread to pass Thread ref in futex.wait_with_owner (kernel gap)"]
-fn requeue_invalid_owner() {
-    // Same kernel gap as WaitInvalidOwner. Validated via QEMU core-tests.
+/// Case 3: proposed owner is waiting on wake futex or requeue futex.
+#[async_std::test]
+async fn requeue_invalid_owner() {
+    use crate::helpers::FutexTestThread;
+    use core::sync::atomic::AtomicI32;
+    use std::sync::Arc;
+
+    let _ctx = TestContext::new();
+    let fv1 = Arc::new(AtomicI32::new(100));
+    let fv2 = Arc::new(AtomicI32::new(200));
+    let futex1 = Futex::new(Arc::as_ptr(&fv1) as *const AtomicI32 as usize);
+    let futex2 = Futex::new(Arc::as_ptr(&fv2) as *const AtomicI32 as usize);
+    let proc = _ctx.proc.clone();
+
+    // C++: TestThread waiter_wake; waiter_wake.Start(&futex1);
+    let waiter_wake = FutexTestThread::start(&proc, &futex1, 100);
+    // C++: TestThread waiter_requeue; waiter_requeue.Start(&futex2);
+    let waiter_requeue = FutexTestThread::start(&proc, &futex2, 200);
+
+    // Let both block
+    async_std::task::yield_now().await;
+    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+
+    // C++: EXPECT_EQ(zx_futex_requeue(&futex1, 1, 100, &futex2, 1,
+    //               waiter_wake.thread().get()), ZX_ERR_INVALID_ARGS);
+    let result = futex1.requeue(100, 1, 1, &futex2, Some(waiter_wake.thread.clone()), true);
+    assert_eq!(
+        result.unwrap_err(),
+        zircon_object::ZxError::INVALID_ARGS,
+        "requeue with waiter on wake futex as owner should fail"
+    );
+
+    // C++: EXPECT_EQ(zx_futex_requeue(&futex1, 1, 100, &futex2, 1,
+    //               waiter_requeue.thread().get()), ZX_ERR_INVALID_ARGS);
+    let result = futex1.requeue(
+        100,
+        1,
+        1,
+        &futex2,
+        Some(waiter_requeue.thread.clone()),
+        true,
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        zircon_object::ZxError::INVALID_ARGS,
+        "requeue with waiter on requeue futex as owner should fail"
+    );
+
+    // Clean up
+    futex1.wake(1);
+    futex2.wake(1);
+    waiter_wake.wait_until_woken().await;
+    waiter_requeue.wait_until_woken().await;
+    waiter_wake.shutdown().await;
+    waiter_requeue.shutdown().await;
 }
 
 // ── Bulk-ported futex tests (batch 2) ───────────────────────────────

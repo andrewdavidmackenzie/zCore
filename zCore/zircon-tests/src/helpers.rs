@@ -83,9 +83,9 @@ pub struct FutexWaiterState {
     pub wait_result: AtomicU32,
 }
 
-const WAITER_STATE_WAITING_TO_START: u32 = 100;
-const WAITER_STATE_ABOUT_TO_WAIT: u32 = 200;
-const WAITER_STATE_WAIT_RETURNED: u32 = 300;
+pub const WAITER_STATE_WAITING_TO_START: u32 = 100;
+pub const WAITER_STATE_ABOUT_TO_WAIT: u32 = 200;
+pub const WAITER_STATE_WAIT_RETURNED: u32 = 300;
 
 impl FutexWaiterState {
     pub fn new(futex: Arc<Futex>, expected_value: i32) -> Arc<Self> {
@@ -130,7 +130,14 @@ pub fn futex_waiter_thread_fn(
 
         // C++: wait_result_.store(zx_futex_wait(futex(), *futex(), owner, deadline));
         // Use blocking_run so the wait is cancellable via Thread::kill().
-        let wait_future = core::pin::pin!(waiter_state.futex.wait(waiter_state.expected_value));
+        // Pass the thread reference so the kernel tracks which thread is
+        // waiting — needed for is_valid_new_owner checks in futex_wait
+        // and futex_requeue with owner validation.
+        let wait_future = core::pin::pin!(waiter_state.futex.wait_with_owner(
+            waiter_state.expected_value,
+            Some(inner_thread.clone()),
+            None,
+        ));
         let result = thread
             .blocking_run(
                 wait_future,
@@ -276,6 +283,446 @@ pub async fn assert_woke_thread_count(threads: &[FutexTestThread], target: usize
         target,
         count_woken(threads)
     );
+}
+
+// ── Sync completion helper ───────────────────────────────────────────
+//
+// Rust equivalent of Fuchsia's sync_completion_t from libsync.
+// Implements the same 3-state protocol:
+//   UNSIGNALED(0) → UNSIGNALED_WITH_WAITERS(1) → SIGNALED(2)
+
+const SYNC_UNSIGNALED: i32 = 0;
+const SYNC_UNSIGNALED_WITH_WAITERS: i32 = 1;
+const SYNC_SIGNALED: i32 = 2;
+
+/// A sync_completion_t equivalent built on Futex + AtomicI32.
+///
+/// This replicates the exact same futex protocol as Fuchsia's
+/// sync_completion in libsync, so the tests exercise the same
+/// kernel futex_wait/futex_wake code paths.
+pub struct SyncCompletion {
+    pub value: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    pub futex: Arc<Futex>,
+}
+
+impl SyncCompletion {
+    pub fn new() -> Self {
+        let value = std::sync::Arc::new(core::sync::atomic::AtomicI32::new(SYNC_UNSIGNALED));
+        let futex = Futex::new(
+            std::sync::Arc::as_ptr(&value) as *const core::sync::atomic::AtomicI32 as usize
+        );
+        SyncCompletion { value, futex }
+    }
+
+    /// C equivalent: sync_completion_signal()
+    pub fn signal(&self) {
+        use core::sync::atomic::AtomicI32;
+        let futex_ptr = &*self.value as *const AtomicI32;
+        let prev = self.value.swap(SYNC_SIGNALED, Ordering::SeqCst);
+        if prev == SYNC_UNSIGNALED_WITH_WAITERS {
+            self.futex.wake(usize::MAX);
+        }
+    }
+
+    /// C equivalent: sync_completion_reset()
+    pub fn reset(&self) {
+        let _ = self.value.compare_exchange(
+            SYNC_SIGNALED,
+            SYNC_UNSIGNALED,
+            Ordering::SeqCst,
+            Ordering::Acquire,
+        );
+    }
+
+    /// C equivalent: sync_completion_signaled()
+    pub fn signaled(&self) -> bool {
+        self.value.load(Ordering::Acquire) == SYNC_SIGNALED
+    }
+
+    /// C equivalent: sync_completion_signal_requeue()
+    pub fn signal_requeue(&self, target_futex: &Arc<Futex>) {
+        self.value.store(SYNC_SIGNALED, Ordering::SeqCst);
+        // Requeue all waiters to the target futex (wake 0, requeue all)
+        let _ = self
+            .futex
+            .requeue(SYNC_SIGNALED, 0, usize::MAX, target_futex, None, true);
+    }
+}
+
+/// Shared state for a sync_completion waiter thread.
+pub struct CompletionWaiterState {
+    pub completion: std::sync::Arc<SyncCompletion>,
+    pub state: AtomicU32,
+    pub wait_result: AtomicU32,
+}
+
+impl CompletionWaiterState {
+    pub fn new(completion: std::sync::Arc<SyncCompletion>) -> Arc<Self> {
+        Arc::new(Self {
+            completion,
+            state: AtomicU32::new(WAITER_STATE_WAITING_TO_START),
+            wait_result: AtomicU32::new(u32::MAX),
+        })
+    }
+
+    pub fn has_wait_returned(&self) -> bool {
+        self.state.load(Ordering::Acquire) == WAITER_STATE_WAIT_RETURNED
+    }
+}
+
+/// Thread function for sync_completion waiter threads.
+///
+/// Implements the same protocol as sync_completion_wait_deadline:
+/// 1. CAS(UNSIGNALED → UNSIGNALED_WITH_WAITERS)
+/// 2. If was SIGNALED, return immediately
+/// 3. futex_wait(&futex, UNSIGNALED_WITH_WAITERS)
+/// 4. On wake, check if SIGNALED (loop if not)
+pub fn completion_waiter_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let inner_thread = thread.inner();
+        let waiter_state = inner_thread
+            .ext()
+            .downcast_ref::<Arc<CompletionWaiterState>>()
+            .expect("CompletionWaiterState ext missing")
+            .clone();
+
+        waiter_state
+            .state
+            .store(WAITER_STATE_ABOUT_TO_WAIT, Ordering::Release);
+
+        let completion = &waiter_state.completion;
+
+        // C: atomic_compare_exchange_strong(futex, &prev_value, UNSIGNALED_WITH_WAITERS)
+        let mut prev = SYNC_UNSIGNALED;
+        let _ = completion.value.compare_exchange(
+            prev,
+            SYNC_UNSIGNALED_WITH_WAITERS,
+            Ordering::SeqCst,
+            Ordering::Acquire,
+        );
+        prev = completion.value.load(Ordering::Acquire);
+
+        let result = if prev == SYNC_SIGNALED {
+            // Already signaled — return immediately
+            Ok(())
+        } else {
+            // Wait loop — handles spurious wakeups
+            loop {
+                let wait_future = core::pin::pin!(completion.futex.wait_with_owner(
+                    SYNC_UNSIGNALED_WITH_WAITERS,
+                    Some(inner_thread.clone()),
+                    None,
+                ));
+                let wait_result = thread
+                    .blocking_run(
+                        wait_future,
+                        zircon_object::task::ThreadState::BlockedFutex,
+                        core::time::Duration::from_secs(3600),
+                        None,
+                    )
+                    .await;
+
+                match wait_result {
+                    Ok(()) => {
+                        // Woken — check if actually signaled
+                        if completion.value.load(Ordering::Acquire) != SYNC_UNSIGNALED_WITH_WAITERS
+                        {
+                            break Ok(());
+                        }
+                        // Spurious wake — go back to sleep
+                    }
+                    Err(zircon_object::ZxError::BAD_STATE) => {
+                        // Value changed (now SIGNALED) — success
+                        break Ok(());
+                    }
+                    Err(e) => break Err(e),
+                }
+            }
+        };
+
+        let code = match result {
+            Ok(()) => 0,
+            Err(e) => e as u32,
+        };
+        waiter_state.wait_result.store(code, Ordering::Release);
+        waiter_state
+            .state
+            .store(WAITER_STATE_WAIT_RETURNED, Ordering::Release);
+    })
+}
+
+/// A handle to a running sync_completion waiter thread.
+pub struct CompletionTestThread {
+    pub thread: Arc<Thread>,
+    pub state: Arc<CompletionWaiterState>,
+}
+
+impl CompletionTestThread {
+    pub fn start(proc: &Arc<Process>, completion: &std::sync::Arc<SyncCompletion>) -> Self {
+        let waiter_state = CompletionWaiterState::new(completion.clone());
+        let thread =
+            Thread::create_with_ext(proc, "completion-waiter", waiter_state.clone()).unwrap();
+        thread.start(completion_waiter_thread_fn).unwrap();
+        CompletionTestThread {
+            thread,
+            state: waiter_state,
+        }
+    }
+
+    pub fn has_wait_returned(&self) -> bool {
+        self.state.has_wait_returned()
+    }
+
+    pub fn wait_result(&self) -> u32 {
+        self.state.wait_result.load(Ordering::Acquire)
+    }
+
+    pub async fn wait_until_woken(&self) {
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+        while !self.has_wait_returned() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "CompletionTestThread: timed out waiting for thread to wake"
+            );
+            async_std::task::yield_now().await;
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        if !self.has_wait_returned() {
+            self.thread.kill();
+        }
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        loop {
+            if self.thread.state() == zircon_object::task::ThreadState::Dead {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+            async_std::task::yield_now().await;
+        }
+    }
+}
+
+// ── Sync mutex helper ────────────────────────────────────────────────
+//
+// Rust equivalent of Fuchsia's sync_mutex_t from libsync.
+// Uses a simple 3-state protocol:
+//   UNLOCKED(0) → LOCKED_WITHOUT_WAITERS(1) → LOCKED_WITH_WAITERS(2)
+
+const MUTEX_UNLOCKED: i32 = 0;
+const MUTEX_LOCKED: i32 = 1;
+const MUTEX_LOCKED_WITH_WAITERS: i32 = 2;
+
+/// A sync_mutex_t equivalent built on Futex + AtomicI32.
+pub struct SyncMutex {
+    pub value: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    pub futex: Arc<Futex>,
+}
+
+impl SyncMutex {
+    pub fn new() -> Self {
+        let value = std::sync::Arc::new(core::sync::atomic::AtomicI32::new(MUTEX_UNLOCKED));
+        let futex = Futex::new(
+            std::sync::Arc::as_ptr(&value) as *const core::sync::atomic::AtomicI32 as usize
+        );
+        SyncMutex { value, futex }
+    }
+
+    /// C equivalent: sync_mutex_lock() — blocking lock
+    /// Uses CAS to try to acquire; if contended, does futex_wait.
+    pub async fn lock(&self) {
+        // Fast path: CAS 0 → 1
+        if self
+            .value
+            .compare_exchange(
+                MUTEX_UNLOCKED,
+                MUTEX_LOCKED,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            )
+            .is_ok()
+        {
+            return;
+        }
+        // Slow path: mark as contended and wait
+        loop {
+            // If not already LOCKED_WITH_WAITERS, set it
+            if self
+                .value
+                .swap(MUTEX_LOCKED_WITH_WAITERS, Ordering::Acquire)
+                == MUTEX_UNLOCKED
+            {
+                // We got the lock (it was unlocked)
+                return;
+            }
+            // Wait until the value changes from LOCKED_WITH_WAITERS
+            let _ = self.futex.wait(MUTEX_LOCKED_WITH_WAITERS).await;
+        }
+    }
+
+    /// C equivalent: sync_mutex_unlock() — release lock
+    pub fn unlock(&self) {
+        if self.value.swap(MUTEX_UNLOCKED, Ordering::Release) == MUTEX_LOCKED_WITH_WAITERS {
+            // There were waiters — wake one
+            self.futex.wake(1);
+        }
+    }
+}
+
+// ── Sync condition variable helper ──────────────────────────────────
+
+/// A sync_condition_t equivalent built on Futex + AtomicI32.
+pub struct SyncCondition {
+    pub value: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    pub futex: Arc<Futex>,
+}
+
+impl SyncCondition {
+    pub fn new() -> Self {
+        let value = std::sync::Arc::new(core::sync::atomic::AtomicI32::new(0));
+        let futex = Futex::new(
+            std::sync::Arc::as_ptr(&value) as *const core::sync::atomic::AtomicI32 as usize
+        );
+        SyncCondition { value, futex }
+    }
+
+    /// C equivalent: sync_condition_wait(cond, mutex)
+    /// Unlocks mutex, waits on futex, re-locks mutex.
+    pub async fn wait(&self, mutex: &SyncMutex) {
+        let seq = self.value.load(Ordering::Acquire);
+        mutex.unlock();
+        let _ = self.futex.wait(seq).await;
+        mutex.lock().await;
+    }
+
+    /// C equivalent: sync_condition_signal(cond) — wake one
+    pub fn signal(&self) {
+        self.value.fetch_add(1, Ordering::Release);
+        self.futex.wake(1);
+    }
+
+    /// C equivalent: sync_condition_broadcast(cond) — wake all
+    pub fn broadcast(&self) {
+        self.value.fetch_add(1, Ordering::Release);
+        self.futex.wake(usize::MAX);
+    }
+}
+
+/// Shared state for mutex contention waiter threads.
+pub struct MutexContenderState {
+    pub mutex: std::sync::Arc<SyncMutex>,
+    pub counter: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    pub iterations: usize,
+    pub state: AtomicU32,
+}
+
+impl MutexContenderState {
+    pub fn new(
+        mutex: std::sync::Arc<SyncMutex>,
+        counter: std::sync::Arc<core::sync::atomic::AtomicI32>,
+        iterations: usize,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            mutex,
+            counter,
+            iterations,
+            state: AtomicU32::new(WAITER_STATE_WAITING_TO_START),
+        })
+    }
+}
+
+/// Thread function for mutex contention threads.
+///
+/// C++ equivalent: each TestThread repeatedly does mutex.lock, counter++, mutex.unlock.
+pub fn mutex_contender_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let inner_thread = thread.inner();
+        let contender = inner_thread
+            .ext()
+            .downcast_ref::<Arc<MutexContenderState>>()
+            .expect("MutexContenderState ext missing")
+            .clone();
+
+        contender
+            .state
+            .store(WAITER_STATE_ABOUT_TO_WAIT, Ordering::Release);
+
+        for _ in 0..contender.iterations {
+            contender.mutex.lock().await;
+            contender.counter.fetch_add(1, Ordering::SeqCst);
+            contender.mutex.unlock();
+            // Small yield to let other threads contend
+            async_std::task::yield_now().await;
+        }
+
+        contender
+            .state
+            .store(WAITER_STATE_WAIT_RETURNED, Ordering::Release);
+    })
+}
+
+/// Shared state for condvar waiter threads.
+pub struct CondvarWaiterState {
+    pub mutex: std::sync::Arc<SyncMutex>,
+    pub cond: std::sync::Arc<SyncCondition>,
+    pub predicate: std::sync::Arc<core::sync::atomic::AtomicBool>,
+    pub woken_counter: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    pub state: AtomicU32,
+}
+
+impl CondvarWaiterState {
+    pub fn new(
+        mutex: std::sync::Arc<SyncMutex>,
+        cond: std::sync::Arc<SyncCondition>,
+        predicate: std::sync::Arc<core::sync::atomic::AtomicBool>,
+        woken_counter: std::sync::Arc<core::sync::atomic::AtomicI32>,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            mutex,
+            cond,
+            predicate,
+            woken_counter,
+            state: AtomicU32::new(WAITER_STATE_WAITING_TO_START),
+        })
+    }
+}
+
+/// Thread function for condvar waiter threads.
+///
+/// C++ equivalent: mutex.lock, while (!predicate) cond.wait(&mutex),
+/// woken_counter++, mutex.unlock.
+pub fn condvar_waiter_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let inner_thread = thread.inner();
+        let waiter = inner_thread
+            .ext()
+            .downcast_ref::<Arc<CondvarWaiterState>>()
+            .expect("CondvarWaiterState ext missing")
+            .clone();
+
+        waiter
+            .state
+            .store(WAITER_STATE_ABOUT_TO_WAIT, Ordering::Release);
+
+        waiter.mutex.lock().await;
+        while !waiter.predicate.load(Ordering::Acquire) {
+            waiter.cond.wait(&waiter.mutex).await;
+        }
+        waiter.woken_counter.fetch_add(1, Ordering::SeqCst);
+        waiter.mutex.unlock();
+
+        waiter
+            .state
+            .store(WAITER_STATE_WAIT_RETURNED, Ordering::Release);
+    })
 }
 
 /// A test context providing a Zircon process and current thread.

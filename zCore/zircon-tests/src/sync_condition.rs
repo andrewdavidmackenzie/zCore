@@ -31,15 +31,68 @@ use zircon_object::signal::Futex;
 ///
 /// This requires concurrent multi-threaded execution with blocking
 /// futex waits. Cannot run in cooperative libos mode.
-#[test]
-#[ignore = "requires preemptive multi-threaded scheduling for concurrent condvar wait/signal"]
-fn condition_test() {
-    // Kernel primitives exercised:
-    //   sync_condition_wait → sync_mutex_unlock + futex_wait + sync_mutex_lock
-    //   sync_condition_broadcast → futex_wake(UINT_MAX)
-    //   sync_condition_signal → futex_wake(1)
-    //   sync_mutex_lock/unlock → CAS + futex_wait/wake
-    //   sched_yield → zx_nanosleep(0)
+/// 3 threads wait on a condvar. Main thread broadcasts, all wake.
+#[async_std::test]
+async fn condition_test() {
+    use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};
+    use core::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+    use zircon_object::task::Thread;
+
+    let ctx = TestContext::new();
+    let proc = ctx.proc.clone();
+
+    let mutex = Arc::new(SyncMutex::new());
+    let cond = Arc::new(SyncCondition::new());
+    let predicate = Arc::new(AtomicBool::new(false));
+    let woken_counter = Arc::new(AtomicI32::new(0));
+
+    // C++: 3 threads each do cond.wait → broadcast → verify woken
+    let mut threads = std::vec::Vec::new();
+    for _ in 0..3 {
+        let state = CondvarWaiterState::new(
+            mutex.clone(),
+            cond.clone(),
+            predicate.clone(),
+            woken_counter.clone(),
+        );
+        let thread = Thread::create_with_ext(&proc, "condvar-waiter", state.clone()).unwrap();
+        thread.start(condvar_waiter_thread_fn).unwrap();
+        threads.push((thread, state));
+    }
+
+    // Wait for threads to block
+    async_std::task::yield_now().await;
+    async_std::task::sleep(core::time::Duration::from_millis(100)).await;
+
+    // C++: set predicate, broadcast
+    predicate.store(true, Ordering::Release);
+    cond.broadcast();
+
+    // Wait for all threads to wake and finish
+    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+    while woken_counter.load(Ordering::SeqCst) < 3 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "condvar threads timed out"
+        );
+        async_std::task::yield_now().await;
+    }
+    assert_eq!(woken_counter.load(Ordering::SeqCst), 3);
+
+    // Wait for threads to terminate
+    for (thread, _) in &threads {
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+        loop {
+            if thread.state() == zircon_object::task::ThreadState::Dead {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+            async_std::task::yield_now().await;
+        }
+    }
 }
 
 /// C++: TEST(SyncCondition, TimeoutTest)
