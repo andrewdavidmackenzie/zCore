@@ -58,6 +58,47 @@ When working on issue #21 (or any batch-fix task):
   re-triggers all CI from scratch, and can cause dependent PRs to
   show conflicts or close.
 
+## Rust Zircon test suite (zircon-tests)
+
+The Rust test suite in `zCore/zircon-tests/` is a **faithful 1:1 port** of the
+Fuchsia C++ `core-tests-standalone` binary. Every Rust test must exercise
+the **exact same Zircon kernel code paths** as the corresponding C++ test.
+
+### Rules for writing tests
+
+1. **Use Zircon kernel APIs only.** Tests create `Thread`, `Process`,
+   `Futex`, `Channel`, etc. via the kernel object APIs in
+   `zircon-object`. Never bypass the kernel with host-specific APIs
+   like `async_std::task::spawn` or `std::thread::spawn`.
+
+2. **Create Zircon threads for concurrency.** When the C++ test creates
+   threads via `thrd_create`/`zx_thread_create` + `zx_thread_start`,
+   the Rust equivalent must use `Thread::create()` + `Thread::start()`.
+   This exercises `ThreadSwitchFuture`, `spawn_with_priority()`, and
+   the kernel scheduler — the same code path as bare-metal execution.
+
+3. **Target-independent.** Tests must compile and run on all targets:
+   - libos mode (`cargo test`)
+   - QEMU x86_64
+   - QEMU aarch64
+   Do not use `std`, `async_std`, or any host-only facility in test
+   logic. The test crate is `no_std` compatible for bare-metal.
+
+4. **Same assertions.** The Rust test must make the same assertions as
+   the C++ test. Map `ASSERT_OK` → `assert!(result.is_ok())`,
+   `ASSERT_EQ(a, b)` → `assert_eq!(a, b)`, etc.
+
+5. **Reference the C++ source.** Every test function should have a doc
+   comment citing the C++ test: `/// C++: TEST(SuiteName, TestName)`.
+
+### Where the C++ source lives
+
+The Fuchsia C++ core-tests source is at:
+- Public: `https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/zircon/system/utest/core/`
+- Local (ThinkPad): `/home/amackenz/RustroverProjects/fuchsia/fuchsia/zircon/system/utest/core/`
+
+Fetch individual files with `?format=TEXT` (base64) from googlesource.
+
 ## Problem-solving principles
 - **Never silence errors or warnings without understanding the root cause.**
   Downgrading a log level or suppressing output is not a fix. Investigate
