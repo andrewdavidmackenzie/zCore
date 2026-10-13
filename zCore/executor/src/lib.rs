@@ -24,15 +24,8 @@ extern crate alloc;
 #[macro_use]
 extern crate log;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sched-priority")] {
-        #[path = "sched/priority.rs"]
-        pub mod sched;
-    } else {
-        #[path = "sched/cooperative.rs"]
-        pub mod sched;
-    }
-}
+#[path = "sched/priority.rs"]
+pub mod sched;
 
 mod context;
 mod executor;

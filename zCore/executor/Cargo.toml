@@ -8,8 +8,6 @@ edition = "2021"
 # For bare-metal testing, if kernel panic or the root process is finished,
 # shutdown the machine and exit QEMU.
 baremetal-test = []
-# Use priority round-robin scheduler instead of cooperative FIFO.
-sched-priority = []
 
 [dependencies]
 slab = { version = "0.4", default-features = false }
