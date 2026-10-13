@@ -316,15 +316,23 @@ impl Process {
                 self.terminate();
                 return;
             }
+            // Identify unstarted threads BEFORE killing — kill()
+            // transitions New→Dying, making them indistinguishable
+            // from started-then-killed threads.  Unstarted threads
+            // will never self-terminate (never call remove_thread).
+            let unstarted: alloc::vec::Vec<KoID> = inner
+                .threads
+                .iter()
+                .filter(|t| t.state() == ThreadState::New)
+                .map(|t| t.id())
+                .collect();
             for thread in inner.threads.iter() {
                 thread.kill();
             }
-            // Remove unstarted threads (New state) — they will never
-            // self-terminate because they were never running, so they
-            // will never call remove_thread().  Started threads
-            // (Running, Blocked, Dying) will eventually call
-            // remove_thread() when their CurrentThread is dropped.
-            inner.threads.retain(|t| t.state() != ThreadState::New);
+            // Remove unstarted threads — they can never call
+            // remove_thread().  Started threads (now Dying) will
+            // call remove_thread() when their CurrentThread drops.
+            inner.threads.retain(|t| !unstarted.contains(&t.id()));
             should_terminate = inner.threads.is_empty();
             zero_handles_objects = inner.clear_handles();
         }
