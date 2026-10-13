@@ -471,6 +471,7 @@ mod tests {
         futex.wake_single_owner();
         assert!(Arc::ptr_eq(&futex.owner().unwrap(), &thread));
         assert_eq!(futex.wake(1), 0);
+        proc.exit(0);
     }
 
     #[async_std::test]
@@ -537,5 +538,6 @@ mod tests {
 
         // Wake the requeued waiter to clean up
         requeue_futex.wake(1);
+        proc.exit(0);
     }
 }

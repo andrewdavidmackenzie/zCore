@@ -389,7 +389,13 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn decommit(&self, offset: usize, len: usize) -> ZxResult {
         let (_guard, mut inner) = self.get_inner_mut();
-        if inner.parent.is_some() {
+        // Fuchsia rejects decommit on:
+        //   - Contiguous VMOs (pages must stay physically contiguous)
+        //   - Snapshot children (has parent)
+        //   - Parent VMOs with children (reparented under hidden node,
+        //     so parent.is_some() after first create_child)
+        // Matches C++ VmoCloneTestCase::Decommit and Pager::DecommitTest.
+        if inner.is_contiguous() || inner.parent.is_some() {
             return Err(ZxError::NOT_SUPPORTED);
         }
         // Validate range.

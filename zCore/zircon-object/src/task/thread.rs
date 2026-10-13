@@ -1065,6 +1065,7 @@ mod tests {
         assert_eq!(thread.related_koid(), proc.id());
         let child = proc.get_child(thread.id()).unwrap().downcast_arc().unwrap();
         assert!(Arc::ptr_eq(&child, &thread));
+        proc.exit(0);
     }
 
     #[async_std::test]
@@ -1123,6 +1124,8 @@ mod tests {
         // no other references to `Thread`
         assert_eq!(Arc::strong_count(&thread), 1);
         assert_eq!(thread.state(), ThreadState::Dead);
+        // Clean up self-referential handle added by proc.start().
+        proc.exit(0);
     }
 
     #[async_std::test]
@@ -1170,6 +1173,7 @@ mod tests {
             )
             .await;
         assert_eq!(result.err(), Some(ZxError::CANCELED));
+        proc.exit(0);
     }
 
     #[test]
@@ -1184,6 +1188,7 @@ mod tests {
             thread.get_thread_exception_info().err(),
             Some(ZxError::BAD_STATE)
         );
+        proc.exit(0);
     }
 
     #[test]
@@ -1220,6 +1225,7 @@ mod tests {
             .is_ok());
         assert!(thread.write_state(ThreadStateKind::General, &buf).is_ok());
         // TODO
+        proc.exit(0);
     }
 
     #[test]
@@ -1230,6 +1236,7 @@ mod tests {
 
         let _ext = thread.ext();
         // TODO
+        proc.exit(0);
     }
 
     #[async_std::test]
@@ -1267,6 +1274,7 @@ mod tests {
         }
         let thread: Arc<dyn KernelObject> = thread;
         thread.wait_signal(Signal::THREAD_TERMINATED).await;
+        proc.exit(0);
     }
 
     #[test]
@@ -1278,6 +1286,7 @@ mod tests {
         assert_eq!(thread.get_time(), 0);
         thread.time_add(10);
         assert_eq!(thread.get_time(), 10);
+        proc.exit(0);
     }
 
     #[test]
@@ -1300,6 +1309,7 @@ mod tests {
         // Calling exit again should be idempotent (not panic).
         current.exit();
         assert_eq!(thread.state(), ThreadState::Dying);
+        proc.exit(0);
     }
 
     #[test]
@@ -1311,6 +1321,7 @@ mod tests {
         // New threads should have the Zircon default priority (16).
         assert_eq!(thread.priority(), ZIRCON_DEFAULT_PRIORITY);
         assert_eq!(thread.priority(), 16);
+        proc.exit(0);
     }
 
     #[test]
@@ -1328,5 +1339,6 @@ mod tests {
         // Values above 31 are clamped.
         thread.set_priority(100);
         assert_eq!(thread.priority(), 31);
+        proc.exit(0);
     }
 }

@@ -627,6 +627,7 @@ mod tests {
 
         let _proc = Process::create(&job, "proc").expect("failed to create process");
         assert!(!job.is_empty());
+        _proc.exit(0);
     }
 
     #[async_std::test]

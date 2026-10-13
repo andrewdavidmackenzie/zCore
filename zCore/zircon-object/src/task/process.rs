@@ -7,6 +7,7 @@ use lock::Mutex;
 
 use super::exception::{ExceptionChannelType, Exceptionate};
 use super::job_policy::{JobPolicy, PolicyAction, PolicyCondition};
+use super::thread::ThreadState;
 use super::{Job, Task, Thread, ThreadFn};
 use crate::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
 use crate::object::{KObjectBase, KernelObject, KoID, Rights, Signal};
@@ -299,6 +300,7 @@ impl Process {
     /// It will terminate after all its child threads are terminated.
     pub fn exit(&self, retcode: i64) {
         let zero_handles_objects;
+        let should_terminate;
         {
             let mut inner = self.inner.lock();
             if let Status::Exited(_) = inner.status {
@@ -314,13 +316,31 @@ impl Process {
                 self.terminate();
                 return;
             }
+            // Identify unstarted threads BEFORE killing — kill()
+            // transitions New→Dying, making them indistinguishable
+            // from started-then-killed threads.  Unstarted threads
+            // will never self-terminate (never call remove_thread).
+            let unstarted: alloc::vec::Vec<KoID> = inner
+                .threads
+                .iter()
+                .filter(|t| t.state() == ThreadState::New)
+                .map(|t| t.id())
+                .collect();
             for thread in inner.threads.iter() {
                 thread.kill();
             }
+            // Remove unstarted threads — they can never call
+            // remove_thread().  Started threads (now Dying) will
+            // call remove_thread() when their CurrentThread drops.
+            inner.threads.retain(|t| !unstarted.contains(&t.id()));
+            should_terminate = inner.threads.is_empty();
             zero_handles_objects = inner.clear_handles();
         }
         for obj in &zero_handles_objects {
             obj.on_zero_handles();
+        }
+        if should_terminate {
+            self.terminate();
         }
     }
 
@@ -1011,6 +1031,7 @@ mod tests {
 
         assert_eq!(proc.related_koid(), root_job.id());
         assert!(Arc::ptr_eq(&root_job, &proc.job()));
+        proc.exit(0);
     }
 
     #[test]
@@ -1072,6 +1093,7 @@ mod tests {
                 .err(),
             Some(ZxError::BAD_HANDLE)
         );
+        proc.exit(0);
     }
 
     #[test]
@@ -1113,6 +1135,8 @@ mod tests {
             }),
             Err(ZxError::ACCESS_DENIED)
         );
+        // Clean up self-referential handles to avoid aspace ID leak.
+        proc.exit(0);
     }
 
     #[test]
@@ -1155,6 +1179,8 @@ mod tests {
             .downcast_arc::<Process>()
             .expect("wrong object type");
         assert!(Arc::ptr_eq(&object, &proc));
+        // Clean up self-referential handles to avoid aspace ID leak.
+        proc.exit(0);
     }
 
     #[test]
@@ -1168,6 +1194,7 @@ mod tests {
 
         let thread1 = Thread::create(&proc, "thread1").expect("failed to create thread");
         assert_eq!(proc.thread_ids(), vec![thread.id(), thread1.id()]);
+        proc.exit(0);
     }
 
     #[test]
@@ -1180,6 +1207,7 @@ mod tests {
 
         proc.set_dyn_break_on_load(2);
         assert_eq!(proc.get_dyn_break_on_load(), 2);
+        proc.exit(0);
     }
 
     #[test]
@@ -1220,6 +1248,9 @@ mod tests {
 
         let inner = proc.inner.lock();
         assert!(inner.contains_thread(&thread) && !inner.contains_thread(&thread1));
+        drop(inner);
+        proc.exit(0);
+        proc1.exit(0);
     }
 
     #[test]
@@ -1253,5 +1284,6 @@ mod tests {
                 .err(),
             Some(ZxError::BAD_STATE)
         );
+        proc.exit(0);
     }
 }
