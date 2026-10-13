@@ -99,13 +99,13 @@ impl Drop for VmAddressRegion {
         // long-running test suites don't exhaust the host VA space.
         #[cfg(feature = "aspace-separate")]
         if self.parent.is_none() {
+            const ASPACE_STRIDE: usize = 0x1000_0000; // must match new_root()
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
             let base = 0x4_0000_0000usize;
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize;
-            let stride = 0x100_0000_0000usize;
             if self.addr >= base {
-                let id = (self.addr - base) / stride;
+                let id = (self.addr - base) / ASPACE_STRIDE;
                 aspace_id::free(id);
             }
         }
@@ -158,11 +158,17 @@ impl VmAddressRegion {
             let i = aspace_id::alloc();
             // On aarch64 macOS, mmap MAP_FIXED fails below 0x400000000.
             // Use a higher base address for separate address spaces.
+            // Each address space gets ASPACE_STRIDE bytes of virtual
+            // address space. Use a smaller stride so more address spaces
+            // fit within the 47-bit user VA limit (~128 TB on most OSes).
+            // 256 MB per address space allows 500K+ concurrent processes.
+            const ASPACE_STRIDE: usize = 0x1000_0000; // 256 MB
+            const ASPACE_SIZE: usize = ASPACE_STRIDE;
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-            let base = 0x4_0000_0000usize; // 16 GB
+            let base = 0x4_0000_0000usize; // 16 GB (macOS MAP_FIXED minimum)
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize; // 8 GB
-            (base + 0x100_0000_0000 * i, 0x100_0000_0000)
+            (base + ASPACE_STRIDE * i, ASPACE_SIZE)
         };
         #[cfg(not(feature = "aspace-separate"))]
         let (addr, size) = (USER_ASPACE_BASE as usize, USER_ASPACE_SIZE as usize);
@@ -889,6 +895,21 @@ impl VmAddressRegion {
             drop(mapping);
         }
         *guard = None;
+        // Eagerly recycle the address space ID for root VMARs so that
+        // the host VA range is available for reuse immediately, without
+        // waiting for the Arc<VmAddressRegion> to be fully dropped.
+        #[cfg(feature = "aspace-separate")]
+        if self.parent.is_none() {
+            const ASPACE_STRIDE: usize = 0x1000_0000; // must match new_root()
+            #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+            let base = 0x4_0000_0000usize;
+            #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
+            let base = 0x2_0000_0000usize;
+            if self.addr >= base {
+                let id = (self.addr - base) / ASPACE_STRIDE;
+                aspace_id::free(id);
+            }
+        }
         Ok(())
     }
 

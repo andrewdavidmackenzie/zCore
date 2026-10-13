@@ -349,7 +349,7 @@ impl MockMemory {
         let mut page = start_page;
         while page < end {
             if let Some(&vaddr) = map.get(&page) {
-                let offset_in_page = if page < paddr { paddr - page } else { 0 };
+                let offset_in_page = paddr.saturating_sub(page);
                 let copy_start = page + offset_in_page;
                 let copy_end = (page + page_size).min(end);
                 let copy_len = copy_end - copy_start;
@@ -375,7 +375,7 @@ impl MockMemory {
         let mut page = start_page;
         while page < end {
             if let Some(&vaddr) = map.get(&page) {
-                let offset_in_page = if page < paddr { paddr - page } else { 0 };
+                let offset_in_page = paddr.saturating_sub(page);
                 let copy_start = page + offset_in_page;
                 let copy_end = (page + page_size).min(end);
                 let copy_len = copy_end - copy_start;
