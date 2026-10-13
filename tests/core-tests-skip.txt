@@ -136,10 +136,162 @@ VmoTestCase.UnmapLoanedcontiguousWhileFaulting
 
 # ── Pager infrastructure (#498, #499) ────────────────────────────────
 # Pager tests need preemptive scheduling + TRAP_DIRTY support.
-Pager.*
-PagerProcess.*
+# ~105 Pager tests: 8 pass individually, rest hang on pager fault loop.
+# Passing (removed from skip): InvalidPagerCreate, ResizeNonresizableVmo,
+#   DetachClosePagerTest, ZeroHandlesRace, DetachAndAlwaysNeed,
+#   CloneResizeParentOK, DeepHierarchy, PagerDetachPinned.
+# Remaining ~97 all hang — keep wildcard for those.
+Pager.OverlapCommitSupplyTest
+Pager.BulkOddLengthSupplyTest
+Pager.BulkOddOffsetSupplyTest
+Pager.BulkSingleSupplyTest
+Pager.CancelKeyDoesNotWedgeThePager
+Pager.CloneChainCommitTest
+Pager.CloneCommitMultipleBatches
+Pager.CloneCommitRandomBatches
+Pager.CloneCommitSingleBatch
+Pager.CloneCommitTest
+Pager.CloneCommitTwoBatches
+Pager.CloneMightSeeIntermediateForks
+Pager.CloneReadFromCloneTest
+Pager.CloneReadFromParentTest
+Pager.CloneResizeCloneHazard
+Pager.CloneSeesCorrectParentPages
+Pager.CloneShrinkGrowParent
+Pager.CloneSimultaneousChildReadTest
+Pager.CloneSimultaneousReadTest
+Pager.CloneSplitCommitTest
+Pager.CloneWriteToCloneTest
+Pager.ClosePageCompleteTest
+Pager.ClosePagerTest
+Pager.ClosePortTest
+Pager.CommitRedundantSupplyTest
+Pager.ConcurrentMultipageAccessTest
+Pager.ConcurrentOverlappingAccessTest
+Pager.CreateVmoUnboundedInvalidStreamSize
+Pager.DecommitOnDetachTest
+Pager.DecommitTest
+Pager.DetachNonMappingAccess
+Pager.DetachPageCompleteTest
+Pager.EarlySupplyTest
+Pager.EarlyWakeCloneRace
+Pager.EarlyWakeNonLinearSupply
+Pager.EarlyWakeOnSupply
+Pager.EarlyWakeOverlappingRequests
+Pager.EarlyWakeWithResize
+Pager.EvictionHintAlwaysNeed
+Pager.EvictionHintsCloneVmar
+Pager.EvictionHintsNestedVmar
+Pager.EvictionHintsOpRange
+Pager.EvictionHintsVmar
+Pager.EvictionHintsWithClones
+Pager.EvictionHintsWithResize
+Pager.FailAfterDetach
+Pager.FailEarlyWake
+Pager.FailErrorCode
+Pager.FailExactRange
+Pager.FailMultipleCommits
+Pager.FailMultipleVmos
+Pager.FailOverlapRequest
+Pager.FailOverlappingRangeCommit
+Pager.FailOverlappingRangeRead
+Pager.FailRedundant
+Pager.FailSinglePage
+Pager.InvalidPagerCreateVmo
+Pager.InvalidPagerDetachVmo
+Pager.InvalidPagerSupplyPages
+Pager.ManyRequestTest
+Pager.MappedSupplyPages
+Pager.MulticommitSupplyTest
+Pager.MultipleConcurrentVmoTest
+Pager.MultisupplyCommitTest
+Pager.OpCommitCloneVmar
+Pager.OpCommitVmar
+Pager.OverlapCommitTest
+Pager.OverlapSupplyTest
+Pager.PageRequestBatchingChecksAncestorPages
+Pager.PinPagerVmoWithLoanedPages
+Pager.PinnedSupplyPages
+Pager.Prefetch
+Pager.PresentPageSplitsRange
+Pager.ProxyUseAfterFree
+Pager.RacyPortDequeue
+Pager.ReadCloseInterruptEarlyTest
+Pager.ReadCloseInterruptLateTest
+Pager.ReadDetachInterruptEarlyTest
+Pager.ReadDetachInterruptLateTest
+Pager.ReadResizeTest
+Pager.ResizeBlockedPin
+Pager.ResizeCommitTest
+Pager.SequentialMultipageTest
+Pager.SimpleCommitTest
+Pager.SinglePageTest
+Pager.SplitCommitTest
+Pager.SuccessiveVmoTest
+Pager.SupplyAfterDetach
+Pager.SupplyAfterFail
+Pager.SuspendCommitTest
+Pager.SuspendInKernelCaptureFaultsTest
+Pager.SuspendInKernelTest
+Pager.SuspendReadTest
+Pager.UncommittedSinglePageTest
+Pager.UncommittedSupply
+Pager.VmarMapRangeTest
+Pager.VmarRemapTest
+Pager.VmarUnmapTest
+Pager.VmoInfoPagerTest
+# PagerProcess: all 8 hang — need preemptive scheduling for
+# kill-after-suspend / kill-blocked-usercopy patterns.
+PagerProcess.KillBlockedUserVmoRead
+PagerProcess.KillBlockedUserPageFault
+PagerProcess.KillBlockedUsercopy
+PagerProcess.KillBlockedUsercopyCaptureFaults
+PagerProcess.KillAfterSuspendVmoRead
+PagerProcess.KillAfterSuspendPageFault
+PagerProcess.KillAfterSuspendUsercopy
+PagerProcess.KillAfterSuspendUsercopyCapture
+# PagerWriteback: all 179 tests hang — need TRAP_DIRTY pager support.
+# Too many to list individually; every single one hangs on the pager
+# fault loop. Keep wildcard until TRAP_DIRTY is implemented.
 PagerWriteback.*
-Snapshot.*
+# Snapshot: all 37 hang — need pager fault loop for snapshot operations.
+Snapshot.Smoke
+Snapshot.Read
+Snapshot.CloseRoot
+Snapshot.CloseClone
+Snapshot.CloseSnapshot
+Snapshot.DropVmos
+Snapshot.RootVmoWrite
+Snapshot.CloneVmoWrite
+Snapshot.SnapshotVmoWrite
+Snapshot.CommitRangeInSnapshot
+Snapshot.ResizeShrinkSnapshot
+Snapshot.ResizeShrinkSnapshotWithEmptyParent
+Snapshot.ResizeSnapshotRace
+Snapshot.ObjMemAccounting
+Snapshot.SnapshotReadOnlyVmo
+Snapshot.SnapshotModifiedClone
+Snapshot.CloneModifyChain
+Snapshot.CloneAfterSliceRoot
+Snapshot.SnapshotSlice
+Snapshot.SnapshotVmoWithSlice
+Snapshot.AlowSlice
+Snapshot.SnapshotSliceAtLeastOnWrite
+Snapshot.AtLeastOnWriteAfterSnapshotModified
+Snapshot.SnapshotModifiedAfterAtLeastOnWrite
+Snapshot.WriteAfterDropSibling
+Snapshot.ReleaseCowParentPagesLeft
+Snapshot.ReleaseCowParentPagesRight
+Snapshot.ReleaseCowParentPagesLeftAndRight
+Snapshot.ReleaseCowParentPagesRightInHiddenNode
+Snapshot.ZeroRangeFromEndOfParent
+Snapshot.ZeroRangeLeftInSnapshotPageInParent
+Snapshot.ZeroRangeLeftInSnapshotPageInSnapshot
+Snapshot.ZeroRangeLeftInSnapshotPageInClone
+Snapshot.ZeroRangeLeftInSnapshotPageInHiddenNode
+Snapshot.ZeroRangeLeftInSnapshotNoPagesInParent
+Snapshot.ZeroRangeLeftInSnapshotPagesInParentChain
+Snapshot.ZeroRangeLeftInSnapshotNoPagesInParentChain
 # StreamTestCase: most fail without hanging — removed from skip.
 # These StreamTestCase tests hang (pager-backed VMO or retry loops).
 StreamTestCase.AppendSuppliesZeroes
@@ -176,14 +328,29 @@ Vmar.FaultBeyondStreamSizeForceWritable
 # InvalidInputs: now fails without crashing (test_ram_reserve set) — removed.
 
 # ── BTI (Bus Transaction Initiator) ─────────────────────────────────
-# Kernel panics in paged.rs:1161 assertion during pin operations.
-Bti.*
+# 8/13 pass: Create, NameSupport, GetInfoTest, Clone, Resize, Pin,
+#   PinContigFlag, PinContiguous — removed from skip.
+# Remaining 5: kernel panic, fail, or hang.
+Bti.InvalidPinArgs
+Bti.QuarantineDisallowsPin
+Bti.NoDelayedUnpin
+Bti.PinTooManyAddresses
+Bti.DecommitRace
 
 # ── Interrupt / MSI tests ────────────────────────────────────────────
-# Multiple tests panic (interrupt/mod.rs:55 unwrap) or hang.
+# 12/16 InterruptTest pass: VirtualNotWakeable, VirtualInterrupts,
+#   BindTriggeredIrqToPort, NonBindablePort, UserSignals, UnBindPort,
+#   WaitThreadFunctionsAfterSuspendResume, BindPort,
+#   PortUnbindPurgesQueuedPacket, NullOutputTimestamp,
+#   DuplicateTriggerIgnoredWhileQueued, PacketDeliveredAfterBind
+#   — removed from skip.
+# 2 hang:
+InterruptTest.UntriggeredSignalInterruptWait
+InterruptTest.PacketFollowsUnbindToWait
+# 2 fail (no crash/hang) — removed from skip:
+#   UntriggeredSignalPortsAndAck, PacketFollowsRebindToNewPort
 # MsiTest — 2/6 pass (AllocateSyscall, ContiguousNotSupported).
 # Remaining 4 fail (Msi, CreateSyscallArgs, AllocatedHandleRights, Msix).
-InterruptTest.*
 MsiTest.Msi
 MsiTest.CreateSyscallArgs
 MsiTest.AllocatedHandleRights
@@ -196,7 +363,13 @@ MsiTest.Msix
 # ── Resource tests ───────────────────────────────────────────────────
 # Mexec* triggers platform reset. Ioports crashes — needs boot
 # resource handle. ExclusiveShared* crashes similarly.
-Resource.Mexec*
+# Mexec triggers platform reset — all 6 hang or crash.
+Resource.MexecBadZbiHeaderLength
+Resource.MexecEmptyZbi
+Resource.MexecMemoryLeakOnFailure
+Resource.MexecPagerPanic
+Resource.MexecPayloadTooSmall
+Resource.MexecZeroSizedVmo
 Resource.Ioports
 
 # ── Timer / Job (previously skipped, now passing) ────────────────────
@@ -216,22 +389,38 @@ Resource.Ioports
 # SystemEvent: hangs on wait_many — needs runtime debugging.
 SystemEvent.ExactlyOneMemoryEventSignaled
 # SystemSuspend: all 6 pass individually and as a suite (20s) — removed.
-# WakeReport: ThreadBound hangs.
+# WakeReportTestsThreadBound: all 12 hang — thread-bound flavor uses
+# zx_object_wait_one on suspend syscall which our stub can't handle.
+WakeReportTestsThreadBound.BadReportRequests
+WakeReportTestsThreadBound.Discard
+WakeReportTestsThreadBound.DestructionYesAck
+WakeReportTestsThreadBound.DestructionNoAck
+WakeReportTestsThreadBound.MultiWakeSource
+WakeReportTestsThreadBound.SingleWakeSource
+WakeReportTestsThreadBound.SmallReportBuffer
+WakeReportTestsThreadBound.AlreadyTimedOut
+WakeReportTestsThreadBound.ReportOnly
+WakeReportTestsThreadBound.Acked
+WakeReportTestsThreadBound.AckedStillPending
+WakeReportTestsThreadBound.MultipleSignals
 # PortBound.SmallReportBuffer hangs — calls DoSuspend with infinite
 # deadline + REPORT_ONLY flag; our stub ignores REPORT_ONLY and
 # busy-waits 5s per iteration, never populates report header.
-WakeReportTestsThreadBound.*
 WakeReportTestsPortBound.SmallReportBuffer
 # SuspendAndResumeByTimer: now passes — removed from skip.
 
 # ── ThreadSampler — crashes test runner ──────────────────────────────
-# sampler_create now works (4-arg ABI fix) but the sampler doesn't
-# actually sample, causing the test to crash (UD2 abort) when it
-# tries to read samples. Kills the test runner process.
-ThreadSampler.*
+# 1/6 passes: InvalidOptions — removed from skip.
+# Remaining 5 crash (UD2 abort) when trying to read samples.
+ThreadSampler.StartStop
+ThreadSampler.NonRunningThread
+ThreadSampler.SamplerLifetime
+ThreadSampler.DroppedSampler
+ThreadSampler.HighFrequency
 
 # ── BadAccessTest — crashes test runner ───────────────────────────────
-# Tests intentionally access invalid/kernel memory, triggering GP faults
-# that crash the test runner. Some tests pass individually but the suite
-# destabilizes the kernel state, causing crashes in later tests.
-BadAccessTest.*
+# 4/5 pass: InvalidMappedAddressFails, ChannelReadHandle,
+#   NormalMappedAddressChannelWriteSucceeds,
+#   KernelMappedAddressChannelWriteFails — removed from skip.
+# SyscallNumTest fails and crashes the test process.
+BadAccessTest.SyscallNumTest
