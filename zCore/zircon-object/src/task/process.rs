@@ -7,6 +7,7 @@ use lock::Mutex;
 
 use super::exception::{ExceptionChannelType, Exceptionate};
 use super::job_policy::{JobPolicy, PolicyAction, PolicyCondition};
+use super::thread::ThreadState;
 use super::{Job, Task, Thread, ThreadFn};
 use crate::object::{Handle, HandleBasicInfo, HandleValue, INVALID_HANDLE};
 use crate::object::{KObjectBase, KernelObject, KoID, Rights, Signal};
@@ -299,6 +300,7 @@ impl Process {
     /// It will terminate after all its child threads are terminated.
     pub fn exit(&self, retcode: i64) {
         let zero_handles_objects;
+        let should_terminate;
         {
             let mut inner = self.inner.lock();
             if let Status::Exited(_) = inner.status {
@@ -317,10 +319,20 @@ impl Process {
             for thread in inner.threads.iter() {
                 thread.kill();
             }
+            // Remove unstarted threads (New state) — they will never
+            // self-terminate because they were never running, so they
+            // will never call remove_thread().  Started threads
+            // (Running, Blocked, Dying) will eventually call
+            // remove_thread() when their CurrentThread is dropped.
+            inner.threads.retain(|t| t.state() != ThreadState::New);
+            should_terminate = inner.threads.is_empty();
             zero_handles_objects = inner.clear_handles();
         }
         for obj in &zero_handles_objects {
             obj.on_zero_handles();
+        }
+        if should_terminate {
+            self.terminate();
         }
     }
 
