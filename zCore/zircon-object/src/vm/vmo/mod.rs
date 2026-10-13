@@ -848,10 +848,11 @@ impl VmObject {
     /// `ZX_VMO_OP_DECOMMIT` which rejects decommit on any VMO in a
     /// pager-backed tree (the pager owns page lifecycle).
     pub fn decommit(&self, offset: usize, len: usize) -> ZxResult {
-        // Pager-backed VMOs reject decommit — the pager owns
-        // page lifecycle.  After detach (clear_pager), the VMO
-        // is no longer pager-backed and decommit succeeds.
-        if self.is_pager_backed() {
+        // Reject decommit on any VMO in a pager-backed tree
+        // (including slices/references of pager-backed VMOs).
+        // After detach (clear_pager), the VMO is no longer
+        // pager-backed and decommit succeeds.
+        if self.is_in_pager_tree() {
             return Err(ZxError::NOT_SUPPORTED);
         }
         // Validate range before decommitting.
@@ -1283,4 +1284,3 @@ mod tests {
         assert!(!info.flags.contains(VmoInfoFlags::RESIZABLE));
     }
 }
-
