@@ -11,6 +11,7 @@ use alloc::sync::Arc;
 use zircon_object::object::KernelObject;
 use zircon_object::signal::{Pager, Port};
 use zircon_object::vm::{VmObject, PAGE_SIZE};
+use zircon_object::ZxError;
 
 extern crate alloc;
 
@@ -487,12 +488,37 @@ fn pager_supply_unaligned() {
     assert_eq!(&buf, b"offset data");
 }
 
+/// C++: TEST(Pager, ClosePagerTest) — adapted
 ///
-/// Detaching a VMO should wake threads blocked on pager faults.
-/// This requires async infrastructure to create waiters.
-#[test]
-#[ignore = "async pager waiter test not supported in sync mode"]
-fn pager_detach_closes_existing_waiters() {}
+/// Detaching a pager VMO should wake any threads blocked waiting for
+/// pages.  We simulate a blocked waiter by spawning wait_for_page()
+/// as an async task, then detaching the VMO, and verifying the waiter
+/// receives an error.
+#[async_std::test]
+async fn pager_detach_closes_existing_waiters() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    // Spawn a waiter that blocks on an unsupplied page.
+    let vmo2 = vmo.clone();
+    let waiter = async_std::task::spawn(async move { vmo2.wait_for_page(0).await });
+
+    // Give the waiter time to register itself.
+    async_std::task::yield_now().await;
+
+    // Detach the VMO — this should wake the waiter with an error.
+    pager.detach_vmo(&vmo).unwrap();
+
+    // The waiter should complete with NOT_FOUND (detach sends NOT_FOUND).
+    let result = waiter.await;
+    assert!(result.is_err(), "waiter should have been woken with error");
+    assert_eq!(
+        result.unwrap_err(),
+        ZxError::NOT_FOUND,
+        "detach should wake waiters with NOT_FOUND"
+    );
+}
 
 ///
 /// After the pager is dropped, the VMO still exists but is no longer
