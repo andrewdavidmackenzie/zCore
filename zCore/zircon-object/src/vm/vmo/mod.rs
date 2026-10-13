@@ -1283,3 +1283,4 @@ mod tests {
         assert!(!info.flags.contains(VmoInfoFlags::RESIZABLE));
     }
 }
+
