@@ -109,8 +109,8 @@ fn wrong_type() {
 }
 
 /// Syscall-level basic transfer test.
-#[test]
-fn basic_transfer() {
+#[async_std::test]
+async fn basic_transfer() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -131,13 +131,14 @@ fn basic_transfer() {
     let mut read_buf = vec![0u8; PAGE_SIZE];
     let out_ptr = UserOutPtr::from(read_buf.as_mut_ptr() as usize);
     sc.sys_vmo_read(dst_h, out_ptr, page_size, PAGE_SIZE)
+        .await
         .unwrap();
     assert_eq!(read_buf, src_data, "dst should have transferred data");
 
     // Read src first page — should be zeroed.
     let mut read_buf2 = vec![0xFFu8; PAGE_SIZE];
     let out_ptr2 = UserOutPtr::from(read_buf2.as_mut_ptr() as usize);
-    sc.sys_vmo_read(src_h, out_ptr2, 0, PAGE_SIZE).unwrap();
+    sc.sys_vmo_read(src_h, out_ptr2, 0, PAGE_SIZE).await.unwrap();
     assert_eq!(
         read_buf2,
         vec![0u8; PAGE_SIZE],

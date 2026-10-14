@@ -83,8 +83,8 @@ fn lock_unlock() {
 ///
 /// Read and write to a locked discardable VMO. Should behave like
 /// a normal VMO while locked.
-#[test]
-fn read_write_while_locked() {
+#[async_std::test]
+async fn read_write_while_locked() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, ZX_VMO_DISCARDABLE);
     let sc = ctx.syscall();
@@ -109,6 +109,7 @@ fn read_write_while_locked() {
     // Read it back.
     let mut buf = [0u8; 4];
     sc.sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, 4)
+        .await
         .unwrap();
     assert_eq!(buf, data);
 
@@ -124,8 +125,8 @@ fn read_write_while_locked() {
 /// NOTE: zCore does not implement kernel memory reclamation, so we
 /// cannot trigger the discard. This test verifies that an unlocked
 /// discardable VMO still reads as zeroed (initial state).
-#[test]
-fn read_after_discard() {
+#[async_std::test]
+async fn read_after_discard() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, ZX_VMO_DISCARDABLE);
     let sc = ctx.syscall();
@@ -151,6 +152,7 @@ fn read_after_discard() {
     // the VMO is still accessible (no crash).
     let mut buf = [0u8; 16];
     sc.sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, 16)
+        .await
         .unwrap();
     // Data survives because zCore doesn't reclaim. This documents behavior.
     assert_eq!(buf, data);
