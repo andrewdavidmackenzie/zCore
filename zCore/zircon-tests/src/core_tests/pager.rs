@@ -4936,23 +4936,6 @@ fn pager_snapshot_snapshot_modified_after_at_least_on_write() {
     assert_eq!(&buf, b"snap test");
 }
 
-/// C++: TEST(Snapshot, DropVmos)
-#[test]
-fn pager_snapshot_drop_vmos() {
-    let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"snap test").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let mut buf = [0u8; 9];
-    snap.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"snap test");
-}
-
 /// C++: TEST(Snapshot, ResizeShrinkSnapshot)
 #[test]
 fn pager_snapshot_resize_shrink_snapshot() {
@@ -5225,23 +5208,6 @@ fn pager_snapshot_alow_slice() {
     assert_eq!(&buf, b"snap test");
 }
 
-/// C++: TEST(Snapshot, SnapshotSlice)
-#[test]
-fn pager_snapshot_snapshot_slice() {
-    let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"snap test").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let mut buf = [0u8; 9];
-    snap.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"snap test");
-}
-
 /// C++: TEST(Snapshot, SnapshotSliceAtLeastOnWrite)
 #[test]
 fn pager_snapshot_snapshot_slice_at_least_on_write() {
@@ -5259,43 +5225,9 @@ fn pager_snapshot_snapshot_slice_at_least_on_write() {
     assert_eq!(&buf, b"snap test");
 }
 
-/// C++: TEST(Snapshot, SnapshotVmoWithSlice)
-#[test]
-fn pager_snapshot_snapshot_vmo_with_slice() {
-    let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"snap test").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let mut buf = [0u8; 9];
-    snap.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"snap test");
-}
-
 /// C++: TEST(Snapshot, CloneAfterSliceRoot)
 #[test]
 fn pager_snapshot_clone_after_slice_root() {
-    let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"snap test").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let mut buf = [0u8; 9];
-    snap.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"snap test");
-}
-
-/// C++: TEST(Snapshot, CommitRangeInSnapshot)
-#[test]
-fn pager_snapshot_commit_range_in_snapshot() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
@@ -5372,72 +5304,243 @@ fn pager_snapshot_read_test() {
     assert_eq!(u64::from_ne_bytes(snap_val), 0x1eaf);
 }
 
-/// C++: TEST(Snapshot, SnapshotModifiedClone)
+/// C++: TEST(Snapshot, DropVmos)
+///
+/// Creates root → clone → snapshot chain, writes to clone to fork
+/// pages. Then drops VMOs in various orders, verifying no panics
+/// and that remaining VMOs still have correct data.
+#[test]
+fn pager_snapshot_drop_vmos() {
+    let _ctx = TestContext::new();
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(2);
+
+    pager.supply_pages(&vmo, key, 0, 2);
+    vmo.write(0, &0xdead1eaf_u64.to_ne_bytes()).unwrap();
+    vmo.write(PAGE_SIZE, &0xdead1eaf_u64.to_ne_bytes()).unwrap();
+
+    // Clone root and fork both pages by writing.
+    let clone = vmo.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+    clone.write(0, &0xc0ffee_u64.to_ne_bytes()).unwrap();
+    clone.write(PAGE_SIZE, &0xc0ffee_u64.to_ne_bytes()).unwrap();
+
+    // Snapshot the clone.
+    let full_snapshot = clone.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+
+    // Write to full_snapshot to fork pages.
+    full_snapshot.write(0, &0xbee5_u64.to_ne_bytes()).unwrap();
+    full_snapshot
+        .write(PAGE_SIZE, &0xdead1eaf_u64.to_ne_bytes())
+        .unwrap();
+
+    // Snapshot the full_snapshot (partial — only 1 page).
+    let partial_snapshot = full_snapshot
+        .create_child(false, 0, PAGE_SIZE)
+        .unwrap();
+
+    // Drop full_snapshot — should not panic.
+    drop(full_snapshot);
+
+    // partial_snapshot should still have data.
+    let mut val = [0u8; 8];
+    partial_snapshot.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xbee5);
+
+    // Drop partial_snapshot — should not panic.
+    drop(partial_snapshot);
+
+    // Clone and root should still have correct data.
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
+    clone.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
+    vmo.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
+}
+
+/// C++: TEST(Snapshot, SnapshotModifiedClone) — stub (uses ReadWrite
+/// with GenerateBufferContents, mostly covered by the Read test)
 #[test]
 fn pager_snapshot_snapshot_modified_clone() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"snap test").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let mut buf = [0u8; 9];
-    snap.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"snap test");
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(1);
+    pager.supply_pages(&vmo, key, 0, 1);
+    vmo.write(0, &0xdead1eaf_u64.to_ne_bytes()).unwrap();
+
+    let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+    clone.write(0, &0xc0ffee_u64.to_ne_bytes()).unwrap();
+
+    let snapshot = clone.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
+    snapshot.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
 }
 
 /// C++: TEST(Snapshot, WriteAfterDropSibling)
+///
+/// Creates root → clone → snapshot chain.  Writes to clone to fork a
+/// page, then drops the snapshot.  Writes to clone after drop should
+/// not panic and should be visible.
 #[test]
 fn pager_snapshot_write_after_drop_sibling() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"snap test").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let mut buf = [0u8; 9];
-    snap.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"snap test");
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(1);
+
+    pager.supply_pages(&vmo, key, 0, 1);
+
+    let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // Write page into hidden node.
+    clone.write(0, &0xdead1eaf_u64.to_ne_bytes()).unwrap();
+
+    // Snapshot the clone.
+    let snapshot = clone.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // Drop snapshot — should not panic.
+    drop(snapshot);
+
+    // Write to clone after sibling is dropped.
+    clone.write(0, &0xc0ffee_u64.to_ne_bytes()).unwrap();
+
+    let mut val = [0u8; 8];
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
 }
 
 /// C++: TEST(Snapshot, CloneModifyChain)
+///
+/// Two-page VMO. Clone and modify down a chain, verifying COW
+/// isolation between root, clone, and snapshot at each step.
+///
+/// Note: The C++ test uses ZX_VMO_CHILD_SNAPSHOT_MODIFIED where unmodified
+/// pages in the clone fall through to the root and see later root changes.
+/// zCore uses snapshot-at-least-on-write semantics: the snapshot captures
+/// the page state at snapshot time, so later root modifications to page 0
+/// are NOT visible through the snapshot. We test accordingly.
 #[test]
 fn pager_snapshot_clone_modify_chain() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"snap test").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let mut buf = [0u8; 9];
-    snap.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"snap test");
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(2);
+
+    pager.supply_pages(&vmo, key, 0, 2);
+
+    let original: u64 = 0xdead1eaf;
+    let new_data: u64 = 0xc0ffee;
+    let newer_data: u64 = 0x1eaf;
+
+    // Write to page 0 of root.
+    vmo.write(0, &original.to_ne_bytes()).unwrap();
+
+    // Clone & modify page 1 of clone.
+    let clone = vmo.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+    clone.write(PAGE_SIZE, &original.to_ne_bytes()).unwrap();
+
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), original);
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), original);
+    clone.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), original);
+
+    // Snapshot the clone & check pages.
+    let snapshot = clone.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), original);
+    clone.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), original);
+
+    // Modify pages in root & clone.
+    vmo.write(0, &new_data.to_ne_bytes()).unwrap();
+    clone.write(PAGE_SIZE, &new_data.to_ne_bytes()).unwrap();
+
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), new_data);
+    // Clone page 0 was COW-forked when root wrote: clone retains original.
+    // (ALOW semantics: clone captured root's page 0 at clone time.)
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), original);
+    clone.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), new_data);
+
+    // Snapshot: both pages captured at snapshot time (original).
+    snapshot.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), original);
+    snapshot.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), original);
+
+    // Modify snapshot.
+    snapshot.write(0, &newer_data.to_ne_bytes()).unwrap();
+    snapshot.write(PAGE_SIZE, &newer_data.to_ne_bytes()).unwrap();
+
+    // Modifying snapshot should not modify root or clone.
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), new_data);
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), original);
+    clone.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), new_data);
+    snapshot.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), newer_data);
+    snapshot.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), newer_data);
 }
 
-/// C++: TEST(Snapshot, ObjMemAccounting)
+/// C++: TEST(Snapshot, CommitRangeInSnapshot)
+///
+/// Creates root → clone → snapshot, writes to clone to fork a page
+/// shared between clone and snapshot. Then reads the snapshot page
+/// (effectively committing it). Verifies the page is committed.
+#[test]
+fn pager_snapshot_commit_range_in_snapshot() {
+    let _ctx = TestContext::new();
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(1);
+
+    pager.supply_pages(&vmo, key, 0, 1);
+    vmo.write(0, &0xdead1eaf_u64.to_ne_bytes()).unwrap();
+
+    // Create clone, write to fork a page.
+    let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+    clone.write(0, &0xc0ffee_u64.to_ne_bytes()).unwrap();
+
+    // Snapshot the clone.
+    let snapshot = clone.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // "Commit" the snapshot's page by reading it (forces page resolution).
+    let mut val = [0u8; 8];
+    snapshot.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
+
+    // Verify the snapshot's page is committed.
+    assert!(
+        snapshot.committed_pages_in_range(0, 1) > 0,
+        "snapshot page should be committed after read"
+    );
+}
+
+/// C++: TEST(Snapshot, ObjMemAccounting) — stub
+///
+/// Memory accounting (populated_bytes fractional attribution) is not
+/// implemented in zCore. Documented stub.
 #[test]
 fn pager_snapshot_obj_mem_accounting() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"snap test").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let mut buf = [0u8; 9];
-    snap.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"snap test");
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(1);
+    pager.supply_pages(&vmo, key, 0, 1);
+    // Basic sanity: root page is committed.
+    assert!(vmo.committed_pages_in_range(0, 1) > 0);
 }
 
 /// C++: TEST(Snapshot, RootVmoWrite)
@@ -5475,37 +5578,70 @@ fn pager_snapshot_root_vmo_write() {
 }
 
 /// C++: TEST(Snapshot, CloneVmoWrite)
+///
+/// Creates root → clone → snapshot chain.  Writes to the clone and
+/// verifies that root and snapshot are unchanged (COW isolation).
 #[test]
 fn pager_snapshot_clone_vmo_write() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"snap test").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let mut buf = [0u8; 9];
-    snap.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"snap test");
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(1);
+
+    // Supply and write original data.
+    pager.supply_pages(&vmo, key, 0, 1);
+    vmo.write(0, &0xdead1eaf_u64.to_ne_bytes()).unwrap();
+
+    // Clone root, then snapshot the clone.
+    let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+    let snapshot = clone.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // Write to clone — should not affect root or snapshot.
+    clone.write(0, &0xc0ffee_u64.to_ne_bytes()).unwrap();
+
+    let mut val = [0u8; 8];
+    // Root unchanged.
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
+    // Clone has new data.
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
+    // Snapshot still sees original clone data.
+    snapshot.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
 }
 
 /// C++: TEST(Snapshot, SnapshotVmoWrite)
+///
+/// Creates root → clone → snapshot chain.  Writes to the snapshot
+/// and verifies that root and clone are unchanged (COW isolation).
 #[test]
 fn pager_snapshot_snapshot_vmo_write() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"snap test").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let snap = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let mut buf = [0u8; 9];
-    snap.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"snap test");
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(1);
+
+    // Supply and write original data.
+    pager.supply_pages(&vmo, key, 0, 1);
+    vmo.write(0, &0xdead1eaf_u64.to_ne_bytes()).unwrap();
+
+    // Clone root, write to clone, then snapshot the clone.
+    let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+    clone.write(0, &0xc0ffee_u64.to_ne_bytes()).unwrap();
+    let snapshot = clone.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // Write to snapshot — should not affect root or clone.
+    snapshot.write(0, &0x1eaf_u64.to_ne_bytes()).unwrap();
+
+    let mut val = [0u8; 8];
+    // Root unchanged.
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
+    // Clone unchanged.
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
+    // Snapshot has newer data.
+    snapshot.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0x1eaf);
 }
 
 /// C++: TEST(Snapshot, CloseClone)
@@ -5595,6 +5731,98 @@ fn pager_snapshot_close_root() {
     clone.read(0, &mut val).unwrap();
     assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
     snapshot.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
+}
+
+/// C++: TEST(Snapshot, SnapshotSlice)
+///
+/// Limitation: zCore slices do not support `create_child` (COW clones).
+/// The C++ test creates ZX_VMO_CHILD_SNAPSHOT_MODIFIED of a root slice,
+/// which Fuchsia supports but zCore returns NOT_SUPPORTED.
+///
+/// This test documents the limitation by verifying the expected error,
+/// and validates that slices themselves work (read/write transparency).
+#[test]
+fn pager_snapshot_snapshot_slice() {
+    let _ctx = TestContext::new();
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(1);
+
+    pager.supply_pages(&vmo, key, 0, 1);
+    vmo.write(0, &0xdead1eaf_u64.to_ne_bytes()).unwrap();
+
+    // Slice of root works.
+    let rootslice = vmo.create_slice(0, PAGE_SIZE).unwrap();
+
+    let mut val = [0u8; 8];
+    rootslice.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
+
+    // Snapshot (COW clone) of a slice is NOT supported in zCore.
+    let result = rootslice.create_child(false, 0, PAGE_SIZE);
+    assert_eq!(
+        result.unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+        "zCore: create_child on slice should return NOT_SUPPORTED"
+    );
+
+    // But writes to root are visible through the slice.
+    vmo.write(0, &0xc0ffee_u64.to_ne_bytes()).unwrap();
+    rootslice.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
+}
+
+/// C++: TEST(Snapshot, SnapshotVmoWithSlice)
+///
+/// Creates root → clone → snapshot chain, then modifies clone, creates
+/// a slice of clone, snapshots clone again. Verifies slice tracks clone
+/// writes and that snapshots are isolated.
+#[test]
+fn pager_snapshot_snapshot_vmo_with_slice() {
+    let _ctx = TestContext::new();
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(2);
+
+    pager.supply_pages(&vmo, key, 0, 2);
+    vmo.write(0, &0xdead1eaf_u64.to_ne_bytes()).unwrap();
+    vmo.write(PAGE_SIZE, &0xdead1eaf_u64.to_ne_bytes()).unwrap();
+
+    let clone = vmo.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+    let snapshot = clone.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+
+    // Modify clone, create slice of clone, snapshot clone again.
+    clone.write(0, &0xc0ffee_u64.to_ne_bytes()).unwrap();
+    let slice = clone.create_slice(0, 2 * PAGE_SIZE).unwrap();
+    let snapshot2 = clone.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+
+    let mut val = [0u8; 8];
+
+    // snapshot2 should see the clone's value at time of snapshot.
+    snapshot2.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
+    // Slice shares clone's pages — should see same.
+    slice.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
+
+    // Modify clone and verify slice tracks it (slices share pages).
+    clone.write(0, &0x1eaf_u64.to_ne_bytes()).unwrap();
+    slice.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0x1eaf);
+    slice.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
+    clone.write(PAGE_SIZE, &0x1eaf_u64.to_ne_bytes()).unwrap();
+    slice.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0x1eaf);
+
+    // Snapshots should be isolated: first snapshot sees root data,
+    // second sees clone's value at time of snapshot2 creation.
+    snapshot.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
+    snapshot.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
+    snapshot2.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xc0ffee);
+    snapshot2.read(PAGE_SIZE, &mut val).unwrap();
     assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
 }
 
