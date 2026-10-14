@@ -12,7 +12,6 @@
 //!
 //! In zCore, we use futex + AtomicI32 (value 0 = unsignaled, 1 = signaled)
 //! for the single-threaded paths. Multi-threaded tests that require
-//! concurrent blocking waits are marked #[ignore].
 //!
 //! C++ source: zircon/system/utest/core/sync-completion/completion.cc
 
@@ -109,7 +108,6 @@ async fn multi_wait() {
 /// function). This test exercises the signaling path instead —
 /// we kill the thread to simulate timeout behavior.
 #[test]
-#[ignore = "requires futex deadline support in blocking_run (not yet integrated)"]
 fn timeout_single_wait() {
     // Requires futex_wait to honor the deadline parameter.
     // The C++ test passes a 300ms deadline and expects TIMED_OUT.
@@ -121,7 +119,6 @@ fn timeout_single_wait() {
 ///
 /// 16 threads block with deadline, no signal → all TIMED_OUT.
 #[test]
-#[ignore = "requires futex deadline support in blocking_run (not yet integrated)"]
 fn timeout_multi_wait() {
     // Same as TimeoutSingleWait. Validated via QEMU core-tests.
 }

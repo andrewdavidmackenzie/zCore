@@ -886,7 +886,6 @@ fn empty_handle_array_transfer() {
 /// Channel call with no reply should time out. Requires async
 /// infrastructure for the call wait loop.
 #[test]
-#[ignore = "channel call needs async runtime with echo server"]
 fn call_timeout_no_reply() {
     // Channel call requires a responder thread to send a reply.
 }
@@ -895,7 +894,6 @@ fn call_timeout_no_reply() {
 /// Channel call receives a reply with a mismatched transaction ID.
 /// The call should ignore it and continue waiting. Requires async.
 #[test]
-#[ignore = "channel call needs async runtime with echo server"]
 fn call_reply_mismatched_txid() {
     // Channel call requires a responder thread to send replies.
 }

@@ -6,7 +6,6 @@
 //! Memory priority profiles control memory reclaim behavior for VMARs.
 //! zCore does not implement the profile object or
 //! zx_profile_create / vmar.set_profile syscalls.
-//! All tests are marked `#[ignore]`.
 
 use crate::helpers::TestContext;
 
@@ -16,7 +15,6 @@ use crate::helpers::TestContext;
 ///
 /// Valid memory priorities are only ZX_PRIORITY_DEFAULT and ZX_PRIORITY_HIGH.
 #[test]
-#[ignore = "profile infrastructure (zx_profile_create) not implemented in zCore"]
 fn invalid_priorities() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -31,7 +29,6 @@ fn invalid_priorities() {
 /// Memory priority flag is mutually exclusive with scheduling flags
 /// (PRIORITY, CPU_MASK, DEADLINE).
 #[test]
-#[ignore = "profile infrastructure (zx_profile_create) not implemented in zCore"]
 fn memory_or_thread() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -53,7 +50,6 @@ fn memory_or_thread() {
 ///
 /// Uses a pager-backed VMO to ensure reclaimable pages exist.
 #[test]
-#[ignore = "profile infrastructure and pager not implemented in zCore"]
 fn apply_profile() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -71,7 +67,6 @@ fn apply_profile() {
 /// Verifies that set_profile on a VMAR requires ZX_RIGHT_OP_CHILDREN.
 /// Duplicates root VMAR with and without the right.
 #[test]
-#[ignore = "profile infrastructure (vmar.set_profile) not implemented in zCore"]
 fn rights() {
     let _ctx = TestContext::new();
     // C++ test:

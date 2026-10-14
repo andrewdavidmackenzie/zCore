@@ -1,9 +1,7 @@
 //! Tests faithfully ported from C++ core-tests that are expected to
 //! hang or crash in zCore due to missing kernel functionality.
 //!
-//! Each test is marked `#[ignore]` with a reason documenting why it fails.
 //! When the underlying kernel bug/gap is fixed, the test will start
-//! passing and the `#[ignore]` should be removed.
 //!
 //! See also: AGENTS.md skip list, issue #21 (tracking)
 
@@ -30,7 +28,6 @@ extern crate alloc;
 /// Verifies the kernel does not leak handle objects when the
 /// copy-out to userspace faults.
 #[test]
-#[ignore = "libos has no copy_to_user fault path — cannot fault on bad output pointer"]
 fn channel_read_fault_does_not_leak_handles() {
     let _ctx = TestContext::new();
     // In Fuchsia, kBadAddress = 0xfffffffffffffff0 (kernel space) is
@@ -51,7 +48,6 @@ fn channel_read_fault_does_not_leak_handles() {
 ///
 /// Verifies no spurious READABLE signal when writer and reader race.
 #[test]
-#[ignore = "requires concurrent threads with preemptive scheduling"]
 fn channel_no_spurious_readable_signal_when_racing() {
     let _ctx = TestContext::new();
     // Requires two threads: a writer spinning on arch::Yield() and a
@@ -68,7 +64,6 @@ fn channel_no_spurious_readable_signal_when_racing() {
 ///   - No duplicates
 ///   - Each reader's values are monotonically increasing
 #[test]
-#[ignore = "requires concurrent threads with preemptive scheduling"]
 fn channel_concurrent_reads_consume_unique_elements() {
     let _ctx = TestContext::new();
     // Requires two concurrent reader threads (std::jthread) and an
@@ -85,7 +80,6 @@ fn channel_concurrent_reads_consume_unique_elements() {
 ///   - Worker received 0 bytes from remote_2
 ///   - Event was signaled with ZX_USER_SIGNAL_0
 #[test]
-#[ignore = "requires async wait_many with concurrent writer thread"]
 fn channel_wait_many_is_signaled_on_any_element_write() {
     let _ctx = TestContext::new();
     // Requires a worker thread doing object_wait_many on two
@@ -103,7 +97,6 @@ fn channel_wait_many_is_signaled_on_any_element_write() {
 ///
 /// Verifies write_count > 1000 before the exception.
 #[test]
-#[ignore = "policy exception infrastructure not implemented in zCore"]
 fn channel_full_exception() {
     let _ctx = TestContext::new();
     // In Fuchsia:
@@ -127,7 +120,6 @@ fn channel_full_exception() {
 /// Main thread reads the exception from the process exception channel,
 /// verifies the exception type and synth_code, then resumes the thread.
 #[test]
-#[ignore = "policy exception infrastructure not implemented in zCore"]
 fn port_queue_packet_limit_exceeded_generates_policy_exception() {
     let _ctx = TestContext::new();
     // In Fuchsia:
@@ -148,7 +140,6 @@ fn port_queue_packet_limit_exceeded_generates_policy_exception() {
 /// In zCore, the allocator panics on OOM instead of returning
 /// ZX_ERR_NO_MEMORY.
 #[test]
-#[ignore = "kernel panics on OOM instead of returning ZX_ERR_NO_MEMORY"]
 fn port_too_many_observers() {
     let _ctx = TestContext::new();
     // In Fuchsia:
@@ -174,7 +165,6 @@ fn port_too_many_observers() {
 ///   4. Writing 0xcc to child forks the page (not visible in root)
 ///   5. Root still reads 0xbb, child reads 0xcc
 #[test]
-#[ignore = "SNAPSHOT_AT_LEAST_ON_WRITE on reference children not fully implemented"]
 fn vmo_reference_child_snapshot_at_least_on_write() {
     let _ctx = TestContext::new();
     // zCore creates a regular COW snapshot instead of a true
@@ -229,7 +219,6 @@ fn vmo_zero_write_cow_parent() {
 /// C++: TEST(VmoZeroTestCase, AllocateAfterMergeMultipleChildren)
 /// Multiple COW children, drop some, verify populated_bytes.
 #[test]
-#[ignore = "COW populated_bytes fractional attribution not implemented"]
 fn vmo_zero_allocate_after_merge_multiple_children() {
     // COW page attribution doesn't implement fractional scaling,
     // causing wrong populated_bytes values after merge.
@@ -407,7 +396,6 @@ fn vmo_clone2_progressive_clone_truncate() {
 
 /// C++: TEST_F(VmoCloneResizeTests, ResizeChild)
 #[test]
-#[ignore = "COW populated_bytes fractional attribution not implemented"]
 fn vmo_clone_resize_child() {
     let _ctx = TestContext::new();
     let vmo = init_page_tagged_vmo_resizable(3);
@@ -423,7 +411,6 @@ fn vmo_clone_resize_child() {
 
 /// C++: TEST_F(VmoCloneResizeTests, ResizeOriginal)
 #[test]
-#[ignore = "COW populated_bytes fractional attribution not implemented"]
 fn vmo_clone_resize_original() {
     let _ctx = TestContext::new();
     let vmo = init_page_tagged_vmo_resizable(3);

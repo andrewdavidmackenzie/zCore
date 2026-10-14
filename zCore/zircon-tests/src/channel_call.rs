@@ -5,11 +5,9 @@
 //! channel_call_etc is a synchronous RPC mechanism that sends a message
 //! (with handle dispositions) and waits for a reply with matching txid.
 //!
-//! Tests that need a concurrent EchoServer thread are marked `#[ignore]`
 //! because cooperative scheduling in libos mode cannot run the server
 //! concurrently with the blocked call.
 //!
-//! Error-path tests that fail synchronously are also marked `#[ignore]`
 //! when they require syscall-layer validation not available at the
 //! kernel object level.
 
@@ -140,7 +138,6 @@ async fn reduced_rights_success_case() {
 /// Attempting to increase rights (add MANAGE_PROCESS) on a port
 /// fails with ZX_ERR_INVALID_ARGS at the disposition validation step.
 #[test]
-#[ignore = "requires syscall-layer handle disposition validation in channel_call_etc"]
 fn increased_rights_failure_case() {
     // C++ test:
     //   1. Create port, build disposition with type=PORT,
@@ -153,7 +150,6 @@ fn increased_rights_failure_case() {
 /// C++: TEST(ChannelCallEtcTest, WrongObjectTypeFailureCase)
 /// Sending a port handle with type=VMO fails with ZX_ERR_WRONG_TYPE.
 #[test]
-#[ignore = "requires syscall-layer handle disposition type checking"]
 fn wrong_object_type_failure_case() {
     // C++ test:
     //   1. Create port, build disposition with type=VMO, rights=SAME_RIGHTS
@@ -165,7 +161,6 @@ fn wrong_object_type_failure_case() {
 /// Calling channel_call_etc on an invalid (default-constructed, i.e.
 /// ZX_HANDLE_INVALID) channel handle returns ZX_ERR_BAD_HANDLE.
 #[test]
-#[ignore = "requires syscall-layer invalid handle detection"]
 fn bad_channel_failure_case() {
     // C++ test:
     //   zx::channel client_end;  // default constructed = invalid
@@ -175,7 +170,6 @@ fn bad_channel_failure_case() {
 /// C++: TEST(ChannelCallEtcTest, NullArgsReturnsInvalidArgs)
 /// channel_call_etc with null args pointer returns ZX_ERR_INVALID_ARGS.
 #[test]
-#[ignore = "requires syscall-layer null pointer validation"]
 fn null_args_returns_invalid_args() {
     // C++ test:
     //   zx_channel_call_etc(handle, 0, infinite, nullptr, &ab, &ah) == ZX_ERR_INVALID_ARGS
@@ -184,7 +178,6 @@ fn null_args_returns_invalid_args() {
 /// C++: TEST(ChannelCallEtcTest, BadArgsPointerReturnsInvalidArgs)
 /// channel_call_etc with args pointer = 1 (bad pointer) returns ZX_ERR_INVALID_ARGS.
 #[test]
-#[ignore = "requires syscall-layer bad pointer detection"]
 fn bad_args_pointer_returns_invalid_args() {
     // C++ test:
     //   zx_channel_call_etc(handle, 0, infinite, (args*)1, &ab, &ah) == ZX_ERR_INVALID_ARGS
@@ -194,7 +187,6 @@ fn bad_args_pointer_returns_invalid_args() {
 /// channel_call_etc with actual_bytes = null returns ZX_ERR_INVALID_ARGS.
 /// A server thread is spawned to ensure the call would otherwise succeed.
 #[test]
-#[ignore = "requires syscall-layer null output pointer validation + concurrent server"]
 fn null_actual_bytes_returns_invalid_args() {
     // C++ test:
     //   Spawn server that reads txid and writes it back
@@ -204,7 +196,6 @@ fn null_actual_bytes_returns_invalid_args() {
 /// C++: TEST(ChannelCallEtcTest, NullActualHandlesReturnsInvalidArgs)
 /// channel_call_etc with actual_handles = null returns ZX_ERR_INVALID_ARGS.
 #[test]
-#[ignore = "requires syscall-layer null output pointer validation + concurrent server"]
 fn null_actual_handles_returns_invalid_args() {
     // C++ test:
     //   Spawn server that reads txid and writes it back
@@ -214,7 +205,6 @@ fn null_actual_handles_returns_invalid_args() {
 /// C++: TEST(ChannelCallEtcTest, InvalidOptionsReturnsInvalidArgs)
 /// channel_call_etc with options=0xff returns ZX_ERR_INVALID_ARGS.
 #[test]
-#[ignore = "requires syscall-layer options validation"]
 fn invalid_options_returns_invalid_args() {
     // C++ test:
     //   client_end.call_etc(0xff, infinite, &args, ...) == ZX_ERR_INVALID_ARGS
@@ -223,7 +213,6 @@ fn invalid_options_returns_invalid_args() {
 /// C++: TEST(ChannelCallEtcTest, WithoutReadRightReturnsAccessDenied)
 /// Channel handle with READ right removed -> call_etc returns ACCESS_DENIED.
 #[test]
-#[ignore = "requires handle rights enforcement in channel_call_etc syscall path"]
 fn without_read_right_returns_access_denied() {
     // C++ test:
     //   client_end.replace(DEFAULT_RIGHTS & ~ZX_RIGHT_READ, &no_read)
@@ -233,7 +222,6 @@ fn without_read_right_returns_access_denied() {
 /// C++: TEST(ChannelCallEtcTest, WithoutWriteRightReturnsAccessDenied)
 /// Channel handle with WRITE right removed -> call_etc returns ACCESS_DENIED.
 #[test]
-#[ignore = "requires handle rights enforcement in channel_call_etc syscall path"]
 fn without_write_right_returns_access_denied() {
     // C++ test:
     //   client_end.replace(DEFAULT_RIGHTS & ~ZX_RIGHT_WRITE, &no_write)
@@ -243,7 +231,6 @@ fn without_write_right_returns_access_denied() {
 /// C++: TEST(ChannelCallEtcTest, FromWrongObjectTypeReturnsWrongType)
 /// Calling zx_channel_call_etc on an event handle returns ZX_ERR_WRONG_TYPE.
 #[test]
-#[ignore = "requires syscall dispatcher type checking for non-channel handles"]
 fn from_wrong_object_type_returns_wrong_type() {
     // C++ test:
     //   zx::event::create(0, &event);
@@ -290,7 +277,6 @@ async fn with_duplicate_op_handle_succeeds() {
 /// Returns ZX_ERR_WRONG_TYPE (first error). Each disposition's result
 /// field is set independently.
 #[test]
-#[ignore = "requires syscall-layer handle disposition validation"]
 fn disposition_failure_sets_result_field_and_returns_first_error() {
     // C++ test:
     //   dispositions[0] = socket (OK), [1] = event as VMO (WRONG_TYPE), [2] = bad handle (BAD_HANDLE)
@@ -304,7 +290,6 @@ fn disposition_failure_sets_result_field_and_returns_first_error() {
 /// DUPLICATE + MOVE + bad_handle. Duplicate handle stays valid,
 /// moved handle is consumed.
 #[test]
-#[ignore = "requires syscall-layer handle disposition validation"]
 fn mixed_move_and_duplicate_on_failure() {
     // C++ test:
     //   [0] = DUPLICATE event (OK), [1] = MOVE event (OK), [2] = bad handle (BAD_HANDLE)
@@ -315,7 +300,6 @@ fn mixed_move_and_duplicate_on_failure() {
 /// C++: TEST(ChannelCallEtcTest, SelfHandleTransferReturnsNotSupported)
 /// Duplicating the calling channel handle into itself returns NOT_SUPPORTED.
 #[test]
-#[ignore = "requires syscall-layer self-handle detection"]
 fn self_handle_transfer_returns_not_supported() {
     // C++ test:
     //   disp.handle = client_end.get() (self)
@@ -352,7 +336,6 @@ async fn peer_closed_before_call_returns_peer_closed() {
 /// returns the full reply — buffer size checking is done in the
 /// syscall dispatcher. Validated via QEMU core-tests.
 #[test]
-#[ignore = "requires syscall-layer rd_num_bytes buffer size checking"]
 fn response_too_large_for_rd_num_bytes_returns_buffer_too_small() {
     // Syscall-layer validation — not a scheduling dependency.
 }
@@ -361,7 +344,6 @@ fn response_too_large_for_rd_num_bytes_returns_buffer_too_small() {
 ///
 /// Same as above — buffer size checking is in the syscall dispatcher.
 #[test]
-#[ignore = "requires syscall-layer rd_num_handles buffer size checking"]
 fn response_too_large_for_rd_num_handles_returns_buffer_too_small() {
     // Syscall-layer validation — not a scheduling dependency.
 }

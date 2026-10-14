@@ -786,7 +786,6 @@ async fn thread_invalid_handle_start() {
 // The following tests correspond to C++ ThreadTest tests. Tests that
 // can be exercised with the cooperative scheduler have real logic.
 // Tests that would hang (blocking in syscalls with preemptive
-// scheduling) keep #[ignore].
 
 ///
 /// Suspend a thread blocked in zx_channel_call. Requires a real
@@ -1564,7 +1563,6 @@ async fn thread_read_state_vector() {
 // Missing Fuchsia core-tests: Threads suite (56 tests)
 // Tests that can be exercised without real thread execution have real logic.
 // Tests requiring hardware features, real exceptions, or preemptive
-// scheduling keep #[ignore = "would hang: ..."].
 // ============================================================================
 
 /// C++: TEST(Threads, BadSyscallCaller)

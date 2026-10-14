@@ -5,7 +5,6 @@
 //! Shared processes (zx_process_create with ZX_PROCESS_SHARED /
 //! zx_process_create_shared) allow multiple processes to share a
 //! single address space. zCore does not implement this infrastructure.
-//! All tests are marked `#[ignore]`.
 
 use crate::helpers::TestContext;
 
@@ -15,7 +14,6 @@ use crate::helpers::TestContext;
 /// VMAR, and verifies both processes can read the data via
 /// zx_process_read_memory at the same address.
 #[test]
-#[ignore = "shared process infrastructure (zx_process_create_shared) not implemented in zCore"]
 fn map_in_prototype() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -31,7 +29,6 @@ fn map_in_prototype() {
 /// Maps a VMO into the restricted (private) VMAR of the child process,
 /// then verifies the prototype process cannot read from that address.
 #[test]
-#[ignore = "shared process infrastructure (zx_process_create_shared) not implemented in zCore"]
 fn restricted_vmar_not_shared() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -45,7 +42,6 @@ fn restricted_vmar_not_shared() {
 /// Creating a shared child from a non-shared (regular) process
 /// returns ZX_ERR_INVALID_ARGS.
 #[test]
-#[ignore = "shared process infrastructure (zx_process_create_shared) not implemented in zCore"]
 fn invalid_prototype() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -59,7 +55,6 @@ fn invalid_prototype() {
 /// ZX_PROP_PROCESS_DEBUG_ADDR are copied (not shared) to the child.
 /// Changing the child's value does not affect the prototype's.
 #[test]
-#[ignore = "shared process infrastructure (zx_process_create_shared) not implemented in zCore"]
 fn properties_copied() {
     let _ctx = TestContext::new();
     // C++ test:

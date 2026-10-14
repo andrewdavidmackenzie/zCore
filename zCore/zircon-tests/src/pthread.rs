@@ -11,7 +11,6 @@
 //! C++ source: zircon/system/utest/core/pthread/pthread.cc
 //!
 //! Tests that require actual multi-threaded concurrent execution are
-//! marked #[ignore] because the libos test runner uses a cooperative
 //! scheduler that cannot context-switch between blocking threads.
 
 use crate::helpers::{self, TestContext};

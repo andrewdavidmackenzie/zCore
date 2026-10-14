@@ -19,7 +19,6 @@ use zircon_object::ipc::{Channel, MessagePacket};
 /// The vDSO function is found by computing its offset from the vDSO base.
 /// zCore does not expose channel_call_finish as a separate entry point.
 #[test]
-#[ignore = "zx_channel_call_finish is an internal vDSO function not exposed by zCore"]
 fn call_finish_without_previously_calling_call_returns_bad_state() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -32,7 +31,6 @@ fn call_finish_without_previously_calling_call_returns_bad_state() {
 /// C++: TEST(ChannelInternalTest, CallEtcFinishWithoutPreviouslyCallingCallReturnsBadState)
 /// Same as above but for zx_channel_call_etc_finish.
 #[test]
-#[ignore = "zx_channel_call_etc_finish is an internal vDSO function not exposed by zCore"]
 fn call_etc_finish_without_previously_calling_call_returns_bad_state() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -119,7 +117,6 @@ fn transfer_channel_with_pending_call() {
 /// trigger ZX_ERR_BAD_HANDLE during call, then calls call_finish.
 /// Requires concurrent threads and mini-process infrastructure.
 #[test]
-#[ignore = "requires concurrent threads, mini-process, and vDSO call_finish — not available in zCore"]
 fn channel_call_finish_after_failed_call() {
     let _ctx = TestContext::new();
     // C++ test:

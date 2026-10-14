@@ -5,7 +5,6 @@
 //! The thread sampler (zx_sampler_create/start/stop/read) is a kernel-level
 //! profiling facility that periodically samples thread register state.
 //! zCore does not implement the sampler syscalls or the sampling resource.
-//! All tests are marked `#[ignore]`.
 
 use crate::helpers::TestContext;
 
@@ -13,7 +12,6 @@ use crate::helpers::TestContext;
 /// Creates a sampler, spawns a thread, starts sampling, reads at least
 /// 10 records containing the thread's TID, stops, and cleans up.
 #[test]
-#[ignore = "sampler infrastructure (zx_sampler_create/start/stop/read) not implemented in zCore"]
 fn start_stop() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -33,7 +31,6 @@ fn start_stop() {
 /// second sampler while the first exists returns ZX_ERR_ALREADY_EXISTS.
 /// After closing the first, a new one can be created.
 #[test]
-#[ignore = "sampler infrastructure (zx_sampler_create) not implemented in zCore"]
 fn sampler_lifetime() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -47,7 +44,6 @@ fn sampler_lifetime() {
 /// C++: TEST(ThreadSampler, InvalidOptions)
 /// Creating a sampler with non-zero options returns ZX_ERR_INVALID_ARGS.
 #[test]
-#[ignore = "sampler infrastructure (zx_sampler_create) not implemented in zCore"]
 fn invalid_options() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -59,7 +55,6 @@ fn invalid_options() {
 /// Drops a sampler mid-session (close handle while sampling is active),
 /// then creates a new one and verifies it works.
 #[test]
-#[ignore = "sampler infrastructure (zx_sampler_create/start/stop) not implemented in zCore"]
 fn dropped_sampler() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -75,7 +70,6 @@ fn dropped_sampler() {
 /// sampling, then starts the thread. Samples from the now-running
 /// thread should appear.
 #[test]
-#[ignore = "sampler infrastructure and TestThread::Init/Start not available in zCore"]
 fn non_running_thread() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -92,7 +86,6 @@ fn non_running_thread() {
 /// Stress test: 4 threads, 50us sample period, 1024-page buffer.
 /// Reads at least 10 records total.
 #[test]
-#[ignore = "sampler infrastructure not implemented in zCore"]
 fn high_frequency() {
     let _ctx = TestContext::new();
     // C++ test:

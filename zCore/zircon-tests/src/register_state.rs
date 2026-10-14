@@ -12,7 +12,6 @@
 /// to a unique value (i * 0x10004). All threads sync at a pthread
 /// barrier, then verify gs_base and fs_base are preserved.
 #[test]
-#[ignore = "x86 FSGSBASE instructions and pthread barriers not available in libos mode"]
 fn context_switch_of_gs_base() {
     // C++ test:
     //   const uint32_t thread_count = zx_system_get_num_cpus() * 2;
