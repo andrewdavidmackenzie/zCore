@@ -802,7 +802,10 @@ fn basic_test() {
     // If the parent job is killed, creating a child should fail.
     let dead_job = Job::create_child(&job_parent).unwrap();
     dead_job.kill_with_code(-1);
-    assert_eq!(Job::create_child(&dead_job).unwrap_err(), ZxError::BAD_STATE);
+    assert_eq!(
+        Job::create_child(&dead_job).unwrap_err(),
+        ZxError::BAD_STATE
+    );
 }
 
 /// C++: TEST(JobTest, CreateTest)
@@ -843,9 +846,7 @@ fn create_missing_rights_test() {
     let reduced_rights = Rights::DEFAULT_JOB & !Rights::WRITE & !Rights::MANAGE_JOB;
 
     // Add the job to the process handle table with reduced rights
-    let handle_value = ctx
-        .proc
-        .add_handle(Handle::new(root_job, reduced_rights));
+    let handle_value = ctx.proc.add_handle(Handle::new(root_job, reduced_rights));
 
     // Attempting to retrieve the job with MANAGE_JOB rights should fail
     let result = ctx

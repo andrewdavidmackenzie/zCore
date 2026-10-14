@@ -106,13 +106,17 @@ fn signal_peer_and_verify_received() {
     assert_eq!(ep1.signal(), Signal::USER_SIGNAL_0);
 
     // ep1 signals peer (ep0) with USER_SIGNAL_1 | USER_SIGNAL_2.
-    ep1.peer().unwrap().signal_set(Signal::USER_SIGNAL_1 | Signal::USER_SIGNAL_2);
+    ep1.peer()
+        .unwrap()
+        .signal_set(Signal::USER_SIGNAL_1 | Signal::USER_SIGNAL_2);
     assert_eq!(ep0.signal(), Signal::USER_SIGNAL_1 | Signal::USER_SIGNAL_2);
     assert_eq!(ep1.signal(), Signal::USER_SIGNAL_0);
 
     // ep0 clears USER_SIGNAL_0 on peer (ep1) and sets USER_SIGNAL_3 | USER_SIGNAL_4.
     ep0.peer().unwrap().signal_clear(Signal::USER_SIGNAL_0);
-    ep0.peer().unwrap().signal_set(Signal::USER_SIGNAL_3 | Signal::USER_SIGNAL_4);
+    ep0.peer()
+        .unwrap()
+        .signal_set(Signal::USER_SIGNAL_3 | Signal::USER_SIGNAL_4);
     assert_eq!(ep0.signal(), Signal::USER_SIGNAL_1 | Signal::USER_SIGNAL_2);
     assert_eq!(ep1.signal(), Signal::USER_SIGNAL_3 | Signal::USER_SIGNAL_4);
 }
@@ -125,7 +129,9 @@ fn signal_peer_then_close_and_verify_signal_received() {
     let _ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
 
-    ep0.peer().unwrap().signal_set(Signal::USER_SIGNAL_3 | Signal::USER_SIGNAL_4);
+    ep0.peer()
+        .unwrap()
+        .signal_set(Signal::USER_SIGNAL_3 | Signal::USER_SIGNAL_4);
 
     // Drop ep0.
     drop(ep0);
@@ -322,13 +328,9 @@ fn invalid_signal_bits() {
     );
 
     // SIGNALED (bit 3) is allowed on eventpairs.
-    assert!(sc
-        .sys_object_signal(h0, 0, Signal::SIGNALED.bits())
-        .is_ok());
+    assert!(sc.sys_object_signal(h0, 0, Signal::SIGNALED.bits()).is_ok());
     assert_eq!(ep0.signal(), Signal::SIGNALED);
-    assert!(sc
-        .sys_object_signal(h0, Signal::SIGNALED.bits(), 0)
-        .is_ok());
+    assert!(sc.sys_object_signal(h0, Signal::SIGNALED.bits(), 0).is_ok());
     assert_eq!(ep0.signal(), Signal::empty());
 }
 

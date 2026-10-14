@@ -504,10 +504,7 @@ fn vmo_resize_basic() {
 
     // C++: resize to a ludicrous size (UINT64_MAX) → OUT_OF_RANGE.
     let result = vmo.set_len(u64::MAX as usize);
-    assert!(
-        result.is_err(),
-        "resize to ludicrous size should fail"
-    );
+    assert!(result.is_err(), "resize to ludicrous size should fail");
     // Size should be unchanged after failed resize.
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
 

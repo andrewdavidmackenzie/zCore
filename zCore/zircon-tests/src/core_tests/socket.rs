@@ -823,10 +823,16 @@ fn datagram() {
     let rx_avail = {
         let dbg = format!("{:?}", info);
         let s = dbg.split("rx_buf_available: ").nth(1).unwrap();
-        let end = s.find(',').unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
+        let end = s
+            .find(',')
+            .unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
         s[..end].trim().parse::<usize>().unwrap()
     };
-    assert_eq!(rx_avail, msg1.len(), "rx_buf_available should be first datagram size");
+    assert_eq!(
+        rx_avail,
+        msg1.len(),
+        "rx_buf_available should be first datagram size"
+    );
 
     // Read fewer bytes than in the first datagram — remainder is truncated
     let mut buf = [0u8; 32];
@@ -839,10 +845,16 @@ fn datagram() {
     let rx_avail = {
         let dbg = format!("{:?}", info);
         let s = dbg.split("rx_buf_available: ").nth(1).unwrap();
-        let end = s.find(',').unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
+        let end = s
+            .find(',')
+            .unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
         s[..end].trim().parse::<usize>().unwrap()
     };
-    assert_eq!(rx_avail, msg2.len(), "rx_buf_available should be second datagram size");
+    assert_eq!(
+        rx_avail,
+        msg2.len(),
+        "rx_buf_available should be second datagram size"
+    );
 
     // Read the second datagram in full
     let n = remote.read(false, &mut buf[..msg2.len()]).unwrap();
@@ -854,7 +866,9 @@ fn datagram() {
     let rx_avail = {
         let dbg = format!("{:?}", info);
         let s = dbg.split("rx_buf_available: ").nth(1).unwrap();
-        let end = s.find(',').unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
+        let end = s
+            .find(',')
+            .unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
         s[..end].trim().parse::<usize>().unwrap()
     };
     assert_eq!(
@@ -873,7 +887,9 @@ fn datagram() {
     let rx_avail = {
         let dbg = format!("{:?}", info);
         let s = dbg.split("rx_buf_available: ").nth(1).unwrap();
-        let end = s.find(',').unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
+        let end = s
+            .find(',')
+            .unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
         s[..end].trim().parse::<usize>().unwrap()
     };
     assert_eq!(rx_avail, 0, "socket should be empty");

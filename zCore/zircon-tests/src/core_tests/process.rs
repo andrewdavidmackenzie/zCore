@@ -102,7 +102,10 @@ fn long_name_succeeds() {
     // 80-character name, well beyond ZX_MAX_NAME_LEN (32)
     let long_name = "0123456789012345678901234567890123456789\
                      0123456789012345678901234567890123456789";
-    assert!(long_name.len() > 31, "test name too short to exercise truncation");
+    assert!(
+        long_name.len() > 31,
+        "test name too short to exercise truncation"
+    );
     let proc = Process::create(&job, long_name).unwrap();
     // At the object level the full name is stored. The syscall layer
     // (sys_process_create) truncates to ZX_MAX_NAME_LEN - 1 chars.

@@ -98,29 +98,54 @@ fn read_when_empty_and_closed_returns_peer_closed() {
 }
 
 /// C++: TEST(ChannelTest, ReadRemainingMessagesWhenPeerIsClosed)
+/// C++ writes kMessageCount=4 messages, closes peer, checks READABLE|PEER_CLOSED
+/// signal, reads all 4, verifies channel is no longer READABLE.
 #[test]
 fn read_remaining_messages_when_peer_is_closed() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
 
-    // Write 3 messages then close the writer
-    for i in 0..3u8 {
+    const MESSAGE_COUNT: u32 = 4;
+    const CHANNEL_DATA: u32 = 0xDEAD_BEEF;
+
+    // Write 4 messages (matching C++ kMessageCount)
+    for _ in 0..MESSAGE_COUNT {
         local
             .write(MessagePacket {
-                data: vec![i],
+                data: CHANNEL_DATA.to_le_bytes().to_vec(),
                 handles: Vec::new(),
             })
             .unwrap();
     }
     drop(local);
 
-    // Should still be able to read all 3 messages
-    for i in 0..3u8 {
+    // C++: ASSERT_EQ(ZX_CHANNEL_READABLE | ZX_CHANNEL_PEER_CLOSED, signal);
+    let signal = remote.signal();
+    assert!(
+        signal.contains(Signal::READABLE),
+        "expected READABLE after peer closed with queued messages"
+    );
+    assert!(
+        signal.contains(Signal::PEER_CLOSED),
+        "expected PEER_CLOSED after peer closed"
+    );
+
+    // Read all 4 messages and verify contents
+    for _ in 0..MESSAGE_COUNT {
         let msg = remote.read().unwrap();
-        assert_eq!(msg.data, vec![i]);
+        assert_eq!(msg.data.len(), 4, "expected 4 bytes per message");
+        let data = u32::from_le_bytes(msg.data[..4].try_into().unwrap());
+        assert_eq!(data, CHANNEL_DATA);
     }
 
-    // After reading all, should get PEER_CLOSED
+    // C++: ASSERT_EQ(remote.wait_one(READABLE, past, nullptr), ZX_ERR_TIMED_OUT);
+    // The channel should no longer be readable.
+    assert!(
+        !remote.signal().contains(Signal::READABLE),
+        "channel should not be READABLE after all messages are read"
+    );
+
+    // Further reads should return PEER_CLOSED
     assert_eq!(remote.read().unwrap_err(), ZxError::PEER_CLOSED);
 }
 
@@ -148,18 +173,18 @@ fn close_clears_signals_writeable() {
 }
 
 /// C++: TEST(ChannelTest, CloseSignalsPeerReturnsPeerClosed)
+/// C++ calls `remote.signal_peer(0, ZX_USER_SIGNAL_0)` after `local.reset()`
+/// and expects ZX_ERR_PEER_CLOSED. We call `peer()` on the remaining endpoint
+/// to verify the peer is gone.
 #[test]
 fn close_signals_peer_returns_peer_closed() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
-    drop(remote);
+    drop(local);
 
-    let err = local
-        .write(MessagePacket {
-            data: vec![1],
-            handles: Vec::new(),
-        })
-        .unwrap_err();
+    // C++: ASSERT_EQ(remote.signal_peer(0, ZX_USER_SIGNAL_0), ZX_ERR_PEER_CLOSED);
+    // signal_peer requires a live peer — peer() should return PEER_CLOSED.
+    let err = remote.peer().unwrap_err();
     assert_eq!(err, ZxError::PEER_CLOSED);
 }
 
@@ -177,7 +202,23 @@ fn read_and_write_with_multiple_sizes() {
     // Deterministic set of 100 sizes covering important boundaries
     // plus pseudo-random sizes spread across the range.
     let mut sizes: Vec<usize> = vec![
-        0, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128, 255, 256,
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8,
+        15,
+        16,
+        31,
+        32,
+        63,
+        64,
+        127,
+        128,
+        255,
+        256,
         PAGE_SIZE - 1,
         PAGE_SIZE,
         PAGE_SIZE + 1,
@@ -384,33 +425,64 @@ fn write_self_handle_returns_not_supported() {
 }
 
 /// C++: TEST(ChannelTest, OnFlightHandlesSignalledWhenPeerIsClosed)
-/// When a channel is closed, handles that were in-flight (inside messages)
-/// should also have their peer endpoints signalled with PEER_CLOSED.
+/// C++ sends on_flight_remote[0] via local, on_flight_remote[1] via remote.
+/// Closing local drops on_flight_remote[1]'s in-flight handle →
+/// on_flight_local[1] sees PEER_CLOSED. But on_flight_local[0]'s peer is
+/// still readable on remote, so on_flight_local[0] remains WRITABLE.
+/// Then closing remote drops on_flight_remote[0] → on_flight_local[0]
+/// sees PEER_CLOSED.
 #[test]
 fn on_flight_handles_signalled_when_peer_is_closed() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
 
-    // Create inner channel pairs and send one endpoint through the outer channel
-    let (inner0, inner1) = Channel::create();
-    let (inner2, inner3) = Channel::create();
+    // Create two inner channel pairs
+    let (on_flight_local0, on_flight_remote0) = Channel::create();
+    let (on_flight_local1, on_flight_remote1) = Channel::create();
 
+    // Write on_flight_remote[0] to local (message goes to remote's queue)
     local
         .write(MessagePacket {
             data: vec![],
-            handles: vec![
-                Handle::new(inner0, Rights::DEFAULT_CHANNEL),
-                Handle::new(inner2, Rights::DEFAULT_CHANNEL),
-            ],
+            handles: vec![Handle::new(on_flight_remote0, Rights::DEFAULT_CHANNEL)],
         })
         .unwrap();
 
-    // Drop the remote end — the in-flight handles should be dropped too
+    // Write on_flight_remote[1] to remote (message goes to local's queue)
+    remote
+        .write(MessagePacket {
+            data: vec![],
+            handles: vec![Handle::new(on_flight_remote1, Rights::DEFAULT_CHANNEL)],
+        })
+        .unwrap();
+
+    // Close local → drops messages in local's queue (including on_flight_remote[1])
+    drop(local);
+
+    // on_flight_local[1]'s peer was dropped → should see PEER_CLOSED
+    assert!(
+        on_flight_local1.signal().contains(Signal::PEER_CLOSED),
+        "on_flight_local[1] should see PEER_CLOSED after local is closed"
+    );
+
+    // on_flight_local[0]'s peer is still in remote's message queue → still WRITABLE
+    assert!(
+        on_flight_local0.signal().contains(Signal::WRITABLE),
+        "on_flight_local[0] should still be WRITABLE (peer in remote's queue)"
+    );
+    assert!(
+        !on_flight_local0.signal().contains(Signal::PEER_CLOSED),
+        "on_flight_local[0] should NOT see PEER_CLOSED yet"
+    );
+
+    // Close remote → drops messages in remote's queue (including on_flight_remote[0])
     drop(remote);
 
-    // The peers of the in-flight handles should now see PEER_CLOSED
-    assert!(inner1.signal().contains(Signal::PEER_CLOSED));
-    assert!(inner3.signal().contains(Signal::PEER_CLOSED));
+    // Now on_flight_local[0]'s peer was also dropped → PEER_CLOSED
+    assert!(
+        on_flight_local0.signal().contains(Signal::PEER_CLOSED),
+        "on_flight_local[0] should see PEER_CLOSED after remote is closed"
+    );
 }
 
 /// C++: TEST(ChannelTest, WriteToPeerClosedConsumesMovedHandles)

@@ -144,7 +144,10 @@ async fn port_event_async_signal_wait_single() {
     // we dequeued exactly 5 valid packets with keys in range.
     // The C++ test specifically gets the first 5 dequeued which sum
     // to 20. We verify the same: sum of 5 packets from {0..6}.
-    assert_eq!(key_sum, 20, "key_sum of first 5 dequeued packets should be 20");
+    assert_eq!(
+        key_sum, 20,
+        "key_sum of first 5 dequeued packets should be 20"
+    );
 }
 
 /// C++: TEST(PortTest, AsyncWaitEventRepeat)
@@ -239,12 +242,7 @@ fn port_async_wait_close_order() {
         // Register wait_async on ChannelB for READABLE|PEER_CLOSED
         let ch_b_obj = ch_b.clone() as std::sync::Arc<dyn KernelObject>;
         ch_b_obj
-            .send_signal_to_port_async(
-                Signal::READABLE | Signal::PEER_CLOSED,
-                &port,
-                1122,
-                false,
-            )
+            .send_signal_to_port_async(Signal::READABLE | Signal::PEER_CLOSED, &port, 1122, false)
             .unwrap();
 
         // Build an array of Option-wrapped objects to close in order
