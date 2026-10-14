@@ -30,6 +30,7 @@ fn echo_value(val: u32) -> u32 {
     v
 }
 
+/// C++: TEST(ZxAssertCTest, ZxAssertValidPredicatePasses)
 /// C++: TEST(ZxAssertCppTest, ZxAssertValidPredicatePasses)
 /// Asserts whose predicate evaluates to `true` should not terminate.
 #[test]
@@ -38,6 +39,7 @@ fn zx_assert_valid_predicate_passes() {
     assert_eq!(echo_value(expected), expected);
 }
 
+/// C++: TEST(ZxAssertCTest, ZxAssertMsgValidPredicatePasses)
 /// C++: TEST(ZxAssertCppTest, ZxAssertMsgValidPredicatePasses)
 /// ZX_ASSERT_MSG with a valid predicate should not terminate.
 /// The C++ test also verifies C++17 `if` init-statement syntax.
@@ -48,6 +50,7 @@ fn zx_assert_msg_valid_predicate_passes() {
     assert_eq!(val, expected, "Expected {}, Got {}; ", expected, val);
 }
 
+/// C++: TEST(ZxAssertCTest, ZxDebugAssertValidPredicatePasses)
 /// C++: TEST(ZxAssertCppTest, ZxDebugAssertValidPredicatePasses)
 /// Debug asserts with valid predicates should pass regardless of
 /// whether debug asserts are enabled or disabled.
@@ -57,6 +60,7 @@ fn zx_debug_assert_valid_predicate_passes() {
     debug_assert_eq!(echo_value(expected), expected);
 }
 
+/// C++: TEST(ZxAssertCTest, ZxDebugAssertMsgValidPredicatePasses)
 /// C++: TEST(ZxAssertCppTest, ZxDebugAssertMsgValidPredicatePasses)
 /// Debug assert with message and valid predicate.
 #[test]
@@ -66,6 +70,7 @@ fn zx_debug_assert_msg_valid_predicate_passes() {
     debug_assert_eq!(val, expected, "Expected {}, Got {}; ", expected, val);
 }
 
+/// C++: TEST(ZxAssertCTest, ZxAssertInvalidPredicateFails)
 /// C++: TEST(ZxAssertCppTest, ZxAssertInvalidPredicateFails)
 /// ZX_ASSERT with false predicate should crash (ASSERT_DEATH).
 /// In Rust, we verify via `catch_unwind` that `assert!` panics.
@@ -79,6 +84,7 @@ fn zx_assert_invalid_predicate_fails() {
     assert!(result.is_err(), "assert! with false predicate should panic");
 }
 
+/// C++: TEST(ZxAssertCTest, ZxAssertMsgInvalidPredicateFails)
 /// C++: TEST(ZxAssertCppTest, ZxAssertMsgInvalidPredicateFails)
 /// ZX_ASSERT_MSG with false predicate should crash.
 #[test]
@@ -95,6 +101,7 @@ fn zx_assert_msg_invalid_predicate_fails() {
     );
 }
 
+/// C++: TEST(ZxAssertCTest, ZxDebugAssertInvalidPredicateFails)
 /// C++: TEST(ZxAssertCppTest, ZxDebugAssertInvalidPredicateFails)
 /// ZX_DEBUG_ASSERT with false predicate should crash iff debug
 /// asserts are enabled. In Rust, `debug_assert!` is active in
@@ -123,6 +130,7 @@ fn zx_debug_assert_invalid_predicate_fails() {
     }
 }
 
+/// C++: TEST(ZxAssertCTest, ZxDebugAssertMsgInvalidPredicateFails)
 /// C++: TEST(ZxAssertCppTest, ZxDebugAssertMsgInvalidPredicateFails)
 /// ZX_DEBUG_ASSERT_MSG with false predicate and message.
 #[test]

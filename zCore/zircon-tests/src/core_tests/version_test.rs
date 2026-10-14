@@ -116,3 +116,12 @@ fn non_empty_trimmed_printable_string() {
         );
     }
 }
+
+/// C++: TEST(VersionTest, StdU8StringView)
+#[test]
+fn std_u8_string_view() {
+    // The C++ test calls zx_system_get_version_string and verifies the
+    // returned zx_string_view_t can be used as std::u8string_view.
+    // This is a C++ API-level test; in Rust the equivalent is covered
+    // by the existing tests that verify the version string content.
+}

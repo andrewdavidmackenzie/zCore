@@ -317,7 +317,7 @@ impl SyncCompletion {
     /// C equivalent: sync_completion_signal()
     pub fn signal(&self) {
         use core::sync::atomic::AtomicI32;
-        let futex_ptr = &*self.value as *const AtomicI32;
+        let _futex_ptr = &*self.value as *const AtomicI32;
         let prev = self.value.swap(SYNC_SIGNALED, Ordering::SeqCst);
         if prev == SYNC_UNSIGNALED_WITH_WAITERS {
             self.futex.wake(usize::MAX);
@@ -730,7 +730,7 @@ pub fn condvar_waiter_thread_fn(
 // A Zircon thread that reads messages from a channel and writes them
 // back (echo). Used by channel_call and iovec tests.
 
-use zircon_object::ipc::{Channel, MessagePacket};
+use zircon_object::ipc::Channel;
 use zircon_object::object::{KernelObject, Signal};
 
 /// Shared state for an echo server thread.

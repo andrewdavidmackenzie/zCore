@@ -36,7 +36,6 @@ fn arm_mops() {
     let mops_bit = 1u32 << 20;
     if cpu_features & mops_bit == 0 {
         // FEAT_MOPS not detected — skip, matching C++ ZXTEST_SKIP behavior.
-        return;
     }
 
     // If FEAT_MOPS were available, the C++ test would execute SETP/SETM/SETE.
@@ -60,9 +59,7 @@ fn arm_mops_exception() {
     let cpu_features = constants.features.cpu;
 
     let mops_bit = 1u32 << 20;
-    if cpu_features & mops_bit == 0 {
-        return;
-    }
+    if cpu_features & mops_bit == 0 {}
 
     // C++ uses ASSERT_DEATH: deliberately corrupts C flag between SETP and SETM.
     // In libos mode we cannot safely test this (would kill the test process).

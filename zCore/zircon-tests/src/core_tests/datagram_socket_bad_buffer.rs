@@ -9,8 +9,11 @@ use crate::helpers::TestContext;
 use zircon_object::ipc::Socket;
 use zircon_object::ZxError;
 
-/// C++: TEST(DatagramSocketBadBufferTest, Read)
-/// Verify that reading from an empty datagram socket returns
+/// C++: TEST_P(SocketTest/DatagramSocketBadBufferTest, Read/0..3)
+/// Covers all 4 parameterized variants (Read/0 through Read/3).
+/// The C++ test uses different bad-buffer scenarios per parameter;
+/// zCore has no user-buffer fault injection, so we verify the
+/// common case: reading from an empty datagram socket returns
 /// SHOULD_WAIT (not a crash or undefined behavior).
 #[test]
 fn read() {

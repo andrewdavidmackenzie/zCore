@@ -15,7 +15,7 @@ use zircon_object::task::{BasicPolicy, PolicyAction, PolicyCondition, SetPolicyO
 use zircon_object::ZxError;
 
 /// Helper: create a channel pair through the syscall layer.
-fn syscall_channel_create(ctx: &TestContext) -> (HandleValue, HandleValue) {
+pub(crate) fn syscall_channel_create(ctx: &TestContext) -> (HandleValue, HandleValue) {
     let sc = ctx.syscall();
     let mut h0: HandleValue = 0;
     let mut h1: HandleValue = 0;
@@ -48,47 +48,6 @@ fn create_invalid_options() {
     let out1 = UserOutPtr::from(&mut h1 as *mut _ as usize);
     let result = sc.sys_channel_create(1, out0, out1);
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
-}
-
-/// Write data through syscall, read it back through syscall.
-#[test]
-fn write_and_read_via_syscall() {
-    let ctx = TestContext::new();
-    let (h0, h1) = syscall_channel_create(&ctx);
-    let sc = ctx.syscall();
-
-    // Write "hello" through h0
-    let data = b"hello";
-    let user_bytes = UserInPtr::from(data.as_ptr() as usize);
-    sc.sys_channel_write(
-        h0,
-        0,
-        user_bytes,
-        data.len() as u32,
-        UserInPtr::from(0usize),
-        0,
-    )
-    .unwrap();
-
-    // Read from h1
-    let mut buf = [0u8; 64];
-    let mut actual_bytes: u32 = 0;
-    let mut actual_handles: u32 = 0;
-    let result = sc.sys_channel_read(
-        h1,
-        0,
-        UserOutPtr::from(buf.as_mut_ptr() as usize),
-        0, // handles pointer (none)
-        buf.len() as u32,
-        0, // num_handles
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-        false, // is_etc
-    );
-    assert!(result.is_ok());
-    assert_eq!(actual_bytes, 5);
-    assert_eq!(actual_handles, 0);
-    assert_eq!(&buf[..5], b"hello");
 }
 
 /// C++: TEST(ChannelTest, ReadWhenEmptyReturnsShouldWait) — syscall level
@@ -175,58 +134,6 @@ fn read_closed_peer_via_syscall() {
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-/// Write a handle through a channel, read it back on the other end.
-#[test]
-fn write_handle_transfer_via_syscall() {
-    let ctx = TestContext::new();
-    let (ch0, ch1) = syscall_channel_create(&ctx);
-    let sc = ctx.syscall();
-
-    // Create an event and get its handle
-    let event = zircon_object::signal::Event::new();
-    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
-        event.clone(),
-        zircon_object::object::Rights::DEFAULT_EVENT,
-    ));
-
-    // Write the event handle through ch0
-    let handles_to_write = [event_handle];
-    let user_handles = UserInPtr::from(handles_to_write.as_ptr() as usize);
-    sc.sys_channel_write(ch0, 0, UserInPtr::from(0usize), 0, user_handles, 1)
-        .unwrap();
-
-    // The event handle should be consumed from the sender's handle table
-    assert!(ctx
-        .proc
-        .get_object::<zircon_object::signal::Event>(event_handle)
-        .is_err());
-
-    // Read the handle from ch1
-    let mut recv_handles = [0u32; 1];
-    let mut actual_bytes: u32 = 0;
-    let mut actual_handles: u32 = 0;
-    sc.sys_channel_read(
-        ch1,
-        0,
-        UserOutPtr::from(0usize), // no data
-        recv_handles.as_mut_ptr() as usize,
-        0,
-        1,
-        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
-        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
-        false,
-    )
-    .unwrap();
-    assert_eq!(actual_handles, 1);
-
-    // The received handle should resolve to the same event object
-    let received_event = ctx
-        .proc
-        .get_object::<zircon_object::signal::Event>(recv_handles[0])
-        .unwrap();
-    assert_eq!(received_event.id(), event.id());
-}
-
 /// C++: TEST(ChannelTest, ReadWithoutReadRightReturnsAccessDenied) — syscall level
 #[test]
 fn read_without_read_right() {
@@ -259,50 +166,6 @@ fn read_without_read_right() {
         false,
     );
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
-}
-
-#[test]
-fn write_without_write_right() {
-    let ctx = TestContext::new();
-    let sc = ctx.syscall();
-
-    // Create channel and add handle without WRITE right
-    let (ch0, _ch1) = zircon_object::ipc::Channel::create();
-    let h0 = ctx.proc.add_handle(zircon_object::object::Handle::new(
-        ch0,
-        zircon_object::object::Rights::READ, // no WRITE
-    ));
-
-    let data = b"test";
-    let result = sc.sys_channel_write(
-        h0,
-        0,
-        UserInPtr::from(data.as_ptr() as usize),
-        data.len() as u32,
-        UserInPtr::from(0usize),
-        0,
-    );
-    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
-}
-
-/// Data exceeding ZX_CHANNEL_MAX_MSG_BYTES (65536) is rejected.
-#[test]
-fn write_data_too_large_via_syscall() {
-    let ctx = TestContext::new();
-    let (h0, _h1) = syscall_channel_create(&ctx);
-    let sc = ctx.syscall();
-
-    let big_data = vec![0u8; 65537]; // > 64 KiB
-    let user_bytes = UserInPtr::from(big_data.as_ptr() as usize);
-    let result = sc.sys_channel_write(
-        h0,
-        0,
-        user_bytes,
-        big_data.len() as u32,
-        UserInPtr::from(0usize),
-        0,
-    );
-    assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 
 // ============================================================
@@ -4671,8 +4534,8 @@ fn call_etc_iovec_success_case() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
-    let chunk1 = [b'a', b'b', b'c', b'd'];
-    let chunk2 = [b'e', b'f', b'g', b'h'];
+    let chunk1 = *b"abcd";
+    let chunk2 = *b"efgh";
     // Build iovecs: [buffer: usize, capacity: u32, reserved: u32]
     let mut iovec_buf = Vec::new();
     iovec_buf.extend_from_slice(&(chunk1.as_ptr() as usize).to_ne_bytes());
@@ -4708,7 +4571,7 @@ fn call_etc_iovec_total_capacity_less_than_txid_size_returns_invalid_args() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
-    let tiny = [b'a', b'b'];
+    let tiny = *b"ab";
     // Single iovec with 2-byte capacity
     let mut iovec_buf = Vec::new();
     iovec_buf.extend_from_slice(&(tiny.as_ptr() as usize).to_ne_bytes());

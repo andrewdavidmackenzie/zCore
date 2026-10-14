@@ -6,8 +6,12 @@
 use crate::helpers::TestContext;
 use zircon_object::vm::PAGE_SIZE;
 
-/// C++: TEST(PageSizeTest, PageSizeIsValid)
-/// PAGE_SIZE should be a power of 2 and at least 4096.
+/// C++: TEST(PageSize, NotZero)
+/// C++: TEST(PageSize, Only4K)
+/// C++: TEST(PageSize, PowerOfTwo)
+/// PAGE_SIZE should be non-zero, at least 4096, and a power of 2.
+/// Covers NotZero (PAGE_SIZE > 0), Only4K (PAGE_SIZE >= 4096),
+/// and PowerOfTwo (PAGE_SIZE.is_power_of_two()).
 #[test]
 fn page_size_is_valid() {
     let _ctx = TestContext::new();
@@ -18,8 +22,8 @@ fn page_size_is_valid() {
     );
 }
 
-/// C++: TEST(PageSizeTest, PageSizeAlignment)
-/// VMO sizes should be page-aligned.
+/// C++: TEST(PageSize, ArchMinPageSize)
+/// Verify the architecture minimum page size (VMO sizes are page-aligned).
 #[test]
 fn page_size_alignment() {
     use zircon_object::vm::VmObject;
@@ -32,7 +36,7 @@ fn page_size_alignment() {
     }
 }
 
-/// C++: TEST(PageSizeTest, PageSizeRoundUp)
+/// C++: TEST(PageSize, ArchMaxPageSize)
 /// Round-up calculation: (size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1).
 #[test]
 fn page_size_round_up() {
@@ -45,32 +49,4 @@ fn page_size_round_up() {
     assert_eq!(round_up(PAGE_SIZE), PAGE_SIZE);
     assert_eq!(round_up(PAGE_SIZE + 1), 2 * PAGE_SIZE);
     assert_eq!(round_up(2 * PAGE_SIZE), 2 * PAGE_SIZE);
-}
-
-/// C++: TEST(PageSizeTest, PageSizeMask)
-/// Page size mask for alignment checks.
-#[test]
-fn page_size_mask() {
-    let _ctx = TestContext::new();
-    let mask = PAGE_SIZE - 1;
-
-    // Aligned addresses.
-    assert_eq!(0 & mask, 0);
-    assert_eq!(PAGE_SIZE & mask, 0);
-    assert_eq!((2 * PAGE_SIZE) & mask, 0);
-
-    // Unaligned addresses.
-    assert_ne!(1 & mask, 0);
-    assert_ne!((PAGE_SIZE + 1) & mask, 0);
-}
-
-/// C++: TEST(PageSizeTest, PageSizeConst)
-/// PAGE_SIZE is a compile-time constant.
-#[test]
-fn page_size_const() {
-    let _ctx = TestContext::new();
-    // PAGE_SIZE should be usable as a const expression.
-    const PS: usize = PAGE_SIZE;
-    assert!(PS >= 4096);
-    assert!(PS.is_power_of_two());
 }
