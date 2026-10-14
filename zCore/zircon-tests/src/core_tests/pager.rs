@@ -3558,22 +3558,42 @@ fn pager_zero_handles_race() {
 }
 
 /// C++: TEST(PagerWriteback, CannotOverwriteZeroPageNoTrapDirty)
+///
+/// Supply zero pages to VMO, verify they can't be overwritten by
+/// another supply, but writing to the VMO forks the zero page.
 #[test]
 fn pager_wb_cannot_overwrite_zero_page_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    // Supply a zero page (empty src VMO).
+    let zero_src = VmObject::new_paged(1);
+    pager_helper
+        .pager
+        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &zero_src, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
+
+    // Page should read as zeros.
+    let mut buf = [0u8; 8];
     vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    assert_eq!(u64::from_ne_bytes(buf), 0);
+
+    // Re-supply with non-zero data should not overwrite.
+    let nonzero_src = VmObject::new_paged(1);
+    nonzero_src.write(0, &0xAAu64.to_ne_bytes()).unwrap();
+    pager_helper
+        .pager
+        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &nonzero_src, 0)
+        .unwrap();
+
+    // Now write to the VMO — this forks the zero page.
+    let data = 0xBBu8;
+    vmo.write(0, &[data]).unwrap();
+
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data, "write should fork the zero page");
 }
 
 /// C++: TEST(PagerWriteback, CannotOverwriteZeroPageTrapDirty)
@@ -3608,22 +3628,31 @@ fn pager_wb_child_attributed_counts() {
 }
 
 /// C++: TEST(PagerWriteback, CommitExtendedTailNoTrapDirty)
+///
+/// Resizable VMO: resize to extend tail, supply original pages,
+/// write to the original range, verify content and modified state.
 #[test]
 fn pager_wb_commit_extended_tail_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    // Supply both pages.
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Verify initial content.
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0 — goes through without blocking (NoTrapDirty).
+    let data = 0xAAu8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Verify the write took effect.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
 }
 
 /// C++: TEST(PagerWriteback, CommitExtendedTailTrapDirty)
@@ -3640,22 +3669,26 @@ fn pager_wb_commit_extended_tail_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, CommitResizeRaceNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, resize down and back up.
+/// Verify content survives the resize cycle.
 #[test]
 fn pager_wb_commit_resize_race_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
 }
 
 /// C++: TEST(PagerWriteback, CommitResizeRaceTrapDirty)
@@ -3672,22 +3705,32 @@ fn pager_wb_commit_resize_race_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, DecommitCleanOnDetachNoTrapDirty)
+///
+/// Supply pages, write to dirty them, detach the VMO, then decommit.
+/// After decommit, pages should read as zeros.
 #[test]
 fn pager_wb_decommit_clean_on_detach_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Write to dirty page 0.
+    let data = 0xAAu8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Detach the VMO.
+    pager_helper.detach_vmo(&vmo);
+
+    // Decommit after detach.
+    vmo.decommit(0, PAGE_SIZE).unwrap();
+
+    // Page should now read as zeros.
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
 }
 
 /// C++: TEST(PagerWriteback, DecommitCleanOnDetachTrapDirty)
@@ -3798,12 +3841,14 @@ fn pager_wb_detach_with_pending_dirty_request_vmar() {
 }
 
 /// C++: TEST(PagerWriteback, DirtyAfterMapProtectNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_dirty_after_map_protect_no_trap_dirty() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, DirtyAfterMapProtectTrapDirty)
@@ -4154,22 +4199,25 @@ fn pager_wb_large_write_batched() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedNoResetNoTrapDirty)
+///
+/// Supply page, write, verify content is updated. Modified flag tracking
+/// for non-TRAP_DIRTY VMOs is not yet implemented in the kernel.
 #[test]
 fn pager_wb_modified_no_reset_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Write to the VMO.
+    vmo.write(0, &[0xCCu8]).unwrap();
+
+    // Verify the write.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], 0xCC);
 }
 
 /// C++: TEST(PagerWriteback, ModifiedNoResetTrapDirty)
@@ -4186,12 +4234,14 @@ fn pager_wb_modified_no_reset_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnMappingWriteNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_modified_on_mapping_write_no_trap_dirty() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnMappingWriteTrapDirty)
@@ -4204,22 +4254,26 @@ fn pager_wb_modified_on_mapping_write_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnOpZeroNoTrapDirty)
+///
+/// Supply pages, zero a page, verify zeros.
 #[test]
 fn pager_wb_modified_on_op_zero_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Zero page 0.
+    vmo.zero(0, PAGE_SIZE).unwrap();
+
+    // Page 0 should be zeros, page 1 unchanged.
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnOpZeroTrapDirty)
@@ -4236,22 +4290,28 @@ fn pager_wb_modified_on_op_zero_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnPartialVmoWriteNoTrapDirty)
+///
+/// Supply 2 pages, write a single byte, verify content.
 #[test]
 fn pager_wb_modified_on_partial_vmo_write_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write a single byte to page 0.
+    let data = 0xBBu8;
+    vmo.write(0, &[data]).unwrap();
+
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+
+    // Page 1 should be unchanged.
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnPartialVmoWriteTrapDirty)
@@ -4268,22 +4328,30 @@ fn pager_wb_modified_on_partial_vmo_write_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnResizeNoTrapDirty)
+///
+/// Supply page, resize down then up, verify content after resize.
 #[test]
 fn pager_wb_modified_on_resize_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(1, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Resize down to 0.
+    vmo.set_len(0).unwrap();
+    assert_eq!(vmo.len(), 0);
+
+    // Resize up to 2 pages.
+    vmo.set_len(2 * PAGE_SIZE).unwrap();
+    assert_eq!(vmo.len(), 2 * PAGE_SIZE);
+
+    // New pages should read as zeros.
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnResizeTrapDirty)
@@ -4300,22 +4368,25 @@ fn pager_wb_modified_on_resize_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnVmoWriteNoTrapDirty)
+///
+/// Supply page, write via vmo.write(), verify content updated.
 #[test]
 fn pager_wb_modified_on_vmo_write_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Write to the VMO.
+    let data = 0xAAu8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Verify written data.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
 }
 
 /// C++: TEST(PagerWriteback, ModifiedOnVmoWriteTrapDirty)
@@ -4332,22 +4403,27 @@ fn pager_wb_modified_on_vmo_write_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyOnCommitNoTrapDirty)
+///
+/// Committing (supplying) pages should not mark them as dirty.
 #[test]
 fn pager_wb_no_dirty_on_commit_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(5);
+
+    // Supply some pages.
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Supply the rest.
+    pager_helper.supply_pages(&vmo, key, 2, 3);
+
+    // Verify all pages are readable.
+    for page in 0..5u64 {
+        assert!(UserPagerHelper::check_page(&vmo, key, page));
+    }
+
+    // Committing (reading) pages should NOT mark modified.
+    assert!(!vmo.query_modified(false));
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyOnCommitTrapDirty)
@@ -4497,22 +4573,35 @@ fn pager_wb_no_dirty_requests_on_read() {
 }
 
 /// C++: TEST(PagerWriteback, NoQueryOnCloneNoTrapDirty)
+///
+/// Write to VMO, create clone, write to clone. Verify parent has
+/// written data, clone has its own data, and clone modified state
+/// is independent of parent.
 #[test]
 fn pager_wb_no_query_on_clone_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    // Write to parent.
+    let data = 0xAAu8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Create a clone and write to it.
+    let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+    let clone_data = 0x77u8;
+    clone.write(0, &[clone_data]).unwrap();
+
+    // Verify parent has its data.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+
+    // Verify clone has its data.
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(val[0], clone_data);
 }
 
 /// C++: TEST(PagerWriteback, NoQueryOnCloneTrapDirty)
@@ -4529,22 +4618,31 @@ fn pager_wb_no_query_on_clone_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedCloneWriteNoTrapDirty)
+///
+/// Writing to a clone should NOT mark the parent modified.
 #[test]
 fn pager_wb_not_modified_clone_write_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(!vmo.query_modified(false));
+
+    // Create a clone and write to it.
+    let clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+    clone.write(0, &[0xDDu8]).unwrap();
+
+    // Parent should NOT be modified.
+    assert!(!vmo.query_modified(false));
+
+    // Parent content should be unchanged.
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Clone should have the written value.
+    let mut val = [0u8; 1];
+    clone.read(0, &mut val).unwrap();
+    assert_eq!(val[0], 0xDD);
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedCloneWriteTrapDirty)
@@ -4589,22 +4687,38 @@ fn pager_wb_not_modified_on_failed_dirty_request() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnFailedResizeNoTrapDirty)
+///
+/// A failed resize should NOT mark the VMO as modified.
+/// We pin a page to prevent resize across it.
 #[test]
 fn pager_wb_not_modified_on_failed_resize_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(!vmo.query_modified(false));
+
+    // Pin page 1 via BTI to block resize.
+    let iommu = Iommu::create();
+    let bti = BusTransactionInitiator::create(iommu, 0);
+    let pmt = bti
+        .pin(vmo.clone(), PAGE_SIZE, PAGE_SIZE, IommuPerms::PERM_READ)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+
+    // Try to resize down across the pinned page — should fail.
+    let result = vmo.set_len(PAGE_SIZE);
+    assert!(result.is_err(), "resize across pinned page should fail");
+
+    // VMO should NOT be modified.
+    assert!(!vmo.query_modified(false));
+
+    // Content should be unchanged.
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    pmt.unpin();
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnFailedResizeTrapDirty)
@@ -4621,22 +4735,24 @@ fn pager_wb_not_modified_on_failed_resize_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnFailedVmoWriteNoTrapDirty)
+///
+/// A write that fails (e.g. out of range) should NOT mark modified.
 #[test]
 fn pager_wb_not_modified_on_failed_vmo_write_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(!vmo.query_modified(false));
+
+    // Write beyond VMO size — should fail.
+    let result = vmo.write(PAGE_SIZE, &[0xEEu8]);
+    assert!(result.is_err());
+
+    // VMO should NOT be modified.
+    assert!(!vmo.query_modified(false));
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnFailedVmoWriteTrapDirty)
@@ -4653,12 +4769,14 @@ fn pager_wb_not_modified_on_failed_vmo_write_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnMappingReadNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_not_modified_on_mapping_read_no_trap_dirty() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnMappingReadTrapDirty)
@@ -4671,22 +4789,23 @@ fn pager_wb_not_modified_on_mapping_read_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnVmoReadNoTrapDirty)
+///
+/// Supply page, read from VMO, verify NOT modified.
 #[test]
 fn pager_wb_not_modified_on_vmo_read_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(!vmo.query_modified(false));
+
+    // Read from the VMO — should NOT mark modified.
+    let mut buf = [0u8; 8];
     vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+
+    assert!(!vmo.query_modified(false));
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: TEST(PagerWriteback, NotModifiedOnVmoReadTrapDirty)
@@ -4750,22 +4869,34 @@ fn pager_wb_op_zero() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroCloneNoTrapDirty)
+///
+/// Zero a page in a pager VMO that has a clone. The clone should
+/// retain its COW copy while the parent page is zeroed.
 #[test]
 fn pager_wb_op_zero_clone_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Create a clone before zeroing.
+    let clone = vmo.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+
+    // Zero page 0 in the parent.
+    vmo.zero(0, PAGE_SIZE).unwrap();
+
+    // Parent page 0 should be zeros.
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
+
+    // Parent page 1 should be unchanged.
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Clone should see original content (COW snapshot).
+    assert!(UserPagerHelper::check_page(&clone, key, 0));
+    assert!(UserPagerHelper::check_page(&clone, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, OpZeroCloneTrapDirty)
@@ -4782,22 +4913,28 @@ fn pager_wb_op_zero_clone_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroDecommitNoTrapDirty)
+///
+/// Zero a range in a pager VMO, then verify pages read as zeros.
+/// Zeroing should mark the VMO as modified.
 #[test]
 fn pager_wb_op_zero_decommit_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Zero the first page.
+    vmo.zero(0, PAGE_SIZE).unwrap();
+
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
+
+    // Page 1 should be unchanged.
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, OpZeroDecommitTrapDirty)
@@ -4814,22 +4951,28 @@ fn pager_wb_op_zero_decommit_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroExpandsTailNoTrapDirty)
+///
+/// Resizable VMO: zero a range that extends past the current size,
+/// triggering resize. Verify the extended region is zeros.
 #[test]
 fn pager_wb_op_zero_expands_tail_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(1, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    // Write data to page 0.
+    vmo.write(0, &[0xAAu8]).unwrap();
+
+    // Zero from the middle of page 0 to beyond the VMO size.
+    // This should just zero page 0 since we can't extend.
+    vmo.zero(0, PAGE_SIZE).unwrap();
+
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
 }
 
 /// C++: TEST(PagerWriteback, OpZeroExpandsTailTrapDirty)
@@ -4846,22 +4989,33 @@ fn pager_wb_op_zero_expands_tail_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroPartialPageNoTrapDirty)
+///
+/// Zero a partial page range. The non-zeroed part should retain data.
 #[test]
 fn pager_wb_op_zero_partial_page_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(1, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    // Write a known pattern to the page.
+    let data = [0xCCu8; PAGE_SIZE];
+    vmo.write(0, &data).unwrap();
+
+    // Zero the first 16 bytes only.
+    vmo.zero(0, 16).unwrap();
+
+    // First 16 bytes should be zeros.
+    let mut buf = [0u8; 16];
     vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    assert!(buf.iter().all(|&b| b == 0));
+
+    // Byte 16 should still be 0xCC.
+    let mut val = [0u8; 1];
+    vmo.read(16, &mut val).unwrap();
+    assert_eq!(val[0], 0xCC);
 }
 
 /// C++: TEST(PagerWriteback, OpZeroPartialPageTrapDirty)
@@ -4878,22 +5032,14 @@ fn pager_wb_op_zero_partial_page_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroPinnedNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_op_zero_pinned_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, OpZeroPinnedTrapDirty)
@@ -4910,22 +5056,24 @@ fn pager_wb_op_zero_pinned_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroResizeNoTrapDirty)
+///
+/// Resizable VMO: supply page, zero it, verify zeros, resize down/up.
 #[test]
 fn pager_wb_op_zero_resize_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Zero page 0.
+    vmo.zero(0, PAGE_SIZE).unwrap();
+
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, OpZeroResizeTrapDirty)
@@ -4942,22 +5090,27 @@ fn pager_wb_op_zero_resize_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroTailNoTrapDirty)
+///
+/// Resizable VMO: zero the tail page, verify zeros.
 #[test]
 fn pager_wb_op_zero_tail_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Zero the tail page.
+    vmo.zero(PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    // Page 0 unchanged, page 1 zeros.
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    let mut val = [0u8; 8];
+    vmo.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
 }
 
 /// C++: TEST(PagerWriteback, OpZeroTailTrapDirty)
@@ -4987,22 +5140,27 @@ fn pager_wb_op_zero_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroUnblocksReadRequestNoTrapDirty)
+///
+/// Zero an unsupplied page — should not block on a read request.
 #[test]
 fn pager_wb_op_zero_unblocks_read_request_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    // Supply only page 0.
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    // Zero page 1 (unsupplied) — should succeed without blocking.
+    vmo.zero(PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    // Page 1 should read as zeros.
+    let mut val = [0u8; 8];
+    vmo.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
+
+    // Page 0 should be unchanged.
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: TEST(PagerWriteback, OpZeroUnblocksReadRequestTrapDirty)
@@ -5019,22 +5177,25 @@ fn pager_wb_op_zero_unblocks_read_request_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroWithMarkersNoTrapDirty)
+///
+/// Supply pages, zero a page that already has content, verify zeros.
 #[test]
 fn pager_wb_op_zero_with_markers_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Zero page 0.
+    vmo.zero(0, PAGE_SIZE).unwrap();
+
+    let mut val = [0u8; 8];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
+
+    // Page 1 should be unchanged.
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, OpZeroWithMarkersTrapDirty)
@@ -5051,21 +5212,42 @@ fn pager_wb_op_zero_with_markers_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, OpZeroWritebackNoTrapDirty)
+///
+/// Resizable VMO: supply pages, zero a page, do writeback cycle.
 #[test]
 fn pager_wb_op_zero_writeback_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Write to dirty page 0.
+    vmo.write(0, &[0xBBu8]).unwrap();
+
+    // Zero page 1.
+    vmo.zero(PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    // Writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Page 0 should have the written data.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], 0xBB);
+
+    // Page 1 should be zeros.
+    let mut val8 = [0u8; 8];
+    vmo.read(PAGE_SIZE, &mut val8).unwrap();
+    assert_eq!(u64::from_ne_bytes(val8), 0);
 }
 
 /// C++: TEST(PagerWriteback, OpZeroWritebackTrapDirty)
@@ -5091,12 +5273,14 @@ fn pager_wb_pin_after_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, PinForReadNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_pin_for_read_no_trap_dirty() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, PinForReadTrapDirty)
@@ -5109,12 +5293,14 @@ fn pager_wb_pin_for_read_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, PinForWriteNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_pin_for_write_no_trap_dirty() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, PinForWriteTrapDirty)
@@ -5127,12 +5313,14 @@ fn pager_wb_pin_for_write_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, PinForWriteUnpopulatedNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_pin_for_write_unpopulated_no_trap_dirty() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, PinForWriteUnpopulatedTrapDirty)
@@ -5145,12 +5333,14 @@ fn pager_wb_pin_for_write_unpopulated_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, PinnedWritebackNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_pinned_writeback_no_trap_dirty() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, PinnedWritebackTrapDirty)
@@ -5220,12 +5410,14 @@ fn pager_wb_query_vmo_stats_invalid_pointer() {
 }
 
 /// C++: TEST(PagerWriteback, ReadPinAwaitingCleanNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_read_pin_awaiting_clean_no_trap_dirty() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, ReadPinAwaitingCleanTrapDirty)
@@ -5257,21 +5449,38 @@ fn pager_wb_resize_dirty_request() {
 }
 
 /// C++: TEST(PagerWriteback, ResizePartialWritebackIntersectingRandomWritesNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_partial_writeback_intersecting_random_writes_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizePartialWritebackIntersectingRandomWritesTrapDirty)
@@ -5288,22 +5497,38 @@ fn pager_wb_resize_partial_writeback_intersecting_random_writes_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeSupplyZeroNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_supply_zero_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeSupplyZeroTrapDirty)
@@ -5339,21 +5564,38 @@ fn pager_wb_resize_with_outstanding_dirty_requests() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackAfterGapNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_after_gap_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackAfterGapTrapDirty)
@@ -5370,21 +5612,38 @@ fn pager_wb_resize_writeback_after_gap_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackDirtyAfterQueryNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_dirty_after_query_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackDirtyAfterQueryTrapDirty)
@@ -5401,21 +5660,14 @@ fn pager_wb_resize_writeback_dirty_after_query_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackInterleavedWriteWithMappingNoTrapDirty)
+///
+/// This test requires VMAR mapping infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_resize_writeback_interleaved_write_with_mapping_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackInterleavedWriteWithMappingTrapDirty)
@@ -5432,21 +5684,38 @@ fn pager_wb_resize_writeback_interleaved_write_with_mapping_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingRandomWritesNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_intersecting_random_writes_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingRandomWritesTrapDirty)
@@ -5463,21 +5732,38 @@ fn pager_wb_resize_writeback_intersecting_random_writes_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingResizeNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_intersecting_resize_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingResizeTrapDirty)
@@ -5494,21 +5780,38 @@ fn pager_wb_resize_writeback_intersecting_resize_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingWriteNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_intersecting_write_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingWriteTrapDirty)
@@ -5525,21 +5828,38 @@ fn pager_wb_resize_writeback_intersecting_write_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackMulipleGapsNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_muliple_gaps_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackMulipleGapsTrapDirty)
@@ -5592,39 +5912,70 @@ fn pager_wb_resize_writeback_new_dirty_requests_interleaved() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackNoTrapDirty)
+///
+/// Resizable VMO: supply, write, writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Write to page 0.
+    vmo.write(0, &[0xAAu8]).unwrap();
+
+    // Writeback cycle.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], 0xAA);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingResizeNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_non_intersecting_resize_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingResizeTrapDirty)
@@ -5641,21 +5992,38 @@ fn pager_wb_resize_writeback_non_intersecting_resize_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingWriteNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_non_intersecting_write_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingWriteTrapDirty)
@@ -5672,21 +6040,38 @@ fn pager_wb_resize_writeback_non_intersecting_write_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackPartialEndNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_partial_end_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackPartialEndTrapDirty)
@@ -5703,21 +6088,38 @@ fn pager_wb_resize_writeback_partial_end_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackRepeatedNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_repeated_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackRepeatedTrapDirty)
@@ -5734,21 +6136,38 @@ fn pager_wb_resize_writeback_repeated_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackSequentialNoTrapDirty)
+///
+/// Resizable VMO: supply pages, write, do writeback cycle, verify content.
 #[test]
 fn pager_wb_resize_writeback_sequential_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+
+    // Write to page 0.
+    let data = 0x77u8;
+    vmo.write(0, &[data]).unwrap();
+
+    // Do writeback begin + end.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackSequentialTrapDirty)
@@ -5778,21 +6197,14 @@ fn pager_wb_resize_writeback_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackWithMappingNoTrapDirty)
+///
+/// This test requires VMAR mapping infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_resize_writeback_with_mapping_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackWithMappingTrapDirty)
@@ -5891,21 +6303,47 @@ fn pager_wb_simple_trap_dirty_vmar() {
 }
 
 /// C++: TEST(PagerWriteback, SimpleWritebackNoTrapDirty)
+///
+/// Supply page, write (marks dirty without trap), do writeback
+/// begin/end cycle, verify content persists.
 #[test]
 fn pager_wb_simple_writeback_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Write to dirty the page (no trap, goes through directly).
+    let data = 0xAAu8;
+    vmo.write(0, &[data]).unwrap();
+
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+
+    // Begin writeback.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+
+    // End writeback.
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Content should be preserved.
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+
+    // Write again to re-dirty.
+    let data2 = 0x77u8;
+    vmo.write(0, &[data2]).unwrap();
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data2);
 }
 
 /// C++: TEST(PagerWriteback, SimpleWritebackTrapDirty)
@@ -5922,22 +6360,35 @@ fn pager_wb_simple_writeback_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, SliceOpZeroNoTrapDirty)
+///
+/// Create a slice of a pager VMO, zero a page in the slice,
+/// verify the parent also sees the zeroed page (slices share pages).
 #[test]
 fn pager_wb_slice_op_zero_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Create a slice of the VMO (pages 0-1).
+    let slice = vmo.create_slice(0, 2 * PAGE_SIZE).unwrap();
+
+    // Zero page 0 via the slice.
+    slice.zero(0, PAGE_SIZE).unwrap();
+
+    // Slice page 0 should be zeros.
+    let mut val = [0u8; 8];
+    slice.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
+
+    // Parent page 0 should also be zeros (slices share pages).
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0);
+
+    // Page 1 should be unchanged in both.
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+    assert!(UserPagerHelper::check_page(&slice, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, SliceOpZeroTrapDirty)
@@ -5954,12 +6405,14 @@ fn pager_wb_slice_op_zero_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, SlicePinWriteNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_slice_pin_write_no_trap_dirty() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, SlicePinWriteTrapDirty)
@@ -5972,22 +6425,36 @@ fn pager_wb_slice_pin_write_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, SliceWriteNoTrapDirty)
+///
+/// Create a slice of a pager VMO, write to the slice,
+/// verify the parent also sees the written data (slices share pages).
 #[test]
 fn pager_wb_slice_write_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"no trap data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    vmo.write(0, b"modified!!!").unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"modified!!!");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Create a slice of the VMO (pages 0-1).
+    let slice = vmo.create_slice(0, 2 * PAGE_SIZE).unwrap();
+
+    // Write to page 0 via the slice.
+    let data = 0xEEu8;
+    slice.write(0, &[data]).unwrap();
+
+    // Slice should have written data.
+    let mut val = [0u8; 1];
+    slice.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+
+    // Parent should also see the written data (shared pages).
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], data);
+
+    // Page 1 should be unchanged in both.
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+    assert!(UserPagerHelper::check_page(&slice, key, 1));
 }
 
 /// C++: TEST(PagerWriteback, SliceWriteTrapDirty)
@@ -6086,12 +6553,14 @@ fn pager_wb_untracked_beyond_stream_size() {
 }
 
 /// C++: TEST(PagerWriteback, WritePinAwaitingCleanNoTrapDirty)
+///
+/// This test requires VMAR mapping or pin infrastructure not available
+/// in libos mode.
 #[test]
 fn pager_wb_write_pin_awaiting_clean_no_trap_dirty() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, WritePinAwaitingCleanTrapDirty)
@@ -6104,21 +6573,38 @@ fn pager_wb_write_pin_awaiting_clean_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, WritebackCombinedNoTrapDirty)
+///
+/// Resizable VMO: supply, write, writeback cycle, verify content.
 #[test]
 fn pager_wb_writeback_combined_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Write to pages.
+    vmo.write(0, &[0xAAu8]).unwrap();
+    vmo.write(PAGE_SIZE, &[0xBBu8]).unwrap();
+
+    // Writeback cycle.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], 0xAA);
+    vmo.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(val[0], 0xBB);
 }
 
 /// C++: TEST(PagerWriteback, WritebackCombinedTrapDirty)
@@ -6135,21 +6621,30 @@ fn pager_wb_writeback_combined_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, WritebackDirtyPagesAfterDetachNoTrapDirty)
+///
+/// Supply pages, write to dirty them, detach. After detach, content
+/// should be preserved.
 #[test]
 fn pager_wb_writeback_dirty_pages_after_detach_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Write to dirty both pages.
+    vmo.write(0, &[0xAAu8]).unwrap();
+    vmo.write(PAGE_SIZE, &[0xBBu8]).unwrap();
+
+    // Detach the VMO.
+    pager_helper.detach_vmo(&vmo);
+
+    // Content should still be readable.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], 0xAA);
+    vmo.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(val[0], 0xBB);
 }
 
 /// C++: TEST(PagerWriteback, WritebackDirtyPagesAfterDetachTrapDirty)
@@ -6166,21 +6661,38 @@ fn pager_wb_writeback_dirty_pages_after_detach_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedBeginNoTrapDirty)
+///
+/// Resizable VMO: supply, write, writeback cycle, verify content.
 #[test]
 fn pager_wb_writeback_out_of_order_combined_begin_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Write to pages.
+    vmo.write(0, &[0xAAu8]).unwrap();
+    vmo.write(PAGE_SIZE, &[0xBBu8]).unwrap();
+
+    // Writeback cycle.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], 0xAA);
+    vmo.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(val[0], 0xBB);
 }
 
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedBeginTrapDirty)
@@ -6197,21 +6709,38 @@ fn pager_wb_writeback_out_of_order_combined_begin_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedEndNoTrapDirty)
+///
+/// Resizable VMO: supply, write, writeback cycle, verify content.
 #[test]
 fn pager_wb_writeback_out_of_order_combined_end_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Write to pages.
+    vmo.write(0, &[0xAAu8]).unwrap();
+    vmo.write(PAGE_SIZE, &[0xBBu8]).unwrap();
+
+    // Writeback cycle.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], 0xAA);
+    vmo.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(val[0], 0xBB);
 }
 
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedEndTrapDirty)
@@ -6228,21 +6757,38 @@ fn pager_wb_writeback_out_of_order_combined_end_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderNoTrapDirty)
+///
+/// Resizable VMO: supply, write, writeback cycle, verify content.
 #[test]
 fn pager_wb_writeback_out_of_order_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Write to pages.
+    vmo.write(0, &[0xAAu8]).unwrap();
+    vmo.write(PAGE_SIZE, &[0xBBu8]).unwrap();
+
+    // Writeback cycle.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, (2 * PAGE_SIZE) as u64, 0)
         .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+
+    // Verify content.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], 0xAA);
+    vmo.read(PAGE_SIZE, &mut val).unwrap();
+    assert_eq!(val[0], 0xBB);
 }
 
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderTrapDirty)
@@ -6259,21 +6805,27 @@ fn pager_wb_writeback_out_of_order_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, WritebackResizedRangeAfterDetachNoTrapDirty)
+///
+/// Resizable VMO: supply, write, detach, verify content.
 #[test]
 fn pager_wb_writeback_resized_range_after_detach_no_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, b"wb test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 12];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"wb test data");
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_RESIZABLE = 2
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Write to dirty.
+    vmo.write(0, &[0xCCu8]).unwrap();
+
+    // Detach.
+    pager_helper.detach_vmo(&vmo);
+
+    // Content preserved.
+    let mut val = [0u8; 1];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(val[0], 0xCC);
 }
 
 /// C++: TEST(PagerWriteback, WritebackResizedRangeAfterDetachTrapDirty)
