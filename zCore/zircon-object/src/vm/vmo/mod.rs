@@ -315,10 +315,7 @@ impl VmObject {
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
         // Check that all pages in range are committed (supplied).
         if length > 0 {
-            let committed = self.trait_.committed_pages_in_range(
-                start_page * PAGE_SIZE,
-                (end_page - start_page) * PAGE_SIZE,
-            );
+            let committed = self.trait_.committed_pages_in_range(start_page, end_page);
             if committed < end_page - start_page {
                 return Err(ZxError::NOT_FOUND);
             }
