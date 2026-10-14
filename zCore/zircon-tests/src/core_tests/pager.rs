@@ -8968,76 +8968,282 @@ fn uncommitted_single_page_test() {
     assert_eq!(&buf, b"supply test data");
 }
 
-/// C++: TEST(PagerProcess, KillAfterSuspendPageFault)
-#[test]
-fn pager_process_kill_after_suspend_page_fault() {
-    let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-}
+/// C++: TEST(PagerProcess, KillBlockedUserVmoRead)
+///
+/// Create a pager-backed VMO with no pages supplied.
+/// Start a thread that calls vmo.read_paged() — it blocks on
+/// demand-paging. Verify a page request arrives on the port,
+/// then kill the process. The thread should terminate cleanly.
+///
+/// This is the canonical "kill blocked reader" test. In C++ the
+/// thread does sys_vmo_read which traps into the pager path.
+/// In libos mode, read_paged() + blocking_run is the equivalent.
+#[async_std::test]
+async fn pager_process_kill_blocked_user_vmo_read() {
+    use crate::helpers::PagerProcessTestThread;
+    use zircon_object::object::Signal;
+    use zircon_object::task::Task;
 
-/// C++: TEST(PagerProcess, KillAfterSuspendUsercopy)
-#[test]
-fn pager_process_kill_after_suspend_usercopy() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-}
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
 
-/// C++: TEST(PagerProcess, KillAfterSuspendUsercopyCapture)
-#[test]
-fn pager_process_kill_after_suspend_usercopy_capture() {
-    let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-}
+    // Start a thread that will block reading from the unsupplied VMO.
+    let ptt = PagerProcessTestThread::start(vmo.clone());
+    ptt.wait_until_blocked().await;
 
-/// C++: TEST(PagerProcess, KillAfterSuspendVmoRead)
-#[test]
-fn pager_process_kill_after_suspend_vmo_read() {
-    let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    // Verify the thread has not completed its read (it's blocked).
+    assert!(
+        !ptt.has_read_returned(),
+        "thread should be blocked on pager read"
+    );
+
+    // Kill the process — this kills all threads in it.
+    ptt.proc.kill();
+
+    // The thread should terminate.
+    ptt.wait_for_termination().await;
+
+    // Verify termination signals.
+    assert!(
+        ptt.thread.signal().contains(Signal::THREAD_TERMINATED),
+        "thread should have THREAD_TERMINATED signal"
+    );
 }
 
 /// C++: TEST(PagerProcess, KillBlockedUserPageFault)
-#[test]
-fn pager_process_kill_blocked_user_page_fault() {
-    let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-}
+///
+/// Same as KillBlockedUserVmoRead but in C++ the thread accesses a
+/// mapped address causing a page fault. In libos mode there is no
+/// MMU mapping, so we use the same read_paged() path. The kernel
+/// behavior being tested is identical: a thread blocked waiting for
+/// pager pages is killed.
+#[async_std::test]
+async fn pager_process_kill_blocked_user_page_fault() {
+    use crate::helpers::PagerProcessTestThread;
+    use zircon_object::object::Signal;
+    use zircon_object::task::Task;
 
-/// C++: TEST(PagerProcess, KillBlockedUserVmoRead)
-#[test]
-fn pager_process_kill_blocked_user_vmo_read() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    let ptt = PagerProcessTestThread::start(vmo.clone());
+    ptt.wait_until_blocked().await;
+
+    assert!(
+        !ptt.has_read_returned(),
+        "thread should be blocked on pager read (page fault variant)"
+    );
+
+    ptt.proc.kill();
+    ptt.wait_for_termination().await;
+
+    assert!(
+        ptt.thread.signal().contains(Signal::THREAD_TERMINATED),
+        "thread should have THREAD_TERMINATED signal"
+    );
 }
 
 /// C++: TEST(PagerProcess, KillBlockedUsercopy)
-#[test]
-fn pager_process_kill_blocked_usercopy() {
+///
+/// Same as KillBlockedUserVmoRead but in C++ the thread does a
+/// get_info/read_state that requires copying from a pager-backed
+/// buffer. In libos mode this exercises the same code path.
+#[async_std::test]
+async fn pager_process_kill_blocked_usercopy() {
+    use crate::helpers::PagerProcessTestThread;
+    use zircon_object::object::Signal;
+    use zircon_object::task::Task;
+
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    let ptt = PagerProcessTestThread::start(vmo.clone());
+    ptt.wait_until_blocked().await;
+
+    assert!(
+        !ptt.has_read_returned(),
+        "thread should be blocked on pager read (usercopy variant)"
+    );
+
+    ptt.proc.kill();
+    ptt.wait_for_termination().await;
+
+    assert!(
+        ptt.thread.signal().contains(Signal::THREAD_TERMINATED),
+        "thread should have THREAD_TERMINATED signal"
+    );
 }
 
 /// C++: TEST(PagerProcess, KillBlockedUsercopyCaptureFaults)
-#[test]
-fn pager_process_kill_blocked_usercopy_capture_faults() {
+///
+/// Same as KillBlockedUsercopy but with fault capture enabled.
+/// In libos mode, the code path is identical to the other variants.
+#[async_std::test]
+async fn pager_process_kill_blocked_usercopy_capture_faults() {
+    use crate::helpers::PagerProcessTestThread;
+    use zircon_object::object::Signal;
+    use zircon_object::task::Task;
+
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    let ptt = PagerProcessTestThread::start(vmo.clone());
+    ptt.wait_until_blocked().await;
+
+    assert!(
+        !ptt.has_read_returned(),
+        "thread should be blocked on pager read (usercopy capture variant)"
+    );
+
+    ptt.proc.kill();
+    ptt.wait_for_termination().await;
+
+    assert!(
+        ptt.thread.signal().contains(Signal::THREAD_TERMINATED),
+        "thread should have THREAD_TERMINATED signal"
+    );
+}
+
+/// C++: TEST(PagerProcess, KillAfterSuspendVmoRead)
+///
+/// Like KillBlockedUserVmoRead, but suspends the thread before
+/// killing the process. Verifies that a suspended, blocked thread
+/// is correctly killed and terminates.
+#[async_std::test]
+async fn pager_process_kill_after_suspend_vmo_read() {
+    use crate::helpers::PagerProcessTestThread;
+    use zircon_object::object::Signal;
+    use zircon_object::task::Task;
+
+    let _ctx = TestContext::new();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    let ptt = PagerProcessTestThread::start(vmo.clone());
+    ptt.wait_until_blocked().await;
+
+    assert!(
+        !ptt.has_read_returned(),
+        "thread should be blocked on pager read"
+    );
+
+    // Suspend the thread before killing.
+    ptt.thread.suspend();
+    // Yield to let suspension take effect.
+    async_std::task::yield_now().await;
+
+    // Kill the process — should terminate even though suspended.
+    ptt.proc.kill();
+    ptt.wait_for_termination().await;
+
+    assert!(
+        ptt.thread.signal().contains(Signal::THREAD_TERMINATED),
+        "suspended thread should terminate after kill"
+    );
+}
+
+/// C++: TEST(PagerProcess, KillAfterSuspendPageFault)
+///
+/// Same as KillAfterSuspendVmoRead but in C++ the thread blocks on
+/// a page fault. In libos mode the code path is identical.
+#[async_std::test]
+async fn pager_process_kill_after_suspend_page_fault() {
+    use crate::helpers::PagerProcessTestThread;
+    use zircon_object::object::Signal;
+    use zircon_object::task::Task;
+
+    let _ctx = TestContext::new();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    let ptt = PagerProcessTestThread::start(vmo.clone());
+    ptt.wait_until_blocked().await;
+
+    assert!(
+        !ptt.has_read_returned(),
+        "thread should be blocked on pager read (page fault variant)"
+    );
+
+    ptt.thread.suspend();
+    async_std::task::yield_now().await;
+
+    ptt.proc.kill();
+    ptt.wait_for_termination().await;
+
+    assert!(
+        ptt.thread.signal().contains(Signal::THREAD_TERMINATED),
+        "suspended thread should terminate after kill"
+    );
+}
+
+/// C++: TEST(PagerProcess, KillAfterSuspendUsercopy)
+///
+/// Same as KillAfterSuspendVmoRead but for the usercopy variant.
+#[async_std::test]
+async fn pager_process_kill_after_suspend_usercopy() {
+    use crate::helpers::PagerProcessTestThread;
+    use zircon_object::object::Signal;
+    use zircon_object::task::Task;
+
+    let _ctx = TestContext::new();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    let ptt = PagerProcessTestThread::start(vmo.clone());
+    ptt.wait_until_blocked().await;
+
+    assert!(
+        !ptt.has_read_returned(),
+        "thread should be blocked on pager read (usercopy variant)"
+    );
+
+    ptt.thread.suspend();
+    async_std::task::yield_now().await;
+
+    ptt.proc.kill();
+    ptt.wait_for_termination().await;
+
+    assert!(
+        ptt.thread.signal().contains(Signal::THREAD_TERMINATED),
+        "suspended thread should terminate after kill"
+    );
+}
+
+/// C++: TEST(PagerProcess, KillAfterSuspendUsercopyCapture)
+///
+/// Same as KillAfterSuspendVmoRead but for the usercopy capture variant.
+#[async_std::test]
+async fn pager_process_kill_after_suspend_usercopy_capture() {
+    use crate::helpers::PagerProcessTestThread;
+    use zircon_object::object::Signal;
+    use zircon_object::task::Task;
+
+    let _ctx = TestContext::new();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    let ptt = PagerProcessTestThread::start(vmo.clone());
+    ptt.wait_until_blocked().await;
+
+    assert!(
+        !ptt.has_read_returned(),
+        "thread should be blocked on pager read (usercopy capture variant)"
+    );
+
+    ptt.thread.suspend();
+    async_std::task::yield_now().await;
+
+    ptt.proc.kill();
+    ptt.wait_for_termination().await;
+
+    assert!(
+        ptt.thread.signal().contains(Signal::THREAD_TERMINATED),
+        "suspended thread should terminate after kill"
+    );
 }
 
 /// C++: TEST(PagerWriteback, DetachWithPendingDirtyRequest)

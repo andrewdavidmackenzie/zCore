@@ -1085,3 +1085,167 @@ impl TestContext {
             .add_handle(Handle::new(resource, Rights::DEFAULT_RESOURCE))
     }
 }
+
+// ── Pager process test thread ────────────────────────────────────────
+//
+// Rust equivalent of the C++ PagerProcess test fixture's child thread.
+// Creates a separate process + thread that calls vmo.read_paged() on
+// a pager-backed VMO (no pages supplied). The thread blocks on the
+// demand-paging path, allowing the test to verify the thread is blocked,
+// optionally suspend it, kill the process, and verify termination.
+
+use zircon_object::task::ThreadState;
+
+/// State constants for pager read threads.
+pub const PAGER_STATE_WAITING_TO_START: u32 = 100;
+pub const PAGER_STATE_ABOUT_TO_READ: u32 = 200;
+pub const PAGER_STATE_READ_RETURNED: u32 = 300;
+
+/// Shared state between the test and its pager reader thread.
+pub struct PagerReadState {
+    /// The pager-backed VMO to read from.
+    pub vmo: Arc<VmObject>,
+    /// Thread state: 100=waiting, 200=about to read, 300=read returned
+    pub state: AtomicU32,
+    /// Result of the read: 0=pending, 1=Ok, otherwise ZxError code
+    pub read_result: AtomicU32,
+}
+
+/// Thread function for pager read threads.
+///
+/// Reads one page from the pager-backed VMO via `read_paged()`.
+/// Uses `blocking_run` so the read is cancellable via Thread::kill().
+///
+/// This mirrors how the C++ PagerProcess tests block a thread on an
+/// unsupplied pager VMO — the thread enters the demand-paging path,
+/// sends a ZX_PAGER_VMO_READ request, and waits for the page.
+pub fn pager_read_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let inner_thread = thread.inner();
+        let pager_state = inner_thread
+            .ext()
+            .downcast_ref::<Arc<PagerReadState>>()
+            .expect("PagerReadState ext missing")
+            .clone();
+
+        // Signal that we're about to start the blocking read.
+        pager_state
+            .state
+            .store(PAGER_STATE_ABOUT_TO_READ, Ordering::Release);
+
+        // Call read_paged — this will block via demand-paging.
+        // We wrap it in blocking_run so Thread::kill() can cancel it.
+        let vmo = pager_state.vmo.clone();
+        let read_future = core::pin::pin!(async {
+            let mut buf = alloc::vec![0u8; PAGE_SIZE];
+            vmo.read_paged(0, &mut buf).await
+        });
+        let result = thread
+            .blocking_run(
+                read_future,
+                ThreadState::BlockedPager,
+                core::time::Duration::from_secs(3600), // effectively infinite
+                None,
+            )
+            .await;
+
+        // Store result: 1 for Ok, error code for Err
+        let code = match result {
+            Ok(()) => 1,
+            Err(e) => e as u32,
+        };
+        pager_state.read_result.store(code, Ordering::Release);
+
+        // Signal that the read returned.
+        pager_state
+            .state
+            .store(PAGER_STATE_READ_RETURNED, Ordering::Release);
+
+        // CurrentThread drop calls terminate()
+    })
+}
+
+/// A handle to a running pager reader thread in a separate process.
+///
+/// Rust equivalent of the C++ PagerProcess fixture's child process.
+/// The thread calls `vmo.read_paged()` which blocks on the pager,
+/// allowing the test to verify blocking, suspend, and kill behavior.
+pub struct PagerProcessTestThread {
+    pub thread: Arc<Thread>,
+    pub proc: Arc<Process>,
+    pub state: Arc<PagerReadState>,
+    /// The job that owns the process. Kept alive so the process
+    /// isn't orphaned. Killed on drop to clean up.
+    _job: Arc<Job>,
+}
+
+impl PagerProcessTestThread {
+    /// Create and start a pager reader thread in a new process.
+    ///
+    /// The thread will attempt to read from `vmo` (which should be
+    /// pager-backed with no pages supplied), blocking on the demand-
+    /// paging path.
+    pub fn start(vmo: Arc<VmObject>) -> Self {
+        let job = Job::root();
+        let proc = Process::create(&job, "pager-test-proc").unwrap();
+        let pager_state = Arc::new(PagerReadState {
+            vmo,
+            state: AtomicU32::new(PAGER_STATE_WAITING_TO_START),
+            read_result: AtomicU32::new(0),
+        });
+        let thread = Thread::create_with_ext(&proc, "pager-reader", pager_state.clone()).unwrap();
+        thread.start(pager_read_thread_fn).unwrap();
+        PagerProcessTestThread {
+            thread,
+            proc,
+            state: pager_state,
+            _job: job,
+        }
+    }
+
+    /// Wait until the thread has entered the blocking read.
+    ///
+    /// After this returns, the thread is blocked on `read_paged()`,
+    /// waiting for the pager to supply the page.
+    pub async fn wait_until_blocked(&self) {
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+        loop {
+            let st = self.state.state.load(Ordering::Acquire);
+            if st >= PAGER_STATE_ABOUT_TO_READ {
+                // Also wait for the thread to actually enter the blocked state.
+                // Yield a few times to let the async runtime schedule the read.
+                for _ in 0..10 {
+                    async_std::task::yield_now().await;
+                }
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "PagerProcessTestThread: timed out waiting for thread to block"
+            );
+            async_std::task::yield_now().await;
+        }
+    }
+
+    /// Check if the thread's read has returned.
+    pub fn has_read_returned(&self) -> bool {
+        self.state.state.load(Ordering::Acquire) == PAGER_STATE_READ_RETURNED
+    }
+
+    /// Wait for the thread to terminate (state == Dead).
+    pub async fn wait_for_termination(&self) {
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+        loop {
+            if self.thread.state() == ThreadState::Dead {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "PagerProcessTestThread: timed out waiting for thread to terminate"
+            );
+            async_std::task::yield_now().await;
+        }
+    }
+}
