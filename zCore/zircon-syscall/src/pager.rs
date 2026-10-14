@@ -145,18 +145,18 @@ impl Syscall<'_> {
             return Err(ZxError::OUT_OF_RANGE);
         }
 
-        let ranges = vmo.query_dirty_ranges(offset as usize, length as usize);
-        let avail_count = ranges.len();
-
         // Each range is 24 bytes: { offset: u64, length: u64, options: u64 }
         const RANGE_SIZE: usize = 24;
-        let max_entries = buffer_size / RANGE_SIZE;
-        let write_count = avail_count.min(max_entries);
 
-        // Null buffer with non-zero buffer_size is invalid if there are ranges.
-        if buffer == 0 && buffer_size > 0 && avail_count > 0 {
+        // Null buffer with non-zero capacity is invalid.
+        let max_entries = buffer_size / RANGE_SIZE;
+        if buffer == 0 && max_entries > 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+
+        let ranges = vmo.query_dirty_ranges(offset as usize, length as usize);
+        let avail_count = ranges.len();
+        let write_count = avail_count.min(max_entries);
         if write_count > 0 && buffer != 0 {
             let mut out = UserOutPtr::<u8>::from(buffer);
             for &(off, len, opts) in ranges.iter().take(write_count) {
