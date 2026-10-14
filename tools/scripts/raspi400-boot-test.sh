@@ -10,6 +10,10 @@
 
 set -euo pipefail
 
+# Read core count from target config (hardcoded aarch64 for raspi400)
+source "$(dirname "$0")/get-target-cores.sh"
+CORES=$(get_target_cores "aarch64")
+
 TIMEOUT=30
 QEMU_PID=""
 OUTPUT=""
@@ -42,7 +46,7 @@ echo "Running in QEMU raspi4b..."
 OUTPUT=$(mktemp)
 
 qemu-system-aarch64 \
-  -machine raspi4b -m 2G \
+  -machine raspi4b -m 2G -smp "$CORES" \
   -display none -no-reboot -nographic \
   -serial mon:stdio \
   -kernel target/raspi400/release/kernel.bin > "$OUTPUT" 2>&1 &

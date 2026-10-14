@@ -11,6 +11,10 @@
 
 set -euo pipefail
 
+# Read core count from target config (hardcoded riscv64)
+source "$(dirname "$0")/get-target-cores.sh"
+CORES=$(get_target_cores "riscv64")
+
 TIMEOUT=30
 
 if ! command -v qemu-system-riscv64 &>/dev/null; then
@@ -32,7 +36,7 @@ echo "==> Booting riscv64 in QEMU..."
 OUTPUT=$(mktemp)
 
 qemu-system-riscv64 \
-  -m 2G -display none -no-reboot -nographic \
+  -m 2G -smp "$CORES" -display none -no-reboot -nographic \
   -machine virt -bios default \
   -serial mon:stdio \
   -kernel "$KERNEL" \

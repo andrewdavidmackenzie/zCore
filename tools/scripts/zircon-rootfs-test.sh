@@ -15,6 +15,10 @@ set -euo pipefail
 ARCH="${1:?Usage: $0 <arch>}"
 TIMEOUT=30
 
+# Read core count from target config
+source "$(dirname "$0")/get-target-cores.sh"
+CORES=$(get_target_cores "$ARCH")
+
 case "$ARCH" in
   aarch64)
     RUST_TARGET="aarch64-unknown-none-softfloat"
@@ -23,7 +27,7 @@ case "$ARCH" in
     QEMU_BASE_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
-      -machine virt -cpu cortex-a72
+      -machine virt -cpu cortex-a72 -smp "$CORES"
       -serial mon:stdio
     )
     ;;
