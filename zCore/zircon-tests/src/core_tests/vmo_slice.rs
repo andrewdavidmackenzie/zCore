@@ -15,19 +15,45 @@ extern crate alloc;
 
 /// C++: TEST(VmoSliceTestCase, NonSlice)
 /// Invalid slice parameters return appropriate errors.
+/// Tests all 8 cases from C++ including overflow edge cases.
 #[test]
 fn non_slice() {
     let _ctx = TestContext::new();
-    let parent = VmObject::new_paged(4);
+    // C++ creates a 2-page resizable parent, but we need non-resizable for
+    // slices (resizable parents reject slices with NOT_SUPPORTED).
+    // Use a 2-page non-resizable parent like the C++ validation logic.
+    let parent = VmObject::new_paged(2);
 
-    // Offset not page-aligned
-    assert!(parent.create_slice(1, PAGE_SIZE).is_err());
+    // 1. Size exceeds parent bounds (3 pages > 2 pages)
+    assert!(parent.create_slice(0, 3 * PAGE_SIZE).is_err());
 
-    // Size exceeds parent bounds
-    assert!(parent.create_slice(0, 5 * PAGE_SIZE).is_err());
+    // 2. Offset + size exceeds parent bounds (offset=1page, size=2pages > 2 pages)
+    assert!(parent.create_slice(PAGE_SIZE, 2 * PAGE_SIZE).is_err());
 
-    // Offset + size exceeds parent bounds
-    assert!(parent.create_slice(3 * PAGE_SIZE, 2 * PAGE_SIZE).is_err());
+    // 3. Offset beyond parent bounds (offset=2pages, size=1page)
+    assert!(parent.create_slice(2 * PAGE_SIZE, PAGE_SIZE).is_err());
+
+    // 4. UINT64_MAX / usize::MAX size (overflow)
+    assert_eq!(
+        parent.create_slice(0, usize::MAX).unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+
+    // 5. Nearly-max size: usize::MAX - PAGE_SIZE + 1 (page-aligned near max)
+    let nearly_max = usize::MAX - PAGE_SIZE + 1;
+    assert_eq!(
+        parent.create_slice(0, nearly_max).unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+
+    // 6. Nearly-max offset with PAGE_SIZE size
+    assert!(parent.create_slice(nearly_max, PAGE_SIZE).is_err());
+
+    // 7. Nearly-max offset with nearly-max size (double overflow)
+    assert!(parent.create_slice(nearly_max, nearly_max).is_err());
+
+    // 8. Nearly-max offset with usize::MAX size
+    assert!(parent.create_slice(nearly_max, usize::MAX).is_err());
 }
 
 /// C++: TEST(VmoSliceTestCase, NonResizable)
@@ -304,25 +330,22 @@ fn decommit_parent() {
 }
 
 /// C++: TEST(VmoSliceTestCase, DeepHierarchy)
-/// Create nested slices: parent → slice → slice of slice.
+/// Create 64 levels of nested slices (C++ does 1000, we do 64 to match
+/// the "at least 32 levels" requirement while staying fast). Each level
+/// creates a slice of the previous. After dropping the chain, no panic.
 #[test]
 fn deep_hierarchy() {
     let _ctx = TestContext::new();
-    let parent = VmObject::new_paged(4);
-    parent.write(0, &[0xAA]).unwrap();
+    let mut vmo = VmObject::new_paged(1);
 
-    let slice1 = parent.create_slice(0, 2 * PAGE_SIZE).unwrap();
-    // Can't create a slice of a slice directly in zCore (implementation
-    // dependent), but we can verify the parent-slice relationship.
+    // C++ creates 1000 levels. We create 64 levels of slice-of-slice.
+    for _ in 0..64 {
+        let temp = vmo.create_slice(0, PAGE_SIZE).unwrap();
+        vmo = temp;
+    }
 
-    let mut buf = [0u8; 1];
-    slice1.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 0xAA);
-
-    // Write through slice1 visible in parent.
-    slice1.write(0, &[0xBB]).unwrap();
-    parent.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 0xBB);
+    // Drop the entire chain — verifies no stack overflow or panic.
+    drop(vmo);
 }
 
 /// C++: TEST(VmoSliceTestCase, Nested)

@@ -99,7 +99,9 @@ async fn port_async_wait_channel() {
 // ═══════════════════════════════════════════════════════════════════
 
 /// C++: TEST(PortTest, EventAsyncSignalWaitSingle)
-/// wait_async on an event: signal the event, then dequeue from port.
+/// Register 7 wait_async calls on the same event with keys 0..6,
+/// signal the event, dequeue 5 packets (kNumAwaits - 2), verify
+/// key_sum == 20 and each packet has count == 1.
 #[async_std::test]
 async fn port_event_async_signal_wait_single() {
     let _ctx = TestContext::new();
@@ -108,24 +110,41 @@ async fn port_event_async_signal_wait_single() {
 
     use zircon_object::object::Signal;
 
-    let event_obj = event.clone() as std::sync::Arc<dyn KernelObject>;
-    event_obj
-        .send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 42, false)
-        .unwrap();
+    const NUM_AWAITS: u64 = 7;
 
-    // Signal the event.
+    // Register 7 wait_async calls with keys 0..6
+    for ix in 0..NUM_AWAITS {
+        let event_obj = event.clone() as std::sync::Arc<dyn KernelObject>;
+        event_obj
+            .send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, ix, false)
+            .unwrap();
+    }
+
+    // Signal the event — all 7 observers fire.
     event.signal_set(Signal::USER_SIGNAL_0);
 
-    // Dequeue the packet.
-    let received = port.wait().await;
-    let repr = PortPacketRepr::from(&received);
-    assert_eq!(repr.key, 42);
-    assert_eq!(repr.status, ZxError::OK);
-    if let PayloadRepr::Signal(sig) = repr.data {
-        assert!(sig.observed.contains(Signal::USER_SIGNAL_0));
-    } else {
-        panic!("expected Signal payload");
+    // Dequeue NUM_AWAITS - 2 = 5 packets and verify key_sum and count.
+    let mut key_sum = 0u64;
+    for _ in 0..(NUM_AWAITS - 2) {
+        let received = port.wait().await;
+        let repr = PortPacketRepr::from(&received);
+        key_sum += repr.key;
+        assert_eq!(repr.status, ZxError::OK);
+        if let PayloadRepr::Signal(sig) = repr.data {
+            assert_eq!(sig.count, 1, "signal count should be 1");
+        } else {
+            panic!("expected Signal payload");
+        }
     }
+
+    // C++ verifies key_sum == 20 (0+1+2+3+4+5+6 = 21, minus the two
+    // we didn't dequeue — but since LIFO order in zCore, the 5 we
+    // get are keys 6,5,4,3,2 = 20).
+    // With any ordering of 5 out of {0,1,2,3,4,5,6}, just verify
+    // we dequeued exactly 5 valid packets with keys in range.
+    // The C++ test specifically gets the first 5 dequeued which sum
+    // to 20. We verify the same: sum of 5 packets from {0..6}.
+    assert_eq!(key_sum, 20, "key_sum of first 5 dequeued packets should be 20");
 }
 
 /// C++: TEST(PortTest, AsyncWaitEventRepeat)
@@ -193,27 +212,59 @@ async fn port_async_wait_event_many_all_processed() {
 }
 
 /// C++: TEST(PortTest, AsyncWaitCloseOrder)
-/// Closing the source object cancels the wait — no packet delivered.
+/// What matters here is not the return values, but that the system doesn't
+/// crash as a result of the close ordering. Tests all 6 permutations of
+/// closing {ChannelA, ChannelB, Port}.
 #[test]
 fn port_async_wait_close_order() {
     let _ctx = TestContext::new();
-    let port = Port::new(0).unwrap();
-    let event = zircon_object::signal::Event::new();
 
     use zircon_object::object::Signal;
 
-    let event_obj = event.clone() as std::sync::Arc<dyn KernelObject>;
-    event_obj
-        .send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 99, false)
-        .unwrap();
+    // All 6 permutations of closing {ChannelA, ChannelB, Port}
+    let orderings: [(usize, usize, usize); 6] = [
+        (1, 0, 2), // ChannelB, ChannelA, Port
+        (1, 2, 0), // ChannelB, Port, ChannelA
+        (0, 2, 1), // ChannelA, Port, ChannelB
+        (0, 1, 2), // ChannelA, ChannelB, Port
+        (2, 0, 1), // Port, ChannelA, ChannelB
+        (2, 1, 0), // Port, ChannelB, ChannelA
+    ];
 
-    // Drop the event — this should cancel the subscription.
-    drop(event);
-    drop(event_obj);
+    for (first, second, third) in &orderings {
+        // Create handles: [0]=ChannelA, [1]=ChannelB, [2]=Port
+        let (ch_a, ch_b) = zircon_object::ipc::Channel::create();
+        let port = Port::new(0).unwrap();
 
-    // Port should have no packets (or a cancellation packet).
-    // In Fuchsia, closing the source cancels pending waits.
-    // No panic is the key assertion here.
+        // Register wait_async on ChannelB for READABLE|PEER_CLOSED
+        let ch_b_obj = ch_b.clone() as std::sync::Arc<dyn KernelObject>;
+        ch_b_obj
+            .send_signal_to_port_async(
+                Signal::READABLE | Signal::PEER_CLOSED,
+                &port,
+                1122,
+                false,
+            )
+            .unwrap();
+
+        // Build an array of Option-wrapped objects to close in order
+        let mut handles: [Option<std::sync::Arc<dyn KernelObject>>; 3] = [
+            Some(ch_a.clone()),
+            Some(ch_b.clone()),
+            Some(port.clone() as std::sync::Arc<dyn KernelObject>),
+        ];
+
+        // Close in the specified order — no panics expected
+        handles[*first] = None;
+        handles[*second] = None;
+        handles[*third] = None;
+
+        // Drop explicit references too
+        drop(ch_a);
+        drop(ch_b);
+        drop(ch_b_obj);
+        drop(port);
+    }
 }
 
 /// C++: TEST(PortTest, ChannelAsyncWaitOnExistingStateIsNotified)
@@ -300,28 +351,56 @@ fn port_edge_trigger_cancel() {
 }
 
 /// C++: TEST(PortTest, CancelEventKey)
-/// port.cancel removes the subscription for a given object+key.
-#[test]
-fn port_cancel_event_key() {
+/// Register 4 observers with keys [128, 13, 7, 13] (note duplicate key 13).
+/// Cancel key 13 before signaling. Signal twice. Verify only keys 128 and 7
+/// fire: wait_count == 2, key_sum == 128 + 7 = 135.
+#[async_std::test]
+async fn port_cancel_event_key() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
     let event = zircon_object::signal::Event::new();
 
     use zircon_object::object::Signal;
 
-    let event_obj = event.clone() as std::sync::Arc<dyn KernelObject>;
-    event_obj
-        .send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, 77, false)
-        .unwrap();
+    // Register 4 observers with keys [128, 13, 7, 13] (note repeated key 13).
+    let keys: [u64; 4] = [128, 13, 7, 13];
+    for &key in &keys {
+        let event_obj = event.clone() as std::sync::Arc<dyn KernelObject>;
+        event_obj
+            .send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, key, false)
+            .unwrap();
+    }
 
-    // Cancel the subscription.
-    port.cancel_async(event.id(), 77).unwrap();
+    // Cancel key 13 BEFORE signaling — both observers with key 13 should be removed.
+    port.cancel_async(event.id(), 13).unwrap();
 
-    // Signal — no packet should be delivered.
+    // Signal twice (set, clear, set, clear) — C++ does this to exercise re-arm.
     event.signal_set(Signal::USER_SIGNAL_0);
+    event.signal_clear(Signal::USER_SIGNAL_0);
+    event.signal_set(Signal::USER_SIGNAL_0);
+    event.signal_clear(Signal::USER_SIGNAL_0);
 
-    // Verify port is empty by trying cancel_by_key (should be NOT_FOUND).
-    assert_eq!(port.cancel_by_key(77).unwrap_err(), ZxError::NOT_FOUND);
+    // Dequeue the expected 2 packets (keys 128 and 7).
+    let mut wait_count = 0u32;
+    let mut key_sum = 0u64;
+    for _ in 0..2 {
+        let received = port.wait().await;
+        let repr = PortPacketRepr::from(&received);
+        wait_count += 1;
+        key_sum += repr.key;
+        if let PayloadRepr::Signal(sig) = repr.data {
+            assert_eq!(sig.trigger, Signal::USER_SIGNAL_0);
+        }
+    }
+
+    // After delivery, cancelling key 128 should return NOT_FOUND.
+    assert_eq!(
+        port.cancel_async(event.id(), 128).unwrap_err(),
+        ZxError::NOT_FOUND
+    );
+
+    assert_eq!(wait_count, 2, "only two observers (128, 7) should fire");
+    assert_eq!(key_sum, 128 + 7, "key_sum should be 135");
 }
 
 /// C++: TEST(PortTest, CancelEventKeyAfter)
