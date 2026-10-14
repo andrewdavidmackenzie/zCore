@@ -511,6 +511,7 @@ impl Syscall<'_> {
                 .get_object::<VmObject>(handle_value)
                 .is_ok_and(|v| v.has_pager());
             if is_pager {
+                // Debug: write to serial directly (survives LTO)
                 let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
                 if !rights.contains(Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
@@ -520,11 +521,14 @@ impl Syscall<'_> {
                 }
                 let start = offset & !(PAGE_SIZE - 1);
                 let end = (offset + len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+                let aligned_len = end - start;
+                // Send one batched page request for the entire range,
+                // then wait for all pages. Fuchsia batches commit requests
+                // — the C++ tests expect a single packet with the full range.
+                let _ = vmo.request_pages(start, aligned_len);
                 for page_idx in (start / PAGE_SIZE)..(end / PAGE_SIZE) {
                     if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
-                        let po = page_idx * PAGE_SIZE;
-                        let _ = vmo.request_pages(po, PAGE_SIZE);
-                        vmo.wait_for_page(po).await?;
+                        vmo.wait_for_page(page_idx * PAGE_SIZE).await?;
                     }
                 }
                 return Ok(());
