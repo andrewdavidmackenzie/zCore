@@ -182,6 +182,50 @@ static TRAMPOLINE_GDT: [u64; 4] = [
 static mut BSP_GDTR: [u8; 10] = [0; 10]; // GDTR is 2-byte limit + 8-byte base
 
 /// Save the BSP's GDTR after trapframe::init(). Called from primary_init().
+/// Park any UEFI-started APs by broadcasting an INIT IPI.
+///
+/// OVMF may leave secondary CPUs running (e.g., in a HLT loop with
+/// the UEFI IDT). When a timer interrupt fires, the AP uses the stale
+/// UEFI IDT which points to reclaimed memory, causing a triple fault.
+/// Sending an INIT IPI puts all APs into the INIT wait state.
+pub fn park_aps_init() {
+    // The BSP's local APIC must be initialized before we can send IPIs.
+    // init_local_apic_bsp() was called in drivers::init() — but we need
+    // to park APs BEFORE driver init. Use a direct APIC register write.
+    //
+    // ICR format for broadcast INIT:
+    //   Bits 0-7:   Vector = 0
+    //   Bits 8-10:  Delivery mode = 101b (INIT)
+    //   Bit 11:     Destination mode = 0 (physical)
+    //   Bit 14:     Level = 1 (assert)
+    //   Bits 18-19: Destination shorthand = 11b (all excluding self)
+    //
+    // ICR value: (0b11 << 18) | (1 << 14) | (0b101 << 8) = 0x000C_4500
+    const ICR_INIT_ALL_EXCL_SELF: u32 = 0x000C_4500;
+
+    // Write to the xAPIC ICR (MMIO offset 0x300 for low, 0x310 for high).
+    // For broadcast with "all excluding self" shorthand, the high dword
+    // (destination) is ignored — set it to 0.
+    // Read APIC base from MSR and convert to virtual address.
+    let apic_base = unsafe { x86::msr::rdmsr(0x1B) & 0xFFFF_F000 };
+    let apic_virt = phys_to_virt(apic_base as usize);
+
+    // Software-enable the BSP's APIC first (required to send IPIs).
+    // Set bit 8 (APIC Software Enable) in the Spurious Interrupt Vector
+    // Register (offset 0xF0), preserving the existing spurious vector.
+    unsafe {
+        let svr = core::ptr::read_volatile((apic_virt + 0xF0) as *const u32);
+        core::ptr::write_volatile((apic_virt + 0xF0) as *mut u32, svr | (1 << 8));
+
+        // Write ICR high (destination = 0, not used for broadcast)
+        core::ptr::write_volatile((apic_virt + 0x310) as *mut u32, 0);
+        // Write ICR low (triggers the IPI)
+        core::ptr::write_volatile((apic_virt + 0x300) as *mut u32, ICR_INIT_ALL_EXCL_SELF);
+    }
+    // Wait for INIT to take effect.
+    spin_delay_ms(10);
+}
+
 pub fn save_bsp_gdt() {
     unsafe {
         core::arch::asm!("sgdt [{}]", in(reg) &mut BSP_GDTR, options(nostack));
@@ -220,12 +264,6 @@ extern "C" fn ap_entry() -> ! {
         Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
     }
     // Register this AP's APIC ID → logical core index mapping.
-    // Must happen before anything calls cpu_id().
-    //
-    // NOTE: `initial_local_apic_id()` returns a u8 (bits 31:24 of CPUID.01H:EBX).
-    // On x2APIC systems with APIC IDs > 255, this would need CPUID leaf 0x0B
-    // (extended topology) to read the full 32-bit ID. This is a known limitation;
-    // our target hardware (ThinkPad T480 with 6 cores, APIC IDs 0-10) fits in 8 bits.
     let apic_id = raw_cpuid::CpuId::new()
         .get_feature_info()
         .map(|f| f.initial_local_apic_id())
