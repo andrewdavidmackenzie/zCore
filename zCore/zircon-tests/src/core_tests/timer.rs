@@ -79,8 +79,7 @@ fn set_negative_deadline_max() {
 /// layer with an invalid slack value.
 #[test]
 fn set_negative_slack() {
-    use hal_impl::user::UserOutPtr;
-    use zircon_object::object::{Handle, HandleValue, Rights};
+    use zircon_object::object::{Handle, Rights};
 
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -92,19 +91,12 @@ fn set_negative_slack() {
 
     // Negative slack should return OUT_OF_RANGE.
     let result = sc.sys_timer_set(h, zircon_syscall::Deadline::from(0usize), -1i64);
-    // zCore may or may not implement the negative slack check.
-    // If it does: OUT_OF_RANGE. If not: Ok (with slack clamped to 0).
-    match result {
-        Err(zircon_object::ZxError::OUT_OF_RANGE) => {
-            // Expected: matches C++ behavior.
-            check_info(&timer, 0, 0, 0);
-        }
-        Ok(()) => {
-            // Acceptable: zCore doesn't reject negative slack.
-            // Timer still functions correctly.
-        }
-        Err(e) => panic!("unexpected error: {:?}", e),
-    }
+    assert_eq!(
+        result,
+        Err(zircon_object::ZxError::OUT_OF_RANGE),
+        "negative slack must return OUT_OF_RANGE"
+    );
+    check_info(&timer, 0, 0, 0);
 }
 
 /// C++: TEST(Timer, AlreadyPassedDeadlineOnWaitOne)
@@ -194,9 +186,9 @@ fn invalid_calls() {
     let result = sc.sys_timer_create(0, 2, out);
     assert_eq!(result, Err(zircon_object::ZxError::INVALID_ARGS));
 
-    // Invalid options + invalid clock should also fail.
+    // Invalid options (3) with valid clock (0) should fail on options check.
     let out2 = UserOutPtr::from(&mut h as *mut _ as usize);
-    let result = sc.sys_timer_create(3, 2, out2); // SLACK_LATE+1 = 3
+    let result = sc.sys_timer_create(3, 0, out2); // SLACK_LATE+1 = 3, clock=MONOTONIC
     assert_eq!(result, Err(zircon_object::ZxError::INVALID_ARGS));
 }
 

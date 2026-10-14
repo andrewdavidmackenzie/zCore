@@ -369,15 +369,7 @@ async fn wait_one_transient_signals_not_returned() {
     .unwrap();
 
     // C++: ASSERT_EQ(observed, ZX_USER_SIGNAL_1)
-    // The observed mask should contain USER_SIGNAL_1 but NOT USER_SIGNAL_0
-    assert!(
-        observed2.contains(Signal::USER_SIGNAL_1),
-        "observed should contain USER_SIGNAL_1"
-    );
-    assert!(
-        !observed2.contains(Signal::USER_SIGNAL_0),
-        "observed should NOT contain transient USER_SIGNAL_0"
-    );
+    assert_eq!(observed2, Signal::USER_SIGNAL_1);
 }
 
 /// C++: TEST(ObjectWaitOneTest, WaitForEventSignaled)

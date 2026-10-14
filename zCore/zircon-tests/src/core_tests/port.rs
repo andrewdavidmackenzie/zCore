@@ -244,24 +244,17 @@ fn port_async_wait_close_order() {
         ch_b_obj
             .send_signal_to_port_async(Signal::READABLE | Signal::PEER_CLOSED, &port, 1122, false)
             .unwrap();
+        drop(ch_b_obj);
 
-        // Build an array of Option-wrapped objects to close in order
-        let mut handles: [Option<std::sync::Arc<dyn KernelObject>>; 3] = [
-            Some(ch_a.clone()),
-            Some(ch_b.clone()),
-            Some(port.clone() as std::sync::Arc<dyn KernelObject>),
-        ];
+        // Move all objects into the array so destruction order is
+        // fully controlled by the permutation — no extra references.
+        let mut handles: [Option<std::sync::Arc<dyn KernelObject>>; 3] =
+            [Some(ch_a), Some(ch_b), Some(port)];
 
         // Close in the specified order — no panics expected
         handles[*first] = None;
         handles[*second] = None;
         handles[*third] = None;
-
-        // Drop explicit references too
-        drop(ch_a);
-        drop(ch_b);
-        drop(ch_b_obj);
-        drop(port);
     }
 }
 

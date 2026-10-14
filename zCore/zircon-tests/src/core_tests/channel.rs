@@ -121,13 +121,10 @@ fn read_remaining_messages_when_peer_is_closed() {
 
     // C++: ASSERT_EQ(ZX_CHANNEL_READABLE | ZX_CHANNEL_PEER_CLOSED, signal);
     let signal = remote.signal();
-    assert!(
-        signal.contains(Signal::READABLE),
-        "expected READABLE after peer closed with queued messages"
-    );
-    assert!(
-        signal.contains(Signal::PEER_CLOSED),
-        "expected PEER_CLOSED after peer closed"
+    assert_eq!(
+        signal,
+        Signal::READABLE | Signal::PEER_CLOSED,
+        "expected exactly READABLE | PEER_CLOSED after peer closed with queued messages"
     );
 
     // Read all 4 messages and verify contents
@@ -174,18 +171,21 @@ fn close_clears_signals_writeable() {
 
 /// C++: TEST(ChannelTest, CloseSignalsPeerReturnsPeerClosed)
 /// C++ calls `remote.signal_peer(0, ZX_USER_SIGNAL_0)` after `local.reset()`
-/// and expects ZX_ERR_PEER_CLOSED. We call `peer()` on the remaining endpoint
-/// to verify the peer is gone.
+/// and expects ZX_ERR_PEER_CLOSED. We use the syscall to attempt peer
+/// signaling and verify it returns PEER_CLOSED.
 #[test]
 fn close_signals_peer_returns_peer_closed() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let (local, remote) = Channel::create();
+    let h = ctx
+        .proc
+        .add_handle(Handle::new(remote, Rights::DEFAULT_CHANNEL));
     drop(local);
 
     // C++: ASSERT_EQ(remote.signal_peer(0, ZX_USER_SIGNAL_0), ZX_ERR_PEER_CLOSED);
-    // signal_peer requires a live peer — peer() should return PEER_CLOSED.
-    let err = remote.peer().unwrap_err();
-    assert_eq!(err, ZxError::PEER_CLOSED);
+    let result = sc.sys_object_signal_peer(h, 0, Signal::USER_SIGNAL_0.bits());
+    assert_eq!(result, Err(ZxError::PEER_CLOSED));
 }
 
 /// C++: TEST(ChannelTest, ReadAndWriteWithMultipleSizes)
@@ -250,18 +250,10 @@ fn read_and_write_with_multiple_sizes() {
 
         let msg = remote.read().unwrap();
         assert_eq!(
-            msg.data.len(),
-            num_bytes,
-            "size mismatch at iteration {}",
-            i
+            msg.data, tagged_data,
+            "data mismatch at iteration {} (size={})",
+            i, num_bytes
         );
-        if num_bytes > 0 {
-            assert_eq!(
-                msg.data[0], tagged_data[0],
-                "data mismatch at iteration {}",
-                i
-            );
-        }
     }
 }
 
@@ -289,21 +281,25 @@ fn nesting_is_ok() {
     let _ctx = TestContext::new();
     const NESTED_COUNT: usize = 200;
 
-    let mut locals = Vec::with_capacity(NESTED_COUNT);
-    let mut remotes = Vec::with_capacity(NESTED_COUNT);
+    let mut locals: Vec<Option<_>> = Vec::with_capacity(NESTED_COUNT);
+    let mut remotes: Vec<Option<_>> = Vec::with_capacity(NESTED_COUNT);
 
     for _ in 0..NESTED_COUNT {
         let (l, r) = Channel::create();
-        locals.push(l);
-        remotes.push(r);
+        locals.push(Some(l));
+        remotes.push(Some(r));
     }
 
     // Nest each channel pair inside the previous one: write handles[i]
     // into locals[i-1], from innermost to outermost.
     for i in (1..NESTED_COUNT).rev() {
-        let lh = Handle::new(locals[i].clone(), Rights::DEFAULT_CHANNEL);
-        let rh = Handle::new(remotes[i].clone(), Rights::DEFAULT_CHANNEL);
+        let l = locals[i].take().unwrap();
+        let r = remotes[i].take().unwrap();
+        let lh = Handle::new(l, Rights::DEFAULT_CHANNEL);
+        let rh = Handle::new(r, Rights::DEFAULT_CHANNEL);
         locals[i - 1]
+            .as_ref()
+            .unwrap()
             .write(MessagePacket {
                 data: vec![],
                 handles: vec![lh, rh],
@@ -312,13 +308,21 @@ fn nesting_is_ok() {
     }
 
     // All handles except those at index 0 have been transferred.
-    assert_ne!(locals[0].id(), 0);
-    assert_ne!(remotes[0].id(), 0);
+    assert_ne!(locals[0].as_ref().unwrap().id(), 0);
+    assert_ne!(remotes[0].as_ref().unwrap().id(), 0);
+
+    // Drop the vectors (which only hold Some at index 0) before closing
+    // the outermost pair, allowing the deep destruction chain to proceed
+    // without extra references keeping inner channels alive.
+    let outer_local = locals[0].take().unwrap();
+    let outer_remote = remotes[0].take().unwrap();
+    drop(locals);
+    drop(remotes);
 
     // Close the outermost pair, forcing recursive destruction of all
     // 200 nested levels.
-    drop(locals);
-    drop(remotes);
+    drop(outer_local);
+    drop(outer_remote);
 }
 
 /// C++: TEST(ChannelTest, ReadZeroByteZeroHandleMessageSucceeds)

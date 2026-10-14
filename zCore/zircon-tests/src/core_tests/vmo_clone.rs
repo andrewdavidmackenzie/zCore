@@ -232,6 +232,7 @@ fn not_immutable_missing_snapshot() {
 }
 
 /// C++: TEST(VmoCloneTestCase, SizeAlign)
+/// C++: TEST(VmoCloneTestCase, SizeAlign)
 /// Snapshot clones with various sizes should report the correct
 /// (page-rounded) size. The C++ test iterates sizes 0..4*PAGE_SIZE
 /// and verifies each clone rounds up to the nearest page boundary.

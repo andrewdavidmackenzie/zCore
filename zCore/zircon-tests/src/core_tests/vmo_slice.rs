@@ -330,6 +330,7 @@ fn decommit_parent() {
 }
 
 /// C++: TEST(VmoSliceTestCase, DeepHierarchy)
+/// C++: TEST(VmoSliceTestCase, DeepHierarchy)
 /// Create 64 levels of nested slices (C++ does 1000, we do 64 to match
 /// the "at least 32 levels" requirement while staying fast). Each level
 /// creates a slice of the previous. After dropping the chain, no panic.
