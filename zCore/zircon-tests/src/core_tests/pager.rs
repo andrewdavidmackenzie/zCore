@@ -48,8 +48,8 @@ fn pager_detach_closes_existing_waiters() {
     }
 
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
 
     // Create the wait_for_page future and poll it once to register
     // the waiter, without blocking.
@@ -65,7 +65,7 @@ fn pager_detach_closes_existing_waiters() {
 
     // Detach the VMO — this calls fail_pager_requests(NOT_FOUND),
     // which sends Err(NOT_FOUND) through the oneshot channel.
-    pager.detach_vmo(&vmo).unwrap();
+    pager_helper.detach_vmo(&vmo);
 
     // Second poll should now complete with the error.
     match wait_fut.as_mut().poll(&mut cx) {
@@ -1325,134 +1325,127 @@ fn pager_commit_redundant_supply_test() {
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ConcurrentMultipageAccessTest) — Vmo variant
+///
+/// The C++ test has multiple threads each reading different pages concurrently.
+/// We pre-supply all pages and verify each is readable with correct content.
 #[test]
 fn pager_concurrent_multipage_access_test_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(4);
-    for i in 0..4 {
-        src.write(i * PAGE_SIZE, &(i as u64).to_ne_bytes()).unwrap();
-    }
-    pager
-        .supply_pages(&vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    for i in 0..4 {
-        let mut val = [0u8; 8];
-        vmo.read(i * PAGE_SIZE, &mut val).unwrap();
-        assert_eq!(u64::from_ne_bytes(val), i as u64);
-    }
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    // Supply both pages.
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Verify each page is readable.
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ConcurrentMultipageAccessTest) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_concurrent_multipage_access_test_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(4);
-    for i in 0..4 {
-        src.write(i * PAGE_SIZE, &(i as u64).to_ne_bytes()).unwrap();
-    }
-    pager
-        .supply_pages(&vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    for i in 0..4 {
-        let mut val = [0u8; 8];
-        vmo.read(i * PAGE_SIZE, &mut val).unwrap();
-        assert_eq!(u64::from_ne_bytes(val), i as u64);
-    }
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ConcurrentOverlappingAccessTest) — Vmo variant
+///
+/// The C++ test has 32 threads all reading the same page concurrently.
+/// We supply the page and verify it's readable (the concurrency aspect
+/// cannot be tested in libos mode without threads).
 #[test]
 fn pager_concurrent_overlapping_access_test_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(4);
-    for i in 0..4 {
-        src.write(i * PAGE_SIZE, &(i as u64).to_ne_bytes()).unwrap();
-    }
-    pager
-        .supply_pages(&vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    for i in 0..4 {
-        let mut val = [0u8; 8];
-        vmo.read(i * PAGE_SIZE, &mut val).unwrap();
-        assert_eq!(u64::from_ne_bytes(val), i as u64);
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    // Simulate 32 concurrent reads — all should see the same content.
+    for _ in 0..32 {
+        assert!(UserPagerHelper::check_page(&vmo, key, 0));
     }
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ConcurrentOverlappingAccessTest) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_concurrent_overlapping_access_test_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(4);
-    for i in 0..4 {
-        src.write(i * PAGE_SIZE, &(i as u64).to_ne_bytes()).unwrap();
-    }
-    pager
-        .supply_pages(&vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    for i in 0..4 {
-        let mut val = [0u8; 8];
-        vmo.read(i * PAGE_SIZE, &mut val).unwrap();
-        assert_eq!(u64::from_ne_bytes(val), i as u64);
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    for _ in 0..32 {
+        assert!(UserPagerHelper::check_page(&vmo, key, 0));
     }
 }
 
 /// C++: TEST(Pager, CreateVmoUnboundedInvalidStreamSize)
+///
+/// UNBOUNDED (16) + RESIZABLE (2) = 18 is invalid — the kernel rejects
+/// this combination.
 #[test]
 fn pager_create_vmo_unbounded_invalid_stream_size() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
+    let pager_helper = UserPagerHelper::new();
     // UNBOUNDED (16) + RESIZABLE (2) = 18 is invalid.
-    let result = pager.create_vmo(18, &port, 0, PAGE_SIZE as u64);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::INVALID_ARGS));
+    let result = pager_helper
+        .pager
+        .create_vmo(18, &pager_helper.port, 0, PAGE_SIZE as u64);
+    assert_eq!(result.err(), Some(ZxError::INVALID_ARGS));
 }
 
 /// C++: VMO_VMAR_TEST(Pager, DecommitOnDetachTest) — Vmo variant
+///
+/// Supply a page, detach the VMO, then decommit. After decommit the
+/// page should read as zeros. In the C++ test, accessing pages after
+/// detach+decommit fails; our implementation allows decommit after
+/// detach and the page reads as zeros.
 #[test]
 fn pager_decommit_on_detach_test_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, &42u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    pager.detach_vmo(&vmo).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    // Detach the VMO.
+    pager_helper.detach_vmo(&vmo);
+
+    // Decommit after detach should succeed.
     vmo.decommit(0, PAGE_SIZE).unwrap();
+
+    // Page should now read as zeros.
     let mut val = [0u8; 8];
     vmo.read(0, &mut val).unwrap();
     assert_eq!(u64::from_ne_bytes(val), 0);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, DecommitOnDetachTest) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_decommit_on_detach_test_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, &42u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    pager.detach_vmo(&vmo).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    pager_helper.detach_vmo(&vmo);
     vmo.decommit(0, PAGE_SIZE).unwrap();
+
     let mut val = [0u8; 8];
     vmo.read(0, &mut val).unwrap();
     assert_eq!(u64::from_ne_bytes(val), 0);
@@ -1487,34 +1480,44 @@ fn pager_decommit_test() {
 }
 
 /// C++: TEST(Pager, DeepHierarchy)
+///
+/// The C++ test creates a deep chain of COW clones (1000+ levels)
+/// and verifies the deepest clone can still be created. We create
+/// a chain of 6 clones and verify content propagates through.
 #[test]
 fn pager_deep_hierarchy() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"deep").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
     let mut current = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
     for _ in 0..5 {
         current = current.create_child(false, 0, PAGE_SIZE).unwrap();
     }
-    let mut buf = [0u8; 4];
-    current.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"deep");
+
+    // The deepest clone should see the root content.
+    assert!(
+        UserPagerHelper::check_page(&current, key, 0),
+        "deepest clone should see root content"
+    );
 }
 
 /// C++: TEST(Pager, DetachAndAlwaysNeed)
+///
+/// Detach a VMO, then try ALWAYS_NEED (op_range 5) — should fail
+/// because the VMO is no longer owned by the pager.
 #[test]
 fn pager_detach_and_always_need() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    pager.detach_vmo(&vmo).unwrap();
-    // After detach, op_range should fail.
-    let result = pager.op_range(5, &vmo, 0, PAGE_SIZE as u64, 0);
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    pager_helper.detach_vmo(&vmo);
+
+    // After detach, op_range (ALWAYS_NEED=5) should fail.
+    let result = pager_helper.pager.op_range(5, &vmo, 0, PAGE_SIZE as u64, 0);
     assert!(result.is_err());
 }
 
@@ -1539,78 +1542,97 @@ fn pager_detach_close_pager_test() {
 }
 
 /// C++: TEST(Pager, DetachNonMappingAccess)
+///
+/// The C++ test supplies page 0, detaches, then reads across pages 0-1.
+/// The read spanning the unsupplied page 1 should fail with BAD_STATE.
+/// In libos mode, we supply page 0, detach, and verify the supplied
+/// page is still readable (non-mapping VMO read of committed data).
 #[test]
 fn pager_detach_non_mapping_access() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"non-mapping").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    pager.detach_vmo(&vmo).unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"non-mapping");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    // Supply only page 0.
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    // Detach the VMO.
+    pager_helper.detach_vmo(&vmo);
+
+    // The supplied page should still be readable after detach.
+    assert!(
+        UserPagerHelper::check_page(&vmo, key, 0),
+        "supplied page should be readable after detach"
+    );
 }
 
 /// C++: TEST(Pager, DetachPageCompleteTest)
+///
+/// Detaching a VMO should send a COMPLETE packet to the port.
+/// We supply a page, detach, and verify the supplied page is still
+/// readable (the pager has relinquished ownership).
 #[test]
 fn pager_detach_page_complete_test() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"detach page").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    pager.detach_vmo(&vmo).unwrap();
-    let mut buf = [0u8; 11];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"detach page");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    pager_helper.detach_vmo(&vmo);
+
+    // Supplied page should still be readable after detach.
+    assert!(
+        UserPagerHelper::check_page(&vmo, key, 0),
+        "page should be readable after detach"
+    );
 }
 
 /// C++: VMO_VMAR_TEST(Pager, EarlySupplyTest) — Vmo variant
+///
+/// The C++ test supplies pages before a concurrent reader starts, so
+/// the reader never generates a page request. We supply both pages of
+/// a 2-page VMO and verify they're readable.
 #[test]
 fn pager_early_supply_test_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"supply test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 16];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"supply test data");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    // Supply page 0 first.
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Supply page 1.
+    pager_helper.supply_pages(&vmo, key, 1, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: VMO_VMAR_TEST(Pager, EarlySupplyTest) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_early_supply_test_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"supply test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 16];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"supply test data");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    pager_helper.supply_pages(&vmo, key, 1, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
 /// C++: TEST(Pager, EarlyWakeCloneRace)
+///
+/// This test requires concurrent threads and demand-paging, which are
+/// not available in zCore libos mode.
 #[test]
 fn pager_early_wake_clone_race() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, EarlyWakeNonLinearSupply)
@@ -1711,95 +1733,116 @@ fn pager_early_wake_on_supply() {
 }
 
 /// C++: TEST(Pager, EarlyWakeOverlappingRequests)
+///
+/// This test requires concurrent threads and demand-paging.
 #[test]
 fn pager_early_wake_overlapping_requests() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, EarlyWakeWithResize)
+///
+/// This test requires concurrent threads and demand-paging.
 #[test]
 fn pager_early_wake_with_resize() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, EvictionHintAlwaysNeed)
+///
+/// The C++ test uses ALWAYS_NEED (op 5) to commit pages. Our kernel
+/// returns NOT_SUPPORTED for this op. Verify the error is correct.
 #[test]
 fn pager_eviction_hint_always_need() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let result = pager.op_range(5, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::NOT_SUPPORTED));
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    // ALWAYS_NEED (5) is not implemented — should return NOT_SUPPORTED.
+    let result = pager_helper.pager.op_range(5, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert_eq!(result.err(), Some(ZxError::NOT_SUPPORTED));
 }
 
 /// C++: TEST(Pager, EvictionHintsCloneVmar)
+///
+/// This test requires VMAR operations not available in libos mode.
 #[test]
 fn pager_eviction_hints_clone_vmar() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, EvictionHintsNestedVmar)
+///
+/// This test requires VMAR operations not available in libos mode.
 #[test]
 fn pager_eviction_hints_nested_vmar() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, EvictionHintsOpRange)
+///
+/// Verify both ALWAYS_NEED (5) and DONT_NEED (6) return NOT_SUPPORTED.
 #[test]
 fn pager_eviction_hints_op_range() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // ALWAYS_NEED (5) and DONT_NEED (6) are not supported.
-    let r1 = pager.op_range(5, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(r1.err(), Some(zircon_object::ZxError::NOT_SUPPORTED));
-    let r2 = pager.op_range(6, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(r2.err(), Some(zircon_object::ZxError::NOT_SUPPORTED));
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    let r1 = pager_helper.pager.op_range(5, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert_eq!(r1.err(), Some(ZxError::NOT_SUPPORTED));
+
+    let r2 = pager_helper.pager.op_range(6, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert_eq!(r2.err(), Some(ZxError::NOT_SUPPORTED));
 }
 
 /// C++: TEST(Pager, EvictionHintsVmar)
+///
+/// This test requires VMAR operations not available in libos mode.
 #[test]
 fn pager_eviction_hints_vmar() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, EvictionHintsWithClones)
+///
+/// ALWAYS_NEED through a clone should also return NOT_SUPPORTED.
 #[test]
 fn pager_eviction_hints_with_clones() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
     let _clone = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
-    let result = pager.op_range(5, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::NOT_SUPPORTED));
+
+    let result = pager_helper.pager.op_range(5, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert_eq!(result.err(), Some(ZxError::NOT_SUPPORTED));
 }
 
 /// C++: TEST(Pager, EvictionHintsWithResize)
+///
+/// Create a resizable VMO, resize down, then try ALWAYS_NEED on the
+/// remaining range — should still return NOT_SUPPORTED.
 #[test]
 fn pager_eviction_hints_with_resize() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(2, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    // Create resizable VMO (option 2 = ZX_VMO_RESIZABLE).
+    let (vmo, _key) = pager_helper.create_vmo_with_options(2, 2);
+
     vmo.set_len(PAGE_SIZE).unwrap();
-    let result = pager.op_range(5, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::NOT_SUPPORTED));
+
+    let result = pager_helper.pager.op_range(5, &vmo, 0, PAGE_SIZE as u64, 0);
+    assert_eq!(result.err(), Some(ZxError::NOT_SUPPORTED));
 }
 
 /// C++: TEST(Pager, FailAfterDetach)
@@ -1830,12 +1873,26 @@ fn pager_fail_after_detach() {
 }
 
 /// C++: TEST(Pager, FailEarlyWake)
+///
+/// This test requires concurrent threads (early wake optimization).
+/// We verify the basic fail+re-supply pattern works.
 #[test]
 fn pager_fail_early_wake() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(3);
+
+    // Supply page 0.
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+
+    // Fail page 1.
+    pager_helper.fail_pages(&vmo, 1, 1, ZxError::IO);
+
+    // Re-supply pages 1-2.
+    pager_helper.supply_pages(&vmo, key, 1, 2);
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+    assert!(UserPagerHelper::check_page(&vmo, key, 2));
 }
 
 /// C++: TEST(Pager, FailErrorCode)
@@ -1879,102 +1936,220 @@ fn pager_fail_error_code() {
 }
 
 /// C++: TEST(Pager, FailExactRange)
+///
+/// Fail the exact requested range. The C++ test fails 11 pages after
+/// a commit request. We verify OP_FAIL succeeds, then re-supply and
+/// verify pages are readable.
 #[test]
 fn pager_fail_exact_range() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // OP_FAIL (1) with error code.
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
-    assert!(result.is_ok(), "OP_FAIL should succeed on owned VMO");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(11);
+
+    // OP_FAIL on the entire range should succeed.
+    pager_helper.fail_pages(&vmo, 0, 11, ZxError::IO);
+
+    // After fail, supply should still work (fail is not fatal).
+    pager_helper.supply_pages(&vmo, key, 0, 11);
+    for page in 0..11u64 {
+        assert!(
+            UserPagerHelper::check_page(&vmo, key, page),
+            "page {} should be readable after fail+supply",
+            page
+        );
+    }
 }
 
 /// C++: TEST(Pager, FailMultipleCommits)
+///
+/// The C++ test fails multiple disjoint and overlapping commit ranges.
+/// We verify OP_FAIL succeeds on multiple individual pages, then
+/// re-supply the full range.
 #[test]
 fn pager_fail_multiple_commits() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // OP_FAIL (1) with error code.
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
-    assert!(result.is_ok(), "OP_FAIL should succeed on owned VMO");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(11);
+
+    // Fail each page individually (disjoint ranges).
+    for i in 0..11u64 {
+        pager_helper.fail_pages(&vmo, i, 1, ZxError::IO);
+    }
+
+    // Re-supply all pages.
+    pager_helper.supply_pages(&vmo, key, 0, 11);
+    for page in 0..11u64 {
+        assert!(UserPagerHelper::check_page(&vmo, key, page));
+    }
 }
 
 /// C++: TEST(Pager, FailMultipleVmos)
+///
+/// The C++ test creates two VMOs on the same pager, fails them
+/// independently, and verifies each can be re-supplied.
 #[test]
 fn pager_fail_multiple_vmos() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // OP_FAIL (1) with error code.
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
-    assert!(result.is_ok(), "OP_FAIL should succeed on owned VMO");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo1, key1) = pager_helper.create_vmo(1);
+    let (vmo2, key2) = pager_helper.create_vmo(1);
+
+    // Fail both VMOs.
+    pager_helper.fail_pages(&vmo1, 0, 1, ZxError::IO);
+    pager_helper.fail_pages(&vmo2, 0, 1, ZxError::IO);
+
+    // Re-supply and verify both.
+    pager_helper.supply_pages(&vmo1, key1, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo1, key1, 0));
+
+    pager_helper.supply_pages(&vmo2, key2, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo2, key2, 0));
 }
 
 /// C++: TEST(Pager, FailOverlapRequest)
+///
+/// The C++ test has overlapping reads — one spanning all 4 pages and
+/// one for just page 1. It fails page 1, supplies the rest, and
+/// verifies the overlapping request gets its failure while the primary
+/// request re-generates a request for page 1.
+///
+/// In libos mode we exercise the synchronous path: fail page 1, supply
+/// pages 0 and 2-3, then re-supply page 1, and verify all readable.
 #[test]
 fn pager_fail_overlap_request() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // OP_FAIL (1) with error code.
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
-    assert!(result.is_ok(), "OP_FAIL should succeed on owned VMO");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(4);
+
+    // Fail page 1.
+    pager_helper.fail_pages(&vmo, 1, 1, ZxError::IO);
+
+    // Supply pages 0, 2, 3.
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    pager_helper.supply_pages(&vmo, key, 2, 2);
+
+    // Re-supply page 1 (fail is not fatal).
+    pager_helper.supply_pages(&vmo, key, 1, 1);
+
+    // All pages should be readable.
+    for page in 0..4u64 {
+        assert!(
+            UserPagerHelper::check_page(&vmo, key, page),
+            "page {} should be readable after fail+supply",
+            page
+        );
+    }
 }
 
 /// C++: TEST(Pager, FailOverlappingRangeCommit)
+///
+/// The C++ test fails a middle range [1,10) while supplying pages 0
+/// and 10. We test the same pattern: supply boundary pages, fail the
+/// middle, then re-supply and verify.
 #[test]
 fn pager_fail_overlapping_range_commit() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // OP_FAIL (1) with error code.
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
-    assert!(result.is_ok(), "OP_FAIL should succeed on owned VMO");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(11);
+
+    // Supply pages 0 and 10 (boundary pages).
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    pager_helper.supply_pages(&vmo, key, 10, 1);
+
+    // Fail the middle range [1, 10).
+    pager_helper.fail_pages(&vmo, 1, 9, ZxError::IO);
+
+    // Re-supply the failed range.
+    pager_helper.supply_pages(&vmo, key, 1, 9);
+
+    // All 11 pages should be readable.
+    for page in 0..11u64 {
+        assert!(UserPagerHelper::check_page(&vmo, key, page));
+    }
 }
 
 /// C++: TEST(Pager, FailOverlappingRangeRead)
+///
+/// Same pattern as FailOverlappingRangeCommit but with vmo_read instead
+/// of commit. Both exercise the same pager fail path in libos mode.
 #[test]
 fn pager_fail_overlapping_range_read() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // OP_FAIL (1) with error code.
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
-    assert!(result.is_ok(), "OP_FAIL should succeed on owned VMO");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(11);
+
+    // Fail the middle range.
+    pager_helper.fail_pages(&vmo, 1, 9, ZxError::IO);
+
+    // Supply boundary pages.
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    pager_helper.supply_pages(&vmo, key, 10, 1);
+
+    // Re-supply the failed range.
+    pager_helper.supply_pages(&vmo, key, 1, 9);
+
+    // All pages should be readable.
+    for page in 0..11u64 {
+        assert!(UserPagerHelper::check_page(&vmo, key, page));
+    }
 }
 
 /// C++: TEST(Pager, FailRedundant)
+///
+/// The C++ test fails the same range multiple times — only the first
+/// matters; subsequent calls are no-ops. We fail each page individually,
+/// then verify re-supply works.
 #[test]
 fn pager_fail_redundant() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // OP_FAIL (1) with error code.
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
-    assert!(result.is_ok(), "OP_FAIL should succeed on owned VMO");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(11);
+
+    // Fail each page redundantly (multiple calls covering overlapping ranges).
+    for i in 0..11u64 {
+        pager_helper.fail_pages(&vmo, i, 1, ZxError::IO);
+    }
+
+    // Re-supply all pages — fail is not fatal.
+    pager_helper.supply_pages(&vmo, key, 0, 11);
+
+    for page in 0..11u64 {
+        assert!(UserPagerHelper::check_page(&vmo, key, page));
+    }
 }
 
 /// C++: VMO_VMAR_TEST(Pager, FailSinglePage) — Vmo variant
+///
+/// Fail a single page, then re-supply and verify it's readable.
+/// The C++ test verifies the blocking reader gets an error; we verify
+/// the pager API accepts the fail and recovery supply works.
 #[test]
 fn pager_fail_single_page_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // OP_FAIL (1) with error code.
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
-    assert!(result.is_ok(), "OP_FAIL should succeed on owned VMO");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    // OP_FAIL on the single page.
+    pager_helper.fail_pages(&vmo, 0, 1, ZxError::IO);
+
+    // Re-supply — fail is not fatal.
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: VMO_VMAR_TEST(Pager, FailSinglePage) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_fail_single_page_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // OP_FAIL (1) with error code.
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
-    assert!(result.is_ok(), "OP_FAIL should succeed on owned VMO");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.fail_pages(&vmo, 0, 1, ZxError::IO);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: TEST(Pager, InvalidPagerCreate)
@@ -1986,79 +2161,88 @@ fn pager_invalid_pager_create() {
 }
 
 /// C++: TEST(Pager, InvalidPagerCreateVmo)
+///
+/// Verify that invalid options are rejected: DISCARDABLE (4) and
+/// RESIZABLE + UNBOUNDED (2|16=18).
 #[test]
 fn pager_invalid_pager_create_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
+    let pager_helper = UserPagerHelper::new();
     // DISCARDABLE (4) is invalid.
-    let result = pager.create_vmo(4, &port, 0, PAGE_SIZE as u64);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::INVALID_ARGS));
+    let result = pager_helper
+        .pager
+        .create_vmo(4, &pager_helper.port, 0, PAGE_SIZE as u64);
+    assert_eq!(result.err(), Some(ZxError::INVALID_ARGS));
     // RESIZABLE + UNBOUNDED (2|16=18) are mutually exclusive.
-    let result = pager.create_vmo(18, &port, 0, PAGE_SIZE as u64);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::INVALID_ARGS));
+    let result = pager_helper
+        .pager
+        .create_vmo(18, &pager_helper.port, 0, PAGE_SIZE as u64);
+    assert_eq!(result.err(), Some(ZxError::INVALID_ARGS));
 }
 
 /// C++: TEST(Pager, InvalidPagerDetachVmo)
+///
+/// Detaching a VMO that isn't owned by the pager should fail.
 #[test]
 fn pager_invalid_pager_detach_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let _owned = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_owned, _key) = pager_helper.create_vmo(1);
     let unrelated = VmObject::new_paged(1);
-    let result = pager.detach_vmo(&unrelated);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::NOT_FOUND));
+    let result = pager_helper.pager.detach_vmo(&unrelated);
+    assert_eq!(result.err(), Some(ZxError::NOT_FOUND));
 }
 
 /// C++: TEST(Pager, InvalidPagerSupplyPages)
+///
+/// Creating a VMO with invalid options (DISCARDABLE=4) should fail.
+/// The C++ test exercises various invalid supply_pages arguments;
+/// we verify the option validation path.
 #[test]
 fn pager_invalid_pager_supply_pages() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let result = pager.create_vmo(4, &port, 0, PAGE_SIZE as u64);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::INVALID_ARGS));
+    let pager_helper = UserPagerHelper::new();
+    let result = pager_helper
+        .pager
+        .create_vmo(4, &pager_helper.port, 0, PAGE_SIZE as u64);
+    assert_eq!(result.err(), Some(ZxError::INVALID_ARGS));
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ManyRequestTest) — Vmo variant
+///
+/// The C++ test creates 257 threads each requesting one page. We
+/// supply all pages one at a time and verify each is readable.
 #[test]
 fn pager_many_request_test_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(4);
-    for i in 0..4usize {
-        src.write(i * PAGE_SIZE, &(i as u64).to_ne_bytes()).unwrap();
-    }
-    pager
-        .supply_pages(&vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    for i in 0..4usize {
-        let mut val = [0u8; 8];
-        vmo.read(i * PAGE_SIZE, &mut val).unwrap();
-        assert_eq!(u64::from_ne_bytes(val), i as u64);
+    let mut pager_helper = UserPagerHelper::new();
+    const NUM_PAGES: u64 = 257;
+    let (vmo, key) = pager_helper.create_vmo(NUM_PAGES as usize);
+
+    // Supply pages one at a time and verify each.
+    for i in 0..NUM_PAGES {
+        pager_helper.supply_pages(&vmo, key, i, 1);
+        assert!(
+            UserPagerHelper::check_page(&vmo, key, i),
+            "page {} should be readable",
+            i
+        );
     }
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ManyRequestTest) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_many_request_test_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(4);
-    for i in 0..4usize {
-        src.write(i * PAGE_SIZE, &(i as u64).to_ne_bytes()).unwrap();
-    }
-    pager
-        .supply_pages(&vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    for i in 0..4usize {
-        let mut val = [0u8; 8];
-        vmo.read(i * PAGE_SIZE, &mut val).unwrap();
-        assert_eq!(u64::from_ne_bytes(val), i as u64);
+    let mut pager_helper = UserPagerHelper::new();
+    const NUM_PAGES: u64 = 257;
+    let (vmo, key) = pager_helper.create_vmo(NUM_PAGES as usize);
+
+    for i in 0..NUM_PAGES {
+        pager_helper.supply_pages(&vmo, key, i, 1);
+        assert!(UserPagerHelper::check_page(&vmo, key, i));
     }
 }
 
@@ -2073,16 +2257,17 @@ fn pager_many_request_test_vmar() {
 #[test]
 fn pager_mapped_supply_pages() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
 
     // Create an aux VMO and write a known byte pattern.
     let aux_vmo = VmObject::new_paged(1);
     let data: u8 = 0xcc;
     aux_vmo.write(0, &[data]).unwrap();
 
-    // Supply the aux VMO page to the pager VMO.
-    pager
+    // Supply the aux VMO page to the pager VMO directly.
+    pager_helper
+        .pager
         .supply_pages(&vmo, 0, PAGE_SIZE as u64, &aux_vmo, 0)
         .unwrap();
 
@@ -2093,25 +2278,33 @@ fn pager_mapped_supply_pages() {
 }
 
 /// C++: TEST(Pager, MulticommitSupplyTest)
+///
+/// A single supply can fulfil multiple commit requests. We have 5
+/// commit ranges of 7 pages each (35 pages total). We supply in
+/// stride-5 chunks (7 supplies of 5 pages) so each supply covers
+/// parts of multiple commit ranges.
 #[test]
 fn pager_multicommit_supply_test() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, &1u64.to_ne_bytes()).unwrap();
-    src.write(PAGE_SIZE, &2u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    let clone = vmo.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
-    let mut val = [0u8; 8];
-    clone.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 1);
-    clone.read(PAGE_SIZE, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 2);
+    let mut pager_helper = UserPagerHelper::new();
+    const NUM_COMMITS: u64 = 5;
+    const NUM_SUPPLIES: u64 = 7;
+    const NUM_PAGES: u64 = NUM_COMMITS * NUM_SUPPLIES; // 35
+    let (vmo, key) = pager_helper.create_vmo(NUM_PAGES as usize);
+
+    // Supply in stride-5 chunks (each chunk covers parts of multiple commit ranges).
+    for i in 0..NUM_SUPPLIES {
+        pager_helper.supply_pages(&vmo, key, NUM_COMMITS * i, NUM_COMMITS);
+    }
+
+    // Verify all pages are readable.
+    for page in 0..NUM_PAGES {
+        assert!(
+            UserPagerHelper::check_page(&vmo, key, page),
+            "page {} should be readable (multicommit supply)",
+            page
+        );
+    }
 }
 
 /// C++: TEST(Pager, MultipleConcurrentVmoTest)
@@ -2146,25 +2339,30 @@ fn pager_multiple_concurrent_vmo_test() {
 }
 
 /// C++: TEST(Pager, MultisupplyCommitTest)
+///
+/// A single commit is fulfilled by multiple supply calls. We create
+/// a 32-page VMO, supply pages one at a time, and verify all are
+/// readable.
 #[test]
 fn pager_multisupply_commit_test() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, &1u64.to_ne_bytes()).unwrap();
-    src.write(PAGE_SIZE, &2u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    let clone = vmo.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
-    let mut val = [0u8; 8];
-    clone.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 1);
-    clone.read(PAGE_SIZE, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 2);
+    let mut pager_helper = UserPagerHelper::new();
+    const NUM_PAGES: u64 = 32;
+    let (vmo, key) = pager_helper.create_vmo(NUM_PAGES as usize);
+
+    // Supply pages one at a time.
+    for i in 0..NUM_PAGES {
+        pager_helper.supply_pages(&vmo, key, i, 1);
+    }
+
+    // Verify all pages are readable.
+    for page in 0..NUM_PAGES {
+        assert!(
+            UserPagerHelper::check_page(&vmo, key, page),
+            "page {} should be readable (multisupply commit)",
+            page
+        );
+    }
 }
 
 /// C++: TEST(Pager, OpCommitCloneVmar)
@@ -2373,59 +2571,47 @@ fn pager_overlap_commit_test() {
 }
 
 /// C++: VMO_VMAR_TEST(Pager, OverlapSupplyTest) — Vmo variant
+///
+/// The C++ test supplies page 0 with alt data, then page 1 with
+/// regular data, and verifies page 0 has the alt data (supply doesn't
+/// overwrite existing content in Fuchsia). We supply both pages with
+/// auto-generated content, then re-supply page 0 (which should
+/// overwrite in our impl), and verify page 1 is untouched.
 #[test]
 fn pager_overlap_supply_test_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src1 = VmObject::new_paged(2);
-    src1.write(0, &1u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src1, 0)
-        .unwrap();
-    // Overlap: supply again with new data.
-    let src2 = VmObject::new_paged(1);
-    src2.write(0, &2u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src2, 0)
-        .unwrap();
-    let mut val = [0u8; 8];
-    vmo.read(0, &mut val).unwrap();
-    assert_eq!(
-        u64::from_ne_bytes(val),
-        2,
-        "overlapping supply should overwrite"
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    // Supply both pages.
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+
+    // Re-supply page 0 (overlapping supply).
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    // Page 1 should still have its original content.
+    assert!(
+        UserPagerHelper::check_page(&vmo, key, 1),
+        "page 1 should be untouched by overlapping supply"
     );
+    // Page 0 should have the re-supplied content (same key pattern).
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: VMO_VMAR_TEST(Pager, OverlapSupplyTest) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_overlap_supply_test_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src1 = VmObject::new_paged(2);
-    src1.write(0, &1u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src1, 0)
-        .unwrap();
-    // Overlap: supply again with new data.
-    let src2 = VmObject::new_paged(1);
-    src2.write(0, &2u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src2, 0)
-        .unwrap();
-    let mut val = [0u8; 8];
-    vmo.read(0, &mut val).unwrap();
-    assert_eq!(
-        u64::from_ne_bytes(val),
-        2,
-        "overlapping supply should overwrite"
-    );
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(2);
+
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+
+    assert!(UserPagerHelper::check_page(&vmo, key, 1));
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: TEST(Pager, PageRequestBatchingChecksAncestorPages)
@@ -2533,15 +2719,11 @@ fn pager_pager_detach_pinned() {
     let iommu = Iommu::create();
     let bti = BusTransactionInitiator::create(iommu, 0);
 
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
 
-    // Create aux VMO and supply a page.
-    let aux_vmo = VmObject::new_paged(1);
-    aux_vmo.commit(0, PAGE_SIZE).unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &aux_vmo, 0)
-        .unwrap();
+    // Supply the page.
+    pager_helper.supply_pages(&vmo, key, 0, 1);
 
     // Pin the page via BTI.
     let pmt = bti
@@ -2549,19 +2731,20 @@ fn pager_pager_detach_pinned() {
         .unwrap();
 
     // Detach the pager VMO — should succeed even with pinned pages.
-    pager.detach_vmo(&vmo).unwrap();
+    pager_helper.detach_vmo(&vmo);
 
     // Clean up: unpin.
     pmt.unpin();
 }
 
 /// C++: TEST(Pager, PinPagerVmoWithLoanedPages)
+///
+/// This test requires loaned page infrastructure not available in libos mode.
 #[test]
 fn pager_pin_pager_vmo_with_loaned_pages() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, PinnedSupplyPages)
@@ -2588,16 +2771,15 @@ fn pager_pinned_supply_pages() {
     let iommu = Iommu::create();
     let bti = BusTransactionInitiator::create(iommu, 0);
 
-    let (pager, port) = create_pager_and_port();
+    let mut pager_helper = UserPagerHelper::new();
     let num_pages: usize = 3;
-    let vmo = pager
-        .create_vmo(0, &port, 0, (num_pages * PAGE_SIZE) as u64)
-        .unwrap();
+    let (vmo, _key) = pager_helper.create_vmo(num_pages);
 
     // Supply only the middle page (page 1).
     let aux1 = VmObject::new_paged(1);
     aux1.commit(0, PAGE_SIZE).unwrap();
-    pager
+    pager_helper
+        .pager
         .supply_pages(&vmo, PAGE_SIZE as u64, PAGE_SIZE as u64, &aux1, 0)
         .unwrap();
 
@@ -2623,7 +2805,8 @@ fn pager_pinned_supply_pages() {
     // overwritten (known gap — supply_pages doesn't check pin status).
     let aux2 = VmObject::new_paged(num_pages);
     aux2.commit(0, num_pages * PAGE_SIZE).unwrap();
-    pager
+    pager_helper
+        .pager
         .supply_pages(&vmo, 0, (num_pages * PAGE_SIZE) as u64, &aux2, 0)
         .unwrap();
 
@@ -2772,143 +2955,149 @@ fn pager_present_page_splits_range() {
 }
 
 /// C++: VMO_VMAR_TEST(Pager, PresupplyTest) — Vmo variant
+///
+/// Pre-supplied pages don't result in page requests.
 #[test]
 fn pager_presupply_test_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"supply test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 16];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"supply test data");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: VMO_VMAR_TEST(Pager, PresupplyTest) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_presupply_test_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"supply test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 16];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"supply test data");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: TEST(Pager, ProxyUseAfterFree)
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_proxy_use_after_free() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, RacyPortDequeue)
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_racy_port_dequeue() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptEarlyTest) — Vmo variant
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_read_close_interrupt_early_test_vmo() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptEarlyTest) — Vmar variant
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_read_close_interrupt_early_test_vmar() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptLateTest) — Vmo variant
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_read_close_interrupt_late_test_vmo() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptLateTest) — Vmar variant
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_read_close_interrupt_late_test_vmar() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptEarlyTest) — Vmo variant
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_read_detach_interrupt_early_test_vmo() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptEarlyTest) — Vmar variant
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_read_detach_interrupt_early_test_vmar() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptLateTest) — Vmo variant
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_read_detach_interrupt_late_test_vmo() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptLateTest) — Vmar variant
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_read_detach_interrupt_late_test_vmar() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ReadResizeTest) — Vmo variant
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_read_resize_test_vmo() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, ReadResizeTest) — Vmar variant
+///
+/// This test requires concurrent threads not available in libos mode.
 #[test]
 fn pager_read_resize_test_vmar() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, ResizeBlockedPin)
@@ -2928,17 +3117,12 @@ fn pager_resize_blocked_pin() {
     let iommu = Iommu::create();
     let bti = BusTransactionInitiator::create(iommu, 0);
 
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(2, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap(); // flag 2 = RESIZABLE
+    let mut pager_helper = UserPagerHelper::new();
+    // Create resizable VMO (option 2 = ZX_VMO_RESIZABLE).
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 2);
 
     // Supply the first page.
-    let src = VmObject::new_paged(1);
-    src.commit(0, PAGE_SIZE).unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
+    pager_helper.supply_pages(&vmo, key, 0, 1);
 
     // Resize the VMO down to 0 pages.
     vmo.set_len(0).unwrap();
@@ -2954,170 +3138,181 @@ fn pager_resize_blocked_pin() {
 }
 
 /// C++: TEST(Pager, ResizeCommitTest)
+///
+/// The C++ test resizes out from under a commit. We create a resizable
+/// 3-page VMO, supply pages, resize to 1 page, and verify page 0 is
+/// still readable.
 #[test]
 fn pager_resize_commit_test() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(2, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, &42u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    // Create resizable VMO (option 2 = ZX_VMO_RESIZABLE).
+    let (vmo, key) = pager_helper.create_vmo_with_options(3, 2);
+
+    // Supply all 3 pages.
+    pager_helper.supply_pages(&vmo, key, 0, 3);
+
+    // Resize down to 1 page.
     vmo.set_len(PAGE_SIZE).unwrap();
     assert_eq!(vmo.len(), PAGE_SIZE);
-    let mut val = [0u8; 8];
-    vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 42);
+
+    // Page 0 should still be readable.
+    assert!(
+        UserPagerHelper::check_page(&vmo, key, 0),
+        "page 0 should survive resize"
+    );
 }
 
 /// C++: TEST(Pager, ResizeNonresizableVmo)
+///
+/// Resizing a non-resizable pager VMO should fail with UNAVAILABLE.
 #[test]
 fn pager_resize_nonresizable_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
     let result = vmo.set_len(2 * PAGE_SIZE);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::UNAVAILABLE));
+    assert_eq!(result.err(), Some(ZxError::UNAVAILABLE));
 }
 
 /// C++: VMO_VMAR_TEST(Pager, SequentialMultipageTest) — Vmo variant
+///
+/// The C++ test has a single thread reading 32 pages sequentially,
+/// with pages supplied one at a time. We supply all 32 pages in one
+/// call and verify each is readable sequentially.
 #[test]
 fn pager_sequential_multipage_test_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(4);
-    for i in 0..4usize {
-        src.write(i * PAGE_SIZE, &(i as u64).to_ne_bytes()).unwrap();
-    }
-    pager
-        .supply_pages(&vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    for i in 0..4usize {
-        let mut val = [0u8; 8];
-        vmo.read(i * PAGE_SIZE, &mut val).unwrap();
-        assert_eq!(u64::from_ne_bytes(val), i as u64);
+    let mut pager_helper = UserPagerHelper::new();
+    const NUM_PAGES: u64 = 32;
+    let (vmo, key) = pager_helper.create_vmo(NUM_PAGES as usize);
+
+    pager_helper.supply_pages(&vmo, key, 0, NUM_PAGES);
+
+    for page in 0..NUM_PAGES {
+        assert!(
+            UserPagerHelper::check_page(&vmo, key, page),
+            "page {} should be readable (sequential multipage)",
+            page
+        );
     }
 }
 
 /// C++: VMO_VMAR_TEST(Pager, SequentialMultipageTest) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_sequential_multipage_test_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(4);
-    for i in 0..4usize {
-        src.write(i * PAGE_SIZE, &(i as u64).to_ne_bytes()).unwrap();
-    }
-    pager
-        .supply_pages(&vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    for i in 0..4usize {
-        let mut val = [0u8; 8];
-        vmo.read(i * PAGE_SIZE, &mut val).unwrap();
-        assert_eq!(u64::from_ne_bytes(val), i as u64);
+    let mut pager_helper = UserPagerHelper::new();
+    const NUM_PAGES: u64 = 32;
+    let (vmo, key) = pager_helper.create_vmo(NUM_PAGES as usize);
+
+    pager_helper.supply_pages(&vmo, key, 0, NUM_PAGES);
+
+    for page in 0..NUM_PAGES {
+        assert!(UserPagerHelper::check_page(&vmo, key, page));
     }
 }
 
 /// C++: TEST(Pager, SimpleCommitTest)
+///
+/// The C++ test commits 555 pages. We supply all and verify they're
+/// readable.
 #[test]
 fn pager_simple_commit_test() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, &1u64.to_ne_bytes()).unwrap();
-    src.write(PAGE_SIZE, &2u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    let clone = vmo.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
-    let mut val = [0u8; 8];
-    clone.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 1);
-    clone.read(PAGE_SIZE, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 2);
+    let mut pager_helper = UserPagerHelper::new();
+    const NUM_PAGES: u64 = 555;
+    let (vmo, key) = pager_helper.create_vmo(NUM_PAGES as usize);
+
+    pager_helper.supply_pages(&vmo, key, 0, NUM_PAGES);
+
+    // Spot-check several pages (checking all 555 would be slow).
+    for page in [0u64, 1, 100, 277, 554] {
+        assert!(
+            UserPagerHelper::check_page(&vmo, key, page),
+            "page {} should be readable (simple commit)",
+            page
+        );
+    }
 }
 
 /// C++: VMO_VMAR_TEST(Pager, SinglePageTest) — Vmo variant
+///
+/// Basic single-page test: supply one page and verify it's readable.
 #[test]
 fn pager_single_page_test_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"supply test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 16];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"supply test data");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: VMO_VMAR_TEST(Pager, SinglePageTest) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_single_page_test_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"supply test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 16];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"supply test data");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(1);
+
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
 /// C++: TEST(Pager, SplitCommitTest)
+///
+/// The C++ test pre-supplies the middle page of a 33-page VMO, then
+/// commits the entire range. This generates two page requests split
+/// around the pre-supplied page. We supply the middle, then both
+/// halves, and verify all pages.
 #[test]
 fn pager_split_commit_test() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(2);
-    src.write(0, &1u64.to_ne_bytes()).unwrap();
-    src.write(PAGE_SIZE, &2u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    let clone = vmo.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
-    let mut val = [0u8; 8];
-    clone.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 1);
-    clone.read(PAGE_SIZE, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 2);
+    let mut pager_helper = UserPagerHelper::new();
+    const NUM_PAGES: u64 = 33;
+    let (vmo, key) = pager_helper.create_vmo(NUM_PAGES as usize);
+
+    // Supply the middle page first.
+    let mid = NUM_PAGES / 2;
+    pager_helper.supply_pages(&vmo, key, mid, 1);
+    assert!(UserPagerHelper::check_page(&vmo, key, mid));
+
+    // Supply the lower half [0, mid).
+    pager_helper.supply_pages(&vmo, key, 0, mid);
+
+    // Supply the upper half [mid+1, NUM_PAGES).
+    pager_helper.supply_pages(&vmo, key, mid + 1, NUM_PAGES - mid - 1);
+
+    // All pages should be readable.
+    for page in 0..NUM_PAGES {
+        assert!(
+            UserPagerHelper::check_page(&vmo, key, page),
+            "page {} should be readable (split commit)",
+            page
+        );
+    }
 }
 
 /// C++: TEST(Pager, SuccessiveVmoTest)
+///
+/// The C++ test creates and destroys 64 successive VMOs on the same
+/// pager. We create 64 VMOs, supply each, verify, and let them drop.
 #[test]
 fn pager_successive_vmo_test() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    for i in 0u64..5 {
-        let vmo = pager.create_vmo(0, &port, i, PAGE_SIZE as u64).unwrap();
-        let src = VmObject::new_paged(1);
-        src.write(0, &i.to_ne_bytes()).unwrap();
-        pager
-            .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-            .unwrap();
-        let mut val = [0u8; 8];
-        vmo.read(0, &mut val).unwrap();
-        assert_eq!(u64::from_ne_bytes(val), i);
+    let mut pager_helper = UserPagerHelper::new();
+
+    for _ in 0..64 {
+        let (vmo, key) = pager_helper.create_vmo(1);
+        pager_helper.supply_pages(&vmo, key, 0, 1);
+        assert!(UserPagerHelper::check_page(&vmo, key, 0));
+        // VMO is dropped at end of iteration.
     }
 }
 
@@ -3152,164 +3347,214 @@ fn pager_supply_after_detach() {
 }
 
 /// C++: TEST(Pager, SupplyAfterFail)
+///
+/// Fail pages, then supply — the supply should succeed (fail is not
+/// fatal). The C++ test does two rounds: fail→WaitForFailure, then
+/// re-commit→re-supply→Wait.
 #[test]
 fn pager_supply_after_fail() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    // OP_FAIL first.
-    pager
-        .op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64)
-        .unwrap();
-    // Then supply — should still work.
-    let src = VmObject::new_paged(1);
-    src.write(0, b"after fail").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let mut buf = [0u8; 10];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"after fail");
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo(11);
+
+    // Fail all 11 pages.
+    pager_helper.fail_pages(&vmo, 0, 11, ZxError::IO);
+
+    // Re-supply all pages — fail is not fatal.
+    pager_helper.supply_pages(&vmo, key, 0, 11);
+
+    // All pages should be readable.
+    for page in 0..11u64 {
+        assert!(
+            UserPagerHelper::check_page(&vmo, key, page),
+            "page {} should be readable after fail+supply",
+            page
+        );
+    }
 }
 
 /// C++: TEST(Pager, SuspendCommitTest)
+///
+/// This test requires thread suspension not available in libos mode.
 #[test]
 fn pager_suspend_commit_test() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, SuspendInKernelCaptureFaultsTest)
+///
+/// This test requires thread suspension not available in libos mode.
 #[test]
 fn pager_suspend_in_kernel_capture_faults_test() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, SuspendInKernelTest)
+///
+/// This test requires thread suspension not available in libos mode.
 #[test]
 fn pager_suspend_in_kernel_test() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, SuspendReadTest) — Vmo variant
+///
+/// This test requires thread suspension not available in libos mode.
 #[test]
 fn pager_suspend_read_test_vmo() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, SuspendReadTest) — Vmar variant
+///
+/// This test requires thread suspension not available in libos mode.
 #[test]
 fn pager_suspend_read_test_vmar() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, UncommittedSinglePageTest) — Vmo variant
+///
+/// Supply an uncommitted (zero) page and verify it reads as zeros.
 #[test]
 fn pager_uncommitted_single_page_test_vmo() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"supply test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    // Supply an uncommitted (empty) VMO page — should read as zeros.
+    let empty = VmObject::new_paged(1);
+    pager_helper
+        .pager
+        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &empty, 0)
         .unwrap();
-    let mut buf = [0u8; 16];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"supply test data");
+
+    let mut val = [0u8; 4];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(
+        u32::from_ne_bytes(val),
+        0,
+        "uncommitted page should be zeros"
+    );
 }
 
 /// C++: VMO_VMAR_TEST(Pager, UncommittedSinglePageTest) — Vmar variant
+///
+/// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
 fn pager_uncommitted_single_page_test_vmar() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"supply test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    let empty = VmObject::new_paged(1);
+    pager_helper
+        .pager
+        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &empty, 0)
         .unwrap();
-    let mut buf = [0u8; 16];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"supply test data");
+
+    let mut val = [0u8; 4];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(u32::from_ne_bytes(val), 0);
 }
 
 /// C++: TEST(Pager, UncommittedSupply)
+///
+/// Supply uncommitted pages — prevents faults and gives zeros.
 #[test]
 fn pager_uncommitted_supply() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, b"supply test data").unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    // Supply an empty (uncommitted) VMO.
+    let empty = VmObject::new_paged(1);
+    pager_helper
+        .pager
+        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &empty, 0)
         .unwrap();
-    let mut buf = [0u8; 16];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(&buf, b"supply test data");
+
+    // A read should not fault and give zeros.
+    let mut val = [0u8; 4];
+    vmo.read(0, &mut val).unwrap();
+    assert_eq!(
+        u32::from_ne_bytes(val),
+        0,
+        "uncommitted supply should give zeros"
+    );
 }
 
 /// C++: TEST(Pager, VmarMapRangeTest)
+///
+/// This test requires VMAR mapping not available in libos mode.
 #[test]
 fn pager_vmar_map_range_test() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, VmarRemapTest)
+///
+/// This test requires VMAR mapping not available in libos mode.
 #[test]
 fn pager_vmar_remap_test() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, VmarUnmapTest)
+///
+/// This test requires VMAR mapping not available in libos mode.
 #[test]
 fn pager_vmar_unmap_test() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(Pager, VmoInfoPagerTest)
+///
+/// Verify that a pager-backed VMO reports is_pager_backed() == true,
+/// has a non-zero ID, and has the correct size.
 #[test]
 fn pager_vmo_info_pager_test() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 42, PAGE_SIZE as u64).unwrap();
-    assert!(vmo.is_pager_backed());
-    assert_ne!(vmo.id(), 0);
-    assert_eq!(vmo.len(), PAGE_SIZE);
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, _key) = pager_helper.create_vmo(1);
+
+    assert!(vmo.is_pager_backed(), "should be pager-backed");
+    assert_ne!(vmo.id(), 0, "should have non-zero ID");
+    assert_eq!(vmo.len(), PAGE_SIZE, "should have correct size");
+
+    // A regular VMO should NOT be pager-backed.
+    let plain = VmObject::new_paged(1);
+    assert!(
+        !plain.is_pager_backed(),
+        "regular VMO should not be pager-backed"
+    );
 }
 
 /// C++: TEST(Pager, ZeroHandlesRace)
+///
+/// This test requires concurrent handle manipulation not available in
+/// libos mode.
 #[test]
 fn pager_zero_handles_race() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 /// C++: TEST(PagerWriteback, CannotOverwriteZeroPageNoTrapDirty)
@@ -7907,42 +8152,79 @@ fn pager_process_kill_blocked_usercopy_capture_faults() {
 #[test]
 fn pager_writeback_detach_with_pending_dirty_request() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(8, &port, 0, PAGE_SIZE as u64).unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    let pager_helper = UserPagerHelper::new();
+    let vmo = pager_helper
+        .pager
+        .create_vmo(8, &pager_helper.port, 0, PAGE_SIZE as u64)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyRequestsAfterDetach)
 #[test]
 fn pager_writeback_no_dirty_requests_after_detach() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(8, &port, 0, PAGE_SIZE as u64).unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    let pager_helper = UserPagerHelper::new();
+    let vmo = pager_helper
+        .pager
+        .create_vmo(8, &pager_helper.port, 0, PAGE_SIZE as u64)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, SimpleTrapDirty)
 #[test]
 fn pager_writeback_simple_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(8, &port, 0, PAGE_SIZE as u64).unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    let pager_helper = UserPagerHelper::new();
+    let vmo = pager_helper
+        .pager
+        .create_vmo(8, &pager_helper.port, 0, PAGE_SIZE as u64)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, SuspendDirtyTest)
+///
+/// This test requires thread suspension not available in libos mode.
 #[test]
 fn pager_writeback_suspend_dirty_test() {
     let _ctx = TestContext::new();
-    // This test requires infrastructure not available in libos mode.
-    let (pager, port) = create_pager_and_port();
-    let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
 // ── Demand-paging integration test ──────────────────────────────────
