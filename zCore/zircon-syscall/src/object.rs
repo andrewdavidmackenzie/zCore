@@ -274,6 +274,14 @@ impl Syscall<'_> {
                 thread.with_context(|ctx| ctx.general_mut().gsbase = gsbase)?;
                 Ok(())
             }
+            // On non-x86_64, FS/GS registers don't exist. Check the
+            // object type first (WRONG_TYPE for non-Thread), then
+            // return NOT_SUPPORTED for threads on this arch.
+            #[cfg(not(target_arch = "x86_64"))]
+            Property::RegisterFs | Property::RegisterGs => {
+                proc.get_object::<Thread>(handle_value)?;
+                Err(ZxError::NOT_SUPPORTED)
+            }
             Property::ProcessBreakOnLoad => {
                 let addr = UserInPtr::<usize>::from_addr_size(buffer, buffer_size)?.read()?;
                 proc.get_object_with_rights::<Process>(handle_value, Rights::SET_PROPERTY)?
@@ -1345,6 +1353,8 @@ struct TaskRuntimeInfo {
 /// `zx_info_kmem_stats_t` — 152 bytes (19 x u64).
 #[repr(C)]
 #[derive(Default)]
+/// `zx_info_kmem_stats_t` — 14 fields, 112 bytes.
+/// Matches the Fuchsia ABI (topic 17, version 1).
 struct KmemInfo {
     total_bytes: u64,
     free_bytes: u64,
@@ -1360,11 +1370,6 @@ struct KmemInfo {
     zram_bytes: u64,
     other_bytes: u64,
     vmo_reclaim_total_bytes: u64,
-    vmo_reclaim_newest_bytes: u64,
-    vmo_reclaim_oldest_bytes: u64,
-    vmo_reclaim_disabled_bytes: u64,
-    vmo_discardable_locked_bytes: u64,
-    vmo_discardable_unlocked_bytes: u64,
 }
 
 /// `zx_info_kmem_stats_extended_t` — includes all base kmem fields

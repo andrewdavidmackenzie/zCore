@@ -1616,14 +1616,15 @@ struct VmMappingInner {
     fault_beyond_stream_size: bool,
 }
 
-/// Statistics about resources (e.g., memory) used by a task.
+/// `zx_info_task_stats_t` — 2 fields, 16 bytes.
+/// Matches the Fuchsia ABI (topic 36).
 #[repr(C)]
 #[derive(Default)]
 pub struct TaskStatsInfo {
-    mapped_bytes: u64,
-    private_bytes: u64,
-    shared_bytes: u64,
-    scaled_shared_bytes: u64,
+    /// Total mapped memory in bytes.
+    pub mapped_bytes: u64,
+    /// Private (not shared) memory in bytes.
+    pub private_bytes: u64,
 }
 
 /// `zx_info_maps_t` — 152 bytes per entry.
@@ -1792,9 +1793,6 @@ impl VmMapping {
         let share_count = self.vmo.share_count();
         if share_count == 1 {
             task_stats.private_bytes += (committed_pages * PAGE_SIZE) as u64;
-        } else {
-            task_stats.shared_bytes += (committed_pages * PAGE_SIZE) as u64;
-            task_stats.scaled_shared_bytes += (committed_pages * PAGE_SIZE / share_count) as u64;
         }
     }
 

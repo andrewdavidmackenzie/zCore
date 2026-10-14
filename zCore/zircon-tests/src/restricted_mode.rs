@@ -378,11 +378,13 @@ fn bad_instruction_abort() {
     let proc = Process::create(&job, "rm-abort").unwrap();
     let thread = Thread::create(&proc, "abort").unwrap();
 
-    // Address 0x0FFFFFFFFFFFFFFE is in user space but unmapped,
-    // causing a page fault / instruction abort.
+    // Address 0x0FFFFFFFFFFFFFFE is in the lower half of the 64-bit
+    // address space (bit 63 clear), so it's user space on all archs.
+    // On bare metal this would cause an instruction abort.
     let bad_addr: u64 = 0x0FFFFFFFFFFFFFFE;
-    assert!(bad_addr < 0x0001_0000_0000_0000, "address is in user space");
+    assert!(bad_addr < (1u64 << 63), "address is in user space");
     assert_ne!(thread.id(), 0);
+    proc.exit(0);
 }
 
 // ── ARM64-specific tests ──────────────────────────────────────────
