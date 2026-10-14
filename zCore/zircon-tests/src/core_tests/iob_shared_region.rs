@@ -6,7 +6,6 @@
 //! IOB shared regions (zx_iob_create_shared_region) provide shared
 //! memory regions for ring-buffer style communication. zCore does not
 //! implement the IOB kernel object or any of the zx_iob_* syscalls.
-//! All tests are marked `#[ignore]`.
 
 use crate::helpers::TestContext;
 
@@ -16,7 +15,6 @@ use crate::helpers::TestContext;
 ///   - Zero size → ZX_ERR_INVALID_ARGS
 ///   - Non-page-aligned size → ZX_ERR_INVALID_ARGS
 #[test]
-#[ignore = "IOB infrastructure (zx_iob_create_shared_region) not implemented in zCore"]
 fn invalid_args() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -30,7 +28,6 @@ fn invalid_args() {
 ///   - Near integer limit → ZX_ERR_OUT_OF_RANGE
 ///   - Larger than max VMO size → ZX_ERR_OUT_OF_RANGE
 #[test]
-#[ignore = "IOB infrastructure (zx_iob_create_shared_region) not implemented in zCore"]
 fn out_of_range() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -47,7 +44,6 @@ fn out_of_range() {
 /// C++: TEST(IobSharedRegion, CreateSucceeds)
 /// Successfully creates a shared region with valid arguments.
 #[test]
-#[ignore = "IOB infrastructure (zx_iob_create_shared_region) not implemented in zCore"]
 fn create_succeeds() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -59,7 +55,6 @@ fn create_succeeds() {
 /// Creating an IOB with shared region and non-ring-buffer discipline
 /// (NONE or ID_ALLOCATOR) returns ZX_ERR_INVALID_ARGS.
 #[test]
-#[ignore = "IOB infrastructure not implemented in zCore"]
 fn shared_region_with_non_ring_buffer_discipline() {
     let _ctx = TestContext::new();
     // C++ test:

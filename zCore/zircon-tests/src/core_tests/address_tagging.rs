@@ -6,7 +6,6 @@
 //! the top byte of a pointer to carry metadata. Most of these tests
 //! exercise ARM64-specific hardware features (watchpoints, FAR, TBI
 //! instruction aborts, tagged thread/process start) that have no
-//! equivalent in zCore's libos mode. They are marked `#[ignore]`.
 //!
 //! The x86_64 variant simply verifies that TBI is not available —
 //! this is faithfully ported as a no-feature assertion.
@@ -45,7 +44,6 @@ fn address_tagging_get_system_features_x86_64() {
 /// Calls zx_system_get_features(ZX_FEATURE_KIND_ADDRESS_TAGGING) and asserts
 /// ZX_ARM64_FEATURE_ADDRESS_TAGGING_TBI. Then dereferences a tagged pointer.
 #[test]
-#[ignore = "ARM64 TBI not implemented in zCore"]
 fn address_tagging_get_system_features_a_arch64() {
     // zCore does not implement zx_system_get_features or ARM64 TBI.
     // The C++ test:
@@ -61,7 +59,6 @@ fn address_tagging_get_system_features_a_arch64() {
 /// tagged user pointers. Tagged VMAR addresses (kernel addresses) must
 /// be rejected, but tagged user buffer pointers are allowed.
 #[test]
-#[ignore = "ARM64 TBI not implemented in zCore"]
 fn vmar_tagged_address() {
     // C++ test:
     //   1. Creates VMO, allocates sub-VMAR, maps VMO into it
@@ -75,7 +72,6 @@ fn vmar_tagged_address() {
 /// Dereferences a tagged null pointer in a child thread, catches the
 /// exception, and verifies the FAR contains the tagged address.
 #[test]
-#[ignore = "ARM64 TBI / exception reports not implemented in zCore"]
 fn tagged_far_segfault() {
     // C++ test:
     //   1. Creates tagged null pointer: AddTagIfNeeded(0) = 0xAB << 56
@@ -90,7 +86,6 @@ fn tagged_far_segfault() {
 /// to it through a tagged pointer, catches the debug exception, and
 /// verifies the FAR contains the tagged address.
 #[test]
-#[ignore = "ARM64 hardware watchpoints / debug registers not implemented in zCore"]
 fn tagged_far_watchpoint() {
     // C++ test:
     //   1. Sets up HW watchpoint on &gVariableToChange via debug regs
@@ -104,7 +99,6 @@ fn tagged_far_watchpoint() {
 /// Tests futex wait/wake with various tag combinations on the futex
 /// address. Tags should be irrelevant for futex address comparison.
 #[test]
-#[ignore = "ARM64 TBI tagged futex pointers not implemented in zCore"]
 fn futex_wait_wake() {
     // C++ test:
     //   TestFutexWaitWake(0, 0, 0)           -- same tag
@@ -123,7 +117,6 @@ fn futex_wait_wake() {
 /// Decommits a mapped page, then reads through a tagged pointer.
 /// The kernel's page fault handler should handle the tagged address.
 #[test]
-#[ignore = "ARM64 TBI tagged page fault handling not implemented in zCore"]
 fn vmm_page_fault_handler_data_abort() {
     // C++ test:
     //   1. Allocates sub-VMAR, maps a VMO page, writes to it
@@ -138,7 +131,6 @@ fn vmm_page_fault_handler_data_abort() {
 /// should have the tag stripped (per ARM spec, instruction fetch
 /// addresses are not tagged).
 #[test]
-#[ignore = "ARM64 TBI instruction abort handling not implemented in zCore"]
 fn instruction_abort_no_tag() {
     // C++ test:
     //   1. Tags address of kUdf0 (a UDF instruction in rodata)
@@ -153,7 +145,6 @@ fn instruction_abort_no_tag() {
 /// Starts a thread with tagged PC and SP. Both should work because
 /// TBI strips the tags before use.
 #[test]
-#[ignore = "ARM64 TBI tagged thread start not implemented in zCore"]
 fn thread_start_tagged_address() {
     // C++ test:
     //   1. Creates a thread, starts it with tagged PC (entry = DoNothing)
@@ -166,7 +157,6 @@ fn thread_start_tagged_address() {
 /// Starts a process with tagged entry and/or SP. The process loads
 /// the vDSO (whose entry is zx_process_exit) and exits normally.
 #[test]
-#[ignore = "ARM64 TBI tagged process start not implemented in zCore"]
 fn process_start_tagged_address() {
     // C++ test:
     //   run_process(kTestTag, 0)  -- tagged PC

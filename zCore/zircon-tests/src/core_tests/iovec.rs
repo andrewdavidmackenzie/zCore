@@ -375,7 +375,6 @@ fn write_null_buffer_nonnull_size() {
 // ────────────────────────── Call tests ──────────────────────────
 // Channel call requires a response thread to echo the message back.
 // In our test environment we don't have async echo servers, so most
-// call tests will time out. These are marked #[ignore].
 
 /// Helper struct matching ChannelCallArgs ABI.
 #[repr(C)]

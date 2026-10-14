@@ -335,7 +335,6 @@ fn snapshot_child_dst() {
 /// so a true race cannot occur. This test verifies the basic scenario:
 /// create a snapshot child, then close the parent, then transfer from child.
 #[test]
-#[ignore = "needs concurrent threads to race parent drop against transfer_data"]
 fn racy_drop_parent() {
     // The real C++ test uses std::thread to race a parent.reset() against
     // dst_vmo.transfer_data(). zCore's cooperative scheduler cannot reproduce

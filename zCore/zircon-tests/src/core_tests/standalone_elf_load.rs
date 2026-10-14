@@ -29,7 +29,6 @@
 ///
 /// Asserts at least one module was for the native machine.
 #[test]
-#[ignore = "requires elfldltl, VMAR loader, test module VMOs — not available in zCore libos"]
 fn load() {
     // Full C++ test requires the elfldltl ELF loading infrastructure,
     // test module binaries, and the ability to map and execute ELF

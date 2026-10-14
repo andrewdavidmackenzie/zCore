@@ -42,7 +42,6 @@ fn fpu_long_compute_loop() {
 /// interrupt resets them to 0 via IRET. The C++ test is SKIP'd because
 /// non-KVM QEMU doesn't implement IRET fully.
 #[test]
-#[ignore = "x86 segment selector hardware not available in libos mode; C++ test also SKIP'd"]
 fn segment_selectors_zeroed_on_interrupt() {
     // C++ test:
     //   ZXTEST_SKIP() << "Disabled because some versions of non-KVM QEMU don't implement IRET fully";
@@ -57,7 +56,6 @@ fn segment_selectors_zeroed_on_interrupt() {
 /// Sets x86 segment selectors and FS/GS base to 1, sleeps to trigger
 /// a context switch, verifies selectors are cleared but bases are preserved.
 #[test]
-#[ignore = "x86 segment selector hardware not available in libos mode"]
 fn segment_selectors_zeroed_on_context_switch() {
     // C++ test:
     //   1. Sets gs=1, gs_base=1, fs=1, fs_base=1, es=1, ds=1

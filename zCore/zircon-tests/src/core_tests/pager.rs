@@ -1304,7 +1304,6 @@ fn pager_detach_one_keep_others() {
 // The following 30 tests correspond to C++ pager tests that require
 // concurrent threads and demand-paging (async page fault handling).
 // Tests that can be exercised via presupply-then-read have real logic;
-// tests that require blocking on unsupplied pages remain #[ignore].
 
 ///
 /// Pre-supply pages before mapping, then read via a faulting thread.
@@ -3525,7 +3524,6 @@ fn pager_vmo_op_dont_need() {
 // Tests ported from Fuchsia's pager.cc. Those that exercise synchronous
 // pager API (supply, detach, op_range, clone, resize) have real logic.
 // Those that truly require blocking page faults + concurrent threads
-// remain #[ignore] with a clear reason.
 
 /// C++: VMO_VMAR_TEST(Pager, BulkOddLengthSupplyTest) — Vmo variant
 /// Supply a non-page-multiple length. supply_pages works in page chunks.

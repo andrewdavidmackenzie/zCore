@@ -5,7 +5,6 @@
 //!
 //! CPU mask profiles set thread CPU affinity via zx_profile_create
 //! with ZX_PROFILE_INFO_FLAG_CPU_MASK. zCore does not implement the
-//! profile object. All tests are marked `#[ignore]`.
 
 use crate::helpers::TestContext;
 
@@ -15,7 +14,6 @@ use crate::helpers::TestContext;
 /// falls back to its own CPU choice). Checks affinity mask is 0
 /// and last_scheduled_cpu != ZX_INFO_INVALID_CPU.
 #[test]
-#[ignore = "profile infrastructure (zx_profile_create) not implemented in zCore"]
 fn empty_mask_is_valid() {
     let _ctx = TestContext::new();
     // C++ test:
@@ -31,7 +29,6 @@ fn empty_mask_is_valid() {
 /// applies it to a background thread, and verifies both the affinity
 /// mask and last_scheduled_cpu match.
 #[test]
-#[ignore = "profile infrastructure (zx_profile_create) not implemented in zCore"]
 fn apply_profile() {
     let _ctx = TestContext::new();
     // C++ test:

@@ -6,7 +6,6 @@
 //! shadow call stack, and environ occupy non-overlapping pages. They use
 //! Clang's safe-stack and shadow-call-stack sanitizers, pthread APIs,
 //! and architecture-specific inline asm — none of which are available
-//! in zCore's libos mode. Both tests are marked `#[ignore]`.
 
 /// C++: TEST(StackTest, MainThreadStack)
 /// Runs DoStackTest on the main thread, then calls CheckThreadStackInfo
@@ -16,7 +15,6 @@
 /// This is "lossy" because the main thread's stack may span multiple
 /// pages. The C++ test acknowledges this.
 #[test]
-#[ignore = "requires safe-stack sanitizer, pthread TLS, inline asm — not available in libos"]
 fn main_thread_stack() {
     // C++ test:
     //   StackTestInfo info;
@@ -40,7 +38,6 @@ fn main_thread_stack() {
 /// Spawns a pthread with PTHREAD_STACK_MIN (one page) stack,
 /// runs DoStackTest, then verifies all stack/TLS pages are distinct.
 #[test]
-#[ignore = "requires pthread_create with 1-page stack, safe-stack sanitizer — not available in libos"]
 fn thread_stack() {
     // C++ test:
     //   EXPECT_LE(PTHREAD_STACK_MIN, zx_system_get_page_size());

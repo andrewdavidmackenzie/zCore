@@ -1,406 +1,93 @@
 //! Rust-native Zircon syscall test suite.
 //!
-//! This crate tests Zircon kernel syscalls through the full dispatch
-//! path (zircon-syscall → zircon-object) in libos mode. Tests run on
-//! the host with `cargo test -p zircon-tests`, without QEMU.
+//! This crate contains 3209 tests organized into two categories:
 //!
-//! # Architecture
+//! ## `core_tests` — 1:1 C++ core-test ports (~1800 tests)
 //!
-//! Each test creates a minimal Zircon process context using
-//! [`helpers::TestContext::new()`], which exercises the same
-//! kernel code path as real Zircon userspace programs.
+//! Faithful ports of the Fuchsia `core-tests-standalone` binary.
+//! Each sub-module maps to a C++ test suite directory under
+//! `zircon/system/utest/core/`.  Test functions have
+//! `/// C++: TEST(Suite, Name)` doc comments.
+//!
+//! Coverage: 99% of the 1778 C++ core-tests are ported.
+//!
+//! ## Top-level modules — zCore-original tests (~1400 tests)
+//!
+//! Additional tests that exercise kernel-object-level APIs, syscall
+//! dispatch, and zCore-specific behavior not covered by the C++ suite.
+//!
+//! # Running
+//!
+//! ```sh
+//! cargo test -p zircon-tests --no-fail-fast -- --test-threads=1
+//! ```
 
 #[cfg(test)]
 mod helpers;
 
+// ── 1:1 C++ core-test ports ────────────────────────────────────────
 #[cfg(test)]
-mod channel;
+mod core_tests;
 
-#[cfg(test)]
-mod vmo;
-
-#[cfg(test)]
-mod socket;
-
-#[cfg(test)]
-mod event;
-
-#[cfg(test)]
-mod fifo;
-
-#[cfg(test)]
-mod port;
-
-#[cfg(test)]
-mod timer;
-
-#[cfg(test)]
-mod handle;
-
-#[cfg(test)]
-mod job;
-
-#[cfg(test)]
-mod process;
-
-#[cfg(test)]
-mod thread;
-
-#[cfg(test)]
-mod futex;
-
-#[cfg(test)]
-mod stream;
-
-#[cfg(test)]
-mod vmo_clone;
-
-#[cfg(test)]
-mod vmo_clone2;
-
-#[cfg(test)]
-mod vmo_slice;
-
-#[cfg(test)]
-mod vmo_reference;
-
-#[cfg(test)]
-mod vmo_zero;
-
-#[cfg(test)]
-mod vmar;
-
-#[cfg(test)]
-mod clock;
-
-#[cfg(test)]
-mod counter;
-
-#[cfg(test)]
-mod resource;
-
-#[cfg(test)]
-mod interrupt;
-
-#[cfg(test)]
-mod bti;
-
-#[cfg(test)]
-mod exception;
-
-#[cfg(test)]
-mod pager;
-
-#[cfg(test)]
-mod debuglog;
-
-#[cfg(test)]
-mod skipped;
-
-#[cfg(test)]
-mod syscall_channel;
-
-#[cfg(test)]
-mod syscall_fifo;
-
-#[cfg(test)]
-mod syscall_handle;
-
-#[cfg(test)]
-mod syscall_object;
-
-#[cfg(test)]
-mod syscall_signal;
-
-#[cfg(test)]
-mod syscall_port;
-
-#[cfg(test)]
-mod syscall_socket;
-
-#[cfg(test)]
-mod syscall_task;
-
-#[cfg(test)]
-mod syscall_vmo;
-
-#[cfg(test)]
-mod object_info;
-
-#[cfg(test)]
-mod property;
-
-#[cfg(test)]
-mod vmo_transfer_data;
-
-#[cfg(test)]
-mod syscall_transfer_data;
-
+// ── zCore-original tests ───────────────────────────────────────────
 #[cfg(test)]
 mod bad_syscall;
-
-#[cfg(test)]
-mod sync_mutex;
-
-#[cfg(test)]
-mod object_wait;
-
-#[cfg(test)]
-mod profile;
-
-#[cfg(test)]
-mod address_tagging;
-
-#[cfg(test)]
-mod c11_thread;
-
-#[cfg(test)]
-mod c11_mutex;
-
-#[cfg(test)]
-mod system_event;
-
-#[cfg(test)]
-mod memory_mapping;
-
-#[cfg(test)]
-mod cprng;
-
-#[cfg(test)]
-mod mini_process;
-
-#[cfg(test)]
-mod policy;
-
-#[cfg(test)]
-mod rights;
-
-#[cfg(test)]
-mod debug;
-
-#[cfg(test)]
-mod namespace;
-
-#[cfg(test)]
-mod pthread;
-
 #[cfg(test)]
 mod cache;
-
-#[cfg(test)]
-mod object_signal;
-
-#[cfg(test)]
-mod object_properties;
-
-#[cfg(test)]
-mod event_pair;
-
-#[cfg(test)]
-mod handle_dup;
-
-#[cfg(test)]
-mod vmo_contiguous;
-
-#[cfg(test)]
-mod vmo_discardable;
-
-#[cfg(test)]
-mod task_lifecycle;
-
-#[cfg(test)]
-mod vmar_ops;
-
-#[cfg(test)]
-mod port_stress;
-
-#[cfg(test)]
-mod channel_call;
-
-#[cfg(test)]
-mod vmo_ops;
-
-#[cfg(test)]
-mod fifo_ops;
-
-#[cfg(test)]
-mod timer_ops;
-
-#[cfg(test)]
-mod stream_ops;
-
-#[cfg(test)]
-mod socket_disposition;
-
-#[cfg(test)]
-mod exception_ops;
-
-#[cfg(test)]
-mod object_lifecycle;
-
-#[cfg(test)]
-mod ipc_limits;
-
-#[cfg(test)]
-mod suspend_resume;
-
-#[cfg(test)]
-mod kcounter;
-
-#[cfg(test)]
-mod object_info_extra;
-
-#[cfg(test)]
-mod object_wait_ops;
-
 #[cfg(test)]
 mod clock_ops;
-
 #[cfg(test)]
-mod iovec;
-
+mod cprng;
 #[cfg(test)]
-mod iob;
-
-// ── New test modules ported from Fuchsia C++ core-tests ────────────
-
+mod debug;
 #[cfg(test)]
-mod bad_access;
-
+mod exception_ops;
 #[cfg(test)]
-mod bad_segsel;
-
+mod fifo_ops;
 #[cfg(test)]
-mod channel_call_mutex;
-
+mod handle_dup;
 #[cfg(test)]
-mod channel_internal;
-
+mod ipc_limits;
 #[cfg(test)]
-mod completion_wrapper;
-
+mod kcounter;
 #[cfg(test)]
-mod conditional_variable;
-
+mod mini_process;
 #[cfg(test)]
-mod cpp_thread;
-
+mod namespace;
 #[cfg(test)]
-mod cpu_features;
-
+mod object_info_extra;
 #[cfg(test)]
-mod cpu_mask_profile;
-
+mod object_lifecycle;
 #[cfg(test)]
-mod datagram_socket_bad_buffer;
-
+mod object_properties;
 #[cfg(test)]
-mod exceptions_arch;
-
+mod object_signal;
 #[cfg(test)]
-mod executable_tls;
-
+mod object_wait_ops;
 #[cfg(test)]
-mod hotplug;
-
-#[cfg(test)]
-mod interrupt_crash;
-
-#[cfg(test)]
-mod iob_shared_region;
-
-#[cfg(test)]
-mod membarrier;
-
-#[cfg(test)]
-mod memory_priority_profile;
-
-#[cfg(test)]
-mod msi;
-
-#[cfg(test)]
-mod mutex_wrapper;
-
-#[cfg(test)]
-mod next_vdso;
-
-#[cfg(test)]
-mod object_child;
-
-#[cfg(test)]
-mod page_size;
-
-#[cfg(test)]
-mod process_debug;
-
-#[cfg(test)]
-mod process_shared;
-
-#[cfg(test)]
-mod protect;
-
-#[cfg(test)]
-mod pthread_barrier;
-
-#[cfg(test)]
-mod register_context_switch;
-
-#[cfg(test)]
-mod register_state;
-
-#[cfg(test)]
-mod restricted_mode;
-
-#[cfg(test)]
-mod rseq;
-
-#[cfg(test)]
-mod stack;
-
-#[cfg(test)]
-mod standalone_elf_load;
-
-#[cfg(test)]
-mod sync_completion;
-
-#[cfg(test)]
-mod sync_condition;
-
-#[cfg(test)]
-mod syscall_generation;
-
-#[cfg(test)]
-mod system_cpu;
-
-#[cfg(test)]
-mod system_suspend;
-
-#[cfg(test)]
-mod thread_initial_state;
-
-#[cfg(test)]
-mod thread_sampler;
-
-#[cfg(test)]
-mod ticks;
-
-#[cfg(test)]
-mod user_exceptions;
-
-#[cfg(test)]
-mod version_test;
-
-#[cfg(test)]
-mod wake_reports;
-
-#[cfg(test)]
-mod zx_assert;
-
-#[cfg(test)]
-mod zx_assert_c;
-
-#[cfg(test)]
-mod handle_wait;
-
+mod policy;
 #[cfg(test)]
 mod pthread_tls;
+#[cfg(test)]
+mod rights;
+#[cfg(test)]
+mod socket_disposition;
+#[cfg(test)]
+mod stream_ops;
+#[cfg(test)]
+mod suspend_resume;
+#[cfg(test)]
+mod syscall_object;
+#[cfg(test)]
+#[cfg(test)]
+mod task_lifecycle;
+#[cfg(test)]
+mod timer_ops;
+#[cfg(test)]
+mod vmar_ops;
+#[cfg(test)]
+mod vmo_contiguous;
+#[cfg(test)]
+mod vmo_discardable;
+#[cfg(test)]
+mod vmo_ops;

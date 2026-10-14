@@ -307,7 +307,6 @@ async fn requeue() {
 // ── Bulk-ported futex tests (batch 2) ───────────────────────────────
 //
 // These tests require multi-threaded async runtime for concurrent
-// wait/wake/requeue operations. All are marked #[ignore].
 
 /// C++: TEST(FutexTest, RequeueValueMismatch)
 ///
@@ -431,7 +430,6 @@ async fn requeue_unqueued_on_timeout() {
 /// with the futex_wait syscall restart mechanism. Validated via
 /// QEMU core-tests.
 #[test]
-#[ignore = "requires real thread suspension during futex wait (bare-metal only)"]
 fn thread_suspended() {
     // Thread suspension during futex_wait requires the VDSO syscall
     // restart mechanism which only exists in bare-metal mode.
