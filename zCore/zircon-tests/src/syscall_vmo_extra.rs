@@ -59,7 +59,9 @@ async fn read_without_read_right() {
     ));
 
     let mut buf = [0u8; 8];
-    let result = sc.sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, 8).await;
+    let result = sc
+        .sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, 8)
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 

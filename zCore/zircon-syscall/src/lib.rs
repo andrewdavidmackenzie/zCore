@@ -379,7 +379,10 @@ impl Syscall<'_> {
             }
             Sys::FUTEX_GET_OWNER => self.sys_futex_get_owner(a0.into(), a1.into()),
             Sys::VMO_CREATE => self.sys_vmo_create(a0 as _, a1 as _, a2.into()),
-            Sys::VMO_READ => self.sys_vmo_read(a0 as _, a1.into(), a2 as _, a3 as _).await,
+            Sys::VMO_READ => {
+                self.sys_vmo_read(a0 as _, a1.into(), a2 as _, a3 as _)
+                    .await
+            }
             Sys::VMO_WRITE => self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _),
             Sys::VMO_GET_SIZE => self.sys_vmo_get_size(a0 as _, a1.into()),
             Sys::VMO_SET_SIZE => self.sys_vmo_set_size(a0 as _, a1 as _),

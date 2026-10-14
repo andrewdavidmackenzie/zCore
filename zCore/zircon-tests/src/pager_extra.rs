@@ -3434,7 +3434,10 @@ async fn user_pager_helper_multiple_vmos() {
     let mut buf2 = [0u8; 8];
     vmo1.read(0, &mut buf1).unwrap();
     vmo2.read(0, &mut buf2).unwrap();
-    assert_ne!(buf1, buf2, "different keys should produce different content");
+    assert_ne!(
+        buf1, buf2,
+        "different keys should produce different content"
+    );
 }
 
 /// UserPagerHelper detach_vmo works.

@@ -75,7 +75,9 @@ async fn read_write_out_of_range() {
 
     // Read past end
     let mut buf = vec![0u8; PAGE_SIZE + 1];
-    let result = sc.sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, buf.len()).await;
+    let result = sc
+        .sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, buf.len())
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 

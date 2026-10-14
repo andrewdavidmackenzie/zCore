@@ -845,9 +845,7 @@ impl EchoServer {
 // pages with auto-generated content, waiting for page requests, and
 // failing pages.
 
-use zircon_object::signal::{
-    Pager, Port, PayloadRepr, PortPacketRepr, ZX_PAGER_VMO_READ,
-};
+use zircon_object::signal::{Pager, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_READ};
 use zircon_object::vm::{VmObject, PAGE_SIZE};
 use zircon_object::ZxError;
 
@@ -935,13 +933,7 @@ impl UserPagerHelper {
     /// 8-byte word, matching the C++ `GenerateBufferContents` pattern.
     ///
     /// C++ equivalent: `UserPager::SupplyPages(vmo, page_offset, page_count)`
-    pub fn supply_pages(
-        &self,
-        vmo: &Arc<VmObject>,
-        key: u64,
-        page_offset: u64,
-        page_count: u64,
-    ) {
+    pub fn supply_pages(&self, vmo: &Arc<VmObject>, key: u64, page_offset: u64, page_count: u64) {
         let src = VmObject::new_paged(page_count as usize);
         for i in 0..page_count {
             let page_index = page_offset + i;
@@ -973,10 +965,7 @@ impl UserPagerHelper {
                 );
                 (repr.key, pr.offset, pr.length)
             }
-            _ => panic!(
-                "expected PageRequest packet, got {:?}",
-                packet.type_
-            ),
+            _ => panic!("expected PageRequest packet, got {:?}", packet.type_),
         }
     }
 
@@ -1000,13 +989,7 @@ impl UserPagerHelper {
     /// Fail pages in the specified range.
     ///
     /// C++ equivalent: `UserPager::FailPages(vmo, page_offset, page_count, error)`
-    pub fn fail_pages(
-        &self,
-        vmo: &Arc<VmObject>,
-        page_offset: u64,
-        page_count: u64,
-        err: ZxError,
-    ) {
+    pub fn fail_pages(&self, vmo: &Arc<VmObject>, page_offset: u64, page_count: u64, err: ZxError) {
         let byte_offset = page_offset * PAGE_SIZE as u64;
         let byte_length = page_count * PAGE_SIZE as u64;
         // Map ZxError to the Fuchsia error code expected by op_range.

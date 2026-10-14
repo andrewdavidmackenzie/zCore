@@ -138,7 +138,9 @@ async fn basic_transfer() {
     // Read src first page — should be zeroed.
     let mut read_buf2 = vec![0xFFu8; PAGE_SIZE];
     let out_ptr2 = UserOutPtr::from(read_buf2.as_mut_ptr() as usize);
-    sc.sys_vmo_read(src_h, out_ptr2, 0, PAGE_SIZE).await.unwrap();
+    sc.sys_vmo_read(src_h, out_ptr2, 0, PAGE_SIZE)
+        .await
+        .unwrap();
     assert_eq!(
         read_buf2,
         vec![0u8; PAGE_SIZE],
