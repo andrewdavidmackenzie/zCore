@@ -45,7 +45,6 @@ fn channel_call_chain_sequential() {
 /// on the remote endpoint. This requires concurrent thread
 /// execution with blocking channel_call semantics.
 #[test]
-#[ignore = "requires std::thread synchronization"]
 fn mutex_held_across_call_chain() {
     let _ctx = TestContext::new();
     // In Fuchsia:

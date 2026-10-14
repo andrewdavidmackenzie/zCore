@@ -277,7 +277,6 @@ fn pin_encode_addrs_count() {
 /// directly; it's checked in `sys_bti_pin` when validating the
 /// user-provided address buffer size.
 #[test]
-#[ignore = "requires syscall-level address buffer size validation"]
 fn pin_too_many_addresses() {
     let _ctx = TestContext::new();
     // In Fuchsia:
