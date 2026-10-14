@@ -27,7 +27,7 @@ fn get_default_name() {
     let event = Event::new();
     // Default name is empty
     let name = event.name();
-    assert!(name.is_empty() || name == "");
+    assert!(name.is_empty() || name.is_empty());
 }
 
 ///

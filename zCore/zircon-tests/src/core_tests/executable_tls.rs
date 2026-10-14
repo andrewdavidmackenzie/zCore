@@ -39,7 +39,7 @@ thread_local! {
 const ARRAY_SIZE: usize = 1024;
 thread_local! {
     static TLS_ARRAY: core::cell::RefCell<[u8; ARRAY_SIZE]> =
-        core::cell::RefCell::new([0xFF; ARRAY_SIZE]);
+        const { core::cell::RefCell::new([0xFF; ARRAY_SIZE]) };
 }
 
 // C++ thread_local uint8_t big_array[1 << 20]; (zero-initialized)
@@ -64,7 +64,7 @@ thread_local! {
 // C++ thread_local uint8_t spam_array[1024] = {0xff repeated};
 thread_local! {
     static TLS_SPAM_ARRAY: core::cell::RefCell<[u8; ARRAY_SIZE]> =
-        core::cell::RefCell::new([0xFF; ARRAY_SIZE]);
+        const { core::cell::RefCell::new([0xFF; ARRAY_SIZE]) };
 }
 
 /// Collect basic initializer values from the current thread's TLS.
@@ -104,7 +104,7 @@ fn get_basic_initializers() -> BasicInitializerInfo {
 }
 
 fn verify_basic_initializers(info: &BasicInitializerInfo, error_message: &str) {
-    assert_eq!(info.u1, true, "{}", error_message);
+    assert!(info.u1, "{}", error_message);
     assert_eq!(info.u8, u8::MAX, "{}", error_message);
     assert_eq!(info.u16, u16::MAX, "{}", error_message);
     assert_eq!(info.u32, u32::MAX, "{}", error_message);
@@ -125,7 +125,7 @@ fn verify_basic_initializers(info: &BasicInitializerInfo, error_message: &str) {
 fn basic_initalizers_in_thread() {
     let handle = std::thread::Builder::new()
         .name("GetInitializers".into())
-        .spawn(|| get_basic_initializers())
+        .spawn(get_basic_initializers)
         .expect("unable to create GetInitializers thread");
 
     let info = handle
