@@ -82,7 +82,7 @@ async fn handles_success_case() {
 
     // Create an event and send it
     let event = Event::new();
-    let event_koid = event.id();
+    let _event_koid = event.id();
     let handle = Handle::new(event, zircon_object::object::Rights::DEFAULT_EVENT);
 
     let reply = echo
