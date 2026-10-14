@@ -836,6 +836,217 @@ impl EchoServer {
     }
 }
 
+// ── UserPagerHelper ──────────────────────────────────────────────────
+//
+// Rust equivalent of the C++ UserPager test helper class from
+// zircon/system/utest/core/pager/userpager.h.
+//
+// Provides a convenient API for creating pager-backed VMOs, supplying
+// pages with auto-generated content, waiting for page requests, and
+// failing pages.
+
+use zircon_object::signal::{
+    Pager, Port, PayloadRepr, PortPacketRepr, ZX_PAGER_VMO_READ,
+};
+use zircon_object::vm::{VmObject, PAGE_SIZE};
+use zircon_object::ZxError;
+
+/// Test helper that wraps a Pager + Port pair and provides convenient
+/// methods for creating pager-backed VMOs, supplying pages, waiting
+/// for page requests, and failing pages.
+///
+/// Rust equivalent of the C++ `UserPager` class in
+/// `zircon/system/utest/core/pager/userpager.h`.
+pub struct UserPagerHelper {
+    pub pager: Arc<Pager>,
+    pub port: Arc<Port>,
+    next_key: u64,
+}
+
+impl UserPagerHelper {
+    /// Create a new UserPagerHelper with a fresh Pager and Port.
+    ///
+    /// C++ equivalent: `UserPager::Init()`
+    pub fn new() -> Self {
+        UserPagerHelper {
+            pager: Pager::new(),
+            port: Port::new(0).unwrap(),
+            next_key: 2, // Start at 2, matching C++ kShutdownKey + 1
+        }
+    }
+
+    /// Create a pager-backed VMO with `num_pages` pages.
+    ///
+    /// Returns `(vmo, key)` where `key` is the port packet key used
+    /// for page request identification.
+    ///
+    /// C++ equivalent: `UserPager::CreateVmo(num_pages, &vmo)`
+    pub fn create_vmo(&mut self, num_pages: usize) -> (Arc<VmObject>, u64) {
+        let key = self.next_key;
+        self.next_key += 1;
+        let size = (num_pages * PAGE_SIZE) as u64;
+        let vmo = self
+            .pager
+            .create_vmo(0, &self.port, key, size)
+            .expect("UserPagerHelper::create_vmo failed");
+        (vmo, key)
+    }
+
+    /// Create a pager-backed VMO with the given options and `num_pages` pages.
+    ///
+    /// Returns `(vmo, key)` where `key` is the port packet key.
+    ///
+    /// C++ equivalent: `UserPager::CreateVmoWithOptions(num_pages, options, &vmo)`
+    pub fn create_vmo_with_options(
+        &mut self,
+        num_pages: usize,
+        options: u32,
+    ) -> (Arc<VmObject>, u64) {
+        let key = self.next_key;
+        self.next_key += 1;
+        let size = (num_pages * PAGE_SIZE) as u64;
+        let vmo = self
+            .pager
+            .create_vmo(options, &self.port, key, size)
+            .expect("UserPagerHelper::create_vmo_with_options failed");
+        (vmo, key)
+    }
+
+    /// Generate buffer contents for a given key and page offset.
+    ///
+    /// C++ equivalent: `Vmo::GenerateBufferContents()`
+    ///
+    /// The C++ version fills each `u64` in the page with
+    /// `(key << 32) | page_offset`. We replicate that pattern:
+    /// each 8-byte word in the page is set to `(key << 32) | page_index`.
+    fn generate_page_content(key: u64, page_index: u64) -> alloc::vec::Vec<u8> {
+        let pattern = (key << 32) | page_index;
+        let words_per_page = PAGE_SIZE / 8;
+        let mut buf = alloc::vec::Vec::with_capacity(PAGE_SIZE);
+        for _ in 0..words_per_page {
+            buf.extend_from_slice(&pattern.to_ne_bytes());
+        }
+        buf
+    }
+
+    /// Supply pages to a VMO range with auto-generated content.
+    ///
+    /// Each page is filled with `(key << 32) | page_index` in every
+    /// 8-byte word, matching the C++ `GenerateBufferContents` pattern.
+    ///
+    /// C++ equivalent: `UserPager::SupplyPages(vmo, page_offset, page_count)`
+    pub fn supply_pages(
+        &self,
+        vmo: &Arc<VmObject>,
+        key: u64,
+        page_offset: u64,
+        page_count: u64,
+    ) {
+        let src = VmObject::new_paged(page_count as usize);
+        for i in 0..page_count {
+            let page_index = page_offset + i;
+            let content = Self::generate_page_content(key, page_index);
+            src.write(i as usize * PAGE_SIZE, &content)
+                .expect("UserPagerHelper: failed to write to source VMO");
+        }
+        let byte_offset = page_offset * PAGE_SIZE as u64;
+        let byte_length = page_count * PAGE_SIZE as u64;
+        self.pager
+            .supply_pages(vmo, byte_offset, byte_length, &src, 0)
+            .expect("UserPagerHelper::supply_pages failed");
+    }
+
+    /// Wait for a `ZX_PAGER_VMO_READ` request on the port.
+    ///
+    /// Returns `(key, offset, length)` from the page request packet.
+    ///
+    /// C++ equivalent: `UserPager::GetPageReadRequest()`
+    pub async fn wait_for_page_read(&self) -> (u64, u64, u64) {
+        let packet = self.port.wait().await;
+        let repr = PortPacketRepr::from(&packet);
+        match repr.data {
+            PayloadRepr::PageRequest(pr) => {
+                assert_eq!(
+                    pr.command, ZX_PAGER_VMO_READ,
+                    "expected ZX_PAGER_VMO_READ, got command {}",
+                    pr.command
+                );
+                (repr.key, pr.offset, pr.length)
+            }
+            _ => panic!(
+                "expected PageRequest packet, got {:?}",
+                packet.type_
+            ),
+        }
+    }
+
+    /// Supply pages in response to a page read request (convenience).
+    ///
+    /// Waits for a read request, then supplies the requested pages
+    /// with auto-generated content.
+    ///
+    /// C++ equivalent: combination of `GetPageReadRequest` + `SupplyPages`
+    pub async fn handle_page_read(&self, vmo: &Arc<VmObject>, key: u64) {
+        let (req_key, offset, length) = self.wait_for_page_read().await;
+        assert_eq!(
+            req_key, key,
+            "page read key mismatch: expected {key}, got {req_key}"
+        );
+        let page_offset = offset / PAGE_SIZE as u64;
+        let page_count = length / PAGE_SIZE as u64;
+        self.supply_pages(vmo, key, page_offset, page_count);
+    }
+
+    /// Fail pages in the specified range.
+    ///
+    /// C++ equivalent: `UserPager::FailPages(vmo, page_offset, page_count, error)`
+    pub fn fail_pages(
+        &self,
+        vmo: &Arc<VmObject>,
+        page_offset: u64,
+        page_count: u64,
+        err: ZxError,
+    ) {
+        let byte_offset = page_offset * PAGE_SIZE as u64;
+        let byte_length = page_count * PAGE_SIZE as u64;
+        // Map ZxError to the Fuchsia error code expected by op_range.
+        let data = match err {
+            ZxError::NO_SPACE => (-54i32) as u64,
+            ZxError::IO => (-5i32) as u64,
+            ZxError::IO_DATA_INTEGRITY => (-29i32) as u64,
+            ZxError::BAD_STATE => (-45i32) as u64,
+            _ => (-5i32) as u64, // default to ZX_ERR_IO
+        };
+        // ZX_PAGER_OP_FAIL = 1
+        self.pager
+            .op_range(1, vmo, byte_offset, byte_length, data)
+            .expect("UserPagerHelper::fail_pages failed");
+    }
+
+    /// Detach a VMO from the pager.
+    ///
+    /// C++ equivalent: `UserPager::DetachVmo(vmo)`
+    pub fn detach_vmo(&self, vmo: &Arc<VmObject>) {
+        self.pager
+            .detach_vmo(vmo)
+            .expect("UserPagerHelper::detach_vmo failed");
+    }
+
+    /// Verify the content of a VMO page matches the expected pattern.
+    ///
+    /// Returns `true` if the page content matches `generate_page_content(key, page_index)`.
+    ///
+    /// C++ equivalent: `Vmo::CheckVmo(page_offset, page_count)`
+    pub fn check_page(vmo: &Arc<VmObject>, key: u64, page_index: u64) -> bool {
+        let expected = Self::generate_page_content(key, page_index);
+        let mut buf = alloc::vec![0u8; PAGE_SIZE];
+        if vmo.read(page_index as usize * PAGE_SIZE, &mut buf).is_err() {
+            return false;
+        }
+        buf == expected
+    }
+}
+
 /// A test context providing a Zircon process and current thread.
 pub struct TestContext {
     pub proc: Arc<Process>,
