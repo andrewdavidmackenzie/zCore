@@ -8,8 +8,15 @@ pub fn timer_now() -> Duration {
 }
 
 pub fn init() {
-    // Enable the local APIC timer directly. This was previously called
-    // through the generic IrqScheme trait, but enabling the APIC timer
-    // is inherently x86-specific and doesn't belong in a generic trait.
+    // Configure and enable the local APIC timer. The timer registers
+    // (mode, divide, initial count) are per-CPU — each core must set
+    // them independently. The BSP sets them first in drivers.rs during
+    // driver init; APs call this during secondary_init via timer_enable().
+    use x2apic::lapic::{TimerDivide, TimerMode};
+    let freq = super::cpu::cpu_frequency();
+    let cycles = freq as u64 * 1_000_000 / super::super::timer::TICKS_PER_SEC;
+    Apic::local_apic().set_timer_mode(TimerMode::Periodic);
+    Apic::local_apic().set_timer_divide(TimerDivide::Div1);
+    Apic::local_apic().set_timer_initial(cycles as u32);
     Apic::local_apic().enable_timer();
 }
