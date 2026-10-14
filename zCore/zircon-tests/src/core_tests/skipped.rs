@@ -28,6 +28,7 @@ extern crate alloc;
 /// Verifies the kernel does not leak handle objects when the
 /// copy-out to userspace faults.
 #[test]
+#[ignore = "requires bad pointer fault handling"]
 fn channel_read_fault_does_not_leak_handles() {
     let _ctx = TestContext::new();
     // In Fuchsia, kBadAddress = 0xfffffffffffffff0 (kernel space) is
@@ -48,6 +49,7 @@ fn channel_read_fault_does_not_leak_handles() {
 ///
 /// Verifies no spurious READABLE signal when writer and reader race.
 #[test]
+#[ignore = "requires concurrent Zircon threads"]
 fn channel_no_spurious_readable_signal_when_racing() {
     let _ctx = TestContext::new();
     // Requires two threads: a writer spinning on arch::Yield() and a
@@ -64,6 +66,7 @@ fn channel_no_spurious_readable_signal_when_racing() {
 ///   - No duplicates
 ///   - Each reader's values are monotonically increasing
 #[test]
+#[ignore = "requires concurrent Zircon threads"]
 fn channel_concurrent_reads_consume_unique_elements() {
     let _ctx = TestContext::new();
     // Requires two concurrent reader threads (std::jthread) and an
@@ -80,6 +83,7 @@ fn channel_concurrent_reads_consume_unique_elements() {
 ///   - Worker received 0 bytes from remote_2
 ///   - Event was signaled with ZX_USER_SIGNAL_0
 #[test]
+#[ignore = "requires concurrent Zircon threads"]
 fn channel_wait_many_is_signaled_on_any_element_write() {
     let _ctx = TestContext::new();
     // Requires a worker thread doing object_wait_many on two
@@ -97,6 +101,7 @@ fn channel_wait_many_is_signaled_on_any_element_write() {
 ///
 /// Verifies write_count > 1000 before the exception.
 #[test]
+#[ignore = "requires policy exception infrastructure"]
 fn channel_full_exception() {
     let _ctx = TestContext::new();
     // In Fuchsia:
@@ -120,6 +125,7 @@ fn channel_full_exception() {
 /// Main thread reads the exception from the process exception channel,
 /// verifies the exception type and synth_code, then resumes the thread.
 #[test]
+#[ignore = "requires policy exception infrastructure"]
 fn port_queue_packet_limit_exceeded_generates_policy_exception() {
     let _ctx = TestContext::new();
     // In Fuchsia:
@@ -140,6 +146,7 @@ fn port_queue_packet_limit_exceeded_generates_policy_exception() {
 /// In zCore, the allocator panics on OOM instead of returning
 /// ZX_ERR_NO_MEMORY.
 #[test]
+#[ignore = "requires OOM handling (kernel panics instead of returning NO_MEMORY)"]
 fn port_too_many_observers() {
     let _ctx = TestContext::new();
     // In Fuchsia:
