@@ -12,7 +12,10 @@ impl Syscall<'_> {
         }
         let pager = Pager::new();
         let proc = self.thread.proc();
-        let handle = proc.add_handle(Handle::new(pager, Rights::DEFAULT_CHANNEL));
+        // ZX_DEFAULT_PAGER_RIGHTS = DUPLICATE | TRANSFER | INSPECT | MANAGE_VMO
+        let pager_rights =
+            Rights::DUPLICATE | Rights::TRANSFER | Rights::INSPECT | Rights::MANAGE_VMO;
+        let handle = proc.add_handle(Handle::new(pager, pager_rights));
         out.write(handle)?;
         Ok(())
     }
@@ -98,8 +101,8 @@ impl Syscall<'_> {
             pager_handle, op, vmo_handle, offset, length, data
         );
         let proc = self.thread.proc();
-        let pager = proc.get_object::<Pager>(pager_handle)?;
-        let vmo = proc.get_object::<VmObject>(vmo_handle)?;
+        let pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::MANAGE_VMO)?;
+        let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::WRITE)?;
         pager.op_range(op, &vmo, offset, length, data)
     }
 
@@ -125,13 +128,22 @@ impl Syscall<'_> {
             pager_handle, vmo_handle, offset, length
         );
         let proc = self.thread.proc();
-        let _pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::default())?;
-        let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::default())?;
+        // Pager needs MANAGE_VMO right.
+        let pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::MANAGE_VMO)?;
+        // VMO needs READ right.
+        let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::READ)?;
         if !vmo.is_pager_backed() {
             return Err(ZxError::INVALID_ARGS);
         }
+        // VMO must belong to this pager.
+        if !pager.owns_vmo(&vmo) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         // Validate range doesn't overflow.
-        let _query_end = offset.checked_add(length).ok_or(ZxError::OUT_OF_RANGE)?;
+        let query_end = offset.checked_add(length).ok_or(ZxError::OUT_OF_RANGE)?;
+        if query_end as usize > vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
 
         let ranges = vmo.query_dirty_ranges(offset as usize, length as usize);
         let avail_count = ranges.len();
@@ -141,6 +153,10 @@ impl Syscall<'_> {
         let max_entries = buffer_size / RANGE_SIZE;
         let write_count = avail_count.min(max_entries);
 
+        // Null buffer with non-zero buffer_size is invalid if there are ranges.
+        if buffer == 0 && buffer_size > 0 && avail_count > 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         if write_count > 0 && buffer != 0 {
             let mut out = UserOutPtr::<u8>::from(buffer);
             for &(off, len, opts) in ranges.iter().take(write_count) {
@@ -179,17 +195,34 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        let _pager = proc.get_object::<Pager>(pager_handle)?;
-        let _vmo = proc.get_object::<VmObject>(vmo_handle)?;
+        // Pager needs MANAGE_VMO right.
+        let pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::MANAGE_VMO)?;
+        // VMO needs READ right.
+        let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::READ)?;
+        if !vmo.is_pager_backed() {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // VMO must belong to this pager.
+        if !pager.owns_vmo(&vmo) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         // zx_pager_vmo_stats_t is { uint32_t modified; }
         if buffer_size < 4 {
             return Err(ZxError::BUFFER_TOO_SMALL);
         }
-        // Without dirty tracking, report not modified.
-        // TODO: track per-VMO modified state and report
-        // ZX_PAGER_VMO_STATS_MODIFIED (1) after writes.
+        // Null buffer is invalid.
+        if buffer == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let reset = options & ZX_PAGER_RESET_VMO_STATS != 0;
+        let modified = vmo.query_modified(reset);
+        const ZX_PAGER_VMO_STATS_MODIFIED: u32 = 1;
         let mut stats_ptr = UserOutPtr::<u32>::from(buffer);
-        stats_ptr.write(0)?;
+        stats_ptr.write(if modified {
+            ZX_PAGER_VMO_STATS_MODIFIED
+        } else {
+            0
+        })?;
         Ok(())
     }
 }
