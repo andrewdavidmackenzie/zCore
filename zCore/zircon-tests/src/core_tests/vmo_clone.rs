@@ -232,14 +232,20 @@ fn not_immutable_missing_snapshot() {
 }
 
 /// C++: TEST(VmoCloneTestCase, SizeAlign)
-/// Snapshot clones with various page-aligned sizes should report the
-/// correct size. In Fuchsia, non-page-aligned sizes are rounded up; in
-/// zCore, create_child requires page-aligned lengths, so we test the
-/// page-aligned subset.
+/// Snapshot clones with various sizes should report the correct
+/// (page-rounded) size. The C++ test iterates sizes 0..4*PAGE_SIZE
+/// and verifies each clone rounds up to the nearest page boundary.
+/// At the kernel-object level, create_child asserts page-aligned
+/// lengths, so we round up before calling (matching what the syscall
+/// layer does with roundup_pages).
 #[test]
 fn size_align() {
+    use zircon_object::vm::roundup_pages;
+
     let _ctx = TestContext::new();
 
+    // C++ uses a 0-page parent; we need at least 4 pages to cover
+    // the requested sizes after rounding.
     let parent = VmObject::new_paged(4);
 
     // Test page-aligned sizes from 0 to 4*PAGE_SIZE.
@@ -254,4 +260,32 @@ fn size_align() {
             s
         );
     }
+
+    // Test non-page-aligned sizes: 1, PAGE_SIZE-1, PAGE_SIZE+1.
+    // The syscall layer rounds up via roundup_pages before calling
+    // create_child. We replicate that rounding here.
+    for raw_size in [1usize, PAGE_SIZE - 1, PAGE_SIZE + 1] {
+        let rounded = roundup_pages(raw_size);
+        let child = parent.create_child(false, 0, rounded).unwrap();
+        assert_eq!(
+            child.len(),
+            rounded,
+            "clone with raw size {} should round up to {}",
+            raw_size,
+            rounded
+        );
+        // Verify the rounded size is a page multiple.
+        assert_eq!(
+            rounded % PAGE_SIZE,
+            0,
+            "rounded size {} should be page-aligned",
+            rounded
+        );
+    }
+
+    // PAGE_SIZE itself should not change after rounding.
+    let rounded_page = roundup_pages(PAGE_SIZE);
+    assert_eq!(rounded_page, PAGE_SIZE);
+    let child = parent.create_child(false, 0, rounded_page).unwrap();
+    assert_eq!(child.len(), PAGE_SIZE);
 }
