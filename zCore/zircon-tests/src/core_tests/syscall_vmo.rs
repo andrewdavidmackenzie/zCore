@@ -36,8 +36,8 @@ fn create_via_syscall() {
 }
 
 /// C++: TEST(VmoTestCase, ReadWrite) — syscall level
-#[test]
-fn read_write_via_syscall() {
+#[async_std::test]
+async fn read_write_via_syscall() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, 0);
     let sc = ctx.syscall();
@@ -55,14 +55,15 @@ fn read_write_via_syscall() {
         0,
         data.len(),
     )
+    .await
     .unwrap();
     assert_eq!(&buf[..data.len()], data);
 }
 
 /// C++: TEST(VmoTestCase, ReadWriteRange) — syscall level
 /// Read/write past end returns OUT_OF_RANGE.
-#[test]
-fn read_write_out_of_range() {
+#[async_std::test]
+async fn read_write_out_of_range() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, 0);
     let sc = ctx.syscall();
@@ -74,7 +75,9 @@ fn read_write_out_of_range() {
 
     // Read past end
     let mut buf = vec![0u8; PAGE_SIZE + 1];
-    let result = sc.sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, buf.len());
+    let result = sc
+        .sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, buf.len())
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 
@@ -145,8 +148,8 @@ fn no_resize_via_syscall() {
 }
 
 /// C++: TEST(VmoTestCase, CreateChild — SNAPSHOT) — syscall level
-#[test]
-fn create_child_snapshot() {
+#[async_std::test]
+async fn create_child_snapshot() {
     let ctx = TestContext::new();
     let parent_h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, 0);
     let sc = ctx.syscall();
@@ -169,6 +172,7 @@ fn create_child_snapshot() {
     // Child sees parent data
     let mut buf = [0u8; 1];
     sc.sys_vmo_read(child_h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, 1)
+        .await
         .unwrap();
     assert_eq!(buf[0], 0xAA);
 
@@ -176,6 +180,7 @@ fn create_child_snapshot() {
     sc.sys_vmo_write(parent_h, UserInPtr::from(b"\xBB".as_ptr() as usize), 0, 1)
         .unwrap();
     sc.sys_vmo_read(child_h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, 1)
+        .await
         .unwrap();
     assert_eq!(buf[0], 0xAA); // still old value
 }

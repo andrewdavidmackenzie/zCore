@@ -66,7 +66,11 @@ impl Syscall<'_> {
     }
 
     /// Read bytes from a VMO.
-    pub fn sys_vmo_read(
+    ///
+    /// For pager-backed VMOs, this will demand-page any missing pages
+    /// by sending `ZX_PAGER_VMO_READ` requests to the pager's port
+    /// and waiting for the pager to supply the pages.
+    pub async fn sys_vmo_read(
         &self,
         handle_value: HandleValue,
         mut buf: UserOutPtr<u8>,
@@ -99,9 +103,23 @@ impl Syscall<'_> {
             None => return Err(ZxError::NOT_FOUND),
             _ => {}
         }
-        // Chunked VMO read: read page-sized chunks from the VMO and
-        // copy each chunk to user space, avoiding a single huge kernel
-        // allocation for the entire read.
+        // For pager-backed VMOs, demand-page any missing pages first.
+        // This sends ZX_PAGER_VMO_READ requests and waits for supply_pages.
+        if vmo.has_pager() && buf_size > 0 {
+            let start = offset as usize;
+            let end = start + buf_size;
+            let start_page = start / zircon_object::vm::PAGE_SIZE;
+            let end_page = end.div_ceil(zircon_object::vm::PAGE_SIZE);
+            for page_idx in start_page..end_page {
+                if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
+                    let page_offset = page_idx * zircon_object::vm::PAGE_SIZE;
+                    let _ = vmo.request_pages(page_offset, zircon_object::vm::PAGE_SIZE);
+                    vmo.wait_for_page(page_offset).await?;
+                }
+            }
+        }
+        // All pages are now present. Read page-sized chunks from the VMO
+        // and copy each chunk to user space.
         let mut vmo_offset = offset as usize;
         buf.for_each_chunk_mut::<ZxError>(buf_size, |chunk| {
             vmo.read(vmo_offset, chunk)?;

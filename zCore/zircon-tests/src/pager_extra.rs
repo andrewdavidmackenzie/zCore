@@ -3359,3 +3359,97 @@ fn pager_vmo_op_dont_need() {
     let result = pager.op_range(6, &vmo, 0, PAGE_SIZE as u64, 0);
     assert_eq!(result.err(), Some(zircon_object::ZxError::NOT_SUPPORTED));
 }
+
+// ── UserPagerHelper tests ───────────────────────────────────────────
+
+use crate::helpers::UserPagerHelper;
+
+/// Basic test of UserPagerHelper: create a VMO, supply pages with
+/// auto-generated content, and verify the content matches the
+/// expected pattern.
+#[async_std::test]
+async fn user_pager_helper_basic() {
+    let _ctx = TestContext::new();
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(1);
+
+    // Supply pages synchronously (pre-supply)
+    pager.supply_pages(&vmo, key, 0, 1);
+
+    // Read should work — verify content matches the key pattern
+    let mut buf = [0u8; 8];
+    vmo.read(0, &mut buf).unwrap();
+    // Content is (key << 32) | page_index, where page_index=0
+    let expected = (key << 32) | 0;
+    assert_eq!(
+        u64::from_ne_bytes(buf),
+        expected,
+        "page content should match (key << 32) | page_index"
+    );
+
+    // Verify check_page also passes
+    assert!(
+        UserPagerHelper::check_page(&vmo, key, 0),
+        "check_page should pass for supplied page"
+    );
+}
+
+/// Multi-page UserPagerHelper test: create 4 pages, supply, verify each.
+#[async_std::test]
+async fn user_pager_helper_multi_page() {
+    let _ctx = TestContext::new();
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(4);
+
+    // Supply all 4 pages
+    pager.supply_pages(&vmo, key, 0, 4);
+
+    // Verify each page
+    for page_idx in 0..4u64 {
+        assert!(
+            UserPagerHelper::check_page(&vmo, key, page_idx),
+            "page {page_idx} should match expected content"
+        );
+    }
+}
+
+/// UserPagerHelper with multiple VMOs, each with a unique key.
+#[async_std::test]
+async fn user_pager_helper_multiple_vmos() {
+    let _ctx = TestContext::new();
+    let mut pager = UserPagerHelper::new();
+
+    let (vmo1, key1) = pager.create_vmo(1);
+    let (vmo2, key2) = pager.create_vmo(1);
+    assert_ne!(key1, key2, "keys should be unique");
+
+    pager.supply_pages(&vmo1, key1, 0, 1);
+    pager.supply_pages(&vmo2, key2, 0, 1);
+
+    assert!(UserPagerHelper::check_page(&vmo1, key1, 0));
+    assert!(UserPagerHelper::check_page(&vmo2, key2, 0));
+
+    // Content should differ because keys differ
+    let mut buf1 = [0u8; 8];
+    let mut buf2 = [0u8; 8];
+    vmo1.read(0, &mut buf1).unwrap();
+    vmo2.read(0, &mut buf2).unwrap();
+    assert_ne!(
+        buf1, buf2,
+        "different keys should produce different content"
+    );
+}
+
+/// UserPagerHelper detach_vmo works.
+#[async_std::test]
+async fn user_pager_helper_detach() {
+    let _ctx = TestContext::new();
+    let mut pager = UserPagerHelper::new();
+    let (vmo, key) = pager.create_vmo(1);
+
+    pager.supply_pages(&vmo, key, 0, 1);
+    pager.detach_vmo(&vmo);
+
+    // Data still readable after detach
+    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+}

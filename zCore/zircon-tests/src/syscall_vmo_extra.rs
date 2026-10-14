@@ -24,8 +24,8 @@ fn op_range_commit_decommit() {
         .unwrap();
 }
 
-#[test]
-fn op_range_zero() {
+#[async_std::test]
+async fn op_range_zero() {
     let ctx = TestContext::new();
     let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, 0);
     let sc = ctx.syscall();
@@ -42,12 +42,13 @@ fn op_range_zero() {
     // Read back — should be zeros
     let mut buf = [0xFFu8; 21];
     sc.sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, buf.len())
+        .await
         .unwrap();
     assert!(buf.iter().all(|&b| b == 0));
 }
 
-#[test]
-fn read_without_read_right() {
+#[async_std::test]
+async fn read_without_read_right() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -58,7 +59,9 @@ fn read_without_read_right() {
     ));
 
     let mut buf = [0u8; 8];
-    let result = sc.sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, 8);
+    let result = sc
+        .sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, 8)
+        .await;
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
 
