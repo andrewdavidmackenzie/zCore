@@ -105,7 +105,7 @@ impl Syscall<'_> {
         }
         // For pager-backed VMOs, demand-page any missing pages first.
         // This sends ZX_PAGER_VMO_READ requests and waits for supply_pages.
-        if vmo.has_pager() {
+        if vmo.has_pager() && buf_size > 0 {
             let start = offset as usize;
             let end = start + buf_size;
             let start_page = start / zircon_object::vm::PAGE_SIZE;

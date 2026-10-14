@@ -264,7 +264,7 @@ impl VmObject {
     ///
     /// For non-pager VMOs, this is equivalent to `vmo.read()`.
     pub async fn read_paged(&self, offset: usize, buf: &mut [u8]) -> ZxResult {
-        if !self.has_pager() {
+        if !self.has_pager() || buf.is_empty() {
             return self.read(offset, buf);
         }
         // Demand-page: request and wait for any missing pages in the range.
@@ -274,6 +274,9 @@ impl VmObject {
             if self.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
                 let page_offset = page_idx * PAGE_SIZE;
                 // request_pages sends ZX_PAGER_VMO_READ to the port.
+                // Note: wait_for_page registers the waiter under the VMO
+                // lock and re-checks committed status, so supply_pages
+                // completing between these two calls is handled correctly.
                 let _ = self.request_pages(page_offset, PAGE_SIZE);
                 // Block until the pager calls supply_pages for this page.
                 self.wait_for_page(page_offset).await?;
