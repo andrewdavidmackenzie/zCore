@@ -239,11 +239,10 @@ fn pin_contiguous() {
     pmt.unpin();
 }
 
-/// C++: TEST(Bti, PinTooManyAddresses)
-/// Pin a large VMO and verify encode_addrs returns the correct
+/// Pin a moderate VMO and verify encode_addrs returns the correct
 /// number of page addresses.
 #[test]
-fn pin_too_many_addresses() {
+fn pin_encode_addrs_count() {
     let _ctx = TestContext::new();
     let (_iommu, bti) = create_iommu_bti();
 
@@ -264,6 +263,30 @@ fn pin_too_many_addresses() {
     assert_eq!(addrs.len(), pages);
 
     pmt.unpin();
+}
+
+/// C++: TEST(Bti, PinTooManyAddresses)
+///
+/// In C++, creates a VMO with page_count = (page_size * 64) / 8 + 1
+/// pages (just over the limit where the address output buffer would
+/// exceed the maximum allowed copy-out size). The syscall layer
+/// rejects the pin with ZX_ERR_INVALID_ARGS.
+///
+/// This is a syscall-level validation — the kernel object API
+/// (`BusTransactionInitiator::pin`) doesn't enforce this limit
+/// directly; it's checked in `sys_bti_pin` when validating the
+/// user-provided address buffer size.
+#[test]
+#[ignore = "requires syscall-level address buffer size validation"]
+fn pin_too_many_addresses() {
+    let _ctx = TestContext::new();
+    // In Fuchsia:
+    //   const page_size = zx_system_get_page_size();
+    //   kPageCount = (page_size * 64) / sizeof(uint64_t) + 1;
+    //   kVmoSize = page_size * kPageCount;
+    //   vmo::create(kVmoSize, 0, &vmo);
+    //   bti.pin(ZX_BTI_PERM_READ, vmo, 0, kVmoSize, paddrs, kPageCount, &pmt)
+    //     → ZX_ERR_INVALID_ARGS
 }
 
 /// C++: TEST(Bti, QuarantineDisallowsPin)

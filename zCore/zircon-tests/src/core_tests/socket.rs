@@ -88,7 +88,7 @@ fn peeking_leaves_data() {
     assert_eq!(buf, [0xDE, 0xAD, 0xBE, 0xEF]);
 
     // Data still there — remote still readable
-    assert!(remote.signal().contains(Signal::READABLE));
+    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
 
     // Consume
     let n = remote.read(false, &mut buf).unwrap();
@@ -96,7 +96,7 @@ fn peeking_leaves_data() {
     assert_eq!(buf, [0xDE, 0xAD, 0xBE, 0xEF]);
 
     // No longer readable
-    assert!(!remote.signal().contains(Signal::READABLE));
+    assert_eq!(remote.signal(), Signal::WRITABLE);
 }
 
 /// C++: TEST(SocketTest, PeekingIntoEmpty)
@@ -118,28 +118,26 @@ fn signals() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
 
-    assert!(local.signal().contains(Signal::WRITABLE));
-    assert!(remote.signal().contains(Signal::WRITABLE));
+    assert_eq!(local.signal(), Signal::WRITABLE);
+    assert_eq!(remote.signal(), Signal::WRITABLE);
 
     // Write some data
     local.write(&[0x66u8; 1024]).unwrap();
 
-    assert!(local.signal().contains(Signal::WRITABLE));
-    assert!(remote.signal().contains(Signal::READABLE));
-    assert!(remote.signal().contains(Signal::WRITABLE));
+    assert_eq!(local.signal(), Signal::WRITABLE);
+    assert_eq!(remote.signal(), Signal::READABLE | Signal::WRITABLE);
 
     // Read all data
     let mut buf = [0u8; 2048];
     let n = remote.read(false, &mut buf).unwrap();
     assert_eq!(n, 1024);
 
-    assert!(local.signal().contains(Signal::WRITABLE));
-    assert!(!remote.signal().contains(Signal::READABLE));
+    assert_eq!(local.signal(), Signal::WRITABLE);
+    assert_eq!(remote.signal(), Signal::WRITABLE);
 
     // Close local
     drop(local);
-    assert!(remote.signal().contains(Signal::PEER_CLOSED));
-    assert!(!remote.signal().contains(Signal::WRITABLE));
+    assert_eq!(remote.signal(), Signal::PEER_CLOSED);
 }
 
 /// C++: TEST(SocketTest, SignalClosedPeer)
@@ -341,7 +339,7 @@ fn set_disposition_wrong_type() {
 
     // Valid disposition succeeds on correct type
     local.set_disposition(1, 0).unwrap(); // WRITE_DISABLED
-    assert!(local.signal().contains(Signal::SOCKET_WRITE_DISABLED));
+    assert_eq!(local.signal(), Signal::SOCKET_WRITE_DISABLED);
 }
 
 /// C++: TEST(SocketTest, SetDispositionHandleWithoutRight)
@@ -355,8 +353,7 @@ fn set_disposition_handle_without_right() {
 
     // Object-level call always succeeds (rights checked in syscall layer)
     local.set_disposition(1, 0).unwrap();
-    assert!(local.signal().contains(Signal::SOCKET_WRITE_DISABLED));
-    assert!(!local.signal().contains(Signal::WRITABLE));
+    assert_eq!(local.signal(), Signal::SOCKET_WRITE_DISABLED);
 }
 
 /// C++: TEST(SocketTest, SetDispositionNoOpAndClosedPeer)
@@ -419,32 +416,156 @@ fn set_threshholds_prop() {
 }
 
 /// C++: TEST(SocketTest, SetThreshholdsAndCheckSignals)
-/// Set a read threshold, write data, verify threshold signal fires.
+/// Faithfully mirrors the ~150-line C++ test: sets rx threshold on `local`,
+/// tx threshold on `remote`, verifies signal transitions through writes
+/// and reads, tests threshold bumps up/down, and checks duplicate handles
+/// see the same signals.
 #[test]
 fn set_threshholds_and_check_signals() {
     let _ctx = TestContext::new();
     let (local, remote) = Socket::create(0).unwrap();
 
-    // Set read threshold on remote to 5
-    remote.set_read_threshold(5).unwrap();
-    assert!(!remote.signal().contains(Signal::SOCKET_READ_THRESHOLD));
+    // C++ uses SOCKET2_SIGNALTEST_RX_THRESHOLD = 101
+    const RX_THRESHOLD: usize = 101;
 
-    // Write 3 bytes (below threshold)
-    local.write(&[0u8; 3]).unwrap();
-    assert!(!remote.signal().contains(Signal::SOCKET_READ_THRESHOLD));
+    // Set rx threshold on local
+    local.set_read_threshold(RX_THRESHOLD).unwrap();
+    assert_eq!(local.get_rx_tx_threshold().0, RX_THRESHOLD);
 
-    // Write 2 more bytes (now at threshold)
-    local.write(&[0u8; 2]).unwrap();
-    assert!(remote.signal().contains(Signal::SOCKET_READ_THRESHOLD));
+    // Determine socket buffer max and set tx threshold on remote such that
+    // write_threshold = tx_buf_max - (RX_THRESHOLD + 2)
+    let info = remote.get_info();
+    let tx_buf_max = {
+        let dbg = format!("{:?}", info);
+        let s = dbg.split("tx_buf_max: ").nth(1).unwrap();
+        let end = s.find(',').unwrap_or(s.len());
+        s[..end].parse::<usize>().unwrap()
+    };
+    let write_threshold = tx_buf_max - (RX_THRESHOLD + 2);
+    remote.set_write_threshold(write_threshold).unwrap();
+    assert_eq!(remote.get_rx_tx_threshold().1, write_threshold);
 
-    // Read 1 byte (drops below threshold)
-    let mut buf = [0u8; 1];
-    remote.read(false, &mut buf).unwrap();
-    assert!(!remote.signal().contains(Signal::SOCKET_READ_THRESHOLD));
+    // --- Initial signal state after setting thresholds ---
+    // local: WRITABLE only (no data yet, rx threshold not met)
+    assert_eq!(
+        local.signal(),
+        Signal::WRITABLE,
+        "local initial: WRITABLE only"
+    );
+    // remote: WRITABLE | WRITE_THRESHOLD (buffer is empty, plenty of space)
+    assert_eq!(
+        remote.signal(),
+        Signal::WRITABLE | Signal::SOCKET_WRITE_THRESHOLD,
+        "remote initial: WRITABLE | WRITE_THRESHOLD"
+    );
 
-    // Write threshold
-    local.set_write_threshold(10).unwrap();
-    assert!(local.signal().contains(Signal::SOCKET_WRITE_THRESHOLD));
+    // --- Write data below the read threshold (RX_THRESHOLD - 1 bytes) ---
+    let buf_size = RX_THRESHOLD - 1;
+    let buf = vec![0u8; buf_size];
+    let n = remote.write(&buf).unwrap();
+    assert_eq!(n, buf_size);
+
+    // local: WRITABLE | READABLE (data present, but below rx threshold)
+    assert_eq!(
+        local.signal(),
+        Signal::WRITABLE | Signal::READABLE,
+        "local after {buf_size}B: WRITABLE | READABLE (no READ_THRESHOLD)"
+    );
+    // remote: WRITABLE | WRITE_THRESHOLD (still plenty of space)
+    assert_eq!(
+        remote.signal(),
+        Signal::WRITABLE | Signal::SOCKET_WRITE_THRESHOLD,
+        "remote after {buf_size}B: WRITABLE | WRITE_THRESHOLD"
+    );
+
+    // --- Write exactly 1 more byte to hit the rx threshold ---
+    let n = remote.write(&[0u8; 1]).unwrap();
+    assert_eq!(n, 1);
+
+    // local: WRITABLE | READABLE | READ_THRESHOLD
+    assert_eq!(
+        local.signal(),
+        Signal::WRITABLE | Signal::READABLE | Signal::SOCKET_READ_THRESHOLD,
+        "local at threshold: WRITABLE | READABLE | READ_THRESHOLD"
+    );
+    // remote: WRITABLE | WRITE_THRESHOLD (still enough space)
+    assert_eq!(
+        remote.signal(),
+        Signal::WRITABLE | Signal::SOCKET_WRITE_THRESHOLD,
+        "remote at rx threshold: WRITABLE | WRITE_THRESHOLD"
+    );
+
+    // --- Bump up the read threshold → READ_THRESHOLD should deassert ---
+    local.set_read_threshold(RX_THRESHOLD + 50).unwrap();
+    assert_eq!(
+        local.signal(),
+        Signal::WRITABLE | Signal::READABLE,
+        "local after rx threshold bump: WRITABLE | READABLE (no READ_THRESHOLD)"
+    );
+
+    // --- Restore the read threshold → READ_THRESHOLD should reassert ---
+    local.set_read_threshold(RX_THRESHOLD).unwrap();
+    assert_eq!(
+        local.signal(),
+        Signal::WRITABLE | Signal::READABLE | Signal::SOCKET_READ_THRESHOLD,
+        "local after rx threshold restore: WRITABLE | READABLE | READ_THRESHOLD"
+    );
+
+    // --- Bump write threshold way up → WRITE_THRESHOLD should deassert ---
+    remote.set_write_threshold(tx_buf_max - 10).unwrap();
+    assert_eq!(
+        remote.signal(),
+        Signal::WRITABLE,
+        "remote after tx threshold bump: WRITABLE (no WRITE_THRESHOLD)"
+    );
+
+    // --- Restore write threshold → WRITE_THRESHOLD should reassert ---
+    remote.set_write_threshold(write_threshold).unwrap();
+    assert_eq!(
+        remote.signal(),
+        Signal::WRITABLE | Signal::SOCKET_WRITE_THRESHOLD,
+        "remote after tx threshold restore: WRITABLE | WRITE_THRESHOLD"
+    );
+
+    // --- Write enough to deassert WRITE_THRESHOLD ---
+    // Total written so far: RX_THRESHOLD bytes. Need to fill until
+    // remaining space < write_threshold.
+    let fill_size = write_threshold - (RX_THRESHOLD + 1);
+    let fill_buf = vec![0u8; fill_size];
+    let n = remote.write(&fill_buf).unwrap();
+    assert_eq!(n, fill_size);
+
+    // local: WRITABLE | READABLE | READ_THRESHOLD
+    assert_eq!(
+        local.signal(),
+        Signal::WRITABLE | Signal::READABLE | Signal::SOCKET_READ_THRESHOLD,
+        "local after fill: WRITABLE | READABLE | READ_THRESHOLD"
+    );
+    // remote: WRITABLE only (not enough space for WRITE_THRESHOLD)
+    assert_eq!(
+        remote.signal(),
+        Signal::WRITABLE,
+        "remote after fill: WRITABLE (no WRITE_THRESHOLD)"
+    );
+
+    // --- Read enough data to deassert READ_THRESHOLD and reassert WRITE_THRESHOLD ---
+    let read_size = fill_size + 10;
+    let mut read_buf = vec![0u8; read_size];
+    let n = local.read(false, &mut read_buf).unwrap();
+    assert_eq!(n, read_size);
+
+    // local: WRITABLE | READABLE (some data remains, but below threshold)
+    assert_eq!(
+        local.signal(),
+        Signal::WRITABLE | Signal::READABLE,
+        "local after partial read: WRITABLE | READABLE (no READ_THRESHOLD)"
+    );
+    // remote: WRITABLE | WRITE_THRESHOLD (space freed up)
+    assert_eq!(
+        remote.signal(),
+        Signal::WRITABLE | Signal::SOCKET_WRITE_THRESHOLD,
+        "remote after partial read: WRITABLE | WRITE_THRESHOLD"
+    );
 }
 
 /// C++: TEST(SocketTest, GetInfoSocketBufferTooSmallReturnsBufferTooSmall)
@@ -670,6 +791,110 @@ fn datagram_peek_empty() {
     );
 }
 
+/// C++: TEST(SocketTest, Datagram)
+/// Write 3 datagrams (two short + one 4KB multi-mbuf), verify
+/// rx_buf_available reports the first datagram size, read back with
+/// truncation and full-read semantics.
+#[test]
+fn datagram() {
+    let _ctx = TestContext::new();
+    let (local, remote) = Socket::create(1).unwrap(); // DATAGRAM
+
+    let msg1 = b"12345";
+    let msg2 = b"abcdef";
+
+    // Write two short datagrams
+    let n = local.write(msg1).unwrap();
+    assert_eq!(n, msg1.len());
+    let n = local.write(msg2).unwrap();
+    assert_eq!(n, msg2.len());
+
+    // Write a large datagram (4KB, spans multiple internal MBufs)
+    const LARGER_THAN_MBUF_PAYLOAD: usize = 4096;
+    let mut write_data = vec![0u8; LARGER_THAN_MBUF_PAYLOAD];
+    for i in 0..write_data.len() {
+        write_data[i] = i as u8;
+    }
+    let n = local.write(&write_data).unwrap();
+    assert_eq!(n, LARGER_THAN_MBUF_PAYLOAD);
+
+    // rx_buf_available should report the first datagram's size
+    let info = remote.get_info();
+    let rx_avail = {
+        let dbg = format!("{:?}", info);
+        let s = dbg.split("rx_buf_available: ").nth(1).unwrap();
+        let end = s
+            .find(',')
+            .unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
+        s[..end].trim().parse::<usize>().unwrap()
+    };
+    assert_eq!(
+        rx_avail,
+        msg1.len(),
+        "rx_buf_available should be first datagram size"
+    );
+
+    // Read fewer bytes than in the first datagram — remainder is truncated
+    let mut buf = [0u8; 32];
+    let n = remote.read(false, &mut buf[..msg1.len() - 1]).unwrap();
+    assert_eq!(n, msg1.len() - 1);
+    assert_eq!(&buf[..n], &msg1[..msg1.len() - 1]);
+
+    // rx_buf_available should now report the second datagram's size
+    let info = remote.get_info();
+    let rx_avail = {
+        let dbg = format!("{:?}", info);
+        let s = dbg.split("rx_buf_available: ").nth(1).unwrap();
+        let end = s
+            .find(',')
+            .unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
+        s[..end].trim().parse::<usize>().unwrap()
+    };
+    assert_eq!(
+        rx_avail,
+        msg2.len(),
+        "rx_buf_available should be second datagram size"
+    );
+
+    // Read the second datagram in full
+    let n = remote.read(false, &mut buf[..msg2.len()]).unwrap();
+    assert_eq!(n, msg2.len());
+    assert_eq!(&buf[..n], msg2);
+
+    // rx_buf_available should now report the large datagram's size
+    let info = remote.get_info();
+    let rx_avail = {
+        let dbg = format!("{:?}", info);
+        let s = dbg.split("rx_buf_available: ").nth(1).unwrap();
+        let end = s
+            .find(',')
+            .unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
+        s[..end].trim().parse::<usize>().unwrap()
+    };
+    assert_eq!(
+        rx_avail, LARGER_THAN_MBUF_PAYLOAD,
+        "rx_buf_available should be large datagram size"
+    );
+
+    // Read the large datagram in full and verify all bytes
+    let mut large_buf = vec![0u8; LARGER_THAN_MBUF_PAYLOAD];
+    let n = remote.read(false, &mut large_buf).unwrap();
+    assert_eq!(n, LARGER_THAN_MBUF_PAYLOAD);
+    assert_eq!(&large_buf[..], &write_data[..]);
+
+    // Socket should now be empty
+    let info = remote.get_info();
+    let rx_avail = {
+        let dbg = format!("{:?}", info);
+        let s = dbg.split("rx_buf_available: ").nth(1).unwrap();
+        let end = s
+            .find(',')
+            .unwrap_or_else(|| s.find('}').unwrap_or(s.len()));
+        s[..end].trim().parse::<usize>().unwrap()
+    };
+    assert_eq!(rx_avail, 0, "socket should be empty");
+}
+
 /// C++: TEST(SocketTest, DatagramReadBufferLargerThanPacketReadsFullPacket)
 /// Reading with a buffer larger than the datagram returns exactly the
 /// datagram size, not the buffer size.
@@ -715,14 +940,14 @@ fn disable_write_both() {
     let (local, remote) = Socket::create(0).unwrap();
 
     // Both start writable
-    assert!(local.signal().contains(Signal::WRITABLE));
-    assert!(remote.signal().contains(Signal::WRITABLE));
+    assert_eq!(local.signal(), Signal::WRITABLE);
+    assert_eq!(remote.signal(), Signal::WRITABLE);
 
     // Write data on both before disabling
     local.write(b"12345").unwrap();
     remote.write(b"abcdef").unwrap();
-    assert!(remote.signal().contains(Signal::READABLE));
-    assert!(local.signal().contains(Signal::READABLE));
+    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
+    assert_eq!(local.signal(), Signal::WRITABLE | Signal::READABLE);
 
     // Disable writes on both: local_disposition=1, peer_disposition=1
     local.set_disposition(1, 1).unwrap();
@@ -753,14 +978,14 @@ fn disable_write_both() {
 
     // Re-enable writes on both
     local.set_disposition(2, 2).unwrap(); // WRITE_ENABLED
-    assert!(local.signal().contains(Signal::WRITABLE));
-    assert!(remote.signal().contains(Signal::WRITABLE));
+    assert_eq!(local.signal(), Signal::WRITABLE);
+    assert_eq!(remote.signal(), Signal::WRITABLE);
 
     // Both can write again
     local.write(b"abcdef").unwrap();
     remote.write(b"ghijklm").unwrap();
-    assert!(local.signal().contains(Signal::READABLE));
-    assert!(remote.signal().contains(Signal::READABLE));
+    assert_eq!(local.signal(), Signal::WRITABLE | Signal::READABLE);
+    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
 
     // Verify data
     let n = local.read(false, &mut buf).unwrap();
@@ -783,8 +1008,8 @@ fn set_disposition_of_closed_peer_with_buffered_data() {
         remote = remote_inner;
     }
 
-    assert!(local.signal().contains(Signal::WRITABLE));
-    assert!(remote.signal().contains(Signal::WRITABLE));
+    assert_eq!(local.signal(), Signal::WRITABLE);
+    assert_eq!(remote.signal(), Signal::WRITABLE);
 
     // Remote writes data into local's buffer
     remote.write(b"12345").unwrap();
@@ -869,7 +1094,7 @@ fn reuse_datagram_buffer() {
     assert_eq!(buf[0], b'd');
 
     // Socket should be empty
-    assert!(!b.signal().contains(Signal::READABLE));
+    assert_eq!(b.signal(), Signal::WRITABLE);
 }
 
 /// C++: TEST(SocketTest, SetReadThresholdOnClosedPeer)
