@@ -81,6 +81,41 @@ async fn process_get_info_runtime_v1() {
 #[test]
 fn process_wait_async_cancel_self() {}
 
+/// C++: TEST(ProcessTest, EmptyNameSucceeds)
+/// Creating a process with an empty name should succeed.
+#[test]
+fn empty_name_succeeds() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "").unwrap();
+    assert_eq!(proc.name(), "");
+}
+
+/// C++: TEST(ProcessTest, LongNameSucceeds)
+/// Creating a process with a name longer than ZX_MAX_NAME_LEN (32)
+/// should succeed. The kernel stores (and possibly truncates) the
+/// name without error.
+#[test]
+fn long_name_succeeds() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    // 80-character name, well beyond ZX_MAX_NAME_LEN (32)
+    let long_name = "0123456789012345678901234567890123456789\
+                     0123456789012345678901234567890123456789";
+    assert!(long_name.len() > 31, "test name too short to exercise truncation");
+    let proc = Process::create(&job, long_name).unwrap();
+    // At the object level the full name is stored. The syscall layer
+    // (sys_process_create) truncates to ZX_MAX_NAME_LEN - 1 chars.
+    // We just verify creation succeeded and a name is retrievable.
+    let stored = proc.name();
+    assert!(!stored.is_empty(), "process should have a non-empty name");
+    // The stored name should start with the same prefix as long_name
+    assert!(
+        long_name.starts_with(&stored) || stored.starts_with(&long_name[..31]),
+        "stored name should be a prefix of or match long_name"
+    );
+}
+
 // ── Batch 3: 25 missing ProcessTest ports from process.cc ──────────
 
 /// C++: TEST(ProcessTest, GetRuntimeNoPermission)

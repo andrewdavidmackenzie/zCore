@@ -777,3 +777,85 @@ fn wait_test() {
     // get_info on the job should succeed even after termination
     let _info = job.get_info();
 }
+
+/// C++: TEST(JobTest, BasicTest)
+/// Create child and grandchild jobs, verify info, verify creating
+/// from an invalid (killed) parent fails.
+#[test]
+fn basic_test() {
+    let _ctx = TestContext::new();
+    let job_parent = Job::root();
+
+    // If the parent job is valid, one should be able to create a child job
+    // and a child job of the child job.
+    let job_child = Job::create_child(&job_parent).unwrap();
+    let job_grandchild = Job::create_child(&job_child).unwrap();
+
+    // Verify info on child: should not be exited
+    let _info = job_child.get_info();
+    assert!(!job_child.signal().contains(Signal::JOB_TERMINATED));
+
+    // Clean up (drop closes handles)
+    drop(job_grandchild);
+    drop(job_child);
+
+    // If the parent job is killed, creating a child should fail.
+    let dead_job = Job::create_child(&job_parent).unwrap();
+    dead_job.kill_with_code(-1);
+    assert_eq!(Job::create_child(&dead_job).unwrap_err(), ZxError::BAD_STATE);
+}
+
+/// C++: TEST(JobTest, CreateTest)
+/// Create a child job and verify that processes can be created under
+/// both the parent job and the child job.
+#[test]
+fn create_test() {
+    let _ctx = TestContext::new();
+    let job_parent = Job::root();
+
+    let job_child = Job::create_child(&job_parent).unwrap();
+
+    // Make sure we can create process objects with both the parent job
+    // and a child job.
+    let proc1 = Process::create(&job_parent, "job-test-p").unwrap();
+    let proc2 = Process::create(&job_child, "job-test-p").unwrap();
+
+    assert_ne!(proc1.id(), 0);
+    assert_ne!(proc2.id(), 0);
+    assert_ne!(proc1.id(), proc2.id());
+}
+
+/// C++: TEST(JobTest, CreateMissingRightsTest)
+/// Duplicate a job handle with reduced rights (no WRITE, no MANAGE_JOB),
+/// then verify that creating a child job via that handle fails with
+/// ACCESS_DENIED.
+///
+/// This tests the handle-rights path: `get_object_with_rights` checks
+/// for MANAGE_JOB (or WRITE) before allowing `Job::create_child`.
+#[test]
+fn create_missing_rights_test() {
+    use zircon_object::object::{Handle, Rights};
+
+    let ctx = TestContext::new();
+    let root_job = Job::root();
+
+    // C++: zx_rights_t rights = ZX_DEFAULT_JOB_RIGHTS & ~ZX_RIGHT_WRITE & ~ZX_RIGHT_MANAGE_JOB;
+    let reduced_rights = Rights::DEFAULT_JOB & !Rights::WRITE & !Rights::MANAGE_JOB;
+
+    // Add the job to the process handle table with reduced rights
+    let handle_value = ctx
+        .proc
+        .add_handle(Handle::new(root_job, reduced_rights));
+
+    // Attempting to retrieve the job with MANAGE_JOB rights should fail
+    let result = ctx
+        .proc
+        .get_object_with_rights::<Job>(handle_value, Rights::MANAGE_JOB);
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+
+    // Also verify WRITE rights are denied
+    let result = ctx
+        .proc
+        .get_object_with_rights::<Job>(handle_value, Rights::WRITE);
+    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+}
