@@ -43,45 +43,36 @@ pub(crate) fn set_property(
 pub(crate) const PROP_NAME: u32 = 3;
 pub(crate) const MAX_NAME_LEN: usize = 32;
 
-
 // ── ZX_PROP_PROCESS_DEBUG_ADDR (property 5) ────────────────────────
 
 pub(crate) const PROP_PROCESS_DEBUG_ADDR: u32 = 5;
-
 
 // ── ZX_PROP_PROCESS_BREAK_ON_LOAD (property 7) ────────────────────
 
 pub(crate) const PROP_PROCESS_BREAK_ON_LOAD: u32 = 7;
 
-
 // ── ZX_PROP_PROCESS_VDSO_BASE_ADDRESS (property 6) ─────────────────
 
 pub(crate) const PROP_PROCESS_VDSO_BASE_ADDRESS: u32 = 6;
-
 
 // ── ZX_PROP_SOCKET_RX_THRESHOLD / TX_THRESHOLD (property 12, 13) ──
 
 pub(crate) const PROP_SOCKET_RX_THRESHOLD: u32 = 12;
 pub(crate) const PROP_SOCKET_TX_THRESHOLD: u32 = 13;
 
-
 // ── ZX_PROP_JOB_KILL_ON_OOM (property 15) ─────────────────────────
 
 pub(crate) const PROP_JOB_KILL_ON_OOM: u32 = 15;
-
 
 // ── ZX_PROP_VMO_CONTENT_SIZE (property 16) ─────────────────────────
 
 pub(crate) const PROP_VMO_CONTENT_SIZE: u32 = 17;
 
-
 // ── ZX_PROP_EXCEPTION_STRATEGY (property 17) ──────────────────────
 
 pub(crate) const PROP_EXCEPTION_STRATEGY: u32 = 18;
 
-
 // ── Invalid property ID ────────────────────────────────────────────
-
 
 /// C++: TEST(Property, JobName)
 /// Set and get ZX_PROP_NAME on a Job.

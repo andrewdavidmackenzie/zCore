@@ -12,7 +12,6 @@ use zircon_object::object::KernelObject;
 use zircon_object::signal::Port;
 use zircon_object::ZxError;
 
-
 /// C++: TEST(InterruptTest, Bind)
 ///
 /// Binding a virtual interrupt to a port succeeds.
@@ -24,7 +23,6 @@ fn interrupt_bind() {
     assert!(interrupt.bind(&port, 42).is_ok());
 }
 
-
 /// C++: TEST(InterruptTest, Wait)
 ///
 /// Waiting on an interrupt requires async context. Left as stub.
@@ -33,7 +31,6 @@ fn interrupt_wait() {
     // Requires async context and real interrupt delivery.
     // This test would block forever waiting for an interrupt.
 }
-
 
 /// C++: TEST(InterruptTest, VirtualInterrupt)
 ///
@@ -56,7 +53,6 @@ fn interrupt_virtual_interrupt() {
     // Trigger after destroy → CANCELED
     assert_eq!(interrupt.trigger(9999).unwrap_err(), ZxError::CANCELED);
 }
-
 
 /// C++: TEST(InterruptTest, BindPort)
 /// Bind a virtual interrupt to a port with BIND_TO_INTERRUPT option.

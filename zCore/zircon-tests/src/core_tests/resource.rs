@@ -9,7 +9,6 @@ use crate::helpers::TestContext;
 use zircon_object::dev::{Resource, ResourceFlags, ResourceKind};
 use zircon_object::object::KernelObject;
 
-
 // ============================================================================
 // Missing Fuchsia core-tests: Resource suite (36 tests)
 // All require system/MMIO/IRQ resources not available in libos mode.

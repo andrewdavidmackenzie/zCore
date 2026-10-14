@@ -5,9 +5,9 @@
 
 use crate::helpers::TestContext;
 use hal_impl::user::UserOutPtr;
-use zircon_object::ZxError;
 use zircon_object::ipc::Channel;
 use zircon_object::object::{Handle, HandleValue, KernelObject, Rights};
+use zircon_object::ZxError;
 
 #[test]
 fn close_via_syscall() {
@@ -247,4 +247,3 @@ fn replace_invalid_rights_syscall() {
     );
     assert!(result.is_err());
 }
-

@@ -8,7 +8,6 @@ use zircon_object::task::{Job, Process};
 use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 use zircon_object::ZxError;
 
-
 /// C++: TEST(VmoTestCase, ReadWriteBadLen)
 /// Read/write within bounds succeeds; exact size is fine.
 /// NOTE: zCore's kernel object layer does not enforce OUT_OF_RANGE
@@ -208,7 +207,6 @@ fn vmo_content_size() {
     assert_eq!(vmo.content_size(), 0);
 }
 
-
 /// C++: TEST(VmoTestCase, ZeroRange)
 /// Zero a range in the middle of written data.
 #[test]
@@ -240,7 +238,6 @@ fn vmo_zero_range() {
         assert_eq!(b, (i + 32) as u8);
     }
 }
-
 
 /// C++: TEST(VmoTestCase, Cache)
 /// Set cache policy on clean VMO; clone prevents policy change.
@@ -276,7 +273,6 @@ fn vmo_cache_policy() {
     assert_eq!(vmo.read(0, &mut buf).unwrap_err(), ZxError::BAD_STATE);
     assert_eq!(vmo.write(0, &[42]).unwrap_err(), ZxError::BAD_STATE);
 }
-
 
 // -- Faithful 1:1 ports from VmoSignalTestCase (vmo-signal.cc) --
 
@@ -406,7 +402,6 @@ fn vmo_read_write_range_extended() {
     assert_eq!(span_buf, span_data);
 }
 
-
 /// C++: TEST(VmoTestCase, Resize)
 ///
 /// Resize a resizable VMO up and down. Verify size changes correctly.
@@ -429,7 +424,6 @@ fn vmo_resize_basic() {
     vmo.set_len(2 * PAGE_SIZE).unwrap();
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
 }
-
 
 /// C++: TEST(VmoTestCase, CachePolicy)
 ///
@@ -464,7 +458,6 @@ fn vmo_cache_policy_basic() {
         "policy change on VMO with children should fail"
     );
 }
-
 
 /// C++: TEST(VmoTestCase, ContentSize)
 ///
@@ -503,7 +496,6 @@ fn vmo_content_size_extended() {
 }
 
 // ── Bulk-ported VMO op_range tests (VmoTestCase from vmo.cc) ────────
-
 
 /// C++: TEST(VmoSignalTestCase, ChildSignalMap)
 /// VMAR mapping keeps child VMO alive — ZERO_CHILDREN stays cleared
@@ -552,7 +544,6 @@ fn child_signal_map() {
 // Additional VMO tests — faithful ports from vmo.cc
 // ═══════════════════════════════════════════════════════════════════
 
-
 /// C++: TEST(VmoTestCase, ZeroPage)
 #[test]
 fn vmo_zero_page() {
@@ -567,7 +558,6 @@ fn vmo_zero_page() {
         "uncommitted page should be all zeros"
     );
 }
-
 
 /// C++: TEST(VmoTestCase, ZeroRange)
 #[test]
@@ -595,7 +585,6 @@ fn vmo_zero_sub_range() {
     vmo.read(300, &mut buf).unwrap();
     assert_eq!(buf, [0xBB; 4]);
 }
-
 
 // ============================================================================
 // Missing Fuchsia core-tests: VmoTestCase suite (53 tests)

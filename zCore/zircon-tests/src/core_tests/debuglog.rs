@@ -7,7 +7,6 @@ use crate::helpers::TestContext;
 
 use zircon_object::debuglog::{DebugLog, Severity, DLOG_MAX_LEN};
 
-
 /// C++: TEST(DebugLogTest, DrainAndSignal)
 /// Write multiple messages, then read until drained.
 /// After draining, read returns 0 (no more records).

@@ -438,4 +438,3 @@ fn resource_register_region() {
         "after unregister, region should be available"
     );
 }
-

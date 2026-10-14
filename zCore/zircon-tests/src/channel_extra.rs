@@ -4,10 +4,10 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
-use zircon_object::ZxError;
 use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::signal::Event;
+use zircon_object::ZxError;
 
 /// When peer is closed but messages remain, both READABLE and PEER_CLOSED
 /// should be set simultaneously.
@@ -435,4 +435,3 @@ fn call_timeout_no_reply() {
 fn call_reply_mismatched_txid() {
     // Channel call requires a responder thread to send replies.
 }
-

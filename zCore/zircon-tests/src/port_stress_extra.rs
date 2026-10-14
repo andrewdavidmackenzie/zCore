@@ -248,4 +248,3 @@ fn port_interleave_queue_dequeue() {
         assert_eq!(PortPacketRepr::from(&pkt).key, i);
     }
 }
-

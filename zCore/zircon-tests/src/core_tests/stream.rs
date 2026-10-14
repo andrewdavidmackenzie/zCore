@@ -4,7 +4,6 @@ use crate::helpers::TestContext;
 use zircon_object::object::KernelObject;
 use zircon_object::vm::{SeekOrigin, Stream, VmObject};
 
-
 /// C++: TEST(StreamTestCase, Create)
 /// Basic stream creation with properties verified.
 #[test]

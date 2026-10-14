@@ -4,9 +4,9 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
-use zircon_object::ZxError;
 use zircon_object::ipc::Fifo;
 use zircon_object::object::{KernelObject, Signal};
+use zircon_object::ZxError;
 
 #[test]
 fn fifo_create() {
@@ -193,4 +193,3 @@ fn peer_closed_read_returns_peer_closed() {
     let mut buf = [0u8; 4];
     assert_eq!(fb.read(4, &mut buf, 1).unwrap_err(), ZxError::PEER_CLOSED);
 }
-

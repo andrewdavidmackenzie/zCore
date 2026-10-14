@@ -17,7 +17,6 @@ fn port_create_via_syscall() {
     assert_ne!(h, 0);
 }
 
-
 /// C++: TEST(PortTest, CreateInvalidOptions) — syscall level
 #[test]
 fn port_create_invalid_options() {
@@ -27,7 +26,6 @@ fn port_create_invalid_options() {
     let result = sc.sys_port_create(0xFF, UserOutPtr::from(&mut h as *mut _ as usize));
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
-
 
 /// C++: TEST(PortTest, QueueWrongType) — syscall level
 #[test]
@@ -381,5 +379,3 @@ fn port_wait_async_target_access_denied() {
     );
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
-
-

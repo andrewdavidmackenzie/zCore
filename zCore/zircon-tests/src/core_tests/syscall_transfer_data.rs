@@ -100,5 +100,3 @@ fn invalid_inputs() {
         "bad src handle should fail"
     );
 }
-
-

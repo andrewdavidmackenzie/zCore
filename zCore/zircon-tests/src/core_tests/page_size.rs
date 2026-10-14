@@ -50,5 +50,3 @@ fn page_size_round_up() {
     assert_eq!(round_up(PAGE_SIZE + 1), 2 * PAGE_SIZE);
     assert_eq!(round_up(2 * PAGE_SIZE), 2 * PAGE_SIZE);
 }
-
-

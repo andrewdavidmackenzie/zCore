@@ -4,9 +4,9 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
-use zircon_object::ZxError;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::{Event, EventPair};
+use zircon_object::ZxError;
 
 #[test]
 fn event_create() {
@@ -148,4 +148,3 @@ fn eventpair_user_signals() {
     assert!(!sig.contains(Signal::USER_SIGNAL_0));
     assert!(!sig.contains(Signal::USER_SIGNAL_7));
 }
-

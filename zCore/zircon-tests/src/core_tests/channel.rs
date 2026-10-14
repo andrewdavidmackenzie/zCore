@@ -340,7 +340,6 @@ fn write_to_peer_closed_consumes_moved_handles() {
     // handle consumption in libos mode, but we verify the error.
 }
 
-
 /// C++: TEST(ChannelTest, WaitManyIsSignaledForBothWrites)
 /// When both endpoints have messages, both should be READABLE.
 #[test]
@@ -471,5 +470,3 @@ fn read_may_discard_with_zero_size_buffers() {
 }
 
 // ── Bulk-ported channel tests (batch 2) ─────────────────────────────
-
-

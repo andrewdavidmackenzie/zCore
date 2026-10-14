@@ -408,4 +408,3 @@ fn process_vmar_info() {
     // The VMAR's koid should be non-zero
     assert_ne!(vmar.id(), 0, "VMAR koid should be non-zero");
 }
-

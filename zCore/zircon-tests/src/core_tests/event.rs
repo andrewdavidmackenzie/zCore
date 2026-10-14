@@ -5,7 +5,6 @@ use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::EventPair;
 use zircon_object::ZxError;
 
-
 // -- Faithful 1:1 ports from EventPairTest (event-pair.cc) --
 // Test names match the C++ originals exactly.
 
@@ -110,7 +109,6 @@ fn signal_self_after_peer_closed() {
     assert!(sig.contains(Signal::PEER_CLOSED));
     assert!(sig.contains(Signal::USER_SIGNAL_0));
 }
-
 
 /// C++: TEST(EventPairTest, WaitAccessDeniedMissingWaitRight)
 /// Duplicating an eventpair handle without ZX_RIGHT_WAIT, then calling

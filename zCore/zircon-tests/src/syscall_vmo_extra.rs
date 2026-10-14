@@ -3,11 +3,11 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
+use crate::core_tests::syscall_vmo::syscall_vmo_create;
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
-use zircon_object::ZxError;
 use zircon_object::vm::PAGE_SIZE;
-use crate::core_tests::syscall_vmo::{syscall_vmo_create};
+use zircon_object::ZxError;
 
 #[test]
 fn op_range_commit_decommit() {
@@ -98,4 +98,3 @@ fn op_range_out_of_bounds() {
         ZxError::OUT_OF_RANGE
     );
 }
-

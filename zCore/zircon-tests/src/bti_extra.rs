@@ -4,11 +4,11 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 extern crate alloc;
+use crate::core_tests::bti::create_iommu_bti;
 use crate::helpers::TestContext;
 use zircon_object::dev::IommuPerms;
-use zircon_object::vm::{VmObject, PAGE_SIZE, PAGE_SIZE_LOG2};
-use crate::core_tests::bti::{create_iommu_bti};
 use zircon_object::object::KernelObject;
+use zircon_object::vm::{VmObject, PAGE_SIZE, PAGE_SIZE_LOG2};
 
 /// Pin a VMO and verify PMT is tracked.
 #[test]
@@ -252,4 +252,3 @@ fn pin_large_vmo() {
     assert_ne!(pmt.id(), 0);
     pmt.unpin();
 }
-

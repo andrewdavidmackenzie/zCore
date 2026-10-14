@@ -144,7 +144,6 @@ fn no_resize_via_syscall() {
     assert_eq!(size, PAGE_SIZE * 2);
 }
 
-
 /// C++: TEST(VmoTestCase, CreateChild — SNAPSHOT) — syscall level
 #[test]
 fn create_child_snapshot() {
@@ -180,7 +179,6 @@ fn create_child_snapshot() {
         .unwrap();
     assert_eq!(buf[0], 0xAA); // still old value
 }
-
 
 /// C++: TEST(VmoTestCase, Cache) — syscall level
 /// Set cache policy via syscall.
@@ -223,4 +221,3 @@ fn stream_size_via_syscall() {
         .unwrap();
     assert_eq!(size, PAGE_SIZE * 2);
 }
-

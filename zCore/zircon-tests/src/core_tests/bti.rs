@@ -44,7 +44,6 @@ fn get_info() {
     assert_eq!(info.quarantine_count, 0);
 }
 
-
 /// C++: TEST(Bti, NameSupport)
 /// BTI supports set/get name.
 #[test]
@@ -57,7 +56,6 @@ fn name_support() {
 }
 
 // ── Additional BTI tests ────────────────────────────────────────────
-
 
 /// C++: TEST(Bti, Clone)
 /// In C++, "clone" creates a duplicate handle to the BTI. We test

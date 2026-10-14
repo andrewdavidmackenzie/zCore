@@ -5,7 +5,6 @@ use zircon_object::object::KernelObject;
 use zircon_object::signal::{PayloadRepr, Port, PortPacket, PortPacketRepr};
 use zircon_object::ZxError;
 
-
 /// C++: TEST(PortTest, QueueWaitVerifyUserPacket)
 /// Queue a user packet, dequeue it, and verify all fields round-trip.
 #[async_std::test]

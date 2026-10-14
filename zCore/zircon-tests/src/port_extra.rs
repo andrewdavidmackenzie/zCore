@@ -175,4 +175,3 @@ fn port_cancel_by_key_not_found() {
     // No subscriptions exist — should return NOT_FOUND
     assert_eq!(port.cancel_by_key(999).unwrap_err(), ZxError::NOT_FOUND);
 }
-

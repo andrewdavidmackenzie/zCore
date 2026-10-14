@@ -3,11 +3,11 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
+use crate::core_tests::syscall_channel::syscall_channel_create;
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
-use zircon_object::ZxError;
-use crate::core_tests::syscall_channel::{syscall_channel_create};
 use zircon_object::object::KernelObject;
+use zircon_object::ZxError;
 
 /// Write data through syscall, read it back through syscall.
 #[test]
@@ -145,4 +145,3 @@ fn write_data_too_large_via_syscall() {
     );
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
-

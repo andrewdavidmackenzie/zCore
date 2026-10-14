@@ -5,7 +5,6 @@ use hal_impl::user::UserOutPtr;
 use zircon_object::object::HandleValue;
 use zircon_object::ZxError;
 
-
 /// C++: TEST(EventPairTest, HandlesNotInvalid) — syscall level
 #[test]
 fn eventpair_create_via_syscall() {
@@ -69,7 +68,6 @@ fn eventpair_signal_closed_peer() {
         ZxError::PEER_CLOSED
     );
 }
-
 
 /// C++: TEST(Timer, InvalidCalls) — syscall level
 /// Invalid clock_id or options rejected.
@@ -303,7 +301,6 @@ fn eventpair_duplicate_handles_and_peer_closed() {
         ZxError::PEER_CLOSED
     );
 }
-
 
 /// C++: TEST(EventPairTest, InvalidHandleAndWrongType) — syscall level
 #[test]

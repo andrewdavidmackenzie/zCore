@@ -6,7 +6,6 @@ use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::task::{Job, Process, Task, Thread, ThreadState};
 use zircon_object::ZxError;
 
-
 /// C++: TEST(ProcessTest, GetInfoRuntime)
 ///
 /// Start a thread, let it run briefly, query ZX_INFO_TASK_RUNTIME.
@@ -77,12 +76,10 @@ async fn process_get_info_runtime_v1() {
     }
 }
 
-
 /// C++: TEST(ProcessTest, ProcessWaitAsyncCancelSelf)
 /// Race condition stress test that needs real threads.
 #[test]
 fn process_wait_async_cancel_self() {}
-
 
 // ── Batch 3: 25 missing ProcessTest ports from process.cc ──────────
 

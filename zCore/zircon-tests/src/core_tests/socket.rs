@@ -5,7 +5,6 @@ use zircon_object::ipc::Socket;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::ZxError;
 
-
 /// C++: TEST(SocketTest, GetInfo)
 /// SocketInfo has private fields, so we verify via the Debug representation.
 #[test]
@@ -24,7 +23,6 @@ fn socket_get_info() {
         debug
     );
 }
-
 
 // -- Faithful 1:1 ports from SocketTest (socket.cc) --
 
@@ -569,7 +567,6 @@ fn write_invalid_options() {
 
 // ── Bulk-ported socket tests (batch 2) ──────────────────────────────
 
-
 /// C++: TEST(SocketTest, WriteZeroBytes)
 ///
 /// Writing zero bytes to a stream socket should succeed (no-op).
@@ -581,7 +578,6 @@ fn write_zero_bytes() {
     // Stream sockets accept zero-byte writes as no-ops.
     assert!(result.is_ok() || result.unwrap_err() == ZxError::SHOULD_WAIT);
 }
-
 
 // ── Batch 3: Ports from socket.cc (24 missing tests) ──────────────
 

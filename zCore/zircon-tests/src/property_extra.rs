@@ -3,13 +3,17 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
+use crate::core_tests::property::{
+    get_property, set_property, MAX_NAME_LEN, PROP_EXCEPTION_STRATEGY, PROP_JOB_KILL_ON_OOM,
+    PROP_NAME, PROP_PROCESS_BREAK_ON_LOAD, PROP_PROCESS_DEBUG_ADDR, PROP_PROCESS_VDSO_BASE_ADDRESS,
+    PROP_SOCKET_RX_THRESHOLD, PROP_SOCKET_TX_THRESHOLD, PROP_VMO_CONTENT_SIZE,
+};
 use crate::helpers::TestContext;
 use zircon_object::ipc::Socket;
 use zircon_object::object::{Handle, Rights};
 use zircon_object::signal::Event;
 use zircon_object::task::Job;
 use zircon_object::vm::VmObject;
-use crate::core_tests::property::{MAX_NAME_LEN, PROP_EXCEPTION_STRATEGY, PROP_JOB_KILL_ON_OOM, PROP_NAME, PROP_PROCESS_BREAK_ON_LOAD, PROP_PROCESS_DEBUG_ADDR, PROP_PROCESS_VDSO_BASE_ADDRESS, PROP_SOCKET_RX_THRESHOLD, PROP_SOCKET_TX_THRESHOLD, PROP_VMO_CONTENT_SIZE, get_property, set_property};
 
 ///
 /// Set ZX_PROP_NAME on an event and verify it sticks.
@@ -321,4 +325,3 @@ fn property_invalid_property() {
         "invalid property should return INVALID_ARGS"
     );
 }
-

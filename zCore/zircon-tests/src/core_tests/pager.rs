@@ -22,9 +22,7 @@ pub(crate) fn create_pager_and_port() -> (Arc<Pager>, Arc<Port>) {
     (pager, port)
 }
 
-
 // ── Bulk-ported pager tests ─────────────────────────────────────────
-
 
 /// C++: TEST(Pager, ClosePagerTest) — adapted
 ///
@@ -83,33 +81,25 @@ fn pager_detach_closes_existing_waiters() {
     }
 }
 
-
 // ── Bulk-ported pager tests (batch 2) ───────────────────────────────
 
 // 1-5: Supply page alignment/range validation tests
 
-
 // 6-10: Op range validation tests
-
 
 // 11-15: Detach then various operations
 
-
 // 16-20: Pager close (drop) then operations
-
 
 // 21-25: VMO resize with pager
 
-
 // 26-30: Multiple pagers, VMO lifecycle
-
 
 // ── Demand-paging tests (require threads/async page faults) ─────────
 //
 // The following 30 tests correspond to C++ pager tests that require
 // concurrent threads and demand-paging (async page fault handling).
 // Tests that can be exercised via presupply-then-read have real logic;
-
 
 /// C++: TEST(Pager, DecommitTest)
 ///
@@ -150,48 +140,35 @@ fn pager_clone_decommit() {
     );
 }
 
-
 // ── PagerProcess tests (require process + VMAR mapping) ─────────────
 //
 // These tests correspond to the C++ PagerProcess fixture. We test
 // the kernel-object layer operations synchronously.
 
-
 // ── PagerWriteback tests (TRAP_DIRTY + writeback lifecycle) ─────────
-
 
 // ── More Pager validation (TRAP_DIRTY variants) ─────────────────────
 
-
 // ── Pager stress tests (sequential variants) ────────────────────────
-
 
 // ── ResizeWithPager tests ───────────────────────────────────────────
 
-
 // ── Snapshot-modified pager tests ───────────────────────────────────
-
 
 // ── Writeback-complete pager tests ──────────────────────────────────
 
-
 // ── Pager close lifecycle tests ─────────────────────────────────────
-
 
 // ── Pager VMO operation tests ───────────────────────────────────────
 
-
 // ── Advanced pager tests ────────────────────────────────────────────
 
-
 // ── Concurrent pager tests (sequential simulation) ──────────────────
-
 
 // ── Bulk-ported pager tests (batch 3) ───────────────────────────────
 //
 // Tests for eviction (decommit), pinning (not supported in libos),
 // dirty traps, writeback lifecycle, page requests, and VMO info.
-
 
 // ── Bulk-ported pager tests (from pager.cc) ─────────────────────────
 //

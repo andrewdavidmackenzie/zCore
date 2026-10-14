@@ -8,11 +8,9 @@ use crate::helpers::TestContext;
 use zircon_object::task::{Job, Process};
 use zircon_object::vm::{MMUFlags, VmObject, VmarFlags, PAGE_SIZE};
 
-
 // ============================================================
 // Ported from Fuchsia's zircon/system/utest/core/vmar/vmar.cc
 // ============================================================
-
 
 // ============================================================================
 // Missing Fuchsia core-tests: Vmar suite (58 tests)

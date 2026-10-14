@@ -4,9 +4,9 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
-use zircon_object::ZxError;
 use zircon_object::ipc::Socket;
 use zircon_object::object::{KernelObject, Signal};
+use zircon_object::ZxError;
 
 #[test]
 fn socket_create_stream() {
@@ -451,4 +451,3 @@ fn bidirectional_stream_verify() {
     let n = local.read(false, &mut buf).unwrap();
     assert_eq!(&buf[..n], b"R->L data");
 }
-

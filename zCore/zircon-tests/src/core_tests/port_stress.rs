@@ -9,7 +9,6 @@ use zircon_object::signal::{PayloadRepr, Port, PortPacket, PortPacketRepr};
 
 extern crate alloc;
 
-
 /// C++: TEST(PortStressTest, CancelKeyActiveObserverRace)
 /// Sequential version: register an observer, signal, dequeue, then
 /// verify the packet was delivered.

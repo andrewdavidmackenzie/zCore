@@ -87,7 +87,6 @@ pub(crate) fn syscall_clock_create(
     Ok(handle)
 }
 
-
 /// C++: TEST(ClockTest, FaultBeyondStreamSizeReturnserror)
 /// Mapping a clock VMO with ZX_VM_FAULT_BEYOND_STREAM_SIZE should fail
 /// with INVALID_ARGS. This requires mappable clock support which is not

@@ -52,7 +52,6 @@ fn profile_create() {
     assert!(profile.info.flags().contains(ProfileInfoFlags::PRIORITY));
 }
 
-
 /// C++: TEST(ProfileTest, ApplySchedulingProfileToVmarIsOk)
 /// Apply a scheduling profile to a VMAR — should succeed (no-op).
 #[test]

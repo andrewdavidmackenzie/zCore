@@ -41,9 +41,7 @@ pub(crate) fn add_thread_handle(ctx: &TestContext) -> HandleValue {
     ctx.proc.add_handle(Handle::new(thread, rights))
 }
 
-
 // ── Bulk-ported exception tests ─────────────────────────────────────
-
 
 /// C++: TEST(DefaultExceptionHandlerTest, UnhandledHardwareException)
 /// An unhandled hardware exception (e.g. BUILTIN_TRAP / illegal instruction)

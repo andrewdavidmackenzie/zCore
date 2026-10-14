@@ -321,7 +321,6 @@ fn vmo_info_basic() {
     assert_eq!(size, (2 * PAGE_SIZE) as u64);
 }
 
-
 // ── HANDLE_BASIC on Process (topic 2) ───────────────────────────────
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoHandleBasicOnSelfSucceeds)
@@ -367,7 +366,6 @@ fn process_info_handle_basic_zero_buffer() {
 pub(crate) const TOPIC_JOB: u32 = 24;
 pub(crate) const JOB_INFO_SIZE: usize = 16; // zx_info_job_t
 
-
 // ── ZX_INFO_HANDLE_VALID (topic 1) ─────────────────────────────────
 
 pub(crate) const TOPIC_HANDLE_VALID: u32 = 1;
@@ -411,24 +409,20 @@ fn handle_valid_closed_fails() {
 pub(crate) const TOPIC_SOCKET: u32 = 22;
 pub(crate) const SOCKET_INFO_SIZE: usize = 48; // zx_info_socket_t
 
-
 // ── ZX_INFO_TIMER (topic 25) ───────────────────────────────────────
 
 pub(crate) const TOPIC_TIMER: u32 = 25;
 pub(crate) const TIMER_INFO_SIZE: usize = 24; // zx_info_timer_t
-
 
 // ── ZX_INFO_STREAM (topic 26) ──────────────────────────────────────
 
 pub(crate) const TOPIC_STREAM: u32 = 26;
 pub(crate) const STREAM_INFO_SIZE: usize = 24; // zx_info_stream_t
 
-
 // ── ZX_INFO_BTI (topic 20) ─────────────────────────────────────────
 
 pub(crate) const TOPIC_BTI: u32 = 20;
 pub(crate) const BTI_INFO_SIZE: usize = 32; // zx_info_bti_t
-
 
 // ── ZX_INFO_HANDLE_COUNT on Thread (topic 19) ──────────────────────
 
@@ -620,7 +614,6 @@ fn process_info_handle_stats() {
 
 pub(crate) const TOPIC_RESOURCE: u32 = 18;
 pub(crate) const RESOURCE_INFO_SIZE: usize = 56; // zx_info_resource_t
-
 
 // ── ZX_INFO_HANDLE_TABLE (topic 27) ────────────────────────────────
 
@@ -1238,7 +1231,6 @@ fn process_info_threads_invalid_handle() {
     );
 }
 
-
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessThreadsNullAvailSucceeds)
 #[test]
 fn process_info_threads_null_avail() {
@@ -1515,7 +1507,6 @@ fn thread_info_bad_avail() {
 
 pub(crate) const VMO_INFO_SIZE: usize = 168;
 
-
 // ── VMAR (topic 7) — missing tests ─────────────────────────────────
 
 /// C++: TEST_F(VmarGetInfoTest, InfoVmarNullAvailSucceeds)
@@ -1778,18 +1769,13 @@ fn job_info_handle_basic_bad_avail() {
 
 // ── SOCKET (topic 22) — missing tests ──────────────────────────────
 
-
 // ── BTI (topic 20) — missing tests ─────────────────────────────────
-
 
 // ── TIMER (topic 25) — remaining 6 tests ──────────────────────────
 
-
 // ── STREAM (topic 26) — remaining 6 tests ─────────────────────────
 
-
 // ── RESOURCE (topic 18) — remaining 7 tests ───────────────────────
-
 
 // ── THREAD_STATS (topic 15) — remaining 6 tests ──────────────────
 
@@ -1922,7 +1908,6 @@ fn thread_info_thread_stats_bad_avail() {
 }
 
 // ── HANDLE_COUNT (topic 19) — remaining 8 tests ──────────────────
-
 
 // ── HANDLE_BASIC on Process (topic 2) — remaining 6 tests ─────────
 
@@ -2204,9 +2189,7 @@ fn thread_info_handle_basic_bad_avail() {
 
 // ── JOB (topic 24) — remaining 6 tests ────────────────────────────
 
-
 // ── PROCESS_HANDLE_STATS (topic 21) — remaining 8 tests ──────────
-
 
 // ── HANDLE_TABLE (topic 27) — remaining 7 tests ──────────────────
 
@@ -2234,7 +2217,6 @@ fn process_info_handle_table_null_avail() {
     .unwrap();
 }
 
-
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessHandleTableInvalidBufferPointerFails)
 #[test]
 fn process_info_handle_table_invalid_buffer() {
@@ -2258,7 +2240,6 @@ fn process_info_handle_table_invalid_buffer() {
     .unwrap_err();
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
-
 
 // ═══════════════════════════════════════════════════════════════════
 // ZX_INFO_PROCESS_MAPS (topic 13) — 10 tests
@@ -2499,7 +2480,6 @@ fn process_info_maps_bad_avail() {
     .unwrap_err();
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
-
 
 // ═══════════════════════════════════════════════════════════════════
 // ZX_INFO_PROCESS_VMOS (topic 14) — 10 tests
@@ -2750,21 +2730,17 @@ fn process_info_vmos_bad_avail() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on Event (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
-
 
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on EventPair (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on Channel (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
-
 
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_VALID (topic 1) — NullAvail, NullActual, NullActualAndAvail
@@ -2774,22 +2750,18 @@ fn process_info_vmos_bad_avail() {
 // HANDLE_BASIC on VMO (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on Socket (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
-
 
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on Timer (topic 2) — 6 additional tests
 // (OnSelf, InvalidHandle, ZeroBuffer already exist above)
 // ═══════════════════════════════════════════════════════════════════
 
-
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on Timer (topic 2) — 3 missing tests (on_self, invalid_handle, zero_buffer)
 // ═══════════════════════════════════════════════════════════════════
-
 
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on Thread (topic 2) — 3 missing tests (on_self, invalid_handle, zero_buffer)
@@ -2850,31 +2822,25 @@ fn thread_info_handle_basic_zero_buffer() {
 // HANDLE_BASIC on Fifo (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on Port (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
-
 
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on Counter (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on Pager (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
-
 
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on BTI (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
 
-
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE_BASIC on Resource (topic 2) — 9 tests
 // ═══════════════════════════════════════════════════════════════════
-
 
 /// C++: TEST(JobGetInfoTest, InfoJobChildJobsGetChild)
 /// Create a child job, enumerate via JOB_CHILDREN, then look up the child

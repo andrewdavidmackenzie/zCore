@@ -101,4 +101,3 @@ fn related_koid() {
     assert_eq!(ep0.related_koid(), ep1.id());
     assert_eq!(ep1.related_koid(), ep0.id());
 }
-

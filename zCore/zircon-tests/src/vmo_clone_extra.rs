@@ -246,4 +246,3 @@ fn clone_name() {
     assert_eq!(child.name(), "my-clone");
     assert_eq!(child.type_name(), "VmObject");
 }
-

@@ -127,4 +127,3 @@ fn slice_deep_hierarchy() {
     current.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 99);
 }
-

@@ -10,7 +10,6 @@ use zircon_object::task::{Job, Process, Task, Thread, ThreadState, ThreadStateKi
 
 extern crate alloc;
 
-
 // ── Thread lifecycle tests (async, using test_loop_thread_fn) ───────
 
 /// Helper: cast Arc<Thread> to Arc<dyn KernelObject> for wait_signal.
@@ -18,13 +17,11 @@ pub(crate) fn as_kobject(thread: &alloc::sync::Arc<Thread>) -> alloc::sync::Arc<
     thread.clone()
 }
 
-
 // NOTE: Double-start test omitted — zCore's Thread::start() doesn't
 // currently check for already-running state (Fuchsia returns BAD_STATE).
 // This is a known gap, not a test infrastructure issue.
 
 // ── Bulk-ported thread tests ────────────────────────────────────────
-
 
 // ── Bulk-ported thread tests (batch 2) ──────────────────────────────
 //
@@ -32,9 +29,7 @@ pub(crate) fn as_kobject(thread: &alloc::sync::Arc<Thread>) -> alloc::sync::Arc<
 // can be exercised with the cooperative scheduler have real logic.
 // Tests that would hang (blocking in syscalls with preemptive
 
-
 // ── Bulk-ported thread tests (batch 2) ──────────────────────────────
-
 
 // ============================================================================
 // Missing Fuchsia core-tests: Threads suite (56 tests)

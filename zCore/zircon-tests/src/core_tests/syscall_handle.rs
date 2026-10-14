@@ -9,7 +9,6 @@ use hal_impl::user::UserOutPtr;
 use zircon_object::object::{Handle, HandleValue, Rights};
 use zircon_object::ZxError;
 
-
 /// C++: TEST(HandleCloseTest, Many) — syscall level
 /// Close many handles at once.
 #[test]
@@ -98,5 +97,3 @@ fn replace_failure_both_invalid() {
     // The source handle remains valid.
     sc.sys_handle_check_valid(h).unwrap();
 }
-
-

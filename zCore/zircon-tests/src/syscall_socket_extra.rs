@@ -3,10 +3,10 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
+use crate::core_tests::syscall_socket::syscall_socket_create;
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::ZxError;
-use crate::core_tests::syscall_socket::{syscall_socket_create};
 
 #[test]
 fn shutdown_write() {
@@ -40,4 +40,3 @@ fn shutdown_write() {
     .unwrap();
     assert_eq!(actual, 2);
 }
-

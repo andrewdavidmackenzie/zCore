@@ -5,9 +5,9 @@
 
 use crate::helpers::TestContext;
 use hal_impl::user::UserOutPtr;
-use zircon_object::ZxError;
 use zircon_object::object::{Handle, HandleValue, Rights, Signal};
 use zircon_object::signal::{PortPacket, PortPacketRepr};
+use zircon_object::ZxError;
 
 /// wait_one returns immediately when the signal is already set.
 #[async_std::test]
@@ -396,4 +396,3 @@ async fn wait_one_channel_peer_closed() {
         Err(e) => panic!("unexpected error: {:?}", e),
     }
 }
-

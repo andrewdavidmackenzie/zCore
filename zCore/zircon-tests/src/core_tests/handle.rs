@@ -5,7 +5,6 @@ use zircon_object::ipc::Channel;
 use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::ZxError;
 
-
 /// C++: TEST(HandleCloseTest, ManyDuplicateTest)
 /// Duplicate a handle many times, then close all duplicates and the original.
 /// All should become invalid after closing.

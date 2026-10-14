@@ -4,8 +4,8 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
-use zircon_object::vm::{SeekOrigin, Stream, VmObject};
 use zircon_object::object::KernelObject;
+use zircon_object::vm::{SeekOrigin, Stream, VmObject};
 
 /// Create a stream on a VMO.
 #[test]
@@ -221,4 +221,3 @@ fn stream_name() {
     stream.set_name("my-stream");
     assert_eq!(stream.name(), "my-stream");
 }
-

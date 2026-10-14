@@ -4132,4 +4132,3 @@ fn resource_info_on_self() {
     assert_eq!(actual, 1);
     assert_eq!(avail, 1);
 }
-

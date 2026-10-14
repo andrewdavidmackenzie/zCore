@@ -3,8 +3,8 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
-use core::time::Duration;
 use crate::helpers::TestContext;
+use core::time::Duration;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::{Slack, Timer};
 
@@ -193,4 +193,3 @@ fn timer_invalid_args() {
     let result = sc.sys_timer_create(0xFF, 0, UserOutPtr::from(&mut h as *mut _ as usize));
     assert_eq!(result.unwrap_err(), zircon_object::ZxError::INVALID_ARGS);
 }
-

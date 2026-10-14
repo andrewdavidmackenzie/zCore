@@ -6,7 +6,6 @@
 use crate::helpers::TestContext;
 use zircon_object::vm::{MMUFlags, VmObject};
 
-
 /// C++: TEST(MemoryMappingTest, AddressSpaceLimitsTest)
 /// Map multiple VMOs and verify they all get distinct addresses.
 #[test]

@@ -177,4 +177,3 @@ fn mapping_permissions() {
     let _ = result;
     vmar.unmap(addr, 0x1000).unwrap();
 }
-

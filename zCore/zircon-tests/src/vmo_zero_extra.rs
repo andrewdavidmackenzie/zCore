@@ -42,4 +42,3 @@ fn hidden_no_content() {
     vmo.read(PAGE_SIZE, &mut buf).unwrap();
     assert_eq!(buf, [0xBB; 8], "second page should be unchanged");
 }
-

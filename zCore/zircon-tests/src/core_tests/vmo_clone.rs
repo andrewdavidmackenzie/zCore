@@ -8,7 +8,6 @@ use zircon_object::task::{Job, Process};
 use zircon_object::vm::{MMUFlags, VmObject, VmoInfoFlags, PAGE_SIZE};
 use zircon_object::ZxError;
 
-
 // -- Faithful 1:1 ports from VmoCloneTestCase (vmo-clone.cc) --
 // Test names match the C++ originals exactly.
 

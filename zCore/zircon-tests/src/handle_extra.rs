@@ -4,9 +4,9 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
-use zircon_object::ZxError;
 use zircon_object::ipc::Channel;
 use zircon_object::object::{Handle, KernelObject, Rights};
+use zircon_object::ZxError;
 
 #[test]
 fn handle_close() {
@@ -279,4 +279,3 @@ fn handle_replace_invalid_rights() {
     });
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
-

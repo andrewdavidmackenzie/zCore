@@ -3,11 +3,13 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
+use crate::core_tests::exception::{
+    add_job_handle, add_process_handle, add_thread_handle, HandleValue,
+};
 use crate::helpers::TestContext;
 use hal_impl::user::UserOutPtr;
 use zircon_object::object::{Handle, Rights};
 use zircon_object::task::{Job, Task};
-use crate::core_tests::exception::{HandleValue, add_job_handle, add_process_handle, add_thread_handle};
 
 /// Create an exception channel on a process.
 #[test]
@@ -466,4 +468,3 @@ fn exception_double_bind_process() {
         "double-bind on process should fail with ALREADY_BOUND"
     );
 }
-

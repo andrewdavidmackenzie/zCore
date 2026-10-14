@@ -5,10 +5,10 @@
 
 use crate::helpers::TestContext;
 use hal_impl::user::UserOutPtr;
-use zircon_object::ZxError;
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::task::{Job, Process};
 use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
+use zircon_object::ZxError;
 
 /// vmo_create: basic creation with correct size.
 #[test]
@@ -951,4 +951,3 @@ fn vmo_info_not_paged() {
     // Size should match (via len(), not info.size which is private).
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
 }
-

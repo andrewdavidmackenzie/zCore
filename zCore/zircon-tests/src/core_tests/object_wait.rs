@@ -8,7 +8,6 @@ use hal_impl::user::UserOutPtr;
 use zircon_object::object::{HandleValue, Signal};
 use zircon_object::ZxError;
 
-
 /// C++: TEST(ObjectWaitManyTest, InvalidHandle)
 /// wait_many with an invalid handle in the array returns BAD_HANDLE.
 #[async_std::test]

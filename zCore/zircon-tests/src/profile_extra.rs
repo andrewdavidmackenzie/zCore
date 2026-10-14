@@ -3,11 +3,11 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
+use crate::core_tests::profile::make_deadline_info;
 use crate::helpers::TestContext;
-use zircon_object::ZxError;
 use zircon_object::object::{Handle, KernelObject, Rights};
-use crate::core_tests::profile::{make_deadline_info};
 use zircon_object::task::{Job, Process, Profile, ProfileInfo, ProfileInfoFlags, Thread};
+use zircon_object::ZxError;
 
 /// Creating a profile with invalid parameters should fail.
 #[test]
@@ -227,4 +227,3 @@ fn profile_name_support() {
     profile.set_name("my-profile");
     assert_eq!(profile.name(), "my-profile");
 }
-

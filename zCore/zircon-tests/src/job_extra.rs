@@ -4,9 +4,11 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
-use zircon_object::ZxError;
 use zircon_object::object::{KernelObject, Signal};
-use zircon_object::task::{BasicPolicy, Job, PolicyAction, PolicyCondition, Process, SetPolicyOptions};
+use zircon_object::task::{
+    BasicPolicy, Job, PolicyAction, PolicyCondition, Process, SetPolicyOptions,
+};
+use zircon_object::ZxError;
 
 #[test]
 fn job_root() {
@@ -413,4 +415,3 @@ fn job_no_children() {
     assert!(!root.signal().contains(Signal::JOB_NO_CHILDREN));
     assert!(!root.signal().contains(Signal::JOB_NO_PROCESSES));
 }
-

@@ -44,7 +44,6 @@ fn empty_queue_should_wait() {
     assert_eq!(result.unwrap_err(), ZxError::SHOULD_WAIT);
 }
 
-
 /// C++: TEST(FifoTest, InvalidParametersReturnOutOfRange) — syscall level
 #[test]
 fn invalid_parameters() {

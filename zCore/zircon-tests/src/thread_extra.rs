@@ -3,10 +3,10 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
+use crate::core_tests::thread::as_kobject;
 use crate::helpers::{self, TestContext};
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::task::{Job, Process, Task, Thread, ThreadState, ThreadStateKind};
-use crate::core_tests::thread::{as_kobject};
 
 #[test]
 fn thread_create() {
@@ -1535,4 +1535,3 @@ async fn thread_read_state_vector() {
         .wait_signal(Signal::THREAD_TERMINATED)
         .await;
 }
-

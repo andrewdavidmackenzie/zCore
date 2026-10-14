@@ -97,7 +97,6 @@ fn peer_closed_error() {
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-
 /// C++: TEST(SocketTest, CreateInvalidArgs) — syscall level
 #[test]
 fn create_invalid_args() {

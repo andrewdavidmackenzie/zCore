@@ -348,7 +348,6 @@ fn unaligned_committed() {
 
 // ── Pager-backed VmoZero test ───────────────────────────────────────
 
-
 /// C++: TEST(VmoZeroTestCase, ResizeOverHiddenMarkers)
 /// When a resizable VMO has a hidden parent with zero-markers from a
 /// previous zero operation, resizing the VMO so that only a sibling

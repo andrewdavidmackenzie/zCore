@@ -5,7 +5,6 @@ use zircon_object::ipc::Fifo;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::ZxError;
 
-
 /// C++: TEST(FifoTest, PartialWrite)
 #[test]
 fn fifo_partial_write() {
@@ -21,7 +20,6 @@ fn fifo_partial_write() {
     let n = f0.write(4, &data, 3).unwrap();
     assert_eq!(n, 1);
 }
-
 
 /// C++: TEST(FifoTest, FifoOrder)
 #[test]
@@ -147,7 +145,6 @@ fn user_signals_and_signal_peer() {
     assert!(fb.signal().contains(Signal::USER_SIGNAL_1));
     assert!(!fa.signal().contains(Signal::USER_SIGNAL_1));
 }
-
 
 /// C++: TEST(FifoTest, DefaultRightsAndType)
 /// Create a FIFO pair, verify type_name and initial signals.

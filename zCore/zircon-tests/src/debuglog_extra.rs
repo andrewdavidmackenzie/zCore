@@ -84,4 +84,3 @@ fn debuglog_create_invalid_options() {
     let log = DebugLog::create(0xDEAD_BEEF);
     assert_ne!(log.id(), 0);
 }
-

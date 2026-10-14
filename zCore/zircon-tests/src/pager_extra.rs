@@ -4,12 +4,12 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 extern crate alloc;
+use crate::core_tests::pager::create_pager_and_port;
 use crate::helpers::TestContext;
-use zircon_object::ZxError;
+use zircon_object::object::KernelObject;
 use zircon_object::signal::{Pager, Port};
 use zircon_object::vm::{VmObject, PAGE_SIZE};
-use crate::core_tests::pager::{create_pager_and_port};
-use zircon_object::object::KernelObject;
+use zircon_object::ZxError;
 
 /// Create a pager.
 #[test]
@@ -3359,4 +3359,3 @@ fn pager_vmo_op_dont_need() {
     let result = pager.op_range(6, &vmo, 0, PAGE_SIZE as u64, 0);
     assert_eq!(result.err(), Some(zircon_object::ZxError::NOT_SUPPORTED));
 }
-

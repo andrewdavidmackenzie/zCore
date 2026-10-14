@@ -4,8 +4,8 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
-use zircon_object::signal::Futex;
 use zircon_object::object::KernelObject;
+use zircon_object::signal::Futex;
 
 /// Futex wake with no waiters returns 0.
 #[test]
@@ -32,4 +32,3 @@ fn futex_koid() {
     let futex = Futex::new(0);
     assert_ne!(futex.id(), 0);
 }
-

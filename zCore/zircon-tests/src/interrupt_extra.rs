@@ -4,10 +4,10 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
-use zircon_object::ZxError;
 use zircon_object::dev::Interrupt;
-use zircon_object::signal::Port;
 use zircon_object::object::KernelObject;
+use zircon_object::signal::Port;
+use zircon_object::ZxError;
 
 /// Creating a virtual interrupt object succeeds.
 #[test]
@@ -93,4 +93,3 @@ fn interrupt_virtual_interrupt_wait() {
     // Requires async context and real interrupt delivery.
     // This test would block forever waiting for a virtual interrupt.
 }
-

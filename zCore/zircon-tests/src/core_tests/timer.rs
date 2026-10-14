@@ -5,7 +5,6 @@ use core::time::Duration;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::{Slack, Timer};
 
-
 /// C++: TEST(Timer, AlreadyPassedDeadlineOnWaitOne)
 /// Set deadline to 0 (past), wait_one should return immediately.
 #[test]

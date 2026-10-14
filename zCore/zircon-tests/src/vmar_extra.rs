@@ -4,9 +4,9 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
+use zircon_object::object::KernelObject;
 use zircon_object::task::{Job, Process};
 use zircon_object::vm::{MMUFlags, VmObject, VmarFlags, PAGE_SIZE};
-use zircon_object::object::KernelObject;
 
 /// Process root VMAR exists and has valid properties.
 #[test]
@@ -552,4 +552,3 @@ fn addr_and_size() {
     let info = child.get_info();
     assert_eq!(info.len, size);
 }
-

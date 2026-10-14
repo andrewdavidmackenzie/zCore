@@ -50,7 +50,6 @@ fn create_invalid_options() {
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
 
-
 /// C++: TEST(ChannelTest, ReadWhenEmptyReturnsShouldWait) — syscall level
 #[test]
 fn read_empty_via_syscall() {
@@ -135,7 +134,6 @@ fn read_closed_peer_via_syscall() {
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
 }
 
-
 /// C++: TEST(ChannelTest, ReadWithoutReadRightReturnsAccessDenied) — syscall level
 #[test]
 fn read_without_read_right() {
@@ -169,7 +167,6 @@ fn read_without_read_right() {
     );
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
-
 
 // ============================================================
 // New tests ported from Fuchsia's channel.cc

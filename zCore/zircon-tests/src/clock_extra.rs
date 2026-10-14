@@ -3,9 +3,9 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
+use crate::core_tests::clock::syscall_clock_create;
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
-use crate::core_tests::clock::{syscall_clock_create};
 
 /// Create an auto-start clock and read it.
 #[test]
@@ -130,4 +130,3 @@ fn clock_adjust_needs_resource() {
     let result = sc.sys_clock_adjust(0xDEAD, 1, 0);
     assert_eq!(result, Err(zircon_object::ZxError::BAD_HANDLE));
 }
-

@@ -11,7 +11,6 @@ use zircon_object::ZxError;
 
 extern crate alloc;
 
-
 // -- Faithful 1:1 ports from VmoSliceTestCase (vmo-slice.cc) --
 
 /// C++: TEST(VmoSliceTestCase, NonSlice)

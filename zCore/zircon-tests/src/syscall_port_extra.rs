@@ -5,9 +5,9 @@
 
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
-use zircon_object::ZxError;
 use zircon_object::object::HandleValue;
 use zircon_object::signal::PortPacket;
+use zircon_object::ZxError;
 
 #[test]
 fn port_create_bind_to_interrupt() {
@@ -88,4 +88,3 @@ fn port_cancel_key_bad_handle() {
     let result = sc.sys_port_cancel_key(0xDEAD, 0, 0);
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
-

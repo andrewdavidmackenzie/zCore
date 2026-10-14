@@ -3,7 +3,6 @@
 use crate::helpers::TestContext;
 use zircon_object::signal::Futex;
 
-
 /// C++: TEST(FutexTest, WaitValueMismatch)
 /// futex_wait with wrong expected value returns BAD_STATE immediately.
 #[test]

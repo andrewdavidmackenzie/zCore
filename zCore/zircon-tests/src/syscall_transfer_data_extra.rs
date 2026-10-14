@@ -4,12 +4,12 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 extern crate alloc;
-use alloc::vec;
+use crate::core_tests::syscall_transfer_data::{syscall_vmo_create, HandleValue};
 use crate::helpers::TestContext;
+use alloc::vec;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::object::{Handle, Rights};
 use zircon_object::vm::{VmObject, PAGE_SIZE};
-use crate::core_tests::syscall_transfer_data::{HandleValue, syscall_vmo_create};
 
 /// Test missing WRITE right on dst handle.
 #[test]
@@ -144,4 +144,3 @@ fn basic_transfer() {
         "src should be zeroed after transfer"
     );
 }
-

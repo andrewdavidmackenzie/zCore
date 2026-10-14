@@ -8,7 +8,6 @@ use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::signal::EventPair;
 
-
 /// C++: TEST(EventPairTest, SignalPeer)
 ///
 /// Signal the peer endpoint and verify the signal is visible.
@@ -31,5 +30,3 @@ fn signal_self() {
     ep0.signal_set(Signal::USER_SIGNAL_0);
     assert!(ep0.signal().contains(Signal::USER_SIGNAL_0));
 }
-
-

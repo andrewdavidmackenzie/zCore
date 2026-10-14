@@ -3,11 +3,11 @@
 //! These are NOT 1:1 ports of C++ core-tests. They exercise
 //! kernel-object-level APIs and zCore-specific behavior.
 
+use crate::core_tests::syscall_signal::syscall_eventpair_create;
 use crate::helpers::TestContext;
 use hal_impl::user::UserOutPtr;
-use zircon_object::ZxError;
 use zircon_object::object::HandleValue;
-use crate::core_tests::syscall_signal::{syscall_eventpair_create};
+use zircon_object::ZxError;
 
 #[test]
 fn event_create_via_syscall() {
@@ -83,4 +83,3 @@ fn eventpair_invalid_signal_bits_full() {
     sc.sys_object_signal(h0, 0, 1 << 3).unwrap();
     sc.sys_object_signal(h0, 1 << 3, 0).unwrap();
 }
-

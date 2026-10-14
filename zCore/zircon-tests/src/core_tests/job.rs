@@ -7,7 +7,6 @@ use zircon_object::task::{
 };
 use zircon_object::ZxError;
 
-
 /// C++: TEST(JobTest, GetInfo)
 /// JobInfo has private fields, so we verify it returns without panicking.
 #[test]
@@ -17,7 +16,6 @@ fn job_get_info() {
     let _info = root.get_info();
     // JobInfo has private fields; just verify it returns successfully
 }
-
 
 /// C++: TEST(JobTest, PolicyBasicOverride)
 /// Set policy DENY, then override with ALLOW using Relative option.
@@ -50,7 +48,6 @@ fn job_policy_basic_override() {
         Some(PolicyAction::Allow)
     );
 }
-
 
 /// C++: TEST(JobTest, CloseJobRemovesFromTree)
 /// Dropping a job removes it from the parent's child list.
@@ -94,7 +91,6 @@ fn job_max_height() {
     );
 }
 
-
 /// C++: TEST(JobTest, CriticalProcess)
 /// Marking a process critical to a job kills the job when the process exits.
 #[test]
@@ -117,7 +113,6 @@ fn job_critical_process() {
     proc.exit(1);
     assert!(root.signal().contains(Signal::JOB_TERMINATED));
 }
-
 
 // ── Batch-ported JobTest tests from jobs.cc ──
 
