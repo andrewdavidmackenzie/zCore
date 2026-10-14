@@ -98,6 +98,15 @@ impl Pager {
         Ok(vmo)
     }
 
+    /// Check if a VMO belongs to this pager.
+    pub fn owns_vmo(&self, vmo: &Arc<VmObject>) -> bool {
+        let inner = self.inner.lock();
+        inner
+            .vmos
+            .iter()
+            .any(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
+    }
+
     /// Detach a VMO from this pager.
     ///
     /// After detaching, page faults on the VMO will no longer be
@@ -171,6 +180,20 @@ impl Pager {
         length: u64,
         data: u64,
     ) -> ZxResult {
+        // Validate op code first.
+        if !matches!(
+            op,
+            ZX_PAGER_OP_FAIL
+                | ZX_PAGER_OP_DIRTY
+                | ZX_PAGER_OP_WRITEBACK_BEGIN
+                | ZX_PAGER_OP_WRITEBACK_END
+        ) {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
+        // VMO must be pager-backed.
+        if !vmo.is_pager_backed() {
+            return Err(ZxError::INVALID_ARGS);
+        }
         // Verify the VMO belongs to this pager.
         let inner = self.inner.lock();
         if !inner
@@ -180,35 +203,61 @@ impl Pager {
         {
             return Err(ZxError::INVALID_ARGS);
         }
-        drop(inner); // Release pager lock before operating on VMO.
-                     // Validate range doesn't overflow.
-        (offset as usize)
+        drop(inner);
+        // Validate alignment.
+        if !(offset as usize).is_multiple_of(PAGE_SIZE)
+            || !(length as usize).is_multiple_of(PAGE_SIZE)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Validate range doesn't overflow and is within VMO bounds.
+        let end = (offset as usize)
             .checked_add(length as usize)
             .ok_or(ZxError::OUT_OF_RANGE)?;
+        if end > vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         match op {
             ZX_PAGER_OP_FAIL => {
-                // Fail waiting threads for the specified range with
-                // the error code in `data`. Map common Fuchsia errors;
-                // default to IO for unknown codes.
-                let err = match data as i32 {
-                    -54 => ZxError::NO_SPACE,
-                    -5 => ZxError::IO,
-                    -29 => ZxError::IO_DATA_INTEGRITY,
-                    -45 => ZxError::BAD_STATE,
-                    _ => ZxError::IO,
+                // Validate error code: must be a recognized Fuchsia error.
+                let data_i32 = data as i32;
+                let err = match data_i32 {
+                    -54 => ZxError::NO_SPACE,          // ZX_ERR_NO_SPACE
+                    -5 => ZxError::IO,                 // ZX_ERR_IO
+                    -29 => ZxError::IO_DATA_INTEGRITY, // ZX_ERR_IO_DATA_INTEGRITY
+                    -45 => ZxError::BAD_STATE,         // ZX_ERR_BAD_STATE
+                    _ => return Err(ZxError::INVALID_ARGS),
                 };
                 vmo.fail_pager_requests_range(offset as usize, length as usize, err);
                 Ok(())
             }
             ZX_PAGER_OP_DIRTY => {
-                // Grant dirty permission for the range. Wakes threads
-                // blocked on dirty traps.
-                vmo.mark_pages_dirty(offset as usize, length as usize);
+                // data must be 0.
+                if data != 0 {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                // OP_DIRTY requires TRAP_DIRTY on the VMO.
+                if !vmo.is_trap_dirty() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
+                // Can only dirty supplied (committed) pages.
+                vmo.mark_pages_dirty(offset as usize, length as usize)
+            }
+            ZX_PAGER_OP_WRITEBACK_BEGIN => {
+                // data must be 0 or ZX_VMO_DIRTY_RANGE_IS_ZERO (1).
+                const ZX_VMO_DIRTY_RANGE_IS_ZERO: u64 = 1;
+                if data != 0 && data != ZX_VMO_DIRTY_RANGE_IS_ZERO {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                vmo.writeback_begin(offset as usize, length as usize, data);
                 Ok(())
             }
-            ZX_PAGER_OP_WRITEBACK_BEGIN | ZX_PAGER_OP_WRITEBACK_END => {
-                // Writeback lifecycle — currently a no-op since we
-                // don't distinguish clean/writeback/dirty states.
+            ZX_PAGER_OP_WRITEBACK_END => {
+                // data must be 0.
+                if data != 0 {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                vmo.writeback_end(offset as usize, length as usize);
                 Ok(())
             }
             _ => Err(ZxError::NOT_SUPPORTED),

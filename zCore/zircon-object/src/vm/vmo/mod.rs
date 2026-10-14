@@ -22,6 +22,11 @@ mod slice;
 kcounter!(VMO_PAGE_ALLOC, "vmo.page_alloc");
 kcounter!(VMO_PAGE_DEALLOC, "vmo.page_dealloc");
 
+/// Page dirty-tracking states.
+const PAGE_CLEAN: u8 = 0;
+const PAGE_DIRTY: u8 = 1;
+const PAGE_AWAITING_CLEAN: u8 = 2;
+
 /// The amount of memory committed to VMOs.
 pub fn vmo_page_bytes() -> usize {
     (VMO_PAGE_ALLOC.get() - VMO_PAGE_DEALLOC.get()) * PAGE_SIZE
@@ -176,10 +181,12 @@ struct VmObjectInner {
     pager_key: u64,
     /// Whether this VMO traps writes for dirty-page notifications.
     trap_dirty: bool,
-    /// Per-page dirty state. `true` = dirty (write allowed),
-    /// `false` = clean (write traps if `trap_dirty` is set).
+    /// Per-page dirty state tracking.
+    /// Clean = 0, Dirty = 1, AwaitingClean = 2
     /// Only used when `trap_dirty` is true.
-    dirty_pages: Vec<bool>,
+    dirty_pages: Vec<u8>,
+    /// Whether the VMO has been modified since last stats query.
+    modified: bool,
     /// Threads waiting for pager to supply/dirty pages. Each entry is a
     /// (page_index, sender) pair. Waiters for both READ and DIRTY
     /// requests share this list — they're woken by supply_pages or
@@ -264,7 +271,7 @@ impl VmObject {
     pub fn set_trap_dirty(&self, pages: usize) {
         let mut inner = self.inner.lock();
         inner.trap_dirty = true;
-        inner.dirty_pages = alloc::vec![false; pages];
+        inner.dirty_pages = alloc::vec![PAGE_CLEAN; pages];
     }
 
     /// Check if this VMO has dirty-page trapping enabled.
@@ -301,13 +308,22 @@ impl VmObject {
 
     /// Mark pages as dirty (called by pager_op_range(DIRTY)).
     /// Wakes any threads waiting for dirty permission on these pages.
-    pub fn mark_pages_dirty(&self, offset: usize, length: usize) {
+    /// Returns NOT_FOUND if any page in the range is not committed.
+    pub fn mark_pages_dirty(&self, offset: usize, length: usize) -> ZxResult {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
-            inner.dirty_pages[page_idx] = true;
+        // Check that all pages in range are committed (supplied).
+        if length > 0 {
+            let committed = self.trait_.committed_pages_in_range(start_page, end_page);
+            if committed < end_page - start_page {
+                return Err(ZxError::NOT_FOUND);
+            }
         }
+        for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
+            inner.dirty_pages[page_idx] = PAGE_DIRTY;
+        }
+        inner.modified = true;
         // Wake waiters for these pages (shared waiter list with read waiters).
         let mut i = 0;
         while i < inner.pager_waiters.len() {
@@ -318,6 +334,7 @@ impl VmObject {
                 i += 1;
             }
         }
+        Ok(())
     }
 
     /// Check if a page is dirty (i.e., write-allowed for TRAP_DIRTY VMOs).
@@ -326,7 +343,10 @@ impl VmObject {
         if !inner.trap_dirty {
             return true; // Non-TRAP_DIRTY VMOs treat all pages as writable
         }
-        inner.dirty_pages.get(page_idx).copied().unwrap_or(false)
+        matches!(
+            inner.dirty_pages.get(page_idx).copied(),
+            Some(PAGE_DIRTY) | Some(PAGE_AWAITING_CLEAN)
+        )
     }
 
     /// For TRAP_DIRTY VMOs, find the first clean page in the range
@@ -349,8 +369,8 @@ impl VmObject {
                 None
             };
         }
-        for (i, dirty) in inner.dirty_pages[start_page..max_page].iter().enumerate() {
-            if !dirty {
+        for (i, &state) in inner.dirty_pages[start_page..max_page].iter().enumerate() {
+            if state == PAGE_CLEAN {
                 return Some((start_page + i) * PAGE_SIZE);
             }
         }
@@ -399,9 +419,9 @@ impl VmObject {
         }
         let mut ranges = Vec::new();
         let mut run_start: Option<usize> = None;
-        for (i, &dirty) in inner.dirty_pages[start_page..max_page].iter().enumerate() {
+        for (i, &state) in inner.dirty_pages[start_page..max_page].iter().enumerate() {
             let page_idx = start_page + i;
-            if dirty {
+            if state == PAGE_DIRTY || state == PAGE_AWAITING_CLEAN {
                 if run_start.is_none() {
                     run_start = Some(page_idx);
                 }
@@ -422,6 +442,46 @@ impl VmObject {
             ));
         }
         ranges
+    }
+
+    /// Begin writeback: transition dirty pages in range to AwaitingClean.
+    pub fn writeback_begin(&self, offset: usize, length: usize, _data: u64) {
+        let mut inner = self.inner.lock();
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
+            if inner.dirty_pages[page_idx] == PAGE_DIRTY {
+                inner.dirty_pages[page_idx] = PAGE_AWAITING_CLEAN;
+            }
+        }
+    }
+
+    /// End writeback: transition AwaitingClean pages in range to Clean.
+    /// Pages that were re-dirtied during writeback stay dirty.
+    pub fn writeback_end(&self, offset: usize, length: usize) {
+        let mut inner = self.inner.lock();
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
+            if inner.dirty_pages[page_idx] == PAGE_AWAITING_CLEAN {
+                inner.dirty_pages[page_idx] = PAGE_CLEAN;
+            }
+        }
+    }
+
+    /// Query and optionally reset the modified flag.
+    pub fn query_modified(&self, reset: bool) -> bool {
+        let mut inner = self.inner.lock();
+        let was_modified = inner.modified;
+        if reset {
+            inner.modified = false;
+        }
+        was_modified
+    }
+
+    /// Set the modified flag (called on write/resize/op_zero).
+    pub fn set_modified(&self) {
+        self.inner.lock().modified = true;
     }
 
     /// Clear the pager association (called on detach).
