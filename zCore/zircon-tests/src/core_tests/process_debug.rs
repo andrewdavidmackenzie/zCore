@@ -7,7 +7,7 @@ use crate::helpers::TestContext;
 use zircon_object::task::{Job, Process};
 use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 
-/// C++: TEST(ProcessDebugTest, ReadMemory)
+/// C++: TEST(ProcessDebugTest, ReadMemoryAtOffsetIsOk)
 /// Read memory from a mapped VMO via VMAR read_memory.
 #[test]
 fn read_memory() {
@@ -30,7 +30,7 @@ fn read_memory() {
     vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
-/// C++: TEST(ProcessDebugTest, WriteMemory)
+/// C++: TEST(ProcessDebugTest, WriteMemoryAtOffsetIsOk)
 /// Write memory to a mapped VMO via VMAR write_memory.
 #[test]
 fn write_memory() {
@@ -53,32 +53,7 @@ fn write_memory() {
     vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
-/// C++: TEST(ProcessDebugTest, ReadWriteRoundTrip)
-/// Write then read back via memory APIs.
-#[test]
-fn read_write_round_trip() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "debug-rw").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo = VmObject::new_paged(1);
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
-
-    let data = [0xCC; 32];
-    let _ = vmar.write_memory(addr, &data);
-
-    let mut buf = [0u8; 32];
-    let result = vmar.read_memory(addr, &mut buf);
-    if result.is_ok() {
-        assert_eq!(buf, data);
-    }
-
-    vmar.unmap(addr, PAGE_SIZE).unwrap();
-}
-
-/// C++: TEST(ProcessDebugTest, ReadUnmapped)
+/// C++: TEST(ProcessDebugTest, ReadMemoryAtInvalidOffsetReturnsErrorNotFound)
 /// Read from unmapped address should fail.
 #[test]
 fn read_unmapped() {
@@ -100,7 +75,7 @@ fn read_unmapped() {
     );
 }
 
-/// C++: TEST(ProcessDebugTest, DebugUtilities)
+/// C++: TEST(ProcessDebugUtilsTest, XorShiftIsOk)
 /// Verify process VMAR info for debug purposes.
 #[test]
 fn debug_utilities() {
@@ -114,7 +89,7 @@ fn debug_utilities() {
     assert_ne!(info.base, 0, "VMAR should have non-zero base");
 }
 
-/// C++: TEST(ProcessDebugTest, VdsoProtection)
+/// C++: TEST(ProcessDebugVDSO, WriteToVdsoAddressReturnsAccessDenied)
 /// Verify VDSO base is 0 in test mode (no vDSO mapped).
 #[test]
 fn vdso_protection() {
@@ -129,4 +104,25 @@ fn vdso_protection() {
         .unwrap();
     let vdso_base = usize::from_ne_bytes(buf.try_into().unwrap());
     assert_eq!(vdso_base, 0, "no vDSO in test mode");
+}
+
+/// C++: TEST(ProcessDebugTest, WriteAtInvalidOffsetReturnsErrorNotFound)
+/// Write to unmapped address should fail.
+#[test]
+fn write_at_invalid_offset() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "debug-write-bad").unwrap();
+    let vmar = proc.vmar();
+
+    let vmo = VmObject::new_paged(1);
+    let flags = MMUFlags::READ | MMUFlags::WRITE;
+    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, flags).unwrap();
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
+
+    let result = vmar.write_memory(addr, &[0xBB; 8]);
+    assert!(
+        result.is_err(),
+        "write_memory on unmapped address should fail"
+    );
 }

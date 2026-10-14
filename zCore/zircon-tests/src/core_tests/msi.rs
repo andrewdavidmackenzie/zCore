@@ -193,3 +193,10 @@ fn contiguous_not_supported() {
     // We verify the concept: MSI requires UNCACHED_DEVICE cache policy
     // on a physical VMO, not a contiguous allocation.
 }
+
+/// C++: TEST_F(MsiTest, AllocatedHandleRights)
+#[test]
+#[ignore = "requires MSI allocation infrastructure"]
+fn allocated_handle_rights() {
+    // Requires MSI allocation infrastructure not available in zCore.
+}

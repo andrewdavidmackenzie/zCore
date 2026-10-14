@@ -93,6 +93,8 @@ mod object_wait_extra;
 #[cfg(test)]
 mod object_wait_ops;
 #[cfg(test)]
+mod page_size_extra;
+#[cfg(test)]
 mod pager_extra;
 #[cfg(test)]
 mod policy;
@@ -100,6 +102,8 @@ mod policy;
 mod port_extra;
 #[cfg(test)]
 mod port_stress_extra;
+#[cfg(test)]
+mod process_debug_extra;
 #[cfg(test)]
 mod process_extra;
 #[cfg(test)]
@@ -166,3 +170,5 @@ mod vmo_ops;
 mod vmo_slice_extra;
 #[cfg(test)]
 mod vmo_zero_extra;
+#[cfg(test)]
+mod zx_assert_extra;
