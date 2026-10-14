@@ -580,3 +580,289 @@ fn write_rollback_on_wrap_around_fault() {
         assert_eq!(val, exp);
     }
 }
+
+/// C++: TEST(FifoTest, CreateArithmeticOverflow)
+/// Overflow in elem_count * elem_size returns OUT_OF_RANGE at syscall level.
+#[test]
+fn create_arithmetic_overflow() {
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::HandleValue;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let mut h0: HandleValue = 0;
+    let mut h1: HandleValue = 0;
+
+    // UINT32_MAX * 2 overflows
+    assert_eq!(
+        sc.sys_fifo_create(
+            u32::MAX as usize,
+            2,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+
+    // 2 * UINT32_MAX overflows
+    assert_eq!(
+        sc.sys_fifo_create(
+            2,
+            u32::MAX as usize,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+
+    // (1<<20) * (1<<20) overflows (or exceeds 4096)
+    assert_eq!(
+        sc.sys_fifo_create(
+            1 << 20,
+            1 << 20,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+}
+
+/// C++: TEST(FifoTest, CreateMaxBufferBoundary)
+/// Exact maximum (512*8=4096) succeeds; exceeding it returns OUT_OF_RANGE.
+#[test]
+fn create_max_buffer_boundary() {
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::HandleValue;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let mut h0: HandleValue = 0;
+    let mut h1: HandleValue = 0;
+
+    // Exact maximum size: 512 * 8 = 4096 bytes
+    sc.sys_fifo_create(
+        512,
+        8,
+        0,
+        UserOutPtr::from(&mut h0 as *mut _ as usize),
+        UserOutPtr::from(&mut h1 as *mut _ as usize),
+    )
+    .unwrap();
+
+    // Over maximum: 513 * 8 = 4104 bytes
+    assert_eq!(
+        sc.sys_fifo_create(
+            513,
+            8,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+
+    // Over maximum: 512 * 9 = 4608 bytes
+    assert_eq!(
+        sc.sys_fifo_create(
+            512,
+            9,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+}
+
+/// C++: TEST(FifoTest, CreateMinAndMaxSizes)
+/// Minimum valid sizes (1,1) and maximum buffer boundary (4096 bytes).
+#[test]
+fn create_min_and_max_sizes() {
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::HandleValue;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let mut h0: HandleValue = 0;
+    let mut h1: HandleValue = 0;
+
+    // Minimum valid sizes
+    sc.sys_fifo_create(
+        1,
+        1,
+        0,
+        UserOutPtr::from(&mut h0 as *mut _ as usize),
+        UserOutPtr::from(&mut h1 as *mut _ as usize),
+    )
+    .unwrap();
+
+    // Maximum: count * elem_size == 4096
+    sc.sys_fifo_create(
+        4096,
+        1,
+        0,
+        UserOutPtr::from(&mut h0 as *mut _ as usize),
+        UserOutPtr::from(&mut h1 as *mut _ as usize),
+    )
+    .unwrap();
+    sc.sys_fifo_create(
+        1,
+        4096,
+        0,
+        UserOutPtr::from(&mut h0 as *mut _ as usize),
+        UserOutPtr::from(&mut h1 as *mut _ as usize),
+    )
+    .unwrap();
+
+    // Exceeding maximum (4097 bytes)
+    assert_eq!(
+        sc.sys_fifo_create(
+            4097,
+            1,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+    assert_eq!(
+        sc.sys_fifo_create(
+            1,
+            4097,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+}
+
+/// C++: TEST(FifoTest, CreateZeroSize)
+/// Zero count or zero elem_size returns OUT_OF_RANGE.
+#[test]
+fn create_zero_size() {
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::HandleValue;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let mut h0: HandleValue = 0;
+    let mut h1: HandleValue = 0;
+
+    // Zero count
+    assert_eq!(
+        sc.sys_fifo_create(
+            0,
+            8,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+
+    // Zero elem_size
+    assert_eq!(
+        sc.sys_fifo_create(
+            8,
+            0,
+            0,
+            UserOutPtr::from(&mut h0 as *mut _ as usize),
+            UserOutPtr::from(&mut h1 as *mut _ as usize),
+        )
+        .unwrap_err(),
+        ZxError::OUT_OF_RANGE
+    );
+}
+
+/// C++: TEST(FifoTest, EmptyQueueReturnsErrShouldWait)
+/// Reading from an empty FIFO returns SHOULD_WAIT.
+#[test]
+fn empty_queue_returns_err_should_wait() {
+    let _ctx = TestContext::new();
+    let (_fa, fb) = Fifo::create(8, 8);
+
+    // Should not be able to read from an empty FIFO
+    let mut buf = [0u8; 64]; // 8 elements * 8 bytes
+    let err = fb.read(8, &mut buf, 8).unwrap_err();
+    assert_eq!(err, ZxError::SHOULD_WAIT);
+}
+
+/// C++: TEST(FifoTest, EndpointCloseSignalsPeerClosed)
+/// Closing one endpoint signals PEER_CLOSED on the other, but queued
+/// data can still be read before getting PEER_CLOSED on subsequent reads.
+#[test]
+fn endpoint_close_signals_peer_closed() {
+    let _ctx = TestContext::new();
+    let (fa, fb) = Fifo::create(8, 8);
+
+    // Write one element, then drop the writer endpoint
+    let data = 19u64.to_ne_bytes();
+    let n = fa.write(8, &data, 1).unwrap();
+    assert_eq!(n, 1);
+    drop(fa);
+
+    // fb should have READABLE | PEER_CLOSED
+    let sig = fb.signal();
+    assert!(sig.contains(Signal::READABLE));
+    assert!(sig.contains(Signal::PEER_CLOSED));
+
+    // Can still read the queued element
+    let mut buf = [0u8; 64];
+    let n = fb.read(8, &mut buf, 8).unwrap();
+    assert_eq!(n, 1);
+
+    // After draining, only PEER_CLOSED remains
+    let sig = fb.signal();
+    assert!(sig.contains(Signal::PEER_CLOSED));
+    assert!(!sig.contains(Signal::READABLE));
+
+    // Further reads return PEER_CLOSED
+    let err = fb.read(8, &mut buf, 8).unwrap_err();
+    assert_eq!(err, ZxError::PEER_CLOSED);
+}
+
+/// C++: TEST(FifoTest, PartialWriteQueuesElementsThatFit)
+/// When the FIFO is partially full, writing more elements than fit
+/// succeeds with only the fitting elements queued.
+#[test]
+fn partial_write_queues_elements_that_fit() {
+    let _ctx = TestContext::new();
+    let (fa, _fb) = Fifo::create(8, 8); // 8 elements of 8 bytes
+
+    // Fill with 5 elements
+    let data: Vec<u8> = (1u64..=8).flat_map(|x| x.to_ne_bytes()).collect();
+    let n = fa.write(8, &data[..40], 5).unwrap();
+    assert_eq!(n, 5);
+
+    // Partial write: request 5, only 3 fit
+    let n = fa.write(8, &data[..40], 5).unwrap();
+    assert_eq!(n, 3);
+}
+
+/// C++: TEST(FifoTest, WritePeerClosedReturnsPeerClosed)
+/// Writing to a FIFO whose peer has been closed returns PEER_CLOSED.
+#[test]
+fn write_peer_closed_returns_peer_closed() {
+    let _ctx = TestContext::new();
+    let (fa, fb) = Fifo::create(8, 8);
+
+    // Close the peer endpoint
+    drop(fa);
+
+    // Writing to the surviving endpoint should fail with PEER_CLOSED
+    let data = 42u64.to_ne_bytes();
+    let err = fb.write(8, &data, 1).unwrap_err();
+    assert_eq!(err, ZxError::PEER_CLOSED);
+}

@@ -339,7 +339,8 @@ fn child_signal_clone() {
 /// C++: TEST(VmoTestCase, Create)
 ///
 /// Basic VMO creation with various page counts. Verify KOID is
-/// non-zero, size is correct, initial content is zero.
+/// non-zero, size is correct, initial content is zero, and
+/// get_info() returns consistent metadata (flags, size, committed).
 #[test]
 fn vmo_create_basic() {
     let _ctx = TestContext::new();
@@ -349,12 +350,42 @@ fn vmo_create_basic() {
         assert_ne!(vmo.id(), 0, "VMO KOID should be non-zero");
         assert_eq!(vmo.len(), pages * PAGE_SIZE);
 
-        // First page should read as zeros.
+        // get_info() before any access: no pages committed yet.
+        let info_before = vmo.get_info();
+        assert!(
+            info_before
+                .flags
+                .contains(zircon_object::vm::VmoInfoFlags::TYPE_PAGED),
+            "paged VMO should have TYPE_PAGED flag"
+        );
+        assert!(
+            !info_before
+                .flags
+                .contains(zircon_object::vm::VmoInfoFlags::RESIZABLE),
+            "default VMO should not be RESIZABLE"
+        );
+        assert_eq!(
+            info_before.committed_bytes, 0,
+            "freshly created VMO should have 0 committed bytes"
+        );
+        assert_eq!(
+            info_before.populated_bytes, 0,
+            "freshly created VMO should have 0 populated bytes"
+        );
+
+        // First page should read as zeros (this commits the page).
         let mut buf = [0xFFu8; 8];
         vmo.read(0, &mut buf).unwrap();
         assert!(
             buf.iter().all(|&b| b == 0),
             "initial content should be zero"
+        );
+
+        // After read, page 0 is committed.
+        let info_after = vmo.get_info();
+        assert_eq!(
+            info_after.committed_bytes as usize, PAGE_SIZE,
+            "after reading page 0, committed_bytes should be PAGE_SIZE"
         );
     }
 }
@@ -363,12 +394,14 @@ fn vmo_create_basic() {
 ///
 /// Read and write at various offsets within a multi-page VMO.
 /// Verify data round-trip at page boundaries and mid-page offsets.
+/// Also tests OUT_OF_RANGE for reads/writes past the end, and
+/// zero-length operations at exact boundaries (matching the C++ test).
 #[test]
 fn vmo_read_write_range_extended() {
     let _ctx = TestContext::new();
 
     let vmo = VmObject::new_paged(4);
-    let _total = 4 * PAGE_SIZE;
+    let len = 4 * PAGE_SIZE;
 
     // Write at page-aligned offsets.
     for i in 0..4 {
@@ -400,11 +433,50 @@ fn vmo_read_write_range_extended() {
     let mut span_buf = [0u8; 8];
     vmo.read(boundary, &mut span_buf).unwrap();
     assert_eq!(span_buf, span_data);
+
+    // ── OUT_OF_RANGE checks (matching C++ ReadWriteRange) ──
+
+    // Read past end → OUT_OF_RANGE.
+    let mut big_buf = vec![0u8; len * 2];
+    assert_eq!(
+        vmo.read(0, &mut big_buf).unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "read past end should return OUT_OF_RANGE"
+    );
+
+    // Successfully read 0 bytes at exact end.
+    let mut empty = [0u8; 0];
+    vmo.read(len, &mut empty).unwrap();
+
+    // Read 0 bytes past end → OUT_OF_RANGE.
+    assert_eq!(
+        vmo.read(len + 1, &mut empty).unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "read 0 bytes past end should return OUT_OF_RANGE"
+    );
+
+    // Write past end → OUT_OF_RANGE.
+    assert_eq!(
+        vmo.write(0, &big_buf).unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "write past end should return OUT_OF_RANGE"
+    );
+
+    // Successfully write 0 bytes at exact end.
+    vmo.write(len, &[]).unwrap();
+
+    // Write 0 bytes past end → OUT_OF_RANGE.
+    assert_eq!(
+        vmo.write(len + 1, &[]).unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "write 0 bytes past end should return OUT_OF_RANGE"
+    );
 }
 
 /// C++: TEST(VmoTestCase, Resize)
 ///
-/// Resize a resizable VMO up and down. Verify size changes correctly.
+/// Resize a resizable VMO up and down. Verify size changes correctly,
+/// signals are consistent, and ludicrous sizes return OUT_OF_RANGE.
 #[test]
 fn vmo_resize_basic() {
     let _ctx = TestContext::new();
@@ -416,6 +488,12 @@ fn vmo_resize_basic() {
     vmo.set_len(4 * PAGE_SIZE).unwrap();
     assert_eq!(vmo.len(), 4 * PAGE_SIZE);
 
+    // After resize, VMO_ZERO_CHILDREN should still be set (no children).
+    assert!(
+        vmo.signal().contains(Signal::VMO_ZERO_CHILDREN),
+        "VMO_ZERO_CHILDREN should be set after resize (no children)"
+    );
+
     // Shrink to 2 pages.
     vmo.set_len(2 * PAGE_SIZE).unwrap();
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
@@ -423,6 +501,24 @@ fn vmo_resize_basic() {
     // Resize to same size (no-op).
     vmo.set_len(2 * PAGE_SIZE).unwrap();
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
+
+    // C++: resize to a ludicrous size (UINT64_MAX) → OUT_OF_RANGE.
+    let result = vmo.set_len(u64::MAX as usize);
+    assert_eq!(
+        result.unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "resize to ludicrous size should return OUT_OF_RANGE"
+    );
+    // Size should be unchanged after failed resize.
+    assert_eq!(vmo.len(), 2 * PAGE_SIZE);
+
+    // Resize to non-aligned size — should round up.
+    vmo.set_len(2 * PAGE_SIZE + 1).unwrap();
+    assert_eq!(
+        vmo.len(),
+        3 * PAGE_SIZE,
+        "non-aligned resize should round up"
+    );
 }
 
 /// C++: TEST(VmoTestCase, CachePolicy)
