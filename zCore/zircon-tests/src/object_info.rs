@@ -6961,8 +6961,8 @@ fn kernel_stats_guest_stats_array_size() {
 fn kernel_stats_kmem_stats() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
-    // zx_info_kmem_stats_t is 112 bytes
-    let mut buf = vec![0u8; 112];
+    // zx_info_kmem_stats_t is 152 bytes (19 × u64)
+    let mut buf = vec![0u8; 152];
     let result = get_info(&ctx, res_h, TOPIC_KMEM_STATS, &mut buf);
     match result {
         Ok((actual, avail)) => {
@@ -7963,7 +7963,10 @@ fn stall_get_info_memory_stall_zero_sized_buffer_is_too_small() {
 // ── Task Stats (topic 12) ─────────────────────────────────────────
 
 const TOPIC_TASK_STATS: u32 = 12;
-const TASK_STATS_SIZE: usize = 16; // zx_info_task_stats_t: 2 x u64
+/// V2 size: zx_info_task_stats_t has 4 × u64 = 32 bytes.
+const TASK_STATS_SIZE: usize = 32;
+/// V1 size: zx_info_task_stats_v1_t has 2 × u64 = 16 bytes.
+const TASK_STATS_V1_SIZE: usize = 16;
 
 /// C++: TEST(TaskGetInfoTest, InfoStatsSmokeTest)
 #[test]
@@ -7984,13 +7987,14 @@ fn task_get_info_info_stats_smoke_test() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoStatsSmokeTestV1)
+/// V1 uses a 16-byte buffer (2 fields only).
 #[test]
 fn task_get_info_info_stats_smoke_test_v1() {
     let ctx = TestContext::new();
     let proc_h = ctx
         .proc
         .add_handle(Handle::new(ctx.proc.clone(), Rights::INSPECT));
-    let mut buf = [0u8; TASK_STATS_SIZE];
+    let mut buf = [0u8; TASK_STATS_V1_SIZE];
     let _result = get_info(&ctx, proc_h, TOPIC_TASK_STATS, &mut buf);
 }
 
