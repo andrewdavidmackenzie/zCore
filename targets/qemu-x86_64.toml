@@ -5,8 +5,7 @@
 
 default-flavour = "linux"
 arch = "x86_64"
-# TODO(#680): increase to 8 once x86_64 SMP boot is fixed
-cores = 1
+cores = 8
 linker-script = "zCore/hal-impl/src/bare/arch/x86_64/platform/linker.ld"
 drivers = ["uart-16550", "apic", "pci"]
 features = ["dynamic-linking"]
