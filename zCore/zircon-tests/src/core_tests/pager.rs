@@ -6019,3 +6019,97 @@ fn pager_writeback_suspend_dirty_test() {
     let (pager, port) = create_pager_and_port();
     let _vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 }
+
+// ── Demand-paging integration test ──────────────────────────────────
+
+/// C++: TEST(Pager, SinglePageTestVmo) — demand-paging variant
+///
+/// This test verifies the full demand-paging path:
+/// 1. Create pager + port + pager-backed VMO (page NOT pre-supplied)
+/// 2. Spawn an async task that calls `vmo.read_paged()` — this sends
+///    a `ZX_PAGER_VMO_READ` page request to the port and blocks
+///    until the pager supplies the page.
+/// 3. The main task dequeues the `ZX_PAGER_VMO_READ` packet from the
+///    port, verifying the page request metadata.
+/// 4. The main task supplies the page via `pager.supply_pages()`.
+/// 5. The reader task unblocks and returns the supplied data.
+#[async_std::test]
+async fn demand_paging_integration() {
+    use zircon_object::signal::{PacketType, PortPacketRepr, PayloadRepr, ZX_PAGER_VMO_READ};
+
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+    let pager_key: u64 = 42;
+    let vmo = pager
+        .create_vmo(0, &port, pager_key, PAGE_SIZE as u64)
+        .unwrap();
+
+    // The VMO has no pages committed yet.
+    assert_eq!(
+        vmo.committed_pages_in_range(0, 1),
+        0,
+        "page should NOT be committed before supply"
+    );
+
+    // Clone the Arc<VmObject> for the reader task.
+    let vmo_reader = vmo.clone();
+
+    // Spawn a reader task that will block on the unsupplied page.
+    let reader_handle = async_std::task::spawn(async move {
+        let mut buf = [0u8; 16];
+        vmo_reader
+            .read_paged(0, &mut buf)
+            .await
+            .expect("read_paged should succeed after pages are supplied");
+        buf
+    });
+
+    // Dequeue the page request from the port.
+    // read_paged() internally calls request_pages() which pushes a
+    // ZX_PAGER_VMO_READ packet, then blocks on wait_for_page().
+    let packet = port.wait().await;
+
+    // Verify the packet is a PageRequest with the correct metadata.
+    assert_eq!(
+        packet.type_,
+        PacketType::PageRequest,
+        "packet type should be PageRequest"
+    );
+    let repr = PortPacketRepr::from(&packet);
+    assert_eq!(repr.key, pager_key, "packet key should match pager key");
+    match repr.data {
+        PayloadRepr::PageRequest(pr) => {
+            assert_eq!(
+                pr.command, ZX_PAGER_VMO_READ,
+                "command should be ZX_PAGER_VMO_READ"
+            );
+            assert_eq!(pr.offset, 0, "requested offset should be 0");
+            assert_eq!(
+                pr.length, PAGE_SIZE as u64,
+                "requested length should be PAGE_SIZE"
+            );
+        }
+        other => panic!("expected PageRequest payload, got {:?}", other),
+    }
+
+    // Supply the page — this writes data into the VMO and wakes the
+    // reader task via complete_pager_requests().
+    let src = VmObject::new_paged(1);
+    src.write(0, b"demand page data").unwrap();
+    pager
+        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
+        .expect("supply_pages should succeed");
+
+    // The reader task should now complete with the supplied data.
+    let result = reader_handle.await;
+    assert_eq!(
+        &result, b"demand page data",
+        "reader should see the data supplied by the pager"
+    );
+
+    // Verify the page is now committed.
+    assert!(
+        vmo.committed_pages_in_range(0, 1) > 0,
+        "page should be committed after supply"
+    );
+}
