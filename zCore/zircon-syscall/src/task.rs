@@ -287,6 +287,14 @@ impl Syscall<'_> {
     ) -> ZxResult {
         info!("task.suspend_token: handle={:?}, token={:?}", handle, token);
         let proc = self.thread.proc();
+        // Validate the handle exists before type dispatch.
+        // get_object returns BAD_HANDLE for invalid handles, which
+        // must be propagated instead of falling through to WRONG_TYPE.
+        let (object, rights) = proc.get_dyn_object_and_rights(handle)?;
+        if !rights.contains(Rights::WRITE) {
+            return Err(ZxError::ACCESS_DENIED);
+        }
+        drop(object);
         if let Ok(thread) = proc.get_object_with_rights::<Thread>(handle, Rights::WRITE) {
             if Arc::ptr_eq(&thread, self.thread) {
                 return Err(ZxError::NOT_SUPPORTED);
@@ -493,7 +501,8 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         let proc = self.thread.proc();
-        // Validate: accept ROOT or SYSTEM resource with PROFILE_BASE
+        // Validate: accept ROOT or SYSTEM resource with PROFILE_BASE.
+        // Non-profile resources get ACCESS_DENIED (Fuchsia behavior).
         let rsrc = proc.get_resource_with_rights(resource, Rights::empty())?;
         if rsrc
             .validate(zircon_object::dev::ResourceKind::ROOT)
@@ -503,7 +512,8 @@ impl Syscall<'_> {
                 zircon_object::dev::ResourceKind::SYSTEM,
                 zircon_object::dev::ZX_RSRC_SYSTEM_PROFILE_BASE,
                 1,
-            )?;
+            )
+            .map_err(|_| ZxError::ACCESS_DENIED)?;
         }
         // Check job policy
         proc.check_policy(PolicyCondition::NewProfile)?;
