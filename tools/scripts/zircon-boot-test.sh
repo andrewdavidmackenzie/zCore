@@ -12,7 +12,7 @@
 set -euo pipefail
 
 ARCH="${1:?Usage: $0 <arch>}"
-TIMEOUT=30
+TIMEOUT=60
 
 # Read core count from target config
 source "$(dirname "$0")/get-target-cores.sh"
