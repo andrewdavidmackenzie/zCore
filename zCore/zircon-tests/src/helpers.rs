@@ -1212,18 +1212,18 @@ impl PagerProcessTestThread {
     pub async fn wait_until_blocked(&self) {
         let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
         loop {
+            // Check if the thread has entered BlockedPager state.
+            if self.thread.state() == zircon_object::task::ThreadState::BlockedPager {
+                return;
+            }
+            // Also accept if the thread already finished (Dying/Dead).
             let st = self.state.state.load(Ordering::Acquire);
-            if st >= PAGER_STATE_ABOUT_TO_READ {
-                // Also wait for the thread to actually enter the blocked state.
-                // Yield a few times to let the async runtime schedule the read.
-                for _ in 0..10 {
-                    async_std::task::yield_now().await;
-                }
+            if st >= PAGER_STATE_READ_RETURNED {
                 return;
             }
             assert!(
                 std::time::Instant::now() < deadline,
-                "PagerProcessTestThread: timed out waiting for thread to block"
+                "PagerProcessTestThread: timed out waiting for thread to enter BlockedPager"
             );
             async_std::task::yield_now().await;
         }

@@ -8992,6 +8992,11 @@ async fn pager_process_kill_blocked_user_vmo_read() {
     let ptt = PagerProcessTestThread::start(vmo.clone());
     ptt.wait_until_blocked().await;
 
+    // Verify a page request arrived on the port (matching C++ WaitForPageRead).
+    let (_key, offset, len) = pager_helper.wait_for_page_read().await;
+    assert_eq!(offset, 0);
+    assert_eq!(len, PAGE_SIZE as u64);
+
     // Verify the thread has not completed its read (it's blocked).
     assert!(
         !ptt.has_read_returned(),
@@ -9031,6 +9036,11 @@ async fn pager_process_kill_blocked_user_page_fault() {
     let ptt = PagerProcessTestThread::start(vmo.clone());
     ptt.wait_until_blocked().await;
 
+    // Verify a page request arrived on the port (matching C++ WaitForPageRead).
+    let (_key, offset, len) = pager_helper.wait_for_page_read().await;
+    assert_eq!(offset, 0);
+    assert_eq!(len, PAGE_SIZE as u64);
+
     assert!(
         !ptt.has_read_returned(),
         "thread should be blocked on pager read (page fault variant)"
@@ -9063,6 +9073,11 @@ async fn pager_process_kill_blocked_usercopy() {
     let ptt = PagerProcessTestThread::start(vmo.clone());
     ptt.wait_until_blocked().await;
 
+    // Verify a page request arrived on the port (matching C++ WaitForPageRead).
+    let (_key, offset, len) = pager_helper.wait_for_page_read().await;
+    assert_eq!(offset, 0);
+    assert_eq!(len, PAGE_SIZE as u64);
+
     assert!(
         !ptt.has_read_returned(),
         "thread should be blocked on pager read (usercopy variant)"
@@ -9093,6 +9108,11 @@ async fn pager_process_kill_blocked_usercopy_capture_faults() {
 
     let ptt = PagerProcessTestThread::start(vmo.clone());
     ptt.wait_until_blocked().await;
+
+    // Verify a page request arrived on the port (matching C++ WaitForPageRead).
+    let (_key, offset, len) = pager_helper.wait_for_page_read().await;
+    assert_eq!(offset, 0);
+    assert_eq!(len, PAGE_SIZE as u64);
 
     assert!(
         !ptt.has_read_returned(),
@@ -9125,6 +9145,11 @@ async fn pager_process_kill_after_suspend_vmo_read() {
 
     let ptt = PagerProcessTestThread::start(vmo.clone());
     ptt.wait_until_blocked().await;
+
+    // Verify a page request arrived on the port (matching C++ WaitForPageRead).
+    let (_key, offset, len) = pager_helper.wait_for_page_read().await;
+    assert_eq!(offset, 0);
+    assert_eq!(len, PAGE_SIZE as u64);
 
     assert!(
         !ptt.has_read_returned(),
@@ -9163,6 +9188,11 @@ async fn pager_process_kill_after_suspend_page_fault() {
     let ptt = PagerProcessTestThread::start(vmo.clone());
     ptt.wait_until_blocked().await;
 
+    // Verify a page request arrived on the port (matching C++ WaitForPageRead).
+    let (_key, offset, len) = pager_helper.wait_for_page_read().await;
+    assert_eq!(offset, 0);
+    assert_eq!(len, PAGE_SIZE as u64);
+
     assert!(
         !ptt.has_read_returned(),
         "thread should be blocked on pager read (page fault variant)"
@@ -9196,6 +9226,11 @@ async fn pager_process_kill_after_suspend_usercopy() {
     let ptt = PagerProcessTestThread::start(vmo.clone());
     ptt.wait_until_blocked().await;
 
+    // Verify a page request arrived on the port (matching C++ WaitForPageRead).
+    let (_key, offset, len) = pager_helper.wait_for_page_read().await;
+    assert_eq!(offset, 0);
+    assert_eq!(len, PAGE_SIZE as u64);
+
     assert!(
         !ptt.has_read_returned(),
         "thread should be blocked on pager read (usercopy variant)"
@@ -9228,6 +9263,11 @@ async fn pager_process_kill_after_suspend_usercopy_capture() {
 
     let ptt = PagerProcessTestThread::start(vmo.clone());
     ptt.wait_until_blocked().await;
+
+    // Verify a page request arrived on the port (matching C++ WaitForPageRead).
+    let (_key, offset, len) = pager_helper.wait_for_page_read().await;
+    assert_eq!(offset, 0);
+    assert_eq!(len, PAGE_SIZE as u64);
 
     assert!(
         !ptt.has_read_returned(),
