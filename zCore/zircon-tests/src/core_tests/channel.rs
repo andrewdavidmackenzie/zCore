@@ -29,8 +29,8 @@ fn is_writeable_by_default() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
 
-    assert!(local.signal().contains(Signal::WRITABLE));
-    assert!(remote.signal().contains(Signal::WRITABLE));
+    assert_eq!(local.signal(), Signal::WRITABLE);
+    assert_eq!(remote.signal(), Signal::WRITABLE);
 }
 
 /// C++: TEST(ChannelTest, WriteToEndpointCausesOtherToBecomeReadable)
@@ -47,12 +47,10 @@ fn write_to_endpoint_causes_other_to_become_readable() {
         .unwrap();
 
     // local: still writable, not readable
-    assert!(local.signal().contains(Signal::WRITABLE));
-    assert!(!local.signal().contains(Signal::READABLE));
+    assert_eq!(local.signal(), Signal::WRITABLE);
 
     // remote: writable AND readable
-    assert!(remote.signal().contains(Signal::WRITABLE));
-    assert!(remote.signal().contains(Signal::READABLE));
+    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
 }
 
 /// C++: TEST(ChannelTest, WriteConsumesAllHandles)
@@ -361,13 +359,9 @@ fn wait_many_is_signaled_for_both_writes() {
         })
         .unwrap();
 
-    // Both endpoints should now be READABLE.
-    assert!(local.signal().contains(Signal::READABLE));
-    assert!(remote.signal().contains(Signal::READABLE));
-
-    // Both should still be WRITABLE.
-    assert!(local.signal().contains(Signal::WRITABLE));
-    assert!(remote.signal().contains(Signal::WRITABLE));
+    // Both endpoints should now be READABLE and WRITABLE.
+    assert_eq!(local.signal(), Signal::WRITABLE | Signal::READABLE);
+    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
 }
 
 /// C++: TEST(ChannelTest, ReadMayDiscardWithSmallerBufferDiscardHandlesAndDateReturnsBufferTooSmall)
@@ -397,7 +391,7 @@ fn read_may_discard_with_smaller_buffer() {
     assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
 
     // Message should still be in the queue — READABLE still set.
-    assert!(remote.signal().contains(Signal::READABLE));
+    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
     let msg = remote.read().unwrap();
     assert_eq!(msg.data.len(), 32);
     assert_eq!(msg.handles.len(), 1);
@@ -430,7 +424,7 @@ fn read_may_discard_with_null_buffer_discard_handles_returns_buffer_too_small() 
     assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
 
     // Message should still be queued.
-    assert!(remote.signal().contains(Signal::READABLE));
+    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
     let msg = remote.read().unwrap();
     assert_eq!(msg.handles.len(), 1);
 }
@@ -463,7 +457,7 @@ fn read_may_discard_with_zero_size_buffers() {
     assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
 
     // Message is still queued.
-    assert!(remote.signal().contains(Signal::READABLE));
+    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
     let msg = remote.read().unwrap();
     assert_eq!(msg.data, vec![0xBB; 16]);
     assert_eq!(msg.handles.len(), 1);

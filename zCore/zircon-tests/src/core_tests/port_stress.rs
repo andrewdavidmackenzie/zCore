@@ -122,7 +122,7 @@ fn cancel_key_during_registration_race() {
     // Cancel before signal — no packet.
     port.cancel_async_and_drain(event.id(), 7).unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
-    assert!(!port.signal().contains(Signal::READABLE));
+    assert_eq!(port.signal(), Signal::empty());
 }
 
 /// C++: TEST(PortStressTest, CancelKeySharedKeyRace)
