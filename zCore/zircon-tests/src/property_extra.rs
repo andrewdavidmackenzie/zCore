@@ -139,7 +139,7 @@ fn property_process_debug_addr() {
 
     let mut buf = [0u8; core::mem::size_of::<usize>()];
     get_property(&ctx, proc_h, PROP_PROCESS_DEBUG_ADDR, &mut buf).unwrap();
-    let read_addr = usize::from_ne_bytes(buf.try_into().unwrap());
+    let read_addr = usize::from_ne_bytes(buf);
     assert_eq!(read_addr, addr, "debug addr round-trip should match");
 }
 
@@ -159,7 +159,7 @@ fn property_process_break_on_load() {
 
     let mut buf = [0u8; core::mem::size_of::<usize>()];
     get_property(&ctx, proc_h, PROP_PROCESS_BREAK_ON_LOAD, &mut buf).unwrap();
-    let read_val = usize::from_ne_bytes(buf.try_into().unwrap());
+    let read_val = usize::from_ne_bytes(buf);
     assert_eq!(read_val, val, "break_on_load round-trip should match");
 }
 
@@ -177,7 +177,7 @@ fn property_process_vdso_base() {
 
     let mut buf = [0u8; core::mem::size_of::<usize>()];
     get_property(&ctx, proc_h, PROP_PROCESS_VDSO_BASE_ADDRESS, &mut buf).unwrap();
-    let vdso_base = usize::from_ne_bytes(buf.try_into().unwrap());
+    let vdso_base = usize::from_ne_bytes(buf);
     // In test mode, vDSO is not mapped, so base should be 0.
     assert_eq!(vdso_base, 0, "no vDSO mapped in test mode");
 }
@@ -198,7 +198,7 @@ fn property_socket_rx_threshold() {
 
     let mut buf = [0u8; core::mem::size_of::<usize>()];
     get_property(&ctx, socket_h, PROP_SOCKET_RX_THRESHOLD, &mut buf).unwrap();
-    let read_threshold = usize::from_ne_bytes(buf.try_into().unwrap());
+    let read_threshold = usize::from_ne_bytes(buf);
     assert_eq!(
         read_threshold, threshold,
         "rx threshold round-trip should match"
@@ -221,7 +221,7 @@ fn property_socket_tx_threshold() {
 
     let mut buf = [0u8; core::mem::size_of::<usize>()];
     get_property(&ctx, socket_h, PROP_SOCKET_TX_THRESHOLD, &mut buf).unwrap();
-    let read_threshold = usize::from_ne_bytes(buf.try_into().unwrap());
+    let read_threshold = usize::from_ne_bytes(buf);
     assert_eq!(
         read_threshold, threshold,
         "tx threshold round-trip should match"
@@ -245,7 +245,7 @@ fn property_job_kill_on_oom() {
 
     let mut buf = [0u8; core::mem::size_of::<usize>()];
     get_property(&ctx, job_h, PROP_JOB_KILL_ON_OOM, &mut buf).unwrap();
-    let read_val = usize::from_ne_bytes(buf.try_into().unwrap());
+    let read_val = usize::from_ne_bytes(buf);
     assert_eq!(read_val, val, "kill_on_oom round-trip should match");
 }
 
@@ -266,7 +266,7 @@ fn property_vmo_content_size() {
 
     let mut buf = [0u8; 8];
     get_property(&ctx, vmo_h, PROP_VMO_CONTENT_SIZE, &mut buf).unwrap();
-    let read_size = u64::from_ne_bytes(buf.try_into().unwrap());
+    let read_size = u64::from_ne_bytes(buf);
     assert_eq!(
         read_size, content_size,
         "content_size round-trip should match"

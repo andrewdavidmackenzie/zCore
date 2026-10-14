@@ -736,14 +736,14 @@ fn partial_unmap_and_read() {
     // Page 0 still readable via read_memory.
     let mut buf = [0u8; 8];
     let result = vmar.read_memory(addr, &mut buf);
-    if let Ok(_) = result {
+    if result.is_ok() {
         assert_eq!(buf[0], 1);
     }
 
     // Page 3 still readable via read_memory.
     let mut buf3 = [0u8; 8];
     let result3 = vmar.read_memory(addr + 3 * PAGE_SIZE, &mut buf3);
-    if let Ok(_) = result3 {
+    if result3.is_ok() {
         assert_eq!(buf3[0], 4);
     }
 
@@ -814,7 +814,7 @@ fn partial_unmap_with_vmar_offset() {
     // Verify first mapped page = VMO page 1 via read_memory.
     let mut buf = [0u8; 8];
     let result = vmar.read_memory(addr, &mut buf);
-    if let Ok(_) = result {
+    if result.is_ok() {
         assert_eq!(buf[0], 0xBB);
     }
 
@@ -824,7 +824,7 @@ fn partial_unmap_with_vmar_offset() {
     // Second page still accessible via read_memory.
     let mut buf2 = [0u8; 8];
     let result2 = vmar.read_memory(addr + PAGE_SIZE, &mut buf2);
-    if let Ok(_) = result2 {
+    if result2.is_ok() {
         assert_eq!(buf2[0], 0xCC);
     }
 
@@ -1460,13 +1460,13 @@ fn unmap_split_test() {
     // Verify remaining pages via read_memory.
     let mut buf0 = [0u8; 8];
     let r0 = vmar.read_memory(addr, &mut buf0);
-    if let Ok(_) = r0 {
+    if r0.is_ok() {
         assert_eq!(buf0[0], 1);
     }
 
     let mut buf3 = [0u8; 8];
     let r3 = vmar.read_memory(addr + 3 * PAGE_SIZE, &mut buf3);
-    if let Ok(_) = r3 {
+    if r3.is_ok() {
         assert_eq!(buf3[0], 4);
     }
 

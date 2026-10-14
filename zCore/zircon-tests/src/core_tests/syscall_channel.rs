@@ -4534,8 +4534,8 @@ fn call_etc_iovec_success_case() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
-    let chunk1 = [b'a', b'b', b'c', b'd'];
-    let chunk2 = [b'e', b'f', b'g', b'h'];
+    let chunk1 = *b"abcd";
+    let chunk2 = *b"efgh";
     // Build iovecs: [buffer: usize, capacity: u32, reserved: u32]
     let mut iovec_buf = Vec::new();
     iovec_buf.extend_from_slice(&(chunk1.as_ptr() as usize).to_ne_bytes());
@@ -4571,7 +4571,7 @@ fn call_etc_iovec_total_capacity_less_than_txid_size_returns_invalid_args() {
     let ctx = TestContext::new();
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
-    let tiny = [b'a', b'b'];
+    let tiny = *b"ab";
     // Single iovec with 2-byte capacity
     let mut iovec_buf = Vec::new();
     iovec_buf.extend_from_slice(&(tiny.as_ptr() as usize).to_ne_bytes());

@@ -154,7 +154,7 @@ fn handle_duplicate_invalid() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
 
-    let result = proc.dup_handle_operating_rights(0xDEAD_BEEF, |r| Ok(r));
+    let result = proc.dup_handle_operating_rights(0xDEAD_BEEF, Ok);
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
@@ -169,7 +169,7 @@ fn handle_duplicate_same_rights() {
     let h = proc.add_handle(Handle::new(ch0, original_rights));
 
     // Duplicate with same rights
-    let h2 = proc.dup_handle_operating_rights(h, |r| Ok(r)).unwrap();
+    let h2 = proc.dup_handle_operating_rights(h, Ok).unwrap();
     assert_ne!(h, h2);
 
     // Check rights are preserved

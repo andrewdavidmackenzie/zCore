@@ -203,7 +203,7 @@ fn pager_bulk_odd_length_supply_test_vmar() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -221,7 +221,7 @@ fn pager_bulk_odd_offset_supply_test_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -239,7 +239,7 @@ fn pager_bulk_odd_offset_supply_test_vmar() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -257,7 +257,7 @@ fn pager_bulk_single_supply_test_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -275,7 +275,7 @@ fn pager_bulk_single_supply_test_vmar() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -1047,7 +1047,7 @@ fn pager_early_supply_test_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -1065,7 +1065,7 @@ fn pager_early_supply_test_vmar() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -1663,7 +1663,7 @@ fn pager_presupply_test_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -1681,7 +1681,7 @@ fn pager_presupply_test_vmar() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -1912,7 +1912,7 @@ fn pager_single_page_test_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -1930,7 +1930,7 @@ fn pager_single_page_test_vmar() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -2068,7 +2068,7 @@ fn pager_uncommitted_single_page_test_vmo() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -2086,7 +2086,7 @@ fn pager_uncommitted_single_page_test_vmar() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -2104,7 +2104,7 @@ fn pager_uncommitted_supply() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -4633,7 +4633,7 @@ fn pager_wb_unbounded() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(16 | 0, &port, 0, PAGE_SIZE as u64)
+        .create_vmo(16, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     assert!(vmo.is_pager_backed());
     assert_eq!(vmo.content_size(), PAGE_SIZE);
@@ -5550,7 +5550,7 @@ fn bulk_odd_length_supply_test() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -5568,7 +5568,7 @@ fn bulk_odd_offset_supply_test() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -5586,7 +5586,7 @@ fn bulk_single_supply_test() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -5747,7 +5747,7 @@ fn early_supply_test() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -5826,7 +5826,7 @@ fn presupply_test() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -5911,7 +5911,7 @@ fn single_page_test() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();
@@ -5938,7 +5938,7 @@ fn uncommitted_single_page_test() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager
-        .create_vmo(0, &port, 0, (1 * PAGE_SIZE) as u64)
+        .create_vmo(0, &port, 0, PAGE_SIZE as u64)
         .unwrap();
     let src = VmObject::new_paged(1);
     src.write(0, b"supply test data").unwrap();

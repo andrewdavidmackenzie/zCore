@@ -23,7 +23,7 @@ fn read_memory() {
 
     let mut buf = [0u8; 8];
     let result = vmar.read_memory(addr, &mut buf);
-    if let Ok(_) = result {
+    if result.is_ok() {
         assert_eq!(buf[0], 0xAA);
     }
 

@@ -20,7 +20,7 @@ fn assert_not_ok() {
     let _ctx = TestContext::new();
     let result: Result<(), ZxError> = Err(ZxError::BAD_HANDLE);
     assert!(result.is_err(), "Err should be err");
-    assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
+    assert_eq!(result.err().unwrap(), ZxError::BAD_HANDLE);
 }
 
 /// Various error values have correct identity.

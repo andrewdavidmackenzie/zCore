@@ -19,7 +19,7 @@ fn handle_close_many_duplicate_test() {
     // Duplicate the handle 10 times
     let mut dups = Vec::new();
     for _ in 0..10 {
-        let hd = proc.dup_handle_operating_rights(h, |r| Ok(r)).unwrap();
+        let hd = proc.dup_handle_operating_rights(h, Ok).unwrap();
         dups.push(hd);
     }
 
@@ -128,7 +128,7 @@ fn handle_info_dup_and_info_rights() {
     let h = proc.add_handle(Handle::new(ch0, original_rights));
 
     // Duplicate with same rights
-    let h2 = proc.dup_handle_operating_rights(h, |r| Ok(r)).unwrap();
+    let h2 = proc.dup_handle_operating_rights(h, Ok).unwrap();
 
     // Both should reference the same object
     let (obj1, rights1) = proc.get_object_and_rights::<Channel>(h).unwrap();

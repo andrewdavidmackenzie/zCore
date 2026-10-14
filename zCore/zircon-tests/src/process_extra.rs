@@ -193,7 +193,7 @@ fn process_multiple_handles_dup() {
     ));
 
     // Duplicate it
-    let h2 = proc.dup_handle_operating_rights(h1, |r| Ok(r)).unwrap();
+    let h2 = proc.dup_handle_operating_rights(h1, Ok).unwrap();
 
     assert_ne!(h1, h2);
 

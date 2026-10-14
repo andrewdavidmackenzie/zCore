@@ -2947,7 +2947,7 @@ fn job_get_info_info_job_children_small_buffer_is_ok() {
     // Buffer for only 1 koid
     let mut buf = [0u64; 1];
     let (actual, avail) = get_info(&ctx, job_h, TOPIC_JOB_CHILDREN, unsafe {
-        core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 1 * 8)
+        core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8)
     })
     .unwrap();
     assert_eq!(actual, 1, "only room for 1 entry");
@@ -3068,7 +3068,7 @@ fn job_get_info_info_job_processes_small_buffer_is_ok() {
     // Buffer for only 1 koid
     let mut buf = [0u64; 1];
     let (actual, avail) = get_info(&ctx, job_h, TOPIC_JOB_PROCESSES, unsafe {
-        core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 1 * 8)
+        core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8)
     })
     .unwrap();
     assert_eq!(actual, 1, "only room for 1 entry");
@@ -4429,13 +4429,10 @@ fn task_get_info_info_task_stats_zero_sized_buffer_is_too_small() {
         .add_handle(Handle::new(ctx.proc.clone(), Rights::INSPECT));
     let mut buf = [0u8; 0];
     let result = get_info(&ctx, proc_h, TOPIC_TASK_STATS, &mut buf);
-    match result {
-        Err(e) => assert!(
-            e == zircon_object::ZxError::BUFFER_TOO_SMALL
-                || e == zircon_object::ZxError::NOT_SUPPORTED,
-        ),
-        Ok(_) => {}
-    }
+    if let Err(e) = result { assert!(
+        e == zircon_object::ZxError::BUFFER_TOO_SMALL
+            || e == zircon_object::ZxError::NOT_SUPPORTED,
+    ) }
 }
 
 /// C++: TEST(TaskGetInfoTest, SharedMemAccounting)

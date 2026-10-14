@@ -10,7 +10,8 @@ fn page_size_mask() {
     let mask = PAGE_SIZE - 1;
 
     // Aligned addresses.
-    assert_eq!(0 & mask, 0);
+    let zero: usize = 0;
+    assert_eq!(zero & mask, 0);
     assert_eq!(PAGE_SIZE & mask, 0);
     assert_eq!((2 * PAGE_SIZE) & mask, 0);
 
@@ -26,6 +27,7 @@ fn page_size_const() {
     let _ctx = crate::helpers::TestContext::new();
     // PAGE_SIZE should be usable as a const expression.
     const PS: usize = PAGE_SIZE;
-    assert!(PS >= 4096);
-    assert!(PS.is_power_of_two());
+    let ps = PS;
+    assert!(ps >= 4096);
+    assert!(ps.is_power_of_two());
 }

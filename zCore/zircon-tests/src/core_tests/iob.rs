@@ -11,7 +11,7 @@ use zircon_object::ZxError;
 
 /// Helper: create a single-region IOB pair with the given size.
 fn create_iob_pair(size: usize) -> (alloc::sync::Arc<IoBuffer>, alloc::sync::Arc<IoBuffer>) {
-    let pages = (size + 0xFFF) / 0x1000;
+    let pages = size.div_ceil(0x1000);
     let vmo = VmObject::new_paged(pages);
     let regions = alloc::vec![IoBufferRegion::new(vmo, size, 0x3)]; // read+write
     IoBuffer::create(regions).expect("IOB create should succeed")
