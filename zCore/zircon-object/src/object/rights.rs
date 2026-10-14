@@ -81,6 +81,9 @@ bitflags! {
         /// Allows resizing a VMO.
         const RESIZE = 1 << 22;
 
+        /// Allows attaching VMOs to pagers.
+        const ATTACH_VMO = 1 << 23;
+
         /// Allows pager operations on VMOs (supply, op_range, query).
         const MANAGE_VMO = 1 << 25;
 

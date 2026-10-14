@@ -12,9 +12,9 @@ impl Syscall<'_> {
         }
         let pager = Pager::new();
         let proc = self.thread.proc();
-        // ZX_DEFAULT_PAGER_RIGHTS = DUPLICATE | TRANSFER | INSPECT | MANAGE_VMO
+        // ZX_DEFAULT_PAGER_RIGHTS = INSPECT | TRANSFER | ATTACH_VMO | MANAGE_VMO
         let pager_rights =
-            Rights::DUPLICATE | Rights::TRANSFER | Rights::INSPECT | Rights::MANAGE_VMO;
+            Rights::INSPECT | Rights::TRANSFER | Rights::ATTACH_VMO | Rights::MANAGE_VMO;
         let handle = proc.add_handle(Handle::new(pager, pager_rights));
         out.write(handle)?;
         Ok(())
