@@ -15,6 +15,10 @@
 
 set -euo pipefail
 
+# Read core count from target config (hardcoded aarch64 for UEFI test)
+source "$(dirname "$0")/get-target-cores.sh"
+CORES=$(get_target_cores "aarch64")
+
 TIMEOUT=30
 
 if ! command -v qemu-system-aarch64 &>/dev/null; then
@@ -67,7 +71,7 @@ cargo image --arch aarch64
 
 echo "==> Generating DTB..."
 qemu-system-aarch64 -M virt,dumpdtb=/tmp/zcore-uefi-test-virt.dtb \
-  -cpu cortex-a72 -m 2G -smp 1 2>/dev/null || true
+  -cpu cortex-a72 -m 2G -smp "$CORES" 2>/dev/null || true
 
 echo "==> Stripping kernel..."
 KERNEL="target/qemu-aarch64-uefi/release/kernel"
@@ -116,7 +120,7 @@ QEMU_IN="$TMPD/qemu_in"
 touch "$OUTPUT"
 mkfifo "$QEMU_IN"
 
-qemu-system-aarch64 -M virt -cpu cortex-a72 -m 2G -smp 1 \
+qemu-system-aarch64 -M virt -cpu cortex-a72 -m 2G -smp "$CORES" \
   -drive if=pflash,format=raw,readonly=on,file="$EDK2" \
   -drive if=pflash,format=raw,file="$VARS" \
   -drive format=raw,file="$ESP" \

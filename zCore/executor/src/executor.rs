@@ -106,10 +106,11 @@ impl Executor {
 
     pub fn run(&mut self) {
         loop {
-            let mut task_info = self.task_collection.take_task();
-            if task_info.is_none() {
-                task_info = crate::runtime::steal_task_from_other_cpu();
-            }
+            let task_info = self.task_collection.take_task();
+            // Note: work stealing is disabled. Stolen tasks retain their
+            // original CPU's waker page, so waker notifications go to the
+            // wrong CPU, causing tasks to never wake up. All tasks stay on
+            // the CPU where they were spawned. (#680)
             if let Some((key, task, waker_ref, droper)) = task_info {
                 let waker_ref = Arc::new(waker_ref);
                 let waker = woke::waker_ref(&waker_ref);

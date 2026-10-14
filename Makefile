@@ -3,6 +3,12 @@
 ARCH ?= aarch64
 XTASK ?= 1
 
+# Read core count from target config (defaults to 1).
+# QEMU_CORES uses ARCH (for arch-generic targets like boot-test).
+# X86_CORES always reads from qemu-x86_64.toml (for x86-specific targets).
+QEMU_CORES := $(shell grep '^cores' targets/qemu-$(ARCH).toml 2>/dev/null | awk '{print $$NF}' || echo 1)
+X86_CORES := $(shell grep '^cores' targets/qemu-x86_64.toml 2>/dev/null | awk '{print $$NF}' || echo 1)
+
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
 
@@ -38,7 +44,7 @@ debug-qemu: build
 	@echo "    Or RustRover: Run > Attach to Process > Remote GDB Server, localhost:1234"
 	@echo "    Kernel symbols: target/qemu-$(ARCH)/release/kernel"
 	@qemu-system-aarch64 -m 2G -display none -no-reboot -nographic \
-		-machine virt -cpu cortex-a72 \
+		-machine virt -cpu cortex-a72 -smp $(QEMU_CORES) \
 		-kernel target/qemu-aarch64/release/kernel.bin \
 		-serial mon:stdio \
 		-initrd target/qemu-aarch64/release/aarch64-linux.img \
@@ -229,7 +235,7 @@ x86-linux-run: x86-linux-build
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
 		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
-		-smp $$(grep '^cores' targets/qemu-x86_64.toml 2>/dev/null | awk '{print $$NF}' || echo 1) \
+		-smp $(X86_CORES) \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive format=raw,file=target/qemu-x86_64/release/boot.img
@@ -243,7 +249,7 @@ x86-zircon-run: x86-zircon-build
 	@echo "==> Starting x86_64 Zircon (Ctrl-A X to exit QEMU)..."
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
-		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
+		-machine q35 -smp $(X86_CORES) -cpu qemu64,+fsgsbase,+rdrand \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img
@@ -389,7 +395,7 @@ core-tests: core-tests-build
 	@echo "==> Running QEMU (timeout=$(CORE_TESTS_TIMEOUT)s, log=$(CORE_TESTS_LOG))..."
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
-		-machine q35 -smp 1 \
+		-machine q35 -smp $(X86_CORES) \
 		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
@@ -420,15 +426,8 @@ boot-test: build
 	@echo "==> Boot smoke test ($(ARCH))..."
 	@tools/scripts/boot-test.sh $(ARCH)
 
-# SMP smoke test: boot with -smp 4, verify all cores initialize.
-smp-test: build
-	@echo "==> SMP smoke test ($(ARCH))..."
-	@tools/scripts/smp-test.sh $(ARCH)
-
-# SMP stress test: concurrent workloads across multiple cores.
-smp-stress-test: build
-	@echo "==> SMP stress test ($(ARCH))..."
-	@tools/scripts/smp-stress-test.sh $(ARCH)
+# SMP testing is now integrated into boot-test and other CI targets
+# via the cores count in targets/qemu-<arch>.toml.
 
 # Run busybox applet tests: echo, ls, cat, pipes, etc.
 # Verifies that common busybox commands work end-to-end in QEMU.

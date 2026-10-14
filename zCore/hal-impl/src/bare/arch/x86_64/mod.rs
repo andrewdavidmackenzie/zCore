@@ -57,6 +57,15 @@ pub fn init_ram_disk() -> Option<&'static mut [u8]> {
 pub fn primary_init_early() {
     // Register BSP's APIC ID as logical core 0 (must be first).
     smp::register_bsp();
+
+    // Park any UEFI-started APs immediately. OVMF leaves secondary
+    // CPUs running with the UEFI IDT. After ExitBootServices, the
+    // UEFI IDT points to reclaimed memory. Any interrupt on an AP
+    // causes a triple fault. We send an INIT IPI broadcast to put
+    // all APs into the INIT wait state. This uses raw xAPIC MMIO
+    // (the LAPIC driver isn't initialized yet, but phys_to_virt
+    // works because KCONFIG was already set by the caller).
+    smp::park_aps_init();
     // init serial output first
     drivers::init_early().unwrap();
     // init framebuffer console (if available)

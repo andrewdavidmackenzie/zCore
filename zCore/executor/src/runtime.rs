@@ -136,6 +136,12 @@ fn get_runtime(cpu_id: u8) -> &'static Mutex<ExecutorRuntime> {
 }
 
 // obtain a task from other cpu.
+/// Steal a task from another CPU's run queue.
+///
+/// Currently unused: stolen tasks retain their original CPU's waker
+/// page, so waker notifications are delivered to the wrong CPU.
+/// This causes tasks to never wake up after being stolen. (#680)
+#[allow(dead_code)]
 pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, DroperRef)> {
     let map = CPU_RUNTIMES.get()?;
     let runtime = map

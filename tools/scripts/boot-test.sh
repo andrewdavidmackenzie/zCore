@@ -15,6 +15,10 @@ ARCH="${1:?Usage: $0 <arch>}"
 TIMEOUT=60
 PROMPT_PATTERN='/ # '
 
+# Read core count from target config
+source "$(dirname "$0")/get-target-cores.sh"
+CORES=$(get_target_cores "$ARCH")
+
 case "$ARCH" in
   aarch64)
     KERNEL="target/qemu-aarch64/release/kernel.bin"
@@ -22,7 +26,7 @@ case "$ARCH" in
     QEMU_CMD=(
       qemu-system-aarch64
       -m 2G -display none -no-reboot -nographic
-      -machine virt -cpu cortex-a72
+      -machine virt -cpu cortex-a72 -smp "$CORES"
       -kernel "$KERNEL"
       -serial mon:stdio
       -initrd "$IMAGE"
@@ -53,7 +57,7 @@ case "$ARCH" in
     QEMU_CMD=(
       qemu-system-x86_64
       -m 2G -display none -no-reboot -nographic
-      -machine q35 -cpu qemu64,+fsgsbase,+rdrand
+      -machine q35 -smp "$CORES" -cpu qemu64,+fsgsbase,+rdrand
       -serial mon:stdio
       -drive if=pflash,format=raw,readonly=on,file="$OVMF"
       -drive "format=raw,file=$BOOT_IMG"
@@ -65,7 +69,7 @@ case "$ARCH" in
     QEMU_CMD=(
       qemu-system-riscv64
       -m 2G -display none -no-reboot -nographic
-      -machine virt
+      -machine virt -smp "$CORES"
       -kernel "$KERNEL"
       -bios default
       -serial mon:stdio

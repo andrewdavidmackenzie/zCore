@@ -15,6 +15,10 @@
 set -euo pipefail
 
 ARCH="x86_64"
+
+# Read core count from target config
+source "$(dirname "$0")/get-target-cores.sh"
+CORES=$(get_target_cores "$ARCH")
 PREBUILT_DIR="prebuilt/zircon-test/x86_64"
 ROOTFS_DIR="target/rootfs/zircon/$ARCH"
 SESSION_TIMEOUT=300  # 5 minutes for the full test suite
@@ -80,7 +84,7 @@ touch "$OUTPUT"
 
 qemu-system-x86_64 \
     -m 4G -display none -no-reboot -nographic \
-    -machine q35 -cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+    -machine q35 -smp "$CORES" -cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
     -serial mon:stdio \
     -drive if=pflash,format=raw,readonly=on,file="$OVMF" \
     -drive "format=raw,file=$BOOT_IMG" \
