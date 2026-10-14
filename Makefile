@@ -4,7 +4,10 @@ ARCH ?= aarch64
 XTASK ?= 1
 
 # Read core count from target config (defaults to 1).
+# QEMU_CORES uses ARCH (for arch-generic targets like boot-test).
+# X86_CORES always reads from qemu-x86_64.toml (for x86-specific targets).
 QEMU_CORES := $(shell grep '^cores' targets/qemu-$(ARCH).toml 2>/dev/null | awk '{print $$NF}' || echo 1)
+X86_CORES := $(shell grep '^cores' targets/qemu-x86_64.toml 2>/dev/null | awk '{print $$NF}' || echo 1)
 
 STRIP := $(ARCH)-linux-musl-strip
 export PATH=$(shell printenv PATH):$(CURDIR)/.build-cache/target/$(ARCH)/$(ARCH)-linux-musl-cross/bin/
@@ -232,7 +235,7 @@ x86-linux-run: x86-linux-build
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
 		-machine q35 -cpu qemu64,+fsgsbase,+rdrand \
-		-smp $(QEMU_CORES) \
+		-smp $(X86_CORES) \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive format=raw,file=target/qemu-x86_64/release/boot.img
@@ -246,7 +249,7 @@ x86-zircon-run: x86-zircon-build
 	@echo "==> Starting x86_64 Zircon (Ctrl-A X to exit QEMU)..."
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
-		-machine q35 -smp $(QEMU_CORES) -cpu qemu64,+fsgsbase,+rdrand \
+		-machine q35 -smp $(X86_CORES) -cpu qemu64,+fsgsbase,+rdrand \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img
@@ -392,7 +395,7 @@ core-tests: core-tests-build
 	@echo "==> Running QEMU (timeout=$(CORE_TESTS_TIMEOUT)s, log=$(CORE_TESTS_LOG))..."
 	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
 	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
-		-machine q35 -smp $(QEMU_CORES) \
+		-machine q35 -smp $(X86_CORES) \
 		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \

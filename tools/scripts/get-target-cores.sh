@@ -6,9 +6,10 @@
 get_target_cores() {
     local arch="${1:?Usage: get_target_cores <arch>}"
     local config="targets/qemu-${arch}.toml"
+    local cores=""
     if [ -f "$config" ]; then
-        grep '^cores' "$config" 2>/dev/null | awk '{print $NF}' || echo 1
-    else
-        echo 1
+        cores=$(grep '^cores' "$config" 2>/dev/null | awk '{print $NF}')
     fi
+    # Default to 1 if config missing, key absent, or value empty
+    echo "${cores:-1}"
 }
