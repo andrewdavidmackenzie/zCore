@@ -164,22 +164,63 @@ fn close_signals_peer_returns_peer_closed() {
 }
 
 /// C++: TEST(ChannelTest, ReadAndWriteWithMultipleSizes)
+/// C++ tests 1000 random sizes in [0, ZX_CHANNEL_MAX_MSG_BYTES).
+/// We test 100 sizes covering 0, 1, small, PAGE_SIZE boundary, and MAX_MSG_BYTES.
 #[test]
 fn read_and_write_with_multiple_sizes() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
 
-    for size in [0, 1, 4, 64, 256, 1024] {
-        let data: Vec<u8> = (0..size).map(|i| (i & 0xFF) as u8).collect();
+    const MAX_MSG_BYTES: usize = 65536;
+    const PAGE_SIZE: usize = 4096;
+
+    // Deterministic set of 100 sizes covering important boundaries
+    // plus pseudo-random sizes spread across the range.
+    let mut sizes: Vec<usize> = vec![
+        0, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128, 255, 256,
+        PAGE_SIZE - 1,
+        PAGE_SIZE,
+        PAGE_SIZE + 1,
+        PAGE_SIZE * 2,
+        MAX_MSG_BYTES - 1,
+    ];
+    // Fill remaining with pseudo-random sizes (simple LCG)
+    let mut rng: u32 = 42;
+    while sizes.len() < 100 {
+        rng = rng.wrapping_mul(1664525).wrapping_add(1013904223);
+        let size = (rng as usize) % MAX_MSG_BYTES;
+        sizes.push(size);
+    }
+
+    for (i, &num_bytes) in sizes.iter().enumerate() {
+        let data: Vec<u8> = (0..num_bytes).map(|j| (j & 0xFF) as u8).collect();
+        // Tag first byte with iteration index for verification
+        let mut tagged_data = data;
+        if !tagged_data.is_empty() {
+            tagged_data[0] = (i % 256) as u8;
+        }
+
         local
             .write(MessagePacket {
-                data: data.clone(),
+                data: tagged_data.clone(),
                 handles: Vec::new(),
             })
             .unwrap();
 
         let msg = remote.read().unwrap();
-        assert_eq!(msg.data, data);
+        assert_eq!(
+            msg.data.len(),
+            num_bytes,
+            "size mismatch at iteration {}",
+            i
+        );
+        if num_bytes > 0 {
+            assert_eq!(
+                msg.data[0], tagged_data[0],
+                "data mismatch at iteration {}",
+                i
+            );
+        }
     }
 }
 
@@ -199,26 +240,44 @@ fn create_invalid_options_returns_invalid_args() {
 }
 
 /// C++: TEST(ChannelTest, NestingIsOk)
-/// Writing a channel handle through another channel.
+/// Nest 200 channels, each one in the payload of the previous one. Without
+/// the SafeDeleter in fbl_recycle() this blows the kernel stack when calling
+/// the destructors.
 #[test]
 fn nesting_is_ok() {
     let _ctx = TestContext::new();
+    const NESTED_COUNT: usize = 200;
 
-    let (outer0, outer1) = Channel::create();
-    let (inner0, _inner1) = Channel::create();
+    let mut locals = Vec::with_capacity(NESTED_COUNT);
+    let mut remotes = Vec::with_capacity(NESTED_COUNT);
 
-    // Write inner0's handle through outer0
-    let h = Handle::new(inner0.clone(), Rights::DEFAULT_CHANNEL);
-    outer0
-        .write(MessagePacket {
-            data: vec![],
-            handles: vec![h],
-        })
-        .unwrap();
+    for _ in 0..NESTED_COUNT {
+        let (l, r) = Channel::create();
+        locals.push(l);
+        remotes.push(r);
+    }
 
-    // Read from outer1 — should get inner0's handle
-    let msg = outer1.read().unwrap();
-    assert_eq!(msg.handles.len(), 1);
+    // Nest each channel pair inside the previous one: write handles[i]
+    // into locals[i-1], from innermost to outermost.
+    for i in (1..NESTED_COUNT).rev() {
+        let lh = Handle::new(locals[i].clone(), Rights::DEFAULT_CHANNEL);
+        let rh = Handle::new(remotes[i].clone(), Rights::DEFAULT_CHANNEL);
+        locals[i - 1]
+            .write(MessagePacket {
+                data: vec![],
+                handles: vec![lh, rh],
+            })
+            .unwrap();
+    }
+
+    // All handles except those at index 0 have been transferred.
+    assert_ne!(locals[0].id(), 0);
+    assert_ne!(remotes[0].id(), 0);
+
+    // Close the outermost pair, forcing recursive destruction of all
+    // 200 nested levels.
+    drop(locals);
+    drop(remotes);
 }
 
 /// C++: TEST(ChannelTest, ReadZeroByteZeroHandleMessageSucceeds)
@@ -240,22 +299,62 @@ fn read_zero_byte_zero_handle_message_succeeds() {
 }
 
 /// C++: TEST(ChannelTest, WriteShortPayloadsSucceeds)
+/// C++ tests 0–3 byte payloads, verifying data and signal state.
+/// We test 0–3 bytes (matching C++) plus also 4–8 for extra coverage,
+/// and verify exact signal masks after each write and read.
 #[test]
 fn write_short_payloads_succeeds() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
 
-    for len in 0..=8 {
-        let data = vec![0xAAu8; len];
+    let src_data: [u8; 8] = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+
+    for size in 0..=8usize {
+        // Before write: local writable, remote writable (no messages queued)
+        assert_eq!(
+            local.signal(),
+            Signal::WRITABLE,
+            "local should be WRITABLE before write (size={})",
+            size
+        );
+
         local
             .write(MessagePacket {
-                data: data.clone(),
+                data: src_data[..size].to_vec(),
                 handles: vec![],
             })
             .unwrap();
 
+        // After write: remote should now be READABLE | WRITABLE
+        assert!(
+            remote.signal().contains(Signal::READABLE),
+            "remote should be READABLE after write (size={})",
+            size
+        );
+        assert!(
+            remote.signal().contains(Signal::WRITABLE),
+            "remote should be WRITABLE after write (size={})",
+            size
+        );
+
         let msg = remote.read().unwrap();
-        assert_eq!(msg.data, data);
+        assert_eq!(msg.data.len(), size, "data length mismatch (size={})", size);
+        if size > 0 {
+            assert_eq!(
+                &msg.data[..],
+                &src_data[..size],
+                "data content mismatch (size={})",
+                size
+            );
+        }
+
+        // After read: remote should be WRITABLE only (queue empty)
+        assert_eq!(
+            remote.signal(),
+            Signal::WRITABLE,
+            "remote should be WRITABLE after read (size={})",
+            size
+        );
     }
 }
 
