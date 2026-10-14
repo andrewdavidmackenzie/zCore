@@ -237,12 +237,33 @@ pub fn save_bsp_gdt() {
 /// calls secondary_main.
 extern "C" fn ap_entry() -> ! {
     unsafe {
-        // Load the BSP's GDT -- critical! The trampoline's minimal GDT has
-        // different entry count than the BSP's. trapframe::init() extends
-        // "the current GDT" and sets global USER_SS/USER_CS based on the
-        // entry count. If the AP starts with a different GDT, the selectors
-        // will be wrong, causing #GP on iret.
-        core::arch::asm!("lgdt [{}]", in(reg) &BSP_GDTR, options(nostack));
+        // Load the BSP's GDT and reload CS to match.
+        //
+        // The trampoline enters 64-bit mode with CS=0x18 (trampoline GDT
+        // index 3 = code64). After LGDT with the BSP's GDT, index 3 is
+        // the TSS descriptor, not a code segment. CS is still cached as
+        // 0x18 from the trampoline. When an interrupt fires, IRET restores
+        // CS=0x18, loading the TSS descriptor as code — #GP → triple fault.
+        //
+        // Fix: after LGDT, do a far return to reload CS to 0x08 (the BSP's
+        // kernel code segment at GDT index 1).
+        core::arch::asm!(
+            "lgdt [{gdt}]",
+            // Reload CS via far return. retfq pops RIP then CS.
+            // Stack must be: [RIP, CS] with RIP on top.
+            "lea {tmp}, [rip + 2f]",
+            "push 0x08",   // CS (pushed second = deeper on stack)
+            "push {tmp}",  // RIP (pushed last = top of stack)
+            "retfq",       // pops RIP, then CS
+            "2:",
+            // Also reload data segment registers to match BSP's GDT
+            "mov ax, 0x10",
+            "mov ds, ax",
+            "mov es, ax",
+            "mov ss, ax",
+            gdt = in(reg) &BSP_GDTR,
+            tmp = out(reg) _,
+        );
 
         // Enable NXE in EFER -- the kernel page table uses NX bits on data
         // pages. Without NXE, bit 63 in PTEs is reserved, causing #PF.
