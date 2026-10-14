@@ -427,7 +427,12 @@ pub fn spawn_process(
     );
     // Create a minimal ZBI VMO for standalone test's GetOptions/GetBootOptions.
     // The VMO name must be "zbi" -- standalone-init.cc looks it up by name.
-    let zbi_vmo = VmObject::new_paged(1);
+    // Allocate enough pages for the ZBI container + CMDLINE item.
+    // The CMDLINE can be large (e.g., 8KB+ gtest_filter skip list).
+    let cmdline_estimate = config.extra_args.iter().map(|a| a.len() + 1).sum::<usize>();
+    let zbi_size = 32 + 32 + ((cmdline_estimate + 7) & !7); // container + item header + padded payload
+    let zbi_pages = zbi_size.max(4096).div_ceil(4096);
+    let zbi_vmo = VmObject::new_paged(zbi_pages);
     // Write a minimal ZBI container header (empty, no items)
     // Build a ZBI cmdline string from extra_args (for gtest_filter etc.)
     // The standalone test framework reads options from ZBI_TYPE_CMDLINE items.
