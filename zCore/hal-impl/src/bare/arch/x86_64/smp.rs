@@ -180,6 +180,8 @@ static TRAMPOLINE_GDT: [u64; 4] = [
 
 /// BSP's GDT descriptor, saved after trapframe::init() so APs can load it.
 static mut BSP_GDTR: [u8; 10] = [0; 10]; // GDTR is 2-byte limit + 8-byte base
+/// BSP's kernel CS selector, saved so APs can reload CS after LGDT.
+static mut BSP_CS: u64 = 0x08;
 
 /// Save the BSP's GDTR after trapframe::init(). Called from primary_init().
 /// Park any UEFI-started APs by broadcasting an INIT IPI.
@@ -229,6 +231,10 @@ pub fn park_aps_init() {
 pub fn save_bsp_gdt() {
     unsafe {
         core::arch::asm!("sgdt [{}]", in(reg) &mut BSP_GDTR, options(nostack));
+        // Save the BSP's current CS selector for APs to use after LGDT.
+        let cs: u64;
+        core::arch::asm!("mov {}, cs", out(reg) cs, options(nomem, nostack));
+        BSP_CS = cs;
     }
 }
 
@@ -245,23 +251,26 @@ extern "C" fn ap_entry() -> ! {
         // 0x18 from the trampoline. When an interrupt fires, IRET restores
         // CS=0x18, loading the TSS descriptor as code — #GP → triple fault.
         //
-        // Fix: after LGDT, do a far return to reload CS to 0x08 (the BSP's
-        // kernel code segment at GDT index 1).
+        // Fix: after LGDT, do a far return to reload CS to the BSP's
+        // kernel code segment selector (saved in BSP_CS).
+        let bsp_cs = BSP_CS;
+        let bsp_ds = bsp_cs + 8; // data segment is next GDT entry
         core::arch::asm!(
             "lgdt [{gdt}]",
             // Reload CS via far return. retfq pops RIP then CS.
             // Stack must be: [RIP, CS] with RIP on top.
             "lea {tmp}, [rip + 2f]",
-            "push 0x08",   // CS (pushed second = deeper on stack)
+            "push {cs}",   // CS (pushed second = deeper on stack)
             "push {tmp}",  // RIP (pushed last = top of stack)
             "retfq",       // pops RIP, then CS
             "2:",
             // Also reload data segment registers to match BSP's GDT
-            "mov ax, 0x10",
-            "mov ds, ax",
-            "mov es, ax",
-            "mov ss, ax",
+            "mov ds, {ds:x}",
+            "mov es, {ds:x}",
+            "mov ss, {ds:x}",
             gdt = in(reg) &BSP_GDTR,
+            cs = in(reg) bsp_cs,
+            ds = in(reg) bsp_ds as u16,
             tmp = out(reg) _,
         );
 

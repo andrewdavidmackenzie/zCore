@@ -591,7 +591,10 @@ fn parent_start_limit_regression() {
 /// Map a clone into a VMAR, write through the mapping, verify
 /// parent is unaffected (COW isolation through mapping).
 #[test]
-#[ignore = "SIGSEGV in libos: mock_mem COW mapping not dereferenceable (#680)"]
+#[cfg_attr(
+    not(target_os = "none"),
+    ignore = "SIGSEGV in libos: mock_mem COW mapping not dereferenceable (#680)"
+)]
 fn clone_vmar_write() {
     use crate::helpers::TestContext;
     use zircon_object::task::{Job, Process};
@@ -746,7 +749,10 @@ fn forbid_contiguous_vmo() {
 /// C++: TEST(VmoClone2TestCase, ManyCloneMapping)
 /// Create many clones, map each, verify isolation through mappings.
 #[test]
-#[ignore = "SIGSEGV in libos: mock_mem COW mapping not dereferenceable (#680)"]
+#[cfg_attr(
+    not(target_os = "none"),
+    ignore = "SIGSEGV in libos: mock_mem COW mapping not dereferenceable (#680)"
+)]
 fn many_clone_mapping() {
     use zircon_object::task::{Job, Process};
     use zircon_object::vm::MMUFlags;

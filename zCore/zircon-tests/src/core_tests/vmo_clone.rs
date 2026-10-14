@@ -137,7 +137,10 @@ fn clone_rights() {
 /// C++: TEST(VmoCloneTestCase, Commit)
 /// Map parent and clone, verify data through mapped pointers.
 #[test]
-#[ignore = "SIGSEGV in libos: mock_mem COW mapping not dereferenceable (#680)"]
+#[cfg_attr(
+    not(target_os = "none"),
+    ignore = "SIGSEGV in libos: mock_mem COW mapping not dereferenceable (#680)"
+)]
 fn clone_commit_via_mapping() {
     let _ctx = TestContext::new();
     let job = Job::root();
