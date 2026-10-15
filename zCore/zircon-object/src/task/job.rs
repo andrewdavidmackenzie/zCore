@@ -46,8 +46,8 @@ impl_kobject!(Job
         if let Some(job) = inner.children.iter().filter_map(|o|o.upgrade()).find(|o| o.id() == id) {
             return Ok(job);
         }
-        if let Some(proc) = inner.processes.iter().find(|o| o.id() == id) {
-            return Ok(proc.clone());
+        if let Some(proc) = inner.processes.iter().filter_map(|o| o.upgrade()).find(|o| o.id() == id) {
+            return Ok(proc);
         }
         Err(ZxError::NOT_FOUND)
     }
@@ -61,7 +61,7 @@ define_count_helper!(Job);
 struct JobInner {
     policy: JobPolicy,
     children: Vec<Weak<Job>>,
-    processes: Vec<Arc<Process>>,
+    processes: Vec<Weak<Process>>,
     // if the job is killed, no more child creation should works
     killed: bool,
     timer_policy: TimerSlack,
@@ -146,6 +146,8 @@ impl Job {
         let mut inner = self.inner.lock();
         inner.children.retain(|child| !to_remove.ptr_eq(child));
         let no_children = inner.children.is_empty();
+        // Prune dead weak refs while we have the lock.
+        inner.processes.retain(|p| p.strong_count() > 0);
         let no_processes = inner.processes.is_empty();
         let killed = inner.killed;
         drop(inner);
@@ -268,7 +270,7 @@ impl Job {
         if inner.killed {
             return Err(ZxError::BAD_STATE);
         }
-        inner.processes.push(process);
+        inner.processes.push(Arc::downgrade(&process));
         drop(inner);
         // Parent now has a process — clear JOB_NO_PROCESSES and JOB_NO_CHILDREN.
         self.base
@@ -285,7 +287,9 @@ impl Job {
         inner.exited_cpu_time += cpu_time;
         // Use at least 1ns queue time for any started process.
         inner.exited_queue_time += cpu_time.min(1);
-        inner.processes.retain(|proc| proc.id() != id);
+        inner
+            .processes
+            .retain(|proc| proc.upgrade().map_or(false, |p| p.id() != id));
         let no_children = inner.children.is_empty();
         let no_processes = inner.processes.is_empty();
         let killed = inner.killed;
@@ -337,7 +341,13 @@ impl Job {
 
     /// Get KoIDs of Processes.
     pub fn process_ids(&self) -> Vec<KoID> {
-        self.inner.lock().processes.iter().map(|p| p.id()).collect()
+        self.inner
+            .lock()
+            .processes
+            .iter()
+            .filter_map(|p| p.upgrade())
+            .map(|p| p.id())
+            .collect()
     }
 
     /// Get KoIDs of children Jobs.
@@ -359,13 +369,17 @@ impl Job {
     /// Get total accumulated CPU time across all processes and child jobs (nanoseconds).
     /// Includes time from exited processes/jobs that have been removed.
     pub fn total_cpu_time(&self) -> u64 {
-        // Clone collections and read exited_cpu_time under lock, then
+        // Upgrade weak refs and read exited_cpu_time under lock, then
         // release lock before calling into Process/Job (avoids deadlock
         // with Process::terminate → Job::remove_process lock order).
         let (processes, children, exited_time) = {
             let inner = self.inner.lock();
             (
-                inner.processes.clone(),
+                inner
+                    .processes
+                    .iter()
+                    .filter_map(|p| p.upgrade())
+                    .collect::<Vec<_>>(),
                 inner.children.clone(),
                 inner.exited_cpu_time,
             )
@@ -384,7 +398,11 @@ impl Job {
         let (processes, children, exited_time) = {
             let inner = self.inner.lock();
             (
-                inner.processes.clone(),
+                inner
+                    .processes
+                    .iter()
+                    .filter_map(|p| p.upgrade())
+                    .collect::<Vec<_>>(),
                 inner.children.clone(),
                 inner.exited_queue_time,
             )
@@ -421,7 +439,14 @@ impl Job {
             }
             inner.killed = true;
             inner.return_code = return_code;
-            (inner.children.clone(), inner.processes.clone())
+            (
+                inner.children.clone(),
+                inner
+                    .processes
+                    .iter()
+                    .filter_map(|p| p.upgrade())
+                    .collect::<Vec<_>>(),
+            )
         };
         if children.is_empty() && processes.is_empty() {
             self.terminate();
@@ -464,7 +489,8 @@ impl Task for Job {
 
 impl JobInner {
     fn is_empty(&self) -> bool {
-        self.processes.is_empty() && self.children.is_empty()
+        self.processes.iter().all(|p| p.strong_count() == 0)
+            && self.children.iter().all(|c| c.strong_count() == 0)
     }
 }
 
