@@ -118,6 +118,10 @@ pub unsafe fn copy_from_user(dst: *mut u8, src: *const u8, len: usize) -> Result
     if len == 0 {
         return Ok(());
     }
+    // In libos mode, reject obviously-invalid user addresses before
+    // attempting the copy (no MMU to catch faults for us).
+    #[cfg(feature = "libos")]
+    validate_user_address_range(src as usize, len)?;
     // In libos mode, check that the source (user) address is readable.
     #[cfg(feature = "libos")]
     check_user_access_libos(src as usize, len, false)?;
@@ -135,6 +139,10 @@ pub unsafe fn copy_to_user(dst: *mut u8, src: *const u8, len: usize) -> Result<(
     if len == 0 {
         return Ok(());
     }
+    // In libos mode, reject obviously-invalid user addresses before
+    // attempting the copy (no MMU to catch faults for us).
+    #[cfg(feature = "libos")]
+    validate_user_address_range(dst as usize, len)?;
     // In libos mode, check that the destination (user) address is writable.
     #[cfg(feature = "libos")]
     check_user_access_libos(dst as usize, len, true)?;
@@ -223,7 +231,53 @@ unsafe fn guarded_user_copy(dst: *mut u8, src: *const u8, len: usize) -> Result<
     }
 }
 
-/// Libos version: unguarded copy (host OS handles faults).
+/// Libos version: validates the user address range, then copies.
+///
+/// On bare-metal the MMU and trap handler catch bad user pointers.
+/// In libos mode there is no MMU, so we reject addresses that are
+/// obviously invalid before attempting the copy:
+///
+/// - Addresses in the first page (< 0x1000): null-guard page.
+/// - Addresses at or above the Zircon kernel address-space base
+///   (`KERNEL_ASPACE_BASE = 0xffff_8000_0000_0000` on x86-64): these
+///   would never be valid user-space addresses on the host OS either.
+/// - Ranges that wrap around or cross into kernel space.
+///
+/// `user_addr` is whichever of `dst`/`src` came from user space.
+/// The caller (`copy_from_user` / `copy_to_user`) passes the correct
+/// pointer.
+#[cfg(feature = "libos")]
+const LIBOS_KERNEL_ASPACE_BASE: usize = 0xffff_8000_0000_0000;
+
+#[cfg(feature = "libos")]
+fn validate_user_address_range(addr: usize, len: usize) -> Result<()> {
+    if len == 0 {
+        return Ok(());
+    }
+    // Reject addresses in the low guard region (first 64 KiB).
+    //
+    // On real hardware the MMU catches accesses to unmapped pages.  In
+    // libos mode there is no MMU, so we reject the low region that is
+    // never a valid host-process mapping.  This covers null-guard,
+    // Fuchsia's unmapped-first-page tests (address 0x1000 = 4096), and
+    // the standard Linux mmap_min_addr (65536).
+    if addr < 0x10000 {
+        return Err(Error::InvalidPointer);
+    }
+    // Reject kernel-space addresses.
+    if addr >= LIBOS_KERNEL_ASPACE_BASE {
+        return Err(Error::InvalidPointer);
+    }
+    // Reject ranges that wrap around or cross into kernel space.
+    match addr.checked_add(len) {
+        None => return Err(Error::InvalidPointer),
+        Some(end) if end > LIBOS_KERNEL_ASPACE_BASE => return Err(Error::InvalidPointer),
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Libos version: validates the address range, then copies.
 #[cfg(feature = "libos")]
 unsafe fn guarded_user_copy(dst: *mut u8, src: *const u8, len: usize) -> Result<()> {
     dst.copy_from_nonoverlapping(src, len);
