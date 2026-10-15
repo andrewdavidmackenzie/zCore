@@ -118,10 +118,32 @@ fn non_empty_trimmed_printable_string() {
 }
 
 /// C++: TEST(VersionTest, StdU8StringView)
+/// The C++ test verifies that zx_string_view_t can be used as
+/// std::u8string_view (UTF-8 view). In Rust, strings are natively
+/// UTF-8, so we verify the version string is valid UTF-8 and that
+/// the bytes match across both string and byte representations.
 #[test]
 fn std_u8_string_view() {
-    // The C++ test calls zx_system_get_version_string and verifies the
-    // returned zx_string_view_t can be used as std::u8string_view.
-    // This is a C++ API-level test; in Rust the equivalent is covered
-    // by the existing tests that verify the version string content.
+    let _ctx = TestContext::new();
+    let version = get_version_string();
+
+    // Rust strings are always valid UTF-8 by construction, but
+    // verify the VdsoConstants bytes are also valid UTF-8.
+    let constants = hal_impl::vdso::vdso_constants();
+    let len = constants.version_string_len as usize;
+    let full = constants.version_string.as_str();
+    let bytes = full[..len].as_bytes();
+
+    // Verify the bytes form valid UTF-8 (equivalent of C++ u8string_view).
+    assert!(
+        core::str::from_utf8(bytes).is_ok(),
+        "version string bytes should be valid UTF-8"
+    );
+
+    // Verify byte-level equivalence with the string representation.
+    assert_eq!(
+        bytes,
+        version.as_bytes(),
+        "byte representation should match string"
+    );
 }
