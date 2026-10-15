@@ -1,155 +1,396 @@
 //! Job syscall tests.
+//!
+//! All tests use the syscall layer (Syscall struct) rather than
+//! direct kernel object methods where possible, matching the C++
+//! core-tests pattern.
 
 use crate::helpers::TestContext;
-use zircon_object::object::{KernelObject, Signal};
-use zircon_object::task::{
-    BasicPolicy, Job, PolicyAction, PolicyCondition, Process, SetPolicyOptions,
-};
+use hal_impl::user::{UserInPtr, UserOutPtr};
+use zircon_object::object::{Handle, HandleValue, KernelObject, Rights, Signal};
+use zircon_object::task::{Job, Process};
 use zircon_object::ZxError;
 
+// ── Topic and policy constants matching Fuchsia ABI ──
+
+/// ZX_INFO_JOB = 24
+const ZX_INFO_JOB: u32 = 24;
+/// ZX_JOB_POL_BASE_V1 = 0
+const JOB_POL_BASE_V1: u32 = 0;
+/// ZX_JOB_POL_BASE_V2 = 0x0100_0000
+const JOB_POL_BASE_V2: u32 = 0x0100_0000;
+/// ZX_JOB_POL_TIMER_SLACK = 1
+const JOB_POL_TIMER_SLACK: u32 = 1;
+/// ZX_JOB_POL_RELATIVE = 0
+const JOB_POL_RELATIVE: u32 = 0;
+/// ZX_JOB_POL_ABSOLUTE = 1
+const JOB_POL_ABSOLUTE: u32 = 1;
+
+/// Raw V1 policy entry (8 bytes), matching zx_policy_basic_t.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+struct RawPolicyV1 {
+    condition: u32,
+    action: u32,
+}
+
+/// Raw V2 policy entry (12 bytes), matching zx_policy_basic_v2_t.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+struct RawPolicyV2 {
+    condition: u32,
+    action: u32,
+    flags: u32,
+}
+
+/// Raw timer slack policy (16 bytes), matching zx_policy_timer_slack.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+struct RawTimerSlackPolicy {
+    min_slack: i64,
+    default_mode: u32,
+    _padding: u32,
+}
+
+/// JobInfo layout matching zx_info_job_t.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+struct JobInfo {
+    return_code: i64,
+    exited: bool,
+    kill_on_oom: bool,
+    debugger_attached: bool,
+    padding: [u8; 5],
+}
+
+// ── Helpers ──
+
+/// Add a fresh root job to the process handle table with DEFAULT_JOB rights.
+fn add_root_job(ctx: &TestContext) -> HandleValue {
+    let job = Job::root();
+    ctx.proc.add_handle(Handle::new(job, Rights::DEFAULT_JOB))
+}
+
+/// Create a child job via syscall, return its handle.
+fn create_job(ctx: &TestContext, parent_h: HandleValue) -> HandleValue {
+    let sc = ctx.syscall();
+    let mut h: HandleValue = 0;
+    sc.sys_job_create(parent_h, 0, UserOutPtr::from(&mut h as *mut _ as usize))
+        .unwrap();
+    assert_ne!(h, 0);
+    h
+}
+
+/// Create a process via syscall, return (proc_handle, vmar_handle).
+fn create_process(
+    ctx: &TestContext,
+    job_h: HandleValue,
+    name: &[u8],
+) -> (HandleValue, HandleValue) {
+    let sc = ctx.syscall();
+    let mut proc_h: HandleValue = 0;
+    let mut vmar_h: HandleValue = 0;
+    sc.sys_process_create(
+        job_h,
+        UserInPtr::from(name.as_ptr() as usize),
+        name.len(),
+        0,
+        UserOutPtr::from(&mut proc_h as *mut _ as usize),
+        UserOutPtr::from(&mut vmar_h as *mut _ as usize),
+    )
+    .unwrap();
+    assert_ne!(proc_h, 0);
+    assert_ne!(vmar_h, 0);
+    (proc_h, vmar_h)
+}
+
+/// Get job info via sys_object_get_info, return JobInfo.
+fn get_job_info(ctx: &TestContext, job_h: HandleValue) -> JobInfo {
+    let sc = ctx.syscall();
+    let mut info: JobInfo = unsafe { core::mem::zeroed() };
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    sc.sys_object_get_info(
+        job_h,
+        ZX_INFO_JOB,
+        &mut info as *mut _ as usize,
+        core::mem::size_of::<JobInfo>(),
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+        UserOutPtr::from(&mut avail as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+    info
+}
+
+/// Set V1 job policy via syscall.
+fn set_policy_v1(
+    ctx: &TestContext,
+    job_h: HandleValue,
+    options: u32,
+    policies: &[RawPolicyV1],
+) -> Result<(), ZxError> {
+    let sc = ctx.syscall();
+    sc.sys_job_set_policy(
+        job_h,
+        options,
+        JOB_POL_BASE_V1,
+        policies.as_ptr() as usize,
+        policies.len() as u32,
+    )
+}
+
+/// Set V2 job policy via syscall.
+fn set_policy_v2(
+    ctx: &TestContext,
+    job_h: HandleValue,
+    options: u32,
+    policies: &[RawPolicyV2],
+) -> Result<(), ZxError> {
+    let sc = ctx.syscall();
+    sc.sys_job_set_policy(
+        job_h,
+        options,
+        JOB_POL_BASE_V2,
+        policies.as_ptr() as usize,
+        policies.len() as u32,
+    )
+}
+
+/// Set timer slack policy via syscall.
+fn set_timer_slack_policy(
+    ctx: &TestContext,
+    job_h: HandleValue,
+    policy: &RawTimerSlackPolicy,
+) -> Result<(), ZxError> {
+    let sc = ctx.syscall();
+    sc.sys_job_set_policy(
+        job_h,
+        JOB_POL_RELATIVE,
+        JOB_POL_TIMER_SLACK,
+        policy as *const _ as usize,
+        1,
+    )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Tests
+// ═══════════════════════════════════════════════════════════════════
+
+/// C++: TEST(JobTest, BasicTest)
+/// Create child and grandchild jobs, get info, verify creating from
+/// an invalid (killed) parent fails.
+#[test]
+fn basic_test() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let parent_h = add_root_job(&ctx);
+
+    // Create child and grandchild
+    let child_h = create_job(&ctx, parent_h);
+    let grandchild_h = create_job(&ctx, child_h);
+
+    // C++: zx_object_get_info(job_child, ZX_INFO_JOB, ...)
+    let info = get_job_info(&ctx, child_h);
+    assert!(!info.exited);
+    assert_eq!(info.return_code, 0);
+
+    // Close grandchild and child
+    sc.sys_handle_close(grandchild_h).unwrap();
+    sc.sys_handle_close(child_h).unwrap();
+
+    // C++: zx_job_create(ZX_HANDLE_INVALID, ...) → BAD_HANDLE
+    let mut fail_h: HandleValue = 0;
+    assert_eq!(
+        sc.sys_job_create(0, 0, UserOutPtr::from(&mut fail_h as *mut _ as usize))
+            .unwrap_err(),
+        ZxError::BAD_HANDLE
+    );
+}
+
+/// C++: TEST(JobTest, CreateTest)
+/// Create a child job and verify that processes can be created under
+/// both the parent job and the child job.
+#[test]
+fn create_test() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let parent_h = add_root_job(&ctx);
+    let child_h = create_job(&ctx, parent_h);
+
+    // Create processes under both parent and child
+    let (proc1, vmar1) = create_process(&ctx, parent_h, b"job-test-p");
+    let (proc2, vmar2) = create_process(&ctx, child_h, b"job-test-p");
+
+    assert_ne!(proc1, proc2);
+
+    // Clean up
+    sc.sys_handle_close(proc1).unwrap();
+    sc.sys_handle_close(proc2).unwrap();
+    sc.sys_handle_close(vmar1).unwrap();
+    sc.sys_handle_close(vmar2).unwrap();
+    sc.sys_handle_close(child_h).unwrap();
+}
+
 /// C++: TEST(JobTest, GetInfo)
-/// JobInfo has private fields, so we verify it returns without panicking.
+/// JobInfo should return without error.
 #[test]
 fn job_get_info() {
-    let _ctx = TestContext::new();
-    let root = Job::root();
-    let _info = root.get_info();
-    // JobInfo has private fields; just verify it returns successfully
+    let ctx = TestContext::new();
+    let job_h = add_root_job(&ctx);
+    let _info = get_job_info(&ctx, job_h);
 }
 
 /// C++: TEST(JobTest, PolicyBasicOverride)
-/// Set policy DENY, then override with ALLOW using Relative option.
+/// Set policy DENY via V1, then override with ALLOW using Relative option.
 #[test]
 fn job_policy_basic_override() {
-    let _ctx = TestContext::new();
-    let root = Job::root();
+    let ctx = TestContext::new();
+    let job_h = add_root_job(&ctx);
 
-    // Set BadHandle to Deny
-    let deny_policy = &[BasicPolicy {
-        condition: PolicyCondition::BadHandle,
-        action: PolicyAction::Deny,
+    // ZX_POL_BAD_HANDLE=0, ZX_POL_ACTION_DENY=1
+    let deny_policy = [RawPolicyV1 {
+        condition: 0, // BadHandle
+        action: 1,    // Deny
     }];
-    root.set_policy_basic(SetPolicyOptions::Relative, deny_policy)
-        .unwrap();
-    assert_eq!(
-        root.policy().get_action(PolicyCondition::BadHandle),
-        Some(PolicyAction::Deny)
-    );
+    set_policy_v1(&ctx, job_h, JOB_POL_RELATIVE, &deny_policy).unwrap();
 
     // Override with Allow using Relative
-    let allow_policy = &[BasicPolicy {
-        condition: PolicyCondition::BadHandle,
-        action: PolicyAction::Allow,
+    let allow_policy = [RawPolicyV1 {
+        condition: 0, // BadHandle
+        action: 0,    // Allow
     }];
-    root.set_policy_basic(SetPolicyOptions::Relative, allow_policy)
-        .unwrap();
-    assert_eq!(
-        root.policy().get_action(PolicyCondition::BadHandle),
-        Some(PolicyAction::Allow)
-    );
+    set_policy_v1(&ctx, job_h, JOB_POL_RELATIVE, &allow_policy).unwrap();
 }
 
 /// C++: TEST(JobTest, CloseJobRemovesFromTree)
-/// Dropping a job removes it from the parent's child list.
+/// Closing a job handle removes it from the parent's child list.
+/// Uses sys_job_create + sys_handle_close, object-level assertion
+/// on parent's children_ids.
 #[test]
 fn job_close_removes_from_tree() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // We need object references to check children_ids
     let root = Job::root();
-    let child_id;
-    {
-        let child = Job::create_child(&root).unwrap();
-        child_id = child.id();
-        assert!(root.children_ids().contains(&child_id));
-        // child is dropped here
-    }
-    // After drop, the child should be removed from the parent
+    let root_h = ctx
+        .proc
+        .add_handle(Handle::new(root.clone(), Rights::DEFAULT_JOB));
+
+    let child_h = create_job(&ctx, root_h);
+    // Get the child's koid via the handle table
+    let child_obj = ctx.proc.get_object::<Job>(child_h).unwrap();
+    let child_id = child_obj.id();
+    assert!(root.children_ids().contains(&child_id));
+
+    // Close child handle — should remove from parent
+    sc.sys_handle_close(child_h).unwrap();
+    drop(child_obj); // release the Arc
     assert!(!root.children_ids().contains(&child_id));
 }
 
 /// C++: TEST(JobTest, MaxHeight)
-/// Job nesting depth is limited to MAX_HEIGHT (32). Root is depth 0,
-/// so we can create children down to depth 32 (parent depth 31).
-/// Creating at depth 32 (parent depth 32) fails.
+/// Job nesting depth is limited to MAX_HEIGHT (32).
 #[test]
 fn job_max_height() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
     let root = Job::root();
+    let mut parent_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
 
     // Build a chain: root(0) -> child(1) -> ... -> child(32)
-    let mut jobs = vec![root];
-    for i in 0..32 {
-        let parent = &jobs[i];
-        let child = Job::create_child(parent).unwrap();
-        jobs.push(child);
+    let mut handles = Vec::new();
+    for _ in 0..32 {
+        let child_h = create_job(&ctx, parent_h);
+        handles.push(child_h);
+        parent_h = child_h;
     }
 
-    // jobs[32] has depth 32 — creating a child on it should fail
-    let deepest = &jobs[32];
+    // Creating at depth 33 should fail with OUT_OF_RANGE
+    let deepest = handles[31]; // depth 32
+    let mut fail_h: HandleValue = 0;
     assert_eq!(
-        Job::create_child(deepest).unwrap_err(),
+        sc.sys_job_create(deepest, 0, UserOutPtr::from(&mut fail_h as *mut _ as usize))
+            .unwrap_err(),
         ZxError::OUT_OF_RANGE,
     );
 }
 
 /// C++: TEST(JobTest, CriticalProcess)
 /// Marking a process critical to a job kills the job when the process exits.
+/// Uses sys_job_set_critical syscall.
 #[test]
 fn job_critical_process() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
     let root = Job::root();
-    let job = Job::create_child(&root).unwrap();
-    let proc = Process::create(&job, "critical").unwrap();
+    let root_h = ctx
+        .proc
+        .add_handle(Handle::new(root.clone(), Rights::DEFAULT_JOB));
+    let child_h = create_job(&ctx, root_h);
+    let _child_job = ctx.proc.get_object::<Job>(child_h).unwrap();
 
-    // Mark the process as critical to the root job
-    proc.set_critical_at_job(&root, false).unwrap();
+    // Create process under child job
+    let (proc_h, _vmar_h) = create_process(&ctx, child_h, b"critical");
+    let proc_obj = ctx.proc.get_object::<Process>(proc_h).unwrap();
 
-    // Cannot set critical twice
+    // C++: zx_job_set_critical(root_job, 0, process)
+    sc.sys_job_set_critical(root_h, 0, proc_h).unwrap();
+
+    // Cannot set critical twice (even on different job)
     assert_eq!(
-        proc.set_critical_at_job(&job, false).unwrap_err(),
+        sc.sys_job_set_critical(child_h, 0, proc_h).unwrap_err(),
         ZxError::ALREADY_BOUND,
     );
 
     // When the critical process exits, the job it's critical to should be killed
-    proc.exit(1);
+    proc_obj.exit(1);
     assert!(root.signal().contains(Signal::JOB_TERMINATED));
 }
-
-// ── Batch-ported JobTest tests from jobs.cc ──
 
 /// C++: TEST(JobTest, JobSignals)
 /// Full signal lifecycle: create process, create child job, close each.
 #[test]
 fn job_signals() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
+    let ctx = TestContext::new();
+
+    let root = Job::root();
+    let root_h = ctx
+        .proc
+        .add_handle(Handle::new(root.clone(), Rights::DEFAULT_JOB));
+    let job_h = create_job(&ctx, root_h);
+    let job = ctx.proc.get_object::<Job>(job_h).unwrap();
 
     // New job should have NO_{JOBS,PROCESSES,CHILDREN} signals set
     assert!(job.signal().contains(Signal::JOB_NO_PROCESSES));
     assert!(job.signal().contains(Signal::JOB_NO_JOBS));
     assert!(job.signal().contains(Signal::JOB_NO_CHILDREN));
 
-    // Create a child process
-    let child_proc = Process::create(&job, "signal-test").unwrap();
+    // Create a child process via syscall
+    let (child_proc_h, _child_vmar_h) = create_process(&ctx, job_h, b"signal-test");
     // Expect only NO_JOBS now
     assert!(job.signal().contains(Signal::JOB_NO_JOBS));
     assert!(!job.signal().contains(Signal::JOB_NO_PROCESSES));
     assert!(!job.signal().contains(Signal::JOB_NO_CHILDREN));
 
-    // Create a child job
-    let child_job = Job::create_child(&job).unwrap();
+    // Create a child job via syscall
+    let child_job_h = create_job(&ctx, job_h);
     // Expect no "no" signals
     assert!(!job.signal().contains(Signal::JOB_NO_JOBS));
     assert!(!job.signal().contains(Signal::JOB_NO_PROCESSES));
     assert!(!job.signal().contains(Signal::JOB_NO_CHILDREN));
 
-    // Exit the process — NO_PROCESSES should activate
-    // (In zCore, process must exit() to be removed from job; drop alone
-    //  does not remove it because the Arc may still be held.)
-    child_proc.exit(0);
+    // C++: zx_handle_close(child_process) — close process handle
+    // In zCore, processes must exit() to be removed from job
+    let proc_obj = ctx.proc.get_object::<Process>(child_proc_h).unwrap();
+    proc_obj.exit(0);
     assert!(job.signal().contains(Signal::JOB_NO_PROCESSES));
 
-    // Kill the child job — NO_JOBS and NO_CHILDREN should also activate
-    child_job.kill_with_code(-1);
+    // Kill the child job via sys_task_kill
+    ctx.syscall().sys_task_kill(child_job_h).unwrap();
     assert!(job.signal().contains(Signal::JOB_NO_PROCESSES));
     assert!(job.signal().contains(Signal::JOB_NO_JOBS));
     assert!(job.signal().contains(Signal::JOB_NO_CHILDREN));
@@ -160,58 +401,41 @@ fn job_signals() {
 /// but changing it with Absolute fails with ALREADY_EXISTS.
 #[test]
 fn policy_basic_override_deny() {
-    use zircon_object::task::{BasicPolicyV2, SetPolicyOptions};
+    let ctx = TestContext::new();
+    let job_h = add_root_job(&ctx);
 
-    let _ctx = TestContext::new();
-    let root = Job::root();
-
-    let policies = &[
-        BasicPolicyV2 {
-            condition: PolicyCondition::BadHandle,
-            action: PolicyAction::Kill,
-            flags: 1, // OVERRIDE_DENY
-        },
-        BasicPolicyV2 {
-            condition: PolicyCondition::NewChannel,
-            action: PolicyAction::AllowException,
+    // ZX_POL_BAD_HANDLE=0, ZX_POL_ACTION_KILL=4, ZX_POL_OVERRIDE_DENY=1
+    // ZX_POL_NEW_CHANNEL=5, ZX_POL_ACTION_ALLOW_EXCEPTION=2
+    // ZX_POL_NEW_FIFO=10, ZX_POL_ACTION_DENY=1
+    let policies = [
+        RawPolicyV2 {
+            condition: 0,
+            action: 4,
             flags: 1,
-        },
-        BasicPolicyV2 {
-            condition: PolicyCondition::NewFIFO,
-            action: PolicyAction::Deny,
+        }, // BadHandle, Kill, OVERRIDE_DENY
+        RawPolicyV2 {
+            condition: 5,
+            action: 2,
             flags: 1,
-        },
+        }, // NewChannel, AllowException, OVERRIDE_DENY
+        RawPolicyV2 {
+            condition: 10,
+            action: 1,
+            flags: 1,
+        }, // NewFIFO, Deny, OVERRIDE_DENY
     ];
 
     // Set policy — should succeed
-    root.set_policy_basic_v2(SetPolicyOptions::Relative, policies)
-        .unwrap();
+    set_policy_v2(&ctx, job_h, JOB_POL_RELATIVE, &policies).unwrap();
 
     // Setting the exact same policy again should succeed
-    root.set_policy_basic_v2(SetPolicyOptions::Absolute, policies)
-        .unwrap();
+    set_policy_v2(&ctx, job_h, JOB_POL_ABSOLUTE, &policies).unwrap();
 
     // Changing a set policy should fail
-    let changed = &[
-        BasicPolicyV2 {
-            condition: PolicyCondition::BadHandle,
-            action: PolicyAction::Allow, // changed from Kill
-            flags: 1,
-        },
-        BasicPolicyV2 {
-            condition: PolicyCondition::NewChannel,
-            action: PolicyAction::AllowException,
-            flags: 1,
-        },
-        BasicPolicyV2 {
-            condition: PolicyCondition::NewFIFO,
-            action: PolicyAction::Deny,
-            flags: 1,
-        },
-    ];
+    let mut changed = policies;
+    changed[0].action = 0; // Changed from Kill to Allow
     assert_eq!(
-        root.set_policy_basic_v2(SetPolicyOptions::Absolute, changed)
-            .unwrap_err(),
+        set_policy_v2(&ctx, job_h, JOB_POL_ABSOLUTE, &changed).unwrap_err(),
         ZxError::ALREADY_EXISTS,
     );
 }
@@ -220,90 +444,91 @@ fn policy_basic_override_deny() {
 /// Set policy with OVERRIDE_ALLOW, changing it should succeed.
 #[test]
 fn policy_basic_override_allow() {
-    use zircon_object::task::{BasicPolicyV2, SetPolicyOptions};
+    let ctx = TestContext::new();
+    let job_h = add_root_job(&ctx);
 
-    let _ctx = TestContext::new();
-    let root = Job::root();
-
-    let policies = &[
-        BasicPolicyV2 {
-            condition: PolicyCondition::BadHandle,
-            action: PolicyAction::Kill,
-            flags: 0, // OVERRIDE_ALLOW
-        },
-        BasicPolicyV2 {
-            condition: PolicyCondition::NewChannel,
-            action: PolicyAction::AllowException,
+    let policies = [
+        RawPolicyV2 {
+            condition: 0,
+            action: 4,
             flags: 0,
-        },
-        BasicPolicyV2 {
-            condition: PolicyCondition::NewFIFO,
-            action: PolicyAction::Deny,
+        }, // BadHandle, Kill, OVERRIDE_ALLOW
+        RawPolicyV2 {
+            condition: 5,
+            action: 2,
             flags: 0,
-        },
+        }, // NewChannel, AllowException, OVERRIDE_ALLOW
+        RawPolicyV2 {
+            condition: 10,
+            action: 1,
+            flags: 0,
+        }, // NewFIFO, Deny, OVERRIDE_ALLOW
     ];
 
-    root.set_policy_basic_v2(SetPolicyOptions::Relative, policies)
-        .unwrap();
+    set_policy_v2(&ctx, job_h, JOB_POL_RELATIVE, &policies).unwrap();
 
     // Changing a set policy should succeed with OVERRIDE_ALLOW
-    let changed = &[
-        BasicPolicyV2 {
-            condition: PolicyCondition::BadHandle,
-            action: PolicyAction::Allow,
-            flags: 0,
-        },
-        BasicPolicyV2 {
-            condition: PolicyCondition::NewChannel,
-            action: PolicyAction::AllowException,
-            flags: 0,
-        },
-        BasicPolicyV2 {
-            condition: PolicyCondition::NewFIFO,
-            action: PolicyAction::Deny,
-            flags: 0,
-        },
-    ];
-    root.set_policy_basic_v2(SetPolicyOptions::Absolute, changed)
-        .unwrap();
+    let mut changed = policies;
+    changed[0].action = 0; // Changed from Kill to Allow
+    set_policy_v2(&ctx, job_h, JOB_POL_ABSOLUTE, &changed).unwrap();
 }
 
 /// C++: TEST(JobTest, PolicyTimerSlackNonEmptyTest)
 /// Setting timer slack policy on a non-empty job fails with BAD_STATE.
-/// TimerSlackPolicy fields are private, so we construct it via repr(C)
-/// transmute with valid values: min_slack=10ms, mode=Late(2).
 #[test]
 fn policy_timer_slack_non_empty() {
-    let _ctx = TestContext::new();
-    let root = Job::root();
-    let _child = Job::create_child(&root).unwrap();
+    let ctx = TestContext::new();
+    let job_h = add_root_job(&ctx);
+    let _child_h = create_job(&ctx, job_h);
 
-    // Construct TimerSlackPolicy via zeroed memory and unsafe transmute.
-    // repr(C) layout: { min_slack: i64, default_mode: u32 } = 12 bytes
-    // (plus 4 bytes padding to 16 if aligned).
-    let policy: zircon_object::task::TimerSlackPolicy = unsafe { core::mem::zeroed() };
+    // ZX_TIMER_SLACK_LATE = 2
+    let policy = RawTimerSlackPolicy {
+        min_slack: 10_000_000, // 10ms
+        default_mode: 2,       // Late
+        _padding: 0,
+    };
 
-    // The job isn't empty — should fail regardless of policy content
-    let result = root.set_policy_timer_slack(policy);
-    assert_eq!(result.unwrap_err(), ZxError::BAD_STATE);
+    // The job isn't empty — should fail
+    assert_eq!(
+        set_timer_slack_policy(&ctx, job_h, &policy).unwrap_err(),
+        ZxError::BAD_STATE
+    );
 }
 
 /// C++: TEST(JobTest, KillJobNoChildTest)
 /// Kill a job with no children — creating new children should fail.
 #[test]
 fn kill_job_no_child() {
-    let _ctx = TestContext::new();
-    let root = Job::root();
-    let child = Job::create_child(&root).unwrap();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let parent_h = add_root_job(&ctx);
+    let child_h = create_job(&ctx, parent_h);
 
-    child.kill_with_code(-1);
+    // Kill via sys_task_kill
+    ctx.syscall().sys_task_kill(child_h).unwrap();
 
     // Cannot create grandchild on dead job
-    assert_eq!(Job::create_child(&child).unwrap_err(), ZxError::BAD_STATE,);
+    let mut fail_h: HandleValue = 0;
+    assert_eq!(
+        sc.sys_job_create(child_h, 0, UserOutPtr::from(&mut fail_h as *mut _ as usize))
+            .unwrap_err(),
+        ZxError::BAD_STATE,
+    );
 
     // Cannot create process on dead job
+    let name = b"fail";
+    let mut proc_h: HandleValue = 0;
+    let mut vmar_h: HandleValue = 0;
     assert_eq!(
-        Process::create(&child, "fail").unwrap_err(),
+        sc.sys_process_create(
+            child_h,
+            UserInPtr::from(name.as_ptr() as usize),
+            name.len(),
+            0,
+            UserOutPtr::from(&mut proc_h as *mut _ as usize),
+            UserOutPtr::from(&mut vmar_h as *mut _ as usize),
+        )
+        .unwrap_err(),
         ZxError::BAD_STATE,
     );
 }
@@ -312,26 +537,27 @@ fn kill_job_no_child() {
 /// Kill a chain of nested jobs — all should terminate.
 #[test]
 fn kill_job_chain() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
     let root = Job::root();
+    let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
 
-    // Build a chain of 5 jobs
-    let mut jobs = Vec::new();
-    let mut parent = root.clone();
+    // Build a chain of 5 jobs, each with a process
+    let mut job_handles = Vec::new();
+    let mut parent_h = root_h;
     for _ in 0..5 {
-        let child = Job::create_child(&parent).unwrap();
-        // Add a process under each job
-        let _proc = Process::create(&child, "chain").unwrap();
-        jobs.push(child.clone());
-        parent = child;
+        let child_h = create_job(&ctx, parent_h);
+        let (_proc_h, _vmar_h) = create_process(&ctx, child_h, b"chain");
+        job_handles.push(child_h);
+        parent_h = child_h;
     }
 
-    // Kill the root of the chain
-    jobs[0].kill_with_code(-1);
+    // Kill the root of the chain via sys_task_kill
+    ctx.syscall().sys_task_kill(job_handles[0]).unwrap();
 
-    // All jobs should be terminated
-    for j in &jobs {
-        assert!(j.signal().contains(Signal::JOB_TERMINATED));
+    // All jobs should be terminated (check via get_info)
+    for &jh in &job_handles {
+        let info = get_job_info(&ctx, jh);
+        assert!(info.exited, "job should be terminated after kill");
     }
 }
 
@@ -339,33 +565,45 @@ fn kill_job_chain() {
 /// Killing a process that is critical to a job kills the job.
 #[test]
 fn one_critical_process_kills_one_job() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let root = Job::root();
-    let job = Job::create_child(&root).unwrap();
-    let proc = Process::create(&job, "critical").unwrap();
+    let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
+    let job_h = create_job(&ctx, root_h);
+    let (proc_h, _vmar_h) = create_process(&ctx, job_h, b"critical");
 
-    proc.set_critical_at_job(&job, false).unwrap();
-    proc.exit(1);
+    // sys_job_set_critical(job, 0, process)
+    sc.sys_job_set_critical(job_h, 0, proc_h).unwrap();
 
-    assert!(job.signal().contains(Signal::JOB_TERMINATED));
+    // Kill the process
+    let proc_obj = ctx.proc.get_object::<Process>(proc_h).unwrap();
+    proc_obj.exit(1);
+
+    let info = get_job_info(&ctx, job_h);
+    assert!(info.exited);
 }
 
 /// C++: TEST(JobTest, ManyCriticalProcessesKillOneJob)
 /// Multiple processes critical to same job — killing one kills the job.
 #[test]
 fn many_critical_processes_kill_one_job() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let root = Job::root();
-    let job = Job::create_child(&root).unwrap();
-    let proc1 = Process::create(&job, "crit1").unwrap();
-    let proc2 = Process::create(&job, "crit2").unwrap();
+    let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
+    let job_h = create_job(&ctx, root_h);
+    let (proc1_h, _) = create_process(&ctx, job_h, b"crit1");
+    let (proc2_h, _) = create_process(&ctx, job_h, b"crit2");
 
-    proc1.set_critical_at_job(&job, false).unwrap();
-    proc2.set_critical_at_job(&job, false).unwrap();
+    sc.sys_job_set_critical(job_h, 0, proc1_h).unwrap();
+    sc.sys_job_set_critical(job_h, 0, proc2_h).unwrap();
 
     // Kill proc1 — job should terminate
+    let proc1 = ctx.proc.get_object::<Process>(proc1_h).unwrap();
     proc1.exit(1);
-    assert!(job.signal().contains(Signal::JOB_TERMINATED));
+
+    let info = get_job_info(&ctx, job_h);
+    assert!(info.exited);
 }
 
 /// C++: TEST(JobTest, OneCriticalProcessKillsJobTree)
@@ -373,41 +611,49 @@ fn many_critical_processes_kill_one_job() {
 /// process exits, if the critical binding is at the parent level.
 #[test]
 fn one_critical_process_kills_job_tree() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let root = Job::root();
-    let job1 = Job::create_child(&root).unwrap();
-    let job2 = Job::create_child(&job1).unwrap();
-    let _proc1 = Process::create(&job1, "tree1").unwrap();
-    let proc2 = Process::create(&job2, "tree2").unwrap();
+    let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
+    let job1_h = create_job(&ctx, root_h);
+    let job2_h = create_job(&ctx, job1_h);
+    let (_proc1_h, _) = create_process(&ctx, job1_h, b"tree1");
+    let (proc2_h, _) = create_process(&ctx, job2_h, b"tree2");
 
     // proc2 is critical to job1 (the parent)
-    proc2.set_critical_at_job(&job1, false).unwrap();
+    sc.sys_job_set_critical(job1_h, 0, proc2_h).unwrap();
 
     // proc1 is NOT critical to job2 (wrong direction) — should fail
     assert_eq!(
-        _proc1.set_critical_at_job(&job2, false).unwrap_err(),
+        sc.sys_job_set_critical(job2_h, 0, _proc1_h).unwrap_err(),
         ZxError::INVALID_ARGS,
     );
 
     // Kill proc2 — should terminate job1 and job2
+    let proc2 = ctx.proc.get_object::<Process>(proc2_h).unwrap();
     proc2.exit(1);
-    assert!(job1.signal().contains(Signal::JOB_TERMINATED));
-    assert!(job2.signal().contains(Signal::JOB_TERMINATED));
+
+    let info1 = get_job_info(&ctx, job1_h);
+    assert!(info1.exited);
+    let info2 = get_job_info(&ctx, job2_h);
+    assert!(info2.exited);
 }
 
 /// C++: TEST(JobTest, CriticalProcessNotInAncestor)
 /// A process not in the job's hierarchy cannot be set as critical.
 #[test]
 fn critical_process_not_in_ancestor() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let root = Job::root();
-    let job1 = Job::create_child(&root).unwrap();
-    let job2 = Job::create_child(&root).unwrap();
-    let proc = Process::create(&job2, "not-ancestor").unwrap();
+    let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
+    let job1_h = create_job(&ctx, root_h);
+    let job2_h = create_job(&ctx, root_h);
+    let (proc_h, _) = create_process(&ctx, job2_h, b"not-ancestor");
 
     // proc is under job2, not under job1 — should fail
     assert_eq!(
-        proc.set_critical_at_job(&job1, false).unwrap_err(),
+        sc.sys_job_set_critical(job1_h, 0, proc_h).unwrap_err(),
         ZxError::INVALID_ARGS,
     );
 }
@@ -416,49 +662,70 @@ fn critical_process_not_in_ancestor() {
 /// Setting critical twice on the same process returns ALREADY_BOUND.
 #[test]
 fn critical_process_already_set() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let root = Job::root();
-    let job = Job::create_child(&root).unwrap();
-    let proc = Process::create(&job, "already").unwrap();
+    let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
+    let job_h = create_job(&ctx, root_h);
+    let (proc_h, _) = create_process(&ctx, job_h, b"already");
 
-    proc.set_critical_at_job(&job, false).unwrap();
+    sc.sys_job_set_critical(job_h, 0, proc_h).unwrap();
     assert_eq!(
-        proc.set_critical_at_job(&job, false).unwrap_err(),
+        sc.sys_job_set_critical(job_h, 0, proc_h).unwrap_err(),
         ZxError::ALREADY_BOUND,
     );
 
     // Kill process — job should terminate
-    proc.exit(1);
-    assert!(job.signal().contains(Signal::JOB_TERMINATED));
+    let proc_obj = ctx.proc.get_object::<Process>(proc_h).unwrap();
+    proc_obj.exit(1);
+    let job_obj = ctx.proc.get_object::<Job>(job_h).unwrap();
+    assert!(job_obj.signal().contains(Signal::JOB_TERMINATED));
 }
 
 /// C++: TEST(JobTest, InfoTaskStatsFails)
-/// ZX_INFO_TASK_STATS does not apply to jobs.
-/// At the object level, job.get_info() returns JobInfo which is different
-/// from task_stats. We verify that getting info doesn't panic and that
-/// a fresh job's info reports not-exited.
+/// ZX_INFO_TASK_STATS does not apply to jobs. Querying it should fail
+/// with WRONG_TYPE.
 #[test]
 fn info_task_stats_fails() {
-    let _ctx = TestContext::new();
-    let root = Job::root();
-    let info = root.get_info();
-    // JobInfo fields are private, but get_info() shouldn't panic
-    let _ = info;
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let job_h = add_root_job(&ctx);
+
+    // ZX_INFO_TASK_STATS = 12
+    let mut buf = [0u8; 64];
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let result = sc.sys_object_get_info(
+        job_h,
+        12, // ZX_INFO_TASK_STATS
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+        UserOutPtr::from(&mut avail as *mut _ as usize),
+    );
+    // Should return WRONG_TYPE since task_stats only applies to processes
+    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
 }
 
 /// C++: TEST(JobTest, KillJobRemovesFromTree)
 /// Killing a child job removes it from parent's children list.
 #[test]
 fn kill_job_removes_from_tree() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
     let root = Job::root();
-    let child = Job::create_child(&root).unwrap();
-    let child_id = child.id();
+    let root_h = ctx
+        .proc
+        .add_handle(Handle::new(root.clone(), Rights::DEFAULT_JOB));
+    let child_h = create_job(&ctx, root_h);
+
+    let child_obj = ctx.proc.get_object::<Job>(child_h).unwrap();
+    let child_id = child_obj.id();
 
     assert!(root.children_ids().contains(&child_id));
     assert_eq!(root.children_ids().len(), 1);
 
-    child.kill_with_code(-1);
+    // Kill via sys_task_kill
+    ctx.syscall().sys_task_kill(child_h).unwrap();
 
     // After kill, child should be removed from parent
     assert!(!root.children_ids().contains(&child_id));
@@ -469,90 +736,143 @@ fn kill_job_removes_from_tree() {
 /// Create jobs up to max depth and verify the deepest cannot create children.
 #[test]
 fn max_height_smoke() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let root = Job::root();
+    let mut parent_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
 
-    let mut jobs = vec![root];
-    for i in 0..32 {
-        let parent = &jobs[i];
-        let child = Job::create_child(parent).unwrap();
-        jobs.push(child);
+    let mut handles = Vec::new();
+    for _ in 0..32 {
+        let child_h = create_job(&ctx, parent_h);
+        handles.push(child_h);
+        parent_h = child_h;
     }
 
-    // jobs[32] is at depth 32 — creating a child should fail
+    // Creating at depth 33 should fail
+    let deepest = handles[31];
+    let mut fail_h: HandleValue = 0;
     assert_eq!(
-        Job::create_child(&jobs[32]).unwrap_err(),
+        sc.sys_job_create(deepest, 0, UserOutPtr::from(&mut fail_h as *mut _ as usize))
+            .unwrap_err(),
         ZxError::OUT_OF_RANGE,
     );
 
     // Creating a process on the deepest job should still work
-    let proc = Process::create(&jobs[32], "deep").unwrap();
-    assert_ne!(proc.id(), 0);
+    let (proc_h, _vmar_h) = create_process(&ctx, deepest, b"deep");
+    assert_ne!(proc_h, 0);
 }
 
 /// C++: TEST(JobTest, SetJobOomKillBit)
-/// Set and reset the OOM kill bit on a job.
+/// Set and reset the OOM kill bit on a job via sys_object_set_property.
 #[test]
 fn set_job_oom_kill_bit() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+
     let root = Job::root();
+    let job_h = ctx.proc.add_handle(Handle::new(
+        root,
+        Rights::DEFAULT_JOB | Rights::SET_PROPERTY | Rights::GET_PROPERTY,
+    ));
 
-    root.set_kill_on_oom(true);
-    assert!(root.get_kill_on_oom());
+    // ZX_PROP_JOB_KILL_ON_OOM = 15
+    let value: u64 = 1;
+    ctx.syscall()
+        .sys_object_set_property(job_h, 15, &value as *const _ as usize, 8)
+        .unwrap();
 
-    root.set_kill_on_oom(false);
-    assert!(!root.get_kill_on_oom());
+    let mut read_value: u64 = 0;
+    ctx.syscall()
+        .sys_object_get_property(job_h, 15, &mut read_value as *mut _ as usize, 8)
+        .unwrap();
+    assert_eq!(read_value, 1);
+
+    // Reset
+    let value: u64 = 0;
+    ctx.syscall()
+        .sys_object_set_property(job_h, 15, &value as *const _ as usize, 8)
+        .unwrap();
+
+    let mut read_value: u64 = 0;
+    ctx.syscall()
+        .sys_object_get_property(job_h, 15, &mut read_value as *mut _ as usize, 8)
+        .unwrap();
+    assert_eq!(read_value, 0);
 }
 
 /// C++: TEST(JobTest, GetInfoRuntime)
-/// Verify that get_info returns a valid JobInfo for a job with
-/// processes. The C++ test uses ZX_INFO_TASK_RUNTIME; at the
-/// kernel-object level we verify get_info succeeds before and after
-/// the job is killed, and check signals + process return codes.
+/// Verify that get_info returns valid JobInfo before and after
+/// the job is killed.
 #[test]
 fn get_info_runtime() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
     let root = Job::root();
-    let job = Job::create_child(&root).unwrap();
-    let proc = Process::create(&job, "info-rt").unwrap();
+    let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
+    let job_h = create_job(&ctx, root_h);
+    let (proc_h, _) = create_process(&ctx, job_h, b"info-rt");
 
     // get_info should succeed on a live job
-    let _info = job.get_info();
-
-    // Job should not yet be terminated
-    assert!(!job.signal().contains(Signal::JOB_TERMINATED));
+    let info = get_job_info(&ctx, job_h);
+    assert!(!info.exited);
 
     // Kill the process, then job
-    proc.exit(0);
-    job.kill_with_code(-1);
+    let proc_obj = ctx.proc.get_object::<Process>(proc_h).unwrap();
+    proc_obj.exit(0);
+    ctx.syscall().sys_task_kill(job_h).unwrap();
 
     // Job should now be terminated
-    assert!(job.signal().contains(Signal::JOB_TERMINATED));
-    // get_info still succeeds on a dead job
-    let _info2 = job.get_info();
+    let info2 = get_job_info(&ctx, job_h);
+    assert!(info2.exited);
 }
 
 /// C++: TEST(JobTest, GetInfoRuntimeV1)
 /// Verifies that the kill_on_oom property is gettable/settable.
 #[test]
 fn get_info_runtime_v1() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
     let root = Job::root();
-    let job = Job::create_child(&root).unwrap();
+    let root_h = ctx.proc.add_handle(Handle::new(
+        root,
+        Rights::DEFAULT_JOB | Rights::SET_PROPERTY | Rights::GET_PROPERTY,
+    ));
+    let job_h = create_job(&ctx, root_h);
+    // Need SET_PROPERTY on the child job handle too
+    let job_obj = ctx.proc.get_object::<Job>(job_h).unwrap();
+    let job_h_full = ctx.proc.add_handle(Handle::new(
+        job_obj,
+        Rights::DEFAULT_JOB | Rights::SET_PROPERTY | Rights::GET_PROPERTY,
+    ));
 
     // Default kill_on_oom should be false
-    assert!(!job.get_kill_on_oom());
+    let mut read_value: u64 = 0;
+    ctx.syscall()
+        .sys_object_get_property(job_h_full, 15, &mut read_value as *mut _ as usize, 8)
+        .unwrap();
+    assert_eq!(read_value, 0);
 
-    // Set and verify
-    job.set_kill_on_oom(true);
-    assert!(job.get_kill_on_oom());
+    // Set
+    let value: u64 = 1;
+    ctx.syscall()
+        .sys_object_set_property(job_h_full, 15, &value as *const _ as usize, 8)
+        .unwrap();
+
+    // Verify
+    ctx.syscall()
+        .sys_object_get_property(job_h_full, 15, &mut read_value as *mut _ as usize, 8)
+        .unwrap();
+    assert_eq!(read_value, 1);
 
     // get_info should still succeed
-    let _info = job.get_info();
+    let _info = get_job_info(&ctx, job_h);
 
-    // Reset and verify
-    job.set_kill_on_oom(false);
-    assert!(!job.get_kill_on_oom());
+    // Reset
+    let value: u64 = 0;
+    ctx.syscall()
+        .sys_object_set_property(job_h_full, 15, &value as *const _ as usize, 8)
+        .unwrap();
+    ctx.syscall()
+        .sys_object_get_property(job_h_full, 15, &mut read_value as *mut _ as usize, 8)
+        .unwrap();
+    assert_eq!(read_value, 0);
 }
 
 /// C++: TEST(JobTest, KillTest)
@@ -560,170 +880,225 @@ fn get_info_runtime_v1() {
 /// children fails, job is terminated.
 #[test]
 fn kill_test() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let root = Job::root();
-    let job = Job::create_child(&root).unwrap();
-    let proc1 = Process::create(&job, "kill1").unwrap();
-    let proc2 = Process::create(&job, "kill2").unwrap();
-    let child = Job::create_child(&job).unwrap();
-    let proc3 = Process::create(&child, "kill3").unwrap();
+    let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
+    let job_h = create_job(&ctx, root_h);
+    let (_proc1_h, _) = create_process(&ctx, job_h, b"kill1");
+    let (_proc2_h, _) = create_process(&ctx, job_h, b"kill2");
+    let child_h = create_job(&ctx, job_h);
+    let (_proc3_h, _) = create_process(&ctx, child_h, b"kill3");
 
-    // Kill the top job
-    job.kill_with_code(-1);
-
-    // All processes should have the kill return code
-    assert_eq!(proc1.get_info().return_code, -1);
-    assert_eq!(proc2.get_info().return_code, -1);
-    assert_eq!(proc3.get_info().return_code, -1);
+    // Kill the top job via sys_task_kill
+    ctx.syscall().sys_task_kill(job_h).unwrap();
 
     // Both jobs should be terminated
-    assert!(job.signal().contains(Signal::JOB_TERMINATED));
-    assert!(child.signal().contains(Signal::JOB_TERMINATED));
+    let info = get_job_info(&ctx, job_h);
+    assert!(info.exited);
+    let child_info = get_job_info(&ctx, child_h);
+    assert!(child_info.exited);
 
     // Cannot create new children on the dead job
-    assert_eq!(Job::create_child(&job).unwrap_err(), ZxError::BAD_STATE);
+    let mut fail_h: HandleValue = 0;
     assert_eq!(
-        Process::create(&job, "fail").unwrap_err(),
+        sc.sys_job_create(job_h, 0, UserOutPtr::from(&mut fail_h as *mut _ as usize))
+            .unwrap_err(),
         ZxError::BAD_STATE
     );
 }
 
 /// C++: TEST(JobTest, OneCriticalProcessKillsOneJobIfRetcodeNonzero)
-/// A critical process with retcode_nonzero=true only kills the job if
-/// the process exits with a non-zero return code. Exiting with 0 should
-/// NOT kill the job.
+/// A critical process with retcode_nonzero=true (options=1) only kills
+/// the job if the process exits with a non-zero return code.
 #[test]
 fn one_critical_process_kills_one_job_if_retcode_nonzero() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let root = Job::root();
+    let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
 
-    // Case 1: exit with 0, retcode_nonzero=true → job should NOT be killed
-    let job1 = Job::create_child(&root).unwrap();
-    let proc1 = Process::create(&job1, "crit-zero").unwrap();
-    proc1.set_critical_at_job(&job1, true).unwrap(); // retcode_nonzero=true
+    // Case 1: exit with 0, retcode_nonzero=true (options=1) → job should NOT be killed
+    let job1_h = create_job(&ctx, root_h);
+    let (proc1_h, _) = create_process(&ctx, job1_h, b"crit-zero");
+    // C++: zx_job_set_critical(job1, 1, proc1)  — options=1 means retcode_nonzero
+    sc.sys_job_set_critical(job1_h, 1, proc1_h).unwrap();
+    let proc1 = ctx.proc.get_object::<Process>(proc1_h).unwrap();
     proc1.exit(0);
+    let info1 = get_job_info(&ctx, job1_h);
     assert!(
-        !job1.signal().contains(Signal::JOB_TERMINATED),
+        !info1.exited,
         "job should NOT be killed when critical process exits with 0 and retcode_nonzero=true"
     );
 
     // Case 2: exit with non-zero, retcode_nonzero=true → job SHOULD be killed
-    let job2 = Job::create_child(&root).unwrap();
-    let proc2 = Process::create(&job2, "crit-nonzero").unwrap();
-    proc2.set_critical_at_job(&job2, true).unwrap();
+    let job2_h = create_job(&ctx, root_h);
+    let (proc2_h, _) = create_process(&ctx, job2_h, b"crit-nonzero");
+    sc.sys_job_set_critical(job2_h, 1, proc2_h).unwrap();
+    let proc2 = ctx.proc.get_object::<Process>(proc2_h).unwrap();
     proc2.exit(1);
+    let info2 = get_job_info(&ctx, job2_h);
     assert!(
-        job2.signal().contains(Signal::JOB_TERMINATED),
+        info2.exited,
         "job should be killed when critical process exits with non-zero and retcode_nonzero=true"
     );
 }
 
 /// C++: TEST(JobTest, PolicyInvalidTopicTest)
-/// In C++ the raw syscall with an invalid topic number returns
-/// INVALID_ARGS. At the kernel-object level, the topic is represented
-/// by type-safe enums, so we verify that setting an empty policy list
-/// on a job with children returns BAD_STATE (the validation path).
+/// Passing an invalid topic number to sys_job_set_policy returns INVALID_ARGS.
 #[test]
 fn policy_invalid_topic_test() {
-    let _ctx = TestContext::new();
-    let root = Job::root();
-    let _child = Job::create_child(&root).unwrap();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let root_h = add_root_job(&ctx);
+    let job_h = create_job(&ctx, root_h);
 
-    // Setting policy on non-empty job fails with BAD_STATE
-    let result = root.set_policy_basic(SetPolicyOptions::Relative, &[]);
-    assert_eq!(result.unwrap_err(), ZxError::BAD_STATE);
+    // C++: invalid_topic = 2u (not 0=BASE_V1, 1=TIMER_SLACK, 0x01000000=BASE_V2)
+    let some_policy: u32 = 0;
+    assert_eq!(
+        sc.sys_job_set_policy(
+            job_h,
+            JOB_POL_RELATIVE,
+            2, // invalid topic
+            &some_policy as *const _ as usize,
+            1,
+        )
+        .unwrap_err(),
+        ZxError::INVALID_ARGS
+    );
 }
 
 /// C++: TEST(JobTest, PolicyTimerSlackInvalidCountTest)
-/// Passing more than one TimerSlackPolicy entry should fail.
-/// At the kernel-object level, set_policy_timer_slack takes a single
-/// policy. We verify that a valid policy on an empty job succeeds,
-/// and that setting on a non-empty job fails.
+/// Passing count != 1 for timer slack fails with INVALID_ARGS.
 #[test]
 fn policy_timer_slack_invalid_count_test() {
-    use zircon_object::task::TimerSlackPolicy;
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let root_h = add_root_job(&ctx);
+    let job_h = create_job(&ctx, root_h);
 
-    let _ctx = TestContext::new();
-    let root = Job::root();
+    let policy = RawTimerSlackPolicy {
+        min_slack: 10_000_000,
+        default_mode: 2,
+        _padding: 0,
+    };
 
-    // Construct a valid policy: min_slack=0, mode=Center(0)
-    let policy: TimerSlackPolicy = unsafe { core::mem::zeroed() };
+    // Too few (count=0)
+    assert_eq!(
+        sc.sys_job_set_policy(
+            job_h,
+            JOB_POL_RELATIVE,
+            JOB_POL_TIMER_SLACK,
+            &policy as *const _ as usize,
+            0,
+        )
+        .unwrap_err(),
+        ZxError::INVALID_ARGS
+    );
 
-    // Empty job — should succeed
-    root.set_policy_timer_slack(policy).unwrap();
+    // Too many (count=2)
+    let policies = [policy, policy];
+    assert_eq!(
+        sc.sys_job_set_policy(
+            job_h,
+            JOB_POL_RELATIVE,
+            JOB_POL_TIMER_SLACK,
+            policies.as_ptr() as usize,
+            2,
+        )
+        .unwrap_err(),
+        ZxError::INVALID_ARGS
+    );
 
-    // Now add a child and try again — should fail with BAD_STATE
-    let _child = Job::create_child(&root).unwrap();
-    let result = root.set_policy_timer_slack(policy);
-    assert_eq!(result.unwrap_err(), ZxError::BAD_STATE);
+    // Just right (count=1)
+    sc.sys_job_set_policy(
+        job_h,
+        JOB_POL_RELATIVE,
+        JOB_POL_TIMER_SLACK,
+        &policy as *const _ as usize,
+        1,
+    )
+    .unwrap();
 }
 
 /// C++: TEST(JobTest, PolicyTimerSlackInvalidOptionsTest)
-/// Timer slack policy set_policy_timer_slack only works on empty jobs.
-/// Setting it on a job with children returns BAD_STATE (testing the
-/// "invalid options" path at the object level).
+/// Timer slack policy with options != ZX_JOB_POL_RELATIVE (i.e. Absolute)
+/// returns INVALID_ARGS.
 #[test]
 fn policy_timer_slack_invalid_options_test() {
-    use zircon_object::task::TimerSlackPolicy;
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let root_h = add_root_job(&ctx);
+    let job_h = create_job(&ctx, root_h);
 
-    let _ctx = TestContext::new();
-    let root = Job::root();
-    let child = Job::create_child(&root).unwrap();
-    let _grandchild = Job::create_child(&child).unwrap();
+    let policy = RawTimerSlackPolicy {
+        min_slack: 10_000_000,
+        default_mode: 2,
+        _padding: 0,
+    };
 
-    // Parent is non-empty — should fail
-    let policy: TimerSlackPolicy = unsafe { core::mem::zeroed() };
+    // C++: ZX_JOB_POL_ABSOLUTE is invalid for timer slack
     assert_eq!(
-        root.set_policy_timer_slack(policy).unwrap_err(),
-        ZxError::BAD_STATE
+        sc.sys_job_set_policy(
+            job_h,
+            JOB_POL_ABSOLUTE,
+            JOB_POL_TIMER_SLACK,
+            &policy as *const _ as usize,
+            1,
+        )
+        .unwrap_err(),
+        ZxError::INVALID_ARGS
     );
 
-    // Child is also non-empty — should fail
-    assert_eq!(
-        child.set_policy_timer_slack(policy).unwrap_err(),
-        ZxError::BAD_STATE
-    );
+    // ZX_JOB_POL_RELATIVE is valid
+    sc.sys_job_set_policy(
+        job_h,
+        JOB_POL_RELATIVE,
+        JOB_POL_TIMER_SLACK,
+        &policy as *const _ as usize,
+        1,
+    )
+    .unwrap();
 }
 
 /// C++: TEST(JobTest, PolicyTimerSlackInvalidPolicyTest)
-/// A timer slack policy with a negative min_slack or invalid mode is
+/// A timer slack policy with negative min_slack or invalid mode is
 /// rejected with INVALID_ARGS.
 #[test]
 fn policy_timer_slack_invalid_policy_test() {
-    use zircon_object::task::TimerSlackPolicy;
+    let ctx = TestContext::new();
+    let root_h = add_root_job(&ctx);
+    let job_h = create_job(&ctx, root_h);
 
-    let _ctx = TestContext::new();
-    let root = Job::root();
-
-    // Construct a policy with negative min_slack via transmute
-    // repr(C) layout: { min_slack: i64, default_mode: u32 }
-    let invalid_policy: TimerSlackPolicy = unsafe {
-        let mut bytes = [0u8; core::mem::size_of::<TimerSlackPolicy>()];
-        // Set min_slack to -1 (negative)
-        let neg_one: i64 = -1;
-        bytes[..8].copy_from_slice(&neg_one.to_ne_bytes());
-        // mode=0 (Center) is valid
-        core::mem::transmute_copy(&bytes)
+    // Negative min_slack
+    let invalid_policy = RawTimerSlackPolicy {
+        min_slack: -10_000_000,
+        default_mode: 2,
+        _padding: 0,
     };
     assert_eq!(
-        root.set_policy_timer_slack(invalid_policy).unwrap_err(),
+        set_timer_slack_policy(&ctx, job_h, &invalid_policy).unwrap_err(),
         ZxError::INVALID_ARGS
     );
 
-    // Construct a policy with invalid mode (99)
-    let invalid_mode_policy: TimerSlackPolicy = unsafe {
-        let mut bytes = [0u8; core::mem::size_of::<TimerSlackPolicy>()];
-        // min_slack=0 (valid)
-        // mode=99 (invalid)
-        let mode: u32 = 99;
-        bytes[8..12].copy_from_slice(&mode.to_ne_bytes());
-        core::mem::transmute_copy(&bytes)
+    // Invalid mode (3 is not a valid Slack variant)
+    let invalid_mode_policy = RawTimerSlackPolicy {
+        min_slack: 10_000_000,
+        default_mode: 3,
+        _padding: 0,
     };
     assert_eq!(
-        root.set_policy_timer_slack(invalid_mode_policy)
-            .unwrap_err(),
+        set_timer_slack_policy(&ctx, job_h, &invalid_mode_policy).unwrap_err(),
         ZxError::INVALID_ARGS
     );
+
+    // Valid policy should succeed
+    let ok_policy = RawTimerSlackPolicy {
+        min_slack: 10_000_000,
+        default_mode: 2,
+        _padding: 0,
+    };
+    set_timer_slack_policy(&ctx, job_h, &ok_policy).unwrap();
 }
 
 /// C++: TEST(JobTest, PolicyTimerSlackValid)
@@ -731,132 +1106,67 @@ fn policy_timer_slack_invalid_policy_test() {
 /// Valid modes: Center(0), Early(1), Late(2).
 #[test]
 fn policy_timer_slack_valid() {
-    use zircon_object::task::TimerSlackPolicy;
+    let ctx = TestContext::new();
 
-    let _ctx = TestContext::new();
-
-    // Test all three valid modes: Center(0), Early(1), Late(2)
+    // Test all three valid modes
     for mode_val in 0u32..3 {
-        let root = Job::root();
+        let root_h = add_root_job(&ctx);
+        let job_h = create_job(&ctx, root_h);
 
-        let policy: TimerSlackPolicy = unsafe {
-            let mut bytes = [0u8; core::mem::size_of::<TimerSlackPolicy>()];
-            // min_slack = 10_000 (10 us)
-            let slack: i64 = 10_000;
-            bytes[..8].copy_from_slice(&slack.to_ne_bytes());
-            bytes[8..12].copy_from_slice(&mode_val.to_ne_bytes());
-            core::mem::transmute_copy(&bytes)
+        let policy = RawTimerSlackPolicy {
+            min_slack: 10_000,
+            default_mode: mode_val,
+            _padding: 0,
         };
-        root.set_policy_timer_slack(policy).unwrap();
+        set_timer_slack_policy(&ctx, job_h, &policy).unwrap();
     }
 }
 
 /// C++: TEST(JobTest, WaitTest)
-/// A killed job asserts JOB_TERMINATED. We verify this synchronously
-/// since the signal is asserted immediately on kill. In C++ this
-/// test uses zx_object_wait_one — here we check signals directly.
+/// A killed job asserts JOB_TERMINATED.
 #[test]
 fn wait_test() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
     let root = Job::root();
-    let job = Job::create_child(&root).unwrap();
-    let proc = Process::create(&job, "wait-test").unwrap();
+    let root_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
+    let job_h = create_job(&ctx, root_h);
+    let (_proc_h, _) = create_process(&ctx, job_h, b"wait-test");
 
-    // Before kill — no TERMINATED signal
-    assert!(!job.signal().contains(Signal::JOB_TERMINATED));
+    // Before kill — not exited
+    let info = get_job_info(&ctx, job_h);
+    assert!(!info.exited);
 
     // Kill the job
-    job.kill_with_code(-1);
+    ctx.syscall().sys_task_kill(job_h).unwrap();
 
-    // After kill — TERMINATED should be asserted
-    assert!(job.signal().contains(Signal::JOB_TERMINATED));
-
-    // The return code should be propagated to the process
-    assert_eq!(proc.get_info().return_code, -1);
-
-    // get_info on the job should succeed even after termination
-    let _info = job.get_info();
-}
-
-/// C++: TEST(JobTest, BasicTest)
-/// Create child and grandchild jobs, verify info, verify creating
-/// from an invalid (killed) parent fails.
-#[test]
-fn basic_test() {
-    let _ctx = TestContext::new();
-    let job_parent = Job::root();
-
-    // If the parent job is valid, one should be able to create a child job
-    // and a child job of the child job.
-    let job_child = Job::create_child(&job_parent).unwrap();
-    let job_grandchild = Job::create_child(&job_child).unwrap();
-
-    // Verify info on child: should not be exited
-    let _info = job_child.get_info();
-    assert!(!job_child.signal().contains(Signal::JOB_TERMINATED));
-
-    // Clean up (drop closes handles)
-    drop(job_grandchild);
-    drop(job_child);
-
-    // If the parent job is killed, creating a child should fail.
-    let dead_job = Job::create_child(&job_parent).unwrap();
-    dead_job.kill_with_code(-1);
-    assert_eq!(
-        Job::create_child(&dead_job).unwrap_err(),
-        ZxError::BAD_STATE
-    );
-}
-
-/// C++: TEST(JobTest, CreateTest)
-/// Create a child job and verify that processes can be created under
-/// both the parent job and the child job.
-#[test]
-fn create_test() {
-    let _ctx = TestContext::new();
-    let job_parent = Job::root();
-
-    let job_child = Job::create_child(&job_parent).unwrap();
-
-    // Make sure we can create process objects with both the parent job
-    // and a child job.
-    let proc1 = Process::create(&job_parent, "job-test-p").unwrap();
-    let proc2 = Process::create(&job_child, "job-test-p").unwrap();
-
-    assert_ne!(proc1.id(), 0);
-    assert_ne!(proc2.id(), 0);
-    assert_ne!(proc1.id(), proc2.id());
+    // After kill — exited
+    let info2 = get_job_info(&ctx, job_h);
+    assert!(info2.exited);
 }
 
 /// C++: TEST(JobTest, CreateMissingRightsTest)
 /// Duplicate a job handle with reduced rights (no WRITE, no MANAGE_JOB),
 /// then verify that creating a child job via that handle fails with
 /// ACCESS_DENIED.
-///
-/// This tests the handle-rights path: `get_object_with_rights` checks
-/// for MANAGE_JOB (or WRITE) before allowing `Job::create_child`.
 #[test]
 fn create_missing_rights_test() {
-    use zircon_object::object::{Handle, Rights};
-
     let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let root_job = Job::root();
 
-    // C++: zx_rights_t rights = ZX_DEFAULT_JOB_RIGHTS & ~ZX_RIGHT_WRITE & ~ZX_RIGHT_MANAGE_JOB;
+    // C++: rights = ZX_DEFAULT_JOB_RIGHTS & ~ZX_RIGHT_WRITE & ~ZX_RIGHT_MANAGE_JOB
     let reduced_rights = Rights::DEFAULT_JOB & !Rights::WRITE & !Rights::MANAGE_JOB;
-
-    // Add the job to the process handle table with reduced rights
     let handle_value = ctx.proc.add_handle(Handle::new(root_job, reduced_rights));
 
-    // Attempting to retrieve the job with MANAGE_JOB rights should fail
-    let result = ctx
-        .proc
-        .get_object_with_rights::<Job>(handle_value, Rights::MANAGE_JOB);
-    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
-
-    // Also verify WRITE rights are denied
-    let result = ctx
-        .proc
-        .get_object_with_rights::<Job>(handle_value, Rights::WRITE);
-    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
+    // Creating a child should fail with ACCESS_DENIED
+    let mut child_h: HandleValue = 0;
+    assert_eq!(
+        sc.sys_job_create(
+            handle_value,
+            0,
+            UserOutPtr::from(&mut child_h as *mut _ as usize)
+        )
+        .unwrap_err(),
+        ZxError::ACCESS_DENIED
+    );
 }

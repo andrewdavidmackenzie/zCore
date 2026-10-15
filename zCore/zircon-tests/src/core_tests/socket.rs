@@ -1335,7 +1335,6 @@ fn set_read_threshold_on_closed_peer() {
 /// syscall layer. The kernel rejects sizes > UINT32_MAX before
 /// attempting buffer allocation.
 #[test]
-#[ignore = "would crash: 4GB+ buffer allocation causes SIGBUS (kernel missing UINT32_MAX check)"]
 fn read_write_length_overflow_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, h1) = super::syscall_socket::syscall_socket_create(&ctx, 0);
