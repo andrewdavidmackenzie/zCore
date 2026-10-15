@@ -2,6 +2,7 @@ use {
     super::*,
     crate::util::block_range::BlockIter,
     alloc::collections::BTreeMap,
+    alloc::collections::BTreeSet,
     alloc::collections::VecDeque,
     alloc::sync::{Arc, Weak},
     alloc::vec::Vec,
@@ -86,6 +87,11 @@ struct VMObjectPagedInner {
     size: usize,
     /// Physical frames of this VMO.
     frames: BTreeMap<usize, PageState>,
+    /// Zero markers: page indices that have been explicitly zeroed and
+    /// decommitted.  Reading a page with a zero marker returns zeros
+    /// instead of falling through to the parent chain.  This is a
+    /// lightweight substitute for Fuchsia's `VmPageOrMarker::Marker`.
+    zero_markers: BTreeSet<usize>,
     /// All mappings to this VMO.
     mappings: Vec<Weak<VmMapping>>,
     /// Cache Policy
@@ -208,6 +214,7 @@ impl VMObjectPaged {
                 parent_limit: 0usize,
                 size: pages * PAGE_SIZE,
                 frames: BTreeMap::new(),
+                zero_markers: BTreeSet::new(),
                 mappings: Vec::new(),
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
@@ -310,18 +317,24 @@ impl VMObjectTrait for VMObjectPaged {
             //let paddr = self.commit_page(block.block, MMUFlags::READ)?;
             if block.len() == PAGE_SIZE && !inner.is_contiguous() {
                 let _ = inner.commit_page(block.block, MMUFlags::WRITE)?;
-                // Only decommit if the page is not pinned.
                 let pinned = inner
                     .frames
                     .get(&block.block)
                     .is_some_and(|f| f.pin_count > 0);
                 if pinned {
-                    // Can't decommit pinned pages — just zero in place.
+                    // Can't decommit pinned pages — zero in place.
                     if let Some(frame) = inner.frames.get(&block.block) {
                         hal_impl::mem::pmem_zero(frame.frame.paddr(), PAGE_SIZE);
                     }
                 } else {
-                    unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
+                    // Decommit the page.  If the parent chain has content
+                    // at this offset, insert a zero marker to block
+                    // fall-through reads from returning non-zero data.
+                    if inner.parent_has_page(block.block) {
+                        inner.zero_markers.insert(block.block);
+                    }
+                    unwanted
+                        .push_back(block.block + inner.parent_offset / PAGE_SIZE);
                     inner.frames.remove(&block.block);
                 }
             } else if inner.committed_pages_in_range(block.block, block.block + 1) != 0 {
@@ -690,8 +703,11 @@ impl VMObjectPagedInner {
             (self.parent_offset + page_idx * PAGE_SIZE) >= self.parent_limit
         };
         let mut need_unmap = false;
+        // Zero markers block parent fall-through: a zeroed-then-decommitted
+        // page reads as zero without walking up to the parent chain.
+        let has_zero_marker = no_frame && self.zero_markers.contains(&page_idx);
         if no_frame {
-            if out_of_range || no_parent {
+            if out_of_range || no_parent || has_zero_marker {
                 // COW children reading beyond parent_limit: return
                 // shared zero page without allocating. This covers:
                 // - Active COW children (has parent, out of range)
@@ -708,6 +724,11 @@ impl VMObjectPagedInner {
                         Some(zp) => Ok(CommitResult::Ref(zp.paddr())),
                         None => Err(ZxError::NO_MEMORY),
                     };
+                }
+                // Remove zero marker if present — the page is being
+                // materialized as a real (zero-filled) frame.
+                if has_zero_marker {
+                    self.zero_markers.remove(&page_idx);
                 }
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if self.type_.is_hidden() {
@@ -876,6 +897,11 @@ impl VMObjectPagedInner {
                 count += 1;
                 continue;
             }
+            // Zero markers represent decommitted-but-zeroed pages:
+            // they use no memory and block parent fall-through.
+            if self.zero_markers.contains(&i) {
+                continue;
+            }
             if self.parent_limit <= i * PAGE_SIZE {
                 continue;
             }
@@ -885,6 +911,10 @@ impl VMObjectPagedInner {
             let mut current_idx = i + self.parent_offset / PAGE_SIZE;
             while let Some(vmop) = current {
                 let inner = vmop.inner.borrow();
+                // Zero markers in ancestors also block the walk.
+                if inner.zero_markers.contains(&current_idx) {
+                    break;
+                }
                 if inner.frames.contains_key(&current_idx) {
                     count += 1;
                     break;
@@ -901,6 +931,42 @@ impl VMObjectPagedInner {
             }
         }
         count
+    }
+
+    /// Returns `true` if any ancestor in the parent chain has a
+    /// committed page at `page_idx` (translated through parent_offset).
+    /// This is used by the zero operation to decide whether decommitting
+    /// a page would expose non-zero parent content.
+    fn parent_has_page(&self, page_idx: usize) -> bool {
+        if self.parent.is_none() {
+            return false;
+        }
+        if page_idx * PAGE_SIZE + self.parent_offset >= self.parent_limit {
+            return false;
+        }
+        let mut current = self.parent.clone();
+        let mut current_idx = page_idx + self.parent_offset / PAGE_SIZE;
+        while let Some(vmop) = current {
+            let inner = vmop.inner.borrow();
+            // Zero markers in ancestors block the walk — the ancestor
+            // zeroed this page, so no non-zero content is visible.
+            if inner.zero_markers.contains(&current_idx) {
+                return false;
+            }
+            if inner.frames.contains_key(&current_idx) {
+                return true;
+            }
+            if inner.parent_limit == 0 {
+                return false;
+            }
+            let next = current_idx + inner.parent_offset / PAGE_SIZE;
+            if next * PAGE_SIZE >= inner.parent_limit {
+                return false;
+            }
+            current_idx = next;
+            current = inner.parent.clone();
+        }
+        false
     }
 
     /// Remove one child and contract hidden node.
@@ -932,6 +998,11 @@ impl VMObjectPagedInner {
                 value.pin_count -= 1;
             }
             let idx = key - start;
+            // Don't merge a frame into a slot that has a zero marker —
+            // the zero marker takes precedence (the child zeroed that page).
+            if surviving.zero_markers.contains(&idx) {
+                continue;
+            }
             if !surviving.frames.contains_key(&idx) && value.tag != tag.negate() {
                 value.tag = PageStateTag::Owned;
                 surviving.frames.insert(idx, value);
@@ -964,6 +1035,11 @@ impl VMObjectPagedInner {
         // Re-borrow to set parent.
         let mut surviving = arc_child.inner.borrow_mut();
         surviving.parent = self.parent.take();
+        // If the surviving child now has no parent, zero markers are
+        // unnecessary — there's no ancestor content to block.
+        if surviving.parent.is_none() {
+            surviving.zero_markers.clear();
+        }
     }
 
     /// Remove intermediate COW copies whose split tags point to a child
@@ -1076,6 +1152,7 @@ impl VMObjectPagedInner {
                 parent_limit: offset.saturating_add(len).min(self.size),
                 size: len,
                 frames: BTreeMap::new(),
+                zero_markers: BTreeSet::new(),
                 mappings: Vec::new(),
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
@@ -1097,6 +1174,7 @@ impl VMObjectPagedInner {
                 parent_limit: self.parent_limit,
                 size: self.size,
                 frames: core::mem::take(&mut self.frames),
+                zero_markers: core::mem::take(&mut self.zero_markers),
                 mappings: Vec::new(),
                 cache_policy: CachePolicy::Cached,
                 contiguous: self.contiguous,
