@@ -56,6 +56,8 @@ fn segment_selectors_zeroed_on_interrupt() {
     // selectors and cannot be ported to libos mode.
     //
     // Verified by running: make core-tests CORE_TESTS_FILTER='RegisterContextSwitchTests.*'
+
+    todo!("implement test");
 }
 
 /// C++: TEST(RegisterContextSwitchTests, SegmentSelectorsZeroedOnContextSwitch)
@@ -79,4 +81,6 @@ fn segment_selectors_zeroed_on_context_switch() {
     // the architecture-independent part of register preservation.
     //
     // Verified by running: make core-tests CORE_TESTS_FILTER='RegisterContextSwitchTests.*'
+
+    todo!("implement test");
 }

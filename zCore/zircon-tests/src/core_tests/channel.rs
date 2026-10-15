@@ -660,6 +660,8 @@ fn read_fault_does_not_leak_handles() {
     // address during copy_to_user, closes the handles, and returns
     // ZX_ERR_INVALID_ARGS. In libos mode, all pointers are valid
     // process memory — there is no copy_to_user fault path.
+
+    todo!("implement test");
 }
 
 /// C++: TEST(ChannelTest, NoSpuriousReadableSignalWhenRacing)
@@ -678,6 +680,8 @@ fn no_spurious_readable_signal_when_racing() {
     // Requires two threads: a writer spinning on arch::Yield() and a
     // reader doing wait_one + read. Single-threaded cooperative
     // scheduling cannot reproduce the race.
+
+    todo!("implement test");
 }
 
 /// C++: TEST(ChannelTest, ConcurrentReadsConsumeUniqueElements)
@@ -694,6 +698,8 @@ fn concurrent_reads_consume_unique_elements() {
     // Requires two concurrent reader threads (std::jthread) and an
     // event for synchronization. Cooperative scheduling cannot run
     // two readers concurrently.
+
+    todo!("implement test");
 }
 
 /// C++: TEST(ChannelTest, WaitManyIsSignaledOnAnyElementWrite)
@@ -710,6 +716,8 @@ fn wait_many_is_signaled_on_any_element_write() {
     // Requires a worker thread doing object_wait_many on two
     // channels while the main thread writes to one. Cannot be
     // done with cooperative scheduling.
+
+    todo!("implement test");
 }
 
 /// C++: TEST(ChannelTest, ChannelFullException)
@@ -731,6 +739,8 @@ fn full_exception() {
     //   4. ASSERT_GT(write_count, 1000)
     //   5. Wait for ZX_PROCESS_TERMINATED
     //   6. Assert return_code == ZX_TASK_RETCODE_EXCEPTION_KILL
+
+    todo!("implement test");
 }
 
 // ── Bulk-ported channel tests (batch 2) ─────────────────────────────

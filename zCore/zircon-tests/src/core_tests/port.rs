@@ -765,6 +765,8 @@ fn queue_packet_limit_exceeded_generates_policy_exception() {
     //   5. Main reads exception: type == ZX_EXCP_POLICY_ERROR,
     //      synth_code == ZX_EXCP_POLICY_CODE_PORT_TOO_MANY_PACKETS
     //   6. Resume thread from exception
+
+    todo!("implement test");
 }
 
 /// C++: TEST(PortTest, TooManyObservers)
@@ -784,4 +786,6 @@ fn too_many_observers() {
     //   4. Expect ZX_ERR_PEER_CLOSED (process terminated)
     //   5. Wait for ZX_PROCESS_TERMINATED
     //   6. Assert return_code == ZX_TASK_RETCODE_EXCEPTION_KILL
+
+    todo!("implement test");
 }
