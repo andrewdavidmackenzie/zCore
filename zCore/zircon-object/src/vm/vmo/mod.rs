@@ -626,6 +626,19 @@ impl VmObject {
         offset: usize,
         len: usize,
     ) -> ZxResult<Arc<Self>> {
+        // Slices are transparent windows into a parent VMO. Creating a
+        // COW snapshot of a slice redirects through the parent VMO with
+        // the slice's offset added, matching Fuchsia's behavior.
+        if self.is_slice && !self.trait_.is_reference() {
+            let parent = self
+                .inner
+                .lock()
+                .parent
+                .upgrade()
+                .ok_or(ZxError::BAD_STATE)?;
+            let slice_off = self.trait_.parent_offset();
+            return parent.create_child(resizable, offset + slice_off, len);
+        }
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         base.set_name(&self.base.name());
         let trait_ = self.trait_.create_child(offset, len)?;
