@@ -836,6 +836,364 @@ impl EchoServer {
     }
 }
 
+// ── Suspend-during-blocking test threads ─────────────────────────────
+//
+// Thread helpers for testing suspend of threads blocked on syscalls:
+// sleeping, channel_call, port_wait, and wait_one (event).
+
+use zircon_object::signal::{Event, PacketUser, PayloadRepr, Port, PortPacketRepr};
+
+/// Shared state for a sleeping thread (SuspendSleeping test).
+///
+/// C++ equivalent: threads_test_sleep_fn — calls zx_nanosleep(deadline).
+pub struct SleepingThreadState {
+    /// Thread state tracking.
+    pub state: AtomicU32,
+}
+
+impl SleepingThreadState {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            state: AtomicU32::new(WAITER_STATE_WAITING_TO_START),
+        })
+    }
+}
+
+/// Thread function that sleeps for a long time (blocking).
+///
+/// C++ equivalent: threads_test_sleep_fn
+/// Uses blocking_run with a future that waits on a never-signaled event,
+/// with ThreadState::BlockedSleeping.
+pub fn sleeping_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let inner_thread = thread.inner();
+        let sleep_state = inner_thread
+            .ext()
+            .downcast_ref::<Arc<SleepingThreadState>>()
+            .expect("SleepingThreadState ext missing")
+            .clone();
+
+        sleep_state
+            .state
+            .store(WAITER_STATE_ABOUT_TO_WAIT, Ordering::Release);
+
+        // Sleep for a long time using blocking_run.
+        // We use hal_impl::thread::sleep_until to create a sleep future,
+        // but blocking_run has its own deadline. Use a very long sleep.
+        let sleep_future = core::pin::pin!(hal_impl::thread::sleep_until(
+            core::time::Duration::from_secs(3600)
+        ));
+        let _result = thread
+            .blocking_run(
+                sleep_future,
+                zircon_object::task::ThreadState::BlockedSleeping,
+                core::time::Duration::from_secs(3600),
+                None,
+            )
+            .await;
+
+        sleep_state
+            .state
+            .store(WAITER_STATE_WAIT_RETURNED, Ordering::Release);
+    })
+}
+
+/// A handle to a running sleeping thread.
+pub struct SleepingTestThread {
+    pub thread: Arc<Thread>,
+    pub state: Arc<SleepingThreadState>,
+}
+
+impl SleepingTestThread {
+    pub fn start(proc: &Arc<Process>) -> Self {
+        let sleep_state = SleepingThreadState::new();
+        let thread = Thread::create_with_ext(proc, "sleeping-thread", sleep_state.clone()).unwrap();
+        thread.start(sleeping_thread_fn).unwrap();
+        SleepingTestThread {
+            thread,
+            state: sleep_state,
+        }
+    }
+}
+
+/// Shared state for a channel_call blocking thread.
+///
+/// C++ equivalent: threads_test_channel_call_fn — calls zx_channel_call
+/// which blocks waiting for a reply.
+pub struct ChannelCallThreadState {
+    /// The thread's end of the channel (for making the call).
+    pub channel: Arc<Channel>,
+    /// Thread state tracking.
+    pub state: AtomicU32,
+    /// Result of the call.
+    pub call_result: AtomicU32,
+}
+
+impl ChannelCallThreadState {
+    pub fn new(channel: Arc<Channel>) -> Arc<Self> {
+        Arc::new(Self {
+            channel,
+            state: AtomicU32::new(WAITER_STATE_WAITING_TO_START),
+            call_result: AtomicU32::new(u32::MAX),
+        })
+    }
+}
+
+/// Thread function that blocks on a channel_call.
+///
+/// C++ equivalent: threads_test_channel_call_fn
+/// Sends a message ("abcdefghi") and waits for a reply.
+pub fn channel_call_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let inner_thread = thread.inner();
+        let call_state = inner_thread
+            .ext()
+            .downcast_ref::<Arc<ChannelCallThreadState>>()
+            .expect("ChannelCallThreadState ext missing")
+            .clone();
+
+        call_state
+            .state
+            .store(WAITER_STATE_ABOUT_TO_WAIT, Ordering::Release);
+
+        // Send "abcdefghi" via channel_call — blocks until reply arrives.
+        let msg = zircon_object::ipc::MessagePacket {
+            data: alloc::vec![b'a', b'b', b'c', b'd', b'e', b'f', b'g', b'h', b'i'],
+            handles: alloc::vec![],
+        };
+
+        let call_future = core::pin::pin!(call_state.channel.call(msg));
+        let result: zircon_object::ZxResult<zircon_object::ipc::MessagePacket> = thread
+            .blocking_run(
+                call_future,
+                zircon_object::task::ThreadState::BlockedChannel,
+                core::time::Duration::from_secs(3600),
+                None,
+            )
+            .await;
+
+        let code = match result {
+            Ok(_) => 0,
+            Err(e) => e as u32,
+        };
+        call_state.call_result.store(code, Ordering::Release);
+
+        call_state
+            .state
+            .store(WAITER_STATE_WAIT_RETURNED, Ordering::Release);
+    })
+}
+
+/// A handle to a running channel_call blocking thread.
+pub struct ChannelCallTestThread {
+    pub thread: Arc<Thread>,
+    pub state: Arc<ChannelCallThreadState>,
+    /// The other end of the channel (test side).
+    pub peer: Arc<Channel>,
+}
+
+impl ChannelCallTestThread {
+    pub fn start(proc: &Arc<Process>) -> Self {
+        let (thread_end, test_end) = Channel::create();
+        let call_state = ChannelCallThreadState::new(thread_end);
+        let thread =
+            Thread::create_with_ext(proc, "channel-call-thread", call_state.clone()).unwrap();
+        thread.start(channel_call_thread_fn).unwrap();
+        ChannelCallTestThread {
+            thread,
+            state: call_state,
+            peer: test_end,
+        }
+    }
+}
+
+/// Shared state for a port_wait blocking thread.
+///
+/// C++ equivalent: threads_test_port_fn — calls zx_port_wait on port[0],
+/// then queues a packet to port[1] with key+5.
+pub struct PortWaitThreadState {
+    /// The port to wait on.
+    pub wait_port: Arc<Port>,
+    /// The port to send the result to.
+    pub result_port: Arc<Port>,
+    /// Thread state tracking.
+    pub state: AtomicU32,
+}
+
+impl PortWaitThreadState {
+    pub fn new(wait_port: Arc<Port>, result_port: Arc<Port>) -> Arc<Self> {
+        Arc::new(Self {
+            wait_port,
+            result_port,
+            state: AtomicU32::new(WAITER_STATE_WAITING_TO_START),
+        })
+    }
+}
+
+/// Thread function that blocks on port_wait.
+///
+/// C++ equivalent: threads_test_port_fn
+/// Waits for a packet on port[0], then queues a packet to port[1]
+/// with key += 5.
+pub fn port_wait_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let inner_thread = thread.inner();
+        let port_state = inner_thread
+            .ext()
+            .downcast_ref::<Arc<PortWaitThreadState>>()
+            .expect("PortWaitThreadState ext missing")
+            .clone();
+
+        port_state
+            .state
+            .store(WAITER_STATE_ABOUT_TO_WAIT, Ordering::Release);
+
+        // Wait for a packet on the wait port using blocking_run.
+        let wait_future = core::pin::pin!(port_state.wait_port.wait());
+        let result = thread
+            .blocking_run(
+                wait_future,
+                zircon_object::task::ThreadState::BlockedPort,
+                core::time::Duration::from_secs(3600),
+                None,
+            )
+            .await;
+
+        // If we got a packet, forward it to the result port with key+5.
+        if let Ok(packet) = result {
+            let repr = PortPacketRepr::from(&packet);
+            let new_repr = PortPacketRepr {
+                key: repr.key + 5,
+                status: zircon_object::ZxError::OK,
+                data: PayloadRepr::User(PacketUser::default()),
+            };
+            port_state.result_port.push(new_repr);
+        }
+
+        port_state
+            .state
+            .store(WAITER_STATE_WAIT_RETURNED, Ordering::Release);
+    })
+}
+
+/// A handle to a running port_wait blocking thread.
+pub struct PortWaitTestThread {
+    pub thread: Arc<Thread>,
+    pub state: Arc<PortWaitThreadState>,
+    /// The port the thread waits on (test sends packets here).
+    pub wait_port: Arc<Port>,
+    /// The port the thread sends results to (test reads from here).
+    pub result_port: Arc<Port>,
+}
+
+impl PortWaitTestThread {
+    pub fn start(proc: &Arc<Process>) -> Self {
+        let wait_port = Port::new(0).unwrap();
+        let result_port = Port::new(0).unwrap();
+        let port_state = PortWaitThreadState::new(wait_port.clone(), result_port.clone());
+        let thread = Thread::create_with_ext(proc, "port-wait-thread", port_state.clone()).unwrap();
+        thread.start(port_wait_thread_fn).unwrap();
+        PortWaitTestThread {
+            thread,
+            state: port_state,
+            wait_port,
+            result_port,
+        }
+    }
+}
+
+/// Shared state for a wait_one blocking thread (event wait).
+///
+/// C++ equivalent: threads_test_wait_fn — calls
+/// zx_object_wait_one(event, USER_SIGNAL_0, INFINITE, NULL).
+/// On wake, signals USER_SIGNAL_1 on the event.
+pub struct EventWaitThreadState {
+    /// The event to wait on.
+    pub event: Arc<Event>,
+    /// Thread state tracking.
+    pub state: AtomicU32,
+}
+
+impl EventWaitThreadState {
+    pub fn new(event: Arc<Event>) -> Arc<Self> {
+        Arc::new(Self {
+            event,
+            state: AtomicU32::new(WAITER_STATE_WAITING_TO_START),
+        })
+    }
+}
+
+/// Thread function that blocks on wait_one(event, USER_SIGNAL_0).
+///
+/// C++ equivalent: threads_test_wait_fn
+/// Waits for USER_SIGNAL_0 on the event, then signals USER_SIGNAL_1.
+pub fn event_wait_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let inner_thread = thread.inner();
+        let wait_state = inner_thread
+            .ext()
+            .downcast_ref::<Arc<EventWaitThreadState>>()
+            .expect("EventWaitThreadState ext missing")
+            .clone();
+
+        wait_state
+            .state
+            .store(WAITER_STATE_ABOUT_TO_WAIT, Ordering::Release);
+
+        // Wait for USER_SIGNAL_0 using blocking_run.
+        let event_obj: Arc<dyn KernelObject> = wait_state.event.clone();
+        let wait_future = core::pin::pin!(event_obj.wait_signal(Signal::USER_SIGNAL_0));
+        let result = thread
+            .blocking_run(
+                wait_future,
+                zircon_object::task::ThreadState::BlockedWaitOne,
+                core::time::Duration::from_secs(3600),
+                None,
+            )
+            .await;
+
+        // If we got the signal, signal USER_SIGNAL_1 back.
+        if result.is_ok() {
+            wait_state.event.signal_set(Signal::USER_SIGNAL_1);
+        }
+
+        wait_state
+            .state
+            .store(WAITER_STATE_WAIT_RETURNED, Ordering::Release);
+    })
+}
+
+/// A handle to a running event wait thread.
+pub struct EventWaitTestThread {
+    pub thread: Arc<Thread>,
+    pub state: Arc<EventWaitThreadState>,
+    /// The event the thread waits on.
+    pub event: Arc<Event>,
+}
+
+impl EventWaitTestThread {
+    pub fn start(proc: &Arc<Process>) -> Self {
+        let event = Event::new();
+        let wait_state = EventWaitThreadState::new(event.clone());
+        let thread =
+            Thread::create_with_ext(proc, "event-wait-thread", wait_state.clone()).unwrap();
+        thread.start(event_wait_thread_fn).unwrap();
+        EventWaitTestThread {
+            thread,
+            state: wait_state,
+            event,
+        }
+    }
+}
+
 // ── UserPagerHelper ──────────────────────────────────────────────────
 //
 // Rust equivalent of the C++ UserPager test helper class from
@@ -845,7 +1203,7 @@ impl EchoServer {
 // pages with auto-generated content, waiting for page requests, and
 // failing pages.
 
-use zircon_object::signal::{Pager, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_READ};
+use zircon_object::signal::{Pager, ZX_PAGER_VMO_READ};
 use zircon_object::vm::{VmObject, PAGE_SIZE};
 use zircon_object::ZxError;
 
@@ -1244,6 +1602,126 @@ impl PagerProcessTestThread {
             assert!(
                 std::time::Instant::now() < deadline,
                 "PagerProcessTestThread: timed out waiting for thread to terminate"
+            );
+            async_std::task::yield_now().await;
+        }
+    }
+}
+
+// ── Exception test thread ────────────────────────────────────────────
+//
+// A Zircon thread that triggers a policy exception with configurable
+// synth_code and synth_data. Used by the Threads.ExitViaException,
+// Threads.BadSyscallCaller, and Threads.BadSyscallNumber tests.
+
+/// Shared state for an exception test thread.
+pub struct ExceptionTestState {
+    /// The policy exception synth_code to raise.
+    pub synth_code: u32,
+    /// The policy exception synth_data to raise.
+    pub synth_data: u32,
+    /// Thread state tracking.
+    pub state: AtomicU32,
+}
+
+/// State constants for exception test threads.
+pub const EXCEPTION_STATE_WAITING_TO_START: u32 = 100;
+pub const EXCEPTION_STATE_ABOUT_TO_RAISE: u32 = 200;
+pub const EXCEPTION_STATE_DONE: u32 = 300;
+
+impl ExceptionTestState {
+    pub fn new(synth_code: u32, synth_data: u32) -> Arc<Self> {
+        Arc::new(Self {
+            synth_code,
+            synth_data,
+            state: AtomicU32::new(EXCEPTION_STATE_WAITING_TO_START),
+        })
+    }
+}
+
+/// Thread function for exception test threads.
+///
+/// 1. Signals a policy exception on the thread via `signal_policy_exception`
+/// 2. Delivers it via `deliver_pending_policy_exception` (blocks until handled)
+/// 3. Thread exits (CurrentThread drop calls terminate)
+pub fn exception_test_thread_fn(
+    thread: CurrentThread,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    Box::pin(async move {
+        let inner_thread = thread.inner();
+        let exc_state = inner_thread
+            .ext()
+            .downcast_ref::<Arc<ExceptionTestState>>()
+            .expect("ExceptionTestState ext missing")
+            .clone();
+
+        exc_state
+            .state
+            .store(EXCEPTION_STATE_ABOUT_TO_RAISE, Ordering::Release);
+
+        // Signal the policy exception (deferred delivery model).
+        inner_thread.signal_policy_exception(exc_state.synth_code, exc_state.synth_data);
+
+        // Deliver it — this blocks until the exception handler resolves it.
+        thread.deliver_pending_policy_exception().await;
+
+        exc_state
+            .state
+            .store(EXCEPTION_STATE_DONE, Ordering::Release);
+
+        // CurrentThread drop calls terminate()
+    })
+}
+
+/// A handle to a running exception test thread.
+pub struct ExceptionTestThread {
+    pub thread: Arc<Thread>,
+    pub state: Arc<ExceptionTestState>,
+}
+
+impl ExceptionTestThread {
+    /// Create and start an exception test thread that will raise a
+    /// policy exception with the given synth_code and synth_data.
+    pub fn start(proc: &Arc<Process>, synth_code: u32, synth_data: u32) -> Self {
+        let exc_state = ExceptionTestState::new(synth_code, synth_data);
+        let thread = Thread::create_with_ext(proc, "exception-test", exc_state.clone()).unwrap();
+        thread.start(exception_test_thread_fn).unwrap();
+        ExceptionTestThread {
+            thread,
+            state: exc_state,
+        }
+    }
+
+    /// Wait until the thread has entered the exception-blocked state.
+    pub async fn wait_until_blocked(&self) {
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+        loop {
+            if self.thread.state() == ThreadState::BlockedException {
+                return;
+            }
+            // Also accept if the thread already finished (Dying/Dead).
+            let st = self.thread.state();
+            if st == ThreadState::Dying || st == ThreadState::Dead {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "ExceptionTestThread: timed out waiting for BlockedException state"
+            );
+            async_std::task::yield_now().await;
+        }
+    }
+
+    /// Wait for the thread to terminate (state == Dead).
+    pub async fn wait_for_termination(&self) {
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
+        loop {
+            if self.thread.state() == ThreadState::Dead {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "ExceptionTestThread: timed out waiting for thread to terminate"
             );
             async_std::task::yield_now().await;
         }
