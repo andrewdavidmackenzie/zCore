@@ -1526,7 +1526,14 @@ impl VmAddressRegion {
         let map_inner = map.inner.lock();
         let vmo_offset = vaddr - map_inner.addr + map_inner.vmo_offset;
         let size_limit = map_inner.addr + map_inner.size - vaddr;
-        let actual_size = buf.len().min(size_limit);
+        let mut actual_size = buf.len().min(size_limit);
+        // Clamp to the VMO's actual size — a mapping may be larger
+        // than the VMO (e.g., resizable VMO that was shrunk).
+        let vmo_remaining = map.vmo.len().saturating_sub(vmo_offset);
+        actual_size = actual_size.min(vmo_remaining);
+        if actual_size == 0 {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         map.vmo.read(vmo_offset, &mut buf[0..actual_size])?;
         Ok(actual_size)
     }
@@ -1547,7 +1554,13 @@ impl VmAddressRegion {
         }
         let vmo_offset = vaddr - map_inner.addr + map_inner.vmo_offset;
         let size_limit = map_inner.addr + map_inner.size - vaddr;
-        let actual_size = buf.len().min(size_limit);
+        let mut actual_size = buf.len().min(size_limit);
+        // Clamp to the VMO's actual size.
+        let vmo_remaining = map.vmo.len().saturating_sub(vmo_offset);
+        actual_size = actual_size.min(vmo_remaining);
+        if actual_size == 0 {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         map.vmo.write(vmo_offset, &buf[0..actual_size])?;
 
         // In libos mode, also write directly to the user virtual address.
