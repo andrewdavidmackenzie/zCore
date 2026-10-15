@@ -1563,19 +1563,28 @@ fn read_only_map() {
 }
 
 /// C++: TEST(VmoTestCase, ReadWriteInvalidKernelBuffer)
-/// In libos mode, there is no kernel/user address split. Verify
-/// that VMO read/write with normal buffers works correctly.
-#[test]
-fn read_write_invalid_kernel_buffer() {
-    let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1);
+/// Kernel-space buffer addresses are rejected by `sys_vmo_read`/`sys_vmo_write`.
+/// The syscall layer checks the buffer address against `KERNEL_ASPACE_BASE` and
+/// returns `NOT_FOUND` for any address at or above it.
+#[async_std::test]
+async fn read_write_invalid_kernel_buffer() {
+    use crate::core_tests::syscall_vmo::syscall_vmo_create;
+    use hal_impl::user::{UserInPtr, UserOutPtr};
 
-    // Normal write/read should work.
-    let data = [0xAB; 32];
-    vmo.write(0, &data).unwrap();
-    let mut buf = [0u8; 32];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(buf, data);
+    let ctx = TestContext::new();
+    let h = syscall_vmo_create(&ctx, PAGE_SIZE as u64, 0);
+    let sc = ctx.syscall();
+
+    // A kernel-space address should be rejected with NOT_FOUND.
+    let kernel_addr: usize = 0xFFFF_FF80_0000_0000;
+
+    let result = sc
+        .sys_vmo_read(h, UserOutPtr::from(kernel_addr), 0, 8)
+        .await;
+    assert_eq!(result, Err(ZxError::NOT_FOUND));
+
+    let result = sc.sys_vmo_write(h, UserInPtr::from(kernel_addr), 0, 8);
+    assert_eq!(result, Err(ZxError::NOT_FOUND));
 }
 
 /// C++: TEST(VmoTestCase, ReadWriteInvalidNullBuffer)
@@ -1592,19 +1601,15 @@ fn read_write_invalid_null_buffer() {
 }
 
 /// C++: TEST(VmoTestCase, ReadWriteInvalidUserBuffer)
-/// Verify read/write with a valid stack buffer succeeds.
-/// In libos mode, all buffers are in the same address space.
+/// The C++ test creates a read-only VMAR mapping and attempts to read VMO data
+/// into it, expecting the write to the read-only page to fail. On bare-metal the
+/// page table enforces this and `guarded_user_copy` catches the fault. In libos
+/// mode, `copy_to_user` is a plain memcpy that doesn't check VMAR permissions,
+/// so the write silently succeeds. This test is therefore ignored in libos.
 #[test]
+#[cfg_attr(feature = "libos", ignore)]
 fn read_write_invalid_user_buffer() {
-    let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1);
-
-    // Stack buffer — always valid in libos mode.
-    let data = [0xCC; 128];
-    vmo.write(0, &data).unwrap();
-    let mut buf = [0u8; 128];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(buf, data);
+    panic!("not yet implemented: requires bare-metal VMAR permission enforcement");
 }
 
 /// C++: TEST(VmoTestCase, ResizeHazard)
