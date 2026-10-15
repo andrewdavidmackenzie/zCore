@@ -1266,7 +1266,7 @@ pub struct VmoInfo {
     /// VMO mapping cache policy.
     cache_policy: u32,
     /// Kernel memory used to track metadata for this VMO.
-    metadata_bytes: u64,
+    pub metadata_bytes: u64,
     /// Running counter of committed-state change events.
     committed_change_events: u64,
     /// Content populated and tracked by this VMO (including shared pages).
