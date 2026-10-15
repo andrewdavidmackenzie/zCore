@@ -177,10 +177,12 @@ async fn basics() {
 }
 
 /// C++: TEST(Threads, DebugRegistersDr6CorrectAfterBreakpointRemoval)
+#[ignore = "requires hardware debug registers (DR6)"]
 #[test]
 fn debug_registers_dr6_correct_after_breakpoint_removal() {}
 
 /// C++: TEST(Threads, DebugRegistersDr6ResetOnDebugException)
+#[ignore = "requires hardware debug registers (DR6)"]
 #[test]
 fn debug_registers_dr6_reset_on_debug_exception() {}
 
@@ -207,6 +209,7 @@ fn debug_registers_validation() {
 }
 
 /// C++: TEST(Threads, DebugRegistersWatchpointSyscallPanicRepro)
+#[ignore = "requires hardware debug registers (watchpoints)"]
 #[test]
 fn debug_registers_watchpoint_syscall_panic_repro() {}
 
@@ -457,10 +460,12 @@ fn long_name_succeeds() {
 }
 
 /// C++: TEST(Threads, NoncanonicalRipAddressIRETQ)
+#[ignore = "x86-specific: requires non-canonical address exception handling"]
 #[test]
 fn noncanonical_rip_address_iretq() {}
 
 /// C++: TEST(Threads, NoncanonicalRipAddressSyscall)
+#[ignore = "x86-specific: requires non-canonical address exception handling"]
 #[test]
 fn noncanonical_rip_address_syscall() {}
 
@@ -681,6 +686,7 @@ fn start_regs() {
 }
 
 /// C++: TEST(Threads, StartRegsNoncanonicalTp)
+#[ignore = "x86-specific: requires non-canonical TP register handling"]
 #[test]
 fn start_regs_noncanonical_tp() {}
 
@@ -1240,6 +1246,7 @@ async fn suspend_stops_thread() {
 }
 
 /// C++: TEST(Threads, SyscallDebuggerModifyResult)
+#[ignore = "requires debugger exception channel to modify syscall return value"]
 #[test]
 fn syscall_debugger_modify_result() {}
 
@@ -1281,6 +1288,7 @@ async fn syscall_suspended_register_state() {
 }
 
 /// C++: TEST(Threads, ThreadLocalRegisterState)
+#[ignore = "requires TLS register (FS/GS base) read/write in thread context"]
 #[test]
 fn thread_local_register_state() {}
 
@@ -1365,6 +1373,7 @@ fn thread_start_with_zero_instruction_pointer() {
 }
 
 /// C++: TEST(Threads, WatchpointSyscallPanic)
+#[ignore = "requires hardware watchpoint support"]
 #[test]
 fn watchpoint_syscall_panic() {}
 
@@ -1391,6 +1400,7 @@ fn write_read_debug_register_state() {
 }
 
 /// C++: TEST(Threads, WriteThreadStateWithInvalidMxcsrIsInvalidArgs)
+#[ignore = "x86-specific: requires MXCSR validation in write_state"]
 #[test]
 fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {}
 
@@ -1575,6 +1585,7 @@ fn writing_vector_register_state_unsupported_fields_ignored() {
 }
 
 /// C++: TEST(Threads, X86AcFlagUserCopy)
+#[ignore = "x86-specific: requires AC flag handling during user copy"]
 #[test]
 fn x86_ac_flag_user_copy() {}
 
