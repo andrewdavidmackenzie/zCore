@@ -1352,7 +1352,6 @@ impl VmAddressRegion {
     /// Produces a depth-first pre-order walk:
     /// - depth 0: the VMAR itself
     /// - depth 1+: child VMARs and mappings
-    /// Get info maps entries for this VMAR and its children.
     ///
     /// Returns `BAD_STATE` if the VMAR is destroyed. Use
     /// `get_info_maps_or_empty` when calling from `ZX_INFO_PROCESS_MAPS`
