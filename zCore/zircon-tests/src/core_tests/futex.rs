@@ -399,14 +399,50 @@ async fn requeue_unqueued_on_timeout() {
 /// Suspend a thread while it is waiting on a futex. The thread
 /// should resume waiting when unsuspended, then be woken normally.
 ///
-/// This test requires real Zircon thread suspension which interacts
-/// with the futex_wait syscall restart mechanism. Validated via
-/// QEMU core-tests.
-#[test]
-fn thread_suspended() {
+/// Full thread suspension during futex_wait requires the VDSO syscall
+/// restart mechanism (bare-metal only). We exercise the parts that
+/// work in libos mode: create a waiter thread on a futex, verify it
+/// blocks, then wake it and verify it completes normally.
+#[async_std::test]
+async fn thread_suspended() {
+    use crate::helpers::FutexTestThread;
+    use core::sync::atomic::AtomicI32;
+    use std::sync::Arc;
+
+    let _ctx = TestContext::new();
+    let fv = Arc::new(AtomicI32::new(1));
+    let futex = Futex::new(Arc::as_ptr(&fv) as *const AtomicI32 as usize);
+    let proc = _ctx.proc.clone();
+
+    // Start a waiter thread on the futex.
+    let t = FutexTestThread::start(&proc, &futex, 1);
+
+    // Let the thread block on the futex.
+    async_std::task::yield_now().await;
+    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+
+    // The thread should NOT have returned from its wait yet.
+    assert!(
+        !t.has_wait_returned(),
+        "thread should be blocked on futex before wake"
+    );
+
+    // In Fuchsia, the thread would be suspended here and then resumed.
     // Thread suspension during futex_wait requires the VDSO syscall
     // restart mechanism which only exists in bare-metal mode.
-    // Validated by C++ core-tests in QEMU.
+    // We verify the thread remains blocked during the simulated
+    // "suspend" period.
+    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+    assert!(
+        !t.has_wait_returned(),
+        "thread should still be blocked during 'suspend' period"
+    );
+
+    // Wake the thread (simulating unsuspend + normal wake).
+    futex.wake(1);
+    t.wait_until_woken().await;
+    assert_eq!(t.wait_result(), 0, "wait_result should be Ok after wake");
+    t.shutdown().await;
 }
 
 /// C++: TEST(FutexTest, EventSignaling)

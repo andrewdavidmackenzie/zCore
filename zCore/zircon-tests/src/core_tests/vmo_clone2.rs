@@ -1072,3 +1072,114 @@ fn snapshot_at_least_on_write_slice_in_chain() {
     vmo_check(&slice, 77, PAGE_SIZE);
     vmo_check(&snap, 2, PAGE_SIZE); // snapshot frozen at creation time
 }
+
+/// C++: TEST_F(VmoClone2TestCase, ResizeOffsetChild)
+#[test]
+fn resize_offset_child() {
+    let _ctx = TestContext::new();
+    let vmo = init_page_tagged_vmo_resizable(3);
+    let clone = vmo.create_child(false, PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    vmo.set_len(0).unwrap();
+
+    let info = vmo.get_info();
+    assert_eq!(info.populated_bytes, 0, "parent resized to 0");
+    let clone_info = clone.get_info();
+    assert_eq!(
+        clone_info.populated_bytes as usize, PAGE_SIZE,
+        "clone should own its page"
+    );
+}
+
+/// C++: TEST_F(VmoClone2TestCase, ResizeDisjointChild)
+#[test]
+fn resize_disjoint_child() {
+    let _ctx = TestContext::new();
+    let vmo = init_page_tagged_vmo_resizable(3);
+
+    let c0 = vmo.create_child(true, 0, PAGE_SIZE).unwrap();
+    let c1 = vmo.create_child(true, PAGE_SIZE, PAGE_SIZE).unwrap();
+    let c2 = vmo.create_child(true, 2 * PAGE_SIZE, PAGE_SIZE).unwrap();
+
+    c0.set_len(0).unwrap();
+    c1.set_len(0).unwrap();
+    vmo.set_len(0).unwrap();
+
+    let info = c2.get_info();
+    assert_eq!(
+        info.populated_bytes as usize, PAGE_SIZE,
+        "c2 should be sole owner"
+    );
+}
+
+/// C++: TEST_F(VmoClone2TestCase, ResizeMultipleProgressive)
+#[test]
+fn resize_multiple_progressive() {
+    let _ctx = TestContext::new();
+    let vmo = init_page_tagged_vmo_resizable(3);
+
+    let clone = vmo.create_child(true, 0, 2 * PAGE_SIZE).unwrap();
+    vmo.write(0, &4u32.to_ne_bytes()).unwrap();
+    clone.write(PAGE_SIZE, &5u32.to_ne_bytes()).unwrap();
+
+    let clone2 = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+    clone.set_len(0).unwrap();
+
+    let info = clone2.get_info();
+    assert!(
+        info.populated_bytes > 0,
+        "clone2 should have attributed pages"
+    );
+}
+
+/// C++: TEST_F(ProgressiveCloneDiscardTests, ProgressiveCloneClose)
+#[test]
+fn progressive_clone_close() {
+    let _ctx = TestContext::new();
+    let num_clones = 6usize;
+    let vmo = init_page_tagged_vmo_resizable(num_clones);
+
+    let mut clones = Vec::new();
+    for i in 1..num_clones {
+        let c = vmo.create_child(true, 0, num_clones * PAGE_SIZE).unwrap();
+        c.write(i * PAGE_SIZE, &((num_clones + 2) as u32).to_ne_bytes())
+            .unwrap();
+        clones.push(c);
+    }
+
+    drop(vmo);
+
+    for c in &clones {
+        let info = c.get_info();
+        assert!(
+            info.populated_bytes > 0,
+            "each clone should have attributed pages"
+        );
+    }
+}
+
+/// C++: TEST_F(ProgressiveCloneDiscardTests, ProgressiveCloneTruncate)
+#[test]
+fn progressive_clone_truncate() {
+    let _ctx = TestContext::new();
+    let num_clones = 6usize;
+    let vmo = init_page_tagged_vmo_resizable(num_clones);
+
+    let mut clones = Vec::new();
+    for i in 1..num_clones {
+        let c = vmo.create_child(true, 0, num_clones * PAGE_SIZE).unwrap();
+        c.write(i * PAGE_SIZE, &((num_clones + 2) as u32).to_ne_bytes())
+            .unwrap();
+        clones.push(c);
+    }
+
+    vmo.set_len(0).unwrap();
+
+    for c in &clones {
+        let info = c.get_info();
+        assert!(
+            info.populated_bytes > 0,
+            "each clone should have attributed pages"
+        );
+    }
+}

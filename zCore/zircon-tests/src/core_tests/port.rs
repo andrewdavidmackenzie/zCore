@@ -742,3 +742,50 @@ async fn wait_async_boot_timestamp() {
         panic!("expected Signal payload");
     }
 }
+
+// ── Tests requiring infrastructure not yet available ────────────────
+
+/// C++: TEST(PortTest, QueuePacketLimitExceededGeneratesPolicyException)
+/// port/ports.cc:213
+///
+/// Pre-queues 4096 user packets to a port, then queues one more
+/// from a worker thread. The kernel raises ZX_EXCP_POLICY_ERROR
+/// with synth_code ZX_EXCP_POLICY_CODE_PORT_TOO_MANY_PACKETS.
+///
+/// Main thread reads the exception from the process exception channel,
+/// verifies the exception type and synth_code, then resumes the thread.
+#[test]
+fn queue_packet_limit_exceeded_generates_policy_exception() {
+    let _ctx = TestContext::new();
+    // In Fuchsia:
+    //   1. Create port, queue 4096 packets
+    //   2. Spawn worker thread
+    //   3. Create process exception channel
+    //   4. Worker attempts 4097th queue → triggers policy exception
+    //   5. Main reads exception: type == ZX_EXCP_POLICY_ERROR,
+    //      synth_code == ZX_EXCP_POLICY_CODE_PORT_TOO_MANY_PACKETS
+    //   6. Resume thread from exception
+
+    todo!("implement test");
+}
+
+/// C++: TEST(PortTest, TooManyObservers)
+/// port/ports.cc:1155
+///
+/// Spawns a mini-process that calls wait_async in a loop until OOM.
+/// The process is killed with ZX_TASK_RETCODE_EXCEPTION_KILL.
+/// In zCore, the allocator panics on OOM instead of returning
+/// ZX_ERR_NO_MEMORY.
+#[test]
+fn too_many_observers() {
+    let _ctx = TestContext::new();
+    // In Fuchsia:
+    //   1. Create process + thread + channel
+    //   2. start_mini_process_etc
+    //   3. mini_process_cmd(MINIP_CMD_WAIT_ASYNC) → loops until OOM
+    //   4. Expect ZX_ERR_PEER_CLOSED (process terminated)
+    //   5. Wait for ZX_PROCESS_TERMINATED
+    //   6. Assert return_code == ZX_TASK_RETCODE_EXCEPTION_KILL
+
+    todo!("implement test");
+}

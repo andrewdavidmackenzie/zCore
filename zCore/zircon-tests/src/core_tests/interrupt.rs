@@ -23,13 +23,41 @@ fn interrupt_bind() {
     assert!(interrupt.bind(&port, 42).is_ok());
 }
 
-/// C++: TEST(InterruptTest, Wait)
+/// C++: TEST(InterruptTest, VirtualInterrupts) — wait path
 ///
-/// Waiting on an interrupt requires async context. Left as stub.
-#[test]
-fn interrupt_wait() {
-    // Requires async context and real interrupt delivery.
-    // This test would block forever waiting for an interrupt.
+/// Create a virtual interrupt, trigger it with a known timestamp,
+/// call interrupt.wait(), and verify the returned timestamp matches.
+///
+/// C++ source: zircon/system/utest/core/interrupt/interrupt-test.cc
+///   ASSERT_OK(interrupt.trigger(0, kSignaledTimeStamp1));
+///   ASSERT_OK(interrupt.wait(&timestamp));
+///   ASSERT_EQ(timestamp.get(), kSignaledTimeStamp1.get());
+#[async_std::test]
+async fn interrupt_wait() {
+    let _ctx = TestContext::new();
+    let interrupt = Interrupt::new_virtual();
+    let timestamp: i64 = 12345;
+
+    // Trigger before wait — the interrupt enters Triggered state and
+    // the subsequent wait returns immediately with the timestamp.
+    interrupt.trigger(timestamp).unwrap();
+
+    let result = interrupt.wait().await;
+    assert!(result.is_ok(), "interrupt.wait() should succeed");
+    assert_eq!(
+        result.unwrap(),
+        timestamp,
+        "wait should return the trigger timestamp"
+    );
+
+    // Second trigger + wait cycle (verifies re-arm works).
+    let timestamp2: i64 = 67890;
+    interrupt.trigger(timestamp2).unwrap();
+    let result2 = interrupt.wait().await.unwrap();
+    assert_eq!(
+        result2, timestamp2,
+        "second wait should return second timestamp"
+    );
 }
 
 /// C++: TEST(InterruptTest, VirtualInterrupt)
@@ -294,13 +322,56 @@ fn un_bind_port() {
 }
 
 /// C++: TEST(InterruptTest, UntriggeredSignalInterruptWait)
-/// An untriggered interrupt in wait mode would block indefinitely.
-/// Destroying the interrupt while waiting returns CANCELED.
-#[test]
-fn untriggered_signal_interrupt_wait() {
-    // This test requires an async runtime to call interrupt.wait()
-    // and a separate task to destroy the interrupt. The synchronous
-    // test framework cannot support this pattern.
+///
+/// Verify signal lifecycle for a virtual interrupt in wait mode:
+/// 1. Initially: INTERRUPT_SIGNAL is NOT set (untriggered).
+/// 2. After trigger: INTERRUPT_SIGNAL IS set.
+/// 3. After wait(): INTERRUPT_SIGNAL is cleared (consumed).
+/// 4. A second wait() on a re-triggered interrupt returns the new timestamp.
+///
+/// C++ source: zircon/system/utest/core/interrupt/interrupt-test.cc
+#[async_std::test]
+async fn untriggered_signal_interrupt_wait() {
+    let _ctx = TestContext::new();
+    use zircon_object::object::Signal;
+
+    let interrupt = Interrupt::new_virtual();
+
+    // 1. Initially, INTERRUPT_SIGNAL should NOT be set.
+    let signals = interrupt.signal();
+    assert!(
+        !signals.contains(Signal::INTERRUPT_SIGNAL),
+        "untriggered interrupt should not have INTERRUPT_SIGNAL"
+    );
+
+    // 2. After trigger, INTERRUPT_SIGNAL IS set (unbound mode).
+    let ts1: i64 = 12345;
+    interrupt.trigger(ts1).unwrap();
+    let signals_after_trigger = interrupt.signal();
+    assert!(
+        signals_after_trigger.contains(Signal::INTERRUPT_SIGNAL),
+        "triggered interrupt should have INTERRUPT_SIGNAL"
+    );
+
+    // 3. wait() consumes the trigger — returns the timestamp and clears the signal.
+    let result = interrupt.wait().await.unwrap();
+    assert_eq!(result, ts1);
+    let signals_after_wait = interrupt.signal();
+    assert!(
+        !signals_after_wait.contains(Signal::INTERRUPT_SIGNAL),
+        "INTERRUPT_SIGNAL should be cleared after wait()"
+    );
+
+    // 4. Spawn a task that triggers the interrupt, then wait.
+    //    This exercises the blocking wait → trigger → wake path.
+    let int_clone = interrupt.clone();
+    let ts2: i64 = 67890;
+    async_std::task::spawn(async move {
+        async_std::task::sleep(core::time::Duration::from_millis(10)).await;
+        int_clone.trigger(ts2).unwrap();
+    });
+    let result2 = interrupt.wait().await.unwrap();
+    assert_eq!(result2, ts2);
 }
 
 /// C++: TEST(InterruptTest, UntriggeredSignalPortsAndAck)
@@ -418,12 +489,42 @@ fn virtual_not_wakeable() {
 }
 
 /// C++: TEST(InterruptTest, WaitThreadFunctionsAfterSuspendResume)
-/// In the C++ test, a thread waiting on an interrupt is suspended
-/// and resumed. This requires thread scheduling infrastructure.
-/// We verify the basic destroy-while-not-waiting behavior.
-#[test]
-fn wait_thread_functions_after_suspend_resume() {
-    // This test requires spawning a thread that calls interrupt.wait(),
-    // then suspending and resuming that thread. The cooperative
-    // scheduler in libos mode cannot support this pattern.
+///
+/// A thread blocked on interrupt.wait() is suspended, resumed, then
+/// the interrupt is triggered. The thread should complete the wait
+/// successfully after resume.
+///
+/// C++ source: zircon/system/utest/core/interrupt/interrupt-test.cc
+///   - Create interrupt, start thread that calls interrupt.wait()
+///   - Wait until thread is blocked
+///   - Suspend thread, wait until suspended
+///   - Resume thread, wait until blocked again
+///   - Trigger interrupt, wait for thread to exit
+///
+/// In libos mode we cannot truly suspend a blocked Zircon thread
+/// (the cooperative scheduler doesn't preempt), but we can verify
+/// the trigger-while-another-task-awaits-wait() path by spawning
+/// an async task that calls wait(), then triggering the interrupt
+/// from the test task.
+#[async_std::test]
+async fn wait_thread_functions_after_suspend_resume() {
+    let _ctx = TestContext::new();
+    let interrupt = Interrupt::new_virtual();
+
+    // Spawn a task that waits on the interrupt.
+    let int_clone = interrupt.clone();
+    let waiter = async_std::task::spawn(async move { int_clone.wait().await });
+
+    // Give the waiter time to enter the wait state.
+    async_std::task::yield_now().await;
+    async_std::task::sleep(core::time::Duration::from_millis(20)).await;
+
+    // Trigger the interrupt — this should wake the waiter task.
+    let trigger_ts: i64 = 42424242;
+    interrupt.trigger(trigger_ts).unwrap();
+
+    // The waiter should complete with the trigger timestamp.
+    let result = waiter.await;
+    assert!(result.is_ok(), "wait should succeed after trigger");
+    assert_eq!(result.unwrap(), trigger_ts);
 }

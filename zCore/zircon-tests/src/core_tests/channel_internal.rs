@@ -3,39 +3,126 @@
 //! 1:1 ports of Fuchsia's zircon/system/utest/core/channel/channel-internal.cc.
 //!
 //! These tests exercise the internal channel_call_finish / channel_call_etc_finish
-//! vDSO functions and channel handle transfer interactions with pending calls.
+//! syscalls and channel handle transfer interactions with pending calls.
 //!
-//! The first two tests call internal vDSO functions that zCore does not expose.
-//! The third test transfers a channel handle while a call is pending,
-//! which requires concurrent threads.
+//! In Fuchsia, these are internal vDSO functions. In zCore, they are
+//! exposed as regular syscalls (`sys_channel_call_finish` and
+//! `sys_channel_call_etc_finish`).
 
 use crate::helpers::TestContext;
 use zircon_object::ipc::{Channel, MessagePacket};
+
+/// Mirror of `ChannelCallArgs` for test use (raw pointer fields as usize).
+/// Layout must match `zircon_syscall::channel::ChannelCallArgs`.
+#[repr(C)]
+#[derive(Debug)]
+struct TestChannelCallArgs {
+    wr_bytes: usize,
+    wr_handles: usize,
+    rd_bytes: usize,
+    rd_handles: usize,
+    wr_num_bytes: u32,
+    wr_num_handles: u32,
+    rd_num_bytes: u32,
+    rd_num_handles: u32,
+}
+
+/// Mirror of `ChannelCallEtcArgs` for test use (raw pointer fields as usize).
+/// Layout must match `zircon_syscall::channel::ChannelCallEtcArgs`.
+#[repr(C)]
+#[derive(Debug)]
+struct TestChannelCallEtcArgs {
+    wr_bytes: usize,
+    wr_handles: usize,
+    rd_bytes: usize,
+    rd_handles: usize,
+    wr_num_bytes: u32,
+    wr_num_handles: u32,
+    rd_num_bytes: u32,
+    rd_num_handles: u32,
+}
 
 /// C++: TEST(ChannelInternalTest, CallFinishWithoutPreviouslyCallingCallReturnsBadState)
 /// Calls the internal vDSO function zx_channel_call_finish without a
 /// prior interrupted channel_call. Should return ZX_ERR_BAD_STATE.
 ///
-/// The vDSO function is found by computing its offset from the vDSO base.
-/// zCore does not expose channel_call_finish as a separate entry point.
+/// In the C++ test, the vDSO function is found by computing its offset
+/// from the vDSO base. In zCore, `sys_channel_call_finish` is a regular
+/// syscall that checks whether the calling thread is in BlockedChannel
+/// state. Since no channel_call is in progress, the thread is not in
+/// BlockedChannel state, so the syscall returns BAD_STATE.
 #[test]
 fn call_finish_without_previously_calling_call_returns_bad_state() {
-    let _ctx = TestContext::new();
-    // C++ test:
-    //   uintptr_t vdso_base = (uintptr_t)&zx_handle_close - VDSO_SYSCALL_zx_handle_close;
-    //   uintptr_t fnptr = vdso_base + VDSO_SYSCALL_zx_channel_call_finish;
-    //   zx_channel_call_finish(deadline, &args, &act_bytes, &act_handles);
-    //   ASSERT_EQ(ZX_ERR_BAD_STATE, result);
+    use hal_impl::user::{UserInPtr, UserOutPtr};
+    use zircon_object::ZxError;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Set up args matching the C++ test: 8 bytes of write data, no read buffers.
+    let msg = [0u8; 8];
+    let args = TestChannelCallArgs {
+        wr_bytes: msg.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: 0,
+        rd_handles: 0,
+        wr_num_bytes: 8,
+        wr_num_handles: 0,
+        rd_num_bytes: 0,
+        rd_num_handles: 0,
+    };
+
+    let mut act_bytes: u32 = 0xffffffff;
+    let mut act_handles: u32 = 0xffffffff;
+
+    // Call channel_call_finish without having had a channel call interrupted.
+    let result = sc.sys_channel_call_finish(
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut act_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut act_handles as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BAD_STATE);
 }
 
 /// C++: TEST(ChannelInternalTest, CallEtcFinishWithoutPreviouslyCallingCallReturnsBadState)
 /// Same as above but for zx_channel_call_etc_finish.
+///
+/// Calls `sys_channel_call_etc_finish` without a prior interrupted
+/// channel_call. The thread is not in BlockedChannel state, so the
+/// syscall returns BAD_STATE.
 #[test]
 fn call_etc_finish_without_previously_calling_call_returns_bad_state() {
-    let _ctx = TestContext::new();
-    // C++ test:
-    //   zx_channel_call_etc_finish(deadline, &args, &act_bytes, &act_handles);
-    //   ASSERT_EQ(ZX_ERR_BAD_STATE, result);
+    use hal_impl::user::{UserInPtr, UserOutPtr};
+    use zircon_object::ZxError;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Set up args matching the C++ test: 8 bytes of write data, no read buffers.
+    let msg = [0u8; 8];
+    let args = TestChannelCallEtcArgs {
+        wr_bytes: msg.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: 0,
+        rd_handles: 0,
+        wr_num_bytes: 8,
+        wr_num_handles: 0,
+        rd_num_bytes: 0,
+        rd_num_handles: 0,
+    };
+
+    let mut act_bytes: u32 = 0xffffffff;
+    let mut act_handles: u32 = 0xffffffff;
+
+    // Call channel_call_etc_finish without having had a channel call interrupted.
+    let result = sc.sys_channel_call_etc_finish(
+        zircon_syscall::Deadline::from(0usize),
+        UserInPtr::from(&args as *const _ as usize),
+        UserOutPtr::from(&mut act_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut act_handles as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::BAD_STATE);
 }
 
 /// C++: TEST(ChannelInternalTest, TransferChannelWithPendingCall)
@@ -113,19 +200,82 @@ fn transfer_channel_with_pending_call() {
 
 /// C++: TEST(ChannelInternalTest, ChannelCallFinishAfterFailedCall)
 /// Regression test for https://fxbug.dev/503723797.
-/// Races channel_call with handle transfer via zx_process_start to
-/// trigger ZX_ERR_BAD_HANDLE during call, then calls call_finish.
-/// Requires concurrent threads and mini-process infrastructure.
+///
+/// The C++ test races channel_call with handle transfer via
+/// zx_process_start to trigger ZX_ERR_BAD_HANDLE during call, then
+/// calls channel_call_finish to verify it doesn't crash.
+///
+/// In zCore, we simulate the post-failure state directly:
+/// 1. Attempt a channel_call that fails (peer closed → PEER_CLOSED).
+/// 2. Call channel_call_finish — should return BAD_STATE (not crash).
+/// This exercises the same kernel invariant: calling call_finish
+/// when the thread is not in BlockedChannel state must return
+/// BAD_STATE without panicking.
 #[test]
 fn channel_call_finish_after_failed_call() {
-    let _ctx = TestContext::new();
-    // C++ test:
-    //   for 100 iterations:
-    //     1. Create channel pair (c1, c2)
-    //     2. Prepare mini-process (create process/thread/vmar, load vDSO + stack)
-    //     3. Spawn thread t1 that calls zx_channel_call(c1, ...)
-    //     4. Race: transfer c1 via zx_process_start(process, thread, entry, sp, c1, 0)
-    //     5. If channel_call returned ZX_ERR_BAD_HANDLE:
-    //        call zx_channel_call_finish(0, &args, ...) — should not crash
-    //     6. Wait for mini-process to terminate
+    use hal_impl::user::{UserInPtr, UserOutPtr};
+    use zircon_object::ZxError;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Iterate multiple times like the C++ test (100 iterations).
+    // Each iteration: create a channel, close the remote end to
+    // make channel_call fail, then call call_finish.
+    for _ in 0..100 {
+        let (local, remote) = Channel::create();
+        let local_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+            local,
+            zircon_object::object::Rights::DEFAULT_CHANNEL,
+        ));
+
+        // Close the remote end so channel_call will fail immediately
+        // with PEER_CLOSED (the channel has no peer to receive the message).
+        drop(remote);
+
+        let wr_data = [0u8; 64];
+        let mut rd_buf = [0u8; 64];
+        let mut rd_handles = [0u32; 4];
+        let args = TestChannelCallArgs {
+            wr_bytes: wr_data.as_ptr() as usize,
+            wr_handles: 0,
+            rd_bytes: rd_buf.as_mut_ptr() as usize,
+            rd_handles: rd_handles.as_mut_ptr() as usize,
+            wr_num_bytes: 64,
+            wr_num_handles: 0,
+            rd_num_bytes: 64,
+            rd_num_handles: 4,
+        };
+
+        let mut actual_bytes: u32 = 0;
+        let mut actual_handles: u32 = 0;
+
+        // Attempt channel_call — should fail because peer is closed.
+        let call_result = async_std::task::block_on(sc.sys_channel_call_noretry(
+            local_handle,
+            0,
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        ));
+        assert!(
+            call_result.is_err(),
+            "channel_call should fail with peer closed"
+        );
+
+        // Now call channel_call_finish — the thread is NOT in
+        // BlockedChannel state, so this should return BAD_STATE
+        // (and not crash, which is the regression being tested).
+        let finish_result = sc.sys_channel_call_finish(
+            zircon_syscall::Deadline::from(0usize),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        );
+        assert_eq!(finish_result.unwrap_err(), ZxError::BAD_STATE);
+
+        // Clean up the handle.
+        let _ = ctx.proc.remove_handle(local_handle);
+    }
 }

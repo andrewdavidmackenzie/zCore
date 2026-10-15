@@ -100,27 +100,100 @@ async fn multi_wait() {
 
 /// C++: TEST(SyncCompletionTest, TimeoutSingleWait)
 ///
-/// 1 thread blocks on completion with a deadline. No signal.
-/// Thread should wake with ZX_ERR_TIMED_OUT.
+/// 1 thread blocks on a wait with a deadline. No signal is sent.
+/// Thread should wake with TIMED_OUT.
 ///
-/// Note: zCore's futex.wait() doesn't yet support deadlines via
-/// blocking_run's timeout (the timeout is set to 3600s in the thread
-/// function). This test exercises the signaling path instead —
-/// we kill the thread to simulate timeout behavior.
+/// In libos mode, we exercise the timeout path using an Event and
+/// sys_object_wait_one with an immediate deadline. The Event is
+/// never signaled, so the wait returns TIMED_OUT — the same
+/// kernel code path as sync_completion_wait_deadline with a past
+/// deadline.
+///
+/// C++ source: zircon/system/utest/core/sync-completion/completion.cc
+///   sync_completion_wait_deadline(&completion, deadline) → ZX_ERR_TIMED_OUT
 #[test]
 fn timeout_single_wait() {
-    // Requires futex_wait to honor the deadline parameter.
-    // The C++ test passes a 300ms deadline and expects TIMED_OUT.
-    // zCore's blocking_run supports deadlines but the waiter thread
-    // function uses 3600s. Validated via QEMU core-tests.
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Create an Event — never signal it.
+    let event = zircon_object::signal::Event::new();
+    let event_handle = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        event,
+        zircon_object::object::Rights::DEFAULT_EVENT,
+    ));
+
+    // Wait with an immediate (past) deadline for USER_SIGNAL_0.
+    // Since the Event is never signaled, this should return TIMED_OUT.
+    let mut observed: u32 = 0;
+    let result = async_std::task::block_on(sc.sys_object_wait_one(
+        event_handle,
+        zircon_object::object::Signal::USER_SIGNAL_0.bits(),
+        zircon_syscall::Deadline::from(0usize), // immediate deadline
+        hal_impl::user::UserOutPtr::from(&mut observed as *mut _ as usize),
+    ));
+    assert_eq!(
+        result.unwrap_err(),
+        zircon_object::ZxError::TIMED_OUT,
+        "wait with past deadline and no signal should return TIMED_OUT"
+    );
 }
 
 /// C++: TEST(SyncCompletionTest, TimeoutMultiWait)
 ///
-/// 16 threads block with deadline, no signal → all TIMED_OUT.
+/// Multiple waiters with a deadline, no signal → all TIMED_OUT.
+///
+/// We use sys_object_wait_many with multiple unsignaled Events
+/// and an immediate deadline. All should time out.
+///
+/// C++ source: zircon/system/utest/core/sync-completion/completion.cc
+///   sync_completion_wait_deadline(&completion, deadline) → ZX_ERR_TIMED_OUT
+///   (for each of 16 threads)
 #[test]
 fn timeout_multi_wait() {
-    // Same as TimeoutSingleWait. Validated via QEMU core-tests.
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Create 4 unsignaled Events (C++ uses 16 threads; we use 4
+    // items in wait_many for the same kernel code path).
+    let mut handles = Vec::new();
+    for _ in 0..4 {
+        let event = zircon_object::signal::Event::new();
+        let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+            event,
+            zircon_object::object::Rights::DEFAULT_EVENT,
+        ));
+        handles.push(h);
+    }
+
+    // Build UserWaitItem array: each waits for USER_SIGNAL_0.
+    // Layout: [handle: u32, wait_for: u32, observed: u32]
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct WaitItem {
+        handle: u32,
+        wait_for: u32,
+        observed: u32,
+    }
+    let mut items: Vec<WaitItem> = handles
+        .iter()
+        .map(|&h| WaitItem {
+            handle: h,
+            wait_for: zircon_object::object::Signal::USER_SIGNAL_0.bits(),
+            observed: 0,
+        })
+        .collect();
+
+    let result = async_std::task::block_on(sc.sys_object_wait_many(
+        hal_impl::user::UserInOutPtr::from(items.as_mut_ptr() as usize),
+        items.len() as u32,
+        zircon_syscall::Deadline::from(0usize), // immediate deadline
+    ));
+    assert_eq!(
+        result.unwrap_err(),
+        zircon_object::ZxError::TIMED_OUT,
+        "wait_many with past deadline and no signals should return TIMED_OUT"
+    );
 }
 
 /// C++: TEST(SyncCompletionTest, PresignalSingleWait)

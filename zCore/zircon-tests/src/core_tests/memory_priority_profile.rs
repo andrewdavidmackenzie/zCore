@@ -13,16 +13,37 @@ use crate::helpers::TestContext;
 /// Creates profiles with invalid memory priorities (LOWEST, LOW, HIGHEST)
 /// and asserts ZX_ERR_INVALID_ARGS for each.
 ///
-/// Valid memory priorities are only ZX_PRIORITY_DEFAULT and ZX_PRIORITY_HIGH.
+/// Valid memory priorities are only ZX_PRIORITY_DEFAULT (16) and
+/// ZX_PRIORITY_HIGH (24).
 #[test]
 fn invalid_priorities() {
+    use zircon_object::task::{Profile, ProfileInfo, ProfileInfoFlags};
+
     let _ctx = TestContext::new();
-    // C++ test:
-    //   constexpr int32_t kBadPriorities[] = {ZX_PRIORITY_LOWEST, ZX_PRIORITY_LOW, ZX_PRIORITY_HIGHEST};
-    //   for (prio : kBadPriorities) {
-    //     profile_info = MakeMemoryPriorityProfile(prio);
-    //     EXPECT_EQ(ZX_ERR_INVALID_ARGS, zx::profile::create(rsrc, 0, &info, &profile));
-    //   }
+
+    // ZX_PRIORITY_LOWEST=0, ZX_PRIORITY_LOW=8, ZX_PRIORITY_HIGHEST=31
+    let bad_priorities: &[i32] = &[0, 8, 31];
+
+    for &prio in bad_priorities {
+        let info = ProfileInfo::with_priority(ProfileInfoFlags::MEMORY_PRIORITY.bits(), prio);
+        let result = Profile::create(info);
+        assert_eq!(
+            result.unwrap_err(),
+            zircon_object::ZxError::INVALID_ARGS,
+            "memory priority {} should be invalid",
+            prio
+        );
+    }
+
+    // Valid memory priorities should succeed.
+    for &prio in &[16i32, 24i32] {
+        let info = ProfileInfo::with_priority(ProfileInfoFlags::MEMORY_PRIORITY.bits(), prio);
+        assert!(
+            Profile::create(info).is_ok(),
+            "memory priority {} should be valid",
+            prio
+        );
+    }
 }
 
 /// C++: TEST(MemoryPriorityProfile, MemoryOrThread)
@@ -30,17 +51,29 @@ fn invalid_priorities() {
 /// (PRIORITY, CPU_MASK, DEADLINE).
 #[test]
 fn memory_or_thread() {
+    use zircon_object::task::{Profile, ProfileInfo, ProfileInfoFlags};
+
     let _ctx = TestContext::new();
-    // C++ test:
-    //   const uint32_t kInvalidWith[] = {
-    //     ZX_PROFILE_INFO_FLAG_PRIORITY,
-    //     ZX_PROFILE_INFO_FLAG_CPU_MASK,
-    //     ZX_PROFILE_INFO_FLAG_DEADLINE,
-    //   };
-    //   for (invalid_with : kInvalidWith) {
-    //     info.flags = ZX_PROFILE_INFO_FLAG_MEMORY_PRIORITY | invalid_with;
-    //     ASSERT_EQ(ZX_ERR_INVALID_ARGS, zx::profile::create(rsrc, 0, &info, &profile));
-    //   }
+
+    let invalid_combinations: &[ProfileInfoFlags] = &[
+        ProfileInfoFlags::PRIORITY,
+        ProfileInfoFlags::CPU_MASK,
+        ProfileInfoFlags::DEADLINE,
+    ];
+
+    for &invalid_flag in invalid_combinations {
+        let combined = ProfileInfoFlags::MEMORY_PRIORITY | invalid_flag;
+        // Use priority=16 (valid memory priority) so only the flag
+        // combination check fires, not the priority value check.
+        let info = ProfileInfo::with_priority(combined.bits(), 16);
+        let result = Profile::create(info);
+        assert_eq!(
+            result.unwrap_err(),
+            zircon_object::ZxError::INVALID_ARGS,
+            "MEMORY_PRIORITY | {:?} should be invalid",
+            invalid_flag
+        );
+    }
 }
 
 /// C++: TEST(MemoryPriorityProfile, ApplyProfile)
@@ -48,31 +81,121 @@ fn memory_or_thread() {
 /// to root VMAR, verifies vmo_reclaim_disabled_bytes increases,
 /// then applies DEFAULT and verifies it returns to the previous value.
 ///
-/// Uses a pager-backed VMO to ensure reclaimable pages exist.
+/// zCore does not implement memory reclaim tracking, so we verify
+/// the profile creation and application paths work correctly.
+/// We create both HIGH and DEFAULT profiles and apply them to the
+/// root VMAR via sys_object_set_profile.
 #[test]
 fn apply_profile() {
-    let _ctx = TestContext::new();
-    // C++ test:
-    //   1. Create profile_high  = MakeMemoryPriorityProfile(ZX_PRIORITY_HIGH)
-    //   2. Create profile_default = MakeMemoryPriorityProfile(ZX_PRIORITY_DEFAULT)
-    //   3. Create pager + pager_vmo, map it
-    //   4. Supply pages to pager_vmo
-    //   5. Read ZX_INFO_KMEM_STATS_EXTENDED → prev = stats.vmo_reclaim_disabled_bytes
-    //   6. Apply profile_high to root VMAR
-    //   7. Re-supply pages, read stats → assert GT prev
-    //   8. Apply profile_default → read stats → assert EQ prev
+    use zircon_object::task::{ProfileInfo, ProfileInfoFlags};
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let rsrc_h = ctx.add_root_resource();
+
+    // Create HIGH memory priority profile (priority=24).
+    let info_high = ProfileInfo::with_priority(ProfileInfoFlags::MEMORY_PRIORITY.bits(), 24);
+    let mut out_high: u32 = 0;
+    sc.sys_profile_create(
+        rsrc_h,
+        0,
+        hal_impl::user::UserInPtr::from(&info_high as *const _ as usize),
+        hal_impl::user::UserOutPtr::from(&mut out_high as *mut _ as usize),
+    )
+    .expect("create HIGH memory profile should succeed");
+    assert_ne!(out_high, 0);
+
+    // Create DEFAULT memory priority profile (priority=16).
+    let info_default = ProfileInfo::with_priority(ProfileInfoFlags::MEMORY_PRIORITY.bits(), 16);
+    let mut out_default: u32 = 0;
+    sc.sys_profile_create(
+        rsrc_h,
+        0,
+        hal_impl::user::UserInPtr::from(&info_default as *const _ as usize),
+        hal_impl::user::UserOutPtr::from(&mut out_default as *mut _ as usize),
+    )
+    .expect("create DEFAULT memory profile should succeed");
+    assert_ne!(out_default, 0);
+
+    // Get VMAR handle with appropriate rights.
+    let job = zircon_object::task::Job::root();
+    let proc = zircon_object::task::Process::create(&job, "mem-prof").unwrap();
+    let vmar = proc.vmar();
+    let vmar_h = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmar,
+        zircon_object::object::Rights::DEFAULT_VMAR,
+    ));
+
+    // Apply HIGH memory priority to root VMAR — should succeed.
+    let result = sc.sys_object_set_profile(vmar_h, out_high, 0);
+    assert!(
+        result.is_ok(),
+        "applying HIGH memory profile to VMAR should succeed: {:?}",
+        result
+    );
+
+    // Apply DEFAULT memory priority — should also succeed.
+    let result = sc.sys_object_set_profile(vmar_h, out_default, 0);
+    assert!(
+        result.is_ok(),
+        "applying DEFAULT memory profile to VMAR should succeed: {:?}",
+        result
+    );
 }
 
 /// C++: TEST(MemoryPriorityProfile, Rights)
 /// Verifies that set_profile on a VMAR requires ZX_RIGHT_OP_CHILDREN.
 /// Duplicates root VMAR with and without the right.
+///
+/// In zCore, sys_object_set_profile checks for MANAGE_THREAD on Thread
+/// targets and falls through to VMAR targets. For VMAR targets, the
+/// handle must have the VMAR rights that allow the operation. We test
+/// that a VMAR handle with full rights succeeds, while one with no
+/// rights fails with ACCESS_DENIED.
 #[test]
 fn rights() {
-    let _ctx = TestContext::new();
-    // C++ test:
-    //   1. Create memory priority profile (DEFAULT)
-    //   2. Duplicate root VMAR with ZX_RIGHT_OP_CHILDREN → vmar_valid
-    //   3. Duplicate root VMAR with 0 rights → vmar_invalid
-    //   4. EXPECT_OK(vmar_valid.set_profile(profile, 0))
-    //   5. EXPECT_EQ(ZX_ERR_ACCESS_DENIED, vmar_invalid.set_profile(profile, 0))
+    use zircon_object::task::{ProfileInfo, ProfileInfoFlags};
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let rsrc_h = ctx.add_root_resource();
+
+    // Create DEFAULT memory priority profile.
+    let info = ProfileInfo::with_priority(ProfileInfoFlags::MEMORY_PRIORITY.bits(), 16);
+    let mut out: u32 = 0;
+    sc.sys_profile_create(
+        rsrc_h,
+        0,
+        hal_impl::user::UserInPtr::from(&info as *const _ as usize),
+        hal_impl::user::UserOutPtr::from(&mut out as *mut _ as usize),
+    )
+    .expect("create profile should succeed");
+
+    let job = zircon_object::task::Job::root();
+    let proc = zircon_object::task::Process::create(&job, "rights-test").unwrap();
+    let vmar = proc.vmar();
+
+    // Handle with full VMAR rights — should succeed.
+    let vmar_valid = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmar.clone(),
+        zircon_object::object::Rights::DEFAULT_VMAR,
+    ));
+    let result = sc.sys_object_set_profile(vmar_valid, out, 0);
+    assert!(
+        result.is_ok(),
+        "VMAR with full rights should accept profile: {:?}",
+        result
+    );
+
+    // Handle with no rights — should fail with ACCESS_DENIED.
+    let vmar_invalid = ctx.proc.add_handle(zircon_object::object::Handle::new(
+        vmar,
+        zircon_object::object::Rights::empty(),
+    ));
+    let result = sc.sys_object_set_profile(vmar_invalid, out, 0);
+    assert_eq!(
+        result.unwrap_err(),
+        zircon_object::ZxError::ACCESS_DENIED,
+        "VMAR with no rights should fail"
+    );
 }
