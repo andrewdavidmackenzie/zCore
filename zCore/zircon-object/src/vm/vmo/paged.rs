@@ -777,10 +777,26 @@ impl VMObjectPagedInner {
             };
             if !in_range {
                 if flags.contains(MMUFlags::WRITE) {
-                    // Only the requesting child can see this page.
-                    // Give it the frame directly (migration).
-                    let frame = self.frames.remove(&page_idx).unwrap().take();
-                    return Ok(CommitResult::CopyOnWrite(frame, need_unmap));
+                    // The other child can't see this page.  Check whether
+                    // the requesting child's subtree has multiple viewers
+                    // (share_count > 0).  If so, copy instead of migrate
+                    // so that other nodes in the subtree still find the
+                    // original page here.
+                    let frame = self.frames.get_mut(&page_idx).unwrap();
+                    if frame.share_count == 0 {
+                        // Truly exclusive — migrate the frame out.
+                        let target = self.frames.remove(&page_idx).unwrap().take();
+                        return Ok(CommitResult::CopyOnWrite(target, need_unmap));
+                    }
+                    // Shared within requesting subtree — copy, keep original.
+                    let target = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
+                    hal_impl::mem::pmem_copy(
+                        target.paddr(),
+                        frame.frame.paddr(),
+                        PAGE_SIZE,
+                    );
+                    frame.share_count -= 1;
+                    return Ok(CommitResult::CopyOnWrite(target, true));
                 }
                 // READ: return reference, don't migrate.
                 let frame = self.frames.get(&page_idx).unwrap();
