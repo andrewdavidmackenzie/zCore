@@ -146,6 +146,14 @@ impl Syscall<'_> {
         {
             return Err(ZxError::INVALID_ARGS);
         }
+        // FAULT_BEYOND_STREAM_SIZE is not supported on physical or
+        // contiguous VMOs — their stream size is always zero so the
+        // mapping would always fault. (Fuchsia returns NOT_SUPPORTED.)
+        if options.contains(VmOptions::FAULT_BEYOND_STREAM_SIZE)
+            && (!vmo.is_paged() || vmo.is_contiguous())
+        {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         // OFFSET_IS_UPPER_LIMIT is mutually exclusive with SPECIFIC/SPECIFIC_OVERWRITE.
         if options.contains(VmOptions::OFFSET_IS_UPPER_LIMIT)
             && options.intersects(VmOptions::SPECIFIC | VmOptions::SPECIFIC_OVERWRITE)

@@ -1131,6 +1131,11 @@ impl VmObject {
         self.dead.load(core::sync::atomic::Ordering::Acquire)
     }
 
+    /// Returns true if the VMO is backed by RAM (paged VMO).
+    pub fn is_paged(&self) -> bool {
+        self.trait_.is_paged()
+    }
+
     pub fn is_contiguous(&self) -> bool {
         self.trait_.is_contiguous()
     }
