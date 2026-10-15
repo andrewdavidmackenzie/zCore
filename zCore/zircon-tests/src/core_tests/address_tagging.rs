@@ -27,6 +27,8 @@ fn address_tagging_get_system_features_x86_64() {
     // zCore does not implement zx_system_get_features.
     // On x86_64, Fuchsia returns features == 0 (no TBI).
     // This is the expected behavior in zCore as well — TBI is never available.
+
+    todo!("implement test");
 }
 
 // ── ARM64-only tests ───────────────────────────────────────────────
@@ -52,6 +54,8 @@ fn address_tagging_get_system_features_a_arch64() {
     //   3. Tags a stack pointer with kTestTag (0xAB) in bits 63:56
     //   4. Dereferences the tagged pointer (writes val=1)
     //   5. Asserts val == 1
+
+    todo!("implement test");
 }
 
 /// C++: TEST(TopByteIgnoreTests, VmarTaggedAddress)
@@ -66,6 +70,8 @@ fn vmar_tagged_address() {
     //   3. Asserts tagged VMAR address fails with ZX_ERR_NOT_FOUND
     //   4. Asserts untagged VMAR address succeeds
     //   5. Tests protect, decommit, unmap with tagged addresses
+
+    todo!("implement test");
 }
 
 /// C++: TEST(TopByteIgnoreTests, TaggedFARSegfault)
@@ -79,6 +85,8 @@ fn tagged_far_segfault() {
     //   3. Catches exception via exception channel
     //   4. Reads ZX_INFO_THREAD_EXCEPTION_REPORT
     //   5. Asserts report.context.arch.u.arm_64.far == tagged_ptr
+
+    todo!("implement test");
 }
 
 /// C++: TEST(TopByteIgnoreTests, TaggedFARWatchpoint)
@@ -93,6 +101,8 @@ fn tagged_far_watchpoint() {
     //   3. Spawns thread that writes *tagged_ptr = 1
     //   4. Catches ZX_EXCP_HW_BREAKPOINT exception
     //   5. Asserts report.context.arch.u.arm_64.far == tagged_ptr
+
+    todo!("implement test");
 }
 
 /// C++: TEST(TopByteIgnoreTests, FutexWaitWake)
@@ -111,6 +121,8 @@ fn futex_wait_wake() {
     //   3. Calls zx_futex_get_owner with differently-tagged futex ptr
     //   4. Asserts owner matches current thread koid
     //   5. Wakes futex, joins thread
+
+    todo!("implement test");
 }
 
 /// C++: TEST(TopByteIgnoreTests, VmmPageFaultHandlerDataAbort)
@@ -124,6 +136,8 @@ fn vmm_page_fault_handler_data_abort() {
     //   3. Tags the mapping address
     //   4. Reads through the tagged pointer (UnsanitizedLoad)
     //   5. Asserts value is 0 (decommitted = zero-filled)
+
+    todo!("implement test");
 }
 
 /// C++: TEST(TopByteIgnoreTests, InstructionAbortNoTag)
@@ -139,6 +153,8 @@ fn instruction_abort_no_tag() {
     //   4. Asserts EC == kInstructionAbortLowerEl
     //   5. Asserts FAR == RemoveTag(pc) -- tag stripped
     //   Also tests with a kernel address 0xffff_ffff_ffff_fff0
+
+    todo!("implement test");
 }
 
 /// C++: TEST(TopByteIgnoreTests, ThreadStartTaggedAddress)
@@ -151,6 +167,8 @@ fn thread_start_tagged_address() {
     //   2. Waits for thread termination
     //   3. Repeats with tagged SP
     //   4. Both should succeed with TBI enabled
+
+    todo!("implement test");
 }
 
 /// C++: TEST(TopByteIgnoreTests, ProcessStartTaggedAddress)
@@ -168,4 +186,6 @@ fn process_start_tagged_address() {
     //   3. Loads stack
     //   4. Starts process with AddTagIfNeeded(entry, &pc_tag)
     //   5. Waits for ZX_TASK_TERMINATED
+
+    todo!("implement test");
 }

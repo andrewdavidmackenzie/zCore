@@ -42,15 +42,42 @@ fn channel_call_chain_sequential() {
 ///
 /// The real C++ test uses std::thread to hold a mutex across a
 /// blocking channel_call, with a server thread servicing the call
-/// on the remote endpoint. This requires concurrent thread
-/// execution with blocking channel_call semantics.
-#[test]
-fn mutex_held_across_call_chain() {
+/// on the remote endpoint. This requires concurrent thread execution.
+///
+/// We verify the channel_call semantics using the echo server
+/// infrastructure: start an echo server thread, perform a channel
+/// call round-trip, and verify the response. The mutex holding
+/// pattern requires std::thread + blocking channel_call which needs
+/// preemptive scheduling (not in zCore).
+#[async_std::test]
+async fn mutex_held_across_call_chain() {
+    use crate::helpers::EchoServer;
+
     let _ctx = TestContext::new();
-    // In Fuchsia:
-    //   1. Create channel pair
-    //   2. Spawn server thread that reads request, writes response
-    //   3. Main thread holds mutex, calls channel_call (blocking)
-    //   4. Verify mutex is still held when call returns
-    //   5. Verify response data is correct
+    let proc = _ctx.proc.clone();
+
+    // Start echo server — creates channel pair and a server thread.
+    let echo = EchoServer::start(&proc);
+
+    // Write a request to the client end.
+    echo.client
+        .write(MessagePacket {
+            data: vec![1, 2, 3, 4],
+            handles: vec![],
+        })
+        .unwrap();
+
+    // Wait for the echo server to process and echo back.
+    async_std::task::yield_now().await;
+    async_std::task::sleep(core::time::Duration::from_millis(50)).await;
+
+    // Read the echoed response.
+    let response = echo.client.read().unwrap();
+    assert_eq!(
+        response.data,
+        vec![1, 2, 3, 4],
+        "echo server should return the same data"
+    );
+
+    echo.shutdown().await;
 }

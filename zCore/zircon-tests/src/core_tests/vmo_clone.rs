@@ -2,11 +2,15 @@
 //!
 //! Mirrors VmoCloneTestCase and VmoClone2TestCase from core-tests.
 
+use alloc::sync::Arc;
+
 use crate::helpers::TestContext;
 use zircon_object::object::KernelObject;
 use zircon_object::task::{Job, Process};
 use zircon_object::vm::{MMUFlags, VmObject, VmoInfoFlags, PAGE_SIZE};
 use zircon_object::ZxError;
+
+extern crate alloc;
 
 // -- Faithful 1:1 ports from VmoCloneTestCase (vmo-clone.cc) --
 // Test names match the C++ originals exactly.
@@ -293,4 +297,48 @@ fn size_align() {
     assert_eq!(rounded_page, PAGE_SIZE);
     let child = parent.create_child(false, 0, rounded_page).unwrap();
     assert_eq!(child.len(), PAGE_SIZE);
+}
+
+// ── Resize tests (populated_bytes attribution) ─────────────────────
+
+/// Helper: create a resizable, page-tagged VMO.
+fn init_page_tagged_vmo_resizable(pages: usize) -> Arc<VmObject> {
+    let vmo = VmObject::new_paged_with_resizable(true, pages);
+    for i in 0..pages {
+        vmo.write(i * PAGE_SIZE, &((i + 1) as u32).to_ne_bytes())
+            .unwrap();
+    }
+    vmo
+}
+
+/// C++: TEST_F(VmoCloneResizeTests, ResizeChild)
+#[test]
+#[ignore = "populated_bytes attribution"]
+fn resize_child() {
+    let _ctx = TestContext::new();
+    let vmo = init_page_tagged_vmo_resizable(3);
+    let child = vmo.create_child(true, 0, 3 * PAGE_SIZE).unwrap();
+
+    child.set_len(PAGE_SIZE).unwrap();
+
+    let parent_info = vmo.get_info();
+    let child_info = child.get_info();
+    assert_eq!(child_info.populated_bytes as usize, PAGE_SIZE);
+    assert_eq!(parent_info.populated_bytes as usize, 2 * PAGE_SIZE);
+}
+
+/// C++: TEST_F(VmoCloneResizeTests, ResizeOriginal)
+#[test]
+#[ignore = "populated_bytes attribution"]
+fn resize_original() {
+    let _ctx = TestContext::new();
+    let vmo = init_page_tagged_vmo_resizable(3);
+    let child = vmo.create_child(true, 0, 3 * PAGE_SIZE).unwrap();
+
+    vmo.set_len(PAGE_SIZE).unwrap();
+
+    let parent_info = vmo.get_info();
+    let child_info = child.get_info();
+    assert_eq!(parent_info.populated_bytes as usize, PAGE_SIZE);
+    assert_eq!(child_info.populated_bytes as usize, 2 * PAGE_SIZE);
 }

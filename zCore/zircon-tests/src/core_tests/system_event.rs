@@ -257,6 +257,8 @@ fn exactly_one_memory_event_signaled() {
 #[test]
 fn disabled_memory_stall_event() {
     // Disabled in upstream Fuchsia. See https://fxbug.dev/513577268.
+
+    todo!("implement test");
 }
 
 /// C++: TEST(SystemEvent, CannotSignalMemoryStallEventFromUserspace)

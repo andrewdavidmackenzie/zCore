@@ -2691,28 +2691,206 @@ fn write_etc_first_error_latched_and_returned() {
 }
 
 /// C++: TEST(ChannelTest, CallSuspendedThreadResumesAndSucceeds) — syscall level
-/// A suspended thread that calls channel_call should resume and succeed.
-/// Not testable in single-threaded libos mode.
-#[test]
-fn call_suspended_thread_resumes_and_succeeds() {}
+///
+/// A thread calls channel_call (which blocks waiting for a reply).
+/// Meanwhile, the echo server reads the message and writes it back.
+/// The channel_call should complete successfully with the echoed data.
+///
+/// C++ source: zircon/system/utest/core/channel/channel.cc
+///   RunSuspendedCallTest(channel_call, kExpectedData)
+///
+/// In libos mode we skip the suspend/resume portion and focus on
+/// verifying channel_call succeeds end-to-end via the EchoServer.
+#[async_std::test]
+async fn call_suspended_thread_resumes_and_succeeds() {
+    use crate::helpers::EchoServer;
+
+    let ctx = TestContext::new();
+    let echo = EchoServer::start(&ctx.proc);
+
+    // Build a message with at least 4 bytes (txid header) + payload.
+    let msg = zircon_object::ipc::MessagePacket {
+        data: alloc::vec![0, 0, 0, 0, 0x12, 0x34, 0x56, 0x78],
+        handles: alloc::vec![],
+    };
+
+    // Call the echo server via Channel::call.
+    let reply = echo.client.call(msg).await;
+    assert!(reply.is_ok(), "channel_call should succeed");
+    let reply = reply.unwrap();
+    // The echo server preserves the txid (bytes 0..4) and echoes
+    // the entire message back. Verify the payload portion.
+    assert!(reply.data.len() >= 8, "reply should have at least 8 bytes");
+    assert_eq!(
+        &reply.data[4..8],
+        &[0x12, 0x34, 0x56, 0x78],
+        "reply payload should match sent data"
+    );
+
+    echo.shutdown().await;
+}
 
 /// C++: TEST(ChannelTest, CallEtcSuspendedThreadResumesAndSucceeds) — syscall level
-/// A suspended thread that calls channel_call_etc should resume and succeed.
-/// Not testable in single-threaded libos mode.
-#[test]
-fn call_etc_suspended_thread_resumes_and_succeeds() {}
+///
+/// Same as CallSuspendedThreadResumesAndSucceeds but uses
+/// Channel::call (which is the same kernel path as call_etc —
+/// the etc variant just uses HandleDisposition on the write side
+/// and HandleInfo on the read side, but the blocking call/reply
+/// mechanism is identical).
+///
+/// C++ source: zircon/system/utest/core/channel/channel.cc
+///   RunSuspendedCallTest(channel_call_etc, kExpectedData)
+#[async_std::test]
+async fn call_etc_suspended_thread_resumes_and_succeeds() {
+    use crate::helpers::EchoServer;
+
+    let ctx = TestContext::new();
+    let echo = EchoServer::start(&ctx.proc);
+
+    // Build a message with txid header + distinct payload.
+    let msg = zircon_object::ipc::MessagePacket {
+        data: alloc::vec![0, 0, 0, 0, 0x87, 0x65, 0x43, 0x21],
+        handles: alloc::vec![],
+    };
+
+    let reply = echo.client.call(msg).await;
+    assert!(reply.is_ok(), "channel_call (etc path) should succeed");
+    let reply = reply.unwrap();
+    assert!(reply.data.len() >= 8);
+    assert_eq!(
+        &reply.data[4..8],
+        &[0x87, 0x65, 0x43, 0x21],
+        "reply payload should match sent data"
+    );
+
+    echo.shutdown().await;
+}
 
 /// C++: TEST(ChannelTest, CallPendingTransactionsUseDifferentIds) — syscall level
-/// Multiple pending channel_call transactions should use different txids.
-/// Not testable in single-threaded libos mode.
-#[test]
-fn call_pending_transactions_use_different_ids() {}
+///
+/// Two sequential channel_call transactions should use different txids.
+/// The C++ test spawns 20 concurrent callers and verifies all txids
+/// are unique. In libos mode we do two sequential calls and verify
+/// the txids in the echoed replies differ.
+///
+/// C++ source: zircon/system/utest/core/channel/channel.cc
+///   TEST(ChannelTest, CallPendingTransactionsUseDifferentIds)
+#[async_std::test]
+async fn call_pending_transactions_use_different_ids() {
+    use crate::helpers::EchoServer;
+
+    let ctx = TestContext::new();
+    let echo = EchoServer::start(&ctx.proc);
+
+    // First call — extract the txid from the reply.
+    let msg1 = zircon_object::ipc::MessagePacket {
+        data: alloc::vec![0, 0, 0, 0, 0xAA],
+        handles: alloc::vec![],
+    };
+    let reply1 = echo.client.call(msg1).await.unwrap();
+    let txid1 = reply1.get_txid();
+
+    // Second call — extract the txid from the reply.
+    let msg2 = zircon_object::ipc::MessagePacket {
+        data: alloc::vec![0, 0, 0, 0, 0xBB],
+        handles: alloc::vec![],
+    };
+    let reply2 = echo.client.call(msg2).await.unwrap();
+    let txid2 = reply2.get_txid();
+
+    // The kernel assigns unique txids (monotonically increasing
+    // from 0x8000_0000). Two sequential calls must differ.
+    assert_ne!(
+        txid1, txid2,
+        "two sequential channel_call transactions should have different txids"
+    );
+
+    echo.shutdown().await;
+}
 
 /// C++: TEST(ChannelTest, CallResponseBiggerThanRdNumHandlesReturnsBufferTooSmall) — syscall level
-/// When a reply arrives with more handles than rd_num_handles, the call
-/// should return BUFFER_TOO_SMALL. Not testable without async responder.
-#[test]
-fn call_response_bigger_than_rd_num_handles_returns_buffer_too_small() {}
+///
+/// When a reply arrives with more handles than the caller's
+/// rd_num_handles capacity, channel_call should return
+/// BUFFER_TOO_SMALL. We construct this scenario by having the
+/// server write back a reply with 2 handles while the caller
+/// only provides rd_num_handles=1.
+///
+/// C++ source: zircon/system/utest/core/channel/channel.cc
+///   TEST(ChannelTest, CallResponseBiggerThanRdNumHandlesReturnsBufferTooSmall)
+#[async_std::test]
+async fn call_response_bigger_than_rd_num_handles_returns_buffer_too_small() {
+    use zircon_object::ipc::{Channel, MessagePacket};
+    use zircon_object::object::Handle;
+
+    let ctx = TestContext::new();
+    let (client, server) = Channel::create();
+
+    // Spawn a responder task that reads the request and writes back
+    // a reply with 2 event handles (more than the caller will accept).
+    let server_clone = server.clone();
+    async_std::task::spawn(async move {
+        let server_obj: alloc::sync::Arc<dyn KernelObject> = server_clone.clone();
+        server_obj
+            .wait_signal(zircon_object::object::Signal::READABLE)
+            .await;
+
+        let msg = server_clone.read().unwrap();
+        // Build reply with the same txid but 2 event handles.
+        let event1 = zircon_object::signal::Event::new();
+        let event2 = zircon_object::signal::Event::new();
+        let reply = MessagePacket {
+            data: msg.data.clone(),
+            handles: alloc::vec![
+                Handle::new(event1, zircon_object::object::Rights::DEFAULT_EVENT),
+                Handle::new(event2, zircon_object::object::Rights::DEFAULT_EVENT),
+            ],
+        };
+        let _ = server_clone.write(reply);
+    });
+
+    // Add client to handle table.
+    let client_handle = ctx.proc.add_handle(Handle::new(
+        client.clone(),
+        zircon_object::object::Rights::DEFAULT_CHANNEL,
+    ));
+
+    let sc = ctx.syscall();
+
+    let wr_data = [0u8; 4]; // txid placeholder
+    let mut rd_buf = [0u8; 64];
+    let mut rd_handles = [0u32; 1]; // only 1 slot — reply has 2 handles!
+    let args = TestChannelCallArgs {
+        wr_bytes: wr_data.as_ptr() as usize,
+        wr_handles: 0,
+        rd_bytes: rd_buf.as_mut_ptr() as usize,
+        rd_handles: rd_handles.as_mut_ptr() as usize,
+        wr_num_bytes: 4,
+        wr_num_handles: 0,
+        rd_num_bytes: 64,
+        rd_num_handles: 1, // too small for 2-handle reply
+    };
+
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = sc
+        .sys_channel_call_noretry(
+            client_handle,
+            0,
+            zircon_syscall::Deadline::forever(),
+            UserInPtr::from(&args as *const _ as usize),
+            UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+            UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        )
+        .await;
+    assert_eq!(
+        result.unwrap_err(),
+        ZxError::BUFFER_TOO_SMALL,
+        "reply with too many handles should return BUFFER_TOO_SMALL"
+    );
+    // Verify actual_handles reports the reply's handle count.
+    assert_eq!(actual_handles, 2, "actual_handles should report 2");
+}
 
 /// C++: TEST(ChannelTest, WriteEtcMixedMoveAndDuplicateOnFailurePreservesDuplicateHandles) — syscall level
 /// When a mixed MOVE+DUP write_etc fails, MOVE handles are consumed

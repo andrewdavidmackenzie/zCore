@@ -69,7 +69,6 @@ mod register_state;
 mod resource;
 mod restricted_mode;
 mod rseq;
-mod skipped;
 mod socket;
 mod stack;
 mod standalone_elf_load;

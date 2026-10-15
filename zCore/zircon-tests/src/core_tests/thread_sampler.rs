@@ -24,6 +24,8 @@ fn start_stop() {
     //   7. zx_sampler_stop(sampler)
     //   8. Signal thread to exit, join
     //   9. zx_handle_close(sampler)
+
+    todo!("implement test");
 }
 
 /// C++: TEST(ThreadSampler, SamplerLifetime)
@@ -39,6 +41,8 @@ fn sampler_lifetime() {
     //   3. zx_handle_close(sampler1)
     //   4. zx_sampler_create → sampler3 (OK)
     //   5. zx_handle_close(sampler3)
+
+    todo!("implement test");
 }
 
 /// C++: TEST(ThreadSampler, InvalidOptions)
@@ -49,6 +53,8 @@ fn invalid_options() {
     // C++ test:
     //   zx_sampler_create(sampling_resource, 1 /*non-zero options*/, &config, &sampler)
     //   ASSERT_EQ(create_res, ZX_ERR_INVALID_ARGS);
+
+    todo!("implement test");
 }
 
 /// C++: TEST(ThreadSampler, DroppedSampler)
@@ -63,6 +69,8 @@ fn dropped_sampler() {
     //   3. Create new sampler
     //   4. Start, read 10 records, stop
     //   5. Clean up thread
+
+    todo!("implement test");
 }
 
 /// C++: TEST(ThreadSampler, NonRunningThread)
@@ -80,6 +88,8 @@ fn non_running_thread() {
     //   5. Wait for event signal
     //   6. ReadNRecordsContainingTid(sampler, tid, 10)
     //   7. Stop, signal thread, wait
+
+    todo!("implement test");
 }
 
 /// C++: TEST(ThreadSampler, HighFrequency)
@@ -95,4 +105,6 @@ fn high_frequency() {
     //   4. Start sampler
     //   5. ReadNRecords(sampler, 10)
     //   6. Stop, signal all threads, join all
+
+    todo!("implement test");
 }

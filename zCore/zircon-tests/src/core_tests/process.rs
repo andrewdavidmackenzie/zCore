@@ -77,9 +77,45 @@ async fn process_get_info_runtime_v1() {
 }
 
 /// C++: TEST(ProcessTest, ProcessWaitAsyncCancelSelf)
-/// Race condition stress test that needs real threads.
+///
+/// The C++ test runs a mini-process that loops doing
+/// process.wait_async(port) + port.cancel(process). Meanwhile the
+/// main thread calls get_info on the process 10000 times to try
+/// to trigger a deadlock race.
+///
+/// In libos mode we can't run a mini-process, but we can exercise
+/// the same kernel APIs (wait_async + cancel) on a port bound to
+/// the process's signal set, verifying there's no deadlock or panic.
+///
+/// C++ source: zircon/system/utest/core/process/process.cc
 #[test]
-fn process_wait_async_cancel_self() {}
+fn process_wait_async_cancel_self() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "wait-cancel").unwrap();
+    let _thread = Thread::create(&proc, "th").unwrap();
+    let port = zircon_object::signal::Port::new(0).unwrap();
+
+    let proc_obj: alloc::sync::Arc<dyn KernelObject> = proc.clone();
+    let proc_koid = proc.id();
+
+    // Exercise the wait_async + cancel_async cycle many times.
+    // The C++ test does 10000 iterations of get_info concurrently;
+    // here we do the wait_async + cancel loop inline.
+    for i in 0..1000u64 {
+        // Register an async wait for PROCESS_TERMINATED on the port.
+        proc_obj
+            .send_signal_to_port_async(Signal::PROCESS_TERMINATED, &port, i, false)
+            .unwrap();
+
+        // Cancel it immediately via port.cancel_async(source_koid, key).
+        let _ = port.cancel_async(proc_koid, i);
+    }
+
+    // Verify the process is still alive and queryable.
+    let info = proc.get_info();
+    assert_eq!(info.flags & 2, 0, "process should not be exited");
+}
 
 /// C++: TEST(ProcessTest, EmptyNameSucceeds)
 /// Creating a process with an empty name should succeed.
@@ -901,10 +937,58 @@ fn forbid_destroy_root_vmar() {
 }
 
 /// C++: TEST(ProcessTest, ProcessHwTraceContextIdProperty)
-/// HW trace context ID property. This property is architecture-
-/// specific and may not be supported.
+///
+/// Verify the HW trace context ID property behavior via syscall
+/// layer. zCore doesn't support HW tracing, so both get_property
+/// and set_property should return NOT_SUPPORTED for this property.
+///
+/// C++ source: zircon/system/utest/core/process/process.cc
+///   zx_object_get_property(self, ZX_PROP_PROCESS_HW_TRACE_CONTEXT_ID, ...)
+///   → ZX_ERR_NOT_SUPPORTED (on unsupported architectures)
 #[test]
-fn process_hw_trace_context_id_property() {}
+fn process_hw_trace_context_id_property() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Add a process handle with full rights to the handle table.
+    let proc_handle = ctx.proc.add_handle(Handle::new(
+        ctx.proc.clone(),
+        Rights::DEFAULT_PROCESS | Rights::GET_PROPERTY | Rights::SET_PROPERTY,
+    ));
+
+    // ZX_PROP_PROCESS_HW_TRACE_CONTEXT_ID = 8
+    const PROP_HW_TRACE_CONTEXT_ID: u32 = 8;
+    let mut value: usize = 0;
+
+    // get_property should return NOT_SUPPORTED (zCore doesn't
+    // support HW tracing on any architecture).
+    let result = sc.sys_object_get_property(
+        proc_handle,
+        PROP_HW_TRACE_CONTEXT_ID,
+        &mut value as *mut _ as usize,
+        core::mem::size_of::<usize>(),
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+        "get_property(HW_TRACE_CONTEXT_ID) should return NOT_SUPPORTED"
+    );
+
+    // set_property should also return NOT_SUPPORTED.
+    let set_value: usize = 0x1234;
+    let mut sc_mut = ctx.syscall();
+    let result = sc_mut.sys_object_set_property(
+        proc_handle,
+        PROP_HW_TRACE_CONTEXT_ID,
+        &set_value as *const _ as usize,
+        core::mem::size_of::<usize>(),
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+        "set_property(HW_TRACE_CONTEXT_ID) should return NOT_SUPPORTED"
+    );
+}
 
 /// C++: TEST(ProcessTest, InfoProcessNoProcessHandles)
 /// After killing a process, its info should still be queryable even

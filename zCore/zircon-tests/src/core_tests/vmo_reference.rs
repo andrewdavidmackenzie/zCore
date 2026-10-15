@@ -402,3 +402,31 @@ fn unsupported_child() {
         "snapshot child of pager-backed reference should fail"
     );
 }
+
+/// C++: TEST(VmoReference, ChildSnapshotAtLeastOnWrite)
+/// vmo/vmo-reference.cc:130
+///
+/// Tests COW child creation, data read-through, and write isolation.
+/// zCore treats SNAPSHOT_AT_LEAST_ON_WRITE as a regular snapshot,
+/// so parent writes after child creation are NOT visible in child
+/// (unlike Fuchsia where they would be until the child writes).
+#[test]
+fn child_snapshot_at_least_on_write() {
+    let _ctx = TestContext::new();
+    let root = VmObject::new_paged(1);
+    root.write(0, &[0xAAu8; 8]).unwrap();
+
+    let child = root.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    let mut buf = [0u8; 8];
+    child.read(0, &mut buf).unwrap();
+    assert_eq!(buf, [0xAA; 8], "child should read parent data");
+
+    child.write(0, &[0xCC; 8]).unwrap();
+
+    let mut parent_buf = [0u8; 8];
+    root.read(0, &mut parent_buf).unwrap();
+    assert_eq!(parent_buf, [0xAA; 8], "parent should be unchanged");
+    child.read(0, &mut buf).unwrap();
+    assert_eq!(buf, [0xCC; 8], "child should have forked data");
+}
