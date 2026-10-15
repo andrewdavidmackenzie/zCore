@@ -7,7 +7,11 @@ hal_fn_impl! {
         }
 
         fn needs_user_write_flush() -> bool {
-            cfg!(all(target_arch = "aarch64", target_os = "macos"))
+            // All libos platforms need this: when VMAR protection changes
+            // (e.g., mprotect to read-only), the host OS enforces the
+            // protection on the user VA. Debug APIs like write_memory
+            // need to temporarily mprotect(RW) before writing.
+            true
         }
 
         fn needs_kernel_textrel() -> bool {
