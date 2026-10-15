@@ -286,6 +286,15 @@ impl Thread {
             .expect("Thread::proc(): owning process has been dropped")
     }
 
+    /// Get the process, returning `None` if it has already been dropped.
+    ///
+    /// This is the non-panicking variant of [`proc()`](Self::proc).
+    /// Useful in contexts where the thread may outlive its process
+    /// (e.g., permission checks during teardown).
+    pub fn proc_try(&self) -> Option<Arc<Process>> {
+        self.proc.upgrade()
+    }
+
     /// Get the extension info.
     pub fn ext(&self) -> &Box<dyn Any + Send + Sync> {
         &self.ext
