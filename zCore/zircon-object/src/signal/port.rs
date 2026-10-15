@@ -250,6 +250,12 @@ impl Port {
         inner.interrupt_grave.remove(&pid)
     }
 
+    /// Check whether an interrupt packet is still queued (not yet consumed).
+    pub(crate) fn is_interrupt_packet_queued(&self, pid: u64) -> bool {
+        let inner = self.inner.lock();
+        inner.interrupt_grave.contains(&pid)
+    }
+
     /// Asynchronous wait until at least one packet is available, then take out the earliest
     /// (in FIFO order) available packet.
     pub async fn wait(self: &Arc<Self>) -> PortPacket {
