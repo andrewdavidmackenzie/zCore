@@ -1144,7 +1144,17 @@ impl VmObject {
         self.trait_.is_reference()
     }
 
-    /// Get the parent VmObject (for REFERENCE children).
+    /// Returns true if this VMO is a SLICE child (but not a REFERENCE).
+    pub fn is_slice_vmo(&self) -> bool {
+        self.is_slice
+    }
+
+    /// Offset into the parent VMO (for slices). Returns 0 for non-slices.
+    pub fn parent_offset(&self) -> usize {
+        self.trait_.parent_offset()
+    }
+
+    /// Get the parent VmObject (for REFERENCE or SLICE children).
     pub fn parent(&self) -> Option<Arc<VmObject>> {
         self.inner.lock().parent.upgrade()
     }

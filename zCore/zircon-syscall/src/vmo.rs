@@ -330,6 +330,19 @@ impl Syscall<'_> {
                 } else {
                     Err(ZxError::BAD_STATE)
                 }
+            } else if vmo.is_slice_vmo() {
+                // SLICE VMOs: create the COW child on the slice's parent,
+                // adjusting the offset by the slice's parent_offset.
+                // This matches Fuchsia behavior where SNAPSHOT_AT_LEAST_ON_WRITE
+                // on a SLICE creates the child in the parent's COW tree.
+                if let Some(parent) = vmo.parent() {
+                    let adjusted_offset = offset + vmo.parent_offset();
+                    let child = parent.create_child(resizable, adjusted_offset, child_size)?;
+                    child.set_parent_ref(&vmo);
+                    Ok(child)
+                } else {
+                    Err(ZxError::BAD_STATE)
+                }
             } else {
                 vmo.create_child(resizable, offset, child_size)
             }
