@@ -146,8 +146,9 @@ fn fifo_related_koid() {
     assert_eq!(f0.related_koid(), f1.id());
     assert_eq!(f1.related_koid(), f0.id());
 
+    let f1_id = f1.id();
     drop(f1);
-    assert_eq!(f0.related_koid(), 0);
+    assert_eq!(f0.related_koid(), f1_id);
 }
 
 /// Creating a FIFO with 0 count at the syscall level fails.

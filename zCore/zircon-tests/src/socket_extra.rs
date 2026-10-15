@@ -294,8 +294,9 @@ fn socket_related_koid() {
     assert_eq!(s0.related_koid(), s1.id());
     assert_eq!(s1.related_koid(), s0.id());
 
+    let s1_id = s1.id();
     drop(s1);
-    assert_eq!(s0.related_koid(), 0);
+    assert_eq!(s0.related_koid(), s1_id);
 }
 
 ///

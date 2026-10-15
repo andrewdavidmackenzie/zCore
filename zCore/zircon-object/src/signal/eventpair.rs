@@ -13,6 +13,8 @@ pub struct EventPair {
     base: KObjectBase,
     _counter: CountHelper,
     peer: Weak<EventPair>,
+    /// Cached peer KOID, set at creation time. Survives peer closure.
+    peer_koid: KoID,
 }
 
 impl_kobject!(EventPair
@@ -24,7 +26,7 @@ impl_kobject!(EventPair
         Ok(peer)
     }
     fn related_koid(&self) -> KoID {
-        self.peer.upgrade().map(|p| p.id()).unwrap_or(0)
+        self.peer_koid
     }
 );
 define_count_helper!(EventPair);
@@ -37,17 +39,19 @@ impl EventPair {
             base: KObjectBase::default(),
             _counter: CountHelper::new(),
             peer: Weak::default(),
+            peer_koid: 0,
         });
         let event1 = Arc::new(EventPair {
             base: KObjectBase::default(),
             _counter: CountHelper::new(),
             peer: Arc::downgrade(&event0),
+            peer_koid: event0.id(),
         });
-        // SAFETY: channel0/end0/event0 was just created with strong_count=1.
-        // The only other reference is a Weak held by channel1/end1/event1.
-        // We need to set the peer before returning, and Arc::get_mut
-        // fails because the weak count is non-zero.
-        unsafe { &mut *(Arc::as_ptr(&event0) as *mut EventPair) }.peer = Arc::downgrade(&event1);
+        // SAFETY: event0 was just created with strong_count=1.
+        // We need to set the peer and peer_koid before returning.
+        let e0_mut = unsafe { &mut *(Arc::as_ptr(&event0) as *mut EventPair) };
+        e0_mut.peer = Arc::downgrade(&event1);
+        e0_mut.peer_koid = event1.id();
         (event0, event1)
     }
 
@@ -88,10 +92,13 @@ mod tests {
         assert!(Arc::ptr_eq(&event0.peer().unwrap(), &event1));
         assert_eq!(event0.related_koid(), event1.id());
 
+        let event1_id = event1.id();
         drop(event1);
         assert_eq!(event0.signal(), Signal::PEER_CLOSED);
         assert_eq!(event0.peer().err(), Some(ZxError::PEER_CLOSED));
-        assert_eq!(event0.related_koid(), 0);
+        // related_koid returns the cached peer KOID even after peer close,
+        // matching Fuchsia's PeeredDispatcher behavior.
+        assert_eq!(event0.related_koid(), event1_id);
     }
 
     #[test]

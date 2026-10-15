@@ -18,6 +18,8 @@ use {
 pub struct Fifo {
     base: KObjectBase,
     peer: Weak<Fifo>,
+    /// Cached peer KOID, set at creation time. Survives peer closure.
+    peer_koid: KoID,
     elem_count: usize,
     elem_size: usize,
     recv_queue: Mutex<VecDeque<u8>>,
@@ -29,7 +31,7 @@ impl_kobject!(Fifo
         Ok(peer)
     }
     fn related_koid(&self) -> KoID {
-        self.peer.upgrade().map(|p| p.id()).unwrap_or(0)
+        self.peer_koid
     }
 );
 
@@ -40,6 +42,7 @@ impl Fifo {
         let end0 = Arc::new(Fifo {
             base: KObjectBase::with_signal(Signal::WRITABLE),
             peer: Weak::default(),
+            peer_koid: 0,
             elem_count,
             elem_size,
             recv_queue: Mutex::new(VecDeque::with_capacity(elem_count * elem_size)),
@@ -47,15 +50,16 @@ impl Fifo {
         let end1 = Arc::new(Fifo {
             base: KObjectBase::with_signal(Signal::WRITABLE),
             peer: Arc::downgrade(&end0),
+            peer_koid: end0.id(),
             elem_count,
             elem_size,
             recv_queue: Mutex::new(VecDeque::with_capacity(elem_count * elem_size)),
         });
-        // SAFETY: channel0/end0/event0 was just created with strong_count=1.
-        // The only other reference is a Weak held by channel1/end1/event1.
-        // We need to set the peer before returning, and Arc::get_mut
-        // fails because the weak count is non-zero.
-        unsafe { &mut *(Arc::as_ptr(&end0) as *mut Fifo) }.peer = Arc::downgrade(&end1);
+        // SAFETY: end0 was just created with strong_count=1.
+        // We need to set the peer and peer_koid before returning.
+        let e0_mut = unsafe { &mut *(Arc::as_ptr(&end0) as *mut Fifo) };
+        e0_mut.peer = Arc::downgrade(&end1);
+        e0_mut.peer_koid = end1.id();
         (end0, end1)
     }
 
@@ -187,9 +191,10 @@ mod tests {
         ));
         assert_eq!(end0.related_koid(), end1.id());
 
+        let end1_id = end1.id();
         drop(end1);
         assert_eq!(end0.peer().unwrap_err(), ZxError::PEER_CLOSED);
-        assert_eq!(end0.related_koid(), 0);
+        assert_eq!(end0.related_koid(), end1_id);
     }
 
     #[test]
