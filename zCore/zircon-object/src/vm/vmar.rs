@@ -962,9 +962,12 @@ impl VmAddressRegion {
         len: usize,
         align: usize,
     ) -> ZxResult<VirtAddr> {
-        if !check_aligned(len, align) {
-            Err(ZxError::INVALID_ARGS)
-        } else if let Some(offset) = offset {
+        // Fuchsia only requires the start address to be aligned to `align`.
+        // The length only needs to be page-aligned.
+        if !check_aligned(len, PAGE_SIZE) {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if let Some(offset) = offset {
             if !check_aligned(offset, align) {
                 return Err(ZxError::INVALID_ARGS);
             }
@@ -1024,7 +1027,7 @@ impl VmAddressRegion {
     /// Test if can create a new mapping at `offset` with `len`.
     fn test_map(&self, inner: &VmarInner, offset: usize, len: usize, align: usize) -> bool {
         debug_assert!(check_aligned(offset, align));
-        debug_assert!(check_aligned(len, align));
+        // len only needs page-alignment, not alignment to `align`.
         let begin = self.addr + offset;
         let end = begin + len;
         if end > self.addr + self.size {
@@ -1069,7 +1072,7 @@ impl VmAddressRegion {
     ) -> Option<usize> {
         // TODO: randomize
         debug_assert!(check_aligned(offset_hint, align));
-        debug_assert!(check_aligned(len, align));
+        // len only needs page-alignment, not alignment to `align`.
         // brute force:
         // try each area's end address as the start
         let candidates: alloc::vec::Vec<usize> = core::iter::once(offset_hint)
