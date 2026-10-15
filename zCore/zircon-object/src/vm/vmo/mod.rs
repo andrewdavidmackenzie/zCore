@@ -1276,9 +1276,9 @@ pub struct VmoInfo {
     /// Content populated and tracked by only this VMO (not shared).
     populated_private_bytes: u64,
     /// `committed_bytes` scaled by sharing count (fractional bytes truncated).
-    committed_scaled_bytes: u64,
+    pub committed_scaled_bytes: u64,
     /// `populated_bytes` scaled by sharing count (fractional bytes truncated).
-    populated_scaled_bytes: u64,
+    pub populated_scaled_bytes: u64,
     /// Fractional remainder of `committed_scaled_bytes` (fixed-point, 63-bit precision).
     committed_fractional_scaled_bytes: u64,
     /// Fractional remainder of `populated_scaled_bytes` (fixed-point, 63-bit precision).
@@ -1290,6 +1290,20 @@ impl VmoInfo {
     /// Get the koid of this VMO info entry.
     pub fn koid(&self) -> KoID {
         self.koid
+    }
+
+    /// Return the attributed populated bytes, matching Fuchsia's
+    /// `VmoPopulatedBytes` test helper.
+    ///
+    /// When fractional scaling is supported (`populated_fractional_scaled_bytes
+    /// != u64::MAX`), returns `populated_scaled_bytes` (fractional
+    /// attribution). Otherwise falls back to `populated_bytes`.
+    pub fn vmo_populated_bytes(&self) -> u64 {
+        if self.populated_fractional_scaled_bytes == u64::MAX {
+            self.populated_bytes
+        } else {
+            self.populated_scaled_bytes
+        }
     }
 }
 

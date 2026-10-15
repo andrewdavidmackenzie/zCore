@@ -24,10 +24,11 @@ type HandleValue = u32;
 /// ```
 ///
 /// Writing from an unmapped address (0x1000) to a channel should fail.
-/// In real Fuchsia this is a page fault caught by the kernel. In libos mode,
-/// dereferencing 0x1000 causes SIGSEGV which kills the test runner.
+/// In real Fuchsia this is a page fault caught by the kernel. In libos
+/// mode the `copy_from_user` address-range validation rejects addresses
+/// in the low guard region (first 64 KiB), producing the same result
+/// without an actual SIGSEGV.
 #[test]
-#[ignore = "would crash: reading from unmapped address causes SIGSEGV in libos mode"]
 fn invalid_mapped_address_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -43,8 +44,8 @@ fn invalid_mapped_address_fails() {
     .expect("channel create should succeed");
 
     // C++ uses unmapped_addr = (void*)4096 with 1 byte.
-    // In libos mode, 0x1000 might be a valid host address, so this may
-    // not fault the same way. We pass it through the syscall path.
+    // In libos mode, `copy_from_user` rejects addresses below 0x10000
+    // (low guard region), returning InvalidPointer → INVALID_ARGS.
     let unmapped_addr: usize = 4096;
     let result = sc.sys_channel_write(
         h0,
@@ -54,10 +55,7 @@ fn invalid_mapped_address_fails() {
         UserInPtr::from(0usize),
         0,
     );
-    // C++ expects NOT_OK. In libos mode this might succeed (host memory
-    // at 0x1000 might be mapped) or fail with various errors.
-    // The faithful test: assert the syscall was called. If it returns
-    // an error, that's the expected behavior.
+    // C++ expects NOT_OK — the kernel rejects the bad user pointer.
     assert!(
         result.is_err(),
         "channel write from unmapped address should fail"
@@ -74,9 +72,10 @@ fn invalid_mapped_address_fails() {
 /// ```
 ///
 /// Writing from a kernel-space address should fail.
-/// In libos mode, dereferencing kernel-space address causes SIGSEGV.
+/// In libos mode, `copy_from_user` rejects addresses at or above
+/// the kernel address-space base (0xffff_8000_0000_0000), matching
+/// the bare-metal MMU behavior.
 #[test]
-#[ignore = "would crash: reading from kernel-space address causes SIGSEGV in libos mode"]
 fn kernel_mapped_address_channel_write_fails() {
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -210,10 +209,9 @@ fn syscall_num_test() {
 /// ```
 ///
 /// Reading handles into an unmapped address should return INVALID_ARGS.
-/// In libos mode, writing to unmapped memory causes SIGSEGV which kills the
-/// test runner. The C++ test uses ASSERT_DEATH for this.
+/// In libos mode, `copy_to_user` rejects addresses in the low guard
+/// region, producing an error without an actual SIGSEGV.
 #[test]
-#[ignore = "would crash: writing to unmapped handle pointer causes SIGSEGV in libos mode"]
 fn channel_read_handle() {
     use zircon_object::object::{Handle, Rights};
 
@@ -265,10 +263,11 @@ fn channel_read_handle() {
         UserOutPtr::from(&mut actual_handles as *mut _ as usize),
         false,
     );
-    // C++ expects ZX_ERR_INVALID_ARGS. In zCore libos mode, writing to
-    // the unmapped handles pointer will fail during the copy-out.
-    assert!(
-        result.is_err(),
-        "channel read with unmapped handles pointer should fail"
+    // C++ expects ZX_ERR_INVALID_ARGS. The copy-out to the unmapped
+    // handles pointer fails because `copy_to_user` rejects the address.
+    assert_eq!(
+        result,
+        Err(zircon_object::ZxError::INVALID_ARGS),
+        "channel read with unmapped handles pointer should return INVALID_ARGS"
     );
 }
