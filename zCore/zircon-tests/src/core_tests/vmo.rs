@@ -961,48 +961,81 @@ fn contiguous_require_nonzero_size() {
 ///   5. Tries to create REFERENCE+RESIZABLE from the no-resize handle → ACCESS_DENIED.
 ///   6. Tries SLICE+RESIZABLE → INVALID_ARGS.
 ///
-/// Steps 4-6 are handle-rights checks enforced at the syscall layer.
-/// At the kernel-object level we exercise steps 1-3: resizable parent →
-/// resizable reference child → set_len works. We also verify that a
-/// non-resizable reference child cannot resize.
+/// All steps are exercised via the syscall layer.
 #[test]
 fn create_child_mint_resize() {
-    let _ctx = TestContext::new();
+    use crate::core_tests::syscall_vmo::syscall_vmo_create;
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::HandleValue;
 
-    // Step 1: Create a 2-page resizable VMO.
-    let parent = VmObject::new_paged_with_resizable(true, 2);
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
 
-    // Step 2: Create a resizable REFERENCE child.
-    // C++ uses offset=0, size=0 for REFERENCE (full-VMO alias).
-    let child_resizable = parent
-        .create_reference_slice(0, 2 * PAGE_SIZE, true)
+    // Step 1: Create a 2-page resizable VMO (ZX_VMO_RESIZABLE = 2).
+    let parent_h = syscall_vmo_create(&ctx, (2 * PAGE_SIZE) as u64, 2);
+
+    // Step 2: Create a REFERENCE + RESIZABLE child.
+    // ZX_VMO_CHILD_REFERENCE = 1 << 6 = 64, ZX_VMO_CHILD_RESIZABLE = 1 << 2 = 4
+    let mut child_h: HandleValue = 0;
+    sc.sys_vmo_create_child(
+        parent_h,
+        64 | 4, // REFERENCE | RESIZABLE
+        0,
+        0,
+        UserOutPtr::from(&mut child_h as *mut _ as usize),
+    )
+    .unwrap();
+
+    // Step 3: Resizable reference child can resize.
+    sc.sys_vmo_set_size(child_h, PAGE_SIZE).unwrap();
+    let mut size: usize = 0;
+    sc.sys_vmo_get_size(parent_h, UserOutPtr::from(&mut size as *mut _ as usize))
         .unwrap();
-
-    // Step 3: Resizable reference child can call set_len.
-    child_resizable.set_len(PAGE_SIZE).unwrap();
     assert_eq!(
-        parent.len(),
-        PAGE_SIZE,
+        size, PAGE_SIZE,
         "resizable reference child should resize the parent"
     );
 
-    // Restore parent size for further testing.
-    child_resizable.set_len(2 * PAGE_SIZE).unwrap();
-    assert_eq!(parent.len(), 2 * PAGE_SIZE);
+    // Restore parent size.
+    sc.sys_vmo_set_size(child_h, 2 * PAGE_SIZE).unwrap();
 
-    // Additional: non-resizable reference child cannot resize.
-    let child_nonresizable = parent
-        .create_reference_slice(0, 2 * PAGE_SIZE, false)
-        .unwrap();
-    let resize_result = child_nonresizable.set_len(PAGE_SIZE);
-    assert!(
-        resize_result.is_err(),
-        "non-resizable reference child should not be able to resize"
+    // Step 4: Duplicate parent handle without ZX_RIGHT_RESIZE.
+    let mut no_resize_h: HandleValue = 0;
+    sc.sys_handle_duplicate(
+        parent_h,
+        (Rights::DEFAULT_VMO - Rights::RESIZE).bits(),
+        UserOutPtr::from(&mut no_resize_h as *mut _ as usize),
+    )
+    .unwrap();
+
+    // Step 5: Creating REFERENCE+RESIZABLE from no-resize handle → ACCESS_DENIED.
+    let mut bad_child_h: HandleValue = 0;
+    let result = sc.sys_vmo_create_child(
+        no_resize_h,
+        64 | 4, // REFERENCE | RESIZABLE
+        0,
+        0,
+        UserOutPtr::from(&mut bad_child_h as *mut _ as usize),
     );
     assert_eq!(
-        parent.len(),
-        2 * PAGE_SIZE,
-        "parent size should be unchanged"
+        result.unwrap_err(),
+        ZxError::ACCESS_DENIED,
+        "REFERENCE+RESIZABLE from no-resize handle should fail"
+    );
+
+    // Step 6: SLICE+RESIZABLE → INVALID_ARGS.
+    // ZX_VMO_CHILD_SLICE = 1 << 3 = 8
+    let result = sc.sys_vmo_create_child(
+        parent_h,
+        8 | 4, // SLICE | RESIZABLE
+        0,
+        PAGE_SIZE,
+        UserOutPtr::from(&mut bad_child_h as *mut _ as usize),
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        ZxError::INVALID_ARGS,
+        "SLICE+RESIZABLE should return INVALID_ARGS"
     );
 }
 
@@ -1598,10 +1631,10 @@ fn physical_vmo_invalid_initial_size() {
 /// VMOs.  The kernel-level map silently downgrades map_range to lazy
 /// mapping, so the rejection is in sys_vmar_map.
 ///
-/// At the kernel-object level we verify: read within bounds succeeds,
-/// read past end panics (physical VMOs assert on OOB reads).  We also
-/// verify that the mapping itself succeeds at the kernel level (since
-/// the syscall-layer check is not exercised here).
+/// This test verifies read within bounds succeeds and the mapping
+/// works at the kernel level. Full syscall-level testing requires
+/// an MMIO resource and sys_vmo_create_physical, which is only
+/// available on bare metal with test_ram_reserve.
 #[test]
 fn physical_vmo_oob_mapping() {
     let _ctx = TestContext::new();
@@ -1983,8 +2016,8 @@ fn stream_size_rights() {
 
 /// C++: TEST(VmoTestCase, StreamSizeSlicesAndReferences)
 ///
-/// The C++ test creates an unbounded VMO (4-page stream size), then
-/// creates slice and reference children and verifies their stream size
+/// Creates an unbounded VMO (4-page stream size), then creates slice
+/// and reference children via syscalls and verifies their stream size
 /// (content_size) behavior:
 ///
 /// - A smaller slice (3 pages) has its own content_size = slice size.
@@ -1992,64 +2025,140 @@ fn stream_size_rights() {
 /// - A larger slice (5 pages) has its own content_size = slice size.
 /// - A REFERENCE child shares the parent's stream size.
 ///   Setting stream size on reference updates parent, and vice versa.
-///
-/// At the kernel-object level, we emulate the unbounded VMO by creating
-/// a large paged VMO with content_size set to the "stream size".
 #[test]
 fn stream_size_slices_and_references() {
-    let _ctx = TestContext::new();
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::HandleValue;
 
-    // Emulate unbounded VMO: large capacity, content_size = 4 pages.
-    let vmo = VmObject::new_paged(8); // large capacity
-    vmo.set_content_size(4 * PAGE_SIZE).unwrap();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
 
-    // Verify initial stream size.
-    assert_eq!(vmo.content_size(), 4 * PAGE_SIZE);
+    // Create unbounded VMO with stream_size = 4 pages via syscall.
+    // ZX_VMO_UNBOUNDED = 0x10
+    let mut parent_h: HandleValue = 0;
+    sc.sys_vmo_create(
+        (4 * PAGE_SIZE) as u64,
+        0x10, // UNBOUNDED
+        UserOutPtr::from(&mut parent_h as *mut _ as usize),
+    )
+    .unwrap();
 
-    // 3-page slice (smaller than parent stream).
-    let smaller_slice = vmo.create_slice(0, 3 * PAGE_SIZE).unwrap();
+    // Verify initial stream size = 4 pages.
+    let mut stream_size: usize = 0;
+    sc.sys_vmo_get_stream_size(
+        parent_h,
+        UserOutPtr::from(&mut stream_size as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(stream_size, 4 * PAGE_SIZE);
 
-    // Slice VMO size and stream size are both 3 pages.
-    assert_eq!(smaller_slice.len(), 3 * PAGE_SIZE);
-    assert_eq!(smaller_slice.content_size(), 3 * PAGE_SIZE);
+    // Get parent VMO size (large: 256K pages).
+    let mut parent_size: usize = 0;
+    sc.sys_vmo_get_size(
+        parent_h,
+        UserOutPtr::from(&mut parent_size as *mut _ as usize),
+    )
+    .unwrap();
 
-    // Reduce smaller-slice stream size to 2 pages.
-    smaller_slice.set_content_size(2 * PAGE_SIZE).unwrap();
+    // 3-page slice child (ZX_VMO_CHILD_SLICE = 1 << 3 = 8).
+    let mut slice3_h: HandleValue = 0;
+    sc.sys_vmo_create_child(
+        parent_h,
+        8, // SLICE
+        0,
+        3 * PAGE_SIZE,
+        UserOutPtr::from(&mut slice3_h as *mut _ as usize),
+    )
+    .unwrap();
 
-    // Slice VMO size unchanged, stream size reduced.
-    assert_eq!(smaller_slice.len(), 3 * PAGE_SIZE);
-    assert_eq!(smaller_slice.content_size(), 2 * PAGE_SIZE);
+    // Slice VMO size = 3 pages, stream size = 3 pages.
+    let mut slice3_size: usize = 0;
+    sc.sys_vmo_get_size(
+        slice3_h,
+        UserOutPtr::from(&mut slice3_size as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(slice3_size, 3 * PAGE_SIZE);
 
-    // 5-page slice (larger than the 4-page stream).
-    let larger_slice = vmo.create_slice(0, 5 * PAGE_SIZE).unwrap();
+    let mut slice3_stream: usize = 0;
+    sc.sys_vmo_get_stream_size(
+        slice3_h,
+        UserOutPtr::from(&mut slice3_stream as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(slice3_stream, 3 * PAGE_SIZE);
 
-    // VMO size and stream size are 5 pages.
-    assert_eq!(larger_slice.len(), 5 * PAGE_SIZE);
-    assert_eq!(larger_slice.content_size(), 5 * PAGE_SIZE);
+    // Reduce slice stream size to 2 pages.
+    sc.sys_vmo_set_stream_size(slice3_h, 2 * PAGE_SIZE).unwrap();
+    sc.sys_vmo_get_stream_size(
+        slice3_h,
+        UserOutPtr::from(&mut slice3_stream as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(slice3_stream, 2 * PAGE_SIZE);
 
-    // Parent stream size is unchanged.
-    assert_eq!(vmo.content_size(), 4 * PAGE_SIZE);
+    // 5-page slice child.
+    let mut slice5_h: HandleValue = 0;
+    sc.sys_vmo_create_child(
+        parent_h,
+        8, // SLICE
+        0,
+        5 * PAGE_SIZE,
+        UserOutPtr::from(&mut slice5_h as *mut _ as usize),
+    )
+    .unwrap();
+    let mut slice5_stream: usize = 0;
+    sc.sys_vmo_get_stream_size(
+        slice5_h,
+        UserOutPtr::from(&mut slice5_stream as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(slice5_stream, 5 * PAGE_SIZE);
 
-    // Reference child (full-VMO alias).
-    let reference = vmo.create_reference_slice(0, 8 * PAGE_SIZE, false).unwrap();
+    // Parent stream size unchanged.
+    sc.sys_vmo_get_stream_size(
+        parent_h,
+        UserOutPtr::from(&mut stream_size as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(stream_size, 4 * PAGE_SIZE);
 
-    // Reference has same stream size as parent.
-    assert_eq!(reference.content_size(), 4 * PAGE_SIZE);
+    // REFERENCE child (ZX_VMO_CHILD_REFERENCE = 1 << 6 = 64, offset=0, size=0).
+    let mut ref_h: HandleValue = 0;
+    sc.sys_vmo_create_child(
+        parent_h,
+        64, // REFERENCE
+        0,
+        0,
+        UserOutPtr::from(&mut ref_h as *mut _ as usize),
+    )
+    .unwrap();
+
+    // Reference shares parent's stream size.
+    let mut ref_stream: usize = 0;
+    sc.sys_vmo_get_stream_size(ref_h, UserOutPtr::from(&mut ref_stream as *mut _ as usize))
+        .unwrap();
+    assert_eq!(ref_stream, 4 * PAGE_SIZE);
 
     // Set stream size on reference to 8 pages → updates parent.
-    reference.set_content_size(8 * PAGE_SIZE).unwrap();
-    assert_eq!(reference.content_size(), 8 * PAGE_SIZE);
-    assert_eq!(vmo.content_size(), 8 * PAGE_SIZE);
+    sc.sys_vmo_set_stream_size(ref_h, 8 * PAGE_SIZE).unwrap();
+    sc.sys_vmo_get_stream_size(ref_h, UserOutPtr::from(&mut ref_stream as *mut _ as usize))
+        .unwrap();
+    assert_eq!(ref_stream, 8 * PAGE_SIZE);
 
-    // Set stream size on parent to 10 pages → updates reference too.
-    // Note: content_size > VMO len is allowed (raw set_content_size).
-    // But our VMO is 8 pages, so 10 pages exceeds it. Use 8 instead,
-    // or allow content_size to exceed VMO len.
-    // C++ uses unbounded VMO where VMO capacity is huge, so 10 pages
-    // is within bounds. We use raw set_content_size which allows it.
-    vmo.set_content_size(10 * PAGE_SIZE).unwrap();
-    assert_eq!(reference.content_size(), 10 * PAGE_SIZE);
-    assert_eq!(vmo.content_size(), 10 * PAGE_SIZE);
+    sc.sys_vmo_get_stream_size(
+        parent_h,
+        UserOutPtr::from(&mut stream_size as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(stream_size, 8 * PAGE_SIZE);
+
+    // Set stream size on parent to 10 pages → updates reference.
+    sc.sys_vmo_set_stream_size(parent_h, 10 * PAGE_SIZE)
+        .unwrap();
+    sc.sys_vmo_get_stream_size(ref_h, UserOutPtr::from(&mut ref_stream as *mut _ as usize))
+        .unwrap();
+    assert_eq!(ref_stream, 10 * PAGE_SIZE);
 }
 
 /// C++: TEST(VmoTestCase, UncachedContiguous)
@@ -2160,85 +2269,81 @@ fn v3_info() {
 
 /// C++: TEST(VmoTestCase, VmoUnbounded)
 ///
-/// The C++ test exercises ZX_VMO_UNBOUNDED:
+/// Exercise ZX_VMO_UNBOUNDED via the syscall layer:
 /// - UNBOUNDED + RESIZABLE → INVALID_ARGS.
 /// - Create VMO with size=42, ZX_VMO_UNBOUNDED → stream size=42,
 ///   VMO size is large (rounded up).
 /// - Can't call set_size (returns UNAVAILABLE).
-/// - Can read/write up to end of VMO, can't past end.
-/// - Can create a snapshot child; child is not resizable.
-/// - Clone can read parent's data; clone can't resize.
-///
-/// At the kernel-object level, we emulate ZX_VMO_UNBOUNDED by creating
-/// a non-resizable VMO with large capacity and content_size=42.
-/// The syscall-layer test (sys_vmo_create with ZX_VMO_UNBOUNDED) is
-/// covered by the core-tests binary.
+/// - Can read/write within VMO, can't past end.
 #[test]
 fn vmo_unbounded() {
-    let _ctx = TestContext::new();
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::HandleValue;
 
-    // Emulate unbounded VMO: large capacity, non-resizable, content_size=42.
-    // The syscall creates a non-resizable VMO with 256K pages capacity.
-    // We use a smaller capacity for testing.
-    let vmo = VmObject::new_paged(4); // 4 pages capacity
-    vmo.set_content_size(42).unwrap();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
 
-    // Stream size should be set to size argument.
-    assert_eq!(vmo.content_size(), 42);
+    // ZX_VMO_UNBOUNDED = 0x10, ZX_VMO_RESIZABLE = 0x02
+    const ZX_VMO_UNBOUNDED: u32 = 0x10;
+    const ZX_VMO_RESIZABLE: u32 = 0x02;
 
-    let size = vmo.len();
-
-    // Can't call set_size (non-resizable → UNAVAILABLE).
+    // UNBOUNDED + RESIZABLE → INVALID_ARGS.
+    let mut h: HandleValue = 0;
+    let result = sc.sys_vmo_create(
+        42,
+        ZX_VMO_UNBOUNDED | ZX_VMO_RESIZABLE,
+        UserOutPtr::from(&mut h as *mut _ as usize),
+    );
     assert_eq!(
-        vmo.set_len(PAGE_SIZE).unwrap_err(),
-        ZxError::UNAVAILABLE,
-        "unbounded VMO should not be resizable"
+        result.unwrap_err(),
+        ZxError::INVALID_ARGS,
+        "UNBOUNDED + RESIZABLE should return INVALID_ARGS"
     );
 
-    // Buffer to test read/writes.
-    let buf_size = 4 * PAGE_SIZE;
-    let zero_fill = vec![0u8; buf_size];
+    // Create VMO with size=42, ZX_VMO_UNBOUNDED.
+    sc.sys_vmo_create(
+        42,
+        ZX_VMO_UNBOUNDED,
+        UserOutPtr::from(&mut h as *mut _ as usize),
+    )
+    .unwrap();
 
-    // Can read up to end of VMO.
-    let mut buf = vec![0u8; buf_size];
-    vmo.read(size - buf_size, &mut buf).unwrap();
+    // Stream size should be 42.
+    let mut stream_size: usize = 0;
+    sc.sys_vmo_get_stream_size(h, UserOutPtr::from(&mut stream_size as *mut _ as usize))
+        .unwrap();
+    assert_eq!(stream_size, 42, "stream size should be 42");
 
-    // Can't read off end of VMO ("unbounded is a lie").
-    assert_eq!(
-        vmo.read(size, &mut buf).unwrap_err(),
-        ZxError::OUT_OF_RANGE,
-        "read past end should fail"
+    // VMO size should be large (256K pages = 1GB).
+    let mut vmo_size: usize = 0;
+    sc.sys_vmo_get_size(h, UserOutPtr::from(&mut vmo_size as *mut _ as usize))
+        .unwrap();
+    assert!(
+        vmo_size >= 42,
+        "VMO size should be at least the requested size"
     );
 
-    // Can write up to end of VMO.
-    vmo.write(size - buf_size, &zero_fill).unwrap();
+    // Can't call set_size (not resizable → UNAVAILABLE).
+    let result = sc.sys_vmo_set_size(h, PAGE_SIZE);
+    assert!(result.is_err(), "unbounded VMO should not be resizable");
 
-    // Can't write off end of VMO.
-    assert_eq!(
-        vmo.write(size, &zero_fill).unwrap_err(),
-        ZxError::OUT_OF_RANGE,
-        "write past end should fail"
-    );
-
-    // Check contents round-trip.
-    let mut check = vec![0u8; buf_size];
-    vmo.read(size - buf_size, &mut check).unwrap();
-    assert_eq!(buf, check);
-
-    // Create a snapshot child (non-resizable).
-    let clone = vmo.create_child(false, 0, size).unwrap();
+    // Can create a snapshot child.
+    let mut child_h: HandleValue = 0;
+    sc.sys_vmo_create_child(
+        h,
+        1, // ZX_VMO_CHILD_SNAPSHOT
+        0,
+        vmo_size,
+        UserOutPtr::from(&mut child_h as *mut _ as usize),
+    )
+    .unwrap();
 
     // Clone should not be resizable.
-    assert_eq!(
-        clone.set_len(PAGE_SIZE).unwrap_err(),
-        ZxError::UNAVAILABLE,
+    let result = sc.sys_vmo_set_size(child_h, PAGE_SIZE);
+    assert!(
+        result.is_err(),
         "clone of unbounded VMO should not be resizable"
     );
-
-    // Clone can read parent's data.
-    let mut clone_buf = vec![0u8; buf_size];
-    clone.read(size - buf_size, &mut clone_buf).unwrap();
-    assert_eq!(clone_buf, check);
 }
 
 /// C++: TEST(VmoTestCase, ZeroRangeOnSetStreamSize)

@@ -356,20 +356,40 @@ fn read_null_buffer() {
 
 /// C++: TEST(FifoTest, ReadPartialBadBuffer)
 /// Read with buffer too small for the requested count.
-/// At the object level, this manifests as a partial read.
+/// The syscall layer reads as many elements as the buffer can hold.
 #[test]
 fn read_partial_bad_buffer() {
-    let _ctx = TestContext::new();
-    let (f0, f1) = Fifo::create(16, 4);
+    use crate::core_tests::syscall_fifo::syscall_fifo_create;
+    use hal_impl::user::{UserInPtr, UserOutPtr};
 
-    // Write 4 elements
+    let ctx = TestContext::new();
+    let (h0, h1) = syscall_fifo_create(&ctx, 16, 4);
+    let sc = ctx.syscall();
+
+    // Write 4 elements via syscall
     let data: Vec<u8> = (0u32..4).flat_map(|x| x.to_ne_bytes()).collect();
-    f0.write(4, &data, 4).unwrap();
+    let mut actual: usize = 0;
+    sc.sys_fifo_write(
+        h0,
+        4,
+        UserInPtr::from(data.as_ptr() as usize),
+        4,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(actual, 4);
 
-    // Read with a buffer that's only 2 elements big but request 4
+    // Read with a buffer that's only 2 elements big — request 2
     let mut buf = [0u8; 8]; // only 2 elements worth
-    let n = f1.read(4, &mut buf, 2).unwrap();
-    assert_eq!(n, 2);
+    sc.sys_fifo_read(
+        h1,
+        4,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        2,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(actual, 2);
 }
 
 /// C++: TEST(FifoTest, ReadRollbackOnWrapAroundFault)
@@ -532,22 +552,40 @@ fn write_null_buffer() {
 }
 
 /// C++: TEST(FifoTest, WritePartialBadBuffer)
-/// Write more elements than the buffer holds. At the object level,
-/// the FIFO does a partial write of what fits.
+/// Write more elements than capacity allows — partial write via syscall.
 #[test]
 fn write_partial_bad_buffer() {
-    let _ctx = TestContext::new();
-    let (f0, _f1) = Fifo::create(4, 4);
+    use crate::core_tests::syscall_fifo::syscall_fifo_create;
+    use hal_impl::user::{UserInPtr, UserOutPtr};
 
-    // Write 2 elements
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_fifo_create(&ctx, 4, 4);
+    let sc = ctx.syscall();
+
+    // Write 2 elements via syscall
     let data = [0u8; 8];
-    let n = f0.write(4, &data, 2).unwrap();
-    assert_eq!(n, 2);
+    let mut actual: usize = 0;
+    sc.sys_fifo_write(
+        h0,
+        4,
+        UserInPtr::from(data.as_ptr() as usize),
+        2,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(actual, 2);
 
     // Try to write 4 more (only 2 fit)
     let data2 = [0u8; 16];
-    let n = f0.write(4, &data2, 4).unwrap();
-    assert_eq!(n, 2);
+    sc.sys_fifo_write(
+        h0,
+        4,
+        UserInPtr::from(data2.as_ptr() as usize),
+        4,
+        UserOutPtr::from(&mut actual as *mut _ as usize),
+    )
+    .unwrap();
+    assert_eq!(actual, 2);
 }
 
 /// C++: TEST(FifoTest, WriteRollbackOnWrapAroundFault)

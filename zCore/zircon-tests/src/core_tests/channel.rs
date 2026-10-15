@@ -258,18 +258,36 @@ fn read_and_write_with_multiple_sizes() {
 }
 
 /// C++: TEST(ChannelTest, CreateInvalidOptionsReturnsInvalidArgs)
-/// In the C++ test, passing non-zero options to zx_channel_create fails.
-/// Our kernel object Channel::create() doesn't take options, so this test
-/// verifies the kernel-level invariant differently — the syscall layer
-/// would validate options.
+/// In the C++ test, passing non-zero options to zx_channel_create fails
+/// with ZX_ERR_INVALID_ARGS. Exercise the syscall layer validation.
 #[test]
 fn create_invalid_options_returns_invalid_args() {
-    let _ctx = TestContext::new();
-    // Channel::create() always succeeds at the object level.
-    // The options check is in the syscall dispatch layer.
-    // This test documents that the object API has no invalid state.
-    let (local, remote) = Channel::create();
-    assert_ne!(local.id(), remote.id());
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::HandleValue;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let mut h0: HandleValue = 0;
+    let mut h1: HandleValue = 0;
+
+    // Non-zero options should fail with INVALID_ARGS
+    let result = sc.sys_channel_create(
+        1,
+        UserOutPtr::from(&mut h0 as *mut _ as usize),
+        UserOutPtr::from(&mut h1 as *mut _ as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+
+    // Zero options should succeed
+    sc.sys_channel_create(
+        0,
+        UserOutPtr::from(&mut h0 as *mut _ as usize),
+        UserOutPtr::from(&mut h1 as *mut _ as usize),
+    )
+    .unwrap();
+    assert_ne!(h0, 0);
+    assert_ne!(h1, 0);
+    assert_ne!(h0, h1);
 }
 
 /// C++: TEST(ChannelTest, NestingIsOk)
@@ -404,27 +422,35 @@ fn write_short_payloads_succeeds() {
 }
 
 /// C++: TEST(ChannelTest, WriteSelfHandleReturnsNotSupported)
+/// Writing a channel's own handle through itself is rejected by the
+/// syscall layer with NOT_SUPPORTED.
 #[test]
 fn write_self_handle_returns_not_supported() {
-    let _ctx = TestContext::new();
+    use crate::core_tests::syscall_channel::syscall_channel_create;
+    use hal_impl::user::UserInPtr;
 
-    let (local, _remote) = Channel::create();
-    let h = Handle::new(local.clone(), Rights::DEFAULT_CHANNEL);
+    let ctx = TestContext::new();
+    let (h0, _h1) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
 
-    // Writing the channel's own handle through itself.
-    // At the kernel object level, zCore accepts this (the handle is
-    // consumed into the message). The NOT_SUPPORTED check is enforced
-    // in the syscall layer (sys_channel_write). Here we verify it
-    // doesn't deadlock or panic, and the write succeeds at this level.
-    let result = local.write(MessagePacket {
-        data: vec![],
-        handles: vec![h],
-    });
-    // zCore's kernel object layer accepts self-handle writes
-    assert!(
-        result.is_ok() || result == Err(ZxError::NOT_SUPPORTED),
-        "expected Ok or NOT_SUPPORTED, got {:?}",
-        result
+    // C++: ASSERT_EQ(zx_channel_write(local, 0, nullptr, 0, &local, 1),
+    //               ZX_ERR_NOT_SUPPORTED);
+    // Write the channel's own handle through itself — syscall layer
+    // detects self-transfer and returns NOT_SUPPORTED. The handle is
+    // consumed (removed from the process handle table) regardless.
+    let handles = [h0]; // writing the channel's own handle value
+    let result = sc.sys_channel_write(
+        h0,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        UserInPtr::from(handles.as_ptr() as usize),
+        1,
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+        "writing channel's own handle through itself should return NOT_SUPPORTED"
     );
 }
 
@@ -540,102 +566,158 @@ fn wait_many_is_signaled_for_both_writes() {
 }
 
 /// C++: TEST(ChannelTest, ReadMayDiscardWithSmallerBufferDiscardHandlesAndDateReturnsBufferTooSmall)
-/// When check_and_read's checker rejects a message due to insufficient buffer,
-/// the message is preserved (at the object level, no MAY_DISCARD flag).
+/// Reading with MAY_DISCARD and a buffer too small discards the message
+/// and returns BUFFER_TOO_SMALL with actual sizes reported.
 #[test]
 fn read_may_discard_with_smaller_buffer() {
-    let _ctx = TestContext::new();
-    let (local, remote) = Channel::create();
+    use crate::core_tests::syscall_channel::syscall_channel_create;
+    use hal_impl::user::{UserInPtr, UserOutPtr};
 
-    // Write a message with data and a handle.
+    let ctx = TestContext::new();
+    let (h_local, h_remote) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Write a message with 32 bytes of data and 1 handle (event).
     let event = Event::new();
-    local
-        .write(MessagePacket {
-            data: vec![0xAA; 32],
-            handles: vec![Handle::new(event, Rights::DEFAULT_EVENT)],
-        })
-        .unwrap();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+    let data = vec![0xAA_u8; 32];
+    let handles = [event_h];
+    sc.sys_channel_write(
+        h_local,
+        0,
+        UserInPtr::from(data.as_ptr() as usize),
+        data.len() as u32,
+        UserInPtr::from(handles.as_ptr() as usize),
+        1,
+    )
+    .unwrap();
 
-    // Simulate a "smaller buffer" read by rejecting via check_and_read.
-    let result = remote.check_and_read(|msg| {
-        // Caller's buffer is "too small" for the message's data.
-        assert_eq!(msg.data.len(), 32);
-        assert_eq!(msg.handles.len(), 1);
-        Err(ZxError::BUFFER_TOO_SMALL)
-    });
+    // C++: Read with MAY_DISCARD (flag=1) and a buffer too small (16 bytes
+    // for 32-byte message). Should return BUFFER_TOO_SMALL and report
+    // actual sizes. With MAY_DISCARD, the message is discarded.
+    let mut buf = [0u8; 16]; // too small for 32-byte message
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = sc.sys_channel_read(
+        h_remote,
+        1, // ZX_CHANNEL_READ_MAY_DISCARD
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        0, // no handles buffer
+        buf.len() as u32,
+        0,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        false,
+    );
     assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
-
-    // Message should still be in the queue — READABLE still set.
-    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
-    let msg = remote.read().unwrap();
-    assert_eq!(msg.data.len(), 32);
-    assert_eq!(msg.handles.len(), 1);
+    assert_eq!(
+        actual_bytes, 32,
+        "actual_bytes should report real message size"
+    );
+    assert_eq!(
+        actual_handles, 1,
+        "actual_handles should report real handle count"
+    );
 }
 
 /// C++: TEST(ChannelTest, ReadMayDiscardWithNullBufferDiscardHandlesReturnsBufferTooSmall)
-/// When check_and_read rejects a message because the caller has no buffer
-/// for handles, BUFFER_TOO_SMALL is returned and the message is preserved.
+/// Reading with MAY_DISCARD and no handles buffer discards the message
+/// containing handles and returns BUFFER_TOO_SMALL.
 #[test]
 fn read_may_discard_with_null_buffer_discard_handles_returns_buffer_too_small() {
-    let _ctx = TestContext::new();
-    let (local, remote) = Channel::create();
+    use crate::core_tests::syscall_channel::syscall_channel_create;
+    use hal_impl::user::{UserInPtr, UserOutPtr};
 
-    // Write a message with a handle.
+    let ctx = TestContext::new();
+    let (h_local, h_remote) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Write a message with a handle (no data).
     let event = Event::new();
-    local
-        .write(MessagePacket {
-            data: vec![],
-            handles: vec![Handle::new(event, Rights::DEFAULT_EVENT)],
-        })
-        .unwrap();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+    let handles = [event_h];
+    sc.sys_channel_write(
+        h_local,
+        0,
+        UserInPtr::from(0usize),
+        0,
+        UserInPtr::from(handles.as_ptr() as usize),
+        1,
+    )
+    .unwrap();
 
-    // Simulate "null buffer" by rejecting via check_and_read.
-    let result = remote.check_and_read(|msg| {
-        if !msg.handles.is_empty() {
-            return Err(ZxError::BUFFER_TOO_SMALL);
-        }
-        Ok(())
-    });
+    // C++: Read with MAY_DISCARD, data buffer but no handles buffer.
+    // Message has 1 handle so read fails with BUFFER_TOO_SMALL.
+    // With MAY_DISCARD the message is discarded.
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = sc.sys_channel_read(
+        h_remote,
+        1,                        // ZX_CHANNEL_READ_MAY_DISCARD
+        UserOutPtr::from(0usize), // null data buffer
+        0,                        // no handles buffer
+        0,
+        0,
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        false,
+    );
     assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
-
-    // Message should still be queued.
-    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
-    let msg = remote.read().unwrap();
-    assert_eq!(msg.handles.len(), 1);
+    assert_eq!(actual_bytes, 0, "message had no data bytes");
+    assert_eq!(actual_handles, 1, "actual_handles should report 1");
 }
 
 /// C++: TEST(ChannelTest, ReadMayDiscardWithZeroSizeBuffersDiscardHandlesAndDataReturnsBufferTooSmall)
-/// When check_and_read rejects a non-empty message with zero-size buffers,
-/// BUFFER_TOO_SMALL is returned and the message is preserved.
+/// Reading with MAY_DISCARD and zero-size buffers discards a message
+/// with data+handles, returns BUFFER_TOO_SMALL with actual sizes.
 #[test]
 fn read_may_discard_with_zero_size_buffers() {
-    let _ctx = TestContext::new();
-    let (local, remote) = Channel::create();
+    use crate::core_tests::syscall_channel::syscall_channel_create;
+    use hal_impl::user::{UserInPtr, UserOutPtr};
 
-    // Write a message with data and a handle.
+    let ctx = TestContext::new();
+    let (h_local, h_remote) = syscall_channel_create(&ctx);
+    let sc = ctx.syscall();
+
+    // Write a message with 16 bytes of data and 1 handle.
     let event = Event::new();
-    local
-        .write(MessagePacket {
-            data: vec![0xBB; 16],
-            handles: vec![Handle::new(event, Rights::DEFAULT_EVENT)],
-        })
-        .unwrap();
+    let event_h = ctx
+        .proc
+        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+    let data = vec![0xBB_u8; 16];
+    let handles = [event_h];
+    sc.sys_channel_write(
+        h_local,
+        0,
+        UserInPtr::from(data.as_ptr() as usize),
+        data.len() as u32,
+        UserInPtr::from(handles.as_ptr() as usize),
+        1,
+    )
+    .unwrap();
 
-    // Reject with zero-size buffers.
-    let result = remote.check_and_read(|msg| {
-        // "Zero-size" buffers cannot accommodate anything.
-        if !msg.data.is_empty() || !msg.handles.is_empty() {
-            return Err(ZxError::BUFFER_TOO_SMALL);
-        }
-        Ok(())
-    });
+    // C++: Read with MAY_DISCARD and zero-size buffers (num_bytes=0,
+    // num_handles=0). Message has data+handle so it can't fit.
+    let mut actual_bytes: u32 = 0;
+    let mut actual_handles: u32 = 0;
+    let result = sc.sys_channel_read(
+        h_remote,
+        1,                        // ZX_CHANNEL_READ_MAY_DISCARD
+        UserOutPtr::from(0usize), // null data buffer
+        0,                        // no handles buffer
+        0,                        // zero data capacity
+        0,                        // zero handles capacity
+        UserOutPtr::from(&mut actual_bytes as *mut _ as usize),
+        UserOutPtr::from(&mut actual_handles as *mut _ as usize),
+        false,
+    );
     assert_eq!(result.unwrap_err(), ZxError::BUFFER_TOO_SMALL);
-
-    // Message is still queued.
-    assert_eq!(remote.signal(), Signal::WRITABLE | Signal::READABLE);
-    let msg = remote.read().unwrap();
-    assert_eq!(msg.data, vec![0xBB; 16]);
-    assert_eq!(msg.handles.len(), 1);
+    assert_eq!(actual_bytes, 16, "actual_bytes should report 16");
+    assert_eq!(actual_handles, 1, "actual_handles should report 1");
 }
 
 // ── Tests requiring infrastructure not yet available ────────────────

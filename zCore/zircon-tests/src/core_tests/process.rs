@@ -129,50 +129,115 @@ fn empty_name_succeeds() {
 
 /// C++: TEST(ProcessTest, LongNameSucceeds)
 /// Creating a process with a name longer than ZX_MAX_NAME_LEN (32)
-/// should succeed. The kernel stores (and possibly truncates) the
-/// name without error.
+/// should succeed. The syscall layer truncates to ZX_MAX_NAME_LEN - 1.
 #[test]
 fn long_name_succeeds() {
-    let _ctx = TestContext::new();
+    use hal_impl::user::{UserInPtr, UserOutPtr};
+    use zircon_object::object::HandleValue;
+
+    let ctx = TestContext::new();
+
+    // Add the root job to the handle table
     let job = Job::root();
+    let job_h = ctx
+        .proc
+        .add_handle(Handle::new(job, Rights::MANAGE_PROCESS | Rights::WRITE));
+
+    let sc = ctx.syscall();
+
     // 80-character name, well beyond ZX_MAX_NAME_LEN (32)
-    let long_name = "0123456789012345678901234567890123456789\
-                     0123456789012345678901234567890123456789";
+    let long_name = b"0123456789012345678901234567890123456789\
+                      0123456789012345678901234567890123456789";
     assert!(
         long_name.len() > 31,
         "test name too short to exercise truncation"
     );
-    let proc = Process::create(&job, long_name).unwrap();
-    // At the object level the full name is stored. The syscall layer
-    // (sys_process_create) truncates to ZX_MAX_NAME_LEN - 1 chars.
-    // We just verify creation succeeded and a name is retrievable.
-    let stored = proc.name();
+
+    let mut proc_h: HandleValue = 0;
+    let mut vmar_h: HandleValue = 0;
+    sc.sys_process_create(
+        job_h,
+        UserInPtr::from(long_name.as_ptr() as usize),
+        long_name.len(),
+        0,
+        UserOutPtr::from(&mut proc_h as *mut _ as usize),
+        UserOutPtr::from(&mut vmar_h as *mut _ as usize),
+    )
+    .unwrap();
+    assert_ne!(proc_h, 0);
+
+    // Verify the name was truncated by the syscall layer to <= 31 chars
+    let created_proc = ctx.proc.get_object::<Process>(proc_h).unwrap();
+    let stored = created_proc.name();
     assert!(!stored.is_empty(), "process should have a non-empty name");
-    // The stored name should start with the same prefix as long_name
     assert!(
-        long_name.starts_with(&stored) || stored.starts_with(&long_name[..31]),
-        "stored name should be a prefix of or match long_name"
+        stored.len() <= 32,
+        "syscall layer should truncate name to ZX_MAX_NAME_LEN, got len={}",
+        stored.len()
+    );
+    // The stored name should be a prefix of long_name
+    assert!(
+        core::str::from_utf8(long_name)
+            .unwrap()
+            .starts_with(&stored),
+        "stored name {:?} should be a prefix of long_name",
+        stored
     );
 }
 
 // ── Batch 3: 25 missing ProcessTest ports from process.cc ──────────
 
 /// C++: TEST(ProcessTest, GetRuntimeNoPermission)
-/// Getting runtime info without INSPECT right returns ACCESS_DENIED.
+/// Getting runtime info without INSPECT right returns ACCESS_DENIED
+/// at the syscall level.
 #[test]
 fn get_runtime_no_permission() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
     let job = Job::root();
     let proc = Process::create(&job, "no-perm").unwrap();
+    let sc = ctx.syscall();
 
-    // At the object level, get_info has no rights check (that's syscall
-    // layer). We verify the object-level call always succeeds.
-    let _info = proc.get_info();
+    // Add a handle WITHOUT INSPECT right (remove INSPECT from BASIC)
+    let no_inspect_rights = Rights::DEFAULT_PROCESS - Rights::INSPECT;
+    let no_inspect_h = ctx
+        .proc
+        .add_handle(Handle::new(proc.clone(), no_inspect_rights));
 
-    // The actual ACCESS_DENIED check happens in sys_object_get_info
-    // when the handle lacks ZX_RIGHT_INSPECT. We verify the process
-    // is correctly created and info is retrievable.
-    assert_eq!(proc.get_info().return_code, 0);
+    // ZX_INFO_PROCESS = topic 3 — requires INSPECT right
+    let mut buf = [0u8; 32];
+    let mut actual: usize = 0;
+    let mut avail: usize = 0;
+    let result = sc.sys_object_get_info(
+        no_inspect_h,
+        3, // ZX_INFO_PROCESS
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        hal_impl::user::UserOutPtr::from(&mut actual as *mut _ as usize),
+        hal_impl::user::UserOutPtr::from(&mut avail as *mut _ as usize),
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        ZxError::ACCESS_DENIED,
+        "get_info without INSPECT right should return ACCESS_DENIED"
+    );
+
+    // With INSPECT right, it should succeed
+    let inspect_h = ctx
+        .proc
+        .add_handle(Handle::new(proc.clone(), Rights::DEFAULT_PROCESS));
+    let result = sc.sys_object_get_info(
+        inspect_h,
+        3, // ZX_INFO_PROCESS
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        hal_impl::user::UserOutPtr::from(&mut actual as *mut _ as usize),
+        hal_impl::user::UserOutPtr::from(&mut avail as *mut _ as usize),
+    );
+    assert!(
+        result.is_ok(),
+        "get_info with INSPECT right should succeed: {:?}",
+        result
+    );
 }
 
 /// C++: TEST(ProcessTest, MiniProcessSanity)
@@ -238,39 +303,26 @@ async fn process_start_no_handle() {
 }
 
 /// C++: TEST(ProcessTest, ProcessStartNonUserspaceEntry)
-/// Starting a process with non-userspace entry point returns
-/// INVALID_ARGS at the syscall layer. We test the object-level
-/// start_with_entry which doesn't validate addresses.
+/// Starting a process with a kernel-space entry point returns
+/// INVALID_ARGS at the syscall layer.
 #[test]
 fn process_start_non_userspace_entry() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "non-uspace").unwrap();
-    let thread = Thread::create(&proc, "t1").unwrap();
-
-    // The kernel-level API sets up context without address validation.
-    // We verify the context can be set with arbitrary values.
-    thread
-        .with_context(|ctx| ctx.setup_uspace(0xFFFF_FFFF_FFFF_0000, 0x8000, &[0, 0, 0]))
-        .unwrap();
-
-    // The syscall layer (sys_thread_start / sys_process_start) is what
-    // validates the entry address. We verify with the syscall:
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
-    let job2 = Job::root();
-    let proc2 = Process::create(&job2, "kern-entry").unwrap();
-    let thread2 = Thread::create(&proc2, "t1").unwrap();
+    let job = Job::root();
+    let proc = Process::create(&job, "kern-entry").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
 
     let _proc_h = ctx
         .proc
-        .add_handle(Handle::new(proc2.clone(), Rights::DEFAULT_PROCESS));
+        .add_handle(Handle::new(proc.clone(), Rights::DEFAULT_PROCESS));
     let thread_h = ctx
         .proc
-        .add_handle(Handle::new(thread2, Rights::DEFAULT_THREAD));
+        .add_handle(Handle::new(thread, Rights::DEFAULT_THREAD));
 
-    // Kernel-space entry (high address) should fail
+    // Kernel-space entry (high address) should be rejected by the
+    // syscall layer with INVALID_ARGS.
     let result = sc.sys_thread_start(
         thread_h,
         0xFFFF_8000_0000_0000, // kernel-space address
@@ -278,7 +330,6 @@ fn process_start_non_userspace_entry() {
         0,
         0,
     );
-    // May return INVALID_ARGS if the implementation validates
     if let Err(e) = result {
         assert!(
             e == ZxError::INVALID_ARGS || e == ZxError::BAD_STATE,
@@ -304,11 +355,11 @@ async fn process_start_fail() {
     thread1.start(helpers::test_loop_thread_fn).unwrap();
     async_std::task::yield_now().await;
 
-    // Second thread start should also succeed at the object level
-    // (Thread::start doesn't check process state). But in Fuchsia,
-    // process_start on an already-started process would fail.
+    // In Fuchsia, zx_process_start on an already-started process
+    // returns BAD_STATE. zCore does not yet implement the separate
+    // sys_process_start syscall that enforces this check. Thread::start
+    // always succeeds at the kernel level. Document current behavior.
     let result = thread2.start(helpers::test_loop_thread_fn);
-    // Document current behavior: object-level start always succeeds
     let _ = result; // may or may not error
 
     // Clean up
@@ -502,20 +553,30 @@ async fn suspend() {
 }
 
 /// C++: TEST(ProcessTest, SuspendSelf)
-/// Suspending the current process returns NOT_SUPPORTED.
+/// Suspending the current process (self) via the syscall layer
+/// returns NOT_SUPPORTED because the calling thread would be
+/// suspended, deadlocking the syscall.
 #[test]
 fn suspend_self() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "suspend-self").unwrap();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
 
-    // At the object level, suspend is always callable. The
-    // ZX_ERR_NOT_SUPPORTED check for self-suspend happens at the
-    // syscall layer when the handle refers to the calling process.
-    // We verify the object-level suspend doesn't panic.
-    use zircon_object::task::Task;
-    proc.suspend();
-    proc.resume();
+    // Add a handle to the test context's own process (self).
+    let self_proc_h = ctx
+        .proc
+        .add_handle(Handle::new(ctx.proc.clone(), Rights::DEFAULT_PROCESS));
+
+    // C++: ASSERT_EQ(zx_task_suspend_token(self, &token), ZX_ERR_NOT_SUPPORTED)
+    let mut token_h: u32 = 0;
+    let result = sc.sys_task_suspend_token(
+        self_proc_h,
+        hal_impl::user::UserOutPtr::from(&mut token_h as *mut _ as usize),
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        ZxError::NOT_SUPPORTED,
+        "suspending own process should return NOT_SUPPORTED"
+    );
 }
 
 /// C++: TEST(ProcessTest, SuspendMultipleThreads)
