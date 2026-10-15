@@ -1769,6 +1769,7 @@ impl VmMapping {
     /// Temporarily used for development. A standard procedure for
     /// vmo is: create_vmo, op_range(commit), map
     fn map(self: &Arc<Self>) -> ZxResult {
+        let vmo_pages = self.vmo.len() / PAGE_SIZE;
         self.vmo.commit_pages_with(&mut |commit| {
             let inner = self.inner.lock();
             let mut page_table = self.page_table.lock();
@@ -1779,6 +1780,12 @@ impl VmMapping {
             // Root VMOs need WRITE to work correctly with eager map.
             let is_cow = self.vmo.parent().is_some();
             for i in 0..page_num {
+                // Skip pages beyond the VMO's current size. For resizable
+                // VMOs, the mapping may be larger than the VMO — pages
+                // past the end are demand-faulted (returning OUT_OF_RANGE).
+                if vmo_offset + i >= vmo_pages {
+                    break;
+                }
                 let flags = inner.page_flags(i);
                 let commit_flags = if is_cow {
                     flags - MMUFlags::WRITE
