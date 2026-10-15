@@ -1338,16 +1338,31 @@ impl VmAddressRegion {
     /// Produces a depth-first pre-order walk:
     /// - depth 0: the VMAR itself
     /// - depth 1+: child VMARs and mappings
+    /// Get info maps entries for this VMAR and its children.
+    ///
+    /// Returns `BAD_STATE` if the VMAR is destroyed. Use
+    /// `get_info_maps_or_empty` when calling from `ZX_INFO_PROCESS_MAPS`
+    /// which must succeed even after the root VMAR is destroyed.
     pub fn get_info_maps(&self, base_depth: usize) -> ZxResult<Vec<InfoMapsEntry>> {
-        // If the VMAR is destroyed, return an empty list.
-        // Fuchsia's get_info(ZX_INFO_PROCESS_MAPS) must succeed even
-        // after the root VMAR is destroyed (ProcessTest.ForbidDestroyRootVmar).
         if self.inner.lock().is_none() {
-            return Ok(Vec::new());
+            return Err(ZxError::BAD_STATE);
         }
         let mut result = Vec::new();
         self.walk_info_maps(base_depth, &mut result);
         Ok(result)
+    }
+
+    /// Like `get_info_maps` but returns an empty list instead of
+    /// `BAD_STATE` for destroyed VMARs. Used by `ZX_INFO_PROCESS_MAPS`
+    /// which must succeed even when the root VMAR is destroyed
+    /// (ProcessTest.ForbidDestroyRootVmar).
+    pub fn get_info_maps_or_empty(&self, base_depth: usize) -> Vec<InfoMapsEntry> {
+        if self.inner.lock().is_none() {
+            return Vec::new();
+        }
+        let mut result = Vec::new();
+        self.walk_info_maps(base_depth, &mut result);
+        result
     }
 
     fn walk_info_maps(&self, depth: usize, out: &mut Vec<InfoMapsEntry>) {
