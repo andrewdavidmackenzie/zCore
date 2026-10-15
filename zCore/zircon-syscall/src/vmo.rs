@@ -336,7 +336,15 @@ impl Syscall<'_> {
                 // This matches Fuchsia behavior where SNAPSHOT_AT_LEAST_ON_WRITE
                 // on a SLICE creates the child in the parent's COW tree.
                 if let Some(parent) = vmo.parent() {
-                    let adjusted_offset = offset + vmo.parent_offset();
+                    let end = offset
+                        .checked_add(child_size)
+                        .ok_or(ZxError::OUT_OF_RANGE)?;
+                    if end > vmo.len() {
+                        return Err(ZxError::OUT_OF_RANGE);
+                    }
+                    let adjusted_offset = offset
+                        .checked_add(vmo.parent_offset())
+                        .ok_or(ZxError::OUT_OF_RANGE)?;
                     let child = parent.create_child(resizable, adjusted_offset, child_size)?;
                     child.set_parent_ref(&vmo);
                     Ok(child)

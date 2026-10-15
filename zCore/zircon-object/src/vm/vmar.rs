@@ -862,7 +862,7 @@ impl VmAddressRegion {
                     let map_inner = map.inner.lock();
                     if map_inner.fault_beyond_stream_size {
                         let content_size = map.vmo.content_size();
-                        if vmo_offset >= content_size {
+                        if vmo_offset >= content_size || vmo_offset + op_len > content_size {
                             return Err(ZxError::OUT_OF_RANGE);
                         }
                     }
@@ -1424,53 +1424,79 @@ impl VmAddressRegion {
                 let vmo_koid = mapping.vmo_koid();
                 let page_count = m_inner.size / PAGE_SIZE;
 
-                // Iterate over contiguous protection regions within
-                // the mapping. Each region with distinct permissions
-                // gets its own InfoMapsEntry, matching Fuchsia's
-                // per-region reporting in ZX_INFO_PROCESS_MAPS.
-                let mut region_start = 0usize;
-                let mut region_flags = m_inner.page_flags(0);
-                for page_idx in 1..=page_count {
-                    let cur_flags = if page_idx < page_count {
-                        m_inner.page_flags(page_idx)
+                // Build a list of (start_page, flags) boundaries for
+                // protection regions. For eager mappings (per-page flags
+                // vec), iterate pages. For lazy mappings, use the
+                // protection_overrides BTreeMap directly (O(regions)
+                // instead of O(pages)).
+                let mut emit_entry = |start_page: usize, end_page: usize, perms: MMUFlags| {
+                    let mut mmu_flags: u32 = 0;
+                    if perms.contains(MMUFlags::READ) {
+                        mmu_flags |= 1; // ZX_VM_PERM_READ
+                    }
+                    if perms.contains(MMUFlags::WRITE) {
+                        mmu_flags |= 2; // ZX_VM_PERM_WRITE
+                    }
+                    if perms.contains(MMUFlags::EXECUTE) {
+                        mmu_flags |= 4; // ZX_VM_PERM_EXECUTE
+                    }
+                    let byte_start = start_page * PAGE_SIZE;
+                    let byte_len = (end_page - start_page) * PAGE_SIZE;
+                    items.push(Item::Mapping(InfoMapsEntry {
+                        name: m_name_buf,
+                        base: (m_inner.addr + byte_start) as u64,
+                        size: byte_len as u64,
+                        depth: (depth + 1) as u64,
+                        r#type: 3, // ZX_INFO_MAPS_TYPE_MAPPING
+                        padding: 0,
+                        mapping: InfoMapsMapping {
+                            mmu_flags,
+                            padding1: 0,
+                            vmo_koid,
+                            vmo_offset: (m_inner.vmo_offset + byte_start) as u64,
+                            committed_bytes: 0, // TODO
+                            populated_bytes: 0, // TODO
+                            ..Default::default()
+                        },
+                    }));
+                };
+
+                if m_inner.flags.is_empty() {
+                    // Lazy mapping: use protection_overrides directly.
+                    if m_inner.protection_overrides.is_empty() {
+                        // Single region covering the whole mapping.
+                        emit_entry(0, page_count, m_inner.default_flags);
                     } else {
-                        // Sentinel: force flush of the last region
-                        MMUFlags::from_bits_truncate(!region_flags.bits())
-                    };
-                    if cur_flags != region_flags {
-                        // Emit entry for region [region_start, page_idx)
-                        let perms = region_flags;
-                        let mut mmu_flags: u32 = 0;
-                        if perms.contains(MMUFlags::READ) {
-                            mmu_flags |= 1; // ZX_VM_PERM_READ
+                        // Iterate override boundaries.
+                        let mut prev_page = 0usize;
+                        let mut prev_flags = m_inner.default_flags;
+                        for (&page, &flags) in &m_inner.protection_overrides {
+                            if page > prev_page && page <= page_count {
+                                emit_entry(prev_page, page.min(page_count), prev_flags);
+                            }
+                            prev_page = page.min(page_count);
+                            prev_flags = flags;
                         }
-                        if perms.contains(MMUFlags::WRITE) {
-                            mmu_flags |= 2; // ZX_VM_PERM_WRITE
+                        if prev_page < page_count {
+                            emit_entry(prev_page, page_count, prev_flags);
                         }
-                        if perms.contains(MMUFlags::EXECUTE) {
-                            mmu_flags |= 4; // ZX_VM_PERM_EXECUTE
+                    }
+                } else {
+                    // Eager mapping: iterate per-page flags.
+                    let mut region_start = 0usize;
+                    let mut region_flags = m_inner.page_flags(0);
+                    for page_idx in 1..=page_count {
+                        let cur_flags = if page_idx < page_count {
+                            m_inner.page_flags(page_idx)
+                        } else {
+                            // Sentinel: force flush of the last region
+                            MMUFlags::from_bits_truncate(!region_flags.bits())
+                        };
+                        if cur_flags != region_flags {
+                            emit_entry(region_start, page_idx, region_flags);
+                            region_start = page_idx;
+                            region_flags = cur_flags;
                         }
-                        let region_byte_start = region_start * PAGE_SIZE;
-                        let region_byte_len = (page_idx - region_start) * PAGE_SIZE;
-                        items.push(Item::Mapping(InfoMapsEntry {
-                            name: m_name_buf,
-                            base: (m_inner.addr + region_byte_start) as u64,
-                            size: region_byte_len as u64,
-                            depth: (depth + 1) as u64,
-                            r#type: 3, // ZX_INFO_MAPS_TYPE_MAPPING
-                            padding: 0,
-                            mapping: InfoMapsMapping {
-                                mmu_flags,
-                                padding1: 0,
-                                vmo_koid,
-                                vmo_offset: (m_inner.vmo_offset + region_byte_start) as u64,
-                                committed_bytes: 0, // TODO
-                                populated_bytes: 0, // TODO
-                                ..Default::default()
-                            },
-                        }));
-                        region_start = page_idx;
-                        region_flags = cur_flags;
                     }
                 }
             }

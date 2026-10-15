@@ -93,9 +93,13 @@ impl VMObjectTrait for VMObjectPhysical {
 
     fn complete_info(&self, info: &mut VmoInfo) {
         info.flags |= VmoInfoFlags::TYPE_PHYSICAL | VmoInfoFlags::CONTIGUOUS;
-        let committed = (self.pages * PAGE_SIZE) as u64;
-        info.committed_bytes = committed;
-        info.populated_bytes = committed;
+        // Physical VMOs do not consume VMO memory — report zero
+        // for committed/populated accounting. Mark fractional scaling
+        // as unsupported (sentinel u64::MAX).
+        info.committed_bytes = 0;
+        info.populated_bytes = 0;
+        info.populated_scaled_bytes = 0;
+        info.populated_fractional_scaled_bytes = u64::MAX;
     }
 
     fn cache_policy(&self) -> CachePolicy {
