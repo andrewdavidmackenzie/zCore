@@ -299,7 +299,7 @@ fn size_align() {
     assert_eq!(child.len(), PAGE_SIZE);
 }
 
-// ── Resize tests (populated_bytes attribution) ─────────────────────
+// ── Resize tests (VmoCloneResizeTests, faithful 1:1 port of vmo-clone2.cc) ──
 
 /// Helper: create a resizable, page-tagged VMO.
 fn init_page_tagged_vmo_resizable(pages: usize) -> Arc<VmObject> {
@@ -311,38 +311,146 @@ fn init_page_tagged_vmo_resizable(pages: usize) -> Arc<VmObject> {
     vmo
 }
 
+/// Helper: write a u32 to a VMO at the given offset.
+fn vmo_write(vmo: &Arc<VmObject>, val: u32, offset: usize) {
+    vmo.write(offset, &val.to_ne_bytes()).unwrap();
+}
+
+/// Helper: read a u32 from a VMO at the given offset and assert it matches.
+fn vmo_check(vmo: &Arc<VmObject>, expected: u32, offset: usize) {
+    let mut buf = [0u8; 4];
+    vmo.read(offset, &mut buf).unwrap();
+    let actual = u32::from_ne_bytes(buf);
+    assert_eq!(
+        actual, expected,
+        "at offset {:#x}: expected {}, got {}",
+        offset, expected, actual
+    );
+}
+
+/// Core of VmoCloneResizeTests::ResizeTest (non-contiguous path).
+///
+/// C++: VmoCloneResizeTests::ResizeTest(Contiguity::NonContig, target)
+fn resize_test(resize_child_flag: bool) {
+    let _ctx = TestContext::new();
+
+    // Create a resizable VMO with 4 tagged pages and a snapshot clone.
+    let vmo = init_page_tagged_vmo_resizable(4);
+    let clone = vmo.create_child(true, 0, 4 * PAGE_SIZE).unwrap();
+
+    // Write to one page in each VMO — these become private COW pages.
+    vmo_write(&vmo, 5, PAGE_SIZE);
+    vmo_check(&vmo, 5, PAGE_SIZE);
+    vmo_write(&clone, 5, 2 * PAGE_SIZE);
+    vmo_check(&clone, 5, 2 * PAGE_SIZE);
+
+    // Pre-resize attribution: 1/2 + 1 + 1 + 1/2 = 3 pages for each VMO.
+    let pre_resize_attr = 3 * PAGE_SIZE;
+    assert_eq!(
+        vmo.get_info().vmo_populated_bytes() as usize,
+        pre_resize_attr,
+        "pre-resize parent attribution"
+    );
+    assert_eq!(
+        clone.get_info().vmo_populated_bytes() as usize,
+        pre_resize_attr,
+        "pre-resize clone attribution"
+    );
+
+    // Resize target to 1 page.
+    if resize_child_flag {
+        clone.set_len(PAGE_SIZE).unwrap();
+    } else {
+        vmo.set_len(PAGE_SIZE).unwrap();
+    }
+
+    // Check that the data in both VMOs is correct.
+    {
+        let original_size_vmo = if resize_child_flag { &vmo } else { &clone };
+        let resize_target = if resize_child_flag { &clone } else { &vmo };
+        for i in 0..4u32 {
+            let written_page_idx: u32 = if resize_child_flag { 1 } else { 2 };
+            let expected_val = if i == written_page_idx { 5 } else { i + 1 };
+            vmo_check(original_size_vmo, expected_val, i as usize * PAGE_SIZE);
+        }
+        vmo_check(resize_target, 1, 0);
+    }
+
+    // Post-resize attribution:
+    //   non-resized: 1/2 + 1 + 1 + 1 = 7/2 pages = 3.5 pages
+    //   resized:     1/2 = 0.5 pages
+    let nonresized_attr = 7 * PAGE_SIZE / 2;
+    let resized_attr = PAGE_SIZE / 2;
+    let (expected_vmo, expected_clone) = if resize_child_flag {
+        (nonresized_attr, resized_attr)
+    } else {
+        (resized_attr, nonresized_attr)
+    };
+    assert_eq!(
+        vmo.get_info().vmo_populated_bytes() as usize,
+        expected_vmo,
+        "post-resize parent attribution"
+    );
+    assert_eq!(
+        clone.get_info().vmo_populated_bytes() as usize,
+        expected_clone,
+        "post-resize clone attribution"
+    );
+
+    // Growing the shrunk VMO should expose zeros.
+    if resize_child_flag {
+        clone.set_len(2 * PAGE_SIZE).unwrap();
+        vmo_check(&clone, 0, PAGE_SIZE);
+    } else {
+        vmo.set_len(2 * PAGE_SIZE).unwrap();
+        vmo_check(&vmo, 0, PAGE_SIZE);
+    }
+
+    // Writes into the non-resized VMO don't require allocating pages.
+    if resize_child_flag {
+        vmo_write(&vmo, 6, 3 * PAGE_SIZE);
+    } else {
+        vmo_write(&clone, 6, 3 * PAGE_SIZE);
+    }
+    assert_eq!(
+        vmo.get_info().vmo_populated_bytes() as usize,
+        expected_vmo,
+        "after write to non-resized parent attribution"
+    );
+    assert_eq!(
+        clone.get_info().vmo_populated_bytes() as usize,
+        expected_clone,
+        "after write to non-resized clone attribution"
+    );
+
+    // Closing the non-resized VMO frees the inaccessible pages.
+    // The resized VMO should then have 1 private page.
+    let resized_attr_final = PAGE_SIZE;
+    if resize_child_flag {
+        drop(vmo);
+        assert_eq!(
+            clone.get_info().vmo_populated_bytes() as usize,
+            resized_attr_final,
+            "after drop: resized vmo attribution"
+        );
+    } else {
+        drop(clone);
+        assert_eq!(
+            vmo.get_info().vmo_populated_bytes() as usize,
+            resized_attr_final,
+            "after drop: resized vmo attribution"
+        );
+    }
+}
+
 /// C++: TEST_F(VmoCloneResizeTests, ResizeChild)
 #[test]
-#[ignore = "populated_bytes attribution"]
 fn resize_child() {
-    let _ctx = TestContext::new();
-    let vmo = init_page_tagged_vmo_resizable(3);
-    let child = vmo.create_child(true, 0, 3 * PAGE_SIZE).unwrap();
-
-    child.set_len(PAGE_SIZE).unwrap();
-
-    let parent_info = vmo.get_info();
-    let child_info = child.get_info();
-    // After child shrinks from 3→1 pages:
-    // - Child should only see 1 page
-    // - Parent still has all 3 pages committed, but pages 1-2 are no longer
-    //   shared with the child, so they're fully attributed to the parent.
-    assert_eq!(child_info.populated_bytes as usize, PAGE_SIZE);
-    assert_eq!(parent_info.populated_bytes as usize, 2 * PAGE_SIZE);
+    resize_test(true);
 }
 
 /// C++: TEST_F(VmoCloneResizeTests, ResizeOriginal)
 #[test]
-#[ignore = "populated_bytes attribution"]
 fn resize_original() {
-    let _ctx = TestContext::new();
-    let vmo = init_page_tagged_vmo_resizable(3);
-    let child = vmo.create_child(true, 0, 3 * PAGE_SIZE).unwrap();
-
-    vmo.set_len(PAGE_SIZE).unwrap();
-
-    let parent_info = vmo.get_info();
-    let child_info = child.get_info();
-    assert_eq!(parent_info.populated_bytes as usize, PAGE_SIZE);
-    assert_eq!(child_info.populated_bytes as usize, 2 * PAGE_SIZE);
+    resize_test(false);
 }
