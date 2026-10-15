@@ -177,14 +177,34 @@ async fn basics() {
 }
 
 /// C++: TEST(Threads, DebugRegistersDr6CorrectAfterBreakpointRemoval)
-#[ignore = "requires hardware debug registers (DR6)"]
+///
+/// Verifies that DR6 reports the correct breakpoint after another
+/// breakpoint has been removed.
+///
+/// Requires x86 DR6 debug register which is not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires x86 DR6 debug register — not available in libos mode"
+)]
 #[test]
-fn debug_registers_dr6_correct_after_breakpoint_removal() {}
+fn debug_registers_dr6_correct_after_breakpoint_removal() {
+    panic!("not yet implemented: requires x86 DR6 debug register");
+}
 
 /// C++: TEST(Threads, DebugRegistersDr6ResetOnDebugException)
-#[ignore = "requires hardware debug registers (DR6)"]
+///
+/// Verifies that DR6 is reset to its default value after a debug
+/// exception is handled.
+///
+/// Requires x86 DR6 debug register which is not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires x86 DR6 debug register — not available in libos mode"
+)]
 #[test]
-fn debug_registers_dr6_reset_on_debug_exception() {}
+fn debug_registers_dr6_reset_on_debug_exception() {
+    panic!("not yet implemented: requires x86 DR6 debug register");
+}
 
 /// C++: TEST(Threads, DebugRegistersValidation)
 /// Validate debug register state kind. Should return an error
@@ -209,9 +229,18 @@ fn debug_registers_validation() {
 }
 
 /// C++: TEST(Threads, DebugRegistersWatchpointSyscallPanicRepro)
-#[ignore = "requires hardware debug registers (watchpoints)"]
+///
+/// Reproducer for a panic when a watchpoint fires during a syscall.
+///
+/// Requires x86 debug registers (watchpoints) which are not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires x86 debug registers (watchpoints) — not available in libos mode"
+)]
 #[test]
-fn debug_registers_watchpoint_syscall_panic_repro() {}
+fn debug_registers_watchpoint_syscall_panic_repro() {
+    panic!("not yet implemented: requires x86 debug registers (watchpoints)");
+}
 
 /// C++: TEST(Threads, EmptyNameSucceeds)
 /// Creating a thread with an empty name should succeed.
@@ -460,14 +489,34 @@ fn long_name_succeeds() {
 }
 
 /// C++: TEST(Threads, NoncanonicalRipAddressIRETQ)
-#[ignore = "x86-specific: requires non-canonical address exception handling"]
+///
+/// Verifies that setting RIP to a non-canonical address via IRETQ
+/// raises a #GP exception.
+///
+/// Requires x86 non-canonical address #GP exception which is not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires x86 non-canonical address #GP exception — not available in libos mode"
+)]
 #[test]
-fn noncanonical_rip_address_iretq() {}
+fn noncanonical_rip_address_iretq() {
+    panic!("not yet implemented: requires x86 non-canonical address #GP exception");
+}
 
 /// C++: TEST(Threads, NoncanonicalRipAddressSyscall)
-#[ignore = "x86-specific: requires non-canonical address exception handling"]
+///
+/// Verifies that returning to a non-canonical address via SYSCALL
+/// raises the correct exception.
+///
+/// Requires x86 non-canonical address exception which is not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires x86 non-canonical address exception — not available in libos mode"
+)]
 #[test]
-fn noncanonical_rip_address_syscall() {}
+fn noncanonical_rip_address_syscall() {
+    panic!("not yet implemented: requires x86 non-canonical address exception");
+}
 
 /// C++: TEST(Threads, NonstartedThread)
 /// A thread that is created but never started should be killable
@@ -686,9 +735,19 @@ fn start_regs() {
 }
 
 /// C++: TEST(Threads, StartRegsNoncanonicalTp)
-#[ignore = "x86-specific: requires non-canonical TP register handling"]
+///
+/// Verifies that starting a thread with a non-canonical TP (thread
+/// pointer) register value is rejected.
+///
+/// Requires x86 non-canonical TP validation which is not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires x86 non-canonical TP validation — not available in libos mode"
+)]
 #[test]
-fn start_regs_noncanonical_tp() {}
+fn start_regs_noncanonical_tp() {
+    panic!("not yet implemented: requires x86 non-canonical TP validation");
+}
 
 /// C++: TEST(Threads, StartRegsSuspended)
 /// Start a thread with initial regs while pre-suspended. Verify
@@ -839,19 +898,17 @@ async fn suspend_channel_call() {
     peer_obj.wait_signal(Signal::READABLE).await;
 
     // The thread should now be blocked on channel_call waiting for reply.
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
-    loop {
-        let st = cct.thread.state();
-        if st == ThreadState::BlockedChannel {
+    for _ in 0..100_000 {
+        if cct.thread.state() == ThreadState::BlockedChannel {
             break;
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "timed out waiting for BlockedChannel, got {:?}",
-            st
-        );
         async_std::task::yield_now().await;
     }
+    assert_eq!(
+        cct.thread.state(),
+        ThreadState::BlockedChannel,
+        "timed out waiting for BlockedChannel"
+    );
 
     // Suspend the thread while it's blocked on channel_call.
     cct.thread.suspend();
@@ -878,17 +935,17 @@ async fn suspend_channel_call() {
     // Resume the thread — it should receive the reply and terminate.
     cct.thread.resume();
 
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
-    loop {
+    for _ in 0..100_000 {
         if cct.thread.state() == ThreadState::Dead {
             break;
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "timed out waiting for thread termination"
-        );
         async_std::task::yield_now().await;
     }
+    assert_eq!(
+        cct.thread.state(),
+        ThreadState::Dead,
+        "timed out waiting for thread termination"
+    );
 
     // Verify the call succeeded.
     assert_eq!(
@@ -980,19 +1037,17 @@ async fn suspend_port_call() {
     let pwt = helpers::PortWaitTestThread::start(&proc);
 
     // Wait for the thread to enter BlockedPort state.
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
-    loop {
-        let st = pwt.thread.state();
-        if st == ThreadState::BlockedPort {
+    for _ in 0..100_000 {
+        if pwt.thread.state() == ThreadState::BlockedPort {
             break;
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "timed out waiting for BlockedPort, got {:?}",
-            st
-        );
         async_std::task::yield_now().await;
     }
+    assert_eq!(
+        pwt.thread.state(),
+        ThreadState::BlockedPort,
+        "timed out waiting for BlockedPort"
+    );
 
     // Suspend the thread while it's blocked on port_wait.
     pwt.thread.suspend();
@@ -1021,17 +1076,17 @@ async fn suspend_port_call() {
     pwt.thread.resume();
 
     // Wait for the thread to terminate.
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
-    loop {
+    for _ in 0..100_000 {
         if pwt.thread.state() == ThreadState::Dead {
             break;
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "timed out waiting for thread termination"
-        );
         async_std::task::yield_now().await;
     }
+    assert_eq!(
+        pwt.thread.state(),
+        ThreadState::Dead,
+        "timed out waiting for thread termination"
+    );
 
     // Read from result port — should have key=105.
     let result_packet = pwt.result_port.wait().await;
@@ -1061,19 +1116,17 @@ async fn suspend_single_wait_async_signal_delivery() {
     let ewt = helpers::EventWaitTestThread::start(&proc);
 
     // Wait for the thread to enter BlockedWaitOne state.
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
-    loop {
-        let st = ewt.thread.state();
-        if st == ThreadState::BlockedWaitOne {
+    for _ in 0..100_000 {
+        if ewt.thread.state() == ThreadState::BlockedWaitOne {
             break;
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "timed out waiting for BlockedWaitOne, got {:?}",
-            st
-        );
         async_std::task::yield_now().await;
     }
+    assert_eq!(
+        ewt.thread.state(),
+        ThreadState::BlockedWaitOne,
+        "timed out waiting for BlockedWaitOne"
+    );
 
     // Verify RUNNING signal is present before suspend.
     assert!(ewt.thread.signal().contains(Signal::THREAD_RUNNING));
@@ -1093,19 +1146,17 @@ async fn suspend_single_wait_async_signal_delivery() {
         .await;
 
     // Wait for the thread to re-enter the blocked state.
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
-    loop {
-        let st = ewt.thread.state();
-        if st == ThreadState::BlockedWaitOne {
+    for _ in 0..100_000 {
+        if ewt.thread.state() == ThreadState::BlockedWaitOne {
             break;
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "timed out waiting for re-entry to BlockedWaitOne, got {:?}",
-            st
-        );
         async_std::task::yield_now().await;
     }
+    assert_eq!(
+        ewt.thread.state(),
+        ThreadState::BlockedWaitOne,
+        "timed out waiting for re-entry to BlockedWaitOne"
+    );
 
     // Second suspend/resume cycle (while blocked in syscall).
     ewt.thread.suspend();
@@ -1120,19 +1171,17 @@ async fn suspend_single_wait_async_signal_delivery() {
         .await;
 
     // Wait for re-entry to blocked state again.
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
-    loop {
-        let st = ewt.thread.state();
-        if st == ThreadState::BlockedWaitOne {
+    for _ in 0..100_000 {
+        if ewt.thread.state() == ThreadState::BlockedWaitOne {
             break;
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "timed out waiting for BlockedWaitOne after second resume, got {:?}",
-            st
-        );
         async_std::task::yield_now().await;
     }
+    assert_eq!(
+        ewt.thread.state(),
+        ThreadState::BlockedWaitOne,
+        "timed out waiting for BlockedWaitOne after second resume"
+    );
 
     // Signal the event — thread should wake, signal USER_SIGNAL_1, and exit.
     ewt.event.signal_set(Signal::USER_SIGNAL_0);
@@ -1142,17 +1191,17 @@ async fn suspend_single_wait_async_signal_delivery() {
     event_obj.wait_signal(Signal::USER_SIGNAL_1).await;
 
     // Wait for thread termination.
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
-    loop {
+    for _ in 0..100_000 {
         if ewt.thread.state() == ThreadState::Dead {
             break;
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "timed out waiting for thread termination"
-        );
         async_std::task::yield_now().await;
     }
+    assert_eq!(
+        ewt.thread.state(),
+        ThreadState::Dead,
+        "timed out waiting for thread termination"
+    );
 
     proc.exit(0);
 }
@@ -1171,10 +1220,11 @@ async fn suspend_sleeping() {
     let st = helpers::SleepingTestThread::start(&proc);
 
     // Wait for the thread to enter BlockedSleeping state.
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
-    loop {
+    let mut reached_blocked = false;
+    for _ in 0..100_000 {
         let state = st.thread.state();
         if state == ThreadState::BlockedSleeping {
+            reached_blocked = true;
             break;
         }
         // Thread may have already died or be dying (race).
@@ -1183,13 +1233,9 @@ async fn suspend_sleeping() {
             proc.exit(0);
             return;
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "timed out waiting for BlockedSleeping, got {:?}",
-            state
-        );
         async_std::task::yield_now().await;
     }
+    assert!(reached_blocked, "timed out waiting for BlockedSleeping");
 
     // Suspend the thread while it's sleeping.
     st.thread.suspend();
@@ -1203,6 +1249,14 @@ async fn suspend_sleeping() {
     as_kobject(&st.thread)
         .wait_signal(Signal::THREAD_RUNNING)
         .await;
+
+    // Verify the thread is running again (Running or back to BlockedSleeping).
+    let post_resume = st.thread.state();
+    assert!(
+        post_resume == ThreadState::BlockedSleeping || post_resume == ThreadState::Running,
+        "after resume expected Running or BlockedSleeping, got {:?}",
+        post_resume
+    );
 
     // Kill the thread (it's sleeping for an hour, don't wait).
     st.thread.kill();
@@ -1246,9 +1300,19 @@ async fn suspend_stops_thread() {
 }
 
 /// C++: TEST(Threads, SyscallDebuggerModifyResult)
-#[ignore = "requires debugger exception channel to modify syscall return value"]
+///
+/// Verifies that a debugger can modify a syscall's return value via
+/// the exception channel while the thread is suspended in a syscall.
+///
+/// Requires debugger exception channel modifying syscall return which is not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires debugger exception channel modifying syscall return — not available in libos mode"
+)]
 #[test]
-fn syscall_debugger_modify_result() {}
+fn syscall_debugger_modify_result() {
+    panic!("not yet implemented: requires debugger exception channel modifying syscall return");
+}
 
 /// C++: TEST(Threads, SyscallSuspendedRegisterState)
 /// Read register state while a thread is suspended in a syscall.
@@ -1288,9 +1352,19 @@ async fn syscall_suspended_register_state() {
 }
 
 /// C++: TEST(Threads, ThreadLocalRegisterState)
-#[ignore = "requires TLS register (FS/GS base) read/write in thread context"]
+///
+/// Verifies that FS/GS base registers are correctly saved and
+/// restored across thread context switches.
+///
+/// Requires FS/GS base register save/restore which is not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires FS/GS base register save/restore — not available in libos mode"
+)]
 #[test]
-fn thread_local_register_state() {}
+fn thread_local_register_state() {
+    panic!("not yet implemented: requires FS/GS base register save/restore");
+}
 
 /// C++: TEST(Threads, ThreadStartInvalidEntry)
 /// Start a thread with invalid entry point via syscall.
@@ -1373,9 +1447,19 @@ fn thread_start_with_zero_instruction_pointer() {
 }
 
 /// C++: TEST(Threads, WatchpointSyscallPanic)
-#[ignore = "requires hardware watchpoint support"]
+///
+/// Verifies that a hardware watchpoint exception is correctly
+/// delivered when it fires during a syscall.
+///
+/// Requires hardware watchpoint exception delivery which is not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires hardware watchpoint exception delivery — not available in libos mode"
+)]
 #[test]
-fn watchpoint_syscall_panic() {}
+fn watchpoint_syscall_panic() {
+    panic!("not yet implemented: requires hardware watchpoint exception delivery");
+}
 
 /// C++: TEST(Threads, WriteReadDebugRegisterState)
 /// Write/read debug register state — should fail (not implemented).
@@ -1400,9 +1484,19 @@ fn write_read_debug_register_state() {
 }
 
 /// C++: TEST(Threads, WriteThreadStateWithInvalidMxcsrIsInvalidArgs)
-#[ignore = "x86-specific: requires MXCSR validation in write_state"]
+///
+/// Verifies that writing thread state with an invalid MXCSR value
+/// returns ZX_ERR_INVALID_ARGS.
+///
+/// Requires MXCSR validation in write_state which is not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires MXCSR validation in write_state — not available in libos mode"
+)]
 #[test]
-fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {}
+fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
+    panic!("not yet implemented: requires MXCSR validation in write_state");
+}
 
 /// C++: TEST(Threads, WritingArmFlagsRegister)
 /// Write ARM flags register. We test via general register write.
@@ -1585,9 +1679,19 @@ fn writing_vector_register_state_unsupported_fields_ignored() {
 }
 
 /// C++: TEST(Threads, X86AcFlagUserCopy)
-#[ignore = "x86-specific: requires AC flag handling during user copy"]
+///
+/// Verifies that the AC (alignment check) flag is correctly handled
+/// during user-space memory copies.
+///
+/// Requires x86 AC flag handling during user copy which is not available in libos mode.
+#[cfg_attr(
+    feature = "libos",
+    ignore = "requires x86 AC flag handling during user copy — not available in libos mode"
+)]
 #[test]
-fn x86_ac_flag_user_copy() {}
+fn x86_ac_flag_user_copy() {
+    panic!("not yet implemented: requires x86 AC flag handling during user copy");
+}
 
 /// C++: TEST(Threads, YieldWithNonZeroOptionIsInvalidArgs)
 /// thread_legacy_yield with non-zero options. In zCore, the syscall

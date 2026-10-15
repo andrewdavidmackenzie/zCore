@@ -1568,8 +1568,7 @@ impl PagerProcessTestThread {
     /// After this returns, the thread is blocked on `read_paged()`,
     /// waiting for the pager to supply the page.
     pub async fn wait_until_blocked(&self) {
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
-        loop {
+        for _ in 0..100_000 {
             // Check if the thread has entered BlockedPager state.
             if self.thread.state() == zircon_object::task::ThreadState::BlockedPager {
                 return;
@@ -1579,12 +1578,9 @@ impl PagerProcessTestThread {
             if st >= PAGER_STATE_READ_RETURNED {
                 return;
             }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "PagerProcessTestThread: timed out waiting for thread to enter BlockedPager"
-            );
             async_std::task::yield_now().await;
         }
+        panic!("PagerProcessTestThread: timed out waiting for thread to enter BlockedPager");
     }
 
     /// Check if the thread's read has returned.
@@ -1594,17 +1590,13 @@ impl PagerProcessTestThread {
 
     /// Wait for the thread to terminate (state == Dead).
     pub async fn wait_for_termination(&self) {
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
-        loop {
+        for _ in 0..100_000 {
             if self.thread.state() == ThreadState::Dead {
                 return;
             }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "PagerProcessTestThread: timed out waiting for thread to terminate"
-            );
             async_std::task::yield_now().await;
         }
+        panic!("PagerProcessTestThread: timed out waiting for thread to terminate");
     }
 }
 
@@ -1694,8 +1686,7 @@ impl ExceptionTestThread {
 
     /// Wait until the thread has entered the exception-blocked state.
     pub async fn wait_until_blocked(&self) {
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
-        loop {
+        for _ in 0..100_000 {
             if self.thread.state() == ThreadState::BlockedException {
                 return;
             }
@@ -1704,26 +1695,19 @@ impl ExceptionTestThread {
             if st == ThreadState::Dying || st == ThreadState::Dead {
                 return;
             }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "ExceptionTestThread: timed out waiting for BlockedException state"
-            );
             async_std::task::yield_now().await;
         }
+        panic!("ExceptionTestThread: timed out waiting for BlockedException state");
     }
 
     /// Wait for the thread to terminate (state == Dead).
     pub async fn wait_for_termination(&self) {
-        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
-        loop {
+        for _ in 0..100_000 {
             if self.thread.state() == ThreadState::Dead {
                 return;
             }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "ExceptionTestThread: timed out waiting for thread to terminate"
-            );
             async_std::task::yield_now().await;
         }
+        panic!("ExceptionTestThread: timed out waiting for thread to terminate");
     }
 }
