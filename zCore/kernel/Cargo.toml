@@ -32,6 +32,7 @@ dynamic-linking = ["zircon-loader/dynamic-linking"]
 libos = [
   "hal-impl/libos",
   "linux-loader?/libos",
+  "zircon-loader/libos",
   "async-std",
   "chrono",
   "nix",
