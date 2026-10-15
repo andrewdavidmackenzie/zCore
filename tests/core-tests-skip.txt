@@ -23,6 +23,8 @@ ChannelInternalTest.TransferChannelWithPendingCall
 ProcessTest.ProcessWaitAsyncCancelSelf
 ProcessTest.GetInfoRuntime
 ProcessTest.GetInfoRuntimeV1
+# KillChannelHandleCycle: kernel panic — Thread::proc() owning process dropped
+ProcessTest.KillChannelHandleCycle
 
 # ── Thread suspend / register state (cooperative scheduler) ─────────
 # 3/55 Threads tests pass: Basics, GetInfoRuntimeV1,
@@ -221,6 +223,7 @@ Pager.ResizeBlockedPin
 Pager.ResizeCommitTest
 Pager.SequentialMultipageTest
 Pager.SinglePageTest
+Pager.SinglePageTestVmar
 Pager.SplitCommitTest
 Pager.SuccessiveVmoTest
 Pager.SupplyAfterDetach
@@ -235,6 +238,60 @@ Pager.VmarMapRangeTest
 Pager.VmarRemapTest
 Pager.VmarUnmapTest
 Pager.VmoInfoPagerTest
+# Pager Vmar/Vmo parameterized variants: all hang on pager fault loop.
+# These are VALUE_PARAMETERIZED_TEST instantiations of the above tests.
+Pager.SinglePageTestVmo
+Pager.CancelKeyDoesNotWedgeThePagerVmar
+Pager.CancelKeyDoesNotWedgeThePagerVmo
+Pager.UncommittedSinglePageTestVmar
+Pager.UncommittedSinglePageTestVmo
+Pager.PresupplyTestVmar
+Pager.PresupplyTestVmo
+Pager.EarlySupplyTestVmar
+Pager.EarlySupplyTestVmo
+Pager.SequentialMultipageTestVmar
+Pager.SequentialMultipageTestVmo
+Pager.ConcurrentMultipageAccessTestVmar
+Pager.ConcurrentMultipageAccessTestVmo
+Pager.ConcurrentOverlappingAccessTestVmar
+Pager.ConcurrentOverlappingAccessTestVmo
+Pager.BulkSingleSupplyTestVmar
+Pager.BulkSingleSupplyTestVmo
+Pager.BulkOddLengthSupplyTestVmar
+Pager.BulkOddLengthSupplyTestVmo
+Pager.BulkOddOffsetSupplyTestVmar
+Pager.BulkOddOffsetSupplyTestVmo
+Pager.OverlapSupplyTestVmar
+Pager.OverlapSupplyTestVmo
+Pager.ManyRequestTestVmar
+Pager.ManyRequestTestVmo
+Pager.ReadResizeTestVmar
+Pager.ReadResizeTestVmo
+Pager.SuspendReadTestVmar
+Pager.SuspendReadTestVmo
+Pager.DecommitOnDetachTestVmar
+Pager.DecommitOnDetachTestVmo
+Pager.ReadCloseInterruptLateTestVmar
+Pager.ReadCloseInterruptLateTestVmo
+Pager.ReadDetachInterruptLateTestVmar
+Pager.ReadDetachInterruptLateTestVmo
+Pager.ReadCloseInterruptEarlyTestVmar
+Pager.ReadCloseInterruptEarlyTestVmo
+Pager.ReadDetachInterruptEarlyTestVmar
+Pager.ReadDetachInterruptEarlyTestVmo
+Pager.CloneReadFromCloneTestVmar
+Pager.CloneReadFromCloneTestVmo
+Pager.CloneReadFromParentTestVmar
+Pager.CloneReadFromParentTestVmo
+Pager.CloneSimultaneousReadTestVmar
+Pager.CloneSimultaneousReadTestVmo
+Pager.CloneSimultaneousChildReadTestVmar
+Pager.CloneSimultaneousChildReadTestVmo
+Pager.CloneWriteToCloneTestVmar
+Pager.CloneWriteToCloneTestVmo
+Pager.CloneDetachTest
+Pager.FailSinglePageVmar
+Pager.FailSinglePageVmo
 # PagerProcess: all 8 hang — need preemptive scheduling for
 # kill-after-suspend / kill-blocked-usercopy patterns.
 PagerProcess.KillBlockedUserVmoRead
@@ -366,6 +423,11 @@ Resource.MexecPagerPanic
 Resource.MexecPayloadTooSmall
 Resource.MexecZeroSizedVmo
 Resource.Ioports
+
+# ── Job kill chain ────────────────────────────────────────────────────
+# KillJobChain: kernel panic — Thread::proc() owning process dropped
+# when killing a chain of jobs. Crashes the test runner.
+JobTest.KillJobChain
 
 # ── Timer / Job (previously skipped, now passing) ────────────────────
 # Timer.Basic and JobTest.CriticalProcessAlreadySet removed — now pass.
