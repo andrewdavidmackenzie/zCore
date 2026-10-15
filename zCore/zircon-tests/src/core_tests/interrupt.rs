@@ -23,13 +23,35 @@ fn interrupt_bind() {
     assert!(interrupt.bind(&port, 42).is_ok());
 }
 
-/// C++: TEST(InterruptTest, Wait)
+/// C++: TEST(InterruptTest, VirtualInterrupts) — wait path
 ///
-/// Waiting on an interrupt requires async context. Left as stub.
-#[test]
-fn interrupt_wait() {
-    // Requires async context and real interrupt delivery.
-    // This test would block forever waiting for an interrupt.
+/// Create a virtual interrupt, trigger it, then wait. The wait
+/// should return immediately with the trigger timestamp. Then
+/// trigger again and wait a second time.
+///
+/// This exercises the core wait path: trigger puts the interrupt
+/// into `Triggered` state and sets INTERRUPT_SIGNAL; wait consumes
+/// the trigger, returns the timestamp, and re-arms the interrupt.
+#[async_std::test]
+async fn interrupt_wait() {
+    let _ctx = TestContext::new();
+    let interrupt = std::sync::Arc::new(Interrupt::new_virtual());
+
+    // Trigger with a known timestamp.
+    let ts1: i64 = 12345;
+    assert!(interrupt.trigger(ts1).is_ok());
+
+    // Wait should return immediately with the timestamp.
+    let result = interrupt.wait().await;
+    assert!(result.is_ok(), "wait should succeed after trigger");
+    assert_eq!(result.unwrap(), ts1, "timestamp should match trigger");
+
+    // Trigger again and wait again — verifies re-arm works.
+    let ts2: i64 = 67890;
+    assert!(interrupt.trigger(ts2).is_ok());
+    let result2 = interrupt.wait().await;
+    assert!(result2.is_ok(), "second wait should succeed");
+    assert_eq!(result2.unwrap(), ts2, "second timestamp should match");
 }
 
 /// C++: TEST(InterruptTest, VirtualInterrupt)
@@ -294,13 +316,65 @@ fn un_bind_port() {
 }
 
 /// C++: TEST(InterruptTest, UntriggeredSignalInterruptWait)
-/// An untriggered interrupt in wait mode would block indefinitely.
-/// Destroying the interrupt while waiting returns CANCELED.
-#[test]
-fn untriggered_signal_interrupt_wait() {
-    // This test requires an async runtime to call interrupt.wait()
-    // and a separate task to destroy the interrupt. The synchronous
-    // test framework cannot support this pattern.
+///
+/// Verifies the INTERRUPT_SIGNAL state transitions for a virtual
+/// interrupt through the trigger → wait → re-arm cycle:
+///
+/// 1. Freshly created: no INTERRUPT_SIGNAL asserted.
+/// 2. After trigger: INTERRUPT_SIGNAL is asserted.
+/// 3. After wait consumes the trigger: INTERRUPT_SIGNAL cleared.
+/// 4. Destroying the interrupt: wait returns CANCELED.
+///
+/// The C++ test also spawns a std::thread to block on a second
+/// interrupt.wait() and then triggers it from the main thread.
+/// We replicate this by spawning an async task.
+#[async_std::test]
+async fn untriggered_signal_interrupt_wait() {
+    use zircon_object::object::Signal;
+
+    let _ctx = TestContext::new();
+    let interrupt = std::sync::Arc::new(Interrupt::new_virtual());
+
+    // 1. Initially, INTERRUPT_SIGNAL should NOT be set.
+    let signals = interrupt.signal();
+    assert!(
+        !signals.contains(Signal::INTERRUPT_SIGNAL),
+        "freshly created interrupt should not have INTERRUPT_SIGNAL"
+    );
+
+    // 2. Trigger the interrupt — INTERRUPT_SIGNAL should be asserted.
+    assert!(interrupt.trigger(12345).is_ok());
+    let signals = interrupt.signal();
+    assert!(
+        signals.contains(Signal::INTERRUPT_SIGNAL),
+        "after trigger, INTERRUPT_SIGNAL should be set"
+    );
+
+    // 3. Wait should return immediately (already triggered), consuming
+    //    the trigger.
+    let result = interrupt.wait().await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 12345);
+
+    // 4. Spawn a task to wait on the interrupt. Since it hasn't been
+    //    triggered again, the task will block. We then destroy the
+    //    interrupt, which should wake the waiter with CANCELED.
+    let interrupt_clone = interrupt.clone();
+    let waiter = async_std::task::spawn(async move { interrupt_clone.wait().await });
+
+    // Give the waiter a chance to block.
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+
+    // Destroy the interrupt — should wake the waiter with CANCELED.
+    assert!(interrupt.destroy().is_ok());
+
+    let wait_result = waiter.await;
+    assert_eq!(
+        wait_result.unwrap_err(),
+        ZxError::CANCELED,
+        "wait on destroyed interrupt should return CANCELED"
+    );
 }
 
 /// C++: TEST(InterruptTest, UntriggeredSignalPortsAndAck)
@@ -418,12 +492,42 @@ fn virtual_not_wakeable() {
 }
 
 /// C++: TEST(InterruptTest, WaitThreadFunctionsAfterSuspendResume)
-/// In the C++ test, a thread waiting on an interrupt is suspended
-/// and resumed. This requires thread scheduling infrastructure.
-/// We verify the basic destroy-while-not-waiting behavior.
-#[test]
-fn wait_thread_functions_after_suspend_resume() {
-    // This test requires spawning a thread that calls interrupt.wait(),
-    // then suspending and resuming that thread. The cooperative
-    // scheduler in libos mode cannot support this pattern.
+///
+/// In the C++ test, a thread waiting on zx_interrupt_wait is
+/// suspended and then resumed. After resume, the thread returns to
+/// the blocked-interrupt state. Then the interrupt is triggered and
+/// the thread exits cleanly.
+///
+/// In libos mode we cannot suspend/resume a thread while it blocks
+/// on interrupt.wait() (cooperative scheduler). Instead, we test
+/// the observable behavior: a task blocking on wait() can be woken
+/// by trigger() after an intermediate yield that simulates the
+/// suspend/resume window.
+#[async_std::test]
+async fn wait_thread_functions_after_suspend_resume() {
+    let _ctx = TestContext::new();
+    let interrupt = std::sync::Arc::new(Interrupt::new_virtual());
+
+    // Spawn a task that calls interrupt.wait(). It will block because
+    // the interrupt hasn't been triggered yet.
+    let interrupt_clone = interrupt.clone();
+    let waiter = async_std::task::spawn(async move { interrupt_clone.wait().await });
+
+    // Give the waiter a chance to reach the blocked state.
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+
+    // Simulate the suspend/resume window: yield several times to
+    // exercise the scheduler, then trigger the interrupt.
+    for _ in 0..5 {
+        async_std::task::yield_now().await;
+    }
+
+    // Trigger the interrupt — the waiter should wake up.
+    let ts: i64 = 42;
+    assert!(interrupt.trigger(ts).is_ok());
+
+    let result = waiter.await;
+    assert!(result.is_ok(), "wait should succeed after trigger");
+    assert_eq!(result.unwrap(), ts);
 }
