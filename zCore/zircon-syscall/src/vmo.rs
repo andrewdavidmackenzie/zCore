@@ -380,13 +380,29 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         proc.check_policy(PolicyCondition::NewVMO)?;
-        proc.get_resource(resource)?
-            .validate_ranged_resource(ResourceKind::MMIO, paddr, size)?;
+        let rsrc = proc.get_resource(resource)?;
+        // Validate kind (MMIO) — ROOT bypasses this check.
+        rsrc.validate(ResourceKind::MMIO)
+            .map_err(|_| ZxError::ACCESS_DENIED)?;
         if size == 0 || !page_aligned(size) || !page_aligned(paddr) {
             return Err(ZxError::INVALID_ARGS);
         }
         if paddr.overflowing_add(size).1 {
             return Err(ZxError::INVALID_ARGS);
+        }
+        // For non-root resources, validate that [paddr, paddr+size) fits
+        // within the page-rounded bounds of the resource. Fuchsia's kernel
+        // rounds the resource range to page boundaries for VMO creation
+        // (unlike sys_resource_create which uses strict byte-level checks).
+        // ROOT and ranged-root resources bypass range checks entirely.
+        if !rsrc.is_ranged_root(ResourceKind::MMIO) {
+            let rsrc_base = rsrc.addr();
+            let rsrc_size = rsrc.len();
+            let rsrc_page_base = rsrc_base & !(PAGE_SIZE - 1);
+            let rsrc_page_end = (rsrc_base + rsrc_size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+            if paddr < rsrc_page_base || paddr + size > rsrc_page_end {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
         }
         let vmo = VmObject::new_physical(paddr, size / PAGE_SIZE);
         let handle_value = proc.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO | Rights::EXECUTE));

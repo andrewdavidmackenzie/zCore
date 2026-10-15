@@ -404,18 +404,21 @@ pub fn spawn_process(
 
     // --- Message 2: For libc's _zx_startup_get_handles ---
     // Include sub-resource handles required by standalone tests.
+    // Create ranged-root resources for each kind.
+    // Ranged roots have base=0, size=0 (meaning "unlimited"), matching
+    // Fuchsia's ResourceDispatcher::create_ranged_root convention.
     let mmio_resource = Resource::create(
         "mmio",
         crate::dev::ResourceKind::MMIO,
         0,
-        usize::MAX,
+        0,
         crate::dev::ResourceFlags::empty(),
     );
     let irq_resource = Resource::create(
         "irq",
         crate::dev::ResourceKind::IRQ,
         0,
-        usize::MAX,
+        0,
         crate::dev::ResourceFlags::empty(),
     );
     let system_resource = Resource::create(
