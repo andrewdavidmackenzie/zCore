@@ -1336,9 +1336,11 @@ impl VmAddressRegion {
     /// - depth 0: the VMAR itself
     /// - depth 1+: child VMARs and mappings
     pub fn get_info_maps(&self, base_depth: usize) -> ZxResult<Vec<InfoMapsEntry>> {
-        // If the VMAR is destroyed, return BAD_STATE matching Fuchsia.
+        // If the VMAR is destroyed, return an empty list.
+        // Fuchsia's get_info(ZX_INFO_PROCESS_MAPS) must succeed even
+        // after the root VMAR is destroyed (ProcessTest.ForbidDestroyRootVmar).
         if self.inner.lock().is_none() {
-            return Err(ZxError::BAD_STATE);
+            return Ok(Vec::new());
         }
         let mut result = Vec::new();
         self.walk_info_maps(base_depth, &mut result);

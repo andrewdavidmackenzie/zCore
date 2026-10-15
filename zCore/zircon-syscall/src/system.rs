@@ -409,7 +409,19 @@ impl Syscall<'_> {
             let buf: UserInPtr<u8> = info.into();
             let data = buf.read_array(count * 8)?;
             for i in 0..count {
-                let offset = i * 8 + 4; // skip u32 cpu_number
+                let base = i * 8;
+                // Validate CPU number (first 4 bytes of each entry).
+                let cpu_number = u32::from_ne_bytes([
+                    data[base],
+                    data[base + 1],
+                    data[base + 2],
+                    data[base + 3],
+                ]);
+                if cpu_number as usize >= online_cpus {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                // Validate scale (next 4 bytes: u16 integral + u16 fractional).
+                let offset = base + 4;
                 let integral = u16::from_ne_bytes([data[offset], data[offset + 1]]);
                 let fractional = u16::from_ne_bytes([data[offset + 2], data[offset + 3]]);
                 if integral == 0 && fractional == 0 {
