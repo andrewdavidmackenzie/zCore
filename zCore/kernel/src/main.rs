@@ -63,6 +63,12 @@ fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Proc
     // exec can spawn Zircon processes from Linux context.
     zircon_object::task::spawn::set_spawn_config(zircon_loader::zircon::zircon_spawn_config());
 
+    // Register VMAR permission checker for libos user copies.
+    // In libos mode, copy_to_user/copy_from_user call this checker
+    // to verify user addresses are in writable/readable VMAR mappings.
+    #[cfg(feature = "libos")]
+    zircon_loader::zircon::register_user_access_checker();
+
     // Register rootfs reader so zircon-syscall can read files for exec.
     zircon_object::task::spawn::set_rootfs_reader(fs::read_rootfs_file);
 

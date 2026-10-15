@@ -86,17 +86,17 @@ impl Syscall<'_> {
         if len == 0 {
             return Ok(());
         }
-        #[cfg(feature = "libos")]
-        {
-            // In libos mode, all host memory is accessible — skip VMAR validation.
-            let _ = (addr, len);
-            Ok(())
-        }
-        #[cfg(not(feature = "libos"))]
-        {
-            let vmar = self.thread.proc().vmar();
-            vmar.check_user_access(addr, len, MMUFlags::READ)
-                .map_err(|_| ZxError::INVALID_ARGS)
+        let vmar = self.thread.proc().vmar();
+        match vmar.check_user_access(addr, len, MMUFlags::READ) {
+            Ok(()) => Ok(()),
+            Err(ZxError::ACCESS_DENIED) => Err(ZxError::INVALID_ARGS),
+            #[cfg(feature = "libos")]
+            Err(ZxError::NOT_FOUND) => {
+                // In libos mode, addresses not in any VMAR mapping may be
+                // valid host memory (stack, heap). Allow them.
+                Ok(())
+            }
+            Err(_) => Err(ZxError::INVALID_ARGS),
         }
     }
 
@@ -107,17 +107,17 @@ impl Syscall<'_> {
         if len == 0 {
             return Ok(());
         }
-        #[cfg(feature = "libos")]
-        {
-            // In libos mode, all host memory is accessible — skip VMAR validation.
-            let _ = (addr, len);
-            Ok(())
-        }
-        #[cfg(not(feature = "libos"))]
-        {
-            let vmar = self.thread.proc().vmar();
-            vmar.check_user_access(addr, len, MMUFlags::WRITE)
-                .map_err(|_| ZxError::INVALID_ARGS)
+        let vmar = self.thread.proc().vmar();
+        match vmar.check_user_access(addr, len, MMUFlags::WRITE) {
+            Ok(()) => Ok(()),
+            Err(ZxError::ACCESS_DENIED) => Err(ZxError::INVALID_ARGS),
+            #[cfg(feature = "libos")]
+            Err(ZxError::NOT_FOUND) => {
+                // In libos mode, addresses not in any VMAR mapping may be
+                // valid host memory (stack, heap). Allow them.
+                Ok(())
+            }
+            Err(_) => Err(ZxError::INVALID_ARGS),
         }
     }
 

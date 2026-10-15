@@ -9,6 +9,67 @@ use core::{
     ops::{Deref, DerefMut},
 };
 
+/// Callback type for VMAR permission checking in libos mode.
+///
+/// The callback receives `(thread, addr, len, writable)` where `thread`
+/// is the current thread (as `Arc<dyn Any>`), `addr` and `len` describe
+/// the user buffer, and `writable` indicates whether write permission is
+/// required. Returns `true` if the access is allowed.
+///
+/// The callback is responsible for downcasting the thread to the
+/// concrete type (e.g., `zircon_object::task::Thread`) and checking
+/// the process VMAR mappings.
+#[cfg(feature = "libos")]
+type UserAccessChecker = fn(
+    thread: &alloc::sync::Arc<dyn core::any::Any + Send + Sync>,
+    addr: usize,
+    len: usize,
+    writable: bool,
+) -> bool;
+
+/// Registered VMAR permission checker for libos mode.
+///
+/// When set, `copy_to_user` and `copy_from_user` call this function to
+/// verify that the user-space address is in a VMAR mapping with the
+/// correct permissions. If no checker is registered, the copy proceeds
+/// without permission checks (backward-compatible).
+#[cfg(feature = "libos")]
+static USER_ACCESS_CHECKER: spin::Once<UserAccessChecker> = spin::Once::new();
+
+/// Register a VMAR permission checker for libos user copies.
+///
+/// Must be called once during kernel init (before any user copies).
+/// Subsequent calls are ignored (first-writer-wins via `spin::Once`).
+#[cfg(feature = "libos")]
+pub fn set_user_access_checker(checker: UserAccessChecker) {
+    USER_ACCESS_CHECKER.call_once(|| checker);
+}
+
+/// Check user-pointer permissions in libos mode.
+///
+/// Returns `Ok(())` if:
+/// - no checker is registered (backward-compatible),
+/// - there is no current thread (kernel-only context), or
+/// - the checker approves the access.
+///
+/// Returns `Err(Error::InvalidPointer)` if the checker denies access.
+#[cfg(feature = "libos")]
+fn check_user_access_libos(addr: usize, len: usize, writable: bool) -> Result<()> {
+    let checker = match USER_ACCESS_CHECKER.get() {
+        Some(c) => c,
+        None => return Ok(()), // no checker registered
+    };
+    let thread = match crate::thread::get_current_thread() {
+        Some(t) => t,
+        None => return Ok(()), // no current thread (init / kernel context)
+    };
+    if checker(&thread, addr, len, writable) {
+        Ok(())
+    } else {
+        Err(Error::InvalidPointer)
+    }
+}
+
 /// Whether the CPU supports SMAP (set once at boot).
 #[cfg(all(target_arch = "x86_64", target_os = "none"))]
 static HAS_SMAP: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
@@ -57,6 +118,9 @@ pub unsafe fn copy_from_user(dst: *mut u8, src: *const u8, len: usize) -> Result
     if len == 0 {
         return Ok(());
     }
+    // In libos mode, check that the source (user) address is readable.
+    #[cfg(feature = "libos")]
+    check_user_access_libos(src as usize, len, false)?;
     guarded_user_copy(dst, src, len)
 }
 
@@ -71,6 +135,9 @@ pub unsafe fn copy_to_user(dst: *mut u8, src: *const u8, len: usize) -> Result<(
     if len == 0 {
         return Ok(());
     }
+    // In libos mode, check that the destination (user) address is writable.
+    #[cfg(feature = "libos")]
+    check_user_access_libos(dst as usize, len, true)?;
     guarded_user_copy(dst, src, len)
 }
 
