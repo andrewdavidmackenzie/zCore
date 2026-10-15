@@ -165,12 +165,10 @@ Pager.CloneWriteToCloneTest
 Pager.ClosePageCompleteTest
 Pager.ClosePagerTest
 Pager.ClosePortTest
-Pager.CommitRedundantSupplyTest
 Pager.ConcurrentMultipageAccessTest
 Pager.ConcurrentOverlappingAccessTest
 Pager.CreateVmoUnboundedInvalidStreamSize
 Pager.DecommitOnDetachTest
-Pager.DecommitTest
 Pager.DetachNonMappingAccess
 Pager.DetachPageCompleteTest
 Pager.EarlySupplyTest
@@ -202,9 +200,7 @@ Pager.InvalidPagerDetachVmo
 Pager.InvalidPagerSupplyPages
 Pager.ManyRequestTest
 Pager.MappedSupplyPages
-Pager.MulticommitSupplyTest
 Pager.MultipleConcurrentVmoTest
-Pager.MultisupplyCommitTest
 Pager.OpCommitCloneVmar
 Pager.OpCommitVmar
 Pager.OverlapCommitTest
@@ -224,7 +220,6 @@ Pager.ReadResizeTest
 Pager.ResizeBlockedPin
 Pager.ResizeCommitTest
 Pager.SequentialMultipageTest
-Pager.SimpleCommitTest
 Pager.SinglePageTest
 Pager.SplitCommitTest
 Pager.SuccessiveVmoTest
