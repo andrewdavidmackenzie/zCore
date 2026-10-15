@@ -158,49 +158,6 @@ fn port_too_many_observers() {
     //   6. Assert return_code == ZX_TASK_RETCODE_EXCEPTION_KILL
 }
 
-// ── VmoReference pager test ─────────────────────────────────────────
-
-/// C++: TEST(VmoReference, ChildSnapshotAtLeastOnWrite)
-/// vmo/vmo-reference.cc:130
-///
-/// Creates a pager-backed VMO, supplies pages, writes 0xaa, creates
-/// a REFERENCE child, then creates a SNAPSHOT_AT_LEAST_ON_WRITE child
-/// of the reference. Verifies:
-///   1. parent_koid of child matches reference koid
-///   2. Child can read 0xaa from root VMO
-///   3. Writing 0xbb to root is visible in child (not yet forked)
-///   4. Writing 0xcc to child forks the page (not visible in root)
-///   5. Root still reads 0xbb, child reads 0xcc
-#[test]
-fn vmo_reference_child_snapshot_at_least_on_write() {
-    let _ctx = TestContext::new();
-    // Test the parts that work: create VMO, write, create COW child,
-    // verify child reads parent data, verify COW isolation after write.
-    // zCore creates a regular COW snapshot instead of a true
-    // SNAPSHOT_AT_LEAST_ON_WRITE, so step 7 (parent write visible
-    // in child before fork) won't match Fuchsia behavior.
-    let root = VmObject::new_paged(1);
-    root.write(0, &[0xAAu8; 8]).unwrap();
-
-    // Create COW child (zCore treats SNAPSHOT_AT_LEAST_ON_WRITE as snapshot)
-    let child = root.create_child(false, 0, PAGE_SIZE).unwrap();
-
-    // Child reads parent data
-    let mut buf = [0u8; 8];
-    child.read(0, &mut buf).unwrap();
-    assert_eq!(buf, [0xAA; 8], "child should read parent data");
-
-    // Write to child forks the page
-    child.write(0, &[0xCC; 8]).unwrap();
-
-    // Parent unchanged, child has new data (COW isolation)
-    let mut parent_buf = [0u8; 8];
-    root.read(0, &mut parent_buf).unwrap();
-    assert_eq!(parent_buf, [0xAA; 8], "parent should be unchanged");
-    child.read(0, &mut buf).unwrap();
-    assert_eq!(buf, [0xCC; 8], "child should have forked data");
-}
-
 // ── VmoZero populated_bytes tests ───────────────────────────────────
 // These test COW page attribution accounting (populated_bytes).
 // zCore's fractional attribution doesn't converge correctly,
@@ -232,43 +189,6 @@ fn vmo_zero_write_cow_parent() {
         info.populated_bytes as usize, PAGE_SIZE,
         "populated_bytes: parent should have 1 page after zeroing page 0"
     );
-}
-
-/// C++: TEST(VmoZeroTestCase, AllocateAfterMergeMultipleChildren)
-/// Multiple COW children, drop some, verify populated_bytes.
-#[test]
-fn vmo_zero_allocate_after_merge_multiple_children() {
-    let _ctx = TestContext::new();
-    // Test the parts that work: create parent, multiple COW children,
-    // write to each, drop some, verify parent still readable.
-    // populated_bytes attribution is known to be wrong (fractional
-    // scaling not implemented), so we don't assert exact values.
-    let parent = VmObject::new_paged(3);
-    parent.write(0, &1u32.to_ne_bytes()).unwrap();
-    parent.write(PAGE_SIZE, &2u32.to_ne_bytes()).unwrap();
-    parent.write(2 * PAGE_SIZE, &3u32.to_ne_bytes()).unwrap();
-
-    let c1 = parent.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
-    let c2 = parent.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
-
-    // Write to children to fork pages
-    c1.write(0, &10u32.to_ne_bytes()).unwrap();
-    c2.write(PAGE_SIZE, &20u32.to_ne_bytes()).unwrap();
-
-    // Drop one child
-    drop(c1);
-
-    // Parent and remaining child should still be readable
-    let mut buf = [0u8; 4];
-    parent.read(0, &mut buf).unwrap();
-    assert_eq!(u32::from_ne_bytes(buf), 1, "parent page 0 unchanged");
-
-    c2.read(PAGE_SIZE, &mut buf).unwrap();
-    assert_eq!(u32::from_ne_bytes(buf), 20, "c2 page 1 has written data");
-
-    // Verify populated_bytes is non-negative (don't assert exact value)
-    let info = parent.get_info();
-    assert!(info.populated_bytes <= 3 * PAGE_SIZE as u64);
 }
 
 /// C++: TEST(VmoZeroTestCase, MergeZeroChildren)

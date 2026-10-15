@@ -467,3 +467,36 @@ fn zero_hidden_no_content_snapshot() {
     b.read(PAGE_SIZE, &mut buf).unwrap();
     assert_eq!(u32::from_ne_bytes(buf), 0, "b page 1 should be zero");
 }
+
+/// C++: TEST(VmoZeroTestCase, AllocateAfterMergeMultipleChildren)
+/// vmo/vmo-zero.cc
+///
+/// Tests multi-child COW with page forking and parent/child data
+/// integrity after child drop. populated_bytes attribution is
+/// known to be imprecise (fractional scaling not implemented).
+#[test]
+fn allocate_after_merge_multiple_children() {
+    let _ctx = TestContext::new();
+    let parent = VmObject::new_paged(3);
+    parent.write(0, &1u32.to_ne_bytes()).unwrap();
+    parent.write(PAGE_SIZE, &2u32.to_ne_bytes()).unwrap();
+    parent.write(2 * PAGE_SIZE, &3u32.to_ne_bytes()).unwrap();
+
+    let c1 = parent.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
+    let c2 = parent.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
+
+    c1.write(0, &10u32.to_ne_bytes()).unwrap();
+    c2.write(PAGE_SIZE, &20u32.to_ne_bytes()).unwrap();
+
+    drop(c1);
+
+    let mut buf = [0u8; 4];
+    parent.read(0, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 1, "parent page 0 unchanged");
+
+    c2.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 20, "c2 page 1 has written data");
+
+    let info = parent.get_info();
+    assert!(info.populated_bytes <= 3 * PAGE_SIZE as u64);
+}
