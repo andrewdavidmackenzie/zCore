@@ -546,7 +546,10 @@ fn nonstarted_thread() {
 
 /// C++: TEST(Threads, ProcessStartOnSecondThread)
 /// Starting a process on a second thread (after the first has
-/// already been started) — at the object level this is allowed.
+/// already been started). In Fuchsia, zx_process_start on an
+/// already-started process returns BAD_STATE, but zx_thread_start
+/// on a second thread succeeds. We exercise the kernel-level
+/// Thread::start which corresponds to zx_thread_start.
 #[async_std::test]
 async fn process_start_on_second_thread() {
     helpers::ensure_hal_init();
@@ -559,7 +562,7 @@ async fn process_start_on_second_thread() {
     t1.start(helpers::test_loop_thread_fn).unwrap();
     async_std::task::yield_now().await;
 
-    // Start second thread — should work at the object level
+    // Start second thread — zx_thread_start on additional threads succeeds
     let result = t2.start(helpers::test_loop_thread_fn);
     assert!(result.is_ok(), "second thread start should succeed");
 
@@ -1694,34 +1697,27 @@ fn x86_ac_flag_user_copy() {
 }
 
 /// C++: TEST(Threads, YieldWithNonZeroOptionIsInvalidArgs)
-/// thread_legacy_yield with non-zero options. In zCore, the syscall
-/// always returns Ok(()) regardless of options (known gap — no
-/// options validation). We test the current behavior.
-#[test]
-fn yield_with_non_zero_option_is_invalid_args() {
-    // zCore's THREAD_LEGACY_YIELD implementation doesn't validate
-    // options — it always returns Ok(()). This is a known gap.
-    // The C++ test expects INVALID_ARGS for non-zero options.
-    // We document the current behavior here.
-    let _ctx = TestContext::new();
+/// thread_legacy_yield with non-zero options returns INVALID_ARGS.
+#[async_std::test]
+async fn yield_with_non_zero_option_is_invalid_args() {
+    let ctx = TestContext::new();
+    let mut sc = ctx.syscall();
 
-    // At the object level, yield is not exposed as a method.
-    // The syscall layer handles it. We verify the test context
-    // and process creation work without issues.
-    let job = Job::root();
-    let _proc = Process::create(&job, "yield-test").unwrap();
+    // SYS_THREAD_LEGACY_YIELD = 166, arg0 = options
+    // Non-zero options should return INVALID_ARGS (negative isize).
+    let result = sc.syscall(166, [1, 0, 0, 0, 0, 0, 0, 0]).await;
+    // ZX_ERR_INVALID_ARGS = -10 in Fuchsia ABI
+    assert!(result < 0, "non-zero options should fail, got {}", result);
 }
 
 /// C++: TEST(Threads, YieldWithZeroOptionIsOk)
 /// thread_legacy_yield with zero options should succeed.
-#[test]
-fn yield_with_zero_option_is_ok() {
-    // zCore's THREAD_LEGACY_YIELD always returns Ok(()).
-    // Zero options is the valid case in Fuchsia.
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let _proc = Process::create(&job, "yield-ok").unwrap();
+#[async_std::test]
+async fn yield_with_zero_option_is_ok() {
+    let ctx = TestContext::new();
+    let mut sc = ctx.syscall();
 
-    // The yield syscall is a no-op in zCore — we verify the
-    // process infrastructure is working.
+    // SYS_THREAD_LEGACY_YIELD = 166, arg0 = options = 0
+    let result = sc.syscall(166, [0, 0, 0, 0, 0, 0, 0, 0]).await;
+    assert_eq!(result, 0, "zero options should succeed");
 }

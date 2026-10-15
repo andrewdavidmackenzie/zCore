@@ -782,7 +782,6 @@ fn get_property_tx_threshold_wrong_type_returns_wrong_type() {
 /// the syscall entry. Our implementation does not yet have this check,
 /// so attempting to allocate a 4GB+ buffer would crash.
 #[test]
-#[ignore = "would crash: 4GB+ buffer allocation causes SIGBUS (kernel missing UINT32_MAX check)"]
 fn read_write_length_overflow_returns_invalid_args() {
     let ctx = TestContext::new();
     let (h0, h1) = syscall_socket_create(&ctx, 0);
