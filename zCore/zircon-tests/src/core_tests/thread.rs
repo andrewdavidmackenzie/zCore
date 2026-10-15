@@ -490,32 +490,109 @@ fn long_name_succeeds() {
 
 /// C++: TEST(Threads, NoncanonicalRipAddressIRETQ)
 ///
-/// Verifies that setting RIP to a non-canonical address via IRETQ
-/// raises a #GP exception.
-///
-/// Requires x86 non-canonical address #GP exception which is not available in libos mode.
-#[cfg_attr(
-    feature = "libos",
-    ignore = "requires x86 non-canonical address #GP exception — not available in libos mode"
-)]
-#[test]
-fn noncanonical_rip_address_iretq() {
-    panic!("not yet implemented: requires x86 non-canonical address #GP exception");
+/// Verifies that writing a non-canonical RIP (just below the canonical
+/// kernel range, 0xFFFF_7FFF_FFFF_FFFF) via write_state is rejected
+/// with INVALID_ARGS.
+#[cfg_attr(not(target_arch = "x86_64"), ignore = "x86_64-specific RIP validation")]
+#[async_std::test]
+async fn noncanonical_rip_address_iretq() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "noncanon-iretq-proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    thread.start(helpers::test_loop_thread_fn).unwrap();
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+
+    thread.suspend();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_SUSPENDED)
+        .await;
+
+    // Read current general register state, set RIP to non-canonical,
+    // and verify write_state rejects it.
+    // On x86_64, GeneralRegs field order (byte offsets):
+    // rax(0), rbx(8), rcx(16), rdx(24), rsi(32), rdi(40),
+    // rbp(48), rsp(56), r8(64), r9(72), r10(80), r11(88),
+    // r12(96), r13(104), r14(112), r15(120), rip(128),
+    // rflags(136), fsbase(144), gsbase(152).
+    #[cfg(target_arch = "x86_64")]
+    {
+        let mut buf = vec![0u8; 1024];
+        let size = thread
+            .read_state(ThreadStateKind::General, &mut buf)
+            .unwrap();
+
+        let rip_offset = 128; // offset of rip in GeneralRegs (field 16)
+        let noncanon_addr: usize = 0xFFFF_7FFF_FFFF_FFFF;
+        buf[rip_offset..rip_offset + 8].copy_from_slice(&noncanon_addr.to_ne_bytes());
+
+        let result = thread.write_state(ThreadStateKind::General, &buf[..size]);
+        assert_eq!(
+            result.unwrap_err(),
+            zircon_object::ZxError::INVALID_ARGS,
+            "non-canonical RIP (IRETQ style) should be rejected"
+        );
+    }
+
+    thread.resume();
+    thread.kill();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_TERMINATED)
+        .await;
 }
 
 /// C++: TEST(Threads, NoncanonicalRipAddressSyscall)
 ///
-/// Verifies that returning to a non-canonical address via SYSCALL
-/// raises the correct exception.
-///
-/// Requires x86 non-canonical address exception which is not available in libos mode.
-#[cfg_attr(
-    feature = "libos",
-    ignore = "requires x86 non-canonical address exception — not available in libos mode"
-)]
-#[test]
-fn noncanonical_rip_address_syscall() {
-    panic!("not yet implemented: requires x86 non-canonical address exception");
+/// Verifies that writing a non-canonical RIP (0x0000_8000_0000_0000,
+/// just above the user canonical range) via write_state is rejected
+/// with INVALID_ARGS.
+#[cfg_attr(not(target_arch = "x86_64"), ignore = "x86_64-specific RIP validation")]
+#[async_std::test]
+async fn noncanonical_rip_address_syscall() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "noncanon-syscall-proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    thread.start(helpers::test_loop_thread_fn).unwrap();
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+
+    thread.suspend();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_SUSPENDED)
+        .await;
+
+    // Read current general register state, set RIP to non-canonical,
+    // and verify write_state rejects it.
+    #[cfg(target_arch = "x86_64")]
+    {
+        let mut buf = vec![0u8; 1024];
+        let size = thread
+            .read_state(ThreadStateKind::General, &mut buf)
+            .unwrap();
+
+        // 0x0000_8000_0000_0000: bit 47 set but bits 48..63 are 0,
+        // making it non-canonical on x86_64.
+        let rip_offset = 128; // offset of rip in GeneralRegs
+        let noncanon_addr: usize = 0x0000_8000_0000_0000;
+        buf[rip_offset..rip_offset + 8].copy_from_slice(&noncanon_addr.to_ne_bytes());
+
+        let result = thread.write_state(ThreadStateKind::General, &buf[..size]);
+        assert_eq!(
+            result.unwrap_err(),
+            zircon_object::ZxError::INVALID_ARGS,
+            "non-canonical RIP (syscall style) should be rejected"
+        );
+    }
+
+    thread.resume();
+    thread.kill();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_TERMINATED)
+        .await;
 }
 
 /// C++: TEST(Threads, NonstartedThread)
@@ -739,17 +816,54 @@ fn start_regs() {
 
 /// C++: TEST(Threads, StartRegsNoncanonicalTp)
 ///
-/// Verifies that starting a thread with a non-canonical TP (thread
-/// pointer) register value is rejected.
-///
-/// Requires x86 non-canonical TP validation which is not available in libos mode.
+/// Verifies that writing general register state with a non-canonical
+/// fsbase (thread pointer on x86_64) is rejected with INVALID_ARGS.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires x86 non-canonical TP validation — not available in libos mode"
+    not(target_arch = "x86_64"),
+    ignore = "x86_64-specific fsbase validation"
 )]
-#[test]
-fn start_regs_noncanonical_tp() {
-    panic!("not yet implemented: requires x86 non-canonical TP validation");
+#[async_std::test]
+async fn start_regs_noncanonical_tp() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "noncanon-tp-proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    thread.start(helpers::test_loop_thread_fn).unwrap();
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+
+    thread.suspend();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_SUSPENDED)
+        .await;
+
+    // Set fsbase to a non-canonical address and verify rejection.
+    // On x86_64, fsbase is at offset 144 in GeneralRegs (field 18).
+    #[cfg(target_arch = "x86_64")]
+    {
+        let mut buf = vec![0u8; 1024];
+        let size = thread
+            .read_state(ThreadStateKind::General, &mut buf)
+            .unwrap();
+
+        let fsbase_offset = 144; // offset of fsbase in GeneralRegs
+        let noncanon_addr: usize = 0x0000_8000_0000_0000;
+        buf[fsbase_offset..fsbase_offset + 8].copy_from_slice(&noncanon_addr.to_ne_bytes());
+
+        let result = thread.write_state(ThreadStateKind::General, &buf[..size]);
+        assert_eq!(
+            result.unwrap_err(),
+            zircon_object::ZxError::INVALID_ARGS,
+            "non-canonical fsbase should be rejected"
+        );
+    }
+
+    thread.resume();
+    thread.kill();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_TERMINATED)
+        .await;
 }
 
 /// C++: TEST(Threads, StartRegsSuspended)
@@ -1356,17 +1470,69 @@ async fn syscall_suspended_register_state() {
 
 /// C++: TEST(Threads, ThreadLocalRegisterState)
 ///
-/// Verifies that FS/GS base registers are correctly saved and
-/// restored across thread context switches.
-///
-/// Requires FS/GS base register save/restore which is not available in libos mode.
+/// Verifies that writing a valid user-space fsbase (thread pointer)
+/// via write_state is accepted and can be read back correctly.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires FS/GS base register save/restore — not available in libos mode"
+    not(target_arch = "x86_64"),
+    ignore = "x86_64-specific fsbase round-trip"
 )]
-#[test]
-fn thread_local_register_state() {
-    panic!("not yet implemented: requires FS/GS base register save/restore");
+#[async_std::test]
+async fn thread_local_register_state() {
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "tls-state-proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    thread.start(helpers::test_loop_thread_fn).unwrap();
+    async_std::task::yield_now().await;
+    async_std::task::yield_now().await;
+
+    thread.suspend();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_SUSPENDED)
+        .await;
+
+    // Set fsbase to a valid user-space address, write, read back,
+    // and verify the round-trip preserves the value.
+    #[cfg(target_arch = "x86_64")]
+    {
+        let mut buf = vec![0u8; 1024];
+        let size = thread
+            .read_state(ThreadStateKind::General, &mut buf)
+            .unwrap();
+
+        let fsbase_offset = 144; // offset of fsbase in GeneralRegs
+        let valid_user_addr: usize = 0x0000_7F00_0000_0000;
+        buf[fsbase_offset..fsbase_offset + 8].copy_from_slice(&valid_user_addr.to_ne_bytes());
+
+        let result = thread.write_state(ThreadStateKind::General, &buf[..size]);
+        assert!(
+            result.is_ok(),
+            "valid fsbase should be accepted: {:?}",
+            result
+        );
+
+        // Read back and verify the value was preserved.
+        let mut buf2 = vec![0u8; 1024];
+        let size2 = thread
+            .read_state(ThreadStateKind::General, &mut buf2)
+            .unwrap();
+        assert_eq!(size, size2);
+
+        let readback =
+            usize::from_ne_bytes(buf2[fsbase_offset..fsbase_offset + 8].try_into().unwrap());
+        assert_eq!(
+            readback, valid_user_addr,
+            "fsbase round-trip failed: expected {:#x}, got {:#x}",
+            valid_user_addr, readback
+        );
+    }
+
+    thread.resume();
+    thread.kill();
+    as_kobject(&thread)
+        .wait_signal(Signal::THREAD_TERMINATED)
+        .await;
 }
 
 /// C++: TEST(Threads, ThreadStartInvalidEntry)

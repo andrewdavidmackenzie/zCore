@@ -265,8 +265,9 @@ fn channel_read_handle() {
     );
     // C++ expects ZX_ERR_INVALID_ARGS. The copy-out to the unmapped
     // handles pointer fails because `copy_to_user` rejects the address.
-    assert!(
-        result.is_err(),
-        "channel read with unmapped handles pointer should fail"
+    assert_eq!(
+        result,
+        Err(zircon_object::ZxError::INVALID_ARGS),
+        "channel read with unmapped handles pointer should return INVALID_ARGS"
     );
 }
