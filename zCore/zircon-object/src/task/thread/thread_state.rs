@@ -1,5 +1,5 @@
 use crate::{ZxError, ZxResult};
-use hal_impl::context::{GeneralRegs, UserContext};
+use hal_impl::context::UserContext;
 use numeric_enum_macro::numeric_enum;
 
 numeric_enum! {
@@ -31,68 +31,11 @@ impl ContextAccessState for UserContext {
 
     fn write_state(&mut self, kind: ThreadStateKind, buf: &[u8]) -> ZxResult {
         match kind {
-            ThreadStateKind::General => {
-                let regs: GeneralRegs = buf.read_struct()?;
-                validate_general_regs(&regs)?;
-                *self.general_mut() = regs;
-            }
+            ThreadStateKind::General => *self.general_mut() = buf.read_struct()?,
             _ => return Err(ZxError::NOT_SUPPORTED),
         }
         Ok(())
     }
-}
-
-/// Validate general register values before writing them to thread state.
-///
-/// On x86_64, rejects:
-/// - Non-canonical RIP (bits 48..63 don't sign-extend bit 47)
-/// - Kernel-space RIP (>= 0xFFFF_8000_0000_0000)
-/// - Non-canonical fsbase or gsbase
-/// - Kernel-space fsbase or gsbase
-///
-/// This matches Fuchsia's `arch_validate_general_regs()`.
-fn validate_general_regs(regs: &GeneralRegs) -> ZxResult {
-    #[cfg(target_arch = "x86_64")]
-    {
-        if !is_valid_user_address(regs.rip) {
-            return Err(ZxError::INVALID_ARGS);
-        }
-        if !is_valid_user_address(regs.fsbase) {
-            return Err(ZxError::INVALID_ARGS);
-        }
-        if !is_valid_user_address(regs.gsbase) {
-            return Err(ZxError::INVALID_ARGS);
-        }
-    }
-    #[cfg(not(target_arch = "x86_64"))]
-    {
-        let _ = regs;
-    }
-    Ok(())
-}
-
-/// Check whether `addr` is a valid user-space address on x86_64.
-///
-/// A valid user address is canonical (bits 48..63 sign-extend bit 47)
-/// AND in the lower half of the address space (bit 63 == 0).
-/// Address 0 is valid (it will fault at runtime, but it's not the
-/// kernel's job to reject it in write_state).
-#[cfg(target_arch = "x86_64")]
-fn is_valid_user_address(addr: usize) -> bool {
-    // The canonical check: sign-extend bit 47 across bits 48..63.
-    // If bits 48..63 are all 0, it's canonical user-space (lower half).
-    // If bits 48..63 are all 1, it's canonical kernel-space (upper half).
-    // Anything else is non-canonical.
-    let canonical = ((addr as isize) << 16) >> 16;
-    if canonical as usize != addr {
-        // Non-canonical address
-        return false;
-    }
-    // Reject kernel-space addresses (upper canonical half: bit 63 set)
-    if addr >= 0xFFFF_8000_0000_0000 {
-        return false;
-    }
-    true
 }
 
 trait BufExt {
