@@ -698,10 +698,15 @@ impl VmObject {
         if self.trait_.cache_policy() != CachePolicy::Cached && !self.trait_.is_contiguous() {
             return Err(ZxError::BAD_STATE);
         }
-        // Slices get their own independent content_size equal to the
-        // slice's own size.  REFERENCE children share the parent's
-        // content_size via delegation in content_size()/set_content_size().
-        let child_content_size = size;
+        // Slices of regular paged VMOs get content_size equal to the slice
+        // size. Slices of physical or contiguous VMOs get content_size = 0
+        // since these VMOs don't track content (stream_size is always 0).
+        // REFERENCE children share the parent's content_size via delegation.
+        let child_content_size = if self.trait_.is_paged() && !self.trait_.is_contiguous() {
+            size
+        } else {
+            0
+        };
         let child = Arc::new(VmObject {
             base: KObjectBase::with(&self.base.name(), Signal::VMO_ZERO_CHILDREN),
             resizable,

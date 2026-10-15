@@ -91,8 +91,11 @@ impl VMObjectTrait for VMObjectPhysical {
         Err(ZxError::NOT_SUPPORTED)
     }
 
-    fn complete_info(&self, _info: &mut VmoInfo) {
-        warn!("VmoInfo for physical is unimplemented");
+    fn complete_info(&self, info: &mut VmoInfo) {
+        info.flags |= VmoInfoFlags::TYPE_PHYSICAL | VmoInfoFlags::CONTIGUOUS;
+        let committed = (self.pages * PAGE_SIZE) as u64;
+        info.committed_bytes = committed;
+        info.populated_bytes = committed;
     }
 
     fn cache_policy(&self) -> CachePolicy {
