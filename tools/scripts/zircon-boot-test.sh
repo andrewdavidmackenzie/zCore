@@ -12,7 +12,13 @@
 set -euo pipefail
 
 ARCH="${1:?Usage: $0 <arch>}"
-TIMEOUT=60
+# On macOS, QEMU runs x86_64 via emulation (no KVM) on aarch64 hosts,
+# which is significantly slower. Increase timeout to avoid flaky failures.
+if [ "$(uname -s)" = "Darwin" ]; then
+  TIMEOUT=120
+else
+  TIMEOUT=60
+fi
 
 # Read core count from target config
 source "$(dirname "$0")/get-target-cores.sh"
