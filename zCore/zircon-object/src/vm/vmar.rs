@@ -853,8 +853,22 @@ impl VmAddressRegion {
                     }
                     map.vmo.zero(vmo_offset, op_len)?;
                 }
-                VmarOpType::DontNeed | VmarOpType::AlwaysNeed | VmarOpType::Prefetch => {
-                    // Performance hints — no-op for now.
+                VmarOpType::DontNeed | VmarOpType::AlwaysNeed => {
+                    // For mappings with FAULT_BEYOND_STREAM_SIZE, check
+                    // that the range is within the VMO's content_size.
+                    // This matches Fuchsia's behavior where DONT_NEED/
+                    // ALWAYS_NEED on a range beyond content_size returns
+                    // OUT_OF_RANGE.
+                    let map_inner = map.inner.lock();
+                    if map_inner.fault_beyond_stream_size {
+                        let content_size = map.vmo.content_size();
+                        if vmo_offset >= content_size {
+                            return Err(ZxError::OUT_OF_RANGE);
+                        }
+                    }
+                }
+                VmarOpType::Prefetch => {
+                    // Performance hint — no-op for now.
                 }
             }
         }
