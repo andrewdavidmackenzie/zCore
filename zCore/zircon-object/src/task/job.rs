@@ -289,7 +289,7 @@ impl Job {
         inner.exited_queue_time += cpu_time.min(1);
         inner
             .processes
-            .retain(|proc| proc.upgrade().map_or(false, |p| p.id() != id));
+            .retain(|proc| proc.upgrade().is_some_and(|p| p.id() != id));
         let no_children = inner.children.is_empty();
         let no_processes = inner.processes.is_empty();
         let killed = inner.killed;
