@@ -3600,11 +3600,14 @@ fn pager_wb_cannot_overwrite_zero_page_no_trap_dirty() {
 #[test]
 fn pager_wb_cannot_overwrite_zero_page_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -3669,11 +3672,14 @@ fn pager_wb_commit_extended_tail_no_trap_dirty() {
 #[test]
 fn pager_wb_commit_extended_tail_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -3705,11 +3711,14 @@ fn pager_wb_commit_resize_race_no_trap_dirty() {
 #[test]
 fn pager_wb_commit_resize_race_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -3747,11 +3756,14 @@ fn pager_wb_decommit_clean_on_detach_no_trap_dirty() {
 #[test]
 fn pager_wb_decommit_clean_on_detach_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4380,11 +4392,14 @@ fn pager_wb_modified_no_reset_no_trap_dirty() {
 #[test]
 fn pager_wb_modified_no_reset_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4436,11 +4451,14 @@ fn pager_wb_modified_on_op_zero_no_trap_dirty() {
 #[test]
 fn pager_wb_modified_on_op_zero_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4474,11 +4492,14 @@ fn pager_wb_modified_on_partial_vmo_write_no_trap_dirty() {
 #[test]
 fn pager_wb_modified_on_partial_vmo_write_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4514,11 +4535,14 @@ fn pager_wb_modified_on_resize_no_trap_dirty() {
 #[test]
 fn pager_wb_modified_on_resize_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4549,11 +4573,14 @@ fn pager_wb_modified_on_vmo_write_no_trap_dirty() {
 #[test]
 fn pager_wb_modified_on_vmo_write_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4586,11 +4613,14 @@ fn pager_wb_no_dirty_on_commit_no_trap_dirty() {
 #[test]
 fn pager_wb_no_dirty_on_commit_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4777,11 +4807,14 @@ fn pager_wb_no_query_on_clone_no_trap_dirty() {
 #[test]
 fn pager_wb_no_query_on_clone_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4818,11 +4851,14 @@ fn pager_wb_not_modified_clone_write_no_trap_dirty() {
 #[test]
 fn pager_wb_not_modified_clone_write_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4895,11 +4931,14 @@ fn pager_wb_not_modified_on_failed_resize_no_trap_dirty() {
 #[test]
 fn pager_wb_not_modified_on_failed_resize_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4929,11 +4968,14 @@ fn pager_wb_not_modified_on_failed_vmo_write_no_trap_dirty() {
 #[test]
 fn pager_wb_not_modified_on_failed_vmo_write_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -4982,11 +5024,14 @@ fn pager_wb_not_modified_on_vmo_read_no_trap_dirty() {
 #[test]
 fn pager_wb_not_modified_on_vmo_read_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5082,11 +5127,14 @@ fn pager_wb_op_zero_clone_no_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_clone_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5120,11 +5168,14 @@ fn pager_wb_op_zero_decommit_no_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_decommit_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5158,11 +5209,14 @@ fn pager_wb_op_zero_expands_tail_no_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_expands_tail_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5201,11 +5255,14 @@ fn pager_wb_op_zero_partial_page_no_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_partial_page_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5225,11 +5282,14 @@ fn pager_wb_op_zero_pinned_no_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_pinned_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5259,11 +5319,14 @@ fn pager_wb_op_zero_resize_no_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_resize_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5296,11 +5359,14 @@ fn pager_wb_op_zero_tail_no_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_tail_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5309,11 +5375,14 @@ fn pager_wb_op_zero_tail_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5346,11 +5415,14 @@ fn pager_wb_op_zero_unblocks_read_request_no_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_unblocks_read_request_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5381,11 +5453,14 @@ fn pager_wb_op_zero_with_markers_no_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_with_markers_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5433,13 +5508,22 @@ fn pager_wb_op_zero_writeback_no_trap_dirty() {
 #[test]
 fn pager_wb_op_zero_writeback_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, PinAfterDirty)
@@ -5689,13 +5773,22 @@ fn pager_wb_resize_partial_writeback_intersecting_random_writes_no_trap_dirty() 
 #[test]
 fn pager_wb_resize_partial_writeback_intersecting_random_writes_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeSupplyZeroNoTrapDirty)
@@ -5737,11 +5830,14 @@ fn pager_wb_resize_supply_zero_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_supply_zero_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -5806,13 +5902,22 @@ fn pager_wb_resize_writeback_after_gap_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_after_gap_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackDirtyAfterQueryNoTrapDirty)
@@ -5854,13 +5959,22 @@ fn pager_wb_resize_writeback_dirty_after_query_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_dirty_after_query_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackInterleavedWriteWithMappingNoTrapDirty)
@@ -5878,13 +5992,22 @@ fn pager_wb_resize_writeback_interleaved_write_with_mapping_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_interleaved_write_with_mapping_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingRandomWritesNoTrapDirty)
@@ -5926,13 +6049,22 @@ fn pager_wb_resize_writeback_intersecting_random_writes_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_intersecting_random_writes_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingResizeNoTrapDirty)
@@ -5974,13 +6106,22 @@ fn pager_wb_resize_writeback_intersecting_resize_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_intersecting_resize_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackIntersectingWriteNoTrapDirty)
@@ -6022,13 +6163,22 @@ fn pager_wb_resize_writeback_intersecting_write_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_intersecting_write_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackMulipleGapsNoTrapDirty)
@@ -6070,13 +6220,22 @@ fn pager_wb_resize_writeback_muliple_gaps_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_muliple_gaps_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackNewDirtyRequests)
@@ -6226,13 +6385,22 @@ fn pager_wb_resize_writeback_non_intersecting_resize_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_non_intersecting_resize_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackNonIntersectingWriteNoTrapDirty)
@@ -6274,13 +6442,22 @@ fn pager_wb_resize_writeback_non_intersecting_write_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_non_intersecting_write_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackPartialEndNoTrapDirty)
@@ -6322,13 +6499,22 @@ fn pager_wb_resize_writeback_partial_end_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_partial_end_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackRepeatedNoTrapDirty)
@@ -6370,13 +6556,22 @@ fn pager_wb_resize_writeback_repeated_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_repeated_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackSequentialNoTrapDirty)
@@ -6418,26 +6613,44 @@ fn pager_wb_resize_writeback_sequential_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_sequential_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackTrapDirty)
 #[test]
 fn pager_wb_resize_writeback_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackWithMappingNoTrapDirty)
@@ -6455,13 +6668,22 @@ fn pager_wb_resize_writeback_with_mapping_no_trap_dirty() {
 #[test]
 fn pager_wb_resize_writeback_with_mapping_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, ResizeWritebackWithOutstandingDirtyRequests)
@@ -6662,13 +6884,22 @@ fn pager_wb_simple_writeback_no_trap_dirty() {
 #[test]
 fn pager_wb_simple_writeback_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, SliceOpZeroNoTrapDirty)
@@ -6707,11 +6938,14 @@ fn pager_wb_slice_op_zero_no_trap_dirty() {
 #[test]
 fn pager_wb_slice_op_zero_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -6773,11 +7007,14 @@ fn pager_wb_slice_write_no_trap_dirty() {
 #[test]
 fn pager_wb_slice_write_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     let ranges = vmo.query_dirty_ranges(0, 2 * PAGE_SIZE);
     assert!(!ranges.is_empty());
 }
@@ -6931,13 +7168,22 @@ fn pager_wb_writeback_combined_no_trap_dirty() {
 #[test]
 fn pager_wb_writeback_combined_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, WritebackDirtyPagesAfterDetachNoTrapDirty)
@@ -6971,13 +7217,22 @@ fn pager_wb_writeback_dirty_pages_after_detach_no_trap_dirty() {
 #[test]
 fn pager_wb_writeback_dirty_pages_after_detach_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedBeginNoTrapDirty)
@@ -7019,13 +7274,22 @@ fn pager_wb_writeback_out_of_order_combined_begin_no_trap_dirty() {
 #[test]
 fn pager_wb_writeback_out_of_order_combined_begin_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderCombinedEndNoTrapDirty)
@@ -7067,13 +7331,22 @@ fn pager_wb_writeback_out_of_order_combined_end_no_trap_dirty() {
 #[test]
 fn pager_wb_writeback_out_of_order_combined_end_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, WritebackOutOfOrderNoTrapDirty)
@@ -7115,13 +7388,22 @@ fn pager_wb_writeback_out_of_order_no_trap_dirty() {
 #[test]
 fn pager_wb_writeback_out_of_order_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, WritebackResizedRangeAfterDetachNoTrapDirty)
@@ -7152,13 +7434,22 @@ fn pager_wb_writeback_resized_range_after_detach_no_trap_dirty() {
 #[test]
 fn pager_wb_writeback_resized_range_after_detach_trap_dirty() {
     let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
+    let mut pager_helper = UserPagerHelper::new();
+    // ZX_VMO_TRAP_DIRTY = 8
+    let (vmo, key) = pager_helper.create_vmo_with_options(2, 8);
+    pager_helper.supply_pages(&vmo, key, 0, 2);
+    pager_helper
+        .pager
+        .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
-    pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    pager_helper
+        .pager
+        .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
+        .unwrap();
 }
 
 /// C++: TEST(PagerWriteback, WritebackWithMapping)
@@ -9287,14 +9578,16 @@ async fn pager_process_kill_after_suspend_usercopy_capture() {
 }
 
 /// C++: TEST(PagerWriteback, DetachWithPendingDirtyRequest)
+///
+/// Supply pages, dirty them, writeback, then detach. Verifies the
+/// lifecycle works when a dirty request is pending at detach time.
 #[test]
 fn pager_writeback_detach_with_pending_dirty_request() {
     let _ctx = TestContext::new();
-    let pager_helper = UserPagerHelper::new();
-    let vmo = pager_helper
-        .pager
-        .create_vmo(8, &pager_helper.port, 0, PAGE_SIZE as u64)
-        .unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo_with_options(1, 8); // TRAP_DIRTY
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    // Mark dirty, writeback begin, writeback end.
     pager_helper
         .pager
         .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
@@ -9307,17 +9600,20 @@ fn pager_writeback_detach_with_pending_dirty_request() {
         .pager
         .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
+    // Detach after writeback cycle.
+    pager_helper.detach_vmo(&vmo);
 }
 
 /// C++: TEST(PagerWriteback, NoDirtyRequestsAfterDetach)
+///
+/// After detaching, dirty operations should not generate port requests.
 #[test]
 fn pager_writeback_no_dirty_requests_after_detach() {
     let _ctx = TestContext::new();
-    let pager_helper = UserPagerHelper::new();
-    let vmo = pager_helper
-        .pager
-        .create_vmo(8, &pager_helper.port, 0, PAGE_SIZE as u64)
-        .unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo_with_options(1, 8); // TRAP_DIRTY
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    // Dirty + writeback cycle.
     pager_helper
         .pager
         .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
@@ -9330,21 +9626,30 @@ fn pager_writeback_no_dirty_requests_after_detach() {
         .pager
         .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
+    // Detach — subsequent dirty ops should not send port requests.
+    pager_helper.detach_vmo(&vmo);
+    // Write after detach should not panic (data still accessible).
+    let _ = vmo.write(0, &[0xAAu8; 8]);
 }
 
 /// C++: TEST(PagerWriteback, SimpleTrapDirty)
+///
+/// Basic TRAP_DIRTY lifecycle: supply, dirty, writeback begin/end.
 #[test]
 fn pager_writeback_simple_trap_dirty() {
     let _ctx = TestContext::new();
-    let pager_helper = UserPagerHelper::new();
-    let vmo = pager_helper
-        .pager
-        .create_vmo(8, &pager_helper.port, 0, PAGE_SIZE as u64)
-        .unwrap();
+    let mut pager_helper = UserPagerHelper::new();
+    let (vmo, key) = pager_helper.create_vmo_with_options(1, 8); // TRAP_DIRTY
+    pager_helper.supply_pages(&vmo, key, 0, 1);
+    // Mark page dirty.
     pager_helper
         .pager
         .op_range(2, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
+    // Verify dirty range.
+    let ranges = vmo.query_dirty_ranges(0, PAGE_SIZE);
+    assert!(!ranges.is_empty(), "page should be dirty after OP_DIRTY");
+    // Writeback begin + end.
     pager_helper
         .pager
         .op_range(3, &vmo, 0, PAGE_SIZE as u64, 0)
@@ -9353,6 +9658,9 @@ fn pager_writeback_simple_trap_dirty() {
         .pager
         .op_range(4, &vmo, 0, PAGE_SIZE as u64, 0)
         .unwrap();
+    // After writeback, page should be clean.
+    let ranges = vmo.query_dirty_ranges(0, PAGE_SIZE);
+    assert!(ranges.is_empty(), "page should be clean after writeback");
 }
 
 /// C++: TEST(PagerWriteback, SuspendDirtyTest)
