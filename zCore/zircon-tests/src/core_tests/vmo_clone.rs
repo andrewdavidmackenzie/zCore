@@ -323,6 +323,10 @@ fn resize_child() {
 
     let parent_info = vmo.get_info();
     let child_info = child.get_info();
+    // After child shrinks from 3→1 pages:
+    // - Child should only see 1 page
+    // - Parent still has all 3 pages committed, but pages 1-2 are no longer
+    //   shared with the child, so they're fully attributed to the parent.
     assert_eq!(child_info.populated_bytes as usize, PAGE_SIZE);
     assert_eq!(parent_info.populated_bytes as usize, 2 * PAGE_SIZE);
 }
