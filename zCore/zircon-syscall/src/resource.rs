@@ -32,8 +32,14 @@ impl Syscall<'_> {
             return Err(ZxError::ACCESS_DENIED);
         }
 
-        // Cannot create children from an exclusive parent resource.
-        if parent_rsrc.is_exclusive() {
+        // If the parent is not a ranged root for this kind, then neither
+        // the parent nor the child may have the EXCLUSIVE flag. This prevents
+        // creating exclusive slices from non-root resources and creating
+        // children from exclusive parents.
+        // (Matches Fuchsia: kernel/lib/syscalls/resource.rs lines 72-78)
+        if !parent_rsrc.is_ranged_root(kind)
+            && (parent_rsrc.is_exclusive() || flags.contains(ResourceFlags::EXCLUSIVE))
+        {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate the requested range is valid.

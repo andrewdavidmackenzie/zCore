@@ -126,8 +126,8 @@ impl Resource {
         len: usize,
     ) -> ZxResult {
         self.validate(kind)?;
-        // ROOT resources allow any sub-range.
-        if self.kind == ResourceKind::ROOT {
+        // ROOT and ranged-root resources allow any sub-range.
+        if self.kind == ResourceKind::ROOT || self.is_ranged_root(kind) {
             return Ok(());
         }
         let req_end = addr.checked_add(len);
@@ -188,6 +188,36 @@ impl Resource {
     /// Whether this resource has the EXCLUSIVE flag.
     pub fn is_exclusive(&self) -> bool {
         self.flags.contains(ResourceFlags::EXCLUSIVE)
+    }
+
+    /// Get the base address of this resource.
+    pub fn addr(&self) -> usize {
+        self.addr
+    }
+
+    /// Get the length (size) of this resource.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Get the kind of this resource.
+    pub fn kind(&self) -> ResourceKind {
+        self.kind
+    }
+
+    /// Get the raw flags of this resource.
+    pub fn flags(&self) -> ResourceFlags {
+        self.flags
+    }
+
+    /// Whether this resource is a ranged root for the given kind.
+    ///
+    /// A ranged root has `base == 0 && len == 0` and matching kind,
+    /// or is the ROOT resource. Ranged roots can create both shared
+    /// and exclusive children without restriction.
+    pub fn is_ranged_root(&self, kind: ResourceKind) -> bool {
+        self.kind == ResourceKind::ROOT
+            || (self.kind == kind && self.addr == 0 && self.len == 0)
     }
 
     /// Get information of the resource.
