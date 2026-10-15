@@ -757,11 +757,8 @@ fn write_and_read_size_overflow() {
     let (h0, h1) = super::syscall_socket::syscall_socket_create(&ctx, 0);
     let sc = ctx.syscall();
 
-    // The C++ test uses overflow_size = (1ULL << 32) + 1.
-    // Our syscall layer doesn't yet have the UINT32_MAX check, so
-    // instead we test the available edge case: fill the socket,
-    // then verify the next write returns SHOULD_WAIT and a large
-    // read returns everything.
+    // Fill the socket to capacity, then verify the next write returns
+    // SHOULD_WAIT and a large read returns everything.
     let write_data = vec![0xAAu8; 262144]; // SOCKET_SIZE
     let mut actual: usize = 0;
     sc.sys_socket_write(

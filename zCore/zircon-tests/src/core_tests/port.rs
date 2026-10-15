@@ -746,10 +746,10 @@ fn edge_trigger_timeout() {
     // happened after registration, the subscription should remain pending.
     // We can verify by trying to cancel it — if it fired, cancel would
     // return NOT_FOUND.
-    let cancel_result = sc.sys_port_cancel(port_h, event_h, 30);
-    // Either the subscription is still pending (Ok) or it already fired (NOT_FOUND).
-    // Both are acceptable behaviors. The key assertion is no panic.
-    let _ = cancel_result;
+    // Edge-triggered: no transition after registration, so no packet should fire.
+    // Verify by checking cancel succeeds (subscription still pending).
+    sc.sys_port_cancel(port_h, event_h, 30)
+        .expect("cancel should succeed — edge subscription should still be pending");
 }
 
 /// C++: TEST(PortTest, ThreadEvents)
@@ -876,8 +876,7 @@ async fn wait_async_boot_timestamp() {
     assert_eq!(repr.status, ZxError::OK);
     if let PayloadRepr::Signal(sig) = repr.data {
         assert!(sig.observed.contains(Signal::USER_SIGNAL_1));
-        // Boot timestamp should be set (non-zero)
-        let _ = sig.timestamp;
+        assert!(sig.timestamp > 0, "boot timestamp should be non-zero");
     } else {
         panic!("expected Signal payload");
     }
