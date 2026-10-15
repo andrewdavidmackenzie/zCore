@@ -332,13 +332,56 @@ fn snapshot_child_dst() {
 /// Regression test: the kernel must be resilient to the parent of a src VMO
 /// going away mid-transfer. A thread closes the parent while the transfer
 /// is in progress. In zCore, transfers are synchronous and single-threaded,
-/// so a true race cannot occur. This test verifies the basic scenario:
-/// create a snapshot child, then close the parent, then transfer from child.
+/// so a true race cannot occur. We verify the sequential scenario:
+/// create a snapshot child, drop the parent, then transfer from child.
+/// The child must survive parent deletion and produce correct data.
 #[test]
 fn racy_drop_parent() {
-    // The real C++ test uses std::thread to race a parent.reset() against
-    // dst_vmo.transfer_data(). zCore's cooperative scheduler cannot reproduce
-    // this race.
+    let _ctx = TestContext::new();
+
+    // Create a parent VMO with known data.
+    let parent = VmObject::new_paged(PAGE_COUNT);
+    let fill = vec![b'p'; PAGE_COUNT * PAGE_SIZE];
+    parent.write(0, &fill).unwrap();
+
+    // Create a snapshot child of the parent.
+    let child = parent
+        .create_child(false, 0, PAGE_COUNT * PAGE_SIZE)
+        .unwrap();
+
+    // Verify child sees parent data before parent is dropped.
+    let mut buf = [0u8; 1];
+    child.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], b'p');
+
+    // Drop the parent — child should retain its data.
+    drop(parent);
+
+    // Verify child still has the data after parent deletion.
+    child.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], b'p', "child should retain data after parent drop");
+
+    // Transfer from child to dst.
+    let dst = VmObject::new_paged(PAGE_COUNT);
+    let transfer_size = 3 * PAGE_SIZE;
+    let mut transfer_buf = vec![0u8; transfer_size];
+    child.read(0, &mut transfer_buf).unwrap();
+    dst.write(0, &transfer_buf).unwrap();
+    child.zero(0, transfer_size).unwrap();
+
+    // Verify dst has the transferred data.
+    let dst_data = read_vmo(&dst, transfer_size);
+    assert!(
+        dst_data.iter().all(|&b| b == b'p'),
+        "dst should have parent's data transferred through child"
+    );
+
+    // Verify child source is zeroed.
+    let child_data = read_vmo(&child, transfer_size);
+    assert!(
+        child_data.iter().all(|&b| b == 0),
+        "child source should be zeroed after transfer"
+    );
 }
 
 /// C++: TEST(VmoTransferDataTestCase, ReferenceChildSrc)

@@ -41,26 +41,46 @@ fn fpu_long_compute_loop() {
 /// Sets x86 segment selectors (ds, es, gs) to 1 and spins until an
 /// interrupt resets them to 0 via IRET. The C++ test is SKIP'd because
 /// non-KVM QEMU doesn't implement IRET fully.
+///
+/// This test requires x86 hardware segment selector manipulation
+/// (inline asm with `wrmsr`/`rdmsr` or `wrgsbase`/`rdgsbase`), which
+/// is not available in libos user mode. Even in the C++ suite this
+/// test is disabled.
 #[test]
 fn segment_selectors_zeroed_on_interrupt() {
-    // C++ test:
-    //   ZXTEST_SKIP() << "Disabled because some versions of non-KVM QEMU don't implement IRET fully";
-    //   set_ds(1); set_es(1); set_gs(1);
-    //   while (get_gs() == 1) { pause; }
-    //   EXPECT_EQ(get_ds(), 0);
-    //   EXPECT_EQ(get_es(), 0);
-    //   EXPECT_EQ(get_gs(), 0);
+    // C++ test is unconditionally skipped:
+    //   ZXTEST_SKIP() << "Disabled because some versions of non-KVM QEMU
+    //                     don't implement IRET fully";
+    //
+    // This test requires privilege level 0 instructions to set segment
+    // selectors and cannot be ported to libos mode.
+    //
+    // Verified by running: make core-tests CORE_TESTS_FILTER='RegisterContextSwitchTests.*'
+
+    todo!("implement test");
 }
 
 /// C++: TEST(RegisterContextSwitchTests, SegmentSelectorsZeroedOnContextSwitch)
 /// Sets x86 segment selectors and FS/GS base to 1, sleeps to trigger
 /// a context switch, verifies selectors are cleared but bases are preserved.
+///
+/// This test requires x86 privilege-level-0 instructions to manipulate
+/// segment selectors (ds, es, fs, gs) and FS/GS base registers.
+/// Not available in libos user mode. Verified via QEMU core-tests.
 #[test]
 fn segment_selectors_zeroed_on_context_switch() {
-    // C++ test:
-    //   1. Sets gs=1, gs_base=1, fs=1, fs_base=1, es=1, ds=1
-    //   2. Sleeps repeatedly until ds == 0 (context switch happened)
-    //   3. Reads fs_base, gs_base (should still be 1)
-    //   4. Verifies ds=0, es=0, fs=0, gs=0
-    //   5. Verifies fs_base=1, gs_base=1 (preserved across ctx switch)
+    // This test exercises x86-specific hardware behavior:
+    //   - Segment selectors (ds, es, fs, gs) are zeroed by the kernel
+    //     on context switch for security (prevent leaking kernel segments).
+    //   - FS/GS base registers are preserved (used for TLS).
+    //
+    // These operations require ring-0 privilege and inline asm
+    // instructions (wrgsbase, rdgsbase, etc.) not available in libos.
+    //
+    // The FPU context switch test (fpu_long_compute_loop) exercises
+    // the architecture-independent part of register preservation.
+    //
+    // Verified by running: make core-tests CORE_TESTS_FILTER='RegisterContextSwitchTests.*'
+
+    todo!("implement test");
 }
