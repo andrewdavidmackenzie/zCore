@@ -936,7 +936,6 @@ fn write_shrink_race() {
 /// cannot construct a truly unmapped buffer. This test is ignored in
 /// libos mode. We still verify the near-overflow offset path as a
 /// basic sanity check.
-#[cfg_attr(feature = "libos", ignore)]
 #[test]
 fn write_vector_unmapped_user_buffer_cancels_operation() {
     let _ctx = TestContext::new();

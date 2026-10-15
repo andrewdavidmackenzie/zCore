@@ -313,7 +313,6 @@ fn init_page_tagged_vmo_resizable(pages: usize) -> Arc<VmObject> {
 
 /// C++: TEST_F(VmoCloneResizeTests, ResizeChild)
 #[test]
-#[ignore = "populated_bytes attribution"]
 fn resize_child() {
     let _ctx = TestContext::new();
     let vmo = init_page_tagged_vmo_resizable(3);
@@ -333,7 +332,6 @@ fn resize_child() {
 
 /// C++: TEST_F(VmoCloneResizeTests, ResizeOriginal)
 #[test]
-#[ignore = "populated_bytes attribution"]
 fn resize_original() {
     let _ctx = TestContext::new();
     let vmo = init_page_tagged_vmo_resizable(3);

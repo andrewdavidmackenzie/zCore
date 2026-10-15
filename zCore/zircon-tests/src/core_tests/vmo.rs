@@ -705,7 +705,6 @@ fn vmo_zero_sub_range() {
 /// run in parallel with other tests due to mock_mem anonymous page
 /// aliasing on aarch64 macOS (16K host pages). Passes individually.
 #[test]
-#[cfg_attr(feature = "libos", ignore)]
 fn cache_flush() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1618,7 +1617,6 @@ fn physical_slice() {
 /// test is skipped. The validation is exercised by the core-tests binary
 /// on bare-metal when the MMIO resource and test_ram_reserve are available.
 #[test]
-#[cfg_attr(feature = "libos", ignore)]
 fn physical_vmo_invalid_initial_size() {
     panic!("not yet implemented: requires MMIO resource and bare-metal syscall layer");
 }
@@ -1837,7 +1835,6 @@ fn read_write_invalid_null_buffer() {
 /// mode, `copy_to_user` is a plain memcpy that doesn't check VMAR permissions,
 /// so the write silently succeeds. This test is therefore ignored in libos.
 #[test]
-#[cfg_attr(feature = "libos", ignore)]
 fn read_write_invalid_user_buffer() {
     panic!("not yet implemented: requires bare-metal VMAR permission enforcement");
 }
