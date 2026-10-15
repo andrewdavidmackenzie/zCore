@@ -400,49 +400,28 @@ async fn handler_user_trap(
                 Ok(()) => Ok(()),
                 Err(ZxError::SHOULD_WAIT) => {
                     // Pager-backed VMO: a page request has been sent to
-                    // the pager's port. Find the VMO and wait for the
-                    // page to be supplied, racing against thread kill.
+                    // the pager's port. Wait for the page to be supplied.
+                    if thread.state() == ThreadState::Dying || thread.state() == ThreadState::Dead {
+                        return Err(ExceptionInfo {
+                            type_: ExceptionType::ThreadExiting,
+                            synth_code: 0,
+                        });
+                    }
                     let vmo = vmar.find_pager_vmo(vaddr);
                     let offset = vmar.vaddr_to_vmo_offset(vaddr);
                     if let (Some(vmo), Some(offset)) = (vmo, offset) {
-                        let mut page_fut = core::pin::pin!(vmo.wait_for_page(offset));
-                        loop {
-                            if thread.state() == ThreadState::Dying
-                                || thread.state() == ThreadState::Dead
-                            {
-                                // Drop the future — the oneshot Receiver
-                                // is dropped, and the stale waiter entry
-                                // will be cleaned up on the next supply.
-                                return Err(ExceptionInfo {
-                                    type_: ExceptionType::ThreadExiting,
+                        match vmo.wait_for_page(offset).await {
+                            Ok(()) => Ok(()),
+                            Err(e) => {
+                                warn!("pager wait failed: {:?}", e);
+                                Err(ExceptionInfo {
+                                    type_: ExceptionType::FatalPageFault,
                                     synth_code: 0,
-                                });
-                            }
-                            // Poll the page future in a scoped block so
-                            // Context doesn't live across the yield.
-                            let poll_result = {
-                                let waker = core::task::Waker::noop();
-                                let mut cx = core::task::Context::from_waker(waker);
-                                page_fut.as_mut().poll(&mut cx)
-                            };
-                            match poll_result {
-                                core::task::Poll::Ready(Ok(())) => break Ok(()),
-                                core::task::Poll::Ready(Err(e)) => {
-                                    warn!("pager wait failed: {:?}", e);
-                                    break Err(ExceptionInfo {
-                                        type_: ExceptionType::FatalPageFault,
-                                        synth_code: 0,
-                                    });
-                                }
-                                core::task::Poll::Pending => {
-                                    hal_impl::thread::yield_now().await;
-                                }
+                                })
                             }
                         }
                     } else {
-                        for _ in 0..10 {
-                            hal_impl::thread::yield_now().await;
-                        }
+                        hal_impl::thread::yield_now().await;
                         Ok(())
                     }
                 }

@@ -387,7 +387,9 @@ impl Syscall<'_> {
             Sys::VMO_GET_SIZE => self.sys_vmo_get_size(a0 as _, a1.into()),
             Sys::VMO_SET_SIZE => self.sys_vmo_set_size(a0 as _, a1 as _),
             Sys::VMO_OP_RANGE => {
-                self.sys_vmo_op_range(a0 as _, a1 as _, a2 as _, a3 as _, a4.into(), a5 as _)
+                // COMMIT on pager-backed VMOs needs async demand-paging.
+                self.sys_vmo_op_range_async(a0 as _, a1 as _, a2 as _, a3 as _, a4.into(), a5 as _)
+                    .await
             }
             Sys::VMO_REPLACE_AS_EXECUTABLE => {
                 self.sys_vmo_replace_as_executable(a0 as _, a1 as _, a2.into())

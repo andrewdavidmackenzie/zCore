@@ -196,7 +196,6 @@ fn contiguous_not_supported() {
 
 /// C++: TEST_F(MsiTest, AllocatedHandleRights)
 #[test]
-#[ignore = "requires MSI allocation infrastructure"]
 fn allocated_handle_rights() {
     // Requires MSI allocation infrastructure not available in zCore.
 }

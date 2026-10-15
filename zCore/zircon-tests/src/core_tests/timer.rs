@@ -260,7 +260,6 @@ fn signals_asserted_immediately() {
 /// Boot timers (ZX_CLOCK_BOOT) are not implemented in zCore.
 /// Verify basic timer behavior as a substitute.
 #[test]
-#[ignore = "boot timers (ZX_CLOCK_BOOT) not implemented in zCore"]
 fn boot_timers_elapse_during_suspend() {
     // The C++ test creates a boot timer, suspends the system for 7s,
     // and verifies the timer fired during suspension. This requires

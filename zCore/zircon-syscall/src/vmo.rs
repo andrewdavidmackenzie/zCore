@@ -493,6 +493,50 @@ impl Syscall<'_> {
     /// Perform an operation on a range of a VMO.
     ///
     /// Performs cache and memory operations against pages held by the VMO.
+    /// Async wrapper for sys_vmo_op_range that demand-pages pager-backed
+    /// VMOs on COMMIT. Other ops delegate to the sync version.
+    pub async fn sys_vmo_op_range_async(
+        &self,
+        handle_value: HandleValue,
+        op: u32,
+        offset: usize,
+        len: usize,
+        buffer: UserOutPtr<u8>,
+        buffer_size: usize,
+    ) -> ZxResult {
+        // ZX_VMO_OP_COMMIT = 1
+        if op == 1 {
+            let proc = self.thread.proc();
+            let is_pager = proc
+                .get_object::<VmObject>(handle_value)
+                .is_ok_and(|v| v.has_pager());
+            if is_pager {
+                // Debug: write to serial directly (survives LTO)
+                let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
+                if !rights.contains(Rights::WRITE) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                if offset.checked_add(len).is_none() || offset + len > vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                let start = offset & !(PAGE_SIZE - 1);
+                let end = (offset + len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+                let aligned_len = end - start;
+                // Send one batched page request for the entire range,
+                // then wait for all pages. Fuchsia batches commit requests
+                // — the C++ tests expect a single packet with the full range.
+                let _ = vmo.request_pages(start, aligned_len);
+                for page_idx in (start / PAGE_SIZE)..(end / PAGE_SIZE) {
+                    if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
+                        vmo.wait_for_page(page_idx * PAGE_SIZE).await?;
+                    }
+                }
+                return Ok(());
+            }
+        }
+        self.sys_vmo_op_range(handle_value, op, offset, len, buffer, buffer_size)
+    }
+
     pub fn sys_vmo_op_range(
         &self,
         handle_value: HandleValue,

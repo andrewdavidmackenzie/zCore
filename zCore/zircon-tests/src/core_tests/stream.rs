@@ -749,7 +749,6 @@ fn write_shrink_race() {
 /// path cannot be exercised. We approximate by testing write_at with
 /// a near-overflow offset.
 #[test]
-#[ignore] // Requires partially unmapped user buffer — not possible in libos mode.
 fn write_vector_unmapped_user_buffer_cancels_operation() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);

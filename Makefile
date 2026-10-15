@@ -618,7 +618,7 @@ else ifeq ($(ARCH), riscv64)
 	@ln -s busybox target/rootfs/riscv/bin/ls
 endif
 
-# put other tests into rootfs
+# put other tests into rootfsw
 other-test:
 	cargo other-test --arch $(ARCH)
 
