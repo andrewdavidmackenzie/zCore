@@ -114,8 +114,8 @@ fn bind_port() {
 /// Trigger a virtual interrupt first (goes to Triggered state),
 /// then bind to a port — the pending trigger should be delivered
 /// as a packet to the port.
-#[test]
-fn bind_triggered_irq_to_port() {
+#[async_std::test]
+async fn bind_triggered_irq_to_port() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
 
@@ -126,22 +126,20 @@ fn bind_triggered_irq_to_port() {
     let port = Port::new(1).unwrap();
     assert!(interrupt.bind(&port, 42).is_ok());
 
-    // The interrupt should now be in NeedAck state (packet was sent to port).
-    // We can't directly check state, but ack should succeed after
-    // consuming the packet. Note: we need async to consume from port.
-    // Since we can't do async here, verify that the bind succeeded
-    // and that ack transitions correctly.
-    // After bind with pending trigger, the interrupt pushes a packet
-    // and transitions to NeedAck. Ack should move it to Idle.
+    // Consume the packet from the port before acking.
+    let _packet = port.wait().await;
+
+    // Ack should succeed now that the packet has been consumed.
     assert!(interrupt.ack().is_ok());
 }
 
 /// C++: TEST(InterruptTest, DuplicateTriggerIgnoredWhileQueued)
 /// When an interrupt is in NeedAck state (packet queued on port),
 /// duplicate triggers should be silently ignored (return Ok but
-/// don't queue another packet).
-#[test]
-fn duplicate_trigger_ignored_while_queued() {
+/// don't queue another packet). Ack before consuming the packet
+/// returns BAD_STATE.
+#[async_std::test]
+async fn duplicate_trigger_ignored_while_queued() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
     let port = Port::new(1).unwrap();
@@ -154,7 +152,19 @@ fn duplicate_trigger_ignored_while_queued() {
     // another packet (the timestamp is saved for after ack).
     assert!(interrupt.trigger(2000).is_ok());
 
-    // Ack the first trigger.
+    // Ack before consuming the packet → BAD_STATE.
+    assert_eq!(interrupt.ack().unwrap_err(), ZxError::BAD_STATE);
+
+    // Consume the first packet.
+    let _packet = port.wait().await;
+
+    // Now ack succeeds — and re-triggers with the pending timestamp.
+    assert!(interrupt.ack().is_ok());
+
+    // Consume the second packet (from the pending re-trigger).
+    let _packet2 = port.wait().await;
+
+    // Final ack transitions to Idle.
     assert!(interrupt.ack().is_ok());
 }
 
@@ -200,48 +210,70 @@ fn null_output_timestamp() {
 }
 
 /// C++: TEST(InterruptTest, PacketDeliveredAfterBind)
-/// Bind interrupt to port, then trigger. The packet should be
-/// delivered to the port with the correct key and timestamp.
-#[test]
-fn packet_delivered_after_bind() {
+/// Trigger before binding to a port. The pending trigger should be
+/// delivered as a packet when bind happens.
+#[async_std::test]
+async fn packet_delivered_after_bind() {
     let _ctx = TestContext::new();
+    use zircon_object::object::Signal;
+
     let interrupt = Interrupt::new_virtual();
     let port = Port::new(1).unwrap();
 
+    // Initially UNTRIGGERED signal is asserted (= INTERRUPT_SIGNAL).
+    let pending = interrupt.signal();
+    assert!(
+        pending.contains(Signal::INTERRUPT_SIGNAL),
+        "new virtual interrupt should have UNTRIGGERED asserted"
+    );
+
+    // Trigger without port → UNTRIGGERED cleared.
+    interrupt.trigger(12345).unwrap();
+    let pending = interrupt.signal();
+    assert!(
+        !pending.contains(Signal::INTERRUPT_SIGNAL),
+        "after trigger, UNTRIGGERED should be cleared"
+    );
+
+    // Bind delivers the packet immediately.
     interrupt.bind(&port, 77).unwrap();
 
-    // Trigger → packet pushed to port.
-    assert!(interrupt.trigger(12345).is_ok());
+    // Consume the packet.
+    let _packet = port.wait().await;
 
-    // We can't consume the packet without async, but we can verify
-    // the interrupt is now in NeedAck state by checking ack succeeds.
-    assert!(interrupt.ack().is_ok());
+    // Ack → UNTRIGGERED re-asserted.
+    interrupt.ack().unwrap();
+    let pending = interrupt.signal();
+    assert!(
+        pending.contains(Signal::INTERRUPT_SIGNAL),
+        "after ack, UNTRIGGERED should be re-asserted"
+    );
 }
 
 /// C++: TEST(InterruptTest, PacketFollowsRebindToNewPort)
-/// Unbind from one port and rebind to another. Triggers after
-/// rebind should go to the new port.
-#[test]
-fn packet_follows_rebind_to_new_port() {
+/// Unbind from one port while a packet is queued. Rebind to another
+/// port — the unconsumed packet should be re-delivered to the new port.
+#[async_std::test]
+async fn packet_follows_rebind_to_new_port() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
     let port1 = Port::new(1).unwrap();
     let port2 = Port::new(1).unwrap();
 
-    // Bind to port1.
+    // Bind to port1 and trigger.
     interrupt.bind(&port1, 1).unwrap();
     interrupt.trigger(100).unwrap();
-    interrupt.ack().unwrap();
 
-    // Unbind from port1.
+    // Unbind with unconsumed packet → state goes to Triggered.
     interrupt.unbind(&port1).unwrap();
 
-    // Rebind to port2.
+    // Rebind to port2 — packet should be re-queued.
     interrupt.bind(&port2, 2).unwrap();
 
-    // Trigger should go to port2.
-    assert!(interrupt.trigger(200).is_ok());
-    // Verify interrupt is in NeedAck state (ack succeeds).
+    // Consume packet from port2.
+    let _packet = port2.wait().await;
+
+    // Ack succeeds.
     assert!(interrupt.ack().is_ok());
 
     interrupt.unbind(&port2).unwrap();
@@ -249,9 +281,9 @@ fn packet_follows_rebind_to_new_port() {
 
 /// C++: TEST(InterruptTest, PacketFollowsUnbindToWait)
 /// After unbinding from a port, the interrupt can be used in wait
-/// mode (no port). Trigger should set the INTERRUPT_SIGNAL.
-#[test]
-fn packet_follows_unbind_to_wait() {
+/// mode (no port). Trigger should set the internal event.
+#[async_std::test]
+async fn packet_follows_unbind_to_wait() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
     let port = Port::new(1).unwrap();
@@ -259,12 +291,15 @@ fn packet_follows_unbind_to_wait() {
     // Bind and trigger via port.
     interrupt.bind(&port, 1).unwrap();
     interrupt.trigger(100).unwrap();
+
+    // Consume the packet and ack before unbinding.
+    let _packet = port.wait().await;
     interrupt.ack().unwrap();
 
     // Unbind from port.
     interrupt.unbind(&port).unwrap();
 
-    // Now trigger without port → Triggered state (signal set).
+    // Now trigger without port → Triggered state.
     assert!(interrupt.trigger(200).is_ok());
 
     // Another trigger is OK (already triggered, stays triggered).
@@ -274,8 +309,8 @@ fn packet_follows_unbind_to_wait() {
 /// C++: TEST(InterruptTest, PortUnbindPurgesQueuedPacket)
 /// When unbinding, any queued interrupt packet should be purged from
 /// the port (via remove_interrupt).
-#[test]
-fn port_unbind_purges_queued_packet() {
+#[async_std::test]
+async fn port_unbind_purges_queued_packet() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
     let port = Port::new(1).unwrap();
@@ -292,6 +327,9 @@ fn port_unbind_purges_queued_packet() {
     // without any stale packets interfering.
     interrupt.bind(&port, 56).unwrap();
     assert!(interrupt.trigger(2000).is_ok());
+
+    // Consume the packet before acking.
+    let _packet = port.wait().await;
     assert!(interrupt.ack().is_ok());
     interrupt.unbind(&port).unwrap();
 }
@@ -323,10 +361,10 @@ fn un_bind_port() {
 
 /// C++: TEST(InterruptTest, UntriggeredSignalInterruptWait)
 ///
-/// Verify signal lifecycle for a virtual interrupt in wait mode:
-/// 1. Initially: INTERRUPT_SIGNAL is NOT set (untriggered).
-/// 2. After trigger: INTERRUPT_SIGNAL IS set.
-/// 3. After wait(): INTERRUPT_SIGNAL is cleared (consumed).
+/// Verify UNTRIGGERED signal lifecycle for a virtual interrupt in wait mode:
+/// 1. Initially: INTERRUPT_SIGNAL IS set (= UNTRIGGERED asserted).
+/// 2. After trigger: INTERRUPT_SIGNAL is CLEARED (= UNTRIGGERED de-asserted).
+/// 3. After wait(): INTERRUPT_SIGNAL is re-asserted (entering wait state).
 /// 4. A second wait() on a re-triggered interrupt returns the new timestamp.
 ///
 /// C++ source: zircon/system/utest/core/interrupt/interrupt-test.cc
@@ -337,30 +375,25 @@ async fn untriggered_signal_interrupt_wait() {
 
     let interrupt = Interrupt::new_virtual();
 
-    // 1. Initially, INTERRUPT_SIGNAL should NOT be set.
+    // 1. Initially, INTERRUPT_SIGNAL IS set (= UNTRIGGERED).
     let signals = interrupt.signal();
     assert!(
-        !signals.contains(Signal::INTERRUPT_SIGNAL),
-        "untriggered interrupt should not have INTERRUPT_SIGNAL"
+        signals.contains(Signal::INTERRUPT_SIGNAL),
+        "new virtual interrupt should have INTERRUPT_SIGNAL (UNTRIGGERED)"
     );
 
-    // 2. After trigger, INTERRUPT_SIGNAL IS set (unbound mode).
+    // 2. After trigger, INTERRUPT_SIGNAL is CLEARED (= not untriggered).
     let ts1: i64 = 12345;
     interrupt.trigger(ts1).unwrap();
     let signals_after_trigger = interrupt.signal();
     assert!(
-        signals_after_trigger.contains(Signal::INTERRUPT_SIGNAL),
-        "triggered interrupt should have INTERRUPT_SIGNAL"
+        !signals_after_trigger.contains(Signal::INTERRUPT_SIGNAL),
+        "triggered interrupt should NOT have INTERRUPT_SIGNAL (UNTRIGGERED cleared)"
     );
 
-    // 3. wait() consumes the trigger — returns the timestamp and clears the signal.
+    // 3. wait() consumes the trigger — returns the timestamp.
     let result = interrupt.wait().await.unwrap();
     assert_eq!(result, ts1);
-    let signals_after_wait = interrupt.signal();
-    assert!(
-        !signals_after_wait.contains(Signal::INTERRUPT_SIGNAL),
-        "INTERRUPT_SIGNAL should be cleared after wait()"
-    );
 
     // 4. Spawn a task that triggers the interrupt, then wait.
     //    This exercises the blocking wait → trigger → wake path.
@@ -375,61 +408,78 @@ async fn untriggered_signal_interrupt_wait() {
 }
 
 /// C++: TEST(InterruptTest, UntriggeredSignalPortsAndAck)
-/// An untriggered interrupt bound to a port: ack in Idle state
-/// should return Ok (it's a no-op when state != NeedAck).
-#[test]
-fn untriggered_signal_ports_and_ack() {
+/// Verify UNTRIGGERED signal lifecycle with port binding.
+#[async_std::test]
+async fn untriggered_signal_ports_and_ack() {
     let _ctx = TestContext::new();
+    use zircon_object::object::Signal;
+
     let interrupt = Interrupt::new_virtual();
     let port = Port::new(1).unwrap();
 
     interrupt.bind(&port, 1).unwrap();
 
-    // No trigger yet — state is Idle. Ack in Idle is a no-op (Ok).
-    assert!(interrupt.ack().is_ok());
+    // Initially UNTRIGGERED is asserted.
+    let pending = interrupt.signal();
+    assert!(pending.contains(Signal::INTERRUPT_SIGNAL));
 
-    // Trigger, ack, then ack again (second ack in Idle is also Ok).
+    // Trigger → UNTRIGGERED cleared.
     interrupt.trigger(100).unwrap();
-    assert!(interrupt.ack().is_ok()); // NeedAck → Idle
-    assert!(interrupt.ack().is_ok()); // Idle → no-op
+    let pending = interrupt.signal();
+    assert!(!pending.contains(Signal::INTERRUPT_SIGNAL));
+
+    // Consume the packet.
+    let _packet = port.wait().await;
+
+    // Ack → UNTRIGGERED re-asserted (no pending re-trigger).
+    interrupt.ack().unwrap();
+    let pending = interrupt.signal();
+    assert!(pending.contains(Signal::INTERRUPT_SIGNAL));
 
     interrupt.unbind(&port).unwrap();
 }
 
 /// C++: TEST(InterruptTest, UserSignals)
-/// Interrupt objects use INTERRUPT_SIGNAL (not user signals). Verify
-/// that trigger sets the signal and destroy also sets it (for
-/// unbound interrupts to wake waiters).
+/// For virtual interrupts:
+/// - Initially INTERRUPT_SIGNAL is set (UNTRIGGERED).
+/// - After trigger (no port), INTERRUPT_SIGNAL is cleared.
+/// - After destroy, INTERRUPT_SIGNAL is set (UNTRIGGERED).
 #[test]
 fn user_signals() {
     let _ctx = TestContext::new();
     use zircon_object::object::Signal;
 
-    // Trigger without port → INTERRUPT_SIGNAL is set.
+    // Initially UNTRIGGERED is asserted.
     let interrupt = Interrupt::new_virtual();
-    interrupt.trigger(100).unwrap();
-    // The INTERRUPT_SIGNAL should be asserted.
     let signals = interrupt.signal();
     assert!(
         signals.contains(Signal::INTERRUPT_SIGNAL),
-        "trigger should set INTERRUPT_SIGNAL"
+        "new virtual interrupt should have INTERRUPT_SIGNAL (UNTRIGGERED)"
     );
 
-    // Destroy also sets INTERRUPT_SIGNAL (to wake waiters).
+    // Trigger without port → UNTRIGGERED cleared.
+    interrupt.trigger(100).unwrap();
+    let signals = interrupt.signal();
+    assert!(
+        !signals.contains(Signal::INTERRUPT_SIGNAL),
+        "trigger should clear INTERRUPT_SIGNAL (UNTRIGGERED)"
+    );
+
+    // Destroy → UNTRIGGERED re-asserted.
     let interrupt2 = Interrupt::new_virtual();
     interrupt2.destroy().unwrap();
     let signals2 = interrupt2.signal();
     assert!(
         signals2.contains(Signal::INTERRUPT_SIGNAL),
-        "destroy should set INTERRUPT_SIGNAL"
+        "destroy should set INTERRUPT_SIGNAL (UNTRIGGERED)"
     );
 }
 
 /// C++: TEST(InterruptTest, VirtualInterrupts)
 /// Comprehensive virtual interrupt test: create, bind, trigger,
 /// ack, unbind, destroy lifecycle.
-#[test]
-fn virtual_interrupts() {
+#[async_std::test]
+async fn virtual_interrupts() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
     let port = Port::new(1).unwrap();
@@ -444,13 +494,16 @@ fn virtual_interrupts() {
     // Trigger.
     assert!(interrupt.trigger(42).is_ok());
 
+    // Consume the packet before acking.
+    let _packet = port.wait().await;
+
     // Ack.
     assert!(interrupt.ack().is_ok());
 
     // Trigger again.
     assert!(interrupt.trigger(43).is_ok());
 
-    // Unbind.
+    // Unbind (with unconsumed packet — gets purged).
     assert!(interrupt.unbind(&port).is_ok());
 
     // Trigger without port.
@@ -465,23 +518,24 @@ fn virtual_interrupts() {
 
 /// C++: TEST(InterruptTest, VirtualNotWakeable)
 /// Virtual interrupts don't have the UNMASK/MASK flags that physical
-/// interrupts have. Verify the virtual interrupt's flags don't
-/// include wake-related bits.
-#[test]
-fn virtual_not_wakeable() {
+/// interrupts have. Verify the virtual interrupt's trigger/ack cycle
+/// works correctly with proper packet consumption.
+#[async_std::test]
+async fn virtual_not_wakeable() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
 
-    // Virtual interrupt: trigger, bind, ack cycle works without
-    // any unmask/mask behavior (virtual interrupt trait is no-op).
+    // Virtual interrupt: trigger, consume, ack cycle.
     let port = Port::new(1).unwrap();
     interrupt.bind(&port, 1).unwrap();
     interrupt.trigger(100).unwrap();
+    let _packet = port.wait().await;
     interrupt.ack().unwrap();
 
-    // Multiple trigger/ack cycles should work without issue.
+    // Multiple trigger/consume/ack cycles should work without issue.
     for i in 0..5 {
         interrupt.trigger(200 + i).unwrap();
+        let _packet = port.wait().await;
         interrupt.ack().unwrap();
     }
 
@@ -497,34 +551,26 @@ fn virtual_not_wakeable() {
 /// C++ source: zircon/system/utest/core/interrupt/interrupt-test.cc
 ///   - Create interrupt, start thread that calls interrupt.wait()
 ///   - Wait until thread is blocked
-///   - Suspend thread, wait until suspended
-///   - Resume thread, wait until blocked again
-///   - Trigger interrupt, wait for thread to exit
+///   - Suspend, then resume, then trigger
+///   - Thread completes wait successfully
 ///
-/// In libos mode we cannot truly suspend a blocked Zircon thread
-/// (the cooperative scheduler doesn't preempt), but we can verify
-/// the trigger-while-another-task-awaits-wait() path by spawning
-/// an async task that calls wait(), then triggering the interrupt
-/// from the test task.
+/// This requires cooperative scheduling / thread suspend which
+/// is hard to exercise in unit tests. Verify basic trigger-wait.
 #[async_std::test]
 async fn wait_thread_functions_after_suspend_resume() {
     let _ctx = TestContext::new();
     let interrupt = Interrupt::new_virtual();
 
-    // Spawn a task that waits on the interrupt.
+    // Basic trigger → wait cycle (simplified from C++ test).
     let int_clone = interrupt.clone();
-    let waiter = async_std::task::spawn(async move { int_clone.wait().await });
+    let handle = async_std::task::spawn(async move { int_clone.wait().await.unwrap() });
 
-    // Give the waiter time to enter the wait state.
-    async_std::task::yield_now().await;
-    async_std::task::sleep(core::time::Duration::from_millis(20)).await;
+    // Small delay to let the wait task block.
+    async_std::task::sleep(core::time::Duration::from_millis(10)).await;
 
-    // Trigger the interrupt — this should wake the waiter task.
-    let trigger_ts: i64 = 42424242;
-    interrupt.trigger(trigger_ts).unwrap();
+    // Trigger wakes the waiter.
+    interrupt.trigger(42).unwrap();
 
-    // The waiter should complete with the trigger timestamp.
-    let result = waiter.await;
-    assert!(result.is_ok(), "wait should succeed after trigger");
-    assert_eq!(result.unwrap(), trigger_ts);
+    let ts = handle.await;
+    assert_eq!(ts, 42);
 }

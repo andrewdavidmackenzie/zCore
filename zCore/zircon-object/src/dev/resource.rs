@@ -200,6 +200,11 @@ impl Resource {
         self.len
     }
 
+    /// Whether this resource has zero length.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     /// Get the kind of this resource.
     pub fn kind(&self) -> ResourceKind {
         self.kind
@@ -216,8 +221,7 @@ impl Resource {
     /// or is the ROOT resource. Ranged roots can create both shared
     /// and exclusive children without restriction.
     pub fn is_ranged_root(&self, kind: ResourceKind) -> bool {
-        self.kind == ResourceKind::ROOT
-            || (self.kind == kind && self.addr == 0 && self.len == 0)
+        self.kind == ResourceKind::ROOT || (self.kind == kind && self.addr == 0 && self.len == 0)
     }
 
     /// Get information of the resource.
