@@ -282,20 +282,31 @@ impl Interrupt {
             return Err(ZxError::CANCELED);
         }
         if inner.state == InterruptState::NeedAck {
+            // Check packet consumption before any side effects.
+            // Fuchsia's SendPacketLocked returns false (→ BAD_STATE) when
+            // the packet is still in the port queue (InContainer).
+            if inner
+                .port
+                .as_ref()
+                .unwrap()
+                .is_interrupt_packet_queued(inner.packet_id)
+            {
+                return Err(ZxError::BAD_STATE);
+            }
+
+            // Packet was consumed — safe to proceed with side effects.
             if self.flags.contains(InterruptFlags::UNMASK_PREWAIT) {
                 self.trait_.unmask();
             } else if self.flags.contains(InterruptFlags::UNMASK_PREWAIT_UNLOCKED) {
                 inner.defer_unmask = true;
             }
             if inner.timestamp > 0 {
-                // There is a pending re-trigger. Try to queue another packet.
-                let port = inner.port.as_ref().unwrap();
-                if port.is_interrupt_packet_queued(inner.packet_id) {
-                    // The previous packet hasn't been consumed yet.
-                    // Cannot queue another one — return BAD_STATE.
-                    return Err(ZxError::BAD_STATE);
-                }
-                inner.packet_id = port.push_interrupt(inner.timestamp, inner.key);
+                // Queue the pending re-trigger packet.
+                inner.packet_id = inner
+                    .port
+                    .as_ref()
+                    .unwrap()
+                    .push_interrupt(inner.timestamp, inner.key);
                 if self.flags.contains(InterruptFlags::MASK_POSTWAIT) {
                     self.trait_.mask();
                 }
@@ -308,12 +319,6 @@ impl Interrupt {
                 }
                 // State stays NeedAck (re-triggered).
             } else {
-                // No pending re-trigger. Check that the packet was consumed.
-                let port = inner.port.as_ref().unwrap();
-                if port.is_interrupt_packet_queued(inner.packet_id) {
-                    // Packet still in the port — not consumed yet.
-                    return Err(ZxError::BAD_STATE);
-                }
                 inner.state = InterruptState::Idle;
                 // Assert UNTRIGGERED signal — interrupt is now idle.
                 if self.flags.contains(InterruptFlags::VIRTUAL) {
@@ -435,10 +440,12 @@ impl Interrupt {
             // Not sure ZX_CLOCK_MONOTONIC or ZX_CLOCK_UTC
             inner.timestamp = hal_impl::timer::timer_now().as_nanos() as i64;
         }
+        // Save trigger_timestamp so it survives unbind/rebind
+        // (physical interrupts never go through trigger()).
+        inner.trigger_timestamp = inner.timestamp;
         match &inner.port {
             Some(port) => {
                 if inner.state != InterruptState::NeedAck {
-                    // TODO: use a function to send the package
                     inner.packet_id = port.as_ref().push_interrupt(inner.timestamp, inner.key);
                     if self.flags.contains(InterruptFlags::MASK_POSTWAIT) {
                         self.trait_.mask();

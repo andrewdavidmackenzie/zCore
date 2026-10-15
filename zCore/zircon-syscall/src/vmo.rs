@@ -399,7 +399,10 @@ impl Syscall<'_> {
             let rsrc_base = rsrc.addr();
             let rsrc_size = rsrc.len();
             let rsrc_page_base = rsrc_base & !(PAGE_SIZE - 1);
-            let rsrc_page_end = (rsrc_base + rsrc_size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+            let rsrc_page_end = rsrc_base
+                .saturating_add(rsrc_size)
+                .saturating_add(PAGE_SIZE - 1)
+                & !(PAGE_SIZE - 1);
             if paddr < rsrc_page_base || paddr + size > rsrc_page_end {
                 return Err(ZxError::OUT_OF_RANGE);
             }
