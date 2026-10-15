@@ -1416,44 +1416,63 @@ impl VmAddressRegion {
             }
             for mapping in &inner.mappings {
                 let m_inner = mapping.inner.lock();
-                // Convert internal MMUFlags bit positions to the
-                // Fuchsia ABI ZX_VM_PERM_* values.
-                // Use page_flags(0) which returns the effective
-                // permissions, accounting for protect() changes.
-                let perms = m_inner.page_flags(0);
-                let mut mmu_flags: u32 = 0;
-                if perms.contains(MMUFlags::READ) {
-                    mmu_flags |= 1; // ZX_VM_PERM_READ
-                }
-                if perms.contains(MMUFlags::WRITE) {
-                    mmu_flags |= 2; // ZX_VM_PERM_WRITE
-                }
-                if perms.contains(MMUFlags::EXECUTE) {
-                    mmu_flags |= 4; // ZX_VM_PERM_EXECUTE
-                }
                 let mut m_name_buf = [0u8; 32];
                 let vmo_name = mapping.vmo.name();
                 let vmo_name_bytes = vmo_name.as_bytes();
                 let m_copy_len = vmo_name_bytes.len().min(31);
                 m_name_buf[..m_copy_len].copy_from_slice(&vmo_name_bytes[..m_copy_len]);
+                let vmo_koid = mapping.vmo_koid();
+                let page_count = m_inner.size / PAGE_SIZE;
 
-                items.push(Item::Mapping(InfoMapsEntry {
-                    name: m_name_buf,
-                    base: m_inner.addr as u64,
-                    size: m_inner.size as u64,
-                    depth: (depth + 1) as u64,
-                    r#type: 3, // ZX_INFO_MAPS_TYPE_MAPPING
-                    padding: 0,
-                    mapping: InfoMapsMapping {
-                        mmu_flags,
-                        padding1: 0,
-                        vmo_koid: mapping.vmo_koid(),
-                        vmo_offset: m_inner.vmo_offset as u64,
-                        committed_bytes: 0, // TODO
-                        populated_bytes: 0, // TODO
-                        ..Default::default()
-                    },
-                }));
+                // Iterate over contiguous protection regions within
+                // the mapping. Each region with distinct permissions
+                // gets its own InfoMapsEntry, matching Fuchsia's
+                // per-region reporting in ZX_INFO_PROCESS_MAPS.
+                let mut region_start = 0usize;
+                let mut region_flags = m_inner.page_flags(0);
+                for page_idx in 1..=page_count {
+                    let cur_flags = if page_idx < page_count {
+                        m_inner.page_flags(page_idx)
+                    } else {
+                        // Sentinel: force flush of the last region
+                        MMUFlags::from_bits_truncate(!region_flags.bits())
+                    };
+                    if cur_flags != region_flags {
+                        // Emit entry for region [region_start, page_idx)
+                        let perms = region_flags;
+                        let mut mmu_flags: u32 = 0;
+                        if perms.contains(MMUFlags::READ) {
+                            mmu_flags |= 1; // ZX_VM_PERM_READ
+                        }
+                        if perms.contains(MMUFlags::WRITE) {
+                            mmu_flags |= 2; // ZX_VM_PERM_WRITE
+                        }
+                        if perms.contains(MMUFlags::EXECUTE) {
+                            mmu_flags |= 4; // ZX_VM_PERM_EXECUTE
+                        }
+                        let region_byte_start = region_start * PAGE_SIZE;
+                        let region_byte_len = (page_idx - region_start) * PAGE_SIZE;
+                        items.push(Item::Mapping(InfoMapsEntry {
+                            name: m_name_buf,
+                            base: (m_inner.addr + region_byte_start) as u64,
+                            size: region_byte_len as u64,
+                            depth: (depth + 1) as u64,
+                            r#type: 3, // ZX_INFO_MAPS_TYPE_MAPPING
+                            padding: 0,
+                            mapping: InfoMapsMapping {
+                                mmu_flags,
+                                padding1: 0,
+                                vmo_koid,
+                                vmo_offset: (m_inner.vmo_offset + region_byte_start) as u64,
+                                committed_bytes: 0, // TODO
+                                populated_bytes: 0, // TODO
+                                ..Default::default()
+                            },
+                        }));
+                        region_start = page_idx;
+                        region_flags = cur_flags;
+                    }
+                }
             }
             // Sort by address for deterministic output.
             items.sort_by_key(|item| match item {
