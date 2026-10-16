@@ -296,8 +296,26 @@ fn port_bound_already_timed_out() {
 /// Call suspend with REPORT_ONLY flag. No actual suspend attempt.
 /// With no pending entries: returns 0 entries.
 #[test]
-#[ignore = "requires zx_system_suspend_enter with REPORT_ONLY — not implemented in zCore"]
-fn port_bound_report_only() {}
+fn port_bound_report_only() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Get root resource handle for the syscall.
+    let root_resource = ctx.add_root_resource();
+
+    let mut actual_entries: u32 = 0xFFFF;
+    let result = sc.sys_system_suspend_enter(
+        root_resource,
+        0,   // deadline (irrelevant for REPORT_ONLY)
+        0x2, // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
+        0,   // out_header (unused)
+        0,   // out_entries buffer (0 = no buffer)
+        0,   // num_entries capacity
+        hal_impl::user::UserOutPtr::from(&mut actual_entries as *mut u32 as usize),
+    );
+    assert!(result.is_ok(), "REPORT_ONLY should succeed");
+    assert_eq!(actual_entries, 0, "no pending wake report entries");
+}
 
 /// C++: TEST_F(WakeReportTestsPortBound, SmallReportBuffer)
 /// Use a buffer too small to hold all entries. Verify we can
