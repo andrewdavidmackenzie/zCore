@@ -20,9 +20,9 @@ ChannelTest.NoSpuriousReadableSignalWhenRacing
 # ChannelCallMutexTest.* — removed, 1/1 passes (MutexHeldAcrossCallChain)
 # ChannelInternalTest: 3 tests pass, 1 hangs
 ChannelInternalTest.TransferChannelWithPendingCall
-ProcessTest.ProcessWaitAsyncCancelSelf
-ProcessTest.GetInfoRuntime
-ProcessTest.GetInfoRuntimeV1
+# ProcessTest.ProcessWaitAsyncCancelSelf — removed, now passes
+# ProcessTest.GetInfoRuntime — removed, now passes
+# ProcessTest.GetInfoRuntimeV1 — removed, now passes
 # KillChannelHandleCycle: kernel panic — Thread::proc() owning process dropped
 ProcessTest.KillChannelHandleCycle
 
@@ -59,7 +59,7 @@ Threads.StartSuspendedAndResumedThread
 Threads.StartSuspendedThread
 Threads.SuspendAfterDeath
 Threads.SuspendChannelCall
-Threads.SuspendInvalidTargets
+# Threads.SuspendInvalidTargets — removed, completes (pass or fail)
 Threads.SuspendMultiple
 Threads.SuspendPortCall
 Threads.SuspendSleeping
@@ -69,7 +69,7 @@ Threads.SyscallSuspendedRegisterState
 Threads.ThreadLocalRegisterState
 Threads.ThreadStartInvalidEntry
 Threads.ThreadStartOnInitialThread
-Threads.ThreadStartWithZeroInstructionPointer
+# Threads.ThreadStartWithZeroInstructionPointer — removed, completes (pass or fail)
 Threads.WatchpointSyscallPanic
 Threads.WriteReadDebugRegisterState
 Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
@@ -90,7 +90,7 @@ PortTest.QueuePacketLimitExceededGeneratesPolicyException
 PortTest.TooManyObservers
 ChannelTest.ChannelFullException
 DefaultExceptionHandlerTest.UnhandledPolicyException
-DefaultExceptionHandlerTest.UnhandledHardwareException
+# DefaultExceptionHandlerTest.UnhandledHardwareException — removed, now passes
 # UserExceptionsTest: raise ZX_EXCP_USER from test thread, requires
 # concurrent exception channel handling (cooperative scheduler hangs).
 # InvalidArgs passes (validates args before raising).
@@ -100,15 +100,15 @@ UserExceptionsTest.Delivered
 # wrfsbase/wrgsbase with non-canonical addresses — GPF fires at the
 # wrong instruction (LoadFromGs instead of WrGsBase), causing wrong
 # RIP in exception report and missing second exception.
-Property.RegisterFsNoncanonical
-Property.RegisterGsNoncanonical
+# Property.RegisterFsNoncanonical — removed, completes (pass or fail)
+# Property.RegisterGsNoncanonical — removed, completes (pass or fail)
 
 # ── COW populated_bytes / fractional attribution (#577, #603) ────────
 # NoPhysical: now passes with test_ram_reserve — removed.
 # Offset: now passes — removed from skip
 # WriteCowParent, AllocateAfterMergeMultipleChildren: polling hang
 VmoZeroTestCase.WriteCowParent
-VmoZeroTestCase.AllocateAfterMergeMultipleChildren
+# VmoZeroTestCase.AllocateAfterMergeMultipleChildren — removed, now passes
 
 # ── VmoTestCase (individual hangs/crashes) ────────────────────────────
 # ~28 pass, ~18 fail without hanging. Skip only tests that hang or
@@ -350,7 +350,7 @@ StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 # NoStreamFromContiguousOrPhysicalVmo crashes (boot_options) — keep.
-StreamTestCase.NoStreamFromContiguousOrPhysicalVmo
+# StreamTestCase.NoStreamFromContiguousOrPhysicalVmo — removed, completes (pass or fail)
 
 # ── Memory probe — crashes the runner (UD2 abort) ────────────────────
 # memory-probe.cc spawns a child thread, catches its page-fault
@@ -397,15 +397,15 @@ Bti.DecommitRace
 #   DuplicateTriggerIgnoredWhileQueued, PacketDeliveredAfterBind
 #   — removed from skip.
 # 2 hang:
-InterruptTest.UntriggeredSignalInterruptWait
-InterruptTest.PacketFollowsUnbindToWait
+# InterruptTest.UntriggeredSignalInterruptWait — removed, now passes
+# InterruptTest.PacketFollowsUnbindToWait — removed, now passes
 # 2 fail (no crash/hang) — removed from skip:
 #   UntriggeredSignalPortsAndAck, PacketFollowsRebindToNewPort
 # MsiTest — 2/6 pass (AllocateSyscall, ContiguousNotSupported).
 # Remaining 4 fail (Msi, CreateSyscallArgs, AllocatedHandleRights, Msix).
+# MsiTest.CreateSyscallArgs — removed, now passes
+# MsiTest.AllocatedHandleRights — removed, now passes
 MsiTest.Msi
-MsiTest.CreateSyscallArgs
-MsiTest.AllocatedHandleRights
 MsiTest.Msix
 
 # ── Channel fault handling ───────────────────────────────────────────
@@ -480,4 +480,4 @@ ThreadSampler.HighFrequency
 #   NormalMappedAddressChannelWriteSucceeds,
 #   KernelMappedAddressChannelWriteFails — removed from skip.
 # SyscallNumTest fails and crashes the test process.
-BadAccessTest.SyscallNumTest
+# BadAccessTest.SyscallNumTest — removed, completes (pass or fail)
