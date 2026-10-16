@@ -483,6 +483,13 @@ impl dyn KernelObject {
         edge_triggered: bool,
         timestamp: bool,
     ) -> ZxResult {
+        // Check observer limit BEFORE allocating anything. This ensures
+        // we return ZX_ERR_NO_MEMORY instead of panicking on OOM when
+        // the observer count is at the limit.
+        if self.signal_callback_count() >= KObjectBase::MAX_SIGNAL_CALLBACKS {
+            return Err(ZxError::NO_MEMORY);
+        }
+
         // Register cancellation tracking BEFORE the immediate check,
         // so cancel_async can find it even for level-triggered waits
         // that fire immediately.

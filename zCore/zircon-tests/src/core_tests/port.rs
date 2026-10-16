@@ -951,10 +951,33 @@ async fn queue_packet_limit_exceeded_generates_policy_exception() {
 /// C++: TEST(PortTest, TooManyObservers)
 /// port/ports.cc:1155
 ///
-/// Spawns a mini-process that calls wait_async in a loop until OOM.
-/// The process is killed with ZX_TASK_RETCODE_EXCEPTION_KILL.
-/// In zCore, the allocator panics on OOM instead of returning
-/// ZX_ERR_NO_MEMORY.
+/// Calls wait_async in a loop until the observer limit is reached.
+/// The kernel should return ZX_ERR_NO_MEMORY (not panic) when the
+/// limit is exceeded.
 #[test]
-#[ignore = "requires graceful OOM handling and mini-process — kernel panics on OOM"]
-fn too_many_observers() {}
+fn too_many_observers() {
+    use zircon_object::signal::Port;
+
+    let _ctx = TestContext::new();
+    let port = Port::new(0).unwrap();
+    let event = zircon_object::signal::Event::new();
+    let event_obj: std::sync::Arc<dyn zircon_object::object::KernelObject> = event.clone();
+
+    // Register wait_async in a loop until we hit the observer limit.
+    // The kernel should return NO_MEMORY, not panic.
+    let mut count = 0u32;
+    loop {
+        let result =
+            event_obj.send_signal_to_port_async(Signal::USER_SIGNAL_0, &port, count as u64, false);
+        match result {
+            Ok(()) => count += 1,
+            Err(ZxError::NO_MEMORY) => break,
+            Err(e) => panic!("unexpected error on iteration {count}: {e:?}"),
+        }
+    }
+    // Should have registered many observers before hitting the limit.
+    assert!(
+        count > 100,
+        "expected many successful registrations before NO_MEMORY, got {count}"
+    );
+}
