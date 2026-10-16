@@ -59,7 +59,7 @@ Threads.StartSuspendedAndResumedThread
 Threads.StartSuspendedThread
 Threads.SuspendAfterDeath
 Threads.SuspendChannelCall
-Threads.SuspendInvalidTargets
+# Threads.SuspendInvalidTargets — removed, completes (pass or fail)
 Threads.SuspendMultiple
 Threads.SuspendPortCall
 Threads.SuspendSleeping
@@ -69,7 +69,7 @@ Threads.SyscallSuspendedRegisterState
 Threads.ThreadLocalRegisterState
 Threads.ThreadStartInvalidEntry
 Threads.ThreadStartOnInitialThread
-Threads.ThreadStartWithZeroInstructionPointer
+# Threads.ThreadStartWithZeroInstructionPointer — removed, completes (pass or fail)
 Threads.WatchpointSyscallPanic
 Threads.WriteReadDebugRegisterState
 Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
@@ -100,8 +100,8 @@ UserExceptionsTest.Delivered
 # wrfsbase/wrgsbase with non-canonical addresses — GPF fires at the
 # wrong instruction (LoadFromGs instead of WrGsBase), causing wrong
 # RIP in exception report and missing second exception.
-Property.RegisterFsNoncanonical
-Property.RegisterGsNoncanonical
+# Property.RegisterFsNoncanonical — removed, completes (pass or fail)
+# Property.RegisterGsNoncanonical — removed, completes (pass or fail)
 
 # ── COW populated_bytes / fractional attribution (#577, #603) ────────
 # NoPhysical: now passes with test_ram_reserve — removed.
@@ -350,7 +350,7 @@ StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 # NoStreamFromContiguousOrPhysicalVmo crashes (boot_options) — keep.
-StreamTestCase.NoStreamFromContiguousOrPhysicalVmo
+# StreamTestCase.NoStreamFromContiguousOrPhysicalVmo — removed, completes (pass or fail)
 
 # ── Memory probe — crashes the runner (UD2 abort) ────────────────────
 # memory-probe.cc spawns a child thread, catches its page-fault
@@ -480,4 +480,4 @@ ThreadSampler.HighFrequency
 #   NormalMappedAddressChannelWriteSucceeds,
 #   KernelMappedAddressChannelWriteFails — removed from skip.
 # SyscallNumTest fails and crashes the test process.
-BadAccessTest.SyscallNumTest
+# BadAccessTest.SyscallNumTest — removed, completes (pass or fail)
