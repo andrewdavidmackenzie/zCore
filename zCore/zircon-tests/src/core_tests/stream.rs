@@ -244,7 +244,7 @@ fn stream_no_contiguous_or_physical_vmo() {
     }
 
     // A physical VMO should not be paged
-    let physical = VmObject::new_physical(0x1000, 1);
+    let physical = VmObject::new_physical(PAGE_SIZE, 1);
     assert!(!physical.is_paged());
     // The syscall would return NOT_SUPPORTED
 }
@@ -467,11 +467,15 @@ fn stream_fault_beyond_stream_size_resize_down_race() {
     let stream = Stream::create(vmo.clone(), 0, 0x3);
 
     // Write data into the second page and set content_size.
-    stream.seek(SeekOrigin::Start, 5000).unwrap();
+    stream
+        .seek(SeekOrigin::Start, (PAGE_SIZE + PAGE_SIZE / 2) as isize)
+        .unwrap();
     stream.write(b"past boundary", false).unwrap();
 
     // Seek to an offset in the second page.
-    stream.seek(SeekOrigin::Start, 5000).unwrap();
+    stream
+        .seek(SeekOrigin::Start, (PAGE_SIZE + PAGE_SIZE / 2) as isize)
+        .unwrap();
 
     // Resize down to 1 page — the seek position is now past the VMO.
     vmo.set_len(PAGE_SIZE).unwrap();
@@ -577,7 +581,7 @@ fn partial_vmo_dirty() {
 
     // Read back and verify.
     let mut buf = [0u8; 4];
-    stream.read_at(&mut buf, 4092).unwrap();
+    stream.read_at(&mut buf, PAGE_SIZE - 4).unwrap();
     assert_eq!(&buf, b"ABCD");
 }
 

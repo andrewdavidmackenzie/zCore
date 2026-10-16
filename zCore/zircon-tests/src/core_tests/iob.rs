@@ -6,12 +6,12 @@
 use crate::helpers::TestContext;
 use zircon_object::ipc::{IoBuffer, IoBufferRegion, IoBufferSharedRegion};
 use zircon_object::object::{KernelObject, Signal};
-use zircon_object::vm::VmObject;
+use zircon_object::vm::{VmObject, PAGE_SIZE};
 use zircon_object::ZxError;
 
 /// Helper: create a single-region IOB pair with the given size.
 fn create_iob_pair(size: usize) -> (alloc::sync::Arc<IoBuffer>, alloc::sync::Arc<IoBuffer>) {
-    let pages = size.div_ceil(0x1000);
+    let pages = size.div_ceil(PAGE_SIZE);
     let vmo = VmObject::new_paged(pages);
     let regions = alloc::vec![IoBufferRegion::new(vmo, size, 0x3)]; // read+write
     IoBuffer::create(regions).expect("IOB create should succeed")
@@ -32,7 +32,7 @@ fn bad_vm_options() {
     let mut regions = alloc::vec::Vec::new();
     for _ in 0..65 {
         let vmo = VmObject::new_paged(1);
-        regions.push(IoBufferRegion::new(vmo, 0x1000, 0x3));
+        regions.push(IoBufferRegion::new(vmo, PAGE_SIZE, 0x3));
     }
     let result = IoBuffer::create(regions);
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
@@ -43,7 +43,7 @@ fn bad_vm_options() {
 #[test]
 fn create() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     assert_ne!(ep0.id(), ep1.id());
     assert_eq!(ep0.endpoint_index(), 0);
     assert_eq!(ep1.endpoint_index(), 1);
@@ -55,7 +55,7 @@ fn create() {
 fn create_huge() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(256); // 1 MiB
-    let regions = alloc::vec![IoBufferRegion::new(vmo, 256 * 0x1000, 0x3)];
+    let regions = alloc::vec![IoBufferRegion::new(vmo, 256 * PAGE_SIZE, 0x3)];
     let (ep0, ep1) = IoBuffer::create(regions).unwrap();
     assert_ne!(ep0.id(), ep1.id());
     assert_eq!(ep0.region_count(), 1);
@@ -69,7 +69,7 @@ fn create_max_regions() {
     let mut regions = alloc::vec::Vec::new();
     for _ in 0..64 {
         let vmo = VmObject::new_paged(1);
-        regions.push(IoBufferRegion::new(vmo, 0x1000, 0x3));
+        regions.push(IoBufferRegion::new(vmo, PAGE_SIZE, 0x3));
     }
     let (ep0, _ep1) = IoBuffer::create(regions).unwrap();
     assert_eq!(ep0.region_count(), 64);
@@ -83,7 +83,7 @@ fn create_out_of_range_and_invalid_args() {
     let mut regions = alloc::vec::Vec::new();
     for _ in 0..65 {
         let vmo = VmObject::new_paged(1);
-        regions.push(IoBufferRegion::new(vmo, 0x1000, 0));
+        regions.push(IoBufferRegion::new(vmo, PAGE_SIZE, 0));
     }
     assert_eq!(
         IoBuffer::create(regions).unwrap_err(),
@@ -97,7 +97,7 @@ fn create_out_of_range_and_invalid_args() {
 fn create_with_mediated_write_ring_buffer_discipline_invalid_args() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
-    let regions = alloc::vec![IoBufferRegion::new(vmo, 0x1000, 0x3)]; // no discipline
+    let regions = alloc::vec![IoBufferRegion::new(vmo, PAGE_SIZE, 0x3)]; // no discipline
     let (ep0, _ep1) = IoBuffer::create(regions).unwrap();
     // allocate_id on a non-ID-allocator region should fail with WRONG_TYPE
     assert_eq!(
@@ -112,7 +112,7 @@ fn create_with_mediated_write_ring_buffer_discipline_invalid_args() {
 fn create_with_mediated_write_ring_buffer_discipline_succeeds() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
-    let regions = alloc::vec![IoBufferRegion::new_with_id_allocator(vmo, 0x1000, 0x3)];
+    let regions = alloc::vec![IoBufferRegion::new_with_id_allocator(vmo, PAGE_SIZE, 0x3)];
     let (ep0, _ep1) = IoBuffer::create(regions).unwrap();
     let id = ep0.allocate_id(0, alloc::vec![42]).unwrap();
     assert!(id > 0);
@@ -123,7 +123,7 @@ fn create_with_mediated_write_ring_buffer_discipline_succeeds() {
 #[test]
 fn get_info_iob() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x2000);
+    let (ep0, ep1) = create_iob_pair(2 * PAGE_SIZE);
     assert_eq!(ep0.region_count(), 1);
     assert_eq!(ep1.region_count(), 1);
     assert_eq!(ep0.endpoint_index(), 0);
@@ -146,7 +146,7 @@ fn get_info_iob_regions() {
 #[test]
 fn get_info_iob_regions_edge_cases() {
     let _ctx = TestContext::new();
-    let (ep0, _ep1) = create_iob_pair(0x1000);
+    let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
     assert_eq!(ep0.get_region(1).unwrap_err(), ZxError::OUT_OF_RANGE);
     assert_eq!(ep0.get_region(999).unwrap_err(), ZxError::OUT_OF_RANGE);
 }
@@ -156,7 +156,7 @@ fn get_info_iob_regions_edge_cases() {
 #[test]
 fn get_info_process_maps() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     let (vmo0, _, _) = ep0.get_region(0).unwrap();
     let (vmo1, _, _) = ep1.get_region(0).unwrap();
     assert_ne!(vmo0.id(), 0);
@@ -184,7 +184,7 @@ fn get_info_process_vmos() {
 #[test]
 fn get_set_names() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     ep0.set_name("iob-ep0");
     assert_eq!(ep0.name(), "iob-ep0");
     ep1.set_name("iob-ep1");
@@ -196,7 +196,7 @@ fn get_set_names() {
 #[test]
 fn get_set_names_edge_cases() {
     let _ctx = TestContext::new();
-    let (ep0, _ep1) = create_iob_pair(0x1000);
+    let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
     ep0.set_name("");
     assert_eq!(ep0.name(), "");
     ep0.set_name("overwrite");
@@ -208,7 +208,7 @@ fn get_set_names_edge_cases() {
 #[test]
 fn handle_basic_info_and_rights() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     assert_ne!(ep0.id(), 0);
     assert_ne!(ep1.id(), 0);
     assert_eq!(ep0.type_name(), "IoBuffer");
@@ -221,7 +221,7 @@ fn handle_basic_info_and_rights() {
 fn id_allocator_mediated_access() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
-    let regions = alloc::vec![IoBufferRegion::new_with_id_allocator(vmo, 0x1000, 0x3)];
+    let regions = alloc::vec![IoBufferRegion::new_with_id_allocator(vmo, PAGE_SIZE, 0x3)];
     let (ep0, _ep1) = IoBuffer::create(regions).unwrap();
     let id1 = ep0.allocate_id(0, alloc::vec![1]).unwrap();
     let id2 = ep0.allocate_id(0, alloc::vec![2]).unwrap();
@@ -237,7 +237,7 @@ fn id_allocator_mediated_access() {
 fn id_allocator_mediated_errors() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
-    let regions = alloc::vec![IoBufferRegion::new_with_id_allocator(vmo, 0x1000, 0x3)];
+    let regions = alloc::vec![IoBufferRegion::new_with_id_allocator(vmo, PAGE_SIZE, 0x3)];
     let (ep0, _ep1) = IoBuffer::create(regions).unwrap();
     // Out-of-range region index
     assert_eq!(
@@ -253,7 +253,7 @@ fn id_allocator_mediated_errors() {
 fn id_allocator_multiple_endpoints_and_zero_blob() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
-    let regions = alloc::vec![IoBufferRegion::new_with_id_allocator(vmo, 0x1000, 0x3)];
+    let regions = alloc::vec![IoBufferRegion::new_with_id_allocator(vmo, PAGE_SIZE, 0x3)];
     let (ep0, ep1) = IoBuffer::create(regions).unwrap();
     let id1 = ep0.allocate_id(0, alloc::vec![]).unwrap(); // zero blob
     let id2 = ep1.allocate_id(0, alloc::vec![]).unwrap(); // from peer
@@ -267,7 +267,7 @@ fn iob_write_checks_rights() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
     // read-only access (0x1)
-    let regions = alloc::vec![IoBufferRegion::new(vmo, 0x1000, 0x1)];
+    let regions = alloc::vec![IoBufferRegion::new(vmo, PAGE_SIZE, 0x1)];
     let (ep0, _ep1) = IoBuffer::create(regions).unwrap();
     let (_, _, access) = ep0.get_region(0).unwrap();
     assert_eq!(access, 0x1); // read-only
@@ -278,7 +278,7 @@ fn iob_write_checks_rights() {
 #[test]
 fn iob_write_corrupt() {
     let _ctx = TestContext::new();
-    let (ep0, _ep1) = create_iob_pair(0x1000);
+    let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
     // Write data through the VMO backing the region
     let (vmo, _, _) = ep0.get_region(0).unwrap();
     let data = [0xDE, 0xAD, 0xBE, 0xEF];
@@ -293,7 +293,7 @@ fn iob_write_corrupt() {
 #[test]
 fn iob_write_invalid_args() {
     let _ctx = TestContext::new();
-    let (ep0, _ep1) = create_iob_pair(0x1000);
+    let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
     // Region index 5 doesn't exist
     assert_eq!(ep0.get_region(5).unwrap_err(), ZxError::OUT_OF_RANGE);
 }
@@ -303,7 +303,7 @@ fn iob_write_invalid_args() {
 #[test]
 fn iob_write_max_message_size() {
     let _ctx = TestContext::new();
-    let (ep0, _ep1) = create_iob_pair(0x1000);
+    let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
     let (vmo, size, _) = ep0.get_region(0).unwrap();
     // Write a full page
     let data = alloc::vec![0xABu8; size];
@@ -319,7 +319,7 @@ fn iob_write_max_message_size() {
 fn iob_write_multi_threaded() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
-    let regions = alloc::vec![IoBufferRegion::new_with_id_allocator(vmo, 0x1000, 0x3)];
+    let regions = alloc::vec![IoBufferRegion::new_with_id_allocator(vmo, PAGE_SIZE, 0x3)];
     let (ep0, _ep1) = IoBuffer::create(regions).unwrap();
     let mut ids = alloc::vec::Vec::new();
     for i in 0..100 {
@@ -337,7 +337,7 @@ fn iob_write_multi_threaded() {
 #[test]
 fn iob_write_success() {
     let _ctx = TestContext::new();
-    let (ep0, _ep1) = create_iob_pair(0x1000);
+    let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
     let (vmo, _, _) = ep0.get_region(0).unwrap();
     let msg = b"Hello IOB!";
     vmo.write(0, msg).unwrap();
@@ -351,7 +351,7 @@ fn iob_write_success() {
 #[test]
 fn iob_write_updated_signal() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     assert!(ep0.signal().contains(Signal::WRITABLE));
     assert!(ep1.signal().contains(Signal::WRITABLE));
 }
@@ -361,13 +361,13 @@ fn iob_write_updated_signal() {
 #[test]
 fn iob_write_with_fault_succeeds() {
     let _ctx = TestContext::new();
-    let (ep0, _ep1) = create_iob_pair(0x2000);
+    let (ep0, _ep1) = create_iob_pair(2 * PAGE_SIZE);
     let (vmo, _, _) = ep0.get_region(0).unwrap();
     // Write at offset 0x1000 (second page)
     let data = [0xFF; 8];
-    vmo.write(0x1000, &data).unwrap();
+    vmo.write(PAGE_SIZE, &data).unwrap();
     let mut buf = [0u8; 8];
-    vmo.read(0x1000, &mut buf).unwrap();
+    vmo.read(PAGE_SIZE, &mut buf).unwrap();
     assert_eq!(buf, data);
 }
 
@@ -379,8 +379,8 @@ fn iob_write_with_multiple_vectors() {
     let vmo0 = VmObject::new_paged(1);
     let vmo1 = VmObject::new_paged(1);
     let regions = alloc::vec![
-        IoBufferRegion::new(vmo0, 0x1000, 0x3),
-        IoBufferRegion::new(vmo1, 0x1000, 0x3),
+        IoBufferRegion::new(vmo0, PAGE_SIZE, 0x3),
+        IoBufferRegion::new(vmo1, PAGE_SIZE, 0x3),
     ];
     let (ep0, _ep1) = IoBuffer::create(regions).unwrap();
     assert_eq!(ep0.region_count(), 2);
@@ -403,7 +403,7 @@ fn iob_write_with_multiple_vectors() {
 #[test]
 fn map_when_peer_closed() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     drop(ep1);
     assert!(ep0.peer_closed());
     assert!(ep0.signal().contains(Signal::PEER_CLOSED));
@@ -415,7 +415,7 @@ fn map_when_peer_closed() {
 fn mapping_rights() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
-    let regions = alloc::vec![IoBufferRegion::new(vmo, 0x1000, 0x7)]; // read+write+exec
+    let regions = alloc::vec![IoBufferRegion::new(vmo, PAGE_SIZE, 0x7)]; // read+write+exec
     let (ep0, _ep1) = IoBuffer::create(regions).unwrap();
     let (_, _, access) = ep0.get_region(0).unwrap();
     assert_eq!(access, 0x7);
@@ -430,7 +430,7 @@ fn partial_and_multiple_mappings() {
     let vmo1 = VmObject::new_paged(2);
     let vmo2 = VmObject::new_paged(4);
     let regions = alloc::vec![
-        IoBufferRegion::new(vmo0, 0x1000, 0x1),
+        IoBufferRegion::new(vmo0, PAGE_SIZE, 0x1),
         IoBufferRegion::new(vmo1, 0x2000, 0x2),
         IoBufferRegion::new(vmo2, 0x4000, 0x3),
     ];
@@ -439,7 +439,7 @@ fn partial_and_multiple_mappings() {
     let (_, s0, a0) = ep0.get_region(0).unwrap();
     let (_, s1, a1) = ep0.get_region(1).unwrap();
     let (_, s2, a2) = ep0.get_region(2).unwrap();
-    assert_eq!((s0, a0), (0x1000, 0x1));
+    assert_eq!((s0, a0), (PAGE_SIZE, 0x1));
     assert_eq!((s1, a1), (0x2000, 0x2));
     assert_eq!((s2, a2), (0x4000, 0x3));
 }
@@ -449,7 +449,7 @@ fn partial_and_multiple_mappings() {
 #[test]
 fn peer_closed() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     assert!(!ep0.peer_closed());
     assert!(!ep1.peer_closed());
     drop(ep1);
@@ -462,7 +462,7 @@ fn peer_closed() {
 #[test]
 fn peer_closed_mapped_references() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     // Write data via ep1's VMO
     let (vmo, _, _) = ep1.get_region(0).unwrap();
     vmo.write(0, &[42]).unwrap();
@@ -479,7 +479,7 @@ fn peer_closed_mapped_references() {
 #[test]
 fn region_info_swapped_access() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     let (_, s0, a0) = ep0.get_region(0).unwrap();
     let (_, s1, a1) = ep1.get_region(0).unwrap();
     assert_eq!(s0, s1);
@@ -491,10 +491,10 @@ fn region_info_swapped_access() {
 #[test]
 fn region_map() {
     let _ctx = TestContext::new();
-    let (ep0, _ep1) = create_iob_pair(0x1000);
+    let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
     let (vmo, size, _) = ep0.get_region(0).unwrap();
-    assert_eq!(size, 0x1000);
-    assert!(vmo.len() >= 0x1000);
+    assert_eq!(size, PAGE_SIZE);
+    assert!(vmo.len() >= PAGE_SIZE);
 }
 
 /// C++: TEST(Iob, RoundedSizes)
@@ -515,8 +515,8 @@ fn rounded_sizes() {
 #[test]
 fn shared_region_with_non_ring_buffer_discipline() {
     let _ctx = TestContext::new();
-    let sr = IoBufferSharedRegion::create(0x1000).unwrap();
-    assert_eq!(sr.size(), 0x1000);
+    let sr = IoBufferSharedRegion::create(PAGE_SIZE).unwrap();
+    assert_eq!(sr.size(), PAGE_SIZE);
     assert_ne!(sr.id(), 0);
     // Zero size should fail
     assert_eq!(
@@ -535,7 +535,7 @@ fn shared_region_with_non_ring_buffer_discipline() {
 #[test]
 fn signals_and_signal_peer() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     // Set user signal on ep0
     ep0.signal_set(Signal::USER_SIGNAL_0);
     assert!(ep0.signal().contains(Signal::USER_SIGNAL_0));
@@ -550,7 +550,7 @@ fn signals_and_signal_peer() {
 #[test]
 fn symmetric_peer_closed_with_mappings() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     drop(ep0);
     assert!(ep1.peer_closed());
     assert!(ep1.signal().contains(Signal::PEER_CLOSED));
@@ -564,7 +564,7 @@ fn symmetric_peer_closed_with_mappings() {
 #[test]
 fn vmar_map_iob_errors() {
     let _ctx = TestContext::new();
-    let (ep0, _ep1) = create_iob_pair(0x1000);
+    let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
     assert_eq!(ep0.get_region(10).unwrap_err(), ZxError::OUT_OF_RANGE);
 }
 
@@ -573,7 +573,7 @@ fn vmar_map_iob_errors() {
 #[test]
 fn vmar_map_iob_with_fault_beyond_stream_size_returns_error() {
     let _ctx = TestContext::new();
-    let (ep0, _ep1) = create_iob_pair(0x1000);
+    let (ep0, _ep1) = create_iob_pair(PAGE_SIZE);
     let (vmo, _, _) = ep0.get_region(0).unwrap();
     // Writing beyond VMO length
     let data = [0u8; 1];
@@ -586,7 +586,7 @@ fn vmar_map_iob_with_fault_beyond_stream_size_returns_error() {
 #[test]
 fn vmo_koid() {
     let _ctx = TestContext::new();
-    let (ep0, ep1) = create_iob_pair(0x1000);
+    let (ep0, ep1) = create_iob_pair(PAGE_SIZE);
     let (vmo0, _, _) = ep0.get_region(0).unwrap();
     let (vmo1, _, _) = ep1.get_region(0).unwrap();
     assert_ne!(vmo0.id(), 0);
@@ -599,8 +599,8 @@ fn vmo_koid() {
 #[test]
 fn writev_zero_length_and_multiple_iobs() {
     let _ctx = TestContext::new();
-    let (a0, a1) = create_iob_pair(0x1000);
-    let (b0, b1) = create_iob_pair(0x1000);
+    let (a0, a1) = create_iob_pair(PAGE_SIZE);
+    let (b0, b1) = create_iob_pair(PAGE_SIZE);
     // All four endpoints have unique KOIDs
     let ids = [a0.id(), a1.id(), b0.id(), b1.id()];
     for i in 0..ids.len() {
