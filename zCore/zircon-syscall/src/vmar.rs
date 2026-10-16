@@ -204,10 +204,6 @@ impl Syscall<'_> {
         } else if options.contains(VmOptions::ALLOW_FAULTS) {
             // ALLOW_FAULTS: lazy commit, pages faulted in on demand
             false
-        } else if !mapping_flags.intersects(MMUFlags::RXW) {
-            // Zero-permission mappings are address reservations — don't
-            // commit pages. Any access should fault with ACCESS_DENIED.
-            false
         } else {
             // Default: eagerly commit pages to avoid stale page table issues
             true
