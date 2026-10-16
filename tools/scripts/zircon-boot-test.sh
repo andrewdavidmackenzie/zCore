@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 #
-# Zircon boot smoke test: build petal programs, package into ZBIs,
-# build kernel, run each program in QEMU, check for expected output.
+# Zircon boot smoke test: build petal programs, run each in QEMU,
+# check for expected output.
+#
+# aarch64: builds kernel once + rootfs with all petals, runs QEMU 8
+#          times with -append to select the test binary at runtime.
+# x86_64:  builds kernel per-petal (UEFI has no -append equivalent).
+#          With rust-cache, the relink is near-instant.
 #
 # Usage: tools/scripts/zircon-boot-test.sh <arch>
 #   arch: aarch64, x86_64
@@ -29,6 +34,8 @@ case "$ARCH" in
   aarch64)
     RUST_TARGET="aarch64-unknown-none-softfloat"
     KERNEL="target/qemu-aarch64/release/kernel"
+    KERNEL_BIN="target/qemu-aarch64/release/kernel.bin"
+    ROOTFS_IMG="target/qemu-${ARCH}/release/${ARCH}-zircon.img"
     ;;
   x86_64)
     RUST_TARGET="x86_64-unknown-none"
@@ -43,8 +50,6 @@ esac
 USERSTART="target/userstart/${RUST_TARGET}/release/userstart"
 
 # Build userstart as a static PIE with PIC codegen.
-# Must match tools/xtask/src/petal.rs build_userstart() flags:
-#   --pie (from build.rs), -Crelocation-model=pic, -Z build-std=core,alloc
 echo "Building userstart for $ARCH..."
 if ! CARGO_ENCODED_RUSTFLAGS="-Crelocation-model=pic" \
   cargo build -p userstart \
@@ -67,16 +72,54 @@ if [ "$ARCH" = "x86_64" ]; then
   echo "Using OVMF: $OVMF"
 fi
 
+# --- aarch64: build once, run many ---
+if [ "$ARCH" = "aarch64" ]; then
+  echo "==> Building kernel once (aarch64 rootfs mode)..."
+
+  # Build all petal binaries into the rootfs
+  cargo xtask zircon-rootfs --arch "$ARCH"
+
+  # Build one petal ZBI (needed as fallback, but rootfs overrides)
+  cargo petal-zbi --arch "$ARCH" --bin hello 2>&1 | tail -1
+
+  ZBI="target/petal/${ARCH}/petal.zbi"
+
+  # Build kernel with default ROOTPROC
+  USERSTART_ELF="$(pwd)/$USERSTART" \
+    PETAL_ZBI="$(pwd)/$ZBI" \
+    ZCORE_CMDLINE="LOG=${LOG:-info} ROOTPROC=/bin/hello" \
+    cargo zcore-build -m "qemu-${ARCH}"
+
+  # Strip ELF to raw binary (QEMU needs raw binary for DTB passthrough)
+  OBJCOPY=$(find "$(rustc --print sysroot)" -name llvm-objcopy 2>/dev/null | head -1)
+  if [ -n "$OBJCOPY" ]; then
+    "$OBJCOPY" --strip-all -O binary "$KERNEL" "$KERNEL_BIN"
+  elif command -v llvm-objcopy >/dev/null 2>&1; then
+    llvm-objcopy --strip-all -O binary "$KERNEL" "$KERNEL_BIN"
+  elif command -v rust-objcopy >/dev/null 2>&1; then
+    rust-objcopy --strip-all -O binary "$KERNEL" "$KERNEL_BIN"
+  else
+    echo "WARNING: no objcopy found, using ELF (DTB may not work)"
+    cp "$KERNEL" "$KERNEL_BIN"
+  fi
+fi
+
 # launch_qemu: start QEMU for the current arch, writing output to $1.
+# For aarch64, $2 is the ROOTPROC path (overrides compile-time default).
 launch_qemu() {
   local output="$1"
+  local rootproc="${2:-}"
   case "$ARCH" in
     aarch64)
+      local append_args="ROOTPROC=${rootproc} LOG=${LOG:-warn}"
       qemu-system-aarch64 \
         -m 2G -display none -no-reboot -nographic \
         -machine virt -cpu cortex-a72 -smp "$CORES" \
         -serial mon:stdio \
-        -kernel "$KERNEL" > "$output" 2>&1 &
+        -kernel "$KERNEL_BIN" \
+        -initrd "$ROOTFS_IMG" \
+        -append "$append_args" \
+        > "$output" 2>&1 &
       ;;
     x86_64)
       if ! tools/x86-bootimage/target/release/x86-bootimage \
@@ -106,25 +149,26 @@ run_test() {
   echo ""
   echo "==> Testing petal '$bin_name'..."
 
-  # Build and package
-  cargo petal-zbi --arch "$ARCH" --bin "$bin_name" 2>&1 | tail -3
+  if [ "$ARCH" = "x86_64" ]; then
+    # x86_64: rebuild kernel per petal (no -append in UEFI boot)
+    cargo petal-zbi --arch "$ARCH" --bin "$bin_name" 2>&1 | tail -3
 
-  local ZBI="target/petal/${ARCH}/petal.zbi"
+    local ZBI="target/petal/${ARCH}/petal.zbi"
 
-  # Build kernel with this ZBI
-  if ! USERSTART_ELF="$(pwd)/$USERSTART" \
-    PETAL_ZBI="$(pwd)/$ZBI" \
-    ZCORE_CMDLINE="LOG=${LOG:-info}" \
-    cargo zcore-build -m "qemu-${ARCH}"; then
-    echo "FAIL: kernel build failed for '$bin_name'"
-    return 1
+    if ! USERSTART_ELF="$(pwd)/$USERSTART" \
+      PETAL_ZBI="$(pwd)/$ZBI" \
+      ZCORE_CMDLINE="LOG=${LOG:-info}" \
+      cargo zcore-build -m "qemu-${ARCH}"; then
+      echo "FAIL: kernel build failed for '$bin_name'"
+      return 1
+    fi
   fi
 
   # Run in QEMU
   local OUTPUT
   OUTPUT=$(mktemp)
 
-  launch_qemu "$OUTPUT"
+  launch_qemu "$OUTPUT" "/bin/$bin_name"
   local QEMU_PID=$!
 
   local ELAPSED=0
