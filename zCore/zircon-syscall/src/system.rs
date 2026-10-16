@@ -432,15 +432,17 @@ impl Syscall<'_> {
         &self,
         resource: HandleValue,
         resume_deadline: u64,
-        _options: u64,
+        options: u64,
         _out_header: usize,
         out_entries: usize,
         num_entries: u32,
         mut actual_entries: UserOutPtr<u32>,
     ) -> ZxResult {
+        const ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY: u64 = 0x2;
+
         info!(
-            "system.suspend_enter: resource={:#x}, deadline={}",
-            resource, resume_deadline
+            "system.suspend_enter: resource={:#x}, deadline={}, options={:#x}",
+            resource, resume_deadline, options
         );
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
@@ -451,6 +453,14 @@ impl Syscall<'_> {
                 zircon_object::dev::ZX_RSRC_SYSTEM_CPU_BASE,
                 1,
             )?;
+        }
+
+        // REPORT_ONLY: skip the suspend operation entirely, just return
+        // the current wake report entries (0 entries since we don't track
+        // wake sources yet).
+        if options & ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY != 0 {
+            actual_entries.write_if_not_null(0)?;
+            return Ok(());
         }
 
         // Interpret the deadline as a signed timestamp (nanoseconds since boot).
