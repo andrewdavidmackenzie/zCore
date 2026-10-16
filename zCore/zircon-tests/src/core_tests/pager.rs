@@ -8193,8 +8193,9 @@ fn pager_snapshot_alow_slice() {
 
 /// C++: TEST(Snapshot, SnapshotSliceAtLeastOnWrite)
 ///
-/// Creating a private pager copy of a slice of a snapshot should
-/// not be allowed. In zCore, slices don't support create_child at all.
+/// Creating a COW snapshot of a slice of a snapshot should succeed
+/// (the slice redirects through the parent snapshot VMO).
+/// The snapshot should see the original data frozen at creation time.
 #[test]
 fn pager_snapshot_snapshot_slice_at_least_on_write() {
     let _ctx = TestContext::new();
@@ -8210,13 +8211,13 @@ fn pager_snapshot_snapshot_slice_at_least_on_write() {
     // Slice of snapshot.
     let slice = snap.create_slice(0, PAGE_SIZE).unwrap();
 
-    // ALOW clone of slice is NOT supported in zCore.
-    let result = slice.create_child(false, 0, PAGE_SIZE);
-    assert_eq!(
-        result.unwrap_err(),
-        ZxError::NOT_SUPPORTED,
-        "zCore: create_child on slice should return NOT_SUPPORTED"
-    );
+    // COW clone of the slice (redirects through snap).
+    let snap_of_slice = slice.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // The snapshot-of-slice should see the original data.
+    let mut val = [0u8; 8];
+    snap_of_slice.read(0, &mut val).unwrap();
+    assert_eq!(u64::from_ne_bytes(val), 0xdead1eaf);
 }
 
 /// C++: TEST(Snapshot, CloneAfterSliceRoot)

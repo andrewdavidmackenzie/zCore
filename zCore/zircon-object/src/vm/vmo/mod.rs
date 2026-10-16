@@ -344,7 +344,8 @@ impl VmObject {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        // Check that all pages in range are committed (supplied).
+        // OP_DIRTY can only be applied to committed (supplied) pages.
+        // Unsupplied pages return NOT_FOUND (Fuchsia behavior).
         if length > 0 {
             let committed = self.trait_.committed_pages_in_range(start_page, end_page);
             if committed < end_page - start_page {
@@ -626,6 +627,26 @@ impl VmObject {
         offset: usize,
         len: usize,
     ) -> ZxResult<Arc<Self>> {
+        // Slices are transparent windows into a parent VMO. Creating a
+        // COW snapshot of a slice redirects through the parent VMO with
+        // the slice's offset added, matching Fuchsia's behavior.
+        // Don't redirect pager-backed slices: pager VMOs don't support
+        // regular SNAPSHOT at the object level (only SNAPSHOT_AT_LEAST_ON_WRITE
+        // via the syscall layer).
+        if self.is_slice && !self.trait_.is_reference() {
+            let parent = self
+                .inner
+                .lock()
+                .parent
+                .upgrade()
+                .ok_or(ZxError::BAD_STATE)?;
+            if parent.has_pager() {
+                return Err(ZxError::NOT_SUPPORTED);
+            }
+            let slice_off = self.trait_.parent_offset();
+            let adjusted = offset.checked_add(slice_off).ok_or(ZxError::OUT_OF_RANGE)?;
+            return parent.create_child(resizable, adjusted, len);
+        }
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         base.set_name(&self.base.name());
         let trait_ = self.trait_.create_child(offset, len)?;
