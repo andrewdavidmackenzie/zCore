@@ -311,6 +311,7 @@ impl Debug for PortPacket {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vm::PAGE_SIZE;
 
     #[test]
     fn port_packet_size() {
@@ -457,8 +458,8 @@ mod tests {
             command: 0,
             flags: 0,
             _reserved0: 0,
-            offset: 0x1000,
-            length: 0x2000,
+            offset: PAGE_SIZE as u64,
+            length: 2 * PAGE_SIZE as u64,
             _reserved1: 0,
         };
         test_encdec(PayloadRepr::PageRequest(pr));

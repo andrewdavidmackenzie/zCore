@@ -228,7 +228,8 @@ impl VMObjectPaged {
     /// Create a new VMO backing on contiguous pages.
     pub fn new_contiguous(pages: usize, align_log2: usize) -> ZxResult<Arc<Self>> {
         let vmo = Self::new(pages);
-        let mut frames = PhysFrame::new_contiguous(pages, align_log2 - PAGE_SIZE_LOG2);
+        let mut frames =
+            PhysFrame::new_contiguous(pages, align_log2.saturating_sub(PAGE_SIZE_LOG2));
         if frames.is_empty() {
             return Err(ZxError::NO_MEMORY);
         }
@@ -310,7 +311,7 @@ impl VMObjectTrait for VMObjectPaged {
         let iter = BlockIter {
             begin: offset,
             end: offset + len,
-            block_size_log2: 12,
+            block_size_log2: PAGE_SIZE_LOG2 as u8,
         };
         let mut unwanted = VecDeque::new();
         for block in iter {
@@ -675,7 +676,7 @@ impl VMObjectPagedInner {
         let iter = BlockIter {
             begin: offset,
             end: offset + buf_len,
-            block_size_log2: 12,
+            block_size_log2: PAGE_SIZE_LOG2 as u8,
         };
         for block in iter {
             let paddr = self.commit_page(block.block, flags)?;

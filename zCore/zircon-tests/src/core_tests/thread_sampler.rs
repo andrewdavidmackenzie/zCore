@@ -9,6 +9,7 @@
 
 use crate::helpers::TestContext;
 use zircon_object::object::Rights;
+use zircon_object::vm::PAGE_SIZE;
 use zircon_object::ZxError;
 
 /// Helper: build a zx_sampler_config_t buffer.
@@ -27,7 +28,7 @@ fn start_stop() {
     let sc = ctx.syscall();
     let root_resource = ctx.add_root_resource();
 
-    let config = sampler_config(1_000_000, 4096); // 1ms period, 1 page buffer
+    let config = sampler_config(1_000_000, PAGE_SIZE as u64); // 1ms period, 1 page buffer
     let mut sampler_handle: u32 = 0;
     let result = sc.sys_sampler_create(
         root_resource,
@@ -84,7 +85,7 @@ fn sampler_lifetime() {
     let sc = ctx.syscall();
     let root_resource = ctx.add_root_resource();
 
-    let config = sampler_config(1_000_000, 4096);
+    let config = sampler_config(1_000_000, PAGE_SIZE as u64);
 
     // Create first sampler.
     let mut h1: u32 = 0;
@@ -132,7 +133,7 @@ fn invalid_options() {
     let sc = ctx.syscall();
     let root_resource = ctx.add_root_resource();
 
-    let config = sampler_config(1_000_000, 4096);
+    let config = sampler_config(1_000_000, PAGE_SIZE as u64);
     let mut h: u32 = 0;
     let result = sc.sys_sampler_create(
         root_resource,
@@ -151,7 +152,7 @@ fn dropped_sampler() {
     let sc = ctx.syscall();
     let root_resource = ctx.add_root_resource();
 
-    let config = sampler_config(1_000_000, 4096);
+    let config = sampler_config(1_000_000, PAGE_SIZE as u64);
 
     // Create and start.
     let mut h1: u32 = 0;
@@ -203,7 +204,7 @@ fn non_running_thread() {
     let sc = ctx.syscall();
     let root_resource = ctx.add_root_resource();
 
-    let config = sampler_config(1_000_000, 4096);
+    let config = sampler_config(1_000_000, PAGE_SIZE as u64);
 
     let mut h: u32 = 0;
     assert!(sc
@@ -244,7 +245,7 @@ fn high_frequency() {
     let root_resource = ctx.add_root_resource();
 
     // 50us period, 1024 pages buffer.
-    let config = sampler_config(50_000, 1024 * 4096);
+    let config = sampler_config(50_000, 1024 * PAGE_SIZE as u64);
 
     let mut h: u32 = 0;
     assert!(sc

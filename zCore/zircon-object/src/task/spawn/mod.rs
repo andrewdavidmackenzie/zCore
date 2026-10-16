@@ -434,7 +434,7 @@ pub fn spawn_process(
     // The CMDLINE can be large (e.g., 8KB+ gtest_filter skip list).
     let cmdline_estimate = config.extra_args.iter().map(|a| a.len() + 1).sum::<usize>();
     let zbi_size = 32 + 32 + ((cmdline_estimate + 7) & !7); // container + item header + padded payload
-    let zbi_pages = zbi_size.max(4096).div_ceil(4096);
+    let zbi_pages = zbi_size.max(PAGE_SIZE).div_ceil(PAGE_SIZE);
     let zbi_vmo = VmObject::new_paged(zbi_pages);
     // Write a minimal ZBI container header (empty, no items)
     // Build a ZBI cmdline string from extra_args (for gtest_filter etc.)

@@ -2,7 +2,20 @@
 
 use bitflags::bitflags;
 
-/// Page size constant (4 KiB).
+/// Page size constant.
+///
+/// On aarch64 macOS (libos mode), use 16 KiB to match the host page
+/// size. This eliminates the 4K/16K mismatch that causes mock_mem
+/// to need anonymous mapping fallbacks (which fail with EACCES on
+/// macOS when address ranges have stale file associations).
+///
+/// Newer ARM hardware (e.g., Raspberry Pi 5) can also use 16K pages,
+/// so this exercises zCore's 16K page support.
+#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+pub const PAGE_SIZE: usize = 16384;
+
+/// Page size constant (4 KiB) — default for all other platforms.
+#[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
 pub const PAGE_SIZE: usize = 4096;
 
 bitflags! {

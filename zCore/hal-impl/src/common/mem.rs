@@ -78,6 +78,11 @@ impl PhysFrame {
 impl Drop for PhysFrame {
     fn drop(&mut self) {
         if self.allocated {
+            // Clear stale user VA tracking before recycling the frame.
+            // Without this, sync_pmem_to_user can write to unmapped
+            // addresses when a recycled frame is used by a new VMO (#709).
+            #[cfg(not(target_os = "none"))]
+            crate::imp::mem::MOCK_PHYS_MEM.clear_paddr_mappings(self.paddr);
             KHANDLER.frame_dealloc(self.paddr)
         }
     }

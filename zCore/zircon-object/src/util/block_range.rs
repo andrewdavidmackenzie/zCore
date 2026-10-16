@@ -55,21 +55,24 @@ impl Iterator for BlockIter {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::vm::{PAGE_SIZE, PAGE_SIZE_LOG2};
 
     #[test]
     fn block_iter() {
+        let offset = 0x123 % PAGE_SIZE; // offset within first page
+        let tail = 0x18;
         let mut iter = BlockIter {
-            begin: 0x123,
-            end: 0x2018,
-            block_size_log2: 12,
+            begin: offset,
+            end: 2 * PAGE_SIZE + tail,
+            block_size_log2: PAGE_SIZE_LOG2 as u8,
         };
         assert_eq!(
             iter.next(),
             Some(BlockRange {
                 block: 0,
-                begin: 0x123,
-                end: 0x1000,
-                block_size_log2: 12
+                begin: offset,
+                end: PAGE_SIZE,
+                block_size_log2: PAGE_SIZE_LOG2 as u8,
             })
         );
         assert_eq!(
@@ -77,8 +80,8 @@ mod test {
             Some(BlockRange {
                 block: 1,
                 begin: 0,
-                end: 0x1000,
-                block_size_log2: 12
+                end: PAGE_SIZE,
+                block_size_log2: PAGE_SIZE_LOG2 as u8,
             })
         );
         assert_eq!(
@@ -86,8 +89,8 @@ mod test {
             Some(BlockRange {
                 block: 2,
                 begin: 0,
-                end: 0x18,
-                block_size_log2: 12
+                end: tail,
+                block_size_log2: PAGE_SIZE_LOG2 as u8,
             })
         );
         assert_eq!(iter.next(), None);

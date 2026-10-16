@@ -821,7 +821,7 @@ fn cache_op_out_of_range() {
 #[test]
 fn cache_op_phys() {
     let _ctx = TestContext::new();
-    let phys = VmObject::new_physical(0x1000, 1);
+    let phys = VmObject::new_physical(PAGE_SIZE, 1);
     assert_eq!(phys.len(), PAGE_SIZE);
 
     // Physical VMO info should NOT have TYPE_PAGED.
@@ -1593,7 +1593,7 @@ fn parallel_write_and_decommit() {
 #[test]
 fn physical_slice() {
     let _ctx = TestContext::new();
-    let phys = VmObject::new_physical(0x1000, 2);
+    let phys = VmObject::new_physical(PAGE_SIZE, 2);
     assert_eq!(phys.len(), 2 * PAGE_SIZE);
 
     // Creating a slice of a physical VMO.
@@ -1639,7 +1639,7 @@ fn physical_vmo_oob_mapping() {
     let proc = Process::create(&job, "phys-oob").unwrap();
     let vmar = proc.vmar();
 
-    let phys = VmObject::new_physical(0x1000, 1);
+    let phys = VmObject::new_physical(PAGE_SIZE, 1);
     let flags = MMUFlags::READ | MMUFlags::WRITE;
 
     // Map exactly 1 page — should succeed.

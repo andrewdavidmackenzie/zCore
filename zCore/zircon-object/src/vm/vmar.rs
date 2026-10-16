@@ -118,7 +118,7 @@ impl VmAddressRegion {
         if self.parent.is_none() {
             const ASPACE_STRIDE: usize = 0x4000_0000; // must match new_root()
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-            let base = 0x4_0000_0000usize;
+            let base = 0x9_0000_0000usize; // must match new_root()
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize;
             if self.addr >= base {
@@ -183,8 +183,14 @@ impl VmAddressRegion {
             // within the 47-bit user VA limit (~128 TB).
             const ASPACE_STRIDE: usize = 0x4000_0000; // 1 GB
             const ASPACE_SIZE: usize = ASPACE_STRIDE;
+            // On aarch64 macOS: must be above both the macOS MAP_FIXED
+            // minimum (0x4_0000_0000) and the PMEM mapping region
+            // (0x8_0000_0000..0x8_4000_0000). macOS also limits
+            // MAP_FIXED to ~60GB, so the base + max_stride must fit.
+            // Using 0x9_0000_0000 (36 GB) leaves room for ~24 IDs
+            // at 1GB stride before hitting the ~60GB limit.
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-            let base = 0x4_0000_0000usize; // 16 GB (macOS MAP_FIXED minimum)
+            let base = 0x9_0000_0000usize;
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize; // 8 GB
             (base + ASPACE_STRIDE * i, ASPACE_SIZE)
@@ -342,7 +348,7 @@ impl VmAddressRegion {
         len: usize,
         flags: MMUFlags,
     ) -> ZxResult<VirtAddr> {
-        self.map_ext(
+        let result = self.map_ext(
             vmar_offset,
             vmo,
             vmo_offset,
@@ -352,7 +358,14 @@ impl VmAddressRegion {
             false,
             true,
             false,
-        )
+        );
+        if let Err(ref e) = result {
+            hal_impl::console::console_write_fmt(format_args!(
+                "VMAR::map FAILED: addr={:#x} len={:#x} err={:?}\n",
+                self.addr, len, e
+            ));
+        }
+        result
     }
 
     /// Map the `vmo` into this VMAR.
@@ -457,6 +470,10 @@ impl VmAddressRegion {
                 self.determine_offset(inner, vmar_offset, len, PAGE_SIZE)
             }
             .map_err(|e| {
+                hal_impl::console::console_write_fmt(format_args!(
+                    "VMAR map_ext: determine_offset FAIL vmar={:#x} len={:#x} err={:?}\n",
+                    self.addr, len, e
+                ));
                 // For SPECIFIC maps (offset is Some), convert overlap errors
                 // to ALREADY_EXISTS per Fuchsia's zx_vmar_map semantics.
                 if e == ZxError::INVALID_ARGS && vmar_offset.is_some() {
@@ -491,6 +508,14 @@ impl VmAddressRegion {
                 }
                 self.unmap_inner(addr, len, inner)?;
             } else {
+                hal_impl::console::console_write_fmt(format_args!(
+                    "VMAR map_ext: test_map FAIL addr={:#x} off={:#x} len={:#x} maps={} kids={}\n",
+                    self.addr,
+                    offset,
+                    len,
+                    inner.mappings.len(),
+                    inner.children.len()
+                ));
                 return Err(ZxError::NO_MEMORY);
             }
         }
@@ -508,7 +533,13 @@ impl VmAddressRegion {
         // permission. Mappings with no R/W/X are address reservations
         // that should fault on access (matching Fuchsia behavior).
         if map_range {
-            mapping.map()?;
+            if let Err(e) = mapping.map() {
+                hal_impl::console::console_write_fmt(format_args!(
+                    "VMAR map_ext: mapping.map() failed addr={:#x} len={:#x} err={:?}\n",
+                    addr, len, e
+                ));
+                return Err(e);
+            }
         }
         inner.mappings.push(mapping);
         Ok(addr)
@@ -1867,7 +1898,15 @@ impl VmMapping {
                         paddr,
                         commit_flags,
                     )
-                    .map_err(|_| ZxError::NO_MEMORY)?;
+                    .map_err(|e| {
+                        hal_impl::console::console_write_fmt(format_args!(
+                            "VmMapping::map pt.map failed va={:#x} pa={:#x} err={:?}\n",
+                            inner.addr + i * PAGE_SIZE,
+                            paddr,
+                            e
+                        ));
+                        ZxError::NO_MEMORY
+                    })?;
             }
             Ok(())
         })
@@ -2375,7 +2414,7 @@ cfg_if::cfg_if! {
     }
 }
 /// The size of user address space
-pub const USER_ASPACE_SIZE: u64 = (1u64 << 47) - 4096 - USER_ASPACE_BASE;
+pub const USER_ASPACE_SIZE: u64 = (1u64 << 47) - PAGE_SIZE as u64 - USER_ASPACE_BASE;
 /// The default number of user stack pages
 pub const USER_STACK_PAGES: usize = 128;
 
@@ -2387,19 +2426,24 @@ mod tests {
     fn create_child() {
         let root_vmar = VmAddressRegion::new_root();
         let child = root_vmar
-            .allocate_at(0, 0x2000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+            .allocate_at(0, 2 * PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
             .expect("failed to create child VMAR");
 
         // test invalid argument
         assert_eq!(
             root_vmar
-                .allocate_at(0x2001, 0x1000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+                .allocate_at(
+                    2 * PAGE_SIZE + 1,
+                    PAGE_SIZE,
+                    VmarFlags::CAN_MAP_RXW,
+                    PAGE_SIZE
+                )
                 .err(),
             Some(ZxError::INVALID_ARGS)
         );
         assert_eq!(
             root_vmar
-                .allocate_at(0x2000, 1, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+                .allocate_at(2 * PAGE_SIZE, 1, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
                 .err(),
             Some(ZxError::INVALID_ARGS)
         );
@@ -2407,13 +2451,13 @@ mod tests {
         // (matching Fuchsia semantics).
         assert_eq!(
             root_vmar
-                .allocate_at(0, 0x1000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+                .allocate_at(0, PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
                 .err(),
             Some(ZxError::ALREADY_EXISTS)
         );
         assert_eq!(
             child
-                .allocate_at(0x1000, 0x2000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+                .allocate_at(PAGE_SIZE, 2 * PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
                 .err(),
             Some(ZxError::INVALID_ARGS)
         );
@@ -2433,21 +2477,26 @@ mod tests {
         // Fuchsia allows mapping beyond VMO size (pages fault on access).
         // At the kernel object level, map_range silently downgrades to lazy
         // mapping. The explicit MAP_RANGE check is in the syscall layer.
-        let a1 = vmar.map_at(0, vmo.clone(), 0x4000, 0x1000, flags).unwrap();
-        vmar.unmap(a1, 0x1000).unwrap();
-        let a2 = vmar.map_at(0, vmo.clone(), 0, 0x5000, flags).unwrap();
-        vmar.unmap(a2, 0x5000).unwrap();
+        let a1 = vmar
+            .map_at(0, vmo.clone(), 4 * PAGE_SIZE, PAGE_SIZE, flags)
+            .unwrap();
+        vmar.unmap(a1, PAGE_SIZE).unwrap();
+        let a2 = vmar
+            .map_at(0, vmo.clone(), 0, 5 * PAGE_SIZE, flags)
+            .unwrap();
+        vmar.unmap(a2, 5 * PAGE_SIZE).unwrap();
         assert_eq!(
-            vmar.map_at(0, vmo.clone(), 0x1000, 1, flags),
+            vmar.map_at(0, vmo.clone(), PAGE_SIZE, 1, flags),
             Err(ZxError::INVALID_ARGS)
         );
         assert_eq!(
-            vmar.map_at(0, vmo.clone(), 1, 0x1000, flags),
+            vmar.map_at(0, vmo.clone(), 1, PAGE_SIZE, flags),
             Err(ZxError::INVALID_ARGS)
         );
 
-        vmar.map_at(0, vmo.clone(), 0, 0x4000, flags).unwrap();
-        vmar.map_at(0x12000, vmo.clone(), 0x2000, 0x1000, flags)
+        vmar.map_at(0, vmo.clone(), 0, 4 * PAGE_SIZE, flags)
+            .unwrap();
+        vmar.map_at(18 * PAGE_SIZE, vmo.clone(), 2 * PAGE_SIZE, PAGE_SIZE, flags)
             .unwrap();
 
         // Aliased mapping test: write through one virtual address,
@@ -2457,8 +2506,11 @@ mod tests {
         // this is only tested on Linux hosts.
         #[cfg(not(target_os = "macos"))]
         unsafe {
-            ((vmar.addr() + 0x2000) as *mut usize).write(MAGIC);
-            assert_eq!(((vmar.addr() + 0x12000) as *const usize).read(), MAGIC);
+            ((vmar.addr() + 2 * PAGE_SIZE) as *mut usize).write(MAGIC);
+            assert_eq!(
+                ((vmar.addr() + 18 * PAGE_SIZE) as *const usize).read(),
+                MAGIC
+            );
         }
     }
 
@@ -2483,16 +2535,16 @@ mod tests {
         fn new() -> Self {
             let root = VmAddressRegion::new_root();
             let child1 = root
-                .allocate_at(0, 0x2000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+                .allocate_at(0, 2 * PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
                 .unwrap();
             let child2 = root
-                .allocate_at(0x2000, 0x1000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+                .allocate_at(2 * PAGE_SIZE, PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
                 .unwrap();
             let grandson1 = child1
-                .allocate_at(0, 0x1000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+                .allocate_at(0, PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
                 .unwrap();
             let grandson2 = child1
-                .allocate_at(0x1000, 0x1000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+                .allocate_at(PAGE_SIZE, PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
                 .unwrap();
             Sample {
                 root,
@@ -2508,7 +2560,7 @@ mod tests {
     fn unmap_vmar() {
         let s = Sample::new();
         let base = s.root.addr();
-        s.child1.unmap(base, 0x1000).unwrap();
+        s.child1.unmap(base, PAGE_SIZE).unwrap();
         assert!(s.grandson1.is_dead());
         assert!(s.grandson2.is_alive());
 
@@ -2516,14 +2568,14 @@ mod tests {
         let s = Sample::new();
         let base = s.root.addr();
         assert_eq!(
-            s.root.unmap(base + 0x1000, 0x2000),
+            s.root.unmap(base + PAGE_SIZE, 2 * PAGE_SIZE),
             Err(ZxError::INVALID_ARGS)
         );
 
         // unmap nothing should success.
         let s = Sample::new();
         let base = s.root.addr();
-        s.child1.unmap(base + 0x8000, 0x1000).unwrap();
+        s.child1.unmap(base + 8 * PAGE_SIZE, PAGE_SIZE).unwrap();
     }
 
     #[test]
@@ -2537,7 +2589,7 @@ mod tests {
         // address space should be released
         assert!(s
             .root
-            .allocate_at(0, 0x1000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+            .allocate_at(0, PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
             .is_ok());
     }
 
@@ -2552,34 +2604,34 @@ mod tests {
         let base = vmar.addr();
         let vmo = VmObject::new_paged(5);
         let flags = MMUFlags::READ | MMUFlags::WRITE;
-        vmar.map_at(0, vmo, 0, 0x5000, flags).unwrap();
+        vmar.map_at(0, vmo, 0, 5 * PAGE_SIZE, flags).unwrap();
         assert_eq!(vmar.count(), 1);
-        assert_eq!(vmar.used_size(), 0x5000);
+        assert_eq!(vmar.used_size(), 5 * PAGE_SIZE);
 
         // 0. unmap none.
-        vmar.unmap(base + 0x5000, 0x1000).unwrap();
+        vmar.unmap(base + 5 * PAGE_SIZE, PAGE_SIZE).unwrap();
         assert_eq!(vmar.count(), 1);
-        assert_eq!(vmar.used_size(), 0x5000);
+        assert_eq!(vmar.used_size(), 5 * PAGE_SIZE);
 
         // 1. unmap middle.
-        vmar.unmap(base + 0x3000, 0x1000).unwrap();
+        vmar.unmap(base + 3 * PAGE_SIZE, PAGE_SIZE).unwrap();
         assert_eq!(vmar.count(), 2);
-        assert_eq!(vmar.used_size(), 0x4000);
+        assert_eq!(vmar.used_size(), 4 * PAGE_SIZE);
 
         // 2. unmap prefix.
-        vmar.unmap(base, 0x1000).unwrap();
+        vmar.unmap(base, PAGE_SIZE).unwrap();
         assert_eq!(vmar.count(), 2);
-        assert_eq!(vmar.used_size(), 0x3000);
+        assert_eq!(vmar.used_size(), 3 * PAGE_SIZE);
 
         // 3. unmap postfix.
-        vmar.unmap(base + 0x2000, 0x1000).unwrap();
+        vmar.unmap(base + 2 * PAGE_SIZE, PAGE_SIZE).unwrap();
         assert_eq!(vmar.count(), 2);
-        assert_eq!(vmar.used_size(), 0x2000);
+        assert_eq!(vmar.used_size(), 2 * PAGE_SIZE);
 
         // 4. unmap all.
-        vmar.unmap(base + 0x1000, 0x1000).unwrap();
+        vmar.unmap(base + PAGE_SIZE, PAGE_SIZE).unwrap();
         assert_eq!(vmar.count(), 1);
-        assert_eq!(vmar.used_size(), 0x1000);
+        assert_eq!(vmar.used_size(), PAGE_SIZE);
     }
 
     #[test]
@@ -2675,7 +2727,7 @@ mod tests {
     fn read_write_memory() {
         let root_vmar = VmAddressRegion::new_root();
         let child_vmar = root_vmar
-            .allocate(None, 0x4000, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+            .allocate(None, 4 * PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
             .expect("failed to create child VMAR");
 
         let vmo = VmObject::new_paged(1);

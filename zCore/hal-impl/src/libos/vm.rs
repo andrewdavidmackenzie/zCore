@@ -39,7 +39,8 @@ impl GenericPageTable for PageTable {
     }
 
     fn map(&mut self, page: Page, paddr: PhysAddr, flags: MMUFlags) -> PagingResult {
-        debug_assert!(page.size as usize == PAGE_SIZE);
+        // page.size is PageSize::Size4K (0x1000) from the enum, but
+        // PAGE_SIZE may be 16K on aarch64 macOS. The mmap uses PAGE_SIZE.
         debug_assert!(is_aligned(paddr));
         if paddr < PMEM_SIZE {
             if MOCK_PHYS_MEM.mmap(page.vaddr, PAGE_SIZE, paddr, flags) {

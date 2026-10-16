@@ -128,16 +128,12 @@ impl Syscall<'_> {
             Ok(n)
         })
         .map_err(|e| {
-            // copy_to_user returns INVALID_ARGS for faulting user buffers.
-            // Fuchsia distinguishes: NOT_FOUND for unmapped addresses,
-            // ACCESS_DENIED for permission violations (e.g., read-only).
-            // Check if the address is mapped to determine which error.
+            // Fuchsia distinguishes: NOT_FOUND for unmapped/OOB
+            // addresses, ACCESS_DENIED for permission violations.
+            // vmo_read writes to the user buffer — if the buffer
+            // is fully within a mapping, it's a permission error;
+            // otherwise it's an unmapped/OOB address.
             if e == ZxError::INVALID_ARGS {
-                // Fuchsia distinguishes: NOT_FOUND for unmapped/OOB
-                // addresses, ACCESS_DENIED for permission violations.
-                // vmo_read writes to the user buffer — if the buffer
-                // is fully within a mapping, it's a permission error;
-                // otherwise it's an unmapped/OOB address.
                 let addr = buf.as_addr();
                 let end = addr.saturating_add(buf_size);
                 let vmar = self.thread.proc().vmar();

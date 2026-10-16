@@ -258,7 +258,7 @@ fn round_up_size_physical() {
 
     // Physical VMOs are contiguous and report is_contiguous() == true,
     // which bypasses the cache policy check in create_slice.
-    let physical = VmObject::new_physical(0x1000, 2);
+    let physical = VmObject::new_physical(PAGE_SIZE, 2);
 
     // Create slice with sub-page size — should round up to PAGE_SIZE.
     let slice = physical.create_slice(0, 1).unwrap();

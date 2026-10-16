@@ -386,8 +386,8 @@ Vmar.MapRangeStreamSizeWraparound
 Bti.InvalidPinArgs
 Bti.QuarantineDisallowsPin
 Bti.NoDelayedUnpin
-Bti.PinTooManyAddresses
-Bti.DecommitRace
+# Bti.PinTooManyAddresses — removed, completes
+# Bti.DecommitRace — removed, completes
 
 # ── Interrupt / MSI tests ────────────────────────────────────────────
 # 12/16 InterruptTest pass: VirtualNotWakeable, VirtualInterrupts,
