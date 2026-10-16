@@ -118,7 +118,7 @@ impl VmAddressRegion {
         if self.parent.is_none() {
             const ASPACE_STRIDE: usize = 0x4000_0000; // must match new_root()
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-            let base = 0x4_0000_0000usize;
+            let base = 0xC_0000_0000usize; // must match new_root()
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize;
             if self.addr >= base {
@@ -183,8 +183,12 @@ impl VmAddressRegion {
             // within the 47-bit user VA limit (~128 TB).
             const ASPACE_STRIDE: usize = 0x4000_0000; // 1 GB
             const ASPACE_SIZE: usize = ASPACE_STRIDE;
+            // On aarch64 macOS: must be above both the macOS MAP_FIXED
+            // minimum (0x4_0000_0000) and the PMEM mapping region
+            // (0x8_0000_0000..0x8_4000_0000). Using 0xC_0000_0000 (48 GB)
+            // avoids overlap with PMEM (#709).
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-            let base = 0x4_0000_0000usize; // 16 GB (macOS MAP_FIXED minimum)
+            let base = 0xC_0000_0000usize;
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize; // 8 GB
             (base + ASPACE_STRIDE * i, ASPACE_SIZE)

@@ -76,7 +76,7 @@ pub(super) static FRAME_ALLOCATOR: spin::Lazy<Mutex<FrameAlloc>> = spin::Lazy::n
     allocator.insert(1..PMEM_SIZE / PAGE_SIZE);
     Mutex::new(allocator)
 });
-pub(super) static MOCK_PHYS_MEM: spin::Lazy<MockMemory> =
+pub(crate) static MOCK_PHYS_MEM: spin::Lazy<MockMemory> =
     spin::Lazy::new(|| MockMemory::new(PMEM_SIZE));
 
 hal_fn_impl! {
