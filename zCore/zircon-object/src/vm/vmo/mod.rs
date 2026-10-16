@@ -643,7 +643,8 @@ impl VmObject {
                 return Err(ZxError::NOT_SUPPORTED);
             }
             let slice_off = self.trait_.parent_offset();
-            return parent.create_child(resizable, offset + slice_off, len);
+            let adjusted = offset.checked_add(slice_off).ok_or(ZxError::OUT_OF_RANGE)?;
+            return parent.create_child(resizable, adjusted, len);
         }
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         base.set_name(&self.base.name());

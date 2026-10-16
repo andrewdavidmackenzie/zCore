@@ -12,8 +12,7 @@
 /// 10 records containing the thread's TID, stops, and cleans up.
 #[test]
 #[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
-fn start_stop() {
-}
+fn start_stop() {}
 
 /// C++: TEST(ThreadSampler, SamplerLifetime)
 /// Verifies that only one sampler can exist at a time. Creating a
@@ -21,23 +20,20 @@ fn start_stop() {
 /// After closing the first, a new one can be created.
 #[test]
 #[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
-fn sampler_lifetime() {
-}
+fn sampler_lifetime() {}
 
 /// C++: TEST(ThreadSampler, InvalidOptions)
 /// Creating a sampler with non-zero options returns ZX_ERR_INVALID_ARGS.
 #[test]
 #[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
-fn invalid_options() {
-}
+fn invalid_options() {}
 
 /// C++: TEST(ThreadSampler, DroppedSampler)
 /// Drops a sampler mid-session (close handle while sampling is active),
 /// then creates a new one and verifies it works.
 #[test]
 #[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
-fn dropped_sampler() {
-}
+fn dropped_sampler() {}
 
 /// C++: TEST(ThreadSampler, NonRunningThread)
 /// Creates a sampler, creates a thread (Init but not Start), starts
@@ -45,13 +41,11 @@ fn dropped_sampler() {
 /// thread should appear.
 #[test]
 #[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
-fn non_running_thread() {
-}
+fn non_running_thread() {}
 
 /// C++: TEST(ThreadSampler, HighFrequency)
 /// Stress test: 4 threads, 50us sample period, 1024-page buffer.
 /// Reads at least 10 records total.
 #[test]
 #[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
-fn high_frequency() {
-}
+fn high_frequency() {}

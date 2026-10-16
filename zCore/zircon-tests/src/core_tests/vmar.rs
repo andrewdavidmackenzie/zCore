@@ -1033,12 +1033,8 @@ fn protect_split_test() {
     let addr = vmar
         .map(None, vmo.clone(), 0, 4 * PAGE_SIZE, flags)
         .unwrap();
-    vmar.protect(
-        addr + 2 * PAGE_SIZE,
-        2 * PAGE_SIZE,
-        MMUFlags::READ,
-    )
-    .unwrap();
+    vmar.protect(addr + 2 * PAGE_SIZE, 2 * PAGE_SIZE, MMUFlags::READ)
+        .unwrap();
     for i in 0..4 {
         let mut buf = [0u8; 8];
         let r = vmar.read_memory(addr + i * PAGE_SIZE, &mut buf);

@@ -333,8 +333,7 @@ impl VMObjectTrait for VMObjectPaged {
                     if inner.parent_has_page(block.block) {
                         inner.zero_markers.insert(block.block);
                     }
-                    unwanted
-                        .push_back(block.block + inner.parent_offset / PAGE_SIZE);
+                    unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
                     inner.frames.remove(&block.block);
                 }
             } else if inner.committed_pages_in_range(block.block, block.block + 1) != 0 {
@@ -725,14 +724,17 @@ impl VMObjectPagedInner {
                         None => Err(ZxError::NO_MEMORY),
                     };
                 }
-                // Remove zero marker if present — the page is being
-                // materialized as a real (zero-filled) frame.
-                if has_zero_marker {
-                    self.zero_markers.remove(&page_idx);
-                }
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if self.type_.is_hidden() {
+                    // Hidden nodes return a temporary zero page without
+                    // storing a frame. Keep the zero marker so the
+                    // sibling child also sees zero at this offset.
                     return Ok(CommitResult::NewPage(target_frame));
+                }
+                // Leaf node: the zero marker is replaced by a real
+                // (zero-filled) frame in the local frames map.
+                if has_zero_marker {
+                    self.zero_markers.remove(&page_idx);
                 }
                 self.frames.insert(page_idx, PageState::new(target_frame));
                 for map in self.mappings.iter() {
@@ -811,11 +813,7 @@ impl VMObjectPagedInner {
                     }
                     // Shared within requesting subtree — copy, keep original.
                     let target = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
-                    hal_impl::mem::pmem_copy(
-                        target.paddr(),
-                        frame.frame.paddr(),
-                        PAGE_SIZE,
-                    );
+                    hal_impl::mem::pmem_copy(target.paddr(), frame.frame.paddr(), PAGE_SIZE);
                     frame.share_count -= 1;
                     return Ok(CommitResult::CopyOnWrite(target, true));
                 }
@@ -1006,6 +1004,22 @@ impl VMObjectPagedInner {
             if !surviving.frames.contains_key(&idx) && value.tag != tag.negate() {
                 value.tag = PageStateTag::Owned;
                 surviving.frames.insert(idx, value);
+            }
+        }
+
+        // Transfer zero markers from the hidden node to the surviving
+        // child.  A marker in the hidden node means the dying child (or
+        // the hidden node itself) zeroed that page; the surviving child
+        // must inherit the marker so it doesn't see stale ancestor data.
+        for marker_key in core::mem::take(&mut self.zero_markers) {
+            if marker_key < start || marker_key >= end {
+                continue;
+            }
+            let idx = marker_key - start;
+            // Only transfer if the surviving child doesn't already have
+            // a committed frame there (a frame takes precedence).
+            if !surviving.frames.contains_key(&idx) {
+                surviving.zero_markers.insert(idx);
             }
         }
 
@@ -1424,6 +1438,10 @@ impl VMObjectPagedInner {
                 result.add_page((page.share_count as u64) + 1);
                 continue;
             }
+            // Zero markers block attribution — the page uses no memory.
+            if self.zero_markers.contains(&i) {
+                continue;
+            }
             if self.parent_limit <= i * PAGE_SIZE {
                 continue;
             }
@@ -1433,6 +1451,10 @@ impl VMObjectPagedInner {
             let mut current_idx = i + self.parent_offset / PAGE_SIZE;
             while let Some(vmop) = current {
                 let inner = vmop.inner.borrow();
+                // Zero markers in ancestors also block attribution.
+                if inner.zero_markers.contains(&current_idx) {
+                    break;
+                }
                 if let Some(frame) = inner.frames.get(&current_idx) {
                     result.add_page((frame.share_count as u64) + 1);
                     break;

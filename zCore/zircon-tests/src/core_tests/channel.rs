@@ -736,8 +736,7 @@ fn read_may_discard_with_zero_size_buffers() {
 /// copy-out to userspace faults.
 #[test]
 #[ignore = "requires copy_to_user fault path — not available in libos mode"]
-fn read_fault_does_not_leak_handles() {
-}
+fn read_fault_does_not_leak_handles() {}
 
 /// C++: TEST(ChannelTest, NoSpuriousReadableSignalWhenRacing)
 /// channel/channel.cc:1517
@@ -751,8 +750,7 @@ fn read_fault_does_not_leak_handles() {
 /// Verifies no spurious READABLE signal when writer and reader race.
 #[test]
 #[ignore = "requires concurrent threads — cooperative scheduling cannot reproduce the race"]
-fn no_spurious_readable_signal_when_racing() {
-}
+fn no_spurious_readable_signal_when_racing() {}
 
 /// C++: TEST(ChannelTest, ConcurrentReadsConsumeUniqueElements)
 /// channel/channel.cc:469
@@ -764,8 +762,7 @@ fn no_spurious_readable_signal_when_racing() {
 ///   - Each reader's values are monotonically increasing
 #[test]
 #[ignore = "requires concurrent reader threads — cooperative scheduling cannot run two readers"]
-fn concurrent_reads_consume_unique_elements() {
-}
+fn concurrent_reads_consume_unique_elements() {}
 
 /// C++: TEST(ChannelTest, WaitManyIsSignaledOnAnyElementWrite)
 /// channel/channel.cc:218
@@ -777,8 +774,7 @@ fn concurrent_reads_consume_unique_elements() {
 ///   - Event was signaled with ZX_USER_SIGNAL_0
 #[test]
 #[ignore = "requires concurrent threads for wait_many — not available with cooperative scheduling"]
-fn wait_many_is_signaled_on_any_element_write() {
-}
+fn wait_many_is_signaled_on_any_element_write() {}
 
 /// C++: TEST(ChannelTest, ChannelFullException)
 /// channel/channel.cc:1447
@@ -791,7 +787,6 @@ fn wait_many_is_signaled_on_any_element_write() {
 /// Verifies write_count > 1000 before the exception.
 #[test]
 #[ignore = "requires policy exception infrastructure and mini-process — not yet implemented"]
-fn full_exception() {
-}
+fn full_exception() {}
 
 // ── Bulk-ported channel tests (batch 2) ─────────────────────────────

@@ -1618,8 +1618,7 @@ fn physical_slice() {
 /// on bare-metal when the MMIO resource and test_ram_reserve are available.
 #[test]
 #[ignore = "requires MMIO resource and bare-metal syscall layer"]
-fn physical_vmo_invalid_initial_size() {
-}
+fn physical_vmo_invalid_initial_size() {}
 
 /// C++: TEST(VmoTestCase, PhysicalVmoOobMapping)
 ///
@@ -1836,8 +1835,7 @@ fn read_write_invalid_null_buffer() {
 /// so the write silently succeeds. This test is therefore ignored in libos.
 #[test]
 #[ignore = "requires bare-metal VMAR permission enforcement"]
-fn read_write_invalid_user_buffer() {
-}
+fn read_write_invalid_user_buffer() {}
 
 /// C++: TEST(VmoTestCase, ResizeHazard)
 ///

@@ -22,8 +22,7 @@
 /// and asserts features == 0.
 #[test]
 #[ignore = "requires zx_system_get_features syscall — not implemented in zCore"]
-fn address_tagging_get_system_features_x86_64() {
-}
+fn address_tagging_get_system_features_x86_64() {}
 
 // ── ARM64-only tests ───────────────────────────────────────────────
 
@@ -32,65 +31,56 @@ fn address_tagging_get_system_features_x86_64() {
 /// ZX_ARM64_FEATURE_ADDRESS_TAGGING_TBI. Then dereferences a tagged pointer.
 #[test]
 #[ignore = "requires zx_system_get_features and ARM64 TBI — not available in libos"]
-fn address_tagging_get_system_features_a_arch64() {
-}
+fn address_tagging_get_system_features_a_arch64() {}
 
 /// C++: TEST(TopByteIgnoreTests, VmarTaggedAddress)
 /// Tests VMAR allocate, map, protect, read_memory, write_memory with
 /// tagged user pointers.
 #[test]
 #[ignore = "requires ARM64 TBI kernel support — not available in libos"]
-fn vmar_tagged_address() {
-}
+fn vmar_tagged_address() {}
 
 /// C++: TEST(TopByteIgnoreTests, TaggedFARSegfault)
 /// Dereferences a tagged null pointer in a child thread, catches the
 /// exception, and verifies the FAR contains the tagged address.
 #[test]
 #[ignore = "requires ARM64 TBI + exception FAR inspection — not available in libos"]
-fn tagged_far_segfault() {
-}
+fn tagged_far_segfault() {}
 
 /// C++: TEST(TopByteIgnoreTests, TaggedFARWatchpoint)
 /// Sets up an ARM64 hardware watchpoint on a global variable, writes
 /// to it through a tagged pointer, catches the debug exception.
 #[test]
 #[ignore = "requires ARM64 hardware watchpoints — not available in libos"]
-fn tagged_far_watchpoint() {
-}
+fn tagged_far_watchpoint() {}
 
 /// C++: TEST(TopByteIgnoreTests, FutexWaitWake)
 /// Tests futex wait/wake with various tag combinations on the futex address.
 #[test]
 #[ignore = "requires ARM64 TBI + concurrent threads — not available in libos"]
-fn futex_wait_wake() {
-}
+fn futex_wait_wake() {}
 
 /// C++: TEST(TopByteIgnoreTests, VmmPageFaultHandlerDataAbort)
 /// Decommits a mapped page, then reads through a tagged pointer.
 #[test]
 #[ignore = "requires ARM64 TBI + page fault handler — not available in libos"]
-fn vmm_page_fault_handler_data_abort() {
-}
+fn vmm_page_fault_handler_data_abort() {}
 
 /// C++: TEST(TopByteIgnoreTests, InstructionAbortNoTag)
 /// Branches to a tagged PC. The resulting instruction abort's FAR
 /// should have the tag stripped.
 #[test]
 #[ignore = "requires ARM64 TBI + instruction abort handling — not available in libos"]
-fn instruction_abort_no_tag() {
-}
+fn instruction_abort_no_tag() {}
 
 /// C++: TEST(TopByteIgnoreTests, ThreadStartTaggedAddress)
 /// Starts a thread with tagged PC and SP.
 #[test]
 #[ignore = "requires ARM64 TBI — not available in libos"]
-fn thread_start_tagged_address() {
-}
+fn thread_start_tagged_address() {}
 
 /// C++: TEST(TopByteIgnoreTests, ProcessStartTaggedAddress)
 /// Starts a process with tagged entry and/or SP.
 #[test]
 #[ignore = "requires ARM64 TBI + vDSO loading — not available in libos"]
-fn process_start_tagged_address() {
-}
+fn process_start_tagged_address() {}

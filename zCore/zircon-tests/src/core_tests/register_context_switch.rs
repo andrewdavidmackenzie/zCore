@@ -48,8 +48,7 @@ fn fpu_long_compute_loop() {
 /// test is disabled.
 #[test]
 #[ignore = "C++ test is ZXTEST_SKIP'd — requires x86 ring-0 segment selector instructions"]
-fn segment_selectors_zeroed_on_interrupt() {
-}
+fn segment_selectors_zeroed_on_interrupt() {}
 
 /// C++: TEST(RegisterContextSwitchTests, SegmentSelectorsZeroedOnContextSwitch)
 /// Sets x86 segment selectors and FS/GS base to 1, sleeps to trigger
@@ -60,5 +59,4 @@ fn segment_selectors_zeroed_on_interrupt() {
 /// Not available in libos user mode. Verified via QEMU core-tests.
 #[test]
 #[ignore = "requires x86 ring-0 privilege for segment selector manipulation — not available in libos"]
-fn segment_selectors_zeroed_on_context_switch() {
-}
+fn segment_selectors_zeroed_on_context_switch() {}

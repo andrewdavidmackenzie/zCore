@@ -895,8 +895,7 @@ async fn wait_async_boot_timestamp() {
 /// verifies the exception type and synth_code, then resumes the thread.
 #[test]
 #[ignore = "requires policy exception infrastructure and worker threads — not yet implemented"]
-fn queue_packet_limit_exceeded_generates_policy_exception() {
-}
+fn queue_packet_limit_exceeded_generates_policy_exception() {}
 
 /// C++: TEST(PortTest, TooManyObservers)
 /// port/ports.cc:1155
@@ -907,5 +906,4 @@ fn queue_packet_limit_exceeded_generates_policy_exception() {
 /// ZX_ERR_NO_MEMORY.
 #[test]
 #[ignore = "requires graceful OOM handling and mini-process — kernel panics on OOM"]
-fn too_many_observers() {
-}
+fn too_many_observers() {}
