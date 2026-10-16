@@ -2853,7 +2853,7 @@ fn pager_concurrent_resize() {
 ///
 /// Decommit (evict) supplied pages from a pager-backed VMO.
 #[test]
-#[ignore = "decommit on pager-backed VMOs not yet implemented (needs page eviction)"]
+#[ignore = "decommit on pager-backed VMOs returns NOT_SUPPORTED (Fuchsia behavior)"]
 fn pager_evict_pages() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
@@ -2874,7 +2874,7 @@ fn pager_evict_pages() {
 ///
 /// Decommit a specific range of pages from a multi-page VMO.
 #[test]
-#[ignore = "decommit on pager-backed VMOs not yet implemented (needs page eviction)"]
+#[ignore = "decommit on pager-backed VMOs returns NOT_SUPPORTED (Fuchsia behavior)"]
 fn pager_evict_pages_range() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();

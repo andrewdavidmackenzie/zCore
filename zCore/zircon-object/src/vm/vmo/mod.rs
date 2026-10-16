@@ -967,8 +967,8 @@ impl VmObject {
     pub fn decommit(&self, offset: usize, len: usize) -> ZxResult {
         // Reject decommit on any VMO in a pager-backed tree
         // (including slices/references of pager-backed VMOs).
-        // After detach (clear_pager), the VMO is no longer
-        // pager-backed and decommit succeeds.
+        // This matches Fuchsia's behavior: pager-backed VMOs don't
+        // support decommit (pages are managed by the pager).
         if self.is_in_pager_tree() {
             return Err(ZxError::NOT_SUPPORTED);
         }
