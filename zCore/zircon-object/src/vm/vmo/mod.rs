@@ -913,8 +913,29 @@ impl VmObject {
                 return parent.set_content_size(size);
             }
         }
-        let mut inner = self.inner.lock();
-        inner.content_size = size;
+        let old;
+        {
+            let mut inner = self.inner.lock();
+            old = inner.content_size;
+            inner.content_size = size;
+        }
+        // When content_size decreases, invalidate page table entries
+        // beyond the new content_size in all mappings. This ensures
+        // FAULT_BEYOND_STREAM_SIZE mappings correctly fault on accesses
+        // to the now-beyond-stream-size region instead of reading stale
+        // data from previously-mapped pages.
+        if size < old {
+            let start_page = size / PAGE_SIZE;
+            let removed_pages = old.saturating_sub(size).div_ceil(PAGE_SIZE);
+            if removed_pages > 0 {
+                let inner = self.inner.lock();
+                for map_weak in inner.mappings.iter() {
+                    if let Some(map) = map_weak.upgrade() {
+                        map.range_change(start_page, removed_pages, RangeChangeOp::Unmap);
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -935,10 +956,7 @@ impl VmObject {
         if size > self.len() {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        let mut inner = self.inner.lock();
-        let old = inner.content_size;
-        inner.content_size = size;
-        drop(inner);
+        let old = self.inner.lock().content_size;
         let vmo_len = self.len();
         // Zero from the new content_size to the page-rounded old content_size
         // (or vmo boundary). This covers both shrinking and the case where
@@ -952,24 +970,8 @@ impl VmObject {
         if zero_end > zero_start {
             self.zero(zero_start, zero_end - zero_start)?;
         }
-        // When content_size decreases, invalidate page table entries
-        // beyond the new content_size in all mappings. This ensures
-        // accesses to the now-beyond-stream-size region fault correctly
-        // instead of reading stale data from previously-mapped pages.
-        // (For non-stream mappings, the pages will be demand-faulted back.)
-        if size < old {
-            let start_page = size / PAGE_SIZE;
-            let removed_pages = (old.saturating_sub(size) + PAGE_SIZE - 1) / PAGE_SIZE;
-            if removed_pages > 0 {
-                let inner = self.inner.lock();
-                for map_weak in inner.mappings.iter() {
-                    if let Some(map) = map_weak.upgrade() {
-                        map.range_change(start_page, removed_pages, RangeChangeOp::Unmap);
-                    }
-                }
-            }
-        }
-        Ok(())
+        // set_content_size handles PTE invalidation on decrease.
+        self.set_content_size(size)
     }
 
     /// Decommit pages in the given range.
