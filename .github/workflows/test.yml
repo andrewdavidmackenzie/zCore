@@ -42,6 +42,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # ubuntu-latest (x86_64) uses TCG for aarch64 guest but needs
+        # the x86_64 musl cross-toolchain for busybox. ubuntu-24.04-arm
+        # can't use the x86_64 musl binaries. Keep on ubuntu-latest
+        # until a native aarch64 musl toolchain is available.
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
@@ -175,7 +179,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04-arm, macos-latest]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -207,11 +211,9 @@ jobs:
 
   zircon-boot-test-x86:
     name: Zircon Boot Test (x86_64)
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    # macOS removed: x86_64 guest on ARM macOS = slow TCG emulation.
+    # The x86_64 macOS build is validated by build.yml::bare-metal.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -225,15 +227,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: zircon-x86_64-${{ matrix.os }}
+          key: zircon-x86_64
 
-      - name: Install QEMU and OVMF (Linux)
-        if: runner.os == 'Linux'
+      - name: Install QEMU and OVMF
         run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf
-
-      - name: Install QEMU (macOS)
-        if: runner.os == 'macOS'
-        run: brew install qemu
 
       - name: Zircon boot smoke test (x86_64)
         run: make zircon-boot-test ARCH=x86_64
@@ -299,6 +296,7 @@ jobs:
 
   libc-test-ubuntu:
     name: Libc Test (aarch64, ubuntu)
+    # Needs x86_64 musl cross-toolchain for busybox — can't use ARM runner yet.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
