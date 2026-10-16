@@ -208,9 +208,8 @@ impl MockMemory {
                 match result {
                     Ok(_) => true,
                     Err(err) => {
-                        warn!(
-                            "mmap anon failed: vaddr={:#x}, len={:#x}: {:?} \
-                             (macOS restricts MAP_FIXED at low addresses)",
+                        eprintln!(
+                            "mmap anon failed: vaddr={:#x}, len={:#x}: {:?}",
                             aligned_vaddr, hps, err
                         );
                         false
