@@ -4,7 +4,7 @@
 //! kernel-object-level APIs and zCore-specific behavior.
 
 use crate::helpers::TestContext;
-use zircon_object::vm::{MMUFlags, VmObject};
+use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 
 ///
 /// Map a VMO into the process VMAR and verify the virtual address
@@ -13,11 +13,11 @@ use zircon_object::vm::{MMUFlags, VmObject};
 fn basic_mapping() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
-    let vmo = VmObject::new_paged(1); // 1 page = 4096 bytes
-    let addr = vmar.map(None, vmo, 0, 0x1000, MMUFlags::READ).unwrap();
+    let vmo = VmObject::new_paged(1); // 1 page
+    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ).unwrap();
     assert_ne!(addr, 0);
     // Clean up
-    vmar.unmap(addr, 0x1000).unwrap();
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 ///
@@ -31,14 +31,14 @@ fn read_mapping() {
     // Write data to VMO first
     vmo.write(0, &[0xAA, 0xBB, 0xCC, 0xDD]).unwrap();
     let addr = vmar
-        .map(None, vmo.clone(), 0, 0x1000, MMUFlags::READ)
+        .map(None, vmo.clone(), 0, PAGE_SIZE, MMUFlags::READ)
         .unwrap();
     assert_ne!(addr, 0);
     // Read back from VMO to verify data was committed
     let mut buf = [0u8; 4];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf, [0xAA, 0xBB, 0xCC, 0xDD]);
-    vmar.unmap(addr, 0x1000).unwrap();
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 ///
@@ -53,7 +53,7 @@ fn write_mapping() {
             None,
             vmo.clone(),
             0,
-            0x1000,
+            PAGE_SIZE,
             MMUFlags::READ | MMUFlags::WRITE,
         )
         .unwrap();
@@ -63,7 +63,7 @@ fn write_mapping() {
     let mut buf = [0u8; 4];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf, [1, 2, 3, 4]);
-    vmar.unmap(addr, 0x1000).unwrap();
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 ///
@@ -74,9 +74,9 @@ fn unmap_mapping() {
     let ctx = TestContext::new();
     let vmar = ctx.proc.vmar();
     let vmo = VmObject::new_paged(1);
-    let addr = vmar.map(None, vmo, 0, 0x1000, MMUFlags::READ).unwrap();
+    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ).unwrap();
     // Unmap succeeds
-    vmar.unmap(addr, 0x1000).unwrap();
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
     // Double unmap is OK (the range may already be unmapped)
     // but may also fail — just verify the first unmap worked.
 }
@@ -90,12 +90,12 @@ fn protect_mapping() {
     let vmar = ctx.proc.vmar();
     let vmo = VmObject::new_paged(1);
     let addr = vmar
-        .map(None, vmo, 0, 0x1000, MMUFlags::READ | MMUFlags::WRITE)
+        .map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE)
         .unwrap();
     // Change to read-only
-    let result = vmar.protect(addr, 0x1000, MMUFlags::READ);
+    let result = vmar.protect(addr, PAGE_SIZE, MMUFlags::READ);
     assert!(result.is_ok());
-    vmar.unmap(addr, 0x1000).unwrap();
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 ///
@@ -111,12 +111,12 @@ fn shared_mapping() {
             None,
             vmo.clone(),
             0,
-            0x1000,
+            PAGE_SIZE,
             MMUFlags::READ | MMUFlags::WRITE,
         )
         .unwrap();
     let addr2 = vmar
-        .map(None, vmo.clone(), 0, 0x1000, MMUFlags::READ)
+        .map(None, vmo.clone(), 0, PAGE_SIZE, MMUFlags::READ)
         .unwrap();
     assert_ne!(addr1, addr2);
     // Write via VMO, verify it's visible
@@ -124,8 +124,8 @@ fn shared_mapping() {
     let mut buf = [0u8; 1];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0x42);
-    vmar.unmap(addr1, 0x1000).unwrap();
-    vmar.unmap(addr2, 0x1000).unwrap();
+    vmar.unmap(addr1, PAGE_SIZE).unwrap();
+    vmar.unmap(addr2, PAGE_SIZE).unwrap();
 }
 
 ///
@@ -138,13 +138,13 @@ fn private_mapping() {
     let vmo = VmObject::new_paged(1);
     vmo.write(0, &[0xAA]).unwrap();
     // Create a COW child — writes to child don't affect parent
-    let child = vmo.create_child(false, 0, 0x1000).unwrap();
+    let child = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
     let addr = vmar
         .map(
             None,
             child.clone(),
             0,
-            0x1000,
+            PAGE_SIZE,
             MMUFlags::READ | MMUFlags::WRITE,
         )
         .unwrap();
@@ -157,7 +157,7 @@ fn private_mapping() {
     // Child has the new data
     child.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0xBB);
-    vmar.unmap(addr, 0x1000).unwrap();
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
 ///
@@ -169,11 +169,11 @@ fn mapping_permissions() {
     let vmar = ctx.proc.vmar();
     let vmo = VmObject::new_paged(1);
     // Map read-only
-    let addr = vmar.map(None, vmo, 0, 0x1000, MMUFlags::READ).unwrap();
+    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ).unwrap();
     // Protect to read-write should succeed (within VMAR permissions)
-    let result = vmar.protect(addr, 0x1000, MMUFlags::READ | MMUFlags::WRITE);
+    let result = vmar.protect(addr, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE);
     // May succeed or fail depending on VMAR permission propagation
     // Either way, no panic
     let _ = result;
-    vmar.unmap(addr, 0x1000).unwrap();
+    vmar.unmap(addr, PAGE_SIZE).unwrap();
 }

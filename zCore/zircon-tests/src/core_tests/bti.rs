@@ -286,10 +286,13 @@ fn pin_too_many_addresses() {
     let (_iommu, bti) = create_iommu_bti();
 
     // Calculate the threshold: (page_size * 64) / 8 + 1.
-    // At 4096-byte pages: (4096 * 64) / 8 + 1 = 32769.
     let max_addrs = (PAGE_SIZE * 64) / core::mem::size_of::<u64>();
     let too_many = max_addrs + 1;
-    assert_eq!(too_many, 32769, "threshold should be 32769 for 4K pages");
+    let expected = (PAGE_SIZE * 64) / 8 + 1;
+    assert_eq!(
+        too_many, expected,
+        "threshold should match PAGE_SIZE-based calculation"
+    );
 
     // At the kernel object level, we can pin with a moderate page
     // count to verify the API works. The too_many limit only applies

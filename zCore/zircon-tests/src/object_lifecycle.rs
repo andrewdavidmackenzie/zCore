@@ -7,6 +7,7 @@ use zircon_object::ipc::{Channel, Socket};
 use zircon_object::object::{Handle, KernelObject, Rights};
 use zircon_object::signal::{Event, EventPair, Port, Timer};
 use zircon_object::vm::VmObject;
+use zircon_object::vm::PAGE_SIZE;
 
 extern crate alloc;
 
@@ -153,7 +154,7 @@ fn vmo_with_data_drop() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
     for i in 0..4 {
-        vmo.write(i * 4096, &[0xAA; 100]).unwrap();
+        vmo.write(i * PAGE_SIZE, &[0xAA; 100]).unwrap();
     }
     drop(vmo);
 }
