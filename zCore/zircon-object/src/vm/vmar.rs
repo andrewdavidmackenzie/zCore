@@ -2040,10 +2040,12 @@ impl VmMapping {
             let vaddr = inner.addr + i * PAGE_SIZE;
             if !new_flags.intersects(MMUFlags::RXW) {
                 // No access permissions — on bare-metal, unmap the page
-                // (x86_64 PTEs are always readable if present). In libos,
-                // skip the host unmap — the kernel tracks permissions via
-                // page_flags. Unmapping can cause ENOMEM on macOS when
-                // restoring permissions later (#718).
+                // (x86_64 PTEs are always readable if present). In libos
+                // mode, skip the host mprotect/munmap — the kernel tracks
+                // permissions via page_flags and the host mapping is only
+                // needed for actual data access. Unmapping or mprotecting
+                // to PROT_NONE can fail on macOS with 16K page alignment
+                // (ENOMEM when the 16K host page is only partially mapped).
                 #[cfg(target_os = "none")]
                 pg_table.unmap(vaddr).ignore().unwrap();
             } else {

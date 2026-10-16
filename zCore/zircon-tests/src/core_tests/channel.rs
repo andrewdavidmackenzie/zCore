@@ -936,7 +936,7 @@ async fn wait_many_is_signaled_on_any_element_write() {
     let proc = Process::create(&job, "wait-many").unwrap();
 
     let (local_1, remote_1) = Channel::create();
-    let (local_2, remote_2) = Channel::create();
+    let (_local_2, remote_2) = Channel::create();
     let event = Event::new();
 
     // Shared state for worker.
