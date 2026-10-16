@@ -952,6 +952,23 @@ impl VmObject {
         if zero_end > zero_start {
             self.zero(zero_start, zero_end - zero_start)?;
         }
+        // When content_size decreases, invalidate page table entries
+        // beyond the new content_size in all mappings. This ensures
+        // accesses to the now-beyond-stream-size region fault correctly
+        // instead of reading stale data from previously-mapped pages.
+        // (For non-stream mappings, the pages will be demand-faulted back.)
+        if size < old {
+            let start_page = size / PAGE_SIZE;
+            let removed_pages = (old.saturating_sub(size) + PAGE_SIZE - 1) / PAGE_SIZE;
+            if removed_pages > 0 {
+                let inner = self.inner.lock();
+                for map_weak in inner.mappings.iter() {
+                    if let Some(map) = map_weak.upgrade() {
+                        map.range_change(start_page, removed_pages, RangeChangeOp::Unmap);
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
