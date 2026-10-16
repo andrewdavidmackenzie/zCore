@@ -421,7 +421,11 @@ async fn handler_user_trap(
         ctx.advance_pc(reason);
         thread.put_context(ctx);
         let mut syscall = zircon_syscall::Syscall { thread, thread_fn };
-        let ret = syscall.syscall(num as u32, args).await as usize;
+        // Pass the full 64-bit syscall number so values with upper
+        // bits set (e.g. 0xff00ff0000000000) are correctly rejected
+        // as invalid syscall numbers instead of being truncated to
+        // a valid 32-bit syscall number.
+        let ret = syscall.syscall(num, args).await as usize;
         thread
             .with_context(|ctx| ctx.set_field(UserContextField::ReturnValue, ret))
             .map_err(|_| ExceptionInfo {

@@ -194,15 +194,23 @@ impl Syscall<'_> {
 }
 
 impl Syscall<'_> {
-    pub async fn syscall(&mut self, num: u32, args: [usize; 8]) -> isize {
+    pub async fn syscall(&mut self, num: usize, args: [usize; 8]) -> isize {
         let thread_name = self.thread.name();
         let proc_name = self.thread.proc().name();
-        let sys_type = match Sys::try_from(num) {
-            Ok(t) => t,
-            Err(_) => {
+        let num32 = u32::try_from(num).unwrap_or(u32::MAX);
+        let sys_type = match Sys::try_from(num32) {
+            Ok(Sys::COUNT) | Err(_) => {
                 error!("invalid syscall number: {}", num);
-                return ZxError::INVALID_ARGS as _;
+                // Signal a BAD_SYSCALL policy exception, matching Fuchsia's
+                // sys_invalid_syscall which calls SignalPolicyException.
+                self.thread.signal_policy_exception(
+                    zircon_object::task::policy_code::BAD_SYSCALL,
+                    num as u32,
+                );
+                self.thread.deliver_pending_policy_exception().await;
+                return ZxError::BAD_SYSCALL as _;
             }
+            Ok(t) => t,
         };
 
         debug!(
