@@ -735,15 +735,8 @@ fn read_may_discard_with_zero_size_buffers() {
 /// Verifies the kernel does not leak handle objects when the
 /// copy-out to userspace faults.
 #[test]
+#[ignore = "requires copy_to_user fault path — not available in libos mode"]
 fn read_fault_does_not_leak_handles() {
-    let _ctx = TestContext::new();
-    // In Fuchsia, kBadAddress = 0xfffffffffffffff0 (kernel space) is
-    // passed as the handles output buffer. The kernel detects the bad
-    // address during copy_to_user, closes the handles, and returns
-    // ZX_ERR_INVALID_ARGS. In libos mode, all pointers are valid
-    // process memory — there is no copy_to_user fault path.
-
-    todo!("implement test");
 }
 
 /// C++: TEST(ChannelTest, NoSpuriousReadableSignalWhenRacing)
@@ -757,13 +750,8 @@ fn read_fault_does_not_leak_handles() {
 ///
 /// Verifies no spurious READABLE signal when writer and reader race.
 #[test]
+#[ignore = "requires concurrent threads — cooperative scheduling cannot reproduce the race"]
 fn no_spurious_readable_signal_when_racing() {
-    let _ctx = TestContext::new();
-    // Requires two threads: a writer spinning on arch::Yield() and a
-    // reader doing wait_one + read. Single-threaded cooperative
-    // scheduling cannot reproduce the race.
-
-    todo!("implement test");
 }
 
 /// C++: TEST(ChannelTest, ConcurrentReadsConsumeUniqueElements)
@@ -775,13 +763,8 @@ fn no_spurious_readable_signal_when_racing() {
 ///   - No duplicates
 ///   - Each reader's values are monotonically increasing
 #[test]
+#[ignore = "requires concurrent reader threads — cooperative scheduling cannot run two readers"]
 fn concurrent_reads_consume_unique_elements() {
-    let _ctx = TestContext::new();
-    // Requires two concurrent reader threads (std::jthread) and an
-    // event for synchronization. Cooperative scheduling cannot run
-    // two readers concurrently.
-
-    todo!("implement test");
 }
 
 /// C++: TEST(ChannelTest, WaitManyIsSignaledOnAnyElementWrite)
@@ -793,13 +776,8 @@ fn concurrent_reads_consume_unique_elements() {
 ///   - Worker received 0 bytes from remote_2
 ///   - Event was signaled with ZX_USER_SIGNAL_0
 #[test]
+#[ignore = "requires concurrent threads for wait_many — not available with cooperative scheduling"]
 fn wait_many_is_signaled_on_any_element_write() {
-    let _ctx = TestContext::new();
-    // Requires a worker thread doing object_wait_many on two
-    // channels while the main thread writes to one. Cannot be
-    // done with cooperative scheduling.
-
-    todo!("implement test");
 }
 
 /// C++: TEST(ChannelTest, ChannelFullException)
@@ -812,17 +790,8 @@ fn wait_many_is_signaled_on_any_element_write() {
 ///
 /// Verifies write_count > 1000 before the exception.
 #[test]
+#[ignore = "requires policy exception infrastructure and mini-process — not yet implemented"]
 fn full_exception() {
-    let _ctx = TestContext::new();
-    // In Fuchsia:
-    //   1. Create process + thread + channel
-    //   2. start_mini_process_etc with channel as bootstrap handle
-    //   3. Loop: mini_process_cmd(MINIP_CMD_CHANNEL_WRITE) until != ZX_OK
-    //   4. ASSERT_GT(write_count, 1000)
-    //   5. Wait for ZX_PROCESS_TERMINATED
-    //   6. Assert return_code == ZX_TASK_RETCODE_EXCEPTION_KILL
-
-    todo!("implement test");
 }
 
 // ── Bulk-ported channel tests (batch 2) ─────────────────────────────

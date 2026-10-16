@@ -629,6 +629,9 @@ impl VmObject {
         // Slices are transparent windows into a parent VMO. Creating a
         // COW snapshot of a slice redirects through the parent VMO with
         // the slice's offset added, matching Fuchsia's behavior.
+        // Don't redirect pager-backed slices: pager VMOs don't support
+        // regular SNAPSHOT at the object level (only SNAPSHOT_AT_LEAST_ON_WRITE
+        // via the syscall layer).
         if self.is_slice && !self.trait_.is_reference() {
             let parent = self
                 .inner
@@ -636,6 +639,9 @@ impl VmObject {
                 .parent
                 .upgrade()
                 .ok_or(ZxError::BAD_STATE)?;
+            if parent.has_pager() {
+                return Err(ZxError::NOT_SUPPORTED);
+            }
             let slice_off = self.trait_.parent_offset();
             return parent.create_child(resizable, offset + slice_off, len);
         }

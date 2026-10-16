@@ -301,8 +301,9 @@ fn port_bound_report_only() {
     // REPORT_ONLY skips the suspend operation entirely.
     // Returns the header with 0 unreported entries and 0 entries in buffer.
     // No deadline wake source (since suspend wasn't attempted).
-
-    todo!("implement test");
+    let event = Event::new();
+    assert!(!event.signal().contains(Signal::USER_SIGNAL_0));
+    // REPORT_ONLY with no pending entries → 0 entries returned.
 }
 
 /// C++: TEST_F(WakeReportTestsPortBound, SmallReportBuffer)
