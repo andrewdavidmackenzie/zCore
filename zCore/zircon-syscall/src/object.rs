@@ -1017,12 +1017,6 @@ impl Syscall<'_> {
             }
             Topic::ProcessMaps => {
                 let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
-                // Cannot inspect own maps (would deadlock on VMAR lock).
-                if target.id() == proc.id() {
-                    actual.write_if_not_null(0)?;
-                    avail.write_if_not_null(0)?;
-                    return Ok(());
-                }
                 let vmar = target.vmar();
                 // Build the entries: aspace (depth 0) + VMAR tree (depth 1+).
                 let mut entries = Vec::new();

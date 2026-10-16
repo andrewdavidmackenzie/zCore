@@ -128,9 +128,11 @@ impl Syscall<'_> {
             Ok(n)
         })
         .map_err(|e| {
-            // Fuchsia returns NOT_FOUND for unmapped user buffers.
+            // copy_to_user returns INVALID_ARGS for faulting buffers.
+            // Map to ACCESS_DENIED (Fuchsia returns this when the
+            // destination buffer is in a read-only or unmapped region).
             if e == ZxError::INVALID_ARGS {
-                ZxError::NOT_FOUND
+                ZxError::ACCESS_DENIED
             } else {
                 e
             }
@@ -512,6 +514,10 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle, Rights::WRITE)?;
+        // Physical and contiguous VMOs don't support stream size.
+        if !vmo.is_paged() || vmo.is_contiguous() {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         if size > vmo.len() {
             return Err(ZxError::OUT_OF_RANGE);
         }
