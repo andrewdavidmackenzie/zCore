@@ -50,7 +50,10 @@ hal_fn_impl! {
 }
 
 fn mmu_to_ptf(f: MMUFlags) -> PTF {
-    if f.is_empty() {
+    if f.is_empty() || !f.intersects(MMUFlags::RXW) {
+        // No access permissions — don't set PRESENT.
+        // On x86_64, PRESENT implies readable; not setting it is
+        // the only way to deny all access for USER-only mappings.
         return PTF::empty();
     }
     let mut flags = PTF::PRESENT;

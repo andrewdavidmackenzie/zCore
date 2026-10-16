@@ -1526,7 +1526,14 @@ impl VmAddressRegion {
         let map_inner = map.inner.lock();
         let vmo_offset = vaddr - map_inner.addr + map_inner.vmo_offset;
         let size_limit = map_inner.addr + map_inner.size - vaddr;
-        let actual_size = buf.len().min(size_limit);
+        let mut actual_size = buf.len().min(size_limit);
+        // Clamp to the VMO's actual size — a mapping may be larger
+        // than the VMO (e.g., resizable VMO that was shrunk).
+        let vmo_remaining = map.vmo.len().saturating_sub(vmo_offset);
+        actual_size = actual_size.min(vmo_remaining);
+        if actual_size == 0 {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         map.vmo.read(vmo_offset, &mut buf[0..actual_size])?;
         Ok(actual_size)
     }
@@ -1547,7 +1554,13 @@ impl VmAddressRegion {
         }
         let vmo_offset = vaddr - map_inner.addr + map_inner.vmo_offset;
         let size_limit = map_inner.addr + map_inner.size - vaddr;
-        let actual_size = buf.len().min(size_limit);
+        let mut actual_size = buf.len().min(size_limit);
+        // Clamp to the VMO's actual size.
+        let vmo_remaining = map.vmo.len().saturating_sub(vmo_offset);
+        actual_size = actual_size.min(vmo_remaining);
+        if actual_size == 0 {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         map.vmo.write(vmo_offset, &buf[0..actual_size])?;
 
         // In libos mode, also write directly to the user virtual address.
@@ -2010,10 +2023,28 @@ impl VmMapping {
             new_flags.remove(MMUFlags::RXW);
             new_flags.insert(flags & MMUFlags::RXW);
             inner.set_page_flags(i, new_flags);
-            pg_table
-                .update(inner.addr + i * PAGE_SIZE, None, Some(new_flags))
-                .ignore()
-                .unwrap();
+            let vaddr = inner.addr + i * PAGE_SIZE;
+            if !new_flags.intersects(MMUFlags::RXW) {
+                // No access permissions — unmap the page. On x86_64,
+                // a present PTE is always readable; the only way to
+                // deny all access is to clear the PRESENT bit.
+                pg_table.unmap(vaddr).ignore().unwrap();
+            } else {
+                // Try updating existing PTE. If the page wasn't mapped
+                // (e.g., initially zero-permission), map it now using
+                // the committed page from the VMO.
+                let update_result = pg_table.update(vaddr, None, Some(new_flags));
+                if update_result.is_err() {
+                    // Page not yet mapped — commit and map it.
+                    let vmo_page = inner.vmo_offset / PAGE_SIZE + i;
+                    if let Ok(paddr) = self.vmo.commit_page(vmo_page, new_flags) {
+                        pg_table
+                            .map(Page::new_aligned(vaddr, PageSize::Size4K), paddr, new_flags)
+                            .ignore()
+                            .unwrap();
+                    }
+                }
+            }
         }
         // For large lazy mappings (empty per-page flags vec), persist the
         // protection change so that `page_flags` and `check_access` observe it.
@@ -2120,10 +2151,19 @@ impl VmMapping {
         let (vmo_offset, mut flags, fault_beyond) = {
             let inner = self.inner.lock();
             let offset = vaddr - inner.addr;
-            let pf = inner.page_flags(offset / PAGE_SIZE);
-            // For lazy mappings (ALLOW_FAULTS), the per-page flags may only
-            // be USER. Use the mapping's permissions to determine access.
-            let effective = if pf == MMUFlags::USER {
+            let page_idx = offset / PAGE_SIZE;
+            let pf = inner.page_flags(page_idx);
+            // For lazy mappings where no protect() has been called,
+            // page_flags returns USER (initial state). In that case,
+            // use the mapping's permissions. But if the page was
+            // explicitly protected (eager mapping with per-page flags,
+            // or lazy mapping with protection_overrides), use the
+            // actual flags — don't fall back to self.permissions.
+            let is_lazy_initial = pf == MMUFlags::USER
+                && page_idx >= inner.flags.len()
+                && inner.protection_overrides.is_empty()
+                && inner.default_flags.intersects(MMUFlags::RXW);
+            let effective = if is_lazy_initial {
                 self.permissions | MMUFlags::USER
             } else {
                 pf
