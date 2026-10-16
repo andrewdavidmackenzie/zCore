@@ -1851,14 +1851,6 @@ impl VmMapping {
                     flags
                 };
                 let paddr = commit(vmo_offset + i, commit_flags)?;
-                // For zero-permission pages (no RXW, just USER), skip
-                // the page table mapping. The page is committed in the
-                // VMO and will be mapped when protect() grants access.
-                // On x86_64, a present PTE is always readable, so NOT
-                // mapping is the only way to enforce no-access.
-                if !flags.intersects(MMUFlags::RXW) {
-                    continue;
-                }
                 page_table
                     .map(
                         Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::Size4K),
