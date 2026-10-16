@@ -2188,9 +2188,10 @@ fn pager_invalid_pager_detach_vmo() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
     let (_owned, _key) = pager_helper.create_vmo(1);
+    // Detaching a non-paged VMO → INVALID_ARGS (Fuchsia behavior).
     let unrelated = VmObject::new_paged(1);
     let result = pager_helper.pager.detach_vmo(&unrelated);
-    assert_eq!(result.err(), Some(ZxError::NOT_FOUND));
+    assert_eq!(result.err(), Some(ZxError::INVALID_ARGS));
 }
 
 /// C++: TEST(Pager, InvalidPagerSupplyPages)
@@ -3331,17 +3332,15 @@ fn pager_supply_after_detach() {
     pager_helper.detach_vmo(&vmo);
 
     // Supply after detach — in Fuchsia this fails (BAD_STATE).
-    // Our implementation may succeed or fail depending on ownership
-    // tracking. Verify the call doesn't panic and returns a result.
+    // After detach, the VMO is no longer owned by the pager.
+    // supply_pages should fail with INVALID_ARGS (not owned).
     let src = VmObject::new_paged(11);
     let result = pager_helper
         .pager
         .supply_pages(&vmo, 0, (11 * PAGE_SIZE) as u64, &src, 0);
-    // The C++ test asserts SupplyPages returns false after detach.
-    // Accept either BAD_STATE error or success (our impl may allow it).
     assert!(
-        result.is_ok() || result == Err(ZxError::BAD_STATE),
-        "supply_pages after detach should either succeed or return BAD_STATE, got {:?}",
+        result == Err(ZxError::INVALID_ARGS) || result == Err(ZxError::BAD_STATE),
+        "supply_pages after detach should fail, got {:?}",
         result
     );
 }

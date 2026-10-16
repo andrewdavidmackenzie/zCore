@@ -71,6 +71,19 @@ impl Pager {
         if unbounded && resizable {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Validate size: must not overflow when rounded up to page boundary.
+        // Fuchsia returns OUT_OF_RANGE for sizes that would overflow.
+        // Zero size is INVALID_ARGS for pager VMOs (must have content).
+        if !unbounded {
+            if size == 0 {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Check if rounding up to page boundary would overflow u64.
+            let page_mask = PAGE_SIZE as u64 - 1;
+            if size.checked_add(page_mask).is_none() {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+        }
         let vmo_pages = if unbounded {
             // UNBOUNDED: VMO capacity is maximum; size arg is just content_size.
             256 * 1024 // 1GB
@@ -80,7 +93,15 @@ impl Pager {
         let vmo = VmObject::new_paged_with_resizable(resizable, vmo_pages);
         // Set content_size: for UNBOUNDED, this is the user's requested size;
         // for regular VMOs, it's the VMO's actual (page-rounded) size.
-        vmo.set_content_size(if unbounded { size as usize } else { vmo.len() })?;
+        if unbounded {
+            // Content size must fit within the VMO's capacity.
+            if size as usize > vmo.len() {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            vmo.set_content_size(size as usize)?;
+        } else {
+            vmo.set_content_size(vmo.len())?;
+        }
         vmo.set_name("pager-vmo");
         // Associate the pager's port and key with the VMO for
         // demand-paging notifications. set_pager also marks the VMO
@@ -113,6 +134,10 @@ impl Pager {
     /// After detaching, page faults on the VMO will no longer be
     /// forwarded to the pager.
     pub fn detach_vmo(&self, vmo: &Arc<VmObject>) -> ZxResult {
+        // Non-pager-backed VMO → INVALID_ARGS.
+        if !vmo.is_pager_backed() {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let mut inner = self.inner.lock();
         if let Some(pos) = inner
             .vmos
@@ -126,7 +151,8 @@ impl Pager {
             vmo.clear_pager();
             Ok(())
         } else {
-            Err(ZxError::NOT_FOUND)
+            // VMO is pager-backed but doesn't belong to this pager.
+            Err(ZxError::INVALID_ARGS)
         }
     }
 
@@ -142,6 +168,18 @@ impl Pager {
         aux_vmo: &Arc<VmObject>,
         aux_offset: u64,
     ) -> ZxResult {
+        // Validate: VMO must belong to this pager.
+        if !self.owns_vmo(vmo) {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Validate: offset and length must be page-aligned.
+        if offset as usize % PAGE_SIZE != 0 || length as usize % PAGE_SIZE != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        // Validate: aux_offset must be page-aligned.
+        if aux_offset as usize % PAGE_SIZE != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let mut buf = alloc::vec![0u8; PAGE_SIZE];
         let mut src_off = aux_offset as usize;
         let mut dst_off = offset as usize;
