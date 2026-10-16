@@ -179,7 +179,11 @@ impl Syscall<'_> {
         permissions.set(MMUFlags::WRITE, vmo_rights.contains(Rights::WRITE));
         permissions.set(MMUFlags::EXECUTE, vmo_rights.contains(Rights::EXECUTE));
         let mut mapping_flags = MMUFlags::USER;
-        mapping_flags.set(MMUFlags::READ, options.contains(VmOptions::PERM_READ));
+        // On architectures without XOM (execute-only memory) support
+        // (x86_64), PERM_READ_IF_XOM_UNSUPPORTED is treated as PERM_READ.
+        let has_read = options.contains(VmOptions::PERM_READ)
+            || options.contains(VmOptions::PERM_READ_IF_XOM_UNSUPPORTED);
+        mapping_flags.set(MMUFlags::READ, has_read);
         mapping_flags.set(MMUFlags::WRITE, options.contains(VmOptions::PERM_WRITE));
         mapping_flags.set(MMUFlags::EXECUTE, options.contains(VmOptions::PERM_EXECUTE));
         // WRITE without READ is invalid (Fuchsia ABI requirement).
