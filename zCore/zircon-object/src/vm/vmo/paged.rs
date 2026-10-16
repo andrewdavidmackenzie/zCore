@@ -98,6 +98,12 @@ struct VMObjectPagedInner {
     cache_policy: CachePolicy,
     /// Is contiguous
     contiguous: bool,
+    /// True if this VMO is backed by a pager. Pages must only be
+    /// committed via `supply_pages`, not auto-allocated by `commit_page`.
+    pager_backed: bool,
+    /// Temporarily set to true during `supply_pages` to allow
+    /// `commit_page` to allocate frames on a pager-backed VMO.
+    supplying: bool,
     /// A weak reference to myself.
     self_ref: WeakRef,
     /// Sum of pin_count
@@ -218,6 +224,8 @@ impl VMObjectPaged {
                 mappings: Vec::new(),
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
+                pager_backed: false,
+                supplying: false,
                 self_ref: Default::default(),
                 pin_count: 0,
             },
@@ -317,7 +325,17 @@ impl VMObjectTrait for VMObjectPaged {
         for block in iter {
             //let paddr = self.commit_page(block.block, MMUFlags::READ)?;
             if block.len() == PAGE_SIZE && !inner.is_contiguous() {
-                let _ = inner.commit_page(block.block, MMUFlags::WRITE)?;
+                match inner.commit_page(block.block, MMUFlags::WRITE) {
+                    Ok(_) => {}
+                    Err(ZxError::SHOULD_WAIT) => {
+                        // Pager-backed VMO with unsupplied page — already
+                        // zero. Insert a zero marker so subsequent reads
+                        // return zeros without triggering a pager request.
+                        inner.zero_markers.insert(block.block);
+                        continue;
+                    }
+                    Err(e) => return Err(e),
+                }
                 let pinned = inner
                     .frames
                     .get(&block.block)
@@ -328,10 +346,11 @@ impl VMObjectTrait for VMObjectPaged {
                         hal_impl::mem::pmem_zero(frame.frame.paddr(), PAGE_SIZE);
                     }
                 } else {
-                    // Decommit the page.  If the parent chain has content
-                    // at this offset, insert a zero marker to block
-                    // fall-through reads from returning non-zero data.
-                    if inner.parent_has_page(block.block) {
+                    // Decommit the page.  Insert a zero marker if the
+                    // parent chain has content (to block fall-through) or
+                    // if this is a pager-backed VMO (to prevent
+                    // commit_page from re-requesting from the pager).
+                    if inner.parent_has_page(block.block) || inner.pager_backed {
                         inner.zero_markers.insert(block.block);
                     }
                     unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
@@ -374,6 +393,16 @@ impl VMObjectTrait for VMObjectPaged {
             }
             let old_size = inner.size;
             let old_parent = inner.resize(len);
+            // For pager-backed VMOs growing beyond old size, insert
+            // zero markers for the extended pages so reads return
+            // zeros without triggering pager requests.
+            if inner.pager_backed && len > old_size {
+                let start = old_size / PAGE_SIZE;
+                let end = len / PAGE_SIZE;
+                for idx in start..end {
+                    inner.zero_markers.insert(idx);
+                }
+            }
             // Unmap pages in mappings for the removed range. This
             // invalidates hardware page table entries so accesses to
             // the truncated region fault correctly.
@@ -613,6 +642,24 @@ impl VMObjectTrait for VMObjectPaged {
         true
     }
 
+    fn set_pager_backed(&self) {
+        self.get_inner_mut().1.pager_backed = true;
+    }
+
+    fn is_pager_backed(&self) -> bool {
+        self.get_inner().1.pager_backed
+    }
+
+    fn set_supplying(&self, v: bool) {
+        self.get_inner_mut().1.supplying = v;
+    }
+
+    fn clear_pager_backed(&self) {
+        let (_guard, mut inner) = self.get_inner_mut();
+        inner.pager_backed = false;
+        inner.supplying = false;
+    }
+
     fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
         let (guard, mut inner) = self.get_inner_mut();
         inner.as_mut_buf().map(|(addr, size)| {
@@ -745,6 +792,24 @@ impl VMObjectPagedInner {
                 // zero pages past the end.
                 if out_of_range && no_parent && !self.type_.is_hidden() {
                     return Err(ZxError::OUT_OF_RANGE);
+                }
+                // Pager-backed VMOs: don't auto-allocate zero frames for
+                // uncommitted pages. Return SHOULD_WAIT so the caller
+                // can send a page request to the pager and wait for
+                // supply_pages. Without this, the pager demand-paging
+                // mechanism is bypassed and tests hang because the port
+                // never receives a page request.
+                // Pager-backed VMOs: don't auto-allocate zero frames for
+                // unsupplied pages on READ. Return SHOULD_WAIT so the
+                // caller can request pages from the pager. WRITE is
+                // allowed — it allocates frames normally (the pager
+                // tracks dirty state separately).
+                if self.pager_backed
+                    && !self.supplying
+                    && !has_zero_marker
+                    && !flags.contains(MMUFlags::WRITE)
+                {
+                    return Err(ZxError::SHOULD_WAIT);
                 }
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if self.type_.is_hidden() {
@@ -1192,6 +1257,8 @@ impl VMObjectPagedInner {
                 mappings: Vec::new(),
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
+                pager_backed: false,
+                supplying: false,
                 self_ref: Default::default(),
                 pin_count: 0,
             },
@@ -1214,6 +1281,8 @@ impl VMObjectPagedInner {
                 mappings: Vec::new(),
                 cache_policy: CachePolicy::Cached,
                 contiguous: self.contiguous,
+                pager_backed: false,
+                supplying: false,
                 self_ref: Default::default(),
                 pin_count: self.pin_count,
             },

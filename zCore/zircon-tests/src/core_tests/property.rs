@@ -253,9 +253,10 @@ fn register_fs_other_thread() {
 #[cfg(target_arch = "x86_64")]
 fn register_fs_too_small() {
     let ctx = TestContext::new();
-    let thread = Thread::create(&ctx.proc, "fs-small").unwrap();
+    // Use the calling thread (self), matching the C++ test which uses
+    // zx::thread::self(). FS/GS properties only work on the calling thread.
     let thread_h = ctx.proc.add_handle(Handle::new(
-        thread,
+        ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
     let val_bytes = [0u8; 2]; // too small for a usize
@@ -358,9 +359,9 @@ fn register_gs_other_thread() {
 #[cfg(target_arch = "x86_64")]
 fn register_gs_too_small() {
     let ctx = TestContext::new();
-    let thread = Thread::create(&ctx.proc, "gs-small").unwrap();
+    // Use the calling thread (self), matching the C++ test.
     let thread_h = ctx.proc.add_handle(Handle::new(
-        thread,
+        ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
     let val_bytes = [0u8; 2]; // too small for a usize

@@ -1612,13 +1612,33 @@ fn physical_slice() {
 /// return INVALID_ARGS. This validation lives in the syscall layer
 /// (`sys_vmo_create_physical`), which checks `size == 0 || !page_aligned(size)`.
 ///
-/// In libos mode we don't have an MMIO resource or the syscall
-/// infrastructure to call `sys_vmo_create_physical` directly, so this
-/// test is skipped. The validation is exercised by the core-tests binary
-/// on bare-metal when the MMIO resource and test_ram_reserve are available.
+/// We use the root resource (which bypasses MMIO kind check) to test
+/// the size validation in sys_vmo_create_physical.
 #[test]
-#[ignore = "requires MMIO resource and bare-metal syscall layer"]
-fn physical_vmo_invalid_initial_size() {}
+fn physical_vmo_invalid_initial_size() {
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let root_resource = ctx.add_root_resource();
+    let mut out: u32 = 0;
+
+    // size=0 should return INVALID_ARGS.
+    let result = sc.sys_vmo_create_physical(
+        root_resource,
+        PAGE_SIZE, // valid paddr
+        0,         // size=0
+        hal_impl::user::UserOutPtr::from(&mut out as *mut u32 as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+
+    // Non-page-aligned size should return INVALID_ARGS.
+    let result = sc.sys_vmo_create_physical(
+        root_resource,
+        PAGE_SIZE,
+        PAGE_SIZE + 1, // not aligned
+        hal_impl::user::UserOutPtr::from(&mut out as *mut u32 as usize),
+    );
+    assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
+}
 
 /// C++: TEST(VmoTestCase, PhysicalVmoOobMapping)
 ///

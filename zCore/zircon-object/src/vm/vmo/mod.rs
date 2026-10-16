@@ -124,6 +124,22 @@ pub trait VMObjectTrait: Sync + Send {
         false
     }
 
+    /// Mark this VMO as pager-backed. Pages will not be auto-committed
+    /// by `commit_page` — they must be supplied via the pager.
+    fn set_pager_backed(&self) {}
+
+    /// Returns true if this VMO is pager-backed.
+    fn is_pager_backed(&self) -> bool {
+        false
+    }
+
+    /// Set the supplying flag — allows commit_page to allocate frames
+    /// on pager-backed VMOs during supply_pages.
+    fn set_supplying(&self, _v: bool) {}
+
+    /// Clear the pager-backed flag. Called when the pager is detached.
+    fn clear_pager_backed(&self) {}
+
     /// If contiguous, transmute vmo to a mutable buffer
     fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
         Err(ZxError::NOT_SUPPORTED)
@@ -294,6 +310,16 @@ impl VmObject {
         let mut inner = self.inner.lock();
         inner.pager_port = Some(port);
         inner.pager_key = key;
+        // Mark the underlying paged VMO so commit_page won't
+        // auto-allocate zero frames — pages must come from supply_pages.
+        self.trait_.set_pager_backed();
+    }
+
+    /// Set the supplying flag on the underlying paged VMO.
+    /// Called by `supply_pages` to allow `commit_page` to allocate
+    /// frames on pager-backed VMOs.
+    pub fn set_supplying(&self, v: bool) {
+        self.trait_.set_supplying(v);
     }
 
     /// Enable dirty-page trapping for this pager-backed VMO.
@@ -521,6 +547,9 @@ impl VmObject {
         let mut inner = self.inner.lock();
         inner.pager_port = None;
         inner.pager_key = 0;
+        // Clear the pager-backed flag so commit_page can allocate
+        // frames again (the VMO is no longer demand-paged).
+        self.trait_.clear_pager_backed();
     }
 
     /// Send a page request to the pager for the given offset/length.
