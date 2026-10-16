@@ -83,7 +83,8 @@ impl Pager {
         vmo.set_content_size(if unbounded { size as usize } else { vmo.len() })?;
         vmo.set_name("pager-vmo");
         // Associate the pager's port and key with the VMO for
-        // demand-paging notifications.
+        // demand-paging notifications. set_pager also marks the VMO
+        // as pager-backed so commit_page won't auto-allocate zero frames.
         vmo.set_pager(port.clone(), key);
         if trap_dirty {
             vmo.set_trap_dirty(vmo_pages);
@@ -146,10 +147,13 @@ impl Pager {
         let mut dst_off = offset as usize;
         let end = offset as usize + length as usize;
 
+        // Allow commit_page to allocate frames on this pager-backed VMO.
+        vmo.set_supplying(true);
+
         while dst_off < end {
             let chunk = PAGE_SIZE.min(end - dst_off);
             if let Err(e) = aux_vmo.read(src_off, &mut buf[..chunk]) {
-                // Wake waiters for the pages written so far.
+                vmo.set_supplying(false);
                 let written = dst_off - offset as usize;
                 if written > 0 {
                     vmo.complete_pager_requests(offset as usize, written);
@@ -157,6 +161,7 @@ impl Pager {
                 return Err(e);
             }
             if let Err(e) = vmo.write(dst_off, &buf[..chunk]) {
+                vmo.set_supplying(false);
                 let written = dst_off - offset as usize;
                 if written > 0 {
                     vmo.complete_pager_requests(offset as usize, written);
@@ -166,6 +171,8 @@ impl Pager {
             src_off += chunk;
             dst_off += chunk;
         }
+        // Done supplying — restore the pager-backed guard.
+        vmo.set_supplying(false);
         // Wake threads waiting for pages in this range.
         vmo.complete_pager_requests(offset as usize, length as usize);
         Ok(())
