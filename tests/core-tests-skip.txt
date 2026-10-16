@@ -20,9 +20,9 @@ ChannelTest.NoSpuriousReadableSignalWhenRacing
 # ChannelCallMutexTest.* — removed, 1/1 passes (MutexHeldAcrossCallChain)
 # ChannelInternalTest: 3 tests pass, 1 hangs
 ChannelInternalTest.TransferChannelWithPendingCall
-ProcessTest.ProcessWaitAsyncCancelSelf
-ProcessTest.GetInfoRuntime
-ProcessTest.GetInfoRuntimeV1
+# ProcessTest.ProcessWaitAsyncCancelSelf — removed, now passes
+# ProcessTest.GetInfoRuntime — removed, now passes
+# ProcessTest.GetInfoRuntimeV1 — removed, now passes
 # KillChannelHandleCycle: kernel panic — Thread::proc() owning process dropped
 ProcessTest.KillChannelHandleCycle
 
