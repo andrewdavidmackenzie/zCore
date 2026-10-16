@@ -358,16 +358,16 @@ StreamTestCase.PartialVmoDirty
 # uncommitted memory instead of faulting, so the assertion at
 # memory-probe.cc:130 fires and aborts the whole test process.
 # (VmoTestCase.* and Pager.* wildcards already cover the rest.)
-Vmar.ProtectLargeUncomittedTest
-Vmar.UnmapLargeUncommittedTest
-Vmar.ProtectOverDemandPagedTest
+# Vmar.ProtectLargeUncomittedTest — removed, completes (pass or fail)
+# Vmar.UnmapLargeUncommittedTest — removed, completes (pass or fail)
+# Vmar.ProtectOverDemandPagedTest — removed, completes (pass or fail)
 # Vmar.ProtectReadIfXomUnsupported: fails without crashing — removed
 Vmar.MapRangeResizable
-Vmar.FaultBeyondStreamSize
-Vmar.FaultBeyondReducedStreamSize
-Vmar.FaultBeyondStreamSizeRange
+# Vmar.FaultBeyondStreamSize — removed, completes (pass or fail)
+# Vmar.FaultBeyondReducedStreamSize — removed, completes (pass or fail)
+# Vmar.FaultBeyondStreamSizeRange — removed, completes (pass or fail)
 Vmar.MapRangeStreamSizeWraparound
-Vmar.FaultBeyondStreamSizeForceWritable
+# Vmar.FaultBeyondStreamSizeForceWritable — removed, completes (pass or fail)
 
 # ── Memory mapping ───────────────────────────────────────────────────
 # MmapProtExecTest: now passes — removed from skip.
