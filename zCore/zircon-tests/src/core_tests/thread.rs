@@ -932,6 +932,7 @@ async fn suspend_channel_call() {
     let reply = zircon_object::ipc::MessagePacket {
         data: reply_data,
         handles: alloc::vec![],
+        ..Default::default()
     };
     cct.peer.write(reply).unwrap();
 

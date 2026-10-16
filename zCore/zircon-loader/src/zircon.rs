@@ -301,7 +301,11 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     // Build processargs-formatted message data.
     let argv = Vec::from(cmdline.replace(':', "\0") + "\0");
     let data = zircon_abi::processargs::build_message(&handle_info, &argv);
-    let msg = MessagePacket { data, handles };
+    let msg = MessagePacket {
+        data,
+        handles,
+        cancel_senders: Vec::new(),
+    };
     kernel_channel.write(msg).unwrap();
 
     // Pass the vDSO code base address as arg2 to _start(handle, vdso_base).

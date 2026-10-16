@@ -28,6 +28,7 @@ fn channel_max_handles() {
     let msg = MessagePacket {
         data: alloc::vec![0; 4],
         handles,
+        ..Default::default()
     };
     local.write(msg).unwrap();
 
@@ -46,6 +47,7 @@ fn channel_queue_depth() {
         let msg = MessagePacket {
             data: i.to_ne_bytes().to_vec(),
             handles: alloc::vec![],
+            ..Default::default()
         };
         local.write(msg).unwrap();
     }
@@ -108,6 +110,7 @@ fn channel_message_data_and_handles() {
     let msg = MessagePacket {
         data: alloc::vec![1, 2, 3, 4, 5],
         handles: alloc::vec![handle],
+        ..Default::default()
     };
     local.write(msg).unwrap();
 
@@ -143,6 +146,7 @@ fn channel_zero_bytes_zero_handles() {
     let msg = MessagePacket {
         data: alloc::vec![],
         handles: alloc::vec![],
+        ..Default::default()
     };
     local.write(msg).unwrap();
     let received = remote.read().unwrap();
@@ -189,6 +193,7 @@ fn channel_handle_transfer_preserves_type() {
             Handle::new(s1, Rights::DEFAULT_SOCKET),
             Handle::new(vmo, Rights::DEFAULT_VMO),
         ],
+        ..Default::default()
     };
     local.write(msg).unwrap();
 
@@ -212,6 +217,7 @@ fn channel_multiple_reads_clears() {
         let msg = MessagePacket {
             data: alloc::vec![42],
             handles: alloc::vec![],
+            ..Default::default()
         };
         local.write(msg).unwrap();
     }

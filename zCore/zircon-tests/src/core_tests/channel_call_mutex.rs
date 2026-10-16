@@ -18,6 +18,7 @@ fn channel_call_chain_sequential() {
         .write(MessagePacket {
             data: vec![1, 2, 3],
             handles: vec![],
+            ..Default::default()
         })
         .unwrap();
 
@@ -30,6 +31,7 @@ fn channel_call_chain_sequential() {
         .write(MessagePacket {
             data: vec![4, 5, 6],
             handles: vec![],
+            ..Default::default()
         })
         .unwrap();
 
@@ -64,6 +66,7 @@ async fn mutex_held_across_call_chain() {
         .write(MessagePacket {
             data: vec![1, 2, 3, 4],
             handles: vec![],
+            ..Default::default()
         })
         .unwrap();
 

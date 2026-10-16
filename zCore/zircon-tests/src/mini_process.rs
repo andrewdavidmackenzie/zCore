@@ -43,6 +43,7 @@ fn send_command() {
         .write(MessagePacket {
             data: alloc::vec![0x01, 0x00, 0x00, 0x00], // command ID
             handles: alloc::vec::Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 
@@ -153,6 +154,7 @@ fn channel_communication() {
         .write(MessagePacket {
             data: b"request".to_vec(),
             handles: alloc::vec::Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 
@@ -165,6 +167,7 @@ fn channel_communication() {
         .write(MessagePacket {
             data: b"response".to_vec(),
             handles: alloc::vec::Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 

@@ -171,6 +171,7 @@ fn channel_with_messages_drop() {
         let msg = MessagePacket {
             data: alloc::vec![i; 32],
             handles: alloc::vec![],
+            ..Default::default()
         };
         local.write(msg).unwrap();
     }

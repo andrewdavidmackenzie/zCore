@@ -86,6 +86,7 @@ impl Exceptionate {
         let msg = MessagePacket {
             data: info.pack(),
             handles: alloc::vec![Handle::new(object, Rights::DEFAULT_EXCEPTION)],
+            cancel_senders: alloc::vec::Vec::new(),
         };
         channel.write(msg).map_err(|err| {
             if err == ZxError::PEER_CLOSED {

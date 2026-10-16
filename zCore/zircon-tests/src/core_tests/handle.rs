@@ -255,6 +255,7 @@ fn handle_transfer_cancels_wait() {
     tx.write(MessagePacket {
         data: vec![0u8; 4],
         handles: vec![removed],
+        ..Default::default()
     })
     .unwrap();
 
@@ -296,6 +297,7 @@ fn handle_transfer_over_channel_then_read() {
     tx.write(MessagePacket {
         data: vec![1, 2, 3, 4],
         handles: vec![removed],
+        ..Default::default()
     })
     .unwrap();
 

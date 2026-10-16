@@ -43,6 +43,7 @@ fn write_to_endpoint_causes_other_to_become_readable() {
         .write(MessagePacket {
             data: vec![0xDE, 0xAD, 0xBE, 0xEF],
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 
@@ -72,6 +73,7 @@ fn write_consumes_all_handles() {
     let result = local.write(MessagePacket {
         data: Vec::new(),
         handles,
+        ..Default::default()
     });
     assert_eq!(result.unwrap_err(), ZxError::OUT_OF_RANGE);
 }
@@ -114,6 +116,7 @@ fn read_remaining_messages_when_peer_is_closed() {
             .write(MessagePacket {
                 data: CHANNEL_DATA.to_le_bytes().to_vec(),
                 handles: Vec::new(),
+                ..Default::default()
             })
             .unwrap();
     }
@@ -245,6 +248,7 @@ fn read_and_write_with_multiple_sizes() {
             .write(MessagePacket {
                 data: tagged_data.clone(),
                 handles: Vec::new(),
+                ..Default::default()
             })
             .unwrap();
 
@@ -321,6 +325,7 @@ fn nesting_is_ok() {
             .write(MessagePacket {
                 data: vec![],
                 handles: vec![lh, rh],
+                ..Default::default()
             })
             .unwrap();
     }
@@ -353,6 +358,7 @@ fn read_zero_byte_zero_handle_message_succeeds() {
         .write(MessagePacket {
             data: vec![],
             handles: vec![],
+            ..Default::default()
         })
         .unwrap();
 
@@ -385,6 +391,7 @@ fn write_short_payloads_succeeds() {
             .write(MessagePacket {
                 data: src_data[..size].to_vec(),
                 handles: vec![],
+                ..Default::default()
             })
             .unwrap();
 
@@ -475,6 +482,7 @@ fn on_flight_handles_signalled_when_peer_is_closed() {
         .write(MessagePacket {
             data: vec![],
             handles: vec![Handle::new(on_flight_remote0, Rights::DEFAULT_CHANNEL)],
+            ..Default::default()
         })
         .unwrap();
 
@@ -483,6 +491,7 @@ fn on_flight_handles_signalled_when_peer_is_closed() {
         .write(MessagePacket {
             data: vec![],
             handles: vec![Handle::new(on_flight_remote1, Rights::DEFAULT_CHANNEL)],
+            ..Default::default()
         })
         .unwrap();
 
@@ -531,6 +540,7 @@ fn write_to_peer_closed_consumes_moved_handles() {
     let result = local.write(MessagePacket {
         data: vec![],
         handles: vec![h],
+        ..Default::default()
     });
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
 
@@ -551,12 +561,14 @@ fn wait_many_is_signaled_for_both_writes() {
         .write(MessagePacket {
             data: vec![1],
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
     remote
         .write(MessagePacket {
             data: vec![2],
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 
@@ -755,6 +767,7 @@ fn read_fault_does_not_leak_handles() {
     a.write(MessagePacket {
         data: vec![],
         handles: vec![handle],
+        ..Default::default()
     })
     .unwrap();
 
@@ -788,6 +801,7 @@ fn no_spurious_readable_signal_when_racing() {
         b.write(MessagePacket {
             data: vec![0x42],
             handles: vec![],
+            ..Default::default()
         })
         .unwrap();
 
@@ -836,6 +850,7 @@ async fn concurrent_reads_consume_unique_elements() {
             .write(MessagePacket {
                 data: data.to_vec(),
                 handles: Vec::new(),
+                ..Default::default()
             })
             .unwrap();
     }
@@ -998,6 +1013,7 @@ async fn wait_many_is_signaled_on_any_element_write() {
         .write(MessagePacket {
             data: vec![0xAA; 10],
             handles: vec![],
+            ..Default::default()
         })
         .unwrap();
 

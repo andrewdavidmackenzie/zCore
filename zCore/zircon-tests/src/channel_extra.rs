@@ -20,6 +20,7 @@ fn read_remaining_messages_preserves_signals() {
         .write(MessagePacket {
             data: vec![42],
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
     drop(local);
@@ -46,6 +47,7 @@ fn check_and_read_preserves_message_on_failure() {
         .write(MessagePacket {
             data: vec![1, 2, 3],
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 
@@ -80,6 +82,7 @@ fn multiple_handles_transferred() {
                 Handle::new(event2, Rights::DEFAULT_EVENT),
                 Handle::new(event3, Rights::DEFAULT_EVENT),
             ],
+            ..Default::default()
         })
         .unwrap();
 
@@ -103,6 +106,7 @@ fn message_fifo_order() {
             .write(MessagePacket {
                 data,
                 handles: Vec::new(),
+                ..Default::default()
             })
             .unwrap();
     }
@@ -125,6 +129,7 @@ fn bidirectional_communication() {
         .write(MessagePacket {
             data: vec![1, 2, 3],
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 
@@ -133,6 +138,7 @@ fn bidirectional_communication() {
         .write(MessagePacket {
             data: vec![4, 5, 6],
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 
@@ -157,6 +163,7 @@ fn large_message() {
         .write(MessagePacket {
             data: data.clone(),
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 
@@ -174,6 +181,7 @@ fn write_after_read_drains_queue() {
         .write(MessagePacket {
             data: vec![1],
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
     assert!(remote.signal().contains(Signal::READABLE));
@@ -186,6 +194,7 @@ fn write_after_read_drains_queue() {
         .write(MessagePacket {
             data: vec![2],
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
     assert!(remote.signal().contains(Signal::READABLE));
@@ -209,6 +218,7 @@ fn handle_transfer_preserves_rights() {
         .write(MessagePacket {
             data: vec![],
             handles: vec![h],
+            ..Default::default()
         })
         .unwrap();
 
@@ -232,6 +242,7 @@ fn nested_channel_deep_hierarchy() {
     mid0.write(MessagePacket {
         data: vec![],
         handles: vec![Handle::new(inner0.clone(), Rights::DEFAULT_CHANNEL)],
+        ..Default::default()
     })
     .unwrap();
 
@@ -240,6 +251,7 @@ fn nested_channel_deep_hierarchy() {
         .write(MessagePacket {
             data: vec![],
             handles: vec![Handle::new(mid1.clone(), Rights::DEFAULT_CHANNEL)],
+            ..Default::default()
         })
         .unwrap();
 
@@ -294,6 +306,7 @@ fn write_max_message_size() {
     let msg = MessagePacket {
         data: data.clone(),
         handles: vec![],
+        ..Default::default()
     };
     local.write(msg).unwrap();
     let received = remote.read().unwrap();
@@ -314,6 +327,7 @@ fn write_exceeds_max_message_size() {
     let msg = MessagePacket {
         data,
         handles: vec![],
+        ..Default::default()
     };
     // At the object level, this may succeed. The syscall layer enforces limits.
     let result = local.write(msg);
@@ -344,6 +358,7 @@ fn multiple_readers_writers() {
         let msg = MessagePacket {
             data: vec![i; 4],
             handles: vec![],
+            ..Default::default()
         };
         local.write(msg).unwrap();
     }
@@ -370,6 +385,7 @@ fn write_after_peer_closed_fails_cleanly() {
     let msg = MessagePacket {
         data: vec![1, 2, 3],
         handles: vec![handle],
+        ..Default::default()
     };
     let result = local.write(msg);
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
@@ -414,6 +430,7 @@ fn empty_handle_array_transfer() {
     let msg = MessagePacket {
         data: vec![42; 8],
         handles: vec![],
+        ..Default::default()
     };
     local.write(msg).unwrap();
     let received = remote.read().unwrap();

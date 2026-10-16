@@ -556,6 +556,20 @@ impl Process {
         handles.into_iter().map(|h| inner.add_handle(h)).collect()
     }
 
+    /// Add handles received via transfer (e.g. channel_read).
+    ///
+    /// Unlike `add_handles`, this does NOT increment handle count
+    /// because the handle count was not decremented when the handles
+    /// were removed for transfer. Matches Fuchsia semantics where
+    /// handle transfers preserve the existing handle count.
+    pub fn add_handles_for_transfer(&self, handles: Vec<Handle>) -> Vec<HandleValue> {
+        let mut inner = self.inner.lock();
+        handles
+            .into_iter()
+            .map(|h| inner.add_handle_for_transfer(h))
+            .collect()
+    }
+
     /// Remove a handle from the process
     pub fn remove_handle(&self, handle_value: HandleValue) -> ZxResult<Handle> {
         let handle = self.inner.lock().remove_handle(handle_value)?;
@@ -602,6 +616,42 @@ impl Process {
             }
         }
         handles_result
+    }
+
+    /// Remove handles for transfer (e.g. channel_write).
+    ///
+    /// Unlike `remove_handles`, this does NOT fire cancel tokens and
+    /// does NOT decrement handle counts. Handles are "in transit".
+    /// Returns (handles, cancel_senders) — the senders must be stored
+    /// in the MessagePacket and fired on channel_read.
+    /// Matches Fuchsia: writing handles into a channel does not cancel
+    /// waits on those handles.
+    pub fn remove_handles_for_transfer(
+        &self,
+        handle_values: &[HandleValue],
+    ) -> ZxResult<(Vec<Handle>, Vec<Sender<()>>)> {
+        let mut inner = self.inner.lock();
+        let mut handles = Vec::with_capacity(handle_values.len());
+        let mut senders = Vec::new();
+        let mut first_err = None;
+        for &hv in handle_values {
+            match inner.remove_handle_for_transfer(hv) {
+                Ok((h, mut queue)) => {
+                    handles.push(h);
+                    senders.append(&mut queue);
+                }
+                Err(e) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+            }
+        }
+        if let Some(e) = first_err {
+            Err(e)
+        } else {
+            Ok((handles, senders))
+        }
     }
 
     /// Remove a handle referring to a kernel object of the given type from the process.
@@ -980,6 +1030,44 @@ impl ProcessInner {
             let _ = sender.send(());
         }
         Ok(handle)
+    }
+
+    /// Remove a handle for transfer (e.g. channel_write).
+    ///
+    /// Unlike `remove_handle`, this does NOT fire cancel tokens and
+    /// does NOT decrement the handle count. The handle is "in transit"
+    /// — it has left this process's handle table but will be added to
+    /// another process's handle table (or closed if the channel is
+    /// destroyed with unread messages).
+    ///
+    /// Matches Fuchsia semantics where writing a handle into a channel
+    /// does not cancel waits on that handle.
+    fn remove_handle_for_transfer(
+        &mut self,
+        handle_value: HandleValue,
+    ) -> ZxResult<(Handle, Vec<Sender<()>>)> {
+        let (handle, queue) = self
+            .handles
+            .remove(&handle_value)
+            .ok_or(ZxError::BAD_HANDLE)?;
+        // Do NOT dec_handle_count — the handle is in transit, not closed.
+        // Do NOT fire cancel tokens — waits remain valid while in transit.
+        // Return the cancel senders so they can be stored in the
+        // MessagePacket and fired on channel_read.
+        Ok((handle, queue))
+    }
+
+    /// Add a handle received via transfer.
+    ///
+    /// Unlike `add_handle`, this does NOT increment handle count because
+    /// the count was not decremented when removed for transfer.
+    fn add_handle_for_transfer(&mut self, handle: Handle) -> HandleValue {
+        let key = (self.max_handle_id << 2) | 0x3u32;
+        info!("add handle (transfer): {:#x}, {:?}", key, handle.object);
+        self.max_handle_id += 1;
+        // Do NOT inc_handle_count — preserving the count from before transfer.
+        self.handles.insert(key, (handle, Vec::new()));
+        key
     }
 
     /// Clear all handles, decrementing each object's handle count.

@@ -44,6 +44,7 @@ fn channel_message_round_trip() {
         .write(MessagePacket {
             data: b"/svc/fuchsia.logger.Log".to_vec(),
             handles: alloc::vec::Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 
@@ -63,6 +64,7 @@ fn multiple_messages() {
         ch0.write(MessagePacket {
             data: entry.to_vec(),
             handles: alloc::vec::Vec::new(),
+            ..Default::default()
         })
         .unwrap();
     }
@@ -95,6 +97,7 @@ fn handle_transfer() {
     ch1.write(MessagePacket {
         data: b"hello".to_vec(),
         handles: alloc::vec::Vec::new(),
+        ..Default::default()
     })
     .unwrap();
 
@@ -131,6 +134,7 @@ fn read_after_peer_close() {
     ch0.write(MessagePacket {
         data: b"last-message".to_vec(),
         handles: alloc::vec::Vec::new(),
+        ..Default::default()
     })
     .unwrap();
 
@@ -157,6 +161,7 @@ fn empty_message() {
     ch0.write(MessagePacket {
         data: alloc::vec::Vec::new(),
         handles: alloc::vec::Vec::new(),
+        ..Default::default()
     })
     .unwrap();
 
@@ -186,6 +191,7 @@ fn multiple_handle_transfer() {
             Handle::new(event1, Rights::DEFAULT_EVENT),
             Handle::new(event2, Rights::DEFAULT_EVENT),
         ],
+        ..Default::default()
     })
     .unwrap();
 
@@ -206,6 +212,7 @@ fn fifo_ordering() {
         ch0.write(MessagePacket {
             data: i.to_ne_bytes().to_vec(),
             handles: alloc::vec::Vec::new(),
+            ..Default::default()
         })
         .unwrap();
     }
