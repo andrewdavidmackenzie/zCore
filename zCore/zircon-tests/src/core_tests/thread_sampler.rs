@@ -11,7 +11,7 @@
 /// Creates a sampler, spawns a thread, starts sampling, reads at least
 /// 10 records containing the thread's TID, stops, and cleans up.
 #[test]
-#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
+#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls (#715)"]
 fn start_stop() {}
 
 /// C++: TEST(ThreadSampler, SamplerLifetime)
@@ -19,20 +19,20 @@ fn start_stop() {}
 /// second sampler while the first exists returns ZX_ERR_ALREADY_EXISTS.
 /// After closing the first, a new one can be created.
 #[test]
-#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
+#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls (#715)"]
 fn sampler_lifetime() {}
 
 /// C++: TEST(ThreadSampler, InvalidOptions)
 /// Creating a sampler with non-zero options returns ZX_ERR_INVALID_ARGS.
 #[test]
-#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
+#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls (#715)"]
 fn invalid_options() {}
 
 /// C++: TEST(ThreadSampler, DroppedSampler)
 /// Drops a sampler mid-session (close handle while sampling is active),
 /// then creates a new one and verifies it works.
 #[test]
-#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
+#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls (#715)"]
 fn dropped_sampler() {}
 
 /// C++: TEST(ThreadSampler, NonRunningThread)
@@ -40,12 +40,12 @@ fn dropped_sampler() {}
 /// sampling, then starts the thread. Samples from the now-running
 /// thread should appear.
 #[test]
-#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
+#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls (#715)"]
 fn non_running_thread() {}
 
 /// C++: TEST(ThreadSampler, HighFrequency)
 /// Stress test: 4 threads, 50us sample period, 1024-page buffer.
 /// Reads at least 10 records total.
 #[test]
-#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls"]
+#[ignore = "zCore does not implement zx_sampler_create/start/stop/read syscalls (#715)"]
 fn high_frequency() {}
