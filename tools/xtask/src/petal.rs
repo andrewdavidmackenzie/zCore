@@ -438,11 +438,11 @@ pub fn build_zircon_rootfs_image(arch: Arch) -> PathBuf {
     let image = dir.join(format!("{}-zircon.img", arch.name()));
 
     // Skip if image exists and is newer than all rootfs files.
-    // Check both bin/ and lib/ directories so that updated prebuilt
-    // shared libraries also trigger an image rebuild.
+    // Check bin/, lib/, and etc/ directories so that updated prebuilt
+    // shared libraries or extra-args also trigger an image rebuild.
     if image.is_file() {
         let img_mtime = image.metadata().and_then(|m| m.modified()).ok();
-        let newest_file = ["bin", "lib"]
+        let newest_file = ["bin", "lib", "etc"]
             .iter()
             .filter_map(|sub| rootfs_dir.join(sub).read_dir().ok())
             .flatten()

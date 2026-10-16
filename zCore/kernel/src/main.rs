@@ -99,12 +99,29 @@ fn boot_init(options: BootOptions) -> alloc::sync::Arc<zircon_object::task::Proc
 
                 match flavour {
                     zircon_object::task::Flavour::Zircon => {
-                        let extra_args: alloc::vec::Vec<alloc::string::String> = options
+                        let mut extra_args: alloc::vec::Vec<alloc::string::String> = options
                             .root_proc
                             .split('?')
                             .skip(1)
                             .map(Into::into)
                             .collect();
+                        // Read additional args from /etc/extra-args in rootfs.
+                        // Each non-empty line becomes an extra argument.
+                        // This allows passing gtest filters at rootfs build
+                        // time instead of baking them into ZCORE_CMDLINE,
+                        // avoiding kernel rebuilds when only the filter changes.
+                        if let Ok(inode) = rootfs.root_inode().lookup("etc/extra-args") {
+                            let meta = inode.metadata().unwrap();
+                            let mut buf = alloc::vec![0u8; meta.size];
+                            let n = inode.read_at(0, &mut buf).unwrap_or(0);
+                            let content = core::str::from_utf8(&buf[..n]).unwrap_or("");
+                            for line in content.lines() {
+                                let line = line.trim();
+                                if !line.is_empty() && !line.starts_with('#') {
+                                    extra_args.push(line.into());
+                                }
+                            }
+                        }
                         return zircon_loader::zircon::run_from_rootfs(
                             rootfs, init_path, extra_args,
                         );
