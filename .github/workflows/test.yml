@@ -98,9 +98,21 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y qemu-system-arm qemu-system-misc qemu-utils wget
 
-      - name: Install QEMU (macOS)
+      - name: Cache QEMU (macOS)
         if: runner.os == 'macOS'
+        id: cache-qemu-boot
+        uses: actions/cache@v4
+        with:
+          path: /opt/homebrew/Cellar/qemu
+          key: qemu-${{ runner.os }}-${{ runner.arch }}-v9
+
+      - name: Install QEMU (macOS)
+        if: runner.os == 'macOS' && steps.cache-qemu-boot.outputs.cache-hit != 'true'
         run: brew install qemu
+
+      - name: Link QEMU (macOS, cached)
+        if: runner.os == 'macOS' && steps.cache-qemu-boot.outputs.cache-hit == 'true'
+        run: brew link qemu 2>/dev/null || true
 
       - name: Build kernel and rootfs
         run: make build ARCH=aarch64
@@ -199,9 +211,21 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
 
-      - name: Install QEMU (macOS)
+      - name: Cache QEMU (macOS)
         if: runner.os == 'macOS'
+        id: cache-qemu-zircon
+        uses: actions/cache@v4
+        with:
+          path: /opt/homebrew/Cellar/qemu
+          key: qemu-${{ runner.os }}-${{ runner.arch }}-v9
+
+      - name: Install QEMU (macOS)
+        if: runner.os == 'macOS' && steps.cache-qemu-zircon.outputs.cache-hit != 'true'
         run: brew install qemu
+
+      - name: Link QEMU (macOS, cached)
+        if: runner.os == 'macOS' && steps.cache-qemu-zircon.outputs.cache-hit == 'true'
+        run: brew link qemu 2>/dev/null || true
 
       - name: Zircon boot smoke test (ZBI mode)
         run: make zircon-boot-test ARCH=aarch64
@@ -285,8 +309,20 @@ jobs:
         with:
           key: libc-aarch64-macos
 
+      - name: Cache QEMU (macOS)
+        id: cache-qemu-libc
+        uses: actions/cache@v4
+        with:
+          path: /opt/homebrew/Cellar/qemu
+          key: qemu-${{ runner.os }}-${{ runner.arch }}-v9
+
       - name: Install QEMU (macOS)
+        if: steps.cache-qemu-libc.outputs.cache-hit != 'true'
         run: brew install qemu
+
+      - name: Link QEMU (macOS, cached)
+        if: steps.cache-qemu-libc.outputs.cache-hit == 'true'
+        run: brew link qemu 2>/dev/null || true
 
       - name: Build kernel and rootfs
         run: make build ARCH=aarch64
