@@ -118,7 +118,7 @@ impl VmAddressRegion {
         if self.parent.is_none() {
             const ASPACE_STRIDE: usize = 0x4000_0000; // must match new_root()
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-            let base = 0x4_0000_0000usize;
+            let base = 0xC_0000_0000usize; // must match new_root()
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize;
             if self.addr >= base {
@@ -183,8 +183,12 @@ impl VmAddressRegion {
             // within the 47-bit user VA limit (~128 TB).
             const ASPACE_STRIDE: usize = 0x4000_0000; // 1 GB
             const ASPACE_SIZE: usize = ASPACE_STRIDE;
+            // On aarch64 macOS: must be above both the macOS MAP_FIXED
+            // minimum (0x4_0000_0000) and the PMEM mapping region
+            // (0x8_0000_0000..0x8_4000_0000). Using 0xC_0000_0000 (48 GB)
+            // avoids overlap with PMEM (#709).
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-            let base = 0x4_0000_0000usize; // 16 GB (macOS MAP_FIXED minimum)
+            let base = 0xC_0000_0000usize;
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize; // 8 GB
             (base + ASPACE_STRIDE * i, ASPACE_SIZE)
@@ -2035,9 +2039,12 @@ impl VmMapping {
             inner.set_page_flags(i, new_flags);
             let vaddr = inner.addr + i * PAGE_SIZE;
             if !new_flags.intersects(MMUFlags::RXW) {
-                // No access permissions — unmap the page. On x86_64,
-                // a present PTE is always readable; the only way to
-                // deny all access is to clear the PRESENT bit.
+                // No access permissions — on bare-metal, unmap the page
+                // (x86_64 PTEs are always readable if present). In libos,
+                // skip the host unmap — the kernel tracks permissions via
+                // page_flags. Unmapping can cause ENOMEM on macOS when
+                // restoring permissions later (#718).
+                #[cfg(target_os = "none")]
                 pg_table.unmap(vaddr).ignore().unwrap();
             } else {
                 pg_table
