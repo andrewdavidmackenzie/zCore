@@ -591,6 +591,12 @@ fn pager_query_dirty_ranges() {
         .create_vmo(8, &port, 0, (4 * PAGE_SIZE) as u64)
         .unwrap();
 
+    // Supply all 4 pages (OP_DIRTY requires committed pages).
+    let src = VmObject::new_paged(4);
+    pager
+        .supply_pages(&vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
+        .unwrap();
+
     // Mark pages 1 and 2 as dirty (offset=PAGE_SIZE, length=2*PAGE_SIZE).
     pager
         .op_range(2, &vmo, PAGE_SIZE as u64, (2 * PAGE_SIZE) as u64, 0)
