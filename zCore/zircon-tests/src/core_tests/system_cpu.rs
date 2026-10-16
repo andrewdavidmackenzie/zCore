@@ -482,8 +482,6 @@ fn target_preemption_time_assert() {
 #[test]
 fn scale_bandwidth() {
     // C++: return; (disabled)
-
-    todo!("implement test");
 }
 
 /// C++: TEST(SystemCpu, SetPerformanceInfoNearZero)

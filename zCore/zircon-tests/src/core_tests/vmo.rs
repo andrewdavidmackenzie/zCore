@@ -1617,9 +1617,8 @@ fn physical_slice() {
 /// test is skipped. The validation is exercised by the core-tests binary
 /// on bare-metal when the MMIO resource and test_ram_reserve are available.
 #[test]
-fn physical_vmo_invalid_initial_size() {
-    panic!("not yet implemented: requires MMIO resource and bare-metal syscall layer");
-}
+#[ignore = "requires MMIO resource and bare-metal syscall layer"]
+fn physical_vmo_invalid_initial_size() {}
 
 /// C++: TEST(VmoTestCase, PhysicalVmoOobMapping)
 ///
@@ -1835,9 +1834,8 @@ fn read_write_invalid_null_buffer() {
 /// mode, `copy_to_user` is a plain memcpy that doesn't check VMAR permissions,
 /// so the write silently succeeds. This test is therefore ignored in libos.
 #[test]
-fn read_write_invalid_user_buffer() {
-    panic!("not yet implemented: requires bare-metal VMAR permission enforcement");
-}
+#[ignore = "requires bare-metal VMAR permission enforcement"]
+fn read_write_invalid_user_buffer() {}
 
 /// C++: TEST(VmoTestCase, ResizeHazard)
 ///

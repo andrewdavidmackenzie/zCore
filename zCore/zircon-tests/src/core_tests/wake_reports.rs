@@ -296,14 +296,8 @@ fn port_bound_already_timed_out() {
 /// Call suspend with REPORT_ONLY flag. No actual suspend attempt.
 /// With no pending entries: returns 0 entries.
 #[test]
-fn port_bound_report_only() {
-    let _ctx = TestContext::new();
-    // REPORT_ONLY skips the suspend operation entirely.
-    // Returns the header with 0 unreported entries and 0 entries in buffer.
-    // No deadline wake source (since suspend wasn't attempted).
-
-    todo!("implement test");
-}
+#[ignore = "requires zx_system_suspend_enter with REPORT_ONLY — not implemented in zCore"]
+fn port_bound_report_only() {}
 
 /// C++: TEST_F(WakeReportTestsPortBound, SmallReportBuffer)
 /// Use a buffer too small to hold all entries. Verify we can

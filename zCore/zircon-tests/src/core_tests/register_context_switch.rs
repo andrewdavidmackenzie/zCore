@@ -47,18 +47,8 @@ fn fpu_long_compute_loop() {
 /// is not available in libos user mode. Even in the C++ suite this
 /// test is disabled.
 #[test]
-fn segment_selectors_zeroed_on_interrupt() {
-    // C++ test is unconditionally skipped:
-    //   ZXTEST_SKIP() << "Disabled because some versions of non-KVM QEMU
-    //                     don't implement IRET fully";
-    //
-    // This test requires privilege level 0 instructions to set segment
-    // selectors and cannot be ported to libos mode.
-    //
-    // Verified by running: make core-tests CORE_TESTS_FILTER='RegisterContextSwitchTests.*'
-
-    todo!("implement test");
-}
+#[ignore = "C++ test is ZXTEST_SKIP'd — requires x86 ring-0 segment selector instructions"]
+fn segment_selectors_zeroed_on_interrupt() {}
 
 /// C++: TEST(RegisterContextSwitchTests, SegmentSelectorsZeroedOnContextSwitch)
 /// Sets x86 segment selectors and FS/GS base to 1, sleeps to trigger
@@ -68,19 +58,5 @@ fn segment_selectors_zeroed_on_interrupt() {
 /// segment selectors (ds, es, fs, gs) and FS/GS base registers.
 /// Not available in libos user mode. Verified via QEMU core-tests.
 #[test]
-fn segment_selectors_zeroed_on_context_switch() {
-    // This test exercises x86-specific hardware behavior:
-    //   - Segment selectors (ds, es, fs, gs) are zeroed by the kernel
-    //     on context switch for security (prevent leaking kernel segments).
-    //   - FS/GS base registers are preserved (used for TLS).
-    //
-    // These operations require ring-0 privilege and inline asm
-    // instructions (wrgsbase, rdgsbase, etc.) not available in libos.
-    //
-    // The FPU context switch test (fpu_long_compute_loop) exercises
-    // the architecture-independent part of register preservation.
-    //
-    // Verified by running: make core-tests CORE_TESTS_FILTER='RegisterContextSwitchTests.*'
-
-    todo!("implement test");
-}
+#[ignore = "requires x86 ring-0 privilege for segment selector manipulation — not available in libos"]
+fn segment_selectors_zeroed_on_context_switch() {}

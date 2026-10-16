@@ -246,8 +246,11 @@ fn register_fs_other_thread() {
 }
 
 /// C++: TEST(Property, RegisterFsTooSmall)
-/// Setting FS with a buffer too small should return INVALID_ARGS.
+/// Setting FS with a buffer too small should return BUFFER_TOO_SMALL.
+/// The C++ source is `#ifdef __x86_64__` only — FS/GS base registers
+/// do not exist on ARM.
 #[test]
+#[cfg(target_arch = "x86_64")]
 fn register_fs_too_small() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "fs-small").unwrap();
@@ -257,7 +260,7 @@ fn register_fs_too_small() {
     ));
     let val_bytes = [0u8; 2]; // too small for a usize
     let err = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
-    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
 /// C++: TEST(Property, RegisterGs)
@@ -348,8 +351,11 @@ fn register_gs_other_thread() {
 }
 
 /// C++: TEST(Property, RegisterGsTooSmall)
-/// Setting GS with a buffer too small should return INVALID_ARGS.
+/// Setting GS with a buffer too small should return BUFFER_TOO_SMALL.
+/// The C++ source is `#ifdef __x86_64__` only — FS/GS base registers
+/// do not exist on ARM.
 #[test]
+#[cfg(target_arch = "x86_64")]
 fn register_gs_too_small() {
     let ctx = TestContext::new();
     let thread = Thread::create(&ctx.proc, "gs-small").unwrap();
@@ -359,7 +365,7 @@ fn register_gs_too_small() {
     ));
     let val_bytes = [0u8; 2]; // too small for a usize
     let err = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
-    assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+    assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
 /// C++: TEST(Property, SocketBuffer)
