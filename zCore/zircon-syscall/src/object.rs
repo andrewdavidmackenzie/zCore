@@ -1,9 +1,9 @@
 use {
     super::*,
     alloc::vec::Vec,
-    hal_impl::PAGE_SIZE,
     core::convert::TryFrom,
     hal::UserContextField,
+    hal_impl::PAGE_SIZE,
     numeric_enum_macro::numeric_enum,
     zircon_object::{dev::*, ipc::*, signal::Clock, signal::Port, signal::Timer, task::*, vm::*},
 };

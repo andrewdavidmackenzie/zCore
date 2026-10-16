@@ -2,7 +2,7 @@
 
 use crate::helpers::TestContext;
 use zircon_object::object::KernelObject;
-use zircon_object::vm::{SeekOrigin, Stream, VmObject};
+use zircon_object::vm::{SeekOrigin, Stream, VmObject, PAGE_SIZE};
 
 /// C++: TEST(StreamTestCase, Create)
 /// Basic stream creation with properties verified.
@@ -89,7 +89,7 @@ fn stream_write_extends_content_size() {
 #[test]
 fn stream_write_doesnt_extend_vmo_size() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1); // 1 page = 4096 bytes
+    let vmo = VmObject::new_paged(1); // 1 page
     let original_vmo_len = vmo.len();
 
     let stream = Stream::create(vmo.clone(), 0, 0x3);
@@ -101,9 +101,11 @@ fn stream_write_doesnt_extend_vmo_size() {
     assert_eq!(vmo.len(), original_vmo_len);
 
     // Try to write past the VMO boundary — clamped to VMO size
-    stream.seek(SeekOrigin::Start, 4090).unwrap();
+    stream
+        .seek(SeekOrigin::Start, (PAGE_SIZE - 6) as isize)
+        .unwrap();
     let n = stream.write(&[0xBB; 100], false).unwrap();
-    assert_eq!(n, 6); // only 6 bytes fit (4096 - 4090)
+    assert_eq!(n, 6); // only 6 bytes fit (PAGE_SIZE - offset)
     assert_eq!(vmo.len(), original_vmo_len);
 }
 
@@ -315,7 +317,7 @@ fn stream_expand_overflow() {
 
     // write_at with offset at VMO boundary should fail with OUT_OF_RANGE
     // since offset >= vmo_len.
-    let result = stream.write_at(b"overflow", 4096);
+    let result = stream.write_at(b"overflow", PAGE_SIZE);
     assert!(result.is_err(), "write at VMO boundary should fail");
 }
 
@@ -411,17 +413,19 @@ fn stream_vector_capacity_overflow() {
 #[test]
 fn stream_partial_append_at_vmo_boundary() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1); // 4096 bytes
+    let vmo = VmObject::new_paged(1); // PAGE_SIZE bytes
     let stream = Stream::create(vmo.clone(), 0, 0x3);
 
     // Write to near the end of the VMO.
-    stream.seek(SeekOrigin::Start, 4090).unwrap();
+    stream
+        .seek(SeekOrigin::Start, (PAGE_SIZE - 6) as isize)
+        .unwrap();
     let n = stream.write(b"0123456789", false).unwrap();
-    assert_eq!(n, 6, "only 6 bytes should fit (4096 - 4090)");
+    assert_eq!(n, 6, "only 6 bytes should fit");
 
     // Verify partial write.
     let mut buf = [0u8; 6];
-    stream.read_at(&mut buf, 4090).unwrap();
+    stream.read_at(&mut buf, PAGE_SIZE - 6).unwrap();
     assert_eq!(&buf, b"012345");
 }
 
@@ -470,8 +474,8 @@ fn stream_fault_beyond_stream_size_resize_down_race() {
     stream.seek(SeekOrigin::Start, 5000).unwrap();
 
     // Resize down to 1 page — the seek position is now past the VMO.
-    vmo.set_len(4096).unwrap();
-    vmo.set_content_size(4096).unwrap();
+    vmo.set_len(PAGE_SIZE).unwrap();
+    vmo.set_content_size(PAGE_SIZE).unwrap();
 
     // Read at the stale seek position — should return 0 bytes
     // because seek is past the content_size.
@@ -539,15 +543,21 @@ fn append_with_multiple_threads() {
 #[test]
 fn content_size_updated_on_partial_write() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1); // 4096 bytes
+    let vmo = VmObject::new_paged(1); // PAGE_SIZE bytes
     vmo.set_content_size(0).unwrap();
     let stream = Stream::create(vmo.clone(), 0, 0x3);
 
     // Seek to near the end and write more than fits.
-    stream.seek(SeekOrigin::Start, 4090).unwrap();
+    stream
+        .seek(SeekOrigin::Start, (PAGE_SIZE - 6) as isize)
+        .unwrap();
     let n = stream.write(&[0xAA; 100], false).unwrap();
     assert_eq!(n, 6, "only 6 bytes should fit");
-    assert_eq!(vmo.content_size(), 4096, "content_size should be VMO size");
+    assert_eq!(
+        vmo.content_size(),
+        PAGE_SIZE,
+        "content_size should be VMO size"
+    );
 }
 
 /// C++: TEST(StreamTestCase, PartialVmoDirty)
@@ -559,9 +569,11 @@ fn partial_vmo_dirty() {
     let stream = Stream::create(vmo.clone(), 0, 0x3);
 
     // Write near the VMO boundary.
-    stream.seek(SeekOrigin::Start, 4092).unwrap();
+    stream
+        .seek(SeekOrigin::Start, (PAGE_SIZE - 4) as isize)
+        .unwrap();
     let n = stream.write(b"ABCDEF", false).unwrap();
-    assert_eq!(n, 4, "only 4 bytes fit (4096 - 4092)");
+    assert_eq!(n, 4, "only 4 bytes fit");
 
     // Read back and verify.
     let mut buf = [0u8; 4];
@@ -825,7 +837,7 @@ fn read_vector_alias() {
 #[test]
 fn read_write_shrink_race() {
     let _ctx = TestContext::new();
-    let page_size = 4096usize;
+    let page_size = PAGE_SIZE;
     let initial_vmo_size = 8 * page_size + 8;
     let truncate_to_size = page_size;
 
@@ -887,7 +899,7 @@ fn read_write_shrink_race() {
 #[test]
 fn write_shrink_race() {
     let _ctx = TestContext::new();
-    let page_size = 4096usize;
+    let page_size = PAGE_SIZE;
     let initial_vmo_size = page_size + 8;
     let truncate_to_size = page_size;
 

@@ -2389,7 +2389,12 @@ mod tests {
         // test invalid argument
         assert_eq!(
             root_vmar
-                .allocate_at(2 * PAGE_SIZE + 1, PAGE_SIZE, VmarFlags::CAN_MAP_RXW, PAGE_SIZE)
+                .allocate_at(
+                    2 * PAGE_SIZE + 1,
+                    PAGE_SIZE,
+                    VmarFlags::CAN_MAP_RXW,
+                    PAGE_SIZE
+                )
                 .err(),
             Some(ZxError::INVALID_ARGS)
         );
@@ -2429,9 +2434,13 @@ mod tests {
         // Fuchsia allows mapping beyond VMO size (pages fault on access).
         // At the kernel object level, map_range silently downgrades to lazy
         // mapping. The explicit MAP_RANGE check is in the syscall layer.
-        let a1 = vmar.map_at(0, vmo.clone(), 4 * PAGE_SIZE, PAGE_SIZE, flags).unwrap();
+        let a1 = vmar
+            .map_at(0, vmo.clone(), 4 * PAGE_SIZE, PAGE_SIZE, flags)
+            .unwrap();
         vmar.unmap(a1, PAGE_SIZE).unwrap();
-        let a2 = vmar.map_at(0, vmo.clone(), 0, 5 * PAGE_SIZE, flags).unwrap();
+        let a2 = vmar
+            .map_at(0, vmo.clone(), 0, 5 * PAGE_SIZE, flags)
+            .unwrap();
         vmar.unmap(a2, 5 * PAGE_SIZE).unwrap();
         assert_eq!(
             vmar.map_at(0, vmo.clone(), PAGE_SIZE, 1, flags),
@@ -2442,7 +2451,8 @@ mod tests {
             Err(ZxError::INVALID_ARGS)
         );
 
-        vmar.map_at(0, vmo.clone(), 0, 4 * PAGE_SIZE, flags).unwrap();
+        vmar.map_at(0, vmo.clone(), 0, 4 * PAGE_SIZE, flags)
+            .unwrap();
         vmar.map_at(18 * PAGE_SIZE, vmo.clone(), 2 * PAGE_SIZE, PAGE_SIZE, flags)
             .unwrap();
 
@@ -2454,7 +2464,10 @@ mod tests {
         #[cfg(not(target_os = "macos"))]
         unsafe {
             ((vmar.addr() + 2 * PAGE_SIZE) as *mut usize).write(MAGIC);
-            assert_eq!(((vmar.addr() + 18 * PAGE_SIZE) as *const usize).read(), MAGIC);
+            assert_eq!(
+                ((vmar.addr() + 18 * PAGE_SIZE) as *const usize).read(),
+                MAGIC
+            );
         }
     }
 
