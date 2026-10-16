@@ -42,7 +42,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04-arm, macos-latest]
+        # ubuntu-latest (x86_64) uses TCG for aarch64 guest but needs
+        # the x86_64 musl cross-toolchain for busybox. ubuntu-24.04-arm
+        # can't use the x86_64 musl binaries. Keep on ubuntu-latest
+        # until a native aarch64 musl toolchain is available.
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -292,7 +296,8 @@ jobs:
 
   libc-test-ubuntu:
     name: Libc Test (aarch64, ubuntu)
-    runs-on: ubuntu-24.04-arm
+    # Needs x86_64 musl cross-toolchain for busybox — can't use ARM runner yet.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
