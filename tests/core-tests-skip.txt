@@ -397,8 +397,8 @@ Bti.DecommitRace
 #   DuplicateTriggerIgnoredWhileQueued, PacketDeliveredAfterBind
 #   — removed from skip.
 # 2 hang:
-InterruptTest.UntriggeredSignalInterruptWait
-InterruptTest.PacketFollowsUnbindToWait
+# InterruptTest.UntriggeredSignalInterruptWait — removed, now passes
+# InterruptTest.PacketFollowsUnbindToWait — removed, now passes
 # 2 fail (no crash/hang) — removed from skip:
 #   UntriggeredSignalPortsAndAck, PacketFollowsRebindToNewPort
 # MsiTest — 2/6 pass (AllocateSyscall, ContiguousNotSupported).
