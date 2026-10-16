@@ -344,7 +344,8 @@ impl VmObject {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        // Check that all pages in range are committed (supplied).
+        // OP_DIRTY can only be applied to committed (supplied) pages.
+        // Unsupplied pages return NOT_FOUND (Fuchsia behavior).
         if length > 0 {
             let committed = self.trait_.committed_pages_in_range(start_page, end_page);
             if committed < end_page - start_page {

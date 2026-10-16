@@ -557,7 +557,7 @@ fn pager_op_range_fail() {
 }
 
 ///
-/// op_range with ZX_PAGER_OP_DIRTY grants dirty permission.
+/// op_range with ZX_PAGER_OP_DIRTY grants dirty permission on supplied pages.
 #[test]
 fn pager_op_range_dirty() {
     let _ctx = TestContext::new();
@@ -565,6 +565,13 @@ fn pager_op_range_dirty() {
 
     // Create with TRAP_DIRTY (1 << 3 = 8).
     let vmo = pager.create_vmo(8, &port, 0, PAGE_SIZE as u64).unwrap();
+
+    // Supply pages before dirtying them (OP_DIRTY requires committed pages).
+    let src = VmObject::new_paged(1);
+    src.write(0, &[0xAA; 8]).unwrap();
+    pager
+        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
+        .unwrap();
 
     // ZX_PAGER_OP_DIRTY = 2
     let result = pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0);
