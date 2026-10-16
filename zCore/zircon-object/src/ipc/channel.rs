@@ -30,6 +30,10 @@ pub struct Channel {
     base: KObjectBase,
     _counter: CountHelper,
     peer: Weak<Channel>,
+    /// Cached peer KOID, set at creation time. Unlike `peer.upgrade()`,
+    /// this survives peer closure, matching Fuchsia's behavior where
+    /// `related_koid` returns the original peer's KOID even after it's closed.
+    peer_koid: KoID,
     recv_queue: Mutex<VecDeque<T>>,
     call_reply: Mutex<HashMap<TxID, Sender<ZxResult<T>>>>,
     next_txid: AtomicU32,
@@ -44,7 +48,7 @@ impl_kobject!(Channel
         Ok(peer)
     }
     fn related_koid(&self) -> KoID {
-        self.peer.upgrade().map(|p| p.id()).unwrap_or(0)
+        self.peer_koid
     }
 );
 define_count_helper!(Channel);
@@ -57,6 +61,7 @@ impl Channel {
             base: KObjectBase::with_signal(Signal::WRITABLE),
             _counter: CountHelper::new(),
             peer: Weak::default(),
+            peer_koid: 0, // set below after both are created
             recv_queue: Default::default(),
             call_reply: Default::default(),
             next_txid: AtomicU32::new(0x8000_0000),
@@ -65,15 +70,18 @@ impl Channel {
             base: KObjectBase::with_signal(Signal::WRITABLE),
             _counter: CountHelper::new(),
             peer: Arc::downgrade(&channel0),
+            peer_koid: channel0.id(),
             recv_queue: Default::default(),
             call_reply: Default::default(),
             next_txid: AtomicU32::new(0x8000_0000),
         });
-        // SAFETY: channel0/end0/event0 was just created with strong_count=1.
-        // The only other reference is a Weak held by channel1/end1/event1.
-        // We need to set the peer before returning, and Arc::get_mut
-        // fails because the weak count is non-zero.
-        unsafe { &mut *(Arc::as_ptr(&channel0) as *mut Channel) }.peer = Arc::downgrade(&channel1);
+        // SAFETY: channel0 was just created with strong_count=1.
+        // The only other reference is a Weak held by channel1.
+        // We need to set the peer and peer_koid before returning,
+        // and Arc::get_mut fails because the weak count is non-zero.
+        let c0_mut = unsafe { &mut *(Arc::as_ptr(&channel0) as *mut Channel) };
+        c0_mut.peer = Arc::downgrade(&channel1);
+        c0_mut.peer_koid = channel1.id();
         (channel0, channel1)
     }
 
@@ -237,9 +245,11 @@ mod tests {
         ));
         assert_eq!(end0.related_koid(), end1.id());
 
+        let end1_id = end1.id();
         drop(end1);
         assert_eq!(end0.peer().unwrap_err(), ZxError::PEER_CLOSED);
-        assert_eq!(end0.related_koid(), 0);
+        // related_koid returns the cached peer KOID even after peer close.
+        assert_eq!(end0.related_koid(), end1_id);
     }
 
     #[test]

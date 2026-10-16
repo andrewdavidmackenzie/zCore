@@ -853,8 +853,22 @@ impl VmAddressRegion {
                     }
                     map.vmo.zero(vmo_offset, op_len)?;
                 }
-                VmarOpType::DontNeed | VmarOpType::AlwaysNeed | VmarOpType::Prefetch => {
-                    // Performance hints — no-op for now.
+                VmarOpType::DontNeed | VmarOpType::AlwaysNeed => {
+                    // For mappings with FAULT_BEYOND_STREAM_SIZE, check
+                    // that the range is within the VMO's content_size.
+                    // This matches Fuchsia's behavior where DONT_NEED/
+                    // ALWAYS_NEED on a range beyond content_size returns
+                    // OUT_OF_RANGE.
+                    let map_inner = map.inner.lock();
+                    if map_inner.fault_beyond_stream_size {
+                        let content_size = map.vmo.content_size();
+                        if vmo_offset >= content_size || vmo_offset + op_len > content_size {
+                            return Err(ZxError::OUT_OF_RANGE);
+                        }
+                    }
+                }
+                VmarOpType::Prefetch => {
+                    // Performance hint — no-op for now.
                 }
             }
         }
@@ -962,9 +976,12 @@ impl VmAddressRegion {
         len: usize,
         align: usize,
     ) -> ZxResult<VirtAddr> {
-        if !check_aligned(len, align) {
-            Err(ZxError::INVALID_ARGS)
-        } else if let Some(offset) = offset {
+        // Fuchsia only requires the start address to be aligned to `align`.
+        // The length only needs to be page-aligned.
+        if !check_aligned(len, PAGE_SIZE) {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        if let Some(offset) = offset {
             if !check_aligned(offset, align) {
                 return Err(ZxError::INVALID_ARGS);
             }
@@ -1024,7 +1041,7 @@ impl VmAddressRegion {
     /// Test if can create a new mapping at `offset` with `len`.
     fn test_map(&self, inner: &VmarInner, offset: usize, len: usize, align: usize) -> bool {
         debug_assert!(check_aligned(offset, align));
-        debug_assert!(check_aligned(len, align));
+        // len only needs page-alignment, not alignment to `align`.
         let begin = self.addr + offset;
         let end = begin + len;
         if end > self.addr + self.size {
@@ -1069,7 +1086,7 @@ impl VmAddressRegion {
     ) -> Option<usize> {
         // TODO: randomize
         debug_assert!(check_aligned(offset_hint, align));
-        debug_assert!(check_aligned(len, align));
+        // len only needs page-alignment, not alignment to `align`.
         // brute force:
         // try each area's end address as the start
         let candidates: alloc::vec::Vec<usize> = core::iter::once(offset_hint)
@@ -1335,14 +1352,30 @@ impl VmAddressRegion {
     /// Produces a depth-first pre-order walk:
     /// - depth 0: the VMAR itself
     /// - depth 1+: child VMARs and mappings
+    ///
+    /// Returns `BAD_STATE` if the VMAR is destroyed. Use
+    /// `get_info_maps_or_empty` when calling from `ZX_INFO_PROCESS_MAPS`
+    /// which must succeed even after the root VMAR is destroyed.
     pub fn get_info_maps(&self, base_depth: usize) -> ZxResult<Vec<InfoMapsEntry>> {
-        // If the VMAR is destroyed, return BAD_STATE matching Fuchsia.
         if self.inner.lock().is_none() {
             return Err(ZxError::BAD_STATE);
         }
         let mut result = Vec::new();
         self.walk_info_maps(base_depth, &mut result);
         Ok(result)
+    }
+
+    /// Like `get_info_maps` but returns an empty list instead of
+    /// `BAD_STATE` for destroyed VMARs. Used by `ZX_INFO_PROCESS_MAPS`
+    /// which must succeed even when the root VMAR is destroyed
+    /// (ProcessTest.ForbidDestroyRootVmar).
+    pub fn get_info_maps_or_empty(&self, base_depth: usize) -> Vec<InfoMapsEntry> {
+        if self.inner.lock().is_none() {
+            return Vec::new();
+        }
+        let mut result = Vec::new();
+        self.walk_info_maps(base_depth, &mut result);
+        result
     }
 
     fn walk_info_maps(&self, depth: usize, out: &mut Vec<InfoMapsEntry>) {
@@ -1383,44 +1416,89 @@ impl VmAddressRegion {
             }
             for mapping in &inner.mappings {
                 let m_inner = mapping.inner.lock();
-                // Convert internal MMUFlags bit positions to the
-                // Fuchsia ABI ZX_VM_PERM_* values.
-                // Use page_flags(0) which returns the effective
-                // permissions, accounting for protect() changes.
-                let perms = m_inner.page_flags(0);
-                let mut mmu_flags: u32 = 0;
-                if perms.contains(MMUFlags::READ) {
-                    mmu_flags |= 1; // ZX_VM_PERM_READ
-                }
-                if perms.contains(MMUFlags::WRITE) {
-                    mmu_flags |= 2; // ZX_VM_PERM_WRITE
-                }
-                if perms.contains(MMUFlags::EXECUTE) {
-                    mmu_flags |= 4; // ZX_VM_PERM_EXECUTE
-                }
                 let mut m_name_buf = [0u8; 32];
                 let vmo_name = mapping.vmo.name();
                 let vmo_name_bytes = vmo_name.as_bytes();
                 let m_copy_len = vmo_name_bytes.len().min(31);
                 m_name_buf[..m_copy_len].copy_from_slice(&vmo_name_bytes[..m_copy_len]);
+                let vmo_koid = mapping.vmo_koid();
+                let page_count = m_inner.size / PAGE_SIZE;
 
-                items.push(Item::Mapping(InfoMapsEntry {
-                    name: m_name_buf,
-                    base: m_inner.addr as u64,
-                    size: m_inner.size as u64,
-                    depth: (depth + 1) as u64,
-                    r#type: 3, // ZX_INFO_MAPS_TYPE_MAPPING
-                    padding: 0,
-                    mapping: InfoMapsMapping {
-                        mmu_flags,
-                        padding1: 0,
-                        vmo_koid: mapping.vmo_koid(),
-                        vmo_offset: m_inner.vmo_offset as u64,
-                        committed_bytes: 0, // TODO
-                        populated_bytes: 0, // TODO
-                        ..Default::default()
-                    },
-                }));
+                // Build a list of (start_page, flags) boundaries for
+                // protection regions. For eager mappings (per-page flags
+                // vec), iterate pages. For lazy mappings, use the
+                // protection_overrides BTreeMap directly (O(regions)
+                // instead of O(pages)).
+                let mut emit_entry = |start_page: usize, end_page: usize, perms: MMUFlags| {
+                    let mut mmu_flags: u32 = 0;
+                    if perms.contains(MMUFlags::READ) {
+                        mmu_flags |= 1; // ZX_VM_PERM_READ
+                    }
+                    if perms.contains(MMUFlags::WRITE) {
+                        mmu_flags |= 2; // ZX_VM_PERM_WRITE
+                    }
+                    if perms.contains(MMUFlags::EXECUTE) {
+                        mmu_flags |= 4; // ZX_VM_PERM_EXECUTE
+                    }
+                    let byte_start = start_page * PAGE_SIZE;
+                    let byte_len = (end_page - start_page) * PAGE_SIZE;
+                    items.push(Item::Mapping(InfoMapsEntry {
+                        name: m_name_buf,
+                        base: (m_inner.addr + byte_start) as u64,
+                        size: byte_len as u64,
+                        depth: (depth + 1) as u64,
+                        r#type: 3, // ZX_INFO_MAPS_TYPE_MAPPING
+                        padding: 0,
+                        mapping: InfoMapsMapping {
+                            mmu_flags,
+                            padding1: 0,
+                            vmo_koid,
+                            vmo_offset: (m_inner.vmo_offset + byte_start) as u64,
+                            committed_bytes: 0, // TODO
+                            populated_bytes: 0, // TODO
+                            ..Default::default()
+                        },
+                    }));
+                };
+
+                if m_inner.flags.is_empty() {
+                    // Lazy mapping: use protection_overrides directly.
+                    if m_inner.protection_overrides.is_empty() {
+                        // Single region covering the whole mapping.
+                        emit_entry(0, page_count, m_inner.default_flags);
+                    } else {
+                        // Iterate override boundaries.
+                        let mut prev_page = 0usize;
+                        let mut prev_flags = m_inner.default_flags;
+                        for (&page, &flags) in &m_inner.protection_overrides {
+                            if page > prev_page && page <= page_count {
+                                emit_entry(prev_page, page.min(page_count), prev_flags);
+                            }
+                            prev_page = page.min(page_count);
+                            prev_flags = flags;
+                        }
+                        if prev_page < page_count {
+                            emit_entry(prev_page, page_count, prev_flags);
+                        }
+                    }
+                } else {
+                    // Eager mapping: iterate per-page flags.
+                    let mut region_start = 0usize;
+                    let mut region_flags = m_inner.page_flags(0);
+                    for page_idx in 1..=page_count {
+                        let cur_flags = if page_idx < page_count {
+                            m_inner.page_flags(page_idx)
+                        } else {
+                            // Sentinel: force flush of the last region
+                            MMUFlags::from_bits_truncate(!region_flags.bits())
+                        };
+                        if cur_flags != region_flags {
+                            emit_entry(region_start, page_idx, region_flags);
+                            region_start = page_idx;
+                            region_flags = cur_flags;
+                        }
+                    }
+                }
             }
             // Sort by address for deterministic output.
             items.sort_by_key(|item| match item {
@@ -1736,6 +1814,7 @@ impl VmMapping {
     /// Temporarily used for development. A standard procedure for
     /// vmo is: create_vmo, op_range(commit), map
     fn map(self: &Arc<Self>) -> ZxResult {
+        let vmo_pages = self.vmo.len() / PAGE_SIZE;
         self.vmo.commit_pages_with(&mut |commit| {
             let inner = self.inner.lock();
             let mut page_table = self.page_table.lock();
@@ -1746,6 +1825,12 @@ impl VmMapping {
             // Root VMOs need WRITE to work correctly with eager map.
             let is_cow = self.vmo.parent().is_some();
             for i in 0..page_num {
+                // Skip pages beyond the VMO's current size. For resizable
+                // VMOs, the mapping may be larger than the VMO — pages
+                // past the end are demand-faulted (returning OUT_OF_RANGE).
+                if vmo_offset + i >= vmo_pages {
+                    break;
+                }
                 let flags = inner.page_flags(i);
                 let commit_flags = if is_cow {
                     flags - MMUFlags::WRITE

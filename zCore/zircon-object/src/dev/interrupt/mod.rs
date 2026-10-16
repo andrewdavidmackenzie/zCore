@@ -5,8 +5,54 @@ use {
     crate::signal::*,
     alloc::{boxed::Box, sync::Arc},
     bitflags::bitflags,
+    core::{
+        future::Future,
+        pin::Pin,
+        task::{Context, Poll},
+    },
     lock::Mutex,
 };
+
+/// A future that waits for `SIGNALED` on a `KObjectBase`.
+///
+/// Used internally by `Interrupt::wait()` to block on the internal
+/// `wait_event` without using `dyn KernelObject::wait_signal`.
+struct WaitEventFuture<'a> {
+    event: &'a KObjectBase,
+    registered: bool,
+}
+
+impl<'a> WaitEventFuture<'a> {
+    fn new(event: &'a KObjectBase) -> Self {
+        Self {
+            event,
+            registered: false,
+        }
+    }
+}
+
+impl Future for WaitEventFuture<'_> {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let current = self.event.signal();
+        if current.contains(Signal::SIGNALED) {
+            return Poll::Ready(());
+        }
+        if !self.registered {
+            let waker = cx.waker().clone();
+            self.event.add_signal_callback(Box::new(move |s| {
+                if !s.contains(Signal::SIGNALED) {
+                    return false;
+                }
+                waker.wake_by_ref();
+                true
+            }));
+            self.registered = true;
+        }
+        Poll::Pending
+    }
+}
 
 mod event_interrupt;
 mod virtual_interrupt;
@@ -35,6 +81,9 @@ pub struct Interrupt {
     flags: InterruptFlags,
     inner: Mutex<InterruptInner>,
     trait_: Box<dyn InterruptTrait>,
+    /// Internal event used to wake `wait()` without affecting observable
+    /// signal state. Uses `SIGNALED` (bit 3) as the wakeup signal.
+    wait_event: KObjectBase,
 }
 
 #[derive(Default)]
@@ -42,9 +91,15 @@ struct InterruptInner {
     state: InterruptState,
     port: Option<Arc<Port>>,
     key: u64,
+    /// Pending timestamp for re-trigger coalescing. When a second trigger
+    /// arrives while in NeedAck state, this records the timestamp to be
+    /// delivered on the next ack().
     timestamp: i64,
     defer_unmask: bool,
     packet_id: u64,
+    /// The original trigger timestamp, preserved across unbind/rebind so
+    /// it can be re-queued to a new port.
+    trigger_timestamp: i64,
 }
 
 impl Drop for Interrupt {
@@ -57,13 +112,20 @@ impl Drop for Interrupt {
 
 impl Interrupt {
     /// Create a new virtual interrupt.
+    ///
+    /// Virtual interrupts start in the UNTRIGGERED state with
+    /// `INTERRUPT_SIGNAL` asserted (= `ZX_VIRTUAL_INTERRUPT_UNTRIGGERED`).
     pub fn new_virtual() -> Arc<Self> {
+        let base = KObjectBase::new();
+        // Assert UNTRIGGERED signal immediately after creation.
+        base.signal_set(Signal::INTERRUPT_SIGNAL);
         Arc::new(Interrupt {
-            base: KObjectBase::new(),
+            base,
             has_vcpu: false,
             flags: InterruptFlags::VIRTUAL,
             inner: Default::default(),
             trait_: VirtualInterrupt::new(),
+            wait_event: KObjectBase::new(),
         })
     }
 
@@ -83,6 +145,7 @@ impl Interrupt {
             flags: InterruptFlags::empty(),
             inner: Default::default(),
             trait_: EventInterrupt::new(vector),
+            wait_event: KObjectBase::new(),
         });
         let interrupt_clone = interrupt.clone();
         interrupt
@@ -112,8 +175,20 @@ impl Interrupt {
         inner.port = Some(port.clone());
         inner.key = key;
         if inner.state == InterruptState::Triggered {
-            inner.packet_id = port.as_ref().push_interrupt(inner.timestamp, inner.key);
+            // Use trigger_timestamp which survives unbind (inner.timestamp
+            // may have been cleared when the original packet was sent).
+            let ts = if inner.trigger_timestamp != 0 {
+                inner.trigger_timestamp
+            } else {
+                inner.timestamp
+            };
+            inner.packet_id = port.as_ref().push_interrupt(ts, inner.key);
+            inner.timestamp = 0;
             inner.state = InterruptState::NeedAck;
+            // Clear UNTRIGGERED signal.
+            if self.flags.contains(InterruptFlags::VIRTUAL) {
+                self.base.signal_clear(Signal::INTERRUPT_SIGNAL);
+            }
         }
         Ok(())
     }
@@ -121,6 +196,8 @@ impl Interrupt {
     /// Unbind the interrupt object from a port.
     ///
     /// Unbinding the port removes previously queued packets to the port.
+    /// The triggered/NeedAck state is preserved so that a subsequent rebind
+    /// will re-queue the packet to the new port.
     pub fn unbind(&self, port: &Arc<Port>) -> ZxResult {
         let mut inner = self.inner.lock();
         if inner.port.is_none() || inner.port.as_ref().unwrap().id() != port.id() {
@@ -129,29 +206,49 @@ impl Interrupt {
         if inner.state == InterruptState::Destroy {
             return Err(ZxError::CANCELED);
         }
-        port.remove_interrupt(inner.packet_id);
+        let was_queued = port.remove_interrupt(inner.packet_id);
         inner.port = None;
         inner.key = 0;
+        // If the packet was still in the queue (not yet consumed by the user),
+        // map NeedAck → Triggered so bind() will re-queue it to the new port.
+        // If the packet was already consumed, keep NeedAck — the user still
+        // needs to ack() before the interrupt can re-trigger.
+        if inner.state == InterruptState::NeedAck && was_queued {
+            inner.state = InterruptState::Triggered;
+        }
         Ok(())
     }
 
     /// Triggers a virtual interrupt object.
+    ///
+    /// If the interrupt is already in NeedAck state with a port bound, the
+    /// timestamp is recorded as pending but no second packet is queued.
+    /// The pending timestamp will be delivered when `ack()` is called.
     pub fn trigger(&self, timestamp: i64) -> ZxResult {
         if !self.flags.contains(InterruptFlags::VIRTUAL) {
             return Err(ZxError::BAD_STATE);
         }
         let mut inner = self.inner.lock();
-        if inner.timestamp == 0 {
-            inner.timestamp = timestamp;
-        }
         if inner.state == InterruptState::Destroy {
             return Err(ZxError::CANCELED);
         }
+        // Only record the timestamp if this is the first signal since we
+        // started waiting (matches Fuchsia: `if (!timestamp_) timestamp_ = ts`)
+        if inner.timestamp == 0 {
+            inner.timestamp = timestamp;
+        }
         if inner.state == InterruptState::NeedAck && inner.port.is_some() {
+            // Coalesce: the pending timestamp is already recorded above.
+            // No second packet is queued; it will be sent on ack().
+            // Clear UNTRIGGERED since we are (still) triggered.
+            if self.flags.contains(InterruptFlags::VIRTUAL) {
+                self.base.signal_clear(Signal::INTERRUPT_SIGNAL);
+            }
             return Ok(());
         }
+        // Save the trigger timestamp for rebind scenarios.
+        inner.trigger_timestamp = timestamp;
         if let Some(port) = &inner.port {
-            // TODO: use a function to send the package
             inner.packet_id = port.push_interrupt(timestamp, inner.key);
             if self.flags.contains(InterruptFlags::MASK_POSTWAIT) {
                 self.trait_.mask();
@@ -159,13 +256,23 @@ impl Interrupt {
             inner.timestamp = 0;
             inner.state = InterruptState::NeedAck;
         } else {
-            inner.state = InterruptState::Triggered;
-            self.base.signal_set(Signal::INTERRUPT_SIGNAL);
+            // No port: wake the wait() via the internal event.
+            if inner.state != InterruptState::NeedAck {
+                inner.state = InterruptState::Triggered;
+            }
+            self.wait_event.signal_set(Signal::SIGNALED);
+        }
+        // For virtual interrupts, clear UNTRIGGERED — we are now triggered.
+        if self.flags.contains(InterruptFlags::VIRTUAL) {
+            self.base.signal_clear(Signal::INTERRUPT_SIGNAL);
         }
         Ok(())
     }
 
     /// Acknowledge the interrupt and re-arm it.
+    ///
+    /// Returns `BAD_STATE` if no port is bound, or if the interrupt packet
+    /// has not yet been consumed from the port.
     pub fn ack(&self) -> ZxResult {
         let mut inner = self.inner.lock();
         if inner.port.is_none() {
@@ -175,25 +282,48 @@ impl Interrupt {
             return Err(ZxError::CANCELED);
         }
         if inner.state == InterruptState::NeedAck {
+            // Check packet consumption before any side effects.
+            // Fuchsia's SendPacketLocked returns false (→ BAD_STATE) when
+            // the packet is still in the port queue (InContainer).
+            if inner
+                .port
+                .as_ref()
+                .unwrap()
+                .is_interrupt_packet_queued(inner.packet_id)
+            {
+                return Err(ZxError::BAD_STATE);
+            }
+
+            // Packet was consumed — safe to proceed with side effects.
             if self.flags.contains(InterruptFlags::UNMASK_PREWAIT) {
                 self.trait_.unmask();
             } else if self.flags.contains(InterruptFlags::UNMASK_PREWAIT_UNLOCKED) {
                 inner.defer_unmask = true;
             }
             if inner.timestamp > 0 {
-                // TODO: use a function to send the package
+                // Queue the pending re-trigger packet.
                 inner.packet_id = inner
                     .port
                     .as_ref()
                     .unwrap()
-                    .as_ref()
                     .push_interrupt(inner.timestamp, inner.key);
                 if self.flags.contains(InterruptFlags::MASK_POSTWAIT) {
                     self.trait_.mask();
                 }
                 inner.timestamp = 0;
+                // Assert UNTRIGGERED then immediately clear it (strobe).
+                // This satisfies any async waiters watching for UNTRIGGERED.
+                if self.flags.contains(InterruptFlags::VIRTUAL) {
+                    self.base.signal_set(Signal::INTERRUPT_SIGNAL);
+                    self.base.signal_clear(Signal::INTERRUPT_SIGNAL);
+                }
+                // State stays NeedAck (re-triggered).
             } else {
                 inner.state = InterruptState::Idle;
+                // Assert UNTRIGGERED signal — interrupt is now idle.
+                if self.flags.contains(InterruptFlags::VIRTUAL) {
+                    self.base.signal_set(Signal::INTERRUPT_SIGNAL);
+                }
             }
         }
         if inner.defer_unmask {
@@ -203,11 +333,14 @@ impl Interrupt {
     }
 
     /// Destroy the interrupt.
+    ///
+    /// Asserts UNTRIGGERED signal for virtual interrupts so that waiters
+    /// are not stuck waiting on a destroyed interrupt.
     pub fn destroy(&self) -> ZxResult {
         self.trait_.mask();
         self.trait_.unregister_handler()?;
         let mut inner = self.inner.lock();
-        if let Some(port) = &inner.port {
+        let result = if let Some(port) = &inner.port {
             let in_queue = port.remove_interrupt(inner.packet_id);
             match inner.state {
                 InterruptState::NeedAck => {
@@ -226,15 +359,27 @@ impl Interrupt {
             }
         } else {
             inner.state = InterruptState::Destroy;
-            self.base.signal_set(Signal::INTERRUPT_SIGNAL);
+            // Wake any thread blocked in wait() via the internal event.
+            self.wait_event.signal_set(Signal::SIGNALED);
             Ok(())
+        };
+        // For virtual interrupts, assert UNTRIGGERED (= INTERRUPT_SIGNAL).
+        if self.flags.contains(InterruptFlags::VIRTUAL) {
+            self.base.signal_set(Signal::INTERRUPT_SIGNAL);
         }
+        result
     }
 
     /// Wait until the interrupt is triggered.
+    ///
+    /// Uses an internal `wait_event` object for blocking, separate from the
+    /// observable `base` signals. This prevents the internal wake mechanism
+    /// from interfering with `INTERRUPT_SIGNAL` (bit 4) which carries the
+    /// UNTRIGGERED semantic for virtual interrupts.
     pub async fn wait(self: &Arc<Self>) -> ZxResult<i64> {
         let mut defer_unmask = false;
-        let object = self.clone() as Arc<dyn KernelObject>;
+        // Use the wait_event for blocking, NOT the base object.
+
         loop {
             {
                 let mut inner = self.inner.lock();
@@ -247,10 +392,19 @@ impl Interrupt {
                         inner.state = InterruptState::NeedAck;
                         let timestamp = inner.timestamp;
                         inner.timestamp = 0;
-                        self.base.signal_clear(Signal::INTERRUPT_SIGNAL);
+                        self.wait_event.signal_clear(Signal::SIGNALED);
                         return Ok(timestamp);
                     }
                     InterruptState::NeedAck => {
+                        // If there's a pending re-trigger (timestamp > 0),
+                        // consume it immediately without blocking (matches
+                        // Fuchsia BeginWaitForInterrupt lines 79-89).
+                        if inner.timestamp > 0 {
+                            let timestamp = inner.timestamp;
+                            inner.timestamp = 0;
+                            self.wait_event.signal_clear(Signal::SIGNALED);
+                            return Ok(timestamp);
+                        }
                         if self.flags.contains(InterruptFlags::UNMASK_PREWAIT) {
                             self.trait_.unmask();
                         } else if self.flags.contains(InterruptFlags::UNMASK_PREWAIT_UNLOCKED) {
@@ -261,11 +415,19 @@ impl Interrupt {
                     _ => return Err(ZxError::BAD_STATE),
                 }
                 inner.state = InterruptState::Waiting;
+                // For virtual interrupts, assert UNTRIGGERED when entering wait
+                // (matches Fuchsia: UpdateStateLocked(0, ZX_VIRTUAL_INTERRUPT_UNTRIGGERED))
+                if self.flags.contains(InterruptFlags::VIRTUAL) {
+                    self.base.signal_set(Signal::INTERRUPT_SIGNAL);
+                }
+                // Clear the internal wakeup signal before blocking.
+                self.wait_event.signal_clear(Signal::SIGNALED);
             }
             if defer_unmask {
                 self.trait_.unmask();
             }
-            object.wait_signal(Signal::INTERRUPT_SIGNAL).await;
+            // Block on the internal wait_event, not the base signals.
+            WaitEventFuture::new(&self.wait_event).await;
         }
     }
 
@@ -278,10 +440,12 @@ impl Interrupt {
             // Not sure ZX_CLOCK_MONOTONIC or ZX_CLOCK_UTC
             inner.timestamp = hal_impl::timer::timer_now().as_nanos() as i64;
         }
+        // Save trigger_timestamp so it survives unbind/rebind
+        // (physical interrupts never go through trigger()).
+        inner.trigger_timestamp = inner.timestamp;
         match &inner.port {
             Some(port) => {
                 if inner.state != InterruptState::NeedAck {
-                    // TODO: use a function to send the package
                     inner.packet_id = port.as_ref().push_interrupt(inner.timestamp, inner.key);
                     if self.flags.contains(InterruptFlags::MASK_POSTWAIT) {
                         self.trait_.mask();
@@ -292,7 +456,8 @@ impl Interrupt {
                 }
             }
             None => {
-                self.base.signal_set(Signal::INTERRUPT_SIGNAL);
+                // Wake wait() via the internal event.
+                self.wait_event.signal_set(Signal::SIGNALED);
                 inner.state = InterruptState::Triggered;
             }
         }

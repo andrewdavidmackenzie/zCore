@@ -1040,9 +1040,9 @@ impl Syscall<'_> {
                     padding: 0,
                     mapping: InfoMapsMapping::default(),
                 });
-                // VMAR tree walk (depth 1+).
-                let vmar_entries = vmar.get_info_maps(1)?;
-                entries.extend(vmar_entries);
+                // VMAR tree walk (depth 1+). Use get_info_maps_or_empty
+                // so PROCESS_MAPS succeeds even if the root VMAR is destroyed.
+                entries.extend(vmar.get_info_maps_or_empty(1));
                 // Versioned entry size:
                 // V0: 96 bytes (name + base + size + depth + type + pad + mmu_flags + pad + vmo_koid + vmo_offset + committed_bytes)
                 // V1: 104 bytes (V0 + populated_bytes)
@@ -1074,24 +1074,13 @@ impl Syscall<'_> {
                 let vmar =
                     proc.get_object_with_rights::<VmAddressRegion>(handle, Rights::INSPECT)?;
                 let entries = vmar.get_info_maps(0)?;
-                let full_size = core::mem::size_of::<InfoMapsEntry>();
-                let entry_size = match topic_version {
-                    0 => 96,
-                    1 => 104,
-                    _ => full_size,
-                };
+                // ZX_INFO_VMAR_MAPS has no version scheme — it always
+                // uses the full zx_info_maps_t size (152 bytes), unlike
+                // ZX_INFO_PROCESS_MAPS which has V0/V1/V2 variants.
+                let entry_size = core::mem::size_of::<InfoMapsEntry>();
                 let count = (buffer_size / entry_size).min(entries.len());
                 if count > 0 {
-                    if entry_size == full_size {
-                        UserOutPtr::<InfoMapsEntry>::from(buffer).write_array(&entries[..count])?;
-                    } else {
-                        let src = slice_as_bytes(&entries);
-                        for i in 0..count {
-                            let entry_bytes = &src[i * full_size..i * full_size + entry_size];
-                            let mut dst = UserOutPtr::<u8>::from(buffer + i * entry_size);
-                            dst.write_array(entry_bytes)?;
-                        }
-                    }
+                    UserOutPtr::<InfoMapsEntry>::from(buffer).write_array(&entries[..count])?;
                 }
                 actual.write_if_not_null(count)?;
                 avail.write_if_not_null(entries.len())?;

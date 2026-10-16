@@ -270,16 +270,17 @@ fn check_write_capacity_peer_closed() {
     );
 }
 
-/// After the peer is closed, related_koid should return 0.
+/// After the peer is closed, related_koid still returns the cached
+/// peer KOID (matching Fuchsia's PeeredDispatcher behavior).
 #[test]
-fn related_koid_becomes_zero_on_peer_close() {
+fn related_koid_persists_on_peer_close() {
     let _ctx = TestContext::new();
     let (local, remote) = Channel::create();
     let remote_id = remote.id();
     assert_eq!(local.related_koid(), remote_id);
 
     drop(remote);
-    assert_eq!(local.related_koid(), 0);
+    assert_eq!(local.related_koid(), remote_id);
 }
 
 ///

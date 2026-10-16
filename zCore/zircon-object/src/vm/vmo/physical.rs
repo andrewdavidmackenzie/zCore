@@ -91,8 +91,15 @@ impl VMObjectTrait for VMObjectPhysical {
         Err(ZxError::NOT_SUPPORTED)
     }
 
-    fn complete_info(&self, _info: &mut VmoInfo) {
-        warn!("VmoInfo for physical is unimplemented");
+    fn complete_info(&self, info: &mut VmoInfo) {
+        info.flags |= VmoInfoFlags::TYPE_PHYSICAL | VmoInfoFlags::CONTIGUOUS;
+        // Physical VMOs do not consume VMO memory — report zero
+        // for committed/populated accounting. Mark fractional scaling
+        // as unsupported (sentinel u64::MAX).
+        info.committed_bytes = 0;
+        info.populated_bytes = 0;
+        info.populated_scaled_bytes = 0;
+        info.populated_fractional_scaled_bytes = u64::MAX;
     }
 
     fn cache_policy(&self) -> CachePolicy {

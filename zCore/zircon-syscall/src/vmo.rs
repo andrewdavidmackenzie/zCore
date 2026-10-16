@@ -330,6 +330,27 @@ impl Syscall<'_> {
                 } else {
                     Err(ZxError::BAD_STATE)
                 }
+            } else if vmo.is_slice_vmo() {
+                // SLICE VMOs: create the COW child on the slice's parent,
+                // adjusting the offset by the slice's parent_offset.
+                // This matches Fuchsia behavior where SNAPSHOT_AT_LEAST_ON_WRITE
+                // on a SLICE creates the child in the parent's COW tree.
+                if let Some(parent) = vmo.parent() {
+                    let end = offset
+                        .checked_add(child_size)
+                        .ok_or(ZxError::OUT_OF_RANGE)?;
+                    if end > vmo.len() {
+                        return Err(ZxError::OUT_OF_RANGE);
+                    }
+                    let adjusted_offset = offset
+                        .checked_add(vmo.parent_offset())
+                        .ok_or(ZxError::OUT_OF_RANGE)?;
+                    let child = parent.create_child(resizable, adjusted_offset, child_size)?;
+                    child.set_parent_ref(&vmo);
+                    Ok(child)
+                } else {
+                    Err(ZxError::BAD_STATE)
+                }
             } else {
                 vmo.create_child(resizable, offset, child_size)
             }
@@ -380,13 +401,32 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         proc.check_policy(PolicyCondition::NewVMO)?;
-        proc.get_resource(resource)?
-            .validate_ranged_resource(ResourceKind::MMIO, paddr, size)?;
+        let rsrc = proc.get_resource(resource)?;
+        // Validate kind (MMIO) — ROOT bypasses this check.
+        rsrc.validate(ResourceKind::MMIO)
+            .map_err(|_| ZxError::ACCESS_DENIED)?;
         if size == 0 || !page_aligned(size) || !page_aligned(paddr) {
             return Err(ZxError::INVALID_ARGS);
         }
         if paddr.overflowing_add(size).1 {
             return Err(ZxError::INVALID_ARGS);
+        }
+        // For non-root resources, validate that [paddr, paddr+size) fits
+        // within the page-rounded bounds of the resource. Fuchsia's kernel
+        // rounds the resource range to page boundaries for VMO creation
+        // (unlike sys_resource_create which uses strict byte-level checks).
+        // ROOT and ranged-root resources bypass range checks entirely.
+        if !rsrc.is_ranged_root(ResourceKind::MMIO) {
+            let rsrc_base = rsrc.addr();
+            let rsrc_size = rsrc.len();
+            let rsrc_page_base = rsrc_base & !(PAGE_SIZE - 1);
+            let rsrc_page_end = rsrc_base
+                .saturating_add(rsrc_size)
+                .saturating_add(PAGE_SIZE - 1)
+                & !(PAGE_SIZE - 1);
+            if paddr < rsrc_page_base || paddr + size > rsrc_page_end {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
         }
         let vmo = VmObject::new_physical(paddr, size / PAGE_SIZE);
         let handle_value = proc.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO | Rights::EXECUTE));

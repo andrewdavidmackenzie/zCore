@@ -724,6 +724,12 @@ impl VMObjectPagedInner {
                         None => Err(ZxError::NO_MEMORY),
                     };
                 }
+                // For root VMOs (no parent, not a COW child), accessing
+                // beyond the VMO size is OUT_OF_RANGE — don't allocate
+                // zero pages past the end.
+                if out_of_range && no_parent && !self.type_.is_hidden() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
                 let target_frame = PhysFrame::new_zero().ok_or(ZxError::NO_MEMORY)?;
                 if self.type_.is_hidden() {
                     // Hidden nodes return a temporary zero page without

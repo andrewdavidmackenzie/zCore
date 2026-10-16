@@ -719,10 +719,15 @@ impl VmObject {
         if self.trait_.cache_policy() != CachePolicy::Cached && !self.trait_.is_contiguous() {
             return Err(ZxError::BAD_STATE);
         }
-        // Slices get their own independent content_size equal to the
-        // slice's own size.  REFERENCE children share the parent's
-        // content_size via delegation in content_size()/set_content_size().
-        let child_content_size = size;
+        // Slices of regular paged VMOs get content_size equal to the slice
+        // size. Slices of physical or contiguous VMOs get content_size = 0
+        // since these VMOs don't track content (stream_size is always 0).
+        // REFERENCE children share the parent's content_size via delegation.
+        let child_content_size = if self.trait_.is_paged() && !self.trait_.is_contiguous() {
+            size
+        } else {
+            0
+        };
         let child = Arc::new(VmObject {
             base: KObjectBase::with(&self.base.name(), Signal::VMO_ZERO_CHILDREN),
             resizable,
@@ -1152,6 +1157,11 @@ impl VmObject {
         self.dead.load(core::sync::atomic::Ordering::Acquire)
     }
 
+    /// Returns true if the VMO is backed by RAM (paged VMO).
+    pub fn is_paged(&self) -> bool {
+        self.trait_.is_paged()
+    }
+
     pub fn is_contiguous(&self) -> bool {
         self.trait_.is_contiguous()
     }
@@ -1165,7 +1175,17 @@ impl VmObject {
         self.trait_.is_reference()
     }
 
-    /// Get the parent VmObject (for REFERENCE children).
+    /// Returns true if this VMO is a SLICE child (but not a REFERENCE).
+    pub fn is_slice_vmo(&self) -> bool {
+        self.is_slice
+    }
+
+    /// Offset into the parent VMO (for slices). Returns 0 for non-slices.
+    pub fn parent_offset(&self) -> usize {
+        self.trait_.parent_offset()
+    }
+
+    /// Get the parent VmObject (for REFERENCE or SLICE children).
     pub fn parent(&self) -> Option<Arc<VmObject>> {
         self.inner.lock().parent.upgrade()
     }
