@@ -514,6 +514,10 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let vmo = proc.get_object_with_rights::<VmObject>(handle, Rights::WRITE)?;
+        // Physical and contiguous VMOs don't support stream size.
+        if !vmo.is_paged() || vmo.is_contiguous() {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         if size > vmo.len() {
             return Err(ZxError::OUT_OF_RANGE);
         }
