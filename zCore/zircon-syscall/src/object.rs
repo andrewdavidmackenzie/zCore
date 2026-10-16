@@ -317,8 +317,12 @@ impl Syscall<'_> {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
                 // Setting content_size requires WRITE right.
-                proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?
-                    .set_content_size_with_zero(content_size)
+                let vmo = proc.get_object_with_rights::<VmObject>(handle_value, Rights::WRITE)?;
+                // Physical and contiguous VMOs don't support content_size.
+                if !vmo.is_paged() || vmo.is_contiguous() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
+                vmo.set_content_size_with_zero(content_size)
             }
             Property::ExceptionState => {
                 let state = UserInPtr::<u32>::from_addr_size(buffer, buffer_size)?.read()?;
