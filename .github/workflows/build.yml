@@ -20,6 +20,10 @@ jobs:
         with:
           components: rust-src, rustfmt, clippy
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: workspace-${{ matrix.os }}
+
       - name: Check format
         run: cargo fmt --all -- --check
 
@@ -69,6 +73,10 @@ jobs:
             fi
           done
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: bare-metal-${{ matrix.arch }}-${{ matrix.os }}
+
       - name: Install cross-compilation toolchain (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y qemu-utils wget
@@ -91,6 +99,10 @@ jobs:
         with:
           components: rust-src, llvm-tools-preview
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: libos
+
       - name: Build libos (Linux mode)
         run: cargo zcore-build -m libos --flavour linux
 
@@ -107,6 +119,10 @@ jobs:
         with:
           components: rust-src, rustfmt, clippy, llvm-tools-preview
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: clippy
+
       - name: Clippy all targets and personalities
         run: cargo check-style
 
@@ -119,6 +135,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rust-src, llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: hardware-targets
 
       - name: Build raspi400
         run: cargo bin -m raspi400
