@@ -851,6 +851,11 @@ impl Process {
         self.inner.lock().threads.iter().map(|t| t.id()).collect()
     }
 
+    /// Get all live threads in this process.
+    pub fn threads(&self) -> Vec<Arc<Thread>> {
+        self.inner.lock().threads.clone()
+    }
+
     /// Get total accumulated CPU time across all threads (nanoseconds).
     /// Includes time from exited threads that have been removed.
     /// On a cooperative scheduler, returns at least 1ns when the

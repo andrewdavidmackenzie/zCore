@@ -2,6 +2,7 @@ use {
     super::exception::*,
     super::job_policy::*,
     super::process::Process,
+    super::thread::Thread,
     crate::object::*,
     crate::task::Task,
     alloc::sync::{Arc, Weak},
@@ -359,6 +360,26 @@ impl Job {
             .filter_map(|j| j.upgrade())
             .map(|j| j.id())
             .collect()
+    }
+
+    /// Collect all threads from all processes in this job and its
+    /// child jobs (recursive).  Used by the thread sampler to enumerate
+    /// all running threads in the system.
+    pub fn get_all_threads(&self) -> Vec<Arc<Thread>> {
+        let inner = self.inner.lock();
+        let mut threads = Vec::new();
+        for proc_weak in &inner.processes {
+            if let Some(proc) = proc_weak.upgrade() {
+                threads.extend(proc.threads());
+            }
+        }
+        // Collect from child jobs — drop lock first to avoid deadlock.
+        let children: Vec<Arc<Job>> = inner.children.iter().filter_map(|j| j.upgrade()).collect();
+        drop(inner);
+        for child in children {
+            threads.extend(child.get_all_threads());
+        }
+        threads
     }
 
     /// Return true if this job has no processes and no child jobs.
