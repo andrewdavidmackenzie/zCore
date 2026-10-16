@@ -281,7 +281,7 @@ impl Syscall<'_> {
     ///
     /// Returns per-CPU performance scale values. Topic 0 returns
     /// current scale, topic 1 returns default scale. Each entry is
-    /// a `zx_cpu_performance_scale_t` (4 bytes: u16 integral + u16 fractional).
+    /// a `zx_cpu_performance_scale_t` (8 bytes: u32 integral + u32 fractional).
     /// Returns static 1.0x scale (no DVFS support).
     pub fn sys_system_get_performance_info(
         &self,
@@ -344,14 +344,16 @@ impl Syscall<'_> {
                 }
             } else {
                 // ZX_CPU_PERF_SCALE / DEFAULT_PERF_SCALE:
-                // zx_cpu_performance_info_t = { u32 cpu, { u16 integral, u16 fractional } } = 8 bytes
+                // zx_cpu_performance_info_t = { u32 cpu,
+                //   zx_cpu_performance_scale_t { u32 integral, u32 fractional } } = 12 bytes
                 for i in 0..entries {
                     let cpu_num = (i as u32).to_ne_bytes();
                     out.write_array(&cpu_num)?;
                     out = (out.as_addr() + 4).into();
-                    // performance_scale: 1.0x = { integral=1, fractional=0 }
-                    let scale_1x: [u8; 4] = [1, 0, 0, 0];
-                    out.write_array(&scale_1x)?;
+                    // performance_scale: 1.0x = { integral_part=1, fractional_part=0 }
+                    out.write_array(&1u32.to_ne_bytes())?;
+                    out = (out.as_addr() + 4).into();
+                    out.write_array(&0u32.to_ne_bytes())?;
                     out = (out.as_addr() + 4).into();
                 }
             }
@@ -403,13 +405,15 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate scale values for ZX_CPU_PERF_SCALE (topic 1).
-        // zx_cpu_performance_info_t = { u32 cpu, { u16 integral, u16 fractional } } = 8 bytes.
+        // zx_cpu_performance_info_t = { u32 logical_cpu_number,
+        //   zx_cpu_performance_scale_t { u32 integral_part, u32 fractional_part } } = 12 bytes.
         // Zero scale (0.0) is rejected; values > 1.0 are clamped (accepted).
         if topic == 1 {
+            const ENTRY_SIZE: usize = 12; // 4 + 4 + 4
             let buf: UserInPtr<u8> = info.into();
-            let data = buf.read_array(count * 8)?;
+            let data = buf.read_array(count * ENTRY_SIZE)?;
             for i in 0..count {
-                let base = i * 8;
+                let base = i * ENTRY_SIZE;
                 // Validate CPU number (first 4 bytes of each entry).
                 let cpu_number = u32::from_ne_bytes([
                     data[base],
@@ -420,10 +424,19 @@ impl Syscall<'_> {
                 if cpu_number as usize >= online_cpus {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
-                // Validate scale (next 4 bytes: u16 integral + u16 fractional).
-                let offset = base + 4;
-                let integral = u16::from_ne_bytes([data[offset], data[offset + 1]]);
-                let fractional = u16::from_ne_bytes([data[offset + 2], data[offset + 3]]);
+                // Validate scale: { u32 integral_part, u32 fractional_part }.
+                let integral = u32::from_ne_bytes([
+                    data[base + 4],
+                    data[base + 5],
+                    data[base + 6],
+                    data[base + 7],
+                ]);
+                let fractional = u32::from_ne_bytes([
+                    data[base + 8],
+                    data[base + 9],
+                    data[base + 10],
+                    data[base + 11],
+                ]);
                 if integral == 0 && fractional == 0 {
                     return Err(ZxError::OUT_OF_RANGE);
                 }

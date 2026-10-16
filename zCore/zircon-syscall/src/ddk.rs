@@ -96,6 +96,11 @@ impl Syscall<'_> {
         if !page_aligned(offset) || !page_aligned(size) {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Reject if the output buffer would exceed the maximum
+        // user-copy size (PAGE_SIZE * 64 = 256KB), matching Fuchsia.
+        if addrs_count * core::mem::size_of::<DevVAddr>() > PAGE_SIZE * 64 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let vmo = proc.get_object_with_rights::<VmObject>(vmo, options.to_vmo_rights())?;
         let compress_results = options.contains(BtiOptions::COMPRESS);
         let contiguous = options.contains(BtiOptions::CONTIGUOUS);
