@@ -38,6 +38,21 @@ fn host_page_size() -> usize {
     *CACHED.get_or_init(|| unsafe { nix::libc::sysconf(nix::libc::_SC_PAGESIZE) as usize })
 }
 
+/// Check if a host page is currently mapped (accessible) using mincore.
+/// Returns false if the page is unmapped (stale entries from recycled
+/// address spaces). Used defensively in sync_pmem_to_user/sync_user_to_pmem
+/// and mmap conflict detection (#709).
+fn is_page_mapped(vaddr: usize, len: usize) -> bool {
+    let mut vec = alloc::vec![0u8; (len + host_page_size() - 1) / host_page_size()];
+    unsafe {
+        nix::libc::mincore(
+            vaddr as *mut nix::libc::c_void,
+            len,
+            vec.as_mut_ptr() as *mut _,
+        ) == 0
+    }
+}
+
 impl MockMemory {
     pub fn new(size: usize) -> Self {
         let dir = tempfile::tempdir().expect("failed to create pmem directory");
@@ -176,6 +191,10 @@ impl MockMemory {
             // Helper: create anonymous mapping for this host page.
             // Returns false if the mapping failed (e.g., low address on macOS).
             let map_anon = || -> bool {
+                // On macOS, MAP_FIXED | MAP_ANON can return EACCES if the
+                // address previously had a MAP_SHARED file mapping. Clear
+                // any stale association first.
+                let _ = unsafe { mman::munmap(aligned_vaddr as _, hps) };
                 let result = unsafe {
                     mman::mmap(
                         aligned_vaddr as _,
@@ -249,14 +268,7 @@ impl MockMemory {
                     // Save existing data, convert to anonymous.
                     // First verify the page is still mapped — it may have
                     // been munmap'd by a previous test's cleanup (#709).
-                    let mut resident: u8 = 0;
-                    let page_mapped = unsafe {
-                        nix::libc::mincore(
-                            aligned_vaddr as *mut nix::libc::c_void,
-                            hps,
-                            &mut resident as *mut u8 as *mut i8,
-                        )
-                    } == 0;
+                    let page_mapped = is_page_mapped(aligned_vaddr, hps);
                     let mut saved = vec![0u8; hps];
                     if page_mapped {
                         unsafe {
@@ -379,16 +391,7 @@ impl MockMemory {
                         // recycled across tests (#709). Use mincore to check
                         // if the page is mapped.
                         let host_page = vaddr & !(hps - 1);
-                        let mut resident: u8 = 0;
-                        let rc = unsafe {
-                            nix::libc::mincore(
-                                host_page as *mut nix::libc::c_void,
-                                hps,
-                                &mut resident as *mut u8 as *mut i8,
-                            )
-                        };
-                        if rc != 0 {
-                            // mincore failed — page not mapped, skip.
+                        if !is_page_mapped(host_page, hps) {
                             continue;
                         }
                         let dst = (vaddr + offset_in_page) as *mut u8;
@@ -417,15 +420,7 @@ impl MockMemory {
                 if let Some(&vaddr) = vaddrs.first() {
                     // Verify the user VA is still mapped (#709).
                     let host_page = vaddr & !(hps - 1);
-                    let mut resident: u8 = 0;
-                    let rc = unsafe {
-                        nix::libc::mincore(
-                            host_page as *mut nix::libc::c_void,
-                            hps,
-                            &mut resident as *mut u8 as *mut i8,
-                        )
-                    };
-                    if rc != 0 {
+                    if !is_page_mapped(host_page, hps) {
                         page += page_size;
                         continue;
                     }
