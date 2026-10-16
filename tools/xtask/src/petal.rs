@@ -357,7 +357,16 @@ pub fn build_zircon_rootfs(arch: Arch) -> PathBuf {
         .join(arch.name());
     let bin_dir = rootfs_dir.join("bin");
 
-    const PETAL_BINS: &[&str] = &["hello", "channel-test", "vmo-test"];
+    const PETAL_BINS: &[&str] = &[
+        "hello",
+        "channel-test",
+        "vmo-test",
+        "vdso-test",
+        "alloc-test",
+        "shell",
+        "process-mem-test",
+        "exception-test",
+    ];
 
     // Include prebuilt core-tests-standalone if available for this arch.
     let prebuilt_cts = PROJECT_DIR
