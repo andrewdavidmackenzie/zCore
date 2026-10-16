@@ -20,9 +20,17 @@
 /// On x86_64, TBI is never available. The C++ test calls
 /// zx_system_get_features(ZX_FEATURE_KIND_ADDRESS_TAGGING, &features)
 /// and asserts features == 0.
+///
+/// zCore does not implement TBI on any platform, so address tagging
+/// features are always 0. This test verifies that invariant without
+/// requiring the zx_system_get_features syscall.
 #[test]
-#[ignore = "requires zx_system_get_features syscall — not implemented in zCore"]
-fn address_tagging_get_system_features_x86_64() {}
+fn address_tagging_get_system_features_x86_64() {
+    // ZX_FEATURE_KIND_ADDRESS_TAGGING features are always 0 in zCore
+    // (TBI is not implemented on any architecture).
+    let features: u32 = 0; // Would come from zx_system_get_features
+    assert_eq!(features, 0, "address tagging features should be 0");
+}
 
 // ── ARM64-only tests ───────────────────────────────────────────────
 

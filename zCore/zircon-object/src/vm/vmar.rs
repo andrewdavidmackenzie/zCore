@@ -95,6 +95,16 @@ define_count_helper!(VmAddressRegion);
 
 impl Drop for VmAddressRegion {
     fn drop(&mut self) {
+        // Clean up host memory mappings before recycling the address
+        // space ID.  Without this, stale host mmaps persist and the
+        // next process that gets the same aspace ID can SIGSEGV when
+        // mapping over them.
+        if let Some(inner) = self.inner.lock().as_mut() {
+            // Drop all mappings (triggers VmMapping::Drop → munmap).
+            inner.mappings.clear();
+            // Recursively clean up children.
+            inner.children.clear();
+        }
         self.free_aspace_id();
     }
 }
