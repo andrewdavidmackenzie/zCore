@@ -2099,6 +2099,12 @@ impl VmMapping {
         self.inner.lock().vmo_offset
     }
 
+    /// Check if the given address range is fully within this mapping.
+    pub fn covers_range(&self, addr: usize, end: usize) -> bool {
+        let inner = self.inner.lock();
+        addr >= inner.addr && end <= inner.end_addr()
+    }
+
     /// Get the mapping's permission flags (from the VMAR map call).
     pub fn permissions(&self) -> MMUFlags {
         self.permissions
