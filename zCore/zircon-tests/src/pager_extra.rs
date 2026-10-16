@@ -2850,56 +2850,10 @@ fn pager_concurrent_resize() {
     }
 }
 
-///
-/// Decommit (evict) supplied pages from a pager-backed VMO.
-#[test]
-#[ignore = "decommit on pager-backed VMOs returns NOT_SUPPORTED (Fuchsia behavior)"]
-fn pager_evict_pages() {
-    let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
-    let src = VmObject::new_paged(1);
-    src.write(0, &42u64.to_ne_bytes()).unwrap();
-    pager
-        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
-    let mut val = [0u8; 8];
-    vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 42);
-    vmo.decommit(0, PAGE_SIZE).unwrap();
-    vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 0, "decommitted page reads as zero");
-}
-
-///
-/// Decommit a specific range of pages from a multi-page VMO.
-#[test]
-#[ignore = "decommit on pager-backed VMOs returns NOT_SUPPORTED (Fuchsia behavior)"]
-fn pager_evict_pages_range() {
-    let _ctx = TestContext::new();
-    let (pager, port) = create_pager_and_port();
-    let vmo = pager
-        .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
-        .unwrap();
-    let src = VmObject::new_paged(4);
-    for i in 0..4 {
-        src.write(i * PAGE_SIZE, &(i as u64).to_ne_bytes()).unwrap();
-    }
-    pager
-        .supply_pages(&vmo, 0, (4 * PAGE_SIZE) as u64, &src, 0)
-        .unwrap();
-    // Decommit pages 1-2.
-    vmo.decommit(PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
-    // Pages 0 and 3 still have data.
-    let mut val = [0u8; 8];
-    vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 0);
-    vmo.read(3 * PAGE_SIZE, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 3);
-    // Pages 1-2 read as zero.
-    vmo.read(PAGE_SIZE, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 0);
-}
+// pager_evict_pages and pager_evict_pages_range were deleted:
+// They tested decommit on pager-backed VMOs, which Fuchsia explicitly
+// rejects with NOT_SUPPORTED (verified by core_tests::pager::pager_decommit_test).
+// Page eviction in Fuchsia is done via pager writeback ops, not decommit.
 
 /// Decommit on a clone returns NOT_SUPPORTED (matches Fuchsia).
 /// Parent data is always preserved regardless.
