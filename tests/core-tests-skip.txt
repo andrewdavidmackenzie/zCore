@@ -403,9 +403,9 @@ Bti.DecommitRace
 #   UntriggeredSignalPortsAndAck, PacketFollowsRebindToNewPort
 # MsiTest — 2/6 pass (AllocateSyscall, ContiguousNotSupported).
 # Remaining 4 fail (Msi, CreateSyscallArgs, AllocatedHandleRights, Msix).
+# MsiTest.CreateSyscallArgs — removed, now passes
+# MsiTest.AllocatedHandleRights — removed, now passes
 MsiTest.Msi
-MsiTest.CreateSyscallArgs
-MsiTest.AllocatedHandleRights
 MsiTest.Msix
 
 # ── Channel fault handling ───────────────────────────────────────────
