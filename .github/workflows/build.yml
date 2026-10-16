@@ -6,38 +6,18 @@ on:
   pull_request:
 
 jobs:
-  workspace:
-    name: Workspace ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rust-src, rustfmt, clippy
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: workspace-${{ matrix.os }}
-
-      - name: Check format
-        run: cargo fmt --all -- --check
-
-      - name: Build
-        run: cargo build
+  # workspace job removed: cargo fmt + cargo build is a subset of
+  # the clippy job which does fmt + clippy (superset of build).
 
   bare-metal:
-    name: Bare-metal ${{ matrix.arch }} (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Bare-metal ${{ matrix.arch }} (macos-latest)
+    # Ubuntu bare-metal builds are covered by boot/zircon tests in test.yml.
+    # Keep macOS to validate cross-compilation on a different toolchain.
+    runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
         arch: [aarch64, riscv64, x86_64]
-        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -45,24 +25,23 @@ jobs:
         with:
           components: rust-src, llvm-tools-preview, clippy
 
-      - name: Cache musl-cross toolchain (macOS)
-        if: runner.os == 'macOS'
+      - name: Cache musl-cross toolchain
         id: cache-musl
         uses: actions/cache@v4
         with:
           path: /opt/homebrew/Cellar/musl-cross
           key: musl-cross-${{ runner.os }}-${{ runner.arch }}-v0.9.11
 
-      - name: Install cross-compilation toolchain (macOS)
-        if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit != 'true'
+      - name: Install cross-compilation toolchain
+        if: steps.cache-musl.outputs.cache-hit != 'true'
         run: make config
 
-      - name: Restore musl-cross symlinks (macOS)
-        if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit == 'true'
+      - name: Restore musl-cross symlinks
+        if: steps.cache-musl.outputs.cache-hit == 'true'
         run: brew link musl-cross 2>/dev/null || brew tap FiloSottile/musl-cross && brew link filosottile/musl-cross/musl-cross 2>/dev/null || true
 
-      - name: Install kernel headers (macOS, cached)
-        if: runner.os == 'macOS' && steps.cache-musl.outputs.cache-hit == 'true'
+      - name: Install kernel headers (cached)
+        if: steps.cache-musl.outputs.cache-hit == 'true'
         run: |
           MUSL_PREFIX=$(brew --prefix musl-cross)/libexec
           for MUSL_ARCH in aarch64 riscv64; do
@@ -75,11 +54,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: bare-metal-${{ matrix.arch }}-${{ matrix.os }}
-
-      - name: Install cross-compilation toolchain (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y qemu-utils wget
+          key: bare-metal-${{ matrix.arch }}-macos
 
       - name: Build ${{ matrix.arch }} bare-metal linux
         run: cargo bin -m qemu-${{ matrix.arch }}
