@@ -176,6 +176,10 @@ impl MockMemory {
             // Helper: create anonymous mapping for this host page.
             // Returns false if the mapping failed (e.g., low address on macOS).
             let map_anon = || -> bool {
+                // On macOS, MAP_FIXED | MAP_ANON can return EACCES if the
+                // address previously had a MAP_SHARED file mapping. Clear
+                // any stale association first.
+                let _ = unsafe { mman::munmap(aligned_vaddr as _, hps) };
                 let result = unsafe {
                     mman::mmap(
                         aligned_vaddr as _,
@@ -254,7 +258,7 @@ impl MockMemory {
                         nix::libc::mincore(
                             aligned_vaddr as *mut nix::libc::c_void,
                             hps,
-                            &mut resident as *mut u8 as *mut nix::libc::c_char,
+                            &mut resident as *mut u8 as *mut i8,
                         )
                     } == 0;
                     let mut saved = vec![0u8; hps];
@@ -384,7 +388,7 @@ impl MockMemory {
                             nix::libc::mincore(
                                 host_page as *mut nix::libc::c_void,
                                 hps,
-                                &mut resident as *mut u8 as *mut nix::libc::c_char,
+                                &mut resident as *mut u8 as *mut i8,
                             )
                         };
                         if rc != 0 {
@@ -422,7 +426,7 @@ impl MockMemory {
                         nix::libc::mincore(
                             host_page as *mut nix::libc::c_void,
                             hps,
-                            &mut resident as *mut u8 as *mut nix::libc::c_char,
+                            &mut resident as *mut u8 as *mut i8,
                         )
                     };
                     if rc != 0 {
