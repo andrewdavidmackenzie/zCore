@@ -6,6 +6,7 @@
 use crate::helpers::TestContext;
 
 use hal_impl::user::{UserInPtr, UserOutPtr};
+use zircon_object::vm::PAGE_SIZE;
 
 extern crate alloc;
 
@@ -123,7 +124,7 @@ fn fault_beyond_stream_size_returns_error() {
     const ZX_HANDLE_VMAR_ROOT_SELF: HandleValue = 0xFFFF_0003;
 
     // Use PAGE_SIZE as the mapping length (what a single clock page would be).
-    let size: u64 = 4096;
+    let size: u64 = PAGE_SIZE as u64;
     let mut mapped_addr: usize = 0;
     let result = sc.sys_vmar_map_clock(
         ZX_HANDLE_VMAR_ROOT_SELF,
@@ -163,7 +164,7 @@ fn mappable_clock_padding_leak() {
     // Map with ZX_VM_PERM_READ | ZX_VM_MAP_RANGE
     let options: u32 = (1 << 0) | (1 << 10); // PERM_READ | MAP_RANGE
     const ZX_HANDLE_VMAR_ROOT_SELF: HandleValue = 0xFFFF_0003;
-    let size: u64 = 4096;
+    let size: u64 = PAGE_SIZE as u64;
     let mut mapped_addr: usize = 0;
     let result = sc.sys_vmar_map_clock(
         ZX_HANDLE_VMAR_ROOT_SELF,

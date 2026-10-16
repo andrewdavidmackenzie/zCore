@@ -3,6 +3,7 @@ use {
     alloc::vec::Vec,
     core::convert::TryFrom,
     hal::UserContextField,
+    hal_impl::PAGE_SIZE,
     numeric_enum_macro::numeric_enum,
     zircon_object::{dev::*, ipc::*, signal::Clock, signal::Port, signal::Timer, task::*, vm::*},
 };
@@ -926,7 +927,7 @@ impl Syscall<'_> {
                 // zx_clock_details_v1_t structure.
                 let mut size_ptr = UserOutPtr::<usize>::from_addr_size(buffer, buffer_size)?;
                 let _clock = proc.get_object_with_rights::<Clock>(handle, Rights::INSPECT)?;
-                size_ptr.write(0x1000)?; // PAGE_SIZE
+                size_ptr.write(PAGE_SIZE)?;
             }
             Topic::CpuStats => {
                 // Requires a root or system-info resource handle.

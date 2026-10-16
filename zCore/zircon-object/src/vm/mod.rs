@@ -9,8 +9,8 @@ use super::{ZxError, ZxResult};
 use alloc::sync::Arc;
 pub use hal::{CachePolicy, DevVAddr, MMUFlags, PhysAddr, VirtAddr, PAGE_SIZE};
 
-/// log2(PAGE_SIZE)
-pub const PAGE_SIZE_LOG2: usize = 12;
+/// log2(PAGE_SIZE), derived from PAGE_SIZE.
+pub const PAGE_SIZE_LOG2: usize = PAGE_SIZE.trailing_zeros() as usize;
 
 /// Check whether `x` is a multiple of `PAGE_SIZE`.
 pub fn page_aligned(x: usize) -> bool {
