@@ -325,14 +325,9 @@ StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 # NoStreamFromContiguousOrPhysicalVmo crashes (boot_options) — keep.
 
-# ── Memory probe — crashes the runner (UD2 abort) ────────────────────
-# memory-probe.cc spawns a child thread, catches its page-fault
-# exception, and checks the synth_code. Our kernel demand-pages
-# uncommitted memory instead of faulting, so the assertion at
-# memory-probe.cc:130 fires and aborts the whole test process.
-# (VmoTestCase.* and Pager.* wildcards already cover the rest.)
-Vmar.MapRangeResizable
-Vmar.MapRangeStreamSizeWraparound
+# ── Memory probe ─────────────────────────────────────────────────────
+# MapRangeResizable and MapRangeStreamSizeWraparound now pass
+# (PTE invalidation on content_size decrease + FAULT_BEYOND fixes).
 
 # ── Memory mapping ───────────────────────────────────────────────────
 
