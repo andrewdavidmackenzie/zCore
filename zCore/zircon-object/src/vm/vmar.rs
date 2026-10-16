@@ -118,7 +118,7 @@ impl VmAddressRegion {
         if self.parent.is_none() {
             const ASPACE_STRIDE: usize = 0x4000_0000; // must match new_root()
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-            let base = 0x4_0000_0000usize;
+            let base = 0x9_0000_0000usize; // must match new_root()
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize;
             if self.addr >= base {
@@ -183,8 +183,14 @@ impl VmAddressRegion {
             // within the 47-bit user VA limit (~128 TB).
             const ASPACE_STRIDE: usize = 0x4000_0000; // 1 GB
             const ASPACE_SIZE: usize = ASPACE_STRIDE;
+            // On aarch64 macOS: must be above both the macOS MAP_FIXED
+            // minimum (0x4_0000_0000) and the PMEM mapping region
+            // (0x8_0000_0000..0x8_4000_0000). macOS also limits
+            // MAP_FIXED to ~60GB, so the base + max_stride must fit.
+            // Using 0x9_0000_0000 (36 GB) leaves room for ~24 IDs
+            // at 1GB stride before hitting the ~60GB limit.
             #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-            let base = 0x4_0000_0000usize; // 16 GB (macOS MAP_FIXED minimum)
+            let base = 0x9_0000_0000usize;
             #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
             let base = 0x2_0000_0000usize; // 8 GB
             (base + ASPACE_STRIDE * i, ASPACE_SIZE)
@@ -342,7 +348,7 @@ impl VmAddressRegion {
         len: usize,
         flags: MMUFlags,
     ) -> ZxResult<VirtAddr> {
-        self.map_ext(
+        let result = self.map_ext(
             vmar_offset,
             vmo,
             vmo_offset,
@@ -352,7 +358,14 @@ impl VmAddressRegion {
             false,
             true,
             false,
-        )
+        );
+        if let Err(ref e) = result {
+            hal_impl::console::console_write_fmt(format_args!(
+                "VMAR::map FAILED: addr={:#x} len={:#x} err={:?}\n",
+                self.addr, len, e
+            ));
+        }
+        result
     }
 
     /// Map the `vmo` into this VMAR.
@@ -457,6 +470,10 @@ impl VmAddressRegion {
                 self.determine_offset(inner, vmar_offset, len, PAGE_SIZE)
             }
             .map_err(|e| {
+                hal_impl::console::console_write_fmt(format_args!(
+                    "VMAR map_ext: determine_offset FAIL vmar={:#x} len={:#x} err={:?}\n",
+                    self.addr, len, e
+                ));
                 // For SPECIFIC maps (offset is Some), convert overlap errors
                 // to ALREADY_EXISTS per Fuchsia's zx_vmar_map semantics.
                 if e == ZxError::INVALID_ARGS && vmar_offset.is_some() {
@@ -491,6 +508,14 @@ impl VmAddressRegion {
                 }
                 self.unmap_inner(addr, len, inner)?;
             } else {
+                hal_impl::console::console_write_fmt(format_args!(
+                    "VMAR map_ext: test_map FAIL addr={:#x} off={:#x} len={:#x} maps={} kids={}\n",
+                    self.addr,
+                    offset,
+                    len,
+                    inner.mappings.len(),
+                    inner.children.len()
+                ));
                 return Err(ZxError::NO_MEMORY);
             }
         }
@@ -508,7 +533,13 @@ impl VmAddressRegion {
         // permission. Mappings with no R/W/X are address reservations
         // that should fault on access (matching Fuchsia behavior).
         if map_range {
-            mapping.map()?;
+            if let Err(e) = mapping.map() {
+                hal_impl::console::console_write_fmt(format_args!(
+                    "VMAR map_ext: mapping.map() failed addr={:#x} len={:#x} err={:?}\n",
+                    addr, len, e
+                ));
+                return Err(e);
+            }
         }
         inner.mappings.push(mapping);
         Ok(addr)
@@ -1867,7 +1898,15 @@ impl VmMapping {
                         paddr,
                         commit_flags,
                     )
-                    .map_err(|_| ZxError::NO_MEMORY)?;
+                    .map_err(|e| {
+                        hal_impl::console::console_write_fmt(format_args!(
+                            "VmMapping::map pt.map failed va={:#x} pa={:#x} err={:?}\n",
+                            inner.addr + i * PAGE_SIZE,
+                            paddr,
+                            e
+                        ));
+                        ZxError::NO_MEMORY
+                    })?;
             }
             Ok(())
         })

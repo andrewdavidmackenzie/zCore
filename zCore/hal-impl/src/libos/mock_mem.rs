@@ -38,6 +38,21 @@ fn host_page_size() -> usize {
     *CACHED.get_or_init(|| unsafe { nix::libc::sysconf(nix::libc::_SC_PAGESIZE) as usize })
 }
 
+/// Check if a host page is currently mapped (accessible) using mincore.
+/// Returns false if the page is unmapped (stale entries from recycled
+/// address spaces). Used defensively in sync_pmem_to_user/sync_user_to_pmem
+/// and mmap conflict detection (#709).
+fn is_page_mapped(vaddr: usize, len: usize) -> bool {
+    let mut vec = alloc::vec![0u8; (len + host_page_size() - 1) / host_page_size()];
+    unsafe {
+        nix::libc::mincore(
+            vaddr as *mut nix::libc::c_void,
+            len,
+            vec.as_mut_ptr() as *mut _,
+        ) == 0
+    }
+}
+
 impl MockMemory {
     pub fn new(size: usize) -> Self {
         let dir = tempfile::tempdir().expect("failed to create pmem directory");
@@ -48,7 +63,7 @@ impl MockMemory {
             OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_RDWR,
             Mode::S_IRWXU,
         )
-        .expect("faild to open");
+        .expect("failed to open");
         unistd::ftruncate(fd, size as _).expect("failed to set size of shared memory!");
 
         let mem = Self {
@@ -58,7 +73,6 @@ impl MockMemory {
             anon_paddr_to_vaddr: std::sync::Mutex::new(std::collections::HashMap::new()),
         };
         // Map the entire physical memory backing store at PMEM_MAP_VADDR.
-        // This is always MAP_SHARED so VMO read/write via phys_to_virt works.
         mem.mmap_file(PMEM_MAP_VADDR, size, 0, MMUFlags::READ | MMUFlags::WRITE);
         mem
     }
@@ -177,6 +191,10 @@ impl MockMemory {
             // Helper: create anonymous mapping for this host page.
             // Returns false if the mapping failed (e.g., low address on macOS).
             let map_anon = || -> bool {
+                // On macOS, MAP_FIXED | MAP_ANON can return EACCES if the
+                // address previously had a MAP_SHARED file mapping. Clear
+                // any stale association first.
+                let _ = unsafe { mman::munmap(aligned_vaddr as _, hps) };
                 let result = unsafe {
                     mman::mmap(
                         aligned_vaddr as _,
@@ -190,9 +208,8 @@ impl MockMemory {
                 match result {
                     Ok(_) => true,
                     Err(err) => {
-                        warn!(
-                            "mmap anon failed: vaddr={:#x}, len={:#x}: {:?} \
-                             (macOS restricts MAP_FIXED at low addresses)",
+                        eprintln!(
+                            "mmap anon failed: vaddr={:#x}, len={:#x}: {:?}",
                             aligned_vaddr, hps, err
                         );
                         false
@@ -248,23 +265,30 @@ impl MockMemory {
                 Some(HostPageState::FileBacked(_)) => {
                     // Conflict: different file region or offset mismatch.
                     // Save existing data, convert to anonymous.
+                    // First verify the page is still mapped — it may have
+                    // been munmap'd by a previous test's cleanup (#709).
+                    let page_mapped = is_page_mapped(aligned_vaddr, hps);
                     let mut saved = vec![0u8; hps];
-                    unsafe {
-                        core::ptr::copy_nonoverlapping(
-                            aligned_vaddr as *const u8,
-                            saved.as_mut_ptr(),
-                            hps,
-                        );
+                    if page_mapped {
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(
+                                aligned_vaddr as *const u8,
+                                saved.as_mut_ptr(),
+                                hps,
+                            );
+                        }
                     }
                     if !map_anon() {
                         return false;
                     }
-                    unsafe {
-                        core::ptr::copy_nonoverlapping(
-                            saved.as_ptr(),
-                            aligned_vaddr as *mut u8,
-                            hps,
-                        );
+                    if page_mapped {
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(
+                                saved.as_ptr(),
+                                aligned_vaddr as *mut u8,
+                                hps,
+                            );
+                        }
                     }
                     pages.insert(aligned_vaddr, HostPageState::Anonymous);
                     true
@@ -348,6 +372,7 @@ impl MockMemory {
     pub fn sync_pmem_to_user(&self, paddr: PhysAddr, len: usize) {
         let map = self.anon_paddr_to_vaddr.lock().unwrap();
         let page_size = 0x1000usize;
+        let hps = host_page_size();
         let start_page = paddr & !(page_size - 1);
         let end = paddr + len;
         let mut page = start_page;
@@ -360,6 +385,14 @@ impl MockMemory {
                 if copy_len > 0 {
                     let src = (PMEM_MAP_VADDR + copy_start) as *const u8;
                     for &vaddr in vaddrs {
+                        // Probe the target address for writeability before
+                        // copying. Stale entries can persist when frames are
+                        // recycled across tests (#709). Use mincore to check
+                        // if the page is mapped.
+                        let host_page = vaddr & !(hps - 1);
+                        if !is_page_mapped(host_page, hps) {
+                            continue;
+                        }
                         let dst = (vaddr + offset_in_page) as *mut u8;
                         unsafe { core::ptr::copy_nonoverlapping(src, dst, copy_len) };
                     }
@@ -376,6 +409,7 @@ impl MockMemory {
     /// mapped vaddr as the authoritative source.
     pub fn sync_user_to_pmem(&self, paddr: PhysAddr, len: usize) {
         let map = self.anon_paddr_to_vaddr.lock().unwrap();
+        let hps = host_page_size();
         let page_size = 0x1000usize;
         let start_page = paddr & !(page_size - 1);
         let end = paddr + len;
@@ -383,6 +417,12 @@ impl MockMemory {
         while page < end {
             if let Some(vaddrs) = map.get(&page) {
                 if let Some(&vaddr) = vaddrs.first() {
+                    // Verify the user VA is still mapped (#709).
+                    let host_page = vaddr & !(hps - 1);
+                    if !is_page_mapped(host_page, hps) {
+                        page += page_size;
+                        continue;
+                    }
                     let offset_in_page = paddr.saturating_sub(page);
                     let copy_start = page + offset_in_page;
                     let copy_end = (page + page_size).min(end);
@@ -458,6 +498,19 @@ impl MockMemory {
                     aligned_vaddr, aligned_len, prot, err
                 )
             });
+    }
+
+    /// Clear all user-space mapping state (host_pages + anon tracking).
+    /// Called between tests to prevent stale state from leaking across
+    /// test boundaries.  The PMEM backing file and its mapping at
+    /// PMEM_MAP_VADDR are preserved — only user-space mappings are cleared.
+    /// Remove all user VA tracking entries for a physical address.
+    /// Called when a physical frame is deallocated to prevent
+    /// `sync_pmem_to_user` from writing to stale user VAs after
+    /// the frame is recycled (#709).
+    pub fn clear_paddr_mappings(&self, paddr: PhysAddr) {
+        let aligned = paddr & !(0xFFF);
+        self.anon_paddr_to_vaddr.lock().unwrap().remove(&aligned);
     }
 
     pub fn phys_to_virt(&self, paddr: PhysAddr) -> VirtAddr {

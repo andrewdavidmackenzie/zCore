@@ -124,6 +124,19 @@ impl_kobject!(Process
 );
 define_count_helper!(Process);
 
+impl Drop for Process {
+    fn drop(&mut self) {
+        // Ensure the VMAR is destroyed when the process is dropped.
+        // This cleans up host memory mappings (munmap) before the
+        // address space ID is recycled (#709).
+        // Skip for shared processes — their VMAR is owned by the
+        // source process and must not be destroyed here.
+        if !self.is_shared() {
+            let _ = self.vmar.destroy();
+        }
+    }
+}
+
 #[derive(Default)]
 struct ProcessInner {
     status: Status,
