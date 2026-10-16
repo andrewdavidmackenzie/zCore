@@ -12,6 +12,7 @@ use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::object::{HandleValue, KernelObject};
 use zircon_object::task::{BasicPolicy, PolicyAction, PolicyCondition, SetPolicyOptions};
+use zircon_object::vm::PAGE_SIZE;
 use zircon_object::ZxError;
 
 /// Helper: create a channel pair through the syscall layer.
@@ -4232,7 +4233,7 @@ fn add_vmo(
     size: u64,
 ) -> (HandleValue, alloc::sync::Arc<zircon_object::vm::VmObject>) {
     use zircon_object::vm::VmObject;
-    let vmo = VmObject::new_paged(size as usize / 4096 + 1);
+    let vmo = VmObject::new_paged(size as usize / PAGE_SIZE + 1);
     let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
         vmo.clone(),
         zircon_object::object::Rights::DEFAULT_VMO,
@@ -4532,7 +4533,7 @@ fn call_etc_disposition_failure_sets_result_field_and_returns_first_error() {
 #[test]
 fn call_etc_from_wrong_object_type_returns_wrong_type() {
     let ctx = TestContext::new();
-    let (vmo_h, _vmo) = add_vmo(&ctx, 4096);
+    let (vmo_h, _vmo) = add_vmo(&ctx, PAGE_SIZE as u64);
 
     let wr_data = [0u8; 4];
     let mut rd_buf = [0u8; 64];

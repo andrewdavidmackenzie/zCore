@@ -17,6 +17,7 @@ extern crate alloc;
 use crate::helpers::TestContext;
 use zircon_object::dev::Resource;
 use zircon_object::object::{Handle, Rights};
+use zircon_object::vm::PAGE_SIZE;
 
 /// C++: TEST_F(MsiTest, AllocateSyscall)
 /// Test `zx::msi::allocate(resource, count, &msi)` with various
@@ -81,7 +82,7 @@ fn create_syscall_args() {
 
     // MSI capability struct is 24 bytes.
     let msi_capability_size: u32 = 24;
-    let vmo_size: u32 = 4096; // page size
+    let vmo_size: u32 = PAGE_SIZE as u32; // page size
 
     // vmo_offset past end → INVALID_ARGS.
     assert!(vmo_size <= vmo_size, "offset=size is past end");
@@ -155,7 +156,7 @@ fn msix() {
     assert_ne!(vector_control_masked, 0);
 
     let _msi_cnt: u32 = 8;
-    let vmo_size: u32 = 4096;
+    let vmo_size: u32 = PAGE_SIZE as u32;
 
     // Test offset calculations for table entry fitting.
     let test_cases: &[(bool, u32, u32)] = &[

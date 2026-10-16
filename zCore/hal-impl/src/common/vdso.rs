@@ -1,3 +1,4 @@
+use crate::PAGE_SIZE;
 use core::fmt::{Debug, Error, Formatter};
 use git_version::git_version;
 
@@ -96,7 +97,7 @@ pub(crate) fn vdso_constants_template() -> VdsoConstants {
         },
         dcache_line_size: 64,
         icache_line_size: 64,
-        page_size: 4096,
+        page_size: PAGE_SIZE as u32,
         padding: 0,
         physmem: 0,
         version_string_len: 0,

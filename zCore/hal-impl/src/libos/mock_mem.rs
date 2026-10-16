@@ -254,7 +254,7 @@ impl MockMemory {
                         nix::libc::mincore(
                             aligned_vaddr as *mut nix::libc::c_void,
                             hps,
-                            &mut resident as *mut u8 as *mut nix::libc::c_char,
+                            &mut resident as *mut u8 as *mut i8,
                         )
                     } == 0;
                     let mut saved = vec![0u8; hps];
@@ -384,7 +384,7 @@ impl MockMemory {
                             nix::libc::mincore(
                                 host_page as *mut nix::libc::c_void,
                                 hps,
-                                &mut resident as *mut u8 as *mut nix::libc::c_char,
+                                &mut resident as *mut u8 as *mut i8,
                             )
                         };
                         if rc != 0 {
@@ -422,7 +422,7 @@ impl MockMemory {
                         nix::libc::mincore(
                             host_page as *mut nix::libc::c_void,
                             hps,
-                            &mut resident as *mut u8 as *mut nix::libc::c_char,
+                            &mut resident as *mut u8 as *mut i8,
                         )
                     };
                     if rc != 0 {
