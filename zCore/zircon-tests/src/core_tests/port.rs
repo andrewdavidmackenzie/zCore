@@ -5,7 +5,7 @@
 
 use crate::helpers::TestContext;
 use hal_impl::user::{UserInPtr, UserOutPtr};
-use zircon_object::object::{HandleValue, Signal};
+use zircon_object::object::{HandleValue, KernelObject, Rights, Signal};
 use zircon_object::signal::{PayloadRepr, PortPacket, PortPacketRepr};
 use zircon_object::ZxError;
 
@@ -893,9 +893,60 @@ async fn wait_async_boot_timestamp() {
 ///
 /// Main thread reads the exception from the process exception channel,
 /// verifies the exception type and synth_code, then resumes the thread.
-#[test]
-#[ignore = "requires policy exception infrastructure and worker threads — not yet implemented"]
-fn queue_packet_limit_exceeded_generates_policy_exception() {}
+/// When a port exceeds its packet limit (4096), the kernel raises
+/// ZX_EXCP_POLICY_ERROR with synth_code PORT_TOO_MANY_PACKETS (17).
+#[async_std::test]
+async fn queue_packet_limit_exceeded_generates_policy_exception() {
+    use crate::helpers::{self, ExceptionTestThread};
+    use zircon_object::task::{
+        policy_code, ExceptionObject, ExceptionType, Job, Process, Task, ThreadState,
+    };
+    extern crate alloc;
+
+    helpers::ensure_hal_init();
+    let job = Job::root();
+    let proc = Process::create(&job, "port-exc").unwrap();
+
+    // Create process exception channel before starting the thread.
+    let exc_channel = proc
+        .exceptionate()
+        .create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS)
+        .unwrap();
+
+    // Start thread that raises PORT_TOO_MANY_PACKETS exception.
+    let test_thread = ExceptionTestThread::start(&proc, policy_code::PORT_TOO_MANY_PACKETS, 0);
+
+    // Wait for exception to arrive.
+    let exc_channel_obj: alloc::sync::Arc<dyn KernelObject> = exc_channel.clone();
+    exc_channel_obj
+        .wait_signal(Signal::READABLE | Signal::PEER_CLOSED)
+        .await;
+
+    // Read and verify the exception.
+    let msg = exc_channel.read().unwrap();
+    assert_eq!(msg.handles.len(), 1);
+
+    let exc_type_raw = u32::from_ne_bytes(msg.data[16..20].try_into().unwrap());
+    assert_eq!(exc_type_raw, ExceptionType::PolicyError as u32);
+
+    let report = test_thread.thread.get_thread_exception_info().unwrap();
+    assert_eq!(report.synth_code, policy_code::PORT_TOO_MANY_PACKETS);
+
+    // Resume the thread (HANDLED).
+    let exc_obj = msg.handles[0]
+        .object
+        .clone()
+        .downcast_arc::<ExceptionObject>()
+        .unwrap();
+    exc_obj.set_state(1).unwrap();
+    drop(exc_obj);
+    drop(msg);
+
+    test_thread.wait_for_termination().await;
+    assert_eq!(test_thread.thread.state(), ThreadState::Dead);
+
+    proc.exit(0);
+}
 
 /// C++: TEST(PortTest, TooManyObservers)
 /// port/ports.cc:1155

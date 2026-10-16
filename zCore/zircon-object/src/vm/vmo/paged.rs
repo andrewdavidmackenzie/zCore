@@ -352,7 +352,7 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn set_len(&self, len: usize) -> ZxResult {
         assert!(page_aligned(len));
-        let old_parent = {
+        let (old_parent, old_size) = {
             let (_guard, mut inner) = self.get_inner_mut();
             if inner.pin_count > 0 {
                 return Err(ZxError::BAD_STATE);
@@ -371,9 +371,24 @@ impl VMObjectTrait for VMObjectPaged {
                     return Err(ZxError::INVALID_ARGS);
                 }
             }
-            inner.resize(len)
+            let old_size = inner.size;
+            let old_parent = inner.resize(len);
+            // Unmap pages in mappings for the removed range. This
+            // invalidates hardware page table entries so accesses to
+            // the truncated region fault correctly.
+            if len < old_size {
+                let start_page = len / PAGE_SIZE;
+                let removed_pages = (old_size - len) / PAGE_SIZE;
+                for map_weak in inner.mappings.iter() {
+                    if let Some(map) = map_weak.upgrade() {
+                        map.range_change(start_page, removed_pages, RangeChangeOp::Unmap);
+                    }
+                }
+            }
+            (old_parent, old_size)
         };
         drop(old_parent);
+        let _ = old_size; // suppress unused warning
         Ok(())
     }
 
