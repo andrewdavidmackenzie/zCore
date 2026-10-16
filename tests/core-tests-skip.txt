@@ -108,7 +108,7 @@ Property.RegisterGsNoncanonical
 # Offset: now passes — removed from skip
 # WriteCowParent, AllocateAfterMergeMultipleChildren: polling hang
 VmoZeroTestCase.WriteCowParent
-VmoZeroTestCase.AllocateAfterMergeMultipleChildren
+# VmoZeroTestCase.AllocateAfterMergeMultipleChildren — removed, now passes
 
 # ── VmoTestCase (individual hangs/crashes) ────────────────────────────
 # ~28 pass, ~18 fail without hanging. Skip only tests that hang or
