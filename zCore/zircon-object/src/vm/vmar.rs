@@ -1851,6 +1851,14 @@ impl VmMapping {
                     flags
                 };
                 let paddr = commit(vmo_offset + i, commit_flags)?;
+                // For zero-permission pages (no RXW, just USER), skip
+                // the page table mapping. The page is committed in the
+                // VMO and will be mapped when protect() grants access.
+                // On x86_64, a present PTE is always readable, so NOT
+                // mapping is the only way to enforce no-access.
+                if !flags.intersects(MMUFlags::RXW) {
+                    continue;
+                }
                 page_table
                     .map(
                         Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::Size4K),
@@ -2030,10 +2038,20 @@ impl VmMapping {
                 // deny all access is to clear the PRESENT bit.
                 pg_table.unmap(vaddr).ignore().unwrap();
             } else {
-                pg_table
-                    .update(vaddr, None, Some(new_flags))
-                    .ignore()
-                    .unwrap();
+                // Try updating existing PTE. If the page wasn't mapped
+                // (e.g., initially zero-permission), map it now using
+                // the committed page from the VMO.
+                let update_result = pg_table.update(vaddr, None, Some(new_flags));
+                if update_result.is_err() {
+                    // Page not yet mapped — commit and map it.
+                    let vmo_page = inner.vmo_offset / PAGE_SIZE + i;
+                    if let Ok(paddr) = self.vmo.commit_page(vmo_page, new_flags) {
+                        pg_table
+                            .map(Page::new_aligned(vaddr, PageSize::Size4K), paddr, new_flags)
+                            .ignore()
+                            .unwrap();
+                    }
+                }
             }
         }
         // For large lazy mappings (empty per-page flags vec), persist the
