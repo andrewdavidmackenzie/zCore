@@ -90,7 +90,7 @@ PortTest.QueuePacketLimitExceededGeneratesPolicyException
 PortTest.TooManyObservers
 ChannelTest.ChannelFullException
 DefaultExceptionHandlerTest.UnhandledPolicyException
-DefaultExceptionHandlerTest.UnhandledHardwareException
+# DefaultExceptionHandlerTest.UnhandledHardwareException — removed, now passes
 # UserExceptionsTest: raise ZX_EXCP_USER from test thread, requires
 # concurrent exception channel handling (cooperative scheduler hangs).
 # InvalidArgs passes (validates args before raising).
