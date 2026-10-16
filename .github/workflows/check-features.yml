@@ -16,6 +16,10 @@ jobs:
         with:
           components: rust-src
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: check-features
+
       - name: Install cargo-all-features
         run: cargo install cargo-all-features
 
