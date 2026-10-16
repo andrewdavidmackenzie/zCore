@@ -219,14 +219,19 @@ impl Pager {
         }
         match op {
             ZX_PAGER_OP_FAIL => {
-                // Validate error code: must be a recognized Fuchsia error.
+                // Error code must be a valid (negative) Fuchsia status code.
+                // Map well-known codes to their ZxError variant; for others
+                // use a generic mapping.  Fuchsia accepts any zx_status_t.
                 let data_i32 = data as i32;
+                if data_i32 >= 0 {
+                    return Err(ZxError::INVALID_ARGS);
+                }
                 let err = match data_i32 {
-                    -54 => ZxError::NO_SPACE,          // ZX_ERR_NO_SPACE
-                    -5 => ZxError::IO,                 // ZX_ERR_IO
-                    -29 => ZxError::IO_DATA_INTEGRITY, // ZX_ERR_IO_DATA_INTEGRITY
-                    -45 => ZxError::BAD_STATE,         // ZX_ERR_BAD_STATE
-                    _ => return Err(ZxError::INVALID_ARGS),
+                    -54 => ZxError::NO_SPACE,
+                    -5 => ZxError::IO,
+                    -29 => ZxError::IO_DATA_INTEGRITY,
+                    -45 => ZxError::BAD_STATE,
+                    _ => ZxError::IO, // generic fallback for unknown codes
                 };
                 vmo.fail_pager_requests_range(offset as usize, length as usize, err);
                 Ok(())

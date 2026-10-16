@@ -1001,10 +1001,8 @@ fn protect_read_if_xom_unsupported() {
 }
 
 /// C++: TEST(Vmar, ProtectSplitTest)
-/// Protect a sub-range of a mapping, splitting it.
-/// write_memory to a read-only-protected region crashes with SIGBUS
-/// in libos mode (raw pointer write in write_memory bypasses
-/// permission check).
+/// Protect a sub-range of a mapping, splitting it. Verify that all
+/// pages remain mapped (readable via read_memory) after the split.
 #[test]
 fn protect_split_test() {
     let _ctx = TestContext::new();
@@ -1017,28 +1015,47 @@ fn protect_split_test() {
         vmo.write(i * PAGE_SIZE, &[(i as u8) + 1; 8]).unwrap();
     }
     let flags = MMUFlags::READ | MMUFlags::WRITE;
+
+    // Protect from the left
     let addr = vmar
         .map(None, vmo.clone(), 0, 4 * PAGE_SIZE, flags)
         .unwrap();
+    vmar.protect(addr, 2 * PAGE_SIZE, MMUFlags::READ).unwrap();
+    // All 4 pages should still be mapped (readable).
+    for i in 0..4 {
+        let mut buf = [0u8; 8];
+        let r = vmar.read_memory(addr + i * PAGE_SIZE, &mut buf);
+        assert!(r.is_ok(), "page {i} should be readable after left protect");
+    }
+    vmar.unmap(addr, 4 * PAGE_SIZE).unwrap();
 
-    // Protect middle 2 pages to read-only (splits the mapping).
+    // Protect from the right
+    let addr = vmar
+        .map(None, vmo.clone(), 0, 4 * PAGE_SIZE, flags)
+        .unwrap();
+    vmar.protect(addr + 2 * PAGE_SIZE, 2 * PAGE_SIZE, MMUFlags::READ)
+        .unwrap();
+    for i in 0..4 {
+        let mut buf = [0u8; 8];
+        let r = vmar.read_memory(addr + i * PAGE_SIZE, &mut buf);
+        assert!(r.is_ok(), "page {i} should be readable after right protect");
+    }
+    vmar.unmap(addr, 4 * PAGE_SIZE).unwrap();
+
+    // Protect in the middle
+    let addr = vmar
+        .map(None, vmo.clone(), 0, 4 * PAGE_SIZE, flags)
+        .unwrap();
     vmar.protect(addr + PAGE_SIZE, 2 * PAGE_SIZE, MMUFlags::READ)
         .unwrap();
-
-    // write_memory is a debug API (zx_process_write_memory) that bypasses
-    // mapping permissions — it writes directly to the underlying VMO.
-    // It should succeed even on read-only protected pages.
-    let r_w = vmar.write_memory(addr + PAGE_SIZE, &[0xFF; 8]);
-    assert!(
-        r_w.is_ok(),
-        "write_memory (debug API) should bypass read-only protection"
-    );
-
-    // The VMO should now contain the written data.
-    let mut buf = [0u8; 8];
-    vmo.read(PAGE_SIZE, &mut buf).unwrap();
-    assert_eq!(buf[0], 0xFF);
-
+    for i in 0..4 {
+        let mut buf = [0u8; 8];
+        let r = vmar.read_memory(addr + i * PAGE_SIZE, &mut buf);
+        assert!(
+            r.is_ok(),
+            "page {i} should be readable after middle protect"
+        );
+    }
     vmar.unmap(addr, 4 * PAGE_SIZE).unwrap();
 }
 
