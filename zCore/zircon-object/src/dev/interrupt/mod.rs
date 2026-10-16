@@ -390,7 +390,13 @@ impl Interrupt {
                     InterruptState::Destroy => return Err(ZxError::CANCELED),
                     InterruptState::Triggered => {
                         inner.state = InterruptState::NeedAck;
-                        let timestamp = inner.timestamp;
+                        // Use trigger_timestamp if timestamp was cleared
+                        // (e.g., after trigger-with-port then unbind).
+                        let timestamp = if inner.timestamp != 0 {
+                            inner.timestamp
+                        } else {
+                            inner.trigger_timestamp
+                        };
                         inner.timestamp = 0;
                         self.wait_event.signal_clear(Signal::SIGNALED);
                         return Ok(timestamp);

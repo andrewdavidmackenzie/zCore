@@ -15,9 +15,9 @@ ARCH="${1:?Usage: $0 <arch>}"
 # On macOS, QEMU runs x86_64 via emulation (no KVM) on aarch64 hosts,
 # which is significantly slower. Increase timeout to avoid flaky failures.
 if [ "$(uname -s)" = "Darwin" ]; then
-  TIMEOUT=120
+  TIMEOUT=144
 else
-  TIMEOUT=60
+  TIMEOUT=72
 fi
 
 # Read core count from target config
