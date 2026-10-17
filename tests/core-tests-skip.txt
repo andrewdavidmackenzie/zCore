@@ -203,3 +203,6 @@ WakeReportTestsPortBound.AlreadyTimedOut
 WakeReportTestsPortBound.ReportOnly
 WakeReportTestsPortBound.Acked
 WakeReportTestsPortBound.AckedStillPending
+
+# ── VmoZero/VmoClone2 hangs ─────────────────────────────────────────
+VmoZeroTestCase.AllocateAfterMergeMultipleChildren
