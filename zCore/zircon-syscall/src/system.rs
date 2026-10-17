@@ -506,7 +506,7 @@ impl Syscall<'_> {
             hdr_out = (hdr_out.as_addr() + 8).into();
             hdr_out.write_array(&suspend_start_time.to_ne_bytes())?;
             hdr_out = (hdr_out.as_addr() + 8).into();
-            hdr_out.write_array(&(total_wake_sources as u32).to_ne_bytes())?;
+            hdr_out.write_array(&total_wake_sources.to_ne_bytes())?;
             hdr_out = (hdr_out.as_addr() + 4).into();
             hdr_out.write_array(&0u32.to_ne_bytes())?; // reserved
         }
