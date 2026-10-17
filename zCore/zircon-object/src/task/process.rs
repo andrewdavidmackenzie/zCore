@@ -815,6 +815,19 @@ impl Process {
             .collect()
     }
 
+    /// Count active wake sources (interrupt handles) in this process.
+    ///
+    /// Each Interrupt object handle counts as a potential wake source.
+    /// Used by `zx_system_suspend_enter` to populate the wake report.
+    pub fn count_wake_sources(&self) -> u32 {
+        let inner = self.inner.lock();
+        inner
+            .handles
+            .values()
+            .filter(|(handle, _)| handle.object.type_name() == "Interrupt")
+            .count() as u32
+    }
+
     /// Add a thread to the process.
     pub(super) fn add_thread(&self, thread: Arc<Thread>) -> ZxResult {
         let mut inner = self.inner.lock();

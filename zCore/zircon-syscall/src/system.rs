@@ -458,12 +458,13 @@ impl Syscall<'_> {
         resource: HandleValue,
         resume_deadline: u64,
         options: u64,
-        _out_header: usize,
+        out_header: usize,
         out_entries: usize,
         num_entries: u32,
         mut actual_entries: UserOutPtr<u32>,
     ) -> ZxResult {
         const ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY: u64 = 0x2;
+        const _ZX_SYSTEM_SUSPEND_OPTION_DISCARD: u64 = 0x1;
 
         info!(
             "system.suspend_enter: resource={:#x}, deadline={}, options={:#x}",
@@ -480,9 +481,37 @@ impl Syscall<'_> {
             )?;
         }
 
-        // REPORT_ONLY: skip the suspend operation entirely, just return
-        // the current wake report entries (0 entries since we don't track
-        // wake sources yet).
+        // Count active IRQ wake sources from the process's interrupt handles.
+        // Each Interrupt object with WAKE_VECTOR flag counts as a wake source.
+        let active_wake_sources = proc.count_wake_sources();
+        // Total wake sources = active IRQ sources + 1 (kernel deadline timer).
+        let total_wake_sources = active_wake_sources + 1;
+
+        // Write the wake report header.
+        // zx_wake_source_report_header_t = {
+        //   u64 report_time,       // boot time when report was generated
+        //   u64 suspend_start_time,// boot time suspend started (infinite for REPORT_ONLY)
+        //   u32 total_wake_sources,
+        //   u32 reserved,
+        // } = 24 bytes
+        if out_header != 0 {
+            let report_time = hal_impl::timer::timer_now().as_nanos() as u64;
+            let suspend_start_time = if options & ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY != 0 {
+                i64::MAX as u64 // ZX_TIME_INFINITE_BOOT
+            } else {
+                report_time
+            };
+            let mut hdr_out: UserOutPtr<u8> = out_header.into();
+            hdr_out.write_array(&report_time.to_ne_bytes())?;
+            hdr_out = (hdr_out.as_addr() + 8).into();
+            hdr_out.write_array(&suspend_start_time.to_ne_bytes())?;
+            hdr_out = (hdr_out.as_addr() + 8).into();
+            hdr_out.write_array(&(total_wake_sources as u32).to_ne_bytes())?;
+            hdr_out = (hdr_out.as_addr() + 4).into();
+            hdr_out.write_array(&0u32.to_ne_bytes())?; // reserved
+        }
+
+        // REPORT_ONLY: skip the suspend operation entirely.
         if options & ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY != 0 {
             actual_entries.write_if_not_null(0)?;
             return Ok(());
