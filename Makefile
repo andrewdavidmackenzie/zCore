@@ -383,11 +383,11 @@ core-tests-build:
 		cargo zcore-build -m qemu-x86_64 --flavour ""
 	@echo "==> [3/4] Building Zircon rootfs (with core-tests-standalone + libs)..."
 	@mkdir -p target/rootfs/zircon/x86_64/etc
-	@if [ -n "$(CORE_TESTS_FILTER)" ]; then \
-		echo "--gtest_filter=$(CORE_TESTS_FILTER)" > target/rootfs/zircon/x86_64/etc/extra-args; \
-	else \
-		rm -f target/rootfs/zircon/x86_64/etc/extra-args; \
-	fi
+ifneq ($(strip $(CORE_TESTS_FILTER)),)
+	@printf '%s\n' '--gtest_filter=$(CORE_TESTS_FILTER)' > target/rootfs/zircon/x86_64/etc/extra-args
+else
+	@rm -f target/rootfs/zircon/x86_64/etc/extra-args
+endif
 	@cargo xtask zircon-rootfs --arch x86_64
 	@echo "==> [4/4] Creating boot image with rootfs ramdisk..."
 	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml

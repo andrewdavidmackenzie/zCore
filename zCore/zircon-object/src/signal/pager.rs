@@ -86,7 +86,12 @@ impl Pager {
         }
         let vmo_pages = if unbounded {
             // UNBOUNDED: VMO capacity is maximum; size arg is just content_size.
-            256 * 1024 // 1GB
+            let cap = 256 * 1024usize; // 1GB in pages
+                                       // Validate content_size fits within VMO capacity before allocating.
+            if size as usize > cap * PAGE_SIZE {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
+            cap
         } else {
             (size as usize).div_ceil(PAGE_SIZE)
         };
@@ -94,10 +99,6 @@ impl Pager {
         // Set content_size: for UNBOUNDED, this is the user's requested size;
         // for regular VMOs, it's the VMO's actual (page-rounded) size.
         if unbounded {
-            // Content size must fit within the VMO's capacity.
-            if size as usize > vmo.len() {
-                return Err(ZxError::OUT_OF_RANGE);
-            }
             vmo.set_content_size(size as usize)?;
         } else {
             vmo.set_content_size(vmo.len())?;
