@@ -1825,21 +1825,41 @@ impl VmMapping {
     /// vmo is: create_vmo, op_range(commit), map
     fn map(self: &Arc<Self>) -> ZxResult {
         let vmo_pages = self.vmo.len() / PAGE_SIZE;
+        // Build a set of committed pages BEFORE acquiring the VMO lock
+        // (committed_pages_in_range acquires the VMO's internal lock,
+        // which would deadlock inside commit_pages_with).
+        let (page_num, vmo_offset) = {
+            let inner = self.inner.lock();
+            (inner.size / PAGE_SIZE, inner.vmo_offset / PAGE_SIZE)
+        };
+        // On bare-metal, only map already-committed pages (uncommitted
+        // pages will be demand-faulted). In libos mode, all pages must
+        // be eagerly committed since there's no page fault handler.
+        let skip_uncommitted = cfg!(target_os = "none");
+        let mut is_committed =
+            alloc::vec![true; page_num.min(vmo_pages.saturating_sub(vmo_offset))];
+        if skip_uncommitted {
+            for (i, c) in is_committed.iter_mut().enumerate() {
+                *c = self
+                    .vmo
+                    .committed_pages_in_range(vmo_offset + i, vmo_offset + i + 1)
+                    > 0;
+            }
+        }
+        let is_cow = self.vmo.parent().is_some();
         self.vmo.commit_pages_with(&mut |commit| {
             let inner = self.inner.lock();
             let mut page_table = self.page_table.lock();
-            let page_num = inner.size / PAGE_SIZE;
-            let vmo_offset = inner.vmo_offset / PAGE_SIZE;
-            // For COW children, commit with READ-only to avoid
-            // allocating private zero frames for uncommitted pages.
-            // Root VMOs need WRITE to work correctly with eager map.
-            let is_cow = self.vmo.parent().is_some();
             for i in 0..page_num {
-                // Skip pages beyond the VMO's current size. For resizable
-                // VMOs, the mapping may be larger than the VMO — pages
-                // past the end are demand-faulted (returning OUT_OF_RANGE).
                 if vmo_offset + i >= vmo_pages {
                     break;
+                }
+                // Only map pages that are already committed. Uncommitted
+                // pages will be demand-faulted on first access. This
+                // matches Fuchsia's MapRange(commit=false) which only
+                // populates PTEs for existing pages.
+                if i < is_committed.len() && !is_committed[i] {
+                    continue;
                 }
                 let flags = inner.page_flags(i);
                 let commit_flags = if is_cow {
