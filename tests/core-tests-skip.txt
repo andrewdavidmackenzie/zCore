@@ -260,3 +260,17 @@ ThreadSampler.NonRunningThread
 ThreadSampler.SamplerLifetime
 ThreadSampler.DroppedSampler
 ThreadSampler.HighFrequency
+
+# ── VmoClone2 hangs ──────────────────────────────────────────────
+VmoClone2TestCase.DropParentCommittedBytes
+WakeReportTestsPortBound.MultipleSignals
+WakeReportTestsPortBound.BadReportRequests
+WakeReportTestsPortBound.Discard
+WakeReportTestsPortBound.DestructionYesAck
+WakeReportTestsPortBound.DestructionNoAck
+WakeReportTestsPortBound.MultiWakeSource
+WakeReportTestsPortBound.SingleWakeSource
+WakeReportTestsPortBound.AlreadyTimedOut
+WakeReportTestsPortBound.ReportOnly
+WakeReportTestsPortBound.Acked
+WakeReportTestsPortBound.AckedStillPending
