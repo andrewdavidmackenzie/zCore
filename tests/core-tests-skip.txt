@@ -25,18 +25,9 @@ Threads.ProcessStartOnSecondThread
 Threads.ReadingFpRegisterState
 Threads.ReadingGeneralRegisterState
 Threads.ReadingVectorRegisterState
-Threads.ResumeSuspended
 Threads.StartRegs
 Threads.StartRegsNoncanonicalTp
 Threads.StartRegsSuspended
-Threads.StartSuspendedAndResumedThread
-Threads.StartSuspendedThread
-Threads.SuspendAfterDeath
-Threads.SuspendChannelCall
-Threads.SuspendMultiple
-Threads.SuspendPortCall
-Threads.SuspendSleeping
-Threads.SuspendStopsThread
 Threads.SyscallDebuggerModifyResult
 Threads.SyscallSuspendedRegisterState
 Threads.ThreadStartInvalidEntry
@@ -46,19 +37,15 @@ Threads.WriteReadDebugRegisterState
 Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
 Threads.WritingArmFlagsRegister
 Threads.WritingFpRegisterState
-Threads.WritingGeneralRegisterState
 Threads.WritingSingleStepState
 Threads.WritingVectorRegisterState
 Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
 Threads.X86AcFlagUserCopy
 
 # ── Policy exception infrastructure ─────────────────────────────────
-PortTest.QueuePacketLimitExceededGeneratesPolicyException
-PortTest.TooManyObservers
 ChannelTest.ChannelFullException
 DefaultExceptionHandlerTest.UnhandledPolicyException
 UserExceptionsTest.NonFatal
-UserExceptionsTest.Delivered
 
 # ── COW populated_bytes ──────────────────────────────────────────────
 VmoZeroTestCase.WriteCowParent
