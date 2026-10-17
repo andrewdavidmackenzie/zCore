@@ -361,7 +361,7 @@ CORE_TESTS_SKIP_FILE ?= tests/core-tests-skip.txt
 ifndef CORE_TESTS_FILTER
   ifneq ($(wildcard $(CORE_TESTS_SKIP_FILE)),)
     CORE_TESTS_FILTER := $(shell sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) \
-                            | paste -sd ':' | sed 's/^/-/')
+                            | paste -s -d ':' - | sed 's/^/-/')
   endif
 endif
 CORE_TESTS_FILTER ?=
