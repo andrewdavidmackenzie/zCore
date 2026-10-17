@@ -1138,6 +1138,9 @@ impl VMObjectPagedInner {
             }
             if !surviving.frames.contains_key(&idx) && value.tag != tag.negate() {
                 value.tag = PageStateTag::Owned;
+                // After merge, the surviving child is the sole owner of
+                // this page — reset share_count to 0 (private).
+                value.share_count = 0;
                 surviving.frames.insert(idx, value);
             }
         }
