@@ -6,33 +6,19 @@
 PortStressTest.ChannelCallWaitQueuePanicRepro
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
-PortStressTest.CancelKeyCloseRace
 ChannelTest.NoSpuriousReadableSignalWhenRacing
-ChannelInternalTest.TransferChannelWithPendingCall
 ProcessTest.KillChannelHandleCycle
 
 # ── Thread suspend / register state ─────────────────────────────────
 Threads.BadSyscallCaller
-Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
-Threads.DebugRegistersDr6ResetOnDebugException
-Threads.DebugRegistersValidation
-Threads.DebugRegistersWatchpointSyscallPanicRepro
 Threads.ExitViaException
-Threads.InfoThreadStatsFails
 Threads.NoncanonicalRipAddressIRETQ
 Threads.NoncanonicalRipAddressSyscall
-Threads.ProcessStartOnSecondThread
 Threads.ReadingFpRegisterState
 Threads.ReadingGeneralRegisterState
 Threads.ReadingVectorRegisterState
-Threads.StartRegs
-Threads.StartRegsNoncanonicalTp
 Threads.StartRegsSuspended
-Threads.SyscallDebuggerModifyResult
-Threads.SyscallSuspendedRegisterState
 Threads.ThreadStartInvalidEntry
-Threads.ThreadStartOnInitialThread
-Threads.WatchpointSyscallPanic
 Threads.WriteReadDebugRegisterState
 Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
 Threads.WritingArmFlagsRegister
@@ -44,7 +30,6 @@ Threads.X86AcFlagUserCopy
 
 # ── Policy exception infrastructure ─────────────────────────────────
 ChannelTest.ChannelFullException
-DefaultExceptionHandlerTest.UnhandledPolicyException
 UserExceptionsTest.NonFatal
 
 # ── COW populated_bytes ──────────────────────────────────────────────
