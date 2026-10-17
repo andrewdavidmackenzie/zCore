@@ -303,18 +303,37 @@ fn port_bound_report_only() {
     // Get root resource handle for the syscall.
     let root_resource = ctx.add_root_resource();
 
+    // REPORT_ONLY requires a header buffer (matching Fuchsia's
+    // BadReportRequests test). Passing out_header=0 with REPORT_ONLY
+    // should return INVALID_ARGS.
     let mut actual_entries: u32 = 0xFFFF;
     let result = sc.sys_system_suspend_enter(
         root_resource,
         0,   // deadline (irrelevant for REPORT_ONLY)
         0x2, // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
-        0,   // out_header (unused)
-        0,   // out_entries buffer (0 = no buffer)
-        0,   // num_entries capacity
+        0,   // out_header = nullptr → INVALID_ARGS
+        0,
+        0,
         hal_impl::user::UserOutPtr::from(&mut actual_entries as *mut u32 as usize),
     );
-    assert!(result.is_ok(), "REPORT_ONLY should succeed");
-    assert_eq!(actual_entries, 0, "no pending wake report entries");
+    assert_eq!(
+        result,
+        Err(zircon_object::ZxError::INVALID_ARGS),
+        "REPORT_ONLY without header should fail"
+    );
+
+    // With a header buffer, REPORT_ONLY should succeed.
+    let mut header = [0u8; 24];
+    let result = sc.sys_system_suspend_enter(
+        root_resource,
+        0,                            // deadline
+        0x2,                          // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
+        header.as_mut_ptr() as usize, // out_header
+        0,                            // out_entries (header-only)
+        0,
+        hal_impl::user::UserOutPtr::from(0usize), // actual_entries null
+    );
+    assert!(result.is_ok(), "REPORT_ONLY with header should succeed");
 }
 
 /// C++: TEST_F(WakeReportTestsPortBound, SmallReportBuffer)
