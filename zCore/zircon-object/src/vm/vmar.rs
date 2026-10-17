@@ -790,13 +790,10 @@ impl VmAddressRegion {
             .any(|child| child.end_addr() > addr && child.addr() < end_addr);
 
         // COMMIT and DECOMMIT cannot span child VMARs — return INVALID_ARGS.
-        // COMMIT, DECOMMIT, ZERO, and PREFETCH cannot span child VMARs.
-        if children_overlap
-            && matches!(
-                op,
-                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero | VmarOpType::Prefetch
-            )
-        {
+        // ZERO cannot span child VMARs (Fuchsia returns INVALID_ARGS).
+        // COMMIT/DECOMMIT/PREFETCH recurse into children — the coverage
+        // check below catches gaps (returning BAD_STATE).
+        if children_overlap && matches!(op, VmarOpType::Zero) {
             return Err(ZxError::INVALID_ARGS);
         }
 
@@ -1832,11 +1829,11 @@ impl VmMapping {
             let inner = self.inner.lock();
             (inner.size / PAGE_SIZE, inner.vmo_offset / PAGE_SIZE)
         };
-        // On bare-metal with COW VMOs, only map already-committed pages
-        // (uncommitted pages will be demand-faulted). This prevents
-        // eagerly creating private copies of all parent pages.
-        // For non-COW VMOs and in libos mode, eagerly commit all pages.
-        let skip_uncommitted = cfg!(target_os = "none") && self.vmo.has_parent();
+        // On bare-metal, only map already-committed pages. Uncommitted
+        // pages will be demand-faulted on first access. This prevents
+        // mapping an empty VMO from allocating spurious zero frames.
+        // In libos mode, eagerly commit all pages (no page fault handler).
+        let skip_uncommitted = cfg!(target_os = "none");
         let mut is_committed =
             alloc::vec![true; page_num.min(vmo_pages.saturating_sub(vmo_offset))];
         if skip_uncommitted {
