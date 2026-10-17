@@ -572,7 +572,11 @@ impl VmObject {
         if let Some(port) = &inner.pager_port {
             let page_idx = offset / PAGE_SIZE;
             // Don't send duplicate port requests for the same page.
-            if !inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx) {
+            // Also skip if the page is already committed (avoids
+            // spurious requests on fault retries after supply).
+            let already_committed =
+                self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0;
+            if !already_committed && !inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx) {
                 port.push(PortPacketRepr {
                     key: inner.pager_key,
                     status: ZxError::OK,
