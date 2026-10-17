@@ -158,6 +158,10 @@ struct ThreadInner {
     /// Default is `ZIRCON_DEFAULT_PRIORITY` (16), matching Fuchsia.
     /// Set via `zx_object_set_profile()`.
     priority: usize,
+    /// CPU affinity mask. Bit N set means the thread may run on CPU N.
+    /// Default: all online CPUs (bit 0 for single-CPU).
+    /// Set via `zx_object_set_profile()` with CPU_MASK flag.
+    cpu_affinity_mask: [u64; 8],
 }
 
 impl ThreadInner {
@@ -265,6 +269,11 @@ impl Thread {
             inner: Mutex::new(ThreadInner {
                 context: Some(Box::new(UserContext::new())),
                 priority: ZIRCON_DEFAULT_PRIORITY,
+                cpu_affinity_mask: {
+                    let mut mask = [0u64; 8];
+                    mask[0] = 1; // Default: CPU 0 available
+                    mask
+                },
                 ..Default::default()
             }),
         });
@@ -311,6 +320,15 @@ impl Thread {
     /// The priority is clamped to 0-31.
     pub fn set_priority(&self, priority: usize) {
         self.inner.lock().priority = priority.min(31);
+    }
+
+    /// Set the CPU affinity mask for this thread.
+    ///
+    /// Bit N set means the thread may run on CPU N.
+    /// Not enforced by the scheduler, but reported via
+    /// `zx_object_get_info(ZX_INFO_THREAD)`.
+    pub fn set_cpu_affinity_mask(&self, mask: [u64; 8]) {
+        self.inner.lock().cpu_affinity_mask = mask;
     }
 
     /// Signal a deferred policy exception, matching Fuchsia's
@@ -463,7 +481,7 @@ impl Thread {
                 .exception
                 .as_ref()
                 .map_or(0, |exception| exception.current_channel_type() as u32),
-            cpu_affinity_mask: [0u64; 8],
+            cpu_affinity_mask: inner.cpu_affinity_mask,
         }
     }
 
