@@ -1512,8 +1512,6 @@ impl VMObjectPagedInner {
         let total_pages = self.size / PAGE_SIZE;
         let committed = (self.committed_pages_in_range(0, total_pages) * PAGE_SIZE) as u64;
         info.committed_bytes = committed;
-        // No compression/deduplication, so populated == committed.
-        info.populated_bytes = committed;
 
         // Private bytes: pages in self.frames that are directly owned
         // by this VMO (not resolved from a parent via COW walk).
@@ -1521,6 +1519,13 @@ impl VMObjectPagedInner {
         let private_bytes = (private_pages * PAGE_SIZE) as u64;
         info.committed_private_bytes = private_bytes;
         info.populated_private_bytes = private_bytes;
+
+        // populated_bytes: ideally this should use fractional page
+        // attribution (page_size / share_count) for COW pages, matching
+        // Fuchsia's VmCowPages::AttributedPagesInRangeLocked.
+        // For now, use committed bytes (total, not fractional).
+        // TODO: implement fractional attribution (#668 section 17).
+        info.populated_bytes = committed;
 
         // Compute per-page fractional attribution by walking the COW tree.
         let attribution = self.compute_attribution(0, total_pages);
