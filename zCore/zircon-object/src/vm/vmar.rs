@@ -2053,8 +2053,26 @@ impl VmMapping {
                 #[cfg(target_os = "none")]
                 pg_table.unmap(vaddr).ignore().unwrap();
             } else {
+                // For COW pages (pages shared with a parent VMO),
+                // keep the PTE read-only even if the mapping allows
+                // write. The next write access will fault and trigger
+                // a COW copy via handle_page_fault. This matches
+                // Fuchsia's protect behavior for SNAPSHOT children.
+                let pte_flags = if new_flags.contains(MMUFlags::WRITE)
+                    && self.vmo.has_parent()
+                    && self.vmo.is_cow_child()
+                {
+                    let page_idx = inner.vmo_offset / PAGE_SIZE + i;
+                    if self.vmo.page_is_shared(page_idx) {
+                        new_flags & !MMUFlags::WRITE
+                    } else {
+                        new_flags
+                    }
+                } else {
+                    new_flags
+                };
                 pg_table
-                    .update(vaddr, None, Some(new_flags))
+                    .update(vaddr, None, Some(pte_flags))
                     .ignore()
                     .unwrap();
             }

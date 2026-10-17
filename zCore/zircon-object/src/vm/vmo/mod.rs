@@ -124,6 +124,16 @@ pub trait VMObjectTrait: Sync + Send {
         false
     }
 
+    /// Whether this VMO is a COW child (SNAPSHOT or SNAPSHOT_AT_LEAST_ON_WRITE).
+    fn is_cow_child(&self) -> bool {
+        false
+    }
+
+    /// Whether the page at the given index is shared with the parent VMO.
+    fn page_is_shared(&self, _page_idx: usize) -> bool {
+        false
+    }
+
     /// Mark this VMO as pager-backed. Pages will not be auto-committed
     /// by `commit_page` — they must be supplied via the pager.
     fn set_pager_backed(&self) {}
@@ -1184,6 +1194,23 @@ impl VmObject {
             }
         }
         self.resizable
+    }
+
+    /// Whether this VMO has a parent (i.e., it's a child VMO).
+    pub fn has_parent(&self) -> bool {
+        self.inner.lock().parent.strong_count() > 0
+    }
+
+    /// Whether this VMO is a COW (copy-on-write) child.
+    /// True for SNAPSHOT and SNAPSHOT_AT_LEAST_ON_WRITE children.
+    pub fn is_cow_child(&self) -> bool {
+        self.trait_.is_cow_child()
+    }
+
+    /// Whether the page at the given index is shared with the parent VMO
+    /// (i.e., not yet copied for COW).
+    pub fn page_is_shared(&self, page_idx: usize) -> bool {
+        self.trait_.page_is_shared(page_idx)
     }
 
     /// Called when all handles to this VMO are closed.
