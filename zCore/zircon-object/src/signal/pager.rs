@@ -174,11 +174,13 @@ impl Pager {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate: offset and length must be page-aligned.
-        if offset as usize % PAGE_SIZE != 0 || length as usize % PAGE_SIZE != 0 {
+        if !(offset as usize).is_multiple_of(PAGE_SIZE)
+            || !(length as usize).is_multiple_of(PAGE_SIZE)
+        {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate: aux_offset must be page-aligned.
-        if aux_offset as usize % PAGE_SIZE != 0 {
+        if !(aux_offset as usize).is_multiple_of(PAGE_SIZE) {
             return Err(ZxError::INVALID_ARGS);
         }
         let mut buf = alloc::vec![0u8; PAGE_SIZE];
