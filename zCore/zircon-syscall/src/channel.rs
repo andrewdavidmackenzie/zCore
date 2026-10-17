@@ -35,7 +35,7 @@ impl Syscall<'_> {
         let channel = proc.get_object_with_rights::<Channel>(handle_value, Rights::READ)?;
         let never_discard = options & MAY_DISCARD == 0;
 
-        let msg = if never_discard {
+        let mut msg = if never_discard {
             channel.check_and_read(|front_msg| {
                 if num_bytes < front_msg.data.len() as u32
                     || num_handles < front_msg.handles.len() as u32
@@ -54,16 +54,24 @@ impl Syscall<'_> {
         actual_bytes.write_if_not_null(msg.data.len() as u32)?;
         actual_handles.write_if_not_null(msg.handles.len() as u32)?;
         if num_bytes < msg.data.len() as u32 || num_handles < msg.handles.len() as u32 {
+            // Message is being discarded — close in-transit handles.
+            msg.close_in_transit_handles();
             return Err(ZxError::BUFFER_TOO_SMALL);
         }
         bytes.write_array(msg.data.as_slice())?;
+        // Fire cancel tokens from the sender's process, matching
+        // Fuchsia's dispatcher->Cancel(handle) in msg_get_handles
+        // before adding handles to the receiver's table.
+        for sender in msg.cancel_senders {
+            let _ = sender.send(());
+        }
         if is_etc {
             let mut handle_infos: Vec<HandleInfo> = msg
                 .handles
                 .iter()
                 .map(|handle| handle.get_handle_info())
                 .collect();
-            let values = proc.add_handles(msg.handles);
+            let values = proc.add_handles_for_transfer(msg.handles);
             for (i, value) in values.iter().enumerate() {
                 handle_infos[i].handle = *value;
             }
@@ -75,7 +83,7 @@ impl Syscall<'_> {
                 return Err(e.into());
             }
         } else {
-            let values = proc.add_handles(msg.handles);
+            let values = proc.add_handles_for_transfer(msg.handles);
             if let Err(e) = UserOutPtr::<HandleValue>::from(handles).write_array(&values) {
                 // Copy-out failed — remove handles to prevent leaking.
                 for &v in &values {
@@ -118,12 +126,14 @@ impl Syscall<'_> {
         // list includes the channel's own handle, remove_handles would
         // close it and the lookup would fail with BAD_HANDLE.
         let channel = proc.get_object_with_rights::<Channel>(handle_value, Rights::WRITE);
-        // Consume handles immediately — Fuchsia guarantees handles are
+        // Remove handles for transfer — Fuchsia guarantees handles are
         // always consumed by channel_write regardless of subsequent errors.
-        let handles = if !handle_values.is_empty() {
-            proc.remove_handles(&handle_values)?
+        // Use remove_handles_for_transfer: does NOT fire cancel tokens
+        // or decrement handle counts. The handles are "in transit".
+        let (handles, cancel_senders) = if !handle_values.is_empty() {
+            proc.remove_handles_for_transfer(&handle_values)?
         } else {
-            alloc::vec::Vec::new()
+            (alloc::vec::Vec::new(), alloc::vec::Vec::new())
         };
         if handles.len() > 64 {
             return Err(ZxError::OUT_OF_RANGE);
@@ -137,7 +147,11 @@ impl Syscall<'_> {
                 return Err(ZxError::ACCESS_DENIED);
             }
         }
-        let result = channel.write(MessagePacket { data, handles });
+        let result = channel.write(MessagePacket {
+            data,
+            handles,
+            cancel_senders,
+        });
         if let Err(ZxError::SHOULD_WAIT) = &result {
             // Channel message queue is full — signal a deferred policy
             // exception matching Fuchsia's
@@ -209,9 +223,9 @@ impl Syscall<'_> {
         if wr_data.len() < 4 {
             return Err(ZxError::INVALID_ARGS);
         }
-        let wr_handles = {
+        let (wr_handles, wr_cancel_senders) = {
             let handles = args.wr_handles.read_array(args.wr_num_handles as usize)?;
-            let handles = proc.remove_handles(&handles)?;
+            let (handles, senders) = proc.remove_handles_for_transfer(&handles)?;
             if handles.len() > 64 {
                 return Err(ZxError::OUT_OF_RANGE);
             }
@@ -220,11 +234,12 @@ impl Syscall<'_> {
                     return Err(ZxError::ACCESS_DENIED);
                 }
             }
-            handles
+            (handles, senders)
         };
         let wr_msg = MessagePacket {
             data: wr_data,
             handles: wr_handles,
+            cancel_senders: wr_cancel_senders,
         };
 
         let cancel_token = proc.get_cancel_token(handle_value)?;
@@ -249,8 +264,12 @@ impl Syscall<'_> {
             return Err(ZxError::BUFFER_TOO_SMALL);
         }
         args.rd_bytes.write_array(rd_msg.data.as_slice())?;
+        // Fire cancel tokens from the sender's process.
+        for sender in rd_msg.cancel_senders {
+            let _ = sender.send(());
+        }
         args.rd_handles
-            .write_array(&proc.add_handles(rd_msg.handles))?;
+            .write_array(&proc.add_handles_for_transfer(rd_msg.handles))?;
         Ok(())
     }
 
@@ -346,7 +365,11 @@ impl Syscall<'_> {
         }
         ret?;
         let channel = proc.get_object_with_rights::<Channel>(handle, Rights::WRITE)?;
-        let result = channel.write(MessagePacket { data, handles });
+        let result = channel.write(MessagePacket {
+            data,
+            handles,
+            cancel_senders: alloc::vec::Vec::new(),
+        });
         if let Err(ZxError::SHOULD_WAIT) = &result {
             // Channel message queue is full — signal a deferred policy
             // exception matching Fuchsia's
@@ -453,7 +476,11 @@ impl Syscall<'_> {
         if handles.len() > 64 {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        let wr_msg = MessagePacket { data, handles };
+        let wr_msg = MessagePacket {
+            data,
+            handles,
+            cancel_senders: Vec::new(),
+        };
         let cancel_token = proc.get_cancel_token(handle_value)?;
         let future = channel.call(wr_msg);
         pin_mut!(future);

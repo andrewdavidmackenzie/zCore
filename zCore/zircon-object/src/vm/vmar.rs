@@ -837,13 +837,25 @@ impl VmAddressRegion {
             }
             let map_start = addr.max(map.addr());
             let map_end = end_addr.min(map.end_addr());
-            let (vmo_offset, op_len) = {
+            let (vmo_offset, op_len, fault_beyond) = {
                 let map_inner = map.inner.lock();
                 (
                     map_inner.vmo_offset + (map_start - map_inner.addr),
                     map_end - map_start,
+                    map_inner.fault_beyond_stream_size,
                 )
             };
+            // For FAULT_BEYOND_STREAM_SIZE mappings, reject operations
+            // that extend past the page-aligned stream_size (content_size).
+            // Matches Fuchsia's check before the op switch.
+            if fault_beyond {
+                let cs = map.vmo.content_size();
+                let vmo_size = map.vmo.len();
+                let stream_size = ((cs + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)).min(vmo_size);
+                if vmo_offset > stream_size || op_len > stream_size - vmo_offset {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+            }
             match op {
                 VmarOpType::Commit => {
                     // COMMIT requires the mapping to have WRITE permission,
@@ -872,18 +884,8 @@ impl VmAddressRegion {
                     map.vmo.zero(vmo_offset, op_len)?;
                 }
                 VmarOpType::DontNeed | VmarOpType::AlwaysNeed => {
-                    // For mappings with FAULT_BEYOND_STREAM_SIZE, check
-                    // that the range is within the VMO's content_size.
-                    // This matches Fuchsia's behavior where DONT_NEED/
-                    // ALWAYS_NEED on a range beyond content_size returns
-                    // OUT_OF_RANGE.
-                    let map_inner = map.inner.lock();
-                    if map_inner.fault_beyond_stream_size {
-                        let content_size = map.vmo.content_size();
-                        if vmo_offset >= content_size || vmo_offset + op_len > content_size {
-                            return Err(ZxError::OUT_OF_RANGE);
-                        }
-                    }
+                    // Hint only — no-op for now.
+                    // stream_size check already handled above.
                 }
                 VmarOpType::Prefetch => {
                     // Performance hint — no-op for now.
@@ -1100,10 +1102,31 @@ impl VmAddressRegion {
         align: usize,
         upper_limit: usize,
     ) -> Option<usize> {
-        let candidates: alloc::vec::Vec<usize> = core::iter::once(offset_hint)
-            .chain(inner.children.iter().map(|map| map.end_addr() - self.addr))
-            .chain(inner.mappings.iter().map(|map| map.end_addr() - self.addr))
+        // Collect all occupied region boundaries (start, end) sorted by start.
+        let mut regions: alloc::vec::Vec<(usize, usize)> = inner
+            .children
+            .iter()
+            .map(|c| (c.addr() - self.addr, c.end_addr() - self.addr))
+            .chain(
+                inner
+                    .mappings
+                    .iter()
+                    .map(|m| (m.addr() - self.addr, m.end_addr() - self.addr)),
+            )
             .collect();
+        regions.sort_by_key(|&(start, _)| start);
+
+        // Build candidate offsets: the hint, end of each region, and
+        // aligned starts within each gap.
+        let mut candidates: alloc::vec::Vec<usize> =
+            alloc::vec::Vec::with_capacity(regions.len() + 2);
+        candidates.push(offset_hint);
+
+        // Try end of each occupied region (the start of the next gap).
+        for &(_, end) in &regions {
+            candidates.push(end);
+        }
+
         candidates.into_iter().find_map(|offset| {
             let aligned = if align > 0 {
                 let mask = align - 1;
@@ -2009,8 +2032,26 @@ impl VmMapping {
                 #[cfg(target_os = "none")]
                 pg_table.unmap(vaddr).ignore().unwrap();
             } else {
+                // For COW pages (pages shared with a parent VMO),
+                // keep the PTE read-only even if the mapping allows
+                // write. The next write access will fault and trigger
+                // a COW copy via handle_page_fault. This matches
+                // Fuchsia's protect behavior for SNAPSHOT children.
+                let pte_flags = if new_flags.contains(MMUFlags::WRITE)
+                    && self.vmo.has_parent()
+                    && self.vmo.is_cow_child()
+                {
+                    let page_idx = inner.vmo_offset / PAGE_SIZE + i;
+                    if self.vmo.page_is_shared(page_idx) {
+                        new_flags & !MMUFlags::WRITE
+                    } else {
+                        new_flags
+                    }
+                } else {
+                    new_flags
+                };
                 pg_table
-                    .update(vaddr, None, Some(new_flags))
+                    .update(vaddr, None, Some(pte_flags))
                     .ignore()
                     .unwrap();
             }
@@ -2061,6 +2102,12 @@ impl VmMapping {
     /// Get the offset into the VMO where this mapping starts.
     pub fn vmo_offset(&self) -> usize {
         self.inner.lock().vmo_offset
+    }
+
+    /// Check if the given address range is fully within this mapping.
+    pub fn covers_range(&self, addr: usize, end: usize) -> bool {
+        let inner = self.inner.lock();
+        addr >= inner.addr && end <= inner.end_addr()
     }
 
     /// Get the mapping's permission flags (from the VMAR map call).
@@ -2155,13 +2202,16 @@ impl VmMapping {
             flags.remove(MMUFlags::WRITE);
         }
         // If ZX_VM_FAULT_BEYOND_STREAM_SIZE is set, fault on accesses
-        // past the VMO's content_size instead of returning zeroes.
-        // Note: already-mapped pages are not invalidated when content_size
-        // shrinks — a full implementation would need the VMO to track
-        // its mappings and unmap pages beyond the new content_size.
-        // This check catches faults on not-yet-mapped pages correctly.
-        if fault_beyond && vmo_offset >= self.vmo.content_size() {
-            return Err(ZxError::OUT_OF_RANGE);
+        // past the page containing the VMO's content_size instead of
+        // returning zeroes.  Match Fuchsia's saturating_stream_size:
+        // page-align the content_size upward, capped at VMO size.
+        if fault_beyond {
+            let cs = self.vmo.content_size();
+            let vmo_size = self.vmo.len();
+            let stream_size = ((cs + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)).min(vmo_size);
+            if vmo_offset >= stream_size {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
         }
         // For pager-backed VMOs, check if the page is committed before
         // attempting commit_page. If absent, notify the pager and return

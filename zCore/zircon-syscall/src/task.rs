@@ -561,8 +561,12 @@ impl Syscall<'_> {
                     // as a high-priority fair-scheduled thread.
                     thread.set_priority(31);
                 }
-                // CPU affinity: stored on the profile but not yet
-                // enforced by the scheduler.
+                // CPU affinity: store the mask on the thread.
+                // Not enforced by the scheduler (single CPU), but
+                // reported via ZX_INFO_THREAD.
+                if flags.contains(ProfileInfoFlags::CPU_MASK) {
+                    thread.set_cpu_affinity_mask(info.cpu_affinity_mask);
+                }
             }
             Err(ZxError::WRONG_TYPE) => {
                 // Not a thread — try VMAR (any profile type accepted,

@@ -132,6 +132,7 @@ fn transfer_rights_via_channel() {
     let msg = MessagePacket {
         data: alloc::vec![],
         handles: alloc::vec![handle],
+        ..Default::default()
     };
     local.write(msg).unwrap();
     let received = remote.read().unwrap();

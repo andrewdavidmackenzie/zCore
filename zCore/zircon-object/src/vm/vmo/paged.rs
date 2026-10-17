@@ -146,8 +146,15 @@ impl PageStateTag {
 }
 
 /// Result of per-page fractional attribution computation.
+///
+/// Tracks both raw bytes (full PAGE_SIZE per page) and scaled bytes
+/// (PAGE_SIZE / share_count), matching Fuchsia's `AttributionCounts`.
 #[derive(Default)]
 struct Attribution {
+    /// Total raw bytes (PAGE_SIZE per owned page, regardless of sharing).
+    total_bytes: u64,
+    /// Private bytes (PAGE_SIZE only for pages with share_count==0).
+    private_bytes: u64,
     /// Sum of `PAGE_SIZE / sharing_count` for each page (integer part).
     scaled_bytes: u64,
     /// 63-bit fixed-point fractional remainder from the division.
@@ -156,11 +163,18 @@ struct Attribution {
 
 impl Attribution {
     /// Add one page with the given sharing count to the attribution.
+    ///
+    /// `sharing_count` is share_count+1 (number of VMOs that can see this page).
+    /// For private pages (share_count==0), sharing_count==1.
     fn add_page(&mut self, sharing_count: u64) {
         if sharing_count == 0 {
             return;
         }
         let page_size = PAGE_SIZE as u64;
+        self.total_bytes += page_size;
+        if sharing_count == 1 {
+            self.private_bytes += page_size;
+        }
         // Integer part
         self.scaled_bytes += page_size / sharing_count;
         // Fractional part: (PAGE_SIZE % sharing_count) << 63 / sharing_count
@@ -646,6 +660,19 @@ impl VMObjectTrait for VMObjectPaged {
         self.get_inner_mut().1.pager_backed = true;
     }
 
+    fn is_cow_child(&self) -> bool {
+        let (_guard, inner) = self.get_inner();
+        matches!(inner.type_, VMOType::Snapshot)
+    }
+
+    fn page_is_shared(&self, page_idx: usize) -> bool {
+        let (_guard, inner) = self.get_inner();
+        // A page is shared if the child doesn't have its own copy.
+        // If the page is not in the child's frame table, it comes
+        // from the parent (shared).
+        !inner.frames.contains_key(&page_idx)
+    }
+
     fn is_pager_backed(&self) -> bool {
         self.get_inner().1.pager_backed
     }
@@ -808,6 +835,18 @@ impl VMObjectPagedInner {
                 // caller can request pages from the pager. WRITE is
                 // allowed — it allocates frames normally (the pager
                 // tracks dirty state separately).
+                // Zero markers: return zero page reference for reads
+                // without allocating a frame. The zero marker stays in
+                // place so the page continues to count as "zero" for
+                // attribution. Only writes allocate a real frame.
+                if has_zero_marker && !flags.contains(MMUFlags::WRITE) {
+                    static ZERO_PAGE_ZM: spin::Lazy<Option<PhysFrame>> =
+                        spin::Lazy::new(PhysFrame::new_zero);
+                    return match ZERO_PAGE_ZM.as_ref() {
+                        Some(zp) => Ok(CommitResult::Ref(zp.paddr())),
+                        None => Err(ZxError::NO_MEMORY),
+                    };
+                }
                 if self.pager_backed
                     && !self.supplying
                     && !has_zero_marker
@@ -927,10 +966,11 @@ impl VMObjectPagedInner {
             }
         }
         let frame = self.frames.get_mut(&page_idx).unwrap();
-        // Share_count-based COW (no tags):
-        // - share_count == 0: last viewer → migrate for write, ref for read
-        // - share_count > 0: shared → copy for write, ref for read
+        // COW fork: when a child writes to a shared page in a hidden node,
+        // create a private copy for the writer and tag the original so
+        // the other child exclusively owns it.
         if self.type_.is_hidden() && flags.contains(MMUFlags::WRITE) {
+            let (_child_tag, _) = self.type_.get_tag_and_other(child);
             if frame.share_count == 0 {
                 // Last viewer — migrate the frame out.
                 let target_frame = self.frames.remove(&page_idx).unwrap().take();
@@ -1099,6 +1139,9 @@ impl VMObjectPagedInner {
             }
             if !surviving.frames.contains_key(&idx) && value.tag != tag.negate() {
                 value.tag = PageStateTag::Owned;
+                // After merge, the surviving child is the sole owner of
+                // this page — reset share_count to 0 (private).
+                value.share_count = 0;
                 surviving.frames.insert(idx, value);
             }
         }
@@ -1496,21 +1539,23 @@ impl VMObjectPagedInner {
         info.num_mappings = self.mappings.len() as u64;
         info.share_count = if self.mappings.is_empty() { 0 } else { 1 };
 
+        // Compute attribution by walking the COW tree with proper
+        // tag-based visibility. This gives us total_bytes (raw),
+        // private_bytes, and scaled_bytes (fractional).
         let total_pages = self.size / PAGE_SIZE;
-        let committed = (self.committed_pages_in_range(0, total_pages) * PAGE_SIZE) as u64;
-        info.committed_bytes = committed;
-        // No compression/deduplication, so populated == committed.
-        info.populated_bytes = committed;
-
-        // Private bytes: pages in self.frames that are directly owned
-        // by this VMO (not resolved from a parent via COW walk).
-        let private_pages = self.frames.len();
-        let private_bytes = (private_pages * PAGE_SIZE) as u64;
-        info.committed_private_bytes = private_bytes;
-        info.populated_private_bytes = private_bytes;
-
-        // Compute per-page fractional attribution by walking the COW tree.
         let attribution = self.compute_attribution(0, total_pages);
+
+        // committed_bytes / populated_bytes: total raw bytes of pages
+        // this VMO owns (locally or through parent chain).
+        // Matches Fuchsia's counts.total_bytes().
+        info.committed_bytes = attribution.total_bytes;
+        info.populated_bytes = attribution.total_bytes;
+
+        // Private bytes: pages with share_count == 0 (no sharing).
+        info.committed_private_bytes = attribution.private_bytes;
+        info.populated_private_bytes = attribution.private_bytes;
+
+        // Scaled bytes: fractional attribution.
         info.committed_scaled_bytes = attribution.scaled_bytes;
         info.populated_scaled_bytes = attribution.scaled_bytes;
         info.committed_fractional_scaled_bytes = attribution.fractional_scaled_bytes;
@@ -1524,6 +1569,18 @@ impl VMObjectPagedInner {
     /// `PAGE_SIZE / (share_count + 1)` for fractional attribution.
     /// Local pages have share_count=0 (private). Pages in hidden
     /// parents use the parent's share_count.
+    /// Compute page attribution for this VMO in the given range.
+    ///
+    /// Walks the COW tree from this leaf node upward through hidden
+    /// parents, respecting tag-based visibility. A page in a hidden
+    /// node is visible to a child if `page.tag != child_tag`.
+    ///
+    /// For each visible page:
+    /// - `total_bytes += PAGE_SIZE` (raw, unscaled)
+    /// - `private_bytes += PAGE_SIZE` if share_count == 0
+    /// - `scaled_bytes += PAGE_SIZE / (share_count + 1)` (fractional)
+    ///
+    /// This matches Fuchsia's `GetAttributedMemoryInRangeLocked`.
     fn compute_attribution(&self, start_idx: usize, end_idx: usize) -> Attribution {
         let pages = self.size / PAGE_SIZE;
         if pages == 0 || start_idx >= pages {
@@ -1533,8 +1590,11 @@ impl VMObjectPagedInner {
         let mut result = Attribution::default();
 
         for i in start_idx..end_idx {
-            // Case 1: local frame — private (share_count=0 → divide by 1).
+            // Case 1: local frame in this (visible) leaf node.
+            // Local frames are always private to this node.
             if let Some(page) = self.frames.get(&i) {
+                // For a visible leaf node, share_count should be 0
+                // (private). But use the actual value for correctness.
                 result.add_page((page.share_count as u64) + 1);
                 continue;
             }
@@ -1542,32 +1602,53 @@ impl VMObjectPagedInner {
             if self.zero_markers.contains(&i) {
                 continue;
             }
-            if self.parent_limit <= i * PAGE_SIZE {
+            // Check if this page is within the parent's visible range.
+            if self.parent.is_none() {
+                continue;
+            }
+            let parent_byte_offset = i * PAGE_SIZE;
+            if parent_byte_offset >= self.parent_limit {
                 continue;
             }
             // Case 2: walk up the parent chain to find the owning node.
-            // Use the page's share_count for attribution.
+            // Track which child we are at each level for tag checks.
             let mut current = self.parent.clone();
             let mut current_idx = i + self.parent_offset / PAGE_SIZE;
+            let mut child_ref = self.self_ref.clone();
+
             while let Some(vmop) = current {
                 let inner = vmop.inner.borrow();
-                // Zero markers in ancestors also block attribution.
+                // Zero markers in ancestors block attribution.
                 if inner.zero_markers.contains(&current_idx) {
                     break;
                 }
                 if let Some(frame) = inner.frames.get(&current_idx) {
+                    // Check tag visibility: in a hidden node, the child
+                    // can only see pages where tag != child_tag.
+                    if inner.type_.is_hidden() {
+                        let (child_tag, _) = inner.type_.get_tag_and_other(&child_ref);
+                        if frame.tag == child_tag {
+                            // This page was split away from us — we have
+                            // our own copy (which we already checked in
+                            // our local frames). Skip it.
+                            break;
+                        }
+                    }
                     result.add_page((frame.share_count as u64) + 1);
                     break;
                 }
-                if inner.parent_limit == 0 {
+                // No frame here — continue walking up.
+                if inner.parent.is_none() {
                     break;
                 }
-                let next = current_idx + inner.parent_offset / PAGE_SIZE;
-                if next * PAGE_SIZE >= inner.parent_limit {
+                let next_byte = current_idx * PAGE_SIZE;
+                if next_byte >= inner.parent_limit {
                     break;
                 }
-                current_idx = next;
+                let next_idx = current_idx + inner.parent_offset / PAGE_SIZE;
+                child_ref = inner.self_ref.clone();
                 current = inner.parent.clone();
+                current_idx = next_idx;
             }
         }
         result

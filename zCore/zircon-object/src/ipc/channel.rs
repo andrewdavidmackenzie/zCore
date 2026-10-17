@@ -198,20 +198,73 @@ impl Drop for Channel {
                 let _ = sender.send(Err(ZxError::PEER_CLOSED));
             }
         }
+        // Close in-transit handles in unread messages.
+        // Handles transferred via channel_write are "in transit" — their
+        // handle count was not decremented on write. When the channel is
+        // destroyed with unread messages, we must properly close those
+        // handles (decrement handle count, fire on_zero_handles).
+        // This matches Fuchsia's HandleOwner destruction in
+        // HandleTableArena::Delete.
+        // Close in-transit handles in unread messages.
+        for mut msg in self.recv_queue.lock().drain(..) {
+            msg.close_in_transit_handles();
+        }
     }
 }
 
 /// The message transferred in the channel.
 /// See [Channel](struct.Channel.html) for details.
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct MessagePacket {
     /// The data carried by the message packet
     pub data: Vec<u8>,
     /// See [Channel](struct.Channel.html) for details.
     pub handles: Vec<Handle>,
+    /// Cancel-token senders from the sending process's handle table.
+    /// These are kept alive during transit so that waits on the
+    /// transferred handles are not prematurely canceled. They are
+    /// fired on channel_read (matching Fuchsia's Cancel on read).
+    pub cancel_senders: Vec<futures::channel::oneshot::Sender<()>>,
+}
+
+impl core::fmt::Debug for MessagePacket {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("MessagePacket")
+            .field("data_len", &self.data.len())
+            .field("handles", &self.handles.len())
+            .field("cancel_senders", &self.cancel_senders.len())
+            .finish()
+    }
 }
 
 impl MessagePacket {
+    /// Close in-transit handles and fire cancel tokens.
+    ///
+    /// Call this when a message with transferred handles is being
+    /// discarded without delivering handles to a process (e.g.,
+    /// BUFFER_TOO_SMALL with MAY_DISCARD, or channel destruction
+    /// with unread messages).
+    pub fn close_in_transit_handles(&mut self) {
+        for sender in self.cancel_senders.drain(..) {
+            let _ = sender.send(());
+        }
+        for handle in self.handles.drain(..) {
+            handle.object.dec_handle_count();
+            if handle.object.handle_count() == 0 {
+                handle.object.on_zero_handles();
+            }
+        }
+    }
+    /// Create a new message packet with the given data and handles.
+    /// Cancel senders default to empty (used for non-transfer messages).
+    pub fn new(data: Vec<u8>, handles: Vec<Handle>) -> Self {
+        MessagePacket {
+            data,
+            handles,
+            cancel_senders: Vec::new(),
+        }
+    }
+
     /// Set txid (the first 4 bytes)
     pub fn set_txid(&mut self, txid: TxID) {
         if self.data.len() >= core::mem::size_of::<TxID>() {
@@ -260,12 +313,14 @@ mod tests {
             .write(MessagePacket {
                 data: Vec::from("hello 1"),
                 handles: Vec::new(),
+                ..Default::default()
             })
             .unwrap();
         channel1
             .write(MessagePacket {
                 data: Vec::from("hello 0"),
                 handles: Vec::new(),
+                ..Default::default()
             })
             .unwrap();
 
@@ -358,6 +413,7 @@ mod tests {
                     .write(MessagePacket {
                         data: Vec::from("hello 1"),
                         handles: Vec::new(),
+                        ..Default::default()
                     })
                     .unwrap();
                 // reply the call
@@ -368,6 +424,7 @@ mod tests {
                     .write(MessagePacket {
                         data,
                         handles: Vec::new(),
+                        ..Default::default()
                     })
                     .unwrap();
             }
@@ -377,6 +434,7 @@ mod tests {
             .call(MessagePacket {
                 data: Vec::from("hello 0"),
                 handles: Vec::new(),
+                ..Default::default()
             })
             .await
             .unwrap();
@@ -398,6 +456,7 @@ mod tests {
                 .call(MessagePacket {
                     data: Vec::from("hello 0"),
                     handles: Vec::new(),
+                    ..Default::default()
                 })
                 .await
                 .unwrap_err(),
@@ -423,6 +482,7 @@ mod tests {
             tx.write(MessagePacket {
                 data: vec![i],
                 handles: Vec::new(),
+                ..Default::default()
             })
             .unwrap();
         }
@@ -439,6 +499,7 @@ mod tests {
         tx.write(MessagePacket {
             data: vec![1, 2, 3],
             handles: Vec::new(),
+            ..Default::default()
         })
         .unwrap();
 

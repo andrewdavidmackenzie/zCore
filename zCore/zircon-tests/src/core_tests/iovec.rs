@@ -463,6 +463,7 @@ async fn call_few_large_iovecs() {
         .call(MessagePacket {
             data: data.clone(),
             handles: Vec::new(),
+            ..Default::default()
         })
         .await
         .expect("channel_call failed");
@@ -496,6 +497,7 @@ async fn call_many_small_iovecs() {
         .call(MessagePacket {
             data: data.clone(),
             handles: Vec::new(),
+            ..Default::default()
         })
         .await
         .expect("channel_call failed");
@@ -528,6 +530,7 @@ async fn call_with_handle() {
         .call(MessagePacket {
             data: vec![0, 0, 0, 0, 0xAA, 0xBB, 0xCC, 0xDD],
             handles: vec![handle],
+            ..Default::default()
         })
         .await
         .expect("channel_call failed");
@@ -561,6 +564,7 @@ async fn call_etc_with_handle() {
         .call(MessagePacket {
             data: vec![0, 0, 0, 0, 0x01, 0x02, 0x03, 0x04],
             handles: vec![handle],
+            ..Default::default()
         })
         .await
         .expect("channel_call failed");

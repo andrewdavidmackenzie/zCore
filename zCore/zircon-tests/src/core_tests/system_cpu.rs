@@ -73,7 +73,7 @@ fn set_performance_info_argument_validation() {
 
     // C++: invalid handle → ZX_ERR_BAD_HANDLE
     {
-        let info: [u8; 8] = [0, 0, 0, 0, 1, 0, 0, 0]; // cpu=0, scale={1,0}
+        let info: [u8; 12] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]; // cpu=0, scale={1,0}
         let result = sc.sys_system_set_performance_info(
             0, // ZX_HANDLE_INVALID
             ZX_CPU_PERF_SCALE,
@@ -86,7 +86,7 @@ fn set_performance_info_argument_validation() {
     // C++: incorrect resource kind → ZX_ERR_WRONG_TYPE
     {
         let mmio_resource = add_mmio_resource(&ctx);
-        let info: [u8; 8] = [0, 0, 0, 0, 1, 0, 0, 0];
+        let info: [u8; 12] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
         let result = sc.sys_system_set_performance_info(
             mmio_resource,
             u32::MAX, // kInvalidTopic
@@ -99,7 +99,7 @@ fn set_performance_info_argument_validation() {
     // C++: incorrect system resource range → ZX_ERR_OUT_OF_RANGE
     {
         let info_resource = add_info_resource(&ctx);
-        let info: [u8; 8] = [0, 0, 0, 0, 1, 0, 0, 0];
+        let info: [u8; 12] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
         let result = sc.sys_system_set_performance_info(
             info_resource,
             u32::MAX, // kInvalidTopic
@@ -111,7 +111,7 @@ fn set_performance_info_argument_validation() {
 
     // C++: invalid topic → ZX_ERR_INVALID_ARGS
     {
-        let info: [u8; 8] = [0, 0, 0, 0, 1, 0, 0, 0];
+        let info: [u8; 12] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
         let result = sc.sys_system_set_performance_info(
             cpu_resource,
             u32::MAX, // kInvalidTopic
@@ -134,7 +134,7 @@ fn set_performance_info_argument_validation() {
 
     // C++: count == 0 → ZX_ERR_OUT_OF_RANGE
     {
-        let info: [u8; 8] = [0, 0, 0, 0, 1, 0, 0, 0];
+        let info: [u8; 12] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
         let result = sc.sys_system_set_performance_info(
             cpu_resource,
             ZX_CPU_PERF_SCALE,
@@ -146,7 +146,7 @@ fn set_performance_info_argument_validation() {
 
     // C++: info_count > num_cpus → ZX_ERR_OUT_OF_RANGE
     {
-        let info: [u8; 8] = [0, 0, 0, 0, 1, 0, 0, 0];
+        let info: [u8; 12] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
         let result = sc.sys_system_set_performance_info(
             cpu_resource,
             ZX_CPU_PERF_SCALE,
@@ -158,8 +158,9 @@ fn set_performance_info_argument_validation() {
 
     // C++: invalid perf scale (0.0) → ZX_ERR_OUT_OF_RANGE
     {
-        // cpu=0, scale={integral=0, fractional=0} → zero scale
-        let info: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+        // cpu=0, scale={integral_part=0, fractional_part=0} → zero scale
+        // 12 bytes: u32 cpu + u32 integral + u32 fractional
+        let info: [u8; 12] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         let result = sc.sys_system_set_performance_info(
             cpu_resource,
             ZX_CPU_PERF_SCALE,
@@ -171,8 +172,9 @@ fn set_performance_info_argument_validation() {
 
     // C++: clamped perf scale {1, 1} → ZX_OK
     {
-        // cpu=0, scale={integral=1, fractional=1}
-        let info: [u8; 8] = [0, 0, 0, 0, 1, 0, 1, 0];
+        // cpu=0, scale={integral_part=1, fractional_part=1}
+        // [cpu:0,0,0,0] [integral:1,0,0,0] [fractional:1,0,0,0]
+        let info: [u8; 12] = [0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
         let result = sc.sys_system_set_performance_info(
             cpu_resource,
             ZX_CPU_PERF_SCALE,
@@ -184,8 +186,8 @@ fn set_performance_info_argument_validation() {
 
     // C++: clamped perf scale {2, 0} → ZX_OK
     {
-        // cpu=0, scale={integral=2, fractional=0}
-        let info: [u8; 8] = [0, 0, 0, 0, 2, 0, 0, 0];
+        // cpu=0, scale={integral_part=2, fractional_part=0}
+        let info: [u8; 12] = [0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0];
         let result = sc.sys_system_set_performance_info(
             cpu_resource,
             ZX_CPU_PERF_SCALE,
@@ -209,7 +211,7 @@ fn get_performance_info_argument_validation() {
 
     // C++: invalid handle → ZX_ERR_BAD_HANDLE
     {
-        let mut perf_info = [0u8; 8]; // one entry
+        let mut perf_info = [0u8; 12]; // one entry
         let mut count: usize = 0;
         let result = sc.sys_system_get_performance_info(
             0, // ZX_HANDLE_INVALID
@@ -224,7 +226,7 @@ fn get_performance_info_argument_validation() {
     // C++: incorrect resource kind → ZX_ERR_WRONG_TYPE
     {
         let mmio_resource = add_mmio_resource(&ctx);
-        let mut perf_info = [0u8; 8];
+        let mut perf_info = [0u8; 12];
         let mut count: usize = 0;
         let result = sc.sys_system_get_performance_info(
             mmio_resource,
@@ -239,7 +241,7 @@ fn get_performance_info_argument_validation() {
     // C++: incorrect system resource range → ZX_ERR_OUT_OF_RANGE
     {
         let info_resource = add_info_resource(&ctx);
-        let mut perf_info = [0u8; 8];
+        let mut perf_info = [0u8; 12];
         let mut count: usize = 0;
         let result = sc.sys_system_get_performance_info(
             info_resource,
@@ -253,7 +255,7 @@ fn get_performance_info_argument_validation() {
 
     // C++: invalid topic → ZX_ERR_INVALID_ARGS
     {
-        let mut perf_info = [0u8; 8];
+        let mut perf_info = [0u8; 12];
         let mut count: usize = 0;
         let result = sc.sys_system_get_performance_info(
             cpu_resource,
@@ -267,7 +269,7 @@ fn get_performance_info_argument_validation() {
 
     // C++: info_count == 0 → ZX_ERR_OUT_OF_RANGE (for both PERF_SCALE and PERF_LIMIT)
     {
-        let mut perf_info = [0u8; 8];
+        let mut perf_info = [0u8; 12];
         let mut count: usize = 0;
         let result = sc.sys_system_get_performance_info(
             cpu_resource,
@@ -298,7 +300,7 @@ fn get_performance_info_argument_validation() {
 
     // C++: invalid output_count (nullptr) → ZX_ERR_INVALID_ARGS
     {
-        let mut perf_info = [0u8; 8];
+        let mut perf_info = [0u8; 12];
         let result = sc.sys_system_get_performance_info(
             cpu_resource,
             ZX_CPU_PERF_SCALE,
@@ -325,7 +327,7 @@ fn get_performance_info() {
 
     // Query ZX_CPU_DEFAULT_PERF_SCALE (topic 2)
     {
-        let mut perf_info = [0u8; 8]; // 1 entry: { u32 cpu, { u16 integral, u16 fractional } }
+        let mut perf_info = [0u8; 12]; // 1 entry: { u32 cpu, u32 integral, u32 fractional }
         let mut count: usize = usize::MAX;
         let result = sc.sys_system_get_performance_info(
             cpu_resource,
@@ -337,10 +339,11 @@ fn get_performance_info() {
         assert_eq!(result, Ok(()));
         assert_eq!(count, online_cpus);
 
-        // Parse: cpu_number (u32) + scale (u16 integral + u16 fractional)
+        // Parse: cpu_number (u32) + scale { u32 integral, u32 fractional }
         let cpu = u32::from_ne_bytes([perf_info[0], perf_info[1], perf_info[2], perf_info[3]]);
-        let integral = u16::from_ne_bytes([perf_info[4], perf_info[5]]);
-        let fractional = u16::from_ne_bytes([perf_info[6], perf_info[7]]);
+        let integral = u32::from_ne_bytes([perf_info[4], perf_info[5], perf_info[6], perf_info[7]]);
+        let fractional =
+            u32::from_ne_bytes([perf_info[8], perf_info[9], perf_info[10], perf_info[11]]);
         assert_eq!(cpu, 0);
         // C++: EXPECT_FALSE(integral == 0 && fractional == 0)
         assert!(
@@ -351,7 +354,7 @@ fn get_performance_info() {
 
     // Query ZX_CPU_PERF_SCALE (topic 1)
     {
-        let mut perf_info = [0u8; 8];
+        let mut perf_info = [0u8; 12];
         let mut count: usize = usize::MAX;
         let result = sc.sys_system_get_performance_info(
             cpu_resource,
@@ -364,8 +367,9 @@ fn get_performance_info() {
         assert_eq!(count, online_cpus);
 
         let cpu = u32::from_ne_bytes([perf_info[0], perf_info[1], perf_info[2], perf_info[3]]);
-        let integral = u16::from_ne_bytes([perf_info[4], perf_info[5]]);
-        let fractional = u16::from_ne_bytes([perf_info[6], perf_info[7]]);
+        let integral = u32::from_ne_bytes([perf_info[4], perf_info[5], perf_info[6], perf_info[7]]);
+        let fractional =
+            u32::from_ne_bytes([perf_info[8], perf_info[9], perf_info[10], perf_info[11]]);
         assert_eq!(cpu, 0);
         assert!(
             !(integral == 0 && fractional == 0),
@@ -439,7 +443,8 @@ fn target_preemption_time_assert() {
     // But we still exercise the set_performance_info path.
 
     // Set scale to 1.0 for CPU 0
-    let scale_one: [u8; 8] = [0, 0, 0, 0, 1, 0, 0, 0]; // cpu=0, {1, 0}
+    // 12 bytes: u32 cpu + u32 integral + u32 fractional
+    let scale_one: [u8; 12] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]; // cpu=0, {1, 0}
     let result = sc.sys_system_set_performance_info(
         cpu_resource,
         ZX_CPU_PERF_SCALE,
@@ -448,16 +453,19 @@ fn target_preemption_time_assert() {
     );
     assert_eq!(result, Ok(()));
 
-    // Set scale to 0.5 for CPU 0: {integral=0, fractional=0x8000}
-    let scale_half: [u8; 8] = [0, 0, 0, 0, 0, 0, 0x00, 0x80]; // cpu=0, {0, 0x8000}
+    // Set scale to 0.5 for CPU 0: {integral=0, fractional=0x80000000}
+    let scale_half: [u8; 12] = [
+        0, 0, 0, 0, // cpu=0
+        0, 0, 0, 0, // integral=0
+        0, 0, 0, 0x80, // fractional=0x80000000
+    ];
     let result = sc.sys_system_set_performance_info(
         cpu_resource,
         ZX_CPU_PERF_SCALE,
         scale_half.as_ptr() as usize,
         1,
     );
-    // Note: {0, 0x8000} → fractional = 0x8000, integral = 0.
-    // This is NOT zero (0x8000 != 0), so it should succeed.
+    // fractional = 0x80000000, integral = 0 → not zero, should succeed.
     assert_eq!(result, Ok(()));
 
     // Restore scale to 1.0
@@ -502,8 +510,9 @@ fn set_performance_info_near_zero() {
     let sc = ctx.syscall();
     let cpu_resource = add_cpu_resource(&ctx);
 
-    // cpu=0, scale={integral=0, fractional=1} → near-zero but not zero
-    let info: [u8; 8] = [0, 0, 0, 0, 0, 0, 1, 0];
+    // cpu=0, scale={integral_part=0, fractional_part=1} → near-zero but not zero
+    // 12 bytes: u32 cpu + u32 integral + u32 fractional
+    let info: [u8; 12] = [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0];
     let result = sc.sys_system_set_performance_info(
         cpu_resource,
         ZX_CPU_PERF_SCALE,

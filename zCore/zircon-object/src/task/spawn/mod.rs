@@ -399,6 +399,7 @@ pub fn spawn_process(
     ch0.write(crate::ipc::MessagePacket {
         data: msg1_data,
         handles: msg1_handles,
+        cancel_senders: alloc::vec::Vec::new(),
     })
     .map_err(|_| crate::ZxError::INTERNAL)?;
 
@@ -573,6 +574,7 @@ pub fn spawn_process(
     ch0.write(crate::ipc::MessagePacket {
         data: msg2_data,
         handles: msg2_handles,
+        cancel_senders: alloc::vec::Vec::new(),
     })
     .map_err(|_| crate::ZxError::INTERNAL)?;
 
