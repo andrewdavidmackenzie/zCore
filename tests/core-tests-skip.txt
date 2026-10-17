@@ -44,14 +44,7 @@ Pager.CloneCommitMultipleBatches
 Pager.CloneCommitSingleBatch
 Pager.CloneCommitTest
 Pager.CloneCommitTwoBatches
-Pager.CloneMightSeeIntermediateForks
-Pager.CloneResizeCloneHazard
-Pager.CloneSeesCorrectParentPages
-Pager.CloneShrinkGrowParent
-Pager.CloneSplitCommitTest
 Pager.ClosePageCompleteTest
-Pager.ClosePortTest
-Pager.DetachNonMappingAccess
 Pager.DetachPageCompleteTest
 Pager.EarlyWakeCloneRace
 Pager.EarlyWakeNonLinearSupply
@@ -65,19 +58,13 @@ Pager.EvictionHintsOpRange
 Pager.EvictionHintsVmar
 Pager.EvictionHintsWithClones
 Pager.EvictionHintsWithResize
-Pager.FailErrorCode
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
-Pager.InvalidPagerCreateVmo
-Pager.InvalidPagerDetachVmo
-Pager.InvalidPagerSupplyPages
-Pager.MappedSupplyPages
 Pager.OpCommitCloneVmar
 Pager.OpCommitVmar
 Pager.OverlapCommitTest
 Pager.PageRequestBatchingChecksAncestorPages
-Pager.PinnedSupplyPages
 Pager.Prefetch
 Pager.PresentPageSplitsRange
 Pager.RacyPortDequeue
@@ -89,8 +76,6 @@ Pager.SuspendInKernelCaptureFaultsTest
 Pager.SuspendInKernelTest
 Pager.CancelKeyDoesNotWedgeThePagerVmar
 Pager.CancelKeyDoesNotWedgeThePagerVmo
-Pager.EarlySupplyTestVmar
-Pager.EarlySupplyTestVmo
 Pager.ReadResizeTestVmar
 Pager.ReadResizeTestVmo
 Pager.SuspendReadTestVmar
@@ -116,7 +101,6 @@ Pager.CloneSimultaneousChildReadTestVmo
 Pager.CloneWriteToCloneTestVmar
 Pager.CloneWriteToCloneTestVmo
 Pager.CloneDetachTest
-Pager.FailSinglePageVmar
 
 # ── PagerProcess (preemptive scheduling) ─────────────────────────────
 PagerProcess.KillBlockedUserVmoRead
