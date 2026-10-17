@@ -22,7 +22,47 @@ fn as_bytes<T: Sized>(val: &T) -> &[u8] {
 
 /// View a `#[repr(C)]` struct slice as a byte slice.
 #[allow(unsafe_code)]
+/// Coalesce adjacent mapping entries in the info_maps output.
+///
+/// Adjacent mappings (type == 3) at the same depth, with the same VMO
+/// (vmo_koid), contiguous VMO offsets, and same mmu_flags are merged
+/// into a single entry. This matches Fuchsia's VmMapping merge behavior.
+fn coalesce_mapping_entries(entries: &mut Vec<InfoMapsEntry>) {
+    let mut i = 0;
+    while i + 1 < entries.len() {
+        let merge = {
+            let a = &entries[i];
+            let b = &entries[i + 1];
+            // Both must be mappings at the same depth.
+            a.r#type == 3
+                && b.r#type == 3
+                && a.depth == b.depth
+                // Same VMO.
+                && a.mapping.vmo_koid == b.mapping.vmo_koid
+                && a.mapping.vmo_koid != 0
+                // Adjacent in virtual address space.
+                && a.base + a.size == b.base
+                // Contiguous VMO offsets.
+                && a.mapping.vmo_offset + a.size == b.mapping.vmo_offset
+                // Same permissions.
+                && a.mapping.mmu_flags == b.mapping.mmu_flags
+        };
+        if merge {
+            // Extend entry i to cover entry i+1.
+            entries[i].size += entries[i + 1].size;
+            entries[i].mapping.committed_bytes += entries[i + 1].mapping.committed_bytes;
+            entries[i].mapping.populated_bytes += entries[i + 1].mapping.populated_bytes;
+            entries.remove(i + 1);
+        } else {
+            i += 1;
+        }
+    }
+}
+
+#[allow(unsafe_code)]
 fn slice_as_bytes<T: Sized>(vals: &[T]) -> &[u8] {
+    // SAFETY: Any `T: Sized` with a valid layout can be viewed as bytes.
+    // The lifetime and alignment are preserved by the slice reference.
     unsafe { core::slice::from_raw_parts(vals.as_ptr() as *const u8, core::mem::size_of_val(vals)) }
 }
 
@@ -1042,6 +1082,11 @@ impl Syscall<'_> {
                 // VMAR tree walk (depth 1+). Use get_info_maps_or_empty
                 // so PROCESS_MAPS succeeds even if the root VMAR is destroyed.
                 entries.extend(vmar.get_info_maps_or_empty(1));
+                // Coalesce adjacent mapping entries with the same VMO,
+                // contiguous offsets, and same permissions. This matches
+                // Fuchsia's VmMapping merge behavior where adjacent
+                // compatible mappings appear as a single entry.
+                coalesce_mapping_entries(&mut entries);
                 // Versioned entry size:
                 // V0: 96 bytes (name + base + size + depth + type + pad + mmu_flags + pad + vmo_koid + vmo_offset + committed_bytes)
                 // V1: 104 bytes (V0 + populated_bytes)
@@ -1072,7 +1117,8 @@ impl Syscall<'_> {
             Topic::VmarMaps => {
                 let vmar =
                     proc.get_object_with_rights::<VmAddressRegion>(handle, Rights::INSPECT)?;
-                let entries = vmar.get_info_maps(0)?;
+                let mut entries = vmar.get_info_maps(0)?;
+                coalesce_mapping_entries(&mut entries);
                 // ZX_INFO_VMAR_MAPS has no version scheme — it always
                 // uses the full zx_info_maps_t size (152 bytes), unlike
                 // ZX_INFO_PROCESS_MAPS which has V0/V1/V2 variants.
