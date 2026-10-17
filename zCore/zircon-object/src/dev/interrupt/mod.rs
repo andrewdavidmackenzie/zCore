@@ -226,6 +226,8 @@ struct InterruptInner {
 
 impl Drop for Interrupt {
     fn drop(&mut self) {
+        // Unregister from the global wake source registry.
+        unregister_wake_source(self.base.id);
         // Ignore errors during cleanup — the interrupt may already
         // be destroyed or in an inconsistent state.
         let _ = self.destroy();
