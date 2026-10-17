@@ -151,11 +151,6 @@ Pager.CancelKeyDoesNotWedgeThePagerVmar
 Pager.CancelKeyDoesNotWedgeThePagerVmo
 Pager.EarlySupplyTestVmar
 Pager.EarlySupplyTestVmo
-Pager.ConcurrentMultipageAccessTestVmar
-Pager.ConcurrentMultipageAccessTestVmo
-Pager.ConcurrentOverlappingAccessTestVmar
-Pager.ConcurrentOverlappingAccessTestVmo
-Pager.ManyRequestTestVmo
 Pager.ReadResizeTestVmar
 Pager.ReadResizeTestVmo
 Pager.SuspendReadTestVmar
