@@ -95,7 +95,6 @@ Pager.CloneSimultaneousReadTest
 Pager.CloneSplitCommitTest
 Pager.CloneWriteToCloneTest
 Pager.ClosePageCompleteTest
-Pager.ClosePagerTest
 Pager.ClosePortTest
 Pager.ConcurrentMultipageAccessTest
 Pager.ConcurrentOverlappingAccessTest
@@ -115,10 +114,8 @@ Pager.EvictionHintsOpRange
 Pager.EvictionHintsVmar
 Pager.EvictionHintsWithClones
 Pager.EvictionHintsWithResize
-Pager.FailAfterDetach
 Pager.FailEarlyWake
 Pager.FailErrorCode
-Pager.FailExactRange
 Pager.FailMultipleCommits
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
