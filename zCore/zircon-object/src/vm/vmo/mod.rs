@@ -547,9 +547,11 @@ impl VmObject {
         let mut inner = self.inner.lock();
         inner.pager_port = None;
         inner.pager_key = 0;
-        // Clear the pager-backed flag so commit_page can allocate
-        // frames again (the VMO is no longer demand-paged).
-        self.trait_.clear_pager_backed();
+        // Keep pager_backed flag set so unsupplied pages return
+        // BAD_STATE instead of silently allocating zero frames.
+        // The VMO was pager-backed; after detach it's in a
+        // "detached" state where uncommitted pages fail.
+        // Note: clear_pager_backed() is intentionally a no-op.
     }
 
     /// Send a page request to the pager for the given offset/length.
@@ -579,6 +581,10 @@ impl VmObject {
                 );
             }
             Err(ZxError::SHOULD_WAIT)
+        } else if self.trait_.is_pager_backed() {
+            // VMO was pager-backed but detached — unsupplied pages
+            // should fail with BAD_STATE, not silently allocate zeros.
+            Err(ZxError::BAD_STATE)
         } else {
             Err(ZxError::NOT_FOUND)
         }

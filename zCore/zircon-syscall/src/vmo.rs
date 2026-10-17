@@ -108,7 +108,7 @@ impl Syscall<'_> {
         // (matching Fuchsia kernel behavior). This is important because
         // tests like SequentialMultipageTestVmo expect a single batched
         // request covering the entire range.
-        if vmo.has_pager() && buf_size > 0 {
+        if vmo.is_pager_backed() && buf_size > 0 {
             use zircon_object::vm::PAGE_SIZE;
             let start = offset as usize;
             let end = start + buf_size;
@@ -131,10 +131,15 @@ impl Syscall<'_> {
                 // Send one batched request for the entire run.
                 let req_offset = run_start * PAGE_SIZE;
                 let req_length = (page_idx - run_start) * PAGE_SIZE;
-                let _ = vmo.request_pages(req_offset, req_length);
-                // Wait for all pages in the run to be supplied.
-                for p in run_start..page_idx {
-                    vmo.wait_for_page(p * PAGE_SIZE).await?;
+                match vmo.request_pages(req_offset, req_length) {
+                    Err(ZxError::SHOULD_WAIT) => {
+                        // Normal: request sent, wait for supply.
+                        for p in run_start..page_idx {
+                            vmo.wait_for_page(p * PAGE_SIZE).await?;
+                        }
+                    }
+                    Err(e) => return Err(e), // BAD_STATE (detached), etc.
+                    Ok(()) => {}             // shouldn't happen
                 }
             }
         }
