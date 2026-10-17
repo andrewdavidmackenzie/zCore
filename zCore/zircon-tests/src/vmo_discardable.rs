@@ -148,14 +148,14 @@ async fn read_after_discard() {
     sc.sys_vmo_op_range(h, VMO_OP_UNLOCK, 0, PAGE_SIZE, UserOutPtr::from(0usize), 0)
         .unwrap();
 
-    // Without reclamation, the data is still present. Read to verify
-    // the VMO is still accessible (no crash).
+    // After unlock, the kernel discards pages. Reading returns zeros
+    // because the pages have been decommitted.
     let mut buf = [0u8; 16];
     sc.sys_vmo_read(h, UserOutPtr::from(buf.as_mut_ptr() as usize), 0, 16)
         .await
         .unwrap();
-    // Data survives because zCore doesn't reclaim. This documents behavior.
-    assert_eq!(buf, data);
+    // Pages were discarded — data is gone (zeros).
+    assert_eq!(buf, [0u8; 16]);
 }
 
 ///

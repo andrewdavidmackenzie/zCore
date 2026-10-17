@@ -775,6 +775,11 @@ impl Syscall<'_> {
                     total_heap_bytes: 4 * 1024 * 1024,
                     free_heap_bytes: 2 * 1024 * 1024,
                     vmo_bytes,
+                    vmo_pager_total_bytes: zircon_object::vm::vmo_pager_total_bytes() as u64,
+                    vmo_discardable_locked_bytes: zircon_object::vm::vmo_discardable_locked_bytes()
+                        as u64,
+                    vmo_discardable_unlocked_bytes:
+                        zircon_object::vm::vmo_discardable_unlocked_bytes() as u64,
                     mmu_overhead_bytes: 2 * 1024 * 1024,
                     ipc_bytes: 256 * 1024,
                     other_bytes: 1024 * 1024,
