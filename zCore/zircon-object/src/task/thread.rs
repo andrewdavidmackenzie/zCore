@@ -482,6 +482,11 @@ impl Thread {
         self.inner.lock().state()
     }
 
+    /// Set the thread state (e.g., to BlockedPager during pager waits).
+    pub fn set_state(&self, state: ThreadState) {
+        self.inner.lock().change_state(state, &self.base);
+    }
+
     /// Add the parameter to the time this thread has run on cpu.
     pub fn time_add(&self, time: u128) {
         let mut inner = self.inner.lock();

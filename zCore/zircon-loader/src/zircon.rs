@@ -470,7 +470,16 @@ async fn handler_user_trap(
                     let vmo = vmar.find_pager_vmo(vaddr);
                     let offset = vmar.vaddr_to_vmo_offset(vaddr);
                     if let (Some(vmo), Some(offset)) = (vmo, offset) {
-                        match vmo.wait_for_page(offset).await {
+                        // Set thread state so WaitForBlocked() polls can
+                        // detect the pager-blocked state.
+                        let old_state = thread.state();
+                        thread.set_state(ThreadState::BlockedPager);
+                        let result = vmo.wait_for_page(offset).await;
+                        // Restore to Running unless the thread is dying.
+                        if thread.state() == ThreadState::BlockedPager {
+                            thread.set_state(old_state);
+                        }
+                        match result {
                             Ok(()) => Ok(()),
                             Err(e) => {
                                 warn!("pager wait failed: {:?}", e);

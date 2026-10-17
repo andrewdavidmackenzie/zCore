@@ -513,7 +513,9 @@ impl VmAddressRegion {
         // Only commit pages if the mapping has at least one access
         // permission. Mappings with no R/W/X are address reservations
         // that should fault on access (matching Fuchsia behavior).
-        if map_range {
+        // Pager-backed VMOs must always be lazy — their pages come
+        // from the pager via supply_pages, not from eager commit.
+        if map_range && !mapping.vmo.is_pager_backed() {
             mapping.map()?;
         }
         inner.mappings.push(mapping);

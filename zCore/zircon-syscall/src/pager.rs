@@ -60,7 +60,8 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let pager = proc.get_object::<Pager>(pager_handle)?;
-        let vmo = proc.get_object::<VmObject>(vmo_handle)?;
+        // Fuchsia requires WRITE right on the VMO handle for detach.
+        let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::WRITE)?;
         pager.detach_vmo(&vmo)
     }
 
@@ -80,7 +81,13 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let pager = proc.get_object::<Pager>(pager_handle)?;
-        let vmo = proc.get_object::<VmObject>(vmo_handle)?;
+        // Fuchsia requires WRITE right on the pager VMO handle for supply.
+        let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::WRITE)?;
+        // Validate VMO ownership before looking up aux_vmo handle.
+        // Fuchsia checks ownership before validating aux_vmo.
+        if !pager.owns_vmo(&vmo) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let aux_vmo =
             proc.get_object_with_rights::<VmObject>(aux_vmo_handle, Rights::READ | Rights::WRITE)?;
         pager.supply_pages(&vmo, offset, length, &aux_vmo, aux_offset)

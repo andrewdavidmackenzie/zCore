@@ -361,7 +361,7 @@ CORE_TESTS_SKIP_FILE ?= tests/core-tests-skip.txt
 ifndef CORE_TESTS_FILTER
   ifneq ($(wildcard $(CORE_TESTS_SKIP_FILE)),)
     CORE_TESTS_FILTER := $(shell sed '/^[[:space:]]*\#/d; /^[[:space:]]*$$/d' $(CORE_TESTS_SKIP_FILE) \
-                            | paste -sd ':' | sed 's/^/-/')
+                            | paste -s -d ':' - | sed 's/^/-/')
   endif
 endif
 CORE_TESTS_FILTER ?=
@@ -379,9 +379,15 @@ core-tests-build:
 		--release --target-dir target/userstart -Z build-std=core,alloc
 	@echo "==> [2/4] Building kernel (Zircon base, no linux)..."
 	@USERSTART_ELF="$$(pwd)/target/userstart/x86_64-unknown-none/release/userstart" \
-		ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/core-tests-standalone$(if $(CORE_TESTS_FILTER),?--gtest_filter=$(CORE_TESTS_FILTER))" \
+		ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/core-tests-standalone" \
 		cargo zcore-build -m qemu-x86_64 --flavour ""
 	@echo "==> [3/4] Building Zircon rootfs (with core-tests-standalone + libs)..."
+	@mkdir -p target/rootfs/zircon/x86_64/etc
+ifneq ($(strip $(CORE_TESTS_FILTER)),)
+	@printf '%s\n' '--gtest_filter=$(CORE_TESTS_FILTER)' > target/rootfs/zircon/x86_64/etc/extra-args
+else
+	@rm -f target/rootfs/zircon/x86_64/etc/extra-args
+endif
 	@cargo xtask zircon-rootfs --arch x86_64
 	@echo "==> [4/4] Creating boot image with rootfs ramdisk..."
 	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
