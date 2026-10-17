@@ -600,15 +600,18 @@ impl Syscall<'_> {
         buffer: UserOutPtr<u8>,
         buffer_size: usize,
     ) -> ZxResult {
-        // ZX_VMO_OP_COMMIT = 1
-        if op == 1 {
+        // ZX_VMO_OP_COMMIT = 1, ZX_VMO_OP_PREFETCH = 14
+        // Both trigger demand-paging for pager-backed VMOs.
+        if op == 1 || op == 14 {
             let proc = self.thread.proc();
             let is_pager = proc
                 .get_object::<VmObject>(handle_value)
                 .is_ok_and(|v| v.is_pager_backed());
             if is_pager {
                 let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
-                if !rights.contains(Rights::WRITE) {
+                // COMMIT requires WRITE; PREFETCH only requires READ.
+                let required = if op == 1 { Rights::WRITE } else { Rights::READ };
+                if !rights.contains(required) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
                 if offset.checked_add(len).is_none() || offset + len > vmo.len() {
@@ -771,7 +774,7 @@ impl Syscall<'_> {
                 }
                 Ok(())
             }
-            VmoOpType::AlwaysNeed | VmoOpType::DontNeed | VmoOpType::Prefetch => {
+            VmoOpType::AlwaysNeed | VmoOpType::DontNeed => {
                 // Hinting operations. Require READ rights and valid range.
                 if !rights.contains(Rights::READ) {
                     return Err(ZxError::ACCESS_DENIED);
@@ -780,7 +783,22 @@ impl Syscall<'_> {
                 if end > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
-                // No-op: we don't implement prefetch/eviction hints.
+                // No-op: we don't implement eviction hints.
+                Ok(())
+            }
+            VmoOpType::Prefetch => {
+                // Prefetch: commit pages eagerly. For pager-backed VMOs
+                // this triggers demand-paging via the async path in
+                // sys_vmo_op_range_async (same as COMMIT).
+                // For non-pager VMOs, commit pages synchronously.
+                if !rights.contains(Rights::READ) {
+                    return Err(ZxError::ACCESS_DENIED);
+                }
+                let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
+                if end > vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                vmo.commit(offset, len)?;
                 Ok(())
             }
         }
