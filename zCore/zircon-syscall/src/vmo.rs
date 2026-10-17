@@ -133,9 +133,22 @@ impl Syscall<'_> {
                 let req_length = (page_idx - run_start) * PAGE_SIZE;
                 match vmo.request_pages(req_offset, req_length) {
                     Err(ZxError::SHOULD_WAIT) => {
-                        // Normal: request sent, wait for supply.
+                        // Set BlockedPager so WaitForBlocked() polling detects it.
+                        use zircon_object::task::ThreadState;
+                        let old_state = self.thread.state();
+                        self.thread.set_state(ThreadState::BlockedPager);
+                        let mut wait_err = None;
                         for p in run_start..page_idx {
-                            vmo.wait_for_page(p * PAGE_SIZE).await?;
+                            if let Err(e) = vmo.wait_for_page(p * PAGE_SIZE).await {
+                                wait_err = Some(e);
+                                break;
+                            }
+                        }
+                        if self.thread.state() == ThreadState::BlockedPager {
+                            self.thread.set_state(old_state);
+                        }
+                        if let Some(e) = wait_err {
+                            return Err(e);
                         }
                     }
                     Err(e) => return Err(e), // BAD_STATE (detached), etc.
@@ -592,9 +605,8 @@ impl Syscall<'_> {
             let proc = self.thread.proc();
             let is_pager = proc
                 .get_object::<VmObject>(handle_value)
-                .is_ok_and(|v| v.has_pager());
+                .is_ok_and(|v| v.is_pager_backed());
             if is_pager {
-                // Debug: write to serial directly (survives LTO)
                 let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
                 if !rights.contains(Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
@@ -608,11 +620,29 @@ impl Syscall<'_> {
                 // Send one batched page request for the entire range,
                 // then wait for all pages. Fuchsia batches commit requests
                 // — the C++ tests expect a single packet with the full range.
-                let _ = vmo.request_pages(start, aligned_len);
-                for page_idx in (start / PAGE_SIZE)..(end / PAGE_SIZE) {
-                    if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
-                        vmo.wait_for_page(page_idx * PAGE_SIZE).await?;
+                match vmo.request_pages(start, aligned_len) {
+                    Err(ZxError::SHOULD_WAIT) => {
+                        use zircon_object::task::ThreadState;
+                        let old_state = self.thread.state();
+                        self.thread.set_state(ThreadState::BlockedPager);
+                        let mut wait_err = None;
+                        for page_idx in (start / PAGE_SIZE)..(end / PAGE_SIZE) {
+                            if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
+                                if let Err(e) = vmo.wait_for_page(page_idx * PAGE_SIZE).await {
+                                    wait_err = Some(e);
+                                    break;
+                                }
+                            }
+                        }
+                        if self.thread.state() == ThreadState::BlockedPager {
+                            self.thread.set_state(old_state);
+                        }
+                        if let Some(e) = wait_err {
+                            return Err(e);
+                        }
                     }
+                    Err(e) => return Err(e),
+                    Ok(()) => {}
                 }
                 return Ok(());
             }
