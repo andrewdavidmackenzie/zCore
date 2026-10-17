@@ -71,7 +71,6 @@ VmoZeroTestCase.WriteCowParent
 
 # ── VmoTestCase (kernel panic / crash) ───────────────────────────────
 VmoTestCase.PinTests
-VmoTestCase.UnmapLoanedcontiguousWhileFaulting
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.CloneChainCommitTest
@@ -211,16 +210,11 @@ StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 
 # ── VMAR (FaultBeyondStreamSize) ─────────────────────────────────────
-Vmar.FaultBeyondStreamSize
-Vmar.FaultBeyondReducedStreamSize
-Vmar.FaultBeyondStreamSizeRange
 
 # ── BTI ──────────────────────────────────────────────────────────────
 Bti.InvalidPinArgs
 Bti.QuarantineDisallowsPin
 Bti.NoDelayedUnpin
-Bti.PinTooManyAddresses
-Bti.DecommitRace
 
 # ── MSI ──────────────────────────────────────────────────────────────
 MsiTest.Msi
