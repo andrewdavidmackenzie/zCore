@@ -136,13 +136,11 @@ VmoTestCase.UnmapLoanedcontiguousWhileFaulting
 # ChildSnapshotAtLeastOnWrite and MappingUpdateNestedRootDestroy
 # fail but don't hang/crash — removed.
 
-# ── Pager infrastructure (#498, #499) ────────────────────────────────
-# Pager tests need preemptive scheduling + TRAP_DIRTY support.
-# ~105 Pager tests: 8 pass individually, rest hang on pager fault loop.
-# Passing (removed from skip): InvalidPagerCreate, ResizeNonresizableVmo,
-#   DetachClosePagerTest, ZeroHandlesRace, DetachAndAlwaysNeed,
-#   CloneResizeParentOK, DeepHierarchy, PagerDetachPinned.
-# Remaining ~97 all hang — listed individually below.
+# ── Pager infrastructure (#498, #499, #733, #734) ────────────────────
+# Demand-paging now works on QEMU (#733/#734). ~35 Pager tests pass.
+# Remaining tests need: multi-threaded pager access (cooperative
+# scheduler can't switch between concurrent faulting threads),
+# OP_FAIL exception delivery, or TRAP_DIRTY support.
 Pager.OverlapCommitSupplyTest
 Pager.BulkOddLengthSupplyTest
 Pager.BulkOddOffsetSupplyTest
@@ -150,7 +148,7 @@ Pager.BulkSingleSupplyTest
 Pager.CancelKeyDoesNotWedgeThePager
 Pager.CloneChainCommitTest
 Pager.CloneCommitMultipleBatches
-Pager.CloneCommitRandomBatches
+# Pager.CloneCommitRandomBatches — removed, now passes (#733/#734)
 Pager.CloneCommitSingleBatch
 Pager.CloneCommitTest
 Pager.CloneCommitTwoBatches
@@ -169,7 +167,7 @@ Pager.ClosePagerTest
 Pager.ClosePortTest
 Pager.ConcurrentMultipageAccessTest
 Pager.ConcurrentOverlappingAccessTest
-Pager.CreateVmoUnboundedInvalidStreamSize
+# Pager.CreateVmoUnboundedInvalidStreamSize — removed, now passes (#733/#734)
 Pager.DecommitOnDetachTest
 Pager.DetachNonMappingAccess
 Pager.DetachPageCompleteTest
@@ -191,28 +189,28 @@ Pager.FailEarlyWake
 Pager.FailErrorCode
 Pager.FailExactRange
 Pager.FailMultipleCommits
-Pager.FailMultipleVmos
+# Pager.FailMultipleVmos — removed, now passes (#733/#734)
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
-Pager.FailRedundant
+# Pager.FailRedundant — removed, now passes (#733/#734)
 Pager.FailSinglePage
 Pager.InvalidPagerCreateVmo
 Pager.InvalidPagerDetachVmo
 Pager.InvalidPagerSupplyPages
 Pager.ManyRequestTest
 Pager.MappedSupplyPages
-Pager.MultipleConcurrentVmoTest
+# Pager.MultipleConcurrentVmoTest — removed, now passes (#733/#734)
 Pager.OpCommitCloneVmar
 Pager.OpCommitVmar
 Pager.OverlapCommitTest
 Pager.OverlapSupplyTest
 Pager.PageRequestBatchingChecksAncestorPages
-Pager.PinPagerVmoWithLoanedPages
+# Pager.PinPagerVmoWithLoanedPages — removed, now passes (#733/#734)
 Pager.PinnedSupplyPages
 Pager.Prefetch
 Pager.PresentPageSplitsRange
-Pager.ProxyUseAfterFree
+# Pager.ProxyUseAfterFree — removed, now passes (#733/#734)
 Pager.RacyPortDequeue
 Pager.ReadCloseInterruptEarlyTest
 Pager.ReadCloseInterruptLateTest
@@ -223,46 +221,46 @@ Pager.ResizeBlockedPin
 Pager.ResizeCommitTest
 Pager.SequentialMultipageTest
 Pager.SinglePageTest
-Pager.SinglePageTestVmar
+# Pager.SinglePageTestVmar — removed, now passes (#733/#734)
 Pager.SplitCommitTest
-Pager.SuccessiveVmoTest
-Pager.SupplyAfterDetach
-Pager.SupplyAfterFail
+# Pager.SuccessiveVmoTest — removed, now passes (#733/#734)
+# Pager.SupplyAfterDetach — removed, now passes (#733/#734)
+# Pager.SupplyAfterFail — removed, now passes (#733/#734)
 Pager.SuspendCommitTest
 Pager.SuspendInKernelCaptureFaultsTest
 Pager.SuspendInKernelTest
 Pager.SuspendReadTest
 Pager.UncommittedSinglePageTest
 Pager.UncommittedSupply
-Pager.VmarMapRangeTest
+# Pager.VmarMapRangeTest — removed, now passes (#733/#734)
 Pager.VmarRemapTest
 Pager.VmarUnmapTest
 Pager.VmoInfoPagerTest
 # Pager Vmar/Vmo parameterized variants: all hang on pager fault loop.
 # These are VALUE_PARAMETERIZED_TEST instantiations of the above tests.
-Pager.SinglePageTestVmo
+# Pager.SinglePageTestVmo — removed, now passes (#733/#734)
 Pager.CancelKeyDoesNotWedgeThePagerVmar
 Pager.CancelKeyDoesNotWedgeThePagerVmo
-Pager.UncommittedSinglePageTestVmar
-Pager.UncommittedSinglePageTestVmo
-Pager.PresupplyTestVmar
-Pager.PresupplyTestVmo
+# Pager.UncommittedSinglePageTestVmar — removed, now passes (#733/#734)
+# Pager.UncommittedSinglePageTestVmo — removed, now passes (#733/#734)
+# Pager.PresupplyTestVmar — removed, now passes (#733/#734)
+# Pager.PresupplyTestVmo — removed, now passes (#733/#734)
 Pager.EarlySupplyTestVmar
 Pager.EarlySupplyTestVmo
-Pager.SequentialMultipageTestVmar
+# Pager.SequentialMultipageTestVmar — removed, now passes (#733/#734)
 Pager.SequentialMultipageTestVmo
 Pager.ConcurrentMultipageAccessTestVmar
 Pager.ConcurrentMultipageAccessTestVmo
 Pager.ConcurrentOverlappingAccessTestVmar
 Pager.ConcurrentOverlappingAccessTestVmo
-Pager.BulkSingleSupplyTestVmar
-Pager.BulkSingleSupplyTestVmo
-Pager.BulkOddLengthSupplyTestVmar
-Pager.BulkOddLengthSupplyTestVmo
-Pager.BulkOddOffsetSupplyTestVmar
-Pager.BulkOddOffsetSupplyTestVmo
-Pager.OverlapSupplyTestVmar
-Pager.OverlapSupplyTestVmo
+# Pager.BulkSingleSupplyTestVmar — removed, now passes (#733/#734)
+# Pager.BulkSingleSupplyTestVmo — removed, now passes (#733/#734)
+# Pager.BulkOddLengthSupplyTestVmar — removed, now passes (#733/#734)
+# Pager.BulkOddLengthSupplyTestVmo — removed, now passes (#733/#734)
+# Pager.BulkOddOffsetSupplyTestVmar — removed, now passes (#733/#734)
+# Pager.BulkOddOffsetSupplyTestVmo — removed, now passes (#733/#734)
+# Pager.OverlapSupplyTestVmar — removed, now passes (#733/#734)
+# Pager.OverlapSupplyTestVmo — removed, now passes (#733/#734)
 Pager.ManyRequestTestVmar
 Pager.ManyRequestTestVmo
 Pager.ReadResizeTestVmar
@@ -291,7 +289,7 @@ Pager.CloneWriteToCloneTestVmar
 Pager.CloneWriteToCloneTestVmo
 Pager.CloneDetachTest
 Pager.FailSinglePageVmar
-Pager.FailSinglePageVmo
+# Pager.FailSinglePageVmo — removed, now passes (#733/#734)
 # PagerProcess: all 8 hang — need preemptive scheduling for
 # kill-after-suspend / kill-blocked-usercopy patterns.
 PagerProcess.KillBlockedUserVmoRead
@@ -352,22 +350,19 @@ StreamTestCase.PartialVmoDirty
 # NoStreamFromContiguousOrPhysicalVmo crashes (boot_options) — keep.
 # StreamTestCase.NoStreamFromContiguousOrPhysicalVmo — removed, completes (pass or fail)
 
-# ── Memory probe — crashes the runner (UD2 abort) ────────────────────
-# memory-probe.cc spawns a child thread, catches its page-fault
-# exception, and checks the synth_code. Our kernel demand-pages
-# uncommitted memory instead of faulting, so the assertion at
-# memory-probe.cc:130 fires and aborts the whole test process.
-# (VmoTestCase.* and Pager.* wildcards already cover the rest.)
-Vmar.ProtectLargeUncomittedTest
-Vmar.UnmapLargeUncommittedTest
-Vmar.ProtectOverDemandPagedTest
+# ── Memory probe / VMAR tests ────────────────────────────────────────
+# FaultBeyondStreamSize tests need VMAR op_range PREFETCH to return
+# OUT_OF_RANGE for pages beyond content_size.
+# Vmar.ProtectLargeUncomittedTest — removed, now passes (#733/#734)
+# Vmar.UnmapLargeUncommittedTest — removed, now passes (#733/#734)
+# Vmar.ProtectOverDemandPagedTest — removed, now passes (#733/#734)
 # Vmar.ProtectReadIfXomUnsupported: fails without crashing — removed
-Vmar.MapRangeResizable
+# Vmar.MapRangeResizable — removed, now passes (#733/#734)
 Vmar.FaultBeyondStreamSize
 Vmar.FaultBeyondReducedStreamSize
 Vmar.FaultBeyondStreamSizeRange
-Vmar.MapRangeStreamSizeWraparound
-Vmar.FaultBeyondStreamSizeForceWritable
+# Vmar.MapRangeStreamSizeWraparound — removed, now passes (#733/#734)
+# Vmar.FaultBeyondStreamSizeForceWritable — removed, now passes (#733/#734)
 
 # ── Memory mapping ───────────────────────────────────────────────────
 # MmapProtExecTest: now passes — removed from skip.
