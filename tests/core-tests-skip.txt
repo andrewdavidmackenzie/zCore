@@ -206,3 +206,4 @@ WakeReportTestsPortBound.AckedStillPending
 
 # ── VmoZero/VmoClone2 hangs ─────────────────────────────────────────
 VmoZeroTestCase.AllocateAfterMergeMultipleChildren
+Threads.StartRegsNoncanonicalTp
