@@ -35,7 +35,7 @@ impl Syscall<'_> {
         let channel = proc.get_object_with_rights::<Channel>(handle_value, Rights::READ)?;
         let never_discard = options & MAY_DISCARD == 0;
 
-        let msg = if never_discard {
+        let mut msg = if never_discard {
             channel.check_and_read(|front_msg| {
                 if num_bytes < front_msg.data.len() as u32
                     || num_handles < front_msg.handles.len() as u32
@@ -54,6 +54,8 @@ impl Syscall<'_> {
         actual_bytes.write_if_not_null(msg.data.len() as u32)?;
         actual_handles.write_if_not_null(msg.handles.len() as u32)?;
         if num_bytes < msg.data.len() as u32 || num_handles < msg.handles.len() as u32 {
+            // Message is being discarded — close in-transit handles.
+            msg.close_in_transit_handles();
             return Err(ZxError::BUFFER_TOO_SMALL);
         }
         bytes.write_array(msg.data.as_slice())?;

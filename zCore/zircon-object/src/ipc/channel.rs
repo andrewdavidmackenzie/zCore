@@ -205,21 +205,9 @@ impl Drop for Channel {
         // handles (decrement handle count, fire on_zero_handles).
         // This matches Fuchsia's HandleOwner destruction in
         // HandleTableArena::Delete.
-        let mut recv_queue = self.recv_queue.lock();
-        for msg in recv_queue.drain(..) {
-            // Fire cancel tokens — waits on these handles should be
-            // canceled since the channel (and its unread messages) is
-            // being destroyed.
-            for sender in msg.cancel_senders {
-                let _ = sender.send(());
-            }
-            // Close in-transit handles.
-            for handle in msg.handles {
-                handle.object.dec_handle_count();
-                if handle.object.handle_count() == 0 {
-                    handle.object.on_zero_handles();
-                }
-            }
+        // Close in-transit handles in unread messages.
+        for mut msg in self.recv_queue.lock().drain(..) {
+            msg.close_in_transit_handles();
         }
     }
 }
@@ -250,6 +238,23 @@ impl core::fmt::Debug for MessagePacket {
 }
 
 impl MessagePacket {
+    /// Close in-transit handles and fire cancel tokens.
+    ///
+    /// Call this when a message with transferred handles is being
+    /// discarded without delivering handles to a process (e.g.,
+    /// BUFFER_TOO_SMALL with MAY_DISCARD, or channel destruction
+    /// with unread messages).
+    pub fn close_in_transit_handles(&mut self) {
+        for sender in self.cancel_senders.drain(..) {
+            let _ = sender.send(());
+        }
+        for handle in self.handles.drain(..) {
+            handle.object.dec_handle_count();
+            if handle.object.handle_count() == 0 {
+                handle.object.on_zero_handles();
+            }
+        }
+    }
     /// Create a new message packet with the given data and handles.
     /// Cancel senders default to empty (used for non-transfer messages).
     pub fn new(data: Vec<u8>, handles: Vec<Handle>) -> Self {
