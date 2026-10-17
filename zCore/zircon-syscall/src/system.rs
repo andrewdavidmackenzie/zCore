@@ -463,8 +463,12 @@ impl Syscall<'_> {
         num_entries: u32,
         mut actual_entries: UserOutPtr<u32>,
     ) -> ZxResult {
-        const ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY: u64 = 0x2;
-        const _ZX_SYSTEM_SUSPEND_OPTION_DISCARD: u64 = 0x1;
+        const OPTION_DISCARD: u64 = 0x1;
+        const OPTION_REPORT_ONLY: u64 = 0x2;
+        const VALID_OPTIONS: u64 = OPTION_DISCARD | OPTION_REPORT_ONLY;
+        // Entry size: koid(8) + name(32) + initial_signal_time(8)
+        //           + last_signal_time(8) + last_ack_time(8)
+        //           + signal_count(4) + flags(4) = 72 bytes
 
         info!(
             "system.suspend_enter: resource={:#x}, deadline={}, options={:#x}",
@@ -472,7 +476,6 @@ impl Syscall<'_> {
         );
         let proc = self.thread.proc();
         let res = proc.get_resource(resource)?;
-        // Accept ROOT or SYSTEM/CPU_BASE resource
         if res.validate(ResourceKind::ROOT).is_err() {
             res.validate_ranged_resource(
                 ResourceKind::SYSTEM,
@@ -481,82 +484,135 @@ impl Syscall<'_> {
             )?;
         }
 
-        // Count active IRQ wake sources from the process's interrupt handles.
-        // Each Interrupt object with WAKE_VECTOR flag counts as a wake source.
+        // Validate options: only DISCARD and REPORT_ONLY bits are valid.
+        if options & !VALID_OPTIONS != 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+
+        // REPORT_ONLY requires a header buffer.
+        if options & OPTION_REPORT_ONLY != 0 && out_header == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
+
+        // Validate argument consistency:
+        // If no header, entry args must all be null/zero.
+        let has_header = out_header != 0;
+        let has_entries = out_entries != 0;
+        let has_count = num_entries > 0;
+        let has_actual = !actual_entries.is_null();
+
+        if !has_header {
+            // Without header, all entry args must be null/zero.
+            if has_entries || has_count || has_actual {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        } else {
+            // With header, entry args must be all-null or all-valid.
+            let all_null = !has_entries && !has_count && !has_actual;
+            let all_valid = has_entries && has_count && has_actual;
+            if !all_null && !all_valid {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        }
+
+        // Count active IRQ wake sources.
         let active_wake_sources = proc.count_wake_sources();
-        // Total wake sources = active IRQ sources + 1 (kernel deadline timer).
-        let total_wake_sources = active_wake_sources + 1;
+        let total_wake_sources = active_wake_sources + 1; // +1 for deadline timer
 
-        // Write the wake report header.
-        // zx_wake_source_report_header_t = {
-        //   u64 report_time,       // boot time when report was generated
-        //   u64 suspend_start_time,// boot time suspend started (infinite for REPORT_ONLY)
-        //   u32 total_wake_sources,
-        //   u32 reserved,
-        // } = 24 bytes
-        if out_header != 0 {
-            let report_time = hal_impl::timer::timer_now().as_nanos() as u64;
-            let suspend_start_time = if options & ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY != 0 {
-                i64::MAX as u64 // ZX_TIME_INFINITE_BOOT
-            } else {
-                report_time
-            };
-            let mut hdr_out: UserOutPtr<u8> = out_header.into();
-            hdr_out.write_array(&report_time.to_ne_bytes())?;
-            hdr_out = (hdr_out.as_addr() + 8).into();
-            hdr_out.write_array(&suspend_start_time.to_ne_bytes())?;
-            hdr_out = (hdr_out.as_addr() + 8).into();
-            hdr_out.write_array(&total_wake_sources.to_ne_bytes())?;
-            hdr_out = (hdr_out.as_addr() + 4).into();
-            hdr_out.write_array(&0u32.to_ne_bytes())?; // reserved
-        }
+        let report_time = hal_impl::timer::timer_now().as_nanos() as u64;
 
-        // REPORT_ONLY: skip the suspend operation entirely.
-        if options & ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY != 0 {
-            actual_entries.write_if_not_null(0)?;
-            return Ok(());
-        }
+        // Determine suspend_start_time based on options.
+        let is_report_only = options & OPTION_REPORT_ONLY != 0;
+        let suspend_start_time = if is_report_only {
+            i64::MAX as u64 // ZX_TIME_INFINITE_BOOT
+        } else {
+            report_time
+        };
 
-        // Interpret the deadline as a signed timestamp (nanoseconds since boot).
-        // If already in the past (or infinite_past), return immediately.
-        //
-        // STUB: A real implementation would enter a low-power state via
-        // PSCI (aarch64), ACPI S-states (x86), or SBI HSM (riscv).
-        // This busy-wait is only safe for short durations. Tests with
-        // long deadlines are in the skip list (SuspendAndResumeByTimer).
-        // Cap the wait at 5 seconds to prevent indefinite hangs.
-        let deadline_signed = resume_deadline as i64;
-        if deadline_signed > 0 {
-            let deadline = core::time::Duration::from_nanos(deadline_signed as u64);
-            let now = hal_impl::timer::timer_now();
-            let max_wait = core::time::Duration::from_secs(5);
-            let capped = deadline.min(now + max_wait);
-            if capped > now {
-                while hal_impl::timer::timer_now() < capped {
-                    core::hint::spin_loop();
+        // If not REPORT_ONLY, actually "suspend" (busy-wait to deadline).
+        if !is_report_only {
+            let deadline_signed = resume_deadline as i64;
+            if deadline_signed > 0 {
+                let deadline = core::time::Duration::from_nanos(deadline_signed as u64);
+                let now = hal_impl::timer::timer_now();
+                let max_wait = core::time::Duration::from_secs(5);
+                let capped = deadline.min(now + max_wait);
+                if capped > now {
+                    while hal_impl::timer::timer_now() < capped {
+                        core::hint::spin_loop();
+                    }
                 }
             }
         }
 
-        // Report the kernel deadline as a wake source. The deadline timer
-        // always "fires" in our stub (we don't actually suspend), so always
-        // report the kernel wake source when a report buffer is provided.
-        let deadline_fired = true; // stub: deadline always fires immediately
-        if deadline_fired && num_entries > 0 && out_entries != 0 {
-            // zx_wake_source_report_entry_t = { u64 koid, u64 reserved[3] } = 32 bytes
-            // ZX_KOID_KERNEL = 1
-            let mut entry_out: UserOutPtr<u8> = out_entries.into();
-            let koid_kernel: u64 = 1; // ZX_KOID_KERNEL
-            entry_out.write_array(&koid_kernel.to_ne_bytes())?;
-            entry_out = (entry_out.as_addr() + 8).into();
-            // reserved[3] = {0, 0, 0}
-            for _ in 0..3 {
-                entry_out.write_array(&0u64.to_ne_bytes())?;
-                entry_out = (entry_out.as_addr() + 8).into();
-            }
-            actual_entries.write_if_not_null(1)?;
+        // Write the header if requested.
+        // zx_wake_source_report_header_t = {
+        //   u64 report_time, u64 suspend_start_time,
+        //   u32 total_wake_sources, u32 unreported_entries
+        // } = 24 bytes
+        // Determine how many entries to write.
+        // The deadline timer entry is only reported when we actually
+        // "suspended" (not REPORT_ONLY). For REPORT_ONLY, no deadline
+        // fired so there's nothing to report.
+        let deadline_entry = if !is_report_only { 1u32 } else { 0u32 };
+        let entries_to_write = if has_entries {
+            deadline_entry.min(num_entries)
         } else {
-            actual_entries.write_if_not_null(0)?;
+            0u32
+        };
+        let unreported = if has_entries {
+            deadline_entry.saturating_sub(num_entries)
+        } else {
+            0u32
+        };
+
+        if has_header {
+            let mut hdr: UserOutPtr<u8> = out_header.into();
+            hdr.write_array(&report_time.to_ne_bytes())?;
+            hdr = (hdr.as_addr() + 8).into();
+            hdr.write_array(&suspend_start_time.to_ne_bytes())?;
+            hdr = (hdr.as_addr() + 8).into();
+            hdr.write_array(&total_wake_sources.to_ne_bytes())?;
+            hdr = (hdr.as_addr() + 4).into();
+            hdr.write_array(&unreported.to_ne_bytes())?;
+        }
+
+        // REPORT_ONLY with header-only (no entry buffer): return success.
+        if is_report_only && !has_entries {
+            return Ok(());
+        }
+
+        // Write wake source entries.
+        if entries_to_write > 0 && has_entries {
+            let mut ent: UserOutPtr<u8> = out_entries.into();
+            // Entry 0: kernel deadline timer.
+            // koid = 1 (ZX_KOID_KERNEL)
+            ent.write_array(&1u64.to_ne_bytes())?;
+            ent = (ent.as_addr() + 8).into();
+            // name: "suspend timeout" (32 bytes, null-padded)
+            let mut name = [0u8; 32];
+            let n = b"suspend timeout";
+            name[..n.len()].copy_from_slice(n);
+            ent.write_array(&name)?;
+            ent = (ent.as_addr() + 32).into();
+            // initial_signal_time = report_time
+            ent.write_array(&report_time.to_ne_bytes())?;
+            ent = (ent.as_addr() + 8).into();
+            // last_signal_time = report_time
+            ent.write_array(&report_time.to_ne_bytes())?;
+            ent = (ent.as_addr() + 8).into();
+            // last_ack_time = report_time (auto-acked)
+            ent.write_array(&report_time.to_ne_bytes())?;
+            ent = (ent.as_addr() + 8).into();
+            // signal_count = 1
+            ent.write_array(&1u32.to_ne_bytes())?;
+            ent = (ent.as_addr() + 4).into();
+            // flags = 0 (not signaled, not previously reported)
+            ent.write_array(&0u32.to_ne_bytes())?;
+        }
+
+        if has_actual {
+            actual_entries.write(entries_to_write)?;
         }
         Ok(())
     }
