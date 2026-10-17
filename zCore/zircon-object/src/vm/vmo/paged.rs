@@ -966,10 +966,11 @@ impl VMObjectPagedInner {
             }
         }
         let frame = self.frames.get_mut(&page_idx).unwrap();
-        // Share_count-based COW (no tags):
-        // - share_count == 0: last viewer → migrate for write, ref for read
-        // - share_count > 0: shared → copy for write, ref for read
+        // COW fork: when a child writes to a shared page in a hidden node,
+        // create a private copy for the writer and tag the original so
+        // the other child exclusively owns it.
         if self.type_.is_hidden() && flags.contains(MMUFlags::WRITE) {
+            let (_child_tag, _) = self.type_.get_tag_and_other(child);
             if frame.share_count == 0 {
                 // Last viewer — migrate the frame out.
                 let target_frame = self.frames.remove(&page_idx).unwrap().take();

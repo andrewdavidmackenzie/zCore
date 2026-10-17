@@ -209,7 +209,11 @@ impl Syscall<'_> {
             // ALLOW_FAULTS: lazy commit, pages faulted in on demand
             false
         } else {
-            // Default: eagerly commit pages to avoid stale page table issues
+            // Default for bare-metal: eagerly commit pages.
+            // For COW children and initially-empty VMOs, this will
+            // demand-fault on access since commit_page may create
+            // new pages. Fuchsia only maps existing committed pages
+            // during map and demand-faults the rest.
             true
         };
         // Reject explicit MAP_RANGE when the mapping extends past the VMO,
