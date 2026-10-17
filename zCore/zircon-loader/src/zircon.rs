@@ -482,10 +482,12 @@ async fn handler_user_trap(
                         match result {
                             Ok(()) => Ok(()),
                             Err(e) => {
-                                warn!("pager wait failed: {:?}", e);
+                                // Pass the pager error code as synth_code
+                                // in the exception report. Tests check this
+                                // via WaitForCrash(addr, ZX_ERR_IO).
                                 Err(ExceptionInfo {
                                     type_: ExceptionType::FatalPageFault,
-                                    synth_code: 0,
+                                    synth_code: e as u32,
                                 })
                             }
                         }
@@ -495,62 +497,76 @@ async fn handler_user_trap(
                     }
                 }
                 Err(err) => {
-                    #[cfg_attr(not(target_arch = "x86_64"), allow(unused_variables))]
-                    let ctx = thread.context_cloned();
-                    error!(
-                        "failed to handle page fault from user mode @ {:#x}({:?}): {:?}",
-                        vaddr, flags, err,
-                    );
-                    if let Ok(mf) = thread.proc().vmar().get_mapping_flags(vaddr) {
-                        error!("  mapping at fault addr: {:?}", mf);
-                    } else {
-                        error!("  NO mapping at fault addr {:#x}", vaddr);
-                    }
-                    // Dump TLS info for debugging unsafe stack pointer issues
-                    #[cfg(target_arch = "x86_64")]
-                    {
-                        let regs2 = ctx.as_ref().unwrap().general();
-                        if regs2.fsbase != 0 {
-                            let mut tls_buf = [0u8; 32];
-                            if thread
-                                .proc()
-                                .vmar()
-                                .read_memory(regs2.fsbase, &mut tls_buf)
-                                .is_ok()
-                            {
-                                error!(
-                                    "  fsbase={:#x} TLS[0x10]={:#x} TLS[0x18]={:#x}",
-                                    regs2.fsbase,
-                                    usize::from_le_bytes(tls_buf[0x10..0x18].try_into().unwrap()),
-                                    usize::from_le_bytes(tls_buf[0x18..0x20].try_into().unwrap()),
-                                );
-                            }
-                        }
-                    }
-                    // Dump user registers and stack backtrace
-                    #[cfg(target_arch = "x86_64")]
-                    {
-                        let regs = ctx.as_ref().unwrap().general();
+                    // BAD_STATE from a detached pager VMO is expected —
+                    // the thread should get a FatalPageFault exception.
+                    // Only log unexpected errors.
+                    if err != ZxError::BAD_STATE {
+                        #[cfg_attr(not(target_arch = "x86_64"), allow(unused_variables))]
+                        let ctx = thread.context_cloned();
                         error!(
-                            "  rip={:#x} rsp={:#x} rbp={:#x} rdi={:#x} rsi={:#x}",
-                            regs.rip, regs.rsp, regs.rbp, regs.rdi, regs.rsi
+                            "failed to handle page fault from user mode @ {:#x}({:?}): {:?}",
+                            vaddr, flags, err,
                         );
-                        let mut fp = regs.rbp;
-                        for depth in 0..8 {
-                            if fp == 0 || fp > 0x8000_0000_0000 {
-                                break;
-                            }
-                            let mut buf = [0u8; 16];
-                            if thread.proc().vmar().read_memory(fp, &mut buf).is_ok() {
-                                let next_fp = usize::from_le_bytes(buf[0..8].try_into().unwrap());
-                                let ret_addr = usize::from_le_bytes(buf[8..16].try_into().unwrap());
-                                error!("  frame[{}]: fp={:#x} ret={:#x}", depth, next_fp, ret_addr);
-                                fp = next_fp;
-                            } else {
-                                break;
+                        if let Ok(mf) = thread.proc().vmar().get_mapping_flags(vaddr) {
+                            error!("  mapping at fault addr: {:?}", mf);
+                        } else {
+                            error!("  NO mapping at fault addr {:#x}", vaddr);
+                        }
+                        // Dump TLS info for debugging unsafe stack pointer issues
+                        #[cfg(target_arch = "x86_64")]
+                        {
+                            let regs2 = ctx.as_ref().unwrap().general();
+                            if regs2.fsbase != 0 {
+                                let mut tls_buf = [0u8; 32];
+                                if thread
+                                    .proc()
+                                    .vmar()
+                                    .read_memory(regs2.fsbase, &mut tls_buf)
+                                    .is_ok()
+                                {
+                                    error!(
+                                        "  fsbase={:#x} TLS[0x10]={:#x} TLS[0x18]={:#x}",
+                                        regs2.fsbase,
+                                        usize::from_le_bytes(
+                                            tls_buf[0x10..0x18].try_into().unwrap()
+                                        ),
+                                        usize::from_le_bytes(
+                                            tls_buf[0x18..0x20].try_into().unwrap()
+                                        ),
+                                    );
+                                }
                             }
                         }
-                    }
+                        // Dump user registers and stack backtrace
+                        #[cfg(target_arch = "x86_64")]
+                        {
+                            let regs = ctx.as_ref().unwrap().general();
+                            error!(
+                                "  rip={:#x} rsp={:#x} rbp={:#x} rdi={:#x} rsi={:#x}",
+                                regs.rip, regs.rsp, regs.rbp, regs.rdi, regs.rsi
+                            );
+                            let mut fp = regs.rbp;
+                            for depth in 0..8 {
+                                if fp == 0 || fp > 0x8000_0000_0000 {
+                                    break;
+                                }
+                                let mut buf = [0u8; 16];
+                                if thread.proc().vmar().read_memory(fp, &mut buf).is_ok() {
+                                    let next_fp =
+                                        usize::from_le_bytes(buf[0..8].try_into().unwrap());
+                                    let ret_addr =
+                                        usize::from_le_bytes(buf[8..16].try_into().unwrap());
+                                    error!(
+                                        "  frame[{}]: fp={:#x} ret={:#x}",
+                                        depth, next_fp, ret_addr
+                                    );
+                                    fp = next_fp;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    } // end if err != BAD_STATE
                     Err(ExceptionInfo {
                         type_: ExceptionType::FatalPageFault,
                         synth_code: err as u32,

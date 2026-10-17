@@ -655,8 +655,12 @@ impl VMObjectTrait for VMObjectPaged {
     }
 
     fn clear_pager_backed(&self) {
+        // Don't clear pager_backed — the VMO was pager-backed and
+        // detached. Unsupplied pages should return errors (BAD_STATE)
+        // instead of silently allocating zero frames. The pager_port
+        // is already cleared so request_pages returns BAD_STATE.
+        // Also clear the supplying flag.
         let (_guard, mut inner) = self.get_inner_mut();
-        inner.pager_backed = false;
         inner.supplying = false;
     }
 
@@ -944,6 +948,11 @@ impl VMObjectPagedInner {
 
     fn decommit(&mut self, page_idx: usize) {
         self.frames.remove(&page_idx);
+        // For pager-backed VMOs, insert a zero marker so reads
+        // return zeros instead of triggering SHOULD_WAIT.
+        if self.pager_backed {
+            self.zero_markers.insert(page_idx);
+        }
     }
 
     fn range_change(&self, parent_offset: usize, parent_limit: usize, op: RangeChangeOp) {
