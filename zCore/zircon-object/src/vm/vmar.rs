@@ -1146,10 +1146,31 @@ impl VmAddressRegion {
         align: usize,
         upper_limit: usize,
     ) -> Option<usize> {
-        let candidates: alloc::vec::Vec<usize> = core::iter::once(offset_hint)
-            .chain(inner.children.iter().map(|map| map.end_addr() - self.addr))
-            .chain(inner.mappings.iter().map(|map| map.end_addr() - self.addr))
+        // Collect all occupied region boundaries (start, end) sorted by start.
+        let mut regions: alloc::vec::Vec<(usize, usize)> = inner
+            .children
+            .iter()
+            .map(|c| (c.addr() - self.addr, c.end_addr() - self.addr))
+            .chain(
+                inner
+                    .mappings
+                    .iter()
+                    .map(|m| (m.addr() - self.addr, m.end_addr() - self.addr)),
+            )
             .collect();
+        regions.sort_by_key(|&(start, _)| start);
+
+        // Build candidate offsets: the hint, end of each region, and
+        // aligned starts within each gap.
+        let mut candidates: alloc::vec::Vec<usize> =
+            alloc::vec::Vec::with_capacity(regions.len() + 2);
+        candidates.push(offset_hint);
+
+        // Try end of each occupied region (the start of the next gap).
+        for &(_, end) in &regions {
+            candidates.push(end);
+        }
+
         candidates.into_iter().find_map(|offset| {
             let aligned = if align > 0 {
                 let mask = align - 1;
