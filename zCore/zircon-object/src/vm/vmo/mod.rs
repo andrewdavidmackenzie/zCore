@@ -21,6 +21,17 @@ mod slice;
 
 kcounter!(VMO_PAGE_ALLOC, "vmo.page_alloc");
 kcounter!(VMO_PAGE_DEALLOC, "vmo.page_dealloc");
+// Public counters for kernel memory statistics (KmemStatsExtended).
+// These use a custom declaration instead of kcounter! to be pub(crate).
+#[used]
+pub(crate) static VMO_PAGER_PAGES: crate::util::kcounter::Counter =
+    crate::util::kcounter::Counter::new();
+#[used]
+pub(crate) static VMO_DISCARDABLE_LOCKED_PAGES: crate::util::kcounter::Counter =
+    crate::util::kcounter::Counter::new();
+#[used]
+pub(crate) static VMO_DISCARDABLE_UNLOCKED_PAGES: crate::util::kcounter::Counter =
+    crate::util::kcounter::Counter::new();
 
 /// Page dirty-tracking states.
 const PAGE_CLEAN: u8 = 0;
@@ -30,6 +41,21 @@ const PAGE_AWAITING_CLEAN: u8 = 2;
 /// The amount of memory committed to VMOs.
 pub fn vmo_page_bytes() -> usize {
     (VMO_PAGE_ALLOC.get() - VMO_PAGE_DEALLOC.get()) * PAGE_SIZE
+}
+
+/// Total bytes in pager-backed VMOs.
+pub fn vmo_pager_total_bytes() -> usize {
+    VMO_PAGER_PAGES.get() * PAGE_SIZE
+}
+
+/// Bytes in locked discardable VMOs.
+pub fn vmo_discardable_locked_bytes() -> usize {
+    VMO_DISCARDABLE_LOCKED_PAGES.get() * PAGE_SIZE
+}
+
+/// Bytes in unlocked discardable VMOs.
+pub fn vmo_discardable_unlocked_bytes() -> usize {
+    VMO_DISCARDABLE_UNLOCKED_PAGES.get() * PAGE_SIZE
 }
 
 /// Virtual Memory Object Trait
@@ -67,6 +93,11 @@ pub trait VMObjectTrait: Sync + Send {
 
     /// Decommit allocated physical memory.
     fn decommit(&self, offset: usize, len: usize) -> ZxResult;
+
+    /// Decommit all pages in this VMO (for discardable VMO discard).
+    fn decommit_all(&self) -> ZxResult {
+        self.decommit(0, self.len())
+    }
 
     /// Create a child VMO.
     fn create_child(&self, offset: usize, len: usize) -> ZxResult<Arc<dyn VMObjectTrait>>;
@@ -174,6 +205,9 @@ pub struct VmObject {
     /// True if the VMO was created with SNAPSHOT + NO_WRITE.
     immutable: core::sync::atomic::AtomicBool,
     discardable: core::sync::atomic::AtomicBool,
+    /// True if a discardable VMO has been unlocked and its pages discarded.
+    /// TRY_LOCK returns UNAVAILABLE when this is set.
+    discarded: core::sync::atomic::AtomicBool,
     /// Lock count for discardable VMOs (0 = unlocked, >0 = locked).
     lock_count: core::sync::atomic::AtomicU32,
     /// True if all handles are closed (for slice VMOs, commit_page
@@ -234,6 +268,7 @@ impl VmObject {
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),
+            discarded: core::sync::atomic::AtomicBool::new(false),
             lock_count: core::sync::atomic::AtomicU32::new(0),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
@@ -251,6 +286,7 @@ impl VmObject {
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),
+            discarded: core::sync::atomic::AtomicBool::new(false),
             lock_count: core::sync::atomic::AtomicU32::new(0),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
@@ -267,6 +303,7 @@ impl VmObject {
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),
+            discarded: core::sync::atomic::AtomicBool::new(false),
             lock_count: core::sync::atomic::AtomicU32::new(0),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
@@ -701,6 +738,7 @@ impl VmObject {
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false), // Caller sets this after creation if needed
             discardable: core::sync::atomic::AtomicBool::new(false),
+            discarded: core::sync::atomic::AtomicBool::new(false),
             lock_count: core::sync::atomic::AtomicU32::new(0),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
@@ -779,6 +817,7 @@ impl VmObject {
             is_slice: true,
             immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),
+            discarded: core::sync::atomic::AtomicBool::new(false),
             lock_count: core::sync::atomic::AtomicU32::new(0),
             dead: core::sync::atomic::AtomicBool::new(false),
             _counter: CountHelper::new(),
@@ -916,16 +955,38 @@ impl VmObject {
     ///
     /// Returns `NOT_SUPPORTED` if the VMO is not discardable, matching
     /// Fuchsia's `ZX_VMO_OP_LOCK` behavior.
-    pub fn lock_discardable(&self) -> ZxResult {
+    /// Lock a discardable VMO. If `try_lock` is true, returns
+    /// `UNAVAILABLE` if the VMO has been discarded since it was last
+    /// unlocked. Regular LOCK always succeeds (re-locks a discarded VMO).
+    pub fn lock_discardable_ext(&self, try_lock: bool) -> ZxResult {
         if !self.is_discardable() {
             return Err(ZxError::NOT_SUPPORTED);
         }
-        self.lock_count
+        if try_lock && self.discarded.load(core::sync::atomic::Ordering::Relaxed) {
+            return Err(ZxError::UNAVAILABLE);
+        }
+        // Clear discarded state on successful lock.
+        self.discarded
+            .store(false, core::sync::atomic::Ordering::Relaxed);
+        let old = self
+            .lock_count
             .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        // Track locked pages for KmemStatsExtended.
+        if old == 0 {
+            let pages = self.len() / PAGE_SIZE;
+            VMO_DISCARDABLE_LOCKED_PAGES.add(pages);
+        }
         Ok(())
     }
 
+    /// Lock (non-try variant, for backward compatibility).
+    pub fn lock_discardable(&self) -> ZxResult {
+        self.lock_discardable_ext(false)
+    }
+
     /// Unlock a discardable VMO. Returns BAD_STATE if already unlocked.
+    /// When the lock count reaches 0, the VMO is marked as discarded
+    /// and its pages are decommitted.
     pub fn unlock_discardable(&self) -> ZxResult {
         loop {
             let current = self.lock_count.load(core::sync::atomic::Ordering::Relaxed);
@@ -942,6 +1003,16 @@ impl VmObject {
                 )
                 .is_ok()
             {
+                if current == 1 {
+                    // Lock count reached 0 — discard the VMO's pages.
+                    self.discarded
+                        .store(true, core::sync::atomic::Ordering::Relaxed);
+                    let pages = self.len() / PAGE_SIZE;
+                    VMO_DISCARDABLE_LOCKED_PAGES.sub(pages);
+                    VMO_DISCARDABLE_UNLOCKED_PAGES.add(pages);
+                    // Decommit all pages to reclaim memory.
+                    let _ = self.trait_.decommit_all();
+                }
                 return Ok(());
             }
         }

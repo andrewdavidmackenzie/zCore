@@ -712,7 +712,8 @@ impl Syscall<'_> {
                 if matches!(op, VmoOpType::Lock) && (_buffer_size < 32 || _buffer.is_null()) {
                     return Err(ZxError::INVALID_ARGS);
                 }
-                vmo.lock_discardable()?;
+                let is_try = matches!(op, VmoOpType::TryLock);
+                vmo.lock_discardable_ext(is_try)?;
                 // Write zx_vmo_lock_state_t to buffer (LOCK only, not TRY_LOCK):
                 if matches!(op, VmoOpType::Lock) {
                     let mut buf = _buffer;

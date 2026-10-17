@@ -185,10 +185,15 @@ impl Syscall<'_> {
                 return Err(ZxError::INVALID_ARGS);
             }
             // WAKE_VECTOR requires a valid resource handle.
-            if options.contains(InterruptOptions::WAKE_VECTOR) {
+            let is_wake = options.contains(InterruptOptions::WAKE_VECTOR);
+            if is_wake {
                 proc.get_resource(resource)?;
             }
-            Interrupt::new_virtual()
+            let intr = Interrupt::new_virtual();
+            if is_wake {
+                zircon_object::dev::register_wake_source(intr.id());
+            }
+            intr
         } else {
             let resource = proc.get_resource(resource)?;
             resource.validate_ranged_resource(ResourceKind::IRQ, src_num, 1)?;
@@ -243,6 +248,9 @@ impl Syscall<'_> {
             .thread
             .proc()
             .get_object_with_rights::<Interrupt>(interrupt, Rights::SIGNAL)?;
+        // Record wake source trigger for suspend reports.
+        let now = hal_impl::timer::timer_now().as_nanos() as u64;
+        zircon_object::dev::wake_source_triggered(interrupt.id(), now);
         interrupt.trigger(timestamp)
     }
 
@@ -255,6 +263,9 @@ impl Syscall<'_> {
             .thread
             .proc()
             .get_object_with_rights::<Interrupt>(interrupt, Rights::WRITE)?;
+        // Record wake source ack for suspend reports.
+        let now = hal_impl::timer::timer_now().as_nanos() as u64;
+        zircon_object::dev::wake_source_acked(interrupt.id(), now);
         interrupt.ack()
     }
 

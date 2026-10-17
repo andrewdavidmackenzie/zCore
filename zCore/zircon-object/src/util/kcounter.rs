@@ -92,6 +92,11 @@ impl Counter {
         self.0.fetch_add(x, Ordering::Relaxed);
     }
 
+    /// Subtract a value from the counter.
+    pub fn sub(&self, x: usize) {
+        self.0.fetch_sub(x, Ordering::Relaxed);
+    }
+
     /// Get the value of counter.
     pub fn get(&self) -> usize {
         self.0.load(Ordering::Relaxed)
