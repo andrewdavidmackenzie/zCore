@@ -74,7 +74,6 @@ VmoTestCase.PinTests
 VmoTestCase.UnmapLoanedcontiguousWhileFaulting
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
-Pager.OverlapCommitSupplyTest
 Pager.BulkOddLengthSupplyTest
 Pager.BulkOddOffsetSupplyTest
 Pager.BulkSingleSupplyTest
@@ -114,9 +113,7 @@ Pager.EvictionHintsOpRange
 Pager.EvictionHintsVmar
 Pager.EvictionHintsWithClones
 Pager.EvictionHintsWithResize
-Pager.FailEarlyWake
 Pager.FailErrorCode
-Pager.FailMultipleCommits
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
