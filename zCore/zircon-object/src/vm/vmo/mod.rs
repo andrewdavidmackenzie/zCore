@@ -570,9 +570,19 @@ impl VmObject {
     pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
         let inner = self.inner.lock();
         if let Some(port) = &inner.pager_port {
-            let page_idx = offset / PAGE_SIZE;
-            // Don't send duplicate port requests for the same page.
-            if !inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx) {
+            let start_page = offset / PAGE_SIZE;
+            let end_page = (offset + length).div_ceil(PAGE_SIZE);
+            // Skip if ALL pages in the range are already committed
+            // (avoids spurious requests on fault retries after supply).
+            let total_pages = end_page - start_page;
+            let committed = self.trait_.committed_pages_in_range(start_page, end_page);
+            let all_committed = committed == total_pages;
+            // Also skip if there's already a pending waiter for the first page.
+            let has_waiter = inner
+                .pager_waiters
+                .iter()
+                .any(|(idx, _)| *idx == start_page);
+            if !all_committed && !has_waiter {
                 port.push(PortPacketRepr {
                     key: inner.pager_key,
                     status: ZxError::OK,

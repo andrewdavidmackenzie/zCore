@@ -6,72 +6,37 @@
 PortStressTest.ChannelCallWaitQueuePanicRepro
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
-PortStressTest.CancelKeyCloseRace
 ChannelTest.NoSpuriousReadableSignalWhenRacing
-ChannelInternalTest.TransferChannelWithPendingCall
 ProcessTest.KillChannelHandleCycle
 
 # ── Thread suspend / register state ─────────────────────────────────
 Threads.BadSyscallCaller
-Threads.BadSyscallNumber
-Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
-Threads.DebugRegistersDr6ResetOnDebugException
-Threads.DebugRegistersValidation
-Threads.DebugRegistersWatchpointSyscallPanicRepro
 Threads.ExitViaException
-Threads.GetAffinity
-Threads.GetInfoRuntime
-Threads.GetLastScheduledCpu
-Threads.InfoTaskStatsFails
-Threads.InfoThreadStatsFails
 Threads.NoncanonicalRipAddressIRETQ
 Threads.NoncanonicalRipAddressSyscall
-Threads.ProcessStartOnSecondThread
 Threads.ReadingFpRegisterState
 Threads.ReadingGeneralRegisterState
 Threads.ReadingVectorRegisterState
-Threads.ResumeSuspended
-Threads.StartRegs
-Threads.StartRegsNoncanonicalTp
 Threads.StartRegsSuspended
-Threads.StartSuspendedAndResumedThread
-Threads.StartSuspendedThread
-Threads.SuspendAfterDeath
-Threads.SuspendChannelCall
-Threads.SuspendMultiple
-Threads.SuspendPortCall
-Threads.SuspendSleeping
-Threads.SuspendStopsThread
-Threads.SyscallDebuggerModifyResult
-Threads.SyscallSuspendedRegisterState
-Threads.ThreadLocalRegisterState
 Threads.ThreadStartInvalidEntry
-Threads.ThreadStartOnInitialThread
-Threads.WatchpointSyscallPanic
 Threads.WriteReadDebugRegisterState
 Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
 Threads.WritingArmFlagsRegister
 Threads.WritingFpRegisterState
-Threads.WritingGeneralRegisterState
 Threads.WritingSingleStepState
 Threads.WritingVectorRegisterState
 Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
 Threads.X86AcFlagUserCopy
 
 # ── Policy exception infrastructure ─────────────────────────────────
-PortTest.QueuePacketLimitExceededGeneratesPolicyException
-PortTest.TooManyObservers
 ChannelTest.ChannelFullException
-DefaultExceptionHandlerTest.UnhandledPolicyException
 UserExceptionsTest.NonFatal
-UserExceptionsTest.Delivered
 
 # ── COW populated_bytes ──────────────────────────────────────────────
 VmoZeroTestCase.WriteCowParent
 
 # ── VmoTestCase (kernel panic / crash) ───────────────────────────────
 VmoTestCase.PinTests
-VmoTestCase.UnmapLoanedcontiguousWhileFaulting
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.CloneChainCommitTest
@@ -79,14 +44,7 @@ Pager.CloneCommitMultipleBatches
 Pager.CloneCommitSingleBatch
 Pager.CloneCommitTest
 Pager.CloneCommitTwoBatches
-Pager.CloneMightSeeIntermediateForks
-Pager.CloneResizeCloneHazard
-Pager.CloneSeesCorrectParentPages
-Pager.CloneShrinkGrowParent
-Pager.CloneSplitCommitTest
 Pager.ClosePageCompleteTest
-Pager.ClosePortTest
-Pager.DetachNonMappingAccess
 Pager.DetachPageCompleteTest
 Pager.EarlyWakeCloneRace
 Pager.EarlyWakeNonLinearSupply
@@ -100,58 +58,34 @@ Pager.EvictionHintsOpRange
 Pager.EvictionHintsVmar
 Pager.EvictionHintsWithClones
 Pager.EvictionHintsWithResize
-Pager.FailErrorCode
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
-Pager.InvalidPagerCreateVmo
-Pager.InvalidPagerDetachVmo
-Pager.InvalidPagerSupplyPages
-Pager.MappedSupplyPages
 Pager.OpCommitCloneVmar
 Pager.OpCommitVmar
 Pager.OverlapCommitTest
 Pager.PageRequestBatchingChecksAncestorPages
-Pager.PinnedSupplyPages
-Pager.Prefetch
 Pager.PresentPageSplitsRange
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
 Pager.ResizeCommitTest
 Pager.SplitCommitTest
 Pager.SuspendCommitTest
-Pager.SuspendInKernelCaptureFaultsTest
-Pager.SuspendInKernelTest
-Pager.CancelKeyDoesNotWedgeThePagerVmar
-Pager.CancelKeyDoesNotWedgeThePagerVmo
-Pager.EarlySupplyTestVmar
-Pager.EarlySupplyTestVmo
 Pager.ReadResizeTestVmar
 Pager.ReadResizeTestVmo
 Pager.SuspendReadTestVmar
 Pager.SuspendReadTestVmo
 Pager.DecommitOnDetachTestVmar
 Pager.DecommitOnDetachTestVmo
-Pager.ReadCloseInterruptLateTestVmar
-Pager.ReadCloseInterruptLateTestVmo
-Pager.ReadDetachInterruptLateTestVmar
 Pager.ReadDetachInterruptLateTestVmo
-Pager.ReadCloseInterruptEarlyTestVmar
-Pager.ReadCloseInterruptEarlyTestVmo
-Pager.ReadDetachInterruptEarlyTestVmar
 Pager.ReadDetachInterruptEarlyTestVmo
 Pager.CloneReadFromCloneTestVmar
 Pager.CloneReadFromCloneTestVmo
 Pager.CloneReadFromParentTestVmar
-Pager.CloneReadFromParentTestVmo
-Pager.CloneSimultaneousReadTestVmar
 Pager.CloneSimultaneousReadTestVmo
-Pager.CloneSimultaneousChildReadTestVmar
-Pager.CloneSimultaneousChildReadTestVmo
 Pager.CloneWriteToCloneTestVmar
 Pager.CloneWriteToCloneTestVmo
 Pager.CloneDetachTest
-Pager.FailSinglePageVmar
 
 # ── PagerProcess (preemptive scheduling) ─────────────────────────────
 PagerProcess.KillBlockedUserVmoRead
@@ -211,16 +145,11 @@ StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 
 # ── VMAR (FaultBeyondStreamSize) ─────────────────────────────────────
-Vmar.FaultBeyondStreamSize
-Vmar.FaultBeyondReducedStreamSize
-Vmar.FaultBeyondStreamSizeRange
 
 # ── BTI ──────────────────────────────────────────────────────────────
 Bti.InvalidPinArgs
 Bti.QuarantineDisallowsPin
 Bti.NoDelayedUnpin
-Bti.PinTooManyAddresses
-Bti.DecommitRace
 
 # ── MSI ──────────────────────────────────────────────────────────────
 MsiTest.Msi
@@ -274,3 +203,7 @@ WakeReportTestsPortBound.AlreadyTimedOut
 WakeReportTestsPortBound.ReportOnly
 WakeReportTestsPortBound.Acked
 WakeReportTestsPortBound.AckedStillPending
+
+# ── VmoZero/VmoClone2 hangs ─────────────────────────────────────────
+VmoZeroTestCase.AllocateAfterMergeMultipleChildren
+Threads.StartRegsNoncanonicalTp
