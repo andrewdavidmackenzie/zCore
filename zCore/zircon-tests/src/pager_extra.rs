@@ -233,12 +233,13 @@ fn pager_invalid_detach_vmo() {
     let _owned = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
     // Detach a VMO not owned by this pager.
+    // Non-pager-backed VMOs return INVALID_ARGS (Fuchsia behavior).
     let unrelated = VmObject::new_paged(1);
     let result = pager.detach_vmo(&unrelated);
     assert_eq!(
         result.err(),
-        Some(zircon_object::ZxError::NOT_FOUND),
-        "detach of unowned VMO should return NOT_FOUND"
+        Some(zircon_object::ZxError::INVALID_ARGS),
+        "detach of non-pager VMO should return INVALID_ARGS"
     );
 }
 
@@ -362,12 +363,13 @@ fn pager_double_detach_fails() {
     // First detach succeeds.
     pager.detach_vmo(&vmo).unwrap();
 
-    // Second detach should fail with NOT_FOUND.
+    // Second detach should fail — VMO is no longer pager-backed after
+    // first detach, so returns INVALID_ARGS.
     let result = pager.detach_vmo(&vmo);
     assert_eq!(
         result.err(),
-        Some(zircon_object::ZxError::NOT_FOUND),
-        "double detach should return NOT_FOUND"
+        Some(zircon_object::ZxError::INVALID_ARGS),
+        "double detach should return INVALID_ARGS (no longer pager-backed)"
     );
 }
 
@@ -464,19 +466,21 @@ fn pager_supply_unaligned() {
     let (pager, port) = create_pager_and_port();
     let pager_vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
-    // Source VMO with data at a non-zero offset.
+    // Source VMO with data at page-aligned offset.
     let src = VmObject::new_paged(2);
-    src.write(100, b"offset data").unwrap();
+    src.write(0, b"offset data").unwrap();
 
-    // Supply from aux_offset=100 (non-page-aligned source offset).
-    // This should work because supply_pages reads chunk-by-chunk.
+    // Non-page-aligned aux_offset is rejected (Fuchsia ABI).
     let result = pager.supply_pages(&pager_vmo, 0, PAGE_SIZE as u64, &src, 100);
-    // The read from src at offset 100 gets "offset data" + zeros.
-    // The write to pager_vmo at offset 0 should succeed.
-    assert!(
-        result.is_ok(),
-        "supply with non-aligned aux_offset should work"
+    assert_eq!(
+        result.err(),
+        Some(zircon_object::ZxError::INVALID_ARGS),
+        "non-aligned aux_offset should be rejected"
     );
+
+    // Page-aligned aux_offset works.
+    let result = pager.supply_pages(&pager_vmo, 0, PAGE_SIZE as u64, &src, 0);
+    assert!(result.is_ok(), "page-aligned supply should work");
 
     let mut buf = [0u8; 11];
     pager_vmo.read(0, &mut buf).unwrap();
@@ -545,9 +549,13 @@ fn pager_supply_pages_wrong_vmo() {
         "op_range on non-owned VMO should return INVALID_ARGS"
     );
 
-    // supply_pages doesn't check — it just writes. Document this.
+    // supply_pages now checks VMO ownership.
     let result = pager.supply_pages(&other, 0, PAGE_SIZE as u64, &src, 0);
-    assert!(result.is_ok(), "supply_pages doesn't check VMO ownership");
+    assert_eq!(
+        result.err(),
+        Some(zircon_object::ZxError::INVALID_ARGS),
+        "supply_pages on non-owned VMO should return INVALID_ARGS"
+    );
 }
 
 ///
@@ -833,12 +841,15 @@ fn pager_detach_then_supply_pages() {
 
     pager.detach_vmo(&vmo).unwrap();
 
-    // supply_pages doesn't check ownership — writes directly.
+    // After detach, supply_pages should fail — VMO no longer owned.
     let src = VmObject::new_paged(1);
     src.write(0, b"after detach").unwrap();
     let result = pager.supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0);
-    // Succeeds because supply_pages just copies memory.
-    assert!(result.is_ok(), "supply_pages doesn't check ownership");
+    assert_eq!(
+        result.err(),
+        Some(zircon_object::ZxError::INVALID_ARGS),
+        "supply_pages after detach should fail (not owned)"
+    );
 }
 
 ///
@@ -1644,10 +1655,10 @@ fn pager_rebind() {
     let (pager1, port1) = create_pager_and_port();
     let vmo = pager1.create_vmo(0, &port1, 0, PAGE_SIZE as u64).unwrap();
     pager1.detach_vmo(&vmo).unwrap();
-    // After detach, the VMO is no longer in pager1's list.
+    // After detach, VMO is no longer pager-backed → INVALID_ARGS.
     assert_eq!(
         pager1.detach_vmo(&vmo).err(),
-        Some(zircon_object::ZxError::NOT_FOUND)
+        Some(zircon_object::ZxError::INVALID_ARGS)
     );
     // The VMO still works for direct operations.
     vmo.write(0, b"rebound").unwrap();
@@ -2778,11 +2789,11 @@ fn pager_concurrent_detach() {
     for vmo in &vmos {
         pager.detach_vmo(vmo).unwrap();
     }
-    // Double-detach should fail for all.
+    // Double-detach should fail for all — VMOs are no longer pager-backed.
     for vmo in &vmos {
         assert_eq!(
             pager.detach_vmo(vmo).err(),
-            Some(zircon_object::ZxError::NOT_FOUND)
+            Some(zircon_object::ZxError::INVALID_ARGS)
         );
     }
 }

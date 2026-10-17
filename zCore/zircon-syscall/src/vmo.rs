@@ -104,17 +104,37 @@ impl Syscall<'_> {
             _ => {}
         }
         // For pager-backed VMOs, demand-page any missing pages first.
-        // This sends ZX_PAGER_VMO_READ requests and waits for supply_pages.
+        // Batch consecutive uncommitted pages into a single pager request
+        // (matching Fuchsia kernel behavior). This is important because
+        // tests like SequentialMultipageTestVmo expect a single batched
+        // request covering the entire range.
         if vmo.has_pager() && buf_size > 0 {
+            use zircon_object::vm::PAGE_SIZE;
             let start = offset as usize;
             let end = start + buf_size;
-            let start_page = start / zircon_object::vm::PAGE_SIZE;
-            let end_page = end.div_ceil(zircon_object::vm::PAGE_SIZE);
-            for page_idx in start_page..end_page {
-                if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
-                    let page_offset = page_idx * zircon_object::vm::PAGE_SIZE;
-                    let _ = vmo.request_pages(page_offset, zircon_object::vm::PAGE_SIZE);
-                    vmo.wait_for_page(page_offset).await?;
+            let start_page = start / PAGE_SIZE;
+            let end_page = end.div_ceil(PAGE_SIZE);
+            let mut page_idx = start_page;
+            while page_idx < end_page {
+                // Skip already-committed pages.
+                if vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                    page_idx += 1;
+                    continue;
+                }
+                // Find the end of this consecutive uncommitted run.
+                let run_start = page_idx;
+                while page_idx < end_page
+                    && vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
+                {
+                    page_idx += 1;
+                }
+                // Send one batched request for the entire run.
+                let req_offset = run_start * PAGE_SIZE;
+                let req_length = (page_idx - run_start) * PAGE_SIZE;
+                let _ = vmo.request_pages(req_offset, req_length);
+                // Wait for all pages in the run to be supplied.
+                for p in run_start..page_idx {
+                    vmo.wait_for_page(p * PAGE_SIZE).await?;
                 }
             }
         }

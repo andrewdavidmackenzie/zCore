@@ -1104,6 +1104,9 @@ impl VmObject {
                 if self.discardable.load(core::sync::atomic::Ordering::Relaxed) {
                     f |= VmoInfoFlags::DISCARDABLE;
                 }
+                if inner.pager_port.is_some() {
+                    f |= VmoInfoFlags::PAGER_BACKED;
+                }
                 f
             },
             cache_policy: self.trait_.cache_policy() as u32,
