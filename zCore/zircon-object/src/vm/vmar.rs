@@ -1068,26 +1068,11 @@ impl VmAddressRegion {
         // brute force
         for vmar in inner.children.iter() {
             if vmar.overlap(begin, end) {
-                if len > 0x1_0000_0000 {
-                    warn!(
-                        "test_map: offset={:#x} rejected by child vmar addr={:#x} end={:#x}",
-                        offset,
-                        vmar.addr,
-                        vmar.end_addr()
-                    );
-                }
                 return false;
             }
         }
         for map in inner.mappings.iter() {
             if map.overlap(begin, end) {
-                if len > 0x1_0000_0000 {
-                    let mi = map.inner.lock();
-                    warn!(
-                        "test_map: offset={:#x} rejected by mapping addr={:#x} size={:#x}",
-                        offset, mi.addr, mi.size
-                    );
-                }
                 return false;
             }
         }
@@ -1102,35 +1087,6 @@ impl VmAddressRegion {
         len: usize,
         align: usize,
     ) -> Option<usize> {
-        // TODO: randomize
-        debug_assert!(check_aligned(offset_hint, align));
-        // len only needs page-alignment, not alignment to `align`.
-        // brute force:
-        // try each area's end address as the start
-        let candidates: alloc::vec::Vec<usize> = core::iter::once(offset_hint)
-            .chain(inner.children.iter().map(|map| map.end_addr() - self.addr))
-            .chain(inner.mappings.iter().map(|map| map.end_addr() - self.addr))
-            .collect();
-        if len > 0x1_0000_0000 {
-            warn!(
-                "find_free_area: vmar addr={:#x} size={:#x}, looking for {:#x}, {} candidates",
-                self.addr,
-                self.size,
-                len,
-                candidates.len()
-            );
-            for &c in &candidates {
-                let end = self.addr + c + len;
-                let vmar_end = self.addr + self.size;
-                let fits = end <= vmar_end;
-                let child_overlap = inner.children.iter().any(|v| v.overlap(self.addr + c, end));
-                let map_overlap = inner.mappings.iter().any(|m| m.overlap(self.addr + c, end));
-                warn!(
-                    "  candidate offset={:#x} end={:#x}: fits={} child_overlap={} map_overlap={}",
-                    c, end, fits, child_overlap, map_overlap
-                );
-            }
-        }
         self.find_free_area_with_limit(inner, offset_hint, len, align, self.size)
     }
 

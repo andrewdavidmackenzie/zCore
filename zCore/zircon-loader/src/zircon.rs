@@ -482,10 +482,12 @@ async fn handler_user_trap(
                         match result {
                             Ok(()) => Ok(()),
                             Err(e) => {
-                                warn!("pager wait failed: {:?}", e);
+                                // Pass the pager error code as synth_code
+                                // in the exception report. Tests check this
+                                // via WaitForCrash(addr, ZX_ERR_IO).
                                 Err(ExceptionInfo {
                                     type_: ExceptionType::FatalPageFault,
-                                    synth_code: 0,
+                                    synth_code: e as u32,
                                 })
                             }
                         }
