@@ -515,14 +515,15 @@ impl Syscall<'_> {
             }
         }
 
-        // Count active IRQ wake sources.
-        let active_wake_sources = proc.count_wake_sources();
-        let total_wake_sources = active_wake_sources + 1; // +1 for deadline timer
+        // Count active IRQ wake sources from the global registry.
+        let irq_wake_count = zircon_object::dev::wake_source_count();
+        let total_wake_sources = irq_wake_count + 1; // +1 for deadline timer
 
         let report_time = hal_impl::timer::timer_now().as_nanos() as u64;
 
         // Determine suspend_start_time based on options.
         let is_report_only = options & OPTION_REPORT_ONLY != 0;
+        let is_discard = options & OPTION_DISCARD != 0;
         let suspend_start_time = if is_report_only {
             i64::MAX as u64 // ZX_TIME_INFINITE_BOOT
         } else {
@@ -545,26 +546,41 @@ impl Syscall<'_> {
             }
         }
 
-        // Write the header if requested.
-        // zx_wake_source_report_header_t = {
-        //   u64 report_time, u64 suspend_start_time,
-        //   u32 total_wake_sources, u32 unreported_entries
-        // } = 24 bytes
-        // Determine how many entries to write.
-        // The deadline timer entry is only reported when we actually
-        // "suspended" (not REPORT_ONLY). For REPORT_ONLY, no deadline
-        // fired so there's nothing to report.
-        let deadline_entry = if !is_report_only { 1u32 } else { 0u32 };
+        // Build the list of entries to report.
+        // Entry structure: koid(8) + name(32) + initial_signal(8)
+        //                + last_signal(8) + last_ack(8) + count(4) + flags(4) = 72 bytes
+        let mut entries: alloc::vec::Vec<zircon_object::dev::WakeReportEntry> =
+            alloc::vec::Vec::new();
+
+        // Collect triggered IRQ wake sources.
+        if !is_report_only || has_entries {
+            let irq_entries = zircon_object::dev::collect_wake_entries();
+            entries.extend(irq_entries);
+        }
+
+        // Add the deadline timer entry when we actually "suspended".
+        if !is_report_only {
+            let mut name = [0u8; 32];
+            let n = b"suspend timeout";
+            name[..n.len()].copy_from_slice(n);
+            entries.push((
+                1u64,        // koid = ZX_KOID_KERNEL
+                name,        // name = "suspend timeout"
+                report_time, // initial_signal_time
+                report_time, // last_signal_time
+                report_time, // last_ack_time (auto-acked)
+                1u32,        // signal_count
+                0u32,        // flags = 0
+            ));
+        }
+
+        let total_entries = entries.len() as u32;
         let entries_to_write = if has_entries {
-            deadline_entry.min(num_entries)
+            total_entries.min(num_entries)
         } else {
             0u32
         };
-        let unreported = if has_entries {
-            deadline_entry.saturating_sub(num_entries)
-        } else {
-            0u32
-        };
+        let unreported = total_entries.saturating_sub(entries_to_write);
 
         if has_header {
             let mut hdr: UserOutPtr<u8> = out_header.into();
@@ -579,41 +595,43 @@ impl Syscall<'_> {
 
         // REPORT_ONLY with header-only (no entry buffer): return success.
         if is_report_only && !has_entries {
+            if is_discard {
+                zircon_object::dev::discard_wake_entries();
+            }
             return Ok(());
         }
 
         // Write wake source entries.
         if entries_to_write > 0 && has_entries {
             let mut ent: UserOutPtr<u8> = out_entries.into();
-            // Entry 0: kernel deadline timer.
-            // koid = 1 (ZX_KOID_KERNEL)
-            ent.write_array(&1u64.to_ne_bytes())?;
-            ent = (ent.as_addr() + 8).into();
-            // name: "suspend timeout" (32 bytes, null-padded)
-            let mut name = [0u8; 32];
-            let n = b"suspend timeout";
-            name[..n.len()].copy_from_slice(n);
-            ent.write_array(&name)?;
-            ent = (ent.as_addr() + 32).into();
-            // initial_signal_time = report_time
-            ent.write_array(&report_time.to_ne_bytes())?;
-            ent = (ent.as_addr() + 8).into();
-            // last_signal_time = report_time
-            ent.write_array(&report_time.to_ne_bytes())?;
-            ent = (ent.as_addr() + 8).into();
-            // last_ack_time = report_time (auto-acked)
-            ent.write_array(&report_time.to_ne_bytes())?;
-            ent = (ent.as_addr() + 8).into();
-            // signal_count = 1
-            ent.write_array(&1u32.to_ne_bytes())?;
-            ent = (ent.as_addr() + 4).into();
-            // flags = 0 (not signaled, not previously reported)
-            ent.write_array(&0u32.to_ne_bytes())?;
+            for entry in entries.iter().take(entries_to_write as usize) {
+                let (koid, name, initial, last, ack, count, flags) = entry;
+                ent.write_array(&koid.to_ne_bytes())?;
+                ent = (ent.as_addr() + 8).into();
+                ent.write_array(name)?;
+                ent = (ent.as_addr() + 32).into();
+                ent.write_array(&initial.to_ne_bytes())?;
+                ent = (ent.as_addr() + 8).into();
+                ent.write_array(&last.to_ne_bytes())?;
+                ent = (ent.as_addr() + 8).into();
+                ent.write_array(&ack.to_ne_bytes())?;
+                ent = (ent.as_addr() + 8).into();
+                ent.write_array(&count.to_ne_bytes())?;
+                ent = (ent.as_addr() + 4).into();
+                ent.write_array(&flags.to_ne_bytes())?;
+                ent = (ent.as_addr() + 4).into();
+            }
         }
 
         if has_actual {
             actual_entries.write(entries_to_write)?;
         }
+
+        // DISCARD: clear all wake source state after reporting.
+        if is_discard {
+            zircon_object::dev::discard_wake_entries();
+        }
+
         Ok(())
     }
 

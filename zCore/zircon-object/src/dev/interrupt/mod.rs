@@ -3,15 +3,137 @@ use {
     self::virtual_interrupt::*,
     crate::object::*,
     crate::signal::*,
-    alloc::{boxed::Box, sync::Arc},
+    alloc::{boxed::Box, sync::Arc, vec::Vec},
     bitflags::bitflags,
     core::{
         future::Future,
         pin::Pin,
+        sync::atomic::{AtomicU64, Ordering},
         task::{Context, Poll},
     },
     lock::Mutex,
 };
+
+/// Global registry of wake sources (interrupt objects with WAKE_VECTOR).
+static WAKE_SOURCES: Mutex<Vec<WakeSourceEntry>> = Mutex::new(Vec::new());
+
+/// A registered wake source entry.
+pub struct WakeSourceEntry {
+    /// KoID of the interrupt object.
+    pub koid: KoID,
+    /// Name of the interrupt object (for debugging, "VirtIRQ <koid>").
+    pub name: [u8; 32],
+    /// Boot time of the first trigger (0 if never triggered).
+    pub initial_signal_time: AtomicU64,
+    /// Boot time of the most recent trigger.
+    pub last_signal_time: AtomicU64,
+    /// Boot time of the most recent ack (u64::MAX if never acked).
+    pub last_ack_time: AtomicU64,
+    /// Number of times triggered.
+    pub signal_count: AtomicU64,
+    /// Whether the source is currently signaled (not yet acked).
+    pub signaled: core::sync::atomic::AtomicBool,
+}
+
+impl WakeSourceEntry {
+    fn new(koid: KoID) -> Self {
+        let mut name = [0u8; 32];
+        let s = alloc::format!("VirtIRQ {koid}");
+        let len = s.len().min(31);
+        name[..len].copy_from_slice(&s.as_bytes()[..len]);
+        WakeSourceEntry {
+            koid,
+            name,
+            initial_signal_time: AtomicU64::new(0),
+            last_signal_time: AtomicU64::new(0),
+            last_ack_time: AtomicU64::new(u64::MAX),
+            signal_count: AtomicU64::new(0),
+            signaled: core::sync::atomic::AtomicBool::new(false),
+        }
+    }
+}
+
+/// Register an interrupt as a wake source.
+pub fn register_wake_source(koid: KoID) {
+    let mut sources = WAKE_SOURCES.lock();
+    if !sources.iter().any(|s| s.koid == koid) {
+        sources.push(WakeSourceEntry::new(koid));
+    }
+}
+
+/// Unregister a wake source.
+pub fn unregister_wake_source(koid: KoID) {
+    let mut sources = WAKE_SOURCES.lock();
+    sources.retain(|s| s.koid != koid);
+}
+
+/// Record a trigger event on a wake source.
+pub fn wake_source_triggered(koid: KoID, time: u64) {
+    let sources = WAKE_SOURCES.lock();
+    if let Some(entry) = sources.iter().find(|s| s.koid == koid) {
+        entry
+            .initial_signal_time
+            .compare_exchange(0, time, Ordering::Relaxed, Ordering::Relaxed)
+            .ok();
+        entry.last_signal_time.store(time, Ordering::Relaxed);
+        entry.signal_count.fetch_add(1, Ordering::Relaxed);
+        entry.signaled.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Record an ack event on a wake source.
+pub fn wake_source_acked(koid: KoID, time: u64) {
+    let sources = WAKE_SOURCES.lock();
+    if let Some(entry) = sources.iter().find(|s| s.koid == koid) {
+        entry.last_ack_time.store(time, Ordering::Relaxed);
+        entry.signaled.store(false, Ordering::Relaxed);
+    }
+}
+
+/// Get the number of active (registered) wake sources.
+pub fn wake_source_count() -> u32 {
+    WAKE_SOURCES.lock().len() as u32
+}
+
+/// Wake report entry: (koid, name, initial_signal_time, last_signal_time, last_ack_time, signal_count, flags).
+pub type WakeReportEntry = (KoID, [u8; 32], u64, u64, u64, u32, u32);
+
+/// Collect wake source entries for the suspend report.
+pub fn collect_wake_entries() -> Vec<WakeReportEntry> {
+    let sources = WAKE_SOURCES.lock();
+    sources
+        .iter()
+        .filter(|s| s.signal_count.load(Ordering::Relaxed) > 0)
+        .map(|s| {
+            let flags = if s.signaled.load(Ordering::Relaxed) {
+                1u32 // ZX_SYSTEM_WAKE_REPORT_ENTRY_FLAG_SIGNALED
+            } else {
+                0u32
+            };
+            (
+                s.koid,
+                s.name,
+                s.initial_signal_time.load(Ordering::Relaxed),
+                s.last_signal_time.load(Ordering::Relaxed),
+                s.last_ack_time.load(Ordering::Relaxed),
+                s.signal_count.load(Ordering::Relaxed) as u32,
+                flags,
+            )
+        })
+        .collect()
+}
+
+/// Clear all wake source signal/ack state (for DISCARD option).
+pub fn discard_wake_entries() {
+    let sources = WAKE_SOURCES.lock();
+    for s in sources.iter() {
+        s.initial_signal_time.store(0, Ordering::Relaxed);
+        s.last_signal_time.store(0, Ordering::Relaxed);
+        s.last_ack_time.store(u64::MAX, Ordering::Relaxed);
+        s.signal_count.store(0, Ordering::Relaxed);
+        s.signaled.store(false, Ordering::Relaxed);
+    }
+}
 
 /// A future that waits for `SIGNALED` on a `KObjectBase`.
 ///
