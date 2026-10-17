@@ -77,7 +77,6 @@ Pager.SuspendReadTestVmar
 Pager.SuspendReadTestVmo
 Pager.DecommitOnDetachTestVmar
 Pager.DecommitOnDetachTestVmo
-Pager.ReadCloseInterruptLateTestVmar
 Pager.ReadDetachInterruptLateTestVmo
 Pager.ReadDetachInterruptEarlyTestVmo
 Pager.CloneReadFromCloneTestVmar
