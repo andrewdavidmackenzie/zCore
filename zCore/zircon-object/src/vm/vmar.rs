@@ -1832,10 +1832,11 @@ impl VmMapping {
             let inner = self.inner.lock();
             (inner.size / PAGE_SIZE, inner.vmo_offset / PAGE_SIZE)
         };
-        // On bare-metal, only map already-committed pages (uncommitted
-        // pages will be demand-faulted). In libos mode, all pages must
-        // be eagerly committed since there's no page fault handler.
-        let skip_uncommitted = cfg!(target_os = "none");
+        // On bare-metal with COW VMOs, only map already-committed pages
+        // (uncommitted pages will be demand-faulted). This prevents
+        // eagerly creating private copies of all parent pages.
+        // For non-COW VMOs and in libos mode, eagerly commit all pages.
+        let skip_uncommitted = cfg!(target_os = "none") && self.vmo.has_parent();
         let mut is_committed =
             alloc::vec![true; page_num.min(vmo_pages.saturating_sub(vmo_offset))];
         if skip_uncommitted {
