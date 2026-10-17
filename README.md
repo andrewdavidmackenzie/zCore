@@ -1,4 +1,4 @@
-<p align="center">
+<p #· align="center">
   <img src="docs/img/zirconia-logo.svg" alt="Zirconia logo" width="480">
 </p>
 

@@ -184,5 +184,9 @@ fn make_ldmsg_response(
     let marker: u32 = if handles.is_empty() { 0 } else { 0xFFFF_FFFF };
     data.extend_from_slice(&marker.to_le_bytes());
     debug_assert_eq!(data.len(), core::mem::size_of::<LdmsgResponse>());
-    crate::ipc::MessagePacket { data, handles }
+    crate::ipc::MessagePacket {
+        data,
+        handles,
+        cancel_senders: alloc::vec::Vec::new(),
+    }
 }

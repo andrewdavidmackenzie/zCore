@@ -54,6 +54,7 @@ async fn bytes_only_success_case() {
         .call(MessagePacket {
             data: data.clone(),
             handles: Vec::new(),
+            ..Default::default()
         })
         .await
         .expect("channel_call failed");
@@ -94,6 +95,7 @@ async fn handles_success_case() {
         .call(MessagePacket {
             data: vec![0, 0, 0, 0, 0xAB, 0xCD], // 4 txid + payload
             handles: vec![handle],
+            ..Default::default()
         })
         .await
         .expect("channel_call failed");
@@ -129,6 +131,7 @@ async fn reduced_rights_success_case() {
         .call(MessagePacket {
             data: vec![0, 0, 0, 0, 0x01, 0x02],
             handles: vec![handle],
+            ..Default::default()
         })
         .await
         .expect("channel_call failed");
@@ -559,6 +562,7 @@ async fn with_duplicate_op_handle_succeeds() {
         .call(MessagePacket {
             data: vec![0, 0, 0, 0, 0xFF],
             handles: vec![handle],
+            ..Default::default()
         })
         .await
         .expect("channel_call failed");
@@ -766,6 +770,7 @@ async fn peer_closed_before_call_returns_peer_closed() {
         .call(MessagePacket {
             data: vec![0, 0, 0, 0, 0xDE, 0xAD],
             handles: Vec::new(),
+            ..Default::default()
         })
         .await;
     assert_eq!(result.unwrap_err(), ZxError::PEER_CLOSED);
@@ -801,6 +806,7 @@ fn response_too_large_for_rd_num_bytes_returns_buffer_too_small() {
     tx.write(MessagePacket {
         data: big_reply,
         handles: Vec::new(),
+        ..Default::default()
     })
     .unwrap();
 
@@ -848,6 +854,7 @@ fn response_too_large_for_rd_num_handles_returns_buffer_too_small() {
             Handle::new(e1, Rights::DEFAULT_EVENT),
             Handle::new(e2, Rights::DEFAULT_EVENT),
         ],
+        ..Default::default()
     })
     .unwrap();
 
@@ -899,6 +906,7 @@ async fn handles_info_validation() {
         .call(MessagePacket {
             data: vec![0, 0, 0, 0, 0x01, 0x02, 0x03],
             handles,
+            ..Default::default()
         })
         .await
         .expect("channel_call failed");

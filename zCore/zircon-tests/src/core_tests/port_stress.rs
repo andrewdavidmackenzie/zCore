@@ -172,6 +172,7 @@ fn channel_call_wait_queue_panic_repro() {
     ch1.write(zircon_object::ipc::MessagePacket {
         data: alloc::vec![1, 2, 3, 4],
         handles: alloc::vec::Vec::new(),
+        ..Default::default()
     })
     .unwrap();
 

@@ -2713,6 +2713,7 @@ async fn call_suspended_thread_resumes_and_succeeds() {
     let msg = zircon_object::ipc::MessagePacket {
         data: alloc::vec![0, 0, 0, 0, 0x12, 0x34, 0x56, 0x78],
         handles: alloc::vec![],
+        ..Default::default()
     };
 
     // Call the echo server via Channel::call.
@@ -2752,6 +2753,7 @@ async fn call_etc_suspended_thread_resumes_and_succeeds() {
     let msg = zircon_object::ipc::MessagePacket {
         data: alloc::vec![0, 0, 0, 0, 0x87, 0x65, 0x43, 0x21],
         handles: alloc::vec![],
+        ..Default::default()
     };
 
     let reply = echo.client.call(msg).await;
@@ -2787,6 +2789,7 @@ async fn call_pending_transactions_use_different_ids() {
     let msg1 = zircon_object::ipc::MessagePacket {
         data: alloc::vec![0, 0, 0, 0, 0xAA],
         handles: alloc::vec![],
+        ..Default::default()
     };
     let reply1 = echo.client.call(msg1).await.unwrap();
     let txid1 = reply1.get_txid();
@@ -2795,6 +2798,7 @@ async fn call_pending_transactions_use_different_ids() {
     let msg2 = zircon_object::ipc::MessagePacket {
         data: alloc::vec![0, 0, 0, 0, 0xBB],
         handles: alloc::vec![],
+        ..Default::default()
     };
     let reply2 = echo.client.call(msg2).await.unwrap();
     let txid2 = reply2.get_txid();
@@ -2846,6 +2850,7 @@ async fn call_response_bigger_than_rd_num_handles_returns_buffer_too_small() {
                 Handle::new(event1, zircon_object::object::Rights::DEFAULT_EVENT),
                 Handle::new(event2, zircon_object::object::Rights::DEFAULT_EVENT),
             ],
+            ..Default::default()
         };
         let _ = server_clone.write(reply);
     });

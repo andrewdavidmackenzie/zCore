@@ -155,6 +155,7 @@ fn transfer_channel_with_pending_call() {
         .write(MessagePacket {
             data: msg_data,
             handles: vec![],
+            ..Default::default()
         })
         .unwrap();
 
@@ -170,6 +171,7 @@ fn transfer_channel_with_pending_call() {
     a.write(MessagePacket {
         data: vec![0u8; 8], // transfer message
         handles: vec![local_handle],
+        ..Default::default()
     })
     .unwrap();
 
@@ -190,6 +192,7 @@ fn transfer_channel_with_pending_call() {
         .write(MessagePacket {
             data: vec![0xDE, 0xAD],
             handles: vec![],
+            ..Default::default()
         })
         .unwrap();
 

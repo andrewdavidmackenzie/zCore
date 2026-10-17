@@ -124,6 +124,16 @@ pub trait VMObjectTrait: Sync + Send {
         false
     }
 
+    /// Whether this VMO is a COW child (SNAPSHOT or SNAPSHOT_AT_LEAST_ON_WRITE).
+    fn is_cow_child(&self) -> bool {
+        false
+    }
+
+    /// Whether the page at the given index is shared with the parent VMO.
+    fn page_is_shared(&self, _page_idx: usize) -> bool {
+        false
+    }
+
     /// Mark this VMO as pager-backed. Pages will not be auto-committed
     /// by `commit_page` — they must be supplied via the pager.
     fn set_pager_backed(&self) {}
@@ -948,8 +958,29 @@ impl VmObject {
                 return parent.set_content_size(size);
             }
         }
-        let mut inner = self.inner.lock();
-        inner.content_size = size;
+        let old;
+        {
+            let mut inner = self.inner.lock();
+            old = inner.content_size;
+            inner.content_size = size;
+        }
+        // When content_size decreases, invalidate page table entries
+        // beyond the new content_size in all mappings. This ensures
+        // FAULT_BEYOND_STREAM_SIZE mappings correctly fault on accesses
+        // to the now-beyond-stream-size region instead of reading stale
+        // data from previously-mapped pages.
+        if size < old {
+            let start_page = size / PAGE_SIZE;
+            let removed_pages = old.saturating_sub(size).div_ceil(PAGE_SIZE);
+            if removed_pages > 0 {
+                let inner = self.inner.lock();
+                for map_weak in inner.mappings.iter() {
+                    if let Some(map) = map_weak.upgrade() {
+                        map.range_change(start_page, removed_pages, RangeChangeOp::Unmap);
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -970,10 +1001,7 @@ impl VmObject {
         if size > self.len() {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        let mut inner = self.inner.lock();
-        let old = inner.content_size;
-        inner.content_size = size;
-        drop(inner);
+        let old = self.inner.lock().content_size;
         let vmo_len = self.len();
         // Zero from the new content_size to the page-rounded old content_size
         // (or vmo boundary). This covers both shrinking and the case where
@@ -987,7 +1015,8 @@ impl VmObject {
         if zero_end > zero_start {
             self.zero(zero_start, zero_end - zero_start)?;
         }
-        Ok(())
+        // set_content_size handles PTE invalidation on decrease.
+        self.set_content_size(size)
     }
 
     /// Decommit pages in the given range.
@@ -1174,6 +1203,23 @@ impl VmObject {
             }
         }
         self.resizable
+    }
+
+    /// Whether this VMO has a parent (i.e., it's a child VMO).
+    pub fn has_parent(&self) -> bool {
+        self.inner.lock().parent.strong_count() > 0
+    }
+
+    /// Whether this VMO is a COW (copy-on-write) child.
+    /// True for SNAPSHOT and SNAPSHOT_AT_LEAST_ON_WRITE children.
+    pub fn is_cow_child(&self) -> bool {
+        self.trait_.is_cow_child()
+    }
+
+    /// Whether the page at the given index is shared with the parent VMO
+    /// (i.e., not yet copied for COW).
+    pub fn page_is_shared(&self, page_idx: usize) -> bool {
+        self.trait_.page_is_shared(page_idx)
     }
 
     /// Called when all handles to this VMO are closed.

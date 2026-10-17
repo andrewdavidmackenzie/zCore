@@ -646,6 +646,19 @@ impl VMObjectTrait for VMObjectPaged {
         self.get_inner_mut().1.pager_backed = true;
     }
 
+    fn is_cow_child(&self) -> bool {
+        let (_guard, inner) = self.get_inner();
+        matches!(inner.type_, VMOType::Snapshot)
+    }
+
+    fn page_is_shared(&self, page_idx: usize) -> bool {
+        let (_guard, inner) = self.get_inner();
+        // A page is shared if the child doesn't have its own copy.
+        // If the page is not in the child's frame table, it comes
+        // from the parent (shared).
+        !inner.frames.contains_key(&page_idx)
+    }
+
     fn is_pager_backed(&self) -> bool {
         self.get_inner().1.pager_backed
     }

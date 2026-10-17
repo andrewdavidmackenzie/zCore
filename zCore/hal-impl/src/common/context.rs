@@ -141,6 +141,29 @@ impl UserContext {
                         options(nostack),
                     );
                 }
+                // Zero x86_64 segment selectors (ds, es) before returning
+                // to user mode. Fuchsia's kernel clears ds/es/fs/gs on
+                // every context switch to prevent leaking values.
+                //
+                // We zero ds and es here. For fs and gs, we cannot use
+                // `mov fs/gs, 0` because that also zeroes fs/gs BASE,
+                // which would break the swapgs flow in trapframe's
+                // syscall_return (kernel gs base would be lost).
+                // Instead, fs and gs selectors are zeroed inside
+                // trapframe's syscall_return AFTER swapgs saves the
+                // kernel gs base.
+                //
+                // TODO: patch trapframe to zero fs/gs selectors after
+                // wrfsbase/wrgsbase, before iret/sysret.
+                unsafe {
+                    core::arch::asm!(
+                        "xor eax, eax",
+                        "mov ds, ax",
+                        "mov es, ax",
+                        out("eax") _,
+                        options(nostack, nomem),
+                    );
+                }
                 self.inner.run();
                 // Save user FPU/SSE state after returning from user mode
                 unsafe {

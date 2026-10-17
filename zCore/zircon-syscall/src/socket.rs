@@ -72,9 +72,6 @@ impl Syscall<'_> {
         if count > 0 && user_bytes.is_null() {
             return Err(ZxError::INVALID_ARGS);
         }
-        if count > 0 {
-            self.check_user_buffer_write(user_bytes.as_addr(), count)?;
-        }
         let options = SocketFlags::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
         if !(options - SocketFlags::SOCKET_PEEK).is_empty() {
             return Err(ZxError::INVALID_ARGS);
@@ -88,8 +85,17 @@ impl Syscall<'_> {
             v
         };
         let peek = options.contains(SocketFlags::SOCKET_PEEK);
+        // For datagram sockets, Fuchsia consumes the datagram even if
+        // the copy to user fails (for consuming reads). Read into a
+        // kernel buffer first, then attempt the copy to user.
         let actual_count = socket.read(peek, &mut data)?;
-        user_bytes.write_array(&data)?;
+        if let Err(_e) = user_bytes.write_array(&data[..actual_count]) {
+            // Copy to user failed. For consuming reads on datagram
+            // sockets, the datagram is already consumed — this matches
+            // Fuchsia's behavior where a faulting consuming read drops
+            // the datagram. Return INVALID_ARGS.
+            return Err(ZxError::INVALID_ARGS);
+        }
         actual_count_ptr.write_if_not_null(actual_count)?;
         Ok(())
     }

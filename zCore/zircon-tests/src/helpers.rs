@@ -964,6 +964,7 @@ pub fn channel_call_thread_fn(
         let msg = zircon_object::ipc::MessagePacket {
             data: alloc::vec![b'a', b'b', b'c', b'd', b'e', b'f', b'g', b'h', b'i'],
             handles: alloc::vec![],
+            ..Default::default()
         };
 
         let call_future = core::pin::pin!(call_state.channel.call(msg));

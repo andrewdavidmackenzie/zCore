@@ -57,6 +57,7 @@ fn channel_wait_readable() {
     let msg = MessagePacket {
         data: vec![1],
         handles: vec![],
+        ..Default::default()
     };
     local.write(msg).unwrap();
     assert!(remote.signal().contains(Signal::READABLE));
