@@ -1,52 +1,31 @@
 # Core-tests skip list — tests that hang or crash the test runner.
-#
 # Each non-empty, non-comment line is a gtest pattern to exclude.
-# The Makefile concatenates them into a single --gtest_filter=-... string.
-#
-# When a test is fixed, DELETE its line here (and close the matching
-# checkbox in the GitHub tracking issue).
-#
 # Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
-# ──────────────────────────────────────────────────────────────────────
 
 # ── Multi-threaded / cooperative scheduler ───────────────────────────
-# These tests spawn real OS threads and require preemptive scheduling.
-# PortStressTest: 2 pass, rest hang (multi-threaded stress)
 PortStressTest.ChannelCallWaitQueuePanicRepro
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.CancelKeyCloseRace
 ChannelTest.NoSpuriousReadableSignalWhenRacing
-# ChannelCallMutexTest.* — removed, 1/1 passes (MutexHeldAcrossCallChain)
-# ChannelInternalTest: 3 tests pass, 1 hangs
 ChannelInternalTest.TransferChannelWithPendingCall
-# ProcessTest.ProcessWaitAsyncCancelSelf — removed, now passes
-# ProcessTest.GetInfoRuntime — removed, now passes
-# ProcessTest.GetInfoRuntimeV1 — removed, now passes
-# KillChannelHandleCycle: kernel panic — Thread::proc() owning process dropped
 ProcessTest.KillChannelHandleCycle
 
-# ── Thread suspend / register state (cooperative scheduler) ─────────
-# 3/55 Threads tests pass: Basics, GetInfoRuntimeV1,
-# SuspendSingleWaitAsyncSignalDelivery. Rest hang or fail.
+# ── Thread suspend / register state ─────────────────────────────────
 Threads.BadSyscallCaller
 Threads.BadSyscallNumber
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.DebugRegistersDr6ResetOnDebugException
 Threads.DebugRegistersValidation
 Threads.DebugRegistersWatchpointSyscallPanicRepro
-# Threads.EmptyNameSucceeds — removed, now passes
 Threads.ExitViaException
 Threads.GetAffinity
 Threads.GetInfoRuntime
 Threads.GetLastScheduledCpu
 Threads.InfoTaskStatsFails
 Threads.InfoThreadStatsFails
-# Threads.InvalidRights — removed, now passes
-# Threads.LongNameSucceeds — removed, now passes
 Threads.NoncanonicalRipAddressIRETQ
 Threads.NoncanonicalRipAddressSyscall
-# Threads.NonstartedThread — removed, now passes
 Threads.ProcessStartOnSecondThread
 Threads.ReadingFpRegisterState
 Threads.ReadingGeneralRegisterState
@@ -59,7 +38,6 @@ Threads.StartSuspendedAndResumedThread
 Threads.StartSuspendedThread
 Threads.SuspendAfterDeath
 Threads.SuspendChannelCall
-# Threads.SuspendInvalidTargets — removed, completes (pass or fail)
 Threads.SuspendMultiple
 Threads.SuspendPortCall
 Threads.SuspendSleeping
@@ -69,7 +47,6 @@ Threads.SyscallSuspendedRegisterState
 Threads.ThreadLocalRegisterState
 Threads.ThreadStartInvalidEntry
 Threads.ThreadStartOnInitialThread
-# Threads.ThreadStartWithZeroInstructionPointer — removed, completes (pass or fail)
 Threads.WatchpointSyscallPanic
 Threads.WriteReadDebugRegisterState
 Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
@@ -80,67 +57,23 @@ Threads.WritingSingleStepState
 Threads.WritingVectorRegisterState
 Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
 Threads.X86AcFlagUserCopy
-# Threads.YieldWithNonZeroOptionIsInvalidArgs — removed, now passes
-# Threads.YieldWithZeroOptionIsOk — removed, now passes
-# ProcessTest.SuspendSelf — removed, fixed self-suspend check
 
 # ── Policy exception infrastructure ─────────────────────────────────
-# Need ZX_EXCP_POLICY_CODE_CHANNEL_FULL_WRITE and exception delivery.
 PortTest.QueuePacketLimitExceededGeneratesPolicyException
 PortTest.TooManyObservers
 ChannelTest.ChannelFullException
 DefaultExceptionHandlerTest.UnhandledPolicyException
-# DefaultExceptionHandlerTest.UnhandledHardwareException — removed, now passes
-# UserExceptionsTest: raise ZX_EXCP_USER from test thread, requires
-# concurrent exception channel handling (cooperative scheduler hangs).
-# InvalidArgs passes (validates args before raising).
 UserExceptionsTest.NonFatal
 UserExceptionsTest.Delivered
-# Property.RegisterFs/GsNoncanonical: QEMU TCG doesn't emulate #GP on
-# wrfsbase/wrgsbase with non-canonical addresses — GPF fires at the
-# wrong instruction (LoadFromGs instead of WrGsBase), causing wrong
-# RIP in exception report and missing second exception.
-# Property.RegisterFsNoncanonical — removed, completes (pass or fail)
-# Property.RegisterGsNoncanonical — removed, completes (pass or fail)
 
-# ── COW populated_bytes / fractional attribution (#577, #603) ────────
-# NoPhysical: now passes with test_ram_reserve — removed.
-# Offset: now passes — removed from skip
-# WriteCowParent, AllocateAfterMergeMultipleChildren: polling hang
+# ── COW populated_bytes ──────────────────────────────────────────────
 VmoZeroTestCase.WriteCowParent
-# VmoZeroTestCase.AllocateAfterMergeMultipleChildren — removed, now passes
 
-# ── VmoTestCase (individual hangs/crashes) ────────────────────────────
-# ~28 pass, ~18 fail without hanging. Skip only tests that hang or
-# crash the runner (kernel panic, boot_options UD2, memory-probe UD2).
-# Crash: kernel panic (assertion failure in paged.rs)
+# ── VmoTestCase (kernel panic / crash) ───────────────────────────────
 VmoTestCase.PinTests
 VmoTestCase.UnmapLoanedcontiguousWhileFaulting
-# ProtectToWrite and NoPhysical: now pass with test_ram_reserve — removed.
-# PhysicalSlice and FaultBeyondStreamSizeNoPhysOrContig: fail (no crash)
-# — removed from skip.
-# Crash: memory-probe.cc assertion (demand-pages instead of faulting)
-# VmoTestCase.NoPermProtect — removed, fails (not hangs) due to cooperative scheduler
-# VmoTestCase.ReadOnlyMap — removed, fails (not hangs) due to cooperative scheduler
-# VmoTestCase.Prefetch — removed, now passes
 
-# ── VMO clone/slice/signal — previously skipped, most now pass ───────
-# (VmoReference.ChildSlice, VmoSliceTestCase.ZeroChildrenGrandchildClosedLast,
-#  VmoCloneTestCase.Commit, VmoCloneDisjointClonesTests.DisjointCloneLateClose,
-#  VmoSignalTestCase.ChildSignalMap, VmoZeroTestcase.ZeroFreesAndAllocates
-#  removed — now pass thanks to COW attribution fix #575)
-# (VmoSliceTestCase.AttributedCounts, VmoReference.AttributedCounts,
-#  VmoTransferDataTestCase.SnapshotChildSrc — now pass thanks to #508 fixes)
-
-# ── VmoReference: failures that don't hang (removed from skip list) ──
-# ChildSnapshotAtLeastOnWrite and MappingUpdateNestedRootDestroy
-# fail but don't hang/crash — removed.
-
-# ── Pager infrastructure (#498, #499, #733, #734) ────────────────────
-# Demand-paging now works on QEMU (#733/#734). ~35 Pager tests pass.
-# Remaining tests need: multi-threaded pager access (cooperative
-# scheduler can't switch between concurrent faulting threads),
-# OP_FAIL exception delivery, or TRAP_DIRTY support.
+# ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.OverlapCommitSupplyTest
 Pager.BulkOddLengthSupplyTest
 Pager.BulkOddOffsetSupplyTest
@@ -148,7 +81,6 @@ Pager.BulkSingleSupplyTest
 Pager.CancelKeyDoesNotWedgeThePager
 Pager.CloneChainCommitTest
 Pager.CloneCommitMultipleBatches
-# Pager.CloneCommitRandomBatches — removed, now passes (#733/#734)
 Pager.CloneCommitSingleBatch
 Pager.CloneCommitTest
 Pager.CloneCommitTwoBatches
@@ -167,7 +99,6 @@ Pager.ClosePagerTest
 Pager.ClosePortTest
 Pager.ConcurrentMultipageAccessTest
 Pager.ConcurrentOverlappingAccessTest
-# Pager.CreateVmoUnboundedInvalidStreamSize — removed, now passes (#733/#734)
 Pager.DecommitOnDetachTest
 Pager.DetachNonMappingAccess
 Pager.DetachPageCompleteTest
@@ -189,28 +120,23 @@ Pager.FailEarlyWake
 Pager.FailErrorCode
 Pager.FailExactRange
 Pager.FailMultipleCommits
-# Pager.FailMultipleVmos — removed, now passes (#733/#734)
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
-# Pager.FailRedundant — removed, now passes (#733/#734)
 Pager.FailSinglePage
 Pager.InvalidPagerCreateVmo
 Pager.InvalidPagerDetachVmo
 Pager.InvalidPagerSupplyPages
 Pager.ManyRequestTest
 Pager.MappedSupplyPages
-# Pager.MultipleConcurrentVmoTest — removed, now passes (#733/#734)
 Pager.OpCommitCloneVmar
 Pager.OpCommitVmar
 Pager.OverlapCommitTest
 Pager.OverlapSupplyTest
 Pager.PageRequestBatchingChecksAncestorPages
-# Pager.PinPagerVmoWithLoanedPages — removed, now passes (#733/#734)
 Pager.PinnedSupplyPages
 Pager.Prefetch
 Pager.PresentPageSplitsRange
-# Pager.ProxyUseAfterFree — removed, now passes (#733/#734)
 Pager.RacyPortDequeue
 Pager.ReadCloseInterruptEarlyTest
 Pager.ReadCloseInterruptLateTest
@@ -221,46 +147,25 @@ Pager.ResizeBlockedPin
 Pager.ResizeCommitTest
 Pager.SequentialMultipageTest
 Pager.SinglePageTest
-# Pager.SinglePageTestVmar — removed, now passes (#733/#734)
 Pager.SplitCommitTest
-# Pager.SuccessiveVmoTest — removed, now passes (#733/#734)
-# Pager.SupplyAfterDetach — removed, now passes (#733/#734)
-# Pager.SupplyAfterFail — removed, now passes (#733/#734)
 Pager.SuspendCommitTest
 Pager.SuspendInKernelCaptureFaultsTest
 Pager.SuspendInKernelTest
 Pager.SuspendReadTest
 Pager.UncommittedSinglePageTest
 Pager.UncommittedSupply
-# Pager.VmarMapRangeTest — removed, now passes (#733/#734)
 Pager.VmarRemapTest
 Pager.VmarUnmapTest
 Pager.VmoInfoPagerTest
-# Pager Vmar/Vmo parameterized variants: all hang on pager fault loop.
-# These are VALUE_PARAMETERIZED_TEST instantiations of the above tests.
-# Pager.SinglePageTestVmo — removed, now passes (#733/#734)
 Pager.CancelKeyDoesNotWedgeThePagerVmar
 Pager.CancelKeyDoesNotWedgeThePagerVmo
-# Pager.UncommittedSinglePageTestVmar — removed, now passes (#733/#734)
-# Pager.UncommittedSinglePageTestVmo — removed, now passes (#733/#734)
-# Pager.PresupplyTestVmar — removed, now passes (#733/#734)
-# Pager.PresupplyTestVmo — removed, now passes (#733/#734)
 Pager.EarlySupplyTestVmar
 Pager.EarlySupplyTestVmo
-# Pager.SequentialMultipageTestVmar — removed, now passes (#733/#734)
 Pager.SequentialMultipageTestVmo
 Pager.ConcurrentMultipageAccessTestVmar
 Pager.ConcurrentMultipageAccessTestVmo
 Pager.ConcurrentOverlappingAccessTestVmar
 Pager.ConcurrentOverlappingAccessTestVmo
-# Pager.BulkSingleSupplyTestVmar — removed, now passes (#733/#734)
-# Pager.BulkSingleSupplyTestVmo — removed, now passes (#733/#734)
-# Pager.BulkOddLengthSupplyTestVmar — removed, now passes (#733/#734)
-# Pager.BulkOddLengthSupplyTestVmo — removed, now passes (#733/#734)
-# Pager.BulkOddOffsetSupplyTestVmar — removed, now passes (#733/#734)
-# Pager.BulkOddOffsetSupplyTestVmo — removed, now passes (#733/#734)
-# Pager.OverlapSupplyTestVmar — removed, now passes (#733/#734)
-# Pager.OverlapSupplyTestVmo — removed, now passes (#733/#734)
 Pager.ManyRequestTestVmar
 Pager.ManyRequestTestVmo
 Pager.ReadResizeTestVmar
@@ -289,9 +194,8 @@ Pager.CloneWriteToCloneTestVmar
 Pager.CloneWriteToCloneTestVmo
 Pager.CloneDetachTest
 Pager.FailSinglePageVmar
-# Pager.FailSinglePageVmo — removed, now passes (#733/#734)
-# PagerProcess: all 8 hang — need preemptive scheduling for
-# kill-after-suspend / kill-blocked-usercopy patterns.
+
+# ── PagerProcess (preemptive scheduling) ─────────────────────────────
 PagerProcess.KillBlockedUserVmoRead
 PagerProcess.KillBlockedUserPageFault
 PagerProcess.KillBlockedUsercopy
@@ -300,11 +204,11 @@ PagerProcess.KillAfterSuspendVmoRead
 PagerProcess.KillAfterSuspendPageFault
 PagerProcess.KillAfterSuspendUsercopy
 PagerProcess.KillAfterSuspendUsercopyCapture
-# PagerWriteback: all 179 tests hang — need TRAP_DIRTY pager support.
-# Too many to list individually; every single one hangs on the pager
-# fault loop. Keep wildcard until TRAP_DIRTY is implemented.
+
+# ── PagerWriteback (TRAP_DIRTY not implemented) ──────────────────────
 PagerWriteback.*
-# Snapshot: all 37 hang — need pager fault loop for snapshot operations.
+
+# ── Snapshot (pager-backed snapshot clones) ──────────────────────────
 Snapshot.Smoke
 Snapshot.Read
 Snapshot.CloseRoot
@@ -342,75 +246,29 @@ Snapshot.ZeroRangeLeftInSnapshotPageInHiddenNode
 Snapshot.ZeroRangeLeftInSnapshotNoPagesInParent
 Snapshot.ZeroRangeLeftInSnapshotPagesInParentChain
 Snapshot.ZeroRangeLeftInSnapshotNoPagesInParentChain
-# StreamTestCase: most fail without hanging — removed from skip.
-# These StreamTestCase tests hang (pager-backed VMO or retry loops).
+
+# ── Stream (pager-backed VMO) ────────────────────────────────────────
 StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
-# NoStreamFromContiguousOrPhysicalVmo crashes (boot_options) — keep.
-# StreamTestCase.NoStreamFromContiguousOrPhysicalVmo — removed, completes (pass or fail)
 
-# ── Memory probe / VMAR tests ────────────────────────────────────────
-# FaultBeyondStreamSize tests need VMAR op_range PREFETCH to return
-# OUT_OF_RANGE for pages beyond content_size.
-# Vmar.ProtectLargeUncomittedTest — removed, now passes (#733/#734)
-# Vmar.UnmapLargeUncommittedTest — removed, now passes (#733/#734)
-# Vmar.ProtectOverDemandPagedTest — removed, now passes (#733/#734)
-# Vmar.ProtectReadIfXomUnsupported: fails without crashing — removed
-# Vmar.MapRangeResizable — removed, now passes (#733/#734)
+# ── VMAR (FaultBeyondStreamSize) ─────────────────────────────────────
 Vmar.FaultBeyondStreamSize
 Vmar.FaultBeyondReducedStreamSize
 Vmar.FaultBeyondStreamSizeRange
-# Vmar.MapRangeStreamSizeWraparound — removed, now passes (#733/#734)
-# Vmar.FaultBeyondStreamSizeForceWritable — removed, now passes (#733/#734)
 
-# ── Memory mapping ───────────────────────────────────────────────────
-# MmapProtExecTest: now passes — removed from skip.
-
-# ── Invalid buffer pointer hangs ─────────────────────────────────────
-# (Most previously-skipped tests now pass — removed from list.)
-
-# ── Unimplemented hardware / missing binaries ───────────────────────
-# ProcessTest.ProcessHwTraceContextIdProperty: now passes — removed.
-# InvalidInputs: now fails without crashing (test_ram_reserve set) — removed.
-
-# ── BTI (Bus Transaction Initiator) ─────────────────────────────────
-# 8/13 pass: Create, NameSupport, GetInfoTest, Clone, Resize, Pin,
-#   PinContigFlag, PinContiguous — removed from skip.
-# Remaining 5: kernel panic, fail, or hang.
+# ── BTI ──────────────────────────────────────────────────────────────
 Bti.InvalidPinArgs
 Bti.QuarantineDisallowsPin
 Bti.NoDelayedUnpin
 Bti.PinTooManyAddresses
 Bti.DecommitRace
 
-# ── Interrupt / MSI tests ────────────────────────────────────────────
-# 12/16 InterruptTest pass: VirtualNotWakeable, VirtualInterrupts,
-#   BindTriggeredIrqToPort, NonBindablePort, UserSignals, UnBindPort,
-#   WaitThreadFunctionsAfterSuspendResume, BindPort,
-#   PortUnbindPurgesQueuedPacket, NullOutputTimestamp,
-#   DuplicateTriggerIgnoredWhileQueued, PacketDeliveredAfterBind
-#   — removed from skip.
-# 2 hang:
-# InterruptTest.UntriggeredSignalInterruptWait — removed, now passes
-# InterruptTest.PacketFollowsUnbindToWait — removed, now passes
-# 2 fail (no crash/hang) — removed from skip:
-#   UntriggeredSignalPortsAndAck, PacketFollowsRebindToNewPort
-# MsiTest — 2/6 pass (AllocateSyscall, ContiguousNotSupported).
-# Remaining 4 fail (Msi, CreateSyscallArgs, AllocatedHandleRights, Msix).
-# MsiTest.CreateSyscallArgs — removed, now passes
-# MsiTest.AllocatedHandleRights — removed, now passes
+# ── MSI ──────────────────────────────────────────────────────────────
 MsiTest.Msi
 MsiTest.Msix
 
-# ── Channel fault handling ───────────────────────────────────────────
-# Reads from a faulting buffer — hangs (needs exception infrastructure).
-# ChannelTest.ReadFaultDoesNotLeakHandles — removed, fixed handle leak
-
-# ── Resource tests ───────────────────────────────────────────────────
-# Mexec* triggers platform reset. Ioports crashes — needs boot
-# resource handle. ExclusiveShared* crashes similarly.
-# Mexec triggers platform reset — all 6 hang or crash.
+# ── Resource / Mexec ─────────────────────────────────────────────────
 Resource.MexecBadZbiHeaderLength
 Resource.MexecEmptyZbi
 Resource.MexecMemoryLeakOnFailure
@@ -419,30 +277,11 @@ Resource.MexecPayloadTooSmall
 Resource.MexecZeroSizedVmo
 Resource.Ioports
 
-# ── Job kill chain ────────────────────────────────────────────────────
-# KillJobChain: kernel panic — Thread::proc() owning process dropped
-# when killing a chain of jobs. Crashes the test runner.
+# ── Job kill chain ───────────────────────────────────────────────────
 JobTest.KillJobChain
 
-# ── Timer / Job (previously skipped, now passing) ────────────────────
-# Timer.Basic and JobTest.CriticalProcessAlreadySet removed — now pass.
-
-# ── VMAR protect tests ──────────────────────────────────────────────
-# ProtectTestCase.Unmap: fails but doesn't hang — removed from skip.
-
-# ── Process debug ────────────────────────────────────────────────────
-# WriteToVdsoAddress: fails but doesn't crash — removed from skip.
-
-# ── Profile tests (previously skipped, now passing) ──────────────────
-# ProfileTest.CreateProfileWithMutuallyExclusiveFlagsIsInvalidArgs removed.
-
 # ── System events / suspend / wake reports ───────────────────────────
-# ExactlyOneMemoryEventSignaled hangs — polls all pressure events.
-# SystemEvent: hangs on wait_many — needs runtime debugging.
 SystemEvent.ExactlyOneMemoryEventSignaled
-# SystemSuspend: all 6 pass individually and as a suite (20s) — removed.
-# WakeReportTestsThreadBound: all 12 hang — thread-bound flavor uses
-# zx_object_wait_one on suspend syscall which our stub can't handle.
 WakeReportTestsThreadBound.BadReportRequests
 WakeReportTestsThreadBound.Discard
 WakeReportTestsThreadBound.DestructionYesAck
@@ -455,24 +294,11 @@ WakeReportTestsThreadBound.ReportOnly
 WakeReportTestsThreadBound.Acked
 WakeReportTestsThreadBound.AckedStillPending
 WakeReportTestsThreadBound.MultipleSignals
-# PortBound.SmallReportBuffer hangs — calls DoSuspend with infinite
-# deadline + REPORT_ONLY flag; our stub ignores REPORT_ONLY and
-# busy-waits 5s per iteration, never populates report header.
 WakeReportTestsPortBound.SmallReportBuffer
-# SuspendAndResumeByTimer: now passes — removed from skip.
 
-# ── ThreadSampler — crashes test runner ──────────────────────────────
-# 1/6 passes: InvalidOptions — removed from skip.
-# Remaining 5 crash (UD2 abort) when trying to read samples.
+# ── ThreadSampler (crash on sample read) ─────────────────────────────
 ThreadSampler.StartStop
 ThreadSampler.NonRunningThread
 ThreadSampler.SamplerLifetime
 ThreadSampler.DroppedSampler
 ThreadSampler.HighFrequency
-
-# ── BadAccessTest — crashes test runner ───────────────────────────────
-# 4/5 pass: InvalidMappedAddressFails, ChannelReadHandle,
-#   NormalMappedAddressChannelWriteSucceeds,
-#   KernelMappedAddressChannelWriteFails — removed from skip.
-# SyscallNumTest fails and crashes the test process.
-# BadAccessTest.SyscallNumTest — removed, completes (pass or fail)
