@@ -51,7 +51,6 @@ Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
 Pager.OpCommitCloneVmar
-Pager.OpCommitVmar
 Pager.OverlapCommitTest
 Pager.PageRequestBatchingChecksAncestorPages
 Pager.PresentPageSplitsRange

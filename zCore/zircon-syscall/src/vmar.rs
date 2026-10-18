@@ -394,20 +394,27 @@ impl Syscall<'_> {
             for (vmo, vmo_offset, page_count) in pager_vmos {
                 let start_page = vmo_offset / PAGE_SIZE;
                 let end_page = start_page + page_count;
-                let first =
-                    (start_page..end_page).find(|&p| vmo.committed_pages_in_range(p, p + 1) == 0);
-                let last =
-                    (start_page..end_page).rfind(|&p| vmo.committed_pages_in_range(p, p + 1) == 0);
-                if let (Some(f), Some(l)) = (first, last) {
-                    let req_off = f * PAGE_SIZE;
-                    let req_len = (l + 1 - f) * PAGE_SIZE;
+                // Send separate requests for each consecutive run of
+                // uncommitted pages (don't batch across committed gaps).
+                let mut p = start_page;
+                while p < end_page {
+                    if vmo.committed_pages_in_range(p, p + 1) > 0 {
+                        p += 1;
+                        continue;
+                    }
+                    let run_start = p;
+                    while p < end_page && vmo.committed_pages_in_range(p, p + 1) == 0 {
+                        p += 1;
+                    }
+                    let req_off = run_start * PAGE_SIZE;
+                    let req_len = (p - run_start) * PAGE_SIZE;
                     match vmo.request_pages(req_off, req_len) {
                         Err(ZxError::SHOULD_WAIT) => {
                             let old_state = self.thread.state();
                             self.thread.set_state(ThreadState::BlockedPager);
-                            for p in start_page..end_page {
-                                if vmo.committed_pages_in_range(p, p + 1) == 0 {
-                                    vmo.wait_for_page(p * PAGE_SIZE).await?;
+                            for pg in run_start..p {
+                                if vmo.committed_pages_in_range(pg, pg + 1) == 0 {
+                                    vmo.wait_for_page(pg * PAGE_SIZE).await?;
                                 }
                             }
                             if self.thread.state() == ThreadState::BlockedPager {
