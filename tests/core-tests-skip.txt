@@ -39,8 +39,6 @@ Pager.CloneCommitMultipleBatches
 Pager.CloneCommitSingleBatch
 Pager.CloneCommitTest
 Pager.CloneCommitTwoBatches
-Pager.ClosePageCompleteTest
-Pager.DetachPageCompleteTest
 Pager.EarlyWakeCloneRace
 Pager.EarlyWakeOverlappingRequests
 Pager.EarlyWakeWithResize
@@ -63,8 +61,6 @@ Pager.SuspendReadTestVmar
 Pager.SuspendReadTestVmo
 Pager.DecommitOnDetachTestVmar
 Pager.DecommitOnDetachTestVmo
-Pager.ReadDetachInterruptLateTestVmo
-Pager.ReadDetachInterruptEarlyTestVmo
 Pager.CloneReadFromCloneTestVmar
 Pager.CloneReadFromCloneTestVmo
 Pager.CloneReadFromParentTestVmar
