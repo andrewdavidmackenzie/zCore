@@ -30,7 +30,7 @@ pub struct WakeSourceEntry {
     pub initial_signal_time: AtomicU64,
     /// Boot time of the most recent trigger.
     pub last_signal_time: AtomicU64,
-    /// Boot time of the most recent ack (u64::MAX if never acked).
+    /// Boot time of the most recent ack (i64::MAX as u64 if never acked).
     pub last_ack_time: AtomicU64,
     /// Number of times triggered.
     pub signal_count: AtomicU64,
@@ -155,7 +155,7 @@ pub fn consume_wake_entries(koids: &[KoID]) {
             // Acked — clear for next report.
             s.initial_signal_time.store(0, Ordering::Relaxed);
             s.last_signal_time.store(0, Ordering::Relaxed);
-            s.last_ack_time.store(u64::MAX, Ordering::Relaxed);
+            s.last_ack_time.store(i64::MAX as u64, Ordering::Relaxed);
             s.signal_count.store(0, Ordering::Relaxed);
             s.reported.store(false, Ordering::Relaxed);
         }
@@ -183,7 +183,7 @@ pub fn discard_wake_entries() {
     for s in sources.iter() {
         s.initial_signal_time.store(0, Ordering::Relaxed);
         s.last_signal_time.store(0, Ordering::Relaxed);
-        s.last_ack_time.store(u64::MAX, Ordering::Relaxed);
+        s.last_ack_time.store(i64::MAX as u64, Ordering::Relaxed);
         s.signal_count.store(0, Ordering::Relaxed);
         s.signaled.store(false, Ordering::Relaxed);
         s.reported.store(false, Ordering::Relaxed);
