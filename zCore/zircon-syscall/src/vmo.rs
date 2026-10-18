@@ -613,42 +613,61 @@ impl Syscall<'_> {
                 }
                 let start = offset & !(PAGE_SIZE - 1);
                 let end = (offset + len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-                let aligned_len = end - start;
-                // Send one batched page request for the entire range,
-                // then wait for all pages. Fuchsia batches commit requests
-                // — the C++ tests expect a single packet with the full range.
-                match vmo.request_pages(start, aligned_len) {
-                    Err(ZxError::SHOULD_WAIT) => {
-                        use zircon_object::task::ThreadState;
-                        let old_state = self.thread.state();
-                        self.thread.set_state(ThreadState::BlockedPager);
-                        let mut wait_err = None;
-                        for page_idx in (start / PAGE_SIZE)..(end / PAGE_SIZE) {
-                            // Skip pages beyond current VMO size (truncated).
-                            if page_idx >= vmo.len() / PAGE_SIZE {
-                                continue;
-                            }
-                            if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
-                                match vmo.wait_for_page(page_idx * PAGE_SIZE).await {
-                                    Ok(()) => {}
-                                    // Page was truncated by resize — skip it.
-                                    Err(ZxError::OUT_OF_RANGE) => continue,
-                                    Err(e) => {
-                                        wait_err = Some(e);
+                let start_page = start / PAGE_SIZE;
+                let end_page = end / PAGE_SIZE;
+                // Send separate requests per consecutive uncommitted run,
+                // then wait page-by-page. Fuchsia splits requests around
+                // already-committed pages.
+                {
+                    use zircon_object::task::ThreadState;
+                    let old_state = self.thread.state();
+                    let mut p = start_page;
+                    while p < end_page {
+                        if p >= vmo.len() / PAGE_SIZE {
+                            break;
+                        }
+                        if vmo.committed_pages_in_range(p, p + 1) > 0 {
+                            p += 1;
+                            continue;
+                        }
+                        let run_start = p;
+                        while p < end_page
+                            && p < vmo.len() / PAGE_SIZE
+                            && vmo.committed_pages_in_range(p, p + 1) == 0
+                        {
+                            p += 1;
+                        }
+                        let req_off = run_start * PAGE_SIZE;
+                        let req_len = (p - run_start) * PAGE_SIZE;
+                        match vmo.request_pages(req_off, req_len) {
+                            Err(ZxError::SHOULD_WAIT) => {
+                                self.thread.set_state(ThreadState::BlockedPager);
+                                for pg in run_start..p {
+                                    if pg >= vmo.len() / PAGE_SIZE {
                                         break;
                                     }
+                                    if vmo.committed_pages_in_range(pg, pg + 1) == 0 {
+                                        match vmo.wait_for_page(pg * PAGE_SIZE).await {
+                                            Ok(()) => {}
+                                            Err(ZxError::OUT_OF_RANGE) => continue,
+                                            Err(e) => {
+                                                if self.thread.state() == ThreadState::BlockedPager
+                                                {
+                                                    self.thread.set_state(old_state);
+                                                }
+                                                return Err(e);
+                                            }
+                                        }
+                                    }
+                                }
+                                if self.thread.state() == ThreadState::BlockedPager {
+                                    self.thread.set_state(old_state);
                                 }
                             }
-                        }
-                        if self.thread.state() == ThreadState::BlockedPager {
-                            self.thread.set_state(old_state);
-                        }
-                        if let Some(e) = wait_err {
-                            return Err(e);
+                            Err(e) => return Err(e),
+                            Ok(()) => {}
                         }
                     }
-                    Err(e) => return Err(e),
-                    Ok(()) => {}
                 }
                 return Ok(());
             }

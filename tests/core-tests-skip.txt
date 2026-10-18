@@ -50,10 +50,8 @@ Pager.FailOverlappingRangeRead
 Pager.OpCommitCloneVmar
 Pager.OverlapCommitTest
 Pager.PageRequestBatchingChecksAncestorPages
-Pager.PresentPageSplitsRange
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
-Pager.SplitCommitTest
 Pager.SuspendCommitTest
 Pager.SuspendReadTestVmar
 Pager.SuspendReadTestVmo
