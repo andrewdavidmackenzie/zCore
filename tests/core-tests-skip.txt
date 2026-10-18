@@ -43,7 +43,6 @@ Pager.EarlyWakeCloneRace
 Pager.EarlyWakeOverlappingRequests
 Pager.EarlyWakeWithResize
 Pager.EvictionHintsCloneVmar
-Pager.EvictionHintsNestedVmar
 Pager.EvictionHintsWithClones
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
