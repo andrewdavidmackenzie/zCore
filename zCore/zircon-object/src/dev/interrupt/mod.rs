@@ -17,6 +17,9 @@ use {
 /// Global registry of wake sources (interrupt objects with WAKE_VECTOR).
 static WAKE_SOURCES: Mutex<Vec<WakeSourceEntry>> = Mutex::new(Vec::new());
 
+/// Pending deadline timer wake entry from a previous non-REPORT_ONLY suspend.
+static DEADLINE_PENDING: Mutex<Option<WakeReportEntry>> = Mutex::new(None);
+
 /// A registered wake source entry.
 pub struct WakeSourceEntry {
     /// KoID of the interrupt object.
@@ -159,6 +162,21 @@ pub fn consume_wake_entries(koids: &[KoID]) {
     }
 }
 
+/// Set a pending deadline timer wake entry.
+pub fn set_deadline_pending(entry: WakeReportEntry) {
+    *DEADLINE_PENDING.lock() = Some(entry);
+}
+
+/// Take (consume) the pending deadline timer wake entry.
+pub fn take_deadline_pending() -> Option<WakeReportEntry> {
+    DEADLINE_PENDING.lock().take()
+}
+
+/// Peek at the pending deadline timer wake entry.
+pub fn peek_deadline_pending() -> Option<WakeReportEntry> {
+    *DEADLINE_PENDING.lock()
+}
+
 /// Clear all wake source signal/ack state (for DISCARD option).
 pub fn discard_wake_entries() {
     let sources = WAKE_SOURCES.lock();
@@ -170,6 +188,7 @@ pub fn discard_wake_entries() {
         s.signaled.store(false, Ordering::Relaxed);
         s.reported.store(false, Ordering::Relaxed);
     }
+    *DEADLINE_PENDING.lock() = None;
 }
 
 /// A future that waits for `SIGNALED` on a `KObjectBase`.

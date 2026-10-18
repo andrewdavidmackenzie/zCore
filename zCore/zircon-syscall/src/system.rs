@@ -553,17 +553,16 @@ impl Syscall<'_> {
             alloc::vec::Vec::new();
 
         // Collect triggered IRQ wake sources.
-        if !is_report_only || has_entries {
-            let irq_entries = zircon_object::dev::collect_wake_entries();
-            entries.extend(irq_entries);
-        }
+        let irq_entries = zircon_object::dev::collect_wake_entries();
+        entries.extend(irq_entries);
 
-        // Add the deadline timer entry when we actually "suspended".
+        // Deadline timer entry: create on actual suspend, persist for
+        // subsequent REPORT_ONLY calls.
         if !is_report_only {
             let mut name = [0u8; 32];
             let n = b"suspend timeout";
             name[..n.len()].copy_from_slice(n);
-            entries.push((
+            let deadline_entry: zircon_object::dev::WakeReportEntry = (
                 1u64,        // koid = ZX_KOID_KERNEL
                 name,        // name = "suspend timeout"
                 report_time, // initial_signal_time
@@ -571,7 +570,12 @@ impl Syscall<'_> {
                 report_time, // last_ack_time (auto-acked)
                 1u32,        // signal_count
                 0u32,        // flags = 0
-            ));
+            );
+            zircon_object::dev::set_deadline_pending(deadline_entry);
+            entries.push(deadline_entry);
+        } else if let Some(deadline_entry) = zircon_object::dev::peek_deadline_pending() {
+            // REPORT_ONLY: include the pending deadline entry if it exists.
+            entries.push(deadline_entry);
         }
 
         let total_entries = entries.len() as u32;
@@ -628,16 +632,19 @@ impl Syscall<'_> {
         }
 
         // Consume (mark as reported) entries that were written.
-        // The deadline timer (koid=1) is not in the IRQ registry.
         if entries_to_write > 0 {
-            let written_koids: alloc::vec::Vec<u64> = entries
-                .iter()
-                .take(entries_to_write as usize)
-                .map(|(koid, ..)| *koid)
-                .filter(|&koid| koid != 1) // skip deadline timer
-                .collect();
-            if !written_koids.is_empty() {
-                zircon_object::dev::consume_wake_entries(&written_koids);
+            let mut irq_koids = alloc::vec::Vec::new();
+            for entry in entries.iter().take(entries_to_write as usize) {
+                let koid = entry.0;
+                if koid == 1 {
+                    // Deadline timer: consume the pending entry.
+                    let _ = zircon_object::dev::take_deadline_pending();
+                } else {
+                    irq_koids.push(koid);
+                }
+            }
+            if !irq_koids.is_empty() {
+                zircon_object::dev::consume_wake_entries(&irq_koids);
             }
         }
 
