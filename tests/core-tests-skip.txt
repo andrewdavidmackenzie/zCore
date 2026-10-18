@@ -14,12 +14,7 @@ Threads.BadSyscallCaller
 Threads.ExitViaException
 Threads.NoncanonicalRipAddressIRETQ
 Threads.NoncanonicalRipAddressSyscall
-Threads.ReadingFpRegisterState
-Threads.ReadingGeneralRegisterState
-Threads.ReadingVectorRegisterState
-Threads.StartRegsSuspended
 Threads.ThreadStartInvalidEntry
-Threads.WriteReadDebugRegisterState
 Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
 Threads.WritingArmFlagsRegister
 Threads.WritingFpRegisterState
