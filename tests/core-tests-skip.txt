@@ -46,7 +46,6 @@ Pager.EarlyWakeOverlappingRequests
 Pager.EarlyWakeWithResize
 Pager.EvictionHintsCloneVmar
 Pager.EvictionHintsNestedVmar
-Pager.EvictionHintsVmar
 Pager.EvictionHintsWithClones
 Pager.EvictionHintsWithResize
 Pager.FailOverlapRequest

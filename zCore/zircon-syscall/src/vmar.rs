@@ -382,23 +382,18 @@ impl Syscall<'_> {
             return Err(ZxError::INVALID_ARGS);
         }
         // For pager-backed VMOs, Commit/AlwaysNeed/Prefetch need async
-        // demand-paging. Find the mapping at this address and demand-page
-        // the VMO's pages before the sync op_range.
+        // demand-paging. Find all pager-backed mappings in the range and
+        // demand-page each one before the sync op_range.
         if matches!(
             op,
             VmarOpType::Commit | VmarOpType::AlwaysNeed | VmarOpType::Prefetch
         ) {
-            if let (Some(vmo), Some(vmo_offset)) = (
-                vmar.find_pager_vmo(addr as usize),
-                vmar.vaddr_to_vmo_offset(addr as usize),
-            ) {
-                use zircon_object::task::ThreadState;
-                use zircon_object::vm::PAGE_SIZE;
-                let start = vmo_offset;
-                let end = vmo_offset + size as usize;
-                let start_page = start / PAGE_SIZE;
-                let end_page = end.div_ceil(PAGE_SIZE);
-                // Send batched request for uncommitted pages.
+            use zircon_object::task::ThreadState;
+            use zircon_object::vm::PAGE_SIZE;
+            let pager_vmos = vmar.find_pager_vmos_in_range(addr as usize, size as usize);
+            for (vmo, vmo_offset, page_count) in pager_vmos {
+                let start_page = vmo_offset / PAGE_SIZE;
+                let end_page = start_page + page_count;
                 let first =
                     (start_page..end_page).find(|&p| vmo.committed_pages_in_range(p, p + 1) == 0);
                 let last =

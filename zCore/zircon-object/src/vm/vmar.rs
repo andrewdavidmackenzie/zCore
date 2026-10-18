@@ -1294,6 +1294,45 @@ impl VmAddressRegion {
         None
     }
 
+    /// Find all pager-backed VMO mappings overlapping [addr, addr+len).
+    /// Returns (VMO, vmo_offset, page_count) for each.
+    pub fn find_pager_vmos_in_range(
+        &self,
+        addr: usize,
+        len: usize,
+    ) -> alloc::vec::Vec<(Arc<VmObject>, usize, usize)> {
+        let mut result = alloc::vec::Vec::new();
+        let guard = self.inner.lock();
+        let inner = match guard.as_ref() {
+            Some(i) => i,
+            None => return result,
+        };
+        let range_end = addr + len;
+        for child in inner.children.iter() {
+            result.extend(child.find_pager_vmos_in_range(addr, len));
+        }
+        for mapping in inner.mappings.iter() {
+            if !mapping.vmo.is_pager_backed() {
+                continue;
+            }
+            let mi = mapping.inner.lock();
+            let map_start = mi.addr;
+            let map_end = map_start + mi.size;
+            // Check overlap
+            if map_start >= range_end || map_end <= addr {
+                continue;
+            }
+            let overlap_start = addr.max(map_start);
+            let overlap_end = range_end.min(map_end);
+            let vmo_off = mi.vmo_offset + (overlap_start - map_start);
+            let pages = (overlap_end - overlap_start) / PAGE_SIZE;
+            if pages > 0 {
+                result.push((mapping.vmo.clone(), vmo_off, pages));
+            }
+        }
+        result
+    }
+
     /// Convert a virtual address to the VMO offset in the mapping.
     pub fn vaddr_to_vmo_offset(&self, vaddr: VirtAddr) -> Option<usize> {
         let guard = self.inner.lock();
