@@ -249,8 +249,8 @@ impl Syscall<'_> {
             .proc()
             .get_object_with_rights::<Interrupt>(interrupt, Rights::SIGNAL)?;
         // Record wake source trigger for suspend reports.
-        let now = hal_impl::timer::timer_now().as_nanos() as u64;
-        zircon_object::dev::wake_source_triggered(interrupt.id(), now);
+        // Use the caller-provided timestamp (boot time at trigger).
+        zircon_object::dev::wake_source_triggered(interrupt.id(), timestamp as u64);
         interrupt.trigger(timestamp)
     }
 

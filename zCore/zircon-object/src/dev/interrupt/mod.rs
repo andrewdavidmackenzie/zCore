@@ -33,6 +33,8 @@ pub struct WakeSourceEntry {
     pub signal_count: AtomicU64,
     /// Whether the source is currently signaled (not yet acked).
     pub signaled: core::sync::atomic::AtomicBool,
+    /// Whether this source has been reported in a previous suspend report.
+    pub reported: core::sync::atomic::AtomicBool,
 }
 
 impl WakeSourceEntry {
@@ -49,6 +51,7 @@ impl WakeSourceEntry {
             last_ack_time: AtomicU64::new(u64::MAX),
             signal_count: AtomicU64::new(0),
             signaled: core::sync::atomic::AtomicBool::new(false),
+            reported: core::sync::atomic::AtomicBool::new(false),
         }
     }
 }
@@ -99,28 +102,49 @@ pub fn wake_source_count() -> u32 {
 pub type WakeReportEntry = (KoID, [u8; 32], u64, u64, u64, u32, u32);
 
 /// Collect wake source entries for the suspend report.
+///
+/// Returns entries that have been triggered since the last report.
+/// After collection, acked entries are cleared (they won't appear
+/// in the next report). Still-signaled entries are marked as
+/// "previously reported" and will appear again with that flag set.
 pub fn collect_wake_entries() -> Vec<WakeReportEntry> {
     let sources = WAKE_SOURCES.lock();
-    sources
-        .iter()
-        .filter(|s| s.signal_count.load(Ordering::Relaxed) > 0)
-        .map(|s| {
-            let flags = if s.signaled.load(Ordering::Relaxed) {
-                1u32 // ZX_SYSTEM_WAKE_REPORT_ENTRY_FLAG_SIGNALED
-            } else {
-                0u32
-            };
-            (
-                s.koid,
-                s.name,
-                s.initial_signal_time.load(Ordering::Relaxed),
-                s.last_signal_time.load(Ordering::Relaxed),
-                s.last_ack_time.load(Ordering::Relaxed),
-                s.signal_count.load(Ordering::Relaxed) as u32,
-                flags,
-            )
-        })
-        .collect()
+    let mut result = Vec::new();
+    for s in sources.iter() {
+        let count = s.signal_count.load(Ordering::Relaxed);
+        if count == 0 {
+            continue;
+        }
+        let still_signaled = s.signaled.load(Ordering::Relaxed);
+        let previously_reported = s.reported.load(Ordering::Relaxed);
+        let mut flags = 0u32;
+        if still_signaled {
+            flags |= 1; // ZX_SYSTEM_WAKE_REPORT_ENTRY_FLAG_SIGNALED
+        }
+        if previously_reported {
+            flags |= 2; // ZX_SYSTEM_WAKE_REPORT_ENTRY_FLAG_PREVIOUSLY_REPORTED
+        }
+        result.push((
+            s.koid,
+            s.name,
+            s.initial_signal_time.load(Ordering::Relaxed),
+            s.last_signal_time.load(Ordering::Relaxed),
+            s.last_ack_time.load(Ordering::Relaxed),
+            count as u32,
+            flags,
+        ));
+        // Mark as reported. If acked, clear for next time.
+        s.reported.store(true, Ordering::Relaxed);
+        if !still_signaled {
+            // Acked — clear for next report.
+            s.initial_signal_time.store(0, Ordering::Relaxed);
+            s.last_signal_time.store(0, Ordering::Relaxed);
+            s.last_ack_time.store(u64::MAX, Ordering::Relaxed);
+            s.signal_count.store(0, Ordering::Relaxed);
+            s.reported.store(false, Ordering::Relaxed);
+        }
+    }
+    result
 }
 
 /// Clear all wake source signal/ack state (for DISCARD option).
@@ -132,6 +156,7 @@ pub fn discard_wake_entries() {
         s.last_ack_time.store(u64::MAX, Ordering::Relaxed);
         s.signal_count.store(0, Ordering::Relaxed);
         s.signaled.store(false, Ordering::Relaxed);
+        s.reported.store(false, Ordering::Relaxed);
     }
 }
 
