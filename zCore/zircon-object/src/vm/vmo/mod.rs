@@ -572,17 +572,17 @@ impl VmObject {
         if let Some(port) = &inner.pager_port {
             let start_page = offset / PAGE_SIZE;
             let end_page = (offset + length).div_ceil(PAGE_SIZE);
-            // Skip if ALL pages in the range are already committed
-            // (avoids spurious requests on fault retries after supply).
+            // Skip if ALL pages in the range are already committed or
+            // have pending waiters (avoids spurious duplicate requests).
             let total_pages = end_page - start_page;
             let committed = self.trait_.committed_pages_in_range(start_page, end_page);
-            let all_committed = committed == total_pages;
-            // Also skip if there's already a pending waiter for the first page.
-            let has_waiter = inner
+            let waiters_in_range = inner
                 .pager_waiters
                 .iter()
-                .any(|(idx, _)| *idx == start_page);
-            if !all_committed && !has_waiter {
+                .filter(|(idx, _)| *idx >= start_page && *idx < end_page)
+                .count();
+            let all_covered = committed + waiters_in_range >= total_pages;
+            if !all_covered {
                 port.push(PortPacketRepr {
                     key: inner.pager_key,
                     status: ZxError::OK,
