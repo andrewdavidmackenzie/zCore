@@ -51,7 +51,7 @@ impl WakeSourceEntry {
             name,
             initial_signal_time: AtomicU64::new(0),
             last_signal_time: AtomicU64::new(0),
-            last_ack_time: AtomicU64::new(u64::MAX),
+            last_ack_time: AtomicU64::new(i64::MAX as u64), // ZX_TIME_INFINITE
             signal_count: AtomicU64::new(0),
             signaled: core::sync::atomic::AtomicBool::new(false),
             reported: core::sync::atomic::AtomicBool::new(false),

@@ -531,8 +531,8 @@ impl Syscall<'_> {
         };
 
         // If not REPORT_ONLY, "suspend" until deadline or wake source trigger.
-        // Yield to allow other tasks (including the thread that triggers
-        // the interrupt) to run during the wait.
+        // Track whether the deadline expired vs early exit from wake source.
+        let mut deadline_fired = false;
         if !is_report_only {
             let deadline_signed = resume_deadline as i64;
             if deadline_signed > 0 {
@@ -540,15 +540,18 @@ impl Syscall<'_> {
                 let now = hal_impl::timer::timer_now();
                 let max_wait = core::time::Duration::from_secs(5);
                 let capped = deadline.min(now + max_wait);
+                let mut woken_by_source = false;
                 while hal_impl::timer::timer_now() < capped {
-                    // Check if any wake source was triggered.
                     if !zircon_object::dev::collect_wake_entries().is_empty() {
+                        woken_by_source = true;
                         break;
                     }
-                    // Yield to let other tasks run (including the
-                    // thread that will call zx_interrupt_trigger).
                     hal_impl::thread::yield_now().await;
                 }
+                deadline_fired = !woken_by_source;
+            } else {
+                // Deadline in the past or infinite_past — fires immediately.
+                deadline_fired = true;
             }
         }
 
@@ -562,9 +565,8 @@ impl Syscall<'_> {
         let irq_entries = zircon_object::dev::collect_wake_entries();
         entries.extend(irq_entries);
 
-        // Deadline timer entry: create on actual suspend, persist for
-        // subsequent REPORT_ONLY calls.
-        if !is_report_only {
+        // Deadline timer entry: only when the deadline actually expired.
+        if deadline_fired {
             let mut name = [0u8; 32];
             let n = b"suspend timeout";
             name[..n.len()].copy_from_slice(n);
