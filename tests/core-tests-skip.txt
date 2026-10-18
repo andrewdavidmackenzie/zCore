@@ -47,7 +47,6 @@ Pager.EarlyWakeWithResize
 Pager.EvictionHintsCloneVmar
 Pager.EvictionHintsNestedVmar
 Pager.EvictionHintsWithClones
-Pager.EvictionHintsWithResize
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
@@ -61,8 +60,6 @@ Pager.ResizeBlockedPin
 Pager.ResizeCommitTest
 Pager.SplitCommitTest
 Pager.SuspendCommitTest
-Pager.ReadResizeTestVmar
-Pager.ReadResizeTestVmo
 Pager.SuspendReadTestVmar
 Pager.SuspendReadTestVmo
 Pager.DecommitOnDetachTestVmar

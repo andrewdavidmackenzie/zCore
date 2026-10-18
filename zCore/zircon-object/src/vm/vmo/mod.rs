@@ -884,7 +884,14 @@ impl VmObject {
             }
             return Err(ZxError::UNAVAILABLE);
         }
-        self.trait_.set_len(size)
+        let old_size = self.len();
+        self.trait_.set_len(size)?;
+        // When shrinking a pager-backed VMO, wake any waiters for
+        // pages in the truncated range with OUT_OF_RANGE.
+        if size < old_size {
+            self.fail_pager_requests_range(size, old_size - size, ZxError::OUT_OF_RANGE);
+        }
+        Ok(())
     }
 
     /// Set the size of the content stored in the VMO in bytes, resize vmo if needed
