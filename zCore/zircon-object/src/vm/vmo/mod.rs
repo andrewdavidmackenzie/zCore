@@ -655,6 +655,11 @@ impl VmObject {
         let rx = {
             let mut inner = self.inner.lock();
             let page_idx = offset / PAGE_SIZE;
+            // If the page is beyond the VMO's current size (e.g. after
+            // resize), return OUT_OF_RANGE immediately.
+            if offset >= self.len() {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
             // If the page was already supplied between request_pages()
             // and now (race window), return immediately.
             if self.committed_pages_in_range(page_idx, page_idx + 1) > 0 {

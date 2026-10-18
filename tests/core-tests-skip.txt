@@ -41,7 +41,6 @@ Pager.CloneCommitTest
 Pager.CloneCommitTwoBatches
 Pager.EarlyWakeCloneRace
 Pager.EarlyWakeOverlappingRequests
-Pager.EarlyWakeWithResize
 Pager.EvictionHintsCloneVmar
 Pager.EvictionHintsWithClones
 Pager.FailOverlapRequest
