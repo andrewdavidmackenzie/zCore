@@ -412,13 +412,20 @@ impl Syscall<'_> {
                         Err(ZxError::SHOULD_WAIT) => {
                             let old_state = self.thread.state();
                             self.thread.set_state(ThreadState::BlockedPager);
+                            let mut wait_err = None;
                             for pg in run_start..p {
                                 if vmo.committed_pages_in_range(pg, pg + 1) == 0 {
-                                    vmo.wait_for_page(pg * PAGE_SIZE).await?;
+                                    if let Err(e) = vmo.wait_for_page(pg * PAGE_SIZE).await {
+                                        wait_err = Some(e);
+                                        break;
+                                    }
                                 }
                             }
                             if self.thread.state() == ThreadState::BlockedPager {
                                 self.thread.set_state(old_state);
+                            }
+                            if let Some(e) = wait_err {
+                                return Err(e);
                             }
                         }
                         Err(e) => return Err(e),

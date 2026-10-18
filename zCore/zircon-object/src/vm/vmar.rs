@@ -1307,7 +1307,7 @@ impl VmAddressRegion {
             Some(i) => i,
             None => return result,
         };
-        let range_end = addr + len;
+        let range_end = (addr + len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         for child in inner.children.iter() {
             result.extend(child.find_pager_vmos_in_range(addr, len));
         }
