@@ -453,7 +453,7 @@ impl Syscall<'_> {
     /// this would enter a low-power CPU state; on QEMU we simply
     /// busy-wait until the deadline.
     #[allow(clippy::too_many_arguments)]
-    pub fn sys_system_suspend_enter(
+    pub async fn sys_system_suspend_enter(
         &self,
         resource: HandleValue,
         resume_deadline: u64,
@@ -530,9 +530,9 @@ impl Syscall<'_> {
             report_time
         };
 
-        // If not REPORT_ONLY, actually "suspend" (busy-wait to deadline).
-        // Exit early if a wake source is triggered (matching Fuchsia's
-        // behavior where an asserted wake source prevents/ends suspend).
+        // If not REPORT_ONLY, "suspend" until deadline or wake source trigger.
+        // Yield to allow other tasks (including the thread that triggers
+        // the interrupt) to run during the wait.
         if !is_report_only {
             let deadline_signed = resume_deadline as i64;
             if deadline_signed > 0 {
@@ -540,15 +540,14 @@ impl Syscall<'_> {
                 let now = hal_impl::timer::timer_now();
                 let max_wait = core::time::Duration::from_secs(5);
                 let capped = deadline.min(now + max_wait);
-                if capped > now {
-                    while hal_impl::timer::timer_now() < capped {
-                        // Check if any wake source was triggered — exit
-                        // early to mimic hardware wakeup.
-                        if !zircon_object::dev::collect_wake_entries().is_empty() {
-                            break;
-                        }
-                        core::hint::spin_loop();
+                while hal_impl::timer::timer_now() < capped {
+                    // Check if any wake source was triggered.
+                    if !zircon_object::dev::collect_wake_entries().is_empty() {
+                        break;
                     }
+                    // Yield to let other tasks run (including the
+                    // thread that will call zx_interrupt_trigger).
+                    hal_impl::thread::yield_now().await;
                 }
             }
         }
