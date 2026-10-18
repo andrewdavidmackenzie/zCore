@@ -129,6 +129,10 @@ impl PinnedMemoryToken {
 
     /// Unpin pages and revoke device access to them.
     pub fn unpin(&self) {
+        // Unpin VMO pages that were pinned during create.
+        if self.vmo.is_paged() {
+            let _ = self.vmo.unpin(self.offset, self.size);
+        }
         if let Some(bti) = self.bti.upgrade() {
             bti.release_pmt(self.base.id);
         }
