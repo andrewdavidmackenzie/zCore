@@ -307,7 +307,7 @@ fn port_bound_report_only() {
     // BadReportRequests test). Passing out_header=0 with REPORT_ONLY
     // should return INVALID_ARGS.
     let mut actual_entries: u32 = 0xFFFF;
-    let result = sc.sys_system_suspend_enter(
+    let result = async_std::task::block_on(sc.sys_system_suspend_enter(
         root_resource,
         0,   // deadline (irrelevant for REPORT_ONLY)
         0x2, // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
@@ -315,7 +315,7 @@ fn port_bound_report_only() {
         0,
         0,
         hal_impl::user::UserOutPtr::from(&mut actual_entries as *mut u32 as usize),
-    );
+    ));
     assert_eq!(
         result,
         Err(zircon_object::ZxError::INVALID_ARGS),
@@ -324,7 +324,7 @@ fn port_bound_report_only() {
 
     // With a header buffer, REPORT_ONLY should succeed.
     let mut header = [0u8; 24];
-    let result = sc.sys_system_suspend_enter(
+    let result = async_std::task::block_on(sc.sys_system_suspend_enter(
         root_resource,
         0,                            // deadline
         0x2,                          // ZX_SYSTEM_SUSPEND_OPTION_REPORT_ONLY
@@ -332,7 +332,7 @@ fn port_bound_report_only() {
         0,                            // out_entries (header-only)
         0,
         hal_impl::user::UserOutPtr::from(0usize), // actual_entries null
-    );
+    ));
     assert!(result.is_ok(), "REPORT_ONLY with header should succeed");
 }
 

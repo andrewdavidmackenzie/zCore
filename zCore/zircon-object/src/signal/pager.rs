@@ -209,6 +209,7 @@ impl Pager {
                 }
                 return Err(e);
             }
+            crate::vm::VMO_PAGER_PAGES.add(1);
             src_off += chunk;
             dst_off += chunk;
         }
