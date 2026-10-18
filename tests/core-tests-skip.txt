@@ -44,10 +44,8 @@ Pager.DetachPageCompleteTest
 Pager.EarlyWakeCloneRace
 Pager.EarlyWakeOverlappingRequests
 Pager.EarlyWakeWithResize
-Pager.EvictionHintAlwaysNeed
 Pager.EvictionHintsCloneVmar
 Pager.EvictionHintsNestedVmar
-Pager.EvictionHintsOpRange
 Pager.EvictionHintsVmar
 Pager.EvictionHintsWithClones
 Pager.EvictionHintsWithResize

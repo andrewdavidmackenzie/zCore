@@ -594,16 +594,16 @@ impl Syscall<'_> {
         buffer: UserOutPtr<u8>,
         buffer_size: usize,
     ) -> ZxResult {
-        // ZX_VMO_OP_COMMIT = 1, ZX_VMO_OP_PREFETCH = 14
-        // Both trigger demand-paging for pager-backed VMOs.
-        if op == 1 || op == 14 {
+        // ZX_VMO_OP_COMMIT = 1, ZX_VMO_OP_PREFETCH = 14, ZX_VMO_OP_ALWAYS_NEED = 13
+        // All trigger demand-paging for pager-backed VMOs.
+        if op == 1 || op == 14 || op == 13 {
             let proc = self.thread.proc();
             let is_pager = proc
                 .get_object::<VmObject>(handle_value)
                 .is_ok_and(|v| v.is_pager_backed());
             if is_pager {
                 let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
-                // COMMIT requires WRITE; PREFETCH only requires READ.
+                // COMMIT requires WRITE; PREFETCH/ALWAYS_NEED only require READ.
                 let required = if op == 1 { Rights::WRITE } else { Rights::READ };
                 if !rights.contains(required) {
                     return Err(ZxError::ACCESS_DENIED);
