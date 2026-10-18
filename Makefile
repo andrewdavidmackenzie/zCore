@@ -407,12 +407,12 @@ endif
 
 # Step 4: Create UEFI boot image from kernel + rootfs.
 .PHONY: core-tests-bootimg
-core-tests-bootimg:
+core-tests-bootimg: core-tests-kernel core-tests-rootfs
 	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
 	@$(BOOTIMAGE_BIN) $(KERNEL_ELF) $(BOOT_IMG) --ramdisk $(ROOTFS_IMG)
 
 # All steps together (backwards compatible).
-core-tests-build: core-tests-kernel core-tests-rootfs core-tests-bootimg
+core-tests-build: core-tests-bootimg
 
 # Run a single test (or filter pattern) quickly.
 # Usage: make core-test-run T=Pager.SinglePageTestVmar
@@ -437,9 +437,9 @@ endif
 		> $(CORE_TESTS_LOG) 2>&1 & \
 	PID=$$!; sleep $${CORE_TEST_TIMEOUT:-15}; \
 	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
-	if grep -q '\[       OK \]' $(CORE_TESTS_LOG); then echo "PASS: $(T)"; \
-	elif grep -q '\[  FAILED  \]' $(CORE_TESTS_LOG); then echo "FAIL: $(T)"; \
-	else echo "HANG: $(T)"; fi
+	if grep -q '\[  FAILED  \]' $(CORE_TESTS_LOG); then echo "FAIL: $(T)"; exit 1; \
+	elif grep -q '\[       OK \]' $(CORE_TESTS_LOG); then echo "PASS: $(T)"; \
+	else echo "HANG: $(T)"; exit 1; fi
 
 # Build and run the full core-tests suite.
 core-tests: core-tests-build
