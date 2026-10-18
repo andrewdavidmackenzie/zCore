@@ -103,10 +103,9 @@ pub type WakeReportEntry = (KoID, [u8; 32], u64, u64, u64, u32, u32);
 
 /// Collect wake source entries for the suspend report.
 ///
-/// Returns entries that have been triggered since the last report.
-/// After collection, acked entries are cleared (they won't appear
-/// in the next report). Still-signaled entries are marked as
-/// "previously reported" and will appear again with that flag set.
+/// Returns entries that have been triggered. Does NOT modify state —
+/// entries persist until explicitly consumed via `consume_wake_entries`
+/// or cleared via `discard_wake_entries`.
 pub fn collect_wake_entries() -> Vec<WakeReportEntry> {
     let sources = WAKE_SOURCES.lock();
     let mut result = Vec::new();
@@ -133,9 +132,23 @@ pub fn collect_wake_entries() -> Vec<WakeReportEntry> {
             count as u32,
             flags,
         ));
-        // Mark as reported. If acked, clear for next time.
+    }
+    result
+}
+
+/// Consume (mark as reported) the given entries by koid.
+///
+/// Acked entries that have been reported are cleared so they don't
+/// appear again. Still-signaled entries are marked as "previously
+/// reported" but remain for the next report.
+pub fn consume_wake_entries(koids: &[KoID]) {
+    let sources = WAKE_SOURCES.lock();
+    for s in sources.iter() {
+        if !koids.contains(&s.koid) {
+            continue;
+        }
         s.reported.store(true, Ordering::Relaxed);
-        if !still_signaled {
+        if !s.signaled.load(Ordering::Relaxed) {
             // Acked — clear for next report.
             s.initial_signal_time.store(0, Ordering::Relaxed);
             s.last_signal_time.store(0, Ordering::Relaxed);
@@ -144,7 +157,6 @@ pub fn collect_wake_entries() -> Vec<WakeReportEntry> {
             s.reported.store(false, Ordering::Relaxed);
         }
     }
-    result
 }
 
 /// Clear all wake source signal/ack state (for DISCARD option).

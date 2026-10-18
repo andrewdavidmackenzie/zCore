@@ -627,6 +627,20 @@ impl Syscall<'_> {
             actual_entries.write(entries_to_write)?;
         }
 
+        // Consume (mark as reported) entries that were written.
+        // The deadline timer (koid=1) is not in the IRQ registry.
+        if entries_to_write > 0 {
+            let written_koids: alloc::vec::Vec<u64> = entries
+                .iter()
+                .take(entries_to_write as usize)
+                .map(|(koid, ..)| *koid)
+                .filter(|&koid| koid != 1) // skip deadline timer
+                .collect();
+            if !written_koids.is_empty() {
+                zircon_object::dev::consume_wake_entries(&written_koids);
+            }
+        }
+
         // DISCARD: clear all wake source state after reporting.
         if is_discard {
             zircon_object::dev::discard_wake_entries();
