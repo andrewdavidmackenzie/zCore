@@ -53,7 +53,6 @@ Pager.PageRequestBatchingChecksAncestorPages
 Pager.PresentPageSplitsRange
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
-Pager.ResizeCommitTest
 Pager.SplitCommitTest
 Pager.SuspendCommitTest
 Pager.SuspendReadTestVmar
