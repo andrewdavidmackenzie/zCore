@@ -103,61 +103,70 @@ impl Syscall<'_> {
             None => return Err(ZxError::NOT_FOUND),
             _ => {}
         }
-        // For pager-backed VMOs, demand-page any missing pages first.
-        // Batch consecutive uncommitted pages into a single pager request
-        // (matching Fuchsia kernel behavior). This is important because
-        // tests like SequentialMultipageTestVmo expect a single batched
-        // request covering the entire range.
+        // For pager-backed VMOs, interleave demand-paging with data copy.
+        // Send one batched request for all uncommitted pages, then wait
+        // and copy page by page. This allows "early wake" — data becomes
+        // available in the user buffer as pages are supplied.
         if vmo.is_pager_backed() && buf_size > 0 {
+            use zircon_object::task::ThreadState;
             use zircon_object::vm::PAGE_SIZE;
             let start = offset as usize;
             let end = start + buf_size;
             let start_page = start / PAGE_SIZE;
             let end_page = end.div_ceil(PAGE_SIZE);
-            let mut page_idx = start_page;
-            while page_idx < end_page {
-                // Skip already-committed pages.
-                if vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
-                    page_idx += 1;
-                    continue;
-                }
-                // Find the end of this consecutive uncommitted run.
-                let run_start = page_idx;
-                while page_idx < end_page
-                    && vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
-                {
-                    page_idx += 1;
-                }
-                // Send one batched request for the entire run.
-                let req_offset = run_start * PAGE_SIZE;
-                let req_length = (page_idx - run_start) * PAGE_SIZE;
+
+            // Find all uncommitted pages and send one batched request.
+            let first_uncommitted =
+                (start_page..end_page).find(|&p| vmo.committed_pages_in_range(p, p + 1) == 0);
+            let last_uncommitted =
+                (start_page..end_page).rfind(|&p| vmo.committed_pages_in_range(p, p + 1) == 0);
+
+            let needs_pager = first_uncommitted.is_some();
+            if needs_pager {
+                let req_start = first_uncommitted.unwrap();
+                let req_end = last_uncommitted.unwrap() + 1;
+                let req_offset = req_start * PAGE_SIZE;
+                let req_length = (req_end - req_start) * PAGE_SIZE;
                 match vmo.request_pages(req_offset, req_length) {
-                    Err(ZxError::SHOULD_WAIT) => {
-                        // Set BlockedPager so WaitForBlocked() polling detects it.
-                        use zircon_object::task::ThreadState;
-                        let old_state = self.thread.state();
-                        self.thread.set_state(ThreadState::BlockedPager);
-                        let mut wait_err = None;
-                        for p in run_start..page_idx {
-                            if let Err(e) = vmo.wait_for_page(p * PAGE_SIZE).await {
-                                wait_err = Some(e);
-                                break;
-                            }
-                        }
-                        if self.thread.state() == ThreadState::BlockedPager {
-                            self.thread.set_state(old_state);
-                        }
-                        if let Some(e) = wait_err {
-                            return Err(e);
-                        }
-                    }
-                    Err(e) => return Err(e), // BAD_STATE (detached), etc.
-                    Ok(()) => {}             // shouldn't happen
+                    Err(ZxError::SHOULD_WAIT) => {} // normal
+                    Err(e) => return Err(e),
+                    Ok(()) => {}
                 }
             }
+
+            // Read page by page, waiting for each page as needed.
+            // Data is copied to user buffer as soon as each page is ready.
+            let old_state = self.thread.state();
+            let mut vmo_offset = start;
+            let mut buf_written = 0usize;
+            for page_idx in start_page..end_page {
+                // Wait for this page if uncommitted.
+                if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
+                    self.thread.set_state(ThreadState::BlockedPager);
+                    let result = vmo.wait_for_page(page_idx * PAGE_SIZE).await;
+                    if self.thread.state() == ThreadState::BlockedPager {
+                        self.thread.set_state(old_state);
+                    }
+                    result?;
+                }
+                // Copy this page's data to user buffer.
+                let page_start = page_idx * PAGE_SIZE;
+                let page_end = (page_idx + 1) * PAGE_SIZE;
+                let copy_start = vmo_offset.max(page_start);
+                let copy_end = end.min(page_end);
+                if copy_start < copy_end {
+                    let chunk_len = copy_end - copy_start;
+                    let mut tmp = alloc::vec![0u8; chunk_len];
+                    vmo.read(copy_start, &mut tmp)?;
+                    let mut dst = buf.add(buf_written);
+                    dst.write_array(&tmp).map_err(|_| ZxError::ACCESS_DENIED)?;
+                    buf_written += chunk_len;
+                    vmo_offset = copy_end;
+                }
+            }
+            return Ok(());
         }
-        // All pages are now present. Read page-sized chunks from the VMO
-        // and copy each chunk to user space.
+        // Non-pager VMO: read all at once.
         let mut vmo_offset = offset as usize;
         buf.for_each_chunk_mut::<ZxError>(buf_size, |chunk| {
             vmo.read(vmo_offset, chunk)?;
@@ -166,23 +175,8 @@ impl Syscall<'_> {
             Ok(n)
         })
         .map_err(|e| {
-            // Fuchsia distinguishes: NOT_FOUND for unmapped/OOB
-            // addresses, ACCESS_DENIED for permission violations.
-            // vmo_read writes to the user buffer — if the buffer
-            // is fully within a mapping, it's a permission error;
-            // otherwise it's an unmapped/OOB address.
             if e == ZxError::INVALID_ARGS {
-                let addr = buf.as_addr();
-                let end = addr.saturating_add(buf_size);
-                let vmar = self.thread.proc().vmar();
-                let fully_covered = vmar
-                    .find_mapping(addr)
-                    .is_some_and(|m| m.covers_range(addr, end));
-                if fully_covered {
-                    ZxError::ACCESS_DENIED
-                } else {
-                    ZxError::NOT_FOUND
-                }
+                ZxError::ACCESS_DENIED
             } else {
                 e
             }

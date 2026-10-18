@@ -42,8 +42,6 @@ Pager.CloneCommitTwoBatches
 Pager.ClosePageCompleteTest
 Pager.DetachPageCompleteTest
 Pager.EarlyWakeCloneRace
-Pager.EarlyWakeNonLinearSupply
-Pager.EarlyWakeOnSupply
 Pager.EarlyWakeOverlappingRequests
 Pager.EarlyWakeWithResize
 Pager.EvictionHintAlwaysNeed
