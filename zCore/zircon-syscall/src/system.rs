@@ -531,6 +531,8 @@ impl Syscall<'_> {
         };
 
         // If not REPORT_ONLY, actually "suspend" (busy-wait to deadline).
+        // Exit early if a wake source is triggered (matching Fuchsia's
+        // behavior where an asserted wake source prevents/ends suspend).
         if !is_report_only {
             let deadline_signed = resume_deadline as i64;
             if deadline_signed > 0 {
@@ -540,6 +542,11 @@ impl Syscall<'_> {
                 let capped = deadline.min(now + max_wait);
                 if capped > now {
                     while hal_impl::timer::timer_now() < capped {
+                        // Check if any wake source was triggered — exit
+                        // early to mimic hardware wakeup.
+                        if !zircon_object::dev::collect_wake_entries().is_empty() {
+                            break;
+                        }
                         core::hint::spin_loop();
                     }
                 }
