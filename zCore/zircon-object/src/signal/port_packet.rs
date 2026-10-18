@@ -64,6 +64,8 @@ pub struct PacketPageRequest {
 pub const ZX_PAGER_VMO_READ: u16 = 0;
 /// Pager VMO dirty command (write-to-clean-page notification).
 pub const ZX_PAGER_VMO_DIRTY: u16 = 1;
+/// Pager VMO complete command (last handle closed notification).
+pub const ZX_PAGER_VMO_COMPLETE: u16 = 2;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

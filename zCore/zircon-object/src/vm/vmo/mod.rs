@@ -3,7 +3,8 @@ use {
     super::*,
     crate::object::*,
     crate::signal::{
-        PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_DIRTY, ZX_PAGER_VMO_READ,
+        PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_COMPLETE,
+        ZX_PAGER_VMO_DIRTY, ZX_PAGER_VMO_READ,
     },
     alloc::{
         sync::{Arc, Weak},
@@ -1398,6 +1399,25 @@ impl Deref for VmObject {
 
 impl Drop for VmObject {
     fn drop(&mut self) {
+        // Send ZX_PAGER_VMO_COMPLETE to the pager port when the last
+        // handle to a pager-backed VMO is closed.
+        {
+            let inner = self.inner.lock();
+            if let Some(port) = &inner.pager_port {
+                port.push(PortPacketRepr {
+                    key: inner.pager_key,
+                    status: ZxError::OK,
+                    data: PayloadRepr::PageRequest(PacketPageRequest {
+                        command: ZX_PAGER_VMO_COMPLETE,
+                        flags: 0,
+                        _reserved0: 0,
+                        offset: 0,
+                        length: 0,
+                        _reserved1: 0,
+                    }),
+                });
+            }
+        }
         // Wake any threads blocked on pager faults before freeing.
         {
             let inner = self.inner.lock();
