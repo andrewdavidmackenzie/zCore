@@ -624,10 +624,19 @@ impl Syscall<'_> {
                         self.thread.set_state(ThreadState::BlockedPager);
                         let mut wait_err = None;
                         for page_idx in (start / PAGE_SIZE)..(end / PAGE_SIZE) {
+                            // Skip pages beyond current VMO size (truncated).
+                            if page_idx >= vmo.len() / PAGE_SIZE {
+                                continue;
+                            }
                             if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
-                                if let Err(e) = vmo.wait_for_page(page_idx * PAGE_SIZE).await {
-                                    wait_err = Some(e);
-                                    break;
+                                match vmo.wait_for_page(page_idx * PAGE_SIZE).await {
+                                    Ok(()) => {}
+                                    // Page was truncated by resize — skip it.
+                                    Err(ZxError::OUT_OF_RANGE) => continue,
+                                    Err(e) => {
+                                        wait_err = Some(e);
+                                        break;
+                                    }
                                 }
                             }
                         }

@@ -43,7 +43,6 @@ Pager.EarlyWakeCloneRace
 Pager.EarlyWakeOverlappingRequests
 Pager.EarlyWakeWithResize
 Pager.EvictionHintsCloneVmar
-Pager.EvictionHintsNestedVmar
 Pager.EvictionHintsWithClones
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
@@ -54,7 +53,6 @@ Pager.PageRequestBatchingChecksAncestorPages
 Pager.PresentPageSplitsRange
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
-Pager.ResizeCommitTest
 Pager.SplitCommitTest
 Pager.SuspendCommitTest
 Pager.SuspendReadTestVmar
