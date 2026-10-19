@@ -2,22 +2,16 @@
 # Each non-empty, non-comment line is a gtest pattern to exclude.
 # Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
 
-# ── Multi-threaded / cooperative scheduler ───────────────────────────
+# ── Multi-threaded (need preemptive scheduling / std::thread) ────────
 PortStressTest.*
 ChannelTest.NoSpuriousReadableSignalWhenRacing
-ProcessTest.KillChannelHandleCycle
+PthreadTest.Basic
 
 # ── Thread suspend / register state ─────────────────────────────────
 Threads.NoncanonicalRipAddressIRETQ
 Threads.NoncanonicalRipAddressSyscall
 Threads.WritingArmFlagsRegister
 Threads.X86AcFlagUserCopy
-
-# ── Policy exception infrastructure ─────────────────────────────────
-
-# ── COW populated_bytes ──────────────────────────────────────────────
-
-# ── VmoTestCase (kernel panic / crash) ───────────────────────────────
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.EarlyWakeCloneRace
@@ -31,8 +25,6 @@ Pager.SuspendCommitTest
 Pager.SuspendReadTestVmar
 Pager.SuspendReadTestVmo
 Pager.CloneReadFromParentTestVmar
-
-# ── PagerProcess (preemptive scheduling) ─────────────────────────────
 PagerProcess.KillBlockedUserVmoRead
 PagerProcess.KillBlockedUserPageFault
 PagerProcess.KillBlockedUsercopy
@@ -41,8 +33,6 @@ PagerProcess.KillAfterSuspendVmoRead
 PagerProcess.KillAfterSuspendPageFault
 PagerProcess.KillAfterSuspendUsercopy
 PagerProcess.KillAfterSuspendUsercopyCapture
-
-# ── PagerWriteback (TRAP_DIRTY not implemented) ──────────────────────
 PagerWriteback.*
 
 # ── Snapshot (pager-backed snapshot clones) ──────────────────────────
@@ -89,15 +79,9 @@ StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 
-# ── VMAR (FaultBeyondStreamSize) ─────────────────────────────────────
-
-# ── BTI ──────────────────────────────────────────────────────────────
-
-# ── MSI ──────────────────────────────────────────────────────────────
+# ── MSI / Resource / Hardware ────────────────────────────────────────
 MsiTest.Msi
 MsiTest.Msix
-
-# ── Resource / Mexec ─────────────────────────────────────────────────
 Resource.MexecBadZbiHeaderLength
 Resource.MexecEmptyZbi
 Resource.MexecMemoryLeakOnFailure
@@ -105,8 +89,6 @@ Resource.MexecPagerPanic
 Resource.MexecPayloadTooSmall
 Resource.MexecZeroSizedVmo
 Resource.Ioports
-
-# ── Job kill chain ───────────────────────────────────────────────────
 
 # ── System events / suspend / wake reports ───────────────────────────
 SystemEvent.ExactlyOneMemoryEventSignaled
@@ -122,6 +104,11 @@ WakeReportTestsThreadBound.ReportOnly
 WakeReportTestsThreadBound.Acked
 WakeReportTestsThreadBound.AckedStillPending
 WakeReportTestsThreadBound.MultipleSignals
+WakeReportTestsPortBound.MultipleSignals
+WakeReportTestsPortBound.Discard
+WakeReportTestsPortBound.MultiWakeSource
+WakeReportTestsPortBound.SingleWakeSource
+WakeReportTestsPortBound.AckedStillPending
 
 # ── ThreadSampler (crash on sample read) ─────────────────────────────
 ThreadSampler.StartStop
@@ -130,18 +117,10 @@ ThreadSampler.SamplerLifetime
 ThreadSampler.DroppedSampler
 ThreadSampler.HighFrequency
 
-# ── VmoClone2 hangs ──────────────────────────────────────────────
+# ── COW merge on handle close (needs on_zero_handles) ────────────────
 VmoClone2TestCase.DropParentCommittedBytes
-WakeReportTestsPortBound.MultipleSignals
-WakeReportTestsPortBound.Discard
-WakeReportTestsPortBound.MultiWakeSource
-WakeReportTestsPortBound.SingleWakeSource
-WakeReportTestsPortBound.AckedStillPending
-
-# ── VmoZero/VmoClone2 hangs ─────────────────────────────────────────
-
-# Hangs — blocks sequential test run
-PthreadTest.Basic
 VmoZeroTestCase.WriteCowParent
 VmoZeroTestCase.AllocateAfterMergeMultipleChildren
+
+# ── BTI (std::thread race test) ──────────────────────────────────────
 Bti.NoDelayedUnpin
