@@ -38,7 +38,6 @@ Pager.EarlyWakeCloneRace
 Pager.EarlyWakeOverlappingRequests
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
-Pager.FailOverlappingRangeRead
 Pager.PageRequestBatchingChecksAncestorPages
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin

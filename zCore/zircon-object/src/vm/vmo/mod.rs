@@ -678,6 +678,11 @@ impl VmObject {
         inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx)
     }
 
+    /// Clear a failed-page marker (for retry after OP_FAIL).
+    pub fn clear_failed_page(&self, page_idx: usize) {
+        self.inner.lock().pager_failed_pages.remove(&page_idx);
+    }
+
     /// Block until the page at `offset` is supplied by the pager.
     /// Returns `Ok(())` when the page is ready, or `Err` if the
     /// pager is detached.

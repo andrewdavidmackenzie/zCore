@@ -169,13 +169,40 @@ impl Syscall<'_> {
             let mut buf_written = 0usize;
             for page_idx in start_page..end_page {
                 // Wait for this page if uncommitted in the pager VMO.
+                // Retry on pager errors (IO, etc.) — the kernel re-sends
+                // a request and waits again, matching Fuchsia's behavior.
                 if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
-                    self.thread.set_state(ThreadState::BlockedPager);
-                    let result = pager_vmo.wait_for_page(page_idx * PAGE_SIZE).await;
-                    if self.thread.state() == ThreadState::BlockedPager {
-                        self.thread.set_state(old_state);
+                    let mut last_err = None;
+                    // Try twice: initial wait (from batched request), then
+                    // one re-request after failure (matching Fuchsia kernel
+                    // behavior for vmo_read partial failure).
+                    for retry in 0..2 {
+                        if retry > 0 {
+                            // After failure, clear the marker and re-send.
+                            pager_vmo.clear_failed_page(page_idx);
+                            let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
+                        }
+                        self.thread.set_state(ThreadState::BlockedPager);
+                        let result = pager_vmo.wait_for_page(page_idx * PAGE_SIZE).await;
+                        if self.thread.state() == ThreadState::BlockedPager {
+                            self.thread.set_state(old_state);
+                        }
+                        match result {
+                            Ok(()) => {
+                                last_err = None;
+                                break;
+                            }
+                            Err(ZxError::OUT_OF_RANGE) => return Err(ZxError::OUT_OF_RANGE),
+                            Err(ZxError::BAD_STATE) => return Err(ZxError::BAD_STATE),
+                            Err(e) => {
+                                last_err = Some(e);
+                                // Retry — re-send request
+                            }
+                        }
                     }
-                    result?;
+                    if let Some(e) = last_err {
+                        return Err(e);
+                    }
                 }
                 // Copy this page's data to user buffer.
                 let page_start = page_idx * PAGE_SIZE;
