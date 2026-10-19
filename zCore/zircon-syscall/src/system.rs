@@ -562,8 +562,14 @@ impl Syscall<'_> {
             alloc::vec::Vec::new();
 
         // Collect triggered IRQ wake sources.
+        // When DISCARD is set, only report still-signaled (unacked) entries.
+        // Acked entries are discarded before the report.
         let irq_entries = zircon_object::dev::collect_wake_entries();
-        entries.extend(irq_entries);
+        if is_discard {
+            entries.extend(irq_entries.into_iter().filter(|e| e.6 & 1 != 0));
+        } else {
+            entries.extend(irq_entries);
+        }
 
         // Deadline timer entry: only when the deadline actually expired.
         if deadline_fired {
