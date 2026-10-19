@@ -1,6 +1,7 @@
 use {
     super::*,
     bitflags::bitflags,
+    core::time::Duration,
     hal_impl::CachePolicy,
     numeric_enum_macro::numeric_enum,
     zircon_object::{dev::*, task::PolicyCondition, vm::*},
@@ -164,7 +165,6 @@ impl Syscall<'_> {
 
             // Read page by page, waiting for each page as needed.
             // Data is copied to user buffer as soon as each page is ready.
-            let old_state = self.thread.state();
             let mut vmo_offset = start;
             let mut buf_written = 0usize;
             for page_idx in start_page..end_page {
@@ -182,16 +182,24 @@ impl Syscall<'_> {
                             pager_vmo.clear_failed_page(page_idx);
                             let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
                         }
-                        self.thread.set_state(ThreadState::BlockedPager);
-                        let result = pager_vmo.wait_for_page(page_idx * PAGE_SIZE).await;
-                        if self.thread.state() == ThreadState::BlockedPager {
-                            self.thread.set_state(old_state);
-                        }
+                        let future = pager_vmo.wait_for_page(page_idx * PAGE_SIZE);
+                        pin_mut!(future);
+                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                        let result = self
+                            .thread
+                            .blocking_run(
+                                future,
+                                ThreadState::BlockedPager,
+                                Duration::from_nanos(u64::MAX),
+                                None,
+                            )
+                            .await;
                         match result {
                             Ok(()) => {
                                 last_err = None;
                                 break;
                             }
+                            Err(ZxError::STOP) => return Err(ZxError::STOP),
                             Err(ZxError::OUT_OF_RANGE) => return Err(ZxError::OUT_OF_RANGE),
                             Err(ZxError::BAD_STATE) => return Err(ZxError::BAD_STATE),
                             Err(e) => {
@@ -681,7 +689,6 @@ impl Syscall<'_> {
                 // already-committed pages.
                 {
                     use zircon_object::task::ThreadState;
-                    let old_state = self.thread.state();
                     let mut p = start_page;
                     while p < end_page {
                         if p >= pager_vmo.len() / PAGE_SIZE {
@@ -707,27 +714,31 @@ impl Syscall<'_> {
                         let req_len = (p - run_start) * PAGE_SIZE;
                         match pager_vmo.request_pages(req_off, req_len) {
                             Err(ZxError::SHOULD_WAIT) => {
-                                self.thread.set_state(ThreadState::BlockedPager);
                                 for pg in run_start..p {
                                     if pg >= pager_vmo.len() / PAGE_SIZE {
                                         break;
                                     }
                                     if pager_vmo.committed_pages_in_range(pg, pg + 1) == 0 {
-                                        match pager_vmo.wait_for_page(pg * PAGE_SIZE).await {
+                                        let future = pager_vmo.wait_for_page(pg * PAGE_SIZE);
+                                        pin_mut!(future);
+                                        self.thread
+                                            .set_blocking_state(ThreadState::BlockedPager);
+                                        match self
+                                            .thread
+                                            .blocking_run(
+                                                future,
+                                                ThreadState::BlockedPager,
+                                                Duration::from_nanos(u64::MAX),
+                                                None,
+                                            )
+                                            .await
+                                        {
                                             Ok(()) => {}
+                                            Err(ZxError::STOP) => return Err(ZxError::STOP),
                                             Err(ZxError::OUT_OF_RANGE) => continue,
-                                            Err(e) => {
-                                                if self.thread.state() == ThreadState::BlockedPager
-                                                {
-                                                    self.thread.set_state(old_state);
-                                                }
-                                                return Err(e);
-                                            }
+                                            Err(e) => return Err(e),
                                         }
                                     }
-                                }
-                                if self.thread.state() == ThreadState::BlockedPager {
-                                    self.thread.set_state(old_state);
                                 }
                             }
                             Err(e) => return Err(e),

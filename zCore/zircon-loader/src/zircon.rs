@@ -15,7 +15,8 @@
 
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use cfg_if::cfg_if;
-use core::{future::Future, pin::Pin};
+use core::{future::Future, pin::Pin, time::Duration};
+use futures::pin_mut;
 
 use xmas_elf::ElfFile;
 
@@ -489,17 +490,29 @@ async fn handler_user_trap(
                     });
                     let offset = vmar.vaddr_to_vmo_offset(vaddr);
                     if let (Some(vmo), Some(offset)) = (vmo, offset) {
-                        // Set thread state so WaitForBlocked() polls can
-                        // detect the pager-blocked state.
-                        let old_state = thread.state();
-                        thread.set_state(ThreadState::BlockedPager);
-                        let result = vmo.wait_for_page(offset).await;
-                        // Restore to Running unless the thread is dying.
-                        if thread.state() == ThreadState::BlockedPager {
-                            thread.set_state(old_state);
-                        }
+                        // Use blocking_run so Thread::kill() can cancel the
+                        // pager wait via the killer channel. This matches
+                        // Fuchsia's Interruptible::Yes wait semantics.
+                        let future = vmo.wait_for_page(offset);
+                        pin_mut!(future);
+                        thread.set_blocking_state(ThreadState::BlockedPager);
+                        let result = thread
+                            .blocking_run(
+                                future,
+                                ThreadState::BlockedPager,
+                                Duration::from_nanos(u64::MAX),
+                                None,
+                            )
+                            .await;
                         match result {
                             Ok(()) => Ok(()),
+                            Err(ZxError::STOP) => {
+                                // Thread was killed while pager-blocked.
+                                // Return Ok so the run loop re-enters and
+                                // sees Dying state, matching Fuchsia's
+                                // TranslatePageFaultStatus behavior.
+                                Ok(())
+                            }
                             Err(e) => {
                                 // Pass the pager error code as synth_code
                                 // in the exception report. Tests check this
