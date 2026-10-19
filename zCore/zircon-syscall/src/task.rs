@@ -257,6 +257,14 @@ impl Syscall<'_> {
         if thread.proc().status() != Status::Running {
             return Err(ZxError::BAD_STATE);
         }
+        // Validate thread pointer (tp) — reject non-canonical addresses on x86_64.
+        #[cfg(target_arch = "x86_64")]
+        {
+            let canonical = ((tp as i64) << 16 >> 16) as usize;
+            if tp != 0 && tp != canonical {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        }
         // Set up entry, stack, and args, then set the thread pointer.
         thread.with_context(|ctx| {
             ctx.setup_uspace(entry, stack, &[arg1, arg2, 0]);

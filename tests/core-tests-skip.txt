@@ -181,7 +181,6 @@ WakeReportTestsPortBound.SingleWakeSource
 WakeReportTestsPortBound.AckedStillPending
 
 # ── VmoZero/VmoClone2 hangs ─────────────────────────────────────────
-Threads.StartRegsNoncanonicalTp
 
 # Hangs — blocks sequential test run
 PthreadTest.Basic
