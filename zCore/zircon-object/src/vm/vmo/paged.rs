@@ -879,6 +879,23 @@ impl VMObjectPagedInner {
                 match parent.commit_page_internal(parent_idx, flags, &self.self_ref)? {
                     CommitResult::NewPage(frame) if !self.type_.is_hidden() => {
                         if !flags.contains(MMUFlags::WRITE) {
+                            // Before returning zeros, check if the sibling
+                            // child of our hidden parent has a committed
+                            // page. This handles pager VMOs where
+                            // supply_pages wrote to the root after clone.
+                            if parent.type_.is_hidden() {
+                                let (_, sibling_weak) =
+                                    parent.type_.get_tag_and_other(&self.self_ref);
+                                if let Some(sibling_arc) = sibling_weak.upgrade() {
+                                    let sib = sibling_arc.inner.borrow();
+                                    if parent_idx < sib.size / PAGE_SIZE {
+                                        if let Some(page) = sib.frames.get(&parent_idx) {
+                                            drop(frame);
+                                            return Ok(CommitResult::Ref(page.frame.paddr()));
+                                        }
+                                    }
+                                }
+                            }
                             drop(frame);
                             static ZERO_PAGE_NP: spin::Lazy<Option<PhysFrame>> =
                                 spin::Lazy::new(PhysFrame::new_zero);
