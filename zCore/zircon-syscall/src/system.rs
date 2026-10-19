@@ -25,8 +25,10 @@ static SYSTEM_EVENTS: spin::Once<SystemEvents> = spin::Once::new();
 fn system_events() -> &'static SystemEvents {
     SYSTEM_EVENTS.call_once(|| {
         let normal = Event::new();
-        // System starts in normal memory state
-        normal.signal_set(Signal::USER_SIGNAL_0);
+        // System starts in normal memory state.
+        // Fuchsia signals ZX_EVENT_SIGNALED (bit 3) on the active
+        // pressure level event, not ZX_USER_SIGNAL_0.
+        normal.signal_set(Signal::SIGNALED);
         SystemEvents {
             oom: Event::new(),
             imminent_oom: Event::new(),

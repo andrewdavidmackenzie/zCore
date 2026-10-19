@@ -85,9 +85,6 @@ Resource.MexecPayloadTooSmall
 Resource.MexecZeroSizedVmo
 Resource.Ioports
 
-# ── System events / suspend / wake reports ───────────────────────────
-SystemEvent.ExactlyOneMemoryEventSignaled
-
 # ── ThreadSampler (crash on sample read) ─────────────────────────────
 ThreadSampler.StartStop
 ThreadSampler.NonRunningThread
