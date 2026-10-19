@@ -144,8 +144,8 @@ impl Syscall<'_> {
 
             // Find all uncommitted pages and send one batched request.
             // Check the pager VMO for committed pages (supply goes there).
-            let first_uncommitted =
-                (start_page..end_page).find(|&p| pager_vmo.committed_pages_in_range(p, p + 1) == 0);
+            let first_uncommitted = (start_page..end_page)
+                .find(|&p| pager_vmo.committed_pages_in_range(p, p + 1) == 0);
             let last_uncommitted = (start_page..end_page)
                 .rfind(|&p| pager_vmo.committed_pages_in_range(p, p + 1) == 0);
 
@@ -623,12 +623,12 @@ impl Syscall<'_> {
         buffer_size: usize,
     ) -> ZxResult {
         // ZX_VMO_OP_COMMIT = 1, ZX_VMO_OP_PREFETCH = 14, ZX_VMO_OP_ALWAYS_NEED = 13
-        // All trigger demand-paging for pager-backed VMOs.
+        // All trigger demand-paging for pager-backed VMOs (and clones).
         if op == 1 || op == 14 || op == 13 {
             let proc = self.thread.proc();
             let is_pager = proc
                 .get_object::<VmObject>(handle_value)
-                .is_ok_and(|v| v.is_pager_backed());
+                .is_ok_and(|v| v.is_pager_backed() || v.is_in_pager_tree());
             if is_pager {
                 let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
                 // COMMIT requires WRITE; PREFETCH/ALWAYS_NEED only require READ.
@@ -639,6 +639,12 @@ impl Syscall<'_> {
                 if offset.checked_add(len).is_none() || offset + len > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
+                // For clones, route requests to the root pager VMO.
+                let pager_vmo = if vmo.is_pager_backed() {
+                    vmo.clone()
+                } else {
+                    vmo.find_root_pager_vmo().unwrap_or_else(|| vmo.clone())
+                };
                 let start = offset & !(PAGE_SIZE - 1);
                 let end = (offset + len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
                 let start_page = start / PAGE_SIZE;
@@ -651,34 +657,36 @@ impl Syscall<'_> {
                     let old_state = self.thread.state();
                     let mut p = start_page;
                     while p < end_page {
-                        if p >= vmo.len() / PAGE_SIZE {
+                        if p >= pager_vmo.len() / PAGE_SIZE {
                             break;
                         }
                         // Skip committed pages and pages with pending waiters
                         // (another thread already requested them).
-                        if vmo.committed_pages_in_range(p, p + 1) > 0 || vmo.has_page_waiter(p) {
+                        if pager_vmo.committed_pages_in_range(p, p + 1) > 0
+                            || pager_vmo.has_page_waiter(p)
+                        {
                             p += 1;
                             continue;
                         }
                         let run_start = p;
                         while p < end_page
-                            && p < vmo.len() / PAGE_SIZE
-                            && vmo.committed_pages_in_range(p, p + 1) == 0
-                            && !vmo.has_page_waiter(p)
+                            && p < pager_vmo.len() / PAGE_SIZE
+                            && pager_vmo.committed_pages_in_range(p, p + 1) == 0
+                            && !pager_vmo.has_page_waiter(p)
                         {
                             p += 1;
                         }
                         let req_off = run_start * PAGE_SIZE;
                         let req_len = (p - run_start) * PAGE_SIZE;
-                        match vmo.request_pages(req_off, req_len) {
+                        match pager_vmo.request_pages(req_off, req_len) {
                             Err(ZxError::SHOULD_WAIT) => {
                                 self.thread.set_state(ThreadState::BlockedPager);
                                 for pg in run_start..p {
-                                    if pg >= vmo.len() / PAGE_SIZE {
+                                    if pg >= pager_vmo.len() / PAGE_SIZE {
                                         break;
                                     }
-                                    if vmo.committed_pages_in_range(pg, pg + 1) == 0 {
-                                        match vmo.wait_for_page(pg * PAGE_SIZE).await {
+                                    if pager_vmo.committed_pages_in_range(pg, pg + 1) == 0 {
+                                        match pager_vmo.wait_for_page(pg * PAGE_SIZE).await {
                                             Ok(()) => {}
                                             Err(ZxError::OUT_OF_RANGE) => continue,
                                             Err(e) => {
