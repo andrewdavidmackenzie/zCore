@@ -9,6 +9,10 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 ChannelTest.NoSpuriousReadableSignalWhenRacing
 
 # ── Thread suspend / register state ─────────────────────────────────
+Threads.NoncanonicalRipAddressIRETQ
+
+Threads.WritingArmFlagsRegister
+Threads.X86AcFlagUserCopy
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.EarlyWakeCloneRace
