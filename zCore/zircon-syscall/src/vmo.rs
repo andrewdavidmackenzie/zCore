@@ -143,23 +143,40 @@ impl Syscall<'_> {
                 return Ok(());
             };
 
-            // Find all uncommitted pages and send one batched request.
-            // Check the pager VMO for committed pages (supply goes there).
-            let first_uncommitted =
-                (start_page..end_page).find(|&p| pager_vmo.committed_pages_in_range(p, p + 1) == 0);
-            let last_uncommitted = (start_page..end_page)
-                .rfind(|&p| pager_vmo.committed_pages_in_range(p, p + 1) == 0);
-
-            let needs_pager = first_uncommitted.is_some();
-            if needs_pager {
-                let req_start = first_uncommitted.unwrap();
-                let req_end = last_uncommitted.unwrap() + 1;
-                let req_offset = req_start * PAGE_SIZE;
-                let req_length = (req_end - req_start) * PAGE_SIZE;
-                match pager_vmo.request_pages(req_offset, req_length) {
-                    Err(ZxError::SHOULD_WAIT) => {} // normal
-                    Err(e) => return Err(e),
-                    Ok(()) => {}
+            // Send per-run batched requests for consecutive missing pages.
+            // Check the READING VMO's tree (not just root pager VMO) so
+            // pages committed in ancestor VMOs (via COW forks) are excluded,
+            // matching Fuchsia's LookupCursor::ReadRequest batching that
+            // stops at the first present page in the owner's page list.
+            {
+                let mut p = start_page;
+                while p < end_page {
+                    // Skip pages resolvable from the VMO tree (including
+                    // ancestors like child/grandchild with forked pages).
+                    if vmo.committed_pages_in_range(p, p + 1) > 0 {
+                        p += 1;
+                        continue;
+                    }
+                    // Also skip if already committed in the root pager VMO.
+                    if pager_vmo.committed_pages_in_range(p, p + 1) > 0 {
+                        p += 1;
+                        continue;
+                    }
+                    // Start a run of missing pages.
+                    let run_start = p;
+                    while p < end_page
+                        && vmo.committed_pages_in_range(p, p + 1) == 0
+                        && pager_vmo.committed_pages_in_range(p, p + 1) == 0
+                    {
+                        p += 1;
+                    }
+                    let req_offset = run_start * PAGE_SIZE;
+                    let req_length = (p - run_start) * PAGE_SIZE;
+                    match pager_vmo.request_pages(req_offset, req_length) {
+                        Err(ZxError::SHOULD_WAIT) => {}
+                        Err(e) => return Err(e),
+                        Ok(()) => {}
+                    }
                 }
             }
 
