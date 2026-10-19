@@ -20,8 +20,8 @@ Threads.X86AcFlagUserCopy
 # ── VmoTestCase (kernel panic / crash) ───────────────────────────────
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
+# EarlyWakeOverlappingRequests passes with overlap absorption
 Pager.EarlyWakeCloneRace
-Pager.EarlyWakeOverlappingRequests
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.PageRequestBatchingChecksAncestorPages
