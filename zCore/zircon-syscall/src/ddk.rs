@@ -86,7 +86,13 @@ impl Syscall<'_> {
         addrs_count: usize,
         mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        let options = BtiOptions::from_bits_truncate(options);
+        let options = BtiOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
+        // At least one permission flag must be set.
+        if !options
+            .intersects(BtiOptions::PERM_READ | BtiOptions::PERM_WRITE | BtiOptions::PERM_EXECUTE)
+        {
+            return Err(ZxError::INVALID_ARGS);
+        }
         info!(
             "bti.pin: bti={:#x}, options={:?}, vmo={:#x}, offset={:#x}, size={:#x}, addrs={:#x?}, addrs_count={:#x}",
             bti, options, vmo, offset, size, addrs, addrs_count

@@ -257,6 +257,14 @@ impl Syscall<'_> {
         if thread.proc().status() != Status::Running {
             return Err(ZxError::BAD_STATE);
         }
+        // Validate thread pointer (tp) — reject non-canonical addresses on x86_64.
+        #[cfg(target_arch = "x86_64")]
+        {
+            let canonical = ((tp as i64) << 16 >> 16) as usize;
+            if tp != 0 && tp != canonical {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        }
         // Set up entry, stack, and args, then set the thread pointer.
         thread.with_context(|ctx| {
             ctx.setup_uspace(entry, stack, &[arg1, arg2, 0]);
@@ -625,12 +633,27 @@ impl Syscall<'_> {
                 .try_into()
                 .unwrap(),
         );
-        // Deliver a User exception with synth fields through the
-        // exception handler chain. Blocks until handled.
-        self.thread
-            .handle_exception_user(synth_code, synth_data)
-            .await;
-        Ok(())
+        // ZX_EXCEPTION_TARGET_JOB_DEBUGGER: only send to the job
+        // debugger exception channel. If no debugger is listening,
+        // the exception is silently dropped (non-fatal).
+        let thread_arc = self.thread.inner();
+        let proc = self.thread.proc();
+        let job = proc.job();
+        let exception =
+            zircon_object::task::Exception::new_user(&thread_arc, synth_code, synth_data);
+        let handled = job.get_debug_exceptionate().send_exception(&exception);
+        match handled {
+            Err(ZxError::NEXT) => {
+                // No debugger listening — silently drop (non-fatal).
+                Ok(())
+            }
+            Ok(closed) => {
+                // Debugger is listening — wait for it to handle.
+                closed.await.ok();
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Register a restartable sequence (rseq) area for the calling thread.

@@ -63,10 +63,7 @@ impl Exceptionate {
     }
 
     /// Send exception to the user-owned endpoint.
-    pub(super) fn send_exception(
-        &self,
-        exception: &Arc<Exception>,
-    ) -> ZxResult<oneshot::Receiver<()>> {
+    pub fn send_exception(&self, exception: &Arc<Exception>) -> ZxResult<oneshot::Receiver<()>> {
         debug!(
             "Exception: {:?} ,try send to {:?}",
             exception.type_, self.type_
@@ -308,7 +305,7 @@ pub mod policy_code {
 /// Type of the exception channel
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(super) enum ExceptionChannelType {
+pub enum ExceptionChannelType {
     None = 0,
     Debugger = 1,
     Thread = 2,
@@ -427,7 +424,7 @@ impl Drop for ExceptionObject {
 }
 
 /// An Exception represents a single currently-active exception.
-pub(super) struct Exception {
+pub struct Exception {
     thread: Arc<Thread>,
     type_: ExceptionType,
     report: ExceptionReport,

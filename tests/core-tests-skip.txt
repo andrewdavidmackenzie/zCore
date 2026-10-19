@@ -3,18 +3,13 @@
 # Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
 
 # ── Multi-threaded / cooperative scheduler ───────────────────────────
-PortStressTest.ChannelCallWaitQueuePanicRepro
-PortStressTest.CancelKeyDuringMatchRace
-PortStressTest.SignalCloseWait
+PortStressTest.*
 ChannelTest.NoSpuriousReadableSignalWhenRacing
 ProcessTest.KillChannelHandleCycle
 
 # ── Thread suspend / register state ─────────────────────────────────
-Threads.BadSyscallCaller
-Threads.ExitViaException
 Threads.NoncanonicalRipAddressIRETQ
 Threads.NoncanonicalRipAddressSyscall
-Threads.ThreadStartInvalidEntry
 Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
 Threads.WritingArmFlagsRegister
 Threads.WritingFpRegisterState
@@ -24,14 +19,10 @@ Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
 Threads.X86AcFlagUserCopy
 
 # ── Policy exception infrastructure ─────────────────────────────────
-ChannelTest.ChannelFullException
-UserExceptionsTest.NonFatal
 
 # ── COW populated_bytes ──────────────────────────────────────────────
-VmoZeroTestCase.WriteCowParent
 
 # ── VmoTestCase (kernel panic / crash) ───────────────────────────────
-VmoTestCase.PinTests
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.EarlyWakeCloneRace
@@ -106,9 +97,6 @@ StreamTestCase.PartialVmoDirty
 # ── VMAR (FaultBeyondStreamSize) ─────────────────────────────────────
 
 # ── BTI ──────────────────────────────────────────────────────────────
-Bti.InvalidPinArgs
-Bti.QuarantineDisallowsPin
-Bti.NoDelayedUnpin
 
 # ── MSI ──────────────────────────────────────────────────────────────
 MsiTest.Msi
@@ -124,7 +112,6 @@ Resource.MexecZeroSizedVmo
 Resource.Ioports
 
 # ── Job kill chain ───────────────────────────────────────────────────
-JobTest.KillJobChain
 
 # ── System events / suspend / wake reports ───────────────────────────
 SystemEvent.ExactlyOneMemoryEventSignaled
@@ -140,7 +127,6 @@ WakeReportTestsThreadBound.ReportOnly
 WakeReportTestsThreadBound.Acked
 WakeReportTestsThreadBound.AckedStillPending
 WakeReportTestsThreadBound.MultipleSignals
-WakeReportTestsPortBound.SmallReportBuffer
 
 # ── ThreadSampler (crash on sample read) ─────────────────────────────
 ThreadSampler.StartStop
@@ -152,20 +138,15 @@ ThreadSampler.HighFrequency
 # ── VmoClone2 hangs ──────────────────────────────────────────────
 VmoClone2TestCase.DropParentCommittedBytes
 WakeReportTestsPortBound.MultipleSignals
-WakeReportTestsPortBound.BadReportRequests
 WakeReportTestsPortBound.Discard
-WakeReportTestsPortBound.DestructionYesAck
-WakeReportTestsPortBound.DestructionNoAck
 WakeReportTestsPortBound.MultiWakeSource
 WakeReportTestsPortBound.SingleWakeSource
-WakeReportTestsPortBound.AlreadyTimedOut
-WakeReportTestsPortBound.ReportOnly
-WakeReportTestsPortBound.Acked
 WakeReportTestsPortBound.AckedStillPending
 
 # ── VmoZero/VmoClone2 hangs ─────────────────────────────────────────
-VmoZeroTestCase.AllocateAfterMergeMultipleChildren
-Threads.StartRegsNoncanonicalTp
 
 # Hangs — blocks sequential test run
 PthreadTest.Basic
+VmoZeroTestCase.WriteCowParent
+VmoZeroTestCase.AllocateAfterMergeMultipleChildren
+Bti.NoDelayedUnpin
