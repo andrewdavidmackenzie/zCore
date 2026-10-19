@@ -24,7 +24,7 @@ Threads.X86AcFlagUserCopy
 Pager.EarlyWakeCloneRace
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
-Pager.PageRequestBatchingChecksAncestorPages
+# PageRequestBatchingChecksAncestorPages passes with ancestor-aware batching
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
 # Suspend tests: blocking_run_suspendable infrastructure in place but
