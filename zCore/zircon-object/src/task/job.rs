@@ -449,6 +449,11 @@ impl Job {
 }
 
 impl Job {
+    /// Get the job's debug exceptionate (for user exception delivery).
+    pub fn get_debug_exceptionate(&self) -> Arc<Exceptionate> {
+        self.debug_exceptionate.clone()
+    }
+
     /// Kill the job with a specific return code. The job does not terminate
     /// immediately when killed — it will terminate after all its children
     /// and processes are terminated.

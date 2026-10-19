@@ -995,8 +995,10 @@ impl VmObject {
     }
 
     /// Unlock a discardable VMO. Returns BAD_STATE if already unlocked.
-    /// When the lock count reaches 0, the VMO is marked as discarded
-    /// and its pages are decommitted.
+    /// When the lock count reaches 0, the VMO becomes eligible for
+    /// reclamation. Pages are NOT immediately discarded — they remain
+    /// committed until the kernel actively reclaims them. TRY_LOCK
+    /// after unlock succeeds if pages haven't been reclaimed.
     pub fn unlock_discardable(&self) -> ZxResult {
         loop {
             let current = self.lock_count.load(core::sync::atomic::Ordering::Relaxed);
@@ -1014,14 +1016,12 @@ impl VmObject {
                 .is_ok()
             {
                 if current == 1 {
-                    // Lock count reached 0 — discard the VMO's pages.
-                    self.discarded
-                        .store(true, core::sync::atomic::Ordering::Relaxed);
+                    // Lock count reached 0 — VMO is now unlocked and
+                    // eligible for reclamation. Pages stay committed
+                    // until actively reclaimed. Track for KmemStats.
                     let pages = self.len() / PAGE_SIZE;
                     VMO_DISCARDABLE_LOCKED_PAGES.sub(pages);
                     VMO_DISCARDABLE_UNLOCKED_PAGES.add(pages);
-                    // Decommit all pages to reclaim memory.
-                    let _ = self.trait_.decommit_all();
                 }
                 return Ok(());
             }

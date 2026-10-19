@@ -59,6 +59,13 @@ impl BusTransactionInitiator {
         if size == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Reject new pins if there are quarantined PMTs (PMTs whose
+        // handles were closed without unpinning). Matches Fuchsia's
+        // behavior where quarantined entries block new pins until
+        // release_quarantine is called.
+        if self.quarantine_count() > 0 {
+            return Err(ZxError::BAD_STATE);
+        }
         let pmt = PinnedMemoryToken::create(self, vmo, perms, offset, size)?;
         self.inner.lock().pmts.push(pmt.clone());
         Ok(pmt)
