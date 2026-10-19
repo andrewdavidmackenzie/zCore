@@ -475,7 +475,18 @@ async fn handler_user_trap(
                             synth_code: 0,
                         });
                     }
-                    let vmo = vmar.find_pager_vmo(vaddr);
+                    // Find the VMO for this address. Try direct pager VMO
+                    // first, then check if it's a clone in a pager tree.
+                    let vmo = vmar.find_pager_vmo(vaddr).or_else(|| {
+                        // Clone of a pager VMO: find the mapping's VMO
+                        // and get the root pager VMO from the tree.
+                        let mapping = vmar.find_mapping(vaddr)?;
+                        if mapping.vmo.is_in_pager_tree() {
+                            mapping.vmo.find_root_pager_vmo()
+                        } else {
+                            None
+                        }
+                    });
                     let offset = vmar.vaddr_to_vmo_offset(vaddr);
                     if let (Some(vmo), Some(offset)) = (vmo, offset) {
                         // Set thread state so WaitForBlocked() polls can

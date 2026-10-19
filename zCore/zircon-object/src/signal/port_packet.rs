@@ -49,7 +49,7 @@ pub type PacketUser = [u8; 32];
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct PacketPageRequest {
-    /// Command: 0 = ZX_PAGER_VMO_READ, 1 = ZX_PAGER_VMO_DIRTY
+    /// Command: 0 = ZX_PAGER_VMO_READ, 1 = ZX_PAGER_VMO_COMPLETE, 2 = ZX_PAGER_VMO_DIRTY
     pub command: u16,
     pub flags: u16,
     pub _reserved0: u32,
@@ -62,8 +62,10 @@ pub struct PacketPageRequest {
 
 /// Pager VMO read command (page fault notification).
 pub const ZX_PAGER_VMO_READ: u16 = 0;
+/// Pager VMO complete command (detach / last handle closed notification).
+pub const ZX_PAGER_VMO_COMPLETE: u16 = 1;
 /// Pager VMO dirty command (write-to-clean-page notification).
-pub const ZX_PAGER_VMO_DIRTY: u16 = 1;
+pub const ZX_PAGER_VMO_DIRTY: u16 = 2;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

@@ -39,46 +39,21 @@ Pager.CloneCommitMultipleBatches
 Pager.CloneCommitSingleBatch
 Pager.CloneCommitTest
 Pager.CloneCommitTwoBatches
-Pager.ClosePageCompleteTest
-Pager.DetachPageCompleteTest
 Pager.EarlyWakeCloneRace
 Pager.EarlyWakeOverlappingRequests
-Pager.EarlyWakeWithResize
-Pager.EvictionHintAlwaysNeed
 Pager.EvictionHintsCloneVmar
-Pager.EvictionHintsNestedVmar
-Pager.EvictionHintsOpRange
-Pager.EvictionHintsVmar
 Pager.EvictionHintsWithClones
-Pager.EvictionHintsWithResize
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
 Pager.OpCommitCloneVmar
-Pager.OpCommitVmar
-Pager.OverlapCommitTest
 Pager.PageRequestBatchingChecksAncestorPages
-Pager.PresentPageSplitsRange
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
-Pager.ResizeCommitTest
-Pager.SplitCommitTest
 Pager.SuspendCommitTest
-Pager.ReadResizeTestVmar
-Pager.ReadResizeTestVmo
 Pager.SuspendReadTestVmar
 Pager.SuspendReadTestVmo
-Pager.DecommitOnDetachTestVmar
-Pager.DecommitOnDetachTestVmo
-Pager.ReadDetachInterruptLateTestVmo
-Pager.ReadDetachInterruptEarlyTestVmo
-Pager.CloneReadFromCloneTestVmar
-Pager.CloneReadFromCloneTestVmo
 Pager.CloneReadFromParentTestVmar
-Pager.CloneSimultaneousReadTestVmo
-Pager.CloneWriteToCloneTestVmar
-Pager.CloneWriteToCloneTestVmo
-Pager.CloneDetachTest
 
 # ── PagerProcess (preemptive scheduling) ─────────────────────────────
 PagerProcess.KillBlockedUserVmoRead
@@ -200,4 +175,3 @@ WakeReportTestsPortBound.AckedStillPending
 # ── VmoZero/VmoClone2 hangs ─────────────────────────────────────────
 VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 Threads.StartRegsNoncanonicalTp
-

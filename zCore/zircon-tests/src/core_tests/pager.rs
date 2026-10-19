@@ -72,8 +72,8 @@ fn pager_detach_closes_existing_waiters() {
         Poll::Ready(result) => {
             assert_eq!(
                 result.unwrap_err(),
-                ZxError::NOT_FOUND,
-                "detach should wake waiters with NOT_FOUND"
+                ZxError::BAD_STATE,
+                "detach should wake waiters with BAD_STATE"
             );
         }
         Poll::Pending => {

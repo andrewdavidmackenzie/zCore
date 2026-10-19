@@ -3,7 +3,8 @@ use {
     super::*,
     crate::object::*,
     crate::signal::{
-        PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_DIRTY, ZX_PAGER_VMO_READ,
+        PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_COMPLETE,
+        ZX_PAGER_VMO_DIRTY, ZX_PAGER_VMO_READ,
     },
     alloc::{
         sync::{Arc, Weak},
@@ -508,6 +509,26 @@ impl VmObject {
         false
     }
 
+    /// Find the root pager VMO in this VMO's ancestor chain.
+    /// Returns the ancestor VmObject that has pager_port set.
+    pub fn find_root_pager_vmo(&self) -> Option<Arc<VmObject>> {
+        let inner = self.inner.lock();
+        if inner.pager_port.is_some() {
+            return None; // this VMO IS the pager VMO
+        }
+        let mut cur = inner.parent.upgrade()?;
+        loop {
+            let cur_inner = cur.inner.lock();
+            if cur_inner.pager_port.is_some() {
+                drop(cur_inner);
+                return Some(cur);
+            }
+            let next = cur_inner.parent.upgrade();
+            drop(cur_inner);
+            cur = next?;
+        }
+    }
+
     /// Query dirty page ranges within [offset, offset+length).
     /// Returns a list of (offset, length, options) tuples.
     /// Only returns data for TRAP_DIRTY VMOs; others return empty.
@@ -647,6 +668,12 @@ impl VmObject {
         }
     }
 
+    /// Check if a page has a pending waiter (another thread waiting for supply).
+    pub fn has_page_waiter(&self, page_idx: usize) -> bool {
+        let inner = self.inner.lock();
+        inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx)
+    }
+
     /// Block until the page at `offset` is supplied by the pager.
     /// Returns `Ok(())` when the page is ready, or `Err` if the
     /// pager is detached.
@@ -654,6 +681,11 @@ impl VmObject {
         let rx = {
             let mut inner = self.inner.lock();
             let page_idx = offset / PAGE_SIZE;
+            // If the page is beyond the VMO's current size (e.g. after
+            // resize), return OUT_OF_RANGE immediately.
+            if offset >= self.len() {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
             // If the page was already supplied between request_pages()
             // and now (race window), return immediately.
             if self.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
@@ -884,7 +916,14 @@ impl VmObject {
             }
             return Err(ZxError::UNAVAILABLE);
         }
-        self.trait_.set_len(size)
+        let old_size = self.len();
+        self.trait_.set_len(size)?;
+        // When shrinking a pager-backed VMO, wake any waiters for
+        // pages in the truncated range with OUT_OF_RANGE.
+        if size < old_size {
+            self.fail_pager_requests_range(size, old_size - size, ZxError::OUT_OF_RANGE);
+        }
+        Ok(())
     }
 
     /// Set the size of the content stored in the VMO in bytes, resize vmo if needed
@@ -1391,6 +1430,25 @@ impl Deref for VmObject {
 
 impl Drop for VmObject {
     fn drop(&mut self) {
+        // Send ZX_PAGER_VMO_COMPLETE to the pager port when the last
+        // handle to a pager-backed VMO is closed.
+        {
+            let inner = self.inner.lock();
+            if let Some(port) = &inner.pager_port {
+                port.push(PortPacketRepr {
+                    key: inner.pager_key,
+                    status: ZxError::OK,
+                    data: PayloadRepr::PageRequest(PacketPageRequest {
+                        command: ZX_PAGER_VMO_COMPLETE,
+                        flags: 0,
+                        _reserved0: 0,
+                        offset: 0,
+                        length: 0,
+                        _reserved1: 0,
+                    }),
+                });
+            }
+        }
         // Wake any threads blocked on pager faults before freeing.
         {
             let inner = self.inner.lock();

@@ -366,35 +366,80 @@ ifndef CORE_TESTS_FILTER
 endif
 CORE_TESTS_FILTER ?=
 
-# Build everything needed for core-tests: userstart, kernel (Zircon
-# base, no linux), rootfs with core-tests-standalone + shared libs,
-# and the UEFI boot image. Re-running is safe — cargo and the xtask
-# skip unchanged artifacts.
-core-tests-build:
+# ── Core-tests build pipeline ────────────────────────────────────────
+# Split into granular targets so Make skips unchanged steps.
+# Use 'make core-tests-build' to build everything, or individual
+# targets for faster iteration:
+#   make core-tests-kernel   — rebuild kernel only
+#   make core-tests-rootfs   — rebuild rootfs image only
+#   make core-tests-bootimg  — rebuild boot image only
+
+USERSTART_ELF := $(CURDIR)/target/userstart/x86_64-unknown-none/release/userstart
+KERNEL_ELF    := target/qemu-x86_64/release/kernel
+ROOTFS_IMG    := target/qemu-x86_64/release/x86_64-zircon.img
+BOOT_IMG      := target/qemu-x86_64/release/boot.img
+EXTRA_ARGS    := target/rootfs/zircon/x86_64/etc/extra-args
+BOOTIMAGE_BIN := tools/x86-bootimage/target/release/x86-bootimage
+
+# Step 1+2: Build userstart + kernel (cargo handles caching).
+.PHONY: core-tests-kernel
+core-tests-kernel:
 	@test -f prebuilt/zircon-test/x86_64/core-tests-standalone || \
 		{ echo "ERROR: prebuilt/zircon-test/x86_64/core-tests-standalone not found"; exit 1; }
-	@echo "==> [1/4] Building userstart..."
 	@CARGO_ENCODED_RUSTFLAGS="-Crelocation-model=pic" \
 		cargo build -p userstart --target x86_64-unknown-none \
 		--release --target-dir target/userstart -Z build-std=core,alloc
-	@echo "==> [2/4] Building kernel (Zircon base, no linux)..."
-	@USERSTART_ELF="$$(pwd)/target/userstart/x86_64-unknown-none/release/userstart" \
+	@USERSTART_ELF="$(USERSTART_ELF)" \
 		ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/core-tests-standalone" \
 		cargo zcore-build -m qemu-x86_64 --flavour ""
-	@echo "==> [3/4] Building Zircon rootfs (with core-tests-standalone + libs)..."
+
+# Step 3: Write extra-args filter file + build rootfs SFS image.
+# Only rebuilds the image if rootfs files changed (xtask mtime check).
+.PHONY: core-tests-rootfs
+core-tests-rootfs:
 	@mkdir -p target/rootfs/zircon/x86_64/etc
 ifneq ($(strip $(CORE_TESTS_FILTER)),)
-	@printf '%s\n' '--gtest_filter=$(CORE_TESTS_FILTER)' > target/rootfs/zircon/x86_64/etc/extra-args
+	@printf '%s\n' '--gtest_filter=$(CORE_TESTS_FILTER)' > $(EXTRA_ARGS)
 else
-	@rm -f target/rootfs/zircon/x86_64/etc/extra-args
+	@rm -f $(EXTRA_ARGS)
 endif
 	@cargo xtask zircon-rootfs --arch x86_64
-	@echo "==> [4/4] Creating boot image with rootfs ramdisk..."
+
+# Step 4: Create UEFI boot image from kernel + rootfs.
+.PHONY: core-tests-bootimg
+core-tests-bootimg: core-tests-kernel core-tests-rootfs
 	@cargo build --release --manifest-path tools/x86-bootimage/Cargo.toml
-	@tools/x86-bootimage/target/release/x86-bootimage \
-		target/qemu-x86_64/release/kernel \
-		target/qemu-x86_64/release/boot.img \
-		--ramdisk target/qemu-x86_64/release/x86_64-zircon.img
+	@$(BOOTIMAGE_BIN) $(KERNEL_ELF) $(BOOT_IMG) --ramdisk $(ROOTFS_IMG)
+
+# All steps together (backwards compatible).
+core-tests-build: core-tests-bootimg
+
+# Run a single test (or filter pattern) quickly.
+# Usage: make core-test-run T=Pager.SinglePageTestVmar
+# Only rebuilds rootfs + boot image (not kernel).
+.PHONY: core-test-run
+core-test-run:
+ifndef T
+	$(error Usage: make core-test-run T=TestName)
+endif
+	@mkdir -p target/rootfs/zircon/x86_64/etc
+	@printf '%s\n' '--gtest_filter=$(T)' > $(EXTRA_ARGS)
+	@rm -f $(ROOTFS_IMG)
+	@cargo xtask zircon-rootfs --arch x86_64 > /dev/null 2>&1
+	@$(BOOTIMAGE_BIN) $(KERNEL_ELF) $(BOOT_IMG) --ramdisk $(ROOTFS_IMG) > /dev/null 2>&1
+	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
+	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
+		-machine q35 -smp $(X86_CORES) \
+		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+		-serial mon:stdio \
+		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
+		-drive "format=raw,file=$(BOOT_IMG)" \
+		> $(CORE_TESTS_LOG) 2>&1 & \
+	PID=$$!; sleep $${CORE_TEST_TIMEOUT:-15}; \
+	kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; \
+	if grep -q '\[  FAILED  \]' $(CORE_TESTS_LOG); then echo "FAIL: $(T)"; exit 1; \
+	elif grep -q '\[       OK \]' $(CORE_TESTS_LOG); then echo "PASS: $(T)"; \
+	else echo "HANG: $(T)"; exit 1; fi
 
 # Build and run the full core-tests suite.
 core-tests: core-tests-build

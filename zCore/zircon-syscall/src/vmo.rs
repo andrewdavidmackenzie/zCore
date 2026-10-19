@@ -107,7 +107,7 @@ impl Syscall<'_> {
         // Send one batched request for all uncommitted pages, then wait
         // and copy page by page. This allows "early wake" — data becomes
         // available in the user buffer as pages are supplied.
-        if vmo.is_pager_backed() && buf_size > 0 {
+        if (vmo.is_pager_backed() || vmo.is_in_pager_tree()) && buf_size > 0 {
             use zircon_object::task::ThreadState;
             use zircon_object::vm::PAGE_SIZE;
             let start = offset as usize;
@@ -115,11 +115,39 @@ impl Syscall<'_> {
             let start_page = start / PAGE_SIZE;
             let end_page = end.div_ceil(PAGE_SIZE);
 
+            // For clones in a pager tree, route requests to the root
+            // pager VMO. For direct pager VMOs, use the VMO itself.
+            let pager_vmo_opt = if vmo.is_pager_backed() {
+                Some(vmo.clone())
+            } else {
+                vmo.find_root_pager_vmo()
+            };
+            // If we can't find a pager VMO, fall through to the normal read.
+            let Some(pager_vmo) = pager_vmo_opt else {
+                // fall through to non-pager read below
+                let mut vmo_offset2 = offset as usize;
+                buf.for_each_chunk_mut::<ZxError>(buf_size, |chunk| {
+                    vmo.read(vmo_offset2, chunk)?;
+                    let n = chunk.len();
+                    vmo_offset2 += n;
+                    Ok(n)
+                })
+                .map_err(|e| {
+                    if e == ZxError::INVALID_ARGS {
+                        ZxError::ACCESS_DENIED
+                    } else {
+                        e
+                    }
+                })?;
+                return Ok(());
+            };
+
             // Find all uncommitted pages and send one batched request.
+            // Check the pager VMO for committed pages (supply goes there).
             let first_uncommitted =
-                (start_page..end_page).find(|&p| vmo.committed_pages_in_range(p, p + 1) == 0);
-            let last_uncommitted =
-                (start_page..end_page).rfind(|&p| vmo.committed_pages_in_range(p, p + 1) == 0);
+                (start_page..end_page).find(|&p| pager_vmo.committed_pages_in_range(p, p + 1) == 0);
+            let last_uncommitted = (start_page..end_page)
+                .rfind(|&p| pager_vmo.committed_pages_in_range(p, p + 1) == 0);
 
             let needs_pager = first_uncommitted.is_some();
             if needs_pager {
@@ -127,7 +155,7 @@ impl Syscall<'_> {
                 let req_end = last_uncommitted.unwrap() + 1;
                 let req_offset = req_start * PAGE_SIZE;
                 let req_length = (req_end - req_start) * PAGE_SIZE;
-                match vmo.request_pages(req_offset, req_length) {
+                match pager_vmo.request_pages(req_offset, req_length) {
                     Err(ZxError::SHOULD_WAIT) => {} // normal
                     Err(e) => return Err(e),
                     Ok(()) => {}
@@ -140,10 +168,10 @@ impl Syscall<'_> {
             let mut vmo_offset = start;
             let mut buf_written = 0usize;
             for page_idx in start_page..end_page {
-                // Wait for this page if uncommitted.
-                if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
+                // Wait for this page if uncommitted in the pager VMO.
+                if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
                     self.thread.set_state(ThreadState::BlockedPager);
-                    let result = vmo.wait_for_page(page_idx * PAGE_SIZE).await;
+                    let result = pager_vmo.wait_for_page(page_idx * PAGE_SIZE).await;
                     if self.thread.state() == ThreadState::BlockedPager {
                         self.thread.set_state(old_state);
                     }
@@ -594,16 +622,16 @@ impl Syscall<'_> {
         buffer: UserOutPtr<u8>,
         buffer_size: usize,
     ) -> ZxResult {
-        // ZX_VMO_OP_COMMIT = 1, ZX_VMO_OP_PREFETCH = 14
-        // Both trigger demand-paging for pager-backed VMOs.
-        if op == 1 || op == 14 {
+        // ZX_VMO_OP_COMMIT = 1, ZX_VMO_OP_PREFETCH = 14, ZX_VMO_OP_ALWAYS_NEED = 13
+        // All trigger demand-paging for pager-backed VMOs.
+        if op == 1 || op == 14 || op == 13 {
             let proc = self.thread.proc();
             let is_pager = proc
                 .get_object::<VmObject>(handle_value)
                 .is_ok_and(|v| v.is_pager_backed());
             if is_pager {
                 let (vmo, rights) = proc.get_object_and_rights::<VmObject>(handle_value)?;
-                // COMMIT requires WRITE; PREFETCH only requires READ.
+                // COMMIT requires WRITE; PREFETCH/ALWAYS_NEED only require READ.
                 let required = if op == 1 { Rights::WRITE } else { Rights::READ };
                 if !rights.contains(required) {
                     return Err(ZxError::ACCESS_DENIED);
@@ -613,33 +641,64 @@ impl Syscall<'_> {
                 }
                 let start = offset & !(PAGE_SIZE - 1);
                 let end = (offset + len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-                let aligned_len = end - start;
-                // Send one batched page request for the entire range,
-                // then wait for all pages. Fuchsia batches commit requests
-                // — the C++ tests expect a single packet with the full range.
-                match vmo.request_pages(start, aligned_len) {
-                    Err(ZxError::SHOULD_WAIT) => {
-                        use zircon_object::task::ThreadState;
-                        let old_state = self.thread.state();
-                        self.thread.set_state(ThreadState::BlockedPager);
-                        let mut wait_err = None;
-                        for page_idx in (start / PAGE_SIZE)..(end / PAGE_SIZE) {
-                            if vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
-                                if let Err(e) = vmo.wait_for_page(page_idx * PAGE_SIZE).await {
-                                    wait_err = Some(e);
-                                    break;
+                let start_page = start / PAGE_SIZE;
+                let end_page = end / PAGE_SIZE;
+                // Send separate requests per consecutive uncommitted run,
+                // then wait page-by-page. Fuchsia splits requests around
+                // already-committed pages.
+                {
+                    use zircon_object::task::ThreadState;
+                    let old_state = self.thread.state();
+                    let mut p = start_page;
+                    while p < end_page {
+                        if p >= vmo.len() / PAGE_SIZE {
+                            break;
+                        }
+                        // Skip committed pages and pages with pending waiters
+                        // (another thread already requested them).
+                        if vmo.committed_pages_in_range(p, p + 1) > 0 || vmo.has_page_waiter(p) {
+                            p += 1;
+                            continue;
+                        }
+                        let run_start = p;
+                        while p < end_page
+                            && p < vmo.len() / PAGE_SIZE
+                            && vmo.committed_pages_in_range(p, p + 1) == 0
+                            && !vmo.has_page_waiter(p)
+                        {
+                            p += 1;
+                        }
+                        let req_off = run_start * PAGE_SIZE;
+                        let req_len = (p - run_start) * PAGE_SIZE;
+                        match vmo.request_pages(req_off, req_len) {
+                            Err(ZxError::SHOULD_WAIT) => {
+                                self.thread.set_state(ThreadState::BlockedPager);
+                                for pg in run_start..p {
+                                    if pg >= vmo.len() / PAGE_SIZE {
+                                        break;
+                                    }
+                                    if vmo.committed_pages_in_range(pg, pg + 1) == 0 {
+                                        match vmo.wait_for_page(pg * PAGE_SIZE).await {
+                                            Ok(()) => {}
+                                            Err(ZxError::OUT_OF_RANGE) => continue,
+                                            Err(e) => {
+                                                if self.thread.state() == ThreadState::BlockedPager
+                                                {
+                                                    self.thread.set_state(old_state);
+                                                }
+                                                return Err(e);
+                                            }
+                                        }
+                                    }
+                                }
+                                if self.thread.state() == ThreadState::BlockedPager {
+                                    self.thread.set_state(old_state);
                                 }
                             }
-                        }
-                        if self.thread.state() == ThreadState::BlockedPager {
-                            self.thread.set_state(old_state);
-                        }
-                        if let Some(e) = wait_err {
-                            return Err(e);
+                            Err(e) => return Err(e),
+                            Ok(()) => {}
                         }
                     }
-                    Err(e) => return Err(e),
-                    Ok(()) => {}
                 }
                 return Ok(());
             }
