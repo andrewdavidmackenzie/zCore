@@ -99,11 +99,6 @@ WakeReportTestsThreadBound.ReportOnly
 WakeReportTestsThreadBound.Acked
 WakeReportTestsThreadBound.AckedStillPending
 WakeReportTestsThreadBound.MultipleSignals
-WakeReportTestsPortBound.MultipleSignals
-WakeReportTestsPortBound.Discard
-WakeReportTestsPortBound.MultiWakeSource
-WakeReportTestsPortBound.SingleWakeSource
-WakeReportTestsPortBound.AckedStillPending
 
 # ── ThreadSampler (crash on sample read) ─────────────────────────────
 ThreadSampler.StartStop
@@ -119,3 +114,7 @@ VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 
 # ── BTI (std::thread race test) ──────────────────────────────────────
 Bti.NoDelayedUnpin
+
+# ── WakeReport (entry lifecycle issues) ──────────────────────────────
+WakeReportTestsPortBound.Discard
+WakeReportTestsPortBound.MultipleSignals

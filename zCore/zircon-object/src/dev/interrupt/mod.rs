@@ -93,6 +93,18 @@ pub fn wake_source_acked(koid: KoID, time: u64) {
     if let Some(entry) = sources.iter().find(|s| s.koid == koid) {
         entry.last_ack_time.store(time, Ordering::Relaxed);
         entry.signaled.store(false, Ordering::Relaxed);
+        // If already reported, clear the entry so it doesn't appear
+        // again in subsequent collect calls. This matches Fuchsia's
+        // behavior where acked+reported entries are consumed.
+        if entry.reported.load(Ordering::Relaxed) {
+            entry.initial_signal_time.store(0, Ordering::Relaxed);
+            entry.last_signal_time.store(0, Ordering::Relaxed);
+            entry
+                .last_ack_time
+                .store(i64::MAX as u64, Ordering::Relaxed);
+            entry.signal_count.store(0, Ordering::Relaxed);
+            entry.reported.store(false, Ordering::Relaxed);
+        }
     }
 }
 
