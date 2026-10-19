@@ -37,7 +37,6 @@ VmoTestCase.PinTests
 Pager.EarlyWakeCloneRace
 Pager.EarlyWakeOverlappingRequests
 Pager.EvictionHintsCloneVmar
-Pager.EvictionHintsWithClones
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
