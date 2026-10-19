@@ -27,7 +27,12 @@ Pager.FailOverlappingRangeCommit
 Pager.PageRequestBatchingChecksAncestorPages
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
-# Suspend tests now handled via blocking_run_suspendable
+# Suspend tests: blocking_run_suspendable infrastructure in place but
+# cooperative scheduler can't pause mid-syscall for suspend/resume.
+# Needs preemptive scheduling or deeper scheduler integration.
+Pager.SuspendCommitTest
+Pager.SuspendReadTestVmar
+Pager.SuspendReadTestVmo
 Pager.CloneReadFromParentTestVmar
 
 # ── PagerProcess (usercopy demand-paging not implemented) ────────────

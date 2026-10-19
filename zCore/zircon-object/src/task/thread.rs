@@ -505,6 +505,11 @@ impl Thread {
         self.inner.lock().state()
     }
 
+    /// Check if the thread has a pending suspend (suspend_count > 0).
+    pub fn is_suspended(&self) -> bool {
+        self.inner.lock().suspend_count > 0
+    }
+
     /// Set the thread state (e.g., to BlockedPager during pager waits).
     pub fn set_state(&self, state: ThreadState) {
         self.inner.lock().change_state(state, &self.base);
@@ -787,6 +792,39 @@ impl CurrentThread {
             return;
         }
         inner.change_state(state, &self.base);
+    }
+
+    /// Wait until the thread is no longer suspended, or return immediately
+    /// if the thread is dying/dead. Used by syscall handlers to pause
+    /// execution during a suspend and resume transparently.
+    ///
+    /// The caller should fire `THREAD_SUSPENDED` signal before calling
+    /// this by setting the thread state. The `change_state` call in
+    /// `suspend()` already handles signal changes.
+    pub async fn wait_for_resume(&self) {
+        #[must_use = "wait_for_resume does nothing unless polled"]
+        struct ResumeChecker {
+            thread: Arc<Thread>,
+        }
+        impl Future for ResumeChecker {
+            type Output = ();
+            fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
+                let mut inner = self.thread.inner.lock();
+                if inner.suspend_count == 0
+                    || inner.state == ThreadState::Dying
+                    || inner.state == ThreadState::Dead
+                {
+                    Poll::Ready(())
+                } else {
+                    inner.waker = Some(cx.waker().clone());
+                    Poll::Pending
+                }
+            }
+        }
+        ResumeChecker {
+            thread: self.0.clone(),
+        }
+        .await;
     }
 
     /// Run async future and change state while blocking.

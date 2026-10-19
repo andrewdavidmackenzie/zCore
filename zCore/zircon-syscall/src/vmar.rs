@@ -412,24 +412,41 @@ impl Syscall<'_> {
                         Err(ZxError::SHOULD_WAIT) => {
                             for pg in run_start..p {
                                 if vmo.committed_pages_in_range(pg, pg + 1) == 0 {
-                                    let future = vmo.wait_for_page(pg * PAGE_SIZE);
-                                    pin_mut!(future);
-                                    self.thread
-                                        .set_blocking_state(ThreadState::BlockedPager);
-                                    match self
-                                        .thread
-                                        .blocking_run_suspendable(
-                                            future,
-                                            ThreadState::BlockedPager,
-                                            Duration::from_nanos(u64::MAX),
-                                        )
-                                        .await
-                                    {
-                                        Ok(()) => {}
-                                        Err(ZxError::STOP) | Err(ZxError::CANCELED) => {
-                                            return Err(ZxError::STOP);
+                                    // Suspend/resume retry loop.
+                                    loop {
+                                        let future = vmo.wait_for_page(pg * PAGE_SIZE);
+                                        pin_mut!(future);
+                                        self.thread
+                                            .set_blocking_state(ThreadState::BlockedPager);
+                                        match self
+                                            .thread
+                                            .blocking_run_suspendable(
+                                                future,
+                                                ThreadState::BlockedPager,
+                                                Duration::from_nanos(u64::MAX),
+                                            )
+                                            .await
+                                        {
+                                            Ok(()) => break,
+                                            Err(ZxError::CANCELED) => {
+                                                    while self.thread.is_suspended() {
+                                                        if self.thread.state() == ThreadState::Dying {
+                                                            break;
+                                                        }
+                                                        hal_impl::thread::yield_now().await;
+                                                    }
+                                                    if self.thread.state() == ThreadState::Dying {
+                                                        return Err(ZxError::STOP);
+                                                    }
+                                                    if vmo.committed_pages_in_range(pg, pg + 1) > 0 {
+                                                        break;
+                                                    }
+                                                    let _ = vmo.request_pages(pg * PAGE_SIZE, PAGE_SIZE);
+                                                    continue;
+                                                }
+                                            Err(ZxError::STOP) => return Err(ZxError::STOP),
+                                            Err(e) => return Err(e),
                                         }
-                                        Err(e) => return Err(e),
                                     }
                                 }
                             }
