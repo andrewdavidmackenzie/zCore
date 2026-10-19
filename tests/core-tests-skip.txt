@@ -10,12 +10,7 @@ ProcessTest.KillChannelHandleCycle
 # ── Thread suspend / register state ─────────────────────────────────
 Threads.NoncanonicalRipAddressIRETQ
 Threads.NoncanonicalRipAddressSyscall
-Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
 Threads.WritingArmFlagsRegister
-Threads.WritingFpRegisterState
-Threads.WritingSingleStepState
-Threads.WritingVectorRegisterState
-Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
 Threads.X86AcFlagUserCopy
 
 # ── Policy exception infrastructure ─────────────────────────────────
