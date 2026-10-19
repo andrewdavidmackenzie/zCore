@@ -32,13 +32,11 @@ Pager.SuspendReadTestVmar
 Pager.SuspendReadTestVmo
 Pager.CloneReadFromParentTestVmar
 
-# ── PagerProcess (preemptive scheduling) ─────────────────────────────
-PagerProcess.KillBlockedUserVmoRead
-PagerProcess.KillBlockedUserPageFault
+# ── PagerProcess (usercopy demand-paging not implemented) ────────────
+# The VmoRead and PageFault variants pass (blocking_run kills pager wait).
+# The Usercopy variants need demand-paging in guarded_user_copy.
 PagerProcess.KillBlockedUsercopy
 PagerProcess.KillBlockedUsercopyCaptureFaults
-PagerProcess.KillAfterSuspendVmoRead
-PagerProcess.KillAfterSuspendPageFault
 PagerProcess.KillAfterSuspendUsercopy
 PagerProcess.KillAfterSuspendUsercopyCapture
 
