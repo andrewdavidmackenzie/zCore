@@ -19,9 +19,6 @@ Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
-Pager.SuspendCommitTest
-Pager.SuspendReadTestVmar
-Pager.SuspendReadTestVmo
 Pager.CloneReadFromParentTestVmar
 
 # ── PagerProcess (usercopy demand-paging not implemented) ────────────
