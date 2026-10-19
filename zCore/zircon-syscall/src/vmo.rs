@@ -144,8 +144,8 @@ impl Syscall<'_> {
 
             // Find all uncommitted pages and send one batched request.
             // Check the pager VMO for committed pages (supply goes there).
-            let first_uncommitted = (start_page..end_page)
-                .find(|&p| pager_vmo.committed_pages_in_range(p, p + 1) == 0);
+            let first_uncommitted =
+                (start_page..end_page).find(|&p| pager_vmo.committed_pages_in_range(p, p + 1) == 0);
             let last_uncommitted = (start_page..end_page)
                 .rfind(|&p| pager_vmo.committed_pages_in_range(p, p + 1) == 0);
 
