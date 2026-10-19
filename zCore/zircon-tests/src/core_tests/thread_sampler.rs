@@ -73,7 +73,7 @@ fn start_stop() {
     if actual2 >= 32 {
         let header = u64::from_ne_bytes(buf[0..8].try_into().unwrap());
         let record_type = header & 0xF;
-        assert_eq!(record_type, 8, "FXT record type should be kProfiler (8)");
+        assert_eq!(record_type, 10, "FXT record type should be kProfiler (10)");
     }
 }
 

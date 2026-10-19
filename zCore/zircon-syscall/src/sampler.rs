@@ -32,7 +32,7 @@ const SAMPLER_MIN_PERIOD_NS: u64 = 10_000;
 const SAMPLER_CONFIG_SIZE: usize = 16;
 
 /// FXT record type for profiler samples.
-const FXT_RECORD_TYPE_PROFILER: u64 = 8;
+const FXT_RECORD_TYPE_PROFILER: u64 = 10;
 
 /// Build an FXT profiler record header.
 /// Format: bits 0-3 = type, bits 4-15 = record size (in 8-byte words).

@@ -85,13 +85,6 @@ Resource.MexecPayloadTooSmall
 Resource.MexecZeroSizedVmo
 Resource.Ioports
 
-# ── ThreadSampler (crash on sample read) ─────────────────────────────
-ThreadSampler.StartStop
-ThreadSampler.NonRunningThread
-ThreadSampler.SamplerLifetime
-ThreadSampler.DroppedSampler
-ThreadSampler.HighFrequency
-
 # ── COW merge on handle close (needs on_zero_handles) ────────────────
 VmoClone2TestCase.DropParentCommittedBytes
 VmoZeroTestCase.WriteCowParent
