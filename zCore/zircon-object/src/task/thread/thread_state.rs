@@ -81,8 +81,14 @@ impl ContextAccessState for UserContext {
                 let mxcsr_off = ZMM_COUNT * ZMM_SIZE + OPMASK_SIZE;
                 let new_mxcsr =
                     u32::from_ne_bytes(buf[mxcsr_off..mxcsr_off + 4].try_into().unwrap());
-                // MXCSR valid bits: 0-15 (bits 16-31 are reserved, must be 0).
-                if new_mxcsr & 0xFFFF0000 != 0 {
+                // Use processor's MXCSR_MASK if available, otherwise the
+                // architectural default (0xFFBF — bits 0-15 minus bit 6).
+                let mxcsr_mask = if vr.mxcsr_mask != 0 {
+                    vr.mxcsr_mask
+                } else {
+                    0x0000_FFBF
+                };
+                if new_mxcsr & !mxcsr_mask != 0 {
                     return Err(ZxError::INVALID_ARGS);
                 }
                 vr.mxcsr = new_mxcsr;
