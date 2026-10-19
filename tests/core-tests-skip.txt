@@ -192,3 +192,4 @@ Threads.StartRegsNoncanonicalTp
 PthreadTest.Basic
 VmoZeroTestCase.WriteCowParent
 VmoZeroTestCase.AllocateAfterMergeMultipleChildren
+Bti.NoDelayedUnpin
