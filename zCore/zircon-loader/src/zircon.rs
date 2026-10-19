@@ -508,11 +508,16 @@ async fn handler_user_trap(
                             Ok(()) => Ok(()),
                             Err(ZxError::STOP) | Err(ZxError::CANCELED) => {
                                 // Thread was killed or suspended while
-                                // pager-blocked. Return Ok so the run loop
-                                // re-enters: for kill it detects Dying
-                                // state; for suspend, wait_for_run goes
-                                // Pending. On resume, re-fault re-sends
-                                // the page request.
+                                // pager-blocked. Cancel the stale
+                                // outstanding request so the re-fault
+                                // after resume generates a new port
+                                // packet (not absorbed by overlap).
+                                vmo.cancel_outstanding_requests_in_range(offset, PAGE_SIZE);
+                                // Return Ok so the run loop re-enters:
+                                // for kill it detects Dying state; for
+                                // suspend, wait_for_run goes Pending.
+                                // On resume, re-fault re-sends the
+                                // page request.
                                 Ok(())
                             }
                             Err(e) => {

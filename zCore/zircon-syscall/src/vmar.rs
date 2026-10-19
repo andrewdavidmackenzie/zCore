@@ -440,6 +440,10 @@ impl Syscall<'_> {
                                                 if vmo.committed_pages_in_range(pg, pg + 1) > 0 {
                                                     break;
                                                 }
+                                                vmo.cancel_outstanding_requests_in_range(
+                                                    pg * PAGE_SIZE,
+                                                    PAGE_SIZE,
+                                                );
                                                 let _ =
                                                     vmo.request_pages(pg * PAGE_SIZE, PAGE_SIZE);
                                                 continue;

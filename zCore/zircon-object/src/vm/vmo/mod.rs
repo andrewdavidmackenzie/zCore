@@ -712,6 +712,28 @@ impl VmObject {
         }
     }
 
+    /// Remove outstanding request entries covering the given range.
+    /// Called when a pager wait is aborted (e.g., by suspend) and the
+    /// caller will re-request. Without this, the stale entry causes
+    /// overlap absorption to suppress the re-request's port packet.
+    pub fn cancel_outstanding_requests_in_range(&self, offset: usize, length: usize) {
+        let mut inner = self.inner.lock();
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        let mut i = 0;
+        while i < inner.outstanding_requests.len() {
+            let req = &inner.outstanding_requests[i];
+            let overlaps = req.start_page < end_page && req.end_page > start_page;
+            if overlaps {
+                let removed = inner.outstanding_requests.swap_remove(i);
+                // Drop overlap waiters — their receivers get Err(Canceled).
+                drop(removed);
+            } else {
+                i += 1;
+            }
+        }
+    }
+
     /// Check if a page has a pending waiter (another thread waiting for supply).
     pub fn has_page_waiter(&self, page_idx: usize) -> bool {
         let inner = self.inner.lock();

@@ -238,6 +238,12 @@ impl Syscall<'_> {
                                     {
                                         break Ok(());
                                     }
+                                    // Cancel stale outstanding request so
+                                    // the re-request isn't absorbed.
+                                    pager_vmo.cancel_outstanding_requests_in_range(
+                                        page_idx * PAGE_SIZE,
+                                        PAGE_SIZE,
+                                    );
                                     let _ =
                                         pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
                                     continue;
@@ -803,6 +809,10 @@ impl Syscall<'_> {
                                                     {
                                                         break;
                                                     }
+                                                    pager_vmo.cancel_outstanding_requests_in_range(
+                                                        pg * PAGE_SIZE,
+                                                        PAGE_SIZE,
+                                                    );
                                                     let _ = pager_vmo
                                                         .request_pages(pg * PAGE_SIZE, PAGE_SIZE);
                                                     continue;
