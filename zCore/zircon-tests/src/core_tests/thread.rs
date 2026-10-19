@@ -1683,10 +1683,8 @@ async fn writing_vector_register_state() {
         let read_result = thread.read_state(ThreadStateKind::Vector, &mut read_buf);
         assert!(read_result.is_ok(), "vector read-back should succeed");
         // XMM0 is at zmm[0] offset 0 in the Zircon vector state layout.
-        let xmm0_lo =
-            u64::from_ne_bytes(read_buf[0..8].try_into().unwrap());
-        let xmm0_hi =
-            u64::from_ne_bytes(read_buf[8..16].try_into().unwrap());
+        let xmm0_lo = u64::from_ne_bytes(read_buf[0..8].try_into().unwrap());
+        let xmm0_hi = u64::from_ne_bytes(read_buf[8..16].try_into().unwrap());
         assert_eq!(xmm0_lo, 0xDEAD_BEEF_CAFE_BABE, "XMM0 low not restored");
         assert_eq!(xmm0_hi, 0x1234_5678_9ABC_DEF0, "XMM0 high not restored");
     } else {

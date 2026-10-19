@@ -233,10 +233,13 @@ impl Syscall<'_> {
                                         break Err(ZxError::STOP);
                                     }
                                     // On resume, check if page was supplied.
-                                    if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                                    if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1)
+                                        > 0
+                                    {
                                         break Ok(());
                                     }
-                                    let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
+                                    let _ =
+                                        pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
                                     continue;
                                 }
                                 other => break other,
@@ -785,7 +788,8 @@ impl Syscall<'_> {
                                                 Ok(()) => break,
                                                 Err(ZxError::CANCELED) => {
                                                     while self.thread.is_suspended() {
-                                                        if self.thread.state() == ThreadState::Dying {
+                                                        if self.thread.state() == ThreadState::Dying
+                                                        {
                                                             break;
                                                         }
                                                         hal_impl::thread::preempt_yield().await;
@@ -793,10 +797,14 @@ impl Syscall<'_> {
                                                     if self.thread.state() == ThreadState::Dying {
                                                         return Err(ZxError::STOP);
                                                     }
-                                                    if pager_vmo.committed_pages_in_range(pg, pg + 1) > 0 {
+                                                    if pager_vmo
+                                                        .committed_pages_in_range(pg, pg + 1)
+                                                        > 0
+                                                    {
                                                         break;
                                                     }
-                                                    let _ = pager_vmo.request_pages(pg * PAGE_SIZE, PAGE_SIZE);
+                                                    let _ = pager_vmo
+                                                        .request_pages(pg * PAGE_SIZE, PAGE_SIZE);
                                                     continue;
                                                 }
                                                 Err(ZxError::STOP) => return Err(ZxError::STOP),
