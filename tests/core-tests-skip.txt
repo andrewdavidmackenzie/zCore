@@ -36,11 +36,9 @@ VmoTestCase.PinTests
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.EarlyWakeCloneRace
 Pager.EarlyWakeOverlappingRequests
-Pager.EvictionHintsCloneVmar
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
-Pager.OpCommitCloneVmar
 Pager.PageRequestBatchingChecksAncestorPages
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin

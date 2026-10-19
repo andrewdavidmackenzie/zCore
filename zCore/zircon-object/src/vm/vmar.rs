@@ -1312,13 +1312,20 @@ impl VmAddressRegion {
             result.extend(child.find_pager_vmos_in_range(addr, len));
         }
         for mapping in inner.mappings.iter() {
-            if !mapping.vmo.is_pager_backed() {
+            // Include direct pager VMOs and clones in pager trees.
+            let pager_vmo = if mapping.vmo.is_pager_backed() {
+                mapping.vmo.clone()
+            } else if mapping.vmo.is_in_pager_tree() {
+                match mapping.vmo.find_root_pager_vmo() {
+                    Some(root) => root,
+                    None => continue,
+                }
+            } else {
                 continue;
-            }
+            };
             let mi = mapping.inner.lock();
             let map_start = mi.addr;
             let map_end = map_start + mi.size;
-            // Check overlap
             if map_start >= range_end || map_end <= addr {
                 continue;
             }
@@ -1327,7 +1334,7 @@ impl VmAddressRegion {
             let vmo_off = mi.vmo_offset + (overlap_start - map_start);
             let pages = (overlap_end - overlap_start) / PAGE_SIZE;
             if pages > 0 {
-                result.push((mapping.vmo.clone(), vmo_off, pages));
+                result.push((pager_vmo, vmo_off, pages));
             }
         }
         result
