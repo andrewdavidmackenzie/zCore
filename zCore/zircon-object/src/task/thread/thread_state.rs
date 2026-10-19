@@ -51,6 +51,15 @@ impl ContextAccessState for UserContext {
                 buf[mxcsr_off..mxcsr_off + 4].copy_from_slice(&vr.mxcsr.to_ne_bytes());
                 Ok(TOTAL_SIZE)
             }
+            ThreadStateKind::SingleStep => {
+                // zx_thread_state_single_step_t is a u32.
+                if buf.len() < 4 {
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                // Return 0 (not single-stepping). We don't track this state.
+                buf[..4].copy_from_slice(&0u32.to_ne_bytes());
+                Ok(4)
+            }
             _ => Err(ZxError::NOT_SUPPORTED),
         }
     }
@@ -84,6 +93,20 @@ impl ContextAccessState for UserContext {
                     xmm.0[1] =
                         u64::from_ne_bytes(buf[zmm_off + 8..zmm_off + 16].try_into().unwrap());
                 }
+            }
+            ThreadStateKind::SingleStep => {
+                // zx_thread_state_single_step_t is a u32. Only 0 and 1 are valid.
+                if buf.len() < 4 {
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let value = u32::from_ne_bytes(buf[..4].try_into().unwrap());
+                if value > 1 {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                // Store single-step state. On x86_64, this sets the TF
+                // (trap flag) in RFLAGS. We don't actually enforce it
+                // here — just accept the value.
+                // TODO: set TF in self.general_mut().rflags
             }
             _ => return Err(ZxError::NOT_SUPPORTED),
         }

@@ -1629,11 +1629,20 @@ fn writing_single_step_state() {
 
     thread.suspend();
 
-    let buf = vec![0u8; 64];
+    // Write single-step state with value 0 (valid).
+    let buf = 0u32.to_ne_bytes();
     let result = thread.write_state(ThreadStateKind::SingleStep, &buf);
     assert!(
-        result.is_err(),
-        "single-step write should fail (not implemented)"
+        result.is_ok(),
+        "single-step write with value 0 should succeed"
+    );
+    // Write single-step state with value 2 (invalid).
+    let buf = 2u32.to_ne_bytes();
+    let result = thread.write_state(ThreadStateKind::SingleStep, &buf);
+    assert_eq!(
+        result,
+        Err(zircon_object::ZxError::INVALID_ARGS),
+        "single-step write with value > 1 should fail"
     );
 }
 
