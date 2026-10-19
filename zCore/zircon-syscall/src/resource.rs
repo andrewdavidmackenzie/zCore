@@ -46,7 +46,7 @@ impl Syscall<'_> {
         parent_rsrc
             .validate_ranged_resource(kind, base as usize, size as usize)
             .map_err(|e| {
-                if e == ZxError::WRONG_TYPE {
+                if e == ZxError::WRONG_TYPE || e == ZxError::OUT_OF_RANGE {
                     ZxError::ACCESS_DENIED
                 } else {
                     e

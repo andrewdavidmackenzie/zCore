@@ -83,7 +83,6 @@ Resource.MexecMemoryLeakOnFailure
 Resource.MexecPagerPanic
 Resource.MexecPayloadTooSmall
 Resource.MexecZeroSizedVmo
-Resource.Ioports
 
 # ── COW merge on handle close (needs on_zero_handles) ────────────────
 VmoClone2TestCase.DropParentCommittedBytes

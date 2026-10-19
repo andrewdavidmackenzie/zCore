@@ -144,17 +144,17 @@ fn resource_validate_ranged() {
         .validate_ranged_resource(ResourceKind::MMIO, 0x1800, 0x800)
         .is_ok());
 
-    // Outside range — should fail with ACCESS_DENIED.
+    // Outside range — should fail with OUT_OF_RANGE.
     assert_eq!(
         res.validate_ranged_resource(ResourceKind::MMIO, 0x0, 0x100)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
         "below range should be denied"
     );
     assert_eq!(
         res.validate_ranged_resource(ResourceKind::MMIO, 0x1000, 0x1001)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
         "exceeding range should be denied"
     );
 

@@ -422,6 +422,13 @@ pub fn spawn_process(
         0,
         crate::dev::ResourceFlags::empty(),
     );
+    let ioport_resource = Resource::create(
+        "ioport",
+        crate::dev::ResourceKind::IOPORT,
+        0,
+        0x10000, // covers entire x86 I/O port space (0x0000-0xFFFF)
+        crate::dev::ResourceFlags::empty(),
+    );
     let system_resource = Resource::create(
         "system",
         crate::dev::ResourceKind::SYSTEM,
@@ -540,6 +547,7 @@ pub fn spawn_process(
         ), // PA_VMAR_LOADED
         Handle::new(mmio_resource, Rights::DEFAULT_RESOURCE), // PA_MMIO_RESOURCE
         Handle::new(irq_resource, Rights::DEFAULT_RESOURCE), // PA_IRQ_RESOURCE
+        Handle::new(ioport_resource, Rights::DEFAULT_RESOURCE), // PA_IOPORT_RESOURCE
         Handle::new(system_resource, Rights::DEFAULT_RESOURCE), // PA_SYSTEM_RESOURCE
         Handle::new(zbi_vmo, Rights::DEFAULT_VMO),          // PA_VMO_BOOTDATA
         Handle::new(boot_opts_vmo, Rights::DEFAULT_VMO),    // PA_VMO_KERNEL_FILE (boot-options.txt)
@@ -564,6 +572,7 @@ pub fn spawn_process(
         pa_hnd(PA_VMAR_LOADED, 0),
         pa_hnd(PA_MMIO_RESOURCE, 0),
         pa_hnd(PA_IRQ_RESOURCE, 0),
+        pa_hnd(PA_IOPORT_RESOURCE, 0),
         pa_hnd(PA_SYSTEM_RESOURCE, 0),
         pa_hnd(PA_VMO_BOOTDATA, 0),
         pa_hnd(PA_VMO_KERNEL_FILE, 0), // boot-options.txt
