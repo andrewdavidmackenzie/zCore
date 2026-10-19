@@ -648,6 +648,12 @@ impl VmObject {
         }
     }
 
+    /// Check if a page has a pending waiter (another thread waiting for supply).
+    pub fn has_page_waiter(&self, page_idx: usize) -> bool {
+        let inner = self.inner.lock();
+        inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx)
+    }
+
     /// Block until the page at `offset` is supplied by the pager.
     /// Returns `Ok(())` when the page is ready, or `Err` if the
     /// pager is detached.

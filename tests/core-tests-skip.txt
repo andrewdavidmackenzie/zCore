@@ -47,7 +47,6 @@ Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.FailOverlappingRangeRead
 Pager.OpCommitCloneVmar
-Pager.OverlapCommitTest
 Pager.PageRequestBatchingChecksAncestorPages
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin

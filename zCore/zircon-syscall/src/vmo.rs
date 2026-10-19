@@ -626,7 +626,9 @@ impl Syscall<'_> {
                         if p >= vmo.len() / PAGE_SIZE {
                             break;
                         }
-                        if vmo.committed_pages_in_range(p, p + 1) > 0 {
+                        // Skip committed pages and pages with pending waiters
+                        // (another thread already requested them).
+                        if vmo.committed_pages_in_range(p, p + 1) > 0 || vmo.has_page_waiter(p) {
                             p += 1;
                             continue;
                         }
@@ -634,6 +636,7 @@ impl Syscall<'_> {
                         while p < end_page
                             && p < vmo.len() / PAGE_SIZE
                             && vmo.committed_pages_in_range(p, p + 1) == 0
+                            && !vmo.has_page_waiter(p)
                         {
                             p += 1;
                         }
