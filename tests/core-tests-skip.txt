@@ -3,13 +3,13 @@
 # Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
 
 # ── Multi-threaded (need preemptive scheduling / std::thread) ────────
-PortStressTest.*
+PortStressTest.CancelKeyDuringMatchRace
+PortStressTest.SignalCloseWait
+PortStressTest.ChannelCallWaitQueuePanicRepro
 ChannelTest.NoSpuriousReadableSignalWhenRacing
-PthreadTest.Basic
 
 # ── Thread suspend / register state ─────────────────────────────────
 Threads.NoncanonicalRipAddressIRETQ
-Threads.NoncanonicalRipAddressSyscall
 Threads.WritingArmFlagsRegister
 Threads.X86AcFlagUserCopy
 

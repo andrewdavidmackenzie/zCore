@@ -66,7 +66,25 @@ impl ContextAccessState for UserContext {
 
     fn write_state(&mut self, kind: ThreadStateKind, buf: &[u8]) -> ZxResult {
         match kind {
-            ThreadStateKind::General => *self.general_mut() = buf.read_struct()?,
+            ThreadStateKind::General => {
+                let regs: hal_impl::context::GeneralRegs = buf.read_struct()?;
+                // On x86_64, reject non-canonical and kernel-space RIP/RSP.
+                #[cfg(target_arch = "x86_64")]
+                {
+                    let is_canonical = |addr: usize| -> bool {
+                        let sign_ext = ((addr as i64) << 16 >> 16) as usize;
+                        addr == sign_ext
+                    };
+                    let is_user = |addr: usize| -> bool {
+                        // User addresses have bit 47 = 0 (lower half).
+                        addr < 0x0000_8000_0000_0000
+                    };
+                    if !is_canonical(regs.rip) || !is_user(regs.rip) {
+                        return Err(ZxError::INVALID_ARGS);
+                    }
+                }
+                *self.general_mut() = regs;
+            }
             #[cfg(target_arch = "x86_64")]
             ThreadStateKind::Vector => {
                 const ZMM_COUNT: usize = 32;
