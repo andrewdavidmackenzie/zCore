@@ -13,31 +13,18 @@ Threads.NoncanonicalRipAddressSyscall
 Threads.WritingArmFlagsRegister
 Threads.X86AcFlagUserCopy
 
-# ── Policy exception infrastructure ─────────────────────────────────
-
-# ── COW populated_bytes ──────────────────────────────────────────────
-
-# ── VmoTestCase (kernel panic / crash) ───────────────────────────────
-
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
-# EarlyWakeOverlappingRequests passes with overlap absorption
 Pager.EarlyWakeCloneRace
 Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
-# PageRequestBatchingChecksAncestorPages passes with ancestor-aware batching
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
-# Suspend tests: blocking_run_suspendable infrastructure in place but
-# cooperative scheduler can't pause mid-syscall for suspend/resume.
-# Needs preemptive scheduling or deeper scheduler integration.
 Pager.SuspendCommitTest
 Pager.SuspendReadTestVmar
 Pager.SuspendReadTestVmo
 Pager.CloneReadFromParentTestVmar
 
 # ── PagerProcess (usercopy demand-paging not implemented) ────────────
-# The VmoRead and PageFault variants pass (blocking_run kills pager wait).
-# The Usercopy variants need demand-paging in guarded_user_copy.
 PagerProcess.KillBlockedUsercopy
 PagerProcess.KillBlockedUsercopyCaptureFaults
 PagerProcess.KillAfterSuspendUsercopy
@@ -90,10 +77,6 @@ StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 
-# ── VMAR (FaultBeyondStreamSize) ─────────────────────────────────────
-
-# ── BTI ──────────────────────────────────────────────────────────────
-
 # ── MSI ──────────────────────────────────────────────────────────────
 MsiTest.Msi
 MsiTest.Msix
@@ -106,8 +89,6 @@ Resource.MexecPagerPanic
 Resource.MexecPayloadTooSmall
 Resource.MexecZeroSizedVmo
 Resource.Ioports
-
-# ── Job kill chain ───────────────────────────────────────────────────
 
 # ── System events / suspend / wake reports ───────────────────────────
 SystemEvent.ExactlyOneMemoryEventSignaled
@@ -131,7 +112,7 @@ ThreadSampler.SamplerLifetime
 ThreadSampler.DroppedSampler
 ThreadSampler.HighFrequency
 
-# ── VmoClone2 hangs ──────────────────────────────────────────────
+# ── VmoClone2 hangs ──────────────────────────────────────────────────
 VmoClone2TestCase.DropParentCommittedBytes
 WakeReportTestsPortBound.MultipleSignals
 WakeReportTestsPortBound.Discard
@@ -139,9 +120,7 @@ WakeReportTestsPortBound.MultiWakeSource
 WakeReportTestsPortBound.SingleWakeSource
 WakeReportTestsPortBound.AckedStillPending
 
-# ── VmoZero/VmoClone2 hangs ─────────────────────────────────────────
-
-# Hangs — blocks sequential test run
+# ── Hangs — blocks sequential test run ───────────────────────────────
 PthreadTest.Basic
 VmoZeroTestCase.WriteCowParent
 VmoZeroTestCase.AllocateAfterMergeMultipleChildren
