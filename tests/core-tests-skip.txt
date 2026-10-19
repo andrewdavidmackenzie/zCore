@@ -116,5 +116,4 @@ VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 Bti.NoDelayedUnpin
 
 # ── WakeReport (entry lifecycle issues) ──────────────────────────────
-WakeReportTestsPortBound.Discard
 WakeReportTestsPortBound.MultipleSignals
