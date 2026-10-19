@@ -3,7 +3,8 @@ use {
     super::*,
     crate::object::*,
     crate::signal::{
-        PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_DIRTY, ZX_PAGER_VMO_READ,
+        PacketPageRequest, PayloadRepr, Port, PortPacketRepr, ZX_PAGER_VMO_COMPLETE,
+        ZX_PAGER_VMO_DIRTY, ZX_PAGER_VMO_READ,
     },
     alloc::{
         sync::{Arc, Weak},
@@ -252,6 +253,10 @@ struct VmObjectInner {
     /// requests share this list — they're woken by supply_pages or
     /// op_range(DIRTY) respectively.
     pager_waiters: Vec<(usize, futures::channel::oneshot::Sender<ZxResult>)>,
+    /// Pages that have been failed by OP_FAIL. Maps page_idx → error.
+    /// When wait_for_page registers a waiter for a failed page, it
+    /// returns the error immediately instead of blocking.
+    pager_failed_pages: alloc::collections::BTreeMap<usize, ZxError>,
 }
 
 impl VmObject {
@@ -508,6 +513,26 @@ impl VmObject {
         false
     }
 
+    /// Find the root pager VMO in this VMO's ancestor chain.
+    /// Returns the ancestor VmObject that has pager_port set.
+    pub fn find_root_pager_vmo(&self) -> Option<Arc<VmObject>> {
+        let inner = self.inner.lock();
+        if inner.pager_port.is_some() {
+            return None; // this VMO IS the pager VMO
+        }
+        let mut cur = inner.parent.upgrade()?;
+        loop {
+            let cur_inner = cur.inner.lock();
+            if cur_inner.pager_port.is_some() {
+                drop(cur_inner);
+                return Some(cur);
+            }
+            let next = cur_inner.parent.upgrade();
+            drop(cur_inner);
+            cur = next?;
+        }
+    }
+
     /// Query dirty page ranges within [offset, offset+length).
     /// Returns a list of (offset, length, options) tuples.
     /// Only returns data for TRAP_DIRTY VMOs; others return empty.
@@ -647,6 +672,17 @@ impl VmObject {
         }
     }
 
+    /// Check if a page has a pending waiter (another thread waiting for supply).
+    pub fn has_page_waiter(&self, page_idx: usize) -> bool {
+        let inner = self.inner.lock();
+        inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx)
+    }
+
+    /// Clear a failed-page marker (for retry after OP_FAIL).
+    pub fn clear_failed_page(&self, page_idx: usize) {
+        self.inner.lock().pager_failed_pages.remove(&page_idx);
+    }
+
     /// Block until the page at `offset` is supplied by the pager.
     /// Returns `Ok(())` when the page is ready, or `Err` if the
     /// pager is detached.
@@ -654,10 +690,20 @@ impl VmObject {
         let rx = {
             let mut inner = self.inner.lock();
             let page_idx = offset / PAGE_SIZE;
+            // If the page is beyond the VMO's current size (e.g. after
+            // resize), return OUT_OF_RANGE immediately.
+            if offset >= self.len() {
+                return Err(ZxError::OUT_OF_RANGE);
+            }
             // If the page was already supplied between request_pages()
             // and now (race window), return immediately.
             if self.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
                 return Ok(());
+            }
+            // If the page was failed by OP_FAIL, return the error
+            // immediately (handles race where fail arrives before waiter).
+            if let Some(&err) = inner.pager_failed_pages.get(&page_idx) {
+                return Err(err);
             }
             let (tx, rx) = futures::channel::oneshot::channel();
             inner.pager_waiters.push((page_idx, tx));
@@ -675,6 +721,11 @@ impl VmObject {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        // Clear any failed-page markers in the supplied range
+        // (supply overrides a previous fail).
+        for page_idx in start_page..end_page {
+            inner.pager_failed_pages.remove(&page_idx);
+        }
         // Drain waiters whose page index falls in [start_page, end_page).
         let mut i = 0;
         while i < inner.pager_waiters.len() {
@@ -697,10 +748,17 @@ impl VmObject {
 
     /// Wake pager waiters in a specific range with an error
     /// (called by pager_op_range(FAIL)).
+    /// Also records the failure so future wait_for_page calls for
+    /// these pages immediately return the error.
     pub fn fail_pager_requests_range(&self, offset: usize, length: usize, err: ZxError) {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        // Record failed pages for future waiters.
+        for page_idx in start_page..end_page {
+            inner.pager_failed_pages.insert(page_idx, err);
+        }
+        // Wake existing waiters.
         let mut i = 0;
         while i < inner.pager_waiters.len() {
             if inner.pager_waiters[i].0 >= start_page && inner.pager_waiters[i].0 < end_page {
@@ -884,7 +942,14 @@ impl VmObject {
             }
             return Err(ZxError::UNAVAILABLE);
         }
-        self.trait_.set_len(size)
+        let old_size = self.len();
+        self.trait_.set_len(size)?;
+        // When shrinking a pager-backed VMO, wake any waiters for
+        // pages in the truncated range with OUT_OF_RANGE.
+        if size < old_size {
+            self.fail_pager_requests_range(size, old_size - size, ZxError::OUT_OF_RANGE);
+        }
+        Ok(())
     }
 
     /// Set the size of the content stored in the VMO in bytes, resize vmo if needed
@@ -1391,6 +1456,25 @@ impl Deref for VmObject {
 
 impl Drop for VmObject {
     fn drop(&mut self) {
+        // Send ZX_PAGER_VMO_COMPLETE to the pager port when the last
+        // handle to a pager-backed VMO is closed.
+        {
+            let inner = self.inner.lock();
+            if let Some(port) = &inner.pager_port {
+                port.push(PortPacketRepr {
+                    key: inner.pager_key,
+                    status: ZxError::OK,
+                    data: PayloadRepr::PageRequest(PacketPageRequest {
+                        command: ZX_PAGER_VMO_COMPLETE,
+                        flags: 0,
+                        _reserved0: 0,
+                        offset: 0,
+                        length: 0,
+                        _reserved1: 0,
+                    }),
+                });
+            }
+        }
         // Wake any threads blocked on pager faults before freeing.
         {
             let inner = self.inner.lock();

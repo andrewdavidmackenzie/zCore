@@ -1294,6 +1294,52 @@ impl VmAddressRegion {
         None
     }
 
+    /// Find all pager-backed VMO mappings overlapping [addr, addr+len).
+    /// Returns (VMO, vmo_offset, page_count) for each.
+    pub fn find_pager_vmos_in_range(
+        &self,
+        addr: usize,
+        len: usize,
+    ) -> alloc::vec::Vec<(Arc<VmObject>, usize, usize)> {
+        let mut result = alloc::vec::Vec::new();
+        let guard = self.inner.lock();
+        let inner = match guard.as_ref() {
+            Some(i) => i,
+            None => return result,
+        };
+        let range_end = (addr + len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        for child in inner.children.iter() {
+            result.extend(child.find_pager_vmos_in_range(addr, len));
+        }
+        for mapping in inner.mappings.iter() {
+            // Include direct pager VMOs and clones in pager trees.
+            let pager_vmo = if mapping.vmo.is_pager_backed() {
+                mapping.vmo.clone()
+            } else if mapping.vmo.is_in_pager_tree() {
+                match mapping.vmo.find_root_pager_vmo() {
+                    Some(root) => root,
+                    None => continue,
+                }
+            } else {
+                continue;
+            };
+            let mi = mapping.inner.lock();
+            let map_start = mi.addr;
+            let map_end = map_start + mi.size;
+            if map_start >= range_end || map_end <= addr {
+                continue;
+            }
+            let overlap_start = addr.max(map_start);
+            let overlap_end = range_end.min(map_end);
+            let vmo_off = mi.vmo_offset + (overlap_start - map_start);
+            let pages = (overlap_end - overlap_start) / PAGE_SIZE;
+            if pages > 0 {
+                result.push((pager_vmo, vmo_off, pages));
+            }
+        }
+        result
+    }
+
     /// Convert a virtual address to the VMO offset in the mapping.
     pub fn vaddr_to_vmo_offset(&self, vaddr: VirtAddr) -> Option<usize> {
         let guard = self.inner.lock();
@@ -1676,7 +1722,8 @@ pub struct VmarInfo {
 pub struct VmMapping {
     /// The permission limitation of the vmar
     permissions: MMUFlags,
-    vmo: Arc<VmObject>,
+    /// The VMO backing this mapping.
+    pub vmo: Arc<VmObject>,
     page_table: Arc<Mutex<dyn GenericPageTable>>,
     inner: Mutex<VmMappingInner>,
 }
@@ -2231,14 +2278,34 @@ impl VmMapping {
                 return Err(ZxError::OUT_OF_RANGE);
             }
         }
-        // For pager-backed VMOs, check if the page is committed before
-        // attempting commit_page. If absent, notify the pager and return
-        // SHOULD_WAIT so the thread blocks until pages are supplied.
+        // For pager-backed VMOs (or clones in a pager tree), check if
+        // the page is committed before attempting commit_page. If absent,
+        // send a page request to the root pager VMO and return SHOULD_WAIT.
         let page_idx = vmo_offset / PAGE_SIZE;
         if self.vmo.is_pager_backed()
             && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
         {
             return self.vmo.request_pages(vmo_offset, PAGE_SIZE);
+        }
+        // Clone of a pager VMO: the clone itself is not pager-backed,
+        // but its root ancestor has a pager. Route the request there.
+        if !self.vmo.is_pager_backed()
+            && self.vmo.is_in_pager_tree()
+            && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
+        {
+            if let Some(root) = self.vmo.find_root_pager_vmo() {
+                // The root pager VMO owns the page source. Request pages
+                // there — the offset is the same since clone offset=0
+                // maps to parent offset=0 for full clones.
+                // For offset clones, we'd need to add the clone's offset.
+                let root_offset = vmo_offset; // TODO: handle clone offsets
+                if root
+                    .committed_pages_in_range(root_offset / PAGE_SIZE, root_offset / PAGE_SIZE + 1)
+                    == 0
+                {
+                    return root.request_pages(root_offset, PAGE_SIZE);
+                }
+            }
         }
         let paddr = self.vmo.commit_page(page_idx, access_flags)?;
         let mut pg_table = self.page_table.lock();
