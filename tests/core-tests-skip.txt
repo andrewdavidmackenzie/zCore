@@ -55,13 +55,7 @@ Pager.SuspendReadTestVmar
 Pager.SuspendReadTestVmo
 Pager.DecommitOnDetachTestVmar
 Pager.DecommitOnDetachTestVmo
-Pager.CloneReadFromCloneTestVmar
-Pager.CloneReadFromCloneTestVmo
 Pager.CloneReadFromParentTestVmar
-Pager.CloneSimultaneousReadTestVmo
-Pager.CloneWriteToCloneTestVmar
-Pager.CloneWriteToCloneTestVmo
-Pager.CloneDetachTest
 
 # ── PagerProcess (preemptive scheduling) ─────────────────────────────
 PagerProcess.KillBlockedUserVmoRead

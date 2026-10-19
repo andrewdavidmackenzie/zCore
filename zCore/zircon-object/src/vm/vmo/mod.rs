@@ -509,6 +509,26 @@ impl VmObject {
         false
     }
 
+    /// Find the root pager VMO in this VMO's ancestor chain.
+    /// Returns the ancestor VmObject that has pager_port set.
+    pub fn find_root_pager_vmo(&self) -> Option<Arc<VmObject>> {
+        let inner = self.inner.lock();
+        if inner.pager_port.is_some() {
+            return None; // this VMO IS the pager VMO
+        }
+        let mut cur = inner.parent.upgrade()?;
+        loop {
+            let cur_inner = cur.inner.lock();
+            if cur_inner.pager_port.is_some() {
+                drop(cur_inner);
+                return Some(cur);
+            }
+            let next = cur_inner.parent.upgrade();
+            drop(cur_inner);
+            cur = next?;
+        }
+    }
+
     /// Query dirty page ranges within [offset, offset+length).
     /// Returns a list of (offset, length, options) tuples.
     /// Only returns data for TRAP_DIRTY VMOs; others return empty.
