@@ -390,7 +390,7 @@ core-tests-kernel:
 		cargo build -p userstart --target x86_64-unknown-none \
 		--release --target-dir target/userstart -Z build-std=core,alloc
 	@USERSTART_ELF="$(USERSTART_ELF)" \
-		ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/core-tests-standalone" \
+		ZCORE_CMDLINE="LOG=warn kernel.enable-debugging-syscalls=true ROOTPROC=/bin/core-tests-standalone" \
 		cargo zcore-build -m qemu-x86_64 --flavour ""
 
 # Step 3: Write extra-args filter file + build rootfs SFS image.
