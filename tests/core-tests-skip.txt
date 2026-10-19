@@ -27,9 +27,7 @@ Pager.FailOverlappingRangeCommit
 Pager.PageRequestBatchingChecksAncestorPages
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
-Pager.SuspendCommitTest
-Pager.SuspendReadTestVmar
-Pager.SuspendReadTestVmo
+# Suspend tests now handled via blocking_run_suspendable
 Pager.CloneReadFromParentTestVmar
 
 # ── PagerProcess (usercopy demand-paging not implemented) ────────────
