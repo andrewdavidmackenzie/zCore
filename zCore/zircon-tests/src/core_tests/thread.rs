@@ -670,7 +670,14 @@ async fn reading_vector_register_state() {
 
     let mut buf = vec![0u8; 4096];
     let result = thread.read_state(ThreadStateKind::Vector, &mut buf);
-    assert!(result.is_err(), "vector read should fail");
+    if cfg!(target_arch = "x86_64") {
+        assert!(result.is_ok(), "vector read should succeed on x86_64");
+    } else {
+        assert!(
+            result.is_err(),
+            "vector read not yet supported on this arch"
+        );
+    }
 
     thread.resume();
     thread.kill();
@@ -1626,11 +1633,20 @@ fn writing_single_step_state() {
 
     thread.suspend();
 
-    let buf = vec![0u8; 64];
+    // Write single-step state with value 0 (valid).
+    let buf = 0u32.to_ne_bytes();
     let result = thread.write_state(ThreadStateKind::SingleStep, &buf);
     assert!(
-        result.is_err(),
-        "single-step write should fail (not implemented)"
+        result.is_ok(),
+        "single-step write with value 0 should succeed"
+    );
+    // Write single-step state with value 2 (invalid).
+    let buf = 2u32.to_ne_bytes();
+    let result = thread.write_state(ThreadStateKind::SingleStep, &buf);
+    assert_eq!(
+        result,
+        Err(zircon_object::ZxError::INVALID_ARGS),
+        "single-step write with value > 1 should fail"
     );
 }
 
@@ -1654,10 +1670,14 @@ async fn writing_vector_register_state() {
 
     let buf = vec![0u8; 4096];
     let result = thread.write_state(ThreadStateKind::Vector, &buf);
-    assert!(
-        result.is_err(),
-        "vector write should fail (not implemented)"
-    );
+    if cfg!(target_arch = "x86_64") {
+        assert!(result.is_ok(), "vector write should succeed on x86_64");
+    } else {
+        assert!(
+            result.is_err(),
+            "vector write not yet supported on this arch"
+        );
+    }
 
     thread.resume();
     thread.kill();
