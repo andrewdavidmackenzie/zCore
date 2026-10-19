@@ -220,12 +220,14 @@ impl Syscall<'_> {
                                     // THREAD_SUSPENDED signal was already
                                     // set by suspend(). Wait until the
                                     // thread is resumed before re-entering
-                                    // the pager wait.
+                                    // the pager wait. Use preempt_yield to
+                                    // go to the back of the queue so the
+                                    // test thread can call Resume().
                                     while self.thread.is_suspended() {
                                         if self.thread.state() == ThreadState::Dying {
                                             break;
                                         }
-                                        hal_impl::thread::yield_now().await;
+                                        hal_impl::thread::preempt_yield().await;
                                     }
                                     if self.thread.state() == ThreadState::Dying {
                                         break Err(ZxError::STOP);
@@ -786,7 +788,7 @@ impl Syscall<'_> {
                                                         if self.thread.state() == ThreadState::Dying {
                                                             break;
                                                         }
-                                                        hal_impl::thread::yield_now().await;
+                                                        hal_impl::thread::preempt_yield().await;
                                                     }
                                                     if self.thread.state() == ThreadState::Dying {
                                                         return Err(ZxError::STOP);

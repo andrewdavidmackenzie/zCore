@@ -433,7 +433,7 @@ impl Syscall<'_> {
                                                         if self.thread.state() == ThreadState::Dying {
                                                             break;
                                                         }
-                                                        hal_impl::thread::yield_now().await;
+                                                        hal_impl::thread::preempt_yield().await;
                                                     }
                                                     if self.thread.state() == ThreadState::Dying {
                                                         return Err(ZxError::STOP);
