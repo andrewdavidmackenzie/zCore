@@ -379,7 +379,7 @@ core-tests-build:
 		--release --target-dir target/userstart -Z build-std=core,alloc
 	@echo "==> [2/4] Building kernel (Zircon base, no linux)..."
 	@USERSTART_ELF="$$(pwd)/target/userstart/x86_64-unknown-none/release/userstart" \
-		ZCORE_CMDLINE="LOG=warn ROOTPROC=/bin/core-tests-standalone" \
+		ZCORE_CMDLINE="LOG=warn kernel.enable-debugging-syscalls=true ROOTPROC=/bin/core-tests-standalone" \
 		cargo zcore-build -m qemu-x86_64 --flavour ""
 	@echo "==> [3/4] Building Zircon rootfs (with core-tests-standalone + libs)..."
 	@mkdir -p target/rootfs/zircon/x86_64/etc

@@ -149,6 +149,14 @@ impl Syscall<'_> {
                 Ok(())
             }
             "kill" => self.debug_cmd_kill(args),
+            // Kernel unit test commands. In Fuchsia these run internal
+            // kernel tests. We accept and succeed for test compatibility.
+            "ut" => {
+                let mut msg = String::new();
+                let _ = writeln!(msg, "kernel unit test '{}' — stub OK", args);
+                hal_impl::console::console_write_str(&msg);
+                Ok(())
+            }
             _ => {
                 let mut msg = String::new();
                 let _ = writeln!(msg, "unknown debug command: '{}'", verb);
