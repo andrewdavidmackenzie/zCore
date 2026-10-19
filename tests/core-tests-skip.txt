@@ -22,8 +22,6 @@ Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
 Threads.X86AcFlagUserCopy
 
 # ── Policy exception infrastructure ─────────────────────────────────
-ChannelTest.ChannelFullException
-UserExceptionsTest.NonFatal
 
 # ── COW populated_bytes ──────────────────────────────────────────────
 

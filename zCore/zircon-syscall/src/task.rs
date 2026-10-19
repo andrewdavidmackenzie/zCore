@@ -625,12 +625,27 @@ impl Syscall<'_> {
                 .try_into()
                 .unwrap(),
         );
-        // Deliver a User exception with synth fields through the
-        // exception handler chain. Blocks until handled.
-        self.thread
-            .handle_exception_user(synth_code, synth_data)
-            .await;
-        Ok(())
+        // ZX_EXCEPTION_TARGET_JOB_DEBUGGER: only send to the job
+        // debugger exception channel. If no debugger is listening,
+        // the exception is silently dropped (non-fatal).
+        let thread_arc = self.thread.inner();
+        let proc = self.thread.proc();
+        let job = proc.job();
+        let exception =
+            zircon_object::task::Exception::new_user(&thread_arc, synth_code, synth_data);
+        let handled = job.get_debug_exceptionate().send_exception(&exception);
+        match handled {
+            Err(ZxError::NEXT) => {
+                // No debugger listening — silently drop (non-fatal).
+                Ok(())
+            }
+            Ok(closed) => {
+                // Debugger is listening — wait for it to handle.
+                closed.await.ok();
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Register a restartable sequence (rseq) area for the calling thread.
