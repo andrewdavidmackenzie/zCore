@@ -418,16 +418,17 @@ impl Syscall<'_> {
                                         .set_blocking_state(ThreadState::BlockedPager);
                                     match self
                                         .thread
-                                        .blocking_run(
+                                        .blocking_run_suspendable(
                                             future,
                                             ThreadState::BlockedPager,
                                             Duration::from_nanos(u64::MAX),
-                                            None,
                                         )
                                         .await
                                     {
                                         Ok(()) => {}
-                                        Err(ZxError::STOP) => return Err(ZxError::STOP),
+                                        Err(ZxError::STOP) | Err(ZxError::CANCELED) => {
+                                            return Err(ZxError::STOP);
+                                        }
                                         Err(e) => return Err(e),
                                     }
                                 }

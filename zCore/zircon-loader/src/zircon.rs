@@ -490,27 +490,29 @@ async fn handler_user_trap(
                     });
                     let offset = vmar.vaddr_to_vmo_offset(vaddr);
                     if let (Some(vmo), Some(offset)) = (vmo, offset) {
-                        // Use blocking_run so Thread::kill() can cancel the
-                        // pager wait via the killer channel. This matches
-                        // Fuchsia's Interruptible::Yes wait semantics.
+                        // Use blocking_run_suspendable so Thread::kill()
+                        // and Thread::suspend() can cancel the pager wait.
+                        // This matches Fuchsia's Interruptible::Yes +
+                        // suspendable=true semantics for user page faults.
                         let future = vmo.wait_for_page(offset);
                         pin_mut!(future);
                         thread.set_blocking_state(ThreadState::BlockedPager);
                         let result = thread
-                            .blocking_run(
+                            .blocking_run_suspendable(
                                 future,
                                 ThreadState::BlockedPager,
                                 Duration::from_nanos(u64::MAX),
-                                None,
                             )
                             .await;
                         match result {
                             Ok(()) => Ok(()),
-                            Err(ZxError::STOP) => {
-                                // Thread was killed while pager-blocked.
-                                // Return Ok so the run loop re-enters and
-                                // sees Dying state, matching Fuchsia's
-                                // TranslatePageFaultStatus behavior.
+                            Err(ZxError::STOP) | Err(ZxError::CANCELED) => {
+                                // Thread was killed or suspended while
+                                // pager-blocked. Return Ok so the run loop
+                                // re-enters: for kill it detects Dying
+                                // state; for suspend, wait_for_run goes
+                                // Pending. On resume, re-fault re-sends
+                                // the page request.
                                 Ok(())
                             }
                             Err(e) => {
