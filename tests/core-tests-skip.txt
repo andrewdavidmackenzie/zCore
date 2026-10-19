@@ -34,11 +34,6 @@ VmoZeroTestCase.WriteCowParent
 VmoTestCase.PinTests
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
-Pager.CloneChainCommitTest
-Pager.CloneCommitMultipleBatches
-Pager.CloneCommitSingleBatch
-Pager.CloneCommitTest
-Pager.CloneCommitTwoBatches
 Pager.EarlyWakeCloneRace
 Pager.EarlyWakeOverlappingRequests
 Pager.EvictionHintsCloneVmar
