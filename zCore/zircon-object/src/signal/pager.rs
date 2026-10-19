@@ -145,23 +145,10 @@ impl Pager {
             .iter()
             .position(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
         {
-            let pv = inner.vmos.remove(pos);
-            // Send COMPLETE packet to notify the pager.
-            pv.port.push(PortPacketRepr {
-                key: pv.key,
-                status: ZxError::OK,
-                data: PayloadRepr::PageRequest(PacketPageRequest {
-                    command: ZX_PAGER_VMO_COMPLETE,
-                    flags: 0,
-                    _reserved0: 0,
-                    offset: 0,
-                    length: 0,
-                    _reserved1: 0,
-                }),
-            });
+            inner.vmos.remove(pos);
             // Wake any threads blocked on pager faults before clearing
-            // the pager association — they'll get BAD_STATE.
-            vmo.fail_pager_requests(ZxError::BAD_STATE);
+            // the pager association — they'll get NOT_FOUND.
+            vmo.fail_pager_requests(ZxError::NOT_FOUND);
             vmo.clear_pager();
             Ok(())
         } else {

@@ -561,7 +561,6 @@ impl Syscall<'_> {
             Sys::PROFILE_CREATE => self.sys_profile_create(a0 as _, a1 as _, a2.into(), a3.into()),
             Sys::VMAR_OP_RANGE => {
                 self.sys_vmar_op_range(a0 as _, a1 as _, a2 as _, a3 as _, a4, a5)
-                    .await
             }
             Sys::MSI_ALLOCATE => self.sys_msi_allocate(a0 as _, a1 as _, a2.into()),
             Sys::MSI_CREATE => {

@@ -347,7 +347,7 @@ impl Syscall<'_> {
     }
 
     /// Perform an operation on VMOs mapped within the given address range.
-    pub async fn sys_vmar_op_range(
+    pub fn sys_vmar_op_range(
         &self,
         handle_value: HandleValue,
         op: u32,
@@ -380,59 +380,6 @@ impl Syscall<'_> {
             && !vmar_rights.contains(Rights::OP_CHILDREN)
         {
             return Err(ZxError::INVALID_ARGS);
-        }
-        // For pager-backed VMOs, Commit/AlwaysNeed/Prefetch need async
-        // demand-paging. Find all pager-backed mappings in the range and
-        // demand-page each one before the sync op_range.
-        if matches!(
-            op,
-            VmarOpType::Commit | VmarOpType::AlwaysNeed | VmarOpType::Prefetch
-        ) {
-            use zircon_object::task::ThreadState;
-            use zircon_object::vm::PAGE_SIZE;
-            let pager_vmos = vmar.find_pager_vmos_in_range(addr as usize, size as usize);
-            for (vmo, vmo_offset, page_count) in pager_vmos {
-                let start_page = vmo_offset / PAGE_SIZE;
-                let end_page = start_page + page_count;
-                // Send separate requests for each consecutive run of
-                // uncommitted pages (don't batch across committed gaps).
-                let mut p = start_page;
-                while p < end_page {
-                    if vmo.committed_pages_in_range(p, p + 1) > 0 {
-                        p += 1;
-                        continue;
-                    }
-                    let run_start = p;
-                    while p < end_page && vmo.committed_pages_in_range(p, p + 1) == 0 {
-                        p += 1;
-                    }
-                    let req_off = run_start * PAGE_SIZE;
-                    let req_len = (p - run_start) * PAGE_SIZE;
-                    match vmo.request_pages(req_off, req_len) {
-                        Err(ZxError::SHOULD_WAIT) => {
-                            let old_state = self.thread.state();
-                            self.thread.set_state(ThreadState::BlockedPager);
-                            let mut wait_err = None;
-                            for pg in run_start..p {
-                                if vmo.committed_pages_in_range(pg, pg + 1) == 0 {
-                                    if let Err(e) = vmo.wait_for_page(pg * PAGE_SIZE).await {
-                                        wait_err = Some(e);
-                                        break;
-                                    }
-                                }
-                            }
-                            if self.thread.state() == ThreadState::BlockedPager {
-                                self.thread.set_state(old_state);
-                            }
-                            if let Some(e) = wait_err {
-                                return Err(e);
-                            }
-                        }
-                        Err(e) => return Err(e),
-                        Ok(()) => {}
-                    }
-                }
-            }
         }
         vmar.op_range(op, addr as usize, size as usize)?;
         Ok(())
