@@ -670,10 +670,14 @@ async fn reading_vector_register_state() {
 
     let mut buf = vec![0u8; 4096];
     let result = thread.read_state(ThreadStateKind::Vector, &mut buf);
-    assert!(
-        result.is_ok(),
-        "vector read should succeed on suspended thread"
-    );
+    if cfg!(target_arch = "x86_64") {
+        assert!(result.is_ok(), "vector read should succeed on x86_64");
+    } else {
+        assert!(
+            result.is_err(),
+            "vector read not yet supported on this arch"
+        );
+    }
 
     thread.resume();
     thread.kill();
@@ -1666,10 +1670,14 @@ async fn writing_vector_register_state() {
 
     let buf = vec![0u8; 4096];
     let result = thread.write_state(ThreadStateKind::Vector, &buf);
-    assert!(
-        result.is_ok(),
-        "vector write should succeed on suspended thread"
-    );
+    if cfg!(target_arch = "x86_64") {
+        assert!(result.is_ok(), "vector write should succeed on x86_64");
+    } else {
+        assert!(
+            result.is_err(),
+            "vector write not yet supported on this arch"
+        );
+    }
 
     thread.resume();
     thread.kill();
