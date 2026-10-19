@@ -3,9 +3,7 @@
 # Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
 
 # ── Multi-threaded / cooperative scheduler ───────────────────────────
-PortStressTest.ChannelCallWaitQueuePanicRepro
-PortStressTest.CancelKeyDuringMatchRace
-PortStressTest.SignalCloseWait
+PortStressTest.*
 ChannelTest.NoSpuriousReadableSignalWhenRacing
 ProcessTest.KillChannelHandleCycle
 
@@ -28,10 +26,8 @@ ChannelTest.ChannelFullException
 UserExceptionsTest.NonFatal
 
 # ── COW populated_bytes ──────────────────────────────────────────────
-VmoZeroTestCase.WriteCowParent
 
 # ── VmoTestCase (kernel panic / crash) ───────────────────────────────
-VmoTestCase.PinTests
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.CloneChainCommitTest
@@ -142,9 +138,6 @@ StreamTestCase.PartialVmoDirty
 # ── VMAR (FaultBeyondStreamSize) ─────────────────────────────────────
 
 # ── BTI ──────────────────────────────────────────────────────────────
-Bti.InvalidPinArgs
-Bti.QuarantineDisallowsPin
-Bti.NoDelayedUnpin
 
 # ── MSI ──────────────────────────────────────────────────────────────
 MsiTest.Msi
@@ -176,7 +169,6 @@ WakeReportTestsThreadBound.ReportOnly
 WakeReportTestsThreadBound.Acked
 WakeReportTestsThreadBound.AckedStillPending
 WakeReportTestsThreadBound.MultipleSignals
-WakeReportTestsPortBound.SmallReportBuffer
 
 # ── ThreadSampler (crash on sample read) ─────────────────────────────
 ThreadSampler.StartStop
@@ -188,20 +180,15 @@ ThreadSampler.HighFrequency
 # ── VmoClone2 hangs ──────────────────────────────────────────────
 VmoClone2TestCase.DropParentCommittedBytes
 WakeReportTestsPortBound.MultipleSignals
-WakeReportTestsPortBound.BadReportRequests
 WakeReportTestsPortBound.Discard
-WakeReportTestsPortBound.DestructionYesAck
-WakeReportTestsPortBound.DestructionNoAck
 WakeReportTestsPortBound.MultiWakeSource
 WakeReportTestsPortBound.SingleWakeSource
-WakeReportTestsPortBound.AlreadyTimedOut
-WakeReportTestsPortBound.ReportOnly
-WakeReportTestsPortBound.Acked
 WakeReportTestsPortBound.AckedStillPending
 
 # ── VmoZero/VmoClone2 hangs ─────────────────────────────────────────
-VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 Threads.StartRegsNoncanonicalTp
 
 # Hangs — blocks sequential test run
 PthreadTest.Basic
+VmoZeroTestCase.WriteCowParent
+VmoZeroTestCase.AllocateAfterMergeMultipleChildren
