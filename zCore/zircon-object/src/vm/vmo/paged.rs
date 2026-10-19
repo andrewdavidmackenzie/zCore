@@ -888,10 +888,16 @@ impl VMObjectPagedInner {
                                     parent.type_.get_tag_and_other(&self.self_ref);
                                 if let Some(sibling_arc) = sibling_weak.upgrade() {
                                     let sib = sibling_arc.inner.borrow();
-                                    if parent_idx < sib.size / PAGE_SIZE {
-                                        if let Some(page) = sib.frames.get(&parent_idx) {
-                                            drop(frame);
-                                            return Ok(CommitResult::Ref(page.frame.paddr()));
+                                    // Convert hidden-space index to sibling's
+                                    // local index (subtract sibling's parent_offset).
+                                    let sib_off = sib.parent_offset / PAGE_SIZE;
+                                    if parent_idx >= sib_off {
+                                        let sib_idx = parent_idx - sib_off;
+                                        if sib_idx < sib.size / PAGE_SIZE {
+                                            if let Some(page) = sib.frames.get(&sib_idx) {
+                                                drop(frame);
+                                                return Ok(CommitResult::Ref(page.frame.paddr()));
+                                            }
                                         }
                                     }
                                 }
