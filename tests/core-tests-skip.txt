@@ -148,7 +148,6 @@ Resource.MexecZeroSizedVmo
 Resource.Ioports
 
 # ── Job kill chain ───────────────────────────────────────────────────
-JobTest.KillJobChain
 
 # ── System events / suspend / wake reports ───────────────────────────
 SystemEvent.ExactlyOneMemoryEventSignaled
