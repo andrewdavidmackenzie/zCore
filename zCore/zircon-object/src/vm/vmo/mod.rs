@@ -253,6 +253,10 @@ struct VmObjectInner {
     /// requests share this list — they're woken by supply_pages or
     /// op_range(DIRTY) respectively.
     pager_waiters: Vec<(usize, futures::channel::oneshot::Sender<ZxResult>)>,
+    /// Pages that have been failed by OP_FAIL. Maps page_idx → error.
+    /// When wait_for_page registers a waiter for a failed page, it
+    /// returns the error immediately instead of blocking.
+    pager_failed_pages: alloc::collections::BTreeMap<usize, ZxError>,
 }
 
 impl VmObject {
@@ -691,6 +695,11 @@ impl VmObject {
             if self.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
                 return Ok(());
             }
+            // If the page was failed by OP_FAIL, return the error
+            // immediately (handles race where fail arrives before waiter).
+            if let Some(&err) = inner.pager_failed_pages.get(&page_idx) {
+                return Err(err);
+            }
             let (tx, rx) = futures::channel::oneshot::channel();
             inner.pager_waiters.push((page_idx, tx));
             rx
@@ -707,6 +716,11 @@ impl VmObject {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        // Clear any failed-page markers in the supplied range
+        // (supply overrides a previous fail).
+        for page_idx in start_page..end_page {
+            inner.pager_failed_pages.remove(&page_idx);
+        }
         // Drain waiters whose page index falls in [start_page, end_page).
         let mut i = 0;
         while i < inner.pager_waiters.len() {
@@ -729,10 +743,17 @@ impl VmObject {
 
     /// Wake pager waiters in a specific range with an error
     /// (called by pager_op_range(FAIL)).
+    /// Also records the failure so future wait_for_page calls for
+    /// these pages immediately return the error.
     pub fn fail_pager_requests_range(&self, offset: usize, length: usize, err: ZxError) {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        // Record failed pages for future waiters.
+        for page_idx in start_page..end_page {
+            inner.pager_failed_pages.insert(page_idx, err);
+        }
+        // Wake existing waiters.
         let mut i = 0;
         while i < inner.pager_waiters.len() {
             if inner.pager_waiters[i].0 >= start_page && inner.pager_waiters[i].0 < end_page {
