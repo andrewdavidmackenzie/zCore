@@ -8,11 +8,8 @@ ChannelTest.NoSpuriousReadableSignalWhenRacing
 ProcessTest.KillChannelHandleCycle
 
 # ── Thread suspend / register state ─────────────────────────────────
-Threads.BadSyscallCaller
-Threads.ExitViaException
 Threads.NoncanonicalRipAddressIRETQ
 Threads.NoncanonicalRipAddressSyscall
-Threads.ThreadStartInvalidEntry
 Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
 Threads.WritingArmFlagsRegister
 Threads.WritingFpRegisterState
