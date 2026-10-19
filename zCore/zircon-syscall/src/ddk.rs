@@ -195,7 +195,11 @@ impl Syscall<'_> {
             if is_wake {
                 proc.get_resource(resource)?;
             }
-            let intr = Interrupt::new_virtual();
+            let intr = if is_wake {
+                Interrupt::new_virtual_wake()
+            } else {
+                Interrupt::new_virtual()
+            };
             if is_wake {
                 zircon_object::dev::register_wake_source(intr.id());
             }
@@ -269,10 +273,18 @@ impl Syscall<'_> {
             .thread
             .proc()
             .get_object_with_rights::<Interrupt>(interrupt, Rights::WRITE)?;
-        // Record wake source ack for suspend reports.
+        let koid = interrupt.id();
         let now = hal_impl::timer::timer_now().as_nanos() as u64;
-        zircon_object::dev::wake_source_acked(interrupt.id(), now);
-        interrupt.ack()
+        let re_triggered = interrupt.ack()?;
+        // Record wake source ack for suspend reports.
+        // If the interrupt immediately re-triggered (pending coalesced trigger),
+        // keep the wake source signaled. Otherwise, clear signaled state.
+        if re_triggered {
+            zircon_object::dev::wake_source_ack_remain_signaled(koid, now);
+        } else {
+            zircon_object::dev::wake_source_acked(koid, now);
+        }
+        Ok(())
     }
 
     /// Destroys an interrupt object.
