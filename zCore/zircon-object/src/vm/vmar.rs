@@ -513,9 +513,12 @@ impl VmAddressRegion {
         // Only commit pages if the mapping has at least one access
         // permission. Mappings with no R/W/X are address reservations
         // that should fault on access (matching Fuchsia behavior).
-        // Pager-backed VMOs must always be lazy — their pages come
-        // from the pager via supply_pages, not from eager commit.
-        if map_range && !mapping.vmo.is_pager_backed() {
+        // Pager-backed VMOs and their clone trees must always be
+        // lazy — pages come from the pager via supply_pages, not
+        // from eager commit. Without this, COW clones of pager VMOs
+        // may eagerly map pages from the hidden node that are stale
+        // or incorrect, bypassing the demand-page path.
+        if map_range && !mapping.vmo.is_pager_backed() && !mapping.vmo.is_in_pager_tree() {
             mapping.map()?;
         }
         inner.mappings.push(mapping);
