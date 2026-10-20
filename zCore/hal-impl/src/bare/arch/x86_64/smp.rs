@@ -333,8 +333,8 @@ pub fn boot_application_processors() {
         init_executor_runtimes(bsp_id, &[]);
         return;
     }
-    info!(
-        "Found {} application processor(s): {:?}",
+    warn!(
+        "SMP: Found {} application processor(s): {:?}",
         ap_ids.len(),
         ap_ids
     );
@@ -459,7 +459,7 @@ pub fn boot_application_processors() {
 
         let ready_val = data.ap_ready.load(Ordering::SeqCst);
         if ready_val != 0 {
-            info!("AP {} started (APIC ID {})", apic_id, ready_val);
+            warn!("SMP: AP {} started (APIC ID {})", apic_id, ready_val);
         } else {
             // Check if the AP wrote anything by reading raw memory
             let raw_ptr = phys_to_virt(TRAMPOLINE_PHYS + TRAMPOLINE_DATA_OFFSET + 36) as *const u32;

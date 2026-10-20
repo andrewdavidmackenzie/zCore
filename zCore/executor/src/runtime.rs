@@ -230,14 +230,25 @@ pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
     }
 }
 
-/// Spawn a future with a specific priority on the current CPU.
+/// Spawn a future with a specific priority, distributed across CPUs.
+///
+/// Uses the CPU with the fewest tasks (load-balancing) instead of
+/// pinning to the current CPU. This enables true SMP concurrency
+/// when multiple Zircon threads are created.
 pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) {
     let enable = crate::arch::intr_get();
     if enable {
         crate::arch::intr_off();
     }
-    let cpu_id = crate::arch::cpu_id();
-    spawn_task(future, Some(priority), Some(cpu_id));
+    // Pass cpu_id=None to let spawn_task pick the least-loaded CPU.
+    // Fall back to current CPU if runtimes aren't initialized yet
+    // (early boot, before SMP init).
+    let cpu = if CPU_RUNTIMES.get().is_some() {
+        None // let spawn_task load-balance
+    } else {
+        Some(crate::arch::cpu_id()) // fall back to current CPU
+    };
+    spawn_task(future, Some(priority), cpu);
     if enable {
         crate::arch::intr_on();
     }
