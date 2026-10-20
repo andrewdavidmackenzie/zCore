@@ -63,8 +63,7 @@ pub fn take_yield_pending() -> bool {
 }
 
 pub use runtime::{
-    handle_timeout, init_runtimes, mark_cpu_active, run_until_idle, sched_yield, spawn,
-    spawn_with_priority,
+    handle_timeout, init_runtimes, run_until_idle, sched_yield, spawn, spawn_with_priority,
 };
 
 #[macro_export]
