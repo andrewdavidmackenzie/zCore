@@ -11,6 +11,7 @@ fn main() {
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
     println!("cargo:rerun-if-env-changed=USERSTART_ELF");
+    println!("cargo:rerun-if-env-changed=ZCORE_MAX_CPUS");
     if let Ok(path) = std::env::var("USERSTART_ELF") {
         // Rebuild zircon-loader when the userstart binary changes.
         // Without this, cargo would re-use a cached build even after
@@ -578,7 +579,16 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
         ("cprng_draw", VdsoFunc::Syscall("cprng_draw_once")),
         // Return constants
         ("system_get_page_size", VdsoFunc::ReturnConst(4096)),
-        ("system_get_num_cpus", VdsoFunc::ReturnConst(1)),
+        (
+            "system_get_num_cpus",
+            VdsoFunc::ReturnConst({
+                let max_cpus: u64 = std::env::var("ZCORE_MAX_CPUS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1);
+                max_cpus
+            }),
+        ),
         ("system_get_physmem", VdsoFunc::ReturnConst(0)),
         ("ticks_per_second", VdsoFunc::ReturnConst(1_000_000_000)),
         // thread_self reads the real per-thread handle from TLS

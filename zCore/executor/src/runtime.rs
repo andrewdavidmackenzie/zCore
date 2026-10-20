@@ -230,14 +230,24 @@ pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
     }
 }
 
-/// Spawn a future with a specific priority on the current CPU.
+/// Spawn a future with a specific priority, distributed across CPUs.
+///
+/// Uses the least-loaded CPU for load-balancing when multiple CPUs
+/// are available. Falls back to current CPU if the executor hasn't
+/// been initialized yet (early boot).
 pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) {
     let enable = crate::arch::intr_get();
     if enable {
         crate::arch::intr_off();
     }
-    let cpu_id = crate::arch::cpu_id();
-    spawn_task(future, Some(priority), Some(cpu_id));
+    // Use None (least-loaded CPU) when runtimes are initialized,
+    // otherwise fall back to current CPU.
+    let cpu = if CPU_RUNTIMES.get().is_some() {
+        None
+    } else {
+        Some(crate::arch::cpu_id())
+    };
+    spawn_task(future, Some(priority), cpu);
     if enable {
         crate::arch::intr_on();
     }
@@ -256,12 +266,20 @@ pub fn spawn_task(
     let runtime = if let Some(id) = cpu_id {
         get_runtime(id)
     } else {
-        CPU_RUNTIMES
-            .get()
-            .expect("executor not initialized")
-            .values()
-            .min_by_key(|r| r.lock().task_num())
-            .expect("no CPUs registered")
+        let map = CPU_RUNTIMES.get().expect("executor not initialized");
+        let current = crate::arch::cpu_id();
+        let current_rt = map.get(&current);
+        let current_tasks = current_rt.map(|r| r.lock().task_num()).unwrap_or(0);
+        // Only distribute to other CPUs if the current CPU already
+        // has tasks. This ensures the first spawned task (init process)
+        // runs on the BSP, and subsequent tasks get distributed.
+        if current_tasks == 0 {
+            current_rt.expect("current CPU not in runtime map")
+        } else {
+            map.values()
+                .min_by_key(|r| r.lock().task_num())
+                .expect("no CPUs registered")
+        }
     };
     runtime.lock().add_task(priority, future);
 }

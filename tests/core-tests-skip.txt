@@ -6,7 +6,6 @@
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
-ChannelTest.NoSpuriousReadableSignalWhenRacing
 
 # ── Thread suspend / register state ─────────────────────────────────
 Threads.NoncanonicalRipAddressIRETQ
