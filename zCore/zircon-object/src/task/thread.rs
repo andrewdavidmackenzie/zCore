@@ -474,7 +474,17 @@ impl Thread {
             return Err(ZxError::BAD_STATE);
         }
         let context = inner.context.as_mut().ok_or(ZxError::BAD_STATE)?;
-        context.write_state(kind, buf)
+        let result = context.write_state(kind, buf);
+        // If the register state was modified (especially RIP), interrupt
+        // any blocking wait so the thread re-enters user mode with the
+        // new state on resume. Without this, a modified RIP has no effect
+        // until the current syscall naturally completes.
+        if result.is_ok() && matches!(kind, ThreadStateKind::General) {
+            if let Some(killer) = inner.killer.take() {
+                let _ = killer.send(());
+            }
+        }
+        result
     }
 
     /// Get the thread's information.

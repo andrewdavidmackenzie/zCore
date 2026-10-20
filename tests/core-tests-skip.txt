@@ -4,7 +4,6 @@ PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
 # ── Thread state / exceptions (mini-process crash handling) ──────────
-Threads.X86AcFlagUserCopy
 UserExceptionsTest.Delivered
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
