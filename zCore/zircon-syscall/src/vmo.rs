@@ -143,61 +143,44 @@ impl Syscall<'_> {
                 return Ok(());
             };
 
-            // Send per-run batched requests for consecutive missing pages.
-            // Check the READING VMO's tree (not just root pager VMO) so
-            // pages committed in ancestor VMOs (via COW forks) are excluded,
-            // matching Fuchsia's LookupCursor::ReadRequest batching that
-            // stops at the first present page in the owner's page list.
-            {
-                let mut p = start_page;
-                while p < end_page {
-                    // Skip pages resolvable from the VMO tree (including
-                    // ancestors like child/grandchild with forked pages).
-                    if vmo.committed_pages_in_range(p, p + 1) > 0 {
-                        p += 1;
-                        continue;
-                    }
-                    // Also skip if already committed in the root pager VMO.
-                    if pager_vmo.committed_pages_in_range(p, p + 1) > 0 {
-                        p += 1;
-                        continue;
-                    }
-                    // Start a run of missing pages.
-                    let run_start = p;
-                    while p < end_page
-                        && vmo.committed_pages_in_range(p, p + 1) == 0
-                        && pager_vmo.committed_pages_in_range(p, p + 1) == 0
-                    {
-                        p += 1;
-                    }
-                    let req_offset = run_start * PAGE_SIZE;
-                    let req_length = (p - run_start) * PAGE_SIZE;
-                    match pager_vmo.request_pages(req_offset, req_length) {
-                        Err(ZxError::SHOULD_WAIT) => {}
-                        Err(e) => return Err(e),
-                        Ok(()) => {}
-                    }
-                }
-            }
-
-            // Read page by page, waiting for each page as needed.
+            // Read page by page. For each page, check if it's committed
+            // in the reading VMO (clone tree) or root pager VMO. If not,
+            // find the next run of missing pages, request them, and wait.
+            // This generates requests ONE RUN AT A TIME (not all upfront),
+            // matching Fuchsia's LookupCursor which re-scans after each
+            // partial supply and discovers newly-forked clone pages.
             // Data is copied to user buffer as soon as each page is ready.
             let mut vmo_offset = start;
             let mut buf_written = 0usize;
             for page_idx in start_page..end_page {
-                // Wait for this page if uncommitted in the pager VMO.
-                // Retry on pager errors (IO, etc.) — the kernel re-sends
-                // a request and waits again, matching Fuchsia's behavior.
-                if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
-                    // Wait for the page with retry logic:
-                    // - On SHOULD_WAIT (request completed without resolving this page):
-                    //   re-request without consuming a retry
-                    // - On suspend: wait for resume then re-request
-                    // - On pager error (IO etc): retry once, then fail
+                // Skip pages already committed in the reading VMO's
+                // clone tree (includes forked pages from zero+write).
+                if vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                    // Page available locally — no pager needed.
+                } else if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
+                    // Page not committed — find the run of consecutive
+                    // missing pages and send ONE batched request. Stop
+                    // the run at the first committed page (in clone or
+                    // root), matching Fuchsia's LookupCursor batching.
+                    {
+                        let mut run_end = page_idx + 1;
+                        while run_end < end_page
+                            && vmo.committed_pages_in_range(run_end, run_end + 1) == 0
+                            && pager_vmo.committed_pages_in_range(run_end, run_end + 1) == 0
+                        {
+                            run_end += 1;
+                        }
+                        let req_offset = page_idx * PAGE_SIZE;
+                        let req_length = (run_end - page_idx) * PAGE_SIZE;
+                        let _ = pager_vmo.request_pages(req_offset, req_length);
+                    }
                     let mut fail_retries = 0;
                     loop {
-                        // Check if page was supplied in the meantime.
-                        if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                        // Check if page was supplied in the meantime
+                        // (or forked in the clone while we waited).
+                        if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                            || vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                        {
                             break;
                         }
                         // Check for failed page marker (set by OP_FAIL).
