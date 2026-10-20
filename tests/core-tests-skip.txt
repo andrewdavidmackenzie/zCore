@@ -47,3 +47,11 @@ Snapshot.ReleaseCowParentPagesRightInHiddenNode
 StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
+
+# ── Stream (RefCell reentrancy crash on concurrent write+resize) ──────
+StreamTestCase.WriteShrinkRace
+StreamTestCase.ReadWriteShrinkRace
+StreamTestCase.FaultBeyondStreamSizeResizeDownRace
+
+# ── BTI (deep COW tree + concurrent write loops) ─────────────────────
+Bti.NoDelayedUnpin

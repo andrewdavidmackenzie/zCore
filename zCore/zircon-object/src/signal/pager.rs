@@ -201,6 +201,10 @@ impl Pager {
         let mut dst_off = offset as usize;
         let end = offset as usize + length as usize;
 
+        // Ensure dirty tracking is initialized for query_dirty_ranges.
+        let total_pages = vmo.len() / PAGE_SIZE;
+        vmo.ensure_dirty_tracking(total_pages);
+
         // Allow commit_page to allocate frames on this pager-backed VMO.
         vmo.set_supplying(true);
 
@@ -214,13 +218,22 @@ impl Pager {
                 }
                 return Err(e);
             }
-            if let Err(e) = vmo.write(dst_off, &buf[..chunk]) {
-                vmo.set_supplying(false);
-                let written = dst_off - offset as usize;
-                if written > 0 {
-                    vmo.complete_pager_requests(offset as usize, written);
+            // Detect all-zero pages: insert zero marker instead of
+            // committing a real frame. This matches Fuchsia's behavior
+            // where supply_pages with zero data creates markers that
+            // don't count toward committed_bytes.
+            let is_zero = buf[..chunk].iter().all(|&b| b == 0);
+            if is_zero {
+                vmo.insert_zero_marker(dst_off / PAGE_SIZE);
+            } else {
+                if let Err(e) = vmo.write(dst_off, &buf[..chunk]) {
+                    vmo.set_supplying(false);
+                    let written = dst_off - offset as usize;
+                    if written > 0 {
+                        vmo.complete_pager_requests(offset as usize, written);
+                    }
+                    return Err(e);
                 }
-                return Err(e);
             }
             crate::vm::VMO_PAGER_PAGES.add(1);
             src_off += chunk;

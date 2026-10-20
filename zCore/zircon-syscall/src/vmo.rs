@@ -153,11 +153,15 @@ impl Syscall<'_> {
             let mut vmo_offset = start;
             let mut buf_written = 0usize;
             for page_idx in start_page..end_page {
-                // Skip pages already committed in the reading VMO's
-                // clone tree (includes forked pages from zero+write).
-                if vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                // Skip pages already committed or with zero markers
+                // in the reading VMO's clone tree.
+                if vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                    || vmo.has_zero_marker(page_idx)
+                {
                     // Page available locally — no pager needed.
-                } else if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
+                } else if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
+                    && !pager_vmo.has_zero_marker(page_idx)
+                {
                     // Page not committed — find the run of consecutive
                     // missing pages and send ONE batched request. Stop
                     // the run at the first committed page (in clone or
@@ -166,7 +170,9 @@ impl Syscall<'_> {
                         let mut run_end = page_idx + 1;
                         while run_end < end_page
                             && vmo.committed_pages_in_range(run_end, run_end + 1) == 0
+                            && !vmo.has_zero_marker(run_end)
                             && pager_vmo.committed_pages_in_range(run_end, run_end + 1) == 0
+                            && !pager_vmo.has_zero_marker(run_end)
                         {
                             run_end += 1;
                         }
@@ -179,7 +185,9 @@ impl Syscall<'_> {
                         // Check if page was supplied in the meantime
                         // (or forked in the clone while we waited).
                         if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                            || pager_vmo.has_zero_marker(page_idx)
                             || vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                            || vmo.has_zero_marker(page_idx)
                         {
                             break;
                         }

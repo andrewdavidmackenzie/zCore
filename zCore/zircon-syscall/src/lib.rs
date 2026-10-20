@@ -274,14 +274,96 @@ impl Syscall<'_> {
         }
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + len).div_ceil(PAGE_SIZE);
-        for page_idx in start_page..end_page {
+        // Find contiguous runs of clean pages and send one dirty
+        // request per run. The pager expects coalesced requests
+        // matching the contiguous dirty range.
+        let mut page_idx = start_page;
+        while page_idx < end_page {
+            // Skip already-dirty pages.
             if vmo.is_page_dirty(page_idx) {
+                page_idx += 1;
                 continue;
             }
-            // Page is clean — send dirty request and wait.
-            let page_offset = page_idx * PAGE_SIZE;
-            let _ = vmo.request_dirty(page_offset, PAGE_SIZE);
-            let future = vmo.wait_for_dirty(page_offset);
+            // Find the end of the contiguous clean run.
+            let run_start = page_idx;
+            while page_idx < end_page && !vmo.is_page_dirty(page_idx) {
+                page_idx += 1;
+            }
+            let run_len = page_idx - run_start;
+            let run_offset = run_start * PAGE_SIZE;
+            let run_bytes = run_len * PAGE_SIZE;
+            let _ = vmo.request_dirty(run_offset, run_bytes);
+            // Wait for ALL pages in this run to become dirty.
+            // The pager will acknowledge the entire range with a
+            // single OP_DIRTY call.
+            let future = vmo.wait_for_dirty(run_offset);
+            pin_mut!(future);
+            self.thread.set_blocking_state(ThreadState::BlockedPager);
+            self.thread
+                .blocking_run::<_, (), _>(
+                    future,
+                    ThreadState::BlockedPager,
+                    core::time::Duration::from_nanos(u64::MAX),
+                    None,
+                )
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Pre-commit pages in a pager-tree VMO (clone of pager-backed VMO)
+    /// before writing. When the clone's commit_page encounters an
+    /// unsupplied parent page, the parent returns SHOULD_WAIT. This
+    /// method uses committed_pages_in_range to check which parent pages
+    /// are missing, requests them from the pager, and waits for supply.
+    async fn prefault_pager_write_pages(
+        &self,
+        vmo: &Arc<zircon_object::vm::VmObject>,
+        offset: usize,
+        len: usize,
+    ) -> ZxResult {
+        use hal::PAGE_SIZE;
+        use zircon_object::task::ThreadState;
+
+        if len == 0 || !vmo.is_in_pager_tree() {
+            return Ok(());
+        }
+        let pager_vmo = match vmo.find_root_pager_vmo() {
+            Some(v) => v,
+            None => return Ok(()),
+        };
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + len).div_ceil(PAGE_SIZE);
+        // Check if the root pager VMO has all pages supplied.
+        // If not, request the missing pages and wait.
+        // Helper: check if a page is "supplied" — has either a
+        // committed frame or a zero marker from supply_pages.
+        let is_page_supplied = |vmo: &Arc<zircon_object::vm::VmObject>, pg: usize| -> bool {
+            vmo.committed_pages_in_range(pg, pg + 1) > 0 || vmo.has_zero_marker(pg)
+        };
+        loop {
+            // Check if all pages in range are supplied.
+            let all_supplied = (start_page..end_page).all(|pg| is_page_supplied(&pager_vmo, pg));
+            if all_supplied {
+                break;
+            }
+            // Find the first unsupplied page.
+            let mut first_missing = start_page;
+            for pg in start_page..end_page {
+                if !is_page_supplied(&pager_vmo, pg) {
+                    first_missing = pg;
+                    break;
+                }
+            }
+            // Find run of unsupplied pages.
+            let mut run_end = first_missing + 1;
+            while run_end < end_page && !is_page_supplied(&pager_vmo, run_end) {
+                run_end += 1;
+            }
+            let run_offset = first_missing * PAGE_SIZE;
+            let run_len = (run_end - first_missing) * PAGE_SIZE;
+            let _ = pager_vmo.request_pages(run_offset, run_len);
+            let future = pager_vmo.wait_for_page(run_offset);
             pin_mut!(future);
             self.thread.set_blocking_state(ThreadState::BlockedPager);
             self.thread
@@ -510,14 +592,33 @@ impl Syscall<'_> {
                 if let Err(e) = self.prefault_user_buffer(a1, a3).await {
                     return e as isize;
                 }
-                // Pre-dirty TRAP_DIRTY pages before writing.
                 let proc = self.thread.proc();
                 if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
+                    // Pre-commit pager-tree pages (clone of pager-backed
+                    // VMO) so the parent pages are supplied before writing.
+                    if let Err(e) = self.prefault_pager_write_pages(&vmo, a2, a3).await {
+                        return e as isize;
+                    }
+                    // Pre-dirty TRAP_DIRTY pages before writing.
                     if let Err(e) = self.predirty_trap_dirty_pages(&vmo, a2, a3).await {
                         return e as isize;
                     }
                 }
-                self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _)
+                let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _);
+                // Auto-mark written pages as dirty for pager-backed
+                // non-TRAP_DIRTY VMOs (query_dirty_ranges needs this).
+                if result.is_ok() {
+                    if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
+                        if vmo.is_pager_backed() && !vmo.is_trap_dirty() {
+                            let start_page = a2 / hal::PAGE_SIZE;
+                            let end_page = (a2 + a3).div_ceil(hal::PAGE_SIZE);
+                            for pg in start_page..end_page {
+                                vmo.auto_mark_dirty(pg);
+                            }
+                        }
+                    }
+                }
+                result
             }
             Sys::VMO_GET_SIZE => self.sys_vmo_get_size(a0 as _, a1.into()),
             Sys::VMO_SET_SIZE => self.sys_vmo_set_size(a0 as _, a1 as _),
