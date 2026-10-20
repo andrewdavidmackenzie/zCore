@@ -1231,9 +1231,11 @@ impl VMObjectPagedInner {
             }
             if !surviving.frames.contains_key(&idx) && value.tag != tag.negate() {
                 value.tag = PageStateTag::Owned;
-                // After merge, the surviving child is the sole owner of
-                // this page — reset share_count to 0 (private).
-                value.share_count = 0;
+                // After merge, set share_count based on the surviving
+                // child's type. If it's a hidden node with 2 children,
+                // the page is shared by both → share_count = 1.
+                // If it's a leaf node, it's private → share_count = 0.
+                value.share_count = if surviving.type_.is_hidden() { 1 } else { 0 };
                 surviving.frames.insert(idx, value);
             }
         }
