@@ -2,16 +2,15 @@
 # Each non-empty, non-comment line is a gtest pattern to exclude.
 # Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
 
-# ── Multi-threaded (need preemptive scheduling / std::thread) ────────
+# ── Multi-threaded (need SMP load-balancing / std::thread) ───────────
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
 ChannelTest.NoSpuriousReadableSignalWhenRacing
 
-# ── Thread suspend / register state ─────────────────────────────────
-Threads.NoncanonicalRipAddressIRETQ
-Threads.WritingArmFlagsRegister
+# ── Thread state / exceptions (mini-process crash handling) ──────────
 Threads.X86AcFlagUserCopy
+UserExceptionsTest.Delivered
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.EarlyWakeCloneRace
@@ -69,41 +68,15 @@ StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 
-# ── MSI / Resource / Hardware ────────────────────────────────────────
+# ── MSI (need test_ram_reserve boot option for physical VMOs) ────────
 MsiTest.Msi
 MsiTest.Msix
-Resource.MexecBadZbiHeaderLength
-Resource.MexecEmptyZbi
-Resource.MexecMemoryLeakOnFailure
+
+# ── Mexec (pager-backed bootimage) ───────────────────────────────────
 Resource.MexecPagerPanic
-Resource.MexecPayloadTooSmall
-Resource.MexecZeroSizedVmo
-Resource.Ioports
 
-# ── System events / suspend / wake reports ───────────────────────────
-SystemEvent.ExactlyOneMemoryEventSignaled
-WakeReportTestsThreadBound.BadReportRequests
-WakeReportTestsThreadBound.Discard
-WakeReportTestsThreadBound.DestructionYesAck
-WakeReportTestsThreadBound.DestructionNoAck
-WakeReportTestsThreadBound.MultiWakeSource
-WakeReportTestsThreadBound.SingleWakeSource
-WakeReportTestsThreadBound.SmallReportBuffer
-WakeReportTestsThreadBound.AlreadyTimedOut
-WakeReportTestsThreadBound.ReportOnly
-WakeReportTestsThreadBound.Acked
-WakeReportTestsThreadBound.AckedStillPending
-WakeReportTestsThreadBound.MultipleSignals
-
-# ── VmoClone2 hangs ──────────────────────────────────────────────────
-VmoClone2TestCase.DropParentCommittedBytes
-WakeReportTestsPortBound.MultipleSignals
-WakeReportTestsPortBound.Discard
-WakeReportTestsPortBound.MultiWakeSource
-WakeReportTestsPortBound.SingleWakeSource
-WakeReportTestsPortBound.AckedStillPending
-
-# ── Hangs — blocks sequential test run ───────────────────────────────
-VmoZeroTestCase.WriteCowParent
+# ── COW merge (share_count in multi-level COW tree) ──────────────────
 VmoZeroTestCase.AllocateAfterMergeMultipleChildren
+
+# ── BTI (deep COW tree + concurrent write loops) ─────────────────────
 Bti.NoDelayedUnpin
