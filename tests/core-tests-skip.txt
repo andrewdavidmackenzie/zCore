@@ -13,7 +13,6 @@ UserExceptionsTest.Delivered
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.RacyPortDequeue
-Pager.ResizeBlockedPin
 Pager.CloneReadFromParentTestVmar
 PagerWriteback.*
 
