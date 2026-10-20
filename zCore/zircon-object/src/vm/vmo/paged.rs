@@ -300,9 +300,35 @@ impl VMObjectTrait for VMObjectPaged {
         if end > inner.size {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        inner.for_each_page(offset, buf.len(), MMUFlags::READ, |paddr, buf_range| {
-            hal_impl::mem::pmem_read(paddr, &mut buf[buf_range]);
-        })
+        // Read each page, filling with zeros for uncommitted pages
+        // in root VMOs without allocating (matches Fuchsia's zero-page
+        // optimization where ReadWriteInternal returns vm_get_zero_page()
+        // for ContentZero pages without committing memory).
+        let iter = BlockIter {
+            begin: offset,
+            end: offset + buf.len(),
+            block_size_log2: PAGE_SIZE_LOG2 as u8,
+        };
+        for block in iter {
+            let buf_range = block.origin_begin() - offset..block.origin_end() - offset;
+            // Try to read from a committed page first.
+            if let Some(frame) = inner.frames.get(&block.block) {
+                hal_impl::mem::pmem_read(frame.frame.paddr() + block.begin, &mut buf[buf_range]);
+                continue;
+            }
+            // For uncommitted pages in root VMOs (no parent, not
+            // pager-backed), return zeros without allocating.
+            if inner.parent.is_none() && !inner.pager_backed && !inner.type_.is_hidden() {
+                // Check if there's a zero marker — also returns zeros.
+                buf[buf_range].fill(0);
+                continue;
+            }
+            // For child VMOs or pager-backed VMOs, use commit_page
+            // to walk up the parent chain or request from pager.
+            let paddr = inner.commit_page(block.block, MMUFlags::READ)?;
+            hal_impl::mem::pmem_read(paddr + block.begin, &mut buf[buf_range]);
+        }
+        Ok(())
     }
 
     fn write(&self, offset: usize, buf: &[u8]) -> ZxResult {
@@ -360,11 +386,15 @@ impl VMObjectTrait for VMObjectPaged {
                         hal_impl::mem::pmem_zero(frame.frame.paddr(), PAGE_SIZE);
                     }
                 } else {
-                    // Decommit the page.  Insert a zero marker if the
-                    // parent chain has content (to block fall-through) or
-                    // if this is a pager-backed VMO (to prevent
-                    // commit_page from re-requesting from the pager).
-                    if inner.parent_has_page(block.block) || inner.pager_backed {
+                    // Decommit the page.  Insert a zero marker if:
+                    // - This VMO has a parent (COW child) — the marker
+                    //   prevents a later merge from re-introducing a
+                    //   page that was zeroed.  Even if parent_has_page
+                    //   is false now (page was migrated), a merge can
+                    //   still bring pages from the hidden node.
+                    // - This is a pager-backed VMO — prevents commit_page
+                    //   from re-requesting from the pager.
+                    if inner.parent.is_some() || inner.pager_backed {
                         inner.zero_markers.insert(block.block);
                     }
                     unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
@@ -1099,6 +1129,7 @@ impl VMObjectPagedInner {
     /// committed page at `page_idx` (translated through parent_offset).
     /// This is used by the zero operation to decide whether decommitting
     /// a page would expose non-zero parent content.
+    #[allow(dead_code)]
     fn parent_has_page(&self, page_idx: usize) -> bool {
         if self.parent.is_none() {
             return false;
@@ -1216,6 +1247,7 @@ impl VMObjectPagedInner {
         // Re-borrow to set parent.
         let mut surviving = arc_child.inner.borrow_mut();
         surviving.parent = self.parent.take();
+
         // If the surviving child now has no parent, zero markers are
         // unnecessary — there's no ancestor content to block.
         if surviving.parent.is_none() {
@@ -1850,6 +1882,7 @@ impl Drop for VMObjectPaged {
         let (_guard, mut inner) = self.get_inner_mut();
         // Decrement share_count for pages this VMO sees through the
         // parent chain, then remove from parent's child list.
+
         if let Some(parent) = &inner.parent {
             inner.decrement_parent_share_counts(0, inner.size / PAGE_SIZE);
             parent.inner.borrow_mut().remove_child(&inner.self_ref);

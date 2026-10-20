@@ -137,7 +137,7 @@ impl Resource {
                 return Ok(());
             }
         }
-        Err(ZxError::ACCESS_DENIED)
+        Err(ZxError::OUT_OF_RANGE)
     }
 
     /// Check exclusive resource constraints against the global registry.

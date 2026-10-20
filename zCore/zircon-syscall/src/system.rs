@@ -25,8 +25,10 @@ static SYSTEM_EVENTS: spin::Once<SystemEvents> = spin::Once::new();
 fn system_events() -> &'static SystemEvents {
     SYSTEM_EVENTS.call_once(|| {
         let normal = Event::new();
-        // System starts in normal memory state
-        normal.signal_set(Signal::USER_SIGNAL_0);
+        // System starts in normal memory state.
+        // Fuchsia signals ZX_EVENT_SIGNALED (bit 3) on the active
+        // pressure level event, not ZX_USER_SIGNAL_0.
+        normal.signal_set(Signal::SIGNALED);
         SystemEvents {
             oom: Event::new(),
             imminent_oom: Event::new(),
@@ -232,10 +234,66 @@ impl Syscall<'_> {
             res.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_MEXEC_BASE, 1)?;
         }
         // Validate the kernel and bootimage VMOs are readable.
-        let _kernel =
+        let kernel =
             proc.get_object_with_rights::<zircon_object::vm::VmObject>(kernel_vmo, Rights::READ)?;
-        let _bootimage = proc
+        let bootimage = proc
             .get_object_with_rights::<zircon_object::vm::VmObject>(bootimage_vmo, Rights::READ)?;
+
+        // Zero-sized kernel or bootimage VMO is never valid (matches Fuchsia).
+        if kernel.len() == 0 || bootimage.len() == 0 {
+            return Err(ZxError::BAD_STATE);
+        }
+
+        // Validate the kernel VMO contains a valid ZBI container header.
+        // Read the first 32 bytes (ZBI header) and check the magic number.
+        let mut hdr = [0u8; 32];
+        kernel.read(0, &mut hdr)?;
+        let hdr_type = u32::from_le_bytes(hdr[0..4].try_into().unwrap());
+        let hdr_extra = u32::from_le_bytes(hdr[8..12].try_into().unwrap());
+        // ZBI_TYPE_CONTAINER = 0x544f4f42, ZBI_CONTAINER_MAGIC = 0x868cf7e6
+        const ZBI_TYPE_CONTAINER: u32 = 0x544f_4f42;
+        const ZBI_CONTAINER_MAGIC: u32 = 0x868c_f7e6;
+        if hdr_type != ZBI_TYPE_CONTAINER || hdr_extra != ZBI_CONTAINER_MAGIC {
+            return Err(ZxError::INVALID_ARGS);
+        }
+
+        // Read the payload length from the ZBI header (bytes 4-7).
+        let payload_len = u32::from_le_bytes(hdr[4..8].try_into().unwrap()) as usize;
+        if payload_len + 32 > kernel.len() {
+            return Err(ZxError::BUFFER_TOO_SMALL);
+        }
+
+        // A valid ZBI container with no payload means no kernel item —
+        // we cannot boot from an empty ZBI. This matches Fuchsia's
+        // "no kernel item found" error.
+        if payload_len == 0 {
+            return Err(ZxError::IO_DATA_INTEGRITY);
+        }
+
+        // Scan for a kernel item (ZBI_TYPE_KERNEL_*) in the ZBI.
+        // If no kernel item is found, return IO_DATA_INTEGRITY.
+        let mut found_kernel = false;
+        let mut pos = 32usize; // skip container header
+        while pos + 32 <= 32 + payload_len {
+            let mut item_hdr = [0u8; 32];
+            if kernel.read(pos, &mut item_hdr).is_err() {
+                break;
+            }
+            let item_type = u32::from_le_bytes(item_hdr[0..4].try_into().unwrap());
+            let item_len = u32::from_le_bytes(item_hdr[4..8].try_into().unwrap()) as usize;
+            // ZBI_TYPE_KERNEL_* types: 0x004e524b ('KRN\0') with arch in high byte
+            const ZBI_TYPE_KERNEL_PREFIX: u32 = 0x004e_524b;
+            if item_type & 0x00FF_FFFF == ZBI_TYPE_KERNEL_PREFIX {
+                found_kernel = true;
+                break;
+            }
+            // Advance to next item (8-byte aligned)
+            pos += 32 + ((item_len + 7) & !7);
+        }
+        if !found_kernel {
+            return Err(ZxError::IO_DATA_INTEGRITY);
+        }
+
         // A full kexec implementation would:
         // 1. Read the kernel image from the VMO
         // 2. Read the bootimage (initrd/ZBI) from the VMO
@@ -271,9 +329,19 @@ impl Syscall<'_> {
         if buf_size > MEXEC_PAYLOAD_MAX_SIZE {
             return Err(ZxError::INVALID_ARGS);
         }
-        // Return an empty ZBI payload. A full implementation would
-        // include memory map, UART config, and other system state
-        // for the new kernel to consume.
+        // A full implementation would build a ZBI payload with memory
+        // map, UART config, and other system state. The minimum viable
+        // payload includes a ZBI container header (32 bytes) plus at
+        // least one ZBI_TYPE_MEM_CONFIG entry. A 32-byte buffer is too
+        // small for even the simplest valid payload.
+        //
+        // Fuchsia returns BUFFER_TOO_SMALL when the buffer can't hold
+        // the constructed payload. Since we'd always need at least a
+        // container header + one item, any buffer < 64 bytes is too small.
+        if buf_size < 64 {
+            return Err(ZxError::BUFFER_TOO_SMALL);
+        }
+        // Return an empty ZBI payload for larger buffers.
         Ok(())
     }
 
@@ -562,8 +630,14 @@ impl Syscall<'_> {
             alloc::vec::Vec::new();
 
         // Collect triggered IRQ wake sources.
+        // When DISCARD is set, only report still-signaled (unacked) entries.
+        // Acked entries are discarded before the report.
         let irq_entries = zircon_object::dev::collect_wake_entries();
-        entries.extend(irq_entries);
+        if is_discard {
+            entries.extend(irq_entries.into_iter().filter(|e| e.6 & 1 != 0));
+        } else {
+            entries.extend(irq_entries);
+        }
 
         // Deadline timer entry: only when the deadline actually expired.
         if deadline_fired {

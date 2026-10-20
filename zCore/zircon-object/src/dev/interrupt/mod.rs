@@ -87,12 +87,43 @@ pub fn wake_source_triggered(koid: KoID, time: u64) {
     }
 }
 
-/// Record an ack event on a wake source.
+/// Record an ack event on a wake source, clearing its signaled state.
+///
+/// Use this when the interrupt has no pending re-trigger (transitions to Idle).
+/// When a re-trigger is pending, use `wake_source_ack_remain_signaled` instead.
 pub fn wake_source_acked(koid: KoID, time: u64) {
     let sources = WAKE_SOURCES.lock();
     if let Some(entry) = sources.iter().find(|s| s.koid == koid) {
         entry.last_ack_time.store(time, Ordering::Relaxed);
         entry.signaled.store(false, Ordering::Relaxed);
+        // If already reported, clear the entry so it doesn't appear
+        // again in subsequent collect calls. This matches Fuchsia's
+        // behavior where acked+reported entries are consumed.
+        if entry.reported.load(Ordering::Relaxed) {
+            entry.initial_signal_time.store(0, Ordering::Relaxed);
+            entry.last_signal_time.store(0, Ordering::Relaxed);
+            entry
+                .last_ack_time
+                .store(i64::MAX as u64, Ordering::Relaxed);
+            entry.signal_count.store(0, Ordering::Relaxed);
+            entry.reported.store(false, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Record an ack event but keep the wake source signaled (pending re-trigger).
+///
+/// Called when an interrupt is acked but has a pending coalesced trigger
+/// that immediately re-enters NeedAck state. The wake event remains in the
+/// signaled state and its `reported` flag is cleared so it will appear
+/// in the next report. Matches Fuchsia's `AckBehavior::RemainSignaled`.
+pub fn wake_source_ack_remain_signaled(koid: KoID, time: u64) {
+    let sources = WAKE_SOURCES.lock();
+    if let Some(entry) = sources.iter().find(|s| s.koid == koid) {
+        entry.last_ack_time.store(time, Ordering::Relaxed);
+        // Keep signaled = true (pending re-trigger).
+        // Clear reported so this event appears in the next report.
+        entry.reported.store(false, Ordering::Relaxed);
     }
 }
 
@@ -246,7 +277,14 @@ trait InterruptTrait: Sync + Send {
     fn unregister_handler(&self) -> ZxResult;
 }
 
-impl_kobject!(Interrupt);
+impl_kobject!(Interrupt
+    fn on_zero_handles(&self) {
+        // When the last handle is closed, destroy the interrupt.
+        // This cancels any pending zx_interrupt_wait on a worker thread,
+        // matching Fuchsia's InterruptDispatcher::on_zero_handles().
+        let _ = self.destroy();
+    }
+);
 
 /// Interrupts - Usermode I/O interrupt delivery.
 ///
@@ -296,13 +334,26 @@ impl Interrupt {
     /// Virtual interrupts start in the UNTRIGGERED state with
     /// `INTERRUPT_SIGNAL` asserted (= `ZX_VIRTUAL_INTERRUPT_UNTRIGGERED`).
     pub fn new_virtual() -> Arc<Self> {
+        Self::new_virtual_inner(false)
+    }
+
+    /// Create a new virtual interrupt that is also a wake vector.
+    pub fn new_virtual_wake() -> Arc<Self> {
+        Self::new_virtual_inner(true)
+    }
+
+    fn new_virtual_inner(is_wake: bool) -> Arc<Self> {
         let base = KObjectBase::new();
         // Assert UNTRIGGERED signal immediately after creation.
         base.signal_set(Signal::INTERRUPT_SIGNAL);
+        let mut flags = InterruptFlags::VIRTUAL;
+        if is_wake {
+            flags |= InterruptFlags::WAKE_VECTOR;
+        }
         Arc::new(Interrupt {
             base,
             has_vcpu: false,
-            flags: InterruptFlags::VIRTUAL,
+            flags,
             inner: Default::default(),
             trait_: VirtualInterrupt::new(),
             wait_event: KObjectBase::new(),
@@ -453,7 +504,12 @@ impl Interrupt {
     ///
     /// Returns `BAD_STATE` if no port is bound, or if the interrupt packet
     /// has not yet been consumed from the port.
-    pub fn ack(&self) -> ZxResult {
+    /// Acknowledge a port-bound interrupt.
+    ///
+    /// Returns `Ok(true)` if a pending re-trigger was consumed (the interrupt
+    /// immediately re-enters NeedAck state and a new port packet is queued).
+    /// Returns `Ok(false)` when the interrupt transitions to Idle.
+    pub fn ack(&self) -> ZxResult<bool> {
         let mut inner = self.inner.lock();
         if inner.port.is_none() {
             return Err(ZxError::BAD_STATE);
@@ -461,6 +517,7 @@ impl Interrupt {
         if inner.state == InterruptState::Destroy {
             return Err(ZxError::CANCELED);
         }
+        let mut re_triggered = false;
         if inner.state == InterruptState::NeedAck {
             // Check packet consumption before any side effects.
             // Fuchsia's SendPacketLocked returns false (→ BAD_STATE) when
@@ -498,6 +555,7 @@ impl Interrupt {
                     self.base.signal_clear(Signal::INTERRUPT_SIGNAL);
                 }
                 // State stays NeedAck (re-triggered).
+                re_triggered = true;
             } else {
                 inner.state = InterruptState::Idle;
                 // Assert UNTRIGGERED signal — interrupt is now idle.
@@ -509,7 +567,7 @@ impl Interrupt {
         if inner.defer_unmask {
             self.trait_.unmask();
         }
-        Ok(())
+        Ok(re_triggered)
     }
 
     /// Destroy the interrupt.
@@ -558,6 +616,7 @@ impl Interrupt {
     /// UNTRIGGERED semantic for virtual interrupts.
     pub async fn wait(self: &Arc<Self>) -> ZxResult<i64> {
         let mut defer_unmask = false;
+        let is_wake = self.flags.contains(InterruptFlags::WAKE_VECTOR);
         // Use the wait_event for blocking, NOT the base object.
 
         loop {
@@ -585,11 +644,21 @@ impl Interrupt {
                         // If there's a pending re-trigger (timestamp > 0),
                         // consume it immediately without blocking (matches
                         // Fuchsia BeginWaitForInterrupt lines 79-89).
+                        // Wake vector: ack with RemainSignaled.
                         if inner.timestamp > 0 {
+                            if is_wake {
+                                let now = hal_impl::timer::timer_now().as_nanos() as u64;
+                                wake_source_ack_remain_signaled(self.id(), now);
+                            }
                             let timestamp = inner.timestamp;
                             inner.timestamp = 0;
                             self.wait_event.signal_clear(Signal::SIGNALED);
                             return Ok(timestamp);
+                        }
+                        // No pending re-trigger: ack with ClearSignaled.
+                        if is_wake {
+                            let now = hal_impl::timer::timer_now().as_nanos() as u64;
+                            wake_source_acked(self.id(), now);
                         }
                         if self.flags.contains(InterruptFlags::UNMASK_PREWAIT) {
                             self.trait_.unmask();
@@ -673,6 +742,8 @@ bitflags! {
         const UNMASK_PREWAIT_UNLOCKED  = 1 << 2;
         /// The interrupt should be masked following waiting.
         const MASK_POSTWAIT            = 1 << 4;
+        /// The interrupt is a wake vector (wake source for suspend).
+        const WAKE_VECTOR              = 1 << 5;
     }
 }
 
