@@ -254,6 +254,48 @@ impl Syscall<'_> {
         Ok(())
     }
 
+    /// Pre-dirty TRAP_DIRTY pages before writing to a pager-backed VMO.
+    ///
+    /// For VMOs created with ZX_VMO_TRAP_DIRTY, writes to clean pages
+    /// must send a ZX_PAGER_VMO_DIRTY request to the pager port and
+    /// wait for acknowledgement. This function checks each page in the
+    /// write range and sends dirty requests for clean pages.
+    async fn predirty_trap_dirty_pages(
+        &self,
+        vmo: &Arc<zircon_object::vm::VmObject>,
+        offset: usize,
+        len: usize,
+    ) -> ZxResult {
+        use hal::PAGE_SIZE;
+        use zircon_object::task::ThreadState;
+
+        if !vmo.is_trap_dirty() || len == 0 {
+            return Ok(());
+        }
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + len).div_ceil(PAGE_SIZE);
+        for page_idx in start_page..end_page {
+            if vmo.is_page_dirty(page_idx) {
+                continue;
+            }
+            // Page is clean — send dirty request and wait.
+            let page_offset = page_idx * PAGE_SIZE;
+            let _ = vmo.request_dirty(page_offset, PAGE_SIZE);
+            let future = vmo.wait_for_dirty(page_offset);
+            pin_mut!(future);
+            self.thread.set_blocking_state(ThreadState::BlockedPager);
+            self.thread
+                .blocking_run::<_, (), _>(
+                    future,
+                    ThreadState::BlockedPager,
+                    core::time::Duration::from_nanos(u64::MAX),
+                    None,
+                )
+                .await?;
+        }
+        Ok(())
+    }
+
     pub async fn syscall(&mut self, num: usize, args: [usize; 8]) -> isize {
         let thread_name = self.thread.name();
         let proc_name = self.thread.proc().name();
@@ -466,10 +508,16 @@ impl Syscall<'_> {
             Sys::VMO_WRITE => {
                 // Pre-fault pager pages in user buffer (a1=buf, a3=size).
                 if let Err(e) = self.prefault_user_buffer(a1, a3).await {
-                    Err(e)
-                } else {
-                    self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _)
+                    return e as isize;
                 }
+                // Pre-dirty TRAP_DIRTY pages before writing.
+                let proc = self.thread.proc();
+                if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
+                    if let Err(e) = self.predirty_trap_dirty_pages(&vmo, a2, a3).await {
+                        return e as isize;
+                    }
+                }
+                self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _)
             }
             Sys::VMO_GET_SIZE => self.sys_vmo_get_size(a0 as _, a1.into()),
             Sys::VMO_SET_SIZE => self.sys_vmo_set_size(a0 as _, a1 as _),

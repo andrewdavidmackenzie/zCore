@@ -824,6 +824,30 @@ impl VmObject {
         }
     }
 
+    /// Block until the page at `offset` is marked dirty by the pager.
+    /// Used for TRAP_DIRTY VMOs when writing to a clean page.
+    pub async fn wait_for_dirty(&self, offset: usize) -> ZxResult {
+        let rx = {
+            let mut inner = self.inner.lock();
+            let page_idx = offset / PAGE_SIZE;
+            // Already dirty — return immediately.
+            if page_idx < inner.dirty_pages.len() && inner.dirty_pages[page_idx] == PAGE_DIRTY {
+                return Ok(());
+            }
+            // If the page was failed, return the error.
+            if let Some(&err) = inner.pager_failed_pages.get(&page_idx) {
+                return Err(err);
+            }
+            let (tx, rx) = futures::channel::oneshot::channel();
+            inner.pager_waiters.push((page_idx, tx));
+            rx
+        };
+        match rx.await {
+            Ok(result) => result,
+            Err(_) => Err(ZxError::CANCELED),
+        }
+    }
+
     /// Wake threads waiting for pages in the given range.
     /// Called by `Pager::supply_pages` after writing page data.
     pub fn complete_pager_requests(&self, offset: usize, length: usize) {
