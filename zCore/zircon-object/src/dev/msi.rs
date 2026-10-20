@@ -52,7 +52,7 @@ impl MsiAllocation {
         let mut used = self.used.lock();
         let mask = 1u32 << msi_id;
         if *used & mask != 0 {
-            return Err(ZxError::ALREADY_EXISTS);
+            return Err(ZxError::ALREADY_BOUND);
         }
         *used |= mask;
         Ok(self.base_irq + msi_id as usize)

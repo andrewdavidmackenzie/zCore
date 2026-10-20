@@ -1,7 +1,3 @@
-# Core-tests skip list — tests that hang or crash the test runner.
-# Each non-empty, non-comment line is a gtest pattern to exclude.
-# Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
-
 # ── Multi-threaded (need cross-CPU waker IPI, see #684) ─────────────
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
@@ -53,12 +49,7 @@ StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 
-# ── MSI (need test_ram_reserve boot option for physical VMOs) ────────
-MsiTest.Msi
-MsiTest.Msix
 
-# ── Mexec (pager-backed bootimage) ───────────────────────────────────
-Resource.MexecPagerPanic
 
 
 # ── BTI (deep COW tree + concurrent write loops) ─────────────────────

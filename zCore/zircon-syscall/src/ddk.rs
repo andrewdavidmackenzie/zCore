@@ -473,12 +473,54 @@ impl Syscall<'_> {
                 return Err(ZxError::INVALID_ARGS);
             }
         }
-        let irq = alloc.use_vector(msi_id)?;
-        let interrupt = if irq > 0 {
-            Interrupt::new_physical(irq, InterruptOptions::empty())?
+        alloc.use_vector(msi_id)?;
+        // MSI interrupts use virtual interrupt objects. The actual
+        // hardware MSI vector is managed by the MsiAllocation; the
+        // Interrupt object is just the userspace-facing handle for
+        // waiting/acking. Using new_physical would fail because
+        // the IRQ might already have a handler registered.
+        let interrupt = Interrupt::new_virtual();
+        // Unmask the vector and set up the on-close callback.
+        if is_msix {
+            // MSI-X table entry layout: msg_addr(4) + msg_upper_addr(4)
+            //   + msg_data(4) + vector_control(4) = 16 bytes per entry.
+            let entry_base = vmo_offset + (msi_id as usize) * 16;
+            // Program the table entry with target_addr and target_data.
+            // target_addr = 0xFEE00000 (standard x86 MSI address).
+            // target_data = base_irq + msi_id.
+            let target_addr: u64 = 0xFEE0_0000;
+            let target_data: u32 = alloc.base_irq() as u32 + msi_id;
+            vmo.write(entry_base, &(target_addr as u32).to_le_bytes())?; // msg_addr
+            vmo.write(entry_base + 4, &((target_addr >> 32) as u32).to_le_bytes())?; // msg_upper_addr
+            vmo.write(entry_base + 8, &target_data.to_le_bytes())?; // msg_data
+                                                                    // Unmask: clear bit 0 of vector_control.
+            let mut ctrl = [0u8; 4];
+            vmo.read(entry_base + 12, &mut ctrl)?;
+            let val = u32::from_le_bytes(ctrl) & !1;
+            vmo.write(entry_base + 12, &val.to_le_bytes())?;
+            // On close: clear the table entry and re-mask.
+            let vmo_clone = vmo.clone();
+            let alloc_clone2 = alloc.clone();
+            interrupt.set_on_close(move || {
+                alloc_clone2.release_vector(msi_id);
+                let zeros = [0u8; 12]; // clear addr + data
+                let _ = vmo_clone.write(entry_base, &zeros);
+                let masked = 1u32;
+                let _ = vmo_clone.write(entry_base + 12, &masked.to_le_bytes());
+            });
         } else {
-            Interrupt::new_virtual()
-        };
+            // MSI capability: mask_bits_32 at offset 0x0C (12).
+            let mask_offset = vmo_offset + 0x0C;
+            let mut mask = [0u8; 4];
+            vmo.read(mask_offset, &mut mask)?;
+            let val = u32::from_le_bytes(mask) & !(1u32 << msi_id);
+            vmo.write(mask_offset, &val.to_le_bytes())?;
+            // On close: release MSI vector.
+            let alloc_clone = alloc.clone();
+            interrupt.set_on_close(move || {
+                alloc_clone.release_vector(msi_id);
+            });
+        }
         let handle = proc.add_handle(Handle::new(interrupt, Rights::DEFAULT_INTERRUPT));
         out.write(handle)?;
         Ok(())

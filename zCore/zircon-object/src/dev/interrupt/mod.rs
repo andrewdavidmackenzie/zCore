@@ -283,6 +283,10 @@ impl_kobject!(Interrupt
         // This cancels any pending zx_interrupt_wait on a worker thread,
         // matching Fuchsia's InterruptDispatcher::on_zero_handles().
         let _ = self.destroy();
+        // Invoke the on-close callback (e.g., release MSI vector).
+        if let Some(cb) = self.on_close.lock().take() {
+            cb();
+        }
     }
 );
 
@@ -300,6 +304,9 @@ pub struct Interrupt {
     /// Internal event used to wake `wait()` without affecting observable
     /// signal state. Uses `SIGNALED` (bit 3) as the wakeup signal.
     wait_event: KObjectBase,
+    /// Optional callback invoked when the last handle is closed.
+    /// Used by MSI interrupts to release the vector in the MsiAllocation.
+    on_close: Mutex<Option<Box<dyn FnOnce() + Send + Sync>>>,
 }
 
 #[derive(Default)]
@@ -342,6 +349,12 @@ impl Interrupt {
         Self::new_virtual_inner(true)
     }
 
+    /// Set a callback invoked when the last handle is closed.
+    /// Used by MSI interrupts to release the vector in the MsiAllocation.
+    pub fn set_on_close(&self, cb: impl FnOnce() + Send + Sync + 'static) {
+        *self.on_close.lock() = Some(Box::new(cb));
+    }
+
     fn new_virtual_inner(is_wake: bool) -> Arc<Self> {
         let base = KObjectBase::new();
         // Assert UNTRIGGERED signal immediately after creation.
@@ -357,6 +370,7 @@ impl Interrupt {
             inner: Default::default(),
             trait_: VirtualInterrupt::new(),
             wait_event: KObjectBase::new(),
+            on_close: Mutex::new(None),
         })
     }
 
@@ -377,6 +391,7 @@ impl Interrupt {
             inner: Default::default(),
             trait_: EventInterrupt::new(vector),
             wait_event: KObjectBase::new(),
+            on_close: Mutex::new(None),
         });
         let interrupt_clone = interrupt.clone();
         interrupt
