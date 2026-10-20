@@ -547,7 +547,12 @@ impl Thread {
     /// `suspend_count > 0`, matching Fuchsia's kernel-mode pager
     /// wait behavior.
     pub fn set_nonsuspendable_block(&self, active: bool) {
-        self.inner.lock().in_nonsuspendable_block = active;
+        let mut inner = self.inner.lock();
+        inner.in_nonsuspendable_block = active;
+        // Recompute signals — state() result may have changed
+        // (Suspended ↔ BlockedPager transition).
+        let state = inner.state;
+        inner.change_state(state, &self.base);
     }
 
     /// Set the thread state (e.g., to BlockedPager during pager waits).

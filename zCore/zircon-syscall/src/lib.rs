@@ -208,9 +208,10 @@ impl Syscall<'_> {
         if len == 0 || addr == 0 {
             return Ok(());
         }
+        let end_addr = addr.checked_add(len).ok_or(ZxError::INVALID_ARGS)?;
         let vmar = self.thread.proc().vmar();
         let start_page = addr / PAGE_SIZE;
-        let end_page = (addr + len).div_ceil(PAGE_SIZE);
+        let end_page = end_addr.div_ceil(PAGE_SIZE);
         for page_idx in start_page..end_page {
             let vaddr = page_idx * PAGE_SIZE;
             match vmar.handle_page_fault(vaddr, MMUFlags::READ | MMUFlags::USER) {
