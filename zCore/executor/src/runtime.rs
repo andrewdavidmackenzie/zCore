@@ -240,9 +240,12 @@ pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, pr
     if enable {
         crate::arch::intr_off();
     }
-    // Use None (least-loaded CPU) when runtimes are initialized,
-    // otherwise fall back to current CPU (early boot).
-    let cpu = if CPU_RUNTIMES.get().is_some() {
+    // Distribute tasks across CPUs on x86_64. On aarch64/riscv64,
+    // hardware interrupts (serial, timer) are routed to CPU 0 and
+    // the waker system doesn't propagate cross-CPU (#684). Tasks
+    // on secondary CPUs can't be woken by IRQs on the BSP.
+    // x86_64 uses polled serial I/O so this isn't an issue there.
+    let cpu = if cfg!(target_arch = "x86_64") && CPU_RUNTIMES.get().is_some() {
         None
     } else {
         Some(crate::arch::cpu_id())
