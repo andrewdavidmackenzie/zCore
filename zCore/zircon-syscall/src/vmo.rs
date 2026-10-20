@@ -258,10 +258,8 @@ impl Syscall<'_> {
                                 continue;
                             }
                             Err(e) => {
-                                // Pager error from wait_for_page
-                                // (e.g., overlap completed with IO).
-                                // Return directly — the error was
-                                // already set by the completion.
+                                // Per-waiter error from request
+                                // completion. Return directly.
                                 return Err(e);
                             }
                         }
@@ -773,51 +771,81 @@ impl Syscall<'_> {
                                     if pg >= pager_vmo.len() / PAGE_SIZE {
                                         break;
                                     }
-                                    if pager_vmo.committed_pages_in_range(pg, pg + 1) == 0 {
-                                        // Suspend/resume retry loop.
-                                        loop {
-                                            let future = pager_vmo.wait_for_page(pg * PAGE_SIZE);
-                                            pin_mut!(future);
-                                            self.thread
-                                                .set_blocking_state(ThreadState::BlockedPager);
-                                            match self
-                                                .thread
-                                                .blocking_run_suspendable(
-                                                    future,
-                                                    ThreadState::BlockedPager,
-                                                    Duration::from_nanos(u64::MAX),
-                                                )
-                                                .await
-                                            {
-                                                Ok(()) => break,
-                                                Err(ZxError::CANCELED) => {
-                                                    while self.thread.is_suspended() {
-                                                        if self.thread.state() == ThreadState::Dying
-                                                        {
-                                                            break;
-                                                        }
-                                                        hal_impl::thread::preempt_yield().await;
-                                                    }
+                                    // Same retry loop as sys_vmo_read:
+                                    // handles failed pages, SHOULD_WAIT
+                                    // re-requests, and suspend/resume.
+                                    let mut fail_retries = 0;
+                                    loop {
+                                        if pager_vmo.committed_pages_in_range(pg, pg + 1) > 0 {
+                                            break;
+                                        }
+                                        if let Some(err) = pager_vmo.get_failed_page(pg) {
+                                            if fail_retries >= 1 {
+                                                return Err(err);
+                                            }
+                                            fail_retries += 1;
+                                            pager_vmo.clear_failed_page(pg);
+                                            let _ =
+                                                pager_vmo.request_pages(pg * PAGE_SIZE, PAGE_SIZE);
+                                        }
+                                        let future = pager_vmo.wait_for_page(pg * PAGE_SIZE);
+                                        pin_mut!(future);
+                                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                                        match self
+                                            .thread
+                                            .blocking_run_suspendable(
+                                                future,
+                                                ThreadState::BlockedPager,
+                                                Duration::from_nanos(u64::MAX),
+                                            )
+                                            .await
+                                        {
+                                            Ok(()) => break,
+                                            Err(ZxError::STOP) => return Err(ZxError::STOP),
+                                            Err(ZxError::OUT_OF_RANGE) => break,
+                                            Err(ZxError::BAD_STATE) => {
+                                                return Err(ZxError::BAD_STATE)
+                                            }
+                                            Err(ZxError::SHOULD_WAIT) => {
+                                                let _ = pager_vmo
+                                                    .request_pages(pg * PAGE_SIZE, PAGE_SIZE);
+                                                continue;
+                                            }
+                                            Err(ZxError::CANCELED) => {
+                                                while self.thread.is_suspended() {
                                                     if self.thread.state() == ThreadState::Dying {
-                                                        return Err(ZxError::STOP);
-                                                    }
-                                                    if pager_vmo
-                                                        .committed_pages_in_range(pg, pg + 1)
-                                                        > 0
-                                                    {
                                                         break;
                                                     }
-                                                    pager_vmo.cancel_outstanding_requests_in_range(
-                                                        pg * PAGE_SIZE,
-                                                        PAGE_SIZE,
-                                                    );
-                                                    let _ = pager_vmo
-                                                        .request_pages(pg * PAGE_SIZE, PAGE_SIZE);
-                                                    continue;
+                                                    hal_impl::thread::preempt_yield().await;
                                                 }
-                                                Err(ZxError::STOP) => return Err(ZxError::STOP),
-                                                Err(ZxError::OUT_OF_RANGE) => break,
-                                                Err(e) => return Err(e),
+                                                if self.thread.state() == ThreadState::Dying {
+                                                    return Err(ZxError::STOP);
+                                                }
+                                                if pager_vmo.committed_pages_in_range(pg, pg + 1)
+                                                    > 0
+                                                {
+                                                    break;
+                                                }
+                                                pager_vmo.cancel_outstanding_requests_in_range(
+                                                    pg * PAGE_SIZE,
+                                                    PAGE_SIZE,
+                                                );
+                                                let _ = pager_vmo
+                                                    .request_pages(pg * PAGE_SIZE, PAGE_SIZE);
+                                                continue;
+                                            }
+                                            Err(e) => {
+                                                // Pager error (e.g., IO from
+                                                // per-waiter error on request
+                                                // completion). Retry once.
+                                                if fail_retries >= 1 {
+                                                    return Err(e);
+                                                }
+                                                fail_retries += 1;
+                                                pager_vmo.clear_failed_page(pg);
+                                                let _ = pager_vmo
+                                                    .request_pages(pg * PAGE_SIZE, PAGE_SIZE);
+                                                continue;
                                             }
                                         }
                                     }
