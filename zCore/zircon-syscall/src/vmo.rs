@@ -238,12 +238,7 @@ impl Syscall<'_> {
                             }
                             Err(ZxError::CANCELED) => {
                                 // Suspended — wait for resume.
-                                while self.thread.is_suspended() {
-                                    if self.thread.state() == ThreadState::Dying {
-                                        break;
-                                    }
-                                    hal_impl::thread::preempt_yield().await;
-                                }
+                                self.thread.wait_for_resume().await;
                                 if self.thread.state() == ThreadState::Dying {
                                     return Err(ZxError::STOP);
                                 }
@@ -812,12 +807,7 @@ impl Syscall<'_> {
                                                 continue;
                                             }
                                             Err(ZxError::CANCELED) => {
-                                                while self.thread.is_suspended() {
-                                                    if self.thread.state() == ThreadState::Dying {
-                                                        break;
-                                                    }
-                                                    hal_impl::thread::preempt_yield().await;
-                                                }
+                                                self.thread.wait_for_resume().await;
                                                 if self.thread.state() == ThreadState::Dying {
                                                     return Err(ZxError::STOP);
                                                 }

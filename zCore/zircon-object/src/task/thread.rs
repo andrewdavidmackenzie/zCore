@@ -904,9 +904,14 @@ impl CurrentThread {
             if inner.state() == ThreadState::Dying {
                 return Err(ZxError::STOP);
             }
-            // If already suspended, return immediately so the run loop
-            // handles the pending suspend.
+            // If already suspended, restore state and return immediately
+            // so the run loop handles the pending suspend.
             if inner.suspend_count > 0 {
+                // Restore to Running if we were set to BlockedPager
+                // by set_blocking_state before this call.
+                if inner.state == state {
+                    inner.change_state(ThreadState::Running, &self.base);
+                }
                 return Err(ZxError::CANCELED);
             }
             let (kill_tx, kill_rx) = channel();

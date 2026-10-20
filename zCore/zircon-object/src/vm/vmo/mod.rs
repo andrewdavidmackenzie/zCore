@@ -736,8 +736,11 @@ impl VmObject {
             let overlaps = req.start_page < end_page && req.end_page > start_page;
             if overlaps {
                 let removed = inner.outstanding_requests.swap_remove(i);
-                // Drop overlap waiters — their receivers get Err(Canceled).
-                drop(removed);
+                // Wake any remaining overlap waiters with SHOULD_WAIT
+                // so they can re-request rather than silently failing.
+                for w in removed.overlap_waiters {
+                    let _ = w.sender.send(Err(ZxError::SHOULD_WAIT));
+                }
             } else {
                 i += 1;
             }

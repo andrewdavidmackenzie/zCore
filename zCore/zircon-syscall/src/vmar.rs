@@ -428,12 +428,7 @@ impl Syscall<'_> {
                                         {
                                             Ok(()) => break,
                                             Err(ZxError::CANCELED) => {
-                                                while self.thread.is_suspended() {
-                                                    if self.thread.state() == ThreadState::Dying {
-                                                        break;
-                                                    }
-                                                    hal_impl::thread::preempt_yield().await;
-                                                }
+                                                self.thread.wait_for_resume().await;
                                                 if self.thread.state() == ThreadState::Dying {
                                                     return Err(ZxError::STOP);
                                                 }
