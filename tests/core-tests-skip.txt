@@ -15,7 +15,6 @@ Threads.X86AcFlagUserCopy
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.EarlyWakeCloneRace
-Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
