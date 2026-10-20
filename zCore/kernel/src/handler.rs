@@ -69,56 +69,12 @@ impl KernelHandler for ZcoreKernelHandler {
                 Ok(()) => true,
                 Err(zircon_object::ZxError::SHOULD_WAIT) => {
                     // Pager-backed page fault during kernel usercopy.
-                    // The page request has already been sent to the pager
-                    // port by handle_page_fault. We need to wait for the
-                    // page to be supplied.
-                    //
-                    // Since we're in a synchronous trap handler, we spin-
-                    // poll the executor to let the pager thread supply
-                    // the page. This matches Fuchsia's behavior where
-                    // the kernel usercopy blocks on a pager wait (non-
-                    // suspendable). The thread stays in BlockedPager state.
-                    //
-                    // Set thread state so WaitForBlocked polls detect it.
-                    use zircon_object::task::ThreadState;
-                    thread.set_state(ThreadState::BlockedPager);
-
-                    // Find the pager VMO for this address and wait.
-                    let pager_vmo = vmar.find_pager_vmo(fault_vaddr).or_else(|| {
-                        let mapping = vmar.find_mapping(fault_vaddr)?;
-                        if mapping.vmo.is_in_pager_tree() {
-                            mapping.vmo.find_root_pager_vmo()
-                        } else {
-                            None
-                        }
-                    });
-                    let offset = vmar.vaddr_to_vmo_offset(fault_vaddr);
-
-                    if let (Some(vmo), Some(offset)) = (pager_vmo, offset) {
-                        let page_idx = offset / hal_impl::PAGE_SIZE;
-                        // Spin-poll: run the executor to let pager tasks
-                        // make progress, then check if the page was
-                        // supplied. The thread is killed by dropping the
-                        // process, which fails all pager requests, so
-                        // this loop terminates.
-                        loop {
-                            if vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
-                                thread.set_state(ThreadState::Running);
-                                return true;
-                            }
-                            // Check if the thread was killed during wait.
-                            if thread.state() == ThreadState::Dying
-                                || thread.state() == ThreadState::Dead
-                            {
-                                return false;
-                            }
-                            // Poll the executor to let other tasks run
-                            // (e.g., the pager thread that supplies pages).
-                            executor::run_until_idle();
-                        }
-                    } else {
-                        false
-                    }
+                    // Can't block in trap handler context (cooperative
+                    // scheduler doesn't support synchronous waiting in
+                    // interrupt context). Return false to let the guarded
+                    // copy fail. Usercopy demand-paging requires
+                    // syscall-level pre-faulting of pager pages.
+                    false
                 }
                 Err(_) => false,
             }
