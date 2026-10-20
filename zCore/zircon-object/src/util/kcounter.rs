@@ -116,7 +116,7 @@ impl Default for DescriptorVmoHeader {
     fn default() -> Self {
         Self {
             magic: KCOUNTER_MAGIC,
-            max_cpus: 1,
+            max_cpus: hal_impl::config::MAX_CORE_NUM as u64,
             descriptor_table_size: 0,
         }
     }
@@ -186,7 +186,7 @@ extern "C" {
 #[cfg_attr(target_os = "none", link_section = ".kcounter.desc.header")]
 static DESCRIPTOR_VMO_HEADER: [u64; 2] = [
     KCOUNTER_MAGIC, // magic
-    1,              // max_cpus
+    hal_impl::config::MAX_CORE_NUM as u64, // max_cpus
                     // descriptor_table_size is filled in linker.ld
 ];
 
