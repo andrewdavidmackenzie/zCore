@@ -52,5 +52,3 @@ StreamTestCase.PartialVmoDirty
 
 
 
-# ── BTI (deep COW tree + concurrent write loops) ─────────────────────
-Bti.NoDelayedUnpin
