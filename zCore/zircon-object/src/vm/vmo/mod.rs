@@ -839,11 +839,20 @@ impl VmObject {
                     }
                 }
                 // If the request is fully resolved, wake any remaining
-                // overlap waiters and remove the request.
+                // overlap waiters based on their page's commit status.
                 if req.pending_pages == 0 {
                     let completed = inner.outstanding_requests.swap_remove(req_idx);
-                    for (_, tx) in completed.overlap_waiters {
-                        let _ = tx.send(Ok(()));
+                    for (pg, tx) in completed.overlap_waiters {
+                        if self.trait_.committed_pages_in_range(pg, pg + 1) > 0 {
+                            let _ = tx.send(Ok(()));
+                        } else if let Some(&err) = inner.pager_failed_pages.get(&pg) {
+                            let _ = tx.send(Err(err));
+                        } else {
+                            // Page neither supplied nor failed — wake
+                            // with Ok so the caller can re-check and
+                            // re-request if needed.
+                            let _ = tx.send(Ok(()));
+                        }
                     }
                     continue; // don't increment req_idx
                 }
@@ -912,8 +921,14 @@ impl VmObject {
                 }
                 if req.pending_pages == 0 {
                     let completed = inner.outstanding_requests.swap_remove(req_idx);
-                    for (_, tx) in completed.overlap_waiters {
-                        let _ = tx.send(Err(err));
+                    for (pg, tx) in completed.overlap_waiters {
+                        if let Some(&pg_err) = inner.pager_failed_pages.get(&pg) {
+                            let _ = tx.send(Err(pg_err));
+                        } else if self.trait_.committed_pages_in_range(pg, pg + 1) > 0 {
+                            let _ = tx.send(Ok(()));
+                        } else {
+                            let _ = tx.send(Err(err));
+                        }
                     }
                     continue;
                 }
