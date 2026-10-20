@@ -187,6 +187,7 @@ pub extern "Rust" fn secondary_core_init() -> ! {
         core::hint::spin_loop();
     }
     hal_impl::secondary_init();
+    executor::mark_cpu_active();
     info!("secondary core {} initialized", hal_impl::cpu::cpu_id());
     wait_for_exit(None)
 }

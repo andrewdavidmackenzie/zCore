@@ -115,6 +115,10 @@ unsafe impl Sync for ExecutorRuntime {}
 /// Uses a spin::Once<HashMap> populated during SMP boot.
 static CPU_RUNTIMES: spin::Once<hashbrown::HashMap<u8, Mutex<ExecutorRuntime>>> = spin::Once::new();
 
+/// Number of CPUs that have called `mark_cpu_active`.
+/// Used by `spawn_with_priority` to decide whether to load-balance.
+static ACTIVE_CPU_COUNT: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
 /// Initialize executor runtimes for a set of CPU IDs.
 /// Called once by the BSP during boot, before any AP starts using the executor.
 pub fn init_runtimes(cpu_ids: &[u8]) {
@@ -125,6 +129,14 @@ pub fn init_runtimes(cpu_ids: &[u8]) {
         }
         map
     });
+    // The BSP is always active after init.
+    ACTIVE_CPU_COUNT.store(1, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// Mark an additional CPU as active (called from AP entry point).
+/// This enables load-balancing across the active CPUs.
+pub fn mark_cpu_active() {
+    ACTIVE_CPU_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
 }
 
 fn get_runtime(cpu_id: u8) -> &'static Mutex<ExecutorRuntime> {
@@ -240,13 +252,18 @@ pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, pr
     if enable {
         crate::arch::intr_off();
     }
-    // Pass cpu_id=None to let spawn_task pick the least-loaded CPU.
-    // Fall back to current CPU if runtimes aren't initialized yet
-    // (early boot, before SMP init).
-    let cpu = if CPU_RUNTIMES.get().is_some() {
-        None // let spawn_task load-balance
-    } else {
-        Some(crate::arch::cpu_id()) // fall back to current CPU
+    // Distribute tasks across active CPUs. Only use load-balancing
+    // when multiple CPUs are active (have been registered via
+    // init_runtimes AND are actually running). On single-CPU systems
+    // or before SMP init, pin to the current CPU.
+    let cpu = match CPU_RUNTIMES.get() {
+        Some(map)
+            if map.len() > 1
+                && ACTIVE_CPU_COUNT.load(core::sync::atomic::Ordering::Relaxed) > 1 =>
+        {
+            None // let spawn_task load-balance across active CPUs
+        }
+        _ => Some(crate::arch::cpu_id()), // single CPU or not initialized
     };
     spawn_task(future, Some(priority), cpu);
     if enable {
