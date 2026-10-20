@@ -126,5 +126,8 @@ pub fn timer_init() {
 
 pub fn secondary_init() {
     ::drivers::irq::x86::Apic::init_local_apic_ap();
+    // Configure the per-CPU APIC timer so this AP gets timer
+    // interrupts for preemption and nanosleep wakeups.
+    timer::init();
 }
 pub mod platform;
