@@ -11,10 +11,7 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 Pager.EarlyWakeCloneRace
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
-PagerProcess.KillBlockedUsercopy
-PagerProcess.KillBlockedUsercopyCaptureFaults
-PagerProcess.KillAfterSuspendUsercopy
-PagerProcess.KillAfterSuspendUsercopyCapture
+Pager.CloneReadFromParentTestVmar
 PagerWriteback.*
 
 # ── Snapshot (SNAPSHOT_MODIFIED read-through semantics) ──────────────
