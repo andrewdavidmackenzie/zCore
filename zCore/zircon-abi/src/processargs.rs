@@ -44,6 +44,8 @@ pub const PA_RESOURCE: u32 = 0x3F;
 pub const PA_MMIO_RESOURCE: u32 = 0x50;
 /// IRQ sub-resource.
 pub const PA_IRQ_RESOURCE: u32 = 0x51;
+/// I/O port sub-resource (x86-only).
+pub const PA_IOPORT_RESOURCE: u32 = 0x52;
 /// System sub-resource.
 pub const PA_SYSTEM_RESOURCE: u32 = 0x54;
 /// UTC clock handle.

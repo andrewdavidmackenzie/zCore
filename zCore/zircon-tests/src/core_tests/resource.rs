@@ -62,7 +62,7 @@ fn basic_actions() {
 /// Resources with base+size that would overflow usize are still
 /// created (overflow validation is at the syscall layer). But
 /// validate_ranged_resource uses checked_add, so an overflowing
-/// child range is rejected with ACCESS_DENIED.
+/// child range is rejected with OUT_OF_RANGE.
 #[test]
 fn create_arithmetic_overflow() {
     let _ctx = TestContext::new();
@@ -79,10 +79,10 @@ fn create_arithmetic_overflow() {
     assert_ne!(res.id(), 0);
 
     // validate_ranged_resource uses checked_add — an overflowing
-    // request range should fail with ACCESS_DENIED because
+    // request range should fail with OUT_OF_RANGE because
     // checked_add returns None and the comparison fails.
     let result = res.validate_ranged_resource(ResourceKind::MMIO, usize::MAX - 0x10, 0x20);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::ACCESS_DENIED));
+    assert_eq!(result.err(), Some(zircon_object::ZxError::OUT_OF_RANGE));
 }
 
 /// C++: TEST(Resource, CreateBadNamePointerReturnsInvalidArgs)
@@ -371,20 +371,20 @@ fn create_resource_slice() {
         .validate_ranged_resource(ResourceKind::MMIO, 0x1500, 0x500)
         .is_ok());
 
-    // Slice that extends beyond parent — ACCESS_DENIED.
+    // Slice that extends beyond parent — OUT_OF_RANGE.
     assert_eq!(
         parent
             .validate_ranged_resource(ResourceKind::MMIO, 0x2000, 0x1001)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED)
+        Some(zircon_object::ZxError::OUT_OF_RANGE)
     );
 
-    // Slice before parent start — ACCESS_DENIED.
+    // Slice before parent start — OUT_OF_RANGE.
     assert_eq!(
         parent
             .validate_ranged_resource(ResourceKind::MMIO, 0x0, 0x100)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED)
+        Some(zircon_object::ZxError::OUT_OF_RANGE)
     );
 
     // Wrong kind — WRONG_TYPE.
@@ -707,7 +707,7 @@ fn hierarchy_slicing_boundaries() {
         .validate_ranged_resource(ResourceKind::MMIO, base + page_size * 3, page_size)
         .is_ok());
 
-    // 5. Zero-sized slice of a non-root parent → ACCESS_DENIED
+    // 5. Zero-sized slice of a non-root parent → OUT_OF_RANGE
     //    (C++ line 992-997). Note: at the kernel object level,
     //    validate_ranged_resource with size=0 returns OK because
     //    [base, base+0) is within any range starting at base.
@@ -733,7 +733,7 @@ fn hierarchy_slicing_boundaries() {
         tier1_child
             .validate_ranged_resource(ResourceKind::MMIO, base + page_size - 1, page_size)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
         "off-by-one before child start should fail"
     );
 
@@ -742,7 +742,7 @@ fn hierarchy_slicing_boundaries() {
         parent
             .validate_ranged_resource(ResourceKind::MMIO, base + page_size * 3, page_size + 1)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
         "one byte past parent end should fail"
     );
 
@@ -751,7 +751,7 @@ fn hierarchy_slicing_boundaries() {
         parent
             .validate_ranged_resource(ResourceKind::MMIO, base + page_size * 10, page_size)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
         "completely outside parent should fail"
     );
 
@@ -779,7 +779,7 @@ fn hierarchy_slicing_boundaries() {
         tier3_great_grandchild
             .validate_ranged_resource(ResourceKind::MMIO, base + page_size, page_size)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
         "great-grandchild can't validate beyond its own range"
     );
 
@@ -798,7 +798,7 @@ fn hierarchy_slicing_boundaries() {
         tier2_grandchild
             .validate_ranged_resource(ResourceKind::MMIO, base + page_size, page_size + 1)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
     );
 }
 
@@ -839,11 +839,11 @@ fn invalid_args() {
         .validate_ranged_resource(ResourceKind::MMIO, 0x1000, 0x1000)
         .is_ok());
 
-    // Validate superset of its range — ACCESS_DENIED (privilege inversion).
+    // Validate superset of its range — OUT_OF_RANGE (privilege inversion).
     assert_eq!(
         mmio.validate_ranged_resource(ResourceKind::MMIO, 0, 0x1_0000)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
     );
 
     // --- 2. Invalid kind (C++ line 121-129) ---
@@ -880,7 +880,7 @@ fn invalid_args() {
         overflow_res
             .validate_ranged_resource(ResourceKind::MMIO, 0, 1)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
     );
 
     // --- 4. Invalid size: overflow (C++ line 135) ---
@@ -895,7 +895,7 @@ fn invalid_args() {
         overflow_res2
             .validate_ranged_resource(ResourceKind::MMIO, 1024, 1)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
     );
 
     // --- 5. Invalid flags (C++ line 138-141) ---
@@ -985,7 +985,7 @@ fn ioports() {
         ioport
             .validate_ranged_resource(ResourceKind::IOPORT, 0x70, 0x01)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
     );
 }
 
@@ -1126,7 +1126,7 @@ fn probe_address_space() {
     assert_eq!(
         res.validate_ranged_resource(ResourceKind::MMIO, 0x1_0000_0000, 1)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
     );
 }
 
@@ -1217,7 +1217,7 @@ fn strict_mmio_range_validation() {
         parent
             .validate_ranged_resource(ResourceKind::MMIO, base, 0x200)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
         "child before parent base should be rejected (same page)"
     );
 
@@ -1240,7 +1240,7 @@ fn strict_mmio_range_validation() {
         parent
             .validate_ranged_resource(ResourceKind::MMIO, base + 0x200, 0x401)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
     );
 
     // One byte before start → rejected.
@@ -1248,7 +1248,7 @@ fn strict_mmio_range_validation() {
         parent
             .validate_ranged_resource(ResourceKind::MMIO, base + 0x1FF, 0x1)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
     );
 
     // Also test with a page-aligned resource for completeness.
@@ -1278,7 +1278,7 @@ fn strict_mmio_range_validation() {
         aligned
             .validate_ranged_resource(ResourceKind::MMIO, 0x2000, 0x1)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
     );
 }
 
@@ -1329,7 +1329,7 @@ fn system_resource_sub_bases_and_syscall_validation() {
     assert_eq!(
         sys.validate_ranged_resource(ResourceKind::SYSTEM, 16, 1)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
     );
 
     // Wrong kind — rejected.
@@ -1341,7 +1341,7 @@ fn system_resource_sub_bases_and_syscall_validation() {
 
 /// C++: TEST(Resource, ValidateRangedResourceWithWrongKindReturnsAccessDenied)
 /// validate_ranged_resource with wrong kind returns WRONG_TYPE
-/// (not ACCESS_DENIED — kind is checked first).
+/// (not OUT_OF_RANGE — kind is checked first).
 #[test]
 fn validate_ranged_resource_with_wrong_kind_returns_access_denied() {
     let _ctx = TestContext::new();
@@ -1509,7 +1509,7 @@ fn vmo_creation_unaligned() {
     assert_eq!(
         res.validate_ranged_resource(ResourceKind::MMIO, 0x1000_0000, 0x100)
             .err(),
-        Some(zircon_object::ZxError::ACCESS_DENIED),
+        Some(zircon_object::ZxError::OUT_OF_RANGE),
         "address before unaligned base should be rejected"
     );
 }

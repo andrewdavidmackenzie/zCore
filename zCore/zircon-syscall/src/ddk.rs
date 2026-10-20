@@ -195,7 +195,11 @@ impl Syscall<'_> {
             if is_wake {
                 proc.get_resource(resource)?;
             }
-            let intr = Interrupt::new_virtual();
+            let intr = if is_wake {
+                Interrupt::new_virtual_wake()
+            } else {
+                Interrupt::new_virtual()
+            };
             if is_wake {
                 zircon_object::dev::register_wake_source(intr.id());
             }
@@ -269,10 +273,18 @@ impl Syscall<'_> {
             .thread
             .proc()
             .get_object_with_rights::<Interrupt>(interrupt, Rights::WRITE)?;
-        // Record wake source ack for suspend reports.
+        let koid = interrupt.id();
         let now = hal_impl::timer::timer_now().as_nanos() as u64;
-        zircon_object::dev::wake_source_acked(interrupt.id(), now);
-        interrupt.ack()
+        let re_triggered = interrupt.ack()?;
+        // Record wake source ack for suspend reports.
+        // If the interrupt immediately re-triggered (pending coalesced trigger),
+        // keep the wake source signaled. Otherwise, clear signaled state.
+        if re_triggered {
+            zircon_object::dev::wake_source_ack_remain_signaled(koid, now);
+        } else {
+            zircon_object::dev::wake_source_acked(koid, now);
+        }
+        Ok(())
     }
 
     /// Destroys an interrupt object.
@@ -316,20 +328,23 @@ impl Syscall<'_> {
             resource, io_addr, len
         );
         let proc = self.thread.proc();
-        proc.get_resource(resource)?
-            .validate(ResourceKind::IOPORT)?;
+        proc.get_resource(resource)?.validate_ranged_resource(
+            ResourceKind::IOPORT,
+            io_addr as usize,
+            len as usize,
+        )?;
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
-        // x86-only: would update TSS I/O permission bitmap
         #[cfg(not(target_arch = "x86_64"))]
         {
             Err(ZxError::NOT_SUPPORTED)
         }
         #[cfg(target_arch = "x86_64")]
         {
-            // TODO: update TSS IOPB to permit access to [io_addr, io_addr+len)
-            warn!("ioports.request: accepted but IOPB not updated");
+            // IOPL=3 is already set in RFLAGS, so ring-3 code has
+            // full I/O port access. A proper implementation would
+            // use the TSS IOPB for per-port granularity.
             Ok(())
         }
     }
@@ -341,8 +356,11 @@ impl Syscall<'_> {
             resource, io_addr, len
         );
         let proc = self.thread.proc();
-        proc.get_resource(resource)?
-            .validate(ResourceKind::IOPORT)?;
+        proc.get_resource(resource)?.validate_ranged_resource(
+            ResourceKind::IOPORT,
+            io_addr as usize,
+            len as usize,
+        )?;
         if len == 0 {
             return Err(ZxError::INVALID_ARGS);
         }
@@ -352,7 +370,8 @@ impl Syscall<'_> {
         }
         #[cfg(target_arch = "x86_64")]
         {
-            warn!("ioports.release: accepted but IOPB not updated");
+            // IOPL=3 grants access; release is a no-op until we have
+            // proper IOPB management.
             Ok(())
         }
     }

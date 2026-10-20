@@ -2,14 +2,14 @@
 # Each non-empty, non-comment line is a gtest pattern to exclude.
 # Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
 
-# ── Multi-threaded / cooperative scheduler ───────────────────────────
-PortStressTest.*
+# ── Multi-threaded (need preemptive scheduling / std::thread) ────────
+PortStressTest.CancelKeyDuringMatchRace
+PortStressTest.SignalCloseWait
+PortStressTest.ChannelCallWaitQueuePanicRepro
 ChannelTest.NoSpuriousReadableSignalWhenRacing
-ProcessTest.KillChannelHandleCycle
 
 # ── Thread suspend / register state ─────────────────────────────────
 Threads.NoncanonicalRipAddressIRETQ
-Threads.NoncanonicalRipAddressSyscall
 Threads.WritingArmFlagsRegister
 Threads.X86AcFlagUserCopy
 
@@ -19,14 +19,10 @@ Pager.FailOverlappingRangeCommit
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
 Pager.CloneReadFromParentTestVmar
-
-# ── PagerProcess (usercopy demand-paging not implemented) ────────────
 PagerProcess.KillBlockedUsercopy
 PagerProcess.KillBlockedUsercopyCaptureFaults
 PagerProcess.KillAfterSuspendUsercopy
 PagerProcess.KillAfterSuspendUsercopyCapture
-
-# ── PagerWriteback (TRAP_DIRTY not implemented) ──────────────────────
 PagerWriteback.*
 
 # ── Snapshot (pager-backed snapshot clones) ──────────────────────────
@@ -73,11 +69,9 @@ StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 
-# ── MSI ──────────────────────────────────────────────────────────────
+# ── MSI / Resource / Hardware ────────────────────────────────────────
 MsiTest.Msi
 MsiTest.Msix
-
-# ── Resource / Mexec ─────────────────────────────────────────────────
 Resource.MexecBadZbiHeaderLength
 Resource.MexecEmptyZbi
 Resource.MexecMemoryLeakOnFailure
@@ -101,13 +95,6 @@ WakeReportTestsThreadBound.Acked
 WakeReportTestsThreadBound.AckedStillPending
 WakeReportTestsThreadBound.MultipleSignals
 
-# ── ThreadSampler (crash on sample read) ─────────────────────────────
-ThreadSampler.StartStop
-ThreadSampler.NonRunningThread
-ThreadSampler.SamplerLifetime
-ThreadSampler.DroppedSampler
-ThreadSampler.HighFrequency
-
 # ── VmoClone2 hangs ──────────────────────────────────────────────────
 VmoClone2TestCase.DropParentCommittedBytes
 WakeReportTestsPortBound.MultipleSignals
@@ -117,7 +104,6 @@ WakeReportTestsPortBound.SingleWakeSource
 WakeReportTestsPortBound.AckedStillPending
 
 # ── Hangs — blocks sequential test run ───────────────────────────────
-PthreadTest.Basic
 VmoZeroTestCase.WriteCowParent
 VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 Bti.NoDelayedUnpin
