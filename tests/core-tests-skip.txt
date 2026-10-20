@@ -37,7 +37,6 @@ Snapshot.CloneModifyChain
 Snapshot.CloneAfterSliceRoot
 Snapshot.SnapshotSlice
 Snapshot.SnapshotVmoWithSlice
-Snapshot.SnapshotSliceAtLeastOnWrite
 Snapshot.AtLeastOnWriteAfterSnapshotModified
 Snapshot.SnapshotModifiedAfterAtLeastOnWrite
 Snapshot.ReleaseCowParentPagesLeft
