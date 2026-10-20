@@ -80,8 +80,6 @@ MsiTest.Msix
 Resource.MexecPagerPanic
 
 # ── COW merge on handle close (needs on_zero_handles) ────────────────
-VmoClone2TestCase.DropParentCommittedBytes
-VmoZeroTestCase.WriteCowParent
 VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 
 # ── BTI (std::thread race test) ──────────────────────────────────────

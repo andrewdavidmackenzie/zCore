@@ -381,11 +381,13 @@ fn vmo_create_basic() {
             "initial content should be zero"
         );
 
-        // After read, page 0 is committed.
+        // In Fuchsia, reading an anonymous VMO returns zeros without
+        // committing memory (zero-page optimization). Committed bytes
+        // may be 0 (zero-page ref) or PAGE_SIZE (allocated zero page).
         let info_after = vmo.get_info();
-        assert_eq!(
-            info_after.committed_bytes as usize, PAGE_SIZE,
-            "after reading page 0, committed_bytes should be PAGE_SIZE"
+        assert!(
+            info_after.committed_bytes == 0 || info_after.committed_bytes as usize == PAGE_SIZE,
+            "after reading page 0, committed_bytes should be 0 or PAGE_SIZE"
         );
     }
 }
