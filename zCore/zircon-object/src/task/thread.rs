@@ -1178,6 +1178,7 @@ impl Future for ThreadSwitchFuture {
             Some(p) => p,
             None => return Poll::Ready(()),
         };
+
         cfg_if! {
             if #[cfg(all(target_os = "none", target_arch = "aarch64"))] {
                 use hal_impl::arch::config::USER_TABLE_FLAG;

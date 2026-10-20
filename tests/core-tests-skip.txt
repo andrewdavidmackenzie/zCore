@@ -60,8 +60,6 @@ MsiTest.Msix
 # ── Mexec (pager-backed bootimage) ───────────────────────────────────
 Resource.MexecPagerPanic
 
-# ── COW merge (share_count in multi-level COW tree) ──────────────────
-VmoZeroTestCase.AllocateAfterMergeMultipleChildren
 
 # ── BTI (deep COW tree + concurrent write loops) ─────────────────────
 Bti.NoDelayedUnpin
