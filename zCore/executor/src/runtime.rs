@@ -241,7 +241,7 @@ pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, pr
         crate::arch::intr_off();
     }
     // Use None (least-loaded CPU) when runtimes are initialized,
-    // otherwise fall back to current CPU.
+    // otherwise fall back to current CPU (early boot).
     let cpu = if CPU_RUNTIMES.get().is_some() {
         None
     } else {
