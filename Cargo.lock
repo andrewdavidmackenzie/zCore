@@ -2303,7 +2303,6 @@ name = "zircon-loader"
 version = "0.1.0"
 dependencies = [
  "cfg-if",
- "executor",
  "futures",
  "hal",
  "hal-impl",
