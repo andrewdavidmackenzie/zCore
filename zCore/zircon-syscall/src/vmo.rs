@@ -738,6 +738,8 @@ impl Syscall<'_> {
                 {
                     use zircon_object::task::ThreadState;
                     let mut p = start_page;
+                    let mut commit_retries = 0;
+                    let mut any_page_committed = false;
                     while p < end_page {
                         if p >= pager_vmo.len() / PAGE_SIZE {
                             break;
@@ -769,19 +771,24 @@ impl Syscall<'_> {
                                     // Same retry loop as sys_vmo_read:
                                     // handles failed pages, SHOULD_WAIT
                                     // re-requests, and suspend/resume.
-                                    let mut fail_retries = 0;
                                     loop {
                                         if pager_vmo.committed_pages_in_range(pg, pg + 1) > 0 {
+                                            any_page_committed = true;
                                             break;
                                         }
                                         if let Some(err) = pager_vmo.get_failed_page(pg) {
-                                            if fail_retries >= 1 {
+                                            // Failed page marker found.
+                                            // Only retry if at least one
+                                            // prior page was committed
+                                            // (partial success). If ALL
+                                            // pages are failed, return error.
+                                            if !any_page_committed || commit_retries >= 1 {
                                                 return Err(err);
                                             }
-                                            fail_retries += 1;
+                                            commit_retries += 1;
                                             pager_vmo.clear_failed_page(pg);
-                                            let _ =
-                                                pager_vmo.request_pages(pg * PAGE_SIZE, PAGE_SIZE);
+                                            p = pg;
+                                            break;
                                         }
                                         let future = pager_vmo.wait_for_page(pg * PAGE_SIZE);
                                         pin_mut!(future);
@@ -825,17 +832,16 @@ impl Syscall<'_> {
                                                 continue;
                                             }
                                             Err(e) => {
-                                                // Pager error (e.g., IO from
-                                                // per-waiter error on request
-                                                // completion). Retry once.
-                                                if fail_retries >= 1 {
+                                                // Pager error from per-waiter
+                                                // completion. Only retry if
+                                                // we had partial success.
+                                                if !any_page_committed || commit_retries >= 1 {
                                                     return Err(e);
                                                 }
-                                                fail_retries += 1;
+                                                commit_retries += 1;
                                                 pager_vmo.clear_failed_page(pg);
-                                                let _ = pager_vmo
-                                                    .request_pages(pg * PAGE_SIZE, PAGE_SIZE);
-                                                continue;
+                                                p = pg; // reset to failing page
+                                                break;
                                             }
                                         }
                                     }
