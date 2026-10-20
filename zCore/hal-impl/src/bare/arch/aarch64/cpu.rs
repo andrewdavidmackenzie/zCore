@@ -20,15 +20,18 @@ hal_fn_impl! {
         }
 
         fn reset() -> ! {
-            info!("shutdown...");
-            let psci_system_off = 0x8400_0008_usize;
+            // Use PSCI SYSTEM_RESET (0x84000009) instead of SYSTEM_OFF
+            // (0x84000008). On QEMU virt with -no-reboot, SYSTEM_RESET
+            // causes QEMU to exit cleanly. SYSTEM_OFF doesn't reliably
+            // shut down the VM in all QEMU configurations.
+            let psci_system_reset: u64 = 0x8400_0009;
             unsafe {
                 core::arch::asm!(
                     "hvc #0",
-                    in("x0") psci_system_off
+                    in("x0") psci_system_reset,
+                    options(noreturn)
                 );
             }
-            unreachable!()
         }
     }
 }

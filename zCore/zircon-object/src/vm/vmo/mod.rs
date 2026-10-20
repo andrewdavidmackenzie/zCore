@@ -100,8 +100,18 @@ pub trait VMObjectTrait: Sync + Send {
         self.decommit(0, self.len())
     }
 
-    /// Create a child VMO.
+    /// Create a child VMO (bidirectional COW clone with hidden parent).
     fn create_child(&self, offset: usize, len: usize) -> ZxResult<Arc<dyn VMObjectTrait>>;
+
+    /// Create a unidirectional child VMO (SNAPSHOT_MODIFIED on pager root).
+    /// The child hangs directly under the parent; unmodified pages read through.
+    fn create_child_unidirectional(
+        &self,
+        _offset: usize,
+        _len: usize,
+    ) -> ZxResult<Arc<dyn VMObjectTrait>> {
+        Err(ZxError::NOT_SUPPORTED)
+    }
 
     /// Append a mapping to the VMO's mapping list.
     fn append_mapping(&self, _mapping: Weak<VmMapping>) {}
@@ -998,6 +1008,38 @@ impl VmObject {
             resizable,
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false), // Caller sets this after creation if needed
+            discardable: core::sync::atomic::AtomicBool::new(false),
+            discarded: core::sync::atomic::AtomicBool::new(false),
+            lock_count: core::sync::atomic::AtomicU32::new(0),
+            dead: core::sync::atomic::AtomicBool::new(false),
+            _counter: CountHelper::new(),
+            trait_,
+            inner: Mutex::new(VmObjectInner {
+                parent: Arc::downgrade(self),
+                ..VmObjectInner::default()
+            }),
+        });
+        self.add_child(&child);
+        Ok(child)
+    }
+
+    /// Create a unidirectional child VMO (SNAPSHOT_MODIFIED on pager root).
+    ///
+    /// The child hangs directly under the parent — no hidden node.
+    /// Unmodified pages read through to the parent.
+    pub fn create_child_unidirectional(
+        self: &Arc<Self>,
+        offset: usize,
+        len: usize,
+    ) -> ZxResult<Arc<Self>> {
+        let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
+        base.set_name(&self.base.name());
+        let trait_ = self.trait_.create_child_unidirectional(offset, len)?;
+        let child = Arc::new(VmObject {
+            base,
+            resizable: false,
+            is_slice: false,
+            immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),
             discarded: core::sync::atomic::AtomicBool::new(false),
             lock_count: core::sync::atomic::AtomicU32::new(0),

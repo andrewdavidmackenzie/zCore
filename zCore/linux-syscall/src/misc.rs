@@ -332,7 +332,7 @@ impl Syscall<'_> {
     /// otherwise `EINVAL` is returned. The `cmd` argument selects the action:
     /// power off, restart, or halt.
     pub fn sys_reboot(&self, magic1: u32, magic2: u32, cmd: u32) -> SysResult {
-        debug!(
+        info!(
             "reboot: magic1={:#x}, magic2={:#x}, cmd={:#x}",
             magic1, magic2, cmd
         );

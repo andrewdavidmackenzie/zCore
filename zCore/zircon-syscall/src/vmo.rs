@@ -825,7 +825,10 @@ impl Syscall<'_> {
                                             )
                                             .await
                                         {
-                                            Ok(()) => break,
+                                            Ok(()) => {
+                                                any_page_committed = true;
+                                                break;
+                                            }
                                             Err(ZxError::STOP) => return Err(ZxError::STOP),
                                             Err(ZxError::OUT_OF_RANGE) => break,
                                             Err(ZxError::BAD_STATE) => {
