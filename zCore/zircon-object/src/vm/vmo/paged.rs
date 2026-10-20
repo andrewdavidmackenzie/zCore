@@ -19,8 +19,13 @@ use {
 enum VMOType {
     /// The original node.
     Origin,
-    /// A snapshot of the parent node.
+    /// A snapshot of the parent node (bidirectional COW clone).
     Snapshot,
+    /// A unidirectional clone: hangs directly under the parent
+    /// without a hidden node. Unmodified pages read through to
+    /// the parent; only pages the child writes are COW-forked.
+    /// Used for SNAPSHOT_MODIFIED on a pager root VMO.
+    UnidirectionalChild,
     /// Internal non-leaf node for snapshot.
     ///
     /// ```text
@@ -55,6 +60,10 @@ impl VMOType {
 
     fn is_hidden(&self) -> bool {
         matches!(self, VMOType::Hidden { .. })
+    }
+
+    fn is_unidirectional(&self) -> bool {
+        matches!(self, VMOType::UnidirectionalChild)
     }
 }
 
@@ -536,6 +545,21 @@ impl VMObjectTrait for VMObjectPaged {
         Ok(child)
     }
 
+    fn create_child_unidirectional(
+        &self,
+        offset: usize,
+        len: usize,
+    ) -> ZxResult<Arc<dyn VMObjectTrait>> {
+        assert!(page_aligned(offset));
+        assert!(page_aligned(len));
+        if offset.checked_add(len).is_none() {
+            return Err(ZxError::INVALID_ARGS);
+        }
+        let (_guard, mut inner) = self.get_inner_mut();
+        let child = inner.create_child_unidirectional(offset, len, &self.lock)?;
+        Ok(child)
+    }
+
     fn append_mapping(&self, mapping: Weak<VmMapping>) {
         self.get_inner_mut().1.mappings.push(mapping);
     }
@@ -971,6 +995,15 @@ impl VMObjectPagedInner {
                             need_unmap = need_unmap || unmap;
                         }
                         self.frames.insert(page_idx, new_frame);
+                    }
+                    CommitResult::Ref(paddr)
+                        if self.type_.is_unidirectional() && flags.contains(MMUFlags::WRITE) =>
+                    {
+                        // Unidirectional child writing to a parent page:
+                        // COW-fork into a local copy.
+                        let new_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
+                        hal_impl::mem::pmem_copy(new_frame.paddr(), paddr, PAGE_SIZE);
+                        self.frames.insert(page_idx, PageState::new(new_frame));
                     }
                     r => return Ok(r),
                 }
@@ -1458,6 +1491,51 @@ impl VMObjectPagedInner {
         Ok(child)
     }
 
+    /// Create a unidirectional clone (SNAPSHOT_MODIFIED on pager root).
+    ///
+    /// The child hangs directly under the parent — no hidden node is
+    /// created. Unmodified pages read through to the parent; only
+    /// pages the child writes are COW-forked into the child's frames.
+    ///
+    /// The parent keeps all its pages and mappings (no RemoveWrite).
+    /// This matches Fuchsia's unidirectional clone path in
+    /// `CreateCloneLocked` / `CloneChildLocked`.
+    fn create_child_unidirectional(
+        &mut self,
+        offset: usize,
+        len: usize,
+        lock_ref: &Arc<Mutex<()>>,
+    ) -> ZxResult<Arc<VMObjectPaged>> {
+        if self.cache_policy != CachePolicy::Cached {
+            return Err(ZxError::BAD_STATE);
+        }
+        let child = VMObjectPaged::wrap(
+            VMObjectPagedInner {
+                owner: new_owner_id(),
+                type_: VMOType::UnidirectionalChild,
+                parent: None, // set below
+                parent_offset: offset,
+                parent_limit: offset.saturating_add(len).min(self.size),
+                size: len,
+                frames: BTreeMap::new(),
+                zero_markers: BTreeSet::new(),
+                mappings: Vec::new(),
+                cache_policy: CachePolicy::Cached,
+                contiguous: false,
+                pager_backed: false,
+                supplying: false,
+                self_ref: Default::default(),
+                pin_count: 0,
+            },
+            Some(lock_ref.clone()),
+        );
+        // Set the child's parent directly to self (no hidden node).
+        // Use self_ref to get our Arc<VMObjectPaged>.
+        let self_arc = self.self_ref.upgrade().unwrap();
+        child.inner.borrow_mut().parent = Some(self_arc);
+        Ok(child)
+    }
+
     /// Replace a child of the hidden node.
     /// `new_start` and `new_end` are in bytes
     fn replace_child(
@@ -1590,7 +1668,7 @@ impl VMObjectPagedInner {
     }
 
     fn complete_info(&self, info: &mut VmoInfo) {
-        if let VMOType::Snapshot = self.type_ {
+        if matches!(self.type_, VMOType::Snapshot | VMOType::UnidirectionalChild) {
             info.flags |= VmoInfoFlags::IS_COW_CLONE;
         }
         if self.is_contiguous() {
@@ -1884,8 +1962,12 @@ impl Drop for VMObjectPaged {
         // parent chain, then remove from parent's child list.
 
         if let Some(parent) = &inner.parent {
-            inner.decrement_parent_share_counts(0, inner.size / PAGE_SIZE);
-            parent.inner.borrow_mut().remove_child(&inner.self_ref);
+            // Unidirectional children don't have share_count tracking
+            // with the parent (no hidden node). Skip decrement + remove.
+            if !inner.type_.is_unidirectional() {
+                inner.decrement_parent_share_counts(0, inner.size / PAGE_SIZE);
+                parent.inner.borrow_mut().remove_child(&inner.self_ref);
+            }
         }
         let is_conti = inner.is_contiguous();
         for frame in inner.frames.iter_mut() {
