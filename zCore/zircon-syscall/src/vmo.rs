@@ -189,84 +189,82 @@ impl Syscall<'_> {
                 // Retry on pager errors (IO, etc.) — the kernel re-sends
                 // a request and waits again, matching Fuchsia's behavior.
                 if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0 {
-                    let mut last_err = None;
-                    // Try twice: initial wait (from batched request), then
-                    // one re-request after failure (matching Fuchsia kernel
-                    // behavior for vmo_read partial failure).
-                    for retry in 0..2 {
-                        if retry > 0 {
-                            // After failure, clear the marker and re-send.
+                    // Wait for the page with retry logic:
+                    // - On SHOULD_WAIT (request completed without resolving this page):
+                    //   re-request without consuming a retry
+                    // - On suspend: wait for resume then re-request
+                    // - On pager error (IO etc): retry once, then fail
+                    let mut fail_retries = 0;
+                    loop {
+                        // Check if page was supplied in the meantime.
+                        if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                            break;
+                        }
+                        // Check for failed page marker (set by OP_FAIL).
+                        // For primary requests, clear the marker and
+                        // re-request (the kernel retries once). For
+                        // overlap waiters, the error was already set
+                        // by the completion and they don't retry.
+                        if let Some(err) = pager_vmo.get_failed_page(page_idx) {
+                            if fail_retries >= 1 {
+                                return Err(err);
+                            }
+                            fail_retries += 1;
                             pager_vmo.clear_failed_page(page_idx);
                             let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
                         }
-                        // Loop to handle suspend/resume: when suspended,
-                        // yield to let the executor process the suspend
-                        // signal, then re-request and re-wait.
-                        let page_result = loop {
-                            let future = pager_vmo.wait_for_page(page_idx * PAGE_SIZE);
-                            pin_mut!(future);
-                            self.thread.set_blocking_state(ThreadState::BlockedPager);
-                            let result = self
-                                .thread
-                                .blocking_run_suspendable(
-                                    future,
-                                    ThreadState::BlockedPager,
-                                    Duration::from_nanos(u64::MAX),
-                                )
-                                .await;
-                            match result {
-                                Err(ZxError::CANCELED) => {
-                                    // Suspended — wait for resume. The
-                                    // THREAD_SUSPENDED signal was already
-                                    // set by suspend(). Wait until the
-                                    // thread is resumed before re-entering
-                                    // the pager wait. Use preempt_yield to
-                                    // go to the back of the queue so the
-                                    // test thread can call Resume().
-                                    while self.thread.is_suspended() {
-                                        if self.thread.state() == ThreadState::Dying {
-                                            break;
-                                        }
-                                        hal_impl::thread::preempt_yield().await;
-                                    }
-                                    if self.thread.state() == ThreadState::Dying {
-                                        break Err(ZxError::STOP);
-                                    }
-                                    // On resume, check if page was supplied.
-                                    if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1)
-                                        > 0
-                                    {
-                                        break Ok(());
-                                    }
-                                    // Cancel stale outstanding request so
-                                    // the re-request isn't absorbed.
-                                    pager_vmo.cancel_outstanding_requests_in_range(
-                                        page_idx * PAGE_SIZE,
-                                        PAGE_SIZE,
-                                    );
-                                    let _ =
-                                        pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
-                                    continue;
-                                }
-                                other => break other,
-                            }
-                        };
-                        match page_result {
-                            Ok(()) => {
-                                last_err = None;
-                                break;
-                            }
+                        let future = pager_vmo.wait_for_page(page_idx * PAGE_SIZE);
+                        pin_mut!(future);
+                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                        let result = self
+                            .thread
+                            .blocking_run_suspendable(
+                                future,
+                                ThreadState::BlockedPager,
+                                Duration::from_nanos(u64::MAX),
+                            )
+                            .await;
+                        match result {
+                            Ok(()) => break,
                             Err(ZxError::STOP) => return Err(ZxError::STOP),
                             Err(ZxError::OUT_OF_RANGE) => return Err(ZxError::OUT_OF_RANGE),
                             Err(ZxError::BAD_STATE) => return Err(ZxError::BAD_STATE),
+                            Err(ZxError::SHOULD_WAIT) => {
+                                // Request completed but page not resolved.
+                                // Re-request; if there's still an
+                                // outstanding request, it will be absorbed.
+                                let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
+                                continue;
+                            }
+                            Err(ZxError::CANCELED) => {
+                                // Suspended — wait for resume.
+                                while self.thread.is_suspended() {
+                                    if self.thread.state() == ThreadState::Dying {
+                                        break;
+                                    }
+                                    hal_impl::thread::preempt_yield().await;
+                                }
+                                if self.thread.state() == ThreadState::Dying {
+                                    return Err(ZxError::STOP);
+                                }
+                                if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                                    break;
+                                }
+                                pager_vmo.cancel_outstanding_requests_in_range(
+                                    page_idx * PAGE_SIZE,
+                                    PAGE_SIZE,
+                                );
+                                let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
+                                continue;
+                            }
                             Err(e) => {
-                                last_err = Some(e);
-                                // Retry — re-send request
+                                // Pager error from wait_for_page
+                                // (e.g., overlap completed with IO).
+                                // Return directly — the error was
+                                // already set by the completion.
+                                return Err(e);
                             }
                         }
-                    }
-                    if let Some(e) = last_err {
-                        return Err(e);
                     }
                 }
                 // Copy this page's data to user buffer.

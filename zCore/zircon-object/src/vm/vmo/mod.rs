@@ -278,11 +278,21 @@ struct OutstandingPageRequest {
     /// Number of pages not yet supplied/failed. When this reaches 0,
     /// the request is complete and all waiters are woken.
     pending_pages: usize,
-    /// Overlapping page waiters attached to this request. These
-    /// threads requested pages within this request's range after the
-    /// port packet was sent. They are woken when the primary request
-    /// completes or when their specific pages are supplied/failed.
-    overlap_waiters: Vec<(usize, futures::channel::oneshot::Sender<ZxResult>)>,
+    /// Overlapping page waiters attached to this request. Each has:
+    /// - page index
+    /// - oneshot sender to wake the waiter
+    /// - per-waiter error status (set by FailPages, used at completion)
+    overlap_waiters: Vec<OverlapWaiter>,
+}
+
+/// An individual overlap waiter within an outstanding request.
+struct OverlapWaiter {
+    page_idx: usize,
+    sender: futures::channel::oneshot::Sender<ZxResult>,
+    /// Per-waiter error status, matching Fuchsia's `complete_status_`.
+    /// Set by `fail_pager_requests_range` when the waiter's page is
+    /// failed. Used at completion to send the error to the waiter.
+    error: Option<ZxError>,
 }
 
 impl VmObject {
@@ -745,6 +755,11 @@ impl VmObject {
     }
 
     /// Clear a failed-page marker (for retry after OP_FAIL).
+    /// Get the error for a failed page, if any.
+    pub fn get_failed_page(&self, page_idx: usize) -> Option<ZxError> {
+        self.inner.lock().pager_failed_pages.get(&page_idx).copied()
+    }
+
     pub fn clear_failed_page(&self, page_idx: usize) {
         self.inner.lock().pager_failed_pages.remove(&page_idx);
     }
@@ -780,7 +795,11 @@ impl VmObject {
                 .iter_mut()
                 .find(|req| page_idx >= req.start_page && page_idx < req.end_page);
             if let Some(req) = absorbed {
-                req.overlap_waiters.push((page_idx, tx));
+                req.overlap_waiters.push(OverlapWaiter {
+                    page_idx,
+                    sender: tx,
+                    error: None,
+                });
             } else {
                 inner.pager_waiters.push((page_idx, tx));
             }
@@ -830,28 +849,30 @@ impl VmObject {
                 // Wake overlap waiters for pages in the supplied range.
                 let mut wi = 0;
                 while wi < req.overlap_waiters.len() {
-                    let pg = req.overlap_waiters[wi].0;
-                    if pg >= start_page && pg < end_page {
-                        let (_, tx) = req.overlap_waiters.swap_remove(wi);
-                        let _ = tx.send(Ok(()));
+                    if req.overlap_waiters[wi].page_idx >= start_page
+                        && req.overlap_waiters[wi].page_idx < end_page
+                    {
+                        let w = req.overlap_waiters.swap_remove(wi);
+                        let _ = w.sender.send(Ok(()));
                     } else {
                         wi += 1;
                     }
                 }
                 // If the request is fully resolved, wake any remaining
-                // overlap waiters based on their page's commit status.
+                // overlap waiters using their per-waiter error status.
                 if req.pending_pages == 0 {
                     let completed = inner.outstanding_requests.swap_remove(req_idx);
-                    for (pg, tx) in completed.overlap_waiters {
-                        if self.trait_.committed_pages_in_range(pg, pg + 1) > 0 {
-                            let _ = tx.send(Ok(()));
-                        } else if let Some(&err) = inner.pager_failed_pages.get(&pg) {
-                            let _ = tx.send(Err(err));
+                    for w in completed.overlap_waiters {
+                        if let Some(err) = w.error {
+                            let _ = w.sender.send(Err(err));
+                        } else if self
+                            .trait_
+                            .committed_pages_in_range(w.page_idx, w.page_idx + 1)
+                            > 0
+                        {
+                            let _ = w.sender.send(Ok(()));
                         } else {
-                            // Page neither supplied nor failed — wake
-                            // with Ok so the caller can re-check and
-                            // re-request if needed.
-                            let _ = tx.send(Ok(()));
+                            let _ = w.sender.send(Err(ZxError::SHOULD_WAIT));
                         }
                     }
                     continue; // don't increment req_idx
@@ -869,8 +890,8 @@ impl VmObject {
         }
         // Also fail all outstanding request overlap waiters.
         for req in inner.outstanding_requests.drain(..) {
-            for (_, tx) in req.overlap_waiters {
-                let _ = tx.send(Err(err));
+            for w in req.overlap_waiters {
+                let _ = w.sender.send(Err(err));
             }
         }
     }
@@ -908,26 +929,28 @@ impl VmObject {
             if overlap_start < overlap_end {
                 let newly_failed = overlap_end - overlap_start;
                 req.pending_pages = req.pending_pages.saturating_sub(newly_failed);
-                // Wake overlap waiters with the error.
-                let mut wi = 0;
-                while wi < req.overlap_waiters.len() {
-                    let pg = req.overlap_waiters[wi].0;
-                    if pg >= start_page && pg < end_page {
-                        let (_, tx) = req.overlap_waiters.swap_remove(wi);
-                        let _ = tx.send(Err(err));
-                    } else {
-                        wi += 1;
+                // Store the error on overlap waiters whose pages fall
+                // in the failed range. Don't wake them yet — they're
+                // woken when the primary request completes, matching
+                // Fuchsia's complete_status_ mechanism.
+                for w in req.overlap_waiters.iter_mut() {
+                    if w.page_idx >= start_page && w.page_idx < end_page && w.error.is_none() {
+                        w.error = Some(err);
                     }
                 }
                 if req.pending_pages == 0 {
                     let completed = inner.outstanding_requests.swap_remove(req_idx);
-                    for (pg, tx) in completed.overlap_waiters {
-                        if let Some(&pg_err) = inner.pager_failed_pages.get(&pg) {
-                            let _ = tx.send(Err(pg_err));
-                        } else if self.trait_.committed_pages_in_range(pg, pg + 1) > 0 {
-                            let _ = tx.send(Ok(()));
+                    for w in completed.overlap_waiters {
+                        if let Some(w_err) = w.error {
+                            let _ = w.sender.send(Err(w_err));
+                        } else if self
+                            .trait_
+                            .committed_pages_in_range(w.page_idx, w.page_idx + 1)
+                            > 0
+                        {
+                            let _ = w.sender.send(Ok(()));
                         } else {
-                            let _ = tx.send(Err(err));
+                            let _ = w.sender.send(Err(err));
                         }
                     }
                     continue;
