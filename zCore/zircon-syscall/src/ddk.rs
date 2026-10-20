@@ -75,7 +75,7 @@ impl Syscall<'_> {
 
     #[allow(clippy::too_many_arguments)]
     /// Pin pages and grant devices access to them.
-    pub fn sys_bti_pin(
+    pub async fn sys_bti_pin(
         &self,
         bti: HandleValue,
         options: u32,
@@ -112,6 +112,47 @@ impl Syscall<'_> {
         let contiguous = options.contains(BtiOptions::CONTIGUOUS);
         if contiguous && (compress_results || !vmo.is_contiguous()) {
             return Err(ZxError::INVALID_ARGS);
+        }
+        // For pager-backed VMOs, demand-page the pages before pinning.
+        // The pin needs committed pages, so we wait for the pager to
+        // supply them. Use blocking_run so Thread::kill() can interrupt.
+        if vmo.is_pager_backed() || vmo.is_in_pager_tree() {
+            use zircon_object::task::ThreadState;
+            let pager_vmo = if vmo.is_pager_backed() {
+                vmo.clone()
+            } else {
+                vmo.find_root_pager_vmo().unwrap_or_else(|| vmo.clone())
+            };
+            let start_page = offset / PAGE_SIZE;
+            let end_page = (offset + size).div_ceil(PAGE_SIZE);
+            for page_idx in start_page..end_page {
+                if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                    continue;
+                }
+                // Check if page is beyond VMO size (resize may have
+                // shrunk it while we were waiting).
+                if page_idx * PAGE_SIZE >= vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
+                let future = pager_vmo.wait_for_page(page_idx * PAGE_SIZE);
+                futures::pin_mut!(future);
+                self.thread.set_blocking_state(ThreadState::BlockedPager);
+                let result = self
+                    .thread
+                    .blocking_run::<_, (), _>(
+                        future,
+                        ThreadState::BlockedPager,
+                        core::time::Duration::from_nanos(u64::MAX),
+                        None,
+                    )
+                    .await;
+                match result {
+                    Ok(()) => {}
+                    Err(ZxError::OUT_OF_RANGE) => return Err(ZxError::OUT_OF_RANGE),
+                    Err(e) => return Err(e),
+                }
+            }
         }
         let pmt = bti.pin(vmo, offset, size, options.to_iommu_perms())?;
         let encoded_addrs = pmt.encode_addrs(compress_results, contiguous)?;
