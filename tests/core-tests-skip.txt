@@ -7,8 +7,11 @@ PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
-# ── Pager ────────────────────────────────────────────────────────────
-Pager.EarlyWakeCloneRace
+# ── Thread state / exceptions (mini-process crash handling) ──────────
+Threads.X86AcFlagUserCopy
+UserExceptionsTest.Delivered
+
+# ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
 Pager.CloneReadFromParentTestVmar
