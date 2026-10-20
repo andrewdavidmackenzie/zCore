@@ -6,13 +6,12 @@
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
-ChannelTest.NoSpuriousReadableSignalWhenRacing
 
-# ── Thread state / exceptions ────────────────────────────────────────
+# ── Thread state / exceptions (mini-process crash handling) ──────────
 Threads.X86AcFlagUserCopy
 UserExceptionsTest.Delivered
 
-# ── Pager ────────────────────────────────────────────────────────────
+# ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.EarlyWakeCloneRace
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
@@ -54,7 +53,7 @@ StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 
-# ── MSI (need test_ram_reserve boot option) ──────────────────────────
+# ── MSI (need test_ram_reserve boot option for physical VMOs) ────────
 MsiTest.Msi
 MsiTest.Msix
 
