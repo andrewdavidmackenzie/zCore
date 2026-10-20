@@ -257,6 +257,42 @@ struct VmObjectInner {
     /// When wait_for_page registers a waiter for a failed page, it
     /// returns the error immediately instead of blocking.
     pager_failed_pages: alloc::collections::BTreeMap<usize, ZxError>,
+    /// Outstanding pager requests. Each entry represents a range sent
+    /// to the pager port. New requests whose range falls within an
+    /// existing outstanding request are absorbed (no new port packet
+    /// generated) and attached as overlaps. When the primary request
+    /// completes, all overlapping waiters are woken.
+    ///
+    /// This matches Fuchsia's `PageSource::outstanding_requests_` tree
+    /// with per-request overlap lists.
+    outstanding_requests: Vec<OutstandingPageRequest>,
+}
+
+/// An outstanding pager page request. Tracks the range sent to the
+/// pager port and any overlapping waiters that were absorbed.
+struct OutstandingPageRequest {
+    /// Start page index of the request.
+    start_page: usize,
+    /// End page index (exclusive) of the request.
+    end_page: usize,
+    /// Number of pages not yet supplied/failed. When this reaches 0,
+    /// the request is complete and all waiters are woken.
+    pending_pages: usize,
+    /// Overlapping page waiters attached to this request. Each has:
+    /// - page index
+    /// - oneshot sender to wake the waiter
+    /// - per-waiter error status (set by FailPages, used at completion)
+    overlap_waiters: Vec<OverlapWaiter>,
+}
+
+/// An individual overlap waiter within an outstanding request.
+struct OverlapWaiter {
+    page_idx: usize,
+    sender: futures::channel::oneshot::Sender<ZxResult>,
+    /// Per-waiter error status, matching Fuchsia's `complete_status_`.
+    /// Set by `fail_pager_requests_range` when the waiter's page is
+    /// failed. Used at completion to send the error to the waiter.
+    error: Option<ZxError>,
 }
 
 impl VmObject {
@@ -630,21 +666,25 @@ impl VmObject {
     /// Returns `Err(SHOULD_WAIT)` — the caller should then call
     /// `wait_for_page` to block until the page is supplied.
     pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
-        let inner = self.inner.lock();
+        let mut inner = self.inner.lock();
         if let Some(port) = &inner.pager_port {
             let start_page = offset / PAGE_SIZE;
             let end_page = (offset + length).div_ceil(PAGE_SIZE);
-            // Skip if ALL pages in the range are already committed or
-            // have pending waiters (avoids spurious duplicate requests).
-            let total_pages = end_page - start_page;
+            // Check if ALL pages are already committed.
             let committed = self.trait_.committed_pages_in_range(start_page, end_page);
-            let waiters_in_range = inner
-                .pager_waiters
+            if committed >= end_page - start_page {
+                return Err(ZxError::SHOULD_WAIT);
+            }
+            // Check if the request range falls within an existing
+            // outstanding request (overlap absorption). Matching
+            // Fuchsia's SendRequestToProviderLocked: if the new
+            // request's offset is within an existing request, it is
+            // absorbed — no new port packet is sent.
+            let is_absorbed = inner
+                .outstanding_requests
                 .iter()
-                .filter(|(idx, _)| *idx >= start_page && *idx < end_page)
-                .count();
-            let all_covered = committed + waiters_in_range >= total_pages;
-            if !all_covered {
+                .any(|req| start_page >= req.start_page && start_page < req.end_page);
+            if !is_absorbed {
                 port.push(PortPacketRepr {
                     key: inner.pager_key,
                     status: ZxError::OK,
@@ -656,6 +696,16 @@ impl VmObject {
                         length: length as u64,
                         _reserved1: 0,
                     }),
+                });
+                // Track as a new outstanding request.
+                let pending = (start_page..end_page)
+                    .filter(|&pg| self.trait_.committed_pages_in_range(pg, pg + 1) == 0)
+                    .count();
+                inner.outstanding_requests.push(OutstandingPageRequest {
+                    start_page,
+                    end_page,
+                    pending_pages: pending,
+                    overlap_waiters: Vec::new(),
                 });
                 info!(
                     "pager: requested page at offset={:#x} len={:#x}",
@@ -672,13 +722,47 @@ impl VmObject {
         }
     }
 
+    /// Remove outstanding request entries covering the given range.
+    /// Called when a pager wait is aborted (e.g., by suspend) and the
+    /// caller will re-request. Without this, the stale entry causes
+    /// overlap absorption to suppress the re-request's port packet.
+    pub fn cancel_outstanding_requests_in_range(&self, offset: usize, length: usize) {
+        let mut inner = self.inner.lock();
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        let mut i = 0;
+        while i < inner.outstanding_requests.len() {
+            let req = &inner.outstanding_requests[i];
+            let overlaps = req.start_page < end_page && req.end_page > start_page;
+            if overlaps {
+                let removed = inner.outstanding_requests.swap_remove(i);
+                // Wake any remaining overlap waiters with SHOULD_WAIT
+                // so they can re-request rather than silently failing.
+                for w in removed.overlap_waiters {
+                    let _ = w.sender.send(Err(ZxError::SHOULD_WAIT));
+                }
+            } else {
+                i += 1;
+            }
+        }
+    }
+
     /// Check if a page has a pending waiter (another thread waiting for supply).
     pub fn has_page_waiter(&self, page_idx: usize) -> bool {
         let inner = self.inner.lock();
         inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx)
+            || inner
+                .outstanding_requests
+                .iter()
+                .any(|req| page_idx >= req.start_page && page_idx < req.end_page)
     }
 
     /// Clear a failed-page marker (for retry after OP_FAIL).
+    /// Get the error for a failed page, if any.
+    pub fn get_failed_page(&self, page_idx: usize) -> Option<ZxError> {
+        self.inner.lock().pager_failed_pages.get(&page_idx).copied()
+    }
+
     pub fn clear_failed_page(&self, page_idx: usize) {
         self.inner.lock().pager_failed_pages.remove(&page_idx);
     }
@@ -706,7 +790,22 @@ impl VmObject {
                 return Err(err);
             }
             let (tx, rx) = futures::channel::oneshot::channel();
-            inner.pager_waiters.push((page_idx, tx));
+            // If the page falls within an outstanding request, add as
+            // an overlap waiter (won't generate a new port packet).
+            // Otherwise add to the general pager_waiters list.
+            let absorbed = inner
+                .outstanding_requests
+                .iter_mut()
+                .find(|req| page_idx >= req.start_page && page_idx < req.end_page);
+            if let Some(req) = absorbed {
+                req.overlap_waiters.push(OverlapWaiter {
+                    page_idx,
+                    sender: tx,
+                    error: None,
+                });
+            } else {
+                inner.pager_waiters.push((page_idx, tx));
+            }
             rx
         };
         match rx.await {
@@ -726,7 +825,7 @@ impl VmObject {
         for page_idx in start_page..end_page {
             inner.pager_failed_pages.remove(&page_idx);
         }
-        // Drain waiters whose page index falls in [start_page, end_page).
+        // Drain general waiters whose page index falls in range.
         let mut i = 0;
         while i < inner.pager_waiters.len() {
             if inner.pager_waiters[i].0 >= start_page && inner.pager_waiters[i].0 < end_page {
@@ -736,6 +835,54 @@ impl VmObject {
                 i += 1;
             }
         }
+        // Resolve outstanding requests: decrement pending pages and
+        // wake overlap waiters for supplied pages. When an outstanding
+        // request's pending_pages reaches 0, it is complete — all
+        // remaining overlap waiters are woken with Ok(()).
+        let mut req_idx = 0;
+        while req_idx < inner.outstanding_requests.len() {
+            let req = &mut inner.outstanding_requests[req_idx];
+            // Check if any supplied pages fall within this request.
+            let overlap_start = start_page.max(req.start_page);
+            let overlap_end = end_page.min(req.end_page);
+            if overlap_start < overlap_end {
+                // Count newly-supplied pages in the overlap.
+                let newly_supplied = overlap_end - overlap_start;
+                req.pending_pages = req.pending_pages.saturating_sub(newly_supplied);
+                // Wake overlap waiters for pages in the supplied range.
+                let mut wi = 0;
+                while wi < req.overlap_waiters.len() {
+                    if req.overlap_waiters[wi].page_idx >= start_page
+                        && req.overlap_waiters[wi].page_idx < end_page
+                    {
+                        let w = req.overlap_waiters.swap_remove(wi);
+                        let _ = w.sender.send(Ok(()));
+                    } else {
+                        wi += 1;
+                    }
+                }
+                // If the request is fully resolved, wake any remaining
+                // overlap waiters using their per-waiter error status.
+                if req.pending_pages == 0 {
+                    let completed = inner.outstanding_requests.swap_remove(req_idx);
+                    for w in completed.overlap_waiters {
+                        if let Some(err) = w.error {
+                            let _ = w.sender.send(Err(err));
+                        } else if self
+                            .trait_
+                            .committed_pages_in_range(w.page_idx, w.page_idx + 1)
+                            > 0
+                        {
+                            let _ = w.sender.send(Ok(()));
+                        } else {
+                            let _ = w.sender.send(Err(ZxError::SHOULD_WAIT));
+                        }
+                    }
+                    continue; // don't increment req_idx
+                }
+            }
+            req_idx += 1;
+        }
     }
 
     /// Wake all pager waiters with an error (called on detach/destroy).
@@ -743,6 +890,12 @@ impl VmObject {
         let mut inner = self.inner.lock();
         for (_, tx) in inner.pager_waiters.drain(..) {
             let _ = tx.send(Err(err));
+        }
+        // Also fail all outstanding request overlap waiters.
+        for req in inner.outstanding_requests.drain(..) {
+            for w in req.overlap_waiters {
+                let _ = w.sender.send(Err(err));
+            }
         }
     }
 
@@ -758,7 +911,7 @@ impl VmObject {
         for page_idx in start_page..end_page {
             inner.pager_failed_pages.insert(page_idx, err);
         }
-        // Wake existing waiters.
+        // Wake existing general waiters in range.
         let mut i = 0;
         while i < inner.pager_waiters.len() {
             if inner.pager_waiters[i].0 >= start_page && inner.pager_waiters[i].0 < end_page {
@@ -767,6 +920,46 @@ impl VmObject {
             } else {
                 i += 1;
             }
+        }
+        // Fail overlap waiters in outstanding requests that overlap
+        // the failed range. Also decrement pending_pages for failed
+        // pages and complete requests that reach 0.
+        let mut req_idx = 0;
+        while req_idx < inner.outstanding_requests.len() {
+            let req = &mut inner.outstanding_requests[req_idx];
+            let overlap_start = start_page.max(req.start_page);
+            let overlap_end = end_page.min(req.end_page);
+            if overlap_start < overlap_end {
+                let newly_failed = overlap_end - overlap_start;
+                req.pending_pages = req.pending_pages.saturating_sub(newly_failed);
+                // Store the error on overlap waiters whose pages fall
+                // in the failed range. Don't wake them yet — they're
+                // woken when the primary request completes, matching
+                // Fuchsia's complete_status_ mechanism.
+                for w in req.overlap_waiters.iter_mut() {
+                    if w.page_idx >= start_page && w.page_idx < end_page && w.error.is_none() {
+                        w.error = Some(err);
+                    }
+                }
+                if req.pending_pages == 0 {
+                    let completed = inner.outstanding_requests.swap_remove(req_idx);
+                    for w in completed.overlap_waiters {
+                        if let Some(w_err) = w.error {
+                            let _ = w.sender.send(Err(w_err));
+                        } else if self
+                            .trait_
+                            .committed_pages_in_range(w.page_idx, w.page_idx + 1)
+                            > 0
+                        {
+                            let _ = w.sender.send(Ok(()));
+                        } else {
+                            let _ = w.sender.send(Err(err));
+                        }
+                    }
+                    continue;
+                }
+            }
+            req_idx += 1;
         }
     }
 

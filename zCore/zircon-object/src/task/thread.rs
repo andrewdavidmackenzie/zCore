@@ -124,6 +124,11 @@ struct ThreadInner {
     waker: Option<Waker>,
     /// A token used to kill blocking thread
     killer: Option<Sender<()>>,
+    /// A token used to interrupt suspendable blocking waits (e.g., pager waits).
+    /// When a thread is suspended during a suspendable blocking_run, this
+    /// channel fires to interrupt the wait so the run loop can process the
+    /// suspend and go Pending in wait_for_run.
+    suspend_interrupt: Option<Sender<()>>,
     /// Thread state
     ///
     /// NOTE: This variable will never be `Suspended`. On suspended, the
@@ -500,6 +505,11 @@ impl Thread {
         self.inner.lock().state()
     }
 
+    /// Check if the thread has a pending suspend (suspend_count > 0).
+    pub fn is_suspended(&self) -> bool {
+        self.inner.lock().suspend_count > 0
+    }
+
     /// Set the thread state (e.g., to BlockedPager during pager waits).
     pub fn set_state(&self, state: ThreadState) {
         self.inner.lock().change_state(state, &self.base);
@@ -666,6 +676,10 @@ impl Task for Thread {
         inner.suspend_count += 1;
         let state = inner.state;
         inner.change_state(state, &self.base);
+        // Interrupt any suspendable blocking wait (e.g., pager wait).
+        if let Some(sender) = inner.suspend_interrupt.take() {
+            let _ = sender.send(());
+        }
     }
 
     fn resume(&self) {
@@ -780,6 +794,39 @@ impl CurrentThread {
         inner.change_state(state, &self.base);
     }
 
+    /// Wait until the thread is no longer suspended, or return immediately
+    /// if the thread is dying/dead. Used by syscall handlers to pause
+    /// execution during a suspend and resume transparently.
+    ///
+    /// The caller should fire `THREAD_SUSPENDED` signal before calling
+    /// this by setting the thread state. The `change_state` call in
+    /// `suspend()` already handles signal changes.
+    pub async fn wait_for_resume(&self) {
+        #[must_use = "wait_for_resume does nothing unless polled"]
+        struct ResumeChecker {
+            thread: Arc<Thread>,
+        }
+        impl Future for ResumeChecker {
+            type Output = ();
+            fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
+                let mut inner = self.thread.inner.lock();
+                if inner.suspend_count == 0
+                    || inner.state == ThreadState::Dying
+                    || inner.state == ThreadState::Dead
+                {
+                    Poll::Ready(())
+                } else {
+                    inner.waker = Some(cx.waker().clone());
+                    Poll::Pending
+                }
+            }
+        }
+        ResumeChecker {
+            thread: self.0.clone(),
+        }
+        .await;
+    }
+
     /// Run async future and change state while blocking.
     pub async fn blocking_run<F, T, FT>(
         &self,
@@ -831,6 +878,73 @@ impl CurrentThread {
         }
         assert_eq!(inner.state, state);
         inner.change_state(old_state, &self.base);
+        ret
+    }
+
+    /// Run async future while blocking, interruptible by both kill AND suspend.
+    ///
+    /// Like `blocking_run`, but also listens for suspend notifications.
+    /// When a suspend is requested during this wait, returns
+    /// `Err(ZxError::CANCELED)` so the caller can allow the run loop
+    /// to process the suspend and re-fault on resume. This matches
+    /// Fuchsia's `Interruptible::Yes` + `suspendable=true` semantics in
+    /// `PagerProxy::WaitOnEvent`.
+    pub async fn blocking_run_suspendable<F, T, FT>(
+        &self,
+        future: F,
+        state: ThreadState,
+        deadline: Duration,
+    ) -> ZxResult<T>
+    where
+        F: Future<Output = FT> + Unpin,
+        FT: IntoResult<T>,
+    {
+        let (old_state, killed, suspended) = {
+            let mut inner = self.inner.lock();
+            if inner.state() == ThreadState::Dying {
+                return Err(ZxError::STOP);
+            }
+            // If already suspended, restore state and return immediately
+            // so the run loop handles the pending suspend.
+            if inner.suspend_count > 0 {
+                // Restore to Running if we were set to BlockedPager
+                // by set_blocking_state before this call.
+                if inner.state == state {
+                    inner.change_state(ThreadState::Running, &self.base);
+                }
+                return Err(ZxError::CANCELED);
+            }
+            let (kill_tx, kill_rx) = channel();
+            inner.killer = Some(kill_tx);
+            let (suspend_tx, suspend_rx) = channel();
+            inner.suspend_interrupt = Some(suspend_tx);
+            let old_state = if inner.state == state {
+                ThreadState::Running
+            } else {
+                let old = inner.state;
+                inner.change_state(state, &self.base);
+                old
+            };
+            (old_state, kill_rx, suspend_rx)
+        };
+        let ret = select_biased! {
+            ret = future.fuse() => ret.into_result(),
+            _ = killed.fuse() => Err(ZxError::STOP),
+            _ = suspended.fuse() => Err(ZxError::CANCELED),
+            _ = hal_impl::thread::sleep_until(deadline).fuse() => Err(ZxError::TIMED_OUT),
+        };
+        let mut inner = self.inner.lock();
+        inner.killer = None;
+        inner.suspend_interrupt = None;
+        if inner.state() == ThreadState::Dying {
+            return ret;
+        }
+        // If we were interrupted by suspend, the state might transition
+        // to Suspended (via state() checking suspend_count). Don't assert
+        // the exact state — just restore if we're still in the blocked state.
+        if inner.state == state {
+            inner.change_state(old_state, &self.base);
+        }
         ret
     }
 

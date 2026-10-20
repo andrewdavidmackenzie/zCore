@@ -15,7 +15,8 @@
 
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use cfg_if::cfg_if;
-use core::{future::Future, pin::Pin};
+use core::{future::Future, pin::Pin, time::Duration};
+use futures::pin_mut;
 
 use xmas_elf::ElfFile;
 
@@ -489,17 +490,36 @@ async fn handler_user_trap(
                     });
                     let offset = vmar.vaddr_to_vmo_offset(vaddr);
                     if let (Some(vmo), Some(offset)) = (vmo, offset) {
-                        // Set thread state so WaitForBlocked() polls can
-                        // detect the pager-blocked state.
-                        let old_state = thread.state();
-                        thread.set_state(ThreadState::BlockedPager);
-                        let result = vmo.wait_for_page(offset).await;
-                        // Restore to Running unless the thread is dying.
-                        if thread.state() == ThreadState::BlockedPager {
-                            thread.set_state(old_state);
-                        }
+                        // Use blocking_run_suspendable so Thread::kill()
+                        // and Thread::suspend() can cancel the pager wait.
+                        // This matches Fuchsia's Interruptible::Yes +
+                        // suspendable=true semantics for user page faults.
+                        let future = vmo.wait_for_page(offset);
+                        pin_mut!(future);
+                        thread.set_blocking_state(ThreadState::BlockedPager);
+                        let result = thread
+                            .blocking_run_suspendable(
+                                future,
+                                ThreadState::BlockedPager,
+                                Duration::from_nanos(u64::MAX),
+                            )
+                            .await;
                         match result {
                             Ok(()) => Ok(()),
+                            Err(ZxError::STOP) | Err(ZxError::CANCELED) => {
+                                // Thread was killed or suspended while
+                                // pager-blocked. Cancel the stale
+                                // outstanding request so the re-fault
+                                // after resume generates a new port
+                                // packet (not absorbed by overlap).
+                                vmo.cancel_outstanding_requests_in_range(offset, PAGE_SIZE);
+                                // Return Ok so the run loop re-enters:
+                                // for kill it detects Dying state; for
+                                // suspend, wait_for_run goes Pending.
+                                // On resume, re-fault re-sends the
+                                // page request.
+                                Ok(())
+                            }
                             Err(e) => {
                                 // Pass the pager error code as synth_code
                                 // in the exception report. Tests check this

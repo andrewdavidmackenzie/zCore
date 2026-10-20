@@ -1,4 +1,4 @@
-use {super::*, bitflags::bitflags, zircon_object::vm::*};
+use {super::*, bitflags::bitflags, core::time::Duration, zircon_object::vm::*};
 
 fn amount_of_alignments(options: u32) -> ZxResult<usize> {
     let mut align_pow2 = (options >> 24) as usize;
@@ -410,22 +410,44 @@ impl Syscall<'_> {
                     let req_len = (p - run_start) * PAGE_SIZE;
                     match vmo.request_pages(req_off, req_len) {
                         Err(ZxError::SHOULD_WAIT) => {
-                            let old_state = self.thread.state();
-                            self.thread.set_state(ThreadState::BlockedPager);
-                            let mut wait_err = None;
                             for pg in run_start..p {
                                 if vmo.committed_pages_in_range(pg, pg + 1) == 0 {
-                                    if let Err(e) = vmo.wait_for_page(pg * PAGE_SIZE).await {
-                                        wait_err = Some(e);
-                                        break;
+                                    // Suspend/resume retry loop.
+                                    loop {
+                                        let future = vmo.wait_for_page(pg * PAGE_SIZE);
+                                        pin_mut!(future);
+                                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                                        match self
+                                            .thread
+                                            .blocking_run_suspendable(
+                                                future,
+                                                ThreadState::BlockedPager,
+                                                Duration::from_nanos(u64::MAX),
+                                            )
+                                            .await
+                                        {
+                                            Ok(()) => break,
+                                            Err(ZxError::CANCELED) => {
+                                                self.thread.wait_for_resume().await;
+                                                if self.thread.state() == ThreadState::Dying {
+                                                    return Err(ZxError::STOP);
+                                                }
+                                                if vmo.committed_pages_in_range(pg, pg + 1) > 0 {
+                                                    break;
+                                                }
+                                                vmo.cancel_outstanding_requests_in_range(
+                                                    pg * PAGE_SIZE,
+                                                    PAGE_SIZE,
+                                                );
+                                                let _ =
+                                                    vmo.request_pages(pg * PAGE_SIZE, PAGE_SIZE);
+                                                continue;
+                                            }
+                                            Err(ZxError::STOP) => return Err(ZxError::STOP),
+                                            Err(e) => return Err(e),
+                                        }
                                     }
                                 }
-                            }
-                            if self.thread.state() == ThreadState::BlockedPager {
-                                self.thread.set_state(old_state);
-                            }
-                            if let Some(e) = wait_err {
-                                return Err(e);
                             }
                         }
                         Err(e) => return Err(e),

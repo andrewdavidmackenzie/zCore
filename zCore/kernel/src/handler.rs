@@ -65,7 +65,63 @@ impl KernelHandler for ZcoreKernelHandler {
         if let Some(thread) = hal_impl::thread::get_current_thread() {
             let thread = thread.downcast::<Thread>().unwrap();
             let vmar = thread.proc().vmar();
-            vmar.handle_page_fault(fault_vaddr, access_flags).is_ok()
+            match vmar.handle_page_fault(fault_vaddr, access_flags) {
+                Ok(()) => true,
+                Err(zircon_object::ZxError::SHOULD_WAIT) => {
+                    // Pager-backed page fault during kernel usercopy.
+                    // The page request has already been sent to the pager
+                    // port by handle_page_fault. We need to wait for the
+                    // page to be supplied.
+                    //
+                    // Since we're in a synchronous trap handler, we spin-
+                    // poll the executor to let the pager thread supply
+                    // the page. This matches Fuchsia's behavior where
+                    // the kernel usercopy blocks on a pager wait (non-
+                    // suspendable). The thread stays in BlockedPager state.
+                    //
+                    // Set thread state so WaitForBlocked polls detect it.
+                    use zircon_object::task::ThreadState;
+                    thread.set_state(ThreadState::BlockedPager);
+
+                    // Find the pager VMO for this address and wait.
+                    let pager_vmo = vmar.find_pager_vmo(fault_vaddr).or_else(|| {
+                        let mapping = vmar.find_mapping(fault_vaddr)?;
+                        if mapping.vmo.is_in_pager_tree() {
+                            mapping.vmo.find_root_pager_vmo()
+                        } else {
+                            None
+                        }
+                    });
+                    let offset = vmar.vaddr_to_vmo_offset(fault_vaddr);
+
+                    if let (Some(vmo), Some(offset)) = (pager_vmo, offset) {
+                        let page_idx = offset / hal_impl::PAGE_SIZE;
+                        // Spin-poll: run the executor to let pager tasks
+                        // make progress, then check if the page was
+                        // supplied. The thread is killed by dropping the
+                        // process, which fails all pager requests, so
+                        // this loop terminates.
+                        loop {
+                            if vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                                thread.set_state(ThreadState::Running);
+                                return true;
+                            }
+                            // Check if the thread was killed during wait.
+                            if thread.state() == ThreadState::Dying
+                                || thread.state() == ThreadState::Dead
+                            {
+                                return false;
+                            }
+                            // Poll the executor to let other tasks run
+                            // (e.g., the pager thread that supplies pages).
+                            executor::run_until_idle();
+                        }
+                    } else {
+                        false
+                    }
+                }
+                Err(_) => false,
+            }
         } else {
             false
         }

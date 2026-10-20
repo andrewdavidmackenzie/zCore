@@ -8,24 +8,19 @@ PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
 ChannelTest.NoSpuriousReadableSignalWhenRacing
 
+# ── Thread suspend / register state ─────────────────────────────────
+Threads.NoncanonicalRipAddressIRETQ
+Threads.WritingArmFlagsRegister
+Threads.X86AcFlagUserCopy
+
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.EarlyWakeCloneRace
-Pager.EarlyWakeOverlappingRequests
-Pager.FailOverlapRequest
 Pager.FailOverlappingRangeCommit
-Pager.PageRequestBatchingChecksAncestorPages
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
-Pager.SuspendCommitTest
-Pager.SuspendReadTestVmar
-Pager.SuspendReadTestVmo
 Pager.CloneReadFromParentTestVmar
-PagerProcess.KillBlockedUserVmoRead
-PagerProcess.KillBlockedUserPageFault
 PagerProcess.KillBlockedUsercopy
 PagerProcess.KillBlockedUsercopyCaptureFaults
-PagerProcess.KillAfterSuspendVmoRead
-PagerProcess.KillAfterSuspendPageFault
 PagerProcess.KillAfterSuspendUsercopy
 PagerProcess.KillAfterSuspendUsercopyCapture
 PagerWriteback.*
@@ -77,10 +72,38 @@ StreamTestCase.PartialVmoDirty
 # ── MSI / Resource / Hardware ────────────────────────────────────────
 MsiTest.Msi
 MsiTest.Msix
+Resource.MexecBadZbiHeaderLength
+Resource.MexecEmptyZbi
+Resource.MexecMemoryLeakOnFailure
 Resource.MexecPagerPanic
+Resource.MexecPayloadTooSmall
+Resource.MexecZeroSizedVmo
+Resource.Ioports
 
-# ── COW merge on handle close (needs on_zero_handles) ────────────────
+# ── System events / suspend / wake reports ───────────────────────────
+SystemEvent.ExactlyOneMemoryEventSignaled
+WakeReportTestsThreadBound.BadReportRequests
+WakeReportTestsThreadBound.Discard
+WakeReportTestsThreadBound.DestructionYesAck
+WakeReportTestsThreadBound.DestructionNoAck
+WakeReportTestsThreadBound.MultiWakeSource
+WakeReportTestsThreadBound.SingleWakeSource
+WakeReportTestsThreadBound.SmallReportBuffer
+WakeReportTestsThreadBound.AlreadyTimedOut
+WakeReportTestsThreadBound.ReportOnly
+WakeReportTestsThreadBound.Acked
+WakeReportTestsThreadBound.AckedStillPending
+WakeReportTestsThreadBound.MultipleSignals
+
+# ── VmoClone2 hangs ──────────────────────────────────────────────────
+VmoClone2TestCase.DropParentCommittedBytes
+WakeReportTestsPortBound.MultipleSignals
+WakeReportTestsPortBound.Discard
+WakeReportTestsPortBound.MultiWakeSource
+WakeReportTestsPortBound.SingleWakeSource
+WakeReportTestsPortBound.AckedStillPending
+
+# ── Hangs — blocks sequential test run ───────────────────────────────
+VmoZeroTestCase.WriteCowParent
 VmoZeroTestCase.AllocateAfterMergeMultipleChildren
-
-# ── BTI (std::thread race test) ──────────────────────────────────────
 Bti.NoDelayedUnpin

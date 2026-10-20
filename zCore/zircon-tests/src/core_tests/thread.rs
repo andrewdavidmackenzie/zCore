@@ -1668,10 +1668,25 @@ async fn writing_vector_register_state() {
         .wait_signal(Signal::THREAD_SUSPENDED)
         .await;
 
-    let buf = vec![0u8; 4096];
+    let mut buf = vec![0u8; 4096];
+    // Set a recognizable XMM0 value for round-trip verification.
+    if cfg!(target_arch = "x86_64") {
+        // XMM0 is at the start of the zmm layout (first 16 bytes of zmm[0]).
+        buf[0..8].copy_from_slice(&0xDEAD_BEEF_CAFE_BABEu64.to_ne_bytes());
+        buf[8..16].copy_from_slice(&0x1234_5678_9ABC_DEF0u64.to_ne_bytes());
+    }
     let result = thread.write_state(ThreadStateKind::Vector, &buf);
     if cfg!(target_arch = "x86_64") {
         assert!(result.is_ok(), "vector write should succeed on x86_64");
+        // Read back and verify the written XMM0 value was stored.
+        let mut read_buf = vec![0u8; 4096];
+        let read_result = thread.read_state(ThreadStateKind::Vector, &mut read_buf);
+        assert!(read_result.is_ok(), "vector read-back should succeed");
+        // XMM0 is at zmm[0] offset 0 in the Zircon vector state layout.
+        let xmm0_lo = u64::from_ne_bytes(read_buf[0..8].try_into().unwrap());
+        let xmm0_hi = u64::from_ne_bytes(read_buf[8..16].try_into().unwrap());
+        assert_eq!(xmm0_lo, 0xDEAD_BEEF_CAFE_BABE, "XMM0 low not restored");
+        assert_eq!(xmm0_hi, 0x1234_5678_9ABC_DEF0, "XMM0 high not restored");
     } else {
         assert!(
             result.is_err(),
