@@ -488,6 +488,29 @@ impl Syscall<'_> {
                     Err(ZxError::BAD_STATE)
                 }
             } else if vmo.is_slice_vmo() {
+                // Fuchsia requires unidirectional clones for slices.
+                // For SNAPSHOT_MODIFIED: require_bidirectional = !!parent_
+                // (where parent_ is the slice's cow_pages parent). For
+                // root slices, the cow_pages parent is the root pager VMO
+                // which has no parent → require_bidirectional = false → OK.
+                // For non-root slices, the cow_pages parent HAS a parent
+                // (hidden node from SNAPSHOT_MODIFIED) → conflict → NOT_SUPPORTED.
+                //
+                // For SNAPSHOT_AT_LEAST_ON_WRITE: require_bidirectional = false,
+                // but can_unidirectional_clone returns false when the parent
+                // is hidden → falls to bidirectional → conflicts with slice.
+                if options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
+                    || options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
+                    || options.contains(VmoCloneFlags::SNAPSHOT)
+                {
+                    // Check if the slice's parent VMO has a parent in the
+                    // COW tree (i.e., is not the root pager VMO).
+                    if let Some(parent) = vmo.parent() {
+                        if parent.has_parent() {
+                            return Err(ZxError::NOT_SUPPORTED);
+                        }
+                    }
+                }
                 // SLICE VMOs: create the COW child on the slice's parent,
                 // adjusting the offset by the slice's parent_offset.
                 // This matches Fuchsia behavior where SNAPSHOT_AT_LEAST_ON_WRITE

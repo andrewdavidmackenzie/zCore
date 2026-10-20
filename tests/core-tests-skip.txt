@@ -26,31 +26,19 @@ PagerProcess.KillAfterSuspendUsercopyCapture
 PagerWriteback.*
 
 # ── Snapshot (pager-backed snapshot clones) ──────────────────────────
-Snapshot.Smoke
-Snapshot.Read
-Snapshot.CloseRoot
-Snapshot.CloseClone
-Snapshot.CloseSnapshot
 Snapshot.DropVmos
 Snapshot.RootVmoWrite
-Snapshot.CloneVmoWrite
-Snapshot.SnapshotVmoWrite
 Snapshot.CommitRangeInSnapshot
 Snapshot.ResizeShrinkSnapshot
 Snapshot.ResizeShrinkSnapshotWithEmptyParent
 Snapshot.ResizeSnapshotRace
 Snapshot.ObjMemAccounting
-Snapshot.SnapshotReadOnlyVmo
-Snapshot.SnapshotModifiedClone
 Snapshot.CloneModifyChain
 Snapshot.CloneAfterSliceRoot
 Snapshot.SnapshotSlice
 Snapshot.SnapshotVmoWithSlice
-Snapshot.AlowSlice
-Snapshot.SnapshotSliceAtLeastOnWrite
 Snapshot.AtLeastOnWriteAfterSnapshotModified
 Snapshot.SnapshotModifiedAfterAtLeastOnWrite
-Snapshot.WriteAfterDropSibling
 Snapshot.ReleaseCowParentPagesLeft
 Snapshot.ReleaseCowParentPagesRight
 Snapshot.ReleaseCowParentPagesLeftAndRight
