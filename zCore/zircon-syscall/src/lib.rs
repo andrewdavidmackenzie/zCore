@@ -194,6 +194,65 @@ impl Syscall<'_> {
 }
 
 impl Syscall<'_> {
+    /// Pre-fault pager-backed pages in a user buffer range.
+    ///
+    /// When a syscall needs to read from or write to a user buffer
+    /// that might be in a pager-backed mapping, call this before the
+    /// usercopy to demand-page the pages. Uses `blocking_run` so
+    /// `Thread::kill()` can interrupt the wait, and sets the thread
+    /// state to `BlockedPager` for `WaitForBlocked` polls.
+    async fn prefault_user_buffer(&self, addr: usize, len: usize) -> ZxResult {
+        use hal::{MMUFlags, PAGE_SIZE};
+        use zircon_object::task::ThreadState;
+
+        if len == 0 || addr == 0 {
+            return Ok(());
+        }
+        let vmar = self.thread.proc().vmar();
+        let start_page = addr / PAGE_SIZE;
+        let end_page = (addr + len).div_ceil(PAGE_SIZE);
+        for page_idx in start_page..end_page {
+            let vaddr = page_idx * PAGE_SIZE;
+            match vmar.handle_page_fault(vaddr, MMUFlags::READ | MMUFlags::USER) {
+                Ok(()) => continue,
+                Err(ZxError::SHOULD_WAIT) => {
+                    let pager_vmo = vmar.find_pager_vmo(vaddr).or_else(|| {
+                        let mapping = vmar.find_mapping(vaddr)?;
+                        if mapping.vmo.is_in_pager_tree() {
+                            mapping.vmo.find_root_pager_vmo()
+                        } else {
+                            None
+                        }
+                    });
+                    let offset = vmar.vaddr_to_vmo_offset(vaddr);
+                    if let (Some(vmo), Some(offset)) = (pager_vmo, offset) {
+                        let future = vmo.wait_for_page(offset);
+                        pin_mut!(future);
+                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                        // Mark as non-suspendable (kernel usercopy wait).
+                        self.thread.set_nonsuspendable_block(true);
+                        let result = self
+                            .thread
+                            .blocking_run::<_, (), _>(
+                                future,
+                                ThreadState::BlockedPager,
+                                core::time::Duration::from_nanos(u64::MAX),
+                                None,
+                            )
+                            .await;
+                        self.thread.set_nonsuspendable_block(false);
+                        result?;
+                        // Re-fault to create the PTE now that the page is supplied.
+                        let _ = vmar.handle_page_fault(vaddr, MMUFlags::READ | MMUFlags::USER);
+                    }
+                }
+                Err(ZxError::NOT_FOUND) => break,
+                Err(_) => {} // Non-pager page, skip silently
+            }
+        }
+        Ok(())
+    }
+
     pub async fn syscall(&mut self, num: usize, args: [usize; 8]) -> isize {
         let thread_name = self.thread.name();
         let proc_name = self.thread.proc().name();
@@ -225,7 +284,19 @@ impl Syscall<'_> {
             Sys::HANDLE_DUPLICATE => self.sys_handle_duplicate(a0 as _, a1 as _, a2.into()),
             Sys::HANDLE_REPLACE => self.sys_handle_replace(a0 as _, a1 as _, a2.into()),
             Sys::OBJECT_GET_INFO => {
-                self.sys_object_get_info(a0 as _, a1 as _, a2 as _, a3 as _, a4.into(), a5.into())
+                // Pre-fault pager pages in user buffer (a2=buffer, a3=size).
+                if let Err(e) = self.prefault_user_buffer(a2, a3).await {
+                    Err(e)
+                } else {
+                    self.sys_object_get_info(
+                        a0 as _,
+                        a1 as _,
+                        a2 as _,
+                        a3 as _,
+                        a4.into(),
+                        a5.into(),
+                    )
+                }
             }
             Sys::OBJECT_GET_PROPERTY => {
                 self.sys_object_get_property(a0 as _, a1 as _, a2 as _, a3 as _)
@@ -391,7 +462,14 @@ impl Syscall<'_> {
                 self.sys_vmo_read(a0 as _, a1.into(), a2 as _, a3 as _)
                     .await
             }
-            Sys::VMO_WRITE => self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _),
+            Sys::VMO_WRITE => {
+                // Pre-fault pager pages in user buffer (a1=buf, a3=size).
+                if let Err(e) = self.prefault_user_buffer(a1, a3).await {
+                    Err(e)
+                } else {
+                    self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _)
+                }
+            }
             Sys::VMO_GET_SIZE => self.sys_vmo_get_size(a0 as _, a1.into()),
             Sys::VMO_SET_SIZE => self.sys_vmo_set_size(a0 as _, a1 as _),
             Sys::VMO_OP_RANGE => {
