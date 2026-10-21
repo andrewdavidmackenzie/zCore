@@ -657,8 +657,9 @@ impl Syscall<'_> {
                 self.thread
                     .set_blocking_state(ThreadState::BlockedException);
                 closed.await.ok();
-                // Exception handled — clear state.
+                // Exception handled — clear state and restore to Running.
                 thread_arc.clear_exception();
+                self.thread.set_blocking_state(ThreadState::Running);
                 Ok(())
             }
             Err(e) => {

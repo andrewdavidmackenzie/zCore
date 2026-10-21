@@ -479,7 +479,10 @@ impl Thread {
         // any blocking wait so the thread re-enters user mode with the
         // new state on resume. Without this, a modified RIP has no effect
         // until the current syscall naturally completes.
-        if result.is_ok() && matches!(kind, ThreadStateKind::General) {
+        if result.is_ok()
+            && state == ThreadState::Suspended
+            && matches!(kind, ThreadStateKind::General)
+        {
             if let Some(killer) = inner.killer.take() {
                 let _ = killer.send(());
             }
