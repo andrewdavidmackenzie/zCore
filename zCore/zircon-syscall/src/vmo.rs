@@ -525,7 +525,11 @@ impl Syscall<'_> {
                         && !parent.has_parent()
                         && parent.has_pager()
                     {
-                        parent.create_child_unidirectional(adjusted_offset, child_size, resizable)?
+                        parent.create_child_unidirectional(
+                            adjusted_offset,
+                            child_size,
+                            resizable,
+                        )?
                     } else {
                         parent.create_child(resizable, adjusted_offset, child_size)?
                     };
