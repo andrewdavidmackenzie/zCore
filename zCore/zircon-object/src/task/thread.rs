@@ -474,7 +474,20 @@ impl Thread {
             return Err(ZxError::BAD_STATE);
         }
         let context = inner.context.as_mut().ok_or(ZxError::BAD_STATE)?;
-        context.write_state(kind, buf)
+        let result = context.write_state(kind, buf);
+        // If the register state was modified (especially RIP), interrupt
+        // any blocking wait so the thread re-enters user mode with the
+        // new state on resume. Without this, a modified RIP has no effect
+        // until the current syscall naturally completes.
+        if result.is_ok()
+            && state == ThreadState::Suspended
+            && matches!(kind, ThreadStateKind::General)
+        {
+            if let Some(killer) = inner.killer.take() {
+                let _ = killer.send(());
+            }
+        }
+        result
     }
 
     /// Get the thread's information.
@@ -498,6 +511,16 @@ impl Thread {
         }
         let report = inner.exception.as_ref().ok_or(ZxError::BAD_STATE)?.report();
         Ok(report)
+    }
+
+    /// Set the current exception on this thread (for user-raised exceptions).
+    pub fn set_exception(&self, exception: Arc<Exception>) {
+        self.inner.lock().exception = Some(exception);
+    }
+
+    /// Clear the current exception.
+    pub fn clear_exception(&self) {
+        self.inner.lock().exception = None;
     }
 
     /// Get the thread state.

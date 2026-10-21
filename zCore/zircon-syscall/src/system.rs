@@ -244,6 +244,13 @@ impl Syscall<'_> {
             return Err(ZxError::BAD_STATE);
         }
 
+        // Pager-backed VMOs cannot be used for mexec — reading their
+        // pages during the kexec sequence would trigger pager faults
+        // in a context where the pager can't respond.
+        if kernel.is_pager_backed() || bootimage.is_pager_backed() {
+            return Err(ZxError::BAD_STATE);
+        }
+
         // Validate the kernel VMO contains a valid ZBI container header.
         // Read the first 32 bytes (ZBI header) and check the magic number.
         let mut hdr = [0u8; 32];

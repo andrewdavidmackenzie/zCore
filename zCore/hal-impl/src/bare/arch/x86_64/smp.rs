@@ -180,6 +180,8 @@ static TRAMPOLINE_GDT: [u64; 4] = [
 
 /// BSP's GDT descriptor, saved after trapframe::init() so APs can load it.
 static mut BSP_GDTR: [u8; 10] = [0; 10]; // GDTR is 2-byte limit + 8-byte base
+/// BSP's IDT descriptor, saved after trapframe::init() so APs can load it.
+static mut BSP_IDTR: [u8; 10] = [0; 10]; // IDTR is 2-byte limit + 8-byte base
 /// BSP's kernel CS selector, saved so APs can reload CS after LGDT.
 static mut BSP_CS: u64 = 0x08;
 
@@ -231,6 +233,7 @@ pub fn park_aps_init() {
 pub fn save_bsp_gdt() {
     unsafe {
         core::arch::asm!("sgdt [{}]", in(reg) &mut BSP_GDTR, options(nostack));
+        core::arch::asm!("sidt [{}]", in(reg) &mut BSP_IDTR, options(nostack));
         // Save the BSP's current CS selector for APs to use after LGDT.
         let cs: u64;
         core::arch::asm!("mov {}, cs", out(reg) cs, options(nomem, nostack));
@@ -273,6 +276,11 @@ extern "C" fn ap_entry() -> ! {
             ds = in(reg) bsp_ds as u16,
             tmp = out(reg) _,
         );
+
+        // Load the BSP's IDT so interrupts/exceptions are handled correctly.
+        // Without this, the AP uses a stale IDT (from UEFI/trampoline) and
+        // any interrupt causes a #GP or triple fault.
+        core::arch::asm!("lidt [{}]", in(reg) &BSP_IDTR, options(nostack));
 
         // Enable NXE in EFER -- the kernel page table uses NX bits on data
         // pages. Without NXE, bit 63 in PTEs is reserved, causing #PF.

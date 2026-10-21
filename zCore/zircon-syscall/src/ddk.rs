@@ -473,12 +473,74 @@ impl Syscall<'_> {
                 return Err(ZxError::INVALID_ARGS);
             }
         }
-        let irq = alloc.use_vector(msi_id)?;
-        let interrupt = if irq > 0 {
-            Interrupt::new_physical(irq, InterruptOptions::empty())?
+        alloc.use_vector(msi_id)?;
+        let interrupt = Interrupt::new_virtual();
+        // Set up the capability structure and on-close callback.
+        // If any VMO operation fails, release the vector before returning.
+        let setup_result = if is_msix {
+            // MSI-X table entry: msg_addr(4) + msg_upper_addr(4)
+            //   + msg_data(4) + vector_control(4) = 16 bytes per entry.
+            let entry_base = vmo_offset + (msi_id as usize) * 16;
+            let target_addr: u64 = 0xFEE0_0000;
+            let target_data: u32 = alloc.base_irq() as u32 + msi_id;
+            (|| -> ZxResult {
+                vmo.write(entry_base, &(target_addr as u32).to_le_bytes())?;
+                vmo.write(entry_base + 4, &((target_addr >> 32) as u32).to_le_bytes())?;
+                vmo.write(entry_base + 8, &target_data.to_le_bytes())?;
+                let mut ctrl = [0u8; 4];
+                vmo.read(entry_base + 12, &mut ctrl)?;
+                let val = u32::from_le_bytes(ctrl) & !1; // unmask
+                vmo.write(entry_base + 12, &val.to_le_bytes())?;
+                Ok(())
+            })()
+            .map(|()| {
+                // On close: mask first, then clear, then release.
+                let vmo_clone = vmo.clone();
+                let alloc_clone = alloc.clone();
+                interrupt.set_on_close(move || {
+                    // Re-mask before releasing.
+                    let masked = 1u32;
+                    let _ = vmo_clone.write(entry_base + 12, &masked.to_le_bytes());
+                    let zeros = [0u8; 12]; // clear addr + data
+                    let _ = vmo_clone.write(entry_base, &zeros);
+                    alloc_clone.release_vector(msi_id);
+                });
+            })
         } else {
-            Interrupt::new_virtual()
+            // MSI capability: mask_bits_32.
+            // Offset depends on whether 64-bit addressing is enabled.
+            // Check control register bit 7 (64-bit capable).
+            let mut control_buf = [0u8; 2];
+            vmo.read(vmo_offset + 2, &mut control_buf).and_then(|()| {
+                let control = u16::from_le_bytes(control_buf);
+                let is_64bit = control & (1 << 7) != 0;
+                let mask_offset = if is_64bit {
+                    vmo_offset + 0x10 // 64-bit: mask at offset 16
+                } else {
+                    vmo_offset + 0x0C // 32-bit: mask at offset 12
+                };
+                let mut mask = [0u8; 4];
+                vmo.read(mask_offset, &mut mask)?;
+                let val = u32::from_le_bytes(mask) & !(1u32 << msi_id);
+                vmo.write(mask_offset, &val.to_le_bytes())?;
+                // On close: re-mask and release vector.
+                let vmo_clone = vmo.clone();
+                let alloc_clone = alloc.clone();
+                interrupt.set_on_close(move || {
+                    let mut mask = [0u8; 4];
+                    if vmo_clone.read(mask_offset, &mut mask).is_ok() {
+                        let val = u32::from_le_bytes(mask) | (1u32 << msi_id);
+                        let _ = vmo_clone.write(mask_offset, &val.to_le_bytes());
+                    }
+                    alloc_clone.release_vector(msi_id);
+                });
+                Ok(())
+            })
         };
+        if let Err(e) = setup_result {
+            alloc.release_vector(msi_id);
+            return Err(e);
+        }
         let handle = proc.add_handle(Handle::new(interrupt, Rights::DEFAULT_INTERRUPT));
         out.write(handle)?;
         Ok(())

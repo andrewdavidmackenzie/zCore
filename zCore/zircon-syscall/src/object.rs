@@ -601,8 +601,8 @@ impl Syscall<'_> {
                     interrupt_count: u32,
                 }
                 let info = InfoMsi {
-                    target_addr: 0,
-                    target_data: 0,
+                    target_addr: 0xFEE0_0000, // Standard x86 MSI address
+                    target_data: alloc.base_irq() as u32,
                     base_irq_id: alloc.base_irq() as u32,
                     num_irq: alloc.count(),
                     interrupt_count: alloc.interrupt_count(),

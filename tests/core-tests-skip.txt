@@ -2,16 +2,12 @@
 # Each non-empty, non-comment line is a gtest pattern to exclude.
 # Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
 
-# ── Multi-threaded (need cross-CPU waker IPI, see #684) ─────────────
+# ── Multi-threaded (port/event interaction bug, hangs even with SMP=1) ───
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
-# ── Thread state / exceptions (mini-process crash handling) ──────────
-Threads.X86AcFlagUserCopy
-UserExceptionsTest.Delivered
-
-# ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
+# ── Pager ────────────────────────────────────────────────────────────
 Pager.EarlyWakeCloneRace
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
@@ -52,14 +48,3 @@ Snapshot.ReleaseCowParentPagesRightInHiddenNode
 StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
-
-# ── MSI (need test_ram_reserve boot option for physical VMOs) ────────
-MsiTest.Msi
-MsiTest.Msix
-
-# ── Mexec (pager-backed bootimage) ───────────────────────────────────
-Resource.MexecPagerPanic
-
-
-# ── BTI (deep COW tree + concurrent write loops) ─────────────────────
-Bti.NoDelayedUnpin
