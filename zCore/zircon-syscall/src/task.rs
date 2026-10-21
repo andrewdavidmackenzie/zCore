@@ -641,18 +641,30 @@ impl Syscall<'_> {
         let job = proc.job();
         let exception =
             zircon_object::task::Exception::new_user(&thread_arc, synth_code, synth_data);
+        // Store the exception on the thread so ZX_INFO_THREAD_EXCEPTION_REPORT
+        // can retrieve it while the thread is in BlockedException state.
+        thread_arc.set_exception(exception.clone());
         let handled = job.get_debug_exceptionate().send_exception(&exception);
         match handled {
             Err(ZxError::NEXT) => {
                 // No debugger listening — silently drop (non-fatal).
+                thread_arc.clear_exception();
                 Ok(())
             }
             Ok(closed) => {
-                // Debugger is listening — wait for it to handle.
+                // Debugger is listening — set thread state to BlockedException
+                // so the debugger can query the exception report.
+                self.thread
+                    .set_blocking_state(ThreadState::BlockedException);
                 closed.await.ok();
+                // Exception handled — clear state.
+                thread_arc.clear_exception();
                 Ok(())
             }
-            Err(e) => Err(e),
+            Err(e) => {
+                thread_arc.clear_exception();
+                Err(e)
+            }
         }
     }
 

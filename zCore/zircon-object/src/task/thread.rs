@@ -510,6 +510,16 @@ impl Thread {
         Ok(report)
     }
 
+    /// Set the current exception on this thread (for user-raised exceptions).
+    pub fn set_exception(&self, exception: Arc<Exception>) {
+        self.inner.lock().exception = Some(exception);
+    }
+
+    /// Clear the current exception.
+    pub fn clear_exception(&self) {
+        self.inner.lock().exception = None;
+    }
+
     /// Get the thread state.
     pub fn state(&self) -> ThreadState {
         self.inner.lock().state()

@@ -1,12 +1,13 @@
-# ── Multi-threaded (need cross-CPU waker IPI, see #684) ─────────────
+# Core-tests skip list — tests that hang or crash the test runner.
+# Each non-empty, non-comment line is a gtest pattern to exclude.
+# Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
+
+# ── Multi-threaded (port/event interaction bug, hangs even with SMP=1) ───
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
-# ── Thread state / exceptions (mini-process crash handling) ──────────
-UserExceptionsTest.Delivered
-
-# ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
+# ── Pager ────────────────────────────────────────────────────────────
 Pager.EarlyWakeCloneRace
 Pager.RacyPortDequeue
 Pager.ResizeBlockedPin
@@ -47,7 +48,3 @@ Snapshot.ReleaseCowParentPagesRightInHiddenNode
 StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
-
-
-
-
