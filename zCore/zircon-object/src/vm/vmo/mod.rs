@@ -189,6 +189,20 @@ pub trait VMObjectTrait: Sync + Send {
     /// on pager-backed VMOs during supply_pages.
     fn set_supplying(&self, _v: bool) {}
 
+    /// Insert a zero page marker at the given page index.
+    /// Zero markers indicate that the page is logically zero but no
+    /// physical frame is committed. Used during supply_pages when the
+    /// source page is all zeros.
+    fn insert_zero_marker(&self, _page_idx: usize) {}
+
+    /// Check if a page has a zero marker.
+    fn has_zero_marker(&self, _page_idx: usize) -> bool {
+        false
+    }
+
+    /// Unmap pages from all mappings (for writeback_end).
+    fn range_change_unmap(&self, _page_idx: usize, _count: usize) {}
+
     /// Clear the pager-backed flag. Called when the pager is detached.
     fn clear_pager_backed(&self) {}
 
@@ -420,6 +434,16 @@ impl VmObject {
         self.trait_.set_supplying(v);
     }
 
+    /// Insert a zero page marker at the given page index.
+    pub fn insert_zero_marker(&self, page_idx: usize) {
+        self.trait_.insert_zero_marker(page_idx);
+    }
+
+    /// Check if a page has a zero marker.
+    pub fn has_zero_marker(&self, page_idx: usize) -> bool {
+        self.trait_.has_zero_marker(page_idx)
+    }
+
     /// Enable dirty-page trapping for this pager-backed VMO.
     /// Writes to clean pages will send `ZX_PAGER_VMO_DIRTY` to the
     /// pager port and block until the pager responds.
@@ -427,6 +451,30 @@ impl VmObject {
         let mut inner = self.inner.lock();
         inner.trap_dirty = true;
         inner.dirty_pages = alloc::vec![PAGE_CLEAN; pages];
+    }
+
+    /// Ensure dirty-page tracking is initialized for this VMO.
+    /// Called during supply_pages for all pager-backed VMOs. For
+    /// non-TRAP_DIRTY VMOs, this allows query_dirty_ranges to work
+    /// (writes auto-mark pages as dirty).
+    pub fn ensure_dirty_tracking(&self, pages: usize) {
+        let mut inner = self.inner.lock();
+        if inner.dirty_pages.is_empty() {
+            inner.dirty_pages = alloc::vec![PAGE_CLEAN; pages];
+        } else if inner.dirty_pages.len() < pages {
+            inner.dirty_pages.resize(pages, PAGE_CLEAN);
+        }
+    }
+
+    /// Mark a page as dirty (for non-TRAP_DIRTY auto-dirty tracking).
+    /// Called when a page is written in a pager-backed VMO without
+    /// TRAP_DIRTY enabled.
+    pub fn auto_mark_dirty(&self, page_idx: usize) {
+        let mut inner = self.inner.lock();
+        if !inner.trap_dirty && page_idx < inner.dirty_pages.len() {
+            inner.dirty_pages[page_idx] = PAGE_DIRTY;
+            inner.modified = true;
+        }
     }
 
     /// Check if this VMO has dirty-page trapping enabled.
@@ -469,7 +517,8 @@ impl VmObject {
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
         // OP_DIRTY can only be applied to committed (supplied) pages.
-        // Unsupplied pages return NOT_FOUND (Fuchsia behavior).
+        // Zero markers from resize are NOT supplied pages and should
+        // return NOT_FOUND. Only committed frames count.
         if length > 0 {
             let committed = self.trait_.committed_pages_in_range(start_page, end_page);
             if committed < end_page - start_page {
@@ -581,12 +630,9 @@ impl VmObject {
 
     /// Query dirty page ranges within [offset, offset+length).
     /// Returns a list of (offset, length, options) tuples.
-    /// Only returns data for TRAP_DIRTY VMOs; others return empty.
+    /// Works for both TRAP_DIRTY and non-TRAP_DIRTY pager VMOs.
     pub fn query_dirty_ranges(&self, offset: usize, length: usize) -> Vec<(u64, u64, u64)> {
         let inner = self.inner.lock();
-        if !inner.trap_dirty {
-            return Vec::new();
-        }
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
         let max_page = end_page.min(inner.dirty_pages.len());
@@ -634,14 +680,23 @@ impl VmObject {
 
     /// End writeback: transition AwaitingClean pages in range to Clean.
     /// Pages that were re-dirtied during writeback stay dirty.
+    /// For non-TRAP_DIRTY VMOs, unmap the pages from all mappings
+    /// so that subsequent writes re-fault and trigger auto_mark_dirty.
     pub fn writeback_end(&self, offset: usize, length: usize) {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        let mut any_cleaned = false;
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             if inner.dirty_pages[page_idx] == PAGE_AWAITING_CLEAN {
                 inner.dirty_pages[page_idx] = PAGE_CLEAN;
+                any_cleaned = true;
             }
+        }
+        // Unmap cleaned pages from all mappings so writes re-fault.
+        if any_cleaned {
+            self.trait_
+                .range_change_unmap(start_page, end_page - start_page);
         }
     }
 
@@ -790,8 +845,12 @@ impl VmObject {
                 return Err(ZxError::OUT_OF_RANGE);
             }
             // If the page was already supplied between request_pages()
-            // and now (race window), return immediately.
-            if self.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+            // and now (race window), return immediately. Check both
+            // committed frames and zero markers (supply_pages creates
+            // zero markers for all-zero source pages).
+            if self.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                || self.trait_.has_zero_marker(page_idx)
+            {
                 return Ok(());
             }
             // If the page was failed by OP_FAIL, return the error
@@ -821,6 +880,30 @@ impl VmObject {
         match rx.await {
             Ok(result) => result,
             Err(_) => Err(ZxError::CANCELED), // sender dropped
+        }
+    }
+
+    /// Block until the page at `offset` is marked dirty by the pager.
+    /// Used for TRAP_DIRTY VMOs when writing to a clean page.
+    pub async fn wait_for_dirty(&self, offset: usize) -> ZxResult {
+        let rx = {
+            let mut inner = self.inner.lock();
+            let page_idx = offset / PAGE_SIZE;
+            // Already dirty — return immediately.
+            if page_idx < inner.dirty_pages.len() && inner.dirty_pages[page_idx] == PAGE_DIRTY {
+                return Ok(());
+            }
+            // If the page was failed, return the error.
+            if let Some(&err) = inner.pager_failed_pages.get(&page_idx) {
+                return Err(err);
+            }
+            let (tx, rx) = futures::channel::oneshot::channel();
+            inner.pager_waiters.push((page_idx, tx));
+            rx
+        };
+        match rx.await {
+            Ok(result) => result,
+            Err(_) => Err(ZxError::CANCELED),
         }
     }
 

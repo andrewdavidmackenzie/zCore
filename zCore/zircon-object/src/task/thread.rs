@@ -120,6 +120,12 @@ struct ThreadInner {
 
     /// The number of existing `SuspendToken`.
     suspend_count: usize,
+    /// True when the thread is in a non-suspendable blocking wait
+    /// (e.g., kernel usercopy pager wait via blocking_run). When set,
+    /// state() does NOT return Suspended even if suspend_count > 0,
+    /// matching Fuchsia's behavior where kernel-mode pager waits are
+    /// not interrupted by suspend.
+    in_nonsuspendable_block: bool,
     /// The waker of task when suspending.
     waker: Option<Waker>,
     /// A token used to kill blocking thread
@@ -172,7 +178,10 @@ struct ThreadInner {
 impl ThreadInner {
     fn state(&self) -> ThreadState {
         // Dying > Exception > Suspend > Blocked
+        // Non-suspendable blocking waits (kernel usercopy) suppress
+        // Suspended state, matching Fuchsia's behavior.
         if self.suspend_count == 0
+            || self.in_nonsuspendable_block
             || self.context.is_none()
             || self.state == ThreadState::BlockedException
             || self.state == ThreadState::Dying
@@ -531,6 +540,19 @@ impl Thread {
     /// Check if the thread has a pending suspend (suspend_count > 0).
     pub fn is_suspended(&self) -> bool {
         self.inner.lock().suspend_count > 0
+    }
+
+    /// Mark the thread as in a non-suspendable blocking wait.
+    /// While set, `state()` does NOT return `Suspended` even if
+    /// `suspend_count > 0`, matching Fuchsia's kernel-mode pager
+    /// wait behavior.
+    pub fn set_nonsuspendable_block(&self, active: bool) {
+        let mut inner = self.inner.lock();
+        inner.in_nonsuspendable_block = active;
+        // Recompute signals — state() result may have changed
+        // (Suspended ↔ BlockedPager transition).
+        let state = inner.state;
+        inner.change_state(state, &self.base);
     }
 
     /// Set the thread state (e.g., to BlockedPager during pager waits).

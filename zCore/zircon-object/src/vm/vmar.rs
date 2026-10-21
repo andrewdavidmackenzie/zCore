@@ -2269,6 +2269,24 @@ impl VmMapping {
         if !access_flags.contains(MMUFlags::WRITE) {
             flags.remove(MMUFlags::WRITE);
         }
+        // For TRAP_DIRTY VMOs, strip WRITE for clean pages so that
+        // writes trigger a new page fault → dirty request to pager.
+        // After the pager acknowledges (OP_DIRTY), the page is marked
+        // dirty and the next write fault grants WRITE.
+        if self.vmo.is_trap_dirty() {
+            let page_idx = vmo_offset / PAGE_SIZE;
+            if !self.vmo.is_page_dirty(page_idx) {
+                flags.remove(MMUFlags::WRITE);
+            }
+        }
+        // For non-TRAP_DIRTY pager VMOs, auto-mark the page dirty on
+        // WRITE faults so query_dirty_ranges reports written pages.
+        if access_flags.contains(MMUFlags::WRITE)
+            && self.vmo.is_pager_backed()
+            && !self.vmo.is_trap_dirty()
+        {
+            self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
+        }
         // If ZX_VM_FAULT_BEYOND_STREAM_SIZE is set, fault on accesses
         // past the page containing the VMO's content_size instead of
         // returning zeroes.  Match Fuchsia's saturating_stream_size:
@@ -2311,6 +2329,18 @@ impl VmMapping {
             }
         }
         let paddr = self.vmo.commit_page(page_idx, access_flags)?;
+        // For TRAP_DIRTY VMOs: if a WRITE fault on a committed clean
+        // page, send a dirty request to the pager and return SHOULD_WAIT.
+        // The handler_user_trap catches SHOULD_WAIT, waits for the
+        // pager's OP_DIRTY acknowledgement, then the fault retries
+        // and grants WRITE permission.
+        if access_flags.contains(MMUFlags::WRITE)
+            && self.vmo.is_trap_dirty()
+            && self.vmo.is_pager_backed()
+            && !self.vmo.is_page_dirty(page_idx)
+        {
+            return self.vmo.request_dirty(vmo_offset, PAGE_SIZE);
+        }
         let mut pg_table = self.page_table.lock();
         let mut res = pg_table.map(Page::new_aligned(vaddr, PageSize::Size4K), paddr, flags);
         if let Err(PagingError::AlreadyMapped) = res {

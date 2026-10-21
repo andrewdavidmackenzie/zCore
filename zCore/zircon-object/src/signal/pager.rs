@@ -201,6 +201,10 @@ impl Pager {
         let mut dst_off = offset as usize;
         let end = offset as usize + length as usize;
 
+        // Ensure dirty tracking is initialized for query_dirty_ranges.
+        let total_pages = vmo.len() / PAGE_SIZE;
+        vmo.ensure_dirty_tracking(total_pages);
+
         // Allow commit_page to allocate frames on this pager-backed VMO.
         vmo.set_supplying(true);
 

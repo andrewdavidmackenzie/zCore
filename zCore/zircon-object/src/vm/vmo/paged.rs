@@ -735,6 +735,30 @@ impl VMObjectTrait for VMObjectPaged {
         self.get_inner_mut().1.supplying = v;
     }
 
+    fn insert_zero_marker(&self, page_idx: usize) {
+        let (_guard, mut inner) = self.get_inner_mut();
+        // Only insert zero marker if the page has no committed frame.
+        // Dropping a committed frame without invalidating PTEs would
+        // leave dangling mappings pointing at freed physical memory.
+        if !inner.frames.contains_key(&page_idx) {
+            inner.zero_markers.insert(page_idx);
+        }
+    }
+
+    fn has_zero_marker(&self, page_idx: usize) -> bool {
+        let (_guard, inner) = self.get_inner();
+        inner.zero_markers.contains(&page_idx)
+    }
+
+    fn range_change_unmap(&self, page_idx: usize, count: usize) {
+        let (_guard, inner) = self.get_inner();
+        for map in inner.mappings.iter() {
+            if let Some(map) = map.upgrade() {
+                map.range_change(page_idx, count, RangeChangeOp::Unmap);
+            }
+        }
+    }
+
     fn clear_pager_backed(&self) {
         // Don't clear pager_backed — the VMO was pager-backed and
         // detached. Unsupplied pages should return errors (BAD_STATE)
@@ -930,7 +954,8 @@ impl VMObjectPagedInner {
                 // Walk up to parent to find or allocate the page.
                 let mut parent = self.parent.as_ref().unwrap().inner.borrow_mut();
                 let parent_idx = page_idx + self.parent_offset / PAGE_SIZE;
-                match parent.commit_page_internal(parent_idx, flags, &self.self_ref)? {
+                let parent_flags = flags;
+                match parent.commit_page_internal(parent_idx, parent_flags, &self.self_ref)? {
                     CommitResult::NewPage(frame) if !self.type_.is_hidden() => {
                         if !flags.contains(MMUFlags::WRITE) {
                             // Before returning zeros, check if the sibling

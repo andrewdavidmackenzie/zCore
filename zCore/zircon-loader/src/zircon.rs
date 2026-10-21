@@ -492,9 +492,23 @@ async fn handler_user_trap(
                     if let (Some(vmo), Some(offset)) = (vmo, offset) {
                         // Use blocking_run_suspendable so Thread::kill()
                         // and Thread::suspend() can cancel the pager wait.
-                        // This matches Fuchsia's Interruptible::Yes +
-                        // suspendable=true semantics for user page faults.
-                        let future = vmo.wait_for_page(offset);
+                        // For TRAP_DIRTY WRITE faults, wait for dirty
+                        // acknowledgement. For READ faults, wait for
+                        // page supply.
+                        let is_dirty_wait = flags.contains(MMUFlags::WRITE)
+                            && vmo.is_trap_dirty()
+                            && !vmo.is_page_dirty(offset / PAGE_SIZE);
+                        let future: core::pin::Pin<
+                            alloc::boxed::Box<
+                                dyn core::future::Future<
+                                        Output = Result<(), zircon_object::ZxError>,
+                                    > + Send,
+                            >,
+                        > = if is_dirty_wait {
+                            alloc::boxed::Box::pin(vmo.wait_for_dirty(offset))
+                        } else {
+                            alloc::boxed::Box::pin(vmo.wait_for_page(offset))
+                        };
                         pin_mut!(future);
                         thread.set_blocking_state(ThreadState::BlockedPager);
                         let result = thread

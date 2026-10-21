@@ -7,14 +7,17 @@ PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
-# ── Pager ────────────────────────────────────────────────────────────
-Pager.EarlyWakeCloneRace
+# ── Channel (multi-threaded call + transfer hang) ────────────────────
+ChannelInternalTest.TransferChannelWithPendingCall
+ChannelTest.Call*
+
+# ── Thread state / exceptions (mini-process crash handling) ──────────
+Threads.X86AcFlagUserCopy
+UserExceptionsTest.Delivered
+
+# ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.RacyPortDequeue
-Pager.ResizeBlockedPin
-PagerProcess.KillBlockedUsercopy
-PagerProcess.KillBlockedUsercopyCaptureFaults
-PagerProcess.KillAfterSuspendUsercopy
-PagerProcess.KillAfterSuspendUsercopyCapture
+Pager.CloneReadFromParentTestVmar
 PagerWriteback.*
 
 # ── Snapshot (SNAPSHOT_MODIFIED read-through semantics) ──────────────
@@ -48,3 +51,11 @@ Snapshot.ReleaseCowParentPagesRightInHiddenNode
 StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
+
+# ── Stream (RefCell reentrancy crash on concurrent write+resize) ──────
+StreamTestCase.WriteShrinkRace
+StreamTestCase.ReadWriteShrinkRace
+StreamTestCase.FaultBeyondStreamSizeResizeDownRace
+
+# ── BTI (deep COW tree + concurrent write loops) ─────────────────────
+Bti.NoDelayedUnpin

@@ -194,6 +194,199 @@ impl Syscall<'_> {
 }
 
 impl Syscall<'_> {
+    /// Pre-fault pager-backed pages in a user buffer range.
+    ///
+    /// When a syscall needs to read from or write to a user buffer
+    /// that might be in a pager-backed mapping, call this before the
+    /// usercopy to demand-page the pages. Uses `blocking_run` so
+    /// `Thread::kill()` can interrupt the wait, and sets the thread
+    /// state to `BlockedPager` for `WaitForBlocked` polls.
+    async fn prefault_user_buffer(&self, addr: usize, len: usize) -> ZxResult {
+        use hal::{MMUFlags, PAGE_SIZE};
+        use zircon_object::task::ThreadState;
+
+        if len == 0 || addr == 0 {
+            return Ok(());
+        }
+        let end_addr = addr.checked_add(len).ok_or(ZxError::INVALID_ARGS)?;
+        let vmar = self.thread.proc().vmar();
+        let start_page = addr / PAGE_SIZE;
+        let end_page = end_addr.div_ceil(PAGE_SIZE);
+        for page_idx in start_page..end_page {
+            let vaddr = page_idx * PAGE_SIZE;
+            match vmar.handle_page_fault(vaddr, MMUFlags::READ | MMUFlags::USER) {
+                Ok(()) => continue,
+                Err(ZxError::SHOULD_WAIT) => {
+                    let pager_vmo = vmar.find_pager_vmo(vaddr).or_else(|| {
+                        let mapping = vmar.find_mapping(vaddr)?;
+                        if mapping.vmo.is_in_pager_tree() {
+                            mapping.vmo.find_root_pager_vmo()
+                        } else {
+                            None
+                        }
+                    });
+                    let offset = vmar.vaddr_to_vmo_offset(vaddr);
+                    if let (Some(vmo), Some(offset)) = (pager_vmo, offset) {
+                        let future = vmo.wait_for_page(offset);
+                        pin_mut!(future);
+                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                        // Mark as non-suspendable (kernel usercopy wait).
+                        self.thread.set_nonsuspendable_block(true);
+                        let result = self
+                            .thread
+                            .blocking_run::<_, (), _>(
+                                future,
+                                ThreadState::BlockedPager,
+                                core::time::Duration::from_nanos(u64::MAX),
+                                None,
+                            )
+                            .await;
+                        self.thread.set_nonsuspendable_block(false);
+                        result?;
+                        // Re-fault to create the PTE now that the page is supplied.
+                        let _ = vmar.handle_page_fault(vaddr, MMUFlags::READ | MMUFlags::USER);
+                    }
+                }
+                Err(ZxError::NOT_FOUND) => break,
+                Err(_) => {} // Non-pager page, skip silently
+            }
+        }
+        Ok(())
+    }
+
+    /// Pre-dirty TRAP_DIRTY pages before writing to a pager-backed VMO.
+    ///
+    /// For VMOs created with ZX_VMO_TRAP_DIRTY, writes to clean pages
+    /// must send a ZX_PAGER_VMO_DIRTY request to the pager port and
+    /// wait for acknowledgement. This function checks each page in the
+    /// write range and sends dirty requests for clean pages.
+    async fn predirty_trap_dirty_pages(
+        &self,
+        vmo: &Arc<zircon_object::vm::VmObject>,
+        offset: usize,
+        len: usize,
+    ) -> ZxResult {
+        use hal::PAGE_SIZE;
+        use zircon_object::task::ThreadState;
+
+        if !vmo.is_trap_dirty() || len == 0 {
+            return Ok(());
+        }
+        let start_page = offset / PAGE_SIZE;
+        let end_page = offset
+            .checked_add(len)
+            .ok_or(ZxError::INVALID_ARGS)?
+            .div_ceil(PAGE_SIZE);
+        // Find contiguous runs of clean pages and send one dirty
+        // request per run. The pager expects coalesced requests
+        // matching the contiguous dirty range.
+        let mut page_idx = start_page;
+        while page_idx < end_page {
+            // Skip already-dirty pages.
+            if vmo.is_page_dirty(page_idx) {
+                page_idx += 1;
+                continue;
+            }
+            // Find the end of the contiguous clean run.
+            let run_start = page_idx;
+            while page_idx < end_page && !vmo.is_page_dirty(page_idx) {
+                page_idx += 1;
+            }
+            let run_len = page_idx - run_start;
+            let run_offset = run_start * PAGE_SIZE;
+            let run_bytes = run_len * PAGE_SIZE;
+            match vmo.request_dirty(run_offset, run_bytes) {
+                Err(zircon_object::ZxError::SHOULD_WAIT) => {} // expected
+                Err(e) => return Err(e),                       // NOT_FOUND = no pager port
+                Ok(()) => {}                                   // shouldn't happen but harmless
+            }
+            // Wait for the first page of the run to become dirty.
+            let future = vmo.wait_for_dirty(run_offset);
+            pin_mut!(future);
+            self.thread.set_blocking_state(ThreadState::BlockedPager);
+            self.thread
+                .blocking_run::<_, (), _>(
+                    future,
+                    ThreadState::BlockedPager,
+                    core::time::Duration::from_nanos(u64::MAX),
+                    None,
+                )
+                .await?;
+            // Re-scan from run_start: the pager may have acknowledged
+            // only part of the run. The outer loop will pick up any
+            // remaining clean pages and send new dirty requests.
+            page_idx = run_start;
+        }
+        Ok(())
+    }
+
+    /// Pre-commit pages in a pager-tree VMO (clone of pager-backed VMO)
+    /// before writing. When the clone's commit_page encounters an
+    /// unsupplied parent page, the parent returns SHOULD_WAIT. This
+    /// method uses committed_pages_in_range to check which parent pages
+    /// are missing, requests them from the pager, and waits for supply.
+    async fn prefault_pager_write_pages(
+        &self,
+        vmo: &Arc<zircon_object::vm::VmObject>,
+        offset: usize,
+        len: usize,
+    ) -> ZxResult {
+        use hal::PAGE_SIZE;
+        use zircon_object::task::ThreadState;
+
+        if len == 0 || !vmo.is_in_pager_tree() {
+            return Ok(());
+        }
+        let pager_vmo = match vmo.find_root_pager_vmo() {
+            Some(v) => v,
+            None => return Ok(()),
+        };
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + len).div_ceil(PAGE_SIZE);
+        // Check if the root pager VMO has all pages supplied.
+        // If not, request the missing pages and wait.
+        // Helper: check if a page is "supplied" — has either a
+        // committed frame or a zero marker from supply_pages.
+        let is_page_supplied = |vmo: &Arc<zircon_object::vm::VmObject>, pg: usize| -> bool {
+            vmo.committed_pages_in_range(pg, pg + 1) > 0 || vmo.has_zero_marker(pg)
+        };
+        loop {
+            // Check if all pages in range are supplied.
+            let all_supplied = (start_page..end_page).all(|pg| is_page_supplied(&pager_vmo, pg));
+            if all_supplied {
+                break;
+            }
+            // Find the first unsupplied page.
+            let mut first_missing = start_page;
+            for pg in start_page..end_page {
+                if !is_page_supplied(&pager_vmo, pg) {
+                    first_missing = pg;
+                    break;
+                }
+            }
+            // Find run of unsupplied pages.
+            let mut run_end = first_missing + 1;
+            while run_end < end_page && !is_page_supplied(&pager_vmo, run_end) {
+                run_end += 1;
+            }
+            let run_offset = first_missing * PAGE_SIZE;
+            let run_len = (run_end - first_missing) * PAGE_SIZE;
+            let _ = pager_vmo.request_pages(run_offset, run_len);
+            let future = pager_vmo.wait_for_page(run_offset);
+            pin_mut!(future);
+            self.thread.set_blocking_state(ThreadState::BlockedPager);
+            self.thread
+                .blocking_run::<_, (), _>(
+                    future,
+                    ThreadState::BlockedPager,
+                    core::time::Duration::from_nanos(u64::MAX),
+                    None,
+                )
+                .await?;
+        }
+        Ok(())
+    }
+
     pub async fn syscall(&mut self, num: usize, args: [usize; 8]) -> isize {
         let thread_name = self.thread.name();
         let proc_name = self.thread.proc().name();
@@ -225,7 +418,19 @@ impl Syscall<'_> {
             Sys::HANDLE_DUPLICATE => self.sys_handle_duplicate(a0 as _, a1 as _, a2.into()),
             Sys::HANDLE_REPLACE => self.sys_handle_replace(a0 as _, a1 as _, a2.into()),
             Sys::OBJECT_GET_INFO => {
-                self.sys_object_get_info(a0 as _, a1 as _, a2 as _, a3 as _, a4.into(), a5.into())
+                // Pre-fault pager pages in user buffer (a2=buffer, a3=size).
+                if let Err(e) = self.prefault_user_buffer(a2, a3).await {
+                    Err(e)
+                } else {
+                    self.sys_object_get_info(
+                        a0 as _,
+                        a1 as _,
+                        a2 as _,
+                        a3 as _,
+                        a4.into(),
+                        a5.into(),
+                    )
+                }
             }
             Sys::OBJECT_GET_PROPERTY => {
                 self.sys_object_get_property(a0 as _, a1 as _, a2 as _, a3 as _)
@@ -391,7 +596,39 @@ impl Syscall<'_> {
                 self.sys_vmo_read(a0 as _, a1.into(), a2 as _, a3 as _)
                     .await
             }
-            Sys::VMO_WRITE => self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _),
+            Sys::VMO_WRITE => {
+                // Pre-fault pager pages in user buffer (a1=buf, a3=size).
+                if let Err(e) = self.prefault_user_buffer(a1, a3).await {
+                    return e as isize;
+                }
+                let proc = self.thread.proc();
+                if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
+                    // Pre-commit pager-tree pages (clone of pager-backed
+                    // VMO) so the parent pages are supplied before writing.
+                    if let Err(e) = self.prefault_pager_write_pages(&vmo, a2, a3).await {
+                        return e as isize;
+                    }
+                    // Pre-dirty TRAP_DIRTY pages before writing.
+                    if let Err(e) = self.predirty_trap_dirty_pages(&vmo, a2, a3).await {
+                        return e as isize;
+                    }
+                }
+                let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _);
+                // Auto-mark written pages as dirty for pager-backed
+                // non-TRAP_DIRTY VMOs (query_dirty_ranges needs this).
+                if result.is_ok() {
+                    if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
+                        if vmo.is_pager_backed() && !vmo.is_trap_dirty() {
+                            let start_page = a2 / hal::PAGE_SIZE;
+                            let end_page = (a2 + a3).div_ceil(hal::PAGE_SIZE);
+                            for pg in start_page..end_page {
+                                vmo.auto_mark_dirty(pg);
+                            }
+                        }
+                    }
+                }
+                result
+            }
             Sys::VMO_GET_SIZE => self.sys_vmo_get_size(a0 as _, a1.into()),
             Sys::VMO_SET_SIZE => self.sys_vmo_set_size(a0 as _, a1 as _),
             Sys::VMO_OP_RANGE => {
@@ -489,16 +726,19 @@ impl Syscall<'_> {
                 self.sys_iommu_create(a0 as _, a1 as _, a2.into(), a3 as _, a4.into())
             }
             Sys::BTI_CREATE => self.sys_bti_create(a0 as _, a1 as _, a2 as _, a3.into()),
-            Sys::BTI_PIN => self.sys_bti_pin(
-                a0 as _,
-                a1 as _,
-                a2 as _,
-                a3 as _,
-                a4 as _,
-                a5.into(),
-                a6 as _,
-                a7.into(),
-            ),
+            Sys::BTI_PIN => {
+                self.sys_bti_pin(
+                    a0 as _,
+                    a1 as _,
+                    a2 as _,
+                    a3 as _,
+                    a4 as _,
+                    a5.into(),
+                    a6 as _,
+                    a7.into(),
+                )
+                .await
+            }
             Sys::PMT_UNPIN => self.sys_pmt_unpin(a0 as _),
             Sys::BTI_RELEASE_QUARANTINE => self.sys_bti_release_quarantine(a0 as _),
             Sys::VMAR_UNMAP_HANDLE_CLOSE_THREAD_EXIT => self
