@@ -1114,13 +1114,14 @@ impl VmObject {
         self: &Arc<Self>,
         offset: usize,
         len: usize,
+        resizable: bool,
     ) -> ZxResult<Arc<Self>> {
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         base.set_name(&self.base.name());
         let trait_ = self.trait_.create_child_unidirectional(offset, len)?;
         let child = Arc::new(VmObject {
             base,
-            resizable: false,
+            resizable,
             is_slice: false,
             immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),

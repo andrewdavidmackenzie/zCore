@@ -408,6 +408,14 @@ impl VMObjectTrait for VMObjectPaged {
                     }
                     unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
                     inner.frames.remove(&block.block);
+                    // Unmap the page from all mappings so subsequent
+                    // accesses trigger a page fault (which will see the
+                    // zero marker and return a zero page).
+                    for map in inner.mappings.iter() {
+                        if let Some(map) = map.upgrade() {
+                            map.range_change(block.block, 1, RangeChangeOp::Unmap);
+                        }
+                    }
                 }
             } else if inner.committed_pages_in_range(block.block, block.block + 1) != 0 {
                 // check whether this page is initialized, otherwise nothing should be done
@@ -969,17 +977,20 @@ impl VMObjectPagedInner {
                                 let (_, sibling_weak) =
                                     parent.type_.get_tag_and_other(&self.self_ref);
                                 if let Some(sibling_arc) = sibling_weak.upgrade() {
-                                    let sib = sibling_arc.inner.borrow();
-                                    if sib.pager_backed {
-                                        let sib_off = sib.parent_offset / PAGE_SIZE;
-                                        if parent_idx >= sib_off {
-                                            let sib_idx = parent_idx - sib_off;
-                                            if sib_idx < sib.size / PAGE_SIZE {
-                                                if let Some(page) = sib.frames.get(&sib_idx) {
-                                                    drop(frame);
-                                                    return Ok(CommitResult::Ref(
-                                                        page.frame.paddr(),
-                                                    ));
+                                    // Use try_borrow to avoid reentrancy
+                                    // panic if sibling is the requesting child.
+                                    if let Ok(sib) = sibling_arc.inner.try_borrow() {
+                                        if sib.pager_backed {
+                                            let sib_off = sib.parent_offset / PAGE_SIZE;
+                                            if parent_idx >= sib_off {
+                                                let sib_idx = parent_idx - sib_off;
+                                                if sib_idx < sib.size / PAGE_SIZE {
+                                                    if let Some(page) = sib.frames.get(&sib_idx) {
+                                                        drop(frame);
+                                                        return Ok(CommitResult::Ref(
+                                                            page.frame.paddr(),
+                                                        ));
+                                                    }
                                                 }
                                             }
                                         }
@@ -1009,15 +1020,25 @@ impl VMObjectPagedInner {
                                 par_frame.swap(&mut new_frame);
                             }
                             let sibling = parent.type_.get_tag_and_other(&self.self_ref).1;
-                            let arc_sibling = sibling.upgrade().unwrap();
-                            let sibling_inner = arc_sibling.inner.borrow();
-                            sibling_inner.range_change(
-                                parent_idx * PAGE_SIZE,
-                                (parent_idx + 1) * PAGE_SIZE,
-                                RangeChangeOp::Unmap,
-                            )
+                            if let Some(arc_sibling) = sibling.upgrade() {
+                                // Use try_borrow to avoid reentrancy panic.
+                                if let Ok(sibling_inner) = arc_sibling.inner.try_borrow() {
+                                    sibling_inner.range_change(
+                                        parent_idx * PAGE_SIZE,
+                                        (parent_idx + 1) * PAGE_SIZE,
+                                        RangeChangeOp::Unmap,
+                                    );
+                                }
+                            }
                         } else {
-                            need_unmap = need_unmap || unmap;
+                            // Always unmap when inserting a new frame via
+                            // CopyOnWrite. Even if the parent's unmap flag
+                            // is false (page was migrated, not copied), this
+                            // leaf may have existing PTEs (from a prior Ref
+                            // mapping or slice sharing) that point to the
+                            // old physical page. Without unmapping, those
+                            // PTEs become stale.
+                            need_unmap = true;
                         }
                         self.frames.insert(page_idx, new_frame);
                     }
@@ -1030,6 +1051,24 @@ impl VMObjectPagedInner {
                         hal_impl::mem::pmem_copy(new_frame.paddr(), paddr, PAGE_SIZE);
                         self.frames.insert(page_idx, PageState::new(new_frame));
                     }
+                    CommitResult::Ref(paddr) if flags.contains(MMUFlags::WRITE) => {
+                        // A COW participant (hidden node or snapshot child)
+                        // received a Ref from a non-hidden parent (e.g.,
+                        // pager root). For WRITE access, we must copy the
+                        // page locally to maintain COW isolation — writing
+                        // through the Ref would corrupt the parent's page
+                        // and violate snapshot semantics.
+                        //
+                        // Hidden nodes: the copy goes into self.frames so
+                        // the COW fork logic below (line ~1088) can handle
+                        // distribution to the requesting child.
+                        //
+                        // Snapshot children: the copy becomes a private
+                        // page owned by this VMO.
+                        let new_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
+                        hal_impl::mem::pmem_copy(new_frame.paddr(), paddr, PAGE_SIZE);
+                        self.frames.insert(page_idx, PageState::new(new_frame));
+                    }
                     r => return Ok(r),
                 }
             }
@@ -1038,11 +1077,19 @@ impl VMObjectPagedInner {
         let (_child_tag, other_child) = self.type_.get_tag_and_other(child);
         if self.type_.is_hidden() {
             let arc_other = other_child.upgrade().unwrap();
-            let other_inner = arc_other.inner.borrow();
-            let in_range = {
-                let start = other_inner.parent_offset / PAGE_SIZE;
-                let end = other_inner.parent_limit / PAGE_SIZE;
-                page_idx >= start && page_idx < end
+            // Use try_borrow to avoid RefCell reentrancy panic when the
+            // other child is the same object that initiated commit_page
+            // (its inner RefCell is already mutably borrowed up the call
+            // chain). If we can't borrow, assume in_range=true (safe
+            // because we only use in_range to decide migrate vs copy,
+            // and the conservative choice is to copy).
+            let in_range = match arc_other.inner.try_borrow() {
+                Ok(other_inner) => {
+                    let start = other_inner.parent_offset / PAGE_SIZE;
+                    let end = other_inner.parent_limit / PAGE_SIZE;
+                    page_idx >= start && page_idx < end
+                }
+                Err(_) => true, // conservatively assume in range
             };
             if !in_range {
                 if flags.contains(MMUFlags::WRITE) {
@@ -1067,11 +1114,14 @@ impl VMObjectPagedInner {
                 let frame = self.frames.get(&page_idx).unwrap();
                 return Ok(CommitResult::Ref(frame.frame.paddr()));
             } else if need_unmap {
-                other_inner.range_change(
-                    page_idx * PAGE_SIZE,
-                    (1 + page_idx) * PAGE_SIZE,
-                    RangeChangeOp::Unmap,
-                )
+                // Re-borrow for range_change; skip if reentrancy conflict.
+                if let Ok(other_inner) = arc_other.inner.try_borrow() {
+                    other_inner.range_change(
+                        page_idx * PAGE_SIZE,
+                        (1 + page_idx) * PAGE_SIZE,
+                        RangeChangeOp::Unmap,
+                    )
+                }
             }
         }
         if need_unmap {
@@ -1292,12 +1342,17 @@ impl VMObjectPagedInner {
 
         if let Some(parent) = &self.parent {
             let mut parent_inner = parent.inner.borrow_mut();
-            parent_inner.replace_child(
-                &self.self_ref,
-                self.owner,
-                other_child,
-                Some((surviving_offset, surviving_limit)),
-            );
+            // Only call replace_child on hidden parents — non-hidden
+            // parents (e.g., pager root for unidirectional children)
+            // don't track children via left/right.
+            if parent_inner.type_.is_hidden() {
+                parent_inner.replace_child(
+                    &self.self_ref,
+                    self.owner,
+                    other_child,
+                    Some((surviving_offset, surviving_limit)),
+                );
+            }
             // After replacing the child, clean up stale intermediate COW
             // copies in the parent (grandparent of the dying child).
             if parent_inner.type_.is_hidden() {
@@ -1460,9 +1515,10 @@ impl VMObjectPagedInner {
             },
             Some(lock_ref.clone()),
         );
-        // update parent's child
+        // update parent's child reference (hidden parents only)
         if let Some(parent) = self.parent.take() {
-            if let VMOType::Hidden { left, right, .. } = &mut parent.inner.borrow_mut().type_ {
+            let mut parent_inner = parent.inner.borrow_mut();
+            if let VMOType::Hidden { left, right, .. } = &mut parent_inner.type_ {
                 if left.ptr_eq(&self.self_ref) {
                     *left = Arc::downgrade(&hidden);
                 } else if right.ptr_eq(&self.self_ref) {
@@ -1471,6 +1527,9 @@ impl VMObjectPagedInner {
                     panic!();
                 }
             }
+            // Non-hidden parents (e.g., pager root for unidirectional
+            // children) don't track children via left/right — skip.
+            drop(parent_inner);
         }
         // update children's parent
         self.parent = Some(hidden.clone());
@@ -1488,12 +1547,19 @@ impl VMObjectPagedInner {
                 }
             }
             // Also walk up ancestors for pages not in the hidden node.
+            // Stop at non-hidden parents — they don't participate in
+            // bidirectional COW share_count tracking. This prevents
+            // unidirectional children's hidden nodes from inflating
+            // the root pager VMO's share_count.
             if let Some(ref parent) = h.parent {
                 let mut cur = Some(parent.clone());
                 let mut cur_start = child_start + h.parent_offset / PAGE_SIZE;
                 let mut cur_end = child_end + h.parent_offset / PAGE_SIZE;
                 while let Some(vmop) = cur {
                     let mut inner = vmop.inner.borrow_mut();
+                    if !inner.type_.is_hidden() {
+                        break;
+                    }
                     for idx in cur_start..cur_end {
                         if let Some(page) = inner.frames.get_mut(&idx) {
                             page.share_count += 1;
@@ -1533,7 +1599,7 @@ impl VMObjectPagedInner {
         len: usize,
         lock_ref: &Arc<Mutex<()>>,
     ) -> ZxResult<Arc<VMObjectPaged>> {
-        if self.cache_policy != CachePolicy::Cached {
+        if self.cache_policy != CachePolicy::Cached || self.pin_count != 0 {
             return Err(ZxError::BAD_STATE);
         }
         let child = VMObjectPaged::wrap(
@@ -1783,6 +1849,13 @@ impl VMObjectPagedInner {
 
             while let Some(vmop) = current {
                 let inner = vmop.inner.borrow();
+                // Non-hidden nodes (pager root, Origin) are not part
+                // of the COW tree — their pages are attributed to
+                // themselves, not to children reading through them.
+                // Stop the walk here to avoid double-counting.
+                if !inner.type_.is_hidden() {
+                    break;
+                }
                 // Zero markers in ancestors block attribution.
                 if inner.zero_markers.contains(&current_idx) {
                     break;
@@ -1790,14 +1863,12 @@ impl VMObjectPagedInner {
                 if let Some(frame) = inner.frames.get(&current_idx) {
                     // Check tag visibility: in a hidden node, the child
                     // can only see pages where tag != child_tag.
-                    if inner.type_.is_hidden() {
-                        let (child_tag, _) = inner.type_.get_tag_and_other(&child_ref);
-                        if frame.tag == child_tag {
-                            // This page was split away from us — we have
-                            // our own copy (which we already checked in
-                            // our local frames). Skip it.
-                            break;
-                        }
+                    let (child_tag, _) = inner.type_.get_tag_and_other(&child_ref);
+                    if frame.tag == child_tag {
+                        // This page was split away from us — we have
+                        // our own copy (which we already checked in
+                        // our local frames). Skip it.
+                        break;
                     }
                     result.add_page((frame.share_count as u64) + 1);
                     break;
@@ -1824,6 +1895,10 @@ impl VMObjectPagedInner {
         let mut child = self.self_ref.clone();
         while let Some(parent) = option_parent {
             let mut parent_inner = parent.inner.borrow_mut();
+            // Non-hidden parents don't have left/right child tracking.
+            if !parent_inner.type_.is_hidden() {
+                break;
+            }
             let (tag, other) = parent_inner.type_.get_tag_and_other(&child);
             let arc_other = other.upgrade().unwrap();
             let mut other_inner = arc_other.inner.borrow_mut();
@@ -1887,6 +1962,11 @@ impl VMObjectPagedInner {
             let mut cur_idx = i + self.parent_offset / PAGE_SIZE;
             while let Some(vmop) = cur {
                 let mut p = vmop.inner.borrow_mut();
+                // Stop at non-hidden parents — they don't participate
+                // in bidirectional COW share_count tracking.
+                if !p.type_.is_hidden() {
+                    break;
+                }
                 if let Some(page) = p.frames.get_mut(&cur_idx) {
                     if page.share_count > 0 {
                         page.share_count -= 1;
@@ -1989,9 +2069,16 @@ impl Drop for VMObjectPaged {
         // parent chain, then remove from parent's child list.
 
         if let Some(parent) = &inner.parent {
-            // Unidirectional children don't have share_count tracking
-            // with the parent (no hidden node). Skip decrement + remove.
-            if !inner.type_.is_unidirectional() {
+            // Unidirectional children whose parent is still a non-hidden
+            // node (pager root) skip share_count tracking and remove_child.
+            // But if a unidirectional child later created a bidirectional
+            // child (hidden node), its parent changed to the hidden node.
+            // In that case, it must participate in normal COW merge.
+            let parent_is_hidden = parent.inner.borrow().type_.is_hidden();
+            if inner.type_.is_unidirectional() && !parent_is_hidden {
+                // True unidirectional: parent is still the pager root.
+                // No share_count, no merge needed.
+            } else {
                 inner.decrement_parent_share_counts(0, inner.size / PAGE_SIZE);
                 parent.inner.borrow_mut().remove_child(&inner.self_ref);
             }

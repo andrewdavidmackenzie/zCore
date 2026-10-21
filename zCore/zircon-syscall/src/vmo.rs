@@ -516,12 +516,33 @@ impl Syscall<'_> {
                     let adjusted_offset = offset
                         .checked_add(vmo.parent_offset())
                         .ok_or(ZxError::OUT_OF_RANGE)?;
-                    let child = parent.create_child(resizable, adjusted_offset, child_size)?;
+                    // For SNAPSHOT_MODIFIED on a root-slice (parent is
+                    // pager root with no parent), use unidirectional clone.
+                    // This matches Fuchsia's CreateCloneLocked where
+                    // require_bidirectional = !!parent_ and the root pager
+                    // VMO has no cow_pages parent.
+                    let child = if options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
+                        && !parent.has_parent()
+                        && parent.has_pager()
+                    {
+                        parent.create_child_unidirectional(
+                            adjusted_offset,
+                            child_size,
+                            resizable,
+                        )?
+                    } else {
+                        parent.create_child(resizable, adjusted_offset, child_size)?
+                    };
                     child.set_parent_ref(&vmo);
                     Ok(child)
                 } else {
                     Err(ZxError::BAD_STATE)
                 }
+            } else if options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
+                && !vmo.has_parent()
+                && vmo.has_pager()
+            {
+                vmo.create_child_unidirectional(offset, child_size, resizable)
             } else {
                 vmo.create_child(resizable, offset, child_size)
             }
@@ -868,6 +889,16 @@ impl Syscall<'_> {
                             Ok(()) => {}
                         }
                     }
+                }
+                // For COMMIT (op=1), COW-fork pages into the clone's
+                // local frames. PREFETCH/ALWAYS_NEED only ensure pages
+                // are in the root — they don't create private copies.
+                if op == 1 {
+                    let page_mask = PAGE_SIZE - 1;
+                    let aligned_offset = offset & !page_mask;
+                    let aligned_end = (offset + len + page_mask) & !page_mask;
+                    let aligned_len = aligned_end - aligned_offset;
+                    vmo.commit(aligned_offset, aligned_len)?;
                 }
                 return Ok(());
             }
