@@ -20,11 +20,7 @@ Pager.RacyPortDequeue
 Pager.CloneReadFromParentTestVmar
 PagerWriteback.*
 
-# ── Snapshot (SNAPSHOT_MODIFIED read-through semantics) ──────────────
-Snapshot.RootVmoWrite
-Snapshot.CloneModifyChain
-Snapshot.CloneAfterSliceRoot
-Snapshot.SnapshotSlice
+# ── Snapshot (populated_bytes attribution in unidirectional trees) ────
 Snapshot.SnapshotVmoWithSlice
 Snapshot.CommitRangeInSnapshot
 Snapshot.DropVmos
@@ -32,15 +28,10 @@ Snapshot.ResizeShrinkSnapshot
 Snapshot.ResizeShrinkSnapshotWithEmptyParent
 Snapshot.ResizeSnapshotRace
 Snapshot.ObjMemAccounting
-Snapshot.AtLeastOnWriteAfterSnapshotModified
-Snapshot.SnapshotModifiedAfterAtLeastOnWrite
 Snapshot.ZeroRangeFromEndOfParent
-Snapshot.ZeroRangeLeftInSnapshotPageInParent
 Snapshot.ZeroRangeLeftInSnapshotPageInSnapshot
 Snapshot.ZeroRangeLeftInSnapshotPageInClone
 Snapshot.ZeroRangeLeftInSnapshotPageInHiddenNode
-Snapshot.ZeroRangeLeftInSnapshotPagesInParentChain
-Snapshot.ZeroRangeLeftInSnapshotNoPagesInParentChain
 
 # ── Stream (pager-backed VMO) ────────────────────────────────────────
 StreamTestCase.AppendSuppliesZeroes
