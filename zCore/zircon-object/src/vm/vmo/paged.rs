@@ -1840,6 +1840,10 @@ impl VMObjectPagedInner {
         let mut child = self.self_ref.clone();
         while let Some(parent) = option_parent {
             let mut parent_inner = parent.inner.borrow_mut();
+            // Non-hidden parents don't have left/right child tracking.
+            if !parent_inner.type_.is_hidden() {
+                break;
+            }
             let (tag, other) = parent_inner.type_.get_tag_and_other(&child);
             let arc_other = other.upgrade().unwrap();
             let mut other_inner = arc_other.inner.borrow_mut();
@@ -2005,9 +2009,16 @@ impl Drop for VMObjectPaged {
         // parent chain, then remove from parent's child list.
 
         if let Some(parent) = &inner.parent {
-            // Unidirectional children don't have share_count tracking
-            // with the parent (no hidden node). Skip decrement + remove.
-            if !inner.type_.is_unidirectional() {
+            // Unidirectional children whose parent is still a non-hidden
+            // node (pager root) skip share_count tracking and remove_child.
+            // But if a unidirectional child later created a bidirectional
+            // child (hidden node), its parent changed to the hidden node.
+            // In that case, it must participate in normal COW merge.
+            let parent_is_hidden = parent.inner.borrow().type_.is_hidden();
+            if inner.type_.is_unidirectional() && !parent_is_hidden {
+                // True unidirectional: parent is still the pager root.
+                // No share_count, no merge needed.
+            } else {
                 inner.decrement_parent_share_counts(0, inner.size / PAGE_SIZE);
                 parent.inner.borrow_mut().remove_child(&inner.self_ref);
             }
