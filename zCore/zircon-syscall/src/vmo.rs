@@ -522,6 +522,11 @@ impl Syscall<'_> {
                 } else {
                     Err(ZxError::BAD_STATE)
                 }
+            } else if options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
+                && !vmo.has_parent()
+                && vmo.has_pager()
+            {
+                vmo.create_child_unidirectional(offset, child_size)
             } else {
                 vmo.create_child(resizable, offset, child_size)
             }

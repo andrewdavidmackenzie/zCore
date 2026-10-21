@@ -1292,12 +1292,17 @@ impl VMObjectPagedInner {
 
         if let Some(parent) = &self.parent {
             let mut parent_inner = parent.inner.borrow_mut();
-            parent_inner.replace_child(
-                &self.self_ref,
-                self.owner,
-                other_child,
-                Some((surviving_offset, surviving_limit)),
-            );
+            // Only call replace_child on hidden parents — non-hidden
+            // parents (e.g., pager root for unidirectional children)
+            // don't track children via left/right.
+            if parent_inner.type_.is_hidden() {
+                parent_inner.replace_child(
+                    &self.self_ref,
+                    self.owner,
+                    other_child,
+                    Some((surviving_offset, surviving_limit)),
+                );
+            }
             // After replacing the child, clean up stale intermediate COW
             // copies in the parent (grandparent of the dying child).
             if parent_inner.type_.is_hidden() {
@@ -1460,9 +1465,10 @@ impl VMObjectPagedInner {
             },
             Some(lock_ref.clone()),
         );
-        // update parent's child
+        // update parent's child reference (hidden parents only)
         if let Some(parent) = self.parent.take() {
-            if let VMOType::Hidden { left, right, .. } = &mut parent.inner.borrow_mut().type_ {
+            let mut parent_inner = parent.inner.borrow_mut();
+            if let VMOType::Hidden { left, right, .. } = &mut parent_inner.type_ {
                 if left.ptr_eq(&self.self_ref) {
                     *left = Arc::downgrade(&hidden);
                 } else if right.ptr_eq(&self.self_ref) {
@@ -1471,6 +1477,9 @@ impl VMObjectPagedInner {
                     panic!();
                 }
             }
+            // Non-hidden parents (e.g., pager root for unidirectional
+            // children) don't track children via left/right — skip.
+            drop(parent_inner);
         }
         // update children's parent
         self.parent = Some(hidden.clone());
