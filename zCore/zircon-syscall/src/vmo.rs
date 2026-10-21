@@ -516,7 +516,19 @@ impl Syscall<'_> {
                     let adjusted_offset = offset
                         .checked_add(vmo.parent_offset())
                         .ok_or(ZxError::OUT_OF_RANGE)?;
-                    let child = parent.create_child(resizable, adjusted_offset, child_size)?;
+                    // For SNAPSHOT_MODIFIED on a root-slice (parent is
+                    // pager root with no parent), use unidirectional clone.
+                    // This matches Fuchsia's CreateCloneLocked where
+                    // require_bidirectional = !!parent_ and the root pager
+                    // VMO has no cow_pages parent.
+                    let child = if options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
+                        && !parent.has_parent()
+                        && parent.has_pager()
+                    {
+                        parent.create_child_unidirectional(adjusted_offset, child_size)?
+                    } else {
+                        parent.create_child(resizable, adjusted_offset, child_size)?
+                    };
                     child.set_parent_ref(&vmo);
                     Ok(child)
                 } else {

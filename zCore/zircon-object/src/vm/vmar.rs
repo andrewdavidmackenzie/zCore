@@ -2213,12 +2213,21 @@ impl VmMapping {
                 for i in (start - vmo_offset_pages)..(end - vmo_offset_pages) {
                     match op {
                         RangeChangeOp::RemoveWrite => {
-                            let mut new_flag = inner.page_flags(i);
-                            new_flag.remove(MMUFlags::WRITE);
-                            pg_table
-                                .update(inner.addr + i * PAGE_SIZE, None, Some(new_flag))
-                                .ignore()
-                                .unwrap();
+                            // Only update the PTE if the page is actually
+                            // mapped. On lazy mappings, PTEs for unfaulted
+                            // pages are all-zeros (unused). Calling update()
+                            // on an unused PTE sets the flags but leaves the
+                            // address as 0, creating a spurious mapping to
+                            // physical address 0.
+                            let vaddr_i = inner.addr + i * PAGE_SIZE;
+                            if pg_table.query(vaddr_i).is_ok() {
+                                let mut new_flag = inner.page_flags(i);
+                                new_flag.remove(MMUFlags::WRITE);
+                                pg_table
+                                    .update(vaddr_i, None, Some(new_flag))
+                                    .ignore()
+                                    .unwrap();
+                            }
                         }
                         RangeChangeOp::Unmap => {
                             pg_table.unmap(inner.addr + i * PAGE_SIZE).ignore().unwrap();

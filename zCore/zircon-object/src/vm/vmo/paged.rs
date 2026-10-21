@@ -1030,6 +1030,24 @@ impl VMObjectPagedInner {
                         hal_impl::mem::pmem_copy(new_frame.paddr(), paddr, PAGE_SIZE);
                         self.frames.insert(page_idx, PageState::new(new_frame));
                     }
+                    CommitResult::Ref(paddr) if flags.contains(MMUFlags::WRITE) => {
+                        // A COW participant (hidden node or snapshot child)
+                        // received a Ref from a non-hidden parent (e.g.,
+                        // pager root). For WRITE access, we must copy the
+                        // page locally to maintain COW isolation — writing
+                        // through the Ref would corrupt the parent's page
+                        // and violate snapshot semantics.
+                        //
+                        // Hidden nodes: the copy goes into self.frames so
+                        // the COW fork logic below (line ~1088) can handle
+                        // distribution to the requesting child.
+                        //
+                        // Snapshot children: the copy becomes a private
+                        // page owned by this VMO.
+                        let new_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
+                        hal_impl::mem::pmem_copy(new_frame.paddr(), paddr, PAGE_SIZE);
+                        self.frames.insert(page_idx, PageState::new(new_frame));
+                    }
                     r => return Ok(r),
                 }
             }
