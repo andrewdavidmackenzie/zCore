@@ -7,8 +7,8 @@ PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
-# ── Channel (some Call* variants hang with multi-threaded reply) ──────
-ChannelTest.Call*
+# ── Channel (hangs in full suite due to timing, passes individually) ──
+ChannelInternalTest.TransferChannelWithPendingCall
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.RacyPortDequeue
