@@ -1497,12 +1497,19 @@ impl VMObjectPagedInner {
                 }
             }
             // Also walk up ancestors for pages not in the hidden node.
+            // Stop at non-hidden parents — they don't participate in
+            // bidirectional COW share_count tracking. This prevents
+            // unidirectional children's hidden nodes from inflating
+            // the root pager VMO's share_count.
             if let Some(ref parent) = h.parent {
                 let mut cur = Some(parent.clone());
                 let mut cur_start = child_start + h.parent_offset / PAGE_SIZE;
                 let mut cur_end = child_end + h.parent_offset / PAGE_SIZE;
                 while let Some(vmop) = cur {
                     let mut inner = vmop.inner.borrow_mut();
+                    if !inner.type_.is_hidden() {
+                        break;
+                    }
                     for idx in cur_start..cur_end {
                         if let Some(page) = inner.frames.get_mut(&idx) {
                             page.share_count += 1;
