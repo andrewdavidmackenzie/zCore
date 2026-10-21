@@ -42,10 +42,6 @@ Snapshot.ZeroRangeLeftInSnapshotPageInHiddenNode
 Snapshot.ZeroRangeLeftInSnapshotNoPagesInParent
 Snapshot.ZeroRangeLeftInSnapshotPagesInParentChain
 Snapshot.ZeroRangeLeftInSnapshotNoPagesInParentChain
-Snapshot.ReleaseCowParentPagesLeft
-Snapshot.ReleaseCowParentPagesRight
-Snapshot.ReleaseCowParentPagesLeftAndRight
-Snapshot.ReleaseCowParentPagesRightInHiddenNode
 
 # ── Stream (pager-backed VMO) ────────────────────────────────────────
 StreamTestCase.AppendSuppliesZeroes
