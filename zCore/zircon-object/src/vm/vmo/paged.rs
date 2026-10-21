@@ -1582,7 +1582,7 @@ impl VMObjectPagedInner {
         len: usize,
         lock_ref: &Arc<Mutex<()>>,
     ) -> ZxResult<Arc<VMObjectPaged>> {
-        if self.cache_policy != CachePolicy::Cached {
+        if self.cache_policy != CachePolicy::Cached || self.pin_count != 0 {
             return Err(ZxError::BAD_STATE);
         }
         let child = VMObjectPaged::wrap(
