@@ -516,15 +516,13 @@ impl VmObject {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        // OP_DIRTY can only be applied to supplied pages (committed
-        // frames or zero markers). Unsupplied pages return NOT_FOUND.
+        // OP_DIRTY can only be applied to committed (supplied) pages.
+        // Zero markers from resize are NOT supplied pages and should
+        // return NOT_FOUND. Only committed frames count.
         if length > 0 {
-            for pg in start_page..end_page {
-                let has_frame = self.trait_.committed_pages_in_range(pg, pg + 1) > 0;
-                let has_marker = self.trait_.has_zero_marker(pg);
-                if !has_frame && !has_marker {
-                    return Err(ZxError::NOT_FOUND);
-                }
+            let committed = self.trait_.committed_pages_in_range(start_page, end_page);
+            if committed < end_page - start_page {
+                return Err(ZxError::NOT_FOUND);
             }
         }
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {

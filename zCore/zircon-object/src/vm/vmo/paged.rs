@@ -737,9 +737,12 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn insert_zero_marker(&self, page_idx: usize) {
         let (_guard, mut inner) = self.get_inner_mut();
-        // Remove any existing frame at this page index.
-        inner.frames.remove(&page_idx);
-        inner.zero_markers.insert(page_idx);
+        // Only insert zero marker if the page has no committed frame.
+        // Dropping a committed frame without invalidating PTEs would
+        // leave dangling mappings pointing at freed physical memory.
+        if !inner.frames.contains_key(&page_idx) {
+            inner.zero_markers.insert(page_idx);
+        }
     }
 
     fn has_zero_marker(&self, page_idx: usize) -> bool {

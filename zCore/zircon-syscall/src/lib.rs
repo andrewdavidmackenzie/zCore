@@ -300,9 +300,7 @@ impl Syscall<'_> {
                 Err(e) => return Err(e),                       // NOT_FOUND = no pager port
                 Ok(()) => {}                                   // shouldn't happen but harmless
             }
-            // Wait for ALL pages in this run to become dirty.
-            // The pager will acknowledge the entire range with a
-            // single OP_DIRTY call.
+            // Wait for the first page of the run to become dirty.
             let future = vmo.wait_for_dirty(run_offset);
             pin_mut!(future);
             self.thread.set_blocking_state(ThreadState::BlockedPager);
@@ -314,6 +312,10 @@ impl Syscall<'_> {
                     None,
                 )
                 .await?;
+            // Re-scan from run_start: the pager may have acknowledged
+            // only part of the run. The outer loop will pick up any
+            // remaining clean pages and send new dirty requests.
+            page_idx = run_start;
         }
         Ok(())
     }
