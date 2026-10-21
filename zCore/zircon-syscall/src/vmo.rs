@@ -890,16 +890,16 @@ impl Syscall<'_> {
                         }
                     }
                 }
-                // Demand-paging complete — now commit the pages in the
-                // actual VMO (not the pager root). For clones, this
-                // COW-forks pages from the parent chain into local frames.
-                // Without this, op_range(COMMIT) on a clone only ensures
-                // the root has pages but doesn't create private copies.
-                let page_mask = PAGE_SIZE - 1;
-                let aligned_offset = offset & !page_mask;
-                let aligned_end = (offset + len + page_mask) & !page_mask;
-                let aligned_len = aligned_end - aligned_offset;
-                vmo.commit(aligned_offset, aligned_len)?;
+                // For COMMIT (op=1), COW-fork pages into the clone's
+                // local frames. PREFETCH/ALWAYS_NEED only ensure pages
+                // are in the root — they don't create private copies.
+                if op == 1 {
+                    let page_mask = PAGE_SIZE - 1;
+                    let aligned_offset = offset & !page_mask;
+                    let aligned_end = (offset + len + page_mask) & !page_mask;
+                    let aligned_len = aligned_end - aligned_offset;
+                    vmo.commit(aligned_offset, aligned_len)?;
+                }
                 return Ok(());
             }
         }

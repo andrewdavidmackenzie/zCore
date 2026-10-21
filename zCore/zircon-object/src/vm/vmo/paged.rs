@@ -1945,6 +1945,11 @@ impl VMObjectPagedInner {
             let mut cur_idx = i + self.parent_offset / PAGE_SIZE;
             while let Some(vmop) = cur {
                 let mut p = vmop.inner.borrow_mut();
+                // Stop at non-hidden parents — they don't participate
+                // in bidirectional COW share_count tracking.
+                if !p.type_.is_hidden() {
+                    break;
+                }
                 if let Some(page) = p.frames.get_mut(&cur_idx) {
                     if page.share_count > 0 {
                         page.share_count -= 1;
