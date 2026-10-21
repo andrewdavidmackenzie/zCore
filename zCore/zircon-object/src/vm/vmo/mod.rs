@@ -1449,6 +1449,25 @@ impl VmObject {
         Ok(())
     }
 
+    /// Atomically read content_size and advance it by `count`, clamped
+    /// to `max`. Returns the old content_size (the offset to write at).
+    ///
+    /// Used by stream append to reserve space without racing with
+    /// concurrent appenders.
+    pub fn fetch_add_content_size(&self, count: usize, max: usize) -> ZxResult<usize> {
+        if self.trait_.is_reference() {
+            let parent = self.inner.lock().parent.upgrade();
+            if let Some(parent) = parent {
+                return parent.fetch_add_content_size(count, max);
+            }
+        }
+        let mut inner = self.inner.lock();
+        let old = inner.content_size;
+        let new = old.saturating_add(count).min(max);
+        inner.content_size = new;
+        Ok(old)
+    }
+
     /// Set content_size and zero data beyond it.
     ///
     /// Used by `ZX_PROP_VMO_CONTENT_SIZE` set_property to maintain the

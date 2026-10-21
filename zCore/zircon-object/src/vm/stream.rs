@@ -93,8 +93,17 @@ impl Stream {
             return Ok(0);
         }
         let length = count.min(content_size - offset);
-        self.vmo.read(offset, &mut data[..length])?;
-        Ok(length)
+        // A concurrent set_stream_size / set_size may shrink the VMO
+        // between our content_size read above and the actual vmo.read().
+        // Treat OUT_OF_RANGE and SHOULD_WAIT as end-of-stream (0 bytes
+        // read) rather than propagating the error. SHOULD_WAIT can
+        // occur on pager-backed VMOs when pages are decommitted by
+        // a concurrent resize.
+        match self.vmo.read(offset, &mut data[..length]) {
+            Ok(()) => Ok(length),
+            Err(ZxError::OUT_OF_RANGE) | Err(ZxError::SHOULD_WAIT) => Ok(0),
+            Err(e) => Err(e),
+        }
     }
 
     /// Write data to the stream at the current seek offset or append data at the end of content.
@@ -110,11 +119,16 @@ impl Stream {
         let mut inner = self.inner.lock();
         let do_append = append || (inner.options & MODE_APPEND) != 0;
         if do_append {
-            inner.seek = self.vmo.content_size();
+            // Use atomic append to prevent concurrent appenders from
+            // getting the same offset.
+            let (length, new_seek) = self.append(data)?;
+            inner.seek = new_seek;
+            Ok(length)
+        } else {
+            let length = self.write_at(data, inner.seek)?;
+            inner.seek += length;
+            Ok(length)
         }
-        let length = self.write_at(data, inner.seek)?;
-        inner.seek += length;
-        Ok(length)
     }
 
     /// Write data to the stream at a given offset.
@@ -155,6 +169,30 @@ impl Stream {
             self.vmo.set_content_size(new_end)?;
         }
         Ok(length)
+    }
+
+    /// Append data atomically: reserve space at the current content_size,
+    /// then write. Returns (bytes_written, new_seek_offset).
+    ///
+    /// This is separate from write_at because appends must atomically
+    /// read and advance content_size to prevent two concurrent appenders
+    /// from getting the same offset.
+    pub fn append(&self, data: &[u8]) -> ZxResult<(usize, usize)> {
+        if data.is_empty() {
+            return Ok((0, self.vmo.content_size()));
+        }
+        let count = data.len();
+        let vmo_len = self.vmo.len();
+        // Atomically reserve space: read content_size and advance it
+        // in one operation so concurrent appenders get distinct offsets.
+        let offset = self.vmo.fetch_add_content_size(count, vmo_len)?;
+        // Clamp to VMO boundary.
+        let length = count.min(vmo_len.saturating_sub(offset));
+        if length == 0 {
+            return Ok((0, offset));
+        }
+        self.vmo.write(offset, &data[..length])?;
+        Ok((length, offset + length))
     }
 
     /// Modify the current seek offset of the stream
