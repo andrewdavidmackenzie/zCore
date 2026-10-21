@@ -124,7 +124,10 @@ impl Syscall<'_> {
                 vmo.find_root_pager_vmo().unwrap_or_else(|| vmo.clone())
             };
             let start_page = offset / PAGE_SIZE;
-            let end_page = (offset + size).div_ceil(PAGE_SIZE);
+            let end_page = offset
+                .checked_add(size)
+                .ok_or(ZxError::OUT_OF_RANGE)?
+                .div_ceil(PAGE_SIZE);
             for page_idx in start_page..end_page {
                 if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
                     continue;

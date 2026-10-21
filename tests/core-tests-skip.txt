@@ -7,6 +7,10 @@ PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
+# ── Channel (multi-threaded call + transfer hang) ────────────────────
+ChannelInternalTest.TransferChannelWithPendingCall
+ChannelTest.Call*
+
 # ── Thread state / exceptions (mini-process crash handling) ──────────
 Threads.X86AcFlagUserCopy
 UserExceptionsTest.Delivered

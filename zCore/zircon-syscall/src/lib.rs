@@ -273,7 +273,10 @@ impl Syscall<'_> {
             return Ok(());
         }
         let start_page = offset / PAGE_SIZE;
-        let end_page = (offset + len).div_ceil(PAGE_SIZE);
+        let end_page = offset
+            .checked_add(len)
+            .ok_or(ZxError::INVALID_ARGS)?
+            .div_ceil(PAGE_SIZE);
         // Find contiguous runs of clean pages and send one dirty
         // request per run. The pager expects coalesced requests
         // matching the contiguous dirty range.
@@ -292,7 +295,11 @@ impl Syscall<'_> {
             let run_len = page_idx - run_start;
             let run_offset = run_start * PAGE_SIZE;
             let run_bytes = run_len * PAGE_SIZE;
-            let _ = vmo.request_dirty(run_offset, run_bytes);
+            match vmo.request_dirty(run_offset, run_bytes) {
+                Err(zircon_object::ZxError::SHOULD_WAIT) => {} // expected
+                Err(e) => return Err(e),                       // NOT_FOUND = no pager port
+                Ok(()) => {}                                   // shouldn't happen but harmless
+            }
             // Wait for ALL pages in this run to become dirty.
             // The pager will acknowledge the entire range with a
             // single OP_DIRTY call.
