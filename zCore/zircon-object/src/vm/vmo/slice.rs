@@ -162,4 +162,17 @@ impl VMObjectTrait for VMObjectSlice {
     fn is_paged(&self) -> bool {
         self.parent.is_paged()
     }
+
+    fn append_mapping(&self, mapping: Weak<VmMapping>) {
+        // Register the slice's mapping on the parent VMObjectPaged so
+        // that COW operations (RemoveWrite, Unmap from create_child and
+        // commit_page_internal) propagate to the slice's page table
+        // entries. Without this, slice mappings become stale after
+        // the parent's pages are moved to a hidden node by create_child.
+        self.parent.append_mapping(mapping);
+    }
+
+    fn remove_mapping(&self, mapping: Weak<VmMapping>) {
+        self.parent.remove_mapping(mapping);
+    }
 }

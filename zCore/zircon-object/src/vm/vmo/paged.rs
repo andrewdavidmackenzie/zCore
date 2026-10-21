@@ -1025,7 +1025,14 @@ impl VMObjectPagedInner {
                                 RangeChangeOp::Unmap,
                             )
                         } else {
-                            need_unmap = need_unmap || unmap;
+                            // Always unmap when inserting a new frame via
+                            // CopyOnWrite. Even if the parent's unmap flag
+                            // is false (page was migrated, not copied), this
+                            // leaf may have existing PTEs (from a prior Ref
+                            // mapping or slice sharing) that point to the
+                            // old physical page. Without unmapping, those
+                            // PTEs become stale.
+                            need_unmap = true;
                         }
                         self.frames.insert(page_idx, new_frame);
                     }
