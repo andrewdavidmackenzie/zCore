@@ -408,6 +408,14 @@ impl VMObjectTrait for VMObjectPaged {
                     }
                     unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
                     inner.frames.remove(&block.block);
+                    // Unmap the page from all mappings so subsequent
+                    // accesses trigger a page fault (which will see the
+                    // zero marker and return a zero page).
+                    for map in inner.mappings.iter() {
+                        if let Some(map) = map.upgrade() {
+                            map.range_change(block.block, 1, RangeChangeOp::Unmap);
+                        }
+                    }
                 }
             } else if inner.committed_pages_in_range(block.block, block.block + 1) != 0 {
                 // check whether this page is initialized, otherwise nothing should be done
@@ -1817,6 +1825,13 @@ impl VMObjectPagedInner {
 
             while let Some(vmop) = current {
                 let inner = vmop.inner.borrow();
+                // Non-hidden nodes (pager root, Origin) are not part
+                // of the COW tree — their pages are attributed to
+                // themselves, not to children reading through them.
+                // Stop the walk here to avoid double-counting.
+                if !inner.type_.is_hidden() {
+                    break;
+                }
                 // Zero markers in ancestors block attribution.
                 if inner.zero_markers.contains(&current_idx) {
                     break;
@@ -1824,14 +1839,12 @@ impl VMObjectPagedInner {
                 if let Some(frame) = inner.frames.get(&current_idx) {
                     // Check tag visibility: in a hidden node, the child
                     // can only see pages where tag != child_tag.
-                    if inner.type_.is_hidden() {
-                        let (child_tag, _) = inner.type_.get_tag_and_other(&child_ref);
-                        if frame.tag == child_tag {
-                            // This page was split away from us — we have
-                            // our own copy (which we already checked in
-                            // our local frames). Skip it.
-                            break;
-                        }
+                    let (child_tag, _) = inner.type_.get_tag_and_other(&child_ref);
+                    if frame.tag == child_tag {
+                        // This page was split away from us — we have
+                        // our own copy (which we already checked in
+                        // our local frames). Skip it.
+                        break;
                     }
                     result.add_page((frame.share_count as u64) + 1);
                     break;

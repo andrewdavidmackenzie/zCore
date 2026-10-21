@@ -525,7 +525,7 @@ impl Syscall<'_> {
                         && !parent.has_parent()
                         && parent.has_pager()
                     {
-                        parent.create_child_unidirectional(adjusted_offset, child_size)?
+                        parent.create_child_unidirectional(adjusted_offset, child_size, resizable)?
                     } else {
                         parent.create_child(resizable, adjusted_offset, child_size)?
                     };
@@ -538,7 +538,7 @@ impl Syscall<'_> {
                 && !vmo.has_parent()
                 && vmo.has_pager()
             {
-                vmo.create_child_unidirectional(offset, child_size)
+                vmo.create_child_unidirectional(offset, child_size, resizable)
             } else {
                 vmo.create_child(resizable, offset, child_size)
             }
@@ -886,6 +886,16 @@ impl Syscall<'_> {
                         }
                     }
                 }
+                // Demand-paging complete — now commit the pages in the
+                // actual VMO (not the pager root). For clones, this
+                // COW-forks pages from the parent chain into local frames.
+                // Without this, op_range(COMMIT) on a clone only ensures
+                // the root has pages but doesn't create private copies.
+                let page_mask = PAGE_SIZE - 1;
+                let aligned_offset = offset & !page_mask;
+                let aligned_end = (offset + len + page_mask) & !page_mask;
+                let aligned_len = aligned_end - aligned_offset;
+                vmo.commit(aligned_offset, aligned_len)?;
                 return Ok(());
             }
         }
