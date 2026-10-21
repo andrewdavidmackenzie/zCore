@@ -11,8 +11,6 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 ChannelInternalTest.TransferChannelWithPendingCall
 
 # ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
-Pager.RacyPortDequeue
-Pager.CloneReadFromParentTestVmar
 PagerWriteback.*
 
 # ── Stream (TRAP_DIRTY: needs async stream syscalls with predirty) ───
