@@ -977,17 +977,20 @@ impl VMObjectPagedInner {
                                 let (_, sibling_weak) =
                                     parent.type_.get_tag_and_other(&self.self_ref);
                                 if let Some(sibling_arc) = sibling_weak.upgrade() {
-                                    let sib = sibling_arc.inner.borrow();
-                                    if sib.pager_backed {
-                                        let sib_off = sib.parent_offset / PAGE_SIZE;
-                                        if parent_idx >= sib_off {
-                                            let sib_idx = parent_idx - sib_off;
-                                            if sib_idx < sib.size / PAGE_SIZE {
-                                                if let Some(page) = sib.frames.get(&sib_idx) {
-                                                    drop(frame);
-                                                    return Ok(CommitResult::Ref(
-                                                        page.frame.paddr(),
-                                                    ));
+                                    // Use try_borrow to avoid reentrancy
+                                    // panic if sibling is the requesting child.
+                                    if let Ok(sib) = sibling_arc.inner.try_borrow() {
+                                        if sib.pager_backed {
+                                            let sib_off = sib.parent_offset / PAGE_SIZE;
+                                            if parent_idx >= sib_off {
+                                                let sib_idx = parent_idx - sib_off;
+                                                if sib_idx < sib.size / PAGE_SIZE {
+                                                    if let Some(page) = sib.frames.get(&sib_idx) {
+                                                        drop(frame);
+                                                        return Ok(CommitResult::Ref(
+                                                            page.frame.paddr(),
+                                                        ));
+                                                    }
                                                 }
                                             }
                                         }
@@ -1017,13 +1020,16 @@ impl VMObjectPagedInner {
                                 par_frame.swap(&mut new_frame);
                             }
                             let sibling = parent.type_.get_tag_and_other(&self.self_ref).1;
-                            let arc_sibling = sibling.upgrade().unwrap();
-                            let sibling_inner = arc_sibling.inner.borrow();
-                            sibling_inner.range_change(
-                                parent_idx * PAGE_SIZE,
-                                (parent_idx + 1) * PAGE_SIZE,
-                                RangeChangeOp::Unmap,
-                            )
+                            if let Some(arc_sibling) = sibling.upgrade() {
+                                // Use try_borrow to avoid reentrancy panic.
+                                if let Ok(sibling_inner) = arc_sibling.inner.try_borrow() {
+                                    sibling_inner.range_change(
+                                        parent_idx * PAGE_SIZE,
+                                        (parent_idx + 1) * PAGE_SIZE,
+                                        RangeChangeOp::Unmap,
+                                    );
+                                }
+                            }
                         } else {
                             // Always unmap when inserting a new frame via
                             // CopyOnWrite. Even if the parent's unmap flag
@@ -1071,11 +1077,19 @@ impl VMObjectPagedInner {
         let (_child_tag, other_child) = self.type_.get_tag_and_other(child);
         if self.type_.is_hidden() {
             let arc_other = other_child.upgrade().unwrap();
-            let other_inner = arc_other.inner.borrow();
-            let in_range = {
-                let start = other_inner.parent_offset / PAGE_SIZE;
-                let end = other_inner.parent_limit / PAGE_SIZE;
-                page_idx >= start && page_idx < end
+            // Use try_borrow to avoid RefCell reentrancy panic when the
+            // other child is the same object that initiated commit_page
+            // (its inner RefCell is already mutably borrowed up the call
+            // chain). If we can't borrow, assume in_range=true (safe
+            // because we only use in_range to decide migrate vs copy,
+            // and the conservative choice is to copy).
+            let in_range = match arc_other.inner.try_borrow() {
+                Ok(other_inner) => {
+                    let start = other_inner.parent_offset / PAGE_SIZE;
+                    let end = other_inner.parent_limit / PAGE_SIZE;
+                    page_idx >= start && page_idx < end
+                }
+                Err(_) => true, // conservatively assume in range
             };
             if !in_range {
                 if flags.contains(MMUFlags::WRITE) {
@@ -1100,11 +1114,14 @@ impl VMObjectPagedInner {
                 let frame = self.frames.get(&page_idx).unwrap();
                 return Ok(CommitResult::Ref(frame.frame.paddr()));
             } else if need_unmap {
-                other_inner.range_change(
-                    page_idx * PAGE_SIZE,
-                    (1 + page_idx) * PAGE_SIZE,
-                    RangeChangeOp::Unmap,
-                )
+                // Re-borrow for range_change; skip if reentrancy conflict.
+                if let Ok(other_inner) = arc_other.inner.try_borrow() {
+                    other_inner.range_change(
+                        page_idx * PAGE_SIZE,
+                        (1 + page_idx) * PAGE_SIZE,
+                        RangeChangeOp::Unmap,
+                    )
+                }
             }
         }
         if need_unmap {
