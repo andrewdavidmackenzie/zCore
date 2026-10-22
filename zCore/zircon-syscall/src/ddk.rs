@@ -160,18 +160,26 @@ impl Syscall<'_> {
         let pmt = bti.pin(vmo.clone(), offset, size, options.to_iommu_perms())?;
         // Pin-for-write sets the modified flag and marks pages dirty
         // on pager-backed VMOs (pin with WRITE implies data change).
-        if options.contains(BtiOptions::PERM_WRITE) && (vmo.has_pager() || vmo.was_pager_backed()) {
-            vmo.set_modified();
-            // Mark pages dirty for both TRAP_DIRTY and non-TRAP_DIRTY.
-            // For TRAP_DIRTY, use mark_pages_dirty (direct kernel op).
-            // For non-TRAP_DIRTY, use auto_mark_dirty.
-            if vmo.is_trap_dirty() {
-                let _ = vmo.mark_pages_dirty(offset, size);
+        // For slices, propagate to the parent pager VMO.
+        if options.contains(BtiOptions::PERM_WRITE) {
+            let pager_vmo = if vmo.has_pager() || vmo.was_pager_backed() {
+                Some(vmo.clone())
+            } else if vmo.is_slice_vmo() {
+                vmo.find_root_pager_vmo()
             } else {
-                let start_page = offset / PAGE_SIZE;
-                let end_page = (offset + size).div_ceil(PAGE_SIZE);
-                for pg in start_page..end_page {
-                    vmo.auto_mark_dirty(pg);
+                None
+            };
+            if let Some(pv) = pager_vmo {
+                pv.set_modified();
+                let parent_offset = offset + vmo.get_slice_offset();
+                if pv.is_trap_dirty() {
+                    let _ = pv.mark_pages_dirty(parent_offset, size);
+                } else {
+                    let start_page = parent_offset / PAGE_SIZE;
+                    let end_page = (parent_offset + size).div_ceil(PAGE_SIZE);
+                    for pg in start_page..end_page {
+                        pv.auto_mark_dirty(pg);
+                    }
                 }
             }
         }

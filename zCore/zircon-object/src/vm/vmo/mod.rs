@@ -630,9 +630,7 @@ impl VmObject {
                 // Zero-marker page: allocate a real frame so the page
                 // becomes committed. commit_page with WRITE allocates
                 // a zero-filled frame and removes the zero marker.
-                if let Err(e) = self.trait_.commit_page(page_idx, MMUFlags::WRITE) {
-                    return Err(e);
-                }
+                self.trait_.commit_page(page_idx, MMUFlags::WRITE)?;
             }
         }
         // Second pass: update dirty state under inner lock.
