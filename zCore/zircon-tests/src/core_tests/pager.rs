@@ -1559,11 +1559,9 @@ fn pager_detach_non_mapping_access() {
     // Detach the VMO.
     pager_helper.detach_vmo(&vmo);
 
-    // The supplied page should still be readable after detach.
-    assert!(
-        UserPagerHelper::check_page(&vmo, key, 0),
-        "supplied page should be readable after detach"
-    );
+    // Clean pages are decommitted on detach (Fuchsia behavior).
+    // committed_bytes should be 0.
+    assert_eq!(vmo.committed_pages_in_range(0, 1), 0);
 }
 
 /// C++: TEST(Pager, DetachPageCompleteTest)
@@ -1581,11 +1579,8 @@ fn pager_detach_page_complete_test() {
 
     pager_helper.detach_vmo(&vmo);
 
-    // Supplied page should still be readable after detach.
-    assert!(
-        UserPagerHelper::check_page(&vmo, key, 0),
-        "page should be readable after detach"
-    );
+    // Clean pages are decommitted on detach (Fuchsia behavior).
+    assert_eq!(vmo.committed_pages_in_range(0, 1), 0);
 }
 
 /// C++: VMO_VMAR_TEST(Pager, EarlySupplyTest) — Vmo variant
@@ -7222,14 +7217,17 @@ fn pager_wb_writeback_dirty_pages_after_detach_no_trap_dirty() {
 
     pager_helper.supply_pages(&vmo, key, 0, 2);
 
-    // Write to dirty both pages.
+    // Write to dirty both pages. In the syscall path, auto_mark_dirty
+    // is called automatically; in unit tests we must call it explicitly.
     vmo.write(0, &[0xAAu8]).unwrap();
+    vmo.auto_mark_dirty(0);
     vmo.write(PAGE_SIZE, &[0xBBu8]).unwrap();
+    vmo.auto_mark_dirty(1);
 
-    // Detach the VMO.
+    // Detach the VMO — only clean pages are decommitted.
     pager_helper.detach_vmo(&vmo);
 
-    // Content should still be readable.
+    // Dirty pages survive detach.
     let mut val = [0u8; 1];
     vmo.read(0, &mut val).unwrap();
     assert_eq!(val[0], 0xAA);
@@ -7442,16 +7440,20 @@ fn pager_wb_writeback_resized_range_after_detach_no_trap_dirty() {
 
     pager_helper.supply_pages(&vmo, key, 0, 2);
 
-    // Write to dirty.
+    // Write to dirty page 0. Mark dirty explicitly since unit tests
+    // bypass the syscall layer.
     vmo.write(0, &[0xCCu8]).unwrap();
+    vmo.auto_mark_dirty(0);
 
-    // Detach.
+    // Detach — only clean pages are decommitted.
     pager_helper.detach_vmo(&vmo);
 
-    // Content preserved.
+    // Dirty page 0 survives detach.
     let mut val = [0u8; 1];
     vmo.read(0, &mut val).unwrap();
     assert_eq!(val[0], 0xCC);
+    // Clean page 1 was decommitted.
+    assert_eq!(vmo.committed_pages_in_range(1, 2), 0);
 }
 
 /// C++: TEST(PagerWriteback, WritebackResizedRangeAfterDetachTrapDirty)

@@ -476,7 +476,11 @@ impl VMObjectTrait for VMObjectPaged {
         let (old_parent, old_size) = {
             let (_guard, inner) = self.get_inner_mut();
             if inner.pin_count > 0 {
-                return Err(ZxError::BAD_STATE);
+                // Pager-backed VMOs can grow with pinned pages.
+                // Shrinking that would remove pinned pages is rejected.
+                if !inner.pager_backed || len < inner.size {
+                    return Err(ZxError::BAD_STATE);
+                }
             }
             // Check for overflow: the new size plus accumulated parent
             // offsets must not overflow 64-bit.
@@ -807,6 +811,11 @@ impl VMObjectTrait for VMObjectPaged {
                 map.range_change(page_idx, count, RangeChangeOp::Unmap);
             }
         }
+    }
+
+    fn is_page_pinned(&self, page_idx: usize) -> bool {
+        let (_guard, inner) = self.get_inner();
+        inner.frames.get(&page_idx).is_some_and(|f| f.pin_count > 0)
     }
 
     fn remove_zero_marker(&self, page_idx: usize) {

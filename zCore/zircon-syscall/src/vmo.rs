@@ -968,12 +968,18 @@ impl Syscall<'_> {
                     if let Some(pv) = pager_vmo {
                         pv.set_modified();
                         let parent_offset = offset + vmo.get_slice_offset();
+                        let start_page = parent_offset / PAGE_SIZE;
+                        let end_page = (parent_offset + len).div_ceil(PAGE_SIZE);
                         if !pv.is_trap_dirty() {
-                            let start_page = parent_offset / PAGE_SIZE;
-                            let end_page = (parent_offset + len).div_ceil(PAGE_SIZE);
+                            // Non-TRAP_DIRTY: auto-mark dirty.
                             for pg in start_page..end_page {
                                 pv.auto_mark_dirty(pg);
                             }
+                        } else {
+                            // TRAP_DIRTY: OP_ZERO doesn't generate a
+                            // DIRTY request. Directly mark pages as
+                            // dirty-zero since they were zeroed.
+                            pv.mark_pages_zero_dirty(start_page, end_page);
                         }
                     }
                 }

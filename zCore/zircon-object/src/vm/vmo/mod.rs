@@ -205,6 +205,11 @@ pub trait VMObjectTrait: Sync + Send {
         false
     }
 
+    /// Check if a specific page is pinned (has pin_count > 0).
+    fn is_page_pinned(&self, _page_idx: usize) -> bool {
+        false
+    }
+
     /// Remove a zero marker at the given page index.
     fn remove_zero_marker(&self, _page_idx: usize) {}
 
@@ -519,6 +524,25 @@ impl VmObject {
         self.trait_.remove_zero_marker(page_idx);
     }
 
+    /// Mark pages as dirty-zero (for OP_ZERO on TRAP_DIRTY VMOs).
+    /// This doesn't generate a DIRTY request — it directly sets the
+    /// dirty state since zeroing is allowed without pager ACK.
+    pub fn mark_pages_zero_dirty(&self, start_page: usize, end_page: usize) {
+        let mut inner = self.inner.lock();
+        for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
+            // Only mark as zero-dirty if the page has a zero marker
+            // (was actually zeroed). If the page has a committed frame,
+            // mark as regular dirty.
+            if self.trait_.has_zero_marker(page_idx)
+                && self.trait_.committed_pages_in_range(page_idx, page_idx + 1) == 0
+            {
+                inner.dirty_pages[page_idx] = PAGE_ZERO_DIRTY;
+            } else {
+                inner.dirty_pages[page_idx] = PAGE_DIRTY;
+            }
+        }
+    }
+
     /// Enable dirty-page trapping for this pager-backed VMO.
     /// Writes to clean pages will send `ZX_PAGER_VMO_DIRTY` to the
     /// pager port and block until the pager responds.
@@ -563,6 +587,7 @@ impl VmObject {
         let inner = self.inner.lock();
         if let Some(port) = &inner.pager_port {
             let page_idx = offset / PAGE_SIZE;
+
             // Don't send duplicate requests.
             if !inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx) {
                 port.push(PortPacketRepr {
@@ -593,25 +618,33 @@ impl VmObject {
     ///   writeback cleans them (PAGE_CLEAN), they become "unsupplied"
     ///   and OP_DIRTY returns NOT_FOUND.
     pub fn mark_pages_dirty(&self, offset: usize, length: usize) -> ZxResult {
-        let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        // Two-pass: first validate ALL pages are present (committed
+        // or zero-marker), then allocate frames for zero-marker pages.
+        // This avoids partial allocation if a later page is NOT_FOUND.
         if length > 0 {
+            // Pass 1: validate
             for page_idx in start_page..end_page {
                 let has_frame = self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0;
                 if has_frame {
                     continue;
                 }
-                // Zero-marker page: present if it has a zero marker
-                // (from supply or resize). Only truly absent pages
-                // (no frame, no marker) return NOT_FOUND.
-                let has_zero = self.trait_.has_zero_marker(page_idx);
-                if has_zero {
+                if !self.trait_.has_zero_marker(page_idx) {
+                    return Err(ZxError::NOT_FOUND);
+                }
+            }
+            // Pass 2: allocate frames for zero-marker pages
+            for page_idx in start_page..end_page {
+                if self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
                     continue;
                 }
-                return Err(ZxError::NOT_FOUND);
+                // Zero-marker page: allocate a real frame.
+                self.trait_.commit_page(page_idx, MMUFlags::WRITE)?;
             }
         }
+        // Second pass: update dirty state under inner lock.
+        let mut inner = self.inner.lock();
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             inner.dirty_pages[page_idx] = PAGE_DIRTY;
         }
@@ -808,6 +841,11 @@ impl VmObject {
                 continue;
             }
             if state == PAGE_DIRTY || state == PAGE_ZERO_DIRTY {
+                // Skip pinned pages — they can't be cleaned while
+                // a device has active DMA access.
+                if self.trait_.is_page_pinned(page_idx) {
+                    continue;
+                }
                 inner.dirty_pages[page_idx] = PAGE_AWAITING_CLEAN;
             }
         }
@@ -815,6 +853,7 @@ impl VmObject {
 
     /// End writeback: transition AwaitingClean pages in range to Clean.
     /// Pages that were re-dirtied during writeback stay dirty.
+    /// Pinned pages cannot be cleaned (they have active DMA references).
     /// For non-TRAP_DIRTY VMOs, unmap cleaned pages so subsequent
     /// writes re-fault and trigger auto_mark_dirty.
     pub fn writeback_end(&self, offset: usize, length: usize) {

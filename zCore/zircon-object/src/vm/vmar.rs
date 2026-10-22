@@ -2118,6 +2118,14 @@ impl VmMapping {
                     } else {
                         new_flags
                     }
+                } else if new_flags.contains(MMUFlags::WRITE)
+                    && (self.vmo.is_pager_backed() || self.vmo.is_slice_vmo())
+                {
+                    // Pager-backed VMO (or slice): strip WRITE from
+                    // the hardware PTE so writes trigger a page fault
+                    // for dirty tracking. The fault handler will grant
+                    // WRITE after recording the dirty page.
+                    new_flags & !MMUFlags::WRITE
                 } else {
                     new_flags
                 };
@@ -2281,14 +2289,22 @@ impl VmMapping {
         if !access_flags.contains(MMUFlags::WRITE) {
             flags.remove(MMUFlags::WRITE);
         }
-        // For TRAP_DIRTY VMOs, strip WRITE for clean pages so that
-        // writes trigger a new page fault → dirty request to pager.
-        // After the pager acknowledges (OP_DIRTY), the page is marked
-        // dirty and the next write fault grants WRITE.
+        // For TRAP_DIRTY VMOs (or slices of TRAP_DIRTY parents),
+        // strip WRITE for clean pages so that writes trigger a new
+        // page fault → dirty request to pager.
         if self.vmo.is_trap_dirty() {
             let page_idx = vmo_offset / PAGE_SIZE;
             if !self.vmo.is_page_dirty(page_idx) {
                 flags.remove(MMUFlags::WRITE);
+            }
+        } else if self.vmo.is_slice_vmo() {
+            if let Some(parent) = self.vmo.find_root_pager_vmo() {
+                if parent.is_trap_dirty() {
+                    let parent_page = (vmo_offset + self.vmo.get_slice_offset()) / PAGE_SIZE;
+                    if !parent.is_page_dirty(parent_page) {
+                        flags.remove(MMUFlags::WRITE);
+                    }
+                }
             }
         }
         // Note: dirty/modified tracking for WRITE faults is done
@@ -2349,21 +2365,44 @@ impl VmMapping {
         {
             return self.vmo.request_dirty(vmo_offset, PAGE_SIZE);
         }
+        // Slice of TRAP_DIRTY parent: request dirty on the parent.
+        if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_slice_vmo() {
+            if let Some(parent) = self.vmo.find_root_pager_vmo() {
+                let parent_offset = vmo_offset + self.vmo.get_slice_offset();
+                let parent_page = parent_offset / PAGE_SIZE;
+                if parent.is_trap_dirty()
+                    && parent.is_pager_backed()
+                    && !parent.is_page_dirty(parent_page)
+                {
+                    return parent.request_dirty(parent_offset, PAGE_SIZE);
+                }
+            }
+        }
         let mut pg_table = self.page_table.lock();
         let mut res = pg_table.map(Page::new_aligned(vaddr, PageSize::Size4K), paddr, flags);
         if let Err(PagingError::AlreadyMapped) = res {
             res = pg_table.update(vaddr, Some(paddr), Some(flags)).map(|_| ());
         }
         res.map_err(|_| ZxError::ACCESS_DENIED)?;
-        // After successful WRITE mapping on a pager-backed VMO,
-        // update dirty tracking and modified flag. This is done
-        // AFTER the map succeeds to avoid marking the VMO modified
-        // when the fault returns SHOULD_WAIT (e.g., unsupplied page).
-        if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_pager_backed() {
-            if self.vmo.is_trap_dirty() {
-                self.vmo.set_modified();
-            } else {
-                self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
+        // After successful WRITE mapping on a pager-backed VMO (or a
+        // slice of one), update dirty tracking and modified flag.
+        if access_flags.contains(MMUFlags::WRITE) {
+            if self.vmo.is_pager_backed() {
+                if self.vmo.is_trap_dirty() {
+                    self.vmo.set_modified();
+                } else {
+                    self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
+                }
+            } else if self.vmo.is_slice_vmo() {
+                // Slice: propagate dirty/modified to the parent pager VMO.
+                if let Some(parent) = self.vmo.find_root_pager_vmo() {
+                    let parent_page = (vmo_offset + self.vmo.get_slice_offset()) / PAGE_SIZE;
+                    if parent.is_trap_dirty() {
+                        parent.set_modified();
+                    } else {
+                        parent.auto_mark_dirty(parent_page);
+                    }
+                }
             }
         }
         Ok(())
