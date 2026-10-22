@@ -809,6 +809,31 @@ impl VMObjectTrait for VMObjectPaged {
         }
     }
 
+    fn remove_zero_marker(&self, page_idx: usize) {
+        let (_guard, inner) = self.get_inner_mut();
+        inner.zero_markers.remove(&page_idx);
+    }
+
+    fn decommit_page(&self, page_idx: usize) {
+        let (_guard, inner) = self.get_inner_mut();
+        if let Some(frame) = inner.frames.remove(&page_idx) {
+            // Don't decommit pinned pages.
+            if frame.pin_count > 0 {
+                inner.frames.insert(page_idx, frame);
+                return;
+            }
+            // Insert a zero marker so reads return zeros without
+            // hitting the (now-detached) pager.
+            inner.zero_markers.insert(page_idx);
+            // Unmap from all mappings.
+            for map in inner.mappings.iter() {
+                if let Some(map) = map.upgrade() {
+                    map.range_change(page_idx, 1, RangeChangeOp::Unmap);
+                }
+            }
+        }
+    }
+
     fn clear_pager_backed(&self) {
         // Don't clear pager_backed — the VMO was pager-backed and
         // detached. Unsupplied pages should return errors (BAD_STATE)

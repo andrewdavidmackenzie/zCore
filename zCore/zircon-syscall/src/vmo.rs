@@ -779,9 +779,10 @@ impl Syscall<'_> {
                         if p >= pager_vmo.len() / PAGE_SIZE {
                             break;
                         }
-                        // Skip committed pages and pages with pending waiters
-                        // (another thread already requested them).
+                        // Skip committed pages, zero-marker pages, and
+                        // pages with pending waiters.
                         if pager_vmo.committed_pages_in_range(p, p + 1) > 0
+                            || pager_vmo.has_zero_marker(p)
                             || pager_vmo.has_page_waiter(p)
                         {
                             p += 1;
@@ -791,6 +792,7 @@ impl Syscall<'_> {
                         while p < end_page
                             && p < pager_vmo.len() / PAGE_SIZE
                             && pager_vmo.committed_pages_in_range(p, p + 1) == 0
+                            && !pager_vmo.has_zero_marker(p)
                             && !pager_vmo.has_page_waiter(p)
                         {
                             p += 1;
@@ -952,7 +954,30 @@ impl Syscall<'_> {
                 if !rights.contains(Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
-                vmo.zero(offset, len)
+                let result = vmo.zero(offset, len);
+                // OP_ZERO sets modified and marks pages dirty on the
+                // pager-backed VMO (which may be the parent of a slice).
+                if result.is_ok() {
+                    let pager_vmo = if vmo.has_pager() {
+                        Some(vmo.clone())
+                    } else if vmo.is_slice_vmo() {
+                        vmo.find_root_pager_vmo()
+                    } else {
+                        None
+                    };
+                    if let Some(pv) = pager_vmo {
+                        pv.set_modified();
+                        let parent_offset = offset + vmo.get_slice_offset();
+                        if !pv.is_trap_dirty() {
+                            let start_page = parent_offset / PAGE_SIZE;
+                            let end_page = (parent_offset + len).div_ceil(PAGE_SIZE);
+                            for pg in start_page..end_page {
+                                pv.auto_mark_dirty(pg);
+                            }
+                        }
+                    }
+                }
+                result
             }
             VmoOpType::Lock | VmoOpType::TryLock => {
                 if !vmo.is_discardable() {

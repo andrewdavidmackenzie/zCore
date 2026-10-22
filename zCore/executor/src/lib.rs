@@ -66,6 +66,32 @@ pub use runtime::{
     handle_timeout, init_runtimes, run_until_idle, sched_yield, spawn, spawn_with_priority,
 };
 
+/// Cross-CPU wakeup callback type.
+/// Called with the target CPU ID (APIC ID on x86_64) when a task on
+/// a remote CPU is woken. The implementation should send an IPI to
+/// break the target CPU out of HLT/WFI.
+type WakeupFn = fn(cpu_id: u8);
+
+/// Registered cross-CPU wakeup function. None until set by HAL init.
+static WAKEUP_FN: spin::Once<WakeupFn> = spin::Once::new();
+
+/// Register the cross-CPU wakeup function. Called once during HAL
+/// initialization after the IPI infrastructure is ready.
+pub fn set_ipi_wakeup(f: WakeupFn) {
+    WAKEUP_FN.call_once(|| f);
+}
+
+/// Send a cross-CPU wakeup if the target CPU differs from the current
+/// CPU. Called from `WakerRef::wake_by_ref()`.
+pub(crate) fn ipi_wakeup(target_cpu: u8) {
+    let current = arch::cpu_id();
+    if current != target_cpu {
+        if let Some(f) = WAKEUP_FN.get() {
+            f(target_cpu);
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! run_with_intr_saved_on {
     ($($statements:stmt)*) => {

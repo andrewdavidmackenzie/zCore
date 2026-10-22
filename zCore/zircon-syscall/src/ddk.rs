@@ -157,7 +157,24 @@ impl Syscall<'_> {
                 }
             }
         }
-        let pmt = bti.pin(vmo, offset, size, options.to_iommu_perms())?;
+        let pmt = bti.pin(vmo.clone(), offset, size, options.to_iommu_perms())?;
+        // Pin-for-write sets the modified flag and marks pages dirty
+        // on pager-backed VMOs (pin with WRITE implies data change).
+        if options.contains(BtiOptions::PERM_WRITE) && (vmo.has_pager() || vmo.was_pager_backed()) {
+            vmo.set_modified();
+            // Mark pages dirty for both TRAP_DIRTY and non-TRAP_DIRTY.
+            // For TRAP_DIRTY, use mark_pages_dirty (direct kernel op).
+            // For non-TRAP_DIRTY, use auto_mark_dirty.
+            if vmo.is_trap_dirty() {
+                let _ = vmo.mark_pages_dirty(offset, size);
+            } else {
+                let start_page = offset / PAGE_SIZE;
+                let end_page = (offset + size).div_ceil(PAGE_SIZE);
+                for pg in start_page..end_page {
+                    vmo.auto_mark_dirty(pg);
+                }
+            }
+        }
         let encoded_addrs = pmt.encode_addrs(compress_results, contiguous)?;
         if encoded_addrs.len() != addrs_count {
             warn!(

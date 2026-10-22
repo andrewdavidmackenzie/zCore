@@ -107,7 +107,7 @@ impl Pager {
         // Associate the pager's port and key with the VMO for
         // demand-paging notifications. set_pager also marks the VMO
         // as pager-backed so commit_page won't auto-allocate zero frames.
-        vmo.set_pager(port.clone(), key);
+        vmo.set_pager(port.clone(), key, self.base.id);
         if trap_dirty {
             vmo.set_trap_dirty(vmo_pages);
         }
@@ -218,15 +218,43 @@ impl Pager {
                 }
                 return Err(e);
             }
-            if let Err(e) = vmo.write(dst_off, &buf[..chunk]) {
-                vmo.set_supplying(false);
-                let written = dst_off - offset as usize;
-                if written > 0 {
-                    vmo.complete_pager_requests(offset as usize, written);
+            let page_idx = dst_off / PAGE_SIZE;
+            // Skip pages already present (committed frame or zero
+            // marker). supply_pages doesn't overwrite existing pages.
+            // Exception: zero markers from RESIZE (PAGE_ZERO_DIRTY in
+            // dirty tracking) can be overwritten by supply.
+            let already_committed = vmo.has_committed_page(page_idx);
+            let has_marker = vmo.has_zero_marker(page_idx);
+            if already_committed || has_marker {
+                // Check if this is a resize zero marker that should
+                // be overwritable. Resize markers have PAGE_ZERO_DIRTY.
+                let is_resize_marker = has_marker && vmo.is_page_zero_dirty(page_idx);
+                if !is_resize_marker {
+                    src_off += chunk;
+                    dst_off += chunk;
+                    continue;
                 }
-                return Err(e);
+                // Resize marker → remove it so supply can write data.
+                vmo.remove_zero_marker(page_idx);
             }
-            crate::vm::VMO_PAGER_PAGES.add(1);
+            // Check if source data is all zeros from an uncommitted
+            // source page → create zero marker instead of frame.
+            let is_src_uncommitted =
+                aux_vmo.committed_pages_in_range(src_off / PAGE_SIZE, src_off / PAGE_SIZE + 1) == 0;
+            let is_zero_page = is_src_uncommitted && buf[..chunk].iter().all(|&b| b == 0);
+            if is_zero_page {
+                vmo.insert_zero_marker(page_idx);
+            } else {
+                if let Err(e) = vmo.write(dst_off, &buf[..chunk]) {
+                    vmo.set_supplying(false);
+                    let written = dst_off - offset as usize;
+                    if written > 0 {
+                        vmo.complete_pager_requests(offset as usize, written);
+                    }
+                    return Err(e);
+                }
+                crate::vm::VMO_PAGER_PAGES.add(1);
+            }
             src_off += chunk;
             dst_off += chunk;
         }
@@ -256,20 +284,42 @@ impl Pager {
         ) {
             return Err(ZxError::NOT_SUPPORTED);
         }
-        // VMO must be pager-backed.
-        if !vmo.is_pager_backed() {
-            return Err(ZxError::INVALID_ARGS);
+        let is_writeback = op == ZX_PAGER_OP_WRITEBACK_BEGIN || op == ZX_PAGER_OP_WRITEBACK_END;
+        if is_writeback {
+            // Writeback: VMO must be (or have been) pager-backed.
+            if !vmo.is_pager_backed() && !vmo.was_pager_backed() {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            // Verify this pager owns the VMO. For detached VMOs,
+            // check the stored pager KoID.
+            if vmo.is_pager_backed() {
+                let inner = self.inner.lock();
+                if !inner
+                    .vmos
+                    .iter()
+                    .any(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
+                {
+                    return Err(ZxError::INVALID_ARGS);
+                }
+                drop(inner);
+            } else if vmo.pager_koid() != self.base.id {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        } else {
+            // FAIL/DIRTY: VMO must have an active pager.
+            if !vmo.is_pager_backed() {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            let inner = self.inner.lock();
+            if !inner
+                .vmos
+                .iter()
+                .any(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
+            {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            drop(inner);
         }
-        // Verify the VMO belongs to this pager.
-        let inner = self.inner.lock();
-        if !inner
-            .vmos
-            .iter()
-            .any(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
-        {
-            return Err(ZxError::INVALID_ARGS);
-        }
-        drop(inner);
         // Validate alignment.
         if !(offset as usize).is_multiple_of(PAGE_SIZE)
             || !(length as usize).is_multiple_of(PAGE_SIZE)
@@ -285,19 +335,27 @@ impl Pager {
         }
         match op {
             ZX_PAGER_OP_FAIL => {
-                // Error code must be a valid (negative) Fuchsia status code.
-                // Map well-known codes to their ZxError variant; for others
-                // use a generic mapping.  Fuchsia accepts any zx_status_t.
+                // Data must be a properly sign-extended 32-bit value.
+                // Reject if the 64-bit value doesn't match the sign-
+                // extended form of its lower 32 bits.
                 let data_i32 = data as i32;
-                if data_i32 >= 0 {
+                if data != (data_i32 as i64 as u64) {
                     return Err(ZxError::INVALID_ARGS);
                 }
-                let err = match data_i32 {
-                    -54 => ZxError::NO_SPACE,
-                    -5 => ZxError::IO,
-                    -29 => ZxError::IO_DATA_INTEGRITY,
-                    -45 => ZxError::BAD_STATE,
-                    _ => ZxError::IO, // generic fallback for unknown codes
+                // Only specific negative Fuchsia error codes are allowed.
+                // Values match current Fuchsia ABI (post-renumbering).
+                let err = if data_i32 == -40 {
+                    ZxError::IO // ZX_ERR_IO
+                } else if data_i32 == -42 {
+                    ZxError::IO_DATA_INTEGRITY // ZX_ERR_IO_DATA_INTEGRITY
+                } else if data_i32 == -15 {
+                    ZxError::BUFFER_TOO_SMALL // ZX_ERR_BUFFER_TOO_SMALL
+                } else if data_i32 == -20 {
+                    ZxError::BAD_STATE // ZX_ERR_BAD_STATE
+                } else if data_i32 == -54 {
+                    ZxError::NO_SPACE // ZX_ERR_NO_SPACE
+                } else {
+                    return Err(ZxError::INVALID_ARGS);
                 };
                 vmo.fail_pager_requests_range(offset as usize, length as usize, err);
                 Ok(())

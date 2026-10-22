@@ -1,5 +1,5 @@
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 // use core::task::{RawWaker, RawWakerVTable};
 use woke::Woke;
 
@@ -71,6 +71,8 @@ pub struct WakerPage {
     // completed: AtomicU64SC,
     dropped: AtomicU64SC,
     borrowed: AtomicU64SC,
+    /// CPU ID that owns this waker page. Used for cross-CPU IPI wakeup.
+    cpu_id: AtomicU8,
 }
 
 impl WakerPage {
@@ -80,11 +82,17 @@ impl WakerPage {
             // completed: AtomicU64SC::new(0),
             dropped: AtomicU64SC::new(0),
             borrowed: AtomicU64SC::new(0),
+            cpu_id: AtomicU8::new(crate::arch::cpu_id()),
         }
     }
 
     pub fn new() -> Arc<Self> {
         Arc::new(WakerPage::new_inner())
+    }
+
+    /// Get the owning CPU ID.
+    pub fn owner_cpu(&self) -> u8 {
+        self.cpu_id.load(Ordering::Relaxed)
     }
 
     pub fn initialize(&self, idx: usize) {
@@ -186,6 +194,10 @@ impl WakerRef {
     pub fn wake_by_ref(&self) {
         if !self.dropped.load(Ordering::SeqCst) {
             self.page.notify(self.idx);
+            // If the owning CPU is different from ours, send an IPI
+            // to break it out of HLT/WFI so it sees the notification
+            // immediately instead of waiting for the next timer tick.
+            crate::ipi_wakeup(self.page.owner_cpu());
         }
     }
 

@@ -272,6 +272,11 @@ impl Syscall<'_> {
         if !vmo.is_trap_dirty() || len == 0 {
             return Ok(());
         }
+        // After pager detach, all writes to TRAP_DIRTY VMOs fail
+        // with BAD_STATE — the pager can no longer acknowledge dirty.
+        if !vmo.has_pager() {
+            return Err(zircon_object::ZxError::BAD_STATE);
+        }
         // Match Fuchsia kernel's kMaxWriteWaitPages (256 pages = 1MB).
         // The kernel batches dirty requests at this granularity in
         // ReadWriteInternal. Pager test helpers (WaitForPageDirty)
@@ -304,8 +309,13 @@ impl Syscall<'_> {
             let run_bytes = run_len * PAGE_SIZE;
             match vmo.request_dirty(run_offset, run_bytes) {
                 Err(zircon_object::ZxError::SHOULD_WAIT) => {} // expected
-                Err(e) => return Err(e),                       // NOT_FOUND = no pager port
-                Ok(()) => {}                                   // shouldn't happen but harmless
+                Err(zircon_object::ZxError::NOT_FOUND) => {
+                    // Pager detached — writing to clean pages on a
+                    // detached TRAP_DIRTY VMO returns BAD_STATE.
+                    return Err(zircon_object::ZxError::BAD_STATE);
+                }
+                Err(e) => return Err(e),
+                Ok(()) => {} // shouldn't happen but harmless
             }
             // Wait for the first page of the run to become dirty.
             let future = vmo.wait_for_dirty(run_offset);
@@ -623,15 +633,35 @@ impl Syscall<'_> {
                     }
                 }
                 let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _);
-                // Auto-mark written pages as dirty for pager-backed
-                // non-TRAP_DIRTY VMOs (query_dirty_ranges needs this).
+                // After a successful write to a pager-backed VMO (or a slice
+                // of one), set modified and mark pages dirty on the parent.
+                // Note: for partial failures (some chunks succeed, later chunk
+                // fails), result is Err and we skip dirty/modified tracking.
+                // This matches the C++ tests where partial write failures
+                // (e.g., unmappable source buffer) expect modified=false.
                 if result.is_ok() {
                     if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
-                        if vmo.is_pager_backed() && !vmo.is_trap_dirty() {
-                            let start_page = a2 / hal::PAGE_SIZE;
-                            let end_page = (a2 + a3).div_ceil(hal::PAGE_SIZE);
-                            for pg in start_page..end_page {
-                                vmo.auto_mark_dirty(pg);
+                        // Find the pager-backed VMO: either this VMO or its
+                        // parent (for slices/references only — COW clones
+                        // write to their own pages, not the parent's).
+                        let pager_vmo = if vmo.has_pager() {
+                            Some(vmo.clone())
+                        } else if vmo.is_slice_vmo() {
+                            vmo.find_root_pager_vmo()
+                        } else {
+                            None
+                        };
+                        if let Some(pv) = pager_vmo {
+                            // Compute parent-relative offsets for slices.
+                            let parent_offset = a2 + vmo.get_slice_offset();
+                            if !pv.is_trap_dirty() {
+                                let start_page = parent_offset / hal::PAGE_SIZE;
+                                let end_page = (parent_offset + a3).div_ceil(hal::PAGE_SIZE);
+                                for pg in start_page..end_page {
+                                    pv.auto_mark_dirty(pg);
+                                }
+                            } else {
+                                pv.set_modified();
                             }
                         }
                     }

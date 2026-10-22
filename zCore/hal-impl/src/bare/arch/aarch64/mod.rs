@@ -232,6 +232,9 @@ pub fn primary_init() {
     // On aarch64, CPU IDs are contiguous 0..N.
     let cpu_ids: alloc::vec::Vec<u8> = (0..crate::config::MAX_CORE_NUM as u8).collect();
     executor::init_runtimes(&cpu_ids);
+    executor::set_ipi_wakeup(|target_cpu| {
+        let _ = crate::interrupt::send_ipi(target_cpu as usize, 0);
+    });
 
     // Start secondary cores (QEMU virt uses PSCI).
     // UEFI boot and Jolla C2: SMP not yet implemented (single-core for now).
