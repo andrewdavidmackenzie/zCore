@@ -1351,13 +1351,15 @@ impl UserPagerHelper {
     pub fn fail_pages(&self, vmo: &Arc<VmObject>, page_offset: u64, page_count: u64, err: ZxError) {
         let byte_offset = page_offset * PAGE_SIZE as u64;
         let byte_length = page_count * PAGE_SIZE as u64;
-        // Map ZxError to the Fuchsia error code expected by op_range.
+        // Map ZxError to the Fuchsia ABI error code for op_range.
+        // Values match current Fuchsia ABI (post-renumbering).
         let data = match err {
+            ZxError::IO => (-40i32) as u64,
+            ZxError::IO_DATA_INTEGRITY => (-42i32) as u64,
+            ZxError::BUFFER_TOO_SMALL => (-15i32) as u64,
+            ZxError::BAD_STATE => (-20i32) as u64,
             ZxError::NO_SPACE => (-54i32) as u64,
-            ZxError::IO => (-5i32) as u64,
-            ZxError::IO_DATA_INTEGRITY => (-29i32) as u64,
-            ZxError::BAD_STATE => (-45i32) as u64,
-            _ => (-5i32) as u64, // default to ZX_ERR_IO
+            _ => (-40i32) as u64, // default to ZX_ERR_IO
         };
         // ZX_PAGER_OP_FAIL = 1
         self.pager

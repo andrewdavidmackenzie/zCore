@@ -568,7 +568,7 @@ fn pager_op_range_fail() {
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
     // ZX_PAGER_OP_FAIL = 1, data = -5 (ZX_ERR_IO)
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert!(result.is_ok(), "op_range FAIL should succeed on owned VMO");
 }
 
@@ -819,11 +819,12 @@ fn pager_op_range_fail_with_error_codes() {
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
-    // Only specific Fuchsia error codes are allowed for OP_FAIL:
-    // ZX_ERR_IO = -5, ZX_ERR_IO_DATA_INTEGRITY = -29,
-    // ZX_ERR_BUFFER_TOO_SMALL = -33, ZX_ERR_BAD_STATE = -45,
+    // Only specific Fuchsia error codes are allowed for OP_FAIL.
+    // Values match current Fuchsia ABI (post-renumbering):
+    // ZX_ERR_IO = -40, ZX_ERR_IO_DATA_INTEGRITY = -42,
+    // ZX_ERR_BUFFER_TOO_SMALL = -15, ZX_ERR_BAD_STATE = -20,
     // ZX_ERR_NO_SPACE = -54
-    for err_code in [-5i32, -29, -33, -45, -54] {
+    for err_code in [-40i32, -42, -15, -20, -54] {
         let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, err_code as u64);
         assert!(
             result.is_ok(),
@@ -831,7 +832,7 @@ fn pager_op_range_fail_with_error_codes() {
         );
     }
     // Invalid error codes should be rejected.
-    for err_code in [-99i32, -2, 100] {
+    for err_code in [-99i32, -1, 100] {
         let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, err_code as u64);
         assert_eq!(
             result.err(),
@@ -874,7 +875,7 @@ fn pager_detach_then_op_range() {
 
     pager.detach_vmo(&vmo).unwrap();
 
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert_eq!(
         result.err(),
         Some(zircon_object::ZxError::INVALID_ARGS),
@@ -1239,13 +1240,13 @@ fn pager_detach_one_keep_others() {
     pager.detach_vmo(&vmo2).unwrap();
 
     // vmo1 and vmo3 should still work with op_range.
-    let result = pager.op_range(1, &vmo1, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo1, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert!(result.is_ok(), "vmo1 should still be operational");
-    let result = pager.op_range(1, &vmo3, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo3, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert!(result.is_ok(), "vmo3 should still be operational");
 
     // vmo2 should fail.
-    let result = pager.op_range(1, &vmo2, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo2, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert_eq!(
         result.err(),
         Some(zircon_object::ZxError::INVALID_ARGS),
@@ -2133,7 +2134,7 @@ fn pager_detach_race() {
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
     pager.detach_vmo(&vmo).unwrap();
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert_eq!(result.err(), Some(zircon_object::ZxError::INVALID_ARGS));
 }
 

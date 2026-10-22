@@ -1864,7 +1864,7 @@ fn pager_fail_after_detach() {
     // associated with the pager.
     let result = pager_helper
         .pager
-        .op_range(1, &vmo, 0, (11 * PAGE_SIZE) as u64, (-5i32) as u64);
+        .op_range(1, &vmo, 0, (11 * PAGE_SIZE) as u64, (-40i32) as u64);
     assert!(
         result.is_err(),
         "OP_FAIL after detach should fail, got {:?}",
@@ -4271,7 +4271,7 @@ fn pager_wb_fail_dirty_requests() {
     // (OP_FAIL = 1; data = ZX_ERR_IO = -5)
     pager_helper
         .pager
-        .op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64)
+        .op_range(1, &vmo, 0, PAGE_SIZE as u64, (-40i32) as u64)
         .unwrap();
 }
 
@@ -6758,7 +6758,7 @@ fn pager_wb_resolve_dirty_request_after_detach() {
     // Attempting OP_FAIL after detach should also fail.
     let result = pager_helper
         .pager
-        .op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
+        .op_range(1, &vmo, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert!(result.is_err(), "OP_FAIL should fail after detach");
 }
 
@@ -9102,7 +9102,7 @@ fn fail_single_page() {
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
     // OP_FAIL (1) with error code.
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert!(result.is_ok(), "OP_FAIL should succeed on owned VMO");
 }
 
