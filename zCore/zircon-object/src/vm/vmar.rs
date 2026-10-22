@@ -2118,6 +2118,14 @@ impl VmMapping {
                     } else {
                         new_flags
                     }
+                } else if new_flags.contains(MMUFlags::WRITE)
+                    && (self.vmo.is_pager_backed() || self.vmo.is_slice_vmo())
+                {
+                    // Pager-backed VMO (or slice): strip WRITE from
+                    // the hardware PTE so writes trigger a page fault
+                    // for dirty tracking. The fault handler will grant
+                    // WRITE after recording the dirty page.
+                    new_flags & !MMUFlags::WRITE
                 } else {
                     new_flags
                 };
