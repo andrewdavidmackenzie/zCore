@@ -147,13 +147,20 @@ impl Futex {
                 }
                 // first time?
                 if inner.waker.is_none() {
-                    // check value
+                    // Acquire the futex lock BEFORE the value check.
+                    // The value check and waiter registration must be
+                    // atomic with respect to futex_wake — if a wake
+                    // could occur between the check and the push, a
+                    // waiter would be orphaned (never woken). See
+                    // Fuchsia's futex_context.cc: "Those two steps must
+                    // together be atomic with respect to FutexWake()."
+                    let mut futex = inner.futex.inner.lock();
+                    // check value under the lock
                     let value = inner.futex.load_user_value();
                     if value != self.current_value {
                         return Poll::Ready(Err(ZxError::BAD_STATE));
                     }
                     // check new owner
-                    let mut futex = inner.futex.inner.lock();
                     if !futex.is_valid_new_owner(&self.new_owner) {
                         return Poll::Ready(Err(ZxError::INVALID_ARGS));
                     }
@@ -539,5 +546,31 @@ mod tests {
         // Wake the requeued waiter to clean up
         requeue_futex.wake(1);
         proc.exit(0);
+    }
+
+    /// Regression test: futex_wake must not race with futex_wait's
+    /// value-check-and-register sequence. If the value check and queue
+    /// push are not atomic (under the same lock), a wake can drain the
+    /// queue between the check and push, orphaning the waiter forever.
+    #[async_std::test]
+    async fn wake_during_registration_race() {
+        for _ in 0..100 {
+            static VALUE: AtomicI32 = AtomicI32::new(0);
+            VALUE.store(1, Ordering::SeqCst);
+            let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
+
+            let futex_w = futex.clone();
+            let waiter = async_std::task::spawn(async move { futex_w.wait(1).await });
+
+            async_std::task::yield_now().await;
+
+            VALUE.store(2, Ordering::SeqCst);
+            futex.wake(u32::MAX as usize);
+
+            // Must complete: Ok (woken) or BAD_STATE (value changed).
+            // Use a timeout so the test fails clearly if the race regresses.
+            let result = async_std::future::timeout(Duration::from_millis(500), waiter).await;
+            assert!(result.is_ok(), "waiter hung — lost wakeup (futex race)");
+        }
     }
 }
