@@ -49,15 +49,18 @@ impl KernelHandler for ZcoreKernelHandler {
             let vmar = thread.proc().vmar();
             if let Err(err) = vmar.handle_page_fault(fault_vaddr, access_flags) {
                 use zircon_object::ZxError;
-                if access_flags.contains(MMUFlags::USER) && err != ZxError::SHOULD_WAIT {
-                    // User-mode page faults at unmapped addresses are
-                    // fatal exceptions. Kill the process instead of
-                    // panicking the kernel.
-                    // SHOULD_WAIT is NOT fatal — it means a pager needs
-                    // to supply the page (handled by the syscall layer).
-                    thread
-                        .proc()
-                        .exit(zircon_object::task::TASK_RETCODE_EXCEPTION_KILL);
+                if access_flags.contains(MMUFlags::USER) {
+                    // User-mode page faults: do NOT kill the process here.
+                    // The zircon-loader's handler_user_trap will see the
+                    // same PageFault trap reason after enter_uspace()
+                    // returns, call handle_page_fault again, and properly
+                    // deliver a FatalPageFault exception through the
+                    // exception channel. This gives user-space exception
+                    // handlers (e.g., WaitForCrash in tests) a chance to
+                    // intercept the fault before the process is killed.
+                    //
+                    // SHOULD_WAIT means a pager-backed page needs to be
+                    // supplied — also handled at the loader level.
                 } else if err != ZxError::SHOULD_WAIT {
                     panic!(
                         "handle kernel page fault error: {:?} vaddr(0x{:x}) flags({:?})",

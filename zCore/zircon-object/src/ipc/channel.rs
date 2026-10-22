@@ -153,9 +153,19 @@ impl Channel {
         let peer = self.peer.upgrade().ok_or(ZxError::PEER_CLOSED)?;
         let txid = self.new_txid();
         msg.set_txid(txid);
-        peer.push_general(msg)?;
+        // Register the reply handler BEFORE pushing the message.
+        // This closes the race window where the peer could read the
+        // message, write a reply, and have write() find no call_reply
+        // entry (falling through to push_general instead of resolving
+        // the call). With the handler registered first, any reply with
+        // matching txid will be delivered via the oneshot channel.
         let (sender, receiver) = oneshot::channel();
         self.call_reply.lock().insert(txid, sender);
+        if let Err(e) = peer.push_general(msg) {
+            // If push fails, remove the orphaned reply handler.
+            self.call_reply.lock().remove(&txid);
+            return Err(e);
+        }
         drop(peer);
         receiver.await.unwrap()
     }
@@ -197,6 +207,15 @@ impl Drop for Channel {
             for (_, sender) in core::mem::take(&mut *peer.call_reply.lock()).into_iter() {
                 let _ = sender.send(Err(ZxError::PEER_CLOSED));
             }
+        }
+        // Also resolve our OWN pending call_reply entries.
+        // If this channel is dropped while a call() is pending
+        // (e.g., handle transferred or closed), the oneshot senders
+        // in call_reply would be silently dropped, causing the
+        // receivers to get Canceled (panic on unwrap). Send
+        // CANCELED explicitly so blocking_run returns cleanly.
+        for (_, sender) in core::mem::take(&mut *self.call_reply.lock()).into_iter() {
+            let _ = sender.send(Err(ZxError::CANCELED));
         }
         // Close in-transit handles in unread messages.
         // Handles transferred via channel_write are "in transit" — their

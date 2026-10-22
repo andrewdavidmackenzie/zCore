@@ -538,9 +538,11 @@ impl VMObjectTrait for VMObjectPaged {
     fn commit(&self, offset: usize, len: usize) -> ZxResult {
         let (_guard, inner) = self.get_inner_mut();
         let start_page = offset / PAGE_SIZE;
-        let pages = len / PAGE_SIZE;
-        for i in 0..pages {
-            inner.commit_page(start_page + i, MMUFlags::WRITE)?;
+        // Use div_ceil to commit partial pages — a sub-page write
+        // still needs the containing page committed.
+        let end_page = (offset + len).div_ceil(PAGE_SIZE);
+        for page in start_page..end_page {
+            inner.commit_page(page, MMUFlags::WRITE)?;
         }
         Ok(())
     }

@@ -1,24 +1,8 @@
-# Core-tests skip list — tests that hang or crash the test runner.
-# Each non-empty, non-comment line is a gtest pattern to exclude.
-# Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
-
-# ── Multi-threaded port stress (investigation needed) ────────────────
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
-
-# ── Channel (hangs in full suite due to timing, passes individually) ──
-ChannelInternalTest.TransferChannelWithPendingCall
-
-# ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
 Pager.RacyPortDequeue
 Pager.CloneReadFromParentTestVmar
 PagerWriteback.*
-
-# ── Stream (TRAP_DIRTY: needs async stream syscalls with predirty) ───
-StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
-
-# ── Stream (exception channel crash detection) ──────────────────────
-StreamTestCase.FaultBeyondStreamSizeResizeDownRace
