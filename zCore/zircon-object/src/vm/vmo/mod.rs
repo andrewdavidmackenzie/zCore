@@ -205,6 +205,11 @@ pub trait VMObjectTrait: Sync + Send {
         false
     }
 
+    /// Check if a specific page is pinned (has pin_count > 0).
+    fn is_page_pinned(&self, _page_idx: usize) -> bool {
+        false
+    }
+
     /// Remove a zero marker at the given page index.
     fn remove_zero_marker(&self, _page_idx: usize) {}
 
@@ -838,6 +843,7 @@ impl VmObject {
 
     /// End writeback: transition AwaitingClean pages in range to Clean.
     /// Pages that were re-dirtied during writeback stay dirty.
+    /// Pinned pages cannot be cleaned (they have active DMA references).
     /// For non-TRAP_DIRTY VMOs, unmap cleaned pages so subsequent
     /// writes re-fault and trigger auto_mark_dirty.
     pub fn writeback_end(&self, offset: usize, length: usize) {
@@ -847,6 +853,12 @@ impl VmObject {
         let mut any_cleaned = false;
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             if inner.dirty_pages[page_idx] == PAGE_AWAITING_CLEAN {
+                // Skip pinned pages — they can't be cleaned while
+                // a device has DMA access. Revert to dirty.
+                if self.trait_.is_page_pinned(page_idx) {
+                    inner.dirty_pages[page_idx] = PAGE_DIRTY;
+                    continue;
+                }
                 inner.dirty_pages[page_idx] = PAGE_CLEAN;
                 any_cleaned = true;
             }

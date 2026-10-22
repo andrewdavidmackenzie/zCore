@@ -809,6 +809,11 @@ impl VMObjectTrait for VMObjectPaged {
         }
     }
 
+    fn is_page_pinned(&self, page_idx: usize) -> bool {
+        let (_guard, inner) = self.get_inner();
+        inner.frames.get(&page_idx).is_some_and(|f| f.pin_count > 0)
+    }
+
     fn remove_zero_marker(&self, page_idx: usize) {
         let (_guard, inner) = self.get_inner_mut();
         inner.zero_markers.remove(&page_idx);
