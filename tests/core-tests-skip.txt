@@ -85,3 +85,8 @@ PagerWriteback.ResizeWritebackIntersectingResizeTrapDirty
 PagerWriteback.ResizeWritebackMulipleGapsTrapDirty
 PagerWriteback.ResizeWritebackInterleavedWriteWithMappingNoTrapDirty
 PagerWriteback.ResizeWritebackIntersectingRandomWritesNoTrapDirty
+
+# BTI pin + TRAP_DIRTY concurrent interaction (needs BTI+thread support)
+PagerWriteback.OpZeroPinnedTrapDirty
+PagerWriteback.PinnedWritebackTrapDirty
+PagerWriteback.SlicePinWriteTrapDirty
