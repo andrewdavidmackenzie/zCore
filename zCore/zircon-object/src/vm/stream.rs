@@ -51,6 +51,11 @@ impl Stream {
         })
     }
 
+    /// Get a reference to the backing VMO.
+    pub fn vmo(&self) -> &Arc<VmObject> {
+        &self.vmo
+    }
+
     /// Get the VMO's current size in bytes.
     pub fn vmo_len(&self) -> usize {
         self.vmo.len()

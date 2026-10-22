@@ -53,7 +53,7 @@ impl Syscall<'_> {
     }
 
     /// Write data to a stream at the current seek offset.   
-    pub fn sys_stream_writev(
+    pub async fn sys_stream_writev(
         &self,
         handle_value: HandleValue,
         options: u32,
@@ -120,6 +120,21 @@ impl Syscall<'_> {
                 // address wasn't found. Fuchsia returns NOT_FOUND.
                 ZxError::NOT_FOUND
             })?;
+            // For pager-backed VMOs with TRAP_DIRTY, commit pages
+            // first (so they exist), then send dirty requests so the
+            // pager can acknowledge, then write the data.
+            let write_off = stream.write_offset(append);
+            let write_len = buf.len().min(vmo_len.saturating_sub(write_off));
+            if write_len > 0 {
+                self.prefault_pager_write_pages(stream.vmo(), write_off, write_len)
+                    .await?;
+                if stream.vmo().is_trap_dirty() {
+                    // Commit pages first so mark_pages_dirty finds them.
+                    stream.vmo().commit(write_off, write_len)?;
+                    self.predirty_trap_dirty_pages(stream.vmo(), write_off, write_len)
+                        .await?;
+                }
+            }
             actual_count += stream.write(&buf, append)?;
         }
         actual_count_ptr.write_if_not_null(actual_count)?;
@@ -127,7 +142,7 @@ impl Syscall<'_> {
     }
 
     /// Write data to a stream at the given offset.   
-    pub fn sys_stream_writev_at(
+    pub async fn sys_stream_writev_at(
         &self,
         handle_value: HandleValue,
         options: u32,
@@ -168,6 +183,18 @@ impl Syscall<'_> {
             let buf = io_vec
                 .read_bytes(read_len)
                 .map_err(|_| ZxError::NOT_FOUND)?;
+            // For pager-backed VMOs with TRAP_DIRTY, commit pages
+            // first, then send dirty requests, then write.
+            let write_len = buf.len().min(vmo_len.saturating_sub(offset));
+            if write_len > 0 {
+                self.prefault_pager_write_pages(stream.vmo(), offset, write_len)
+                    .await?;
+                if stream.vmo().is_trap_dirty() {
+                    stream.vmo().commit(offset, write_len)?;
+                    self.predirty_trap_dirty_pages(stream.vmo(), offset, write_len)
+                        .await?;
+                }
+            }
             actual_count += stream.write_at(&buf, offset)?;
             offset += actual_count;
         }

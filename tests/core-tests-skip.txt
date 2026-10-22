@@ -2,7 +2,7 @@
 # Each non-empty, non-comment line is a gtest pattern to exclude.
 # Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
 
-# ── Multi-threaded (port/event interaction bug, hangs even with SMP=1) ───
+# ── Multi-threaded port stress (investigation needed) ────────────────
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
@@ -15,16 +15,10 @@ Pager.RacyPortDequeue
 Pager.CloneReadFromParentTestVmar
 PagerWriteback.*
 
-
-# ── Stream (pager-backed VMO) ────────────────────────────────────────
+# ── Stream (TRAP_DIRTY: needs async stream syscalls with predirty) ───
 StreamTestCase.AppendSuppliesZeroes
 StreamTestCase.ContentSizeUpdatedOnPartialWrite
 StreamTestCase.PartialVmoDirty
 
-# ── Stream (RefCell reentrancy crash on concurrent write+resize) ──────
-StreamTestCase.WriteShrinkRace
-StreamTestCase.ReadWriteShrinkRace
+# ── Stream (exception channel crash detection) ──────────────────────
 StreamTestCase.FaultBeyondStreamSizeResizeDownRace
-
-# ── BTI (deep COW tree + concurrent write loops) ─────────────────────
-Bti.NoDelayedUnpin

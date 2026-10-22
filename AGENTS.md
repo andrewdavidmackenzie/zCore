@@ -198,7 +198,7 @@ tail -5 /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
 - gtest_filter working: use `?--gtest_filter=-Suite.*:Test.Name` in
   ROOTPROC to skip tests. Both argv and ZBI CMDLINE delivery work.
 - Known hangs/crashes requiring gtest_filter skip:
-  - PortStressTest.* (multi-threaded stress, cooperative scheduler)
+  - PortStressTest.* (multi-threaded stress, investigation needed)
   - ChannelTest.NoSpuriousReadableSignalWhenRacing (10K iterations)
   - VmoClone2TestCase.* (populated_bytes fractional attribution)
   - VmoCloneResizeTests.* (populated_bytes after resize/decommit)
@@ -221,18 +221,18 @@ tail -5 /tmp/qemu-core-tests.log | sed 's/\x1b\[[0-9;]*m//g'
   - VmoZeroTestCase.EmptyCowChildren (populated_bytes)
   - VmoTestCase.* (multiple hangs: boot_options uninitialized, VMAR
     map failures causing infinite waits; only 1/58 passes)
-  - PagerProcess.* (pager tests need preemptive scheduling #498)
-  - StreamTestCase.AppendSuppliesZeroes (TRAP_DIRTY + pager, needs #498)
+  - PagerProcess.* (pager tests, investigation needed)
+  - StreamTestCase.AppendSuppliesZeroes (TRAP_DIRTY + pager, needs async stream writes)
   - StreamTestCase.ContentSizeUpdatedOnPartialWrite (same)
   - StreamTestCase.PartialVmoDirty (same)
-  - StreamTestCase.WriteShrinkRace (pager CreateUnboundedVmo, needs #498)
+  - StreamTestCase.WriteShrinkRace (pager CreateUnboundedVmo, was RefCell SMP race — fixed)
   - ProcessTest.ProcessWaitAsyncCancelSelf (race condition stress
     test — mini-process WAIT_ASYNC_CANCEL loop hangs)
   - ProcessTest.ProcessHwTraceContextIdProperty (hw trace not
     implemented — hangs on thread wait)
   - ProcessTest.GetInfoRuntime (hangs in sequential run only —
-    cooperative scheduler doesn't yield to child process)
-  - ProcessTest.GetInfoRuntimeV1 (same as GetInfoRuntime)
+     scheduler doesn't yield to child process)
+   - ProcessTest.GetInfoRuntimeV1 (same as GetInfoRuntime)
 - All 1776 tests have been extracted to /tmp/all_tests.txt via
   `--gtest_list_tests`. Individual suites can be tested with
   `--gtest_filter=SuiteName.*` for fast iteration.
