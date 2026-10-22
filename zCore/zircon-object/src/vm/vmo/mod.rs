@@ -1332,13 +1332,21 @@ impl VmObject {
             self.fail_pager_requests_range(size, old_size - size, ZxError::OUT_OF_RANGE);
         }
         // Update dirty page tracking for pager-backed VMOs on resize.
-        if self.has_pager() && size != old_size {
+        // Use was_pager_backed (trait method, no inner lock) to avoid
+        // deadlock when called from set_content_size_and_resize which
+        // already holds inner.
+        if self.was_pager_backed() && size != old_size {
             let mut inner = self.inner.lock();
             if new_pages > old_pages {
                 // Resize up: new pages are implicitly dirty zeros.
                 // PAGE_ZERO_DIRTY shows as IS_ZERO in query_dirty_ranges
                 // but is NOT considered dirty for TRAP_DIRTY write-gating
                 // (writes still generate dirty requests).
+                // First ensure existing pages are tracked (PAGE_CLEAN).
+                if inner.dirty_pages.len() < old_pages {
+                    inner.dirty_pages.resize(old_pages, PAGE_CLEAN);
+                }
+                // Then add new zero-dirty pages.
                 inner.dirty_pages.resize(new_pages, PAGE_ZERO_DIRTY);
             } else {
                 // Resize down: truncate the dirty_pages vector.

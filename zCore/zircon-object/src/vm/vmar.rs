@@ -2291,16 +2291,14 @@ impl VmMapping {
                 flags.remove(MMUFlags::WRITE);
             }
         }
-        // For pager-backed VMOs, handle dirty tracking on WRITE faults:
-        // - Non-TRAP_DIRTY: auto-mark the page dirty (for query_dirty_ranges)
-        //   and set modified flag.
-        // - TRAP_DIRTY: only set modified (dirty state managed by OP_DIRTY).
-        if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_pager_backed() {
-            if !self.vmo.is_trap_dirty() {
-                self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
-            } else {
-                self.vmo.set_modified();
-            }
+        // For non-TRAP_DIRTY pager VMOs, auto-mark the page dirty on
+        // WRITE faults so query_dirty_ranges reports written pages.
+        // (auto_mark_dirty also sets the modified flag.)
+        if access_flags.contains(MMUFlags::WRITE)
+            && self.vmo.is_pager_backed()
+            && !self.vmo.is_trap_dirty()
+        {
+            self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
         }
         // If ZX_VM_FAULT_BEYOND_STREAM_SIZE is set, fault on accesses
         // past the page containing the VMO's content_size instead of
@@ -2363,6 +2361,16 @@ impl VmMapping {
             res = pg_table.update(vaddr, Some(paddr), Some(flags)).map(|_| ());
         }
         res.map_err(|_| ZxError::ACCESS_DENIED)?;
+        // For TRAP_DIRTY pager VMOs, set modified after successful
+        // WRITE mapping. The page is already dirty (OP_DIRTY was
+        // acknowledged on a previous fault retry), so the write
+        // actually proceeds and modifies the VMO.
+        if access_flags.contains(MMUFlags::WRITE)
+            && self.vmo.is_pager_backed()
+            && self.vmo.is_trap_dirty()
+        {
+            self.vmo.set_modified();
+        }
         Ok(())
     }
 
