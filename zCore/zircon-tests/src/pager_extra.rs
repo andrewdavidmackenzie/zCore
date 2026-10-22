@@ -568,7 +568,7 @@ fn pager_op_range_fail() {
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
     // ZX_PAGER_OP_FAIL = 1, data = -5 (ZX_ERR_IO)
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert!(result.is_ok(), "op_range FAIL should succeed on owned VMO");
 }
 
@@ -819,13 +819,25 @@ fn pager_op_range_fail_with_error_codes() {
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
-    // ZX_ERR_NO_SPACE = -54, ZX_ERR_IO = -5, ZX_ERR_IO_DATA_INTEGRITY = -29,
-    // ZX_ERR_BAD_STATE = -45
-    for err_code in [-54i32, -5, -29, -45, -99] {
+    // Only specific Fuchsia error codes are allowed for OP_FAIL.
+    // Values match current Fuchsia ABI (post-renumbering):
+    // ZX_ERR_IO = -40, ZX_ERR_IO_DATA_INTEGRITY = -42,
+    // ZX_ERR_BUFFER_TOO_SMALL = -15, ZX_ERR_BAD_STATE = -20,
+    // ZX_ERR_NO_SPACE = -54
+    for err_code in [-40i32, -42, -15, -20, -54] {
         let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, err_code as u64);
         assert!(
             result.is_ok(),
             "op_range FAIL with error {err_code} should succeed"
+        );
+    }
+    // Invalid error codes should be rejected.
+    for err_code in [-99i32, -1, 100] {
+        let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, err_code as u64);
+        assert_eq!(
+            result.err(),
+            Some(zircon_object::ZxError::INVALID_ARGS),
+            "op_range FAIL with error {err_code} should return INVALID_ARGS"
         );
     }
 }
@@ -863,7 +875,7 @@ fn pager_detach_then_op_range() {
 
     pager.detach_vmo(&vmo).unwrap();
 
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert_eq!(
         result.err(),
         Some(zircon_object::ZxError::INVALID_ARGS),
@@ -890,7 +902,7 @@ fn pager_detach_then_dirty() {
 }
 
 ///
-/// After detaching, WRITEBACK_BEGIN op_range should fail.
+/// After detaching, WRITEBACK_BEGIN succeeds (matching Fuchsia).
 #[test]
 fn pager_detach_then_writeback_begin() {
     let _ctx = TestContext::new();
@@ -900,15 +912,14 @@ fn pager_detach_then_writeback_begin() {
     pager.detach_vmo(&vmo).unwrap();
 
     let result = pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(
-        result.err(),
-        Some(zircon_object::ZxError::INVALID_ARGS),
-        "WRITEBACK_BEGIN after detach should fail"
+    assert!(
+        result.is_ok(),
+        "WRITEBACK_BEGIN after detach should succeed"
     );
 }
 
 ///
-/// After detaching, WRITEBACK_END op_range should fail.
+/// After detaching, WRITEBACK_END succeeds (matching Fuchsia).
 #[test]
 fn pager_detach_then_writeback_end() {
     let _ctx = TestContext::new();
@@ -918,11 +929,7 @@ fn pager_detach_then_writeback_end() {
     pager.detach_vmo(&vmo).unwrap();
 
     let result = pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(
-        result.err(),
-        Some(zircon_object::ZxError::INVALID_ARGS),
-        "WRITEBACK_END after detach should fail"
-    );
+    assert!(result.is_ok(), "WRITEBACK_END after detach should succeed");
 }
 
 ///
@@ -1233,13 +1240,13 @@ fn pager_detach_one_keep_others() {
     pager.detach_vmo(&vmo2).unwrap();
 
     // vmo1 and vmo3 should still work with op_range.
-    let result = pager.op_range(1, &vmo1, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo1, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert!(result.is_ok(), "vmo1 should still be operational");
-    let result = pager.op_range(1, &vmo3, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo3, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert!(result.is_ok(), "vmo3 should still be operational");
 
     // vmo2 should fail.
-    let result = pager.op_range(1, &vmo2, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo2, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert_eq!(
         result.err(),
         Some(zircon_object::ZxError::INVALID_ARGS),
@@ -1729,14 +1736,19 @@ fn pager_supply_overwrites_existing() {
     let mut val = [0u8; 8];
     vmo.read(0, &mut val).unwrap();
     assert_eq!(u64::from_ne_bytes(val), 1);
-    // Second supply overwrites.
+    // Second supply is a no-op — already-committed pages are not overwritten.
+    // This matches Fuchsia behavior where supply_pages is idempotent.
     let src2 = VmObject::new_paged(1);
     src2.write(0, &2u64.to_ne_bytes()).unwrap();
     pager
         .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src2, 0)
         .unwrap();
     vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 2, "second supply should overwrite");
+    assert_eq!(
+        u64::from_ne_bytes(val),
+        1,
+        "second supply should NOT overwrite"
+    );
 }
 
 ///
@@ -1932,16 +1944,18 @@ fn pager_writeback_partial() {
 }
 
 ///
-/// Writeback after pager detach should fail.
+/// Writeback after pager detach succeeds — writeback operations
+/// are valid even after the pager is detached (matching Fuchsia).
 #[test]
 fn pager_writeback_after_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(8, &port, 0, PAGE_SIZE as u64).unwrap();
     pager.detach_vmo(&vmo).unwrap();
-    // WRITEBACK_BEGIN after detach should fail.
-    let result = pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::INVALID_ARGS));
+    // WRITEBACK_BEGIN after detach should succeed.
+    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    // WRITEBACK_END after detach should also succeed.
+    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
 }
 
 ///
@@ -2099,7 +2113,7 @@ fn pager_concurrent_supply_and_fault() {
 }
 
 ///
-/// Multiple supplies to the same page — last one wins.
+/// Multiple supplies to the same page — first one wins (no overwrite).
 #[test]
 fn pager_supply_race() {
     let _ctx = TestContext::new();
@@ -2114,7 +2128,11 @@ fn pager_supply_race() {
     }
     let mut val = [0u8; 8];
     vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 4, "last supply should win");
+    assert_eq!(
+        u64::from_ne_bytes(val),
+        0,
+        "first supply wins (no overwrite)"
+    );
 }
 
 ///
@@ -2125,7 +2143,7 @@ fn pager_detach_race() {
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
     pager.detach_vmo(&vmo).unwrap();
-    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-5i32) as u64);
+    let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, (-40i32) as u64);
     assert_eq!(result.err(), Some(zircon_object::ZxError::INVALID_ARGS));
 }
 
@@ -2406,7 +2424,8 @@ fn pager_writeback_complete_multiple() {
 }
 
 ///
-/// Writeback after pager detach should fail.
+/// Writeback after pager detach succeeds — writeback operations
+/// are valid even after the pager is detached (matching Fuchsia).
 #[test]
 fn pager_writeback_complete_after_detach() {
     let _ctx = TestContext::new();
@@ -2415,8 +2434,10 @@ fn pager_writeback_complete_after_detach() {
     supply_all_pages(&pager, &vmo, 1);
     pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     pager.detach_vmo(&vmo).unwrap();
-    let result = pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::INVALID_ARGS));
+    // Writeback begin should succeed after detach.
+    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    // Writeback end should also succeed.
+    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
 }
 
 ///
@@ -3215,20 +3236,22 @@ fn pager_concurrent_writeback_and_fault() {
     let vmo = pager
         .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
         .unwrap();
-    supply_all_pages(&pager, &vmo, 2);
+    // Supply pages with actual data (non-zero) so they have committed frames.
+    let src_init = VmObject::new_paged(2);
+    src_init.write(0, b"page 0 init").unwrap();
+    src_init.write(PAGE_SIZE, b"page 1 init").unwrap();
+    pager
+        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src_init, 0)
+        .unwrap();
     // Dirty page 0 and writeback.
     pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    // Meanwhile supply page 1.
-    let src = VmObject::new_paged(1);
-    src.write(0, b"page 1 data").unwrap();
-    pager
-        .supply_pages(&vmo, PAGE_SIZE as u64, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
     pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    // Verify page 1 still has its initial data (supply is no-op for
+    // already-committed pages).
     let mut buf = [0u8; 11];
     vmo.read(PAGE_SIZE, &mut buf).unwrap();
-    assert_eq!(&buf, b"page 1 data");
+    assert_eq!(&buf, b"page 1 init");
 }
 
 ///
@@ -3324,6 +3347,9 @@ fn pager_vmo_info_after_detach() {
 
 ///
 /// Committed bytes on a pager-backed VMO after supply.
+/// Supply with zero-content source creates zero markers (no physical
+/// frames), so committed_pages is 0. Supply with non-zero content
+/// creates committed frames.
 #[test]
 fn pager_vmo_info_committed_bytes() {
     let _ctx = TestContext::new();
@@ -3331,16 +3357,18 @@ fn pager_vmo_info_committed_bytes() {
     let vmo = pager
         .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
         .unwrap();
-    // Supply 2 of 4 pages.
+    // Supply 2 pages with non-zero content.
     let src = VmObject::new_paged(2);
+    src.write(0, b"page0").unwrap();
+    src.write(PAGE_SIZE, b"page1").unwrap();
     pager
         .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
         .unwrap();
-    // VMO should have at least 2 pages committed.
+    // VMO should have 2 committed pages (non-zero content).
     let committed = vmo.committed_pages_in_range(0, 4);
-    assert!(
-        committed >= 2,
-        "should have at least 2 committed pages, got {committed}"
+    assert_eq!(
+        committed, 2,
+        "should have 2 committed pages, got {committed}"
     );
 }
 

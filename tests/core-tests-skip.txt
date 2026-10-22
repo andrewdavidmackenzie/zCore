@@ -10,7 +10,20 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 # ── Channel (hangs in full suite due to timing, passes individually) ──
 ChannelInternalTest.TransferChannelWithPendingCall
 
-# ── PagerWriteback (hang — need OP_ZERO, writeback, overlap, detach) ──
+# ── PagerWriteback (hang — various root causes) ──
+# NotModifiedOnFailed*: OP_FAIL doesn't propagate to
+# TRAP_DIRTY write waiter (predirty_trap_dirty_pages blocks forever)
+PagerWriteback.NotModifiedOnFailedDirtyRequest
+PagerWriteback.NotModifiedOnFailedVmoWriteNoTrapDirty
+PagerWriteback.NotModifiedOnFailedVmoWriteTrapDirty
+
+# DelayedDirtyNotFound: requires concurrent threads (write+writeback race)
+PagerWriteback.DelayedDirtyNotFound
+# DetachWithPendingDirtyRequest: concurrent write during detach
+PagerWriteback.DetachWithPendingDirtyRequestVmar
+PagerWriteback.DetachWithPendingDirtyRequestVmo
+
+# Remaining hangs — need OP_ZERO, writeback, overlap, detach:
 PagerWriteback.CommitExtendedTailNoTrapDirty
 PagerWriteback.CommitExtendedTailTrapDirty
 PagerWriteback.DelayedDirtyZeroRange
@@ -75,3 +88,15 @@ StreamTestCase.PartialVmoDirty
 
 # ── Stream (exception channel crash detection) ──────────────────────
 StreamTestCase.FaultBeyondStreamSizeResizeDownRace
+# ResizePartialWritebackIntersectingRandomWrites: concurrent thread race
+PagerWriteback.ResizePartialWritebackIntersectingRandomWritesNoTrapDirty
+PagerWriteback.ResizePartialWritebackIntersectingRandomWritesTrapDirty
+# Concurrent write+writeback race (need multi-thread support)
+PagerWriteback.ResizeWritebackInterleavedWriteWithMappingTrapDirty
+PagerWriteback.ResizeWritebackIntersectingRandomWritesTrapDirty
+PagerWriteback.ResizeWritebackIntersectingWriteTrapDirty
+PagerWriteback.ResizeWritebackIntersectingResizeTrapDirty
+PagerWriteback.ResizeWritebackMulipleGapsTrapDirty
+PagerWriteback.ResizeWritebackInterleavedWriteWithMappingNoTrapDirty
+PagerWriteback.ResizeWritebackIntersectingRandomWritesNoTrapDirty
+
