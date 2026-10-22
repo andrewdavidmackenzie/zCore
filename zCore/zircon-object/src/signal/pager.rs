@@ -163,6 +163,10 @@ impl Pager {
             // the pager association — they'll get BAD_STATE.
             vmo.fail_pager_requests(ZxError::BAD_STATE);
             vmo.clear_pager();
+            // Decommit clean pages — matching Fuchsia behavior where
+            // the kernel reclaims physical memory for pages that haven't
+            // been modified. Dirty pages survive detach.
+            vmo.decommit_clean_pages();
             Ok(())
         } else {
             // VMO is pager-backed but doesn't belong to this pager.

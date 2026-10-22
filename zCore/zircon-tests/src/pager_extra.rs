@@ -3045,21 +3045,18 @@ fn pager_decommit_pager_range() {
     pager
         .supply_pages(&vmo, 0, (3 * PAGE_SIZE) as u64, &src, 0)
         .unwrap();
-    // After detach, decommit succeeds.
+    // After detach, all clean pages are decommitted (matching Fuchsia).
     pager.detach_vmo(&vmo).unwrap();
-    // Decommit only page 1.
-    vmo.decommit(PAGE_SIZE, PAGE_SIZE).unwrap();
+    // All pages should be decommitted (they were clean).
+    assert_eq!(vmo.committed_pages_in_range(0, 3), 0);
+    // Reads return zeros (zero markers from decommit).
     let mut val = [0u8; 8];
     vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 1);
+    assert_eq!(u64::from_ne_bytes(val), 0);
     vmo.read(PAGE_SIZE, &mut val).unwrap();
-    assert_eq!(
-        u64::from_ne_bytes(val),
-        0,
-        "decommitted page 1 should be zero"
-    );
+    assert_eq!(u64::from_ne_bytes(val), 0);
     vmo.read(2 * PAGE_SIZE, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 3);
+    assert_eq!(u64::from_ne_bytes(val), 0);
 }
 
 ///
@@ -3484,6 +3481,7 @@ async fn user_pager_helper_detach() {
     pager.supply_pages(&vmo, key, 0, 1);
     pager.detach_vmo(&vmo);
 
-    // Data still readable after detach
-    assert!(UserPagerHelper::check_page(&vmo, key, 0));
+    // Clean pages are decommitted on detach (matching Fuchsia).
+    // committed_bytes should be 0 after detach.
+    assert_eq!(vmo.committed_pages_in_range(0, 1), 0);
 }
