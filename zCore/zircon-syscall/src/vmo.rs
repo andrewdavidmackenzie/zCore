@@ -779,9 +779,10 @@ impl Syscall<'_> {
                         if p >= pager_vmo.len() / PAGE_SIZE {
                             break;
                         }
-                        // Skip committed pages and pages with pending waiters
-                        // (another thread already requested them).
+                        // Skip committed pages, zero-marker pages, and
+                        // pages with pending waiters.
                         if pager_vmo.committed_pages_in_range(p, p + 1) > 0
+                            || pager_vmo.has_zero_marker(p)
                             || pager_vmo.has_page_waiter(p)
                         {
                             p += 1;
@@ -791,6 +792,7 @@ impl Syscall<'_> {
                         while p < end_page
                             && p < pager_vmo.len() / PAGE_SIZE
                             && pager_vmo.committed_pages_in_range(p, p + 1) == 0
+                            && !pager_vmo.has_zero_marker(p)
                             && !pager_vmo.has_page_waiter(p)
                         {
                             p += 1;
@@ -958,8 +960,10 @@ impl Syscall<'_> {
                 if result.is_ok() {
                     let pager_vmo = if vmo.has_pager() {
                         Some(vmo.clone())
-                    } else {
+                    } else if vmo.is_slice_vmo() {
                         vmo.find_root_pager_vmo()
+                    } else {
+                        None
                     };
                     if let Some(pv) = pager_vmo {
                         pv.set_modified();

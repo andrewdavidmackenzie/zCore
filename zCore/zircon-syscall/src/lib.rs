@@ -631,11 +631,14 @@ impl Syscall<'_> {
                 if result.is_ok() {
                     if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
                         // Find the pager-backed VMO: either this VMO or its
-                        // parent (for slices/references).
+                        // parent (for slices/references only — COW clones
+                        // write to their own pages, not the parent's).
                         let pager_vmo = if vmo.has_pager() {
                             Some(vmo.clone())
-                        } else {
+                        } else if vmo.is_slice_vmo() {
                             vmo.find_root_pager_vmo()
+                        } else {
+                            None
                         };
                         if let Some(pv) = pager_vmo {
                             // Compute parent-relative offsets for slices.
