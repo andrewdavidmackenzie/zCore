@@ -620,22 +620,26 @@ impl VmObject {
     pub fn mark_pages_dirty(&self, offset: usize, length: usize) -> ZxResult {
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        // First pass: validate all pages are present and allocate
-        // frames for zero-marker pages. Done without holding inner
-        // lock to avoid deadlock with clone-tree lock in commit_page.
+        // Two-pass: first validate ALL pages are present (committed
+        // or zero-marker), then allocate frames for zero-marker pages.
+        // This avoids partial allocation if a later page is NOT_FOUND.
         if length > 0 {
+            // Pass 1: validate
             for page_idx in start_page..end_page {
                 let has_frame = self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0;
                 if has_frame {
                     continue;
                 }
-                let has_zero = self.trait_.has_zero_marker(page_idx);
-                if !has_zero {
+                if !self.trait_.has_zero_marker(page_idx) {
                     return Err(ZxError::NOT_FOUND);
                 }
-                // Zero-marker page: allocate a real frame so the page
-                // becomes committed. commit_page with WRITE allocates
-                // a zero-filled frame and removes the zero marker.
+            }
+            // Pass 2: allocate frames for zero-marker pages
+            for page_idx in start_page..end_page {
+                if self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                    continue;
+                }
+                // Zero-marker page: allocate a real frame.
                 self.trait_.commit_page(page_idx, MMUFlags::WRITE)?;
             }
         }
@@ -837,6 +841,11 @@ impl VmObject {
                 continue;
             }
             if state == PAGE_DIRTY || state == PAGE_ZERO_DIRTY {
+                // Skip pinned pages — they can't be cleaned while
+                // a device has active DMA access.
+                if self.trait_.is_page_pinned(page_idx) {
+                    continue;
+                }
                 inner.dirty_pages[page_idx] = PAGE_AWAITING_CLEAN;
             }
         }

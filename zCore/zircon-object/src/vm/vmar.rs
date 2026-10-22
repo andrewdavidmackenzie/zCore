@@ -2289,14 +2289,22 @@ impl VmMapping {
         if !access_flags.contains(MMUFlags::WRITE) {
             flags.remove(MMUFlags::WRITE);
         }
-        // For TRAP_DIRTY VMOs, strip WRITE for clean pages so that
-        // writes trigger a new page fault → dirty request to pager.
-        // After the pager acknowledges (OP_DIRTY), the page is marked
-        // dirty and the next write fault grants WRITE.
+        // For TRAP_DIRTY VMOs (or slices of TRAP_DIRTY parents),
+        // strip WRITE for clean pages so that writes trigger a new
+        // page fault → dirty request to pager.
         if self.vmo.is_trap_dirty() {
             let page_idx = vmo_offset / PAGE_SIZE;
             if !self.vmo.is_page_dirty(page_idx) {
                 flags.remove(MMUFlags::WRITE);
+            }
+        } else if self.vmo.is_slice_vmo() {
+            if let Some(parent) = self.vmo.find_root_pager_vmo() {
+                if parent.is_trap_dirty() {
+                    let parent_page = (vmo_offset + self.vmo.get_slice_offset()) / PAGE_SIZE;
+                    if !parent.is_page_dirty(parent_page) {
+                        flags.remove(MMUFlags::WRITE);
+                    }
+                }
             }
         }
         // Note: dirty/modified tracking for WRITE faults is done
@@ -2356,6 +2364,19 @@ impl VmMapping {
             && !self.vmo.is_page_dirty(page_idx)
         {
             return self.vmo.request_dirty(vmo_offset, PAGE_SIZE);
+        }
+        // Slice of TRAP_DIRTY parent: request dirty on the parent.
+        if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_slice_vmo() {
+            if let Some(parent) = self.vmo.find_root_pager_vmo() {
+                let parent_offset = vmo_offset + self.vmo.get_slice_offset();
+                let parent_page = parent_offset / PAGE_SIZE;
+                if parent.is_trap_dirty()
+                    && parent.is_pager_backed()
+                    && !parent.is_page_dirty(parent_page)
+                {
+                    return parent.request_dirty(parent_offset, PAGE_SIZE);
+                }
+            }
         }
         let mut pg_table = self.page_table.lock();
         let mut res = pg_table.map(Page::new_aligned(vaddr, PageSize::Size4K), paddr, flags);

@@ -881,13 +881,24 @@ async fn concurrent_reads_consume_unique_elements() {
                 .clone();
 
             let mut my_values = Vec::new();
-            for _ in 0..MESSAGES_PER_READER {
-                // Wait for readable then read.
+            while my_values.len() < MESSAGES_PER_READER {
+                // Wait for readable then try to read. The other reader
+                // may consume the message between signal and read, so
+                // retry on failure.
                 let ch_obj: Arc<dyn KernelObject> = reader_state.channel.clone();
-                ch_obj.wait_signal(Signal::READABLE).await;
-                if let Ok(msg) = reader_state.channel.read() {
-                    let val = u64::from_ne_bytes(msg.data[..8].try_into().unwrap());
-                    my_values.push(val);
+                ch_obj
+                    .wait_signal(Signal::READABLE | Signal::PEER_CLOSED)
+                    .await;
+                match reader_state.channel.read() {
+                    Ok(msg) => {
+                        let val = u64::from_ne_bytes(msg.data[..8].try_into().unwrap());
+                        my_values.push(val);
+                    }
+                    Err(_) => {
+                        // Other reader consumed it, or channel is empty.
+                        // Yield and retry.
+                        async_std::task::yield_now().await;
+                    }
                 }
             }
             reader_state.values.lock().unwrap()[reader_idx] = my_values;
