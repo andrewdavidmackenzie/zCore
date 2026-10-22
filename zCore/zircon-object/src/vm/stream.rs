@@ -200,6 +200,21 @@ impl Stream {
         Ok((length, offset + length))
     }
 
+    /// Advance the seek position by `count` bytes.
+    ///
+    /// Used by the batched TRAP_DIRTY write path which writes data
+    /// directly to the VMO and needs to update the stream's seek
+    /// position without going through `write()` / `append()`.
+    pub fn advance_seek(&self, count: usize, append: bool) {
+        let mut inner = self.inner.lock();
+        if append || (inner.options & MODE_APPEND) != 0 {
+            // In append mode, seek tracks the end of written data.
+            inner.seek = self.vmo.content_size();
+        } else {
+            inner.seek += count;
+        }
+    }
+
     /// Modify the current seek offset of the stream
     pub fn seek(&self, whence: SeekOrigin, offset: isize) -> ZxResult<usize> {
         let mut inner = self.inner.lock();

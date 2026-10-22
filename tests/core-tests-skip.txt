@@ -2,7 +2,3 @@ PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
 Pager.RacyPortDequeue
-Pager.CloneReadFromParentTestVmar
-PagerWriteback.*
-StreamTestCase.ContentSizeUpdatedOnPartialWrite
-StreamTestCase.PartialVmoDirty

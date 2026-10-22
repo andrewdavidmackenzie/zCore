@@ -120,22 +120,27 @@ impl Syscall<'_> {
                 // address wasn't found. Fuchsia returns NOT_FOUND.
                 ZxError::NOT_FOUND
             })?;
-            // For pager-backed VMOs with TRAP_DIRTY, commit pages
-            // first (so they exist), then send dirty requests so the
-            // pager can acknowledge, then write the data.
+            // For pager-backed VMOs with TRAP_DIRTY, write data in
+            // batches matching the dirty request granularity. This
+            // ensures content_size advances between batches (matching
+            // Fuchsia's ReadWriteInternal progress callback) and
+            // supports partial writes when the pager fails a page.
             let write_off = stream.write_offset(append);
             let write_len = buf.len().min(vmo_len.saturating_sub(write_off));
-            if write_len > 0 {
+            if write_len > 0 && stream.vmo().is_trap_dirty() {
                 self.prefault_pager_write_pages(stream.vmo(), write_off, write_len)
                     .await?;
-                if stream.vmo().is_trap_dirty() {
-                    // Commit pages first so mark_pages_dirty finds them.
-                    stream.vmo().commit(write_off, write_len)?;
-                    self.predirty_trap_dirty_pages(stream.vmo(), write_off, write_len)
+                let written = self
+                    .stream_write_trap_dirty(&stream, &buf[..write_len], write_off, append)
+                    .await?;
+                actual_count += written;
+            } else {
+                if write_len > 0 {
+                    self.prefault_pager_write_pages(stream.vmo(), write_off, write_len)
                         .await?;
                 }
+                actual_count += stream.write(&buf, append)?;
             }
-            actual_count += stream.write(&buf, append)?;
         }
         actual_count_ptr.write_if_not_null(actual_count)?;
         Ok(())
@@ -183,20 +188,24 @@ impl Syscall<'_> {
             let buf = io_vec
                 .read_bytes(read_len)
                 .map_err(|_| ZxError::NOT_FOUND)?;
-            // For pager-backed VMOs with TRAP_DIRTY, commit pages
-            // first, then send dirty requests, then write.
             let write_len = buf.len().min(vmo_len.saturating_sub(offset));
-            if write_len > 0 {
+            if write_len > 0 && stream.vmo().is_trap_dirty() {
                 self.prefault_pager_write_pages(stream.vmo(), offset, write_len)
                     .await?;
-                if stream.vmo().is_trap_dirty() {
-                    stream.vmo().commit(offset, write_len)?;
-                    self.predirty_trap_dirty_pages(stream.vmo(), offset, write_len)
+                let written = self
+                    .stream_write_trap_dirty(&stream, &buf[..write_len], offset, false)
+                    .await?;
+                actual_count += written;
+                offset += written;
+            } else {
+                if write_len > 0 {
+                    self.prefault_pager_write_pages(stream.vmo(), offset, write_len)
                         .await?;
                 }
+                let written = stream.write_at(&buf, offset)?;
+                actual_count += written;
+                offset += written;
             }
-            actual_count += stream.write_at(&buf, offset)?;
-            offset += actual_count;
         }
         actual_count_ptr.write_if_not_null(actual_count)?;
         Ok(())
@@ -309,5 +318,76 @@ impl Syscall<'_> {
         let new_seek = stream.seek(whence, offset)?;
         out_seek.write_if_not_null(new_seek)?;
         Ok(())
+    }
+
+    /// Write data to a TRAP_DIRTY pager-backed stream in batches.
+    ///
+    /// Processes the write in `MAX_DIRTY_BATCH`-page chunks: for each
+    /// batch, commits pages, sends dirty requests, waits for pager ack,
+    /// writes data, and updates content_size. This matches Fuchsia's
+    /// `ReadWriteInternal` progress callback behavior and supports
+    /// partial writes when the pager fails a page via OP_FAIL.
+    ///
+    /// Returns the total number of bytes written (may be less than
+    /// `buf.len()` on partial pager failure).
+    async fn stream_write_trap_dirty(
+        &self,
+        stream: &alloc::sync::Arc<Stream>,
+        buf: &[u8],
+        offset: usize,
+        append: bool,
+    ) -> ZxResult<usize> {
+        use hal::PAGE_SIZE;
+
+        const MAX_DIRTY_BATCH: usize = 256;
+        let batch_bytes = MAX_DIRTY_BATCH * PAGE_SIZE;
+
+        let vmo = stream.vmo();
+        let vmo_len = vmo.len();
+        let mut written_total = 0usize;
+        let mut cur_off = offset;
+
+        while written_total < buf.len() {
+            let remaining = buf.len() - written_total;
+            let batch_len = remaining
+                .min(batch_bytes)
+                .min(vmo_len.saturating_sub(cur_off));
+            if batch_len == 0 {
+                break;
+            }
+            // 1. Commit pages for this batch.
+            vmo.commit(cur_off, batch_len)?;
+            // 2. Send dirty requests and wait for pager ack.
+            match self
+                .predirty_trap_dirty_pages(vmo, cur_off, batch_len)
+                .await
+            {
+                Ok(()) => {}
+                Err(e) => {
+                    // Pager failed some pages. If we already wrote
+                    // data in prior batches, return partial success.
+                    if written_total > 0 {
+                        break;
+                    }
+                    return Err(e);
+                }
+            }
+            // 3. Write this batch's data directly to the VMO.
+            let buf_slice = &buf[written_total..written_total + batch_len];
+            vmo.write(cur_off, buf_slice)?;
+            // 4. Update content_size to reflect this batch's progress.
+            let new_end = cur_off + batch_len;
+            let old_cs = vmo.content_size();
+            if new_end > old_cs {
+                vmo.set_content_size(new_end)?;
+            }
+            written_total += batch_len;
+            cur_off += batch_len;
+        }
+        // Update seek position for append or regular writes.
+        if written_total > 0 {
+            stream.advance_seek(written_total, append);
+        }
+        Ok(written_total)
     }
 }
