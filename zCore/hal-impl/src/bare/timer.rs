@@ -26,6 +26,15 @@ hal_fn_impl! {
         fn timer_set(deadline: Duration, callback: Box<dyn FnOnce(Duration) + Send + Sync>) {
             debug!("Set timer at: {:?}", deadline);
             NAIVE_TIMER.lock().add(deadline, callback);
+            // If the deadline is already past (or very near), expire
+            // immediately without waiting for the next periodic tick.
+            // This gives precise deadline handling for short timeouts
+            // (e.g., 1us channel_call deadlines) while keeping the
+            // periodic 100 Hz tick for scheduler preemption.
+            let now = super::arch::timer::timer_now();
+            if deadline <= now {
+                NAIVE_TIMER.lock().expire(now);
+            }
         }
 
         fn timer_tick() {
