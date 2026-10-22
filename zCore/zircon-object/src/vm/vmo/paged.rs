@@ -6,7 +6,6 @@ use {
     alloc::collections::VecDeque,
     alloc::sync::{Arc, Weak},
     alloc::vec::Vec,
-    core::cell::{Ref, RefCell, RefMut},
     core::ops::Range,
     core::sync::atomic::*,
     hal_impl::{
@@ -72,10 +71,16 @@ pub struct VMObjectPaged {
     /// The lock that protected the `inner`
     /// This lock is shared between objects in the same clone tree to avoid deadlock
     lock: Arc<Mutex<()>>,
-    inner: RefCell<VMObjectPagedInner>,
+    /// Interior mutability via UnsafeCell. Safety: the shared `lock` Mutex
+    /// must be held whenever accessing the inner data. We use UnsafeCell
+    /// instead of RefCell because RefCell's runtime borrow checking causes
+    /// panics on SMP when the same clone tree is accessed concurrently —
+    /// even though the Mutex correctly serializes access, RefCell's
+    /// non-atomic borrow counter can observe stale state across cores.
+    inner: core::cell::UnsafeCell<VMObjectPagedInner>,
 }
 
-/// We always lock the lock before access to the Refcell, so it is actually sync
+/// Safety: all access to `inner` is protected by the shared `lock` Mutex.
 #[allow(unsafe_code)]
 unsafe impl Sync for VMObjectPaged {}
 
@@ -265,7 +270,7 @@ impl VMObjectPaged {
             return Err(ZxError::NO_MEMORY);
         }
         {
-            let (_guard, mut inner) = vmo.get_inner_mut();
+            let (_guard, inner) = vmo.get_inner_mut();
             inner.contiguous = true;
             for (i, f) in frames.drain(0..).enumerate() {
                 hal_impl::mem::pmem_zero(f.paddr(), PAGE_SIZE);
@@ -281,26 +286,61 @@ impl VMObjectPaged {
     fn wrap(inner: VMObjectPagedInner, lock_ref: Option<Arc<Mutex<()>>>) -> Arc<Self> {
         let obj = Arc::new(VMObjectPaged {
             lock: lock_ref.unwrap_or_else(|| Arc::new(Mutex::new(()))),
-            inner: RefCell::new(inner),
+            inner: core::cell::UnsafeCell::new(inner),
         });
-        obj.inner.borrow_mut().self_ref = Arc::downgrade(&obj);
+        // Safety: obj is not yet shared — we're the only holder of the Arc.
+        #[allow(unsafe_code)]
+        unsafe {
+            (*obj.inner.get()).self_ref = Arc::downgrade(&obj);
+        }
         obj
     }
 
-    /// get the reference to inner by lock the shared lock
-    fn get_inner(&self) -> (MutexGuard<'_, ()>, Ref<'_, VMObjectPagedInner>) {
-        (self.lock.lock(), self.inner.borrow())
+    /// Get a shared reference to inner, holding the clone-tree lock.
+    ///
+    /// Safety: the returned reference borrows `self`, so the MutexGuard
+    /// (which is returned alongside) keeps the lock held for the
+    /// reference's lifetime.
+    #[allow(unsafe_code)]
+    fn get_inner(&self) -> (MutexGuard<'_, ()>, &VMObjectPagedInner) {
+        let guard = self.lock.lock();
+        // Safety: lock is held, guaranteeing exclusive access.
+        let inner = unsafe { &*self.inner.get() };
+        (guard, inner)
     }
 
-    /// get the mutable reference to inner by lock the shared lock
-    fn get_inner_mut(&self) -> (MutexGuard<'_, ()>, RefMut<'_, VMObjectPagedInner>) {
-        (self.lock.lock(), self.inner.borrow_mut())
+    /// Get a mutable reference to inner, holding the clone-tree lock.
+    #[allow(unsafe_code, clippy::mut_from_ref)]
+    fn get_inner_mut(&self) -> (MutexGuard<'_, ()>, &mut VMObjectPagedInner) {
+        let guard = self.lock.lock();
+        // Safety: lock is held, guaranteeing exclusive access.
+        let inner = unsafe { &mut *self.inner.get() };
+        (guard, inner)
+    }
+
+    /// Borrow another node's inner immutably.
+    ///
+    /// Safety: caller must hold the clone-tree lock (which is shared
+    /// across all nodes in the tree).
+    #[allow(unsafe_code)]
+    #[inline(always)]
+    fn borrow_inner(&self) -> &VMObjectPagedInner {
+        unsafe { &*self.inner.get() }
+    }
+
+    /// Borrow another node's inner mutably.
+    ///
+    /// Safety: caller must hold the clone-tree lock.
+    #[allow(unsafe_code, clippy::mut_from_ref)]
+    #[inline(always)]
+    fn borrow_inner_mut(&self) -> &mut VMObjectPagedInner {
+        unsafe { &mut *self.inner.get() }
     }
 }
 
 impl VMObjectTrait for VMObjectPaged {
     fn read(&self, offset: usize, buf: &mut [u8]) -> ZxResult {
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         if inner.cache_policy != CachePolicy::Cached {
             return Err(ZxError::BAD_STATE);
         }
@@ -342,7 +382,7 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn write(&self, offset: usize, buf: &[u8]) -> ZxResult {
         trace!("VMO write: offset={:#x}, len={}", offset, buf.len());
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         trace!("VMO write: lock acquired, cache={:?}", inner.cache_policy);
         if inner.cache_policy != CachePolicy::Cached {
             return Err(ZxError::BAD_STATE);
@@ -361,7 +401,7 @@ impl VMObjectTrait for VMObjectPaged {
     }
 
     fn zero(&self, offset: usize, len: usize) -> ZxResult {
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         if offset + len > inner.size {
             return Err(ZxError::OUT_OF_RANGE);
         }
@@ -434,7 +474,7 @@ impl VMObjectTrait for VMObjectPaged {
     fn set_len(&self, len: usize) -> ZxResult {
         assert!(page_aligned(len));
         let (old_parent, old_size) = {
-            let (_guard, mut inner) = self.get_inner_mut();
+            let (_guard, inner) = self.get_inner_mut();
             if inner.pin_count > 0 {
                 return Err(ZxError::BAD_STATE);
             }
@@ -444,7 +484,7 @@ impl VMObjectTrait for VMObjectPaged {
                 let mut total = inner.parent_offset.checked_add(len);
                 let mut cur = inner.parent.clone();
                 while let (Some(t), Some(vmop)) = (total, cur) {
-                    let p = vmop.inner.borrow();
+                    let p = vmop.borrow_inner();
                     total = t.checked_add(p.parent_offset);
                     cur = p.parent.clone();
                 }
@@ -491,12 +531,12 @@ impl VMObjectTrait for VMObjectPaged {
         &self,
         f: &mut dyn FnMut(&mut dyn FnMut(usize, MMUFlags) -> ZxResult<PhysAddr>) -> ZxResult,
     ) -> ZxResult {
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         f(&mut |page_idx, flags| inner.commit_page(page_idx, flags))
     }
 
     fn commit(&self, offset: usize, len: usize) -> ZxResult {
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         let start_page = offset / PAGE_SIZE;
         let pages = len / PAGE_SIZE;
         for i in 0..pages {
@@ -506,7 +546,7 @@ impl VMObjectTrait for VMObjectPaged {
     }
 
     fn decommit(&self, offset: usize, len: usize) -> ZxResult {
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         // Fuchsia rejects decommit on:
         //   - Contiguous VMOs (pages must stay physically contiguous)
         //   - Snapshot children (has parent)
@@ -548,7 +588,7 @@ impl VMObjectTrait for VMObjectPaged {
         if offset.checked_add(len).is_none() {
             return Err(ZxError::INVALID_ARGS);
         }
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         let child = inner.create_child(offset, len, &self.lock)?;
         Ok(child)
     }
@@ -563,7 +603,7 @@ impl VMObjectTrait for VMObjectPaged {
         if offset.checked_add(len).is_none() {
             return Err(ZxError::INVALID_ARGS);
         }
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         let child = inner.create_child_unidirectional(offset, len, &self.lock)?;
         Ok(child)
     }
@@ -600,7 +640,7 @@ impl VMObjectTrait for VMObjectPaged {
         // 3) vmo has no mappings
         // 4) vmo has no children (TODO)
         // 5) vmo is not a child
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         if !inner.frames.is_empty()
             && inner.cache_policy != CachePolicy::Cached
             && policy != CachePolicy::Cached
@@ -632,7 +672,7 @@ impl VMObjectTrait for VMObjectPaged {
     }
 
     fn pin(&self, offset: usize, len: usize) -> ZxResult {
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         if offset + len > inner.size {
             return Err(ZxError::OUT_OF_RANGE);
         }
@@ -679,7 +719,7 @@ impl VMObjectTrait for VMObjectPaged {
     }
 
     fn unpin(&self, offset: usize, len: usize) -> ZxResult {
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         let end = offset.checked_add(len).ok_or(ZxError::OUT_OF_RANGE)?;
         if end > inner.size {
             return Err(ZxError::OUT_OF_RANGE);
@@ -744,7 +784,7 @@ impl VMObjectTrait for VMObjectPaged {
     }
 
     fn insert_zero_marker(&self, page_idx: usize) {
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         // Only insert zero marker if the page has no committed frame.
         // Dropping a committed frame without invalidating PTEs would
         // leave dangling mappings pointing at freed physical memory.
@@ -773,12 +813,12 @@ impl VMObjectTrait for VMObjectPaged {
         // instead of silently allocating zero frames. The pager_port
         // is already cleared so request_pages returns BAD_STATE.
         // Also clear the supplying flag.
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         inner.supplying = false;
     }
 
     fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
-        let (guard, mut inner) = self.get_inner_mut();
+        let (guard, inner) = self.get_inner_mut();
         inner.as_mut_buf().map(|(addr, size)| {
             (guard, unsafe {
                 core::slice::from_raw_parts_mut(addr as *mut u8, size)
@@ -787,7 +827,7 @@ impl VMObjectTrait for VMObjectPaged {
     }
 
     fn unset_contiguous(&self) {
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         if inner.contiguous {
             inner.contiguous = false;
             for frame in inner.frames.values_mut() {
@@ -960,7 +1000,7 @@ impl VMObjectPagedInner {
                 }
             } else {
                 // Walk up to parent to find or allocate the page.
-                let mut parent = self.parent.as_ref().unwrap().inner.borrow_mut();
+                let parent = self.parent.as_ref().unwrap().borrow_inner_mut();
                 let parent_idx = page_idx + self.parent_offset / PAGE_SIZE;
                 let parent_flags = flags;
                 match parent.commit_page_internal(parent_idx, parent_flags, &self.self_ref)? {
@@ -977,9 +1017,8 @@ impl VMObjectPagedInner {
                                 let (_, sibling_weak) =
                                     parent.type_.get_tag_and_other(&self.self_ref);
                                 if let Some(sibling_arc) = sibling_weak.upgrade() {
-                                    // Use try_borrow to avoid reentrancy
-                                    // panic if sibling is the requesting child.
-                                    if let Ok(sib) = sibling_arc.inner.try_borrow() {
+                                    {
+                                        let sib = sibling_arc.borrow_inner();
                                         if sib.pager_backed {
                                             let sib_off = sib.parent_offset / PAGE_SIZE;
                                             if parent_idx >= sib_off {
@@ -1021,8 +1060,8 @@ impl VMObjectPagedInner {
                             }
                             let sibling = parent.type_.get_tag_and_other(&self.self_ref).1;
                             if let Some(arc_sibling) = sibling.upgrade() {
-                                // Use try_borrow to avoid reentrancy panic.
-                                if let Ok(sibling_inner) = arc_sibling.inner.try_borrow() {
+                                {
+                                    let sibling_inner = arc_sibling.borrow_inner();
                                     sibling_inner.range_change(
                                         parent_idx * PAGE_SIZE,
                                         (parent_idx + 1) * PAGE_SIZE,
@@ -1077,19 +1116,11 @@ impl VMObjectPagedInner {
         let (_child_tag, other_child) = self.type_.get_tag_and_other(child);
         if self.type_.is_hidden() {
             let arc_other = other_child.upgrade().unwrap();
-            // Use try_borrow to avoid RefCell reentrancy panic when the
-            // other child is the same object that initiated commit_page
-            // (its inner RefCell is already mutably borrowed up the call
-            // chain). If we can't borrow, assume in_range=true (safe
-            // because we only use in_range to decide migrate vs copy,
-            // and the conservative choice is to copy).
-            let in_range = match arc_other.inner.try_borrow() {
-                Ok(other_inner) => {
-                    let start = other_inner.parent_offset / PAGE_SIZE;
-                    let end = other_inner.parent_limit / PAGE_SIZE;
-                    page_idx >= start && page_idx < end
-                }
-                Err(_) => true, // conservatively assume in range
+            let in_range = {
+                let other_inner = arc_other.borrow_inner();
+                let start = other_inner.parent_offset / PAGE_SIZE;
+                let end = other_inner.parent_limit / PAGE_SIZE;
+                page_idx >= start && page_idx < end
             };
             if !in_range {
                 if flags.contains(MMUFlags::WRITE) {
@@ -1114,14 +1145,11 @@ impl VMObjectPagedInner {
                 let frame = self.frames.get(&page_idx).unwrap();
                 return Ok(CommitResult::Ref(frame.frame.paddr()));
             } else if need_unmap {
-                // Re-borrow for range_change; skip if reentrancy conflict.
-                if let Ok(other_inner) = arc_other.inner.try_borrow() {
-                    other_inner.range_change(
-                        page_idx * PAGE_SIZE,
-                        (1 + page_idx) * PAGE_SIZE,
-                        RangeChangeOp::Unmap,
-                    )
-                }
+                arc_other.borrow_inner().range_change(
+                    page_idx * PAGE_SIZE,
+                    (1 + page_idx) * PAGE_SIZE,
+                    RangeChangeOp::Unmap,
+                );
             }
         }
         if need_unmap {
@@ -1177,7 +1205,7 @@ impl VMObjectPagedInner {
         if let VMOType::Hidden { left, right, .. } = &self.type_ {
             for child in &[left, right] {
                 let child = child.upgrade().unwrap();
-                child.inner.borrow().range_change(start, end, op);
+                child.borrow_inner().range_change(start, end, op);
             }
         }
     }
@@ -1210,7 +1238,7 @@ impl VMObjectPagedInner {
             let mut current = self.parent.clone();
             let mut current_idx = i + self.parent_offset / PAGE_SIZE;
             while let Some(vmop) = current {
-                let inner = vmop.inner.borrow();
+                let inner = vmop.borrow_inner();
                 // Zero markers in ancestors also block the walk.
                 if inner.zero_markers.contains(&current_idx) {
                     break;
@@ -1248,7 +1276,7 @@ impl VMObjectPagedInner {
         let mut current = self.parent.clone();
         let mut current_idx = page_idx + self.parent_offset / PAGE_SIZE;
         while let Some(vmop) = current {
-            let inner = vmop.inner.borrow();
+            let inner = vmop.borrow_inner();
             // Zero markers in ancestors block the walk — the ancestor
             // zeroed this page, so no non-zero content is visible.
             if inner.zero_markers.contains(&current_idx) {
@@ -1286,7 +1314,7 @@ impl VMObjectPagedInner {
         }
         let (tag, other_child) = self.type_.get_tag_and_other(child);
         let arc_child = other_child.upgrade().unwrap();
-        let mut surviving = arc_child.inner.borrow_mut();
+        let surviving = arc_child.borrow_inner_mut();
         let start = surviving.parent_offset / PAGE_SIZE;
         let end = surviving.parent_limit / PAGE_SIZE;
 
@@ -1338,10 +1366,9 @@ impl VMObjectPagedInner {
         let surviving_limit = surviving.parent_limit;
         // Drop the surviving borrow before accessing the parent, since
         // the parent's cleanup may need to borrow its children.
-        drop(surviving);
 
         if let Some(parent) = &self.parent {
-            let mut parent_inner = parent.inner.borrow_mut();
+            let parent_inner = parent.borrow_inner_mut();
             // Only call replace_child on hidden parents — non-hidden
             // parents (e.g., pager root for unidirectional children)
             // don't track children via left/right.
@@ -1356,11 +1383,11 @@ impl VMObjectPagedInner {
             // After replacing the child, clean up stale intermediate COW
             // copies in the parent (grandparent of the dying child).
             if parent_inner.type_.is_hidden() {
-                Self::cleanup_stale_cow_copies(&mut parent_inner);
+                Self::cleanup_stale_cow_copies(parent_inner);
             }
         }
         // Re-borrow to set parent.
-        let mut surviving = arc_child.inner.borrow_mut();
+        let surviving = arc_child.borrow_inner_mut();
         surviving.parent = self.parent.take();
 
         // If the surviving child now has no parent, zero markers are
@@ -1383,14 +1410,14 @@ impl VMObjectPagedInner {
                 let ls = left
                     .upgrade()
                     .map(|a| {
-                        let c = a.inner.borrow();
+                        let c = a.borrow_inner();
                         (c.parent_offset / PAGE_SIZE, c.parent_limit / PAGE_SIZE)
                     })
                     .unwrap_or((0, 0));
                 let rs = right
                     .upgrade()
                     .map(|a| {
-                        let c = a.inner.borrow();
+                        let c = a.borrow_inner();
                         (c.parent_offset / PAGE_SIZE, c.parent_limit / PAGE_SIZE)
                     })
                     .unwrap_or((0, 0));
@@ -1426,7 +1453,7 @@ impl VMObjectPagedInner {
             // Try to un-tag the corresponding parent frame.
             if let Some(ref parent) = inner.parent {
                 let parent_idx = idx + inner.parent_offset / PAGE_SIZE;
-                let mut p = parent.inner.borrow_mut();
+                let p = parent.borrow_inner_mut();
                 if let Some(parent_frame) = p.frames.get_mut(&parent_idx) {
                     // The parent frame should have the opposite split
                     // tag. Reset it to Owned so both children of the
@@ -1462,7 +1489,7 @@ impl VMObjectPagedInner {
             let mut total = offset.checked_add(self.parent_offset);
             let mut cur = self.parent.clone();
             while let (Some(t), Some(vmop)) = (total, cur) {
-                let inner = vmop.inner.borrow();
+                let inner = vmop.borrow_inner();
                 total = t.checked_add(inner.parent_offset);
                 cur = inner.parent.clone();
             }
@@ -1517,7 +1544,7 @@ impl VMObjectPagedInner {
         );
         // update parent's child reference (hidden parents only)
         if let Some(parent) = self.parent.take() {
-            let mut parent_inner = parent.inner.borrow_mut();
+            let parent_inner = parent.borrow_inner_mut();
             if let VMOType::Hidden { left, right, .. } = &mut parent_inner.type_ {
                 if left.ptr_eq(&self.self_ref) {
                     *left = Arc::downgrade(&hidden);
@@ -1529,18 +1556,17 @@ impl VMObjectPagedInner {
             }
             // Non-hidden parents (e.g., pager root for unidirectional
             // children) don't track children via left/right — skip.
-            drop(parent_inner);
         }
         // update children's parent
         self.parent = Some(hidden.clone());
         self.parent_offset = 0;
         self.parent_limit = self.size;
-        child.inner.borrow_mut().parent = Some(hidden.clone());
+        child.borrow_inner_mut().parent = Some(hidden.clone());
         // Increment share_count for pages visible to the new child.
         {
             let child_start = offset / PAGE_SIZE;
             let child_end = (offset + len).min(self.size) / PAGE_SIZE;
-            let mut h = hidden.inner.borrow_mut();
+            let h = hidden.borrow_inner_mut();
             for idx in child_start..child_end {
                 if let Some(page) = h.frames.get_mut(&idx) {
                     page.share_count += 1;
@@ -1556,7 +1582,7 @@ impl VMObjectPagedInner {
                 let mut cur_start = child_start + h.parent_offset / PAGE_SIZE;
                 let mut cur_end = child_end + h.parent_offset / PAGE_SIZE;
                 while let Some(vmop) = cur {
-                    let mut inner = vmop.inner.borrow_mut();
+                    let inner = vmop.borrow_inner_mut();
                     if !inner.type_.is_hidden() {
                         break;
                     }
@@ -1625,7 +1651,7 @@ impl VMObjectPagedInner {
         // Set the child's parent directly to self (no hidden node).
         // Use self_ref to get our Arc<VMObjectPaged>.
         let self_arc = self.self_ref.upgrade().unwrap();
-        child.inner.borrow_mut().parent = Some(self_arc);
+        child.borrow_inner_mut().parent = Some(self_arc);
         Ok(child)
     }
 
@@ -1640,7 +1666,7 @@ impl VMObjectPagedInner {
     ) {
         let (tag, other) = self.type_.get_tag_and_other(old);
         let arc_other_child = other.upgrade().unwrap();
-        let mut other_child = arc_other_child.inner.borrow_mut();
+        let other_child = arc_other_child.borrow_inner_mut();
         let mut unwanted = VecDeque::<usize>::new();
         if let Some((new_start, new_end)) = new_range {
             let other_start = other_child.parent_offset / PAGE_SIZE;
@@ -1679,7 +1705,7 @@ impl VMObjectPagedInner {
                                 // the parent's frame.
                                 let has_parent_frame = self.parent.as_ref().is_some_and(|p| {
                                     let pi = i + self.parent_offset / PAGE_SIZE;
-                                    p.inner.borrow().frames.contains_key(&pi)
+                                    p.borrow_inner().frames.contains_key(&pi)
                                 });
                                 if has_parent_frame {
                                     // This frame is an intermediate COW
@@ -1688,7 +1714,7 @@ impl VMObjectPagedInner {
                                     let _removed = self.frames.remove(&i);
                                     if let Some(ref parent) = self.parent {
                                         let parent_idx = i + self.parent_offset / PAGE_SIZE;
-                                        let mut p = parent.inner.borrow_mut();
+                                        let p = parent.borrow_inner_mut();
                                         if let Some(pf) = p.frames.get_mut(&parent_idx) {
                                             if pf.tag.is_split() {
                                                 pf.tag = PageStateTag::Owned;
@@ -1730,10 +1756,10 @@ impl VMObjectPagedInner {
             let mut child = self.self_ref.clone();
             let mut skip_owner = old_id;
             while let Some(parent) = option_parent {
-                let mut parent_inner = parent.inner.borrow_mut();
+                let parent_inner = parent.borrow_inner_mut();
                 if parent_inner.owner == old_id {
                     let (_, other) = parent_inner.type_.get_tag_and_other(&child);
-                    let new_owner = other.upgrade().unwrap().inner.borrow().owner;
+                    let new_owner = other.upgrade().unwrap().borrow_inner().owner;
                     child = parent_inner.self_ref.clone();
                     assert_ne!(new_owner, skip_owner);
                     parent_inner.owner = new_owner;
@@ -1848,7 +1874,7 @@ impl VMObjectPagedInner {
             let mut child_ref = self.self_ref.clone();
 
             while let Some(vmop) = current {
-                let inner = vmop.inner.borrow();
+                let inner = vmop.borrow_inner();
                 // Non-hidden nodes (pager root, Origin) are not part
                 // of the COW tree — their pages are attributed to
                 // themselves, not to children reading through them.
@@ -1894,14 +1920,14 @@ impl VMObjectPagedInner {
         let mut option_parent = self.parent.clone();
         let mut child = self.self_ref.clone();
         while let Some(parent) = option_parent {
-            let mut parent_inner = parent.inner.borrow_mut();
+            let parent_inner = parent.borrow_inner_mut();
             // Non-hidden parents don't have left/right child tracking.
             if !parent_inner.type_.is_hidden() {
                 break;
             }
             let (tag, other) = parent_inner.type_.get_tag_and_other(&child);
             let arc_other = other.upgrade().unwrap();
-            let mut other_inner = arc_other.inner.borrow_mut();
+            let other_inner = arc_other.borrow_inner_mut();
             let start = other_inner.parent_offset / PAGE_SIZE;
             let end = other_inner.parent_limit / PAGE_SIZE;
             for _ in 0..unwanted.len() {
@@ -1942,7 +1968,6 @@ impl VMObjectPagedInner {
             }
             child = parent_inner.self_ref.clone();
             option_parent = parent_inner.parent.clone();
-            drop(parent_inner);
         }
     }
 
@@ -1961,7 +1986,7 @@ impl VMObjectPagedInner {
             let mut cur = self.parent.clone();
             let mut cur_idx = i + self.parent_offset / PAGE_SIZE;
             while let Some(vmop) = cur {
-                let mut p = vmop.inner.borrow_mut();
+                let p = vmop.borrow_inner_mut();
                 // Stop at non-hidden parents — they don't participate
                 // in bidirectional COW share_count tracking.
                 if !p.type_.is_hidden() {
@@ -1994,7 +2019,7 @@ impl VMObjectPagedInner {
             self.decrement_parent_share_counts(0, self.size / PAGE_SIZE);
             self.frames.clear();
             if let Some(parent) = self.parent.as_ref() {
-                parent.inner.borrow_mut().remove_child(&self.self_ref);
+                parent.borrow_inner_mut().remove_child(&self.self_ref);
             }
             // We cannot drop the parent Arc here since we are holding the lock
             // pass it to caller who can drop it after unlocking the lock
@@ -2064,7 +2089,7 @@ impl VMObjectPagedInner {
 
 impl Drop for VMObjectPaged {
     fn drop(&mut self) {
-        let (_guard, mut inner) = self.get_inner_mut();
+        let (_guard, inner) = self.get_inner_mut();
         // Decrement share_count for pages this VMO sees through the
         // parent chain, then remove from parent's child list.
 
@@ -2074,13 +2099,13 @@ impl Drop for VMObjectPaged {
             // But if a unidirectional child later created a bidirectional
             // child (hidden node), its parent changed to the hidden node.
             // In that case, it must participate in normal COW merge.
-            let parent_is_hidden = parent.inner.borrow().type_.is_hidden();
+            let parent_is_hidden = parent.borrow_inner().type_.is_hidden();
             if inner.type_.is_unidirectional() && !parent_is_hidden {
                 // True unidirectional: parent is still the pager root.
                 // No share_count, no merge needed.
             } else {
                 inner.decrement_parent_share_counts(0, inner.size / PAGE_SIZE);
-                parent.inner.borrow_mut().remove_child(&inner.self_ref);
+                parent.borrow_inner_mut().remove_child(&inner.self_ref);
             }
         }
         let is_conti = inner.is_contiguous();
