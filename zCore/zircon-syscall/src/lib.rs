@@ -269,36 +269,14 @@ impl Syscall<'_> {
         use hal::PAGE_SIZE;
         use zircon_object::task::ThreadState;
 
-        // For slice VMOs, check the parent pager VMO for TRAP_DIRTY.
-        // Dirty requests go to the parent, using parent-relative offsets.
-        let (target_vmo, parent_offset) = if vmo.is_slice_vmo() {
-            if let Some(parent) = vmo.find_root_pager_vmo() {
-                if !parent.is_trap_dirty() {
-                    return Ok(());
-                }
-                let po = offset + vmo.get_slice_offset();
-                (parent, po)
-            } else {
-                return Ok(());
-            }
-        } else {
-            if !vmo.is_trap_dirty() || len == 0 {
-                return Ok(());
-            }
-            (vmo.clone(), offset)
-        };
-        if len == 0 {
+        if !vmo.is_trap_dirty() || len == 0 {
             return Ok(());
         }
         // After pager detach, all writes to TRAP_DIRTY VMOs fail
         // with BAD_STATE — the pager can no longer acknowledge dirty.
-        if !target_vmo.has_pager() {
+        if !vmo.has_pager() {
             return Err(zircon_object::ZxError::BAD_STATE);
         }
-        // Use the target (parent) VMO and parent-relative offset
-        // for all dirty tracking below.
-        let vmo = &target_vmo;
-        let offset = parent_offset;
         // Match Fuchsia kernel's kMaxWriteWaitPages (256 pages = 1MB).
         // The kernel batches dirty requests at this granularity in
         // ReadWriteInternal. Pager test helpers (WaitForPageDirty)
@@ -451,7 +429,6 @@ impl Syscall<'_> {
         );
 
         let [a0, a1, a2, a3, a4, a5, a6, a7] = args;
-
         let ret = match sys_type {
             Sys::HANDLE_CLOSE => self.sys_handle_close(a0 as _),
             Sys::HANDLE_CLOSE_MANY => self.sys_handle_close_many(a0.into(), a1 as _),
@@ -639,11 +616,6 @@ impl Syscall<'_> {
                     .await
             }
             Sys::VMO_WRITE => {
-                #[cfg(target_os = "none")]
-                hal_impl::console::console_write_fmt(format_args!(
-                    "VMOWR: h={:#x} off={:#x} len={:#x}\n",
-                    a0, a2, a3
-                ));
                 // Pre-fault pager pages in user buffer (a1=buf, a3=size).
                 if let Err(e) = self.prefault_user_buffer(a1, a3).await {
                     return e as isize;
