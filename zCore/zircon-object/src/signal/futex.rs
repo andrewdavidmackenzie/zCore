@@ -567,9 +567,7 @@ mod tests {
 
             // Waiter: wait for VALUE==1 (matches initially)
             let futex_w = futex.clone();
-            let waiter = async_std::task::spawn(async move {
-                futex_w.wait(1).await
-            });
+            let waiter = async_std::task::spawn(async move { futex_w.wait(1).await });
 
             // Yield to let the waiter get scheduled
             async_std::task::yield_now().await;
@@ -580,10 +578,7 @@ mod tests {
 
             // The waiter should complete — either Ok (was woken) or
             // BAD_STATE (saw changed value). It must NOT hang.
-            let result = async_std::future::timeout(
-                Duration::from_millis(100),
-                waiter,
-            ).await;
+            let result = async_std::future::timeout(Duration::from_millis(100), waiter).await;
             assert!(result.is_ok(), "waiter hung — lost wakeup (futex race)");
         }
     }

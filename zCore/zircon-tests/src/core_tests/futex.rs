@@ -853,9 +853,7 @@ async fn wake_during_registration_race() {
 
         // Spawn a waiter that blocks on futex_wait(addr, 1)
         let futex_clone = futex.clone();
-        let waiter = async_std::task::spawn(async move {
-            futex_clone.wait(1).await
-        });
+        let waiter = async_std::task::spawn(async move { futex_clone.wait(1).await });
 
         // Yield so the waiter gets scheduled
         async_std::task::yield_now().await;
@@ -867,11 +865,8 @@ async fn wake_during_registration_race() {
 
         // The waiter must complete (Ok from wake, or BAD_STATE from
         // seeing changed value). If it hangs, the futex race is present.
-        let result = async_std::future::timeout(
-            core::time::Duration::from_millis(200),
-            waiter,
-        )
-        .await;
+        let result =
+            async_std::future::timeout(core::time::Duration::from_millis(200), waiter).await;
         assert!(
             result.is_ok(),
             "futex waiter hung — lost wakeup due to value-check/register race"
