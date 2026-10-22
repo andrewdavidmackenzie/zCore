@@ -88,3 +88,14 @@ StreamTestCase.PartialVmoDirty
 
 # ── Stream (exception channel crash detection) ──────────────────────
 StreamTestCase.FaultBeyondStreamSizeResizeDownRace
+# ResizePartialWritebackIntersectingRandomWrites: concurrent thread race
+PagerWriteback.ResizePartialWritebackIntersectingRandomWritesNoTrapDirty
+PagerWriteback.ResizePartialWritebackIntersectingRandomWritesTrapDirty
+# Concurrent write+writeback race (need multi-thread support)
+PagerWriteback.ResizeWritebackInterleavedWriteWithMappingTrapDirty
+PagerWriteback.ResizeWritebackIntersectingRandomWritesTrapDirty
+PagerWriteback.ResizeWritebackIntersectingWriteTrapDirty
+PagerWriteback.ResizeWritebackIntersectingResizeTrapDirty
+PagerWriteback.ResizeWritebackMulipleGapsTrapDirty
+PagerWriteback.ResizeWritebackInterleavedWriteWithMappingNoTrapDirty
+PagerWriteback.ResizeWritebackIntersectingRandomWritesNoTrapDirty
