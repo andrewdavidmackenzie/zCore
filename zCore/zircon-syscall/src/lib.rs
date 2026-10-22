@@ -654,6 +654,7 @@ impl Syscall<'_> {
                         if let Some(pv) = pager_vmo {
                             // Compute parent-relative offsets for slices.
                             let parent_offset = a2 + vmo.get_slice_offset();
+
                             if !pv.is_trap_dirty() {
                                 let start_page = parent_offset / hal::PAGE_SIZE;
                                 let end_page = (parent_offset + a3).div_ceil(hal::PAGE_SIZE);

@@ -2355,15 +2355,25 @@ impl VmMapping {
             res = pg_table.update(vaddr, Some(paddr), Some(flags)).map(|_| ());
         }
         res.map_err(|_| ZxError::ACCESS_DENIED)?;
-        // After successful WRITE mapping on a pager-backed VMO,
-        // update dirty tracking and modified flag. This is done
-        // AFTER the map succeeds to avoid marking the VMO modified
-        // when the fault returns SHOULD_WAIT (e.g., unsupplied page).
-        if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_pager_backed() {
-            if self.vmo.is_trap_dirty() {
-                self.vmo.set_modified();
-            } else {
-                self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
+        // After successful WRITE mapping on a pager-backed VMO (or a
+        // slice of one), update dirty tracking and modified flag.
+        if access_flags.contains(MMUFlags::WRITE) {
+            if self.vmo.is_pager_backed() {
+                if self.vmo.is_trap_dirty() {
+                    self.vmo.set_modified();
+                } else {
+                    self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
+                }
+            } else if self.vmo.is_slice_vmo() {
+                // Slice: propagate dirty/modified to the parent pager VMO.
+                if let Some(parent) = self.vmo.find_root_pager_vmo() {
+                    let parent_page = (vmo_offset + self.vmo.get_slice_offset()) / PAGE_SIZE;
+                    if parent.is_trap_dirty() {
+                        parent.set_modified();
+                    } else {
+                        parent.auto_mark_dirty(parent_page);
+                    }
+                }
             }
         }
         Ok(())
