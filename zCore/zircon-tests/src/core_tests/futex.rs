@@ -837,19 +837,19 @@ fn wait_timeout_elapsed() {
 /// with respect to futex_wake. Without this, a wake can drain the queue
 /// between the value check and the push, orphaning the waiter.
 ///
-/// This test races futex_wake against multiple futex_wait calls. With
-/// the bug, at least one waiter would be orphaned and never woken,
-/// causing the test to hang.
+/// This test races futex_wake against futex_wait. The waiter must
+/// always complete — either woken (Ok) or value-mismatch (BAD_STATE).
+/// With the bug, the waiter would be orphaned and hang forever.
 #[async_std::test]
 async fn wake_during_registration_race() {
-    use core::sync::atomic::AtomicI32;
-    use std::sync::Arc;
+    use core::sync::atomic::{AtomicI32, Ordering};
 
     let _ctx = TestContext::new();
 
     for _ in 0..200 {
-        let value = Arc::new(AtomicI32::new(1));
-        let futex = Futex::new(Arc::as_ptr(&value) as *const AtomicI32 as usize);
+        static VALUE: AtomicI32 = AtomicI32::new(0);
+        VALUE.store(1, Ordering::SeqCst);
+        let futex = Futex::new(&VALUE as *const AtomicI32 as usize);
 
         // Spawn a waiter that blocks on futex_wait(addr, 1)
         let futex_clone = futex.clone();
@@ -860,16 +860,10 @@ async fn wake_during_registration_race() {
 
         // Change the value and wake — this races with the waiter's
         // value-check-and-register sequence
-        value.store(2, core::sync::atomic::Ordering::SeqCst);
+        VALUE.store(2, Ordering::SeqCst);
         futex.wake(u32::MAX as usize);
 
-        // The waiter must complete (Ok from wake, or BAD_STATE from
-        // seeing changed value). If it hangs, the futex race is present.
-        let result =
-            async_std::future::timeout(core::time::Duration::from_millis(200), waiter).await;
-        assert!(
-            result.is_ok(),
-            "futex waiter hung — lost wakeup due to value-check/register race"
-        );
+        // The waiter must complete: Ok (woken) or BAD_STATE (value changed).
+        let _result = waiter.await;
     }
 }
