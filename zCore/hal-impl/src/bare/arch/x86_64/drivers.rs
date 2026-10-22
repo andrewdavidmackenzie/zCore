@@ -97,17 +97,6 @@ pub(super) fn init() -> DeviceResult {
     // "no registered handler for interrupt vector 254" on every IPI.
     irq.register_local_apic_handler(0xFE, Box::new(|| {}))?;
 
-    // Register the cross-CPU wakeup function so executor tasks
-    // can be woken immediately via IPI instead of waiting for
-    // the next timer tick (up to 10ms delay).
-    executor::set_ipi_wakeup(|target_cpu| {
-        use crate::hal_fn::interrupt::send_ipi;
-        // Send IPI vector 0xFE to break the target CPU out of HLT.
-        // The reason doesn't matter — the executor just needs to
-        // run its scan_notifications loop.
-        let _ = send_ipi(target_cpu as usize, 0);
-    });
-
     warn!("Measuring CPU frequency...");
     // SAFETY: this will be called once and only once for every core
     Apic::local_apic().set_timer_mode(TimerMode::Periodic);
