@@ -853,12 +853,6 @@ impl VmObject {
         let mut any_cleaned = false;
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             if inner.dirty_pages[page_idx] == PAGE_AWAITING_CLEAN {
-                // Skip pinned pages — they can't be cleaned while
-                // a device has DMA access. Revert to dirty.
-                if self.trait_.is_page_pinned(page_idx) {
-                    inner.dirty_pages[page_idx] = PAGE_DIRTY;
-                    continue;
-                }
                 inner.dirty_pages[page_idx] = PAGE_CLEAN;
                 any_cleaned = true;
             }
