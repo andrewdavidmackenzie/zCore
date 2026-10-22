@@ -28,9 +28,7 @@ pub(crate) fn as_kobject(thread: &alloc::sync::Arc<Thread>) -> alloc::sync::Arc<
 
 // ── Bulk-ported thread tests (batch 2) ──────────────────────────────
 //
-// The following tests correspond to C++ ThreadTest tests. Tests that
-// can be exercised with the cooperative scheduler have real logic.
-// Tests that would hang (blocking in syscalls with preemptive
+// The following tests correspond to C++ ThreadTest tests.
 
 // ── Bulk-ported thread tests (batch 2) ──────────────────────────────
 
@@ -1327,7 +1325,6 @@ fn syscall_debugger_modify_result() {
 
 /// C++: TEST(Threads, SyscallSuspendedRegisterState)
 /// Read register state while a thread is suspended in a syscall.
-/// We use the cooperative suspend to approximate this.
 #[async_std::test]
 async fn syscall_suspended_register_state() {
     helpers::ensure_hal_init();

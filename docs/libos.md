@@ -191,12 +191,7 @@ core exists.
 
 Because the entire kernel is built on async/await. Kernel "threads" are
 `Future`s, not OS threads. The spawn API takes `impl Future<Output=()>`, not a
-closure. On bare metal, the custom executor polls these futures cooperatively.
-Using `async_std::task::spawn` in libos provides the same async model backed by
-a host thread pool. This ensures kernel code behaves identically in both modes.
-OS threads would require fundamentally different synchronization (preemptive vs
-cooperative) and break the abstraction.
-
+closure.
 
 **Timers:** The current time comes from `std::time::SystemTime`. Timer
 deadlines are implemented by spawning an async task that calls

@@ -909,18 +909,8 @@ replaced by `async_std` -- the executor crate is only used on bare metal.
 
 
 Traditional kernels (Linux, Zircon) use preemptive scheduling: timer interrupts
-force context switches via saved register state. zCore uses cooperative async:
-each kernel "thread" is a Future that yields at `.await` points. The executor
-polls futures and switches between them. **Benefits**: (1) no need for per-
-thread kernel stacks (futures are state machines on the heap), (2) simpler
-synchronization (no preemption between await points), (3) natural fit for async
-I/O (VirtIO, network), (4) same code runs on bare metal and in libos mode.
-**Downsides**: (1) a CPU-bound future that doesn't yield can starve others
-(mitigated by the executor's strong/weak promotion system), (2) less
-predictable latency than a preemptive scheduler, (3) the pattern is unusual for
-OS kernels and harder to reason about for developers used to traditional
-kernels.
-
+force context switches via saved register state. zCore has a pre-emptive scheduler
+with deadline and fair scheduling modes.
 
 ---
 

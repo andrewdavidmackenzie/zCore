@@ -527,8 +527,7 @@ async fn thread_suspend_multiple() {
 ///
 /// Suspend a running thread from the test harness, verify it enters
 /// Suspended state, then resume and clean up. This tests the suspend
-/// mechanism on a thread that has been started (the cooperative
-/// equivalent of self-suspend).
+/// mechanism on a thread that has been started
 #[async_std::test]
 async fn thread_suspend_self() {
     helpers::ensure_hal_init();
@@ -723,8 +722,7 @@ async fn thread_wait_for_termination() {
 
 ///
 /// Thread runtime stats require actual CPU execution time tracking.
-/// In zCore's cooperative scheduler, runtime is simulated via
-/// time_add. This test verifies the basic time tracking API.
+/// This test verifies the basic time tracking API.
 #[test]
 fn thread_stats_runtime() {
     let _ctx = TestContext::new();
@@ -786,7 +784,7 @@ fn thread_suspend_in_sleep() {}
 
 ///
 /// Suspend a running thread, verify it stops executing, then resume
-/// it and verify it continues. Uses the cooperative test loop.
+/// it and verify it continues.
 #[async_std::test]
 async fn thread_suspend_then_resume() {
     helpers::ensure_hal_init();
@@ -864,9 +862,7 @@ async fn thread_suspend_multiple_times() {
 }
 
 ///
-/// Set and get thread priority. zCore's cooperative scheduler does
-/// not implement priority-based scheduling, but we can create a
-/// priority profile and attempt to apply it.
+/// Set and get thread priority.
 #[test]
 fn thread_priority() {
     use zircon_object::task::{Profile, ProfileInfo, ProfileInfoFlags};

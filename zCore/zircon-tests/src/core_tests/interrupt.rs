@@ -553,9 +553,6 @@ async fn virtual_not_wakeable() {
 ///   - Wait until thread is blocked
 ///   - Suspend, then resume, then trigger
 ///   - Thread completes wait successfully
-///
-/// This requires cooperative scheduling / thread suspend which
-/// is hard to exercise in unit tests. Verify basic trigger-wait.
 #[async_std::test]
 async fn wait_thread_functions_after_suspend_resume() {
     let _ctx = TestContext::new();

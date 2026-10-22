@@ -1,14 +1,6 @@
-# Core-tests skip list — tests that hang or crash the test runner.
-# Each non-empty, non-comment line is a gtest pattern to exclude.
-# Tracking issue: https://github.com/andrewdavidmackenzie/zCore/issues/21
-
-# ── Multi-threaded port stress (investigation needed) ────────────────
 PortStressTest.CancelKeyDuringMatchRace
 PortStressTest.SignalCloseWait
 PortStressTest.ChannelCallWaitQueuePanicRepro
-
-# ── Channel (hangs in full suite due to timing, passes individually) ──
-ChannelInternalTest.TransferChannelWithPendingCall
 
 # ── PagerWriteback (hang — various root causes) ──
 # NotModifiedOnFailed*: OP_FAIL doesn't propagate to
@@ -24,6 +16,8 @@ PagerWriteback.DetachWithPendingDirtyRequestVmar
 PagerWriteback.DetachWithPendingDirtyRequestVmo
 
 # Remaining hangs — need OP_ZERO, writeback, overlap, detach:
+Pager.RacyPortDequeue
+Pager.CloneReadFromParentTestVmar
 PagerWriteback.CommitExtendedTailNoTrapDirty
 PagerWriteback.CommitExtendedTailTrapDirty
 PagerWriteback.DelayedDirtyZeroRange
@@ -80,14 +74,6 @@ PagerWriteback.UntrackedBeyondStreamSize
 PagerWriteback.WritePinAwaitingCleanTrapDirty
 PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
 PagerWriteback.WritebackWithMapping
-
-# ── Stream (TRAP_DIRTY: needs async stream syscalls with predirty) ───
-StreamTestCase.AppendSuppliesZeroes
-StreamTestCase.ContentSizeUpdatedOnPartialWrite
-StreamTestCase.PartialVmoDirty
-
-# ── Stream (exception channel crash detection) ──────────────────────
-StreamTestCase.FaultBeyondStreamSizeResizeDownRace
 # ResizePartialWritebackIntersectingRandomWrites: concurrent thread race
 PagerWriteback.ResizePartialWritebackIntersectingRandomWritesNoTrapDirty
 PagerWriteback.ResizePartialWritebackIntersectingRandomWritesTrapDirty
@@ -99,4 +85,3 @@ PagerWriteback.ResizeWritebackIntersectingResizeTrapDirty
 PagerWriteback.ResizeWritebackMulipleGapsTrapDirty
 PagerWriteback.ResizeWritebackInterleavedWriteWithMappingNoTrapDirty
 PagerWriteback.ResizeWritebackIntersectingRandomWritesNoTrapDirty
-

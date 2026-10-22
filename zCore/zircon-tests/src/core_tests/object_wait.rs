@@ -72,8 +72,6 @@ async fn wait_many_too_many_objects() {
 /// Expected: items[0].pending == USER_SIGNAL_0,
 ///           items[1].pending == USER_SIGNAL_1,
 ///           items[2].pending == 0.
-/// Under cooperative scheduling, we do the same signal sequence
-/// before calling wait_many with deadline=0.
 #[async_std::test]
 async fn wait_many_transient_signals_not_returned() {
     use hal_impl::user::UserInOutPtr;
@@ -196,8 +194,8 @@ async fn wait_many_wait_for_events_signaled() {
 
 /// C++: TEST(ObjectWaitManyTest, WaitForEventsThenSignal)
 /// C++ creates 8 events, spawns a thread that signals 2 of them after the main
-/// thread enters BLOCKED_WAIT_MANY. Under cooperative scheduling we can't block
-/// and signal from another thread, so we test both halves:
+/// thread enters BLOCKED_WAIT_MANY.
+/// TODO Review this since pre-emptive scheduling
 /// 1. Unsignaled events with deadline=0 → TIMED_OUT
 /// 2. Signal events, then wait_many with deadline=0 → succeeds, at least one
 ///    item has pending signals (matching C++ assertion: signal_count > 0).
@@ -323,7 +321,7 @@ async fn wait_one_empty_signal_set() {
 /// C++: TEST(ObjectWaitOneTest, TransientSignalsNotReturned)
 /// C++ sets USER_SIGNAL_0, clears it, sets USER_SIGNAL_1, then waits for
 /// USER_SIGNAL_1. Assert observed == USER_SIGNAL_1 (not USER_SIGNAL_0).
-/// Under cooperative scheduling we do the same sequence non-blocking:
+/// TODO review this since pre-emptive scheduling
 /// 1. Set+clear USER_SIGNAL_0, then wait for USER_SIGNAL_0 → TIMED_OUT
 /// 2. Additionally set USER_SIGNAL_1, wait for USER_SIGNAL_1 → OK,
 ///    observed contains USER_SIGNAL_1 but NOT USER_SIGNAL_0.

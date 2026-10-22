@@ -54,7 +54,7 @@ synchronously: `supply_pages()` then `vmo.read()`. This means:
 achieve FULL equivalence. The C++ binary (via `make core-tests`) is
 the authoritative test for demand-paging paths.
 
-### 2. Cooperative Scheduler Limits Concurrency Tests
+### 2. Limited Concurrency in rust Tests (TODO: Fix this)
 
 All stress/race tests (PortStressTest, thread suspend-during-blocking,
 concurrent reads, process kill races) are single-threaded in Rust.

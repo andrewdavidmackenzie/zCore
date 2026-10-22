@@ -277,14 +277,19 @@ impl Syscall<'_> {
         if !vmo.has_pager() {
             return Err(zircon_object::ZxError::BAD_STATE);
         }
+        // Match Fuchsia kernel's kMaxWriteWaitPages (256 pages = 1MB).
+        // The kernel batches dirty requests at this granularity in
+        // ReadWriteInternal. Pager test helpers (WaitForPageDirty)
+        // expect exact batch-size matching.
+        const MAX_DIRTY_BATCH: usize = 256;
+
         let start_page = offset / PAGE_SIZE;
         let end_page = offset
             .checked_add(len)
             .ok_or(ZxError::INVALID_ARGS)?
             .div_ceil(PAGE_SIZE);
         // Find contiguous runs of clean pages and send one dirty
-        // request per run. The pager expects coalesced requests
-        // matching the contiguous dirty range.
+        // request per run, capped at MAX_DIRTY_BATCH pages per request.
         let mut page_idx = start_page;
         while page_idx < end_page {
             // Skip already-dirty pages.
@@ -292,9 +297,11 @@ impl Syscall<'_> {
                 page_idx += 1;
                 continue;
             }
-            // Find the end of the contiguous clean run.
+            // Find the end of the contiguous clean run, capped at
+            // MAX_DIRTY_BATCH pages.
             let run_start = page_idx;
-            while page_idx < end_page && !vmo.is_page_dirty(page_idx) {
+            let run_limit = (page_idx + MAX_DIRTY_BATCH).min(end_page);
+            while page_idx < run_limit && !vmo.is_page_dirty(page_idx) {
                 page_idx += 1;
             }
             let run_len = page_idx - run_start;

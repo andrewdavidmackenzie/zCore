@@ -4,12 +4,6 @@
 //!
 //! channel_call_etc is a synchronous RPC mechanism that sends a message
 //! (with handle dispositions) and waits for a reply with matching txid.
-//!
-//! because cooperative scheduling in libos mode cannot run the server
-//! concurrently with the blocked call.
-//!
-//! when they require syscall-layer validation not available at the
-//! kernel object level.
 
 use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::object::{KernelObject, Signal};
@@ -305,10 +299,7 @@ fn bad_args_pointer_returns_invalid_args() {
 ///
 /// In the C++ test, a server thread is spawned so the call completes and
 /// the null pointer is hit at write-back time. In zCore, actual_bytes is
-/// written after the blocking call completes. Without a server thread
-/// (libos cooperative scheduling), the call times out before reaching the
-/// null pointer write. This matches the existing call_etc tests in
-/// syscall_channel.rs.
+/// written after the blocking call completes.
 #[test]
 fn null_actual_bytes_returns_invalid_args() {
     let ctx = TestContext::new();

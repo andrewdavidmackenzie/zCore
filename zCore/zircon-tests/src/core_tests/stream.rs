@@ -768,7 +768,7 @@ fn race_write_resize_vec_smaller() {
 /// read thread against a set_size(0) thread. The read either gets all
 /// data (before truncate) or nothing (after truncate).
 ///
-/// In libos mode the cooperative scheduler makes true races impossible.
+/// TODO Review this since pre-emptive scheduling
 /// We simulate both outcomes sequentially and verify:
 /// - After truncate, reads return 0 bytes.
 /// - Neither outcome crashes.

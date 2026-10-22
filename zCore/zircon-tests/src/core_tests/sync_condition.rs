@@ -30,8 +30,7 @@ use zircon_object::signal::Futex;
 /// 7. Joins all threads
 ///
 /// This requires concurrent multi-threaded execution with blocking
-/// futex waits. Cannot run in cooperative libos mode.
-/// 3 threads wait on a condvar. Main thread broadcasts, all wake.
+/// futex waits.
 #[async_std::test]
 async fn condition_test() {
     use crate::helpers::{condvar_waiter_thread_fn, CondvarWaiterState, SyncCondition, SyncMutex};

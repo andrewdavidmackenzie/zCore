@@ -26,7 +26,7 @@ use zircon_object::signal::Futex;
 ///   Thread 3: 100 iterations, 300us delay
 ///
 /// This requires concurrent multi-threaded execution with blocking
-/// mutex waits (futex_wait). Cannot run in cooperative libos mode.
+/// mutex waits (futex_wait).
 /// 3 threads concurrently lock/unlock a C11 mutex (futex-based).
 /// Each increments a shared counter. Total must match.
 #[async_std::test]

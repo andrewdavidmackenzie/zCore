@@ -50,6 +50,12 @@ pub fn init_executor_runtimes(bsp_id: u8, ap_ids: &[u32]) {
         cpu_ids.push(id as u8);
     }
     executor::init_runtimes(&cpu_ids);
+    // Register cross-CPU wakeup via IPI so that waking a task on a
+    // halted CPU immediately breaks it out of HLT instead of waiting
+    // for the next timer tick (up to 10ms at 100 Hz).
+    executor::set_ipi_wakeup(|target_cpu| {
+        let _ = crate::interrupt::send_ipi(target_cpu as usize, 0);
+    });
 }
 
 /// Look up the logical core index for the current CPU's APIC ID.
