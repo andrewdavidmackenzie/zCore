@@ -587,6 +587,7 @@ impl VmObject {
         let inner = self.inner.lock();
         if let Some(port) = &inner.pager_port {
             let page_idx = offset / PAGE_SIZE;
+
             // Don't send duplicate requests.
             if !inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx) {
                 port.push(PortPacketRepr {
