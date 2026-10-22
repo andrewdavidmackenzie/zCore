@@ -519,6 +519,25 @@ impl VmObject {
         self.trait_.remove_zero_marker(page_idx);
     }
 
+    /// Mark pages as dirty-zero (for OP_ZERO on TRAP_DIRTY VMOs).
+    /// This doesn't generate a DIRTY request — it directly sets the
+    /// dirty state since zeroing is allowed without pager ACK.
+    pub fn mark_pages_zero_dirty(&self, start_page: usize, end_page: usize) {
+        let mut inner = self.inner.lock();
+        for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
+            // Only mark as zero-dirty if the page has a zero marker
+            // (was actually zeroed). If the page has a committed frame,
+            // mark as regular dirty.
+            if self.trait_.has_zero_marker(page_idx)
+                && self.trait_.committed_pages_in_range(page_idx, page_idx + 1) == 0
+            {
+                inner.dirty_pages[page_idx] = PAGE_ZERO_DIRTY;
+            } else {
+                inner.dirty_pages[page_idx] = PAGE_DIRTY;
+            }
+        }
+    }
+
     /// Enable dirty-page trapping for this pager-backed VMO.
     /// Writes to clean pages will send `ZX_PAGER_VMO_DIRTY` to the
     /// pager port and block until the pager responds.
