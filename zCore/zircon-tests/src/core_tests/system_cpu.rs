@@ -430,8 +430,7 @@ fn get_performance_info() {
 ///
 /// Verify that the scheduler's target preemption time is properly updated
 /// when the performance scale changes. This test sets perf scale to 1.0,
-/// then 0.5, and spins. In zCore's single-CPU cooperative scheduler this
-/// is a no-op, but we exercise the syscall path.
+/// then 0.5, and spins.
 #[test]
 fn target_preemption_time_assert() {
     let ctx = TestContext::new();

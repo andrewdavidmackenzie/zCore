@@ -220,9 +220,8 @@ pub fn main() {
                 }
             }
             // Sleep briefly to let the child thread resume and execute.
-            // Closing the exception handle unblocks the child, but the
-            // cooperative scheduler needs a timer interrupt to switch
-            // tasks. nanosleep(0) may not trigger one on all QEMU
+            // Closing the exception handle unblocks the child.
+            // nanosleep(0) may not trigger one on all QEMU
             // versions; use a short real sleep to ensure a timer tick.
             let mut now: i64 = 0;
             unsafe { zx_clock_get(0, &mut now) };

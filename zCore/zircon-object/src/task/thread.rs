@@ -593,8 +593,7 @@ impl Thread {
             total += now.saturating_sub(inner.uspace_enter_time);
         }
         // For threads that have been started (Running/Blocked/Dying), ensure
-        // at least 1ns is reported. In our cooperative scheduler, a thread
-        // may not have entered userspace yet when THREAD_RUNNING fires.
+        // at least 1ns is reported.
         if total == 0 && inner.state() != ThreadState::New && inner.state() != ThreadState::Dead {
             total = 1;
         }

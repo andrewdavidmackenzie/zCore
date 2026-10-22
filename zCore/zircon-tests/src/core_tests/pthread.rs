@@ -29,8 +29,7 @@ use zircon_object::task::{Job, Process, Task, Thread};
 /// 6. Create 3 mutex_threads with staggered delays
 ///
 /// All of this requires concurrent multi-threaded execution with
-/// blocking waits (pthread_cond_wait, pthread_mutex_lock). The
-/// cooperative libos scheduler cannot run this.
+/// blocking waits (pthread_cond_wait, pthread_mutex_lock).
 /// C++: TEST_F(PthreadTest, Basic)
 ///
 /// Exercises concurrent mutex contention and condvar wait/broadcast/signal

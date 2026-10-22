@@ -84,11 +84,10 @@ impl KernelHandler for ZcoreKernelHandler {
                 Ok(()) => true,
                 Err(zircon_object::ZxError::SHOULD_WAIT) => {
                     // Pager-backed page fault during kernel usercopy.
-                    // Can't block in trap handler context (cooperative
-                    // scheduler doesn't support synchronous waiting in
-                    // interrupt context). Return false to let the guarded
+                    // Return false to let the guarded
                     // copy fail. Usercopy demand-paging requires
                     // syscall-level pre-faulting of pager pages.
+                    // TODO review correctness/completeness of this
                     false
                 }
                 Err(_) => false,

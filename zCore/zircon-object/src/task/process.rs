@@ -934,8 +934,6 @@ impl Process {
 
     /// Get total accumulated CPU time across all threads (nanoseconds).
     /// Includes time from exited threads that have been removed.
-    /// On a cooperative scheduler, returns at least 1ns when the
-    /// process has been started (threads may not have run yet).
     pub fn total_cpu_time(&self) -> u64 {
         // Clone threads and read exited_cpu_time under lock, then release
         // lock before calling Thread::get_time (avoids deadlock with
@@ -948,7 +946,7 @@ impl Process {
         let total = live_time + exited_time;
         if total == 0 && status == Status::Running {
             // Process has been started but threads haven't accumulated
-            // measurable CPU time yet (cooperative scheduler artifact).
+            // measurable CPU time yet
             1
         } else {
             total

@@ -230,8 +230,7 @@ fn mappable_clock_padding_leak() {
 /// time, store it in a shared vector, and verify monotonicity every
 /// 100 samples. This runs for 5 seconds.
 ///
-/// zCore uses a cooperative scheduler, so true multi-threaded
-/// contention is not possible. We adapt the test to verify the same
+/// TODO adapt the test to verify the same
 /// invariant (monotonicity of consecutive readings) within a single
 /// thread doing many rapid reads, which exercises the same kernel
 /// clock path (sys_clock_get_monotonic_via_kernel).
