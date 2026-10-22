@@ -556,9 +556,11 @@ impl Syscall<'_> {
             Sys::STREAM_CREATE => self.sys_stream_create(a0 as _, a1 as _, a2 as _, a3.into()),
             Sys::STREAM_WRITEV => {
                 self.sys_stream_writev(a0 as _, a1 as _, a2.into(), a3 as _, a4.into())
+                    .await
             }
             Sys::STREAM_WRITEV_AT => {
                 self.sys_stream_writev_at(a0 as _, a1 as _, a2 as _, a3.into(), a4 as _, a5.into())
+                    .await
             }
             Sys::STREAM_READV => {
                 self.sys_stream_readv(a0 as _, a1 as _, a2.into(), a3 as _, a4.into())
