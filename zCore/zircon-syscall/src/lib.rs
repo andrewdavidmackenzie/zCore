@@ -626,23 +626,28 @@ impl Syscall<'_> {
                     }
                 }
                 let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _);
-                // After a successful write to a pager-backed VMO:
-                // - Set the modified flag (both TRAP_DIRTY and non-TRAP_DIRTY)
-                // - Non-TRAP_DIRTY: also auto-mark pages dirty for query_dirty_ranges
-                //   (auto_mark_dirty also sets modified, so we call it first)
+                // After a successful write to a pager-backed VMO (or a slice
+                // of one), set modified and mark pages dirty on the parent.
                 if result.is_ok() {
                     if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
-                        if vmo.has_pager() {
-                            if !vmo.is_trap_dirty() {
-                                let start_page = a2 / hal::PAGE_SIZE;
-                                let end_page = (a2 + a3).div_ceil(hal::PAGE_SIZE);
+                        // Find the pager-backed VMO: either this VMO or its
+                        // parent (for slices/references).
+                        let pager_vmo = if vmo.has_pager() {
+                            Some(vmo.clone())
+                        } else {
+                            vmo.find_root_pager_vmo()
+                        };
+                        if let Some(pv) = pager_vmo {
+                            // Compute parent-relative offsets for slices.
+                            let parent_offset = a2 + vmo.get_slice_offset();
+                            if !pv.is_trap_dirty() {
+                                let start_page = parent_offset / hal::PAGE_SIZE;
+                                let end_page = (parent_offset + a3).div_ceil(hal::PAGE_SIZE);
                                 for pg in start_page..end_page {
-                                    vmo.auto_mark_dirty(pg);
+                                    pv.auto_mark_dirty(pg);
                                 }
                             } else {
-                                // TRAP_DIRTY: OP_DIRTY already marked pages dirty,
-                                // but the actual write should also set modified.
-                                vmo.set_modified();
+                                pv.set_modified();
                             }
                         }
                     }

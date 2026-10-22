@@ -1736,14 +1736,19 @@ fn pager_supply_overwrites_existing() {
     let mut val = [0u8; 8];
     vmo.read(0, &mut val).unwrap();
     assert_eq!(u64::from_ne_bytes(val), 1);
-    // Second supply overwrites.
+    // Second supply is a no-op — already-committed pages are not overwritten.
+    // This matches Fuchsia behavior where supply_pages is idempotent.
     let src2 = VmObject::new_paged(1);
     src2.write(0, &2u64.to_ne_bytes()).unwrap();
     pager
         .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src2, 0)
         .unwrap();
     vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 2, "second supply should overwrite");
+    assert_eq!(
+        u64::from_ne_bytes(val),
+        1,
+        "second supply should NOT overwrite"
+    );
 }
 
 ///
@@ -2108,7 +2113,7 @@ fn pager_concurrent_supply_and_fault() {
 }
 
 ///
-/// Multiple supplies to the same page — last one wins.
+/// Multiple supplies to the same page — first one wins (no overwrite).
 #[test]
 fn pager_supply_race() {
     let _ctx = TestContext::new();
@@ -2123,7 +2128,11 @@ fn pager_supply_race() {
     }
     let mut val = [0u8; 8];
     vmo.read(0, &mut val).unwrap();
-    assert_eq!(u64::from_ne_bytes(val), 4, "last supply should win");
+    assert_eq!(
+        u64::from_ne_bytes(val),
+        0,
+        "first supply wins (no overwrite)"
+    );
 }
 
 ///
@@ -3227,20 +3236,22 @@ fn pager_concurrent_writeback_and_fault() {
     let vmo = pager
         .create_vmo(8, &port, 0, (2 * PAGE_SIZE) as u64)
         .unwrap();
-    supply_all_pages(&pager, &vmo, 2);
+    // Supply pages with actual data (non-zero) so they have committed frames.
+    let src_init = VmObject::new_paged(2);
+    src_init.write(0, b"page 0 init").unwrap();
+    src_init.write(PAGE_SIZE, b"page 1 init").unwrap();
+    pager
+        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src_init, 0)
+        .unwrap();
     // Dirty page 0 and writeback.
     pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
-    // Meanwhile supply page 1.
-    let src = VmObject::new_paged(1);
-    src.write(0, b"page 1 data").unwrap();
-    pager
-        .supply_pages(&vmo, PAGE_SIZE as u64, PAGE_SIZE as u64, &src, 0)
-        .unwrap();
     pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    // Verify page 1 still has its initial data (supply is no-op for
+    // already-committed pages).
     let mut buf = [0u8; 11];
     vmo.read(PAGE_SIZE, &mut buf).unwrap();
-    assert_eq!(&buf, b"page 1 data");
+    assert_eq!(&buf, b"page 1 init");
 }
 
 ///
@@ -3336,6 +3347,9 @@ fn pager_vmo_info_after_detach() {
 
 ///
 /// Committed bytes on a pager-backed VMO after supply.
+/// Supply with zero-content source creates zero markers (no physical
+/// frames), so committed_pages is 0. Supply with non-zero content
+/// creates committed frames.
 #[test]
 fn pager_vmo_info_committed_bytes() {
     let _ctx = TestContext::new();
@@ -3343,16 +3357,18 @@ fn pager_vmo_info_committed_bytes() {
     let vmo = pager
         .create_vmo(0, &port, 0, (4 * PAGE_SIZE) as u64)
         .unwrap();
-    // Supply 2 of 4 pages.
+    // Supply 2 pages with non-zero content.
     let src = VmObject::new_paged(2);
+    src.write(0, b"page0").unwrap();
+    src.write(PAGE_SIZE, b"page1").unwrap();
     pager
         .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
         .unwrap();
-    // VMO should have at least 2 pages committed.
+    // VMO should have 2 committed pages (non-zero content).
     let committed = vmo.committed_pages_in_range(0, 4);
-    assert!(
-        committed >= 2,
-        "should have at least 2 committed pages, got {committed}"
+    assert_eq!(
+        committed, 2,
+        "should have 2 committed pages, got {committed}"
     );
 }
 

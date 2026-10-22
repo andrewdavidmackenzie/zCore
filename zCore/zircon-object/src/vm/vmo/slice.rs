@@ -155,6 +155,10 @@ impl VMObjectTrait for VMObjectSlice {
         self.parent.unpin(offset + self.offset, len)
     }
 
+    fn slice_offset(&self) -> usize {
+        self.offset
+    }
+
     fn is_contiguous(&self) -> bool {
         self.parent.is_contiguous()
     }

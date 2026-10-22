@@ -953,18 +953,23 @@ impl Syscall<'_> {
                     return Err(ZxError::ACCESS_DENIED);
                 }
                 let result = vmo.zero(offset, len);
-                // OP_ZERO sets the modified flag and marks pages dirty
-                // for pager-backed VMOs, matching Fuchsia behavior.
-                if result.is_ok() && vmo.has_pager() {
-                    vmo.set_modified();
-                    // Mark zeroed pages as dirty (they'll appear as
-                    // ZX_VMO_DIRTY_RANGE_IS_ZERO in query_dirty_ranges
-                    // since the frames are decommitted).
-                    if !vmo.is_trap_dirty() {
-                        let start_page = offset / PAGE_SIZE;
-                        let end_page = (offset + len).div_ceil(PAGE_SIZE);
-                        for pg in start_page..end_page {
-                            vmo.auto_mark_dirty(pg);
+                // OP_ZERO sets modified and marks pages dirty on the
+                // pager-backed VMO (which may be the parent of a slice).
+                if result.is_ok() {
+                    let pager_vmo = if vmo.has_pager() {
+                        Some(vmo.clone())
+                    } else {
+                        vmo.find_root_pager_vmo()
+                    };
+                    if let Some(pv) = pager_vmo {
+                        pv.set_modified();
+                        let parent_offset = offset + vmo.get_slice_offset();
+                        if !pv.is_trap_dirty() {
+                            let start_page = parent_offset / PAGE_SIZE;
+                            let end_page = (parent_offset + len).div_ceil(PAGE_SIZE);
+                            for pg in start_page..end_page {
+                                pv.auto_mark_dirty(pg);
+                            }
                         }
                     }
                 }

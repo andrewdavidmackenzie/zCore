@@ -218,15 +218,43 @@ impl Pager {
                 }
                 return Err(e);
             }
-            if let Err(e) = vmo.write(dst_off, &buf[..chunk]) {
-                vmo.set_supplying(false);
-                let written = dst_off - offset as usize;
-                if written > 0 {
-                    vmo.complete_pager_requests(offset as usize, written);
+            let page_idx = dst_off / PAGE_SIZE;
+            // Skip pages already present (committed frame or zero
+            // marker). supply_pages doesn't overwrite existing pages.
+            // Exception: zero markers from RESIZE (PAGE_ZERO_DIRTY in
+            // dirty tracking) can be overwritten by supply.
+            let already_committed = vmo.has_committed_page(page_idx);
+            let has_marker = vmo.has_zero_marker(page_idx);
+            if already_committed || has_marker {
+                // Check if this is a resize zero marker that should
+                // be overwritable. Resize markers have PAGE_ZERO_DIRTY.
+                let is_resize_marker = has_marker && vmo.is_page_zero_dirty(page_idx);
+                if !is_resize_marker {
+                    src_off += chunk;
+                    dst_off += chunk;
+                    continue;
                 }
-                return Err(e);
+                // Resize marker → remove it so supply can write data.
+                vmo.remove_zero_marker(page_idx);
             }
-            crate::vm::VMO_PAGER_PAGES.add(1);
+            // Check if source data is all zeros from an uncommitted
+            // source page → create zero marker instead of frame.
+            let is_src_uncommitted =
+                aux_vmo.committed_pages_in_range(src_off / PAGE_SIZE, src_off / PAGE_SIZE + 1) == 0;
+            let is_zero_page = is_src_uncommitted && buf[..chunk].iter().all(|&b| b == 0);
+            if is_zero_page {
+                vmo.insert_zero_marker(page_idx);
+            } else {
+                if let Err(e) = vmo.write(dst_off, &buf[..chunk]) {
+                    vmo.set_supplying(false);
+                    let written = dst_off - offset as usize;
+                    if written > 0 {
+                        vmo.complete_pager_requests(offset as usize, written);
+                    }
+                    return Err(e);
+                }
+                crate::vm::VMO_PAGER_PAGES.add(1);
+            }
             src_off += chunk;
             dst_off += chunk;
         }
