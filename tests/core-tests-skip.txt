@@ -10,8 +10,63 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 # ── Channel (hangs in full suite due to timing, passes individually) ──
 ChannelInternalTest.TransferChannelWithPendingCall
 
-# ── Pager (multi-threaded / OP_FAIL / suspend) ──────────────────────
-PagerWriteback.*
+# ── PagerWriteback (hang — need OP_ZERO, writeback, overlap, detach) ──
+PagerWriteback.CommitExtendedTailNoTrapDirty
+PagerWriteback.CommitExtendedTailTrapDirty
+PagerWriteback.DelayedDirtyZeroRange
+PagerWriteback.DelayedPinAwaitingClean
+PagerWriteback.DelayedReadZeroRange
+PagerWriteback.DirtyAfterMapProtectTrapDirty
+PagerWriteback.DirtyAfterPin
+PagerWriteback.DirtyDuringWriteback
+PagerWriteback.DirtyRequestsForZeroRanges
+PagerWriteback.DirtyRequestsOverlap
+PagerWriteback.DirtyRequestsRandomOffsets
+PagerWriteback.FailedPinAwaitingClean
+PagerWriteback.LargeWriteBatched
+PagerWriteback.NoDirtyRequestsAfterDetachVmar
+PagerWriteback.NotModifiedFailedPinWrite
+PagerWriteback.NotModifiedPartialFailedPinWrite
+PagerWriteback.OpZero
+PagerWriteback.OpZeroCloneNoTrapDirty
+PagerWriteback.OpZeroCloneTrapDirty
+PagerWriteback.OpZeroDecommitNoTrapDirty
+PagerWriteback.OpZeroDecommitTrapDirty
+PagerWriteback.OpZeroExpandsTailNoTrapDirty
+PagerWriteback.OpZeroExpandsTailTrapDirty
+PagerWriteback.OpZeroPartialPageNoTrapDirty
+PagerWriteback.OpZeroPartialPageTrapDirty
+PagerWriteback.OpZeroResizeNoTrapDirty
+PagerWriteback.OpZeroResizeTrapDirty
+PagerWriteback.OpZeroTailNoTrapDirty
+PagerWriteback.OpZeroTailTrapDirty
+PagerWriteback.OpZeroTrapDirty
+PagerWriteback.OpZeroUnblocksReadRequestNoTrapDirty
+PagerWriteback.OpZeroUnblocksReadRequestTrapDirty
+PagerWriteback.OpZeroWithMarkersNoTrapDirty
+PagerWriteback.OpZeroWithMarkersTrapDirty
+PagerWriteback.OpZeroWritebackNoTrapDirty
+PagerWriteback.OpZeroWritebackTrapDirty
+PagerWriteback.PinForWriteTrapDirty
+PagerWriteback.PinForWriteUnpopulatedTrapDirty
+PagerWriteback.PinnedWritebackTrapDirty
+PagerWriteback.ResizeDirtyRequest
+PagerWriteback.ResizeSupplyZeroNoTrapDirty
+PagerWriteback.ResizeSupplyZeroTrapDirty
+PagerWriteback.ResizeWritebackNewDirtyRequests
+PagerWriteback.ResizeWritebackNewDirtyRequestsInterleaved
+PagerWriteback.ResizeWritebackNoTrapDirty
+PagerWriteback.ResizeWritebackTrapDirty
+PagerWriteback.ResizeWritebackWithOutstandingDirtyRequests
+PagerWriteback.SlicePinWriteTrapDirty
+PagerWriteback.SliceWriteTrapDirty
+PagerWriteback.SuspendDirtyTestVmar
+PagerWriteback.SuspendDirtyTestVmo
+PagerWriteback.UntrackedAbsorbsPages
+PagerWriteback.UntrackedBeyondStreamSize
+PagerWriteback.WritePinAwaitingCleanTrapDirty
+PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
+PagerWriteback.WritebackWithMapping
 
 # ── Stream (TRAP_DIRTY: needs async stream syscalls with predirty) ───
 StreamTestCase.AppendSuppliesZeroes
