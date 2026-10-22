@@ -593,25 +593,31 @@ impl VmObject {
     ///   writeback cleans them (PAGE_CLEAN), they become "unsupplied"
     ///   and OP_DIRTY returns NOT_FOUND.
     pub fn mark_pages_dirty(&self, offset: usize, length: usize) -> ZxResult {
-        let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        // First pass: validate all pages are present and allocate
+        // frames for zero-marker pages. Done without holding inner
+        // lock to avoid deadlock with clone-tree lock in commit_page.
         if length > 0 {
             for page_idx in start_page..end_page {
                 let has_frame = self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0;
                 if has_frame {
                     continue;
                 }
-                // Zero-marker page: present if it has a zero marker
-                // (from supply or resize). Only truly absent pages
-                // (no frame, no marker) return NOT_FOUND.
                 let has_zero = self.trait_.has_zero_marker(page_idx);
-                if has_zero {
-                    continue;
+                if !has_zero {
+                    return Err(ZxError::NOT_FOUND);
                 }
-                return Err(ZxError::NOT_FOUND);
+                // Zero-marker page: allocate a real frame so the page
+                // becomes committed. commit_page with WRITE allocates
+                // a zero-filled frame and removes the zero marker.
+                if let Err(e) = self.trait_.commit_page(page_idx, MMUFlags::WRITE) {
+                    return Err(e);
+                }
             }
         }
+        // Second pass: update dirty state under inner lock.
+        let mut inner = self.inner.lock();
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             inner.dirty_pages[page_idx] = PAGE_DIRTY;
         }
