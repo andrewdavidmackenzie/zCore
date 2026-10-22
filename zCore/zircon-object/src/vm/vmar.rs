@@ -510,16 +510,19 @@ impl VmAddressRegion {
             self.page_table.clone(),
             fault_beyond_stream_size,
         );
-        // Only commit pages if the mapping has at least one access
-        // permission. Mappings with no R/W/X are address reservations
-        // that should fault on access (matching Fuchsia behavior).
-        // Pager-backed VMOs and their clone trees must always be
-        // lazy — pages come from the pager via supply_pages, not
-        // from eager commit. Without this, COW clones of pager VMOs
-        // may eagerly map pages from the hidden node that are stale
-        // or incorrect, bypassing the demand-page path.
-        if map_range && !mapping.vmo.is_pager_backed() && !mapping.vmo.is_in_pager_tree() {
-            mapping.map()?;
+        if map_range {
+            if mapping.vmo.is_pager_backed() || mapping.vmo.is_in_pager_tree() {
+                // Pager-backed VMOs must be lazy — pages come from the
+                // pager via supply_pages, not from eager commit. Clear
+                // any stale PTEs at the new mapping's address range so
+                // that accesses fault and trigger the pager demand-page
+                // path. The VMAR allocator may place the mapping at an
+                // address covered by a sibling's eagerly-committed PTEs
+                // (e.g., within the ELF binary's code segment).
+                let _ = self.page_table.lock().unmap_cont(addr, len).ignore();
+            } else {
+                mapping.map()?;
+            }
         }
         inner.mappings.push(mapping);
         Ok(addr)
