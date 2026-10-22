@@ -42,12 +42,23 @@ static mut BOOT_PAGE_TABLE: BootPageTable = BootPageTable::ZERO;
 
 /// Primary hart boot.
 extern "C" fn primary_rust_main(hartid: usize, device_tree_paddr: usize) -> ! {
-    // Zero the BSS segment
-    extern "C" {
-        static mut sbss: u64;
-        static mut ebss: u64;
+    // Zero the BSS segment.
+    // Use inline asm to reference linker symbols directly, avoiding
+    // Rust extern statics which LTO can rename (causing .1/.2 suffix
+    // linker errors with rust-lld).
+    unsafe {
+        core::arch::asm!(
+            "la   {start}, __bss_start",
+            "la   {end},   __bss_end",
+            "bgeu {start}, {end}, 2f",
+            "1: sd zero, ({start})",
+            "addi {start}, {start}, 8",
+            "bltu {start}, {end}, 1b",
+            "2:",
+            start = out(reg) _,
+            end = out(reg) _,
+        );
     }
-    unsafe { r0::zero_bss(&mut sbss, &mut ebss) };
     // Enable the boot page table
     let sstatus = unsafe {
         BOOT_PAGE_TABLE.init();

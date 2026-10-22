@@ -44,10 +44,10 @@ SECTIONS
         bootstacktop = .;
 
         . = ALIGN(4K);
-        sbss = .;
+        __bss_start = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)
-        ebss = .;
+        __bss_end = .;
     }
 
     PROVIDE(end = .);

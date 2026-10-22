@@ -12,8 +12,8 @@ _start:
 	#csrw satp, zero
 
 	#Zero the BSS segment
-	la t0, sbss
-	la t1, ebss
+	la t0, __bss_start
+	la t1, __bss_end
 	bgeu t0, t1, primary_hart
 
 clear_bss_loop:
