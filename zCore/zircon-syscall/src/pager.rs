@@ -144,9 +144,13 @@ impl Syscall<'_> {
         if !vmo.was_pager_backed() {
             return Err(ZxError::INVALID_ARGS);
         }
-        // VMO must belong to this pager. After detach, the VMO is
-        // removed from the pager's list but queries are still valid.
-        if vmo.is_pager_backed() && !pager.owns_vmo(&vmo) {
+        // VMO must belong to this pager. For attached VMOs, check the
+        // live ownership list. For detached VMOs, check stored KoID.
+        if vmo.is_pager_backed() {
+            if !pager.owns_vmo(&vmo) {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        } else if vmo.pager_koid() != pager.id() {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate range doesn't overflow.
@@ -212,9 +216,12 @@ impl Syscall<'_> {
         if !vmo.was_pager_backed() {
             return Err(ZxError::INVALID_ARGS);
         }
-        // VMO must belong to this pager. After detach, the VMO is
-        // removed from the pager's list but queries are still valid.
-        if vmo.is_pager_backed() && !pager.owns_vmo(&vmo) {
+        // VMO must belong to this pager.
+        if vmo.is_pager_backed() {
+            if !pager.owns_vmo(&vmo) {
+                return Err(ZxError::INVALID_ARGS);
+            }
+        } else if vmo.pager_koid() != pager.id() {
             return Err(ZxError::INVALID_ARGS);
         }
         // zx_pager_vmo_stats_t is { uint32_t modified; }

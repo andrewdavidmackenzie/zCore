@@ -2291,15 +2291,9 @@ impl VmMapping {
                 flags.remove(MMUFlags::WRITE);
             }
         }
-        // For non-TRAP_DIRTY pager VMOs, auto-mark the page dirty on
-        // WRITE faults so query_dirty_ranges reports written pages.
-        // (auto_mark_dirty also sets the modified flag.)
-        if access_flags.contains(MMUFlags::WRITE)
-            && self.vmo.is_pager_backed()
-            && !self.vmo.is_trap_dirty()
-        {
-            self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
-        }
+        // Note: dirty/modified tracking for WRITE faults is done
+        // AFTER the successful map (see below), not here. We must
+        // not set modified before the write actually succeeds.
         // If ZX_VM_FAULT_BEYOND_STREAM_SIZE is set, fault on accesses
         // past the page containing the VMO's content_size instead of
         // returning zeroes.  Match Fuchsia's saturating_stream_size:
@@ -2361,15 +2355,16 @@ impl VmMapping {
             res = pg_table.update(vaddr, Some(paddr), Some(flags)).map(|_| ());
         }
         res.map_err(|_| ZxError::ACCESS_DENIED)?;
-        // For TRAP_DIRTY pager VMOs, set modified after successful
-        // WRITE mapping. The page is already dirty (OP_DIRTY was
-        // acknowledged on a previous fault retry), so the write
-        // actually proceeds and modifies the VMO.
-        if access_flags.contains(MMUFlags::WRITE)
-            && self.vmo.is_pager_backed()
-            && self.vmo.is_trap_dirty()
-        {
-            self.vmo.set_modified();
+        // After successful WRITE mapping on a pager-backed VMO,
+        // update dirty tracking and modified flag. This is done
+        // AFTER the map succeeds to avoid marking the VMO modified
+        // when the fault returns SHOULD_WAIT (e.g., unsupplied page).
+        if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_pager_backed() {
+            if self.vmo.is_trap_dirty() {
+                self.vmo.set_modified();
+            } else {
+                self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
+            }
         }
         Ok(())
     }

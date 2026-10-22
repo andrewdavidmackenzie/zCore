@@ -107,7 +107,7 @@ impl Pager {
         // Associate the pager's port and key with the VMO for
         // demand-paging notifications. set_pager also marks the VMO
         // as pager-backed so commit_page won't auto-allocate zero frames.
-        vmo.set_pager(port.clone(), key);
+        vmo.set_pager(port.clone(), key, self.base.id);
         if trap_dirty {
             vmo.set_trap_dirty(vmo_pages);
         }
@@ -290,7 +290,8 @@ impl Pager {
             if !vmo.is_pager_backed() && !vmo.was_pager_backed() {
                 return Err(ZxError::INVALID_ARGS);
             }
-            // If still attached, verify ownership (wrong pager → INVALID_ARGS).
+            // Verify this pager owns the VMO. For detached VMOs,
+            // check the stored pager KoID.
             if vmo.is_pager_backed() {
                 let inner = self.inner.lock();
                 if !inner
@@ -301,6 +302,8 @@ impl Pager {
                     return Err(ZxError::INVALID_ARGS);
                 }
                 drop(inner);
+            } else if vmo.pager_koid() != self.base.id {
+                return Err(ZxError::INVALID_ARGS);
             }
         } else {
             // FAIL/DIRTY: VMO must have an active pager.
@@ -332,13 +335,13 @@ impl Pager {
         }
         match op {
             ZX_PAGER_OP_FAIL => {
-                // Data must be a valid 32-bit value. Upper 32 bits must
-                // be zero or sign-extension (all 1s for negative values).
-                let upper = (data >> 32) as u32;
-                if upper != 0 && upper != 0xFFFF_FFFF {
+                // Data must be a properly sign-extended 32-bit value.
+                // Reject if the 64-bit value doesn't match the sign-
+                // extended form of its lower 32 bits.
+                let data_i32 = data as i32;
+                if data != (data_i32 as i64 as u64) {
                     return Err(ZxError::INVALID_ARGS);
                 }
-                let data_i32 = data as i32;
                 // Only specific negative Fuchsia error codes are allowed.
                 // Values match current Fuchsia ABI (post-renumbering).
                 let err = if data_i32 == -40 {

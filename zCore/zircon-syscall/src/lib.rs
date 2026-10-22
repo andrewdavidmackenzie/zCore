@@ -628,6 +628,10 @@ impl Syscall<'_> {
                 let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _);
                 // After a successful write to a pager-backed VMO (or a slice
                 // of one), set modified and mark pages dirty on the parent.
+                // Note: for partial failures (some chunks succeed, later chunk
+                // fails), result is Err and we skip dirty/modified tracking.
+                // This matches the C++ tests where partial write failures
+                // (e.g., unmappable source buffer) expect modified=false.
                 if result.is_ok() {
                     if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
                         // Find the pager-backed VMO: either this VMO or its

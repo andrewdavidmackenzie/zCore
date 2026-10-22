@@ -282,6 +282,10 @@ struct VmObjectInner {
     /// Pager association: port to notify on page fault, and key.
     pager_port: Option<Arc<Port>>,
     pager_key: u64,
+    /// KoID of the pager that created this VMO. Set during create_vmo,
+    /// preserved after detach so writeback/query operations can verify
+    /// the caller is the original pager.
+    pager_koid: u64,
     /// Whether this VMO traps writes for dirty-page notifications.
     trap_dirty: bool,
     /// Per-page dirty state tracking.
@@ -436,13 +440,19 @@ impl VmObject {
     ///
     /// When a page fault occurs on an uncommitted page, a
     /// `ZX_PAGER_VMO_READ` packet will be sent to the port.
-    pub fn set_pager(&self, port: Arc<Port>, key: u64) {
+    pub fn set_pager(&self, port: Arc<Port>, key: u64, pager_koid: u64) {
         let mut inner = self.inner.lock();
         inner.pager_port = Some(port);
         inner.pager_key = key;
+        inner.pager_koid = pager_koid;
         // Mark the underlying paged VMO so commit_page won't
         // auto-allocate zero frames — pages must come from supply_pages.
         self.trait_.set_pager_backed();
+    }
+
+    /// Get the KoID of the pager that created this VMO.
+    pub fn pager_koid(&self) -> u64 {
+        self.inner.lock().pager_koid
     }
 
     /// Set the supplying flag on the underlying paged VMO.
@@ -1436,9 +1446,13 @@ impl VmObject {
                 return parent.set_content_size_and_resize(size, zero_until_offset);
             }
         }
-        let mut inner = self.inner.lock();
-        let content_size = inner.content_size;
-        let len = self.trait_.len();
+        // Read content_size and len under the lock, then drop it
+        // before calling set_len (which also acquires the lock for
+        // pager-backed VMO dirty tracking).
+        let (content_size, len) = {
+            let inner = self.inner.lock();
+            (inner.content_size, self.trait_.len())
+        };
         if size < content_size {
             return Ok(content_size);
         }
@@ -1453,7 +1467,8 @@ impl VmObject {
             self.trait_
                 .zero(content_size, zero_until_offset - content_size)?;
         }
-        inner.content_size = new_content_size;
+        // Re-acquire the lock to update content_size.
+        self.inner.lock().content_size = new_content_size;
         Ok(new_content_size)
     }
 

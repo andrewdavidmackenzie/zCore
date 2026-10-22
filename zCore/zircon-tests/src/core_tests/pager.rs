@@ -4272,7 +4272,7 @@ fn pager_wb_fail_dirty_requests() {
 
     // Fail pages in range — this is a no-op since no pending requests,
     // but verifies the API doesn't crash.
-    // (OP_FAIL = 1; data = ZX_ERR_IO = -5)
+    // (OP_FAIL = 1; data = ZX_ERR_IO = -40)
     pager_helper
         .pager
         .op_range(1, &vmo, 0, PAGE_SIZE as u64, (-40i32) as u64)
