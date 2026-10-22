@@ -568,7 +568,9 @@ mod tests {
             futex.wake(u32::MAX as usize);
 
             // Must complete: Ok (woken) or BAD_STATE (value changed).
-            let _result = waiter.await;
+            // Use a timeout so the test fails clearly if the race regresses.
+            let result = async_std::future::timeout(Duration::from_millis(500), waiter).await;
+            assert!(result.is_ok(), "waiter hung — lost wakeup (futex race)");
         }
     }
 }
