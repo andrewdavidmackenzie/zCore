@@ -38,6 +38,11 @@ pub(crate) static VMO_DISCARDABLE_UNLOCKED_PAGES: crate::util::kcounter::Counter
 const PAGE_CLEAN: u8 = 0;
 const PAGE_DIRTY: u8 = 1;
 const PAGE_AWAITING_CLEAN: u8 = 2;
+/// Zero page from resize — implicitly dirty (shows as IS_ZERO in
+/// query_dirty_ranges). For TRAP_DIRTY, writes still trap (not
+/// considered dirty for write-gating). Writeback transitions
+/// PAGE_ZERO_DIRTY → PAGE_AWAITING_CLEAN → PAGE_CLEAN.
+const PAGE_ZERO_DIRTY: u8 = 3;
 
 /// The amount of memory committed to VMOs.
 pub fn vmo_page_bytes() -> usize {
@@ -511,24 +516,40 @@ impl VmObject {
 
     /// Mark pages as dirty (called by pager_op_range(DIRTY)).
     /// Wakes any threads waiting for dirty permission on these pages.
-    /// Returns NOT_FOUND if any page in the range is not committed.
+    /// Returns NOT_FOUND if any page in the range is not "present":
+    /// - Committed pages (have a frame) are always present.
+    /// - Zero-marker pages from resize are present only if they are
+    ///   still in the dirty-zero state (PAGE_ZERO_DIRTY). After
+    ///   writeback cleans them (PAGE_CLEAN), they become "unsupplied"
+    ///   and OP_DIRTY returns NOT_FOUND.
     pub fn mark_pages_dirty(&self, offset: usize, length: usize) -> ZxResult {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        // OP_DIRTY can only be applied to committed (supplied) pages.
-        // Zero markers from resize are NOT supplied pages and should
-        // return NOT_FOUND. Only committed frames count.
         if length > 0 {
-            let committed = self.trait_.committed_pages_in_range(start_page, end_page);
-            if committed < end_page - start_page {
+            for page_idx in start_page..end_page {
+                let has_frame = self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0;
+                if has_frame {
+                    continue;
+                }
+                // Zero-marker page: only accept if still in dirty-zero state.
+                let has_zero = self.trait_.has_zero_marker(page_idx);
+                let state = inner
+                    .dirty_pages
+                    .get(page_idx)
+                    .copied()
+                    .unwrap_or(PAGE_CLEAN);
+                if has_zero && state == PAGE_ZERO_DIRTY {
+                    continue;
+                }
                 return Err(ZxError::NOT_FOUND);
             }
         }
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             inner.dirty_pages[page_idx] = PAGE_DIRTY;
         }
-        inner.modified = true;
+        // Note: OP_DIRTY does NOT set the modified flag. Only actual
+        // writes to the VMO (vmo_write, mapping write) set modified.
         // Wake waiters for these pages (shared waiter list with read waiters).
         let mut i = 0;
         while i < inner.pager_waiters.len() {
@@ -587,9 +608,15 @@ impl VmObject {
         None
     }
 
-    /// Check if this VMO is pager-backed.
+    /// Check if this VMO is pager-backed (has an active pager).
     pub fn is_pager_backed(&self) -> bool {
         self.inner.lock().pager_port.is_some()
+    }
+
+    /// Check if this VMO was created as a pager-backed VMO.
+    /// Returns true even after the pager is detached.
+    pub fn was_pager_backed(&self) -> bool {
+        self.trait_.is_pager_backed()
     }
 
     /// Check if this VMO or any ancestor in its clone tree is pager-backed.
@@ -630,49 +657,83 @@ impl VmObject {
 
     /// Query dirty page ranges within [offset, offset+length).
     /// Returns a list of (offset, length, options) tuples.
-    /// Works for both TRAP_DIRTY and non-TRAP_DIRTY pager VMOs.
+    ///
+    /// Dirty states: PAGE_DIRTY, PAGE_AWAITING_CLEAN, PAGE_ZERO_DIRTY.
+    /// Committed dirty pages → options=0.
+    /// Zero-marker or uncommitted dirty pages → options=IS_ZERO (1).
     pub fn query_dirty_ranges(&self, offset: usize, length: usize) -> Vec<(u64, u64, u64)> {
-        let inner = self.inner.lock();
-        let start_page = offset / PAGE_SIZE;
-        let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        let max_page = end_page.min(inner.dirty_pages.len());
-        if start_page >= max_page {
-            return Vec::new();
-        }
+        const ZX_VMO_DIRTY_RANGE_IS_ZERO: u64 = 1;
+        let (start_page, max_page, dirty_snapshot) = {
+            let inner = self.inner.lock();
+            let start_page = offset / PAGE_SIZE;
+            let end_page = (offset + length).div_ceil(PAGE_SIZE);
+            let max_page = end_page.min(inner.dirty_pages.len());
+            if start_page >= max_page {
+                return Vec::new();
+            }
+            (
+                start_page,
+                max_page,
+                inner.dirty_pages[start_page..max_page].to_vec(),
+            )
+        };
         let mut ranges = Vec::new();
-        let mut run_start: Option<usize> = None;
-        for (i, &state) in inner.dirty_pages[start_page..max_page].iter().enumerate() {
+        let mut run_start: Option<(usize, u64)> = None;
+        for (i, &state) in dirty_snapshot.iter().enumerate() {
             let page_idx = start_page + i;
-            if state == PAGE_DIRTY || state == PAGE_AWAITING_CLEAN {
-                if run_start.is_none() {
-                    run_start = Some(page_idx);
+            let is_dirty =
+                state == PAGE_DIRTY || state == PAGE_AWAITING_CLEAN || state == PAGE_ZERO_DIRTY;
+            if is_dirty {
+                let is_committed = self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0;
+                let has_zero = self.trait_.has_zero_marker(page_idx);
+                let opts = if is_committed && !has_zero {
+                    0u64
+                } else {
+                    ZX_VMO_DIRTY_RANGE_IS_ZERO
+                };
+                match run_start {
+                    Some((_, run_opts)) if run_opts == opts => {}
+                    Some((start, run_opts)) => {
+                        ranges.push((
+                            (start * PAGE_SIZE) as u64,
+                            ((page_idx - start) * PAGE_SIZE) as u64,
+                            run_opts,
+                        ));
+                        run_start = Some((page_idx, opts));
+                    }
+                    None => {
+                        run_start = Some((page_idx, opts));
+                    }
                 }
-            } else if let Some(start) = run_start {
+            } else if let Some((start, run_opts)) = run_start {
                 ranges.push((
                     (start * PAGE_SIZE) as u64,
                     ((page_idx - start) * PAGE_SIZE) as u64,
-                    0u64,
+                    run_opts,
                 ));
                 run_start = None;
             }
         }
-        if let Some(start) = run_start {
+        if let Some((start, run_opts)) = run_start {
             ranges.push((
                 (start * PAGE_SIZE) as u64,
                 ((max_page - start) * PAGE_SIZE) as u64,
-                0u64,
+                run_opts,
             ));
         }
         ranges
     }
 
     /// Begin writeback: transition dirty pages in range to AwaitingClean.
+    /// Both PAGE_DIRTY and PAGE_ZERO_DIRTY transition to AWAITING_CLEAN.
     pub fn writeback_begin(&self, offset: usize, length: usize, _data: u64) {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
-            if inner.dirty_pages[page_idx] == PAGE_DIRTY {
+            if inner.dirty_pages[page_idx] == PAGE_DIRTY
+                || inner.dirty_pages[page_idx] == PAGE_ZERO_DIRTY
+            {
                 inner.dirty_pages[page_idx] = PAGE_AWAITING_CLEAN;
             }
         }
@@ -1262,11 +1323,28 @@ impl VmObject {
             return Err(ZxError::UNAVAILABLE);
         }
         let old_size = self.len();
+        let old_pages = old_size / PAGE_SIZE;
         self.trait_.set_len(size)?;
+        let new_pages = size / PAGE_SIZE;
         // When shrinking a pager-backed VMO, wake any waiters for
         // pages in the truncated range with OUT_OF_RANGE.
         if size < old_size {
             self.fail_pager_requests_range(size, old_size - size, ZxError::OUT_OF_RANGE);
+        }
+        // Update dirty page tracking for pager-backed VMOs on resize.
+        if self.has_pager() && size != old_size {
+            let mut inner = self.inner.lock();
+            if new_pages > old_pages {
+                // Resize up: new pages are implicitly dirty zeros.
+                // PAGE_ZERO_DIRTY shows as IS_ZERO in query_dirty_ranges
+                // but is NOT considered dirty for TRAP_DIRTY write-gating
+                // (writes still generate dirty requests).
+                inner.dirty_pages.resize(new_pages, PAGE_ZERO_DIRTY);
+            } else {
+                // Resize down: truncate the dirty_pages vector.
+                inner.dirty_pages.truncate(new_pages);
+            }
+            inner.modified = true;
         }
         Ok(())
     }

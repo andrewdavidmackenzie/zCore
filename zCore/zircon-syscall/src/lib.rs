@@ -272,6 +272,11 @@ impl Syscall<'_> {
         if !vmo.is_trap_dirty() || len == 0 {
             return Ok(());
         }
+        // After pager detach, all writes to TRAP_DIRTY VMOs fail
+        // with BAD_STATE — the pager can no longer acknowledge dirty.
+        if !vmo.has_pager() {
+            return Err(zircon_object::ZxError::BAD_STATE);
+        }
         let start_page = offset / PAGE_SIZE;
         let end_page = offset
             .checked_add(len)
@@ -297,8 +302,13 @@ impl Syscall<'_> {
             let run_bytes = run_len * PAGE_SIZE;
             match vmo.request_dirty(run_offset, run_bytes) {
                 Err(zircon_object::ZxError::SHOULD_WAIT) => {} // expected
-                Err(e) => return Err(e),                       // NOT_FOUND = no pager port
-                Ok(()) => {}                                   // shouldn't happen but harmless
+                Err(zircon_object::ZxError::NOT_FOUND) => {
+                    // Pager detached — writing to clean pages on a
+                    // detached TRAP_DIRTY VMO returns BAD_STATE.
+                    return Err(zircon_object::ZxError::BAD_STATE);
+                }
+                Err(e) => return Err(e),
+                Ok(()) => {} // shouldn't happen but harmless
             }
             // Wait for the first page of the run to become dirty.
             let future = vmo.wait_for_dirty(run_offset);
@@ -616,15 +626,23 @@ impl Syscall<'_> {
                     }
                 }
                 let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _);
-                // Auto-mark written pages as dirty for pager-backed
-                // non-TRAP_DIRTY VMOs (query_dirty_ranges needs this).
+                // After a successful write to a pager-backed VMO:
+                // - Set the modified flag (both TRAP_DIRTY and non-TRAP_DIRTY)
+                // - Non-TRAP_DIRTY: also auto-mark pages dirty for query_dirty_ranges
+                //   (auto_mark_dirty also sets modified, so we call it first)
                 if result.is_ok() {
                     if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
-                        if vmo.is_pager_backed() && !vmo.is_trap_dirty() {
-                            let start_page = a2 / hal::PAGE_SIZE;
-                            let end_page = (a2 + a3).div_ceil(hal::PAGE_SIZE);
-                            for pg in start_page..end_page {
-                                vmo.auto_mark_dirty(pg);
+                        if vmo.has_pager() {
+                            if !vmo.is_trap_dirty() {
+                                let start_page = a2 / hal::PAGE_SIZE;
+                                let end_page = (a2 + a3).div_ceil(hal::PAGE_SIZE);
+                                for pg in start_page..end_page {
+                                    vmo.auto_mark_dirty(pg);
+                                }
+                            } else {
+                                // TRAP_DIRTY: OP_DIRTY already marked pages dirty,
+                                // but the actual write should also set modified.
+                                vmo.set_modified();
                             }
                         }
                     }

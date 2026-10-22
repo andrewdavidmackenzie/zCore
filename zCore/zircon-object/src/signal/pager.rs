@@ -256,20 +256,26 @@ impl Pager {
         ) {
             return Err(ZxError::NOT_SUPPORTED);
         }
-        // VMO must be pager-backed.
-        if !vmo.is_pager_backed() {
+        // VMO must be (or have been) pager-backed.
+        if !vmo.was_pager_backed() {
             return Err(ZxError::INVALID_ARGS);
         }
-        // Verify the VMO belongs to this pager.
-        let inner = self.inner.lock();
-        if !inner
-            .vmos
-            .iter()
-            .any(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
-        {
+        // For OP_FAIL and OP_DIRTY, the pager must still be attached.
+        // Writeback operations (BEGIN/END) are valid after detach.
+        if vmo.is_pager_backed() {
+            let inner = self.inner.lock();
+            if !inner
+                .vmos
+                .iter()
+                .any(|pv| pv.vmo.upgrade().is_some_and(|v| Arc::ptr_eq(&v, vmo)))
+            {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            drop(inner);
+        } else if op == ZX_PAGER_OP_FAIL || op == ZX_PAGER_OP_DIRTY {
+            // Pager detached — FAIL and DIRTY require an active pager.
             return Err(ZxError::INVALID_ARGS);
         }
-        drop(inner);
         // Validate alignment.
         if !(offset as usize).is_multiple_of(PAGE_SIZE)
             || !(length as usize).is_multiple_of(PAGE_SIZE)
@@ -285,19 +291,24 @@ impl Pager {
         }
         match op {
             ZX_PAGER_OP_FAIL => {
-                // Error code must be a valid (negative) Fuchsia status code.
-                // Map well-known codes to their ZxError variant; for others
-                // use a generic mapping.  Fuchsia accepts any zx_status_t.
-                let data_i32 = data as i32;
-                if data_i32 >= 0 {
+                // Error code must fit in 32 bits and be one of the
+                // allowed Fuchsia status codes for pager failures.
+                // Upper 32 bits must be zero (or sign-extended from a
+                // negative i32). Reject values whose upper bits are
+                // not all-zero or all-ones.
+                let upper = (data >> 32) as u32;
+                if upper != 0 && upper != 0xFFFF_FFFF {
                     return Err(ZxError::INVALID_ARGS);
                 }
+                let data_i32 = data as i32;
+                // Only specific negative status codes are allowed.
                 let err = match data_i32 {
-                    -54 => ZxError::NO_SPACE,
-                    -5 => ZxError::IO,
-                    -29 => ZxError::IO_DATA_INTEGRITY,
-                    -45 => ZxError::BAD_STATE,
-                    _ => ZxError::IO, // generic fallback for unknown codes
+                    -5 => ZxError::IO,                 // ZX_ERR_IO
+                    -29 => ZxError::IO_DATA_INTEGRITY, // ZX_ERR_IO_DATA_INTEGRITY
+                    -45 => ZxError::BAD_STATE,         // ZX_ERR_BAD_STATE
+                    -54 => ZxError::NO_SPACE,          // ZX_ERR_NO_SPACE
+                    -33 => ZxError::BUFFER_TOO_SMALL,  // ZX_ERR_BUFFER_TOO_SMALL
+                    _ => return Err(ZxError::INVALID_ARGS),
                 };
                 vmo.fail_pager_requests_range(offset as usize, length as usize, err);
                 Ok(())

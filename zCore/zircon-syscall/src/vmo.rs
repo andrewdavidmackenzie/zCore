@@ -952,7 +952,23 @@ impl Syscall<'_> {
                 if !rights.contains(Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
-                vmo.zero(offset, len)
+                let result = vmo.zero(offset, len);
+                // OP_ZERO sets the modified flag and marks pages dirty
+                // for pager-backed VMOs, matching Fuchsia behavior.
+                if result.is_ok() && vmo.has_pager() {
+                    vmo.set_modified();
+                    // Mark zeroed pages as dirty (they'll appear as
+                    // ZX_VMO_DIRTY_RANGE_IS_ZERO in query_dirty_ranges
+                    // since the frames are decommitted).
+                    if !vmo.is_trap_dirty() {
+                        let start_page = offset / PAGE_SIZE;
+                        let end_page = (offset + len).div_ceil(PAGE_SIZE);
+                        for pg in start_page..end_page {
+                            vmo.auto_mark_dirty(pg);
+                        }
+                    }
+                }
+                result
             }
             VmoOpType::Lock | VmoOpType::TryLock => {
                 if !vmo.is_discardable() {

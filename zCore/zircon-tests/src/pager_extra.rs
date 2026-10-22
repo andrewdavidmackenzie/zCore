@@ -819,13 +819,24 @@ fn pager_op_range_fail_with_error_codes() {
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
-    // ZX_ERR_NO_SPACE = -54, ZX_ERR_IO = -5, ZX_ERR_IO_DATA_INTEGRITY = -29,
-    // ZX_ERR_BAD_STATE = -45
-    for err_code in [-54i32, -5, -29, -45, -99] {
+    // Only specific Fuchsia error codes are allowed for OP_FAIL:
+    // ZX_ERR_IO = -5, ZX_ERR_IO_DATA_INTEGRITY = -29,
+    // ZX_ERR_BUFFER_TOO_SMALL = -33, ZX_ERR_BAD_STATE = -45,
+    // ZX_ERR_NO_SPACE = -54
+    for err_code in [-5i32, -29, -33, -45, -54] {
         let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, err_code as u64);
         assert!(
             result.is_ok(),
             "op_range FAIL with error {err_code} should succeed"
+        );
+    }
+    // Invalid error codes should be rejected.
+    for err_code in [-99i32, -2, 100] {
+        let result = pager.op_range(1, &vmo, 0, PAGE_SIZE as u64, err_code as u64);
+        assert_eq!(
+            result.err(),
+            Some(zircon_object::ZxError::INVALID_ARGS),
+            "op_range FAIL with error {err_code} should return INVALID_ARGS"
         );
     }
 }
@@ -890,7 +901,7 @@ fn pager_detach_then_dirty() {
 }
 
 ///
-/// After detaching, WRITEBACK_BEGIN op_range should fail.
+/// After detaching, WRITEBACK_BEGIN succeeds (matching Fuchsia).
 #[test]
 fn pager_detach_then_writeback_begin() {
     let _ctx = TestContext::new();
@@ -900,15 +911,14 @@ fn pager_detach_then_writeback_begin() {
     pager.detach_vmo(&vmo).unwrap();
 
     let result = pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(
-        result.err(),
-        Some(zircon_object::ZxError::INVALID_ARGS),
-        "WRITEBACK_BEGIN after detach should fail"
+    assert!(
+        result.is_ok(),
+        "WRITEBACK_BEGIN after detach should succeed"
     );
 }
 
 ///
-/// After detaching, WRITEBACK_END op_range should fail.
+/// After detaching, WRITEBACK_END succeeds (matching Fuchsia).
 #[test]
 fn pager_detach_then_writeback_end() {
     let _ctx = TestContext::new();
@@ -918,11 +928,7 @@ fn pager_detach_then_writeback_end() {
     pager.detach_vmo(&vmo).unwrap();
 
     let result = pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(
-        result.err(),
-        Some(zircon_object::ZxError::INVALID_ARGS),
-        "WRITEBACK_END after detach should fail"
-    );
+    assert!(result.is_ok(), "WRITEBACK_END after detach should succeed");
 }
 
 ///
@@ -1932,16 +1938,18 @@ fn pager_writeback_partial() {
 }
 
 ///
-/// Writeback after pager detach should fail.
+/// Writeback after pager detach succeeds — writeback operations
+/// are valid even after the pager is detached (matching Fuchsia).
 #[test]
 fn pager_writeback_after_detach() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(8, &port, 0, PAGE_SIZE as u64).unwrap();
     pager.detach_vmo(&vmo).unwrap();
-    // WRITEBACK_BEGIN after detach should fail.
-    let result = pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::INVALID_ARGS));
+    // WRITEBACK_BEGIN after detach should succeed.
+    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    // WRITEBACK_END after detach should also succeed.
+    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
 }
 
 ///
@@ -2406,7 +2414,8 @@ fn pager_writeback_complete_multiple() {
 }
 
 ///
-/// Writeback after pager detach should fail.
+/// Writeback after pager detach succeeds — writeback operations
+/// are valid even after the pager is detached (matching Fuchsia).
 #[test]
 fn pager_writeback_complete_after_detach() {
     let _ctx = TestContext::new();
@@ -2415,8 +2424,10 @@ fn pager_writeback_complete_after_detach() {
     supply_all_pages(&pager, &vmo, 1);
     pager.op_range(2, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
     pager.detach_vmo(&vmo).unwrap();
-    let result = pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0);
-    assert_eq!(result.err(), Some(zircon_object::ZxError::INVALID_ARGS));
+    // Writeback begin should succeed after detach.
+    pager.op_range(3, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
+    // Writeback end should also succeed.
+    pager.op_range(4, &vmo, 0, PAGE_SIZE as u64, 0).unwrap();
 }
 
 ///

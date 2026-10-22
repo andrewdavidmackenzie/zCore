@@ -2291,13 +2291,16 @@ impl VmMapping {
                 flags.remove(MMUFlags::WRITE);
             }
         }
-        // For non-TRAP_DIRTY pager VMOs, auto-mark the page dirty on
-        // WRITE faults so query_dirty_ranges reports written pages.
-        if access_flags.contains(MMUFlags::WRITE)
-            && self.vmo.is_pager_backed()
-            && !self.vmo.is_trap_dirty()
-        {
-            self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
+        // For pager-backed VMOs, handle dirty tracking on WRITE faults:
+        // - Non-TRAP_DIRTY: auto-mark the page dirty (for query_dirty_ranges)
+        //   and set modified flag.
+        // - TRAP_DIRTY: only set modified (dirty state managed by OP_DIRTY).
+        if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_pager_backed() {
+            if !self.vmo.is_trap_dirty() {
+                self.vmo.auto_mark_dirty(vmo_offset / PAGE_SIZE);
+            } else {
+                self.vmo.set_modified();
+            }
         }
         // If ZX_VM_FAULT_BEYOND_STREAM_SIZE is set, fault on accesses
         // past the page containing the VMO's content_size instead of
@@ -2312,11 +2315,14 @@ impl VmMapping {
             }
         }
         // For pager-backed VMOs (or clones in a pager tree), check if
-        // the page is committed before attempting commit_page. If absent,
-        // send a page request to the root pager VMO and return SHOULD_WAIT.
+        // the page is committed or has a zero marker before attempting
+        // commit_page. Zero markers mean the page is already logically
+        // present (all zeros) and commit_page can handle them directly.
+        // Only send a pager request for truly unsupplied pages.
         let page_idx = vmo_offset / PAGE_SIZE;
         if self.vmo.is_pager_backed()
             && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
+            && !self.vmo.has_zero_marker(page_idx)
         {
             return self.vmo.request_pages(vmo_offset, PAGE_SIZE);
         }
@@ -2325,16 +2331,14 @@ impl VmMapping {
         if !self.vmo.is_pager_backed()
             && self.vmo.is_in_pager_tree()
             && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
+            && !self.vmo.has_zero_marker(page_idx)
         {
             if let Some(root) = self.vmo.find_root_pager_vmo() {
-                // The root pager VMO owns the page source. Request pages
-                // there — the offset is the same since clone offset=0
-                // maps to parent offset=0 for full clones.
-                // For offset clones, we'd need to add the clone's offset.
                 let root_offset = vmo_offset; // TODO: handle clone offsets
                 if root
                     .committed_pages_in_range(root_offset / PAGE_SIZE, root_offset / PAGE_SIZE + 1)
                     == 0
+                    && !root.has_zero_marker(root_offset / PAGE_SIZE)
                 {
                     return root.request_pages(root_offset, PAGE_SIZE);
                 }

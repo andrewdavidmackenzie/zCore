@@ -3768,18 +3768,39 @@ fn pager_wb_decommit_clean_on_detach_trap_dirty() {
 }
 
 /// C++: TEST(PagerWriteback, DelayedDirtyNotFound)
+/// Simplified: OP_DIRTY on a freshly-resized zero page succeeds
+/// (the page is in the dirty-zero state). After writeback cleans
+/// it, OP_DIRTY would fail with NOT_FOUND. The full test requires
+/// concurrent threads.
 #[test]
 fn pager_wb_delayed_dirty_not_found() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
-    // TRAP_DIRTY + RESIZABLE; needs concurrent threads for full test.
+    // TRAP_DIRTY + RESIZABLE.
     let (vmo, key) = pager_helper.create_vmo_with_options(1, 10);
     pager_helper.supply_pages(&vmo, key, 0, 1);
 
     // Resize up to create a zero range.
     vmo.set_len(2 * PAGE_SIZE).unwrap();
 
-    // OP_DIRTY on unsupplied page 1 should fail (NOT_FOUND).
+    // OP_DIRTY on the dirty-zero page succeeds (page is present
+    // as a dirty zero from resize).
+    pager_helper
+        .pager
+        .op_range(2, &vmo, PAGE_SIZE as u64, PAGE_SIZE as u64, 0)
+        .unwrap();
+
+    // Writeback cleans the page.
+    pager_helper
+        .pager
+        .op_range(3, &vmo, PAGE_SIZE as u64, PAGE_SIZE as u64, 0)
+        .unwrap();
+    pager_helper
+        .pager
+        .op_range(4, &vmo, PAGE_SIZE as u64, PAGE_SIZE as u64, 0)
+        .unwrap();
+
+    // Now OP_DIRTY fails because the page is clean and unsupplied.
     let result = pager_helper
         .pager
         .op_range(2, &vmo, PAGE_SIZE as u64, PAGE_SIZE as u64, 0);

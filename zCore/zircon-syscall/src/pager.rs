@@ -139,11 +139,14 @@ impl Syscall<'_> {
         let pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::MANAGE_VMO)?;
         // VMO needs READ right.
         let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::READ)?;
-        if !vmo.is_pager_backed() {
+        // VMO must be (or have been) pager-backed. Query is valid
+        // even after the pager is detached.
+        if !vmo.was_pager_backed() {
             return Err(ZxError::INVALID_ARGS);
         }
-        // VMO must belong to this pager.
-        if !pager.owns_vmo(&vmo) {
+        // VMO must belong to this pager. After detach, the VMO is
+        // removed from the pager's list but queries are still valid.
+        if vmo.is_pager_backed() && !pager.owns_vmo(&vmo) {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate range doesn't overflow.
@@ -206,11 +209,12 @@ impl Syscall<'_> {
         let pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::MANAGE_VMO)?;
         // VMO needs READ right.
         let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::READ)?;
-        if !vmo.is_pager_backed() {
+        if !vmo.was_pager_backed() {
             return Err(ZxError::INVALID_ARGS);
         }
-        // VMO must belong to this pager.
-        if !pager.owns_vmo(&vmo) {
+        // VMO must belong to this pager. After detach, the VMO is
+        // removed from the pager's list but queries are still valid.
+        if vmo.is_pager_backed() && !pager.owns_vmo(&vmo) {
             return Err(ZxError::INVALID_ARGS);
         }
         // zx_pager_vmo_stats_t is { uint32_t modified; }
