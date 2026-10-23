@@ -230,16 +230,12 @@ impl Pager {
             let already_committed = vmo.has_committed_page(page_idx);
             let has_marker = vmo.has_zero_marker(page_idx);
             if already_committed || has_marker {
-                // Check if this is a resize zero marker that should
-                // be overwritable. Resize markers have PAGE_ZERO_DIRTY.
-                let is_resize_marker = has_marker && vmo.is_page_zero_dirty(page_idx);
-                if !is_resize_marker {
-                    src_off += chunk;
-                    dst_off += chunk;
-                    continue;
-                }
-                // Resize marker → remove it so supply can write data.
-                vmo.remove_zero_marker(page_idx);
+                // Page already present — skip. supply_pages does not
+                // overwrite existing content (committed frames or
+                // zero markers, including resize zero markers).
+                src_off += chunk;
+                dst_off += chunk;
+                continue;
             }
             // Check if source data is all zeros from an uncommitted
             // source page → create zero marker instead of frame.
