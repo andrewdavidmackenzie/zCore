@@ -287,12 +287,25 @@ impl Syscall<'_> {
                         let td = root.is_trap_dirty();
                         (root, cumulative_offset, td)
                     }
-                    None => return Ok(()),
+                    None => {
+                        // Slice whose root pager VMO is detached.
+                        // Check if the parent was TRAP_DIRTY by walking
+                        // up the parent chain to find one with trap_dirty.
+                        if vmo.parent().map(|p| p.is_trap_dirty()).unwrap_or(false) {
+                            return Err(zircon_object::ZxError::BAD_STATE);
+                        }
+                        return Ok(());
+                    }
                 }
             } else {
                 // COW clone — use prefault_pager_write_pages logic
                 return self.prefault_pager_write_pages(vmo, offset, len).await;
             }
+        } else if vmo.is_trap_dirty() && !vmo.has_pager() {
+            // Detached TRAP_DIRTY VMO: is_in_pager_tree() is false
+            // because the pager port was cleared, but trap_dirty is
+            // still set. Writes to clean pages must fail BAD_STATE.
+            return Err(zircon_object::ZxError::BAD_STATE);
         } else {
             return Ok(());
         };
