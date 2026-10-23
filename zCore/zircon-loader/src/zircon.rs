@@ -447,8 +447,14 @@ async fn handler_user_trap(
         // An unconditional preempt_yield here caused ~27ms delays per
         // syscall in tight loops because it gave up the CPU to other
         // threads on every call, even when no preemption was needed.
+        //
+        // In libos mode, the host OS handles preemption; yield_now
+        // gives other async tasks a chance to run (matching the old
+        // behavior where preempt_yield used waker.wake_by_ref).
         if hal_impl::thread::take_preempt_pending() {
             hal_impl::thread::preempt_yield().await;
+        } else if cfg!(feature = "libos") {
+            hal_impl::thread::yield_now().await;
         }
         return Ok(());
     }
