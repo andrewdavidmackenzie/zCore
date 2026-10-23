@@ -23,9 +23,6 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
         fn erodata();
         fn sdata();
         fn edata();
-        fn sbss();
-        fn ebss();
-
         fn bootstack();
         fn bootstacktop();
     }
@@ -55,11 +52,15 @@ fn init_kernel_page_table() -> PagingResult<PageTable> {
         edata as *const () as usize,
         MMUFlags::READ | MMUFlags::WRITE,
     )?;
-    map_range(
-        sbss as *const () as usize,
-        ebss as *const () as usize,
-        MMUFlags::READ | MMUFlags::WRITE,
-    )?;
+    // Get BSS boundaries via inline asm to avoid LTO renaming the
+    // extern fn symbols (rust-lld adds .1/.2 suffixes when the symbol
+    // name matches a section name like .sbss).
+    let (bss_start, bss_end): (usize, usize);
+    unsafe {
+        core::arch::asm!("la {}, __bss_start", out(reg) bss_start);
+        core::arch::asm!("la {}, __bss_end", out(reg) bss_end);
+    }
+    map_range(bss_start, bss_end, MMUFlags::READ | MMUFlags::WRITE)?;
     // stack
     map_range(
         bootstack as *const () as usize,
