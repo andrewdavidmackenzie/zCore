@@ -419,10 +419,14 @@ impl Syscall<'_> {
                     }
                     None => {
                         // Slice whose root pager VMO is detached.
-                        // Check if the parent was TRAP_DIRTY by walking
-                        // up the parent chain to find one with trap_dirty.
-                        if vmo.parent().map(|p| p.is_trap_dirty()).unwrap_or(false) {
-                            return Err(zircon_object::ZxError::BAD_STATE);
+                        // Walk the full parent chain to find a
+                        // TRAP_DIRTY ancestor (handles nested slices).
+                        let mut cur = vmo.parent();
+                        while let Some(p) = cur {
+                            if p.is_trap_dirty() {
+                                return Err(zircon_object::ZxError::BAD_STATE);
+                            }
+                            cur = p.parent();
                         }
                         return Ok(());
                     }
@@ -435,7 +439,12 @@ impl Syscall<'_> {
             // Detached TRAP_DIRTY VMO: is_in_pager_tree() is false
             // because the pager port was cleared, but trap_dirty is
             // still set. Writes to clean pages must fail BAD_STATE.
-            return Err(zircon_object::ZxError::BAD_STATE);
+            // Validate range first so out-of-range writes get the
+            // correct error from sys_vmo_write, not BAD_STATE.
+            if offset <= vmo.len() && len <= vmo.len() - offset && len > 0 {
+                return Err(zircon_object::ZxError::BAD_STATE);
+            }
+            return Ok(());
         } else {
             return Ok(());
         };
