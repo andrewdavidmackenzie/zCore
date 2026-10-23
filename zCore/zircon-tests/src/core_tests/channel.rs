@@ -794,7 +794,7 @@ fn no_spurious_readable_signal_when_racing() {
     const ITERATIONS: usize = 100;
 
     let (a, b) = Channel::create();
-    let a_obj: std::sync::Arc<dyn KernelObject> = a.clone();
+    let _a_obj: std::sync::Arc<dyn KernelObject> = a.clone();
 
     for _ in 0..ITERATIONS {
         // Write one message.

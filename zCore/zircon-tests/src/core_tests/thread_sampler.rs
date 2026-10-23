@@ -13,7 +13,6 @@
 //! start/stop/read time rather than via periodic timer interrupts.
 
 use crate::helpers::TestContext;
-use zircon_object::object::Rights;
 use zircon_object::vm::PAGE_SIZE;
 use zircon_object::ZxError;
 
