@@ -35,8 +35,8 @@ fn breakpoint(sepc: &mut usize) {
 }
 
 pub(super) fn super_timer() {
-    super::timer::timer_set_next();
     crate::timer::timer_tick();
+    // timer_tick() now reprograms the hardware via update_platform_timer().
     // On a supervisor timer interrupt, the instruction at sepc has not yet executed, so no sepc adjustment is needed.
 }
 

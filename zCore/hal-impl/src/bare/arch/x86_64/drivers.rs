@@ -87,8 +87,6 @@ pub(super) fn init() -> DeviceResult {
 
     warn!("UART IRQs done, configuring APIC timer...");
 
-    use x2apic::lapic::{TimerDivide, TimerMode};
-
     irq.register_local_apic_handler(trap::X86_INT_APIC_TIMER, Box::new(super::trap::super_timer))?;
     // Register a no-op handler for the IPI wakeup vector (0xFE).
     // The IPI itself breaks the target CPU out of HLT; no further
@@ -98,13 +96,11 @@ pub(super) fn init() -> DeviceResult {
     irq.register_local_apic_handler(0xFE, Box::new(|| {}))?;
 
     warn!("Measuring CPU frequency...");
-    // SAFETY: this will be called once and only once for every core
-    Apic::local_apic().set_timer_mode(TimerMode::Periodic);
-    Apic::local_apic().set_timer_divide(TimerDivide::Div1);
     let freq = super::cpu::cpu_frequency();
-    let cycles = freq as u64 * 1_000_000 / super::super::timer::TICKS_PER_SEC;
-    warn!("CPU freq={} MHz, timer cycles={}", freq, cycles);
-    Apic::local_apic().set_timer_initial(cycles as u32);
+    warn!("CPU freq={} MHz, TSC deadline={}", freq, super::timer::has_tsc_deadline());
+    // Timer mode (one-shot or TSC deadline) is configured in
+    // timer::init(), called via timer_enable() after driver init.
+    // Disable the timer here so it doesn't fire before init.
     Apic::local_apic().disable_timer();
 
     crate::device_registry::add_device(Device::Irq(irq));
