@@ -813,6 +813,15 @@ impl VMObjectTrait for VMObjectPaged {
         }
     }
 
+    fn range_change_remove_write(&self, page_idx: usize, count: usize) {
+        let (_guard, inner) = self.get_inner();
+        for map in inner.mappings.iter() {
+            if let Some(map) = map.upgrade() {
+                map.range_change(page_idx, count, RangeChangeOp::RemoveWrite);
+            }
+        }
+    }
+
     fn is_page_pinned(&self, page_idx: usize) -> bool {
         let (_guard, inner) = self.get_inner();
         inner.frames.get(&page_idx).is_some_and(|f| f.pin_count > 0)

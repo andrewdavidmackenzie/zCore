@@ -254,6 +254,307 @@ impl Syscall<'_> {
         Ok(())
     }
 
+    /// Pre-flight for OP_ZERO on pager-backed VMOs.
+    ///
+    /// Partial-page zeros need the affected pages to be demand-paged
+    /// first (can't zero part of a page without reading the rest).
+    /// For TRAP_DIRTY VMOs, partial-page zeros also need a DIRTY
+    /// request before modifying the page.
+    ///
+    /// Full-page zeros are handled by VMObjectPaged::zero() directly
+    /// (inserts zero markers without demand-paging).
+    async fn preflight_zero_pager(
+        &self,
+        vmo: &Arc<zircon_object::vm::VmObject>,
+        offset: usize,
+        len: usize,
+    ) -> ZxResult {
+        use hal::PAGE_SIZE;
+
+        if len == 0 {
+            return Ok(());
+        }
+
+        // Resolve to the root pager VMO.
+        let (pager_vmo, base_offset, is_trap_dirty) = if vmo.has_pager() {
+            (vmo.clone(), 0usize, vmo.is_trap_dirty())
+        } else if vmo.is_slice_vmo() {
+            match vmo.find_root_pager_vmo_with_offset() {
+                Some((root, off)) => {
+                    let td = root.is_trap_dirty();
+                    (root, off, td)
+                }
+                None => return Ok(()),
+            }
+        } else {
+            return Ok(());
+        };
+
+        let parent_offset = offset + base_offset;
+        let end = parent_offset + len;
+
+        // Collect partial-page indices that need demand-paging.
+        let mut pages_to_supply = alloc::vec::Vec::new();
+        let first_page = parent_offset / PAGE_SIZE;
+        let last_page = (end - 1) / PAGE_SIZE;
+
+        // First partial page (if offset is not page-aligned).
+        if !parent_offset.is_multiple_of(PAGE_SIZE) {
+            pages_to_supply.push(first_page);
+        }
+        // Last partial page (if end is not page-aligned and differs
+        // from first partial page).
+        if !end.is_multiple_of(PAGE_SIZE) && last_page != first_page {
+            pages_to_supply.push(last_page);
+        }
+        // Also: if the range is entirely within one page and doesn't
+        // cover the full page, that single page needs demand-paging.
+        if first_page == last_page && len < PAGE_SIZE && !pages_to_supply.contains(&first_page) {
+            pages_to_supply.push(first_page);
+        }
+
+        if pages_to_supply.is_empty() {
+            return Ok(());
+        }
+
+        // Demand-page each partial page.
+        for &pg in &pages_to_supply {
+            self.demand_page_single(&pager_vmo, pg).await?;
+        }
+
+        // For TRAP_DIRTY: request dirty on partial pages.
+        if is_trap_dirty && pager_vmo.has_pager() {
+            for &pg in &pages_to_supply {
+                if !pager_vmo.is_page_dirty(pg) {
+                    let pg_offset = pg * PAGE_SIZE;
+                    match pager_vmo.request_dirty(pg_offset, PAGE_SIZE) {
+                        Err(zircon_object::ZxError::SHOULD_WAIT) => {}
+                        Err(zircon_object::ZxError::NOT_FOUND) => {
+                            return Err(zircon_object::ZxError::BAD_STATE);
+                        }
+                        Err(e) => return Err(e),
+                        Ok(()) => {}
+                    }
+                    let future = pager_vmo.wait_for_dirty(pg_offset);
+                    futures::pin_mut!(future);
+                    self.thread
+                        .set_blocking_state(zircon_object::task::ThreadState::BlockedPager);
+                    self.thread
+                        .blocking_run::<_, (), _>(
+                            future,
+                            zircon_object::task::ThreadState::BlockedPager,
+                            core::time::Duration::from_nanos(u64::MAX),
+                            None,
+                        )
+                        .await?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Demand-page a single page on a pager VMO.
+    /// Requests the page from the pager and waits for supply.
+    async fn demand_page_single(
+        &self,
+        pager_vmo: &Arc<zircon_object::vm::VmObject>,
+        page_idx: usize,
+    ) -> ZxResult {
+        use hal::PAGE_SIZE;
+        loop {
+            if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                || pager_vmo.has_zero_marker(page_idx)
+            {
+                return Ok(());
+            }
+            let pg_offset = page_idx * PAGE_SIZE;
+            let _ = pager_vmo.request_pages(pg_offset, PAGE_SIZE);
+            let future = pager_vmo.wait_for_page(pg_offset);
+            futures::pin_mut!(future);
+            self.thread
+                .set_blocking_state(zircon_object::task::ThreadState::BlockedPager);
+            self.thread
+                .blocking_run::<_, (), _>(
+                    future,
+                    zircon_object::task::ThreadState::BlockedPager,
+                    core::time::Duration::from_nanos(u64::MAX),
+                    None,
+                )
+                .await?;
+        }
+    }
+
+    /// Unified pager pre-flight for VMO writes.
+    ///
+    /// Matches Fuchsia's `ReadWriteInternal` batching: processes the
+    /// write range in `MAX_WRITE_WAIT_PAGES` (256) page batches.
+    /// For each batch:
+    ///   1. Request READ for unsupplied pages, wait for supply.
+    ///   2. If TRAP_DIRTY, request DIRTY for clean pages, wait.
+    ///
+    /// For non-pager VMOs or VMOs where all pages are supplied and
+    /// dirty, this is a no-op.
+    async fn pager_preflight_write(
+        &self,
+        vmo: &Arc<zircon_object::vm::VmObject>,
+        offset: usize,
+        len: usize,
+    ) -> ZxResult {
+        use hal::PAGE_SIZE;
+        use zircon_object::task::ThreadState;
+
+        if len == 0 {
+            return Ok(());
+        }
+
+        // Resolve to the root pager VMO (for slices/references).
+        let (pager_vmo, base_offset, is_trap_dirty) = if vmo.is_in_pager_tree() {
+            if vmo.has_pager() {
+                (vmo.clone(), 0usize, vmo.is_trap_dirty())
+            } else if vmo.is_slice_vmo() {
+                match vmo.find_root_pager_vmo_with_offset() {
+                    Some((root, cumulative_offset)) => {
+                        let td = root.is_trap_dirty();
+                        (root, cumulative_offset, td)
+                    }
+                    None => {
+                        // Slice whose root pager VMO is detached.
+                        // Walk the full parent chain to find a
+                        // TRAP_DIRTY ancestor (handles nested slices).
+                        let mut cur = vmo.parent();
+                        while let Some(p) = cur {
+                            if p.is_trap_dirty() {
+                                return Err(zircon_object::ZxError::BAD_STATE);
+                            }
+                            cur = p.parent();
+                        }
+                        return Ok(());
+                    }
+                }
+            } else {
+                // COW clone — use prefault_pager_write_pages logic
+                return self.prefault_pager_write_pages(vmo, offset, len).await;
+            }
+        } else if vmo.is_trap_dirty() && !vmo.has_pager() {
+            // Detached TRAP_DIRTY VMO: is_in_pager_tree() is false
+            // because the pager port was cleared, but trap_dirty is
+            // still set. Writes to clean pages must fail BAD_STATE.
+            // Validate range first so out-of-range writes get the
+            // correct error from sys_vmo_write, not BAD_STATE.
+            if offset <= vmo.len() && len <= vmo.len() - offset && len > 0 {
+                return Err(zircon_object::ZxError::BAD_STATE);
+            }
+            return Ok(());
+        } else {
+            return Ok(());
+        };
+
+        // Validate range against the VMO length.
+        if offset > vmo.len() || len > vmo.len() - offset {
+            return Ok(());
+        }
+
+        // After pager detach, writes to TRAP_DIRTY clean pages fail.
+        if is_trap_dirty && !pager_vmo.has_pager() {
+            return Err(zircon_object::ZxError::BAD_STATE);
+        }
+
+        // Match Fuchsia's kMaxWriteWaitPages (256 pages = 1MB).
+        const MAX_WRITE_WAIT_PAGES: usize = 256;
+
+        let parent_offset = offset + base_offset;
+        let start_page = parent_offset / PAGE_SIZE;
+        let end_page = parent_offset
+            .checked_add(len)
+            .ok_or(ZxError::INVALID_ARGS)?
+            .div_ceil(PAGE_SIZE);
+
+        // Helper: check if a page is "supplied" — has a committed
+        // frame or a zero marker.
+        let is_page_supplied = |pg: usize| -> bool {
+            pager_vmo.committed_pages_in_range(pg, pg + 1) > 0 || pager_vmo.has_zero_marker(pg)
+        };
+
+        let mut batch_start = start_page;
+        while batch_start < end_page {
+            let batch_end = (batch_start + MAX_WRITE_WAIT_PAGES).min(end_page);
+
+            // Process pages left-to-right within the batch, interleaving
+            // READ and DIRTY requests based on page state.  This matches
+            // Fuchsia's RequirePage cursor which processes one page at a
+            // time, batching consecutive pages of the same state.
+            let mut cursor = batch_start;
+            while cursor < batch_end {
+                if !is_page_supplied(cursor) {
+                    // Unsupplied page: find run, request READ, wait.
+                    let run_start = cursor;
+                    while cursor < batch_end && !is_page_supplied(cursor) {
+                        cursor += 1;
+                    }
+                    let run_offset = run_start * PAGE_SIZE;
+                    let run_len = (cursor - run_start) * PAGE_SIZE;
+                    let _ = pager_vmo.request_pages(run_offset, run_len);
+                    let future = pager_vmo.wait_for_page(run_offset);
+                    pin_mut!(future);
+                    self.thread.set_blocking_state(ThreadState::BlockedPager);
+                    self.thread
+                        .blocking_run::<_, (), _>(
+                            future,
+                            ThreadState::BlockedPager,
+                            core::time::Duration::from_nanos(u64::MAX),
+                            None,
+                        )
+                        .await?;
+                    // After supply, re-scan from run_start: supplied
+                    // pages are now clean and may need DIRTY requests.
+                    cursor = run_start;
+                    continue;
+                }
+
+                if is_trap_dirty && pager_vmo.has_pager() && !pager_vmo.is_page_dirty(cursor) {
+                    // Supplied but clean page: find run, request DIRTY, wait.
+                    let run_start = cursor;
+                    while cursor < batch_end
+                        && is_page_supplied(cursor)
+                        && !pager_vmo.is_page_dirty(cursor)
+                    {
+                        cursor += 1;
+                    }
+                    let run_offset = run_start * PAGE_SIZE;
+                    let run_bytes = (cursor - run_start) * PAGE_SIZE;
+                    match pager_vmo.request_dirty(run_offset, run_bytes) {
+                        Err(zircon_object::ZxError::SHOULD_WAIT) => {}
+                        Err(zircon_object::ZxError::NOT_FOUND) => {
+                            return Err(zircon_object::ZxError::BAD_STATE);
+                        }
+                        Err(e) => return Err(e),
+                        Ok(()) => {}
+                    }
+                    let future = pager_vmo.wait_for_dirty(run_offset);
+                    pin_mut!(future);
+                    self.thread.set_blocking_state(ThreadState::BlockedPager);
+                    self.thread
+                        .blocking_run::<_, (), _>(
+                            future,
+                            ThreadState::BlockedPager,
+                            core::time::Duration::from_nanos(u64::MAX),
+                            None,
+                        )
+                        .await?;
+                    // Re-scan from run_start in case only partial ack.
+                    cursor = run_start;
+                    continue;
+                }
+
+                // Page is supplied and dirty (or not TRAP_DIRTY): skip.
+                cursor += 1;
+            }
+
+            batch_start = batch_end;
+        }
+        Ok(())
+    }
+
     /// Pre-dirty TRAP_DIRTY pages before writing to a pager-backed VMO.
     ///
     /// For VMOs created with ZX_VMO_TRAP_DIRTY, writes to clean pages
@@ -652,13 +953,10 @@ impl Syscall<'_> {
                 }
                 let proc = self.thread.proc();
                 if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
-                    // Pre-commit pager-tree pages (clone of pager-backed
-                    // VMO) so the parent pages are supplied before writing.
-                    if let Err(e) = self.prefault_pager_write_pages(&vmo, a2, a3).await {
-                        return e as isize;
-                    }
-                    // Pre-dirty TRAP_DIRTY pages before writing.
-                    if let Err(e) = self.predirty_trap_dirty_pages(&vmo, a2, a3).await {
+                    // Batched pager pre-flight: request READ for unsupplied
+                    // pages and DIRTY for clean pages in kMaxWriteWaitPages
+                    // batches, matching Fuchsia's ReadWriteInternal.
+                    if let Err(e) = self.pager_preflight_write(&vmo, a2, a3).await {
                         return e as isize;
                     }
                 }

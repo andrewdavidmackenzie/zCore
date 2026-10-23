@@ -226,6 +226,10 @@ pub trait VMObjectTrait: Sync + Send {
     /// Unmap pages from all mappings (for writeback_end).
     fn range_change_unmap(&self, _page_idx: usize, _count: usize) {}
 
+    /// Remove write permission from all mappings for a page range.
+    /// Used by writeback_begin to force re-faults on subsequent writes.
+    fn range_change_remove_write(&self, _page_idx: usize, _count: usize) {}
+
     /// Clear the pager-backed flag. Called when the pager is detached.
     fn clear_pager_backed(&self) {}
 
@@ -669,9 +673,13 @@ impl VmObject {
         if !inner.trap_dirty {
             return true; // Non-TRAP_DIRTY VMOs treat all pages as writable
         }
+        // Only PAGE_DIRTY (and PAGE_ZERO_DIRTY) are considered dirty
+        // for write-permission purposes. PAGE_AWAITING_CLEAN pages
+        // need another DIRTY acknowledgement before writing, matching
+        // Fuchsia's RequirePage which treats AwaitingClean like Clean.
         matches!(
             inner.dirty_pages.get(page_idx).copied(),
-            Some(PAGE_DIRTY) | Some(PAGE_AWAITING_CLEAN)
+            Some(PAGE_DIRTY) | Some(PAGE_ZERO_DIRTY)
         )
     }
 
@@ -859,6 +867,14 @@ impl VmObject {
                 inner.dirty_pages[page_idx] = PAGE_AWAITING_CLEAN;
             }
         }
+        drop(inner);
+        // Remove write permission from all mappings in this range so
+        // that subsequent writes trigger a page fault, which will
+        // generate a new DIRTY request. This matches Fuchsia's
+        // RangeChangeUpdateLocked(range, RemoveWrite).
+        let page_count = end_page - start_page;
+        self.trait_
+            .range_change_remove_write(start_page, page_count);
     }
 
     /// End writeback: transition AwaitingClean pages in range to Clean.

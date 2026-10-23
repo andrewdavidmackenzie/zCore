@@ -740,6 +740,20 @@ impl Syscall<'_> {
         buffer: UserOutPtr<u8>,
         buffer_size: usize,
     ) -> ZxResult {
+        // ZX_VMO_OP_ZERO = 10: partial-page zeros on pager-backed VMOs
+        // need demand-paging (read the page first, then zero in-place).
+        // Also needs TRAP_DIRTY handling for the dirtied partial page.
+        if op == 10 {
+            let proc = self.thread.proc();
+            if let Ok(vmo) = proc.get_object::<VmObject>(handle_value) {
+                if vmo.is_pager_backed() || vmo.is_in_pager_tree() {
+                    // Pre-flight: demand-page partial-page boundaries.
+                    // Full-page zeros don't need demand-paging (zero()
+                    // handles them by inserting zero markers).
+                    self.preflight_zero_pager(&vmo, offset, len).await?;
+                }
+            }
+        }
         // ZX_VMO_OP_COMMIT = 1, ZX_VMO_OP_PREFETCH = 14, ZX_VMO_OP_ALWAYS_NEED = 13
         // All trigger demand-paging for pager-backed VMOs (and clones).
         if op == 1 || op == 14 || op == 13 {
@@ -955,6 +969,23 @@ impl Syscall<'_> {
                     return Err(ZxError::ACCESS_DENIED);
                 }
                 let result = vmo.zero(offset, len);
+                // OP_ZERO on pager-backed VMOs with unsupplied pages
+                // inserts zero markers. Wake any threads blocked in
+                // wait_for_page for those pages — the zero marker
+                // acts as a "supply of zeros".
+                if result.is_ok() {
+                    let wake_vmo = if vmo.has_pager() || vmo.was_pager_backed() {
+                        Some(vmo.clone())
+                    } else if vmo.is_slice_vmo() {
+                        vmo.find_root_pager_vmo()
+                    } else {
+                        None
+                    };
+                    if let Some(wv) = &wake_vmo {
+                        let parent_offset = offset + vmo.get_slice_offset();
+                        wv.complete_pager_requests(parent_offset, len);
+                    }
+                }
                 // OP_ZERO sets modified and marks pages dirty on the
                 // pager-backed VMO (which may be the parent of a slice).
                 if result.is_ok() {
