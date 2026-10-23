@@ -78,6 +78,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
         TrapReason::Interrupt(vector) => {
             crate::interrupt::handle_irq(vector);
             if vector == SUPERVISOR_TIMER_INT_VEC {
+                executor::set_preempt_pending();
                 let current_thread = get_current_thread();
                 set_current_thread(None);
                 executor::handle_timeout();

@@ -437,11 +437,19 @@ async fn handler_user_trap(
                 type_: ExceptionType::ThreadExiting,
                 synth_code: 0,
             })?;
-        // Preemptive yield after syscalls: ensures other threads
-        // get a chance to run even when this thread is in a tight
-        // syscall loop. Uses preempt_yield (not yield_now) so
-        // newly-notified tasks get priority over this task.
-        hal_impl::thread::preempt_yield().await;
+        // Yield only when the timer interrupt has set preempt-pending,
+        // matching Fuchsia's lazy preemption model. Fuchsia enables
+        // interrupts during syscall handlers; if a timer fires and the
+        // thread's timeslice has expired, it sets preempt_pending and
+        // the interrupt return path triggers a context switch. Otherwise
+        // the syscall returns directly to userspace with no reschedule.
+        //
+        // An unconditional preempt_yield here caused ~27ms delays per
+        // syscall in tight loops because it gave up the CPU to other
+        // threads on every call, even when no preemption was needed.
+        if hal_impl::thread::take_preempt_pending() {
+            hal_impl::thread::preempt_yield().await;
+        }
         return Ok(());
     }
 

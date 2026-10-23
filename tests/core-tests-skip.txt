@@ -1,5 +1,7 @@
-PortStressTest.CancelKeyDuringMatchRace
-PortStressTest.SignalCloseWait
+# ── PortStressTest: QEMU overhead (51000 channel_calls × ~500us each) ──
+# 1000 iterations × 51 channel_call(1-10us deadline) — each call takes
+# ~500us in QEMU due to async poll chain overhead, totalling ~25 min.
+# Passes with a 30 min timeout but is impractical for CI.
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
 # ── PagerWriteback: TestThread hangs (need writeback state machine,

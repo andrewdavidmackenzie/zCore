@@ -74,6 +74,14 @@ impl Future for SleepFuture {
         if self.deadline.as_nanos() < i64::MAX as u128 {
             let waker = cx.waker().clone();
             timer::timer_set(self.deadline, Box::new(move |_| waker.wake_by_ref()));
+            // Re-check after registering the timer. For very short
+            // deadlines (e.g., 1 usec), the deadline may have passed
+            // during the timer_set call. Without this check, we'd
+            // return Pending and wait up to 10ms for the next timer
+            // tick, even though the deadline already expired.
+            if timer::timer_now() >= self.deadline {
+                cx.waker().wake_by_ref();
+            }
         }
         Poll::Pending
     }
