@@ -269,6 +269,13 @@ impl Syscall<'_> {
         use hal::PAGE_SIZE;
         use zircon_object::task::ThreadState;
 
+        // Validate range against the VMO length before translating
+        // offsets.  Without this, an out-of-range write on a slice
+        // would send a spurious dirty request to the parent before
+        // sys_vmo_write rejects it with OUT_OF_RANGE.
+        if offset > vmo.len() || len > vmo.len() - offset {
+            return Ok(());
+        }
         if len == 0 {
             return Ok(());
         }
