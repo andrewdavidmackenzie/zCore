@@ -1339,7 +1339,7 @@ mod tests {
             .blocking_run(
                 future,
                 ThreadState::BlockedWaitOne,
-                deadline.into(),
+                deadline,
                 Some(cancel_token),
             )
             .await;
@@ -1359,7 +1359,7 @@ mod tests {
             .blocking_run(
                 future,
                 ThreadState::BlockedWaitOne,
-                deadline.into(),
+                deadline,
                 Some(cancel_token),
             )
             .await;

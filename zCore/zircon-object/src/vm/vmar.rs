@@ -2787,7 +2787,7 @@ mod tests {
         vmo.test_write(0, 1);
         vmar.map_at(0, vmo.clone(), 0, PAGE_SIZE, MMUFlags::RXW)
             .unwrap();
-        let child_vmo = vmo.create_child(false, 0, 1 * PAGE_SIZE).unwrap();
+        let child_vmo = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
         // The clone was created after the map, so the two vmo share pages.
         assert_eq!(
             vmo.commit_page(0, MMUFlags::READ),

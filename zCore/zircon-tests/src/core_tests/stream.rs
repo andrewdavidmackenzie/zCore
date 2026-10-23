@@ -610,14 +610,14 @@ fn race_read_resize_vec_larger() {
 
         // Outcome 1: read with initial (small) capacity.
         stream.seek(SeekOrigin::Start, 0).unwrap();
-        let mut buf1 = [b'!' as u8; 26];
+        let mut buf1 = [b'!'; 26];
         let n1 = stream.read(&mut buf1[..initial_vec_size]).unwrap();
         assert_eq!(n1, initial_vec_size);
         assert_eq!(&buf1[..initial_vec_size], &alphabet[..initial_vec_size]);
 
         // Outcome 2: read with resized (large) capacity.
         stream.seek(SeekOrigin::Start, 0).unwrap();
-        let mut buf2 = [b'!' as u8; 26];
+        let mut buf2 = [b'!'; 26];
         let n2 = stream.read(&mut buf2[..resize_vec_size]).unwrap();
         assert_eq!(n2, resize_vec_size);
         assert_eq!(&buf2[..resize_vec_size], alphabet);
@@ -648,14 +648,14 @@ fn race_read_resize_vec_smaller() {
 
         // Outcome 1: read with initial (full) capacity.
         stream.seek(SeekOrigin::Start, 0).unwrap();
-        let mut buf1 = [b'!' as u8; 26];
+        let mut buf1 = [b'!'; 26];
         let n1 = stream.read(&mut buf1[..initial_vec_size]).unwrap();
         assert_eq!(n1, initial_vec_size);
         assert_eq!(&buf1, alphabet);
 
         // Outcome 2: read with resized (smaller) capacity.
         stream.seek(SeekOrigin::Start, 0).unwrap();
-        let mut buf2 = [b'!' as u8; 26];
+        let mut buf2 = [b'!'; 26];
         let n2 = stream.read(&mut buf2[..resize_vec_size]).unwrap();
         assert_eq!(n2, resize_vec_size);
         assert_eq!(&buf2[..resize_vec_size], &alphabet[..resize_vec_size]);

@@ -433,9 +433,10 @@ fn check_style() {
     println!("==> Format check...");
     Cargo::fmt().arg("--all").arg("--").arg("--check").invoke();
 
-    println!("==> Clippy: host tools...");
+    println!("==> Clippy: host tools (including tests)...");
     Cargo::clippy()
         .args(["-p", "xtask", "-p", "zircon-abi"])
+        .arg("--tests")
         .arg("--no-deps")
         .args(["--", "--deny", "warnings"])
         .invoke();
@@ -497,6 +498,21 @@ fn check_style() {
             .args(["--", "--deny", "warnings"])
             .invoke();
     }
+
+    println!("==> Clippy: test crates...");
+    Cargo::clippy()
+        .args([
+            "-p",
+            "zircon-tests",
+            "-p",
+            "zircon-object",
+            "--tests",
+            "--features",
+            "libos,aspace-separate",
+        ])
+        .arg("--no-deps")
+        .args(["--", "--deny", "warnings"])
+        .invoke();
 
     println!("==> Tests: host-buildable crates...");
     // zircon-abi has no special feature requirements.

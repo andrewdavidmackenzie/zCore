@@ -39,7 +39,7 @@ mod tests {
         let event = Event::new();
         assert!(Signal::verify_user_signal(
             event.allowed_signals(),
-            (Signal::USER_SIGNAL_5 | Signal::SIGNALED).bits().into()
+            (Signal::USER_SIGNAL_5 | Signal::SIGNALED).bits()
         )
         .is_ok());
     }

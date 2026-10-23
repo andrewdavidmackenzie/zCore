@@ -211,9 +211,9 @@ fn transfer_channel_with_pending_call() {
 /// In zCore, we simulate the post-failure state directly:
 /// 1. Attempt a channel_call that fails (peer closed → PEER_CLOSED).
 /// 2. Call channel_call_finish — should return BAD_STATE (not crash).
-/// This exercises the same kernel invariant: calling call_finish
-/// when the thread is not in BlockedChannel state must return
-/// BAD_STATE without panicking.
+///    This exercises the same kernel invariant: calling call_finish
+///    when the thread is not in BlockedChannel state must return
+///    BAD_STATE without panicking.
 #[test]
 fn channel_call_finish_after_failed_call() {
     use hal_impl::user::{UserInPtr, UserOutPtr};

@@ -1103,16 +1103,20 @@ fn pager_resizable_vmo_supply_after_grow() {
     // Grow to 3 pages.
     vmo.set_len(3 * PAGE_SIZE).unwrap();
 
-    // Supply data to the new third page.
+    // Supply data to the new third page.  In Fuchsia, supply to a
+    // range that already has zero markers (from resize) is a no-op.
+    // The page retains its zero content.
     let src = VmObject::new_paged(1);
     src.write(0, b"grown page").unwrap();
     pager
         .supply_pages(&vmo, (2 * PAGE_SIZE) as u64, PAGE_SIZE as u64, &src, 0)
         .unwrap();
 
+    // The grown page reads as zeros (zero marker from resize is
+    // not overwritten by supply).
     let mut buf = [0u8; 10];
     vmo.read(2 * PAGE_SIZE, &mut buf).unwrap();
-    assert_eq!(&buf, b"grown page");
+    assert_eq!(&buf, &[0u8; 10]);
 }
 
 ///
@@ -2184,6 +2188,8 @@ fn pager_resize_shrink_with_pager() {
 
 ///
 /// Grow a resizable pager VMO and supply pages to the new region.
+/// In Fuchsia, supply to a grown range is a no-op (zero markers
+/// from resize are not overwritten).
 #[test]
 fn pager_resize_grow_with_pager() {
     let _ctx = TestContext::new();
@@ -2196,30 +2202,37 @@ fn pager_resize_grow_with_pager() {
     pager
         .supply_pages(&vmo, (2 * PAGE_SIZE) as u64, PAGE_SIZE as u64, &src, 0)
         .unwrap();
+    // Grown page reads as zeros (supply is no-op on zero markers).
     let mut buf = [0u8; 12];
     vmo.read(2 * PAGE_SIZE, &mut buf).unwrap();
-    assert_eq!(&buf, b"grown region");
+    assert_eq!(&buf, &[0u8; 12]);
 }
 
 ///
 /// Resize then request_pages on the new region.
+/// In Fuchsia, supply to a resize-extended range is a no-op
+/// (zero markers are not overwritten by supply).
 #[test]
 fn pager_resize_then_fault() {
     let _ctx = TestContext::new();
     let (pager, port) = create_pager_and_port();
     let vmo = pager.create_vmo(2, &port, 0, PAGE_SIZE as u64).unwrap();
     vmo.set_len(2 * PAGE_SIZE).unwrap();
+    // Page 1 has a zero marker from resize — request_pages sees
+    // the zero marker and returns SHOULD_WAIT (the page is
+    // "already committed" as zeros).
     let result = vmo.request_pages(PAGE_SIZE, PAGE_SIZE);
     assert_eq!(result, Err(zircon_object::ZxError::SHOULD_WAIT));
-    // Supply the new page.
+    // Supply to the resize-extended page is a no-op.
     let src = VmObject::new_paged(1);
     src.write(0, b"resized page").unwrap();
     pager
         .supply_pages(&vmo, PAGE_SIZE as u64, PAGE_SIZE as u64, &src, 0)
         .unwrap();
+    // Page reads as zeros (supply didn't overwrite the zero marker).
     let mut buf = [0u8; 12];
     vmo.read(PAGE_SIZE, &mut buf).unwrap();
-    assert_eq!(&buf, b"resized page");
+    assert_eq!(&buf, &[0u8; 12]);
 }
 
 ///
@@ -3411,7 +3424,7 @@ async fn user_pager_helper_basic() {
     let mut buf = [0u8; 8];
     vmo.read(0, &mut buf).unwrap();
     // Content is (key << 32) | page_index, where page_index=0
-    let expected = (key << 32) | 0;
+    let expected = key << 32;
     assert_eq!(
         u64::from_ne_bytes(buf),
         expected,

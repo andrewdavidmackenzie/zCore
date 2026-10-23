@@ -1199,7 +1199,7 @@ fn pager_clone_write_to_clone_test_vmo() {
     );
 
     // Restore the clone's first word to the key pattern and verify.
-    let pattern = (key << 32) | 0u64;
+    let pattern = key << 32;
     clone.write(0, &pattern.to_ne_bytes()).unwrap();
     assert!(
         UserPagerHelper::check_page(&clone, key, 0),
@@ -1231,7 +1231,7 @@ fn pager_clone_write_to_clone_test_vmar() {
         "parent should still have original content after clone write"
     );
 
-    let pattern = (key << 32) | 0u64;
+    let pattern = key << 32;
     clone.write(0, &pattern.to_ne_bytes()).unwrap();
     assert!(
         UserPagerHelper::check_page(&clone, key, 0),
@@ -2640,7 +2640,7 @@ fn pager_page_request_batching_checks_ancestor_pages() {
 
     // Write to pages 1-2 in child_vmo (fork them).
     let child_fill = [b'b'; PAGE_SIZE];
-    child_vmo.write(1 * PAGE_SIZE, &child_fill).unwrap();
+    child_vmo.write(PAGE_SIZE, &child_fill).unwrap();
     child_vmo.write(2 * PAGE_SIZE, &child_fill).unwrap();
 
     // Create grandchild (COW clone of child).

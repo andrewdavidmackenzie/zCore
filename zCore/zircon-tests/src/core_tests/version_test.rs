@@ -132,7 +132,7 @@ fn std_u8_string_view() {
     let constants = hal_impl::vdso::vdso_constants();
     let len = constants.version_string_len as usize;
     let full = constants.version_string.as_str();
-    let bytes = full[..len].as_bytes();
+    let bytes = &full.as_bytes()[..len];
 
     // Verify the bytes form valid UTF-8 (equivalent of C++ u8string_view).
     assert!(

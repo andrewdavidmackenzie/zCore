@@ -1277,11 +1277,11 @@ fn range_op_zero() {
     // page cache disconnect in libos mode).
     let mut buf = [0xFFu8; 64];
     vmo.read(0, &mut buf).unwrap();
-    for i in 0..32 {
-        assert_eq!(buf[i], 0, "byte {} should be zero", i);
+    for (i, &byte) in buf[..32].iter().enumerate() {
+        assert_eq!(byte, 0, "byte {} should be zero", i);
     }
-    for i in 32..64 {
-        assert_eq!(buf[i], 0xFF, "byte {} should be 0xFF", i);
+    for (i, &byte) in buf[32..64].iter().enumerate() {
+        assert_eq!(byte, 0xFF, "byte {} should be 0xFF", i + 32);
     }
 
     vmar.unmap(addr, PAGE_SIZE).unwrap();

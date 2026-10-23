@@ -144,7 +144,7 @@ fn initalize_local_mutex() {
         "initialized mutex should be unlocked (value 0)"
     );
     // C++: mtx_destroy(&auto_mutex) — no-op for futex-based mutex
-    drop(mutex);
+    let _ = mutex;
 }
 
 /// C++: TEST(C11MutexTest, StaticInitalizerSameBytesAsAuto)
