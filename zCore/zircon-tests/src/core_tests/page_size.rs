@@ -15,7 +15,7 @@ use zircon_object::vm::PAGE_SIZE;
 #[test]
 fn page_size_is_valid() {
     let _ctx = TestContext::new();
-    assert!(PAGE_SIZE >= 4096, "PAGE_SIZE should be >= 4096");
+    const { assert!(PAGE_SIZE >= 4096) };
     assert!(
         PAGE_SIZE.is_power_of_two(),
         "PAGE_SIZE should be a power of 2"

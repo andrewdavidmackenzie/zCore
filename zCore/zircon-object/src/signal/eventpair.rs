@@ -78,7 +78,7 @@ mod tests {
         let (event0, event1) = EventPair::create();
         assert!(Signal::verify_user_signal(
             event0.allowed_signals(),
-            (Signal::USER_SIGNAL_5 | Signal::SIGNALED).bits().into()
+            (Signal::USER_SIGNAL_5 | Signal::SIGNALED).bits()
         )
         .is_ok());
         assert_eq!(event0.allowed_signals(), event1.allowed_signals());

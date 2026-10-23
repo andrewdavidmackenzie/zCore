@@ -83,9 +83,9 @@ fn write_read_iovecs<const N: usize, const M: usize>(ctx: &TestContext) {
 
     // Build input buffers
     let mut inputs = [[0u8; M]; N];
-    for i in 0..N {
+    for (i, input) in inputs.iter_mut().enumerate() {
         let fill = ((i + (i / 256)) & 0xFF) as u8;
-        inputs[i] = [fill; M];
+        *input = [fill; M];
     }
 
     // Build iovec array

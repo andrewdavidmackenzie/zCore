@@ -3424,7 +3424,7 @@ async fn user_pager_helper_basic() {
     let mut buf = [0u8; 8];
     vmo.read(0, &mut buf).unwrap();
     // Content is (key << 32) | page_index, where page_index=0
-    let expected = (key << 32) | 0;
+    let expected = key << 32;
     assert_eq!(
         u64::from_ne_bytes(buf),
         expected,

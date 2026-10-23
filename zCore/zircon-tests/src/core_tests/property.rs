@@ -386,7 +386,7 @@ fn socket_buffer() {
 
     let mut buf = [0u8; core::mem::size_of::<usize>()];
     get_property(&ctx, socket_h, PROP_SOCKET_RX_THRESHOLD, &mut buf).unwrap();
-    let read_threshold = usize::from_ne_bytes(buf.try_into().unwrap());
+    let read_threshold = usize::from_ne_bytes(buf);
     assert_eq!(read_threshold, threshold);
 
     // Set a reasonable tx threshold
@@ -396,7 +396,7 @@ fn socket_buffer() {
 
     let mut buf = [0u8; core::mem::size_of::<usize>()];
     get_property(&ctx, socket_h, PROP_SOCKET_TX_THRESHOLD, &mut buf).unwrap();
-    let read_threshold = usize::from_ne_bytes(buf.try_into().unwrap());
+    let read_threshold = usize::from_ne_bytes(buf);
     assert_eq!(read_threshold, threshold);
 
     // Setting a threshold larger than socket buffer should fail

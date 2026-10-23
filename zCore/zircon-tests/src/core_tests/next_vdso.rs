@@ -22,6 +22,6 @@ fn basic_test() {
     let sc = ctx.syscall();
     sc.sys_object_get_property(proc_h, 6, buf.as_mut_ptr() as usize, buf.len())
         .unwrap();
-    let vdso_base = usize::from_ne_bytes(buf.try_into().unwrap());
+    let vdso_base = usize::from_ne_bytes(buf);
     assert_eq!(vdso_base, 0, "no vDSO mapped in test mode");
 }
