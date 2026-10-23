@@ -711,7 +711,7 @@ mod tests {
         ];
         assert_eq!(actual.len(), expected.len());
         for (actual, expected) in actual.iter().zip(expected.iter()) {
-            assert!(Arc::ptr_eq(&actual, expected));
+            assert!(Arc::ptr_eq(actual, expected));
         }
         proc.exit(0);
     }
@@ -738,7 +738,7 @@ mod tests {
         ];
         assert_eq!(actual.len(), expected.len());
         for (actual, expected) in actual.iter().zip(expected.iter()) {
-            assert!(Arc::ptr_eq(&actual, expected));
+            assert!(Arc::ptr_eq(actual, expected));
         }
         proc.exit(0);
     }
@@ -758,7 +758,7 @@ mod tests {
         ];
         assert_eq!(actual.len(), expected.len());
         for (actual, expected) in actual.iter().zip(expected.iter()) {
-            assert!(Arc::ptr_eq(&actual, expected));
+            assert!(Arc::ptr_eq(actual, expected));
         }
     }
 

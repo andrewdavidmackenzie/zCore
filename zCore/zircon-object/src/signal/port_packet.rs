@@ -395,7 +395,7 @@ mod tests {
     fn guest_io() {
         let guest_io = PacketGuestIo::default();
         assert_eq!(guest_io.port, 0);
-        assert_eq!(guest_io.input, false);
+        assert!(!guest_io.input);
         test_encdec(PayloadRepr::GuestIo(guest_io));
     }
 

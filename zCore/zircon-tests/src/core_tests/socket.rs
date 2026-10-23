@@ -982,8 +982,8 @@ fn datagram() {
     // Write a large datagram (4KB, spans multiple internal MBufs)
     const LARGER_THAN_MBUF_PAYLOAD: usize = 4096;
     let mut write_data = vec![0u8; LARGER_THAN_MBUF_PAYLOAD];
-    for i in 0..write_data.len() {
-        write_data[i] = i as u8;
+    for (i, byte) in write_data.iter_mut().enumerate() {
+        *byte = i as u8;
     }
     let n = local.write(&write_data).unwrap();
     assert_eq!(n, LARGER_THAN_MBUF_PAYLOAD);

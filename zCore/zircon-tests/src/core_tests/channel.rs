@@ -594,7 +594,7 @@ fn read_may_discard_with_smaller_buffer() {
     let event_h = ctx
         .proc
         .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
-    let data = vec![0xAA_u8; 32];
+    let data = [0xAA_u8; 32];
     let handles = [event_h];
     sc.sys_channel_write(
         h_local,
@@ -700,7 +700,7 @@ fn read_may_discard_with_zero_size_buffers() {
     let event_h = ctx
         .proc
         .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
-    let data = vec![0xBB_u8; 16];
+    let data = [0xBB_u8; 16];
     let handles = [event_h];
     sc.sys_channel_write(
         h_local,
@@ -794,7 +794,7 @@ fn no_spurious_readable_signal_when_racing() {
     const ITERATIONS: usize = 100;
 
     let (a, b) = Channel::create();
-    let a_obj: std::sync::Arc<dyn KernelObject> = a.clone();
+    let _a_obj: std::sync::Arc<dyn KernelObject> = a.clone();
 
     for _ in 0..ITERATIONS {
         // Write one message.

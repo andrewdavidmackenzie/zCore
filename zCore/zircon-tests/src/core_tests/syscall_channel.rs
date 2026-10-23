@@ -4453,8 +4453,8 @@ fn call_etc_bytes_only_success_case() {
     let (ch0, _ch1) = syscall_channel_create(&ctx);
 
     let mut request_bytes = [0u8; 512];
-    for i in 0..512 {
-        request_bytes[i] = (i % 256) as u8;
+    for (i, byte) in request_bytes.iter_mut().enumerate() {
+        *byte = (i % 256) as u8;
     }
     let mut response_bytes = [0u8; 512];
 

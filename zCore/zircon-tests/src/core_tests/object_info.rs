@@ -442,7 +442,7 @@ fn thread_info_handle_count_on_self() {
     let (actual, avail) = get_info(&ctx, thread_h, TOPIC_HANDLE_COUNT, &mut buf).unwrap();
     assert_eq!(actual, 1);
     assert_eq!(avail, 1);
-    let count = u32::from_ne_bytes(buf.try_into().unwrap());
+    let count = u32::from_ne_bytes(buf);
     assert_eq!(count, 1, "single handle should have count 1");
 }
 
@@ -3312,12 +3312,11 @@ fn kernel_stats_kmem_stats_extended_small_buffer() {
     let res_h = ctx.add_root_resource();
     let mut buf = [0u8; 4]; // too small
     let result = get_info(&ctx, res_h, TOPIC_KMEM_STATS_EXTENDED, &mut buf);
-    match result {
-        Err(e) => assert!(
+    if let Err(e) = result {
+        assert!(
             e == zircon_object::ZxError::BUFFER_TOO_SMALL
                 || e == zircon_object::ZxError::NOT_SUPPORTED,
-        ),
-        Ok(_) => {} // if it somehow fits, that's fine
+        );
     }
 }
 
@@ -3358,12 +3357,11 @@ fn kernel_stats_kmem_stats_small_buffer() {
     let res_h = ctx.add_root_resource();
     let mut buf = [0u8; 4]; // too small
     let result = get_info(&ctx, res_h, TOPIC_KMEM_STATS, &mut buf);
-    match result {
-        Err(e) => assert!(
+    if let Err(e) = result {
+        assert!(
             e == zircon_object::ZxError::BUFFER_TOO_SMALL
                 || e == zircon_object::ZxError::NOT_SUPPORTED,
-        ),
-        Ok(_) => {} // if it somehow fits, that's fine
+        );
     }
 }
 
@@ -4199,12 +4197,11 @@ fn stall_get_info_memory_stall_zero_sized_buffer_is_too_small() {
     let res_h = ctx.add_root_resource();
     let mut buf = [0u8; 0];
     let result = get_info(&ctx, res_h, TOPIC_MEMORY_STALL, &mut buf);
-    match result {
-        Err(e) => assert!(
+    if let Err(e) = result {
+        assert!(
             e == zircon_object::ZxError::BUFFER_TOO_SMALL
                 || e == zircon_object::ZxError::NOT_SUPPORTED,
-        ),
-        Ok(_) => {} // zero-sized may succeed for some topics
+        );
     }
 }
 

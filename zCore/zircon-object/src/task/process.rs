@@ -1233,9 +1233,7 @@ mod tests {
         // duplicate handle with the same rights.
         let rights = Rights::DUPLICATE;
         let handle_value = proc.add_handle(Handle::new(proc.clone(), rights));
-        let new_handle_value = proc
-            .dup_handle_operating_rights(handle_value, |old_rights| Ok(old_rights))
-            .unwrap();
+        let new_handle_value = proc.dup_handle_operating_rights(handle_value, Ok).unwrap();
         assert_eq!(proc.get_handle(new_handle_value).unwrap().rights, rights);
 
         // duplicate handle with subset rights.

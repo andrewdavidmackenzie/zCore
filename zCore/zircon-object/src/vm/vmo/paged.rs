@@ -2183,7 +2183,7 @@ mod tests {
     #[test]
     fn read_write() {
         let vmo = VmObject::new_paged(2);
-        super::super::tests::read_write(&*vmo);
+        super::super::tests::read_write(&vmo);
     }
 
     #[test]
@@ -2219,6 +2219,7 @@ mod tests {
         // copy-on-write
         for i in 0..3 {
             vmos[i].test_write(0, i as u8);
+            #[allow(clippy::needless_range_loop)]
             for j in 0..3 {
                 assert_eq!(vmos[j].test_read(0), if j <= i { j as u8 } else { 0 });
                 assert_eq!(
@@ -2459,7 +2460,7 @@ mod tests {
             [3, 0, 1, 2],
             [3, 0, 2, 1],
         ];
-        for i in 0..24 {
+        for perm in &permutations {
             let vmo0 = VmObject::new_paged(1);
             vmo0.write(0, &[old]).unwrap();
             let vmo1 = vmo0.create_child(false, 0, PAGE_SIZE).unwrap();
@@ -2467,7 +2468,6 @@ mod tests {
             let vmo3 = vmo1.create_child(false, 0, PAGE_SIZE).unwrap();
             let vmos: [Arc<VmObject>; 4] = [vmo0.clone(), vmo1.clone(), vmo2.clone(), vmo3.clone()];
             let mut write: [bool; 4] = [false; 4];
-            let perm = permutations[i];
             println!("{:?}", perm);
             for j in 0..N {
                 println!("j = {}, write = {}", j, perm[j]);
@@ -2510,8 +2510,8 @@ mod tests {
         assert_eq!(vmo.len(), 4 * PAGE_SIZE);
 
         // Shrink
-        vmo.set_len(1 * PAGE_SIZE).unwrap();
-        assert_eq!(vmo.len(), 1 * PAGE_SIZE);
+        vmo.set_len(PAGE_SIZE).unwrap();
+        assert_eq!(vmo.len(), PAGE_SIZE);
 
         // Non-resizable VMO should fail
         let fixed_vmo = VmObject::new_paged(2);
