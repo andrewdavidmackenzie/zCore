@@ -82,16 +82,28 @@ impl Futex {
     ///
     /// The owner of the futex is set to nothing, regardless of the wake count.
     pub fn wake(&self, wake_count: usize) -> usize {
-        let mut inner = self.inner.lock();
-        inner.set_owner(None);
-        for i in 0..wake_count {
-            if let Some(waiter) = inner.waiter_queue.pop_front() {
-                waiter.wake();
-            } else {
-                return i;
+        // Collect waiters under the futex lock, then wake them after
+        // releasing it. This avoids an ABBA deadlock: wake() holds
+        // FutexInner then WaiterInner, while FutexFuture::poll() holds
+        // WaiterInner then FutexInner.
+        let waiters: alloc::vec::Vec<_> = {
+            let mut inner = self.inner.lock();
+            inner.set_owner(None);
+            let mut collected = alloc::vec::Vec::new();
+            for _ in 0..wake_count {
+                if let Some(waiter) = inner.waiter_queue.pop_front() {
+                    collected.push(waiter);
+                } else {
+                    break;
+                }
             }
+            collected
+        };
+        let count = waiters.len();
+        for waiter in &waiters {
+            waiter.wake();
         }
-        wake_count
+        count
     }
 
     // ------ Advanced APIs on Zircon ------
@@ -216,12 +228,19 @@ impl Futex {
     /// If there is at least one thread to wake, the owner of the futex will be
     /// set to the thread which was woken. Otherwise, the futex will have no owner.
     pub fn wake_single_owner(&self) {
-        let mut inner = self.inner.lock();
-        let new_owner = inner.waiter_queue.pop_front().and_then(|waiter| {
+        // Pop waiter and set owner under the lock, then wake after
+        // releasing to avoid ABBA deadlock (see wake() comment).
+        let (waiter_to_wake, new_owner) = {
+            let mut inner = self.inner.lock();
+            let popped = inner.waiter_queue.pop_front();
+            let owner = popped.as_ref().and_then(|w| w.thread.clone());
+            inner.set_owner(owner.clone());
+            (popped, owner)
+        };
+        if let Some(waiter) = waiter_to_wake {
             waiter.wake();
-            waiter.thread.clone()
-        });
-        inner.set_owner(new_owner);
+        }
+        let _ = new_owner; // used only for set_owner above
     }
 
     /// Requeuing is a generalization of waking.
@@ -287,16 +306,17 @@ impl Futex {
                 return Err(ZxError::INVALID_ARGS);
             }
         }
-        // wake
-        let mut woken = 0;
+        // Collect waiters to wake under the lock, wake after release
+        // to avoid ABBA deadlock (see wake() comment).
+        let mut waiters_to_wake = alloc::vec::Vec::new();
         for _ in 0..wake_count {
             if let Some(waiter) = inner.waiter_queue.pop_front() {
-                waiter.wake();
-                woken += 1;
+                waiters_to_wake.push(waiter);
             } else {
                 break;
             }
         }
+        let woken = waiters_to_wake.len();
         // requeue
         let requeue_count = requeue_count.min(inner.waiter_queue.len());
         for waiter in inner.waiter_queue.drain(..requeue_count) {
@@ -306,7 +326,14 @@ impl Futex {
         // set owner
         inner.set_owner(None);
         new_inner.set_owner(new_requeue_owner);
-        Ok(woken + requeue_count)
+        let total = woken + requeue_count;
+        // Drop both futex locks before waking to avoid ABBA deadlock.
+        drop(inner);
+        drop(new_inner);
+        for waiter in &waiters_to_wake {
+            waiter.wake();
+        }
+        Ok(total)
     }
 }
 
