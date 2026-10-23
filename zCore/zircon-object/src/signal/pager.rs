@@ -233,6 +233,9 @@ impl Pager {
                 // Page already present — skip. supply_pages does not
                 // overwrite existing content (committed frames or
                 // zero markers, including resize zero markers).
+                // Decommit the source page to match Fuchsia's contract
+                // where supply_pages transfers ownership of aux pages.
+                let _ = aux_vmo.decommit(src_off, chunk);
                 src_off += chunk;
                 dst_off += chunk;
                 continue;

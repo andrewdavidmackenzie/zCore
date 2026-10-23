@@ -915,14 +915,21 @@ impl Syscall<'_> {
                     // need a DIRTY request first. The zero→committed
                     // transition is effectively a write operation.
                     if pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
+                        // Translate to root-VMO coordinates for slices.
+                        let slice_off = if vmo.is_slice_vmo() {
+                            vmo.get_slice_offset() / PAGE_SIZE
+                        } else {
+                            0
+                        };
                         for pg in start_page..end_page {
+                            let root_pg = pg + slice_off;
                             // Zero-marker pages being committed always
                             // need a DIRTY request, even if their state
                             // is PAGE_ZERO_DIRTY. Committing materializes
                             // a real frame, and the pager must approve
                             // this transition (e.g., allocate disk space).
-                            if pager_vmo.has_zero_marker(pg) {
-                                let pg_off = pg * PAGE_SIZE;
+                            if pager_vmo.has_zero_marker(root_pg) {
+                                let pg_off = root_pg * PAGE_SIZE;
                                 match pager_vmo.request_dirty(pg_off, PAGE_SIZE) {
                                     Err(ZxError::SHOULD_WAIT) => {}
                                     Err(ZxError::NOT_FOUND) => {
