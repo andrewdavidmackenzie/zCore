@@ -62,6 +62,36 @@ pub fn take_yield_pending() -> bool {
     }
 }
 
+/// Per-CPU preemption-pending flag.
+///
+/// Set by the timer interrupt handler to indicate the current task's
+/// time quantum has expired. The syscall return path checks this flag
+/// and yields only when set, matching Fuchsia's lazy preemption model
+/// where syscalls return directly to userspace unless a timer interrupt
+/// has requested a reschedule.
+static PREEMPT_PENDING: [core::sync::atomic::AtomicBool; 64] = {
+    const FALSE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+    [FALSE; 64]
+};
+
+/// Set preemption-pending for the current CPU (called from timer IRQ).
+pub fn set_preempt_pending() {
+    let cpu = arch::cpu_id() as usize;
+    if cpu < 64 {
+        PREEMPT_PENDING[cpu].store(true, core::sync::atomic::Ordering::Release);
+    }
+}
+
+/// Check and clear preemption-pending for the current CPU.
+pub fn take_preempt_pending() -> bool {
+    let cpu = arch::cpu_id() as usize;
+    if cpu < 64 {
+        PREEMPT_PENDING[cpu].swap(false, core::sync::atomic::Ordering::Acquire)
+    } else {
+        false
+    }
+}
+
 pub use runtime::{
     handle_timeout, init_runtimes, run_until_idle, sched_yield, spawn, spawn_with_priority,
 };

@@ -210,6 +210,33 @@ impl Port {
         drop(inner);
     }
 
+    /// Atomically check a cancellation flag and push a signal packet.
+    ///
+    /// Returns `true` if the packet was enqueued (flag was not set),
+    /// `false` if the subscription was already cancelled. This prevents
+    /// the TOCTOU race where `cancel_by_key` / `cancel_async_and_drain`
+    /// removes the subscription and drains the queue, but the signal
+    /// callback pushes a packet after the drain because it checked the
+    /// `cancelled` flag outside the port lock.
+    pub fn push_if_not_cancelled(
+        &self,
+        packet: impl Into<PortPacket>,
+        source_koid: KoID,
+        cancelled: &AtomicBool,
+    ) -> bool {
+        let mut inner = self.inner.lock();
+        if cancelled.load(core::sync::atomic::Ordering::Relaxed) {
+            return false;
+        }
+        inner.queue.push_back(QueuedPacket {
+            packet: packet.into(),
+            source_koid,
+        });
+        self.base.signal_set(Signal::READABLE);
+        drop(inner);
+        true
+    }
+
     /// Push a `User` type `packet` into the port.
     ///
     /// Returns `SHOULD_WAIT` when the per-port packet limit is exceeded.

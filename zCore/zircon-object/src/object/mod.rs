@@ -408,31 +408,37 @@ impl dyn KernelObject {
         struct SignalFuture {
             object: Arc<dyn KernelObject>,
             signal: Signal,
-            first: bool,
         }
 
         impl Future for SignalFuture {
             type Output = Signal;
 
-            fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
                 let current_signal = self.object.signal();
                 if !(current_signal & self.signal).is_empty() {
                     return Poll::Ready(current_signal);
                 }
-                if self.first {
-                    self.object.add_signal_callback(Box::new({
-                        let signal = self.signal;
-                        let waker = cx.waker().clone();
-                        move |s| {
-                            if (s & signal).is_empty() {
-                                return false;
-                            }
-                            waker.wake_by_ref();
-                            true
+                // Always register a callback when returning Pending.
+                // A previous callback may have been consumed (it fired
+                // and returned true) but another thread cleared the
+                // signal before we were re-polled — a "spurious wakeup".
+                // Without re-registering, we'd be stuck Pending forever
+                // with no callback to wake us.
+                // `add_signal_callback` atomically checks the current
+                // signal state: if the signal was set between our check
+                // above and the registration, the callback fires
+                // immediately and isn't stored, so we get re-polled.
+                self.object.add_signal_callback(Box::new({
+                    let signal = self.signal;
+                    let waker = cx.waker().clone();
+                    move |s| {
+                        if (s & signal).is_empty() {
+                            return false;
                         }
-                    }));
-                    self.first = false;
-                }
+                        waker.wake_by_ref();
+                        true
+                    }
+                }));
                 Poll::Pending
             }
         }
@@ -440,7 +446,6 @@ impl dyn KernelObject {
         SignalFuture {
             object: self.clone(),
             signal,
-            first: true,
         }
     }
 
@@ -531,7 +536,9 @@ impl dyn KernelObject {
             let port = port.clone();
             let source_koid = self.id();
             move |s| {
-                // Check cancellation before pushing
+                // Check cancellation before pushing. Use Relaxed here
+                // as a fast-path only; the definitive check is inside
+                // push_if_not_cancelled under the port lock.
                 if cancelled.load(core::sync::atomic::Ordering::Relaxed) {
                     return true; // cancelled, remove callback
                 }
@@ -543,7 +550,12 @@ impl dyn KernelObject {
                 } else {
                     0
                 };
-                port.push_with_source(
+                // Atomically check the cancellation flag and push under
+                // the port lock. This prevents the TOCTOU race where
+                // cancel_by_key drains the queue between our flag check
+                // and the push, allowing a packet to sneak through after
+                // cancellation.
+                if !port.push_if_not_cancelled(
                     PortPacketRepr {
                         key,
                         status: ZxError::OK,
@@ -556,7 +568,10 @@ impl dyn KernelObject {
                         }),
                     },
                     source_koid,
-                );
+                    &cancelled,
+                ) {
+                    return true; // cancelled, remove callback
+                }
                 // Clean up subscription after one-shot delivery.
                 port.cancel_async(source_koid, key).ok();
                 true
@@ -590,7 +605,6 @@ pub fn wait_signal_many(
     #[must_use = "wait_signal_many does nothing unless polled/`await`-ed"]
     struct SignalManyFuture {
         targets: Vec<(Arc<dyn KernelObject>, Signal)>,
-        first: bool,
     }
 
     impl SignalManyFuture {
@@ -605,27 +619,28 @@ pub fn wait_signal_many(
     impl Future for SignalManyFuture {
         type Output = Vec<Signal>;
 
-        fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
             let current_signals: Vec<_> =
                 self.targets.iter().map(|(obj, _)| obj.signal()).collect();
             if self.happened(&current_signals) {
                 return Poll::Ready(current_signals);
             }
-            if self.first {
-                for (object, signal) in self.targets.iter() {
-                    object.add_signal_callback(Box::new({
-                        let signal = *signal;
-                        let waker = cx.waker().clone();
-                        move |s| {
-                            if (s & signal).is_empty() {
-                                return false;
-                            }
-                            waker.wake_by_ref();
-                            true
+            // Always re-register callbacks when returning Pending.
+            // See SignalFuture::poll for rationale — a previous
+            // callback may have been consumed by a signal that was
+            // then cleared before we were re-polled.
+            for (object, signal) in self.targets.iter() {
+                object.add_signal_callback(Box::new({
+                    let signal = *signal;
+                    let waker = cx.waker().clone();
+                    move |s| {
+                        if (s & signal).is_empty() {
+                            return false;
                         }
-                    }));
-                }
-                self.first = false;
+                        waker.wake_by_ref();
+                        true
+                    }
+                }));
             }
             Poll::Pending
         }
@@ -633,7 +648,6 @@ pub fn wait_signal_many(
 
     SignalManyFuture {
         targets: Vec::from(targets),
-        first: true,
     }
 }
 
