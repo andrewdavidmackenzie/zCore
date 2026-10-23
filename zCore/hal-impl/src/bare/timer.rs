@@ -1,9 +1,16 @@
 //! Time and clock functions — one-shot timer model.
 //!
-//! Instead of a periodic tick, each `timer_set` reprograms the hardware
-//! timer to fire at the earliest pending deadline (capped at 10ms for
-//! scheduler preemption). This matches Fuchsia's `platform_set_oneshot_timer`
-//! model and provides microsecond-precision deadline handling.
+//! Matches Fuchsia's timer architecture: a global timer queue protected
+//! by a spinlock with interrupts disabled. Each `timer_set` adds a
+//! callback and reprograms the local APIC/timer to fire at the earliest
+//! pending deadline. The timer interrupt handler expires due timers and
+//! reprograms to the next deadline.
+//!
+//! All timer queue access and hardware programming happen inside a
+//! single critical section (interrupts off + lock held), preventing
+//! races between task-context `timer_set` and interrupt-context
+//! `timer_tick` on the same CPU. This matches Fuchsia's
+//! `Guard<MonitoredSpinLock, IrqSave>` pattern.
 
 use alloc::boxed::Box;
 use core::time::Duration;
@@ -19,37 +26,18 @@ const MAX_TIMER_INTERVAL: Duration = Duration::from_millis(10);
 
 static NAIVE_TIMER: spin::Lazy<Mutex<Timer>> = spin::Lazy::new(|| Mutex::new(Timer::default()));
 
-/// Reprogram the hardware timer to fire at the earliest pending
-/// deadline, capped at `now + MAX_TIMER_INTERVAL`. If the next
-/// deadline is already past, expire it synchronously to avoid
-/// interrupt re-entry (a past deadline would fire the hardware
-/// timer immediately, potentially nesting into the current handler
-/// and overflowing the interrupt stack).
+/// Program this CPU's hardware timer to the next pending deadline,
+/// capped at `now + MAX_TIMER_INTERVAL`.
 ///
-/// Caller must NOT hold NAIVE_TIMER lock.
-fn update_platform_timer() {
-    loop {
-        let now = super::arch::timer::timer_now();
-        let next = NAIVE_TIMER.lock().next();
-
-        match next {
-            Some(deadline) if deadline <= now => {
-                // Already past — expire synchronously, then check
-                // if more timers became ready.
-                NAIVE_TIMER.lock().expire(now);
-                continue;
-            }
-            Some(deadline) => {
-                let backstop = now + MAX_TIMER_INTERVAL;
-                super::arch::timer::set_oneshot_timer(deadline.min(backstop));
-            }
-            None => {
-                let backstop = now + MAX_TIMER_INTERVAL;
-                super::arch::timer::set_oneshot_timer(backstop);
-            }
-        }
-        break;
-    }
+/// MUST be called with NAIVE_TIMER lock held and interrupts disabled.
+/// This matches Fuchsia's `UpdatePlatformTimerLocked` which asserts
+/// `arch_ints_disabled()` and runs under `timer_lock`.
+fn update_platform_timer_locked(timer: &Timer) {
+    let now = super::arch::timer::timer_now();
+    let backstop = now + MAX_TIMER_INTERVAL;
+    let next = timer.next().unwrap_or(backstop);
+    let target = next.min(backstop);
+    super::arch::timer::set_oneshot_timer(target);
 }
 
 hal_fn_impl! {
@@ -64,30 +52,38 @@ hal_fn_impl! {
 
         fn timer_set(deadline: Duration, callback: Box<dyn FnOnce(Duration) + Send + Sync>) {
             debug!("Set timer at: {:?}", deadline);
-            NAIVE_TIMER.lock().add(deadline, callback);
-            // If the deadline is already past, expire immediately.
-            let now = super::arch::timer::timer_now();
-            if deadline <= now {
-                NAIVE_TIMER.lock().expire(now);
+
+            // Disable interrupts first, then acquire the lock.
+            // This prevents the timer interrupt from firing while we
+            // hold the lock (same-CPU deadlock) and ensures the APIC
+            // programming is atomic w.r.t. interrupts (no immediate
+            // re-entry). Matches Fuchsia's IrqSave guard pattern.
+            let irq_was_on = crate::interrupt::intr_get();
+            crate::interrupt::intr_off();
+            {
+                let mut timer = NAIVE_TIMER.lock();
+                timer.add(deadline, callback);
+                // Expire past-due timers while we hold the lock.
+                let now = super::arch::timer::timer_now();
+                if deadline <= now {
+                    timer.expire(now);
+                }
+                // Reprogram hardware under the lock with interrupts off.
+                update_platform_timer_locked(&timer);
             }
-            // Reprogram hardware to fire at the earliest deadline.
-            // This is the key difference from the old periodic model:
-            // a 1us deadline will now fire in ~1us instead of waiting
-            // up to 10ms for the next tick.
-            update_platform_timer();
+            if irq_was_on {
+                crate::interrupt::intr_on();
+            }
         }
 
         fn timer_tick() {
-            NAIVE_TIMER.lock().expire(timer_now());
-            // Reprogram this CPU's timer to the next pending deadline
-            // (capped at backstop). We call this from the interrupt
-            // handler, so the timer is currently disarmed (one-shot
-            // already fired). We must re-arm to ensure future timers
-            // and preemption ticks continue to fire.
+            // Called from the timer interrupt handler.
+            // Interrupts are already disabled by the interrupt gate.
             let now = super::arch::timer::timer_now();
-            let backstop = now + MAX_TIMER_INTERVAL;
-            let next = NAIVE_TIMER.lock().next().unwrap_or(backstop);
-            super::arch::timer::set_oneshot_timer(next.min(backstop));
+            let mut timer = NAIVE_TIMER.lock();
+            timer.expire(now);
+            // Re-arm to the next deadline under the lock.
+            update_platform_timer_locked(&timer);
         }
     }
 }

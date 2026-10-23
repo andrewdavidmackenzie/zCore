@@ -20,6 +20,10 @@ hal_fn_impl! {
         }
 
         fn primary_init() {
+            // Save the kernel page table before trapframe::init may modify it.
+            #[cfg(target_arch = "x86_64")]
+            super::arch::vm::save_kernel_page_table();
+
             info!("Primary CPU {} init: calling trapframe::init()...", crate::cpu::cpu_id());
             unsafe { trapframe::init() };
             info!("trapframe::init() completed");
@@ -34,6 +38,10 @@ hal_fn_impl! {
                 info!("trapframe::init() done: USER_SS={:#x}, USER_CS={:#x}", ss, cs);
                 assert!(ss != 0, "USER_SS not initialized!");
                 assert!(cs != 0, "USER_CS not initialized!");
+                // Save the BSP's GDT layout so APs can clone it with
+                // the same structure (same entry count, same selectors)
+                // but their own per-CPU TSS.
+                super::arch::smp::save_bsp_gdt_template();
             }
             super::arch::primary_init();
         }
@@ -43,24 +51,13 @@ hal_fn_impl! {
             // we can't print anything here, see reason: zcore/main.rs::secondary_main()
             #[cfg(target_arch = "x86_64")]
             {
-                // Serialize AP trapframe::init() to protect global USER_SS/USER_CS.
-                // trapframe::init() extends the current GDT and recomputes these
-                // globals based on the new entry count. We must save/restore them
-                // atomically so concurrent APs don't corrupt each other's values.
-                static INIT_LOCK: spin::Mutex<()> = spin::Mutex::new(());
-                extern "C" {
-                    static mut USER_SS: u16;
-                    static mut USER_CS: u16;
-                }
-                let _guard = INIT_LOCK.lock();
-                let saved_ss = unsafe { USER_SS };
-                let saved_cs = unsafe { USER_CS };
-                unsafe { trapframe::init() };
-                unsafe {
-                    USER_SS = saved_ss;
-                    USER_CS = saved_cs;
-                }
-                drop(_guard);
+                // Build a GDT with the SAME layout as the BSP's, but with
+                // this AP's own TSS. This avoids the cascading GDT growth
+                // from calling trapframe::init() on each AP, which caused
+                // each CPU to have differently-sized GDTs with different
+                // selector offsets. With a uniform layout, USER_SS/USER_CS
+                // and STAR MSR are consistent across all CPUs.
+                super::arch::smp::init_ap_gdt_idt();
             }
             #[cfg(not(target_arch = "x86_64"))]
             unsafe {

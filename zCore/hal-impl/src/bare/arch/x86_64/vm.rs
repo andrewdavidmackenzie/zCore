@@ -12,12 +12,45 @@ use x86_64::{
 use crate::utils::page_table::{GenericPTE, PageTableImpl, PageTableLevel4};
 use crate::{mem::phys_to_virt, CachePolicy, MMUFlags, PhysAddr, VirtAddr};
 
+/// The kernel's own page table (CR3 at boot). All user page tables
+/// share the kernel's upper-half mappings, so switching to this is
+/// always safe. Saved during primary_init.
+static KERNEL_PAGE_TABLE: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
+
+/// Save the kernel page table address. Called once at boot.
+pub fn save_kernel_page_table() {
+    let current = Cr3::read().0.start_address().as_u64();
+    KERNEL_PAGE_TABLE.store(current, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// Switch this CPU to the kernel page table and clear active tracking.
+/// Used when a task finishes polling (no longer needs the user page table).
+pub fn switch_to_kernel_page_table() {
+    let kernel_pt = KERNEL_PAGE_TABLE.load(core::sync::atomic::Ordering::Relaxed);
+    if kernel_pt == 0 {
+        // KERNEL_PAGE_TABLE not saved yet (early boot or libos).
+        // Just clear tracking without switching CR3 — the current
+        // page table's kernel-half mappings are still valid.
+        crate::common::vm::clear_active_page_table();
+        return;
+    }
+    let frame = x86_64::structures::paging::PhysFrame::containing_address(
+        x86_64::PhysAddr::new(kernel_pt),
+    );
+    if Cr3::read().0 != frame {
+        unsafe { Cr3::write(frame, Cr3Flags::empty()) };
+    }
+    crate::common::vm::clear_active_page_table();
+}
+
 hal_fn_impl! {
     impl mod crate::hal_fn::vm {
         fn activate_paging(vmtoken: PhysAddr) {
             use x86_64::structures::paging::PhysFrame;
             let frame = PhysFrame::containing_address(x86_64::PhysAddr::new(vmtoken as _));
             if Cr3::read().0 != frame {
+                crate::common::vm::set_active_page_table(vmtoken);
                 unsafe { Cr3::write(frame, Cr3Flags::empty()) };
                 trace!("set page_table @ {:#x}", vmtoken);
             }

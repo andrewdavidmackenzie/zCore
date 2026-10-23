@@ -96,11 +96,15 @@ pub(super) fn init() -> DeviceResult {
     irq.register_local_apic_handler(0xFE, Box::new(|| {}))?;
 
     warn!("Measuring CPU frequency...");
+    use x2apic::lapic::{TimerDivide, TimerMode};
     let freq = super::cpu::cpu_frequency();
     warn!("CPU freq={} MHz, TSC deadline={}", freq, super::timer::has_tsc_deadline());
-    // Timer mode (one-shot or TSC deadline) is configured in
-    // timer::init(), called via timer_enable() after driver init.
-    // Disable the timer here so it doesn't fire before init.
+    // Put the APIC timer into a known state (periodic, stopped) so
+    // UEFI's timer config doesn't cause stray interrupts. The actual
+    // one-shot configuration happens later in timer::init().
+    Apic::local_apic().set_timer_mode(TimerMode::Periodic);
+    Apic::local_apic().set_timer_divide(TimerDivide::Div1);
+    Apic::local_apic().set_timer_initial(0); // count=0 stops the timer
     Apic::local_apic().disable_timer();
 
     crate::device_registry::add_device(Device::Irq(irq));

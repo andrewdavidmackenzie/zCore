@@ -191,6 +191,17 @@ static mut BSP_IDTR: [u8; 10] = [0; 10]; // IDTR is 2-byte limit + 8-byte base
 /// BSP's kernel CS selector, saved so APs can reload CS after LGDT.
 static mut BSP_CS: u64 = 0x08;
 
+/// BSP's GDT content after trapframe::init(), used as template for APs.
+/// Each AP clones this and patches in its own TSS descriptor at the
+/// same index, ensuring all CPUs have identically-laid-out GDTs with
+/// consistent selectors (USER_SS, USER_CS, STAR MSR).
+static BSP_GDT_TEMPLATE: spin::Once<alloc::vec::Vec<u64>> = spin::Once::new();
+/// Index of the TSS descriptor in the GDT (occupies 2 u64 slots).
+/// Saved from BSP's trapframe::init() so APs know where to patch.
+static BSP_TSS_INDEX: spin::Once<u16> = spin::Once::new();
+/// BSP's STAR MSR value (syscall/sysret selectors).
+static BSP_STAR: spin::Once<u64> = spin::Once::new();
+
 /// Save the BSP's GDTR after trapframe::init(). Called from primary_init().
 /// Park any UEFI-started APs by broadcasting an INIT IPI.
 ///
@@ -307,6 +318,12 @@ extern "C" fn ap_entry() -> ! {
         use x86_64::registers::control::{Cr0, Cr0Flags};
         Cr0::update(|f| f.remove(Cr0Flags::EMULATE_COPROCESSOR));
     }
+    // Disable the APIC timer immediately to prevent stale UEFI
+    // timer configs from firing before timer_init() runs. With
+    // one-shot timers, a stale timer could fire during AP startup
+    // (before the IDT is fully set up), causing a triple fault.
+    ::drivers::irq::x86::Apic::local_apic().disable_timer();
+
     // Register this AP's APIC ID → logical core index mapping.
     let apic_id = raw_cpuid::CpuId::new()
         .get_feature_info()
@@ -701,6 +718,131 @@ fn virt_to_phys(vaddr: usize) -> usize {
     let pte = pt[(vaddr >> 12) & 0x1FF];
     assert!(pte & 1 != 0, "PT entry not present for {:#x}", vaddr);
     (pte & PTE_ADDR_MASK) as usize | (vaddr & 0xFFF)
+}
+
+/// Save the BSP's GDT content after trapframe::init() as a template
+/// for APs. Called from primary_init() after trapframe::init().
+pub fn save_bsp_gdt_template() {
+    unsafe {
+        // Read the current GDT (set by trapframe::init on BSP)
+        let mut gdtp = x86_64::structures::DescriptorTablePointer {
+            limit: 0,
+            base: x86_64::VirtAddr::zero(),
+        };
+        core::arch::asm!("sgdt [{}]", in(reg) &mut gdtp);
+        let entry_count =
+            (gdtp.limit + 1) as usize / core::mem::size_of::<u64>();
+        let gdt_slice = core::slice::from_raw_parts(
+            gdtp.base.as_ptr::<u64>(),
+            entry_count,
+        );
+
+        // Save the GDT content
+        BSP_GDT_TEMPLATE.call_once(|| alloc::vec::Vec::from(gdt_slice));
+
+        // The TSS index is entry_count_before_trapframe_init (the
+        // original bootloader GDT size). trapframe::init() appended
+        // 7 entries starting at that index: TSS(2), KCODE, KDATA,
+        // UCODE32, UDATA32, UCODE64. So TSS is at entry_count - 7.
+        let tss_index = (entry_count - 7) as u16;
+        BSP_TSS_INDEX.call_once(|| tss_index);
+
+        // Save the STAR MSR value (IA32_STAR = 0xC0000081)
+        let eax: u32;
+        let edx: u32;
+        core::arch::asm!("rdmsr",
+            in("ecx") 0xC000_0081u32,
+            out("eax") eax, out("edx") edx);
+        let star = ((edx as u64) << 32) | (eax as u64);
+        BSP_STAR.call_once(|| star);
+    }
+}
+
+/// Initialize GDT, IDT, TSS, and MSRs for an AP using the BSP's GDT
+/// template. Creates a GDT with the SAME layout and selectors as the
+/// BSP's, but with this AP's own TSS patched in.
+///
+/// This replaces the old approach of calling trapframe::init() on each
+/// AP (which cascaded the GDT, creating different-sized GDTs per CPU).
+pub fn init_ap_gdt_idt() {
+    use alloc::boxed::Box;
+    use x86_64::instructions::tables::{lgdt, load_tss};
+    use x86_64::registers::control::{Cr4, Cr4Flags};
+    use x86_64::registers::model_specific::{Efer, EferFlags, GsBase, LStar, SFMask};
+    use x86_64::registers::rflags::RFlags;
+    use x86_64::structures::gdt::{Descriptor, SegmentSelector};
+    use x86_64::structures::tss::TaskStateSegment;
+    use x86_64::structures::DescriptorTablePointer;
+    use x86_64::{PrivilegeLevel, VirtAddr};
+
+    let template = BSP_GDT_TEMPLATE.get().expect("BSP GDT template not saved");
+    let tss_index = *BSP_TSS_INDEX.get().expect("BSP TSS index not saved");
+    let star_val = *BSP_STAR.get().expect("BSP STAR not saved");
+
+    // Create a new TSS for this AP with its own trap stack.
+    let mut tss = Box::new(TaskStateSegment::new());
+    let trap_stack_top =
+        Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
+    tss.privilege_stack_table[0] = VirtAddr::new(trap_stack_top);
+    let tss: &'static _ = Box::leak(tss);
+
+    // Build the TSS descriptor for this AP's TSS.
+    let (tss0, tss1) = match Descriptor::tss_segment(tss) {
+        Descriptor::SystemSegment(tss0, tss1) => (tss0, tss1),
+        _ => unreachable!(),
+    };
+
+    // Clone the BSP's GDT and patch in this AP's TSS descriptor.
+    let mut gdt = template.clone();
+    gdt[tss_index as usize] = tss0;
+    gdt[tss_index as usize + 1] = tss1;
+    let gdt = alloc::vec::Vec::leak(gdt);
+
+    unsafe {
+        // Disable interrupts during GDT/IDT/MSR setup.
+        x86_64::instructions::interrupts::disable();
+
+        // Load the new GDT (same layout as BSP's).
+        lgdt(&DescriptorTablePointer {
+            limit: gdt.len() as u16 * 8 - 1,
+            base: VirtAddr::new(gdt.as_ptr() as _),
+        });
+
+        // Load the TSS (same selector as BSP's).
+        load_tss(SegmentSelector::new(tss_index, PrivilegeLevel::Ring0));
+
+        // Load the BSP's IDT (shared — all CPUs use the same one).
+        // The IDT was saved in BSP_IDTR during save_bsp_gdt.
+        core::arch::asm!("lidt [{}]", in(reg) &BSP_IDTR, options(nostack));
+
+        // Set GS_BASE to this AP's TSS (per-CPU).
+        #[allow(const_item_mutation)]
+        GsBase::MSR.write(tss as *const _ as u64);
+
+        // Write STAR MSR (same selectors as BSP).
+        let eax = star_val as u32;
+        let edx = (star_val >> 32) as u32;
+        core::arch::asm!("wrmsr",
+            in("ecx") 0xC000_0081u32,
+            in("eax") eax,
+            in("edx") edx);
+
+        // Set LSTAR to the syscall entry point (same for all CPUs).
+        extern "C" {
+            fn syscall_entry();
+        }
+        LStar::write(VirtAddr::new(syscall_entry as *const () as u64));
+
+        // Set SFMASK (same for all CPUs).
+        // TF|DF|IF|IOPL|AC|NT = 0x47700
+        SFMask::write(RFlags::from_bits(0x47700).unwrap());
+
+        // Enable syscall/sysret.
+        Efer::update(|efer| efer.insert(EferFlags::SYSTEM_CALL_EXTENSIONS));
+
+        // Enable FSGSBASE.
+        Cr4::update(|cr4| cr4.insert(Cr4Flags::FSGSBASE));
+    }
 }
 
 /// Spin-wait delay in milliseconds (approximate, uses TSC).
