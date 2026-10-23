@@ -276,12 +276,14 @@ impl Syscall<'_> {
         // A slice's own `is_trap_dirty()` is always false and its
         // `pager_port` is None, so we must find the parent pager VMO
         // that owns the dirty tracking and pager port.
+        // `find_root_pager_vmo_with_offset` accumulates slice offsets
+        // through any nesting levels (slice of slice of pager VMO).
         let (pager_vmo, base_offset) = if vmo.is_trap_dirty() {
             (vmo.clone(), 0usize)
         } else if vmo.is_slice_vmo() {
-            if let Some(root) = vmo.find_root_pager_vmo() {
+            if let Some((root, cumulative_offset)) = vmo.find_root_pager_vmo_with_offset() {
                 if root.is_trap_dirty() {
-                    (root, vmo.get_slice_offset())
+                    (root, cumulative_offset)
                 } else {
                     return Ok(());
                 }
