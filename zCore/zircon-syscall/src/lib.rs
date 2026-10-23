@@ -327,52 +327,49 @@ impl Syscall<'_> {
         while batch_start < end_page {
             let batch_end = (batch_start + MAX_WRITE_WAIT_PAGES).min(end_page);
 
-            // Phase 1: Request READ for unsupplied pages in this batch.
-            loop {
-                // Find first unsupplied page in this batch.
-                let first_missing = (batch_start..batch_end).find(|&pg| !is_page_supplied(pg));
-                let first_missing = match first_missing {
-                    Some(pg) => pg,
-                    None => break, // all pages in batch supplied
-                };
-                // Find contiguous run of unsupplied pages.
-                let mut run_end = first_missing + 1;
-                while run_end < batch_end && !is_page_supplied(run_end) {
-                    run_end += 1;
-                }
-                let run_offset = first_missing * PAGE_SIZE;
-                let run_len = (run_end - first_missing) * PAGE_SIZE;
-                let _ = pager_vmo.request_pages(run_offset, run_len);
-                let future = pager_vmo.wait_for_page(run_offset);
-                pin_mut!(future);
-                self.thread.set_blocking_state(ThreadState::BlockedPager);
-                self.thread
-                    .blocking_run::<_, (), _>(
-                        future,
-                        ThreadState::BlockedPager,
-                        core::time::Duration::from_nanos(u64::MAX),
-                        None,
-                    )
-                    .await?;
-                // Loop back to check for more unsupplied pages
-                // (the pager may have supplied only part of the run).
-            }
-
-            // Phase 2: Request DIRTY for clean pages in this batch.
-            if is_trap_dirty && pager_vmo.has_pager() {
-                let mut page_idx = batch_start;
-                while page_idx < batch_end {
-                    if pager_vmo.is_page_dirty(page_idx) {
-                        page_idx += 1;
-                        continue;
-                    }
-                    // Find contiguous run of clean pages.
-                    let run_start = page_idx;
-                    while page_idx < batch_end && !pager_vmo.is_page_dirty(page_idx) {
-                        page_idx += 1;
+            // Process pages left-to-right within the batch, interleaving
+            // READ and DIRTY requests based on page state.  This matches
+            // Fuchsia's RequirePage cursor which processes one page at a
+            // time, batching consecutive pages of the same state.
+            let mut cursor = batch_start;
+            while cursor < batch_end {
+                if !is_page_supplied(cursor) {
+                    // Unsupplied page: find run, request READ, wait.
+                    let run_start = cursor;
+                    while cursor < batch_end && !is_page_supplied(cursor) {
+                        cursor += 1;
                     }
                     let run_offset = run_start * PAGE_SIZE;
-                    let run_bytes = (page_idx - run_start) * PAGE_SIZE;
+                    let run_len = (cursor - run_start) * PAGE_SIZE;
+                    let _ = pager_vmo.request_pages(run_offset, run_len);
+                    let future = pager_vmo.wait_for_page(run_offset);
+                    pin_mut!(future);
+                    self.thread.set_blocking_state(ThreadState::BlockedPager);
+                    self.thread
+                        .blocking_run::<_, (), _>(
+                            future,
+                            ThreadState::BlockedPager,
+                            core::time::Duration::from_nanos(u64::MAX),
+                            None,
+                        )
+                        .await?;
+                    // After supply, re-scan from run_start: supplied
+                    // pages are now clean and may need DIRTY requests.
+                    cursor = run_start;
+                    continue;
+                }
+
+                if is_trap_dirty && pager_vmo.has_pager() && !pager_vmo.is_page_dirty(cursor) {
+                    // Supplied but clean page: find run, request DIRTY, wait.
+                    let run_start = cursor;
+                    while cursor < batch_end
+                        && is_page_supplied(cursor)
+                        && !pager_vmo.is_page_dirty(cursor)
+                    {
+                        cursor += 1;
+                    }
+                    let run_offset = run_start * PAGE_SIZE;
+                    let run_bytes = (cursor - run_start) * PAGE_SIZE;
                     match pager_vmo.request_dirty(run_offset, run_bytes) {
                         Err(zircon_object::ZxError::SHOULD_WAIT) => {}
                         Err(zircon_object::ZxError::NOT_FOUND) => {
@@ -393,8 +390,12 @@ impl Syscall<'_> {
                         )
                         .await?;
                     // Re-scan from run_start in case only partial ack.
-                    page_idx = run_start;
+                    cursor = run_start;
+                    continue;
                 }
+
+                // Page is supplied and dirty (or not TRAP_DIRTY): skip.
+                cursor += 1;
             }
 
             batch_start = batch_end;
