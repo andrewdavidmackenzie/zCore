@@ -77,6 +77,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
             // matching what riscv64 and x86_64 do in their trap handlers.
             if irq_num == super::timer_interrupt_vector() {
                 crate::timer::timer_tick();
+                executor::set_preempt_pending();
                 executor::handle_timeout();
             }
         }

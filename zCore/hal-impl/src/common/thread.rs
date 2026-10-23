@@ -25,6 +25,22 @@ pub async fn preempt_yield() {
     super::future::PreemptYieldFuture::default().await
 }
 
+/// Check and clear the preemption-pending flag for the current CPU.
+///
+/// Returns `true` if the timer interrupt has fired since the last check,
+/// indicating the current task's time quantum has expired and a
+/// reschedule should be considered.
+#[cfg(not(feature = "libos"))]
+pub fn take_preempt_pending() -> bool {
+    executor::take_preempt_pending()
+}
+
+/// In libos mode, always return false (host OS handles preemption).
+#[cfg(feature = "libos")]
+pub fn take_preempt_pending() -> bool {
+    false
+}
+
 /// Perform an executor-level context switch for preemptive scheduling.
 #[cfg(not(feature = "libos"))]
 pub fn sched_yield() {

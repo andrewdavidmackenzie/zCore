@@ -109,6 +109,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
         TrapReason::Interrupt(vector) => {
             crate::interrupt::handle_irq(vector);
             if vector == X86_INT_APIC_TIMER {
+                executor::set_preempt_pending();
                 executor::handle_timeout();
             }
         }
