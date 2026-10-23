@@ -910,6 +910,43 @@ impl Syscall<'_> {
                 // local frames. PREFETCH/ALWAYS_NEED only ensure pages
                 // are in the root — they don't create private copies.
                 if op == 1 {
+                    // For TRAP_DIRTY VMOs, zero-marker pages that are
+                    // about to be committed (materialized into real frames)
+                    // need a DIRTY request first. The zero→committed
+                    // transition is effectively a write operation.
+                    if pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
+                        for pg in start_page..end_page {
+                            // Zero-marker pages being committed always
+                            // need a DIRTY request, even if their state
+                            // is PAGE_ZERO_DIRTY. Committing materializes
+                            // a real frame, and the pager must approve
+                            // this transition (e.g., allocate disk space).
+                            if pager_vmo.has_zero_marker(pg) {
+                                let pg_off = pg * PAGE_SIZE;
+                                match pager_vmo.request_dirty(pg_off, PAGE_SIZE) {
+                                    Err(ZxError::SHOULD_WAIT) => {}
+                                    Err(ZxError::NOT_FOUND) => {
+                                        return Err(ZxError::BAD_STATE);
+                                    }
+                                    Err(e) => return Err(e),
+                                    Ok(()) => {}
+                                }
+                                let future = pager_vmo.wait_for_dirty(pg_off);
+                                futures::pin_mut!(future);
+                                self.thread.set_blocking_state(
+                                    zircon_object::task::ThreadState::BlockedPager,
+                                );
+                                self.thread
+                                    .blocking_run::<_, (), _>(
+                                        future,
+                                        zircon_object::task::ThreadState::BlockedPager,
+                                        core::time::Duration::from_nanos(u64::MAX),
+                                        None,
+                                    )
+                                    .await?;
+                            }
+                        }
+                    }
                     let page_mask = PAGE_SIZE - 1;
                     let aligned_offset = offset & !page_mask;
                     let aligned_end = (offset + len + page_mask) & !page_mask;
