@@ -738,17 +738,27 @@ impl VmObject {
     /// Find the root pager VMO in this VMO's ancestor chain.
     /// Returns the ancestor VmObject that has pager_port set.
     pub fn find_root_pager_vmo(&self) -> Option<Arc<VmObject>> {
+        self.find_root_pager_vmo_with_offset().map(|(vmo, _)| vmo)
+    }
+
+    /// Walk up the parent chain to find the root pager-backed VMO,
+    /// accumulating slice offsets along the way.  Returns `None` if
+    /// this VMO itself is the pager VMO (has its own pager_port) or
+    /// if no ancestor has a pager_port.
+    pub fn find_root_pager_vmo_with_offset(&self) -> Option<(Arc<VmObject>, usize)> {
         let inner = self.inner.lock();
         if inner.pager_port.is_some() {
             return None; // this VMO IS the pager VMO
         }
+        let mut cumulative_offset = self.get_slice_offset();
         let mut cur = inner.parent.upgrade()?;
         loop {
             let cur_inner = cur.inner.lock();
             if cur_inner.pager_port.is_some() {
                 drop(cur_inner);
-                return Some(cur);
+                return Some((cur, cumulative_offset));
             }
+            cumulative_offset += cur.get_slice_offset();
             let next = cur_inner.parent.upgrade();
             drop(cur_inner);
             cur = next?;

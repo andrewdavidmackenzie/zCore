@@ -269,12 +269,40 @@ impl Syscall<'_> {
         use hal::PAGE_SIZE;
         use zircon_object::task::ThreadState;
 
-        if !vmo.is_trap_dirty() || len == 0 {
+        // Validate range against the VMO length before translating
+        // offsets.  Without this, an out-of-range write on a slice
+        // would send a spurious dirty request to the parent before
+        // sys_vmo_write rejects it with OUT_OF_RANGE.
+        if offset > vmo.len() || len > vmo.len() - offset {
             return Ok(());
         }
+        if len == 0 {
+            return Ok(());
+        }
+        // Resolve to the root pager VMO for slices/references.
+        // A slice's own `is_trap_dirty()` is always false and its
+        // `pager_port` is None, so we must find the parent pager VMO
+        // that owns the dirty tracking and pager port.
+        // `find_root_pager_vmo_with_offset` accumulates slice offsets
+        // through any nesting levels (slice of slice of pager VMO).
+        let (pager_vmo, base_offset) = if vmo.is_trap_dirty() {
+            (vmo.clone(), 0usize)
+        } else if vmo.is_slice_vmo() {
+            if let Some((root, cumulative_offset)) = vmo.find_root_pager_vmo_with_offset() {
+                if root.is_trap_dirty() {
+                    (root, cumulative_offset)
+                } else {
+                    return Ok(());
+                }
+            } else {
+                return Ok(());
+            }
+        } else {
+            return Ok(());
+        };
         // After pager detach, all writes to TRAP_DIRTY VMOs fail
         // with BAD_STATE — the pager can no longer acknowledge dirty.
-        if !vmo.has_pager() {
+        if !pager_vmo.has_pager() {
             return Err(zircon_object::ZxError::BAD_STATE);
         }
         // Match Fuchsia kernel's kMaxWriteWaitPages (256 pages = 1MB).
@@ -283,8 +311,10 @@ impl Syscall<'_> {
         // expect exact batch-size matching.
         const MAX_DIRTY_BATCH: usize = 256;
 
-        let start_page = offset / PAGE_SIZE;
-        let end_page = offset
+        // Translate to parent-relative offsets.
+        let parent_offset = offset + base_offset;
+        let start_page = parent_offset / PAGE_SIZE;
+        let end_page = parent_offset
             .checked_add(len)
             .ok_or(ZxError::INVALID_ARGS)?
             .div_ceil(PAGE_SIZE);
@@ -293,7 +323,7 @@ impl Syscall<'_> {
         let mut page_idx = start_page;
         while page_idx < end_page {
             // Skip already-dirty pages.
-            if vmo.is_page_dirty(page_idx) {
+            if pager_vmo.is_page_dirty(page_idx) {
                 page_idx += 1;
                 continue;
             }
@@ -301,13 +331,13 @@ impl Syscall<'_> {
             // MAX_DIRTY_BATCH pages.
             let run_start = page_idx;
             let run_limit = (page_idx + MAX_DIRTY_BATCH).min(end_page);
-            while page_idx < run_limit && !vmo.is_page_dirty(page_idx) {
+            while page_idx < run_limit && !pager_vmo.is_page_dirty(page_idx) {
                 page_idx += 1;
             }
             let run_len = page_idx - run_start;
             let run_offset = run_start * PAGE_SIZE;
             let run_bytes = run_len * PAGE_SIZE;
-            match vmo.request_dirty(run_offset, run_bytes) {
+            match pager_vmo.request_dirty(run_offset, run_bytes) {
                 Err(zircon_object::ZxError::SHOULD_WAIT) => {} // expected
                 Err(zircon_object::ZxError::NOT_FOUND) => {
                     // Pager detached — writing to clean pages on a
@@ -318,7 +348,7 @@ impl Syscall<'_> {
                 Ok(()) => {} // shouldn't happen but harmless
             }
             // Wait for the first page of the run to become dirty.
-            let future = vmo.wait_for_dirty(run_offset);
+            let future = pager_vmo.wait_for_dirty(run_offset);
             pin_mut!(future);
             self.thread.set_blocking_state(ThreadState::BlockedPager);
             self.thread

@@ -200,8 +200,14 @@ impl Port {
             packet: packet.into(),
             source_koid,
         });
-        drop(inner);
+        // Signal READABLE while still holding the port inner lock to
+        // prevent a TOCTOU race: without this, a concurrent `wait()`
+        // could dequeue the packet and `signal_clear(READABLE)` between
+        // our `drop(inner)` and `signal_set`, leaving READABLE set on
+        // an empty queue. The next `push()` would then be a no-op
+        // (READABLE already set → callbacks don't fire → waiters hang).
         self.base.signal_set(Signal::READABLE);
+        drop(inner);
     }
 
     /// Push a `User` type `packet` into the port.
@@ -222,8 +228,10 @@ impl Port {
             packet,
             source_koid: 0,
         });
-        drop(inner);
+        // Signal READABLE while still holding the port inner lock —
+        // see push_with_source for rationale on the TOCTOU fix.
         self.base.signal_set(Signal::READABLE);
+        drop(inner);
         Ok(())
     }
 
@@ -238,8 +246,10 @@ impl Port {
             pid,
         });
         inner.interrupt_grave.insert(pid);
-        drop(inner);
+        // Signal READABLE while still holding the port inner lock —
+        // see push_with_source for rationale on the TOCTOU fix.
         self.base.signal_set(Signal::READABLE);
+        drop(inner);
         pid
     }
 
