@@ -599,10 +599,12 @@ impl VmObject {
     /// Send a dirty-page request to the pager for the given range.
     /// Returns `Err(SHOULD_WAIT)` — caller should await `wait_for_page`.
     pub fn request_dirty(&self, offset: usize, length: usize) -> ZxResult {
-        let inner = self.inner.lock();
+        let mut inner = self.inner.lock();
+        let page_idx = offset / PAGE_SIZE;
+        // Clear any stale failed-page marker for this page.
+        // A new dirty request supersedes a previous OP_FAIL.
+        inner.pager_failed_pages.remove(&page_idx);
         if let Some(port) = &inner.pager_port {
-            let page_idx = offset / PAGE_SIZE;
-
             // Don't send duplicate requests.
             if !inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx) {
                 port.push(PortPacketRepr {
@@ -682,6 +684,13 @@ impl VmObject {
         let mut inner = self.inner.lock();
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             inner.dirty_pages[page_idx] = PAGE_DIRTY;
+        }
+        // Clear any failed-page markers in the dirtied range.
+        // A successful OP_DIRTY supersedes a previous OP_FAIL for
+        // these pages. Without this, stale failure markers cause
+        // subsequent wait_for_dirty to return the old error.
+        for page_idx in start_page..end_page {
+            inner.pager_failed_pages.remove(&page_idx);
         }
         // Note: OP_DIRTY does NOT set the modified flag. Only actual
         // writes to the VMO (vmo_write, mapping write) set modified.

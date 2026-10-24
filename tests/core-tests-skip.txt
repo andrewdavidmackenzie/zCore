@@ -15,7 +15,6 @@ PagerWriteback.SuspendDirtyTestVmar
 PagerWriteback.SuspendDirtyTestVmo
 PagerWriteback.UntrackedAbsorbsPages
 PagerWriteback.UntrackedBeyondStreamSize
-PagerWriteback.WritebackWithMapping
 
 # ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
 # These tests use ThreadedPagePinner which requires IOMMU/BTI and
