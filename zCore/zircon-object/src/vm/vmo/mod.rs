@@ -333,6 +333,8 @@ struct OutstandingPageRequest {
     /// Number of pages not yet supplied/failed. When this reaches 0,
     /// the request is complete and all waiters are woken.
     pending_pages: usize,
+    /// True if this is a DIRTY request, false for READ.
+    is_dirty: bool,
     /// Overlapping page waiters attached to this request. Each has:
     /// - page index
     /// - oneshot sender to wake the waiter
@@ -580,13 +582,13 @@ impl VmObject {
         }
     }
 
-    /// Check if a page is covered by an outstanding pager request.
+    /// Check if a page is covered by an outstanding DIRTY pager request.
     pub fn is_page_in_outstanding_request(&self, page_idx: usize) -> bool {
         let inner = self.inner.lock();
         inner
             .outstanding_requests
             .iter()
-            .any(|req| page_idx >= req.start_page && page_idx < req.end_page)
+            .any(|req| req.is_dirty && page_idx >= req.start_page && page_idx < req.end_page)
     }
 
     /// Mark a page as dirty without setting the modified flag.
@@ -618,13 +620,11 @@ impl VmObject {
         let port = inner.pager_port.clone();
         if let Some(port) = port {
             // Check if this request is fully absorbed by an existing
-            // outstanding request. Matching Fuchsia's overlap absorption
-            // where a new request within an existing request's range
-            // doesn't generate a new port packet.
-            let is_absorbed = inner
-                .outstanding_requests
-                .iter()
-                .any(|req| start_page >= req.start_page && end_page <= req.end_page);
+            // outstanding DIRTY request. Only dirty requests absorb
+            // other dirty requests — READ requests don't absorb DIRTY.
+            let is_absorbed = inner.outstanding_requests.iter().any(|req| {
+                req.is_dirty && start_page >= req.start_page && end_page <= req.end_page
+            });
             if !is_absorbed {
                 port.push(PortPacketRepr {
                     key: inner.pager_key,
@@ -638,11 +638,12 @@ impl VmObject {
                         _reserved1: 0,
                     }),
                 });
-                // Track as outstanding request for overlap detection.
+                // Track as outstanding DIRTY request for overlap detection.
                 inner.outstanding_requests.push(OutstandingPageRequest {
                     start_page,
                     end_page,
                     pending_pages: end_page - start_page,
+                    is_dirty: true,
                     overlap_waiters: alloc::vec![],
                 });
             }
@@ -1074,6 +1075,7 @@ impl VmObject {
                     start_page,
                     end_page,
                     pending_pages: pending,
+                    is_dirty: false,
                     overlap_waiters: Vec::new(),
                 });
                 info!(
