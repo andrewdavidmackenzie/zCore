@@ -115,6 +115,10 @@ struct VMObjectPagedInner {
     /// True if this VMO is backed by a pager. Pages must only be
     /// committed via `supply_pages`, not auto-allocated by `commit_page`.
     pager_backed: bool,
+    /// For unbounded VMOs: the content boundary in pages (stream_size
+    /// rounded up). Pages at or beyond this index return zeros without
+    /// pager requests on READ. Set to usize::MAX for regular VMOs.
+    content_boundary_pages: usize,
     /// Temporarily set to true during `supply_pages` to allow
     /// `commit_page` to allocate frames on a pager-backed VMO.
     supplying: bool,
@@ -253,6 +257,7 @@ impl VMObjectPaged {
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
                 pager_backed: false,
+                content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
                 pin_count: 0,
@@ -862,6 +867,11 @@ impl VMObjectTrait for VMObjectPaged {
         inner.supplying = false;
     }
 
+    fn set_content_boundary(&self, pages: usize) {
+        let (_guard, inner) = self.get_inner_mut();
+        inner.content_boundary_pages = pages;
+    }
+
     fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
         let (guard, inner) = self.get_inner_mut();
         inner.as_mut_buf().map(|(addr, size)| {
@@ -1014,6 +1024,18 @@ impl VMObjectPagedInner {
                     static ZERO_PAGE_ZM: spin::Lazy<Option<PhysFrame>> =
                         spin::Lazy::new(PhysFrame::new_zero);
                     return match ZERO_PAGE_ZM.as_ref() {
+                        Some(zp) => Ok(CommitResult::Ref(zp.paddr())),
+                        None => Err(ZxError::NO_MEMORY),
+                    };
+                }
+                // Unbounded VMOs: pages beyond the content boundary
+                // (stream_size) return zeros without pager requests.
+                // Matches Fuchsia where pages beyond stream_size on an
+                // unbounded VMO are implicitly zero (untracked).
+                if page_idx >= self.content_boundary_pages && !flags.contains(MMUFlags::WRITE) {
+                    static ZERO_PAGE_UNTRACKED: spin::Lazy<Option<PhysFrame>> =
+                        spin::Lazy::new(PhysFrame::new_zero);
+                    return match ZERO_PAGE_UNTRACKED.as_ref() {
                         Some(zp) => Ok(CommitResult::Ref(zp.paddr())),
                         None => Err(ZxError::NO_MEMORY),
                     };
@@ -1557,6 +1579,7 @@ impl VMObjectPagedInner {
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
                 pager_backed: false,
+                content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
                 pin_count: 0,
@@ -1581,6 +1604,7 @@ impl VMObjectPagedInner {
                 cache_policy: CachePolicy::Cached,
                 contiguous: self.contiguous,
                 pager_backed: false,
+                content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
                 pin_count: self.pin_count,
@@ -1687,6 +1711,7 @@ impl VMObjectPagedInner {
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
                 pager_backed: false,
+                content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
                 pin_count: 0,

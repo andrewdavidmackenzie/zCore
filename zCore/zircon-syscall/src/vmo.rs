@@ -152,6 +152,13 @@ impl Syscall<'_> {
             // Data is copied to user buffer as soon as each page is ready.
             let mut vmo_offset = start;
             let mut buf_written = 0usize;
+            // For unbounded VMOs, pages beyond content_size (stream_size)
+            // read as zeros without pager requests. Get the boundary.
+            let content_boundary = if vmo.is_unbounded() {
+                vmo.content_size().div_ceil(PAGE_SIZE)
+            } else {
+                usize::MAX
+            };
             for page_idx in start_page..end_page {
                 // Skip pages already committed or with zero markers
                 // in the reading VMO's clone tree.
@@ -159,6 +166,9 @@ impl Syscall<'_> {
                     || vmo.has_zero_marker(page_idx)
                 {
                     // Page available locally — no pager needed.
+                } else if page_idx >= content_boundary {
+                    // Beyond stream_size on unbounded VMO — reads
+                    // return zeros from commit_page, no pager needed.
                 } else if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
                     && !pager_vmo.has_zero_marker(page_idx)
                 {
@@ -721,6 +731,15 @@ impl Syscall<'_> {
             let zero_end = if size < old_size { vmo.len() } else { size };
             if zero_end > zero_start {
                 let _ = vmo.zero(zero_start, zero_end - zero_start);
+            }
+            // For unbounded VMOs, update dirty tracking:
+            // - Increase: [old_pages, new_pages) transitions from
+            //   UNTRACKED → ZERO_DIRTY (newly tracked dirty zeros).
+            // - Decrease: [new_pages, old_pages) transitions to
+            //   UNTRACKED (absorbed back). Committed pages in this
+            //   range are decommitted.
+            if vmo.is_unbounded() {
+                vmo.update_stream_size_dirty_tracking(old_size, size);
             }
         }
         vmo.set_content_size(size)
