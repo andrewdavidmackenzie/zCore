@@ -7,7 +7,7 @@ fn get_cycle() -> u64 {
 /// Convert a monotonic `Duration` to a timer cycle count.
 fn duration_to_cycles(d: Duration) -> u64 {
     let freq = super::cpu::cpu_frequency() as u64;
-    (d.as_nanos() as u128 * freq as u128 / 1000) as u64
+    (d.as_nanos() * freq as u128 / 1000) as u64
 }
 
 /// Program the RISC-V timer to fire at `deadline` (monotonic).

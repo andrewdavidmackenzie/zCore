@@ -12,7 +12,7 @@ pub(crate) fn has_tsc_deadline() -> bool {
     *TSC_DEADLINE_SUPPORTED.call_once(|| {
         raw_cpuid::CpuId::new()
             .get_feature_info()
-            .map_or(false, |f| f.has_tsc_deadline())
+            .is_some_and(|f| f.has_tsc_deadline())
     })
 }
 
@@ -21,7 +21,7 @@ fn duration_to_tsc(d: Duration) -> u64 {
     let freq = super::cpu::cpu_frequency() as u64;
     // d.as_nanos() * freq_mhz / 1000 = TSC cycles
     // Use u128 to avoid overflow.
-    (d.as_nanos() as u128 * freq as u128 / 1000) as u64
+    (d.as_nanos() * freq as u128 / 1000) as u64
 }
 
 pub fn timer_now() -> Duration {
