@@ -1,7 +1,3 @@
-# ── Hangs after PR #775 SignalFuture fix ──
-C11ThreadTest.SelfDetachAndFree
-FutexTest.RequeueCycleStressTest
-
 # ── PortStressTest: QEMU overhead (51000 channel_calls × ~500us each) ──
 # 1000 iterations × 51 channel_call(1-10us deadline) — each call takes
 # ~500us in QEMU due to async poll chain overhead, totalling ~25 min.
@@ -10,19 +6,8 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 
 # ── PagerWriteback: TestThread hangs (need writeback state machine,
 #    FailPages, concurrent dirty requests, or Suspend support) ──
-PagerWriteback.DirtyRequestsOverlap
-PagerWriteback.NoDirtyRequestsAfterDetachVmar
-PagerWriteback.NotModifiedOnFailedVmoWriteNoTrapDirty
-
-PagerWriteback.ResizeWritebackInterleavedWriteWithMappingNoTrapDirty
-PagerWriteback.ResizeWritebackInterleavedWriteWithMappingTrapDirty
-PagerWriteback.ResizeWritebackMulipleGapsNoTrapDirty
-PagerWriteback.ResizeWritebackMulipleGapsTrapDirty
-PagerWriteback.SuspendDirtyTestVmar
-PagerWriteback.SuspendDirtyTestVmo
 PagerWriteback.UntrackedAbsorbsPages
 PagerWriteback.UntrackedBeyondStreamSize
-PagerWriteback.WritebackWithMapping
 
 # ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
 # These tests use ThreadedPagePinner which requires IOMMU/BTI and
@@ -36,5 +21,5 @@ PagerWriteback.OpZeroPinnedTrapDirty
 PagerWriteback.PinForWriteTrapDirty
 PagerWriteback.PinForWriteUnpopulatedTrapDirty
 PagerWriteback.PinnedWritebackTrapDirty
-PagerWriteback.SlicePinWriteTrapDirty
+PagerWriteback.SlicePinWriteTrapDirtyyes
 PagerWriteback.WritePinAwaitingCleanTrapDirty

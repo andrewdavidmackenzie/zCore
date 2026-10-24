@@ -521,8 +521,20 @@ impl Syscall<'_> {
                 };
                 if is_trap_dirty && pager_vmo.has_pager() && needs_dirty(cursor) {
                     // Supplied but needs-dirty page: find run, request DIRTY, wait.
+                    // Break the run at pages covered by outstanding dirty
+                    // requests — those pages will be handled via overlap
+                    // absorption when request_dirty is called.
                     let run_start = cursor;
-                    while cursor < batch_end && is_page_supplied(cursor) && needs_dirty(cursor) {
+                    while cursor < batch_end
+                        && is_page_supplied(cursor)
+                        && needs_dirty(cursor)
+                        && !pager_vmo.is_page_in_outstanding_request(cursor)
+                    {
+                        cursor += 1;
+                    }
+                    // If the run is empty (page is in outstanding request),
+                    // just wait for that request to be resolved.
+                    if cursor == run_start {
                         cursor += 1;
                     }
                     let run_offset = run_start * PAGE_SIZE;
@@ -540,11 +552,10 @@ impl Syscall<'_> {
                     self.thread.set_blocking_state(ThreadState::BlockedPager);
                     let dirty_result = self
                         .thread
-                        .blocking_run::<_, (), _>(
+                        .blocking_run_suspendable(
                             future,
                             ThreadState::BlockedPager,
                             core::time::Duration::from_nanos(u64::MAX),
-                            None,
                         )
                         .await;
                     match dirty_result {
@@ -556,6 +567,20 @@ impl Syscall<'_> {
                             // unsupplied, so the READ path will fire
                             // first, then DIRTY again on retry.
                         }
+                        Err(zircon_object::ZxError::CANCELED) => {
+                            // Thread was suspended during the pager wait.
+                            // Cancel the outstanding request so the retry
+                            // generates a fresh port packet. Then wait
+                            // for resume before re-scanning.
+                            pager_vmo.cancel_outstanding_requests_in_range(
+                                run_start * PAGE_SIZE,
+                                (cursor - run_start) * PAGE_SIZE,
+                            );
+                            self.thread.wait_for_resume().await;
+                        }
+                        Err(zircon_object::ZxError::STOP) => {
+                            return Err(zircon_object::ZxError::STOP);
+                        }
                         Err(e) => return Err(e),
                     }
                     // Re-scan from run_start in case only partial ack
@@ -564,7 +589,19 @@ impl Syscall<'_> {
                     continue;
                 }
 
-                // Page is supplied and dirty (or not TRAP_DIRTY): skip.
+                // Page is supplied and dirty (or not TRAP_DIRTY).
+                // For non-TRAP_DIRTY VMOs, mark the page dirty now
+                // (before the actual write), matching Fuchsia's
+                // RequirePage which marks dirty during page lookup.
+                // This ensures dirty state is set even if the write
+                // fails later (e.g., source buffer fault).
+                // Note: only set dirty state, NOT modified flag.
+                // Modified is set later by the VMO_WRITE handler
+                // only if data was actually written. Fuchsia's
+                // mark_modified_locked runs after the copy succeeds.
+                if !is_trap_dirty {
+                    pager_vmo.mark_page_dirty_only(cursor);
+                }
                 cursor += 1;
             }
 
@@ -965,19 +1002,23 @@ impl Syscall<'_> {
                     .await
             }
             Sys::VMO_WRITE => {
+                // Pager pre-flight FIRST: mark destination pages dirty
+                // before prefaulting the source buffer. Matches Fuchsia's
+                // ReadWriteInternal where RequirePage (which marks dirty)
+                // runs before the copy attempt. If the source prefault
+                // fails, pages are still correctly marked dirty.
+                let proc = self.thread.proc();
+                if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
+                    if let Err(e) = self.pager_preflight_write(&vmo, a2, a3).await {
+                        return e as isize;
+                    }
+                }
+                drop(proc);
                 // Pre-fault pager pages in user buffer (a1=buf, a3=size).
                 if let Err(e) = self.prefault_user_buffer(a1, a3).await {
                     return e as isize;
                 }
                 let proc = self.thread.proc();
-                if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
-                    // Batched pager pre-flight: request READ for unsupplied
-                    // pages and DIRTY for clean pages in kMaxWriteWaitPages
-                    // batches, matching Fuchsia's ReadWriteInternal.
-                    if let Err(e) = self.pager_preflight_write(&vmo, a2, a3).await {
-                        return e as isize;
-                    }
-                }
                 let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _);
                 // After a successful write to a pager-backed VMO (or a slice
                 // of one), set modified and mark pages dirty on the parent.

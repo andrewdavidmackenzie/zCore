@@ -2360,9 +2360,15 @@ impl VmMapping {
         // and grants WRITE permission.
         if access_flags.contains(MMUFlags::WRITE)
             && self.vmo.is_trap_dirty()
-            && self.vmo.is_pager_backed()
             && !self.vmo.is_page_dirty(page_idx)
         {
+            // For TRAP_DIRTY VMOs, writes to clean pages need pager
+            // approval. If the pager is still attached, send a DIRTY
+            // request (returns SHOULD_WAIT). If detached, request_dirty
+            // returns BAD_STATE — the write is rejected as a fatal
+            // page fault. This matches Fuchsia's PrepareForWriteLocked
+            // which checks ShouldTrapDirtyTransitions() independently
+            // of the pager being attached.
             return self.vmo.request_dirty(vmo_offset, PAGE_SIZE);
         }
         // Slice of TRAP_DIRTY parent: request dirty on the parent.

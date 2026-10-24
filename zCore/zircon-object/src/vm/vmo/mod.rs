@@ -333,6 +333,8 @@ struct OutstandingPageRequest {
     /// Number of pages not yet supplied/failed. When this reaches 0,
     /// the request is complete and all waiters are woken.
     pending_pages: usize,
+    /// True if this is a DIRTY request, false for READ.
+    is_dirty: bool,
     /// Overlapping page waiters attached to this request. Each has:
     /// - page index
     /// - oneshot sender to wake the waiter
@@ -580,6 +582,26 @@ impl VmObject {
         }
     }
 
+    /// Check if a page is covered by an outstanding DIRTY pager request.
+    pub fn is_page_in_outstanding_request(&self, page_idx: usize) -> bool {
+        let inner = self.inner.lock();
+        inner
+            .outstanding_requests
+            .iter()
+            .any(|req| req.is_dirty && page_idx >= req.start_page && page_idx < req.end_page)
+    }
+
+    /// Mark a page as dirty without setting the modified flag.
+    /// Used by pager_preflight_write to set dirty state during page
+    /// lookup (before data copy), matching Fuchsia's RequirePage which
+    /// marks dirty but defers modified to after the copy succeeds.
+    pub fn mark_page_dirty_only(&self, page_idx: usize) {
+        let mut inner = self.inner.lock();
+        if page_idx < inner.dirty_pages.len() {
+            inner.dirty_pages[page_idx] = PAGE_DIRTY;
+        }
+    }
+
     /// Check if this VMO has dirty-page trapping enabled.
     pub fn is_trap_dirty(&self) -> bool {
         self.inner.lock().trap_dirty
@@ -588,12 +610,22 @@ impl VmObject {
     /// Send a dirty-page request to the pager for the given range.
     /// Returns `Err(SHOULD_WAIT)` — caller should await `wait_for_page`.
     pub fn request_dirty(&self, offset: usize, length: usize) -> ZxResult {
-        let inner = self.inner.lock();
-        if let Some(port) = &inner.pager_port {
-            let page_idx = offset / PAGE_SIZE;
-
-            // Don't send duplicate requests.
-            if !inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx) {
+        let mut inner = self.inner.lock();
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        // Clear any stale failed-page markers in this range.
+        for pg in start_page..end_page {
+            inner.pager_failed_pages.remove(&pg);
+        }
+        let port = inner.pager_port.clone();
+        if let Some(port) = port {
+            // Check if this request is fully absorbed by an existing
+            // outstanding DIRTY request. Only dirty requests absorb
+            // other dirty requests — READ requests don't absorb DIRTY.
+            let is_absorbed = inner.outstanding_requests.iter().any(|req| {
+                req.is_dirty && start_page >= req.start_page && end_page <= req.end_page
+            });
+            if !is_absorbed {
                 port.push(PortPacketRepr {
                     key: inner.pager_key,
                     status: ZxError::OK,
@@ -606,12 +638,17 @@ impl VmObject {
                         _reserved1: 0,
                     }),
                 });
+                // Track as outstanding DIRTY request for overlap detection.
+                inner.outstanding_requests.push(OutstandingPageRequest {
+                    start_page,
+                    end_page,
+                    pending_pages: end_page - start_page,
+                    is_dirty: true,
+                    overlap_waiters: alloc::vec![],
+                });
             }
             Err(ZxError::SHOULD_WAIT)
         } else {
-            // No pager port — VMO was detached. Return BAD_STATE
-            // (not NOT_FOUND) to match Fuchsia's behavior where
-            // writes to detached TRAP_DIRTY VMOs get BAD_STATE.
             Err(ZxError::BAD_STATE)
         }
     }
@@ -655,6 +692,20 @@ impl VmObject {
                             i += 1;
                         }
                     }
+                    // Remove outstanding requests covering this range
+                    // so retries generate new port packets.
+                    let mut req_idx = 0;
+                    while req_idx < inner.outstanding_requests.len() {
+                        let req = &inner.outstanding_requests[req_idx];
+                        if req.start_page < end_page && req.end_page > start_page {
+                            let removed = inner.outstanding_requests.swap_remove(req_idx);
+                            for waiter in removed.overlap_waiters {
+                                let _ = waiter.sender.send(Err(ZxError::NOT_FOUND));
+                            }
+                            continue;
+                        }
+                        req_idx += 1;
+                    }
                     return Err(ZxError::NOT_FOUND);
                 }
             }
@@ -672,6 +723,13 @@ impl VmObject {
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             inner.dirty_pages[page_idx] = PAGE_DIRTY;
         }
+        // Clear any failed-page markers in the dirtied range.
+        // A successful OP_DIRTY supersedes a previous OP_FAIL for
+        // these pages. Without this, stale failure markers cause
+        // subsequent wait_for_dirty to return the old error.
+        for page_idx in start_page..end_page {
+            inner.pager_failed_pages.remove(&page_idx);
+        }
         // Note: OP_DIRTY does NOT set the modified flag. Only actual
         // writes to the VMO (vmo_write, mapping write) set modified.
         // Wake waiters for these pages (shared waiter list with read waiters).
@@ -683,6 +741,27 @@ impl VmObject {
             } else {
                 i += 1;
             }
+        }
+        // Resolve outstanding dirty requests that overlap this range.
+        // Decrement pending_pages for dirtied pages. When a request
+        // reaches 0 pending, wake all overlap waiters and remove it.
+        let mut req_idx = 0;
+        while req_idx < inner.outstanding_requests.len() {
+            let req = &mut inner.outstanding_requests[req_idx];
+            let overlap_start = start_page.max(req.start_page);
+            let overlap_end = end_page.min(req.end_page);
+            if overlap_start < overlap_end {
+                let newly_dirtied = overlap_end - overlap_start;
+                req.pending_pages = req.pending_pages.saturating_sub(newly_dirtied);
+                if req.pending_pages == 0 {
+                    let completed = inner.outstanding_requests.swap_remove(req_idx);
+                    for waiter in completed.overlap_waiters {
+                        let _ = waiter.sender.send(Ok(()));
+                    }
+                    continue; // don't increment — swap_remove shifted
+                }
+            }
+            req_idx += 1;
         }
         Ok(())
     }
@@ -899,43 +978,30 @@ impl VmObject {
 
     /// End writeback: transition AwaitingClean pages in range to Clean.
     /// Pages that were re-dirtied during writeback stay dirty.
-    /// Pinned pages cannot be cleaned (they have active DMA references).
-    /// For non-TRAP_DIRTY VMOs, unmap cleaned pages so subsequent
-    /// writes re-fault and trigger auto_mark_dirty.
     ///
-    /// For zero-marker pages that were AwaitingClean: remove the zero
-    /// marker and decommit the frame (if any). This makes the page
-    /// "unsupplied" — subsequent accesses will re-request from the pager.
-    /// Matches Fuchsia's WritebackEndLocked which removes cleaned zero
-    /// intervals.
+    /// Matching Fuchsia's `WritebackEndLocked`:
+    /// - Committed pages: dirty state transitions AwaitingClean → Clean.
+    ///   Frames stay in memory (not decommitted). Write permissions
+    ///   were already removed by `writeback_begin`.
+    /// - Zero-marker pages: dirty state transitions + zero marker
+    ///   removed. Pages become "empty" — subsequent writes need
+    ///   READ+DIRTY from the pager. Existing READ PTEs remain valid.
     pub fn writeback_end(&self, offset: usize, length: usize) {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        let mut any_cleaned = false;
-        let mut zero_pages_to_clean = alloc::vec::Vec::new();
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             if inner.dirty_pages[page_idx] == PAGE_AWAITING_CLEAN {
                 inner.dirty_pages[page_idx] = PAGE_CLEAN;
-                any_cleaned = true;
-                // Track zero-marker pages for cleanup after lock release.
+                // Remove zero marker atomically with dirty state
+                // transition. Matches Fuchsia's WritebackEndLocked
+                // which removes dirty zero intervals in the same
+                // locked traversal. Pages become "empty" — subsequent
+                // writes need READ+DIRTY. Committed frames stay.
                 if self.trait_.has_zero_marker(page_idx) {
-                    zero_pages_to_clean.push(page_idx);
+                    self.trait_.remove_zero_marker(page_idx);
                 }
             }
-        }
-        drop(inner);
-        // Remove zero markers and decommit frames for cleaned zero
-        // pages. This makes them "unsupplied" so subsequent accesses
-        // re-request from the pager.
-        for page_idx in &zero_pages_to_clean {
-            self.trait_.remove_zero_marker(*page_idx);
-            self.trait_.decommit_page(*page_idx);
-        }
-        // Unmap cleaned pages from all mappings so writes re-fault.
-        if any_cleaned {
-            self.trait_
-                .range_change_unmap(start_page, end_page - start_page);
         }
     }
 
@@ -1009,6 +1075,7 @@ impl VmObject {
                     start_page,
                     end_page,
                     pending_pages: pending,
+                    is_dirty: false,
                     overlap_waiters: Vec::new(),
                 });
                 info!(
@@ -2067,7 +2134,8 @@ impl Drop for VmObject {
         // handle to a pager-backed VMO is closed.
         {
             let inner = self.inner.lock();
-            if let Some(port) = &inner.pager_port {
+            let port = inner.pager_port.clone();
+            if let Some(port) = port {
                 port.push(PortPacketRepr {
                     key: inner.pager_key,
                     status: ZxError::OK,
