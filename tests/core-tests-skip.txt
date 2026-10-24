@@ -8,10 +8,6 @@ FutexTest.RequeueCycleStressTest
 # woken by the final ch2_req.write() — pre-existing on master too.
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
-# ── PagerWriteback: TestThread hangs (need writeback state machine,
-#    FailPages, concurrent dirty requests, or Suspend support) ──
-PagerWriteback.UntrackedAbsorbsPages
-
 # ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
 # These tests use ThreadedPagePinner which requires IOMMU/BTI and
 # spawns a thread for bti.pin(). They hang on the pin thread.

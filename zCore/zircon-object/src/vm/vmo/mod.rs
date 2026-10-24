@@ -626,7 +626,12 @@ impl VmObject {
             drop(inner);
             for pg in pages_to_decommit {
                 self.trait_.decommit_page(pg);
-                self.trait_.remove_zero_marker(pg);
+                // Keep the zero marker set by decommit_page so that
+                // reads return zeros without requesting from the pager.
+                // Previously, remove_zero_marker was called here which
+                // caused VMO reads to block forever waiting for a pager
+                // supply that would never come (the page is a dirty
+                // zero, not a clean page needing supply).
             }
         } else if new_pages < old_pages {
             // Decrease: [new_pages, old_pages) → UNTRACKED
