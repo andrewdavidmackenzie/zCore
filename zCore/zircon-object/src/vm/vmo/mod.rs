@@ -862,21 +862,13 @@ impl VmObject {
         if !inner.trap_dirty {
             return true; // Non-TRAP_DIRTY VMOs treat all pages as writable
         }
-        // Only PAGE_DIRTY (committed dirty pages) are considered dirty
-        // for write-permission purposes.
-        //
-        // PAGE_ZERO_DIRTY pages are NOT treated as dirty here — they
-        // represent zero-intervals from VMO resize that don't have a
-        // committed frame yet. A write to a PAGE_ZERO_DIRTY page must
-        // generate a DIRTY request so the pager can acknowledge the
-        // transition from zero-interval to committed dirty page.
-        //
-        // PAGE_AWAITING_CLEAN pages need another DIRTY acknowledgement
-        // before writing, matching Fuchsia's RequirePage which treats
-        // AwaitingClean like Clean.
+        // PAGE_DIRTY and PAGE_ZERO_DIRTY are both considered dirty
+        // for write-permission purposes. PAGE_AWAITING_CLEAN pages
+        // need another DIRTY acknowledgement before writing, matching
+        // Fuchsia's RequirePage which treats AwaitingClean like Clean.
         matches!(
             inner.dirty_pages.get(page_idx).copied(),
-            Some(PAGE_DIRTY)
+            Some(PAGE_DIRTY) | Some(PAGE_ZERO_DIRTY)
         )
     }
 
