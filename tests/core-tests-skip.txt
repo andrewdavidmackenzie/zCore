@@ -13,6 +13,7 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 # State leak causes TestThread mapping write to not generate a fault.
 PagerWriteback.ResizeWritebackWithMappingTrapDirty
 PagerWriteback.LargeWriteBatched
+PagerWriteback.NoDirtyOnCommitTrapDirty
 
 # ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
 # These tests use ThreadedPagePinner which requires IOMMU/BTI and
