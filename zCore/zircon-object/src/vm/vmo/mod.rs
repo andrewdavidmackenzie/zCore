@@ -609,7 +609,10 @@ impl VmObject {
             }
             Err(ZxError::SHOULD_WAIT)
         } else {
-            Err(ZxError::NOT_FOUND)
+            // No pager port — VMO was detached. Return BAD_STATE
+            // (not NOT_FOUND) to match Fuchsia's behavior where
+            // writes to detached TRAP_DIRTY VMOs get BAD_STATE.
+            Err(ZxError::BAD_STATE)
         }
     }
 
@@ -635,6 +638,23 @@ impl VmObject {
                     continue;
                 }
                 if !self.trait_.has_zero_marker(page_idx) {
+                    // Page was cleaned by WritebackEnd (no frame, no
+                    // marker). Wake any kernel threads waiting for
+                    // dirty on pages in this range so they can retry
+                    // (re-request READ then DIRTY). Without this,
+                    // threads blocked in wait_for_dirty hang forever.
+                    let mut inner = self.inner.lock();
+                    let mut i = 0;
+                    while i < inner.pager_waiters.len() {
+                        if inner.pager_waiters[i].0 >= start_page
+                            && inner.pager_waiters[i].0 < end_page
+                        {
+                            let (_, tx) = inner.pager_waiters.swap_remove(i);
+                            let _ = tx.send(Err(ZxError::NOT_FOUND));
+                        } else {
+                            i += 1;
+                        }
+                    }
                     return Err(ZxError::NOT_FOUND);
                 }
             }

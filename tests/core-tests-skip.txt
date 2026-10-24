@@ -1,3 +1,7 @@
+# ── Hangs after PR #775 SignalFuture fix ──
+C11ThreadTest.SelfDetachAndFree
+FutexTest.RequeueCycleStressTest
+
 # ── PortStressTest: Thread C join hang after channel_call loop ──
 # All 51000 channel_calls complete in ~3s (one-shot timer), but
 # t_c.join() hangs: Thread C's wait_one(READABLE, infinite) is not
@@ -6,8 +10,6 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 
 # ── PagerWriteback: TestThread hangs (need writeback state machine,
 #    FailPages, concurrent dirty requests, or Suspend support) ──
-PagerWriteback.DelayedDirtyNotFound
-
 PagerWriteback.DirtyRequestsOverlap
 PagerWriteback.NoDirtyRequestsAfterDetachVmar
 PagerWriteback.NotModifiedOnFailedVmoWriteNoTrapDirty

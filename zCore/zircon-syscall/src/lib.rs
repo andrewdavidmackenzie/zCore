@@ -538,15 +538,28 @@ impl Syscall<'_> {
                     let future = pager_vmo.wait_for_dirty(run_offset);
                     pin_mut!(future);
                     self.thread.set_blocking_state(ThreadState::BlockedPager);
-                    self.thread
+                    let dirty_result = self
+                        .thread
                         .blocking_run::<_, (), _>(
                             future,
                             ThreadState::BlockedPager,
                             core::time::Duration::from_nanos(u64::MAX),
                             None,
                         )
-                        .await?;
-                    // Re-scan from run_start in case only partial ack.
+                        .await;
+                    match dirty_result {
+                        Ok(()) => {}
+                        Err(zircon_object::ZxError::NOT_FOUND) => {
+                            // Page was cleaned by WritebackEnd between
+                            // our DIRTY request and OP_DIRTY response.
+                            // Re-scan from run_start: the page is now
+                            // unsupplied, so the READ path will fire
+                            // first, then DIRTY again on retry.
+                        }
+                        Err(e) => return Err(e),
+                    }
+                    // Re-scan from run_start in case only partial ack
+                    // or NOT_FOUND retry.
                     cursor = run_start;
                     continue;
                 }
