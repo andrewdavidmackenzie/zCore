@@ -922,30 +922,18 @@ impl VmObject {
         let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
-        let mut zero_markers_to_remove = alloc::vec::Vec::new();
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             if inner.dirty_pages[page_idx] == PAGE_AWAITING_CLEAN {
                 inner.dirty_pages[page_idx] = PAGE_CLEAN;
-                // Track zero-marker pages for cleanup.
+                // Remove zero marker atomically with dirty state
+                // transition. Matches Fuchsia's WritebackEndLocked
+                // which removes dirty zero intervals in the same
+                // locked traversal. Pages become "empty" — subsequent
+                // writes need READ+DIRTY. Committed frames stay.
                 if self.trait_.has_zero_marker(page_idx) {
-                    zero_markers_to_remove.push(page_idx);
+                    self.trait_.remove_zero_marker(page_idx);
                 }
             }
-        }
-        drop(inner);
-        // Remove zero markers for cleaned zero pages. Matches Fuchsia's
-        // WritebackEndLocked which removes dirty zero intervals from
-        // the page list. The pages become "empty" — subsequent writes
-        // need READ+DIRTY from the pager. Existing READ PTEs remain
-        // valid (they point to the shared zero page set up during
-        // commit_page(READ)), so reads work without pager requests.
-        //
-        // Committed page frames are NOT decommitted — they stay in
-        // memory until eviction. Write permissions were already
-        // removed by writeback_begin (matching Fuchsia's
-        // WritebackBeginLocked which calls RemoveWrite).
-        for page_idx in &zero_markers_to_remove {
-            self.trait_.remove_zero_marker(*page_idx);
         }
     }
 
