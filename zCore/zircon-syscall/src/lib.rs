@@ -1324,9 +1324,14 @@ impl Syscall<'_> {
             // --- Additional upstream syscalls (stubs) ---
             Sys::THREAD_LEGACY_YIELD => {
                 // Yield CPU. Options (a0) must be 0.
+                // Must actually yield — the C++ test uses
+                // std::this_thread::yield() in a spin loop waiting
+                // for another thread to set a flag. Without yielding,
+                // the spin loop monopolises the executor.
                 if a0 != 0 {
                     Err(ZxError::INVALID_ARGS)
                 } else {
+                    hal_impl::thread::yield_now().await;
                     Ok(())
                 }
             }

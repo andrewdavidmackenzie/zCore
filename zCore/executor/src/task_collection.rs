@@ -86,15 +86,19 @@ pub struct FutureCollection {
     // pub vec: VecDeque<Key>,
     pub pages: Vec<Arc<WakerPage>>,
     pub priority: usize,
+    /// CPU ID that owns this collection. WakerPages created for this
+    /// collection use this ID so IPI wakeups target the correct CPU.
+    owner_cpu: u8,
 }
 
 impl FutureCollection {
-    pub fn new(priority: usize) -> Self {
+    pub fn new(priority: usize, owner_cpu: u8) -> Self {
         Self {
             slab: Slab::new(),
             // vec: VecDeque::new(),
             pages: vec![],
             priority,
+            owner_cpu,
         }
     }
     /// Our pages hold 64 contiguous future wakers, so we can do simple arithmetic to access the
@@ -112,7 +116,7 @@ impl FutureCollection {
         let key = self.slab.insert(Arc::new(Task::new(future, self.priority)));
         // Add a new page to hold this future's status if the current page is filled.
         while key >= self.pages.len() * WAKER_PAGE_SIZE {
-            self.pages.push(WakerPage::new());
+            self.pages.push(WakerPage::new_for_cpu(self.owner_cpu));
         }
         let (page, subpage_idx) = self.page(key);
         page.initialize(subpage_idx);
@@ -154,7 +158,7 @@ impl TaskCollection {
         let tc = Arc::get_mut(&mut task_collection).expect("Arc just created, must be unique");
         for priority in 0..MAX_PRIORITY {
             tc.future_collections
-                .push(Mutex::new(FutureCollection::new(priority)));
+                .push(Mutex::new(FutureCollection::new(priority, cpu_id)));
         }
         task_collection
     }

@@ -161,13 +161,23 @@ impl Channel {
         // matching txid will be delivered via the oneshot channel.
         let (sender, receiver) = oneshot::channel();
         self.call_reply.lock().insert(txid, sender);
+        // Guard removes the call_reply entry if the future is dropped
+        // (e.g., on timeout). Without this, orphaned entries accumulate
+        // and can swallow replies intended for push_general.
+        let guard = CallReplyGuard {
+            channel: self.clone(),
+            txid,
+        };
         if let Err(e) = peer.push_general(msg) {
-            // If push fails, remove the orphaned reply handler.
-            self.call_reply.lock().remove(&txid);
+            // If push fails, the guard's drop will clean up call_reply.
+            drop(guard);
             return Err(e);
         }
         drop(peer);
-        receiver.await.unwrap()
+        let result = receiver.await.unwrap();
+        // Reply received successfully — disarm the guard.
+        guard.disarm();
+        result
     }
 
     /// Maximum number of pending messages per channel endpoint.
@@ -182,9 +192,16 @@ impl Channel {
             return Err(ZxError::SHOULD_WAIT);
         }
         send_queue.push_back(msg);
-        if send_queue.len() == 1 {
-            self.base.signal_set(Signal::READABLE);
-        }
+        // Always signal READABLE, matching Fuchsia's WriteSelf which
+        // calls RaiseSignalsLocked(ZX_CHANNEL_READABLE) on every push.
+        // signal_change short-circuits when the signal is already set,
+        // so this is a no-op for back-to-back pushes where the reader
+        // hasn't drained the queue. The critical case is when a new
+        // observer registers via add_signal_callback between the reader
+        // clearing READABLE and the next push — the observer fires
+        // immediately in add_signal_callback, but if push_general
+        // skips signal_set, a subsequent push won't re-notify.
+        self.base.signal_set(Signal::READABLE);
         Ok(())
     }
 
@@ -196,6 +213,32 @@ impl Channel {
     /// Is peer channel closed?
     fn peer_closed(&self) -> bool {
         self.peer.strong_count() == 0
+    }
+}
+
+/// RAII guard that removes the `call_reply` entry when dropped.
+///
+/// When `Channel::call()` is cancelled (e.g., by `blocking_run` timeout),
+/// the future is dropped. Without cleanup, the orphaned `call_reply` entry
+/// would swallow any later reply with the same txid — `write()` would
+/// `sender.send()` into a dead oneshot instead of calling `push_general`,
+/// so the READABLE signal would never fire and the reader would hang.
+struct CallReplyGuard {
+    channel: Arc<Channel>,
+    txid: TxID,
+}
+
+impl CallReplyGuard {
+    /// Disarm the guard — call this when the reply was successfully received
+    /// so the entry is already consumed by the oneshot channel.
+    fn disarm(self) {
+        core::mem::forget(self);
+    }
+}
+
+impl Drop for CallReplyGuard {
+    fn drop(&mut self) {
+        self.channel.call_reply.lock().remove(&self.txid);
     }
 }
 
