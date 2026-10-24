@@ -4,14 +4,24 @@ fn get_cycle() -> u64 {
     riscv::register::time::read() as u64
 }
 
-pub(super) fn timer_set_next() {
-    let cycles =
-        super::cpu::cpu_frequency() as u64 * 1_000_000 / super::super::timer::TICKS_PER_SEC;
-    sbi_rt::set_timer(get_cycle() + cycles);
+/// Convert a monotonic `Duration` to a timer cycle count.
+fn duration_to_cycles(d: Duration) -> u64 {
+    let freq = super::cpu::cpu_frequency() as u64;
+    (d.as_nanos() * freq as u128 / 1000) as u64
+}
+
+/// Program the RISC-V timer to fire at `deadline` (monotonic).
+///
+/// Uses SBI set_timer which programs the hardware comparator
+/// to fire when the time CSR reaches the target value.
+pub fn set_oneshot_timer(deadline: Duration) {
+    let target = duration_to_cycles(deadline);
+    sbi_rt::set_timer(target);
 }
 
 pub(super) fn init() {
-    timer_set_next();
+    // Arm with a 10ms backstop.
+    set_oneshot_timer(timer_now() + Duration::from_millis(10));
 }
 
 pub(crate) fn timer_now() -> Duration {

@@ -2,7 +2,13 @@
 #
 #   void swtch(struct ContextData *old, struct ContextData *new);
 # 
-# Save current registers in old. Load from new.	
+# Save current registers in old. Load from new.
+#
+# CR3 is saved/restored to maintain the kernel page table across
+# executor context switches. ThreadSwitchFuture::poll handles the
+# user ↔ kernel page table transitions with active_cpus tracking.
+# The CR3 saved here should always be the kernel page table (since
+# switch_to_kernel_page_table is called after each user poll).
 
     .text
     .globl switch

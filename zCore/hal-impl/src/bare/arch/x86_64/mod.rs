@@ -1,7 +1,7 @@
 mod drivers;
 #[cfg(feature = "fb-console")]
 pub(crate) mod fb_console;
-mod smp;
+pub(crate) mod smp;
 pub(crate) mod trap;
 
 pub mod config;

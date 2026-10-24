@@ -49,6 +49,21 @@ pub struct PageTableImpl<L: PageTableLevel, PTE: GenericPTE> {
     _phantom: PhantomData<(L, PTE)>,
 }
 
+/// Ensure no CPU has this page table loaded in CR3/TTBR/SATP before
+/// freeing the physical frames. Sends IPIs to any CPU that still has
+/// it active, matching Fuchsia's `ArchVmAspace::Destroy` which asserts
+/// `active_cpus_.load() == 0`.
+impl<L: PageTableLevel, PTE: GenericPTE> Drop for PageTableImpl<L, PTE> {
+    fn drop(&mut self) {
+        let table_phys = self.root.paddr();
+        if table_phys != 0 {
+            crate::common::vm::wait_for_page_table_release(table_phys);
+        }
+        // Fields (root, intrm_tables) are dropped after this,
+        // which frees the physical frames via PhysFrame::drop.
+    }
+}
+
 /// Private implementation.
 impl<L: PageTableLevel, PTE: GenericPTE> PageTableImpl<L, PTE> {
     unsafe fn from_root(root_paddr: PhysAddr) -> Self {

@@ -90,6 +90,16 @@ impl WakerPage {
         Arc::new(WakerPage::new_inner())
     }
 
+    /// Create a new WakerPage owned by a specific CPU.
+    /// Used when a task is spawned on a remote CPU — the page must
+    /// record the owning CPU, not the spawning CPU, so that IPI
+    /// wakeups are sent to the correct target.
+    pub fn new_for_cpu(cpu_id: u8) -> Arc<Self> {
+        let mut page = WakerPage::new_inner();
+        page.cpu_id = AtomicU8::new(cpu_id);
+        Arc::new(page)
+    }
+
     /// Get the owning CPU ID.
     pub fn owner_cpu(&self) -> u8 {
         self.cpu_id.load(Ordering::Relaxed)

@@ -87,8 +87,6 @@ pub(super) fn init() -> DeviceResult {
 
     warn!("UART IRQs done, configuring APIC timer...");
 
-    use x2apic::lapic::{TimerDivide, TimerMode};
-
     irq.register_local_apic_handler(trap::X86_INT_APIC_TIMER, Box::new(super::trap::super_timer))?;
     // Register a no-op handler for the IPI wakeup vector (0xFE).
     // The IPI itself breaks the target CPU out of HLT; no further
@@ -98,13 +96,19 @@ pub(super) fn init() -> DeviceResult {
     irq.register_local_apic_handler(0xFE, Box::new(|| {}))?;
 
     warn!("Measuring CPU frequency...");
-    // SAFETY: this will be called once and only once for every core
+    use x2apic::lapic::{TimerDivide, TimerMode};
+    let freq = super::cpu::cpu_frequency();
+    warn!(
+        "CPU freq={} MHz, TSC deadline={}",
+        freq,
+        super::timer::has_tsc_deadline()
+    );
+    // Put the APIC timer into a known state (periodic, stopped) so
+    // UEFI's timer config doesn't cause stray interrupts. The actual
+    // one-shot configuration happens later in timer::init().
     Apic::local_apic().set_timer_mode(TimerMode::Periodic);
     Apic::local_apic().set_timer_divide(TimerDivide::Div1);
-    let freq = super::cpu::cpu_frequency();
-    let cycles = freq as u64 * 1_000_000 / super::super::timer::TICKS_PER_SEC;
-    warn!("CPU freq={} MHz, timer cycles={}", freq, cycles);
-    Apic::local_apic().set_timer_initial(cycles as u32);
+    Apic::local_apic().set_timer_initial(0); // count=0 stops the timer
     Apic::local_apic().disable_timer();
 
     crate::device_registry::add_device(Device::Irq(irq));

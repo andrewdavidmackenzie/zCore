@@ -1223,18 +1223,31 @@ impl Future for ThreadSwitchFuture {
             None => return Poll::Ready(()),
         };
 
+        let table_phys = proc.vmar().table_phys();
+        // On bare-metal, a zero page table means the address space was
+        // torn down — stop polling. In libos mode there are no real
+        // page tables, so table_phys is always 0; skip the check.
+        #[cfg(not(feature = "libos"))]
+        if table_phys == 0 {
+            return Poll::Ready(());
+        }
         cfg_if! {
             if #[cfg(all(target_os = "none", target_arch = "aarch64"))] {
                 use hal_impl::arch::config::USER_TABLE_FLAG;
-                hal_impl::vm::activate_paging(proc.vmar().table_phys() | USER_TABLE_FLAG);
+                hal_impl::vm::activate_paging(table_phys | USER_TABLE_FLAG);
             } else {
-                hal_impl::vm::activate_paging(proc.vmar().table_phys());
+                hal_impl::vm::activate_paging(table_phys);
             }
         }
-        drop(proc);
         hal_impl::thread::set_current_thread(Some(self.thread.clone()));
         let ret = self.future.lock().as_mut().poll(cx);
         hal_impl::thread::set_current_thread(None);
+        // Switch back to the kernel page table and clear tracking.
+        // This ensures that when we drop(proc), if the page table
+        // is freed, no CPU has the old CR3 loaded. The next poll
+        // will activate_paging again if the process is still alive.
+        hal_impl::switch_to_kernel_page_table();
+        drop(proc);
         ret
     }
 }

@@ -317,19 +317,40 @@ impl Futex {
             }
         }
         let woken = waiters_to_wake.len();
-        // requeue
+        // Collect waiters to requeue under the lock, but do NOT call
+        // reset_futex here — that would lock WaiterInner while holding
+        // FutexInner, creating an ABBA deadlock with FutexFuture::poll
+        // (which locks WaiterInner then FutexInner).
         let requeue_count = requeue_count.min(inner.waiter_queue.len());
-        for waiter in inner.waiter_queue.drain(..requeue_count) {
-            waiter.reset_futex(requeue_futex.clone());
-            new_inner.waiter_queue.push_back(waiter);
-        }
+        let waiters_to_requeue: alloc::vec::Vec<_> =
+            inner.waiter_queue.drain(..requeue_count).collect();
         // set owner
         inner.set_owner(None);
-        new_inner.set_owner(new_requeue_owner);
-        let total = woken + requeue_count;
-        // Drop both futex locks before waking to avoid ABBA deadlock.
+        new_inner.set_owner(new_requeue_owner.clone());
+        let total = woken + waiters_to_requeue.len();
+        // Drop both futex locks before touching waiters to avoid ABBA.
         drop(inner);
         drop(new_inner);
+        // Insert waiters into the target queue FIRST, then update their
+        // futex reference. This avoids a window where a cancelled future's
+        // drop handler can't find the waiter in any queue:
+        // - If drop fires before insertion: it looks up the OLD futex
+        //   (source), searches that queue — waiter was already drained,
+        //   so the search is a harmless no-op.
+        // - If drop fires after insertion but before reset_futex: same
+        //   as above — drop looks up the OLD futex, not the target.
+        // - If drop fires after reset_futex: it looks up the target
+        //   futex, finds the waiter in the target queue, removes it.
+        {
+            let mut new_inner = requeue_futex.inner.lock();
+            for waiter in &waiters_to_requeue {
+                new_inner.waiter_queue.push_back(waiter.clone());
+            }
+        }
+        // Now safe to lock WaiterInner (no FutexInner held).
+        for waiter in &waiters_to_requeue {
+            waiter.reset_futex(requeue_futex.clone());
+        }
         for waiter in &waiters_to_wake {
             waiter.wake();
         }
