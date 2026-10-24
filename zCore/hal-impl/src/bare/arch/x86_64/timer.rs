@@ -64,8 +64,7 @@ pub fn set_oneshot_timer(deadline: Duration) {
             // MFENCE + CPUID serialize prior stores before arming.
             core::arch::x86_64::_mm_mfence();
             core::arch::x86_64::__cpuid(0);
-            x86_64::registers::model_specific::Msr::new(IA32_TSC_DEADLINE)
-                .write(tsc_target);
+            x86_64::registers::model_specific::Msr::new(IA32_TSC_DEADLINE).write(tsc_target);
         }
     } else {
         // OneShot mode: compute remaining cycles from now.

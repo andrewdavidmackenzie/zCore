@@ -15,8 +15,7 @@ use crate::{mem::phys_to_virt, CachePolicy, MMUFlags, PhysAddr, VirtAddr};
 /// The kernel's own page table (CR3 at boot). All user page tables
 /// share the kernel's upper-half mappings, so switching to this is
 /// always safe. Saved during primary_init.
-static KERNEL_PAGE_TABLE: core::sync::atomic::AtomicU64 =
-    core::sync::atomic::AtomicU64::new(0);
+static KERNEL_PAGE_TABLE: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 /// Save the kernel page table address. Called once at boot.
 pub fn save_kernel_page_table() {
@@ -35,9 +34,8 @@ pub fn switch_to_kernel_page_table() {
         crate::common::vm::clear_active_page_table();
         return;
     }
-    let frame = x86_64::structures::paging::PhysFrame::containing_address(
-        x86_64::PhysAddr::new(kernel_pt),
-    );
+    let frame =
+        x86_64::structures::paging::PhysFrame::containing_address(x86_64::PhysAddr::new(kernel_pt));
     if Cr3::read().0 != frame {
         unsafe { Cr3::write(frame, Cr3Flags::empty()) };
     }

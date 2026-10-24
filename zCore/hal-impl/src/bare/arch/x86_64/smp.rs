@@ -730,12 +730,8 @@ pub fn save_bsp_gdt_template() {
             base: x86_64::VirtAddr::zero(),
         };
         core::arch::asm!("sgdt [{}]", in(reg) &mut gdtp);
-        let entry_count =
-            (gdtp.limit + 1) as usize / core::mem::size_of::<u64>();
-        let gdt_slice = core::slice::from_raw_parts(
-            gdtp.base.as_ptr::<u64>(),
-            entry_count,
-        );
+        let entry_count = (gdtp.limit + 1) as usize / core::mem::size_of::<u64>();
+        let gdt_slice = core::slice::from_raw_parts(gdtp.base.as_ptr::<u64>(), entry_count);
 
         // Save the GDT content
         BSP_GDT_TEMPLATE.call_once(|| alloc::vec::Vec::from(gdt_slice));
@@ -781,8 +777,7 @@ pub fn init_ap_gdt_idt() {
 
     // Create a new TSS for this AP with its own trap stack.
     let mut tss = Box::new(TaskStateSegment::new());
-    let trap_stack_top =
-        Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
+    let trap_stack_top = Box::leak(Box::new([0u8; 0x1000])).as_ptr() as u64 + 0x1000;
     tss.privilege_stack_table[0] = VirtAddr::new(trap_stack_top);
     let tss: &'static _ = Box::leak(tss);
 

@@ -1,5 +1,5 @@
-#[cfg(not(feature = "board-jollac2"))]
-use crate::arch::timer::set_next_trigger;
+// Timer re-arming is handled by timer_tick() in the trap handler,
+// not by the GIC IRQ handler. The GIC handler is a no-op.
 #[cfg(not(feature = "board-jollac2"))]
 use crate::hal_fn::mem::phys_to_virt;
 #[cfg(not(feature = "board-jollac2"))]
@@ -72,11 +72,9 @@ pub fn init_early() {
     const TIMER_IRQ_NUM: u32 = 27;
     gic.irq_enable(TIMER_IRQ_NUM);
 
-    gic.register_handler(
-        TIMER_IRQ_NUM as usize,
-        Box::new(super::timer::set_next_trigger),
-    )
-    .ok();
+    // Timer re-arming is handled by timer_tick() in the trap handler.
+    gic.register_handler(TIMER_IRQ_NUM as usize, Box::new(|| {}))
+        .ok();
 
     device_registry::add_device(::drivers::Device::Irq(Arc::new(gic)));
     super::fb_console::write_str("init_early: done\n");
@@ -115,7 +113,8 @@ pub fn init_early() {
     gic.irq_enable(UART_IRQ);
     gic.register_handler(UART_IRQ as usize, Box::new(handle_uart_irq))
         .ok();
-    gic.register_handler(TIMER_IRQ as usize, Box::new(set_next_trigger))
+    // Timer re-arming is handled by timer_tick() in the trap handler.
+    gic.register_handler(TIMER_IRQ as usize, Box::new(|| {}))
         .ok();
     crate::device_registry::add_device(Device::Irq(Arc::new(gic)));
     // Wire UART received bytes to the shared console input buffer.

@@ -98,7 +98,11 @@ pub(super) fn init() -> DeviceResult {
     warn!("Measuring CPU frequency...");
     use x2apic::lapic::{TimerDivide, TimerMode};
     let freq = super::cpu::cpu_frequency();
-    warn!("CPU freq={} MHz, TSC deadline={}", freq, super::timer::has_tsc_deadline());
+    warn!(
+        "CPU freq={} MHz, TSC deadline={}",
+        freq,
+        super::timer::has_tsc_deadline()
+    );
     // Put the APIC timer into a known state (periodic, stopped) so
     // UEFI's timer config doesn't cause stray interrupts. The actual
     // one-shot configuration happens later in timer::init().

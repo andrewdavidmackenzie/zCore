@@ -41,8 +41,8 @@ pub(crate) use kernel_handler::KHANDLER;
 
 #[cfg(target_arch = "aarch64")]
 pub use common::aarch64_exception::*;
-pub use common::{addr, console, context, defs::*, ipi::*, user};
 pub use common::vm::{clear_active_page_table, set_active_page_table, switch_to_kernel_page_table};
+pub use common::{addr, console, context, defs::*, ipi::*, user};
 pub use config::KernelConfig;
 pub use imp::{
     boot::{primary_init, primary_init_early, secondary_init},

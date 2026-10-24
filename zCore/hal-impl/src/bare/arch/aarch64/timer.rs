@@ -58,7 +58,10 @@ pub fn init() {
     {
         CNTV_CTL_EL0.write(CNTV_CTL_EL0::ENABLE::SET);
         set_oneshot_timer(backstop);
-        info!("timer: virtual timer enabled (one-shot), CNTFRQ={}", CNTFRQ_EL0.get());
+        info!(
+            "timer: virtual timer enabled (one-shot), CNTFRQ={}",
+            CNTFRQ_EL0.get()
+        );
     }
 
     #[cfg(not(any(feature = "board-raspi400", feature = "board-jollac2")))]
