@@ -111,6 +111,10 @@ impl Pager {
         if trap_dirty {
             vmo.set_trap_dirty(vmo_pages);
         }
+        if unbounded {
+            let stream_pages = (size as usize).div_ceil(PAGE_SIZE);
+            vmo.set_unbounded(vmo_pages, stream_pages);
+        }
 
         let mut inner = self.inner.lock();
         inner.vmos.push(PagerVmo {

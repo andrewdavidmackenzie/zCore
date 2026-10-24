@@ -43,6 +43,12 @@ const PAGE_AWAITING_CLEAN: u8 = 2;
 /// considered dirty for write-gating). Writeback transitions
 /// PAGE_ZERO_DIRTY → PAGE_AWAITING_CLEAN → PAGE_CLEAN.
 const PAGE_ZERO_DIRTY: u8 = 3;
+/// Page beyond the stream_size boundary on an unbounded VMO.
+/// Not reported by query_dirty_ranges. Writes are allowed but
+/// the dirty state is not tracked. When stream_size increases
+/// past this page, it transitions to PAGE_ZERO_DIRTY.
+/// Matches Fuchsia's IntervalDirtyState::Untracked.
+const PAGE_UNTRACKED: u8 = 4;
 
 /// The amount of memory committed to VMOs.
 pub fn vmo_page_bytes() -> usize {
@@ -233,6 +239,9 @@ pub trait VMObjectTrait: Sync + Send {
     /// Clear the pager-backed flag. Called when the pager is detached.
     fn clear_pager_backed(&self) {}
 
+    /// Set the content boundary for unbounded VMOs (stream_size in pages).
+    fn set_content_boundary(&self, _pages: usize) {}
+
     /// If contiguous, transmute vmo to a mutable buffer
     fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
         Err(ZxError::NOT_SUPPORTED)
@@ -297,6 +306,10 @@ struct VmObjectInner {
     pager_koid: u64,
     /// Whether this VMO traps writes for dirty-page notifications.
     trap_dirty: bool,
+    /// Whether this VMO is unbounded (ZX_VMO_UNBOUNDED). Unbounded VMOs
+    /// have a large capacity but track content via stream_size
+    /// (content_size). Pages beyond stream_size are PAGE_UNTRACKED.
+    unbounded: bool,
     /// Per-page dirty state tracking.
     /// Clean = 0, Dirty = 1, AwaitingClean = 2
     /// Only used when `trap_dirty` is true.
@@ -556,6 +569,78 @@ impl VmObject {
         let mut inner = self.inner.lock();
         inner.trap_dirty = true;
         inner.dirty_pages = alloc::vec![PAGE_CLEAN; pages];
+    }
+
+    /// Mark this VMO as unbounded. Pages beyond content_size
+    /// (stream_size) are PAGE_UNTRACKED.
+    pub fn set_unbounded(&self, total_pages: usize, stream_size_pages: usize) {
+        let mut inner = self.inner.lock();
+        inner.unbounded = true;
+        // Initialize dirty_pages: pages within stream_size are CLEAN,
+        // pages beyond are UNTRACKED.
+        inner.dirty_pages = alloc::vec![PAGE_UNTRACKED; total_pages];
+        for state in inner.dirty_pages[..stream_size_pages.min(total_pages)].iter_mut() {
+            *state = PAGE_CLEAN;
+        }
+        drop(inner);
+        // Set the content boundary on the paged inner so commit_page
+        // returns zeros for pages beyond stream_size without pager requests.
+        self.trait_.set_content_boundary(stream_size_pages);
+    }
+
+    /// Check if this VMO is unbounded.
+    pub fn is_unbounded(&self) -> bool {
+        self.inner.lock().unbounded
+    }
+
+    /// Update dirty tracking when stream_size changes on an unbounded VMO.
+    /// Matches Fuchsia's behavior where pages beyond stream_size are
+    /// IntervalDirtyState::Untracked.
+    pub fn update_stream_size_dirty_tracking(&self, old_size: usize, new_size: usize) {
+        let mut inner = self.inner.lock();
+        let old_pages = old_size.div_ceil(PAGE_SIZE);
+        let new_pages = new_size.div_ceil(PAGE_SIZE);
+        if new_pages > old_pages {
+            // Increase: [old_pages, new_pages) → ZERO_DIRTY
+            // These pages are now within the tracked stream_size range.
+            let mut pages_to_decommit = alloc::vec::Vec::new();
+            // Transition [old, new) from UNTRACKED/DIRTY → ZERO_DIRTY
+            for pg in old_pages..new_pages.min(inner.dirty_pages.len()) {
+                let old_state = inner.dirty_pages[pg];
+                inner.dirty_pages[pg] = PAGE_ZERO_DIRTY;
+                if old_state == PAGE_DIRTY {
+                    pages_to_decommit.push(pg);
+                }
+            }
+            // Pages beyond new stream_size that were committed while
+            // untracked should be absorbed back to UNTRACKED. Their
+            // frames are decommitted. In Fuchsia, these become
+            // "untracked zero intervals".
+            for pg in new_pages..inner.dirty_pages.len() {
+                if inner.dirty_pages[pg] == PAGE_DIRTY {
+                    inner.dirty_pages[pg] = PAGE_UNTRACKED;
+                    pages_to_decommit.push(pg);
+                }
+            }
+            inner.modified = true;
+            drop(inner);
+            for pg in pages_to_decommit {
+                self.trait_.decommit_page(pg);
+                self.trait_.remove_zero_marker(pg);
+            }
+        } else if new_pages < old_pages {
+            // Decrease: [new_pages, old_pages) → UNTRACKED
+            // These pages are now beyond the tracked stream_size.
+            for pg in new_pages..old_pages.min(inner.dirty_pages.len()) {
+                inner.dirty_pages[pg] = PAGE_UNTRACKED;
+            }
+            inner.modified = true;
+            drop(inner);
+        } else {
+            drop(inner);
+        }
+        // Update the content boundary on the paged inner.
+        self.trait_.set_content_boundary(new_pages);
     }
 
     /// Ensure dirty-page tracking is initialized for this VMO.
