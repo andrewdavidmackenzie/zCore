@@ -469,10 +469,19 @@ impl Syscall<'_> {
             .ok_or(ZxError::INVALID_ARGS)?
             .div_ceil(PAGE_SIZE);
 
+        // For unbounded VMOs, pages beyond content_size (stream_size)
+        // are implicitly zero — no pager requests needed.
+        let content_boundary = if pager_vmo.is_unbounded() {
+            pager_vmo.content_size().div_ceil(PAGE_SIZE)
+        } else {
+            usize::MAX
+        };
         // Helper: check if a page is "supplied" — has a committed
-        // frame or a zero marker.
+        // frame, a zero marker, or is beyond stream_size (unbounded).
         let is_page_supplied = |pg: usize| -> bool {
-            pager_vmo.committed_pages_in_range(pg, pg + 1) > 0 || pager_vmo.has_zero_marker(pg)
+            pg >= content_boundary
+                || pager_vmo.committed_pages_in_range(pg, pg + 1) > 0
+                || pager_vmo.has_zero_marker(pg)
         };
 
         let mut batch_start = start_page;
@@ -536,6 +545,19 @@ impl Syscall<'_> {
                     // just wait for that request to be resolved.
                     if cursor == run_start {
                         cursor += 1;
+                    }
+                    // Pre-commit pages beyond content_boundary that
+                    // have no frame. OP_DIRTY expects committed pages.
+                    // Pages within content_boundary are already committed
+                    // (supplied by the pager). Untracked pages beyond
+                    // need a zero frame allocated before OP_DIRTY.
+                    for pg in run_start..cursor {
+                        if pg >= content_boundary
+                            && pager_vmo.committed_pages_in_range(pg, pg + 1) == 0
+                            && !pager_vmo.has_zero_marker(pg)
+                        {
+                            let _ = pager_vmo.commit(pg * PAGE_SIZE, PAGE_SIZE);
+                        }
                     }
                     let run_offset = run_start * PAGE_SIZE;
                     let run_bytes = (cursor - run_start) * PAGE_SIZE;
