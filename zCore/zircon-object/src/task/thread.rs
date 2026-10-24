@@ -1224,6 +1224,10 @@ impl Future for ThreadSwitchFuture {
         };
 
         let table_phys = proc.vmar().table_phys();
+        // On bare-metal, a zero page table means the address space was
+        // torn down — stop polling. In libos mode there are no real
+        // page tables, so table_phys is always 0; skip the check.
+        #[cfg(not(feature = "libos"))]
         if table_phys == 0 {
             return Poll::Ready(());
         }
