@@ -552,11 +552,10 @@ impl Syscall<'_> {
                     self.thread.set_blocking_state(ThreadState::BlockedPager);
                     let dirty_result = self
                         .thread
-                        .blocking_run::<_, (), _>(
+                        .blocking_run_suspendable(
                             future,
                             ThreadState::BlockedPager,
                             core::time::Duration::from_nanos(u64::MAX),
-                            None,
                         )
                         .await;
                     match dirty_result {
@@ -567,6 +566,20 @@ impl Syscall<'_> {
                             // Re-scan from run_start: the page is now
                             // unsupplied, so the READ path will fire
                             // first, then DIRTY again on retry.
+                        }
+                        Err(zircon_object::ZxError::CANCELED) => {
+                            // Thread was suspended during the pager wait.
+                            // Cancel the outstanding request so the retry
+                            // generates a fresh port packet. Then wait
+                            // for resume before re-scanning.
+                            pager_vmo.cancel_outstanding_requests_in_range(
+                                run_start * PAGE_SIZE,
+                                (cursor - run_start) * PAGE_SIZE,
+                            );
+                            self.thread.wait_for_resume().await;
+                        }
+                        Err(zircon_object::ZxError::STOP) => {
+                            return Err(zircon_object::ZxError::STOP);
                         }
                         Err(e) => return Err(e),
                     }

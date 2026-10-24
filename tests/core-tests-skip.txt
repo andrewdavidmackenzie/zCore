@@ -10,8 +10,6 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 
 # ── PagerWriteback: TestThread hangs (need writeback state machine,
 #    FailPages, concurrent dirty requests, or Suspend support) ──
-PagerWriteback.SuspendDirtyTestVmar
-PagerWriteback.SuspendDirtyTestVmo
 PagerWriteback.UntrackedAbsorbsPages
 PagerWriteback.UntrackedBeyondStreamSize
 
