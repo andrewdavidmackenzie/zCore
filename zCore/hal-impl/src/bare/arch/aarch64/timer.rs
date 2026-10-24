@@ -25,7 +25,7 @@ pub fn timer_now() -> Duration {
 fn duration_to_cntpct(d: Duration) -> u64 {
     let freq = CNTFRQ_EL0.get();
     // d.as_nanos() * freq / 1_000_000_000
-    (d.as_nanos() as u128 * freq as u128 / 1_000_000_000) as u64
+    (d.as_nanos() * freq as u128 / 1_000_000_000) as u64
 }
 
 /// Program the ARM generic timer to fire at `deadline` (monotonic).
