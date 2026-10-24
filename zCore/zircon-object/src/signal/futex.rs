@@ -317,19 +317,31 @@ impl Futex {
             }
         }
         let woken = waiters_to_wake.len();
-        // requeue
+        // Collect waiters to requeue under the lock, but do NOT call
+        // reset_futex here — that would lock WaiterInner while holding
+        // FutexInner, creating an ABBA deadlock with FutexFuture::poll
+        // (which locks WaiterInner then FutexInner).
         let requeue_count = requeue_count.min(inner.waiter_queue.len());
-        for waiter in inner.waiter_queue.drain(..requeue_count) {
-            waiter.reset_futex(requeue_futex.clone());
-            new_inner.waiter_queue.push_back(waiter);
-        }
+        let waiters_to_requeue: alloc::vec::Vec<_> =
+            inner.waiter_queue.drain(..requeue_count).collect();
         // set owner
         inner.set_owner(None);
-        new_inner.set_owner(new_requeue_owner);
-        let total = woken + requeue_count;
-        // Drop both futex locks before waking to avoid ABBA deadlock.
+        new_inner.set_owner(new_requeue_owner.clone());
+        let total = woken + waiters_to_requeue.len();
+        // Drop both futex locks before touching waiters to avoid ABBA.
         drop(inner);
         drop(new_inner);
+        // Now safe to lock WaiterInner (no FutexInner held).
+        for waiter in &waiters_to_requeue {
+            waiter.reset_futex(requeue_futex.clone());
+        }
+        // Re-acquire the requeue futex lock to insert waiters.
+        {
+            let mut new_inner = requeue_futex.inner.lock();
+            for waiter in waiters_to_requeue {
+                new_inner.waiter_queue.push_back(waiter);
+            }
+        }
         for waiter in &waiters_to_wake {
             waiter.wake();
         }
