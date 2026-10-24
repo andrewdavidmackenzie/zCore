@@ -564,7 +564,19 @@ impl Syscall<'_> {
                     continue;
                 }
 
-                // Page is supplied and dirty (or not TRAP_DIRTY): skip.
+                // Page is supplied and dirty (or not TRAP_DIRTY).
+                // For non-TRAP_DIRTY VMOs, mark the page dirty now
+                // (before the actual write), matching Fuchsia's
+                // RequirePage which marks dirty during page lookup.
+                // This ensures dirty state is set even if the write
+                // fails later (e.g., source buffer fault).
+                // Note: only set dirty state, NOT modified flag.
+                // Modified is set later by the VMO_WRITE handler
+                // only if data was actually written. Fuchsia's
+                // mark_modified_locked runs after the copy succeeds.
+                if !is_trap_dirty {
+                    pager_vmo.mark_page_dirty_only(cursor);
+                }
                 cursor += 1;
             }
 
@@ -965,19 +977,23 @@ impl Syscall<'_> {
                     .await
             }
             Sys::VMO_WRITE => {
+                // Pager pre-flight FIRST: mark destination pages dirty
+                // before prefaulting the source buffer. Matches Fuchsia's
+                // ReadWriteInternal where RequirePage (which marks dirty)
+                // runs before the copy attempt. If the source prefault
+                // fails, pages are still correctly marked dirty.
+                let proc = self.thread.proc();
+                if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
+                    if let Err(e) = self.pager_preflight_write(&vmo, a2, a3).await {
+                        return e as isize;
+                    }
+                }
+                drop(proc);
                 // Pre-fault pager pages in user buffer (a1=buf, a3=size).
                 if let Err(e) = self.prefault_user_buffer(a1, a3).await {
                     return e as isize;
                 }
                 let proc = self.thread.proc();
-                if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
-                    // Batched pager pre-flight: request READ for unsupplied
-                    // pages and DIRTY for clean pages in kMaxWriteWaitPages
-                    // batches, matching Fuchsia's ReadWriteInternal.
-                    if let Err(e) = self.pager_preflight_write(&vmo, a2, a3).await {
-                        return e as isize;
-                    }
-                }
                 let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _);
                 // After a successful write to a pager-backed VMO (or a slice
                 // of one), set modified and mark pages dirty on the parent.

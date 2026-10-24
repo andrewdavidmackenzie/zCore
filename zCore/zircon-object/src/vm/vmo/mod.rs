@@ -580,6 +580,17 @@ impl VmObject {
         }
     }
 
+    /// Mark a page as dirty without setting the modified flag.
+    /// Used by pager_preflight_write to set dirty state during page
+    /// lookup (before data copy), matching Fuchsia's RequirePage which
+    /// marks dirty but defers modified to after the copy succeeds.
+    pub fn mark_page_dirty_only(&self, page_idx: usize) {
+        let mut inner = self.inner.lock();
+        if page_idx < inner.dirty_pages.len() {
+            inner.dirty_pages[page_idx] = PAGE_DIRTY;
+        }
+    }
+
     /// Check if this VMO has dirty-page trapping enabled.
     pub fn is_trap_dirty(&self) -> bool {
         self.inner.lock().trap_dirty
