@@ -437,23 +437,19 @@ async fn handler_user_trap(
                 type_: ExceptionType::ThreadExiting,
                 synth_code: 0,
             })?;
-        // Yield only when the timer interrupt has set preempt-pending,
-        // matching Fuchsia's lazy preemption model. Fuchsia enables
-        // interrupts during syscall handlers; if a timer fires and the
-        // thread's timeslice has expired, it sets preempt_pending and
-        // the interrupt return path triggers a context switch. Otherwise
-        // the syscall returns directly to userspace with no reschedule.
+        // Yield after every syscall to give other threads a chance to
+        // run. Use preempt_yield when the timer interrupt has set
+        // preempt-pending (time quantum expired), otherwise use
+        // yield_now (lightweight self-wake that lets the executor
+        // check for newly-notified tasks).
         //
-        // An unconditional preempt_yield here caused ~27ms delays per
-        // syscall in tight loops because it gave up the CPU to other
-        // threads on every call, even when no preemption was needed.
-        //
-        // In libos mode, the host OS handles preemption; yield_now
-        // gives other async tasks a chance to run (matching the old
-        // behavior where preempt_yield used waker.wake_by_ref).
+        // An unconditional preempt_yield caused ~27ms delays per
+        // syscall in tight loops. yield_now is much lighter — it
+        // returns Pending once (allowing one executor scan) then
+        // Ready on the next poll.
         if hal_impl::thread::take_preempt_pending() {
             hal_impl::thread::preempt_yield().await;
-        } else if cfg!(feature = "libos") {
+        } else {
             hal_impl::thread::yield_now().await;
         }
         return Ok(());

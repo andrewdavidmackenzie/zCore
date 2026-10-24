@@ -10,19 +10,8 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 
 # ── PagerWriteback: TestThread hangs (need writeback state machine,
 #    FailPages, concurrent dirty requests, or Suspend support) ──
-PagerWriteback.DirtyRequestsOverlap
-PagerWriteback.NoDirtyRequestsAfterDetachVmar
-PagerWriteback.NotModifiedOnFailedVmoWriteNoTrapDirty
-
-PagerWriteback.ResizeWritebackInterleavedWriteWithMappingNoTrapDirty
-PagerWriteback.ResizeWritebackInterleavedWriteWithMappingTrapDirty
-PagerWriteback.ResizeWritebackMulipleGapsNoTrapDirty
-PagerWriteback.ResizeWritebackMulipleGapsTrapDirty
-PagerWriteback.SuspendDirtyTestVmar
-PagerWriteback.SuspendDirtyTestVmo
 PagerWriteback.UntrackedAbsorbsPages
 PagerWriteback.UntrackedBeyondStreamSize
-PagerWriteback.WritebackWithMapping
 
 # ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
 # These tests use ThreadedPagePinner which requires IOMMU/BTI and
@@ -36,5 +25,5 @@ PagerWriteback.OpZeroPinnedTrapDirty
 PagerWriteback.PinForWriteTrapDirty
 PagerWriteback.PinForWriteUnpopulatedTrapDirty
 PagerWriteback.PinnedWritebackTrapDirty
-PagerWriteback.SlicePinWriteTrapDirty
+PagerWriteback.SlicePinWriteTrapDirtyyes
 PagerWriteback.WritePinAwaitingCleanTrapDirty
