@@ -1,5 +1,5 @@
 # ── Hangs after PR #775 SignalFuture fix ──
-C11ThreadTest.SelfDetachAndFree
+# C11ThreadTest.SelfDetachAndFree — fixed by THREAD_LEGACY_YIELD (#780)
 FutexTest.RequeueCycleStressTest
 
 # ── PortStressTest: Thread C join hang after channel_call loop ──
