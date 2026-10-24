@@ -8,15 +8,6 @@ FutexTest.RequeueCycleStressTest
 # woken by the final ch2_req.write() — pre-existing on master too.
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
-# ── PagerWriteback: OP_ZERO + writeback state machine edge cases ──
-# These fail on dirty range assertions after OP_ZERO interacts with
-# zero markers from resize or writeback_end zero-marker removal.
-PagerWriteback.ChildAttributedCounts
-PagerWriteback.OpZeroWithMarkersNoTrapDirty
-PagerWriteback.OpZeroWithMarkersTrapDirty
-PagerWriteback.OpZeroWritebackTrapDirty
-PagerWriteback.ResizeWritebackRepeatedTrapDirty
-
 # ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
 # These tests use ThreadedPagePinner which requires IOMMU/BTI and
 # spawns a thread for bti.pin(). They hang on the pin thread.
