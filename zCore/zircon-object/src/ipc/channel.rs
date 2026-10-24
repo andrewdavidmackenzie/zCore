@@ -164,9 +164,10 @@ impl Channel {
         // Guard removes the call_reply entry if the future is dropped
         // (e.g., on timeout). Without this, orphaned entries accumulate
         // and can swallow replies intended for push_general.
-        let guard = CallReplyGuard {
+        let mut guard = CallReplyGuard {
             channel: self.clone(),
             txid,
+            armed: true,
         };
         if let Err(e) = peer.push_general(msg) {
             // If push fails, the guard's drop will clean up call_reply.
@@ -226,19 +227,22 @@ impl Channel {
 struct CallReplyGuard {
     channel: Arc<Channel>,
     txid: TxID,
+    armed: bool,
 }
 
 impl CallReplyGuard {
     /// Disarm the guard — call this when the reply was successfully received
     /// so the entry is already consumed by the oneshot channel.
-    fn disarm(self) {
-        core::mem::forget(self);
+    fn disarm(&mut self) {
+        self.armed = false;
     }
 }
 
 impl Drop for CallReplyGuard {
     fn drop(&mut self) {
-        self.channel.call_reply.lock().remove(&self.txid);
+        if self.armed {
+            self.channel.call_reply.lock().remove(&self.txid);
+        }
     }
 }
 

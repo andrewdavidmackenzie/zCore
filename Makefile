@@ -54,7 +54,7 @@ debug-qemu: build
 		-kernel target/qemu-aarch64/release/kernel.bin \
 		-serial mon:stdio \
 		-initrd target/qemu-aarch64/release/aarch64-linux.img \
-		-S -s
+		-S -gdb tcp:127.0.0.1:1234
 
 LLDB ?= lldb
 debug-lldb:
@@ -76,7 +76,7 @@ debug-x86-qemu: x86-zircon-build
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img \
-		-S -s
+		-S -gdb tcp:127.0.0.1:1234
 
 # Start x86_64 core-tests QEMU paused with GDB server on :1234.
 # Build first with: make core-tests-build
@@ -92,7 +92,7 @@ debug-x86-core-tests: core-tests-build
 		-serial mon:stdio \
 		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
 		-drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
-		-S -s
+		-S -gdb tcp:127.0.0.1:1234
 
 # Connect GDB to a running x86_64 QEMU debug session.
 GDB ?= gdb
