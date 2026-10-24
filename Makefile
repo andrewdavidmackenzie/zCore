@@ -35,14 +35,20 @@ linux-run:
 	cargo qemu -m qemu-$(ARCH)
 
 # --- Remote Debugging via QEMU ---
+# See docs/debugging.md for full instructions.
+#
+# aarch64: make debug-qemu / make debug-lldb
+# x86_64:  make debug-x86-qemu / make debug-x86-gdb
+#          make debug-x86-core-tests CORE_TESTS_FILTER='SuiteName.*'
+#
 # Step 1: Start QEMU paused, waiting for debugger on localhost:1234.
-# Step 2: In another terminal, connect with: make debug-lldb
-#         Or from RustRover: Run > Attach to Process > Remote GDB, host=localhost port=1234
+# Step 2: In another terminal, connect with the matching debug-* target.
+
+# --- aarch64 debugging ---
 debug-qemu: build
-	@echo "==> Starting QEMU in debug mode (paused, waiting for debugger on :1234)..."
+	@echo "==> Starting aarch64 QEMU in debug mode (paused, :1234)..."
 	@echo "    Connect with: make debug-lldb"
-	@echo "    Or RustRover: Run > Attach to Process > Remote GDB Server, localhost:1234"
-	@echo "    Kernel symbols: target/qemu-$(ARCH)/release/kernel"
+	@echo "    Kernel symbols: target/qemu-aarch64/release/kernel"
 	@qemu-system-aarch64 -m 2G -display none -no-reboot -nographic \
 		-machine virt -cpu cortex-a72 -smp $(QEMU_CORES) \
 		-kernel target/qemu-aarch64/release/kernel.bin \
@@ -50,14 +56,50 @@ debug-qemu: build
 		-initrd target/qemu-aarch64/release/aarch64-linux.img \
 		-S -s
 
-# Connect lldb to a running QEMU debug session.
-# Uses the system lldb (or set LLDB to RustRover's bundled version).
 LLDB ?= lldb
 debug-lldb:
 	@echo "==> Connecting lldb to QEMU on :1234..."
 	@$(LLDB) \
 		-o "file target/qemu-aarch64/release/kernel" \
 		-o "gdb-remote 1234"
+
+# --- x86_64 debugging ---
+# Start x86_64 Zircon QEMU paused with GDB server on :1234.
+# Build first with: make x86-zircon-build
+debug-x86-qemu: x86-zircon-build
+	@echo "==> Starting x86_64 Zircon QEMU in debug mode (paused, :1234)..."
+	@echo "    Connect with: make debug-x86-gdb"
+	@echo "    Kernel symbols: target/qemu-x86_64/release/kernel"
+	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
+	qemu-system-x86_64 -m 2G -display none -no-reboot -nographic \
+		-machine q35 -smp $(X86_CORES) -cpu qemu64,+fsgsbase,+rdrand \
+		-serial mon:stdio \
+		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
+		-drive format=raw,file=target/qemu-x86_64/release/kernel-zircon.img \
+		-S -s
+
+# Start x86_64 core-tests QEMU paused with GDB server on :1234.
+# Build first with: make core-tests-build
+# Use CORE_TESTS_FILTER to run a specific test suite.
+debug-x86-core-tests: core-tests-build
+	@echo "==> Starting x86_64 core-tests QEMU in debug mode (paused, :1234)..."
+	@echo "    Connect with: make debug-x86-gdb"
+	@echo "    Kernel symbols: target/qemu-x86_64/release/kernel"
+	@. tools/scripts/find-ovmf.sh && OVMF=$$(find_ovmf) && \
+	qemu-system-x86_64 -m 4G -display none -no-reboot -nographic \
+		-machine q35 -smp $(X86_CORES) \
+		-cpu qemu64,+fsgsbase,+rdrand,+rdtscp,+sse3,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16 \
+		-serial mon:stdio \
+		-drive if=pflash,format=raw,readonly=on,file="$$OVMF" \
+		-drive "format=raw,file=target/qemu-x86_64/release/boot.img" \
+		-S -s
+
+# Connect GDB to a running x86_64 QEMU debug session.
+GDB ?= gdb
+debug-x86-gdb:
+	@echo "==> Connecting GDB to QEMU on :1234..."
+	@$(GDB) target/qemu-x86_64/release/kernel \
+		-ex "target remote :1234"
 
 # Build and run zCore in Zircon mode (userstart hello program).
 # Use LOG=info (or debug/trace/warn/error) to control log verbosity.
