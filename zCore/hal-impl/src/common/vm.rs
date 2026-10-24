@@ -15,6 +15,9 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 /// switch to the kernel page table. This matches Fuchsia's
 /// `active_cpus_` tracking in `X86ArchVmAspace`.
 static ACTIVE_PAGE_TABLE: [AtomicUsize; MAX_CORE_NUM] = {
+    // Use a block expression to initialise the array without a named
+    // `const` item (clippy::declare_interior_mutable_const).
+    #[allow(clippy::declare_interior_mutable_const)]
     const ZERO: AtomicUsize = AtomicUsize::new(0);
     [ZERO; MAX_CORE_NUM]
 };
@@ -38,8 +41,8 @@ pub fn clear_active_page_table() {
 /// Returns a bitmask of CPUs that have it active.
 pub fn active_cpus_for_table(table_phys: PhysAddr) -> u64 {
     let mut mask = 0u64;
-    for i in 0..MAX_CORE_NUM {
-        if ACTIVE_PAGE_TABLE[i].load(Ordering::Acquire) == table_phys {
+    for (i, entry) in ACTIVE_PAGE_TABLE.iter().enumerate().take(MAX_CORE_NUM) {
+        if entry.load(Ordering::Acquire) == table_phys {
             mask |= 1 << i;
         }
     }
