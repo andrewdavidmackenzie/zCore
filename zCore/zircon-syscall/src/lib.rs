@@ -521,8 +521,20 @@ impl Syscall<'_> {
                 };
                 if is_trap_dirty && pager_vmo.has_pager() && needs_dirty(cursor) {
                     // Supplied but needs-dirty page: find run, request DIRTY, wait.
+                    // Break the run at pages covered by outstanding dirty
+                    // requests — those pages will be handled via overlap
+                    // absorption when request_dirty is called.
                     let run_start = cursor;
-                    while cursor < batch_end && is_page_supplied(cursor) && needs_dirty(cursor) {
+                    while cursor < batch_end
+                        && is_page_supplied(cursor)
+                        && needs_dirty(cursor)
+                        && !pager_vmo.is_page_in_outstanding_request(cursor)
+                    {
+                        cursor += 1;
+                    }
+                    // If the run is empty (page is in outstanding request),
+                    // just wait for that request to be resolved.
+                    if cursor == run_start {
                         cursor += 1;
                     }
                     let run_offset = run_start * PAGE_SIZE;

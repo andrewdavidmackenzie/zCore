@@ -580,6 +580,15 @@ impl VmObject {
         }
     }
 
+    /// Check if a page is covered by an outstanding pager request.
+    pub fn is_page_in_outstanding_request(&self, page_idx: usize) -> bool {
+        let inner = self.inner.lock();
+        inner
+            .outstanding_requests
+            .iter()
+            .any(|req| page_idx >= req.start_page && page_idx < req.end_page)
+    }
+
     /// Mark a page as dirty without setting the modified flag.
     /// Used by pager_preflight_write to set dirty state during page
     /// lookup (before data copy), matching Fuchsia's RequirePage which
@@ -600,13 +609,23 @@ impl VmObject {
     /// Returns `Err(SHOULD_WAIT)` — caller should await `wait_for_page`.
     pub fn request_dirty(&self, offset: usize, length: usize) -> ZxResult {
         let mut inner = self.inner.lock();
-        let page_idx = offset / PAGE_SIZE;
-        // Clear any stale failed-page marker for this page.
-        // A new dirty request supersedes a previous OP_FAIL.
-        inner.pager_failed_pages.remove(&page_idx);
-        if let Some(port) = &inner.pager_port {
-            // Don't send duplicate requests.
-            if !inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx) {
+        let start_page = offset / PAGE_SIZE;
+        let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        // Clear any stale failed-page markers in this range.
+        for pg in start_page..end_page {
+            inner.pager_failed_pages.remove(&pg);
+        }
+        let port = inner.pager_port.clone();
+        if let Some(port) = port {
+            // Check if this request is fully absorbed by an existing
+            // outstanding request. Matching Fuchsia's overlap absorption
+            // where a new request within an existing request's range
+            // doesn't generate a new port packet.
+            let is_absorbed = inner
+                .outstanding_requests
+                .iter()
+                .any(|req| start_page >= req.start_page && end_page <= req.end_page);
+            if !is_absorbed {
                 port.push(PortPacketRepr {
                     key: inner.pager_key,
                     status: ZxError::OK,
@@ -619,12 +638,16 @@ impl VmObject {
                         _reserved1: 0,
                     }),
                 });
+                // Track as outstanding request for overlap detection.
+                inner.outstanding_requests.push(OutstandingPageRequest {
+                    start_page,
+                    end_page,
+                    pending_pages: end_page - start_page,
+                    overlap_waiters: alloc::vec![],
+                });
             }
             Err(ZxError::SHOULD_WAIT)
         } else {
-            // No pager port — VMO was detached. Return BAD_STATE
-            // (not NOT_FOUND) to match Fuchsia's behavior where
-            // writes to detached TRAP_DIRTY VMOs get BAD_STATE.
             Err(ZxError::BAD_STATE)
         }
     }
@@ -668,6 +691,20 @@ impl VmObject {
                             i += 1;
                         }
                     }
+                    // Remove outstanding requests covering this range
+                    // so retries generate new port packets.
+                    let mut req_idx = 0;
+                    while req_idx < inner.outstanding_requests.len() {
+                        let req = &inner.outstanding_requests[req_idx];
+                        if req.start_page < end_page && req.end_page > start_page {
+                            let removed = inner.outstanding_requests.swap_remove(req_idx);
+                            for waiter in removed.overlap_waiters {
+                                let _ = waiter.sender.send(Err(ZxError::NOT_FOUND));
+                            }
+                            continue;
+                        }
+                        req_idx += 1;
+                    }
                     return Err(ZxError::NOT_FOUND);
                 }
             }
@@ -703,6 +740,27 @@ impl VmObject {
             } else {
                 i += 1;
             }
+        }
+        // Resolve outstanding dirty requests that overlap this range.
+        // Decrement pending_pages for dirtied pages. When a request
+        // reaches 0 pending, wake all overlap waiters and remove it.
+        let mut req_idx = 0;
+        while req_idx < inner.outstanding_requests.len() {
+            let req = &mut inner.outstanding_requests[req_idx];
+            let overlap_start = start_page.max(req.start_page);
+            let overlap_end = end_page.min(req.end_page);
+            if overlap_start < overlap_end {
+                let newly_dirtied = overlap_end - overlap_start;
+                req.pending_pages = req.pending_pages.saturating_sub(newly_dirtied);
+                if req.pending_pages == 0 {
+                    let completed = inner.outstanding_requests.swap_remove(req_idx);
+                    for waiter in completed.overlap_waiters {
+                        let _ = waiter.sender.send(Ok(()));
+                    }
+                    continue; // don't increment — swap_remove shifted
+                }
+            }
+            req_idx += 1;
         }
         Ok(())
     }
@@ -2074,7 +2132,8 @@ impl Drop for VmObject {
         // handle to a pager-backed VMO is closed.
         {
             let inner = self.inner.lock();
-            if let Some(port) = &inner.pager_port {
+            let port = inner.pager_port.clone();
+            if let Some(port) = port {
                 port.push(PortPacketRepr {
                     key: inner.pager_key,
                     status: ZxError::OK,
