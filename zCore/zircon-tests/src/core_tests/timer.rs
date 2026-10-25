@@ -4,8 +4,10 @@
 
 use crate::helpers::TestContext;
 use core::time::Duration;
-use zircon_object::object::{KernelObject, Signal};
+use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::signal::{Slack, Timer};
+
+use super::object_info::{get_info, HANDLE_BASIC_SIZE, TOPIC_HANDLE_BASIC};
 
 /// Helper matching C++ `CheckInfo`: verify timer options, deadline, slack.
 fn check_info(timer: &Timer, expected_options: u32, expected_deadline: i64, expected_slack: i64) {
@@ -79,8 +81,6 @@ fn set_negative_deadline_max() {
 /// layer with an invalid slack value.
 #[test]
 fn set_negative_slack() {
-    use zircon_object::object::{Handle, Rights};
-
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -102,38 +102,84 @@ fn set_negative_slack() {
 /// C++: TEST(Timer, AlreadyPassedDeadlineOnWaitOne)
 ///
 /// Set deadline to past, wait_one returns immediately with SIGNALED.
-/// Verify get_info before and after.
+/// Verify get_info before and after wait_one.
 #[test]
 fn already_passed_deadline_on_wait_one() {
-    let _ctx = TestContext::new();
+    use hal_impl::user::UserOutPtr;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let timer = Timer::new();
+    let h = ctx
+        .proc
+        .add_handle(Handle::new(timer.clone(), Rights::DEFAULT_TIMER));
+
     check_info(&timer, 0, 0, 0);
 
     timer.set(Duration::from_nanos(0), Duration::from_nanos(0));
     check_info(&timer, 0, 0, 0);
 
-    assert_eq!(timer.signal(), Signal::SIGNALED);
-    // After "wait_one" (implicit here), info should be cleared.
+    // wait_one with zero timeout — already SIGNALED, should succeed.
+    let mut observed = Signal::empty();
+    let out = UserOutPtr::from(&mut observed as *mut _ as usize);
+    let result = async_std::task::block_on(sc.sys_object_wait_one(
+        h,
+        Signal::SIGNALED.bits(),
+        zircon_syscall::Deadline::from(0usize),
+        out,
+    ));
+    assert!(result.is_ok());
+    assert!(observed.contains(Signal::SIGNALED));
+
+    // After wait_one, info should still show cleared deadline.
     check_info(&timer, 0, 0, 0);
 }
 
 /// C++: TEST(Timer, Basic)
 ///
-/// Basic timer lifecycle. C++ loops 3 times with 10ms future deadline.
-/// In libos mode we can only test with past deadlines (fire immediately).
-/// Verify get_info after each fire.
+/// Basic timer lifecycle. C++ first does a wait_one with zero timeout
+/// to verify ZX_ERR_TIMED_OUT and pending==0, then loops 3 times with
+/// 10ms future deadlines and calls wait_one. In libos mode we test
+/// with past deadlines (fire immediately) and use syscall-layer wait_one.
 #[test]
 fn basic() {
-    let _ctx = TestContext::new();
-    let timer = Timer::new();
+    use hal_impl::user::UserOutPtr;
 
-    // Not signaled initially.
-    assert_eq!(timer.signal(), Signal::empty());
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let timer = Timer::new();
+    let h = ctx
+        .proc
+        .add_handle(Handle::new(timer.clone(), Rights::DEFAULT_TIMER));
+
+    // Initially not signaled — wait_one with zero timeout returns TIMED_OUT.
+    let mut observed = Signal::empty();
+    let out = UserOutPtr::from(&mut observed as *mut _ as usize);
+    let result = async_std::task::block_on(sc.sys_object_wait_one(
+        h,
+        Signal::SIGNALED.bits(),
+        zircon_syscall::Deadline::from(0usize),
+        out,
+    ));
+    assert_eq!(result, Err(zircon_object::ZxError::TIMED_OUT));
+    assert_eq!(observed, Signal::empty());
 
     for _ in 0..3 {
         // Set to past → fires immediately.
         timer.set(Duration::from_nanos(0), Duration::from_nanos(0));
-        assert_eq!(timer.signal(), Signal::SIGNALED);
+
+        // wait_one should succeed immediately (already SIGNALED).
+        let mut observed = Signal::empty();
+        let out = UserOutPtr::from(&mut observed as *mut _ as usize);
+        let result = async_std::task::block_on(sc.sys_object_wait_one(
+            h,
+            Signal::SIGNALED.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out,
+        ));
+        assert!(result.is_ok(), "wait_one should succeed for fired timer");
+        assert!(observed.contains(Signal::SIGNALED));
+
         // After firing, info should show cleared deadline.
         check_info(&timer, 0, 0, 0);
         // Cancel to reset for next iteration.
@@ -240,18 +286,46 @@ fn restart_race() {
 /// C++: TEST(Timer, SignalsAssertedImmediately)
 ///
 /// If the timer is already due when set, SIGNALED is asserted
-/// immediately. Canceling deasserts it immediately.
+/// immediately. Canceling deasserts it immediately. Verify via
+/// wait_one with zero timeout.
 #[test]
 fn signals_asserted_immediately() {
-    let _ctx = TestContext::new();
+    use hal_impl::user::UserOutPtr;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let timer = Timer::new();
+    let h = ctx
+        .proc
+        .add_handle(Handle::new(timer.clone(), Rights::DEFAULT_TIMER));
 
     for _ in 0..100 {
         timer.set(Duration::from_nanos(0), Duration::from_nanos(0));
-        assert_eq!(timer.signal(), Signal::SIGNALED);
+
+        // wait_one should succeed immediately.
+        let mut observed = Signal::empty();
+        let out = UserOutPtr::from(&mut observed as *mut _ as usize);
+        let result = async_std::task::block_on(sc.sys_object_wait_one(
+            h,
+            Signal::SIGNALED.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out,
+        ));
+        assert!(result.is_ok());
+        assert!(observed.contains(Signal::SIGNALED));
 
         timer.cancel();
-        assert_eq!(timer.signal(), Signal::empty());
+
+        // After cancel, wait_one should time out.
+        let mut observed2 = Signal::empty();
+        let out2 = UserOutPtr::from(&mut observed2 as *mut _ as usize);
+        let result2 = async_std::task::block_on(sc.sys_object_wait_one(
+            h,
+            Signal::SIGNALED.bits(),
+            zircon_syscall::Deadline::from(0usize),
+            out2,
+        ));
+        assert_eq!(result2, Err(zircon_object::ZxError::TIMED_OUT));
     }
 }
 
@@ -327,32 +401,84 @@ fn disabled_coalesce_test_late() {
 
 /// C++: TEST(Timer, UserSignal)
 ///
-/// User signals can be asserted and cleared on a timer, independent
-/// of the SIGNALED timer signal.
+/// User signals can be asserted and cleared on a timer via syscall layer,
+/// independent of the SIGNALED timer signal. C++ also verifies via wait_one.
 #[test]
 fn user_signal() {
-    let _ctx = TestContext::new();
+    use hal_impl::user::UserOutPtr;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
     let timer = Timer::new();
+    let h = ctx
+        .proc
+        .add_handle(Handle::new(timer.clone(), Rights::DEFAULT_TIMER));
 
-    // Assert user signal.
-    timer.signal_set(Signal::USER_SIGNAL_0);
-    assert_eq!(timer.signal(), Signal::USER_SIGNAL_0);
+    // Assert user signal via syscall.
+    sc.sys_object_signal(h, 0, Signal::USER_SIGNAL_0.bits())
+        .unwrap();
 
-    // Clear user signal.
-    timer.signal_clear(Signal::USER_SIGNAL_0);
-    assert_eq!(timer.signal(), Signal::empty());
+    // wait_one should succeed immediately with USER_SIGNAL_0.
+    let mut observed = Signal::empty();
+    let out = UserOutPtr::from(&mut observed as *mut _ as usize);
+    let result = async_std::task::block_on(sc.sys_object_wait_one(
+        h,
+        Signal::USER_SIGNAL_0.bits(),
+        zircon_syscall::Deadline::from(0usize),
+        out,
+    ));
+    assert!(result.is_ok());
+    assert!(observed.contains(Signal::USER_SIGNAL_0));
+
+    // Clear user signal via syscall.
+    sc.sys_object_signal(h, Signal::USER_SIGNAL_0.bits(), 0)
+        .unwrap();
+
+    // wait_one should now time out.
+    let mut observed2 = Signal::empty();
+    let out2 = UserOutPtr::from(&mut observed2 as *mut _ as usize);
+    let result = async_std::task::block_on(sc.sys_object_wait_one(
+        h,
+        Signal::USER_SIGNAL_0.bits(),
+        zircon_syscall::Deadline::from(0usize),
+        out2,
+    ));
+    assert_eq!(result, Err(zircon_object::ZxError::TIMED_OUT));
 }
 
 /// C++: TEST(Timer, BasicInfo)
 ///
-/// Verify ZX_INFO_HANDLE_BASIC fields: type=TIMER, related_koid=0.
+/// Verify ZX_INFO_HANDLE_BASIC fields: type=TIMER (22),
+/// related_koid=INVALID (0), rights=DEFAULT_TIMER.
 #[test]
 fn basic_info() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
     let timer = Timer::new();
+    let h = ctx
+        .proc
+        .add_handle(Handle::new(timer.clone(), Rights::DEFAULT_TIMER));
 
-    assert_eq!(timer.type_name(), "Timer");
-    assert_ne!(timer.id(), 0);
+    // Check via ZX_INFO_HANDLE_BASIC.
+    // HandleBasicInfo layout: koid(u64,0) rights(u32,8) obj_type(u32,12)
+    //                         related_koid(u64,16) props(u32,24) padding(u32,28)
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    let (actual, avail) = get_info(&ctx, h, TOPIC_HANDLE_BASIC, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+
+    let koid = u64::from_le_bytes(buf[0..8].try_into().unwrap());
+    let rights = u32::from_le_bytes(buf[8..12].try_into().unwrap());
+    let obj_type = u32::from_le_bytes(buf[12..16].try_into().unwrap());
+    let related_koid = u64::from_le_bytes(buf[16..24].try_into().unwrap());
+
+    assert_ne!(koid, 0);
+    assert_eq!(obj_type, 22, "expected Timer type (22)");
+    assert_eq!(related_koid, 0, "timer has no related koid");
+    assert_eq!(
+        rights,
+        Rights::DEFAULT_TIMER.bits(),
+        "expected DEFAULT_TIMER rights"
+    );
 
     // Freshly created timer: no deadline, no slack, default options.
     check_info(&timer, 0, 0, 0);

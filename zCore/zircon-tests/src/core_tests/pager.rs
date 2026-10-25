@@ -175,7 +175,7 @@ fn pager_clone_decommit() {
 // pager API (supply, detach, op_range, clone, resize) have real logic.
 // Those that truly require blocking page faults + concurrent threads
 
-/// C++: VMO_VMAR_TEST(Pager, BulkOddLengthSupplyTest) — Vmo variant
+/// C++: TEST(Pager, BulkOddLengthSupplyTestVmo)
 ///
 /// The C++ test supplies pages in chunks of unusual lengths
 /// [2, 3, 5, 7, 37, 5, 13, 23] with src_offset=0, and verifies
@@ -204,7 +204,7 @@ fn pager_bulk_odd_length_supply_test_vmo() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, BulkOddLengthSupplyTest) — Vmar variant
+/// C++: TEST(Pager, BulkOddLengthSupplyTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -230,7 +230,7 @@ fn pager_bulk_odd_length_supply_test_vmar() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, BulkOddOffsetSupplyTest) — Vmo variant
+/// C++: TEST(Pager, BulkOddOffsetSupplyTestVmo)
 ///
 /// The C++ test supplies pages in chunks of unusual lengths
 /// [2, 3, 5, 7, 37, 5, 13, 23] with src_offset=page_offset (non-zero),
@@ -261,7 +261,7 @@ fn pager_bulk_odd_offset_supply_test_vmo() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, BulkOddOffsetSupplyTest) — Vmar variant
+/// C++: TEST(Pager, BulkOddOffsetSupplyTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -287,7 +287,7 @@ fn pager_bulk_odd_offset_supply_test_vmar() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, BulkSingleSupplyTest) — Vmo variant
+/// C++: TEST(Pager, BulkSingleSupplyTestVmo)
 ///
 /// The C++ test creates an 8-page VMO, has 8 threads each read 1 page,
 /// then supplies all 8 pages in a single call. We pre-supply and verify.
@@ -311,7 +311,7 @@ fn pager_bulk_single_supply_test_vmo() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, BulkSingleSupplyTest) — Vmar variant
+/// C++: TEST(Pager, BulkSingleSupplyTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -332,7 +332,7 @@ fn pager_bulk_single_supply_test_vmar() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CancelKeyDoesNotWedgeThePager) — Vmo variant
+/// C++: TEST(Pager, CancelKeyDoesNotWedgeThePagerVmo)
 ///
 /// The C++ test cancels a port key while a pager packet is queued,
 /// then verifies the pager can still service subsequent requests.
@@ -360,7 +360,7 @@ fn pager_cancel_key_does_not_wedge_the_pager_vmo() {
     );
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CancelKeyDoesNotWedgeThePager) — Vmar variant
+/// C++: TEST(Pager, CancelKeyDoesNotWedgeThePagerVmar)
 ///
 /// Same as the Vmo variant — supply and read two pages sequentially.
 #[test]
@@ -718,7 +718,7 @@ fn pager_clone_might_see_intermediate_forks() {
     );
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CloneReadFromCloneTest) — Vmo variant
+/// C++: TEST(Pager, CloneReadFromCloneTestVmo)
 ///
 /// The C++ test creates a 1-page pager VMO, creates a clone, reads
 /// from the clone (which triggers a page fault on the parent), supplies
@@ -744,7 +744,7 @@ fn pager_clone_read_from_clone_test_vmo() {
     );
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CloneReadFromCloneTest) — Vmar variant
+/// C++: TEST(Pager, CloneReadFromCloneTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -762,7 +762,7 @@ fn pager_clone_read_from_clone_test_vmar() {
     );
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CloneReadFromParentTest) — Vmo variant
+/// C++: TEST(Pager, CloneReadFromParentTestVmo)
 ///
 /// The C++ test creates a 1-page pager VMO, creates a clone, reads
 /// from the parent (populating it), then verifies the clone also sees
@@ -794,7 +794,7 @@ fn pager_clone_read_from_parent_test_vmo() {
     );
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CloneReadFromParentTest) — Vmar variant
+/// C++: TEST(Pager, CloneReadFromParentTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -1039,7 +1039,7 @@ fn pager_clone_shrink_grow_parent() {
     );
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousChildReadTest) — Vmo variant
+/// C++: TEST(Pager, CloneSimultaneousChildReadTestVmo)
 ///
 /// The C++ test creates two clones and reads from both simultaneously.
 /// We pre-supply the parent page and verify both clones see the content.
@@ -1067,7 +1067,7 @@ fn pager_clone_simultaneous_child_read_test_vmo() {
     );
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousChildReadTest) — Vmar variant
+/// C++: TEST(Pager, CloneSimultaneousChildReadTestVmar)
 ///
 /// Same as the Vmo variant — two clones read the same parent page.
 #[test]
@@ -1085,7 +1085,7 @@ fn pager_clone_simultaneous_child_read_test_vmar() {
     assert!(UserPagerHelper::check_page(&clone2, key, 0));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousReadTest) — Vmo variant
+/// C++: TEST(Pager, CloneSimultaneousReadTestVmo)
 ///
 /// The C++ test reads the same page from parent and clone simultaneously.
 /// We pre-supply the page and verify both parent and clone see the content.
@@ -1110,7 +1110,7 @@ fn pager_clone_simultaneous_read_test_vmo() {
     );
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CloneSimultaneousReadTest) — Vmar variant
+/// C++: TEST(Pager, CloneSimultaneousReadTestVmar)
 ///
 /// Same as the Vmo variant — parent and clone read the same page.
 #[test]
@@ -1167,7 +1167,7 @@ fn pager_clone_split_commit_test() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CloneWriteToCloneTest) — Vmo variant
+/// C++: TEST(Pager, CloneWriteToCloneTestVmo)
 ///
 /// The C++ test creates a 1-page pager VMO, supplies the page, creates
 /// a COW clone, writes 0xdeadbeef to the clone, and verifies:
@@ -1207,7 +1207,7 @@ fn pager_clone_write_to_clone_test_vmo() {
     );
 }
 
-/// C++: VMO_VMAR_TEST(Pager, CloneWriteToCloneTest) — Vmar variant
+/// C++: TEST(Pager, CloneWriteToCloneTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read()/write() in libos mode.
 #[test]
@@ -1324,7 +1324,7 @@ fn pager_commit_redundant_supply_test() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ConcurrentMultipageAccessTest) — Vmo variant
+/// C++: TEST(Pager, ConcurrentMultipageAccessTestVmo)
 ///
 /// The C++ test has multiple threads each reading different pages concurrently.
 /// We pre-supply all pages and verify each is readable with correct content.
@@ -1342,7 +1342,7 @@ fn pager_concurrent_multipage_access_test_vmo() {
     assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ConcurrentMultipageAccessTest) — Vmar variant
+/// C++: TEST(Pager, ConcurrentMultipageAccessTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -1357,7 +1357,7 @@ fn pager_concurrent_multipage_access_test_vmar() {
     assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ConcurrentOverlappingAccessTest) — Vmo variant
+/// C++: TEST(Pager, ConcurrentOverlappingAccessTestVmo)
 ///
 /// The C++ test has 32 threads all reading the same page concurrently.
 /// We supply the page and verify it's readable (the concurrency aspect
@@ -1376,7 +1376,7 @@ fn pager_concurrent_overlapping_access_test_vmo() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ConcurrentOverlappingAccessTest) — Vmar variant
+/// C++: TEST(Pager, ConcurrentOverlappingAccessTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -1407,7 +1407,7 @@ fn pager_create_vmo_unbounded_invalid_stream_size() {
     assert_eq!(result.err(), Some(ZxError::INVALID_ARGS));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, DecommitOnDetachTest) — Vmo variant
+/// C++: TEST(Pager, DecommitOnDetachTestVmo)
 ///
 /// Supply a page, detach the VMO, then decommit. After decommit the
 /// page should read as zeros. In the C++ test, accessing pages after
@@ -1433,7 +1433,7 @@ fn pager_decommit_on_detach_test_vmo() {
     assert_eq!(u64::from_ne_bytes(val), 0);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, DecommitOnDetachTest) — Vmar variant
+/// C++: TEST(Pager, DecommitOnDetachTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -1583,7 +1583,7 @@ fn pager_detach_page_complete_test() {
     assert_eq!(vmo.committed_pages_in_range(0, 1), 0);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, EarlySupplyTest) — Vmo variant
+/// C++: TEST(Pager, EarlySupplyTestVmo)
 ///
 /// The C++ test supplies pages before a concurrent reader starts, so
 /// the reader never generates a page request. We supply both pages of
@@ -1603,7 +1603,7 @@ fn pager_early_supply_test_vmo() {
     assert!(UserPagerHelper::check_page(&vmo, key, 1));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, EarlySupplyTest) — Vmar variant
+/// C++: TEST(Pager, EarlySupplyTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -2113,7 +2113,7 @@ fn pager_fail_redundant() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, FailSinglePage) — Vmo variant
+/// C++: TEST(Pager, FailSinglePageVmo)
 ///
 /// Fail a single page, then re-supply and verify it's readable.
 /// The C++ test verifies the blocking reader gets an error; we verify
@@ -2132,7 +2132,7 @@ fn pager_fail_single_page_vmo() {
     assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, FailSinglePage) — Vmar variant
+/// C++: TEST(Pager, FailSinglePageVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -2204,7 +2204,7 @@ fn pager_invalid_pager_supply_pages() {
     assert_eq!(result.err(), Some(ZxError::INVALID_ARGS));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ManyRequestTest) — Vmo variant
+/// C++: TEST(Pager, ManyRequestTestVmo)
 ///
 /// The C++ test creates 257 threads each requesting one page. We
 /// supply all pages one at a time and verify each is readable.
@@ -2226,7 +2226,7 @@ fn pager_many_request_test_vmo() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ManyRequestTest) — Vmar variant
+/// C++: TEST(Pager, ManyRequestTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -2566,7 +2566,7 @@ fn pager_overlap_commit_test() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, OverlapSupplyTest) — Vmo variant
+/// C++: TEST(Pager, OverlapSupplyTestVmo)
 ///
 /// The C++ test supplies page 0 with alt data, then page 1 with
 /// regular data, and verifies page 0 has the alt data (supply doesn't
@@ -2594,7 +2594,7 @@ fn pager_overlap_supply_test_vmo() {
     assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, OverlapSupplyTest) — Vmar variant
+/// C++: TEST(Pager, OverlapSupplyTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -2950,7 +2950,7 @@ fn pager_present_page_splits_range() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, PresupplyTest) — Vmo variant
+/// C++: TEST(Pager, PresupplyTestVmo)
 ///
 /// Pre-supplied pages don't result in page requests.
 #[test]
@@ -2963,7 +2963,7 @@ fn pager_presupply_test_vmo() {
     assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, PresupplyTest) — Vmar variant
+/// C++: TEST(Pager, PresupplyTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -2996,7 +2996,7 @@ fn pager_racy_port_dequeue() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptEarlyTest) — Vmo variant
+/// C++: TEST(Pager, ReadCloseInterruptEarlyTestVmo)
 ///
 /// This test requires concurrent threads not available in libos mode.
 #[test]
@@ -3006,7 +3006,7 @@ fn pager_read_close_interrupt_early_test_vmo() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptEarlyTest) — Vmar variant
+/// C++: TEST(Pager, ReadCloseInterruptEarlyTestVmar)
 ///
 /// This test requires concurrent threads not available in libos mode.
 #[test]
@@ -3016,7 +3016,7 @@ fn pager_read_close_interrupt_early_test_vmar() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptLateTest) — Vmo variant
+/// C++: TEST(Pager, ReadCloseInterruptLateTestVmo)
 ///
 /// This test requires concurrent threads not available in libos mode.
 #[test]
@@ -3026,7 +3026,7 @@ fn pager_read_close_interrupt_late_test_vmo() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ReadCloseInterruptLateTest) — Vmar variant
+/// C++: TEST(Pager, ReadCloseInterruptLateTestVmar)
 ///
 /// This test requires concurrent threads not available in libos mode.
 #[test]
@@ -3036,7 +3036,7 @@ fn pager_read_close_interrupt_late_test_vmar() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptEarlyTest) — Vmo variant
+/// C++: TEST(Pager, ReadDetachInterruptEarlyTestVmo)
 ///
 /// This test requires concurrent threads not available in libos mode.
 #[test]
@@ -3046,7 +3046,7 @@ fn pager_read_detach_interrupt_early_test_vmo() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptEarlyTest) — Vmar variant
+/// C++: TEST(Pager, ReadDetachInterruptEarlyTestVmar)
 ///
 /// This test requires concurrent threads not available in libos mode.
 #[test]
@@ -3056,7 +3056,7 @@ fn pager_read_detach_interrupt_early_test_vmar() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptLateTest) — Vmo variant
+/// C++: TEST(Pager, ReadDetachInterruptLateTestVmo)
 ///
 /// This test requires concurrent threads not available in libos mode.
 #[test]
@@ -3066,7 +3066,7 @@ fn pager_read_detach_interrupt_late_test_vmo() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ReadDetachInterruptLateTest) — Vmar variant
+/// C++: TEST(Pager, ReadDetachInterruptLateTestVmar)
 ///
 /// This test requires concurrent threads not available in libos mode.
 #[test]
@@ -3076,7 +3076,7 @@ fn pager_read_detach_interrupt_late_test_vmar() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ReadResizeTest) — Vmo variant
+/// C++: TEST(Pager, ReadResizeTestVmo)
 ///
 /// This test requires concurrent threads not available in libos mode.
 #[test]
@@ -3086,7 +3086,7 @@ fn pager_read_resize_test_vmo() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, ReadResizeTest) — Vmar variant
+/// C++: TEST(Pager, ReadResizeTestVmar)
 ///
 /// This test requires concurrent threads not available in libos mode.
 #[test]
@@ -3172,7 +3172,7 @@ fn pager_resize_nonresizable_vmo() {
     assert_eq!(result.err(), Some(ZxError::UNAVAILABLE));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, SequentialMultipageTest) — Vmo variant
+/// C++: TEST(Pager, SequentialMultipageTestVmo)
 ///
 /// The C++ test has a single thread reading 32 pages sequentially,
 /// with pages supplied one at a time. We supply all 32 pages in one
@@ -3195,7 +3195,7 @@ fn pager_sequential_multipage_test_vmo() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, SequentialMultipageTest) — Vmar variant
+/// C++: TEST(Pager, SequentialMultipageTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -3235,7 +3235,7 @@ fn pager_simple_commit_test() {
     }
 }
 
-/// C++: VMO_VMAR_TEST(Pager, SinglePageTest) — Vmo variant
+/// C++: TEST(Pager, SinglePageTestVmo)
 ///
 /// Basic single-page test: supply one page and verify it's readable.
 #[test]
@@ -3248,7 +3248,7 @@ fn pager_single_page_test_vmo() {
     assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
-/// C++: VMO_VMAR_TEST(Pager, SinglePageTest) — Vmar variant
+/// C++: TEST(Pager, SinglePageTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -3397,7 +3397,7 @@ fn pager_suspend_in_kernel_test() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, SuspendReadTest) — Vmo variant
+/// C++: TEST(Pager, SuspendReadTestVmo)
 ///
 /// This test requires thread suspension not available in libos mode.
 #[test]
@@ -3407,7 +3407,7 @@ fn pager_suspend_read_test_vmo() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, SuspendReadTest) — Vmar variant
+/// C++: TEST(Pager, SuspendReadTestVmar)
 ///
 /// This test requires thread suspension not available in libos mode.
 #[test]
@@ -3417,7 +3417,7 @@ fn pager_suspend_read_test_vmar() {
     let (_vmo, _key) = pager_helper.create_vmo(1);
 }
 
-/// C++: VMO_VMAR_TEST(Pager, UncommittedSinglePageTest) — Vmo variant
+/// C++: TEST(Pager, UncommittedSinglePageTestVmo)
 ///
 /// Supply an uncommitted (zero) page and verify it reads as zeros.
 #[test]
@@ -3442,7 +3442,7 @@ fn pager_uncommitted_single_page_test_vmo() {
     );
 }
 
-/// C++: VMO_VMAR_TEST(Pager, UncommittedSinglePageTest) — Vmar variant
+/// C++: TEST(Pager, UncommittedSinglePageTestVmar)
 ///
 /// Same as Vmo variant — both use vmo.read() in libos mode.
 #[test]
@@ -3858,7 +3858,7 @@ fn pager_wb_delayed_read_zero_range() {
     assert_eq!(u64::from_ne_bytes(buf), 0);
 }
 
-/// C++: VMO_VMAR_TEST(PagerWriteback, DetachWithPendingDirtyRequest) — Vmo variant
+/// C++: TEST(PagerWriteback, DetachWithPendingDirtyRequestVmo)
 #[test]
 fn pager_wb_detach_with_pending_dirty_request_vmo() {
     let _ctx = TestContext::new();
@@ -3876,7 +3876,7 @@ fn pager_wb_detach_with_pending_dirty_request_vmo() {
     assert!(ranges.is_empty());
 }
 
-/// C++: VMO_VMAR_TEST(PagerWriteback, DetachWithPendingDirtyRequest) — Vmar variant
+/// C++: TEST(PagerWriteback, DetachWithPendingDirtyRequestVmar)
 #[test]
 fn pager_wb_detach_with_pending_dirty_request_vmar() {
     let _ctx = TestContext::new();
@@ -4644,7 +4644,7 @@ fn pager_wb_no_dirty_on_commit_trap_dirty() {
     assert!(!ranges.is_empty());
 }
 
-/// C++: VMO_VMAR_TEST(PagerWriteback, NoDirtyRequestsAfterDetach) — Vmo variant
+/// C++: TEST(PagerWriteback, NoDirtyRequestsAfterDetachVmo)
 #[test]
 fn pager_wb_no_dirty_requests_after_detach_vmo() {
     let _ctx = TestContext::new();
@@ -4667,7 +4667,7 @@ fn pager_wb_no_dirty_requests_after_detach_vmo() {
     assert!(ranges.is_empty());
 }
 
-/// C++: VMO_VMAR_TEST(PagerWriteback, NoDirtyRequestsAfterDetach) — Vmar variant
+/// C++: TEST(PagerWriteback, NoDirtyRequestsAfterDetachVmar)
 #[test]
 fn pager_wb_no_dirty_requests_after_detach_vmar() {
     let _ctx = TestContext::new();
@@ -6802,7 +6802,7 @@ fn pager_wb_simple_dirty_no_trap() {
     assert_eq!(val[0], data2);
 }
 
-/// C++: VMO_VMAR_TEST(PagerWriteback, SimpleTrapDirty) — Vmo variant
+/// C++: TEST(PagerWriteback, SimpleTrapDirtyVmo)
 #[test]
 fn pager_wb_simple_trap_dirty_vmo() {
     let _ctx = TestContext::new();
@@ -6832,7 +6832,7 @@ fn pager_wb_simple_trap_dirty_vmo() {
     assert_eq!(val[0], data);
 }
 
-/// C++: VMO_VMAR_TEST(PagerWriteback, SimpleTrapDirty) — Vmar variant
+/// C++: TEST(PagerWriteback, SimpleTrapDirtyVmar)
 #[test]
 fn pager_wb_simple_trap_dirty_vmar() {
     let _ctx = TestContext::new();
@@ -7038,7 +7038,7 @@ fn pager_wb_slice_write_trap_dirty() {
     assert!(!ranges.is_empty());
 }
 
-/// C++: VMO_VMAR_TEST(PagerWriteback, SuspendDirtyTest) — Vmo variant
+/// C++: TEST(PagerWriteback, SuspendDirtyTestVmo)
 #[test]
 fn pager_wb_suspend_dirty_test_vmo() {
     let _ctx = TestContext::new();
@@ -7049,7 +7049,7 @@ fn pager_wb_suspend_dirty_test_vmo() {
     assert!(UserPagerHelper::check_page(&vmo, key, 0));
 }
 
-/// C++: VMO_VMAR_TEST(PagerWriteback, SuspendDirtyTest) — Vmar variant
+/// C++: TEST(PagerWriteback, SuspendDirtyTestVmar)
 #[test]
 fn pager_wb_suspend_dirty_test_vmar() {
     let _ctx = TestContext::new();
