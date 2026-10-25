@@ -1907,13 +1907,66 @@ fn read_write_invalid_null_buffer() {
 }
 
 /// C++: TEST(VmoTestCase, ReadWriteInvalidUserBuffer)
-/// The C++ test creates a read-only VMAR mapping and attempts to read VMO data
-/// into it, expecting the write to the read-only page to fail. On bare-metal the
-/// page table enforces this and `guarded_user_copy` catches the fault. In libos
-/// mode, `copy_to_user` is a plain memcpy that doesn't check VMAR permissions,
-/// so the write silently succeeds. This test is therefore ignored in libos.
+///
+/// ```cpp
+/// // Allocate VMAR region, no mapping → NOT_FOUND
+/// EXPECT_STATUS(vmo.read(vmar_ptr, 0, 1), ZX_ERR_NOT_FOUND);
+/// EXPECT_STATUS(vmo.write(vmar_ptr, 0, 1), ZX_ERR_NOT_FOUND);
+/// // Map a VMO into the VMAR → succeeds
+/// EXPECT_OK(vmo.read(vmar_ptr, 0, 1));
+/// EXPECT_OK(vmo.write(vmar_ptr, 0, 1));
+/// // Read/write past mapped region → NOT_FOUND
+/// EXPECT_STATUS(vmo.read(vmar_ptr, 0, mapped_size + 1), ZX_ERR_NOT_FOUND);
+/// // Read/write past VMO → OUT_OF_RANGE
+/// EXPECT_STATUS(vmo.read(vmar_ptr, 0, vmo_size + 1), ZX_ERR_OUT_OF_RANGE);
+/// ```
+///
+/// The unmapped-buffer and past-mapping NOT_FOUND checks require kernel-level
+/// guarded_user_copy, which libos mode doesn't enforce (memcpy succeeds on any
+/// host-valid address). We faithfully test what we can:
+/// - OUT_OF_RANGE when reading/writing past the VMO's size.
+/// - Successful read/write within bounds after mapping.
 #[test]
-fn read_write_invalid_user_buffer() {}
+fn read_write_invalid_user_buffer() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "invalid-user-buf").unwrap();
+    let vmar = proc.vmar();
+
+    let mapped_size = PAGE_SIZE;
+    let vmo_size = 2 * mapped_size;
+    let vmo = VmObject::new_paged(vmo_size / PAGE_SIZE);
+
+    // Map the VMO into the VMAR with read+write permissions.
+    let flags = MMUFlags::READ | MMUFlags::WRITE;
+    let addr = vmar.map(None, vmo.clone(), 0, mapped_size, flags).unwrap();
+
+    // Read/write within bounds should succeed (C++: EXPECT_OK after mapping).
+    let mut buf = [0u8; 1];
+    vmo.read(0, &mut buf).unwrap();
+    vmo.write(0, &buf).unwrap();
+
+    // Read/write past the VMO's size should fail with OUT_OF_RANGE.
+    // C++: EXPECT_STATUS(vmo.read(vmar_ptr, 0, vmo_size + 1), ZX_ERR_OUT_OF_RANGE)
+    let mut too_big = vec![0u8; vmo_size + 1];
+    assert_eq!(
+        vmo.read(0, &mut too_big).unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "vmo read past end should be OUT_OF_RANGE"
+    );
+    assert_eq!(
+        vmo.write(0, &too_big).unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "vmo write past end should be OUT_OF_RANGE"
+    );
+
+    // Note: The C++ test also checks NOT_FOUND for unmapped VMAR regions
+    // and for read/write past the mapped region but within VMO bounds.
+    // These require kernel-level guarded_user_copy fault handling, which
+    // libos mode doesn't enforce (copy_to_user is a plain memcpy).
+
+    vmar.unmap(addr, mapped_size).unwrap();
+}
 
 /// C++: TEST(VmoTestCase, ResizeHazard)
 ///

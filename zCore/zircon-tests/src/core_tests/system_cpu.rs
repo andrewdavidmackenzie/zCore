@@ -479,16 +479,21 @@ fn target_preemption_time_assert() {
 
 /// C++: TEST(SystemCpu, ScaleBandwidth)
 ///
-/// This test is disabled in the C++ source:
 /// ```cpp
 /// // TODO(https://fxbug.dev/42166790): Disabled while flakes are investigated.
 /// return;
 /// ```
 ///
-/// We faithfully port the disabled test — it returns immediately.
+/// The C++ test body begins with an unconditional `return;` — it is disabled
+/// while flakes are investigated. We faithfully port the disabled test.
+/// When upstream re-enables it, this test would need to:
+/// 1. Set performance scale to 0.5 on the test CPU
+/// 2. Run a deadline-scheduled thread with known capacity/period
+/// 3. Measure actual CPU time and verify it scales with the performance scale
 #[test]
 fn scale_bandwidth() {
     // C++: return; (disabled while flakes are investigated)
+    // Faithfully matches upstream: immediate return, no assertions.
 }
 
 /// C++: TEST(SystemCpu, SetPerformanceInfoNearZero)

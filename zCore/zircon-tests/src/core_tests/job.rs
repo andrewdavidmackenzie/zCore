@@ -1110,22 +1110,50 @@ fn policy_timer_slack_invalid_policy_test() {
 /// C++: TEST(JobTest, PolicyTimerSlackValid)
 /// Setting valid timer slack policies on empty jobs should succeed.
 /// Valid modes: Center(0), Early(1), Late(2).
+/// Also tests raising and lowering the minimum slack.
 #[test]
 fn policy_timer_slack_valid() {
     let ctx = TestContext::new();
+    let root_h = add_root_job(&ctx);
+    let job_h = create_job(&ctx, root_h);
 
-    // Test all three valid modes
-    for mode_val in 0u32..3 {
-        let root_h = add_root_job(&ctx);
-        let job_h = create_job(&ctx, root_h);
+    // All three valid modes: Center(0), Early(1), Late(2).
+    let policy = RawTimerSlackPolicy {
+        min_slack: 10_000_000, // ZX_MSEC(10)
+        default_mode: 0,       // Center
+        _padding: 0,
+    };
+    set_timer_slack_policy(&ctx, job_h, &policy).unwrap();
 
-        let policy = RawTimerSlackPolicy {
-            min_slack: 10_000,
-            default_mode: mode_val,
-            _padding: 0,
-        };
-        set_timer_slack_policy(&ctx, job_h, &policy).unwrap();
-    }
+    let policy = RawTimerSlackPolicy {
+        min_slack: 10_000_000,
+        default_mode: 1, // Early
+        _padding: 0,
+    };
+    set_timer_slack_policy(&ctx, job_h, &policy).unwrap();
+
+    let policy = RawTimerSlackPolicy {
+        min_slack: 10_000_000,
+        default_mode: 2, // Late
+        _padding: 0,
+    };
+    set_timer_slack_policy(&ctx, job_h, &policy).unwrap();
+
+    // Raise the minimum.
+    let policy = RawTimerSlackPolicy {
+        min_slack: 10_000_000_000, // ZX_SEC(10)
+        default_mode: 2,           // Late
+        _padding: 0,
+    };
+    set_timer_slack_policy(&ctx, job_h, &policy).unwrap();
+
+    // Try to lower the minimum, no error.
+    let policy = RawTimerSlackPolicy {
+        min_slack: 5_000, // ZX_USEC(5)
+        default_mode: 0,  // Center
+        _padding: 0,
+    };
+    set_timer_slack_policy(&ctx, job_h, &policy).unwrap();
 }
 
 /// C++: TEST(JobTest, WaitTest)

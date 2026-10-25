@@ -146,38 +146,54 @@ fn process_name() {
 const PROP_REGISTER_FS: u32 = 4;
 const PROP_REGISTER_GS: u32 = 2;
 
-/// C++: TEST(Property, RegisterFs)
-/// Set ZX_PROP_REGISTER_FS on a thread. This requires the thread to be
-/// in a stopped state. In test mode, we just attempt the syscall.
+/// C++: TEST(Property, RegisterFs) → TestValid(kFs)
+/// Set and get ZX_PROP_REGISTER_FS on the calling thread.
+/// On x86_64 the value round-trips; on other arches set returns NOT_SUPPORTED.
 #[test]
 fn register_fs() {
     let ctx = TestContext::new();
-    let thread = Thread::create(&ctx.proc, "fs-thread").unwrap();
+    // Use the calling thread — FS/GS properties only work on self.
     let thread_h = ctx.proc.add_handle(Handle::new(
-        thread,
+        ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
-    let val: usize = 0x1000;
+    let val: usize = 0xdead1; // C++: kInitialValue
     let val_bytes = val.to_ne_bytes();
-    // May succeed or return an error depending on thread state / arch.
-    let _result = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes);
+    if cfg!(target_arch = "x86_64") {
+        set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap();
+        let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+        get_property(&ctx, thread_h, PROP_REGISTER_FS, &mut read_buf).unwrap();
+        let read_value = usize::from_ne_bytes(read_buf);
+        assert_eq!(read_value, val);
+    } else {
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
+        assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
-/// C++: TEST(Property, RegisterFsFault)
-/// Setting FS to a faulting address should still be accepted by the
-/// property setter (validation happens on context switch). We just
-/// exercise the syscall path.
+/// C++: TEST(Property, RegisterFsFault) → TestFault(kFs)
+/// Setting FS to a faulting (but canonical) address is accepted by the
+/// property setter — validation happens on context switch. The value
+/// still round-trips through get_property.
 #[test]
 fn register_fs_fault() {
     let ctx = TestContext::new();
-    let thread = Thread::create(&ctx.proc, "fs-fault").unwrap();
     let thread_h = ctx.proc.add_handle(Handle::new(
-        thread,
+        ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
-    let val: usize = 0xDEAD_0000;
+    let val: usize = 0xDEAD_0000; // canonical but unmapped
     let val_bytes = val.to_ne_bytes();
-    let _result = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes);
+    if cfg!(target_arch = "x86_64") {
+        set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap();
+        let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+        get_property(&ctx, thread_h, PROP_REGISTER_FS, &mut read_buf).unwrap();
+        let read_value = usize::from_ne_bytes(read_buf);
+        assert_eq!(read_value, val);
+    } else {
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
+        assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
 /// C++: TEST(Property, RegisterFsNonThread)
@@ -196,42 +212,55 @@ fn register_fs_non_thread() {
     assert_eq!(err, zircon_object::ZxError::WRONG_TYPE);
 }
 
-/// C++: TEST(Property, RegisterFsNoncanonical)
-/// Setting FS to a non-canonical address (x86_64 specific).
-/// On non-x86, the property may not be supported.
+/// C++: TEST(Property, RegisterFsNoncanonical) → TestNoncanonical(kFs)
+/// Setting FS to a non-canonical address must fail with INVALID_ARGS
+/// on x86_64, or NOT_SUPPORTED on other architectures.
 #[test]
 fn register_fs_noncanonical() {
     let ctx = TestContext::new();
-    let thread = Thread::create(&ctx.proc, "fs-nc").unwrap();
     let thread_h = ctx.proc.add_handle(Handle::new(
-        thread,
+        ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
-    // Non-canonical address on x86_64: bit 47 set but bits 48-63 not all 1.
-    let val: usize = 0x0001_0000_0000_0000;
+    // C++: kNoncanonicalValue — bit 48 set, bit 47 clear → non-canonical.
+    let val: usize = 0x1010_1010_1010_1010;
     let val_bytes = val.to_ne_bytes();
-    let _result = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes);
-    // May succeed or return INVALID_ARGS depending on arch validation.
+    let err = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
+    if cfg!(target_arch = "x86_64") {
+        assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+    } else {
+        assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
-/// C++: TEST(Property, RegisterFsNonuser)
-/// Setting FS to a kernel-space address should be rejected.
+/// C++: TEST(Property, RegisterFsNonuser) → TestNonuser(kFs)
+/// Non-user (kernel) addresses are canonical and accepted by set_property.
+/// The value round-trips through get_property on x86_64.
 #[test]
 fn register_fs_nonuser() {
     let ctx = TestContext::new();
-    let thread = Thread::create(&ctx.proc, "fs-nonuser").unwrap();
     let thread_h = ctx.proc.add_handle(Handle::new(
-        thread,
+        ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
-    // Kernel-space address (high bit set on most arches)
-    let val: usize = 0xFFFF_FFFF_8000_0000;
+    // C++: kNonuserValue = -4096 = 0xFFFFFFFFFFFFF000 — canonical kernel address.
+    let val: usize = (-4096_i64) as usize;
     let val_bytes = val.to_ne_bytes();
-    let _result = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes);
+    if cfg!(target_arch = "x86_64") {
+        set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap();
+        let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+        get_property(&ctx, thread_h, PROP_REGISTER_FS, &mut read_buf).unwrap();
+        let read_value = usize::from_ne_bytes(read_buf);
+        assert_eq!(read_value, val);
+    } else {
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
+        assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
-/// C++: TEST(Property, RegisterFsOtherThread)
-/// Setting FS on another thread (not the current one).
+/// C++: TEST(Property, RegisterFsOtherThread) → TestOtherThread(kFs)
+/// Set/get FS on another thread must return ACCESS_DENIED on x86_64,
+/// NOT_SUPPORTED on other architectures.
 #[test]
 fn register_fs_other_thread() {
     let ctx = TestContext::new();
@@ -242,7 +271,16 @@ fn register_fs_other_thread() {
     ));
     let val: usize = 0x2000;
     let val_bytes = val.to_ne_bytes();
-    let _result = set_property(&ctx, other_h, PROP_REGISTER_FS, &val_bytes);
+    let set_err = set_property(&ctx, other_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
+    if cfg!(target_arch = "x86_64") {
+        assert_eq!(set_err, zircon_object::ZxError::ACCESS_DENIED);
+    } else {
+        assert_eq!(set_err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
+    let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+    let get_err = get_property(&ctx, other_h, PROP_REGISTER_FS, &mut read_buf).unwrap_err();
+    // get_property for RegisterFs has no arch guard — ACCESS_DENIED on all arches.
+    assert_eq!(get_err, zircon_object::ZxError::ACCESS_DENIED);
 }
 
 /// C++: TEST(Property, RegisterFsTooSmall)
@@ -264,33 +302,52 @@ fn register_fs_too_small() {
     assert_eq!(err, zircon_object::ZxError::BUFFER_TOO_SMALL);
 }
 
-/// C++: TEST(Property, RegisterGs)
-/// Set ZX_PROP_REGISTER_GS on a thread.
+/// C++: TEST(Property, RegisterGs) → TestValid(kGs)
+/// Set and get ZX_PROP_REGISTER_GS on the calling thread.
+/// On x86_64 the value round-trips; on other arches set returns NOT_SUPPORTED.
 #[test]
 fn register_gs() {
     let ctx = TestContext::new();
-    let thread = Thread::create(&ctx.proc, "gs-thread").unwrap();
     let thread_h = ctx.proc.add_handle(Handle::new(
-        thread,
+        ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
-    let val: usize = 0x3000;
+    let val: usize = 0xdead1; // C++: kInitialValue
     let val_bytes = val.to_ne_bytes();
-    let _result = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes);
+    if cfg!(target_arch = "x86_64") {
+        set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap();
+        let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+        get_property(&ctx, thread_h, PROP_REGISTER_GS, &mut read_buf).unwrap();
+        let read_value = usize::from_ne_bytes(read_buf);
+        assert_eq!(read_value, val);
+    } else {
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
+        assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
-/// C++: TEST(Property, RegisterGsFault)
+/// C++: TEST(Property, RegisterGsFault) → TestFault(kGs)
+/// Setting GS to a faulting (but canonical) address is accepted.
+/// The value round-trips through get_property on x86_64.
 #[test]
 fn register_gs_fault() {
     let ctx = TestContext::new();
-    let thread = Thread::create(&ctx.proc, "gs-fault").unwrap();
     let thread_h = ctx.proc.add_handle(Handle::new(
-        thread,
+        ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
-    let val: usize = 0xDEAD_0000;
+    let val: usize = 0xDEAD_0000; // canonical but unmapped
     let val_bytes = val.to_ne_bytes();
-    let _result = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes);
+    if cfg!(target_arch = "x86_64") {
+        set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap();
+        let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+        get_property(&ctx, thread_h, PROP_REGISTER_GS, &mut read_buf).unwrap();
+        let read_value = usize::from_ne_bytes(read_buf);
+        assert_eq!(read_value, val);
+    } else {
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
+        assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
 /// C++: TEST(Property, RegisterGsNonThread)
@@ -309,35 +366,55 @@ fn register_gs_non_thread() {
     assert_eq!(err, zircon_object::ZxError::WRONG_TYPE);
 }
 
-/// C++: TEST(Property, RegisterGsNoncanonical)
+/// C++: TEST(Property, RegisterGsNoncanonical) → TestNoncanonical(kGs)
+/// Setting GS to a non-canonical address must fail with INVALID_ARGS
+/// on x86_64, or NOT_SUPPORTED on other architectures.
 #[test]
 fn register_gs_noncanonical() {
     let ctx = TestContext::new();
-    let thread = Thread::create(&ctx.proc, "gs-nc").unwrap();
     let thread_h = ctx.proc.add_handle(Handle::new(
-        thread,
+        ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
-    let val: usize = 0x0001_0000_0000_0000;
+    // C++: kNoncanonicalValue — bit 48 set, bit 47 clear → non-canonical.
+    let val: usize = 0x1010_1010_1010_1010;
     let val_bytes = val.to_ne_bytes();
-    let _result = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes);
+    let err = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
+    if cfg!(target_arch = "x86_64") {
+        assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+    } else {
+        assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
-/// C++: TEST(Property, RegisterGsNonuser)
+/// C++: TEST(Property, RegisterGsNonuser) → TestNonuser(kGs)
+/// Non-user (kernel) addresses are canonical and accepted by set_property.
+/// The value round-trips through get_property on x86_64.
 #[test]
 fn register_gs_nonuser() {
     let ctx = TestContext::new();
-    let thread = Thread::create(&ctx.proc, "gs-nonuser").unwrap();
     let thread_h = ctx.proc.add_handle(Handle::new(
-        thread,
+        ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
-    let val: usize = 0xFFFF_FFFF_8000_0000;
+    // C++: kNonuserValue = -4096 = 0xFFFFFFFFFFFFF000 — canonical kernel address.
+    let val: usize = (-4096_i64) as usize;
     let val_bytes = val.to_ne_bytes();
-    let _result = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes);
+    if cfg!(target_arch = "x86_64") {
+        set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap();
+        let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+        get_property(&ctx, thread_h, PROP_REGISTER_GS, &mut read_buf).unwrap();
+        let read_value = usize::from_ne_bytes(read_buf);
+        assert_eq!(read_value, val);
+    } else {
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
+        assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
-/// C++: TEST(Property, RegisterGsOtherThread)
+/// C++: TEST(Property, RegisterGsOtherThread) → TestOtherThread(kGs)
+/// Set/get GS on another thread must return ACCESS_DENIED on x86_64,
+/// NOT_SUPPORTED on other architectures.
 #[test]
 fn register_gs_other_thread() {
     let ctx = TestContext::new();
@@ -348,7 +425,20 @@ fn register_gs_other_thread() {
     ));
     let val: usize = 0x4000;
     let val_bytes = val.to_ne_bytes();
-    let _result = set_property(&ctx, other_h, PROP_REGISTER_GS, &val_bytes);
+    let set_err = set_property(&ctx, other_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
+    if cfg!(target_arch = "x86_64") {
+        assert_eq!(set_err, zircon_object::ZxError::ACCESS_DENIED);
+    } else {
+        assert_eq!(set_err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
+    let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+    let get_err = get_property(&ctx, other_h, PROP_REGISTER_GS, &mut read_buf).unwrap_err();
+    if cfg!(target_arch = "x86_64") {
+        assert_eq!(get_err, zircon_object::ZxError::ACCESS_DENIED);
+    } else {
+        // get_property for RegisterGs on non-x86_64 returns NOT_SUPPORTED.
+        assert_eq!(get_err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
 /// C++: TEST(Property, RegisterGsTooSmall)

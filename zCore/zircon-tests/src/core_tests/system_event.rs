@@ -253,10 +253,20 @@ fn exactly_one_memory_event_signaled() {
 }
 
 /// C++: TEST(SystemEvent, DISABLED_MemoryStallEvent)
-/// This test is disabled even in Fuchsia (see the DISABLED_ prefix).
+///
+/// ```cpp
+/// // Retrieve total memory, create stall event with low threshold,
+/// // hoard discardable VMOs until stall is reported.
+/// ```
+///
+/// This test is disabled in upstream Fuchsia (DISABLED_ prefix in gtest).
+/// When enabled, it would call `zx_system_watch_memory_stall` to observe
+/// memory pressure by hoarding discardable VMOs. Neither the syscall nor
+/// discardable VMO infrastructure is implemented in zCore.
 #[test]
 fn disabled_memory_stall_event() {
     // Disabled in upstream Fuchsia. See https://fxbug.dev/513577268.
+    // Faithfully matches upstream: DISABLED_ prefix means gtest skips it.
 }
 
 /// C++: TEST(SystemEvent, CannotSignalMemoryStallEventFromUserspace)

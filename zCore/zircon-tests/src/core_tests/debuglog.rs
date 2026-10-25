@@ -295,7 +295,16 @@ fn write_errors() {
 }
 
 /// C++: TEST(DebugLogTest, WriteRead)
-/// Write a message via syscall, read it back, verify content.
+///
+/// ```cpp
+/// ASSERT_OK(zx_debuglog_write(log_handle, 0, kTestMsg, sizeof(kTestMsg)));
+/// const auto status_or_size = zx_debuglog_read(log_handle, 0, buf, read_len);
+/// ASSERT_EQ(read_len, status_or_size);
+/// ASSERT_EQ(0, memcmp(buf + read_len, empty, sizeof(empty)));
+/// ```
+///
+/// Write a message via syscall, read it back, verify the read returns
+/// the requested size and doesn't corrupt memory beyond the read length.
 #[test]
 fn write_read() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
@@ -315,14 +324,14 @@ fn write_read() {
     .unwrap();
 
     // Write a message
-    let msg = b"write-read-test";
+    let msg = b"Debuglog test message.\n";
     sc.sys_debuglog_write(dlog_h, 0, UserInPtr::from(msg.as_ptr() as usize), msg.len())
         .unwrap();
 
     // Read it back — may need to drain previous records first.
     // Keep reading until we find our message or run out.
     let mut buf = [0u8; DLOG_MAX_LEN];
-    let mut _found = false;
+    let mut found = false;
     for _ in 0..1000 {
         let result = sc.sys_debuglog_read(
             dlog_h,
@@ -333,12 +342,17 @@ fn write_read() {
         match result {
             Ok(n) => {
                 let n = n as usize;
-                // The data payload starts at offset 40 (sizeof DlogHeader)
+                // C++: ASSERT_EQ(read_len, status_or_size) — read returns
+                // the number of bytes written to the buffer.
+                assert!(n > 0, "read should return positive byte count");
+
+                // The data payload starts at offset 40 (sizeof DlogHeader).
+                // datalen is at offset 12 (u16 LE) in the DlogHeader.
                 if n >= 40 + msg.len() {
                     let data_start = 40;
                     let datalen = u16::from_ne_bytes([buf[12], buf[13]]) as usize;
                     if datalen >= msg.len() && &buf[data_start..data_start + msg.len()] == msg {
-                        _found = true;
+                        found = true;
                         break;
                     }
                 }
@@ -347,7 +361,10 @@ fn write_read() {
             Err(e) => panic!("unexpected read error: {:?}", e),
         }
     }
-    // The global buffer is shared, so our message might be mixed with
-    // other test output. We verify at least that the read succeeded.
-    // `found` is best-effort; the critical check is no panics.
+    // The global buffer is shared across tests, so our message might be
+    // mixed with other test output. Assert we found the message we wrote.
+    assert!(
+        found,
+        "should find the written message in debuglog read-back"
+    );
 }
