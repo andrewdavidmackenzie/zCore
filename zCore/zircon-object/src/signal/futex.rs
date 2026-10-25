@@ -182,6 +182,12 @@ impl Futex {
                     // the most recent successful futex_wait.
                     futex.set_owner(self.new_owner.clone());
                     futex.waiter_queue.push_back(self.waiter.clone());
+                    // Track which futex this thread is blocking on,
+                    // so futex_requeue's owner validation can check
+                    // without scanning the waiter queue.
+                    if let Some(ref thread) = self.waiter.thread {
+                        thread.set_blocking_futex(inner.futex.user_addr);
+                    }
                     drop(futex);
                     inner.waker.replace(cx.waker().clone());
                 }
@@ -197,9 +203,12 @@ impl Futex {
                     let futex = inner.futex.clone();
                     let queue = &mut futex.inner.lock().waiter_queue;
                     if let Some(pos) = queue.iter().position(|x| Arc::ptr_eq(x, &self.waiter)) {
-                        // Nobody cares about the order of queue, so just remove faster
                         queue.swap_remove_back(pos);
                     }
+                }
+                // Clear blocking futex tracking.
+                if let Some(ref thread) = self.waiter.thread {
+                    thread.set_blocking_futex(0);
                 }
             }
         }

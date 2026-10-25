@@ -54,15 +54,10 @@ impl Syscall<'_> {
             }
             Some(owner)
         };
-        let futex_addr = value_ptr.as_addr();
-        self.thread.inner().set_blocking_futex(futex_addr);
         let future = futex.wait_with_owner(current_value, Some(self.thread.inner()), new_owner);
-        let result = self
-            .thread
+        self.thread
             .blocking_run::<_, (), _>(future, ThreadState::BlockedFutex, deadline.into(), None)
-            .await;
-        self.thread.inner().set_blocking_futex(0);
-        result?;
+            .await?;
         Ok(())
     }
 

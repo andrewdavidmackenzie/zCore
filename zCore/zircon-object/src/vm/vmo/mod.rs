@@ -626,7 +626,12 @@ impl VmObject {
             drop(inner);
             for pg in pages_to_decommit {
                 self.trait_.decommit_page(pg);
-                self.trait_.remove_zero_marker(pg);
+                // Keep the zero marker set by decommit_page so that
+                // reads return zeros without requesting from the pager.
+                // Previously, remove_zero_marker was called here which
+                // caused VMO reads to block forever waiting for a pager
+                // supply that would never come (the page is a dirty
+                // zero, not a clean page needing supply).
             }
         } else if new_pages < old_pages {
             // Decrease: [new_pages, old_pages) → UNTRACKED
@@ -857,7 +862,7 @@ impl VmObject {
         if !inner.trap_dirty {
             return true; // Non-TRAP_DIRTY VMOs treat all pages as writable
         }
-        // Only PAGE_DIRTY (and PAGE_ZERO_DIRTY) are considered dirty
+        // PAGE_DIRTY and PAGE_ZERO_DIRTY are both considered dirty
         // for write-permission purposes. PAGE_AWAITING_CLEAN pages
         // need another DIRTY acknowledgement before writing, matching
         // Fuchsia's RequirePage which treats AwaitingClean like Clean.
@@ -1033,9 +1038,23 @@ impl VmObject {
     pub fn writeback_begin(&self, offset: usize, length: usize, data: u64) {
         const ZX_VMO_DIRTY_RANGE_IS_ZERO: u64 = 1;
         let zero_only = data == ZX_VMO_DIRTY_RANGE_IS_ZERO;
-        let mut inner = self.inner.lock();
         let start_page = offset / PAGE_SIZE;
         let end_page = (offset + length).div_ceil(PAGE_SIZE);
+        let page_count = end_page - start_page;
+        // Remove write permission from all mappings FIRST, before
+        // transitioning dirty state. This matches Fuchsia's ordering:
+        // 1. Remove write perms → writes now fault
+        // 2. Transition DIRTY → AWAITING_CLEAN
+        // If a write fault occurs between (1) and (2), the page is
+        // still DIRTY, so is_page_dirty() returns true and the fault
+        // handler maps with WRITE (no dirty request). After (2),
+        // subsequent faults see AWAITING_CLEAN and generate a new
+        // DIRTY request. This eliminates the race where a write
+        // sneaks through with WRITE-permitted PTEs after dirty state
+        // has already been transitioned.
+        self.trait_
+            .range_change_remove_write(start_page, page_count);
+        let mut inner = self.inner.lock();
         for page_idx in start_page..end_page.min(inner.dirty_pages.len()) {
             let state = inner.dirty_pages[page_idx];
             // When zero_only, skip committed dirty pages (PAGE_DIRTY).
@@ -1051,14 +1070,6 @@ impl VmObject {
                 inner.dirty_pages[page_idx] = PAGE_AWAITING_CLEAN;
             }
         }
-        drop(inner);
-        // Remove write permission from all mappings in this range so
-        // that subsequent writes trigger a page fault, which will
-        // generate a new DIRTY request. This matches Fuchsia's
-        // RangeChangeUpdateLocked(range, RemoveWrite).
-        let page_count = end_page - start_page;
-        self.trait_
-            .range_change_remove_write(start_page, page_count);
     }
 
     /// End writeback: transition AwaitingClean pages in range to Clean.
@@ -1678,11 +1689,23 @@ impl VmObject {
                 }
                 // Then add new zero-dirty pages.
                 inner.dirty_pages.resize(new_pages, PAGE_ZERO_DIRTY);
+                inner.modified = true;
+                drop(inner);
+                // Set zero markers for the new pages so the fault handler
+                // recognizes them as "present but zero" and doesn't send
+                // page-supply requests to the pager. The page is already
+                // "logically present" (all zeros from resize). On first
+                // write, the TRAP_DIRTY gate (is_page_dirty returns false
+                // for PAGE_ZERO_DIRTY) will generate a DIRTY request and
+                // the pager's OP_DIRTY response will allocate a frame.
+                for pg in old_pages..new_pages {
+                    self.trait_.insert_zero_marker(pg);
+                }
             } else {
                 // Resize down: truncate the dirty_pages vector.
                 inner.dirty_pages.truncate(new_pages);
+                inner.modified = true;
             }
-            inner.modified = true;
         }
         Ok(())
     }
