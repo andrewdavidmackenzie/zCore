@@ -408,11 +408,20 @@ impl Waiter {
     /// `blocking_futex_addr` to match the new futex, so that
     /// `futex_requeue`'s owner validation (which checks the thread's
     /// blocking address, not the queue contents) sees the correct value.
+    ///
+    /// Only updates the tracking if the waiter is still active (not
+    /// woken or cancelled). If `FutexFuture::drop` already cleared
+    /// the tracking, we must not restore it.
     fn reset_futex(&self, futex: Arc<Futex>) {
         let new_addr = futex.user_addr;
-        self.inner.lock().futex = futex;
-        if let Some(ref thread) = self.thread {
-            thread.set_blocking_futex(new_addr);
+        let mut inner = self.inner.lock();
+        let still_active = !inner.woken;
+        inner.futex = futex;
+        drop(inner);
+        if still_active {
+            if let Some(ref thread) = self.thread {
+                thread.set_blocking_futex(new_addr);
+            }
         }
     }
 }

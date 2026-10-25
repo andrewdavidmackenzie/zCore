@@ -180,6 +180,7 @@ pub fn run_until_idle() -> bool {
         runtime = get_current_runtime();
         runtime.current_executor = None;
         if cfg!(feature = "baremetal-test") && runtime.task_num() == 0 {
+            drop(runtime);
             crate::arch::intr_on();
             return false;
         }
