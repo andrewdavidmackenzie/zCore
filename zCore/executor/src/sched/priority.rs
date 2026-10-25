@@ -91,6 +91,26 @@ pub fn should_preempt(state: &mut SchedState, current_key: Key) -> bool {
     true
 }
 
+/// Change a task's priority. Moves it between queues if it's currently
+/// in a ready queue. Returns the old priority (or None if unknown).
+pub fn change_priority(state: &mut SchedState, key: Key, new_priority: usize) -> Option<usize> {
+    let new_p = new_priority.min(31);
+    let old_p = state.task_priorities.insert(key, new_p)?;
+    if old_p == new_p {
+        return Some(old_p);
+    }
+    // If the task is in the old priority queue, move it to the new one.
+    if let Some(pos) = state.queues[old_p].iter().position(|&k| k == key) {
+        state.queues[old_p].remove(pos);
+        if state.queues[old_p].is_empty() {
+            state.ready_bitmap &= !(1 << old_p);
+        }
+        state.queues[new_p].push_back(key);
+        state.ready_bitmap |= 1 << new_p;
+    }
+    Some(old_p)
+}
+
 /// Try to steal a task for another CPU (return lowest-priority ready task).
 pub fn steal_task(state: &mut SchedState) -> Option<Key> {
     if state.ready_bitmap == 0 {

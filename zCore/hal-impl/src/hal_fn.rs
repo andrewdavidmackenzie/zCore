@@ -157,9 +157,18 @@ hal_fn_def! {
         ///
         /// Priority 0 is lowest, 31 is highest. If the platform does not
         /// support priority scheduling, this falls back to `spawn()`.
-        pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) {
-            spawn(future)
+        /// Returns `(task_key, cpu_id)` for runtime priority changes.
+        /// The default (libos) implementation returns `(0, 0)` since
+        /// libos doesn't support priority scheduling.
+        pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) -> (usize, u8) {
+            spawn(future);
+            (0, 0)
         }
+
+        /// Change the scheduling priority of an already-running task.
+        /// `cpu_id` and `task_key` are the values returned by
+        /// `spawn_with_priority`. No-op in libos mode.
+        pub fn change_task_priority(_cpu_id: u8, _task_key: usize, _new_priority: usize) {}
 
         /// Set tid and pid of current task.
         pub fn set_current_thread(thread: Option<Arc<dyn Any + Send + Sync>>) {}

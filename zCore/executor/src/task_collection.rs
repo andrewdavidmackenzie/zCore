@@ -238,6 +238,15 @@ impl TaskCollection {
         }
     }
 
+    /// Change a task's scheduling priority.
+    ///
+    /// Updates the scheduler's priority mapping and moves the task
+    /// between ready queues if it's currently enqueued.
+    pub fn change_task_priority(&self, key: Key, new_priority: usize) {
+        let mut sched = self.sched_state.lock();
+        crate::sched::change_priority(&mut sched, key, new_priority);
+    }
+
     /// Store the key of a task that yielded voluntarily.
     pub fn set_pending_yield(&self, key: Key) {
         *self.pending_yield.lock() = Some(key);
