@@ -438,16 +438,18 @@ async fn handler_user_trap(
                 synth_code: 0,
             })?;
         // Yield after every syscall to give other threads a chance to
-        // run. Use preempt_yield when the timer interrupt has set
-        // preempt-pending (time quantum expired), otherwise use
-        // yield_now (lightweight self-wake that lets the executor
-        // check for newly-notified tasks).
+        // run. Use preempt_yield (deferred re-queue) when:
+        //   1. The timer interrupt set preempt-pending, OR
+        //   2. This thread has exhausted its time slice quantum
+        // Otherwise use yield_now (lightweight self-wake).
         //
-        // An unconditional preempt_yield caused ~27ms delays per
-        // syscall in tight loops. yield_now is much lighter — it
-        // returns Pending once (allowing one executor scan) then
-        // Ready on the next poll.
-        if hal_impl::thread::take_preempt_pending() {
+        // preempt_yield puts the task at the back of the queue AFTER
+        // scanning for newly-notified tasks, ensuring other same-
+        // priority threads get a turn. yield_now self-wakes immediately
+        // so the task stays near the front (lower latency for threads
+        // doing infrequent syscalls).
+        if hal_impl::thread::take_preempt_pending() || thread.quantum_exhausted() {
+            thread.reset_quantum();
             hal_impl::thread::preempt_yield().await;
         } else {
             hal_impl::thread::yield_now().await;

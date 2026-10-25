@@ -176,6 +176,13 @@ struct ThreadInner {
     /// Default is `ZIRCON_DEFAULT_PRIORITY` (16), matching Fuchsia.
     /// Set via `zx_object_set_profile()`.
     priority: usize,
+    /// Per-thread time slice quantum (nanoseconds). When the thread
+    /// accumulates this much CPU time since last preemption, it yields
+    /// to other same-priority threads. Default: 10ms.
+    time_slice_ns: u64,
+    /// CPU time accumulated since the last preemption yield (nanoseconds).
+    /// Reset when the thread does a preempt_yield.
+    time_slice_used_ns: u64,
     /// CPU affinity mask. Bit N set means the thread may run on CPU N.
     /// Default: all online CPUs (bit 0 for single-CPU).
     /// Set via `zx_object_set_profile()` with CPU_MASK flag.
@@ -256,6 +263,11 @@ type ThreadFuturePinned = Pin<Box<ThreadFuture>>;
 /// `DEFAULT_PRIORITY` (midpoint of 0-31 range).
 pub const ZIRCON_DEFAULT_PRIORITY: usize = 16;
 
+/// Default time slice quantum (nanoseconds). Matches Fuchsia's
+/// `kDefaultFairPeriod` (10ms). When a thread accumulates this
+/// much CPU time, it yields to other same-priority threads.
+pub const DEFAULT_TIME_SLICE_NS: u64 = 10_000_000; // 10ms
+
 /// The type of a new thread function.
 pub type ThreadFn = fn(thread: CurrentThread) -> ThreadFuturePinned;
 
@@ -294,6 +306,7 @@ impl Thread {
             inner: Mutex::new(ThreadInner {
                 context: Some(Box::new(UserContext::new())),
                 priority: ZIRCON_DEFAULT_PRIORITY,
+                time_slice_ns: DEFAULT_TIME_SLICE_NS,
                 cpu_affinity_mask: {
                     let mut mask = [0u64; 8];
                     mask[0] = 1; // Default: CPU 0 available
@@ -605,10 +618,28 @@ impl Thread {
     }
 
     /// Add the parameter to the time this thread has run on cpu.
+    /// Also accumulates time toward the per-thread time slice.
     pub fn time_add(&self, time: u128) {
         let mut inner = self.inner.lock();
         inner.time += time;
+        inner.time_slice_used_ns = inner.time_slice_used_ns.saturating_add(time as u64);
         inner.uspace_enter_time = 0;
+    }
+
+    /// Check if this thread has exhausted its time slice quantum.
+    /// Returns true if the accumulated CPU time since last preemption
+    /// exceeds the quantum. The caller should use `preempt_yield`
+    /// instead of `yield_now` to give other same-priority threads
+    /// a chance to run.
+    pub fn quantum_exhausted(&self) -> bool {
+        let inner = self.inner.lock();
+        inner.time_slice_used_ns >= inner.time_slice_ns
+    }
+
+    /// Reset the time slice counter. Called after a preemption yield
+    /// so the thread gets a fresh quantum on its next scheduling.
+    pub fn reset_quantum(&self) {
+        self.inner.lock().time_slice_used_ns = 0;
     }
 
     /// Add time spent in the ready queue (waiting to be scheduled).
