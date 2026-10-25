@@ -2292,9 +2292,15 @@ impl VmMapping {
         // For TRAP_DIRTY VMOs (or slices of TRAP_DIRTY parents),
         // strip WRITE for clean pages so that writes trigger a new
         // page fault → dirty request to pager.
+        // Also strip WRITE for PAGE_ZERO_DIRTY pages (zero markers
+        // from resize) — these need a DIRTY request to allocate a
+        // committed frame, even though is_page_dirty returns true.
         if self.vmo.is_trap_dirty() {
             let page_idx = vmo_offset / PAGE_SIZE;
-            if !self.vmo.is_page_dirty(page_idx) {
+            if !self.vmo.is_page_dirty(page_idx)
+                || (self.vmo.has_zero_marker(page_idx)
+                    && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0)
+            {
                 flags.remove(MMUFlags::WRITE);
             }
         } else if self.vmo.is_slice_vmo() {
@@ -2353,23 +2359,25 @@ impl VmMapping {
             }
         }
         let paddr = self.vmo.commit_page(page_idx, access_flags)?;
-        // For TRAP_DIRTY VMOs: if a WRITE fault on a committed clean
-        // page, send a dirty request to the pager and return SHOULD_WAIT.
+        // For TRAP_DIRTY VMOs: if a WRITE fault on a clean page (or
+        // a PAGE_ZERO_DIRTY page with only a zero marker), send a
+        // dirty request to the pager and return SHOULD_WAIT.
         // The handler_user_trap catches SHOULD_WAIT, waits for the
         // pager's OP_DIRTY acknowledgement, then the fault retries
         // and grants WRITE permission.
-        if access_flags.contains(MMUFlags::WRITE)
-            && self.vmo.is_trap_dirty()
-            && !self.vmo.is_page_dirty(page_idx)
-        {
-            // For TRAP_DIRTY VMOs, writes to clean pages need pager
-            // approval. If the pager is still attached, send a DIRTY
-            // request (returns SHOULD_WAIT). If detached, request_dirty
-            // returns BAD_STATE — the write is rejected as a fatal
-            // page fault. This matches Fuchsia's PrepareForWriteLocked
-            // which checks ShouldTrapDirtyTransitions() independently
-            // of the pager being attached.
-            return self.vmo.request_dirty(vmo_offset, PAGE_SIZE);
+        if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_trap_dirty() {
+            let needs_dirty = !self.vmo.is_page_dirty(page_idx)
+                || (self.vmo.has_zero_marker(page_idx)
+                    && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0);
+            if needs_dirty {
+                // For TRAP_DIRTY VMOs, writes to clean pages (or
+                // zero-marker-only pages from resize) need pager
+                // approval. If the pager is still attached, send a
+                // DIRTY request (returns SHOULD_WAIT). If detached,
+                // request_dirty returns BAD_STATE — the write is
+                // rejected as a fatal page fault.
+                return self.vmo.request_dirty(vmo_offset, PAGE_SIZE);
+            }
         }
         // Slice of TRAP_DIRTY parent: request dirty on the parent.
         if access_flags.contains(MMUFlags::WRITE) && self.vmo.is_slice_vmo() {
