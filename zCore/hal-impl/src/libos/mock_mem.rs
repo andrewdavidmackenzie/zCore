@@ -381,7 +381,7 @@ impl MockMemory {
     /// (which are coherent via MAP_SHARED).
     pub fn sync_pmem_to_user(&self, paddr: PhysAddr, len: usize) {
         let map = self.anon_paddr_to_vaddr.lock().unwrap();
-        let page_size = 0x1000usize;
+        let page_size = PAGE_SIZE;
         let hps = host_page_size();
         let start_page = paddr & !(page_size - 1);
         let end = paddr + len;
@@ -420,7 +420,7 @@ impl MockMemory {
     pub fn sync_user_to_pmem(&self, paddr: PhysAddr, len: usize) {
         let map = self.anon_paddr_to_vaddr.lock().unwrap();
         let hps = host_page_size();
-        let page_size = 0x1000usize;
+        let page_size = PAGE_SIZE;
         let start_page = paddr & !(page_size - 1);
         let end = paddr + len;
         let mut page = start_page;
