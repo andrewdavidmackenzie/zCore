@@ -433,17 +433,16 @@ impl Thread {
         inner.priority.max(inner.inherited_priority)
     }
 
-    /// Apply a priority inheritance boost. If `boost` exceeds the
-    /// current effective priority, the thread's scheduler priority
-    /// is raised. Called when a higher-priority thread blocks on a
-    /// futex owned by this thread.
+    /// Set the priority inheritance boost to `boost`. Unlike a
+    /// monotonic raise, this can also lower the inherited priority
+    /// (e.g., when the highest-priority waiter leaves). Updates the
+    /// scheduler and time slice if the effective priority changes.
     pub fn boost_priority(&self, boost: usize) {
         let (new_effective, task_sched) = {
             let mut inner = self.inner.lock();
-            if boost > inner.inherited_priority {
-                inner.inherited_priority = boost;
-            }
+            inner.inherited_priority = boost;
             let effective = inner.priority.max(inner.inherited_priority);
+            inner.time_slice_ns = priority_to_time_slice_ns(effective);
             (effective, inner.task_sched)
         };
         if let Some((task_key, task_cpu)) = task_sched {
@@ -452,23 +451,9 @@ impl Thread {
     }
 
     /// Clear the priority inheritance boost. Reverts the thread's
-    /// scheduler priority to `max(base_priority, 0)`. Called when
-    /// futex ownership is released.
-    ///
-    /// For simplicity, this resets inherited_priority to 0. If the
-    /// thread owns multiple futexes with waiters, the caller should
-    /// call `boost_priority` again with the remaining max.
+    /// scheduler priority to the base priority.
     pub fn clear_pi_boost(&self) {
-        let (new_effective, task_sched) = {
-            let mut inner = self.inner.lock();
-            inner.inherited_priority = 0;
-            let effective = inner.priority;
-            inner.time_slice_ns = priority_to_time_slice_ns(effective);
-            (effective, inner.task_sched)
-        };
-        if let Some((task_key, task_cpu)) = task_sched {
-            hal_impl::thread::change_task_priority(task_cpu, task_key, new_effective);
-        }
+        self.boost_priority(0);
     }
 
     /// Set the CPU affinity mask for this thread.
@@ -546,15 +531,15 @@ impl Thread {
             priority,
         );
         // Store the executor task identifiers and reconcile priority.
-        // If set_priority() raced between reading inner.priority above
-        // and this point, the scheduler has the old priority. Re-apply
-        // the current priority under the lock to close the race.
+        // If set_priority() or boost_priority() raced between reading
+        // inner.priority above and this point, the scheduler has the
+        // old priority. Re-apply the effective priority under the lock.
         {
             let mut inner = self.inner.lock();
             inner.task_sched = Some((task_key, task_cpu));
-            if inner.priority != priority {
-                // Priority changed during spawn — update the scheduler.
-                hal_impl::thread::change_task_priority(task_cpu, task_key, inner.priority);
+            let effective = inner.priority.max(inner.inherited_priority);
+            if effective != priority {
+                hal_impl::thread::change_task_priority(task_cpu, task_key, effective);
             }
         }
         Ok(())

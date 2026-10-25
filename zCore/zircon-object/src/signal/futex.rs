@@ -376,6 +376,15 @@ impl Futex {
             for waiter in &waiters_to_requeue {
                 new_inner.waiter_queue.push_back(waiter.clone());
             }
+            // Recompute PI boost for the target owner now that
+            // requeued waiters are in the queue. set_owner was called
+            // before insertion so it missed these waiters.
+            if let Some(ref owner) = new_inner.owner {
+                let max_pri = new_inner.max_waiter_priority();
+                if max_pri > 0 {
+                    owner.boost_priority(max_pri);
+                }
+            }
         }
         // Now safe to lock WaiterInner (no FutexInner held).
         for waiter in &waiters_to_requeue {
