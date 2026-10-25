@@ -8,7 +8,7 @@ use x2apic::ioapic::{IoApic as IoApicInner, IrqFlags, IrqMode};
 
 use super::{IrqPolarity, IrqTriggerMode, Phys2VirtFn};
 
-const PAGE_SIZE: usize = 4096;
+use hal::PAGE_SIZE;
 
 #[derive(Clone)]
 struct AcpiMapHandler {

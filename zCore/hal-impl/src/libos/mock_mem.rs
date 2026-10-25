@@ -5,7 +5,7 @@ use nix::sys::mman::{self, MapFlags, ProtFlags};
 use nix::{sys::stat::Mode, unistd};
 
 use super::mem::PMEM_MAP_VADDR;
-use crate::{MMUFlags, PhysAddr, VirtAddr};
+use crate::{MMUFlags, PhysAddr, VirtAddr, PAGE_SIZE};
 
 pub struct MockMemory {
     size: usize,
@@ -315,8 +315,8 @@ impl MockMemory {
 
             // Track paddr→vaddr for anonymous pages so we can sync later.
             // Multiple vaddrs can map the same paddr (shared-frame aliasing).
-            let aligned_paddr = paddr & !(0xFFF); // 4K-align
-            let aligned_va = vaddr & !(0xFFF);
+            let aligned_paddr = paddr & !(PAGE_SIZE - 1);
+            let aligned_va = vaddr & !(PAGE_SIZE - 1);
             self.anon_paddr_to_vaddr
                 .lock()
                 .unwrap()
@@ -358,9 +358,19 @@ impl MockMemory {
                 );
             }
         }
-        // Non-executable pages stay RW (the anonymous mapping default).
-        // The data is synced to PMEM via write() below, not via mmap
-        // sharing, since these are MAP_PRIVATE pages.
+        // For non-executable pages: apply the requested protection.
+        // COW pages are mapped READ-only by VmMapping::map() — the
+        // mprotect ensures a write fault (SIGBUS on macOS) is generated
+        // so the COW handler can copy the page and remap with WRITE.
+        if !prot.contains(MMUFlags::EXECUTE) {
+            let p = mmu_flags_to_prot(prot) - ProtFlags::PROT_EXEC;
+            if let Err(err) = unsafe { mman::mprotect(aligned_vaddr as _, aligned_len, p) } {
+                warn!(
+                    "mprotect failed: vaddr={:#x}, len={:#x}, prot={:?}: {:?}",
+                    aligned_vaddr, aligned_len, prot, err
+                );
+            }
+        }
         true
     }
 
@@ -371,7 +381,7 @@ impl MockMemory {
     /// (which are coherent via MAP_SHARED).
     pub fn sync_pmem_to_user(&self, paddr: PhysAddr, len: usize) {
         let map = self.anon_paddr_to_vaddr.lock().unwrap();
-        let page_size = 0x1000usize;
+        let page_size = PAGE_SIZE;
         let hps = host_page_size();
         let start_page = paddr & !(page_size - 1);
         let end = paddr + len;
@@ -410,7 +420,7 @@ impl MockMemory {
     pub fn sync_user_to_pmem(&self, paddr: PhysAddr, len: usize) {
         let map = self.anon_paddr_to_vaddr.lock().unwrap();
         let hps = host_page_size();
-        let page_size = 0x1000usize;
+        let page_size = PAGE_SIZE;
         let start_page = paddr & !(page_size - 1);
         let end = paddr + len;
         let mut page = start_page;
@@ -509,7 +519,7 @@ impl MockMemory {
     /// `sync_pmem_to_user` from writing to stale user VAs after
     /// the frame is recycled (#709).
     pub fn clear_paddr_mappings(&self, paddr: PhysAddr) {
-        let aligned = paddr & !(0xFFF);
+        let aligned = paddr & !(PAGE_SIZE - 1);
         self.anon_paddr_to_vaddr.lock().unwrap().remove(&aligned);
     }
 

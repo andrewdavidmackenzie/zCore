@@ -669,7 +669,7 @@ impl<T, P: Write> UserPtr<T, P> {
 }
 
 /// Default chunk size for chunked user-copy operations (one page).
-const CHUNK_SIZE: usize = 4096;
+const CHUNK_SIZE: usize = crate::PAGE_SIZE;
 
 impl<P: Read> UserPtr<u8, P> {
     /// Copy data from user space in fixed-size chunks, calling `f` for each chunk.

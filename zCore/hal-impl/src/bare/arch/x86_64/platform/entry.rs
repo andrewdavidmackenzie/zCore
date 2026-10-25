@@ -59,7 +59,7 @@ fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
         for (i, r) in boot_info.memory_regions.iter().take(count).enumerate() {
             *core::ptr::addr_of_mut!(MEMORY_REGIONS[i]) = MemoryRegion {
                 phys_start: r.start,
-                page_count: (r.end - r.start) / 4096,
+                page_count: (r.end - r.start) / crate::PAGE_SIZE as u64,
                 memory_type: match r.kind {
                     MemoryRegionKind::Usable => MemoryType::Conventional,
                     MemoryRegionKind::Bootloader => MemoryType::BootServicesData,

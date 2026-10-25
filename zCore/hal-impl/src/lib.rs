@@ -56,3 +56,9 @@ pub use utils::{lazy_init::LazyInit, mpsc_queue::MpscQueue};
 pub mod libos_frame {
     pub use crate::imp::mem::{frame_alloc, frame_alloc_contiguous, frame_dealloc};
 }
+
+/// LibOS-specific COW handler.
+#[cfg(feature = "libos")]
+pub mod libos_cow {
+    pub use crate::imp::cow_handler::{install_cow_handler, register_cow_callback};
+}

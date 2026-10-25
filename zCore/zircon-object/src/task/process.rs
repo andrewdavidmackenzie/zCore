@@ -202,6 +202,8 @@ impl Process {
         ext: impl Any + Send + Sync,
         vmar: Arc<VmAddressRegion>,
     ) -> ZxResult<Arc<Self>> {
+        // Register VMAR for libos COW fault handling.
+        crate::vm::vmar::register_cow_vmar(&vmar);
         let proc = Arc::new(Process {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),

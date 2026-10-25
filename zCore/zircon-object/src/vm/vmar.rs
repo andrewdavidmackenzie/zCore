@@ -1272,15 +1272,23 @@ impl VmAddressRegion {
     ///
     /// The fault virtual address is `vaddr` and the reason is in `flags`.
     pub fn handle_page_fault(&self, vaddr: VirtAddr, flags: MMUFlags) -> ZxResult {
+        // Find the child VMAR or mapping containing the faulting address.
+        // Drop the VMAR lock before calling into the mapping's fault
+        // handler to avoid deadlocks when the COW copy triggers
+        // range_change operations that re-enter the VMAR.
         let guard = self.inner.lock();
         let inner = guard.as_ref().unwrap();
         if !self.contains(vaddr) {
             return Err(ZxError::NOT_FOUND);
         }
         if let Some(child) = inner.children.iter().find(|ch| ch.contains(vaddr)) {
+            let child = child.clone();
+            drop(guard);
             return child.handle_page_fault(vaddr, flags);
         }
         if let Some(mapping) = inner.mappings.iter().find(|map| map.contains(vaddr)) {
+            let mapping = mapping.clone();
+            drop(guard);
             return mapping.handle_page_fault(vaddr, flags);
         }
         Err(ZxError::NOT_FOUND)
@@ -1927,7 +1935,7 @@ impl VmMapping {
                 let paddr = commit(vmo_offset + i, commit_flags)?;
                 page_table
                     .map(
-                        Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::Size4K),
+                        Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::default_page()),
                         paddr,
                         commit_flags,
                     )
@@ -2410,7 +2418,11 @@ impl VmMapping {
             }
         }
         let mut pg_table = self.page_table.lock();
-        let mut res = pg_table.map(Page::new_aligned(vaddr, PageSize::Size4K), paddr, flags);
+        let mut res = pg_table.map(
+            Page::new_aligned(vaddr, PageSize::default_page()),
+            paddr,
+            flags,
+        );
         if let Err(PagingError::AlreadyMapped) = res {
             res = pg_table.update(vaddr, Some(paddr), Some(flags)).map(|_| ());
         }
@@ -2477,7 +2489,7 @@ impl VmMapping {
                 let paddr = commit(vmo_offset + i, pte_flags)?;
                 page_table
                     .map(
-                        Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::Size4K),
+                        Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::default_page()),
                         paddr,
                         pte_flags,
                     )
@@ -2593,6 +2605,49 @@ cfg_if::cfg_if! {
 pub const USER_ASPACE_SIZE: u64 = (1u64 << 47) - PAGE_SIZE as u64 - USER_ASPACE_BASE;
 /// The default number of user stack pages
 pub const USER_STACK_PAGES: usize = 128;
+
+// ── Libos COW fault handling ────────────────────────────────────
+
+/// Global list of root VMARs for COW fault lookup.
+/// Stored as Weak references — automatically cleaned when processes drop.
+static COW_VMARS: lock::Mutex<Vec<alloc::sync::Weak<VmAddressRegion>>> =
+    lock::Mutex::new(Vec::new());
+
+/// Register a root VMAR for COW fault handling.
+pub fn register_cow_vmar(vmar: &Arc<VmAddressRegion>) {
+    let mut list = COW_VMARS.lock();
+    list.retain(|w| w.strong_count() > 0);
+    list.push(Arc::downgrade(vmar));
+}
+
+/// Handle a COW write fault. Called from the signal handler.
+pub fn handle_cow_fault(vaddr: usize) -> bool {
+    let list = COW_VMARS.lock();
+    // Don't include USER — per-page flags in libos mode don't track USER.
+    let flags = MMUFlags::READ | MMUFlags::WRITE;
+    // Collect candidates first, then drop the lock before calling
+    // handle_page_fault (which acquires other locks).
+    let candidates: Vec<_> = list
+        .iter()
+        .filter_map(|w| w.upgrade())
+        .filter(|vmar| vmar.contains(vaddr))
+        .collect();
+    drop(list);
+    // Try each candidate — a VMAR may contain the address range but
+    // not have a mapping at this specific address. Continue searching
+    // until one succeeds.
+    for vmar in candidates {
+        if vmar.handle_page_fault(vaddr, flags).is_ok() {
+            return true;
+        }
+    }
+    false
+}
+
+/// Function pointer for `register_cow_callback`.
+pub fn cow_fault_callback(vaddr: usize) -> bool {
+    handle_cow_fault(vaddr)
+}
 
 #[cfg(test)]
 mod tests {

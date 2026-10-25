@@ -30,7 +30,8 @@ pub struct Executor {
     state: ExecutorState,
 }
 
-const STACK_SIZE: usize = 4096 * 32;
+/// Executor coroutine stack size (128 KiB).
+const STACK_SIZE: usize = 128 * 1024;
 const STACK_LAYOUT: Layout = Layout::new::<[u8; STACK_SIZE]>();
 
 fn executor_alloc_id() -> usize {

@@ -1,3 +1,4 @@
+pub mod cow_handler;
 mod drivers;
 mod dummy;
 mod mock_mem;

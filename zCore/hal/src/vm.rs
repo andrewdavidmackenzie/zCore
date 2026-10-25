@@ -29,11 +29,12 @@ impl<T> IgnoreNotMappedErr for PagingResult<T> {
     }
 }
 
-/// Possible page size (4K, 2M, 1G).
+/// Possible page size (4K, 16K, 2M, 1G).
 #[repr(usize)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum PageSize {
     Size4K = 0x1000,
+    Size16K = 0x4000,
     Size2M = 0x20_0000,
     Size1G = 0x4000_0000,
 }
@@ -46,6 +47,15 @@ pub struct Page {
 }
 
 impl PageSize {
+    /// Return the `PageSize` variant matching the kernel's `PAGE_SIZE` constant.
+    pub const fn default_page() -> Self {
+        match super::PAGE_SIZE {
+            0x1000 => Self::Size4K,
+            0x4000 => Self::Size16K,
+            _ => Self::Size4K, // fallback
+        }
+    }
+
     pub const fn is_aligned(self, addr: usize) -> bool {
         self.page_offset(addr) == 0
     }
