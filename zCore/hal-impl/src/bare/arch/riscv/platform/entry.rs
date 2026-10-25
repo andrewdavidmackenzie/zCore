@@ -117,7 +117,7 @@ extern "C" fn secondary_rust_main() -> ! {
 /// Naked function.
 #[unsafe(naked)]
 unsafe extern "C" fn select_stack(hartid: usize) {
-    const STACK_LEN_PER_HART: usize = 4096 * STACK_PAGES_PER_HART;
+    const STACK_LEN_PER_HART: usize = crate::PAGE_SIZE * STACK_PAGES_PER_HART;
     const STACK_LEN_TOTAL: usize = STACK_LEN_PER_HART * MAX_HART_NUM;
     #[link_section = ".bss.bootstack"]
     static mut BOOT_STACK: [u8; STACK_LEN_TOTAL] = [0u8; STACK_LEN_TOTAL];

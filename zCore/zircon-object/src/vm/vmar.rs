@@ -1927,7 +1927,7 @@ impl VmMapping {
                 let paddr = commit(vmo_offset + i, commit_flags)?;
                 page_table
                     .map(
-                        Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::Size4K),
+                        Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::default_page()),
                         paddr,
                         commit_flags,
                     )
@@ -2410,7 +2410,11 @@ impl VmMapping {
             }
         }
         let mut pg_table = self.page_table.lock();
-        let mut res = pg_table.map(Page::new_aligned(vaddr, PageSize::Size4K), paddr, flags);
+        let mut res = pg_table.map(
+            Page::new_aligned(vaddr, PageSize::default_page()),
+            paddr,
+            flags,
+        );
         if let Err(PagingError::AlreadyMapped) = res {
             res = pg_table.update(vaddr, Some(paddr), Some(flags)).map(|_| ());
         }
@@ -2477,7 +2481,7 @@ impl VmMapping {
                 let paddr = commit(vmo_offset + i, pte_flags)?;
                 page_table
                     .map(
-                        Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::Size4K),
+                        Page::new_aligned(inner.addr + i * PAGE_SIZE, PageSize::default_page()),
                         paddr,
                         pte_flags,
                     )

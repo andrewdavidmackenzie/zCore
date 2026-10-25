@@ -39,8 +39,7 @@ impl GenericPageTable for PageTable {
     }
 
     fn map(&mut self, page: Page, paddr: PhysAddr, flags: MMUFlags) -> PagingResult {
-        // page.size is PageSize::Size4K (0x1000) from the enum, but
-        // PAGE_SIZE may be 16K on aarch64 macOS. The mmap uses PAGE_SIZE.
+        // The mmap uses PAGE_SIZE for the mapping length.
         debug_assert!(is_aligned(paddr));
         if paddr < PMEM_SIZE {
             if MOCK_PHYS_MEM.mmap(page.vaddr, PAGE_SIZE, paddr, flags) {
@@ -55,7 +54,7 @@ impl GenericPageTable for PageTable {
 
     fn unmap(&mut self, vaddr: VirtAddr) -> PagingResult<(PhysAddr, PageSize)> {
         self.unmap_cont(vaddr, PAGE_SIZE)?;
-        Ok((0, PageSize::Size4K))
+        Ok((0, PageSize::default_page()))
     }
 
     fn update(
@@ -68,7 +67,7 @@ impl GenericPageTable for PageTable {
         if let Some(flags) = flags {
             MOCK_PHYS_MEM.mprotect(vaddr as _, PAGE_SIZE, flags);
         }
-        Ok(PageSize::Size4K)
+        Ok(PageSize::default_page())
     }
 
     fn query(&self, vaddr: VirtAddr) -> PagingResult<(PhysAddr, MMUFlags, PageSize)> {
@@ -77,7 +76,7 @@ impl GenericPageTable for PageTable {
             Ok((
                 vaddr - PMEM_MAP_VADDR,
                 MMUFlags::READ | MMUFlags::WRITE,
-                PageSize::Size4K,
+                PageSize::default_page(),
             ))
         } else {
             Err(PagingError::NotMapped)
@@ -123,10 +122,18 @@ mod tests {
         let vaddr2 = VBASE + 0x5000; // 16K apart for different host pages
         let paddr = 0x1000;
 
-        pt.map(Page::new_aligned(vaddr1, PageSize::Size4K), paddr, flags)
-            .unwrap();
-        pt.map(Page::new_aligned(vaddr2, PageSize::Size4K), paddr, flags)
-            .unwrap();
+        pt.map(
+            Page::new_aligned(vaddr1, PageSize::default_page()),
+            paddr,
+            flags,
+        )
+        .unwrap();
+        pt.map(
+            Page::new_aligned(vaddr2, PageSize::default_page()),
+            paddr,
+            flags,
+        )
+        .unwrap();
 
         unsafe {
             const MAGIC: usize = 0xdead_beaf;

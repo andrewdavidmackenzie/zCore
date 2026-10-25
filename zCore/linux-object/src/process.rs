@@ -47,7 +47,10 @@ impl ProcessExt for Process {
         // Linux processes need a VMAR starting at address 0 so non-PIE
         // ELF binaries are loaded at their intended virtual addresses.
         // Fuchsia processes use USER_ASPACE_BASE (0x200000) for Scudo.
-        let vmar = zircon_object::vm::VmAddressRegion::new_root_at(0, (1usize << 47) - 4096);
+        let vmar = zircon_object::vm::VmAddressRegion::new_root_at(
+            0,
+            (1usize << 47) - zircon_object::vm::PAGE_SIZE,
+        );
         Process::create_with_vmar(job, "root", linux_proc, vmar)
     }
 
@@ -86,7 +89,10 @@ impl ProcessExt for Process {
             }),
         };
         // Linux child processes need a VMAR at address 0 (same as parent).
-        let vmar = zircon_object::vm::VmAddressRegion::new_root_at(0, (1usize << 47) - 4096);
+        let vmar = zircon_object::vm::VmAddressRegion::new_root_at(
+            0,
+            (1usize << 47) - zircon_object::vm::PAGE_SIZE,
+        );
         let new_proc = Process::create_with_vmar(&parent.job(), "", new_linux_proc, vmar)?;
         linux_parent_inner
             .children

@@ -5,7 +5,7 @@ use nix::sys::mman::{self, MapFlags, ProtFlags};
 use nix::{sys::stat::Mode, unistd};
 
 use super::mem::PMEM_MAP_VADDR;
-use crate::{MMUFlags, PhysAddr, VirtAddr};
+use crate::{MMUFlags, PhysAddr, VirtAddr, PAGE_SIZE};
 
 pub struct MockMemory {
     size: usize,
@@ -315,8 +315,8 @@ impl MockMemory {
 
             // Track paddr→vaddr for anonymous pages so we can sync later.
             // Multiple vaddrs can map the same paddr (shared-frame aliasing).
-            let aligned_paddr = paddr & !(0xFFF); // 4K-align
-            let aligned_va = vaddr & !(0xFFF);
+            let aligned_paddr = paddr & !(PAGE_SIZE - 1);
+            let aligned_va = vaddr & !(PAGE_SIZE - 1);
             self.anon_paddr_to_vaddr
                 .lock()
                 .unwrap()
@@ -509,7 +509,7 @@ impl MockMemory {
     /// `sync_pmem_to_user` from writing to stale user VAs after
     /// the frame is recycled (#709).
     pub fn clear_paddr_mappings(&self, paddr: PhysAddr) {
-        let aligned = paddr & !(0xFFF);
+        let aligned = paddr & !(PAGE_SIZE - 1);
         self.anon_paddr_to_vaddr.lock().unwrap().remove(&aligned);
     }
 
