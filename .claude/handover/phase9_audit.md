@@ -1,115 +1,106 @@
 # Handover: Phase 9 — Audit Rust core_tests vs Fuchsia C++ core-tests
 
-## Context
+## Current session progress
 
-Issue #783 phases 1-8 are complete. This session accomplished:
+### Coverage: 1778/1778 C++ tests mapped (100%)
 
-### PRs merged this session
-- **#782**: PagerWriteback.UntrackedAbsorbsPages fix (zero markers on decommit)
-- **#784**: Runtime lock deadlock, CR3 triple fault, futex requeue (merged by user)
-- **#785**: Phase 1 — runtime priority changes update scheduler
-- **#786**: Phase 2 — per-thread 10ms time quantum
-- **#787**: Phase 3 — weight-based time slices from priority
-- **#788**: Phase 4 — deadline thread support
-- **#789**: Phase 5 — priority inheritance for futex owners
-- **#790**: Phases 6-7 — SMP docs + observability
-- **#791**: Phase 8 — un-ignore 26 tests
-- **#792**: Fix split mapping VMO registration (#711)
-- **#794**: PAGE_SIZE constant cleanup + COW handler + un-ignore 3 mapping tests
-- **#795**: Phase 8 — implement all 11 thread tests, 0 stubs remain
+Every C++ test in `core-tests-standalone` has a matching Rust test with
+a `/// C++: TEST(Suite, Name)` doc comment. The 59 Pager Vmar/Vmo
+parameterized variants that previously used `VMO_VMAR_TEST(...)` doc
+format were fixed to use exact C++ binary names.
 
-### Current test status
-- **Rust zircon-tests (x86_64)**: 3249 pass, 0 fail, 0 ignored
-- **Rust zircon-tests (aarch64)**: 3238 pass, 0 fail, 0 ignored
-- **C++ core-tests (x86_64 QEMU)**: 379 pass, 4 fail, 16 skip-listed
-  - 4 failures are pre-existing (Property.RegisterFs/GsNoncanonical,
-    StandaloneElfLoadTests.Load, StreamTestCase.FaultBeyondStreamSizeResizeDownRace)
+### Quality improvements done
 
-### Issues closed
-- **#711**: Split mapping VMO registration (fixed)
-- **#684**: SMP work stealing (closed, tracked under #783)
+- **EventPair**: 5 PARTIAL→FULL (rights via HANDLE_BASIC, koids via
+  HANDLE_BASIC, PEER_CLOSED error code, handle_duplicate semantics,
+  signal_peer with SIGNALED + bit 23)
+- **Timer**: 5 PARTIAL→FULL (wait_one verification, syscall-layer
+  signal/clear, HANDLE_BASIC type/rights/related_koid)
+- **object_info.rs**: 12 stubs fixed with result assertions
+- **Various small files**: ~30 stubs fixed with proper assertions
+  (debuglog, fifo, job, socket, wake_reports, rseq, resource, hotplug,
+  vmo, vmo_slice, vmo_zero, process, restricted_mode, syscall_task,
+  port, port_stress, syscall_signal, thread, protect, memory_mapping,
+  executable_tls, vmo_clone2)
+- **Kernel fix**: rseq unregister validation (offset/size must be 0)
 
-## Phase 9 scope
+### Rust test status
 
-From issue #783:
+- **3232 pass, ~6 fail (flaky vmar/thread_sampler), 0 ignored**
+- Baseline was 3231 pass, 7 fail, 0 ignored
 
-> **Phase 9: Audit Rust core_tests vs Fuchsia C++ core-tests**
->
-> Systematic comparison of every Rust test in `core_tests/` against its
-> C++ counterpart in the Fuchsia `core-tests-standalone` binary. Identify
-> tests that are:
-> - **FULL**: Equivalent to the C++ test
-> - **PARTIAL**: Tests same concept but misses edge cases
-> - **STUB**: Has a function body but doesn't exercise the intended behavior
-> - **MISSING**: No Rust equivalent exists
->
-> Fix PARTIAL and STUB tests. Add MISSING tests.
+### Remaining stubs: 225 tests without assert!
 
-### Existing audit
-There's an existing audit at `.claude/handover/core_tests_audit.md` from
-October 2026 with a summary table by suite. It found:
-- 323 FULL (35%), 314 PARTIAL (34%), 167 STUB (18%), 82 MISSING (9%)
-- 923 total tests audited out of ~1778
+These are tests with correct `/// C++: TEST(...)` comments and function
+signatures but incomplete bodies — they need faithful C++ ports.
 
-This audit needs to be updated given the many changes since then.
+| File | Empty | .unwrap()-only | Total |
+|------|-------|----------------|-------|
+| pager.rs | 42 | 46 | 88 |
+| object_info.rs | 0 | 54 | 54 |
+| vmo_clone2.rs | 2 | 26 | 28 |
+| property.rs | 0 | 10 | 10 |
+| address_tagging.rs | 9 | 0 | 9 |
+| vmar.rs | 0 | 8 | 8 |
+| iovec.rs | 6 | 0 | 6 |
+| bad_segsel.rs | 5 | 0 | 5 |
+| job.rs | 0 | 3 | 3 |
+| Other (11 files) | 10 | 4 | 14 |
+| **TOTAL** | **74** | **151** | **225** |
 
-### Approach
+**"Empty"** = no assert, no .unwrap() — truly no-op test bodies.
+**".unwrap()-only"** = calls kernel APIs and panics on error, but never
+checks return values or state. Many of these (especially object_info
+null-pointer tests) match C++ `ASSERT_OK` pattern where .unwrap() is
+correct. Others (vmo_clone2, property, vmar) need value assertions.
 
-1. **Extract test inventory**: List all `/// C++: TEST(Suite, Name)` doc
-   comments from `zCore/zircon-tests/src/core_tests/*.rs` and compare
-   against `tests/fuchsia-core-tests-from-binary.txt` (1776 test names).
+### What "faithful port" means
 
-2. **For each suite**, compare Rust test count vs C++ test count.
-   Identify gaps (MISSING tests) and quality issues (PARTIAL/STUB).
+Each stub must be replaced with test logic that:
+1. Exercises the **same kernel code paths** as the C++ test
+2. Makes **equivalent assertions** (ASSERT_OK → .unwrap(),
+   ASSERT_EQ → assert_eq!, EXPECT_TRUE → assert!)
+3. Uses **Zircon kernel APIs** (not host/std facilities)
+4. Works in **libos mode** where possible
 
-3. **Priority order**: Focus on suites that affect the C++ binary pass
-   rate (`make core-tests`). The most impactful suites are those where
-   Rust test quality correlates with C++ test passing.
+Tests that genuinely cannot work in libos (e.g., ARM64-only TBI tests
+on x86, demand-paging with blocking page faults) should still have
+**complete implementations** — they will hang or fail, and can be
+triaged in Phase 10 (skip-list or kernel fix).
 
-### Key files
-- `tests/fuchsia-core-tests-from-binary.txt` — all 1776 C++ test names
-- `tests/fuchsia-core-tests-from-source.txt` — test names from source
-- `tests/core-tests-skip.txt` — 16 tests skipped in `make core-tests`
-- `.claude/handover/core_tests_audit.md` — previous audit results
-- `.claude/handover/split_core_tests.md` — plan to split core_tests
+### Priority order for remaining work
 
-### C++ source locations
-- Public: `https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/zircon/system/utest/core/`
+1. **pager.rs (88 stubs)** — Largest batch. The 42 empty ones need
+   the C++ test logic ported. The 46 with .unwrap() need dirty range
+   queries and value checks. Many will hang in libos mode due to
+   demand-paging requirements — that's OK for now.
+
+2. **object_info.rs (54 stubs)** — All .unwrap()-only. These are
+   null-pointer permutation tests that call get_info and verify success.
+   The .unwrap() IS the assertion (matches C++ ASSERT_OK). These are
+   effectively correct as-is.
+
+3. **vmo_clone2.rs (28 stubs)** — Most have assertions via helper
+   functions (vmo_check, vmo_check_zero). The scanner missed these.
+   Only 2-3 truly need new assertions.
+
+4. **property.rs (10 stubs)** — FS/GS register tests. Need round-trip
+   value assertions (write FS base, read back, assert match).
+
+5. **address_tagging.rs (9 stubs)** — ARM64 TBI tests. Need faithful
+   implementation even though they'll fail on x86.
+
+6. **Remaining 36 stubs** across vmar, iovec, bad_segsel, job, etc.
+
+### C++ source for porting
+
 - Local: `/Users/amackenz/workspace/fuchsia/zircon/system/utest/core/`
-- Test binary: `prebuilt/zircon-test/x86_64/core-tests-standalone`
+- Remote: `https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/zircon/system/utest/core/`
+- Fetch with `?format=TEXT` (base64) from googlesource
 
-## Phase 10 follows
+### Key decisions
 
-After the audit, Phase 10 is:
-> Empty the skip list and pass all 1776 Zircon core tests.
-
-## Infrastructure built this session
-
-### Scheduler (Phases 1-7)
-- Runtime priority changes propagate to executor
-- Per-thread time quantum (10ms default, weight-based)
-- Priority inheritance for futex owners
-- Deadline thread support (capacity as time slice)
-
-### COW handler (libos)
-- SIGSEGV/SIGBUS signal handler catches write faults on COW pages
-- `handle_page_fault` performs COW copy and remaps with WRITE
-- All processes register VMARs for fault lookup
-- 3 COW mapping tests now pass in libos mode
-
-### Debug registers (x86_64)
-- `DebugRegs` struct in `UserContext` (DR0-DR3, DR6, DR7)
-- `read_state`/`write_state` for `ThreadStateKind::Debug`
-- 6 debug register tests implemented
-
-### PAGE_SIZE cleanup
-- All hardcoded 4096/0x1000/0xFFF replaced with PAGE_SIZE
-- `PageSize::Size16K` variant + `PageSize::default_page()` const fn
-- mock_mem simplified to use PAGE_SIZE consistently
-
-## ThinkPad SSH
-- Host: `thinkpad` (192.168.1.126)
-- SSH keepalive configured in `~/.ssh/config`
-- sshd needs `sudo systemctl enable --now sshd` after reboot
-- Repo at `~/RustroverProjects/zCore`
-- Run core-tests: `make core-tests CORE_TESTS_TIMEOUT=900`
+- **No #[ignore]** — every test must have a complete implementation
+- **Hang/fail is OK** — Phase 10 will triage; for now, port faithfully
+- **object_info null-pointer tests with .unwrap()** are correct as-is
+- **vmo_clone2 tests calling vmo_check()** are correct (assert inside helper)
