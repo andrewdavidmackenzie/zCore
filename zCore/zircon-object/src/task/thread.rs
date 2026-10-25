@@ -459,10 +459,17 @@ impl Thread {
     /// Set the CPU affinity mask for this thread.
     ///
     /// Bit N set means the thread may run on CPU N.
-    /// Not enforced by the scheduler, but reported via
-    /// `zx_object_get_info(ZX_INFO_THREAD)`.
+    /// Currently stored but not enforced by the scheduler (tasks are
+    /// pinned to their spawn CPU). Reported via `ZX_INFO_THREAD`.
+    /// Enforcement requires fixing #680 (waker page CPU affinity)
+    /// and #684 (aarch64 cross-CPU IRQ routing).
     pub fn set_cpu_affinity_mask(&self, mask: [u64; 8]) {
         self.inner.lock().cpu_affinity_mask = mask;
+    }
+
+    /// Get the CPU affinity mask.
+    pub fn cpu_affinity_mask(&self) -> [u64; 8] {
+        self.inner.lock().cpu_affinity_mask
     }
 
     /// Signal a deferred policy exception, matching Fuchsia's

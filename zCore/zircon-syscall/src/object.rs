@@ -896,7 +896,8 @@ impl Syscall<'_> {
             }
             Topic::TaskRuntime => {
                 // ZX_INFO_TASK_RUNTIME — applies to Job, Process, and Thread.
-                // Return a zeroed struct as a stub (no real CPU accounting yet).
+                // Returns real CPU time and queue time (accumulated by
+                // time_add/queue_time_add in the run_user loop).
                 // First check the handle is a valid task type, then check rights.
                 // This ensures we return ACCESS_DENIED (not WRONG_TYPE) when
                 // the handle is a valid task but lacks INSPECT rights.
