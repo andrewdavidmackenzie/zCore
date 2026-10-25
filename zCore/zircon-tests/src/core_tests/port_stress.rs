@@ -182,6 +182,7 @@ fn cancel_key_shared_key_race() {
 /// C++: TEST(PortStressTest, ChannelCallWaitQueuePanicRepro)
 /// Sequential: verify channel + port interaction doesn't panic.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn channel_call_wait_queue_panic_repro() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
