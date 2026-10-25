@@ -269,16 +269,18 @@ pub const FAIR_PERIOD_NS: u64 = 10_000_000; // 10ms
 
 /// Weight table: maps priority 0-31 to a fixed-point weight (10 fractional bits).
 /// `weight = round(1024 * 1.1^(priority - 31))`
-/// Priority 31 = 1024 (1.0), Priority 16 = 226 (~0.22), Priority 0 = 51 (~0.05)
+/// Priority 31 = 1024 (1.0), Priority 16 = 245 (~0.24), Priority 0 = 53 (~0.05)
 const WEIGHT_TABLE: [u32; 32] = [
-    51, 56, 62, 68, 75, 82, 91, 100, 110, 121, 133, 146, 161, 177, 195, 214, 236, 259, 285, 314,
-    345, 380, 418, 459, 505, 556, 612, 673, 740, 814, 895, 1024,
+    53, 59, 65, 71, 78, 86, 95, 104, 114, 126, 138, 152, 167, 184, 203, 223, 245, 270, 297, 326,
+    359, 395, 434, 478, 525, 578, 636, 699, 769, 846, 931, 1024,
 ];
 
 /// Calculate the time slice quantum (nanoseconds) for a given priority.
-/// Higher priority = larger weight = longer time slice.
-/// Matches Fuchsia's fair scheduler: `time_slice = period * weight / total_weight`.
-/// With a single-thread simplification: `time_slice = period * weight / max_weight`.
+/// Higher priority = larger weight = longer time slice within the
+/// strict-priority scheduler. Note: this provides priority-dependent
+/// quanta (how long a thread runs before yielding to same-priority
+/// peers), NOT cross-priority proportional sharing. A higher-priority
+/// thread always preempts a lower-priority one regardless of quanta.
 pub fn priority_to_time_slice_ns(priority: usize) -> u64 {
     let p = priority.min(31);
     let weight = WEIGHT_TABLE[p] as u64;
