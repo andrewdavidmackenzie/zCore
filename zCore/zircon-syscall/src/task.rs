@@ -565,9 +565,10 @@ impl Syscall<'_> {
                     let priority = info.priority().max(0) as usize;
                     thread.set_priority(priority);
                 } else if flags.contains(ProfileInfoFlags::DEADLINE) {
-                    // Deadline scheduling not yet implemented — treat
-                    // as a high-priority fair-scheduled thread.
-                    thread.set_priority(31);
+                    // Apply deadline scheduling parameters. The thread
+                    // runs at priority 31 with its time slice set to
+                    // the deadline capacity.
+                    thread.set_deadline(info.deadline_params());
                 }
                 // CPU affinity: store the mask on the thread.
                 // Not enforced by the scheduler (single CPU), but
