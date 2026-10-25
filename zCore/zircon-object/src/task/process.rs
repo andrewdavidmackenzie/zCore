@@ -491,6 +491,13 @@ impl Process {
         self.inner.lock().status
     }
 
+    /// Force the process status to Running. Used in tests where
+    /// a process needs to appear started without actually running
+    /// a thread.
+    pub fn set_status_running(&self) {
+        self.inner.lock().status = Status::Running;
+    }
+
     /// Get process exit code if it exited, else returns `None`.
     pub fn exit_code(&self) -> Option<i64> {
         if let Status::Exited(code) = self.status() {

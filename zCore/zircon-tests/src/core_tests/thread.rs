@@ -752,6 +752,8 @@ fn start_regs() {
 fn start_regs_noncanonical_tp() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
+    // Mark process as Running so thread_start_regs doesn't return BAD_STATE.
+    proc.set_status_running();
     let thread = Thread::create(proc, "t1").unwrap();
 
     // The lowest non-canonical address on x86_64 (48-bit VA):
