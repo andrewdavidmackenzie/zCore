@@ -574,6 +574,12 @@ impl VmAddressRegion {
         let mut new_maps = Vec::new();
         for map in core::mem::take(&mut inner.mappings) {
             if let Some(new) = map.cut(begin, end) {
+                // Register the split-off mapping with the VMO so that
+                // range_change (resize, COW fork, decommit) can
+                // invalidate its PTEs. Without this, the VMO's mapping
+                // list doesn't know about the second half of a split
+                // and PTE invalidation is silently skipped. (#711)
+                new.vmo.append_mapping(Arc::downgrade(&new));
                 new_maps.push(new);
             }
             if map.size() > 0 {
@@ -2209,11 +2215,22 @@ impl VmMapping {
         self.page_table.lock().query(vaddr)
     }
 
-    /// Remove WRITE flag from the mappings for Copy-on-Write.
+    /// Apply a range change (Unmap or RemoveWrite) to this mapping's PTEs.
+    ///
+    /// Uses `try_lock` instead of `lock` to avoid deadlocking with
+    /// the page fault handler, which holds VmMapping.inner and then
+    /// acquires the VMO lock. Since `range_change` is called while the
+    /// VMO lock is held (lock order: VMO → VmMapping), a blocking
+    /// lock would create an ABBA deadlock.
+    ///
+    /// **Known limitation:** If `try_lock` fails, the PTE invalidation
+    /// is silently skipped, leaving stale PTEs. This can cause reads
+    /// or writes to succeed when they should fault (Unmap case) or
+    /// writes to bypass dirty tracking (RemoveWrite case). Fixing
+    /// this requires either changing the lock ordering or implementing
+    /// a deferred retry mechanism. See #711.
     pub(super) fn range_change(&self, offset: usize, len: usize, op: RangeChangeOp) {
         let inner = self.inner.try_lock();
-        // If we are already locked, we are handling page fault/map range
-        // In this case we can just ignore the operation since we will update the mapping later
         if let Some(inner) = inner {
             // offset and len are in page units; convert vmo_offset (bytes) to pages
             let vmo_offset_pages = inner.vmo_offset / PAGE_SIZE;
