@@ -1465,7 +1465,7 @@ async fn suspend_stops_thread() {
 /// The full C++ test blocks a thread in wait_one and modifies the
 /// return register. Here we test the write_state round-trip for
 /// the return value register on a suspended thread.
-#[cfg(target_arch = "x86_64")]
+/// Cross-platform: rax (x86_64) and r[0] (aarch64) are both at offset 0.
 #[test]
 fn syscall_debugger_modify_result() {
     let ctx = TestContext::new();
@@ -1474,27 +1474,28 @@ fn syscall_debugger_modify_result() {
     thread.suspend();
 
     // Read general regs.
-    let mut buf = vec![0u8; 256];
+    let mut buf = vec![0u8; 512];
     let n = thread
         .read_state(ThreadStateKind::General, &mut buf)
         .unwrap();
 
-    // Modify rax (return value register on x86_64, offset 0).
-    let new_rax: u64 = 0xDEAD_BEEF_CAFE_BABE;
+    // Modify the return value register (offset 0 on all architectures:
+    // rax on x86_64, r[0] on aarch64, a0 on riscv64).
+    let new_val: u64 = 0xDEAD_BEEF_CAFE_BABE;
     let mut state = buf[..n].to_vec();
-    state[0..8].copy_from_slice(&new_rax.to_ne_bytes());
+    state[0..8].copy_from_slice(&new_val.to_ne_bytes());
     thread
         .write_state(ThreadStateKind::General, &state)
         .unwrap();
 
-    // Read back and verify rax was modified.
-    let mut readback = vec![0u8; 256];
+    // Read back and verify it was modified.
+    let mut readback = vec![0u8; 512];
     thread
         .read_state(ThreadStateKind::General, &mut readback)
         .unwrap();
-    let got_rax = u64::from_ne_bytes(readback[0..8].try_into().unwrap());
+    let got_val = u64::from_ne_bytes(readback[0..8].try_into().unwrap());
     assert_eq!(
-        got_rax, new_rax,
+        got_val, new_val,
         "return register should be modifiable via write_state"
     );
 }
@@ -1537,11 +1538,8 @@ async fn syscall_suspended_register_state() {
 
 /// C++: TEST(Threads, ThreadLocalRegisterState)
 ///
-/// Verifies that fs_base/gs_base (x86) or tpidr (aarch64) can be
-/// written and read back via write_state/read_state on a suspended
-/// thread. The full C++ test verifies actual runtime behavior (thread
-/// sees the values) which requires bare-metal execution.
-#[cfg(target_arch = "x86_64")]
+/// Verifies that the TLS register (fsbase on x86_64, tpidr on aarch64)
+/// can be written and read back via write_state/read_state.
 #[test]
 fn thread_local_register_state() {
     let ctx = TestContext::new();
@@ -1549,37 +1547,38 @@ fn thread_local_register_state() {
     let thread = Thread::create(proc, "t1").unwrap();
     thread.suspend();
 
-    // Read initial general regs.
-    let mut buf = vec![0u8; 256];
+    let mut buf = vec![0u8; 512];
     let n = thread
         .read_state(ThreadStateKind::General, &mut buf)
         .unwrap();
 
-    // On x86_64 GeneralRegs: fsbase and gsbase are the last two u64
-    // fields. The struct layout is: rax..r15 (16), rip, rflags, fsbase, gsbase
-    // = 20 * 8 = 160 bytes.
-    let fsbase_offset = 18 * 8; // 144
-    let gsbase_offset = 19 * 8; // 152
+    // TLS register offset in GeneralRegs (arch-specific).
+    // x86_64: rax..r15(16), rip, rflags, fsbase, gsbase → fsbase at 18*8
+    // aarch64: r[30], lr, sp, pc, cpsr, tpidr → tpidr at 34*8
+    #[cfg(target_arch = "x86_64")]
+    let tls_offset = 18 * 8;
+    #[cfg(target_arch = "aarch64")]
+    let tls_offset = 34 * 8;
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    let tls_offset = usize::MAX; // skip on unsupported arch
 
-    // Write known fsbase value.
-    let test_fsbase: u64 = 0x0000_7FFF_DEAD_BEEF;
+    if tls_offset + 8 > n {
+        return; // GeneralRegs too small for TLS field
+    }
+
+    let test_val: u64 = 0x0000_7FFF_DEAD_BEEF;
     let mut state = buf[..n].to_vec();
-    state[fsbase_offset..fsbase_offset + 8].copy_from_slice(&test_fsbase.to_ne_bytes());
+    state[tls_offset..tls_offset + 8].copy_from_slice(&test_val.to_ne_bytes());
     thread
         .write_state(ThreadStateKind::General, &state)
         .unwrap();
 
-    // Read back and verify.
-    let mut readback = vec![0u8; 256];
-    let n2 = thread
+    let mut readback = vec![0u8; 512];
+    thread
         .read_state(ThreadStateKind::General, &mut readback)
         .unwrap();
-    let got_fsbase = u64::from_ne_bytes(
-        readback[fsbase_offset..fsbase_offset + 8]
-            .try_into()
-            .unwrap(),
-    );
-    assert_eq!(got_fsbase, test_fsbase, "fsbase round-trip failed");
+    let got_val = u64::from_ne_bytes(readback[tls_offset..tls_offset + 8].try_into().unwrap());
+    assert_eq!(got_val, test_val, "TLS register round-trip failed");
 }
 
 /// C++: TEST(Threads, ThreadStartInvalidEntry)
