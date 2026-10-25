@@ -179,10 +179,10 @@ async fn basics() {
 /// Verifies that DR6 reports the correct breakpoint after another
 /// breakpoint has been removed.
 ///
-/// Requires x86 DR6 debug register which is not available in libos mode.
+/// Requires x86 DR6 debug register which is bare-metal x86_64 only.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires x86 DR6 debug register — not available in libos mode"
+    not(target_os = "none"),
+    ignore = "requires x86 DR6 debug register — bare-metal x86_64 only"
 )]
 #[test]
 fn debug_registers_dr6_correct_after_breakpoint_removal() {
@@ -194,10 +194,10 @@ fn debug_registers_dr6_correct_after_breakpoint_removal() {
 /// Verifies that DR6 is reset to its default value after a debug
 /// exception is handled.
 ///
-/// Requires x86 DR6 debug register which is not available in libos mode.
+/// Requires x86 DR6 debug register which is bare-metal x86_64 only.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires x86 DR6 debug register — not available in libos mode"
+    not(target_os = "none"),
+    ignore = "requires x86 DR6 debug register — bare-metal x86_64 only"
 )]
 #[test]
 fn debug_registers_dr6_reset_on_debug_exception() {
@@ -230,10 +230,10 @@ fn debug_registers_validation() {
 ///
 /// Reproducer for a panic when a watchpoint fires during a syscall.
 ///
-/// Requires x86 debug registers (watchpoints) which are not available in libos mode.
+/// Requires x86 debug registers (watchpoints) which are bare-metal x86_64 only.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires x86 debug registers (watchpoints) — not available in libos mode"
+    not(target_os = "none"),
+    ignore = "requires x86 debug registers (watchpoints) — bare-metal x86_64 only"
 )]
 #[test]
 fn debug_registers_watchpoint_syscall_panic_repro() {
@@ -491,10 +491,10 @@ fn long_name_succeeds() {
 /// Verifies that setting RIP to a non-canonical address via IRETQ
 /// raises a #GP exception.
 ///
-/// Requires x86 non-canonical address #GP exception which is not available in libos mode.
+/// Requires x86 non-canonical address #GP exception which is bare-metal x86_64 only.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires x86 non-canonical address #GP exception — not available in libos mode"
+    not(target_os = "none"),
+    ignore = "requires x86 non-canonical address #GP exception — bare-metal x86_64 only"
 )]
 #[test]
 fn noncanonical_rip_address_iretq() {
@@ -506,10 +506,10 @@ fn noncanonical_rip_address_iretq() {
 /// Verifies that returning to a non-canonical address via SYSCALL
 /// raises the correct exception.
 ///
-/// Requires x86 non-canonical address exception which is not available in libos mode.
+/// Requires x86 non-canonical address exception which is bare-metal x86_64 only.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires x86 non-canonical address exception — not available in libos mode"
+    not(target_os = "none"),
+    ignore = "requires x86 non-canonical address exception — bare-metal x86_64 only"
 )]
 #[test]
 fn noncanonical_rip_address_syscall() {
@@ -745,16 +745,34 @@ fn start_regs() {
 /// C++: TEST(Threads, StartRegsNoncanonicalTp)
 ///
 /// Verifies that starting a thread with a non-canonical TP (thread
-/// pointer) register value is rejected.
-///
-/// Requires x86 non-canonical TP validation which is not available in libos mode.
-#[cfg_attr(
-    feature = "libos",
-    ignore = "requires x86 non-canonical TP validation — not available in libos mode"
-)]
+/// pointer) register value is rejected with INVALID_ARGS.
+#[cfg(target_arch = "x86_64")]
 #[test]
 fn start_regs_noncanonical_tp() {
-    panic!("not yet implemented: requires x86 non-canonical TP validation");
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+    let ctx = _ctx.syscall();
+
+    // The lowest non-canonical address on x86_64 (48-bit VA):
+    // bit 47 is 1 but bits 48-63 are 0 → non-canonical.
+    let non_canonical_tp: usize = 0x0000_8000_0000_0000;
+
+    // Add thread handle to the process so the syscall can look it up.
+    let handle = proc.add_handle(Handle::new(thread.clone(), Rights::DEFAULT_THREAD));
+
+    // sys_thread_start_regs should reject the non-canonical TP.
+    let result = ctx.sys_thread_start_regs(
+        handle,
+        0x1000, // entry
+        0x8000, // stack
+        0,      // arg1
+        0,      // arg2
+        non_canonical_tp,
+        0, // abi_reg
+    );
+    assert_eq!(result, Err(ZxError::INVALID_ARGS));
 }
 
 /// C++: TEST(Threads, StartRegsSuspended)
@@ -1311,16 +1329,22 @@ async fn suspend_stops_thread() {
 /// C++: TEST(Threads, SyscallDebuggerModifyResult)
 ///
 /// Verifies that a debugger can modify a syscall's return value via
-/// the exception channel while the thread is suspended in a syscall.
-///
-/// Requires debugger exception channel modifying syscall return which is not available in libos mode.
+/// register write while the thread is suspended in a syscall.
+/// Requires a running thread blocked in a syscall — only on bare-metal.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires debugger exception channel modifying syscall return — not available in libos mode"
+    not(target_os = "none"),
+    ignore = "requires running thread blocked in syscall — bare-metal only"
 )]
 #[test]
 fn syscall_debugger_modify_result() {
-    panic!("not yet implemented: requires debugger exception channel modifying syscall return");
+    // This test requires:
+    // 1. A thread running and blocked in wait_one (syscall)
+    // 2. Suspending it mid-syscall
+    // 3. Reading general regs (should show INTERNAL_INTR_RETRY in rax/r0/a0)
+    // 4. Writing modified return value
+    // 5. Resuming and verifying the modified value is returned
+    // Only feasible on bare-metal where threads actually block in syscalls.
+    panic!("not yet implemented: requires bare-metal thread execution");
 }
 
 /// C++: TEST(Threads, SyscallSuspendedRegisterState)
@@ -1364,10 +1388,10 @@ async fn syscall_suspended_register_state() {
 /// Verifies that FS/GS base registers are correctly saved and
 /// restored across thread context switches.
 ///
-/// Requires FS/GS base register save/restore which is not available in libos mode.
+/// Requires FS/GS base register save/restore which is bare-metal x86_64 only.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires FS/GS base register save/restore — not available in libos mode"
+    not(target_os = "none"),
+    ignore = "requires FS/GS base register save/restore — bare-metal x86_64 only"
 )]
 #[test]
 fn thread_local_register_state() {
@@ -1459,10 +1483,10 @@ fn thread_start_with_zero_instruction_pointer() {
 /// Verifies that a hardware watchpoint exception is correctly
 /// delivered when it fires during a syscall.
 ///
-/// Requires hardware watchpoint exception delivery which is not available in libos mode.
+/// Requires hardware watchpoint exception delivery which is bare-metal x86_64 only.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires hardware watchpoint exception delivery — not available in libos mode"
+    not(target_os = "none"),
+    ignore = "requires hardware watchpoint exception delivery — bare-metal x86_64 only"
 )]
 #[test]
 fn watchpoint_syscall_panic() {
@@ -1494,16 +1518,47 @@ fn write_read_debug_register_state() {
 /// C++: TEST(Threads, WriteThreadStateWithInvalidMxcsrIsInvalidArgs)
 ///
 /// Verifies that writing thread state with an invalid MXCSR value
-/// returns ZX_ERR_INVALID_ARGS.
-///
-/// Requires MXCSR validation in write_state which is not available in libos mode.
-#[cfg_attr(
-    feature = "libos",
-    ignore = "requires MXCSR validation in write_state — not available in libos mode"
-)]
+/// returns ZX_ERR_INVALID_ARGS and does not modify the thread's state.
+#[cfg(target_arch = "x86_64")]
 #[test]
 fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
-    panic!("not yet implemented: requires MXCSR validation in write_state");
+    use zircon_object::vm::PAGE_SIZE;
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "proc").unwrap();
+    let thread = Thread::create(&proc, "t1").unwrap();
+
+    // Suspend the thread so we can read/write state.
+    thread.suspend();
+
+    // Read initial vector state.
+    // Vector regs struct: zmm[32]*64 + opmask[8]*8 + mxcsr(4) + pad(4)
+    const ZMM_COUNT: usize = 32;
+    const ZMM_SIZE: usize = 64;
+    const OPMASK_SIZE: usize = 64;
+    const TOTAL_SIZE: usize = ZMM_COUNT * ZMM_SIZE + OPMASK_SIZE + 8;
+    let mut start_values = vec![0u8; TOTAL_SIZE];
+    let _ = thread.read_state(ThreadStateKind::Vector, &mut start_values);
+
+    // Build a vector state with invalid MXCSR (all bits set).
+    let mut bad_state = vec![0u8; TOTAL_SIZE];
+    bad_state.copy_from_slice(&start_values);
+    let mxcsr_off = ZMM_COUNT * ZMM_SIZE + OPMASK_SIZE;
+    bad_state[mxcsr_off..mxcsr_off + 4].copy_from_slice(&0xFFFF_FFFFu32.to_ne_bytes());
+
+    // Write should be rejected.
+    assert_eq!(
+        thread.write_state(ThreadStateKind::Vector, &bad_state),
+        Err(ZxError::INVALID_ARGS)
+    );
+
+    // Read back — should be unchanged from start_values.
+    let mut end_values = vec![0u8; TOTAL_SIZE];
+    let _ = thread.read_state(ThreadStateKind::Vector, &mut end_values);
+    assert_eq!(
+        start_values, end_values,
+        "rejected write should not modify state"
+    );
 }
 
 /// C++: TEST(Threads, WritingArmFlagsRegister)
@@ -1719,10 +1774,10 @@ fn writing_vector_register_state_unsupported_fields_ignored() {
 /// Verifies that the AC (alignment check) flag is correctly handled
 /// during user-space memory copies.
 ///
-/// Requires x86 AC flag handling during user copy which is not available in libos mode.
+/// Requires x86 AC flag handling during user copy which is bare-metal x86_64 only.
 #[cfg_attr(
-    feature = "libos",
-    ignore = "requires x86 AC flag handling during user copy — not available in libos mode"
+    not(target_os = "none"),
+    ignore = "requires x86 AC flag handling during user copy — bare-metal x86_64 only"
 )]
 #[test]
 fn x86_ac_flag_user_copy() {
