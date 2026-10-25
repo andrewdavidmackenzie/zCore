@@ -47,12 +47,25 @@ cfg_if! {
 ///
 /// On x86_64, includes FPU/SSE vector registers (saved/restored via
 /// FXSAVE/FXRSTOR around user-mode transitions).
+/// x86_64 debug registers (DR0-DR3, DR6, DR7).
+/// Matches `zx_x86_64_thread_state_debug_regs_t`.
+#[cfg(target_arch = "x86_64")]
+#[derive(Clone, Copy, Default, Debug)]
+#[repr(C)]
+pub struct DebugRegs {
+    pub dr: [u64; 4],
+    pub dr6: u64,
+    pub dr7: u64,
+}
+
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct UserContext {
     inner: UserContextInner,
     #[cfg(target_arch = "x86_64")]
     pub vector_regs: VectorRegs,
+    #[cfg(target_arch = "x86_64")]
+    pub debug_regs: DebugRegs,
 }
 
 impl UserContext {
@@ -62,6 +75,8 @@ impl UserContext {
             inner: UserContextInner::default(),
             #[cfg(target_arch = "x86_64")]
             vector_regs: VectorRegs::default(),
+            #[cfg(target_arch = "x86_64")]
+            debug_regs: DebugRegs::default(),
         }
     }
 
