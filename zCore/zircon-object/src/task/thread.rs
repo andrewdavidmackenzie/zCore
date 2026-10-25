@@ -180,6 +180,12 @@ struct ThreadInner {
     /// Default: all online CPUs (bit 0 for single-CPU).
     /// Set via `zx_object_set_profile()` with CPU_MASK flag.
     cpu_affinity_mask: [u64; 8],
+    /// Executor task key, set when the thread is started. Used to
+    /// update the scheduler when priority changes at runtime.
+    task_key: usize,
+    /// CPU ID where the executor task was spawned. Used with task_key
+    /// to locate the correct per-CPU scheduler for priority updates.
+    task_cpu: u8,
 }
 
 impl ThreadInner {
@@ -338,9 +344,21 @@ impl Thread {
     /// Set the thread's scheduling priority (0-31).
     ///
     /// Called when a profile is applied via `zx_object_set_profile()`.
-    /// The priority is clamped to 0-31.
+    /// The priority is clamped to 0-31. If the thread has been started,
+    /// the executor's scheduler is also updated so the priority change
+    /// takes effect immediately.
     pub fn set_priority(&self, priority: usize) {
-        self.inner.lock().priority = priority.min(31);
+        let new_priority = priority.min(31);
+        let (task_key, task_cpu) = {
+            let mut inner = self.inner.lock();
+            inner.priority = new_priority;
+            (inner.task_key, inner.task_cpu)
+        };
+        // If the thread has been started (task_key != 0), update the
+        // executor's scheduler. task_key is 0 before start().
+        if task_key != 0 {
+            hal_impl::thread::change_task_priority(task_cpu, task_key, new_priority);
+        }
     }
 
     /// Set the CPU affinity mask for this thread.
@@ -413,10 +431,17 @@ impl Thread {
         let current = CurrentThread(self.clone());
         let future = thread_fn(current);
 
-        hal_impl::thread::spawn_with_priority(
+        let (task_key, task_cpu) = hal_impl::thread::spawn_with_priority(
             ThreadSwitchFuture::new(self.clone(), future),
             priority,
         );
+        // Store the executor task key and CPU so runtime priority
+        // changes can update the scheduler.
+        {
+            let mut inner = self.inner.lock();
+            inner.task_key = task_key;
+            inner.task_cpu = task_cpu;
+        }
         Ok(())
     }
 

@@ -231,7 +231,7 @@ pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
         crate::arch::intr_off();
     }
     let cpu_id = crate::arch::cpu_id();
-    spawn_task(future, None, Some(cpu_id));
+    let _ = spawn_task(future, None, Some(cpu_id));
     if enable {
         crate::arch::intr_on();
     }
@@ -242,16 +242,18 @@ pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
 /// Uses the least-loaded CPU for load-balancing when multiple CPUs
 /// are available. Falls back to current CPU if the executor hasn't
 /// been initialized yet (early boot).
-pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, priority: usize) {
+/// Spawn a future with a specific priority, distributed across CPUs.
+///
+/// Returns `(task_key, cpu_id)` so the caller can later change the
+/// task's priority via `change_task_priority`.
+pub fn spawn_with_priority(
+    future: impl Future<Output = ()> + Send + 'static,
+    priority: usize,
+) -> (Key, u8) {
     let enable = crate::arch::intr_get();
     if enable {
         crate::arch::intr_off();
     }
-    // Distribute tasks across CPUs on x86_64. On aarch64/riscv64,
-    // hardware interrupts (serial, timer) are routed to CPU 0 and
-    // the waker system doesn't propagate cross-CPU (#684). Tasks
-    // on secondary CPUs can't be woken by IRQs on the BSP.
-    // x86_64 uses polled serial I/O so this isn't an issue there.
     // Distribute tasks across CPUs on x86_64. On aarch64/riscv64,
     // hardware interrupts (serial, timer) are routed to CPU 0 and
     // the waker system doesn't propagate cross-CPU (#684). Tasks
@@ -262,20 +264,23 @@ pub fn spawn_with_priority(future: impl Future<Output = ()> + Send + 'static, pr
     } else {
         Some(crate::arch::cpu_id())
     };
-    spawn_task(future, Some(priority), cpu);
+    let result = spawn_task(future, Some(priority), cpu);
     if enable {
         crate::arch::intr_on();
     }
+    result
 }
 
 /// Spawn a coroutine with `priority` on a specific CPU (by ID).
 /// Default priority: DEFAULT_PRIORITY
 /// Default CPU: the one with fewest tasks
+///
+/// Returns `(task_key, cpu_id)`.
 pub fn spawn_task(
     future: impl Future<Output = ()> + Send + 'static,
     priority: Option<usize>,
     cpu_id: Option<u8>,
-) {
+) -> (Key, u8) {
     debug!("try to spawn {:?} cpu_id={:?}", priority, cpu_id);
     let priority = priority.unwrap_or(DEFAULT_PRIORITY);
     // Disable interrupts while holding runtime locks. The timer
@@ -287,8 +292,8 @@ pub fn spawn_task(
     if enable {
         crate::arch::intr_off();
     }
-    let runtime = if let Some(id) = cpu_id {
-        get_runtime(id)
+    let (runtime, actual_cpu) = if let Some(id) = cpu_id {
+        (get_runtime(id), id)
     } else {
         let map = CPU_RUNTIMES.get().expect("executor not initialized");
         let current = crate::arch::cpu_id();
@@ -298,14 +303,39 @@ pub fn spawn_task(
         // has tasks. This ensures the first spawned task (init process)
         // runs on the BSP, and subsequent tasks get distributed.
         if current_tasks == 0 {
-            current_rt.expect("current CPU not in runtime map")
+            (current_rt.expect("current CPU not in runtime map"), current)
         } else {
-            map.values()
-                .min_by_key(|r| r.lock().task_num())
-                .expect("no CPUs registered")
+            let (best_cpu, best_rt) = map
+                .iter()
+                .min_by_key(|(_, r)| r.lock().task_num())
+                .expect("no CPUs registered");
+            (best_rt, *best_cpu)
         }
     };
-    runtime.lock().add_task(priority, future);
+    let key = runtime.lock().add_task(priority, future);
+    if enable {
+        crate::arch::intr_on();
+    }
+    (key, actual_cpu)
+}
+
+/// Change the scheduling priority of a task identified by its key on
+/// a specific CPU. The task stays in the same FutureCollection slab
+/// (the key's priority bits become stale) but the scheduler's internal
+/// priority mapping and ready queue placement are updated.
+///
+/// This is safe to call from any CPU — it acquires the target CPU's
+/// runtime lock with interrupts disabled.
+pub fn change_task_priority(cpu_id: u8, key: Key, new_priority: usize) {
+    let enable = crate::arch::intr_get();
+    if enable {
+        crate::arch::intr_off();
+    }
+    let runtime = get_runtime(cpu_id);
+    runtime
+        .lock()
+        .task_collection
+        .change_task_priority(key, new_priority);
     if enable {
         crate::arch::intr_on();
     }
