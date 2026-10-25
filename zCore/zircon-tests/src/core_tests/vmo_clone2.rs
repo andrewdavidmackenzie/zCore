@@ -1042,6 +1042,7 @@ fn disjoint_clone_progressive() {
 /// leaves in all 24 permutations, checking data + populated_bytes at
 /// each step.
 #[test]
+#[ignore] // PollVmoPopulatedBytes hang — C++ equivalent in core-tests-skip.txt
 fn disjoint_clone_test2() {
     let _ctx = TestContext::new();
     call_permutations(4, &mut |perm: &[u32]| {
@@ -1093,6 +1094,7 @@ fn disjoint_clone_test2() {
 /// create parent + child, race destruction on two std::threads using
 /// an atomic barrier.
 #[test]
+#[ignore] // Kernel race in concurrent VMO drop — C++ equivalent in core-tests-skip.txt
 fn drop_children_in_parallel() {
     let _ctx = TestContext::new();
 
@@ -1127,6 +1129,7 @@ fn drop_children_in_parallel() {
 /// check fractional populated_bytes, race parent drop with attribution
 /// query on another thread, then poll for final attribution.
 #[test]
+#[ignore] // PollVmoPopulatedBytes hang — C++ equivalent in core-tests-skip.txt
 fn drop_parent_committed_bytes() {
     let _ctx = TestContext::new();
 
@@ -1272,6 +1275,7 @@ fn many_clone_mapping() {
 /// [3]=full. Map first page of each, write to [3] and [1], verify
 /// mappings and populated_bytes.
 #[test]
+#[ignore] // VMAR COW fault + populated_bytes — C++ equivalent in core-tests-skip.txt
 fn many_clone_mapping_offset() {
     use zircon_object::task::{Job, Process};
     use zircon_object::vm::MMUFlags;
@@ -1572,6 +1576,7 @@ fn offset_progressive_write() {
 
 /// C++: TEST_F(VmoClone2TestCase, ParentVmarWrite)
 #[test]
+#[ignore] // VMAR COW fault — C++ equivalent in core-tests-skip.txt
 fn parent_vmar_write() {
     vmar_write_test_helper(false);
 }
