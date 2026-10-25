@@ -1,8 +1,13 @@
-//! Priority round-robin scheduler.
+//! Priority round-robin scheduler with weight-based time slices.
 //!
 //! Tasks are grouped by priority level (0-31, higher = more important).
 //! `pick_next()` always returns the highest-priority ready task.
 //! Within the same priority level, tasks are served round-robin.
+//!
+//! Each priority level maps to a weight via an exponential curve
+//! matching Fuchsia's fair scheduler: `weight = 1.1^(priority - 31)`.
+//! The weight determines the thread's time slice quantum via
+//! `weight_to_time_slice_ns()`.
 
 use crate::task_collection::Key;
 use alloc::collections::VecDeque;
