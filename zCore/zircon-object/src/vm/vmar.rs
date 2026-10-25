@@ -2223,12 +2223,12 @@ impl VmMapping {
     /// VMO lock is held (lock order: VMO → VmMapping), a blocking
     /// lock would create an ABBA deadlock.
     ///
-    /// If `try_lock` fails, the operation is skipped. This is safe
-    /// because the only code path that holds VmMapping.inner is the
-    /// page fault handler, which will set up the correct PTE state
-    /// for the page it's faulting on when it completes. For other
-    /// pages in the range, the stale PTEs will be caught on the next
-    /// access (page fault → re-evaluate). See #711 for discussion.
+    /// **Known limitation:** If `try_lock` fails, the PTE invalidation
+    /// is silently skipped, leaving stale PTEs. This can cause reads
+    /// or writes to succeed when they should fault (Unmap case) or
+    /// writes to bypass dirty tracking (RemoveWrite case). Fixing
+    /// this requires either changing the lock ordering or implementing
+    /// a deferred retry mechanism. See #711.
     pub(super) fn range_change(&self, offset: usize, len: usize, op: RangeChangeOp) {
         let inner = self.inner.try_lock();
         if let Some(inner) = inner {
