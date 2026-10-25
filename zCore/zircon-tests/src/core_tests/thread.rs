@@ -269,7 +269,8 @@ fn debug_registers_dr6_reset_on_debug_exception() {
 
 /// C++: TEST(Threads, DebugRegistersValidation)
 /// Validate debug register state kind. Should return an error
-/// (NOT_SUPPORTED or BAD_STATE) on a non-exception thread.
+/// Verify debug register read succeeds on a suspended thread and
+/// returns the expected size (48 bytes on x86_64).
 #[test]
 fn debug_registers_validation() {
     let _ctx = TestContext::new();
@@ -277,16 +278,23 @@ fn debug_registers_validation() {
     let proc = Process::create(&job, "proc").unwrap();
     let thread = Thread::create(&proc, "t1").unwrap();
 
-    // Suspend so we get past BAD_STATE for "not suspended" check
+    // Suspend so we can read/write state.
     thread.suspend();
 
     let mut buf = vec![0u8; 1024];
-    let result = thread.read_state(ThreadStateKind::Debug, &mut buf);
-    assert!(
-        result.is_err(),
-        "debug register read should fail: {:?}",
-        result
-    );
+    #[cfg(target_arch = "x86_64")]
+    {
+        let n = thread.read_state(ThreadStateKind::Debug, &mut buf).unwrap();
+        assert_eq!(n, 48, "x86_64 debug regs should be 48 bytes (6 x u64)");
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let result = thread.read_state(ThreadStateKind::Debug, &mut buf);
+        assert!(
+            result.is_err(),
+            "debug register read should fail on non-x86_64"
+        );
+    }
 }
 
 /// C++: TEST(Threads, DebugRegistersWatchpointSyscallPanicRepro)
@@ -1699,15 +1707,29 @@ fn write_read_debug_register_state() {
 
     thread.suspend();
 
-    // Write debug state
-    let buf = vec![0u8; 512];
-    let result = thread.write_state(ThreadStateKind::Debug, &buf);
-    assert!(result.is_err(), "debug write should fail (not implemented)");
+    #[cfg(target_arch = "x86_64")]
+    {
+        // Write debug state — should succeed on x86_64.
+        let buf = vec![0u8; 48];
+        thread.write_state(ThreadStateKind::Debug, &buf).unwrap();
 
-    // Read debug state
-    let mut rbuf = vec![0u8; 512];
-    let result = thread.read_state(ThreadStateKind::Debug, &mut rbuf);
-    assert!(result.is_err(), "debug read should fail (not implemented)");
+        // Read debug state — should return 48 bytes.
+        let mut rbuf = vec![0u8; 512];
+        let n = thread
+            .read_state(ThreadStateKind::Debug, &mut rbuf)
+            .unwrap();
+        assert_eq!(n, 48);
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        // Debug state not supported on non-x86_64.
+        let buf = vec![0u8; 512];
+        assert!(thread.write_state(ThreadStateKind::Debug, &buf).is_err());
+        let mut rbuf = vec![0u8; 512];
+        assert!(thread
+            .read_state(ThreadStateKind::Debug, &mut rbuf)
+            .is_err());
+    }
 }
 
 /// C++: TEST(Threads, WriteThreadStateWithInvalidMxcsrIsInvalidArgs)
