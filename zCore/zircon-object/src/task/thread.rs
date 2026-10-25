@@ -180,12 +180,10 @@ struct ThreadInner {
     /// Default: all online CPUs (bit 0 for single-CPU).
     /// Set via `zx_object_set_profile()` with CPU_MASK flag.
     cpu_affinity_mask: [u64; 8],
-    /// Executor task key, set when the thread is started. Used to
-    /// update the scheduler when priority changes at runtime.
-    task_key: usize,
-    /// CPU ID where the executor task was spawned. Used with task_key
-    /// to locate the correct per-CPU scheduler for priority updates.
-    task_cpu: u8,
+    /// Executor task key and CPU ID, set when the thread is started.
+    /// Used to update the scheduler when priority changes at runtime.
+    /// `None` before `start()` or after `terminate()`.
+    task_sched: Option<(usize, u8)>,
 }
 
 impl ThreadInner {
@@ -349,14 +347,12 @@ impl Thread {
     /// takes effect immediately.
     pub fn set_priority(&self, priority: usize) {
         let new_priority = priority.min(31);
-        let (task_key, task_cpu) = {
+        let task_sched = {
             let mut inner = self.inner.lock();
             inner.priority = new_priority;
-            (inner.task_key, inner.task_cpu)
+            inner.task_sched
         };
-        // If the thread has been started (task_key != 0), update the
-        // executor's scheduler. task_key is 0 before start().
-        if task_key != 0 {
+        if let Some((task_key, task_cpu)) = task_sched {
             hal_impl::thread::change_task_priority(task_cpu, task_key, new_priority);
         }
     }
@@ -435,12 +431,17 @@ impl Thread {
             ThreadSwitchFuture::new(self.clone(), future),
             priority,
         );
-        // Store the executor task key and CPU so runtime priority
-        // changes can update the scheduler.
+        // Store the executor task identifiers and reconcile priority.
+        // If set_priority() raced between reading inner.priority above
+        // and this point, the scheduler has the old priority. Re-apply
+        // the current priority under the lock to close the race.
         {
             let mut inner = self.inner.lock();
-            inner.task_key = task_key;
-            inner.task_cpu = task_cpu;
+            inner.task_sched = Some((task_key, task_cpu));
+            if inner.priority != priority {
+                // Priority changed during spawn — update the scheduler.
+                hal_impl::thread::change_task_priority(task_cpu, task_key, inner.priority);
+            }
         }
         Ok(())
     }
@@ -744,6 +745,9 @@ impl Thread {
     fn terminate(&self) {
         let mut inner = self.inner.lock();
         self.exceptionate.shutdown();
+        // Clear task identifiers so a stale set_priority() cannot
+        // address a reused executor slab slot.
+        inner.task_sched = None;
         inner.change_state(ThreadState::Dead, &self.base);
         // If the process has already been dropped (Weak upgrade fails),
         // there is nothing to remove from — the cycle was already broken.
