@@ -10,6 +10,7 @@ use zircon_object::task::{
     policy_code, ExceptionObject, ExceptionType, Job, Process, Task, Thread, ThreadState,
     ThreadStateKind,
 };
+use zircon_object::ZxError;
 
 extern crate alloc;
 
@@ -1522,7 +1523,6 @@ fn write_read_debug_register_state() {
 #[cfg(target_arch = "x86_64")]
 #[test]
 fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
-    use zircon_object::vm::PAGE_SIZE;
     let _ctx = TestContext::new();
     let job = Job::root();
     let proc = Process::create(&job, "proc").unwrap();
