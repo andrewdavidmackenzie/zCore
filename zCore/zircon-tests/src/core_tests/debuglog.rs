@@ -132,13 +132,55 @@ fn max_message_size() {
     let _ctx = TestContext::new();
     let log = DebugLog::create(0);
 
-    // Write exactly DLOG_MAX_DATA bytes
+    // Write exactly DLOG_MAX_DATA bytes — should succeed without panic.
     let data: String = "A".repeat(DLOG_MAX_DATA);
     log.write(Severity::Info, 0, 0, 0, &data);
 
-    // Write more than max — should be truncated, not panic
+    // Read back to verify the write succeeded and the record is present.
+    let mut buf = vec![0u8; DLOG_MAX_LEN];
+    let mut found_max = false;
+    for _ in 0..1000 {
+        let size = log.read(&mut buf);
+        if size == 0 {
+            break;
+        }
+        // Check if the data payload length matches DLOG_MAX_DATA.
+        // datalen is at offset 12 (u16 LE) in the DlogHeader.
+        if size >= 40 {
+            let datalen = u16::from_ne_bytes([buf[12], buf[13]]) as usize;
+            if datalen == DLOG_MAX_DATA {
+                found_max = true;
+            }
+        }
+    }
+    assert!(
+        found_max,
+        "should find a record with exactly DLOG_MAX_DATA bytes"
+    );
+
+    // Write more than max — should be truncated to DLOG_MAX_DATA, not panic.
     let big_data: String = "B".repeat(DLOG_MAX_DATA + 100);
     log.write(Severity::Info, 0, 0, 0, &big_data);
+
+    // Verify truncated write is present and capped at DLOG_MAX_DATA.
+    let mut found_truncated = false;
+    for _ in 0..1000 {
+        let size = log.read(&mut buf);
+        if size == 0 {
+            break;
+        }
+        if size >= 40 {
+            let datalen = u16::from_ne_bytes([buf[12], buf[13]]) as usize;
+            // Oversized message should have been truncated to DLOG_MAX_DATA.
+            if datalen == DLOG_MAX_DATA && buf[40] == b'B' {
+                found_truncated = true;
+            }
+        }
+    }
+    assert!(
+        found_truncated,
+        "oversized message should be truncated to DLOG_MAX_DATA"
+    );
 }
 
 /// C++: TEST(DebugLogTest, ReadDataCopyFault)

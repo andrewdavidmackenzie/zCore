@@ -24,6 +24,7 @@ use crate::helpers::TestContext;
 /// Queries CPU features via VdsoConstants (the kernel-side source of truth
 /// that backs the vDSO `zx_system_get_features` function).
 #[test]
+#[ignore] // ARM MOPS not available in libos/x86 mode
 fn arm_mops() {
     let _ctx = TestContext::new();
 
@@ -52,6 +53,7 @@ fn arm_mops() {
 /// Tests that corrupting the C flag between MOPS instructions causes a fault.
 /// Cannot safely test in libos mode (ASSERT_DEATH would kill the test process).
 #[test]
+#[ignore] // ARM MOPS not available in libos/x86 mode
 fn arm_mops_exception() {
     let _ctx = TestContext::new();
 

@@ -47,6 +47,7 @@ fn fpu_long_compute_loop() {
 /// is not available in libos user mode. Even in the C++ suite this
 /// test is disabled.
 #[test]
+#[ignore] // x86 segment selector state requires bare-metal context switching
 fn segment_selectors_zeroed_on_interrupt() {}
 
 /// C++: TEST(RegisterContextSwitchTests, SegmentSelectorsZeroedOnContextSwitch)
@@ -57,4 +58,5 @@ fn segment_selectors_zeroed_on_interrupt() {}
 /// segment selectors (ds, es, fs, gs) and FS/GS base registers.
 /// Not available in libos user mode. Verified via QEMU core-tests.
 #[test]
+#[ignore] // x86 segment selector state requires bare-metal context switching
 fn segment_selectors_zeroed_on_context_switch() {}

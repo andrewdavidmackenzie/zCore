@@ -3201,7 +3201,14 @@ fn kernel_stats_guest_stats_array_size() {
     let res_h = ctx.add_root_resource();
     let mut buf = [0u8; 0];
     // Guest stats may not be implemented — just exercise the path.
-    let _result = get_info(&ctx, res_h, TOPIC_GUEST_STATS, &mut buf);
+    // Zero-sized buffer → BUFFER_TOO_SMALL (or NOT_SUPPORTED if guest stats unimplemented).
+    let result = get_info(&ctx, res_h, TOPIC_GUEST_STATS, &mut buf);
+    if let Err(e) = result {
+        assert!(
+            e == zircon_object::ZxError::BUFFER_TOO_SMALL
+                || e == zircon_object::ZxError::NOT_SUPPORTED,
+        );
+    }
 }
 
 /// C++: TEST(KernelStatsGetInfoTest, KmemStats)
@@ -3604,7 +3611,12 @@ fn process_get_info_info_process_maps_on_self_fails() {
         .add_handle(Handle::new(ctx.proc.clone(), Rights::DEFAULT_PROCESS));
     let mut buf = vec![0u8; 16 * PROCESS_MAPS_ENTRY_SIZE];
     // Self-query may succeed with (0,0) or may fail — either is acceptable.
-    let _result = get_info(&ctx, proc_h, TOPIC_PROCESS_MAPS, &mut buf);
+    let result = get_info(&ctx, proc_h, TOPIC_PROCESS_MAPS, &mut buf);
+    assert!(
+        result.is_ok()
+            || result == Err(zircon_object::ZxError::NOT_SUPPORTED)
+            || result == Err(zircon_object::ZxError::ACCESS_DENIED),
+    );
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessMapsPartiallyUnmappedBufferIsInvalidArgs)
@@ -4126,7 +4138,7 @@ fn stall_get_info_memory_stall_null_actual_and_avail_succeeds() {
     let ctx = TestContext::new();
     let res_h = ctx.add_root_resource();
     let mut buf = AlignedBuf::<MEMORY_STALL_SIZE>::new();
-    let _result = get_info_raw(
+    let result = get_info_raw(
         &ctx,
         res_h,
         TOPIC_MEMORY_STALL,
@@ -4135,7 +4147,8 @@ fn stall_get_info_memory_stall_null_actual_and_avail_succeeds() {
         0,
         0,
     );
-    // May succeed or return NOT_SUPPORTED.
+    // C++ ASSERT_OK — may succeed or return NOT_SUPPORTED if memory stall unimplemented.
+    assert!(result.is_ok() || result == Err(zircon_object::ZxError::NOT_SUPPORTED),);
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallNullActualSucceeds)
@@ -4145,7 +4158,7 @@ fn stall_get_info_memory_stall_null_actual_succeeds() {
     let res_h = ctx.add_root_resource();
     let mut buf = AlignedBuf::<MEMORY_STALL_SIZE>::new();
     let mut avail: usize = 0;
-    let _result = get_info_raw(
+    let result = get_info_raw(
         &ctx,
         res_h,
         TOPIC_MEMORY_STALL,
@@ -4154,6 +4167,8 @@ fn stall_get_info_memory_stall_null_actual_succeeds() {
         0,
         &mut avail as *mut _ as usize,
     );
+    // C++ ASSERT_OK — may succeed or return NOT_SUPPORTED.
+    assert!(result.is_ok() || result == Err(zircon_object::ZxError::NOT_SUPPORTED),);
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallNullAvailSucceeds)
@@ -4163,7 +4178,7 @@ fn stall_get_info_memory_stall_null_avail_succeeds() {
     let res_h = ctx.add_root_resource();
     let mut buf = AlignedBuf::<MEMORY_STALL_SIZE>::new();
     let mut actual: usize = 0;
-    let _result = get_info_raw(
+    let result = get_info_raw(
         &ctx,
         res_h,
         TOPIC_MEMORY_STALL,
@@ -4172,6 +4187,8 @@ fn stall_get_info_memory_stall_null_avail_succeeds() {
         &mut actual as *mut _ as usize,
         0,
     );
+    // C++ ASSERT_OK — may succeed or return NOT_SUPPORTED.
+    assert!(result.is_ok() || result == Err(zircon_object::ZxError::NOT_SUPPORTED),);
 }
 
 /// C++: TEST(StallGetInfoTest, MemoryStallSmokeTest)
@@ -4232,7 +4249,8 @@ fn task_get_info_info_stats_smoke_test() {
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoStatsSmokeTestV1)
-/// V1 uses a 16-byte buffer (2 fields only).
+/// V1 uses a 16-byte buffer (2 fields only). The kernel may reject
+/// this as BUFFER_TOO_SMALL if it requires the full 32-byte struct.
 #[test]
 fn task_get_info_info_stats_smoke_test_v1() {
     let ctx = TestContext::new();
@@ -4240,7 +4258,19 @@ fn task_get_info_info_stats_smoke_test_v1() {
         .proc
         .add_handle(Handle::new(ctx.proc.clone(), Rights::INSPECT));
     let mut buf = [0u8; TASK_STATS_V1_SIZE];
-    let _result = get_info(&ctx, proc_h, TOPIC_TASK_STATS, &mut buf);
+    let result = get_info(&ctx, proc_h, TOPIC_TASK_STATS, &mut buf);
+    match result {
+        Ok((actual, avail)) => {
+            assert_eq!(actual, 1);
+            assert_eq!(avail, 1);
+        }
+        Err(e) => assert!(
+            e == zircon_object::ZxError::NOT_SUPPORTED
+                || e == zircon_object::ZxError::BUFFER_TOO_SMALL,
+            "expected NOT_SUPPORTED or BUFFER_TOO_SMALL, got {:?}",
+            e
+        ),
+    }
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoStatsUnstartedSucceeds)
@@ -4251,7 +4281,9 @@ fn task_get_info_info_stats_unstarted_succeeds() {
     let target = Process::create(&job, "ts-unstarted").unwrap();
     let proc_h = ctx.proc.add_handle(Handle::new(target, Rights::INSPECT));
     let mut buf = [0u8; TASK_STATS_SIZE];
-    let _result = get_info(&ctx, proc_h, TOPIC_TASK_STATS, &mut buf);
+    let result = get_info(&ctx, proc_h, TOPIC_TASK_STATS, &mut buf);
+    // C++ ASSERT_OK — unstarted process stats should succeed or return NOT_SUPPORTED.
+    assert!(result.is_ok() || result == Err(zircon_object::ZxError::NOT_SUPPORTED),);
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsBadActualIsInvalidArg)
@@ -4350,7 +4382,7 @@ fn task_get_info_info_task_stats_null_actual_and_avail_succeeds() {
         .proc
         .add_handle(Handle::new(ctx.proc.clone(), Rights::INSPECT));
     let mut buf = AlignedBuf::<TASK_STATS_SIZE>::new();
-    let _result = get_info_raw(
+    let result = get_info_raw(
         &ctx,
         proc_h,
         TOPIC_TASK_STATS,
@@ -4359,6 +4391,8 @@ fn task_get_info_info_task_stats_null_actual_and_avail_succeeds() {
         0,
         0,
     );
+    // C++ ASSERT_OK — may succeed or return NOT_SUPPORTED.
+    assert!(result.is_ok() || result == Err(zircon_object::ZxError::NOT_SUPPORTED),);
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsNullActualSucceeds)
@@ -4370,7 +4404,7 @@ fn task_get_info_info_task_stats_null_actual_succeeds() {
         .add_handle(Handle::new(ctx.proc.clone(), Rights::INSPECT));
     let mut buf = AlignedBuf::<TASK_STATS_SIZE>::new();
     let mut avail: usize = 0;
-    let _result = get_info_raw(
+    let result = get_info_raw(
         &ctx,
         proc_h,
         TOPIC_TASK_STATS,
@@ -4379,6 +4413,8 @@ fn task_get_info_info_task_stats_null_actual_succeeds() {
         0,
         &mut avail as *mut _ as usize,
     );
+    // C++ ASSERT_OK — may succeed or return NOT_SUPPORTED.
+    assert!(result.is_ok() || result == Err(zircon_object::ZxError::NOT_SUPPORTED),);
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsNullAvailSucceeds)
@@ -4390,7 +4426,7 @@ fn task_get_info_info_task_stats_null_avail_succeeds() {
         .add_handle(Handle::new(ctx.proc.clone(), Rights::INSPECT));
     let mut buf = AlignedBuf::<TASK_STATS_SIZE>::new();
     let mut actual: usize = 0;
-    let _result = get_info_raw(
+    let result = get_info_raw(
         &ctx,
         proc_h,
         TOPIC_TASK_STATS,
@@ -4399,6 +4435,8 @@ fn task_get_info_info_task_stats_null_avail_succeeds() {
         &mut actual as *mut _ as usize,
         0,
     );
+    // C++ ASSERT_OK — may succeed or return NOT_SUPPORTED.
+    assert!(result.is_ok() || result == Err(zircon_object::ZxError::NOT_SUPPORTED),);
 }
 
 /// C++: TEST(TaskGetInfoTest, InfoTaskStatsThreadHandleIsBadHandle)
@@ -4443,8 +4481,9 @@ fn task_get_info_shared_mem_accounting() {
         .proc
         .add_handle(Handle::new(ctx.proc.clone(), Rights::INSPECT));
     let mut buf = [0u8; TASK_STATS_SIZE];
-    let _result = get_info(&ctx, proc_h, TOPIC_TASK_STATS, &mut buf);
-    // Whether it succeeds or not, we've exercised the path.
+    let result = get_info(&ctx, proc_h, TOPIC_TASK_STATS, &mut buf);
+    // C++ verifies memory accounting fields — we verify success or NOT_SUPPORTED.
+    assert!(result.is_ok() || result == Err(zircon_object::ZxError::NOT_SUPPORTED),);
 }
 
 // ── Thread handle count bad pointer tests ─────────────────────────
@@ -5024,7 +5063,12 @@ fn vmar_maps_get_info_info_vmar_maps_process_destroyed_fails() {
     let vmar_h = ctx.proc.add_handle(Handle::new(vmar, Rights::DEFAULT_VMAR));
     let mut buf = vec![0u8; 16 * VMAR_MAPS_ENTRY_SIZE];
     // May return BAD_STATE, NOT_FOUND, or succeed with 0 entries.
-    let _result = get_info(&ctx, vmar_h, TOPIC_VMAR_MAPS, &mut buf);
+    let result = get_info(&ctx, vmar_h, TOPIC_VMAR_MAPS, &mut buf);
+    assert!(
+        result.is_ok()
+            || result == Err(zircon_object::ZxError::BAD_STATE)
+            || result == Err(zircon_object::ZxError::NOT_FOUND),
+    );
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsRequiresInspectRights)
@@ -5077,7 +5121,8 @@ fn vmar_maps_get_info_info_vmar_maps_vmar_destroyed_fails() {
     let vmar_h = ctx.proc.add_handle(Handle::new(vmar, Rights::DEFAULT_VMAR));
     let mut buf = vec![0u8; 16 * VMAR_MAPS_ENTRY_SIZE];
     // May return BAD_STATE or succeed with 0 entries.
-    let _result = get_info(&ctx, vmar_h, TOPIC_VMAR_MAPS, &mut buf);
+    let result = get_info(&ctx, vmar_h, TOPIC_VMAR_MAPS, &mut buf);
+    assert!(result.is_ok() || result == Err(zircon_object::ZxError::BAD_STATE),);
 }
 
 /// C++: TEST(VmarMapsGetInfoTest, InfoVmarMapsZeroSizedBufferIsOk)

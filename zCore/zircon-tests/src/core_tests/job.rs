@@ -233,12 +233,18 @@ fn create_test() {
 }
 
 /// C++: TEST(JobTest, GetInfo)
-/// JobInfo should return without error.
+/// JobInfo should return without error and report sensible values.
 #[test]
 fn job_get_info() {
     let ctx = TestContext::new();
     let job_h = add_root_job(&ctx);
-    let _info = get_job_info(&ctx, job_h);
+    let info = get_job_info(&ctx, job_h);
+
+    // A fresh root job should not be exited and should have return_code 0.
+    assert!(!info.exited, "fresh job should not be exited");
+    assert_eq!(info.return_code, 0, "fresh job return_code should be 0");
+    assert!(!info.kill_on_oom, "default kill_on_oom should be false");
+    assert!(!info.debugger_attached, "no debugger should be attached");
 }
 
 /// C++: TEST(JobTest, PolicyBasicOverride)

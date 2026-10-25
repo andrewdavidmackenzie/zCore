@@ -63,18 +63,32 @@ fn invalid_unregister_args() {
     let sc = ctx.syscall();
 
     // C++: (INVALID, sizeof(rseq), 0) → INVALID_ARGS
+    // When handle is INVALID (unregister), offset must be 0 and size must be 0.
+    // Non-zero offset with zero size is invalid.
     let result = sc.sys_thread_set_rseq(0, RSEQ_STRUCT_SIZE, 0);
-    // zCore doesn't validate on unregister — will return Ok.
-    // Faithful assertion: document the expected vs actual behavior.
-    let _ = result; // May be Ok or Err depending on implementation
+    assert_eq!(
+        result,
+        Err(ZxError::INVALID_ARGS),
+        "unregister with non-zero offset should fail"
+    );
 
     // C++: (INVALID, 0, sizeof(rseq)) → INVALID_ARGS
+    // Zero offset but non-zero size with INVALID handle is invalid.
     let result = sc.sys_thread_set_rseq(0, 0, RSEQ_STRUCT_SIZE);
-    let _ = result;
+    assert_eq!(
+        result,
+        Err(ZxError::INVALID_ARGS),
+        "unregister with non-zero size should fail"
+    );
 
     // C++: (INVALID, sizeof(rseq), sizeof(rseq)) → INVALID_ARGS
+    // Both non-zero offset and non-zero size with INVALID handle is invalid.
     let result = sc.sys_thread_set_rseq(0, RSEQ_STRUCT_SIZE, RSEQ_STRUCT_SIZE);
-    let _ = result;
+    assert_eq!(
+        result,
+        Err(ZxError::INVALID_ARGS),
+        "unregister with non-zero offset and size should fail"
+    );
 }
 
 /// C++: TEST(RseqTest, UnregisterNotRegistered)

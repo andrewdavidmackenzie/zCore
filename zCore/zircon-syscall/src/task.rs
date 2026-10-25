@@ -680,6 +680,10 @@ impl Syscall<'_> {
             vmo_handle, offset, size
         );
         if vmo_handle == INVALID_HANDLE {
+            // C++: unregister requires offset == 0 && size == 0.
+            if offset != 0 || size != 0 {
+                return Err(ZxError::INVALID_ARGS);
+            }
             self.thread.clear_rseq();
             return Ok(());
         }

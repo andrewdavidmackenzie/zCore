@@ -1030,17 +1030,28 @@ fn mexec_empty_zbi() {
 }
 
 /// C++: TEST(Resource, MexecMemoryLeakOnFailure)
-/// Verify MEXEC resource can be created and dropped without leaking.
+/// The C++ test calls zx_system_mexec() with invalid arguments (expecting
+/// failure), then verifies kernel memory wasn't leaked by repeating many
+/// times. In zCore, zx_system_mexec is not implemented, so we verify the
+/// MEXEC resource can be created, validated, and dropped repeatedly
+/// without leaking — the closest equivalent.
 #[test]
 fn mexec_memory_leak_on_failure() {
     let _ctx = TestContext::new();
-    for _ in 0..100 {
+    use zircon_object::dev::ZX_RSRC_SYSTEM_MEXEC_BASE;
+    for i in 0..100 {
         let sys = Resource::create(
             "system",
             ResourceKind::SYSTEM,
             0,
             16,
             ResourceFlags::empty(),
+        );
+        // Verify the resource is valid before dropping.
+        assert!(
+            sys.validate_ranged_resource(ResourceKind::SYSTEM, ZX_RSRC_SYSTEM_MEXEC_BASE, 1)
+                .is_ok(),
+            "resource should be valid on iteration {i}"
         );
         drop(sys);
     }
