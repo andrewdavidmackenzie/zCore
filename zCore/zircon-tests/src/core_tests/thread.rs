@@ -750,21 +750,19 @@ fn start_regs() {
 #[cfg(target_arch = "x86_64")]
 #[test]
 fn start_regs_noncanonical_tp() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "proc").unwrap();
-    let thread = Thread::create(&proc, "t1").unwrap();
-    let ctx = _ctx.syscall();
+    let ctx = TestContext::new();
+    let proc = &ctx.proc;
+    let thread = Thread::create(proc, "t1").unwrap();
 
     // The lowest non-canonical address on x86_64 (48-bit VA):
     // bit 47 is 1 but bits 48-63 are 0 → non-canonical.
     let non_canonical_tp: usize = 0x0000_8000_0000_0000;
 
-    // Add thread handle to the process so the syscall can look it up.
+    // Add thread handle to the TestContext's process handle table.
     let handle = proc.add_handle(Handle::new(thread.clone(), Rights::DEFAULT_THREAD));
 
     // sys_thread_start_regs should reject the non-canonical TP.
-    let result = ctx.sys_thread_start_regs(
+    let result = ctx.syscall().sys_thread_start_regs(
         handle,
         0x1000, // entry
         0x8000, // stack
