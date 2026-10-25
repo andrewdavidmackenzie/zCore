@@ -187,6 +187,10 @@ struct ThreadInner {
     /// Deadline scheduling parameters, if this thread has a deadline
     /// profile applied. `None` for fair-scheduled threads.
     deadline_params: Option<super::profile::SchedDeadlineParams>,
+    /// Highest priority inherited from threads waiting on futexes
+    /// owned by this thread (priority inheritance). The effective
+    /// scheduling priority is `max(priority, inherited_priority)`.
+    inherited_priority: usize,
     /// CPU affinity mask. Bit N set means the thread may run on CPU N.
     /// Default: all online CPUs (bit 0 for single-CPU).
     /// Set via `zx_object_set_profile()` with CPU_MASK flag.
@@ -385,15 +389,16 @@ impl Thread {
     /// takes effect immediately.
     pub fn set_priority(&self, priority: usize) {
         let new_priority = priority.min(31);
-        let task_sched = {
+        let (effective, task_sched) = {
             let mut inner = self.inner.lock();
             inner.priority = new_priority;
-            // Recalculate the time slice quantum for the new priority.
-            inner.time_slice_ns = priority_to_time_slice_ns(new_priority);
-            inner.task_sched
+            // Effective priority accounts for PI boost.
+            let effective = new_priority.max(inner.inherited_priority);
+            inner.time_slice_ns = priority_to_time_slice_ns(effective);
+            (effective, inner.task_sched)
         };
         if let Some((task_key, task_cpu)) = task_sched {
-            hal_impl::thread::change_task_priority(task_cpu, task_key, new_priority);
+            hal_impl::thread::change_task_priority(task_cpu, task_key, effective);
         }
     }
 
@@ -419,6 +424,51 @@ impl Thread {
     /// Get the deadline parameters, if any.
     pub fn deadline_params(&self) -> Option<super::profile::SchedDeadlineParams> {
         self.inner.lock().deadline_params
+    }
+
+    /// Get the effective scheduling priority, accounting for priority
+    /// inheritance. Returns `max(base_priority, inherited_priority)`.
+    pub fn effective_priority(&self) -> usize {
+        let inner = self.inner.lock();
+        inner.priority.max(inner.inherited_priority)
+    }
+
+    /// Apply a priority inheritance boost. If `boost` exceeds the
+    /// current effective priority, the thread's scheduler priority
+    /// is raised. Called when a higher-priority thread blocks on a
+    /// futex owned by this thread.
+    pub fn boost_priority(&self, boost: usize) {
+        let (new_effective, task_sched) = {
+            let mut inner = self.inner.lock();
+            if boost > inner.inherited_priority {
+                inner.inherited_priority = boost;
+            }
+            let effective = inner.priority.max(inner.inherited_priority);
+            (effective, inner.task_sched)
+        };
+        if let Some((task_key, task_cpu)) = task_sched {
+            hal_impl::thread::change_task_priority(task_cpu, task_key, new_effective);
+        }
+    }
+
+    /// Clear the priority inheritance boost. Reverts the thread's
+    /// scheduler priority to `max(base_priority, 0)`. Called when
+    /// futex ownership is released.
+    ///
+    /// For simplicity, this resets inherited_priority to 0. If the
+    /// thread owns multiple futexes with waiters, the caller should
+    /// call `boost_priority` again with the remaining max.
+    pub fn clear_pi_boost(&self) {
+        let (new_effective, task_sched) = {
+            let mut inner = self.inner.lock();
+            inner.inherited_priority = 0;
+            let effective = inner.priority;
+            inner.time_slice_ns = priority_to_time_slice_ns(effective);
+            (effective, inner.task_sched)
+        };
+        if let Some((task_key, task_cpu)) = task_sched {
+            hal_impl::thread::change_task_priority(task_cpu, task_key, new_effective);
+        }
     }
 
     /// Set the CPU affinity mask for this thread.

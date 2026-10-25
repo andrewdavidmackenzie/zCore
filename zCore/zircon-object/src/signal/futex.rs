@@ -182,6 +182,16 @@ impl Futex {
                     // the most recent successful futex_wait.
                     futex.set_owner(self.new_owner.clone());
                     futex.waiter_queue.push_back(self.waiter.clone());
+                    // Priority inheritance: if the new waiter has
+                    // higher priority than the owner, boost the owner.
+                    if let Some(ref owner) = futex.owner {
+                        if let Some(ref waiter_thread) = self.waiter.thread {
+                            let waiter_pri = waiter_thread.effective_priority();
+                            if waiter_pri > owner.effective_priority() {
+                                owner.boost_priority(waiter_pri);
+                            }
+                        }
+                    }
                     // Track which futex this thread is blocking on,
                     // so futex_requeue's owner validation can check
                     // without scanning the waiter queue.
@@ -200,10 +210,24 @@ impl Futex {
             fn drop(&mut self) {
                 let inner = self.waiter.inner.lock();
                 if !inner.woken {
-                    let futex = inner.futex.clone();
-                    let queue = &mut futex.inner.lock().waiter_queue;
-                    if let Some(pos) = queue.iter().position(|x| Arc::ptr_eq(x, &self.waiter)) {
-                        queue.swap_remove_back(pos);
+                    let futex_arc = inner.futex.clone();
+                    let mut futex = futex_arc.inner.lock();
+                    if let Some(pos) = futex
+                        .waiter_queue
+                        .iter()
+                        .position(|x| Arc::ptr_eq(x, &self.waiter))
+                    {
+                        futex.waiter_queue.swap_remove_back(pos);
+                    }
+                    // Priority inheritance: recompute owner's boost
+                    // after removing a waiter.
+                    if let Some(ref owner) = futex.owner {
+                        let max_pri = futex.max_waiter_priority();
+                        if max_pri > 0 {
+                            owner.boost_priority(max_pri);
+                        } else {
+                            owner.clear_pi_boost();
+                        }
                     }
                 }
                 // Clear blocking futex tracking.
@@ -378,8 +402,30 @@ impl FutexInner {
     }
 
     fn set_owner(&mut self, owner: Option<Arc<Thread>>) {
-        // TODO: change the priority of owner thread
+        // Priority inheritance: when ownership changes, update boosts.
+        // Clear the old owner's PI boost.
+        if let Some(ref old_owner) = self.owner {
+            old_owner.clear_pi_boost();
+        }
+        // If there's a new owner and waiters in the queue, boost
+        // the new owner to the max priority of all waiters.
+        if let Some(ref new_owner) = owner {
+            let max_waiter_pri = self.max_waiter_priority();
+            if max_waiter_pri > 0 {
+                new_owner.boost_priority(max_waiter_pri);
+            }
+        }
         self.owner = owner;
+    }
+
+    /// Return the highest priority among all threads in the waiter queue.
+    fn max_waiter_priority(&self) -> usize {
+        self.waiter_queue
+            .iter()
+            .filter_map(|w| w.thread.as_ref())
+            .map(|t| t.effective_priority())
+            .max()
+            .unwrap_or(0)
     }
 }
 
