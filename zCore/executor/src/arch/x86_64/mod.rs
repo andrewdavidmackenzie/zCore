@@ -31,7 +31,31 @@ pub(crate) fn cpu_id() -> u8 {
 //         .as_u64() as _
 // }
 
+/// The kernel page table physical address, set once at boot by
+/// `set_kernel_page_table`. New executor contexts use this value
+/// instead of reading CR3 directly, because CR3 may contain a user
+/// page table during timer preemption.
+static KERNEL_PT: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Save the kernel page table address. Called once by HAL init.
+pub fn set_kernel_page_table(phys: usize) {
+    KERNEL_PT.store(phys, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// Return the page table base for new executor contexts.
+///
+/// Uses the saved kernel page table, NOT the current CR3. During
+/// timer preemption, CR3 may contain a user page table (loaded by
+/// `ThreadSwitchFuture::poll`). Using that value would save a user
+/// page table in the executor context; when that page table is
+/// freed, switching to the executor writes a stale CR3, causing a
+/// triple fault.
 pub(crate) fn pg_base_register() -> usize {
+    let saved = KERNEL_PT.load(core::sync::atomic::Ordering::Relaxed);
+    if saved != 0 {
+        return saved;
+    }
+    // Fallback for very early boot before set_kernel_page_table.
     let mut cr3;
     unsafe {
         asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack, preserves_flags));

@@ -159,39 +159,43 @@ pub(crate) fn steal_task_from_other_cpu() -> Option<(Key, Arc<Task>, WakerRef, D
 pub fn run_until_idle() -> bool {
     debug!("run_until_idle");
     loop {
+        // Disable interrupts before locking the runtime. The timer
+        // interrupt handler calls sched_yield → get_current_runtime,
+        // which locks the same runtime. Holding the runtime lock
+        // with interrupts enabled causes a self-deadlock when the
+        // timer fires on this CPU.
+        crate::arch::intr_off();
         let mut runtime = get_current_runtime();
         let runtime_cx = runtime.get_context();
         let executor_cx = runtime.strong_executor.context.get_context();
         debug!("switch idle -> {}", runtime.strong_executor.id());
         runtime.current_executor = Some(runtime.strong_executor.clone());
-        // Release the global_runtime lock before switching.
-        // Disable interrupts across the gap between setting
-        // current_executor and entering switch(). If a timer IRQ
-        // fires here, sched_yield() sees current_executor=Some and
-        // attempts a context switch while still in the runtime
-        // context, corrupting state. The executor re-enables
-        // interrupts when it polls tasks or waits.
-        crate::arch::intr_off();
+        // Release the runtime lock before switching. Interrupts
+        // stay disabled across the switch to prevent sched_yield
+        // from re-entering the runtime context.
         drop(runtime);
         switch(runtime_cx, executor_cx);
-        crate::arch::intr_on();
-        // If this function returns, the strong_executor's future has
-        // timed out or voluntarily yielded. Create a new executor for
-        // subsequent futures, promote it to strong_executor, and demote
-        // the old one to a weak_executor.
+        // Interrupts stay disabled from the intr_off at loop top.
+        // Re-acquire runtime lock (still under intr_off).
         runtime = get_current_runtime();
         runtime.current_executor = None;
         if cfg!(feature = "baremetal-test") && runtime.task_num() == 0 {
+            crate::arch::intr_on();
             return false;
         }
         // Only run weak_executors when the strong_executor voluntarily yields.
         if runtime.strong_executor.is_running_future() {
             runtime.downgrade_strong_executor();
+            // drop(runtime) happens implicitly at loop top (reassignment).
+            // intr_on not needed — loop top re-does intr_off.
+            drop(runtime);
+            crate::arch::intr_on();
             continue;
         }
         // Iterate through all weak_executors
         if runtime.weak_executors.is_empty() {
             drop(runtime);
+            crate::arch::intr_on();
             continue;
         }
         debug!("run weak executor");
@@ -207,14 +211,16 @@ pub fn run_until_idle() -> bool {
                 let executor_ctx = executor.context.get_context();
                 debug!("switch idle -> {}", executor.id());
                 runtime.current_executor = Some(executor);
-                crate::arch::intr_off();
+                // Already under intr_off from loop top.
                 drop(runtime);
                 switch(runtime_cx as _, executor_ctx as _);
-                crate::arch::intr_on();
+                // Back from weak executor. Re-acquire under intr_off.
                 runtime = get_current_runtime();
                 runtime.current_executor = None;
             }
         }
+        drop(runtime);
+        crate::arch::intr_on();
     }
 }
 
@@ -271,6 +277,15 @@ pub fn spawn_task(
 ) {
     debug!("try to spawn {:?} cpu_id={:?}", priority, cpu_id);
     let priority = priority.unwrap_or(DEFAULT_PRIORITY);
+    // Disable interrupts while holding runtime locks. The timer
+    // interrupt handler calls sched_yield → get_current_runtime,
+    // which locks the runtime. If we hold a runtime lock with
+    // interrupts enabled, a timer on this CPU deadlocks on the
+    // same lock.
+    let enable = crate::arch::intr_get();
+    if enable {
+        crate::arch::intr_off();
+    }
     let runtime = if let Some(id) = cpu_id {
         get_runtime(id)
     } else {
@@ -290,6 +305,9 @@ pub fn spawn_task(
         }
     };
     runtime.lock().add_task(priority, future);
+    if enable {
+        crate::arch::intr_on();
+    }
 }
 
 /// check whether the running coroutine of current cpu time out, if yes, we will
@@ -307,7 +325,10 @@ pub fn handle_timeout() {
 pub(crate) fn run_executor(executor_addr: usize) {
     let mut p = unsafe { Box::from_raw(executor_addr as *mut Executor) };
     p.run();
-    // Weak executor may return
+    // Weak executor may return. Disable interrupts before locking
+    // the runtime to prevent handle_timeout → sched_yield from
+    // deadlocking on the same lock.
+    crate::arch::intr_off();
     let runtime = get_current_runtime();
     let executor_cx = p.context.get_context();
     let runtime_cx = runtime.get_context();

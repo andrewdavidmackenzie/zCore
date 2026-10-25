@@ -173,7 +173,7 @@ impl Futex {
                         return Poll::Ready(Err(ZxError::BAD_STATE));
                     }
                     // check new owner
-                    if !futex.is_valid_new_owner(&self.new_owner) {
+                    if !futex.is_valid_new_owner(&self.new_owner, inner.futex.user_addr) {
                         return Poll::Ready(Err(ZxError::INVALID_ARGS));
                     }
                     // Set the new owner immediately when the wait begins,
@@ -287,22 +287,19 @@ impl Futex {
             let a = self.inner.lock();
             (a, b)
         };
+
         if check_value && self.load_user_value() != current_value {
             return Err(ZxError::BAD_STATE);
         }
-        // Check new_requeue_owner is not a waiter on EITHER futex
-        // BEFORE performing any wake/requeue. Fuchsia validates the
-        // proposed owner against the current wait queues, not the
-        // post-operation queues. A thread waiting on the wake futex
-        // that would be woken by this call is still invalid as an owner.
+        // Check new_requeue_owner is not blocking on EITHER futex.
+        // Matches Fuchsia's check: `blocking_futex_id_ == wake_id ||
+        // blocking_futex_id_ == requeue_id`. Uses the thread's tracked
+        // blocking address rather than scanning the waiter queues,
+        // which avoids false positives from stale waiter entries that
+        // haven't been cleaned up yet (e.g., after a timeout race).
         if let Some(ref owner) = new_requeue_owner {
-            let is_waiter = inner
-                .waiter_queue
-                .iter()
-                .chain(new_inner.waiter_queue.iter())
-                .filter_map(|w| w.thread.as_ref())
-                .any(|t| Arc::ptr_eq(t, owner));
-            if is_waiter {
+            let owner_futex = owner.blocking_futex_addr();
+            if owner_futex == self.user_addr || owner_futex == requeue_futex.user_addr {
                 return Err(ZxError::INVALID_ARGS);
             }
         }
@@ -359,15 +356,12 @@ impl Futex {
 }
 
 impl FutexInner {
-    fn is_valid_new_owner(&self, new_owner: &Option<Arc<Thread>>) -> bool {
+    fn is_valid_new_owner(&self, new_owner: &Option<Arc<Thread>>, futex_addr: usize) -> bool {
         if let Some(new_owner) = &new_owner {
-            // Reject if the new owner is already waiting on this futex.
-            if self
-                .waiter_queue
-                .iter()
-                .filter_map(|waiter| waiter.thread.as_ref())
-                .any(|thread| Arc::ptr_eq(thread, new_owner))
-            {
+            // Reject if the new owner is currently blocking on this futex.
+            // Uses the thread's tracked blocking address, matching
+            // Fuchsia's `blocking_futex_id_` check.
+            if new_owner.blocking_futex_addr() == futex_addr {
                 return false;
             }
         }
@@ -401,9 +395,16 @@ impl Waiter {
         inner.waker.as_ref().unwrap().wake_by_ref();
     }
 
-    /// Reset futex on requeue.
+    /// Reset futex on requeue. Also updates the thread's
+    /// `blocking_futex_addr` to match the new futex, so that
+    /// `futex_requeue`'s owner validation (which checks the thread's
+    /// blocking address, not the queue contents) sees the correct value.
     fn reset_futex(&self, futex: Arc<Futex>) {
+        let new_addr = futex.user_addr;
         self.inner.lock().futex = futex;
+        if let Some(ref thread) = self.thread {
+            thread.set_blocking_futex(new_addr);
+        }
     }
 }
 

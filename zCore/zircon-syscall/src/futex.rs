@@ -54,10 +54,15 @@ impl Syscall<'_> {
             }
             Some(owner)
         };
+        let futex_addr = value_ptr.as_addr();
+        self.thread.inner().set_blocking_futex(futex_addr);
         let future = futex.wait_with_owner(current_value, Some(self.thread.inner()), new_owner);
-        self.thread
+        let result = self
+            .thread
             .blocking_run::<_, (), _>(future, ThreadState::BlockedFutex, deadline.into(), None)
-            .await?;
+            .await;
+        self.thread.inner().set_blocking_futex(0);
+        result?;
         Ok(())
     }
 
@@ -87,9 +92,6 @@ impl Syscall<'_> {
             None
         } else {
             let owner = self.get_thread_with_pseudo(new_requeue_owner)?;
-            // Reject unstarted threads as futex owners.
-            // Dead/dying threads are accepted per Fuchsia spec — the owner
-            // is simply set (and will be cleared when observed).
             let state = owner.state();
             if state == ThreadState::New {
                 return Err(ZxError::INVALID_ARGS);

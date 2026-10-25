@@ -96,6 +96,15 @@ pub use runtime::{
     handle_timeout, init_runtimes, run_until_idle, sched_yield, spawn, spawn_with_priority,
 };
 
+/// Save the kernel page table address for executor context creation.
+/// Must be called once during boot before any timer preemption can
+/// occur. On x86_64, this prevents new executors from inheriting a
+/// user page table via CR3 during preemption.
+#[cfg(target_arch = "x86_64")]
+pub fn set_kernel_page_table(phys: usize) {
+    arch::set_kernel_page_table(phys);
+}
+
 /// Cross-CPU wakeup callback type.
 /// Called with the target CPU ID (APIC ID on x86_64) when a task on
 /// a remote CPU is woken. The implementation should send an IPI to
