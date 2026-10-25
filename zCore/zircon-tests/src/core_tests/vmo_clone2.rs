@@ -593,7 +593,7 @@ fn parent_start_limit_regression() {
 #[test]
 #[cfg_attr(
     not(target_os = "none"),
-    ignore = "SIGSEGV in libos: mock_mem COW mapping not dereferenceable (#680)"
+    ignore = "libos: mock_mem MAP_SHARED cannot implement COW — write through mapping corrupts shared page"
 )]
 fn clone_vmar_write() {
     use crate::helpers::TestContext;
@@ -751,7 +751,7 @@ fn forbid_contiguous_vmo() {
 #[test]
 #[cfg_attr(
     not(target_os = "none"),
-    ignore = "SIGSEGV in libos: mock_mem COW mapping not dereferenceable (#680)"
+    ignore = "libos: mock_mem MAP_SHARED cannot implement COW — 5 clones alias same physical page"
 )]
 fn many_clone_mapping() {
     use zircon_object::task::{Job, Process};

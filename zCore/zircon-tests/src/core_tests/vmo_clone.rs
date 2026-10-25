@@ -141,7 +141,7 @@ fn clone_rights() {
 /// C++: TEST(VmoCloneTestCase, Commit)
 /// Map parent and clone, verify data through mapped pointers.
 #[test]
-#[ignore = "SIGSEGV on Linux CI — mapping operation crashes in libos mode"]
+#[ignore = "libos: mock_mem MAP_SHARED cannot implement COW — write through mapping corrupts shared page (Linux SIGSEGV, macOS passes via MAP_ANON path)"]
 fn clone_commit_via_mapping() {
     let _ctx = TestContext::new();
     let job = Job::root();
