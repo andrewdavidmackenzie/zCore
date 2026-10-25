@@ -21,6 +21,9 @@ static INIT: std::sync::Once = std::sync::Once::new();
 pub fn ensure_hal_init() {
     INIT.call_once(|| {
         hal_impl::init();
+        // Register the COW callback so write faults on COW-mapped
+        // pages are handled by the Zircon kernel's page fault handler.
+        hal_impl::libos_cow::register_cow_callback(zircon_object::vm::vmar::cow_fault_callback);
     });
 }
 

@@ -1272,15 +1272,23 @@ impl VmAddressRegion {
     ///
     /// The fault virtual address is `vaddr` and the reason is in `flags`.
     pub fn handle_page_fault(&self, vaddr: VirtAddr, flags: MMUFlags) -> ZxResult {
+        // Find the child VMAR or mapping containing the faulting address.
+        // Drop the VMAR lock before calling into the mapping's fault
+        // handler to avoid deadlocks when the COW copy triggers
+        // range_change operations that re-enter the VMAR.
         let guard = self.inner.lock();
         let inner = guard.as_ref().unwrap();
         if !self.contains(vaddr) {
             return Err(ZxError::NOT_FOUND);
         }
         if let Some(child) = inner.children.iter().find(|ch| ch.contains(vaddr)) {
+            let child = child.clone();
+            drop(guard);
             return child.handle_page_fault(vaddr, flags);
         }
         if let Some(mapping) = inner.mappings.iter().find(|map| map.contains(vaddr)) {
+            let mapping = mapping.clone();
+            drop(guard);
             return mapping.handle_page_fault(vaddr, flags);
         }
         Err(ZxError::NOT_FOUND)
@@ -2983,4 +2991,45 @@ mod tests {
             .op_range(VmarOpType::MapRange, mapped_addr, PAGE_SIZE)
             .is_ok());
     }
+}
+
+// ── Libos COW fault handling ────────────────────────────────────
+
+/// Global list of root VMARs for COW fault lookup.
+/// Stored as Weak references — automatically cleaned when processes drop.
+static COW_VMARS: lock::Mutex<Vec<alloc::sync::Weak<VmAddressRegion>>> =
+    lock::Mutex::new(Vec::new());
+
+/// Register a root VMAR for COW fault handling.
+pub fn register_cow_vmar(vmar: &Arc<VmAddressRegion>) {
+    let mut list = COW_VMARS.lock();
+    list.retain(|w| w.strong_count() > 0);
+    list.push(Arc::downgrade(vmar));
+}
+
+/// Handle a COW write fault. Called from the signal handler.
+pub fn handle_cow_fault(vaddr: usize) -> bool {
+    let list = COW_VMARS.lock();
+    // Don't include USER — per-page flags in libos mode don't track USER.
+    let flags = MMUFlags::READ | MMUFlags::WRITE;
+    for weak in list.iter() {
+        if let Some(vmar) = weak.upgrade() {
+            if vmar.contains(vaddr) {
+                drop(list);
+                match vmar.handle_page_fault(vaddr, flags) {
+                    Ok(()) => return true,
+                    Err(e) => {
+                        log::warn!("COW handle_page_fault({:#x}) failed: {:?}", vaddr, e);
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Function pointer for `register_cow_callback`.
+pub fn cow_fault_callback(vaddr: usize) -> bool {
+    handle_cow_fault(vaddr)
 }

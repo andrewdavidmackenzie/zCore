@@ -1,7 +1,7 @@
 //! Objects for Virtual Memory Management.
 
 mod stream;
-mod vmar;
+pub mod vmar;
 mod vmo;
 
 pub use self::{stream::*, vmar::*, vmo::*};

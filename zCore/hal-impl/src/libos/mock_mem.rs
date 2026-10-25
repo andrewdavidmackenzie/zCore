@@ -358,9 +358,19 @@ impl MockMemory {
                 );
             }
         }
-        // Non-executable pages stay RW (the anonymous mapping default).
-        // The data is synced to PMEM via write() below, not via mmap
-        // sharing, since these are MAP_PRIVATE pages.
+        // For non-executable pages: apply the requested protection.
+        // COW pages are mapped READ-only by VmMapping::map() — the
+        // mprotect ensures a write fault (SIGBUS on macOS) is generated
+        // so the COW handler can copy the page and remap with WRITE.
+        if !prot.contains(MMUFlags::EXECUTE) {
+            let p = mmu_flags_to_prot(prot) - ProtFlags::PROT_EXEC;
+            if let Err(err) = unsafe { mman::mprotect(aligned_vaddr as _, aligned_len, p) } {
+                warn!(
+                    "mprotect failed: vaddr={:#x}, len={:#x}, prot={:?}: {:?}",
+                    aligned_vaddr, aligned_len, prot, err
+                );
+            }
+        }
         true
     }
 
