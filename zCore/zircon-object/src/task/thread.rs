@@ -263,10 +263,31 @@ type ThreadFuturePinned = Pin<Box<ThreadFuture>>;
 /// `DEFAULT_PRIORITY` (midpoint of 0-31 range).
 pub const ZIRCON_DEFAULT_PRIORITY: usize = 16;
 
-/// Default time slice quantum (nanoseconds). Matches Fuchsia's
-/// `kDefaultFairPeriod` (10ms). When a thread accumulates this
-/// much CPU time, it yields to other same-priority threads.
-pub const DEFAULT_TIME_SLICE_NS: u64 = 10_000_000; // 10ms
+/// Base scheduling period (nanoseconds). Matches Fuchsia's
+/// `kDefaultFairPeriod` (10ms).
+pub const FAIR_PERIOD_NS: u64 = 10_000_000; // 10ms
+
+/// Weight table: maps priority 0-31 to a fixed-point weight (10 fractional bits).
+/// `weight = round(1024 * 1.1^(priority - 31))`
+/// Priority 31 = 1024 (1.0), Priority 16 = 245 (~0.24), Priority 0 = 53 (~0.05)
+const WEIGHT_TABLE: [u32; 32] = [
+    53, 59, 65, 71, 78, 86, 95, 104, 114, 126, 138, 152, 167, 184, 203, 223, 245, 270, 297, 326,
+    359, 395, 434, 478, 525, 578, 636, 699, 769, 846, 931, 1024,
+];
+
+/// Calculate the time slice quantum (nanoseconds) for a given priority.
+/// Higher priority = larger weight = longer time slice within the
+/// strict-priority scheduler. Note: this provides priority-dependent
+/// quanta (how long a thread runs before yielding to same-priority
+/// peers), NOT cross-priority proportional sharing. A higher-priority
+/// thread always preempts a lower-priority one regardless of quanta.
+pub fn priority_to_time_slice_ns(priority: usize) -> u64 {
+    let p = priority.min(31);
+    let weight = WEIGHT_TABLE[p] as u64;
+    // time_slice = FAIR_PERIOD * (weight / 1024)
+    // Minimum 0.5ms to prevent starvation
+    (FAIR_PERIOD_NS * weight / 1024).max(500_000)
+}
 
 /// The type of a new thread function.
 pub type ThreadFn = fn(thread: CurrentThread) -> ThreadFuturePinned;
@@ -306,7 +327,7 @@ impl Thread {
             inner: Mutex::new(ThreadInner {
                 context: Some(Box::new(UserContext::new())),
                 priority: ZIRCON_DEFAULT_PRIORITY,
-                time_slice_ns: DEFAULT_TIME_SLICE_NS,
+                time_slice_ns: priority_to_time_slice_ns(ZIRCON_DEFAULT_PRIORITY),
                 cpu_affinity_mask: {
                     let mut mask = [0u64; 8];
                     mask[0] = 1; // Default: CPU 0 available
@@ -363,6 +384,8 @@ impl Thread {
         let task_sched = {
             let mut inner = self.inner.lock();
             inner.priority = new_priority;
+            // Recalculate the time slice quantum for the new priority.
+            inner.time_slice_ns = priority_to_time_slice_ns(new_priority);
             inner.task_sched
         };
         if let Some((task_key, task_cpu)) = task_sched {
