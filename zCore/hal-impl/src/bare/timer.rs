@@ -84,6 +84,7 @@ hal_fn_impl! {
             timer.expire(now);
             // Re-arm to the next deadline under the lock.
             update_platform_timer_locked(&timer);
+
         }
     }
 }

@@ -1,7 +1,3 @@
-# ── Hangs after PR #775 SignalFuture fix ──
-# C11ThreadTest.SelfDetachAndFree — fixed by THREAD_LEGACY_YIELD (#780)
-FutexTest.RequeueCycleStressTest
-
 # ── PortStressTest: Thread C join hang after channel_call loop ──
 # All 51000 channel_calls complete in ~3s (one-shot timer), but
 # t_c.join() hangs: Thread C's wait_one(READABLE, infinite) is not

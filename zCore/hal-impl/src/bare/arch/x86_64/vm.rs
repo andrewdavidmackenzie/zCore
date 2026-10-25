@@ -21,6 +21,9 @@ static KERNEL_PAGE_TABLE: core::sync::atomic::AtomicU64 = core::sync::atomic::At
 pub fn save_kernel_page_table() {
     let current = Cr3::read().0.start_address().as_u64();
     KERNEL_PAGE_TABLE.store(current, core::sync::atomic::Ordering::Relaxed);
+    // Tell the executor to use this CR3 for new contexts, not
+    // whatever CR3 happens to be active during timer preemption.
+    executor::set_kernel_page_table(current as usize);
 }
 
 /// Switch this CPU to the kernel page table and clear active tracking.

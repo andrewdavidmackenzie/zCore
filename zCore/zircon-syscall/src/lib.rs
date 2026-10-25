@@ -837,6 +837,7 @@ impl Syscall<'_> {
         );
 
         let [a0, a1, a2, a3, a4, a5, a6, a7] = args;
+
         let ret = match sys_type {
             Sys::HANDLE_CLOSE => self.sys_handle_close(a0 as _),
             Sys::HANDLE_CLOSE_MANY => self.sys_handle_close_many(a0.into(), a1 as _),

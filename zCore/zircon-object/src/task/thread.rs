@@ -165,6 +165,13 @@ struct ThreadInner {
     /// signalled but not yet delivered, matching Fuchsia's
     /// `THREAD_SIGNAL_POLICY_EXCEPTION` deferred delivery model.
     pending_policy_exception: Option<(u32, u32)>,
+    /// The user-space address of the futex this thread is currently
+    /// blocked on, or 0 if not blocking on any futex. Matches Fuchsia's
+    /// `blocking_futex_id_`. Set when entering `futex_wait`, cleared
+    /// when the wait completes (woken, timed out, or cancelled).
+    /// Used by `futex_requeue` to validate the proposed new owner
+    /// without scanning the waiter queues.
+    pub(crate) blocking_futex_addr: usize,
     /// Scheduling priority (0 = lowest, 31 = highest).
     /// Default is `ZIRCON_DEFAULT_PRIORITY` (16), matching Fuchsia.
     /// Set via `zx_object_set_profile()`.
@@ -535,6 +542,17 @@ impl Thread {
     /// Get the thread state.
     pub fn state(&self) -> ThreadState {
         self.inner.lock().state()
+    }
+
+    /// Set the futex address this thread is blocking on.
+    /// Called when entering `futex_wait`. Cleared (set to 0) on exit.
+    pub fn set_blocking_futex(&self, addr: usize) {
+        self.inner.lock().blocking_futex_addr = addr;
+    }
+
+    /// Get the futex address this thread is blocking on (0 = none).
+    pub fn blocking_futex_addr(&self) -> usize {
+        self.inner.lock().blocking_futex_addr
     }
 
     /// Check if the thread has a pending suspend (suspend_count > 0).

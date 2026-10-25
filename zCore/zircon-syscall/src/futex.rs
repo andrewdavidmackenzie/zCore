@@ -87,9 +87,6 @@ impl Syscall<'_> {
             None
         } else {
             let owner = self.get_thread_with_pseudo(new_requeue_owner)?;
-            // Reject unstarted threads as futex owners.
-            // Dead/dying threads are accepted per Fuchsia spec — the owner
-            // is simply set (and will be cleared when observed).
             let state = owner.state();
             if state == ThreadState::New {
                 return Err(ZxError::INVALID_ARGS);
