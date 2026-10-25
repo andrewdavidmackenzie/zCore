@@ -178,11 +178,15 @@ struct ThreadInner {
     priority: usize,
     /// Per-thread time slice quantum (nanoseconds). When the thread
     /// accumulates this much CPU time since last preemption, it yields
-    /// to other same-priority threads. Default: 10ms.
+    /// to other same-priority threads. For fair threads: derived from
+    /// priority weight. For deadline threads: set to capacity.
     time_slice_ns: u64,
     /// CPU time accumulated since the last preemption yield (nanoseconds).
     /// Reset when the thread does a preempt_yield.
     time_slice_used_ns: u64,
+    /// Deadline scheduling parameters, if this thread has a deadline
+    /// profile applied. `None` for fair-scheduled threads.
+    deadline_params: Option<super::profile::SchedDeadlineParams>,
     /// CPU affinity mask. Bit N set means the thread may run on CPU N.
     /// Default: all online CPUs (bit 0 for single-CPU).
     /// Set via `zx_object_set_profile()` with CPU_MASK flag.
@@ -391,6 +395,30 @@ impl Thread {
         if let Some((task_key, task_cpu)) = task_sched {
             hal_impl::thread::change_task_priority(task_cpu, task_key, new_priority);
         }
+    }
+
+    /// Set deadline scheduling parameters.
+    ///
+    /// The thread is scheduled at priority 31 (highest) with its
+    /// time slice set to the deadline capacity. This ensures deadline
+    /// threads preempt all fair threads and run for exactly their
+    /// requested capacity per period.
+    pub fn set_deadline(&self, params: super::profile::SchedDeadlineParams) {
+        let task_sched = {
+            let mut inner = self.inner.lock();
+            inner.priority = 31; // Deadline threads run at highest priority
+            inner.time_slice_ns = params.capacity.max(0) as u64;
+            inner.deadline_params = Some(params);
+            inner.task_sched
+        };
+        if let Some((task_key, task_cpu)) = task_sched {
+            hal_impl::thread::change_task_priority(task_cpu, task_key, 31);
+        }
+    }
+
+    /// Get the deadline parameters, if any.
+    pub fn deadline_params(&self) -> Option<super::profile::SchedDeadlineParams> {
+        self.inner.lock().deadline_params
     }
 
     /// Set the CPU affinity mask for this thread.
