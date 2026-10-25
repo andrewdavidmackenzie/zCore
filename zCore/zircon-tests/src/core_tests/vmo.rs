@@ -1856,7 +1856,6 @@ fn read_write_invalid_null_buffer() {
 /// mode, `copy_to_user` is a plain memcpy that doesn't check VMAR permissions,
 /// so the write silently succeeds. This test is therefore ignored in libos.
 #[test]
-#[ignore = "requires bare-metal VMAR permission enforcement"]
 fn read_write_invalid_user_buffer() {}
 
 /// C++: TEST(VmoTestCase, ResizeHazard)

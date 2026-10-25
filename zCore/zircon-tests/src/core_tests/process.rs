@@ -876,7 +876,6 @@ async fn suspend_twice_before_creating_threads() {
 /// Ignored: hangs on slow ARM emulation (ubuntu-24.04-arm CI) due
 /// to async scheduling not giving threads a chance to run.
 #[async_std::test]
-#[ignore]
 async fn suspend_with_dying_thread() {
     use crate::helpers;
     use zircon_object::task::Task;
