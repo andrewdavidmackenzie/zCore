@@ -60,6 +60,21 @@ impl ContextAccessState for UserContext {
                 buf[..4].copy_from_slice(&0u32.to_ne_bytes());
                 Ok(4)
             }
+            #[cfg(target_arch = "x86_64")]
+            ThreadStateKind::Debug => {
+                // zx_x86_64_thread_state_debug_regs_t: dr[4] + dr6 + dr7 = 48 bytes
+                const DEBUG_SIZE: usize = 6 * 8;
+                if buf.len() < DEBUG_SIZE {
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let dr = &self.debug_regs;
+                for (i, &val) in dr.dr.iter().enumerate() {
+                    buf[i * 8..(i + 1) * 8].copy_from_slice(&val.to_ne_bytes());
+                }
+                buf[32..40].copy_from_slice(&dr.dr6.to_ne_bytes());
+                buf[40..48].copy_from_slice(&dr.dr7.to_ne_bytes());
+                Ok(DEBUG_SIZE)
+            }
             _ => Err(ZxError::NOT_SUPPORTED),
         }
     }
@@ -131,6 +146,19 @@ impl ContextAccessState for UserContext {
                 // (trap flag) in RFLAGS. We don't actually enforce it
                 // here — just accept the value.
                 // TODO: set TF in self.general_mut().rflags
+            }
+            #[cfg(target_arch = "x86_64")]
+            ThreadStateKind::Debug => {
+                const DEBUG_SIZE: usize = 6 * 8;
+                if buf.len() < DEBUG_SIZE {
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let dr = &mut self.debug_regs;
+                for i in 0..4 {
+                    dr.dr[i] = u64::from_ne_bytes(buf[i * 8..(i + 1) * 8].try_into().unwrap());
+                }
+                dr.dr6 = u64::from_ne_bytes(buf[32..40].try_into().unwrap());
+                dr.dr7 = u64::from_ne_bytes(buf[40..48].try_into().unwrap());
             }
             _ => return Err(ZxError::NOT_SUPPORTED),
         }
