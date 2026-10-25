@@ -222,13 +222,32 @@ fn register_fs_noncanonical() {
         ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
-    // C++: kNoncanonicalValue — bit 48 set, bit 47 clear → non-canonical.
-    let val: usize = 0x1010_1010_1010_1010;
-    let val_bytes = val.to_ne_bytes();
-    let err = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
+
     if cfg!(target_arch = "x86_64") {
+        // Set a known-good initial value first (C++: kInitialValue).
+        let initial: usize = 0xdead1;
+        let initial_bytes = initial.to_ne_bytes();
+        set_property(&ctx, thread_h, PROP_REGISTER_FS, &initial_bytes).unwrap();
+
+        // Attempt to set non-canonical value — must fail.
+        // C++: kNoncanonicalValue — bit 48 set, bit 47 clear → non-canonical.
+        let val: usize = 0x1010_1010_1010_1010;
+        let val_bytes = val.to_ne_bytes();
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
         assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+
+        // Old value must be preserved (C++: read_prop == kInitialValue).
+        let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+        get_property(&ctx, thread_h, PROP_REGISTER_FS, &mut read_buf).unwrap();
+        let read_value = usize::from_ne_bytes(read_buf);
+        assert_eq!(
+            read_value, initial,
+            "old FS value must be preserved after rejected set"
+        );
     } else {
+        let val: usize = 0x1010_1010_1010_1010;
+        let val_bytes = val.to_ne_bytes();
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
         assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
     }
 }
@@ -376,13 +395,31 @@ fn register_gs_noncanonical() {
         ctx.current.inner().clone(),
         Rights::GET_PROPERTY | Rights::SET_PROPERTY,
     ));
-    // C++: kNoncanonicalValue — bit 48 set, bit 47 clear → non-canonical.
-    let val: usize = 0x1010_1010_1010_1010;
-    let val_bytes = val.to_ne_bytes();
-    let err = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
+
     if cfg!(target_arch = "x86_64") {
+        // Set a known-good initial value first (C++: kInitialValue).
+        let initial: usize = 0xdead1;
+        let initial_bytes = initial.to_ne_bytes();
+        set_property(&ctx, thread_h, PROP_REGISTER_GS, &initial_bytes).unwrap();
+
+        // Attempt to set non-canonical value — must fail.
+        let val: usize = 0x1010_1010_1010_1010;
+        let val_bytes = val.to_ne_bytes();
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
         assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+
+        // Old value must be preserved (C++: read_prop == kInitialValue).
+        let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+        get_property(&ctx, thread_h, PROP_REGISTER_GS, &mut read_buf).unwrap();
+        let read_value = usize::from_ne_bytes(read_buf);
+        assert_eq!(
+            read_value, initial,
+            "old GS value must be preserved after rejected set"
+        );
     } else {
+        let val: usize = 0x1010_1010_1010_1010;
+        let val_bytes = val.to_ne_bytes();
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
         assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
     }
 }

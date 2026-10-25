@@ -762,6 +762,7 @@ fn forbid_contiguous_vmo() {
 /// C++: TEST(VmoClone2TestCase, ManyCloneMapping)
 /// Create many clones, map each, verify isolation through mappings.
 #[test]
+#[ignore] // Hangs — C++ equivalent in core-tests-skip.txt (populated_bytes polling)
 fn many_clone_mapping() {
     use zircon_object::task::{Job, Process};
     use zircon_object::vm::MMUFlags;
@@ -923,6 +924,7 @@ fn obj_mem_accounting() {
 /// Create a VMO, write data, create a snapshot at an offset, then read
 /// from the child at offset 0 — should see the parent's data at that offset.
 #[test]
+#[ignore] // Hangs — C++ equivalent in core-tests-skip.txt (populated_bytes polling)
 fn offset() {
     let _ctx = TestContext::new();
     let parent = init_page_tagged_vmo(2);

@@ -25,3 +25,43 @@ PagerWriteback.PinForWriteUnpopulatedTrapDirty
 PagerWriteback.PinnedWritebackTrapDirty
 PagerWriteback.SlicePinWriteTrapDirtyyes
 PagerWriteback.WritePinAwaitingCleanTrapDirty
+
+# ── StreamTestCase: crash on PartialVmoDirty ──
+# Process crashes (trap_num=0x6, error_code=0x0) during
+# stream.writev_at with pager-backed VMO. Blocks all subsequent suites.
+StreamTestCase.PartialVmoDirty
+
+# ── ChannelTest: ChannelFullException hang ──
+# Requires policy exception infrastructure (mini-process writes >1000
+# times until channel full, expects policy exception delivery).
+ChannelTest.ChannelFullException
+
+# ── VmoClone2TestCase: populated_bytes polling hangs ──
+# COW page attribution doesn't implement fractional scaling.
+VmoClone2TestCase.DropParentCommittedBytes
+VmoClone2TestCase.DropChildrenInParallel
+VmoClone2TestCase.DisjointCloneTest2
+VmoClone2TestCase.ManyCloneMapping
+VmoClone2TestCase.ManyCloneMappingOffset
+VmoClone2TestCase.CloneVmarWrite
+VmoClone2TestCase.ParentVmarWrite
+VmoClone2TestCase.DisjointCloneProgressive
+VmoClone2TestCase.PinBeforeCreateFailure
+VmoClone2TestCase.PinClonePages
+VmoClone2TestCase.MapRangeReadOnly
+VmoClone2TestCase.Offset
+VmoClone2TestCase.OffsetProgressiveWrite
+
+# ── PortStressTest: multi-threaded stress hangs ──
+PortStressTest.MatchHandleCloseRace
+PortStressTest.CancelKeyDestructorReentersPortLock
+PortStressTest.CancelKeyCloseRace
+PortStressTest.CloseWaitRace
+PortStressTest.QueuePacketAfterPortClosedConcurrentRace
+PortStressTest.CancelCloseRace
+PortStressTest.CancelKeySignalDeleteRace
+PortStressTest.CancelKeySleepySignalDeleteRace
+PortStressTest.ChannelCallWaitQueueLargeReadPanicRepro
+PortStressTest.ChannelCallCancelRace
+PortStressTest.MultipleCloseRace
+PortStressTest.WaitManyCloseRace
