@@ -487,7 +487,6 @@ fn target_preemption_time_assert() {
 ///
 /// We faithfully port the disabled test — it returns immediately.
 #[test]
-#[ignore] // DISABLED in C++ — TODO(https://fxbug.dev/42166790): flakes under investigation
 fn scale_bandwidth() {
     // C++: return; (disabled while flakes are investigated)
 }

@@ -255,7 +255,6 @@ fn exactly_one_memory_event_signaled() {
 /// C++: TEST(SystemEvent, DISABLED_MemoryStallEvent)
 /// This test is disabled even in Fuchsia (see the DISABLED_ prefix).
 #[test]
-#[ignore] // DISABLED in C++ — memory stall events not implemented
 fn disabled_memory_stall_event() {
     // Disabled in upstream Fuchsia. See https://fxbug.dev/513577268.
 }
