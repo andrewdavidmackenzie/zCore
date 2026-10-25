@@ -289,13 +289,12 @@ fn array_initializer_spam_thread() {
 
                             value = starting_value;
                             for (offset, byte) in arr.iter().enumerate() {
-                                if *byte != value {
-                                    panic!(
-                                        "BackgroundThread: Unexpected initialized value: \
-                                         thread={} ExpectedValue={} ActualValue={} FailureOffset={}",
-                                        index, value, *byte, offset
-                                    );
-                                }
+                                assert_eq!(
+                                    *byte, value,
+                                    "BackgroundThread: TLS corruption: \
+                                     thread={} ExpectedValue={} ActualValue={} FailureOffset={}",
+                                    index, value, *byte, offset
+                                );
                                 value = value.wrapping_add(1);
                             }
                         }
@@ -332,13 +331,12 @@ fn array_initializier_spam_main() {
 
             value = starting_value;
             for (offset, byte) in arr.iter().enumerate() {
-                if *byte != value {
-                    panic!(
-                        "MainThread: Unexpected initialized value: \
-                         ExpectedValue={} ActualValue={} FailureOffset={}",
-                        value, *byte, offset
-                    );
-                }
+                assert_eq!(
+                    *byte, value,
+                    "MainThread: TLS corruption: \
+                     ExpectedValue={} ActualValue={} FailureOffset={}",
+                    value, *byte, offset
+                );
                 value = value.wrapping_add(1);
             }
         }

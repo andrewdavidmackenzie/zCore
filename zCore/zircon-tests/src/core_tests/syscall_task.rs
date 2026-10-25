@@ -188,17 +188,42 @@ fn job_max_height_smoke() {
     ));
 
     // Create a chain of jobs (max height is 32)
+    let depth = 10;
     let mut handles = Vec::new();
-    for _ in 0..10 {
+    for i in 0..depth {
         let mut child_h: HandleValue = 0;
-        sc.sys_job_create(
+        let result = sc.sys_job_create(
             parent_h,
             0,
             UserOutPtr::from(&mut child_h as *mut _ as usize),
-        )
-        .unwrap();
+        );
+        assert!(
+            result.is_ok(),
+            "creating job at depth {} should succeed (max height is 32)",
+            i + 1
+        );
+        assert_ne!(child_h, 0, "created job handle should be non-zero");
         handles.push(child_h);
         parent_h = child_h;
+    }
+
+    // Verify we created the expected number of jobs.
+    assert_eq!(
+        handles.len(),
+        depth,
+        "should have created {} nested jobs",
+        depth
+    );
+
+    // Each handle should be unique.
+    for i in 0..handles.len() {
+        for j in (i + 1)..handles.len() {
+            assert_ne!(
+                handles[i], handles[j],
+                "job handles at depths {} and {} should be distinct",
+                i, j
+            );
+        }
     }
 
     // Clean up

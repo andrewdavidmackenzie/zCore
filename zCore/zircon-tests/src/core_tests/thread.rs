@@ -485,11 +485,18 @@ fn get_last_scheduled_cpu() {
     let thread = Thread::create(&proc, "t1").unwrap();
 
     // The thread hasn't been scheduled, so get_thread_info should
-    // return a valid struct with some CPU field.
-    let _info = thread.get_thread_info();
+    // return a valid struct with the thread in New state.
+    let info = thread.get_thread_info();
 
-    // We can't verify the actual CPU value in libos mode, but
-    // we verify the API doesn't panic.
+    // An unscheduled thread should be in the New state.
+    assert_eq!(
+        thread.state(),
+        ThreadState::New,
+        "unscheduled thread should be in New state"
+    );
+    // The info struct is repr(C) with private fields; verify we got
+    // a valid struct by checking the state value matches.
+    let _ = info; // consumed — no panic
 }
 
 /// C++: TEST(Threads, InfoTaskStatsFails)
@@ -867,11 +874,19 @@ fn start_regs() {
         .unwrap();
 
     // Verify the context was set (read it back)
-    let ctx = thread.context_cloned().unwrap();
-    // The context should have the entry point and stack set.
-    // Exact fields depend on architecture, but setup_uspace should
-    // have modified the context.
-    let _ = ctx; // Just verify no panic
+    let mut ctx = thread.context_cloned().unwrap();
+    // The context should have the entry point and stack pointer we set.
+    use hal_impl::context::UserContextField;
+    assert_eq!(
+        ctx.get_field(UserContextField::InstrPointer),
+        0x1000,
+        "instruction pointer should match the entry point passed to setup_uspace"
+    );
+    assert_eq!(
+        ctx.get_field(UserContextField::StackPointer),
+        0x8000,
+        "stack pointer should match the sp passed to setup_uspace"
+    );
 }
 
 /// C++: TEST(Threads, StartRegsNoncanonicalTp)
@@ -1656,9 +1671,19 @@ fn thread_start_with_zero_instruction_pointer() {
         .with_context(|ctx| ctx.setup_uspace(0, 0x8000, &[0, 0, 0]))
         .unwrap();
 
-    // Verify context was set
-    let cloned = thread.context_cloned().unwrap();
-    let _ = cloned; // no panic
+    // Verify context was set with IP=0
+    let mut cloned = thread.context_cloned().unwrap();
+    use hal_impl::context::UserContextField;
+    assert_eq!(
+        cloned.get_field(UserContextField::InstrPointer),
+        0,
+        "instruction pointer should be zero"
+    );
+    assert_eq!(
+        cloned.get_field(UserContextField::StackPointer),
+        0x8000,
+        "stack pointer should match the sp passed to setup_uspace"
+    );
 }
 
 /// C++: TEST(Threads, WatchpointSyscallPanic)

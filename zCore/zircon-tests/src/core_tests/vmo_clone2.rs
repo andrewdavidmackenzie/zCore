@@ -414,6 +414,11 @@ fn resize_over_sibling_range() {
     vmo_write(&vmo, 2, PAGE_SIZE);
     vmo_write(&vmo, 3, 2 * PAGE_SIZE);
     vmo_write(&vmo, 4, 3 * PAGE_SIZE);
+
+    // Verify the writes stuck.
+    vmo_check(&vmo, 2, PAGE_SIZE);
+    vmo_check(&vmo, 3, 2 * PAGE_SIZE);
+    vmo_check(&vmo, 4, 3 * PAGE_SIZE);
 }
 
 /// Helper for ManyChildren / ManyChildrenRevClose tests.
@@ -539,6 +544,11 @@ fn marker_clears_split_bits() {
     // Create another child and fork the same page again. Should succeed.
     let child2 = vmo.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
     child2.write(PAGE_SIZE, &val.to_ne_bytes()).unwrap();
+
+    // Verify the forked page has the expected value.
+    vmo_check(&child2, val, PAGE_SIZE);
+    // Parent should still have the original value.
+    vmo_check(&vmo, val, PAGE_SIZE);
 }
 
 /// C++: TEST_F(VmoClone2TestCase, ParentStartLimitRegression)
@@ -581,10 +591,17 @@ fn parent_start_limit_regression() {
     drop(vmo_m);
 
     // Turn H into a hidden parent by creating a child.
-    let _vmo_hc = vmo_h.create_child(false, 0, PAGE_SIZE).unwrap();
+    let vmo_hc = vmo_h.create_child(false, 0, PAGE_SIZE).unwrap();
 
     // This is where the kernel would assert/panic without the fix.
+    // The drop of vmo_c triggers a hidden-node merge that exercises
+    // the parent_start_limit calculation. If the regression is
+    // present, this panics.
     drop(vmo_c);
+
+    // Verify surviving VMOs are still readable (merge didn't corrupt).
+    vmo_check(&vmo_h, 0, 0);
+    vmo_check(&vmo_hc, 0, 0);
 }
 
 /// C++: TEST(VmoClone2TestCase, CloneVmarWrite)
@@ -990,29 +1007,30 @@ fn parent_vmar_write() {
 }
 
 /// C++: TEST(VmoClone2TestCase, PinBeforeCreateFailure)
-/// Try to pin a VMO, then create a snapshot. Pinned VMOs may
-/// reject snapshot creation.
+/// Pinning a VMO prevents snapshot creation (ZX_ERR_BAD_STATE).
+/// After unpinning, snapshot creation succeeds.
 #[test]
 fn pin_before_create_failure() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
     vmo_write(&vmo, 42, 0);
 
-    // Try to pin (may fail with NOT_SUPPORTED for paged VMOs).
-    let pin_result = vmo.pin(0, PAGE_SIZE);
+    // Pin the page.
+    vmo.pin(0, PAGE_SIZE).unwrap();
 
-    // Regardless of pin result, try to create a snapshot.
+    // Snapshot must fail while pages are pinned.
     let snap_result = vmo.create_child(false, 0, PAGE_SIZE);
-    if pin_result.is_ok() {
-        // If pinned, snapshot may be rejected.
-        // Either way, unpin.
-        let _ = vmo.unpin(0, PAGE_SIZE);
-    }
+    assert!(
+        snap_result.is_err(),
+        "snapshot of pinned VMO should fail with BAD_STATE"
+    );
 
-    // If snapshot succeeded, verify it works.
-    if let Ok(child) = snap_result {
-        vmo_check(&child, 42, 0);
-    }
+    // Unpin the page.
+    vmo.unpin(0, PAGE_SIZE).unwrap();
+
+    // Snapshot should succeed after unpin.
+    let child = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
+    vmo_check(&child, 42, 0);
 }
 
 /// C++: TEST(VmoClone2TestCase, PinClonePages)

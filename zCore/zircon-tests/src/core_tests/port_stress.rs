@@ -51,7 +51,14 @@ fn cancel_key_close_race() {
 
     port.cancel_async_and_drain(event.id(), 1).unwrap();
     drop(event);
-    // No crash — cancel before close is safe.
+
+    // After cancel + close, the port should have no queued packets.
+    // Verify by checking that the port has no READABLE signal.
+    assert_eq!(
+        port.signal(),
+        Signal::empty(),
+        "port should have no queued packets after cancel and event close"
+    );
 }
 
 /// C++: TEST(PortStressTest, CancelKeyDestructorReentersPortLock)
@@ -61,7 +68,8 @@ fn cancel_key_destructor_reenters_port_lock() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
-    let events: alloc::vec::Vec<_> = (0..10)
+    let num_events = 10;
+    let events: alloc::vec::Vec<_> = (0..num_events)
         .map(|_| zircon_object::signal::Event::new())
         .collect();
 
@@ -72,13 +80,30 @@ fn cancel_key_destructor_reenters_port_lock() {
             .unwrap();
     }
 
-    // Cancel all, then drop.
+    // Cancel all observers — each cancel should succeed or return
+    // NOT_FOUND (already cleaned up).
+    let mut cancelled = 0usize;
     for (i, event) in events.iter().enumerate() {
-        let _ = port.cancel_async_and_drain(event.id(), i as u64);
+        if port.cancel_async_and_drain(event.id(), i as u64).is_ok() {
+            cancelled += 1;
+        }
     }
+    assert_eq!(
+        cancelled, num_events,
+        "all {} observers should be cancelled successfully",
+        num_events
+    );
+
+    // After cancelling all observers, port should be empty.
+    assert_eq!(
+        port.signal(),
+        Signal::empty(),
+        "port should be empty after cancelling all observers"
+    );
+
     drop(events);
     drop(port);
-    // No deadlock or panic.
+    // No deadlock or panic — test completed successfully.
 }
 
 /// C++: TEST(PortStressTest, CancelKeyDuringMatchRace)
@@ -184,6 +209,7 @@ fn channel_call_wait_queue_panic_repro() {
 /// Sequential: queue a packet then drop the port. No crash.
 #[test]
 fn close_wait_race() {
+    use zircon_object::object::Signal;
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
@@ -193,8 +219,15 @@ fn close_wait_race() {
         data: PayloadRepr::User([0; 32]),
     };
     port.push_user(PortPacket::from(packet)).unwrap();
+
+    // After queuing, port should be readable.
+    assert!(
+        port.signal().contains(Signal::READABLE),
+        "port should be readable after queuing a packet"
+    );
+
     drop(port);
-    // No crash.
+    // No crash — dropping a port with queued packets is safe.
 }
 
 /// C++: TEST(PortStressTest, MatchHandleCloseRace)
@@ -224,10 +257,12 @@ fn match_handle_close_race() {
 /// Sequential: queue then drop. No crash.
 #[test]
 fn queue_packet_after_port_closed_concurrent_race() {
+    use zircon_object::object::Signal;
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
 
-    for i in 0u64..10 {
+    let num_packets = 10u64;
+    for i in 0..num_packets {
         let packet = PortPacketRepr {
             key: i,
             status: zircon_object::ZxError::OK,
@@ -235,7 +270,16 @@ fn queue_packet_after_port_closed_concurrent_race() {
         };
         port.push_user(PortPacket::from(packet)).unwrap();
     }
+
+    // All 10 packets queued — port should be readable.
+    assert!(
+        port.signal().contains(Signal::READABLE),
+        "port should be readable after queuing {} packets",
+        num_packets
+    );
+
     drop(port);
+    // No crash — dropping a port with multiple queued packets is safe.
 }
 
 /// C++: TEST(PortStressTest, SignalCloseWait)

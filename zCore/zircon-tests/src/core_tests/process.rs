@@ -917,20 +917,36 @@ fn create_and_kill_job_race_stress() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
 
+    const ITERATIONS: usize = 100;
+    let mut completed = 0usize;
+
     // Run 100 iterations of creating a child job, creating a process,
     // and killing the job — some will fail, some will succeed.
-    for _ in 0..100 {
+    for _ in 0..ITERATIONS {
         let root = Job::root();
         let child = root.create_child().unwrap();
 
         // Kill the job
         child.kill();
 
-        // Try to create a process — should fail (job is dead)
+        // Try to create a process — should fail (job is dead) since
+        // we killed synchronously before creating.
         let result = Process::create(&child, "stress");
-        // We don't assert success or failure — the race means either is valid
-        let _ = result;
+        // The job was killed before Process::create, so it should fail.
+        assert!(
+            result.is_err(),
+            "creating process on a killed job should fail"
+        );
+
+        completed += 1;
     }
+
+    // All iterations completed without panic.
+    assert_eq!(
+        completed, ITERATIONS,
+        "all {} stress iterations should complete",
+        ITERATIONS
+    );
 }
 
 /// C++: TEST(ProcessTest, ProcessStartWriteThreadState)

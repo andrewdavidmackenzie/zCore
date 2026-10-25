@@ -40,9 +40,21 @@ fn eventpair_signal_peer_via_syscall() {
     // Signal peer (USER_SIGNAL_0 = 1 << 24)
     sc.sys_object_signal_peer(h0, 0, 1 << 24).unwrap();
 
-    // h0 should not have the signal, but h1 should
-    // (We can't easily read signals without wait_one, but we can
-    //  verify the syscall succeeded without error)
+    // Verify h1 has the signal via wait_one with zero timeout.
+    let mut observed = zircon_object::object::Signal::empty();
+    let out = UserOutPtr::from(&mut observed as *mut _ as usize);
+    let result = async_std::task::block_on(sc.sys_object_wait_one(
+        h1,
+        1 << 24, // USER_SIGNAL_0
+        zircon_syscall::Deadline::from(0usize),
+        out,
+    ));
+    assert!(result.is_ok(), "h1 should have USER_SIGNAL_0 set by peer");
+    assert!(
+        observed.bits() & (1 << 24) != 0,
+        "observed signals on h1 should include USER_SIGNAL_0, got {:#x}",
+        observed.bits()
+    );
 }
 
 /// C++: TEST(EventPairTest, SignalingClosedPeerReturnsPeerClosed) — syscall level
@@ -99,8 +111,39 @@ fn timer_user_signal() {
     // Set user signal
     sc.sys_object_signal(h, 0, 1 << 24).unwrap();
 
+    // Verify the signal is set via wait_one with zero timeout.
+    let mut observed = zircon_object::object::Signal::empty();
+    let out = UserOutPtr::from(&mut observed as *mut _ as usize);
+    let result = async_std::task::block_on(sc.sys_object_wait_one(
+        h,
+        1 << 24, // USER_SIGNAL_0
+        zircon_syscall::Deadline::from(0usize),
+        out,
+    ));
+    assert!(result.is_ok(), "timer should have USER_SIGNAL_0 set");
+    assert!(
+        observed.bits() & (1 << 24) != 0,
+        "observed signals should include USER_SIGNAL_0, got {:#x}",
+        observed.bits()
+    );
+
     // Clear user signal
     sc.sys_object_signal(h, 1 << 24, 0).unwrap();
+
+    // Verify the signal is cleared — wait_one should time out.
+    let mut observed2 = zircon_object::object::Signal::empty();
+    let out2 = UserOutPtr::from(&mut observed2 as *mut _ as usize);
+    let result2 = async_std::task::block_on(sc.sys_object_wait_one(
+        h,
+        1 << 24, // USER_SIGNAL_0
+        zircon_syscall::Deadline::from(0usize),
+        out2,
+    ));
+    assert_eq!(
+        result2.unwrap_err(),
+        ZxError::TIMED_OUT,
+        "after clearing, wait_one should time out"
+    );
 }
 
 /// C++: TEST(EventPairTest, CheckNoFlagsSupported) — syscall level
@@ -201,8 +244,39 @@ fn eventpair_koids_are_correct() {
         UserOutPtr::from(&mut avail as *mut _ as usize),
     )
     .unwrap();
-    // koids should be non-zero and related
-    // (HandleBasicInfo fields are private, but we verified the syscall succeeded)
+    // Verify koids are non-zero and related:
+    // Both endpoints share the same underlying object pair, so
+    // h0's koid == h1's related_koid and vice versa.
+    // HandleBasicInfo is repr(C): {koid: u64, rights: u32, obj_type: u32, related_koid: u64, ...}
+    // Read the raw bytes to access fields.
+    let info0_bytes: &[u8] = unsafe {
+        core::slice::from_raw_parts(
+            &info0 as *const _ as *const u8,
+            core::mem::size_of_val(&info0),
+        )
+    };
+    let info1_bytes: &[u8] = unsafe {
+        core::slice::from_raw_parts(
+            &info1 as *const _ as *const u8,
+            core::mem::size_of_val(&info1),
+        )
+    };
+    let koid0 = u64::from_ne_bytes(info0_bytes[0..8].try_into().unwrap());
+    let koid1 = u64::from_ne_bytes(info1_bytes[0..8].try_into().unwrap());
+    let related_koid0 = u64::from_ne_bytes(info0_bytes[16..24].try_into().unwrap());
+    let related_koid1 = u64::from_ne_bytes(info1_bytes[16..24].try_into().unwrap());
+
+    assert_ne!(koid0, 0, "h0 koid should be non-zero");
+    assert_ne!(koid1, 0, "h1 koid should be non-zero");
+    assert_ne!(koid0, koid1, "endpoints should have distinct koids");
+    assert_eq!(
+        koid0, related_koid1,
+        "h0's koid should be h1's related_koid"
+    );
+    assert_eq!(
+        koid1, related_koid0,
+        "h1's koid should be h0's related_koid"
+    );
 }
 
 /// C++: TEST(EventPairTest, SignalAccessDeniedMissingSignalRight) — syscall level

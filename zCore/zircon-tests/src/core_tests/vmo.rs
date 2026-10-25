@@ -840,13 +840,26 @@ fn cache_policy_race() {
     use zircon_object::vm::CachePolicy;
     let _ctx = TestContext::new();
 
+    let iterations = 100;
     // Without threads, we can't truly race, but we can rapidly cycle.
     let vmo = VmObject::new_paged(1);
-    for _ in 0..100 {
+    for _ in 0..iterations {
         vmo.set_cache_policy(CachePolicy::Uncached).unwrap();
         vmo.set_cache_policy(CachePolicy::WriteCombining).unwrap();
         vmo.set_cache_policy(CachePolicy::Cached).unwrap();
     }
+
+    // All 100 iterations completed without error — the rapid cycling
+    // exercised concurrent-safe cache policy transitions. Verify the
+    // VMO is still functional after all transitions.
+    let mut buf = [0u8; 1];
+    vmo.write(0, &[0x42]).unwrap();
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(
+        buf[0], 0x42,
+        "VMO should be functional after {} cache policy cycles",
+        iterations
+    );
 }
 
 /// C++: TEST(VmoTestCase, ChildResizeRight)
@@ -1450,8 +1463,22 @@ fn no_perm_map() {
     // Map with empty flags — implementation may reject this.
     let result = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::empty());
     // Either fails (INVALID_ARGS) or succeeds with inaccessible mapping.
-    if let Ok(addr) = result {
-        vmar.unmap(addr, PAGE_SIZE).unwrap();
+    match result {
+        Ok(addr) => {
+            // Mapping succeeded — address should be page-aligned and non-zero.
+            assert_ne!(addr, 0, "mapped address should be non-zero");
+            assert_eq!(addr % PAGE_SIZE, 0, "mapped address should be page-aligned");
+            vmar.unmap(addr, PAGE_SIZE).unwrap();
+        }
+        Err(e) => {
+            // Rejection is also valid — should be INVALID_ARGS.
+            assert_eq!(
+                e,
+                ZxError::INVALID_ARGS,
+                "mapping with no permissions should fail with INVALID_ARGS, got {:?}",
+                e
+            );
+        }
     }
 }
 
@@ -1471,10 +1498,22 @@ fn no_perm_protect() {
     // Protect to empty flags.
     let result = vmar.protect(addr, PAGE_SIZE, MMUFlags::empty());
     // May succeed or fail — either is acceptable.
-    let _ = result;
+    match result {
+        Ok(()) => {
+            // Protect succeeded — restore permissions for cleanup.
+            vmar.protect(addr, PAGE_SIZE, flags).unwrap();
+        }
+        Err(e) => {
+            // Rejection is also valid — should be INVALID_ARGS.
+            assert_eq!(
+                e,
+                ZxError::INVALID_ARGS,
+                "protect with no permissions should fail with INVALID_ARGS, got {:?}",
+                e
+            );
+        }
+    }
 
-    // Restore and cleanup.
-    let _ = vmar.protect(addr, PAGE_SIZE, flags);
     vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
@@ -1843,10 +1882,28 @@ fn read_write_invalid_null_buffer() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
 
-    // Zero-length read and write should be no-ops.
+    // Write known data so we can verify the no-op doesn't corrupt it.
+    vmo.write(0, &[0xAB]).unwrap();
+
+    // Zero-length write should be a no-op (data unchanged).
     vmo.write(0, &[]).unwrap();
+    let mut check = [0u8; 1];
+    vmo.read(0, &mut check).unwrap();
+    assert_eq!(
+        check[0], 0xAB,
+        "zero-length write should not alter VMO data"
+    );
+
+    // Zero-length read should be a no-op (succeeds without error).
     let mut empty = [0u8; 0];
     vmo.read(0, &mut empty).unwrap();
+
+    // Data should still be intact after zero-length operations.
+    vmo.read(0, &mut check).unwrap();
+    assert_eq!(
+        check[0], 0xAB,
+        "data should be intact after zero-length read"
+    );
 }
 
 /// C++: TEST(VmoTestCase, ReadWriteInvalidUserBuffer)

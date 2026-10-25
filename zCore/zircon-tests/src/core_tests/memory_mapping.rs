@@ -40,12 +40,14 @@ fn mmap_flags_test() {
     // READ only
     let vmo = VmObject::new_paged(1);
     let a1 = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ).unwrap();
+    assert_ne!(a1, 0, "READ mapping address should be non-zero");
     vmar.unmap(a1, PAGE_SIZE).unwrap();
     // READ | WRITE
     let vmo = VmObject::new_paged(1);
     let a2 = vmar
         .map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE)
         .unwrap();
+    assert_ne!(a2, 0, "READ|WRITE mapping address should be non-zero");
     vmar.unmap(a2, PAGE_SIZE).unwrap();
 }
 
@@ -100,9 +102,21 @@ fn mmap_prot_exec_test() {
     let vmo = VmObject::new_paged(1);
     // Attempt mapping with EXECUTE — may fail if VMO lacks EXECUTE right
     let result = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ | MMUFlags::EXECUTE);
-    // Either succeeds or fails with an error — no panic
-    if let Ok(addr) = result {
-        vmar.unmap(addr, PAGE_SIZE).unwrap();
+    // Either succeeds or fails with a permission error — no panic.
+    match result {
+        Ok(addr) => {
+            assert_ne!(addr, 0, "EXECUTE mapping address should be non-zero");
+            vmar.unmap(addr, PAGE_SIZE).unwrap();
+        }
+        Err(e) => {
+            // Expected: ACCESS_DENIED if the VMO doesn't have EXECUTE right
+            assert_eq!(
+                e,
+                zircon_object::ZxError::ACCESS_DENIED,
+                "map with EXECUTE should fail with ACCESS_DENIED, got {:?}",
+                e
+            );
+        }
     }
 }
 
@@ -114,8 +128,24 @@ fn mmap_prot_test() {
     let vmar = ctx.proc.vmar();
     // Map READ, then protect to READ|WRITE
     let vmo = VmObject::new_paged(1);
-    let addr = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::READ).unwrap();
-    let _ = vmar.protect(addr, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE);
+    vmo.write(0, &[0x42; 4]).unwrap();
+    let addr = vmar
+        .map(None, vmo.clone(), 0, PAGE_SIZE, MMUFlags::READ)
+        .unwrap();
+    assert_ne!(addr, 0, "mapping address should be non-zero");
+
+    // Protect to READ|WRITE should succeed
+    let protect_result = vmar.protect(addr, PAGE_SIZE, MMUFlags::READ | MMUFlags::WRITE);
+    assert!(
+        protect_result.is_ok(),
+        "protect to READ|WRITE should succeed"
+    );
+
+    // Verify data is still accessible via VMO after protect change
+    let mut buf = [0u8; 4];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(buf, [0x42; 4], "data should be intact after protect change");
+
     vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 

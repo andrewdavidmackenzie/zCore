@@ -46,15 +46,28 @@ fn content_in_parent_and_child() {
 }
 
 /// C++: TEST(VmoZeroTestCase, ZeroLengths)
-/// Zero-length zero operations succeed.
+/// Zero-length zero operations succeed and don't alter existing data.
 #[test]
 fn zero_lengths() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
 
+    // Write known data first.
+    let pattern = [0xBBu8; 16];
+    vmo.write(0, &pattern).unwrap();
+
+    // Zero-length zero ops at various offsets should all succeed.
     vmo.zero(0, 0).unwrap();
     vmo.zero(10, 0).unwrap();
     vmo.zero(PAGE_SIZE, 0).unwrap();
+
+    // Verify data was NOT altered by zero-length operations.
+    let mut buf = [0u8; 16];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(
+        buf, pattern,
+        "zero-length zero operations should not alter existing data"
+    );
 }
 
 /// C++: TEST(VmoZeroTestCase, EmptyCowChildren)

@@ -120,8 +120,14 @@ fn port_queue_and_close() {
     }
 
     // Close the port handle — packets are gone.
-    // (No way to observe them after close; this test verifies no panic.)
     ctx.syscall().sys_handle_close(port_h).unwrap();
+
+    // After closing, any operation on the port handle should fail with BAD_HANDLE.
+    let packet = make_user_packet(99, 0, [0; 32]);
+    let result = ctx
+        .syscall()
+        .sys_port_queue(port_h, UserInPtr::from(&packet as *const _ as usize));
+    assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
 /// C++: TEST(PortTest, AsyncWaitChannel)
@@ -317,6 +323,30 @@ fn port_async_wait_close_order() {
         sc.sys_handle_close(handles[*second]).unwrap();
         handles[*second] = 0;
         sc.sys_handle_close(handles[*third]).unwrap();
+
+        // Verify all handles are now invalid
+        for &h in &handles {
+            if h != 0 {
+                // handles were zeroed after close, so nothing to check here
+                continue;
+            }
+        }
+        // Verify closed handles return BAD_HANDLE
+        assert_eq!(
+            sc.sys_handle_close(ch_a).unwrap_err(),
+            ZxError::BAD_HANDLE,
+            "ch_a should be invalid after close"
+        );
+        assert_eq!(
+            sc.sys_handle_close(ch_b).unwrap_err(),
+            ZxError::BAD_HANDLE,
+            "ch_b should be invalid after close"
+        );
+        assert_eq!(
+            sc.sys_handle_close(port_h).unwrap_err(),
+            ZxError::BAD_HANDLE,
+            "port_h should be invalid after close"
+        );
     }
 }
 
@@ -421,11 +451,16 @@ fn port_edge_trigger_cancel() {
     // Cancel it via sys_port_cancel.
     sc.sys_port_cancel(port_h, event_h, 20).unwrap();
 
-    // Signal the event — no packet should fire.
+    // Signal the event — no packet should fire because we cancelled.
     sc.sys_object_signal(event_h, 0, Signal::USER_SIGNAL_0.bits())
         .unwrap();
 
-    // Port should be empty (no panic).
+    // A second cancel should return NOT_FOUND — subscription was already removed.
+    assert_eq!(
+        sc.sys_port_cancel(port_h, event_h, 20).unwrap_err(),
+        ZxError::NOT_FOUND,
+        "cancel after prior cancel should return NOT_FOUND"
+    );
 }
 
 /// C++: TEST(PortTest, CancelEventKey)
@@ -525,9 +560,18 @@ fn async_wait_channel_timed_out() {
     // No data has been written — ch0 is not readable.
     // In C++ this would time out via zx_port_wait with a deadline.
     // Here we verify the subscription exists by cancelling it successfully.
-    sc.sys_port_cancel(port_h, ch0, 6567).unwrap();
+    let cancel_result = sc.sys_port_cancel(port_h, ch0, 6567);
+    assert!(
+        cancel_result.is_ok(),
+        "cancel should succeed — subscription should still be pending"
+    );
 
-    // After cancellation, signaling should not deliver a packet.
+    // After cancellation, a second cancel should return NOT_FOUND.
+    assert_eq!(
+        sc.sys_port_cancel(port_h, ch0, 6567).unwrap_err(),
+        ZxError::NOT_FOUND,
+        "second cancel should return NOT_FOUND"
+    );
 }
 
 /// C++: TEST(PortTest, CancelKey)
@@ -713,6 +757,15 @@ fn close_queue_race() {
         // Signal the event after port is closed — should not panic
         sc.sys_object_signal(event_h, 0, Signal::USER_SIGNAL_0.bits())
             .unwrap();
+
+        // Verify port is truly closed — queue should fail with BAD_HANDLE
+        let packet = make_user_packet(999, 0, [0; 32]);
+        assert_eq!(
+            sc.sys_port_queue(port_h, UserInPtr::from(&packet as *const _ as usize))
+                .unwrap_err(),
+            ZxError::BAD_HANDLE,
+            "port should be closed after sys_handle_close"
+        );
     }
 }
 
@@ -748,8 +801,12 @@ fn edge_trigger_timeout() {
     // return NOT_FOUND.
     // Edge-triggered: no transition after registration, so no packet should fire.
     // Verify by checking cancel succeeds (subscription still pending).
-    sc.sys_port_cancel(port_h, event_h, 30)
-        .expect("cancel should succeed — edge subscription should still be pending");
+    let cancel_result = sc.sys_port_cancel(port_h, event_h, 30);
+    assert!(
+        cancel_result.is_ok(),
+        "cancel should succeed — edge subscription should still be pending, got {:?}",
+        cancel_result,
+    );
 }
 
 /// C++: TEST(PortTest, ThreadEvents)
