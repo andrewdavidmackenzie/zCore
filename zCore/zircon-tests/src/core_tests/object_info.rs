@@ -297,7 +297,9 @@ fn thread_info_zero_buffer() {
 // full struct regardless of version. Using base topic for now.
 pub(crate) const TOPIC_VMO: u32 = 23;
 
-/// C++: VmoGetInfoTest — basic VMO info query.
+/// C++: TEST(ObjectGetInfoTest, OpenValidHandleSucceeds)
+///
+/// Basic VMO info query — exercises the object_get_info path.
 #[test]
 fn vmo_info_basic() {
     let ctx = TestContext::new();
@@ -2315,7 +2317,7 @@ fn process_info_maps_invalid_handle() {
     );
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsNullAvail)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsNullAvailSucceeds)
 ///
 /// PROCESS_MAPS with null avail pointer should succeed.
 #[test]
@@ -2342,7 +2344,7 @@ fn process_info_maps_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsNullActual)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsNullActualSucceeds)
 ///
 /// PROCESS_MAPS with null actual pointer should succeed.
 #[test]
@@ -2369,7 +2371,7 @@ fn process_info_maps_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsNullActualAndAvail)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsNullActualAndAvailSucceeds)
 ///
 /// PROCESS_MAPS with both null actual and avail pointers should succeed.
 #[test]
@@ -2395,7 +2397,7 @@ fn process_info_maps_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsInvalidBuffer)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsInvalidBufferPointerFails)
 ///
 /// PROCESS_MAPS with null buffer pointer and non-zero size should
 /// return INVALID_ARGS.
@@ -2423,7 +2425,7 @@ fn process_info_maps_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsBadActual)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsBadActualIsInvalidArg)
 ///
 /// PROCESS_MAPS with misaligned actual pointer should return
 /// INVALID_ARGS.
@@ -2452,7 +2454,7 @@ fn process_info_maps_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessMapsBadAvail)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessMapsBadAvailIsInvalidArg)
 ///
 /// PROCESS_MAPS with misaligned avail pointer should return
 /// INVALID_ARGS.
@@ -2658,7 +2660,7 @@ fn process_info_vmos_invalid_handle() {
     );
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosNullAvail)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosNullAvailSucceeds)
 ///
 /// PROCESS_VMOS with null avail pointer should succeed.
 #[test]
@@ -2685,7 +2687,7 @@ fn process_info_vmos_null_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosNullActual)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosNullActualSucceeds)
 ///
 /// PROCESS_VMOS with null actual pointer should succeed.
 #[test]
@@ -2712,7 +2714,7 @@ fn process_info_vmos_null_actual() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosNullActualAndAvail)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosNullActualAndAvailSucceeds)
 ///
 /// PROCESS_VMOS with both null actual and avail pointers should succeed.
 #[test]
@@ -2738,7 +2740,7 @@ fn process_info_vmos_null_actual_and_avail() {
     .unwrap();
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosInvalidBuffer)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosInvalidBufferPointerFails)
 ///
 /// PROCESS_VMOS with null buffer pointer and non-zero size should
 /// return INVALID_ARGS.
@@ -2766,7 +2768,7 @@ fn process_info_vmos_invalid_buffer() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosBadActual)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosBadActualIsInvalidArg)
 ///
 /// PROCESS_VMOS with misaligned actual pointer should return
 /// INVALID_ARGS.
@@ -2795,7 +2797,7 @@ fn process_info_vmos_bad_actual() {
     assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
 }
 
-/// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosBadAvail)
+/// C++: TEST(ProcessGetInfoTest, InfoProcessVmosBadAvailIsInvalidArg)
 ///
 /// PROCESS_VMOS with misaligned avail pointer should return
 /// INVALID_ARGS.

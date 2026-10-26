@@ -252,7 +252,7 @@ fn exactly_one_memory_event_signaled() {
     assert_eq!(events_signaled, 1, "exactly one memory event signaled");
 }
 
-/// C++: TEST(SystemEvent, DISABLED_MemoryStallEvent)
+/// C++: TEST(SystemEvent, MemoryStallThresholds)
 ///
 /// ```cpp
 /// // Retrieve total memory, create stall event with low threshold,

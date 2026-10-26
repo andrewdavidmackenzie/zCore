@@ -5,7 +5,7 @@ use zircon_object::ipc::Fifo;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::ZxError;
 
-/// C++: TEST(FifoTest, PartialWrite)
+/// C++: TEST(FifoTest, PartialWriteQueuesElementsThatFit)
 #[test]
 fn fifo_partial_write() {
     let _ctx = TestContext::new();
@@ -21,7 +21,7 @@ fn fifo_partial_write() {
     assert_eq!(n, 1);
 }
 
-/// C++: TEST(FifoTest, FifoOrder)
+/// C++: TEST(FifoTest, FifoOrderIsPreserved)
 #[test]
 fn fifo_order() {
     let _ctx = TestContext::new();

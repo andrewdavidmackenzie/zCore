@@ -29,6 +29,10 @@ mod helpers;
 #[cfg(test)]
 mod core_tests;
 
+// ── Tests from other Fuchsia binaries (not core-tests-standalone) ──
+#[cfg(test)]
+mod extra_tests;
+
 // ── zCore-original tests ───────────────────────────────────────────
 #[cfg(test)]
 mod bad_syscall;

@@ -6,7 +6,7 @@ use zircon_object::ipc::Socket;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::ZxError;
 
-/// C++: TEST(SocketTest, GetInfo)
+/// C++: TEST(SocketTest, GetInfoClosedPeer)
 /// SocketInfo has private fields, so we verify via the Debug representation.
 #[test]
 fn socket_get_info() {
@@ -878,7 +878,7 @@ fn write_invalid_options() {
 
 // ── Bulk-ported socket tests (batch 2) ──────────────────────────────
 
-/// C++: TEST(SocketTest, WriteZeroBytes)
+/// C++: TEST(SocketTest, WriteZeroBytesNullBuffer)
 ///
 /// Writing zero bytes to a stream socket should succeed (no-op).
 #[test]

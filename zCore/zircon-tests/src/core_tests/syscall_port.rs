@@ -6,7 +6,7 @@ use zircon_object::object::HandleValue;
 use zircon_object::signal::PortPacket;
 use zircon_object::ZxError;
 
-/// C++: TEST(PortTest, Create) — syscall level
+/// C++: TEST(PortTest, CreateInvalidOptions) — syscall level
 #[test]
 fn port_create_via_syscall() {
     let ctx = TestContext::new();

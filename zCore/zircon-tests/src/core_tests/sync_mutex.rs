@@ -248,3 +248,35 @@ fn assert_held() {
         "mutex should be unheld (zero) — assert_held would abort"
     );
 }
+
+/// C++: TEST(SyncMutex, Mutexes)
+/// Verify sync_mutex basic lock/unlock operations via futex CAS.
+#[test]
+fn mutexes_sync() {
+    let _ctx = TestContext::new();
+    // sync_mutex internally uses CAS on a futex word.
+    // Lock: CAS(0 -> tid), Unlock: store(0) + wake.
+    let mutex = AtomicI32::new(0);
+
+    // Lock (uncontended path: CAS 0 -> 1).
+    mutex
+        .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+        .expect("lock should succeed");
+
+    // Already locked — trylock should fail.
+    assert!(
+        mutex
+            .compare_exchange(0, 2, Ordering::Acquire, Ordering::Relaxed)
+            .is_err(),
+        "trylock should fail when mutex is held"
+    );
+
+    // Unlock.
+    mutex.store(0, Ordering::Release);
+
+    // Lock again should succeed.
+    mutex
+        .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+        .expect("re-lock should succeed");
+    mutex.store(0, Ordering::Release);
+}

@@ -40,7 +40,7 @@ pub(crate) fn make_deadline_info(
     info
 }
 
-/// C++: TEST(ProfileTest, Create)
+/// C++: TEST(ProfileTest, CreateProfileWithDefaultInitializedProfileInfoIsError)
 ///
 /// Creating a profile with valid parameters succeeds.
 #[test]

@@ -290,7 +290,7 @@ fn read_and_write_validates_size_and_element_count() {
     );
 }
 
-/// C++: TEST(FifoTest, ReadWrite)
+/// C++: TEST(FifoTest, ReadAndWriteValidatesSizeAndElementCount)
 /// Write elements and read them back, verifying order and values.
 #[test]
 fn read_write() {
@@ -353,7 +353,7 @@ fn read_write_null_actual_count() {
     assert_eq!(u64::from_ne_bytes(buf), 1234);
 }
 
-/// C++: TEST(FifoTest, ReadWriteRange)
+/// C++: TEST(FifoTest, ReadWriteBadActualCount)
 /// Fill FIFO, read half, write more (wrapping), read across wrap boundary.
 #[test]
 fn read_write_range() {
@@ -417,7 +417,7 @@ fn read_write_range() {
     }
 }
 
-/// C++: TEST(FifoTest, ReadErrors)
+/// C++: TEST(FifoTest, ReadBadBuffer)
 /// Reading from a bad handle or wrong type returns proper errors.
 #[test]
 fn read_errors() {
@@ -459,7 +459,7 @@ fn read_errors() {
     );
 }
 
-/// C++: TEST(FifoTest, ReadInvalidHandle)
+/// C++: TEST(FifoTest, ReadNoReadRights)
 #[test]
 fn read_invalid_handle() {
     let ctx = TestContext::new();
@@ -480,7 +480,7 @@ fn read_invalid_handle() {
     );
 }
 
-/// C++: TEST(FifoTest, WriteErrors)
+/// C++: TEST(FifoTest, WriteBadBuffer)
 /// Writing to a bad handle or wrong type returns proper errors.
 #[test]
 fn write_errors() {
@@ -522,7 +522,7 @@ fn write_errors() {
     );
 }
 
-/// C++: TEST(FifoTest, WriteInvalidHandle)
+/// C++: TEST(FifoTest, WriteNoWriteRights)
 #[test]
 fn write_invalid_handle() {
     let ctx = TestContext::new();
@@ -750,7 +750,7 @@ fn write_to_closed_peer_returns_peer_closed() {
     );
 }
 
-/// C++: TEST(FifoTest, ReadAndWriteWithMultipleSizes)
+/// C++: TEST(FifoTest, IndividualReadsPreserveOrder)
 /// Write and read with various element sizes.
 #[test]
 fn read_and_write_with_multiple_sizes() {
@@ -786,7 +786,7 @@ fn read_and_write_with_multiple_sizes() {
     }
 }
 
-/// C++: TEST(FifoTest, ReadWriteBadLen)
+/// C++: TEST(FifoTest, ReadWriteBadActualCountReturnsInvalidArgs)
 /// Element count 0 returns OUT_OF_RANGE.
 #[test]
 fn read_write_bad_len() {
@@ -823,7 +823,7 @@ fn read_write_bad_len() {
     );
 }
 
-/// C++: TEST(FifoTest, ReadWriteShrinkRace)
+/// C++: TEST(FifoTest, ReadRollbackOnWrapAroundFault)
 /// Close one endpoint while the other has data. Read should return data
 /// before returning PEER_CLOSED.
 #[test]
@@ -874,7 +874,7 @@ fn read_write_shrink_race() {
     );
 }
 
-/// C++: TEST(FifoTest, SmallReportBuffer)
+/// C++: TEST(FifoTest, ReadPartialBadBuffer)
 /// Reading with a buffer smaller than requested count should return
 /// only the available elements.
 #[test]
@@ -910,7 +910,7 @@ fn small_report_buffer() {
     assert_eq!(u64::from_ne_bytes(buf[8..16].try_into().unwrap()), 2);
 }
 
-/// C++: TEST(FifoTest, LargeWriteBatched)
+/// C++: TEST(FifoTest, WritePartialBadBuffer)
 /// Write more elements than capacity in one call — only capacity elements fit.
 #[test]
 fn large_write_batched() {

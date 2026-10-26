@@ -12,7 +12,7 @@ use zircon_object::object::KernelObject;
 use zircon_object::signal::Port;
 use zircon_object::ZxError;
 
-/// C++: TEST(InterruptTest, Bind)
+/// C++: TEST(InterruptTest, BindPort)
 ///
 /// Binding a virtual interrupt to a port succeeds.
 #[test]
@@ -60,7 +60,7 @@ async fn interrupt_wait() {
     );
 }
 
-/// C++: TEST(InterruptTest, VirtualInterrupt)
+/// C++: TEST(InterruptTest, VirtualInterrupts)
 ///
 /// Creating a virtual interrupt and verifying basic operations.
 #[test]

@@ -7,15 +7,26 @@ use crate::helpers::TestContext;
 use zircon_object::vm::PAGE_SIZE;
 
 /// C++: TEST(PageSize, NotZero)
-/// C++: TEST(PageSize, Only4K)
-/// C++: TEST(PageSize, PowerOfTwo)
-/// PAGE_SIZE should be non-zero, at least 4096, and a power of 2.
-/// Covers NotZero (PAGE_SIZE > 0), Only4K (PAGE_SIZE >= 4096),
-/// and PowerOfTwo (PAGE_SIZE.is_power_of_two()).
+/// PAGE_SIZE should be non-zero.
 #[test]
-fn page_size_is_valid() {
+fn page_size_not_zero() {
     let _ctx = TestContext::new();
-    const { assert!(PAGE_SIZE >= 4096) };
+    assert!(PAGE_SIZE > 0, "PAGE_SIZE should be non-zero");
+}
+
+/// C++: TEST(PageSize, Only4K)
+/// PAGE_SIZE should be at least 4096.
+#[test]
+fn page_size_only_4k() {
+    let _ctx = TestContext::new();
+    assert!(PAGE_SIZE >= 4096, "PAGE_SIZE should be at least 4096");
+}
+
+/// C++: TEST(PageSize, PowerOfTwo)
+/// PAGE_SIZE should be a power of 2.
+#[test]
+fn page_size_power_of_two() {
+    let _ctx = TestContext::new();
     assert!(
         PAGE_SIZE.is_power_of_two(),
         "PAGE_SIZE should be a power of 2"

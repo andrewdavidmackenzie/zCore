@@ -239,6 +239,8 @@ fn pin_contiguous() {
     pmt.unpin();
 }
 
+/// C++: TEST(Bti, PinTooManyAddresses)
+///
 /// Pin a moderate VMO and verify encode_addrs returns the correct
 /// number of page addresses.
 #[test]

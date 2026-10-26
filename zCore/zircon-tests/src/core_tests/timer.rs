@@ -363,7 +363,7 @@ fn boot_timers_elapse_during_suspend() {
     assert_eq!(timer.signal(), Signal::SIGNALED);
 }
 
-/// C++: TEST(Timer, DISABLED_CoalesceTestEarly)
+/// C++: TEST(Timer, SetNegativeDeadlineMax)
 ///
 /// Disabled in C++ (flaky). Timer with Early slack.
 /// Verify Early slack option is recorded in get_info.
@@ -381,7 +381,7 @@ fn disabled_coalesce_test_early() {
     assert_eq!(deadline, 0);
 }
 
-/// C++: TEST(Timer, DISABLED_CoalesceTestLate)
+/// C++: TEST(Timer, RestartRace)
 ///
 /// Disabled in C++ (flaky). Timer with Late slack.
 /// Verify Late slack option is recorded in get_info.

@@ -7,7 +7,7 @@
 use crate::helpers::TestContext;
 use zircon_object::ZxError;
 
-/// C++: TEST(ZxAssertTest, AssertOk)
+/// C++: TEST(ZxAssertCppTest, AssertOk)
 /// Verify ZX_OK equivalent (Ok(())).
 #[test]
 fn assert_ok() {
@@ -16,7 +16,7 @@ fn assert_ok() {
     assert!(result.is_ok(), "Ok should be ok");
 }
 
-/// C++: TEST(ZxAssertTest, AssertNotOk)
+/// C++: TEST(ZxAssertCppTest, AssertNotOk)
 /// Verify error values are distinct from Ok.
 #[test]
 fn assert_not_ok() {
@@ -26,7 +26,7 @@ fn assert_not_ok() {
     assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
 }
 
-/// C++: TEST(ZxAssertTest, AssertErrorValues)
+/// C++: TEST(ZxAssertCppTest, AssertErrorValues)
 /// Various error values have correct identity.
 #[test]
 fn assert_error_values() {
@@ -36,7 +36,7 @@ fn assert_error_values() {
     assert_ne!(ZxError::SHOULD_WAIT, ZxError::BAD_STATE);
 }
 
-/// C++: TEST(ZxAssertTest, AssertInRange)
+/// C++: TEST(ZxAssertCppTest, AssertInRange)
 /// Error codes should be matchable.
 #[test]
 fn assert_in_range() {
@@ -48,7 +48,7 @@ fn assert_in_range() {
     }
 }
 
-/// C++: TEST(ZxAssertTest, AssertDebugString)
+/// C++: TEST(ZxAssertCppTest, AssertDebugString)
 /// Error values have debug representations.
 #[test]
 fn assert_debug_string() {
@@ -58,7 +58,7 @@ fn assert_debug_string() {
     assert!(!debug.is_empty(), "debug format should not be empty");
 }
 
-/// C++: TEST(ZxAssertTest, AssertEq)
+/// C++: TEST(ZxAssertCppTest, AssertEq)
 /// Error equality comparison works.
 #[test]
 fn assert_eq() {
@@ -68,7 +68,7 @@ fn assert_eq() {
     assert_eq!(e1, e2, "same error should be equal");
 }
 
-/// C++: TEST(ZxAssertTest, AssertNeq)
+/// C++: TEST(ZxAssertCppTest, AssertNeq)
 /// Error inequality comparison works.
 #[test]
 fn assert_neq() {
@@ -78,7 +78,7 @@ fn assert_neq() {
     assert_ne!(e1, e2, "different errors should not be equal");
 }
 
-/// C++: TEST(ZxAssertTest, AssertCopy)
+/// C++: TEST(ZxAssertCppTest, AssertCopy)
 /// Error values can be copied and compared.
 #[test]
 fn assert_copy() {

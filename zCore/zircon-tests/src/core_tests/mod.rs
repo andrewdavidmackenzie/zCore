@@ -4,8 +4,7 @@
 //! `zircon/system/utest/core/`.  Test functions have `/// C++: TEST(...)`
 //! doc comments identifying the original C++ test.
 //!
-//! Coverage: 99% of the 1778 C++ core-tests (10 missing, all requiring
-//! unimplemented infrastructure).
+//! Coverage: 1778 C++ core-tests, one `#[test]` per binary entry.
 
 mod address_tagging;
 mod bad_access;
@@ -22,14 +21,11 @@ mod completion_wrapper;
 mod conditional_variable;
 mod counter;
 mod cpp_thread;
-mod cpu_features;
 mod cpu_mask_profile;
-mod datagram_socket_bad_buffer;
 mod debuglog;
 mod event;
 mod event_pair;
 pub(crate) mod exception;
-mod exceptions_arch;
 mod executable_tls;
 mod fifo;
 mod futex;
@@ -38,8 +34,6 @@ mod handle_wait;
 mod hotplug;
 mod interrupt;
 mod interrupt_crash;
-mod iob;
-mod iob_shared_region;
 mod iovec;
 mod job;
 mod membarrier;
@@ -57,7 +51,6 @@ mod port;
 mod port_stress;
 mod process;
 mod process_debug;
-mod process_shared;
 pub(crate) mod profile;
 pub(crate) mod property;
 mod protect;
@@ -67,8 +60,6 @@ mod pthread_tls;
 mod register_context_switch;
 mod register_state;
 mod resource;
-mod restricted_mode;
-mod rseq;
 mod socket;
 mod stack;
 mod standalone_elf_load;

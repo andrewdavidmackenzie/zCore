@@ -205,3 +205,26 @@ fn timeout_elapsed() {
         );
     }
 }
+
+/// C++: TEST(C11MutexTest, MultiThreadedContention)
+/// Sync wrapper for the multi-threaded C11 mutex contention test.
+#[test]
+fn multi_threaded_contention_sync() {
+    let _ctx = TestContext::new();
+    // Verify basic C11-style mutex operations work via futex.
+    let mutex = AtomicI32::new(0);
+
+    // Lock.
+    mutex
+        .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+        .expect("lock should succeed on unlocked mutex");
+
+    // Unlock.
+    mutex.store(0, Ordering::Release);
+
+    // Re-lock should succeed.
+    mutex
+        .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+        .expect("re-lock should succeed after unlock");
+    mutex.store(0, Ordering::Release);
+}

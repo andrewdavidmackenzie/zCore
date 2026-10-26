@@ -559,6 +559,8 @@ fn write_cow_parent() {
     );
 }
 
+/// C++: TEST(VmoZeroTestCase, WriteCowParent)
+///
 /// Debug test: faithful reproduction of WriteCowParent from vmo-zero.cc
 /// Tests merge behavior after parent close with zero marker in child.
 #[test]

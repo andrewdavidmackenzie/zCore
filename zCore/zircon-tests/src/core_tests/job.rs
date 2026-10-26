@@ -232,7 +232,7 @@ fn create_test() {
     sc.sys_handle_close(child_h).unwrap();
 }
 
-/// C++: TEST(JobTest, GetInfo)
+/// C++: TEST(JobTest, GetInfoRuntime)
 /// JobInfo should return without error and report sensible values.
 #[test]
 fn job_get_info() {
@@ -247,7 +247,7 @@ fn job_get_info() {
     assert!(!info.debugger_attached, "no debugger should be attached");
 }
 
-/// C++: TEST(JobTest, PolicyBasicOverride)
+/// C++: TEST(JobTest, PolicyBasicOverrideAllowTest)
 /// Set policy DENY via V1, then override with ALLOW using Relative option.
 #[test]
 fn job_policy_basic_override() {
@@ -296,7 +296,7 @@ fn job_close_removes_from_tree() {
     assert!(!root.children_ids().contains(&child_id));
 }
 
-/// C++: TEST(JobTest, MaxHeight)
+/// C++: TEST(JobTest, MaxHeightSmoke)
 /// Job nesting depth is limited to MAX_HEIGHT (32).
 #[test]
 fn job_max_height() {
@@ -324,7 +324,7 @@ fn job_max_height() {
     );
 }
 
-/// C++: TEST(JobTest, CriticalProcess)
+/// C++: TEST(JobTest, CriticalProcessAlreadySet)
 /// Marking a process critical to a job kills the job when the process exits.
 /// Uses sys_job_set_critical syscall.
 #[test]

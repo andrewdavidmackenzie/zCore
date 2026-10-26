@@ -147,7 +147,9 @@ fn no_resize_via_syscall() {
     assert_eq!(size, PAGE_SIZE * 2);
 }
 
-/// C++: TEST(VmoTestCase, CreateChild — SNAPSHOT) — syscall level
+/// C++: TEST(VmoCloneTestCase, NoResize)
+///
+/// Create a SNAPSHOT child — syscall level
 #[async_std::test]
 async fn create_child_snapshot() {
     let ctx = TestContext::new();

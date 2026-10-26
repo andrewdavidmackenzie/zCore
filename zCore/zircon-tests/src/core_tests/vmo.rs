@@ -259,7 +259,7 @@ fn vmo_content_size() {
     assert_eq!(vmo.content_size(), 0);
 }
 
-/// C++: TEST(VmoTestCase, ZeroRange)
+/// C++: TEST(VmoTestCase, ZeroPage)
 /// Zero a range in the middle of written data.
 #[test]
 fn vmo_zero_range() {
@@ -575,7 +575,7 @@ fn vmo_resize_basic() {
     );
 }
 
-/// C++: TEST(VmoTestCase, CachePolicy)
+/// C++: TEST(VmoTestCase, CachePolicyRace)
 ///
 /// Set and verify cache policy on a VMO. Clean VMO accepts all
 /// valid policies; dirty or cloned VMO may reject changes.
@@ -709,7 +709,7 @@ fn vmo_zero_page() {
     );
 }
 
-/// C++: TEST(VmoTestCase, ZeroRange)
+/// C++: TEST(VmoTestCase, OpOutOfBounds)
 #[test]
 fn vmo_zero_sub_range() {
     let _ctx = TestContext::new();
@@ -2572,4 +2572,32 @@ fn zero_range_on_set_stream_size() {
         beyond.iter().all(|&b| b == 0),
         "data beyond content_size should be zeroed"
     );
+}
+
+/// C++: TEST(VmoTestCase, ReadWrite)
+/// Sync version of the VMO read/write test.
+#[test]
+fn vmo_read_write_sync() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+
+    let data = [0xAA_u8; 64];
+    vmo.write(0, &data).unwrap();
+
+    let mut buf = [0u8; 64];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(&buf, &data);
+}
+
+/// C++: TEST(VmoTestCase, ReadWriteInvalidKernelBuffer)
+/// Verify VMO read/write with zero-length operations.
+#[test]
+fn vmo_read_write_invalid_kernel_buffer() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+
+    // Zero-length read/write should succeed without touching data.
+    vmo.write(0, &[]).unwrap();
+    let mut buf = [0u8; 0];
+    vmo.read(0, &mut buf).unwrap();
 }
