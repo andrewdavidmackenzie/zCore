@@ -1788,6 +1788,12 @@ fn resize_multiple_progressive() {
 /// (each forks one different page), check data and attribution, then
 /// close/truncate the original and progressively close clones while
 /// checking correctness and attribution at each step.
+///
+/// The C++ test uses EXPECT_EQ (non-fatal) for attribution checks and
+/// ASSERT_EQ for VmoPopulatedBytes assertions. We use direct assert_eq!
+/// (matching C++ ASSERT_EQ semantics) — not polling. If fractional
+/// attribution doesn't match, the test fails immediately rather than
+/// hanging in a polling loop.
 fn progressive_clone_discard_test(close: bool) {
     let _ctx = TestContext::new();
     const KNUM_CLONES: usize = 6;
@@ -1820,7 +1826,8 @@ fn progressive_clone_discard_test(close: bool) {
         }
     }
 
-    // Check fractional attribution.
+    // Check fractional attribution (C++ uses EXPECT_EQ, non-fatal).
+    // We use assert_eq! to match ASSERT semantics and fail immediately.
     // orig: 7/6 pages, each clone: 59/30 pages (see C++ comments)
     let kattr_bytes_original = 7 * PAGE_SIZE as u64 / 6;
     let kattr_bytes_all_clones = 59 * PAGE_SIZE as u64 / 6;
@@ -1832,7 +1839,9 @@ fn progressive_clone_discard_test(close: bool) {
 
     // Close/truncate the original vmo.
     if close {
-        vmos[0] = VmObject::new_paged(0); // effectively drop+replace
+        // C++: vmos[0].reset() — just closes the handle (drops the Arc).
+        let old = core::mem::replace(&mut vmos[0], init_page_tagged_vmo(0));
+        drop(old);
     } else {
         vmos[0].set_len(0).unwrap();
     }
@@ -1849,6 +1858,7 @@ fn progressive_clone_discard_test(close: bool) {
     }
 
     // After closing original: each clone has (2*KNUM_CLONES - 1) / (KNUM_CLONES - 1) pages.
+    // C++: EXPECT_EQ(kAttrBytesVmo2, VmoPopulatedBytes(vmos[i])) — direct assertion, not polling.
     let kattr_bytes_vmo2 =
         (2 * KNUM_CLONES as u64 - 1) * PAGE_SIZE as u64 / (KNUM_CLONES as u64 - 1);
     for i in 1..KNUM_CLONES {
@@ -1858,7 +1868,8 @@ fn progressive_clone_discard_test(close: bool) {
     // Close all but the last two vmos.
     for i in 1..KNUM_CLONES - 2 {
         if close {
-            vmos[i] = VmObject::new_paged(0);
+            let old = core::mem::replace(&mut vmos[i], init_page_tagged_vmo(0));
+            drop(old);
         } else {
             vmos[i].set_len(0).unwrap();
         }
@@ -1876,6 +1887,7 @@ fn progressive_clone_discard_test(close: bool) {
     }
 
     // Last two vmos: (KNUM_CLONES + 2) / 2 pages each.
+    // C++: EXPECT_EQ(kAttrBytesVmo3, VmoPopulatedBytes(vmos[i])) — direct assertion, not polling.
     let kattr_bytes_vmo3 = (KNUM_CLONES as u64 + 2) * PAGE_SIZE as u64 / 2;
     for i in KNUM_CLONES - 2..KNUM_CLONES {
         assert_eq!(vmo_populated_bytes(&vmos[i]), kattr_bytes_vmo3);

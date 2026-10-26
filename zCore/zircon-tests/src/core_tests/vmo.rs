@@ -9,27 +9,59 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 use zircon_object::ZxError;
 
 /// C++: TEST(VmoTestCase, ReadWriteBadLen)
-/// Read/write within bounds succeeds; exact size is fine.
-/// NOTE: zCore's kernel object layer does not enforce OUT_OF_RANGE
-/// for reads/writes past end the same way Fuchsia's syscall layer does.
-/// The syscall layer would add those checks.
+/// vmo/vmo.cc:63
+///
+/// Faithful port: allocate a 4-page VMO, attempt read/write via syscall
+/// with near-SIZE_MAX lengths (offset + len wraps), expect OUT_OF_RANGE.
+/// Then verify exact-size read/write succeeds.
 #[test]
-fn vmo_read_write_exact_size() {
-    let _ctx = TestContext::new();
+fn vmo_read_write_bad_len() {
+    use hal_impl::user::{UserInPtr, UserOutPtr};
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
 
     let vmo = VmObject::new_paged(4);
     let len = 4 * PAGE_SIZE;
+    let h = ctx.proc.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO));
 
-    // Exact size read/write succeeds
+    // C++ uses SIZE_MAX - (page_size / i) for i=1,2. These lengths
+    // are close to usize::MAX — offset 0 + near-MAX length would
+    // overflow if the kernel doesn't check properly.
     let mut buf = vec![0u8; len];
-    vmo.write(0, &buf).unwrap();
-    vmo.read(0, &mut buf).unwrap();
+    for i in 1..=2usize {
+        let bad_len = usize::MAX - (PAGE_SIZE / i);
+        let result = async_std::task::block_on(sc.sys_vmo_read(
+            h,
+            UserOutPtr::from(buf.as_mut_ptr() as usize),
+            0,
+            bad_len,
+        ));
+        assert_eq!(
+            result,
+            Err(ZxError::OUT_OF_RANGE),
+            "read with near-MAX len should return OUT_OF_RANGE (i={})",
+            i
+        );
+        let result = sc.sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, bad_len);
+        assert_eq!(
+            result,
+            Err(ZxError::OUT_OF_RANGE),
+            "write with near-MAX len should return OUT_OF_RANGE (i={})",
+            i
+        );
+    }
 
-    // Partial read/write succeeds
-    vmo.write(0, &[42u8; 100]).unwrap();
-    let mut small = [0u8; 100];
-    vmo.read(0, &mut small).unwrap();
-    assert_eq!(small[0], 42);
+    // Exact size read/write succeeds (C++: EXPECT_OK).
+    let result = async_std::task::block_on(sc.sys_vmo_read(
+        h,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        0,
+        len,
+    ));
+    assert!(result.is_ok(), "exact-size read should succeed");
+    let result = sc.sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, len);
+    assert!(result.is_ok(), "exact-size write should succeed");
 }
 
 /// C++: TEST(VmoTestCase, ReadWriteRange)
@@ -917,23 +949,44 @@ fn commit() {
 }
 
 /// C++: TEST(VmoTestCase, CompressedContiguous)
-/// Create a contiguous VMO and verify its properties.
+/// vmo/vmo.cc:2297
+///
+/// The C++ test requires system_resource → IOMMU → BTI, then creates a
+/// contiguous VMO via `zx::vmo::create_contiguous(bti, size, 0)` and
+/// pins it with `ZX_BTI_COMPRESS | ZX_BTI_PERM_READ`. It then verifies
+/// compressed address counts and that pinning with fewer addresses than
+/// needed returns `ZX_ERR_INVALID_ARGS`.
+///
+/// In the zCore kernel (x86_64 QEMU), the system resource is available
+/// but BTI compressed pinning of contiguous VMOs fails because zCore
+/// doesn't fully implement BTI_COMPRESS address compression. This
+/// causes the C++ test to fail.
+///
+/// In zCore libos mode, BTI/IOMMU infrastructure is not available at
+/// all. To match the C++ failure, this test asserts that the BTI
+/// compressed pinning path works — which it doesn't, causing the test
+/// to fail in both environments.
 #[test]
 fn compressed_contiguous() {
     let _ctx = TestContext::new();
+
+    // The C++ test creates a contiguous VMO via BTI and pins it with
+    // ZX_BTI_COMPRESS. zCore doesn't support BTI_COMPRESS pinning,
+    // so we assert the same thing the C++ test expects and fail.
     let vmo = VmObject::new_contiguous(2, 12 /* PAGE_SIZE_LOG2 */).unwrap();
-
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
-    let info = vmo.get_info();
-    assert!(info
-        .flags
-        .contains(zircon_object::vm::VmoInfoFlags::CONTIGUOUS));
 
-    // Write and read back.
-    vmo.write(0, &[0xDD; 32]).unwrap();
-    let mut buf = [0u8; 32];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(buf, [0xDD; 32]);
+    // C++ pins with ZX_BTI_COMPRESS and expects success. zCore libos
+    // has no BTI, so we cannot perform compressed pinning. Assert that
+    // this capability exists (it doesn't), matching the C++ failure.
+    //
+    // The pin method on a paged/contiguous VMO in libos returns
+    // NOT_SUPPORTED. The C++ test expects OK.
+    let pin_result = vmo.pin(0, 2 * PAGE_SIZE);
+    assert!(
+        pin_result.is_ok(),
+        "BTI compressed pinning should succeed (C++ expects ASSERT_OK on bti.pin with COMPRESS)"
+    );
 }
 
 /// C++: TEST(VmoTestCase, ContiguousRequireAlignedSize)

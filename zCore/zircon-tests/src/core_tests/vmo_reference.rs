@@ -329,25 +329,75 @@ fn mapping_update_nested_child_destroy() {
 }
 
 /// C++: TEST(VmoReference, MappingUpdateNestedRootDestroy)
-/// Nested references: destroy root parent, verify refs still work.
+/// vmo/vmo-reference.cc:714
+///
+/// Creates root VMO, two references, a nested reference from ref1.
+/// Writes data, verifies all refs see it. Drops root VMO. Decommits
+/// through the nested reference. Verifies populated_bytes == 0 and
+/// all references read zeros.
 #[test]
 fn mapping_update_nested_root_destroy() {
     let _ctx = TestContext::new();
     let parent = VmObject::new_paged(1);
     parent.write(0, &[0xAA]).unwrap();
 
+    // Create two references.
     let ref1 = parent.create_reference_slice(0, 0, false).unwrap();
-    let ref2 = ref1.create_reference_slice(0, 0, false).unwrap();
+    let ref2 = parent.create_reference_slice(0, 0, false).unwrap();
 
-    // Drop root parent.
-    drop(parent);
+    // Create a nested reference from ref1.
+    let nested = ref1.create_reference_slice(0, 0, false).unwrap();
 
-    // Both refs still see data.
+    // All refs see initial data.
     let mut buf = [0u8; 1];
     ref1.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 0xAA);
+    assert_eq!(buf[0], 0xAA, "ref1 should see initial data");
     ref2.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 0xAA);
+    assert_eq!(buf[0], 0xAA, "ref2 should see initial data");
+    nested.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xAA, "nested should see initial data");
+
+    // Modify the VMO and verify the change is visible.
+    parent.write(0, &[0xBB]).unwrap();
+    ref1.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xBB, "ref1 should see updated data");
+    ref2.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xBB, "ref2 should see updated data");
+    nested.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xBB, "nested should see updated data");
+
+    // Drop the root VMO.
+    drop(parent);
+
+    // Decommit the page through the nested reference.
+    nested.decommit(0, PAGE_SIZE).unwrap();
+
+    // populated_bytes should be 0.
+    let info = nested.get_info();
+    assert_eq!(
+        info.populated_bytes, 0,
+        "populated_bytes should be 0 after decommit"
+    );
+
+    // All references should now read zeros.
+    ref1.read(0, &mut buf).unwrap();
+    assert_eq!(
+        buf[0], 0,
+        "ref1 should read zeros after decommit (got {:#x})",
+        buf[0]
+    );
+    ref2.read(0, &mut buf).unwrap();
+    assert_eq!(
+        buf[0], 0,
+        "ref2 should read zeros after decommit (got {:#x})",
+        buf[0]
+    );
+    nested.read(0, &mut buf).unwrap();
+    assert_eq!(
+        buf[0], 0,
+        "nested should read zeros after decommit (got {:#x})",
+        buf[0]
+    );
 }
 
 // ── Stream + pager-backed reference tests ───────────────────────────
@@ -406,27 +456,79 @@ fn unsupported_child() {
 /// C++: TEST(VmoReference, ChildSnapshotAtLeastOnWrite)
 /// vmo/vmo-reference.cc:130
 ///
-/// Tests COW child creation, data read-through, and write isolation.
-/// zCore treats SNAPSHOT_AT_LEAST_ON_WRITE as a regular snapshot,
-/// so parent writes after child creation are NOT visible in child
-/// (unlike Fuchsia where they would be until the child writes).
+/// Creates a pager-backed VMO, supplies a page, writes to it,
+/// creates a REFERENCE child, then creates a SNAPSHOT_AT_LEAST_ON_WRITE
+/// sub-child from the reference. Verifies read-through and write
+/// isolation (COW semantics).
+///
+/// The C++ test exercises pager VMO → reference → SNAPSHOT_AT_LEAST_ON_WRITE
+/// child creation. The Rust test faithfully reproduces this chain.
 #[test]
 fn child_snapshot_at_least_on_write() {
     let _ctx = TestContext::new();
-    let root = VmObject::new_paged(1);
-    root.write(0, &[0xAAu8; 8]).unwrap();
 
-    let child = root.create_child(false, 0, PAGE_SIZE).unwrap();
+    // Create a pager-backed VMO (matches C++ pager.create_vmo).
+    let pager = Pager::new();
+    let port = Port::new(0).unwrap();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
-    let mut buf = [0u8; 8];
+    // Supply a page so it's committed.
+    let aux = VmObject::new_paged(1);
+    pager
+        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &aux, 0)
+        .unwrap();
+
+    // Write a non-zero page.
+    vmo.write(0, &[0xAA]).unwrap();
+
+    // Create a REFERENCE child.
+    let reference = vmo.create_reference_slice(0, 0, false).unwrap();
+
+    // Create a SNAPSHOT_AT_LEAST_ON_WRITE child of the reference.
+    // In Fuchsia, this creates a COW child that sees parent writes until
+    // the child itself writes. In zCore, create_child creates a SNAPSHOT
+    // (full COW). The child creation itself must succeed.
+    let child = reference.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // C++ verifies parent_koid points to the reference.
+    // parent_koid is a private field in zCore's VmoInfo, so we verify
+    // the parent relationship indirectly via IS_COW_CLONE flag.
+    let child_info = child.get_info();
+    assert!(
+        child_info.flags.contains(VmoInfoFlags::IS_COW_CLONE),
+        "snapshot child should have IS_COW_CLONE flag"
+    );
+
+    // The child should logically be a COW child of the root VMO.
+    let mut buf = [0u8; 1];
     child.read(0, &mut buf).unwrap();
-    assert_eq!(buf, [0xAA; 8], "child should read parent data");
+    assert_eq!(buf[0], 0xAA);
 
-    child.write(0, &[0xCC; 8]).unwrap();
+    // Write the page in the root again.
+    vmo.write(0, &[0xBB]).unwrap();
 
-    let mut parent_buf = [0u8; 8];
-    root.read(0, &mut parent_buf).unwrap();
-    assert_eq!(parent_buf, [0xAA; 8], "parent should be unchanged");
+    // In Fuchsia (SNAPSHOT_AT_LEAST_ON_WRITE), the new write SHOULD be
+    // visible to the child (since child hasn't written yet). In zCore,
+    // SNAPSHOT semantics mean the child does NOT see the parent write.
+    // This assertion matches the Fuchsia C++ expectation.
     child.read(0, &mut buf).unwrap();
-    assert_eq!(buf, [0xCC; 8], "child should have forked data");
+    assert_eq!(
+        buf[0], 0xBB,
+        "SNAPSHOT_AT_LEAST_ON_WRITE child should see parent write (buf={:#x})",
+        buf[0]
+    );
+
+    // Write the page in the child.
+    child.write(0, &[0xCC]).unwrap();
+
+    // The write should not be visible in the root.
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xBB, "root should be unchanged after child write");
+
+    // Verify contents of both children.
+    reference.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xBB, "reference should see root data");
+
+    child.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xCC, "child should have forked data");
 }
