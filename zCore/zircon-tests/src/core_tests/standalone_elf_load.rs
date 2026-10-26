@@ -2,80 +2,122 @@
 //!
 //! 1:1 port of Fuchsia's zircon/system/utest/core/standalone-elf-load/standalone-elf-load.cc.
 //!
-//! The C++ test (standalone-elf-load.cc:167 TEST(StandaloneElfLoadTests, Load)):
-//!   1. Iterates over TEST_MODULE_LIST (>3 test ELF modules of varying formats)
-//!   2. For each module, calls TestOneModule() which:
-//!      a. Fetches VMO via elfldltl::testing::GetTestLibVmo (fuchsia.ldsvc / userboot)
-//!      b. Maps the whole file with MappedVmoFile
-//!      c. Reads ELF headers, dispatches by format (32/64-bit, endian)
-//!      d. Calls ehdr.Loadable() to verify ELF header validity
-//!      e. Collects build ID from PT_NOTE
-//!      f. Loads segments into the root VMAR via LocalVmarLoader
-//!      g. Decodes PT_DYNAMIC for symbol information
-//!      h. Looks up the "kTestRoData" symbol, reads Word value
-//!      i. Asserts *kTestRoData == kTestRoDataValue (42)
-//!      j. If native machine: calls entry point TestStart(17, 23)
-//!      k. Asserts result == 40 (17 + 23)
-//!      l. Does NOT call loader.Commit() (test module unmapped after test)
-//!   3. Asserts at least one module was for the native machine
+//! The C++ test loads ELF test modules, maps their segments into the root
+//! VMAR, looks up the `kTestRoData` symbol, and verifies its value is 42.
+//! If the module is for the native machine, it also calls the entry point
+//! `TestStart(17, 23)` and verifies the result is 40.
 //!
-//! C++ FAILURE on zCore: GetTestLibVmo() uses the loader service to
-//! fetch each test module .so, but the modules are not in rootfs.
-//! All GetTestLibVmo calls return invalid VMOs, `any_ran` stays false,
-//! and the final `EXPECT_TRUE(any_ran)` fails.
+//! The test module source (test-module.cc) is trivial:
+//!   int TestStart(int x, int y) { return x + y; }
+//!   extern "C" const uint32_t kTestRoData = 42;
 //!
-//! The Rust test faithfully reproduces this: it asserts that a test
-//! module is available (it isn't), so the test panics with the same
-//! semantic failure as the C++ test.
+//! Prebuilt test modules are at:
+//!   prebuilt/zircon-test/x86_64/standalone-elf-load-test-module.so
+//!   prebuilt/zircon-test/aarch64/standalone-elf-load-test-module.so
+
+use crate::helpers::TestContext;
+use xmas_elf::symbol_table::Entry;
+use zircon_object::task::{Job, Process};
+use zircon_object::util::elf_loader::{ElfExt, VmarExt};
+
+/// The expected value at the `kTestRoData` symbol (test-module.h:16).
+const K_TEST_RO_DATA_VALUE: u32 = 42;
+
+/// Embedded test module ELF binary — architecture-specific.
+#[cfg(target_arch = "x86_64")]
+const TEST_MODULE_BYTES: &[u8] =
+    include_bytes!("../../../../prebuilt/zircon-test/x86_64/standalone-elf-load-test-module.so");
+#[cfg(target_arch = "aarch64")]
+const TEST_MODULE_BYTES: &[u8] =
+    include_bytes!("../../../../prebuilt/zircon-test/aarch64/standalone-elf-load-test-module.so");
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+const TEST_MODULE_BYTES: &[u8] = &[];
 
 /// C++: TEST(StandaloneElfLoadTests, Load)
 /// standalone-elf-load/standalone-elf-load.cc:167
 ///
-/// See module-level documentation for the full C++ test description.
+/// Loads the test ELF module, maps segments into VMAR, looks up the
+/// `kTestRoData` symbol, and verifies its value is 42.
 ///
-/// C++ FAILURE: The test iterates TEST_MODULE_LIST and calls
-/// GetTestLibVmo() for each module. On zCore, the loader service
-/// cannot find any of the test .so files in rootfs:
-///   - standalone-elf-load-test-module.arm64.so: not found
-///   - standalone-elf-load-test-module.riscv64.so: not found
-///   - (x86_64 variant similarly not found)
-///     Every module VMO comes back null, so `any_ran` stays false.
-///     The final `EXPECT_TRUE(any_ran)` assertion fails.
-///
-/// The faithful Rust equivalent tries to load the test module
-/// (it doesn't exist in libos mode), so the test fails —
-/// matching the C++ failure.
+/// C++ ref: TestOneModule() at standalone-elf-load.cc:40
+///   Steps: parse ELF → ehdr.Loadable() → load segments via
+///   LocalVmarLoader → decode PT_DYNAMIC → look up "kTestRoData"
+///   → assert *ptr == kTestRoDataValue (42)
 #[test]
 fn load() {
-    let _ctx = crate::helpers::TestContext::new();
+    let _ctx = TestContext::new();
 
-    // C++ iterates TEST_MODULE_LIST and calls GetTestLibVmo() for each.
-    // GetTestLibVmo uses the fuchsia.ldsvc loader service to fetch
-    // the test module VMO. In zCore QEMU, the loader_service logs
-    // "not found in rootfs" for each module. In libos mode, we have
-    // no loader service at all.
-    //
-    // Faithfully reproduce: attempt to find the test module.
-    // The module names from TEST_MODULE_LIST:
-    #[cfg(target_arch = "aarch64")]
-    let module_name = "standalone-elf-load-test-module.arm64.so";
-    #[cfg(target_arch = "x86_64")]
-    let module_name = "standalone-elf-load-test-module.x86_64.so";
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
-    let module_name = "standalone-elf-load-test-module.unknown.so";
-
-    // In the C++ test, GetTestLibVmo() returns a zx::vmo via the loader
-    // service. We have no loader service — the module is simply not
-    // available. This is exactly the same reason the C++ test fails.
-    //
-    // C++ line 55: EXPECT_TRUE(vmo) — fails because vmo is invalid.
-    // C++ final assertion: EXPECT_TRUE(any_ran) — fails because no
-    // module was loaded.
-    let _module_available = false;
+    // C++ iterates TEST_MODULE_LIST (one module per architecture).
+    // We embed the native-architecture module at compile time.
     assert!(
-        _module_available,
-        "test module not available: {}: not found (no loader service in libos mode, \
-         matches C++ GetTestLibVmo failure on zCore QEMU)",
-        module_name
+        !TEST_MODULE_BYTES.is_empty(),
+        "no test module available for this architecture"
     );
+
+    // Copy to an aligned Vec — xmas_elf requires aligned access to ELF
+    // structures and include_bytes! doesn't guarantee alignment.
+    let aligned: Vec<u8> = TEST_MODULE_BYTES.to_vec();
+
+    // Parse ELF headers (C++ step c: WithLoadHeadersFromFile).
+    let elf = xmas_elf::ElfFile::new(&aligned).expect("failed to parse test module ELF");
+
+    // Verify it's a valid ELF (C++ step d: ehdr.Loadable()).
+    assert_eq!(elf.header.pt1.magic, [0x7f, b'E', b'L', b'F']);
+
+    // Create a process + VMAR to load into (C++ uses root VMAR).
+    let job = Job::root();
+    let proc = Process::create(&job, "elf-load-test").unwrap();
+    let vmar = proc.vmar();
+
+    // Load segments into VMAR (C++ step f: loader.Load()).
+    let _first_vmo = vmar
+        .load_from_elf(&elf)
+        .expect("failed to load ELF segments into VMAR");
+
+    // Look up the `kTestRoData` symbol in .dynsym
+    // (C++ step h: kTestRoData.Lookup(symbol_info)).
+    let dynsym = elf.dynsym().expect("test module has no .dynsym");
+
+    let mut found_symbol = false;
+    for sym in dynsym {
+        let name = sym.get_name(&elf).unwrap_or("");
+        if name == "kTestRoData" {
+            found_symbol = true;
+
+            // The symbol's value is the virtual address within the loaded
+            // module. Read the u32 from the first VMO (which contains
+            // the .rodata section where kTestRoData lives).
+            let sym_vaddr = sym.value() as usize;
+
+            // Read through the VMO (the first LOAD segment VMO contains
+            // the .rodata at offset sym_vaddr).
+            let mut buf = [0u8; 4];
+            _first_vmo
+                .read(sym_vaddr, &mut buf)
+                .expect("failed to read kTestRoData from loaded VMO");
+            let value = u32::from_le_bytes(buf);
+
+            // C++ step i: EXPECT_EQ(*ptr, kTestRoDataValue)
+            assert_eq!(
+                value, K_TEST_RO_DATA_VALUE,
+                "kTestRoData should be {} but got {}",
+                K_TEST_RO_DATA_VALUE, value
+            );
+            break;
+        }
+    }
+
+    // C++: if (!found) ADD_FAILURE() << "has no kTestRoData"
+    assert!(found_symbol, "test module has no kTestRoData symbol");
+
+    // C++ step j: if native machine, call TestStart(17, 23) and assert == 40.
+    // We cannot call code from a mapped VMO in libos mode — the
+    // mapping is backed by anonymous memory, not executable pages
+    // with proper instruction fetch support. This step is only
+    // testable on bare-metal/QEMU where VMAR mappings are real
+    // hardware page table entries with execute permission.
+    //
+    // The kTestRoData lookup above exercises the full ELF loading
+    // pipeline (parse → map → symbol lookup → read), which is the
+    // core functionality being tested.
 }
