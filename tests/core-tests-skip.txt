@@ -72,3 +72,4 @@ VmoTestCase.PinTests
 # ── JobTest: KillJobChain hang ──
 JobTest.KillJobChain
 VmoTestCase.ParallelWriteAndDecommit
+Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
