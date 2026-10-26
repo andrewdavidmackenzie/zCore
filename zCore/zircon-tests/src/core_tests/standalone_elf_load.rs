@@ -39,8 +39,8 @@
 ///   - standalone-elf-load-test-module.arm64.so: not found
 ///   - standalone-elf-load-test-module.riscv64.so: not found
 ///   - (x86_64 variant similarly not found)
-/// Every module VMO comes back null, so `any_ran` stays false.
-/// The final `EXPECT_TRUE(any_ran)` assertion fails.
+///     Every module VMO comes back null, so `any_ran` stays false.
+///     The final `EXPECT_TRUE(any_ran)` assertion fails.
 ///
 /// The faithful Rust equivalent tries to load the test module
 /// (it doesn't exist in libos mode), so the test fails —

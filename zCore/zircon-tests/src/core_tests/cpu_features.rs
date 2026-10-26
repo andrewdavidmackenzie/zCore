@@ -75,7 +75,6 @@ fn arm_mops_exception() {
     let mops_bit = 1u32 << 20;
     if cpu_features & mops_bit == 0 {
         // FEAT_MOPS not detected — skip, matching C++ ZXTEST_SKIP behavior.
-        return;
     }
 
     // C++ uses ASSERT_DEATH: deliberately corrupts the NZCV C flag between

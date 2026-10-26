@@ -947,7 +947,7 @@ fn protect_large_uncommitted_test() {
     // C++: base = ROUNDUP(mapping_addr, 512 * page_size) + page_size
     // Ensure misalignment relative to larger paging structures.
     let align = 512 * PAGE_SIZE;
-    let base = ((addr + align - 1) / align) * align + PAGE_SIZE;
+    let base = addr.div_ceil(align) * align + PAGE_SIZE;
     let protect_size = addr + size - base;
 
     // Protect from base to end as read-only.
@@ -1667,7 +1667,7 @@ fn unmap_large_uncommitted_test() {
     // C++: base = ROUNDUP(mapping_addr, 512 * page_size) + page_size
     // Ensure misalignment relative to larger paging structure level.
     let align = 512 * PAGE_SIZE;
-    let base = ((addr + align - 1) / align) * align + PAGE_SIZE;
+    let base = addr.div_ceil(align) * align + PAGE_SIZE;
     let unmap_size = addr + size - base;
 
     // Unmap from base to end.

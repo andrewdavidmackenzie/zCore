@@ -470,9 +470,9 @@ fn stream_write_vector_with_append_mode() {
 ///           kTestOffset until terminated
 ///         - fault_thread: reads from mapped address at kTestOffset
 ///           (expects fault since stream_size is now 0)
-///      d. read_spam is expected to crash (WaitForAnyCrash)
-///      e. fault_thread is expected to crash with ZX_ERR_OUT_OF_RANGE
-///         at address vaddr + kTestOffset
+///           d. read_spam is expected to crash (WaitForAnyCrash)
+///           e. fault_thread is expected to crash with ZX_ERR_OUT_OF_RANGE
+///           at address vaddr + kTestOffset
 ///
 /// This requires:
 ///   - ZX_VM_FAULT_BEYOND_STREAM_SIZE flag (MMU fault on access beyond

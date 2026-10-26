@@ -29,10 +29,7 @@ fn try_dequeue(port: &Arc<Port>) -> Option<PortPacket> {
         // Race: another thread might drain the packet between our check
         // and the dequeue. Use a short timeout via `block_on`.
         use async_std::future::timeout;
-        match async_std::task::block_on(timeout(Duration::from_millis(1), port.wait())) {
-            Ok(pkt) => Some(pkt),
-            Err(_) => None,
-        }
+        async_std::task::block_on(timeout(Duration::from_millis(1), port.wait())).ok()
     } else {
         None
     }
@@ -424,7 +421,7 @@ fn channel_call_wait_queue_panic_repro() {
 /// from an event and the cancellation logic. Two threads:
 /// - waiter: registers observer, waits for signal, cancels.
 /// - signaler: toggles signal in a loop with variable-length sleeps.
-/// 20000 iterations.
+///   20000 iterations.
 #[test]
 #[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn wait_signal_cancel() {

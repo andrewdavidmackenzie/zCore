@@ -10,7 +10,6 @@ use zircon_object::task::{
     policy_code, ExceptionObject, ExceptionType, Job, Process, Task, Thread, ThreadState,
     ThreadStateKind,
 };
-use zircon_object::ZxError;
 
 extern crate alloc;
 

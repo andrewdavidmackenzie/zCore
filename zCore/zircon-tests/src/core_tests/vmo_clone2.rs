@@ -179,12 +179,12 @@ fn zero_page_write() {
     let vmos: [&Arc<VmObject>; 4] = [&vmo0, &vmo1, &vmo2, &vmo3];
 
     // Write to each VMO and check all populated_bytes.
-    for i in 0..4 {
-        vmo_write(vmos[i], (i + 1) as u32, 0);
-        for j in 0..4 {
-            vmo_check(vmos[j], if j <= i { (j + 1) as u32 } else { 0 }, 0);
+    for (i, vmo_i) in vmos.iter().enumerate() {
+        vmo_write(vmo_i, (i + 1) as u32, 0);
+        for (j, vmo_j) in vmos.iter().enumerate() {
+            vmo_check(vmo_j, if j <= i { (j + 1) as u32 } else { 0 }, 0);
             assert_eq!(
-                vmo_populated_bytes(vmos[j]),
+                vmo_populated_bytes(vmo_j),
                 if j <= i { kvmo_size as u64 } else { 0 },
             );
         }
@@ -536,7 +536,7 @@ fn small_clones() {
 /// C++ `DisjointClonesTest`: 4-page parent, intermediate clone (pages 1-2),
 /// 4 leaf clones (2 direct, 2 via intermediate). If early_close, drop parent
 /// + intermediate before writing; otherwise after. Verify data + poll
-/// populated_bytes for each leaf.
+///   populated_bytes for each leaf.
 fn disjoint_clones_test(early_close: bool) {
     let _ctx = TestContext::new();
     let vmo = init_page_tagged_vmo(4);
@@ -545,30 +545,29 @@ fn disjoint_clones_test(early_close: bool) {
     let intermediate = vmo.create_child(false, PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
 
     // 4 leaf clones.
-    let mut leaf_clones: Vec<Arc<VmObject>> = Vec::new();
-    leaf_clones.push(vmo.create_child(false, 0, PAGE_SIZE).unwrap());
-    leaf_clones.push(intermediate.create_child(false, 0, PAGE_SIZE).unwrap());
-    leaf_clones.push(
+    let leaf_clones: Vec<Arc<VmObject>> = vec![
+        vmo.create_child(false, 0, PAGE_SIZE).unwrap(),
+        intermediate.create_child(false, 0, PAGE_SIZE).unwrap(),
         intermediate
             .create_child(false, PAGE_SIZE, PAGE_SIZE)
             .unwrap(),
-    );
-    leaf_clones.push(vmo.create_child(false, 3 * PAGE_SIZE, PAGE_SIZE).unwrap());
+        vmo.create_child(false, 3 * PAGE_SIZE, PAGE_SIZE).unwrap(),
+    ];
 
     if early_close {
         drop(vmo);
         drop(intermediate);
 
         // Check each clone's data and write to it.
-        for i in 0..4 {
-            vmo_check(&leaf_clones[i], (i + 1) as u32, 0);
-            vmo_write(&leaf_clones[i], (i + 5) as u32, 0);
+        for (i, lc) in leaf_clones.iter().enumerate() {
+            vmo_check(lc, (i + 1) as u32, 0);
+            vmo_write(lc, (i + 5) as u32, 0);
         }
     } else {
         // Check each clone's data and write to it.
-        for i in 0..4 {
-            vmo_check(&leaf_clones[i], (i + 1) as u32, 0);
-            vmo_write(&leaf_clones[i], (i + 5) as u32, 0);
+        for (i, lc) in leaf_clones.iter().enumerate() {
+            vmo_check(lc, (i + 1) as u32, 0);
+            vmo_write(lc, (i + 5) as u32, 0);
         }
 
         drop(vmo);
@@ -577,9 +576,9 @@ fn disjoint_clones_test(early_close: bool) {
 
     // Check that the clones have the correct data and nothing is unnecessarily
     // retained/allocated.
-    for i in 0..4 {
-        vmo_check(&leaf_clones[i], (i + 5) as u32, 0);
-        poll_vmo_populated_bytes(&leaf_clones[i], PAGE_SIZE as u64);
+    for (i, lc) in leaf_clones.iter().enumerate() {
+        vmo_check(lc, (i + 5) as u32, 0);
+        poll_vmo_populated_bytes(lc, PAGE_SIZE as u64);
     }
 }
 
@@ -1064,8 +1063,8 @@ fn disjoint_clone_test2() {
 
         // Check that each clone has the correct data.
         let leaf_clones: [&Arc<VmObject>; 4] = [&leaf0, &leaf1, &leaf2, &leaf3];
-        for i in 0..4 {
-            vmo_check(leaf_clones[i], (i + 1) as u32, 0);
+        for (i, lc) in leaf_clones.iter().enumerate() {
+            vmo_check(lc, (i + 1) as u32, 0);
         }
 
         // Close the clones in the order specified by |perm|, and at each step
@@ -1073,8 +1072,8 @@ fn disjoint_clone_test2() {
         let mut leaves: [Option<Arc<VmObject>>; 4] =
             [Some(leaf0), Some(leaf1), Some(leaf2), Some(leaf3)];
         let mut closed = [false; 4];
-        for i in 0..4 {
-            let idx = perm[i] as usize;
+        for &p in perm.iter().take(4) {
+            let idx = p as usize;
             leaves[idx] = None; // drop
             closed[idx] = true;
 
@@ -1246,8 +1245,8 @@ fn many_clone_mapping() {
 
         // Write to the pages in the order specified by |perm| and validate.
         let mut written = [false; 4];
-        for i in 0..KNUM_ELTS as usize {
-            let cur_idx = perm[i] as usize;
+        for &p in perm.iter().take(KNUM_ELTS as usize) {
+            let cur_idx = p as usize;
             let ptr = addrs[cur_idx] as *mut u32;
             unsafe { core::ptr::write_volatile(ptr, KNEW_DATA) };
             written[cur_idx] = true;
@@ -1264,8 +1263,8 @@ fn many_clone_mapping() {
         }
 
         // Cleanup.
-        for i in 0..KNUM_ELTS as usize {
-            vmar.unmap(addrs[i], PAGE_SIZE).unwrap();
+        for &addr in addrs.iter().take(KNUM_ELTS as usize) {
+            vmar.unmap(addr, PAGE_SIZE).unwrap();
         }
     });
 }
@@ -1301,9 +1300,9 @@ fn many_clone_mapping_offset() {
     let mut addrs = [0usize; 4];
 
     // Map the vmos (first page only) and make sure they're all correct.
-    for i in 0..4 {
+    for (i, vmo_ref) in vmos.iter().enumerate() {
         let addr = vmar
-            .map(None, vmos[i].clone(), 0, PAGE_SIZE, flags)
+            .map(None, (*vmo_ref).clone(), 0, PAGE_SIZE, flags)
             .unwrap();
         addrs[i] = addr;
         if i != 2 {
@@ -1328,14 +1327,14 @@ fn many_clone_mapping_offset() {
         1
     );
 
-    for i in 0..4 {
+    for (i, vmo_ref) in vmos.iter().enumerate() {
         let expected = if i != 2 { PAGE_SIZE as u64 } else { 0u64 };
-        assert_eq!(vmo_populated_bytes(vmos[i]), expected);
+        assert_eq!(vmo_populated_bytes(vmo_ref), expected);
     }
 
     // Cleanup.
-    for i in 0..4 {
-        vmar.unmap(addrs[i], PAGE_SIZE).unwrap();
+    for &addr in &addrs {
+        vmar.unmap(addr, PAGE_SIZE).unwrap();
     }
 }
 
@@ -1697,8 +1696,8 @@ fn resize_disjoint_child() {
         let kimpl_cost_original = 3 * PAGE_SIZE as u64 / 2; // 1/2 + 1/2 + 1/2
         let kimpl_cost_clone = PAGE_SIZE as u64 / 2; // 1/2
         assert_eq!(vmo_populated_bytes(&vmo), kimpl_cost_original);
-        for i in 0..3 {
-            assert_eq!(vmo_populated_bytes(&clones[i]), kimpl_cost_clone);
+        for c in clones.iter().take(3) {
+            assert_eq!(vmo_populated_bytes(c), kimpl_cost_clone);
         }
 
         // Shrink two clones and the parent.
@@ -1815,14 +1814,14 @@ fn progressive_clone_discard_test(close: bool) {
     }
 
     // Check that the vmos have the right content.
-    for i in 0..KNUM_CLONES {
+    for (i, vmo_i) in vmos.iter().enumerate().take(KNUM_CLONES) {
         for j in 0..KNUM_CLONES {
             let expected = if i != 0 && j == i {
                 (KNUM_CLONES + 2) as u32
             } else {
                 (j + 1) as u32
             };
-            vmo_check(&vmos[i], expected, j * PAGE_SIZE);
+            vmo_check(vmo_i, expected, j * PAGE_SIZE);
         }
     }
 
@@ -1833,8 +1832,8 @@ fn progressive_clone_discard_test(close: bool) {
     let kattr_bytes_all_clones = 59 * PAGE_SIZE as u64 / 6;
     let kattr_bytes_clone = kattr_bytes_all_clones / (KNUM_CLONES as u64 - 1);
     assert_eq!(vmo_populated_bytes(&vmos[0]), kattr_bytes_original);
-    for i in 1..KNUM_CLONES {
-        assert_eq!(vmo_populated_bytes(&vmos[i]), kattr_bytes_clone);
+    for vmo_i in vmos.iter().take(KNUM_CLONES).skip(1) {
+        assert_eq!(vmo_populated_bytes(vmo_i), kattr_bytes_clone);
     }
 
     // Close/truncate the original vmo.
@@ -1846,14 +1845,14 @@ fn progressive_clone_discard_test(close: bool) {
         vmos[0].set_len(0).unwrap();
     }
 
-    for i in 1..KNUM_CLONES {
+    for (i, vmo_i) in vmos.iter().enumerate().take(KNUM_CLONES).skip(1) {
         for j in 0..KNUM_CLONES {
             let expected = if j == i {
                 (KNUM_CLONES + 2) as u32
             } else {
                 (j + 1) as u32
             };
-            vmo_check(&vmos[i], expected, j * PAGE_SIZE);
+            vmo_check(vmo_i, expected, j * PAGE_SIZE);
         }
     }
 
@@ -1861,36 +1860,41 @@ fn progressive_clone_discard_test(close: bool) {
     // C++: EXPECT_EQ(kAttrBytesVmo2, VmoPopulatedBytes(vmos[i])) — direct assertion, not polling.
     let kattr_bytes_vmo2 =
         (2 * KNUM_CLONES as u64 - 1) * PAGE_SIZE as u64 / (KNUM_CLONES as u64 - 1);
-    for i in 1..KNUM_CLONES {
-        assert_eq!(vmo_populated_bytes(&vmos[i]), kattr_bytes_vmo2);
+    for vmo_i in vmos.iter().take(KNUM_CLONES).skip(1) {
+        assert_eq!(vmo_populated_bytes(vmo_i), kattr_bytes_vmo2);
     }
 
     // Close all but the last two vmos.
-    for i in 1..KNUM_CLONES - 2 {
+    for vmo_i in vmos.iter_mut().take(KNUM_CLONES - 2).skip(1) {
         if close {
-            let old = core::mem::replace(&mut vmos[i], init_page_tagged_vmo(0));
+            let old = core::mem::replace(vmo_i, init_page_tagged_vmo(0));
             drop(old);
         } else {
-            vmos[i].set_len(0).unwrap();
+            vmo_i.set_len(0).unwrap();
         }
     }
 
-    for i in KNUM_CLONES - 2..KNUM_CLONES {
+    for (i, vmo_i) in vmos
+        .iter()
+        .enumerate()
+        .take(KNUM_CLONES)
+        .skip(KNUM_CLONES - 2)
+    {
         for j in 0..KNUM_CLONES {
             let expected = if j == i {
                 (KNUM_CLONES + 2) as u32
             } else {
                 (j + 1) as u32
             };
-            vmo_check(&vmos[i], expected, j * PAGE_SIZE);
+            vmo_check(vmo_i, expected, j * PAGE_SIZE);
         }
     }
 
     // Last two vmos: (KNUM_CLONES + 2) / 2 pages each.
     // C++: EXPECT_EQ(kAttrBytesVmo3, VmoPopulatedBytes(vmos[i])) — direct assertion, not polling.
     let kattr_bytes_vmo3 = (KNUM_CLONES as u64 + 2) * PAGE_SIZE as u64 / 2;
-    for i in KNUM_CLONES - 2..KNUM_CLONES {
-        assert_eq!(vmo_populated_bytes(&vmos[i]), kattr_bytes_vmo3);
+    for vmo_i in vmos.iter().take(KNUM_CLONES).skip(KNUM_CLONES - 2) {
+        assert_eq!(vmo_populated_bytes(vmo_i), kattr_bytes_vmo3);
     }
 }
 
