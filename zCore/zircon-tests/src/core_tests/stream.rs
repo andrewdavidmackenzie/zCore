@@ -484,7 +484,6 @@ fn stream_write_vector_with_append_mode() {
 /// sequential analog: verify that after reducing stream_size, reads
 /// at the seek position beyond stream_size return 0 bytes.
 #[test]
-#[ignore] // C++ equivalent is a multi-threaded MMU fault race — in core-tests-skip.txt
 fn stream_fault_beyond_stream_size_resize_down_race() {
     let _ctx = TestContext::new();
 

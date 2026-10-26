@@ -46,7 +46,6 @@
 /// (it doesn't exist in libos mode), so the test fails —
 /// matching the C++ failure.
 #[test]
-#[ignore] // TODO: implement ELF module loading via loader service or embedded test module
 fn load() {
     let _ctx = crate::helpers::TestContext::new();
 

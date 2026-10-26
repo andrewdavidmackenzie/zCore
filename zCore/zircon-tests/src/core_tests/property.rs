@@ -252,20 +252,49 @@ fn register_fs_non_thread() {
 ///
 /// On non-x86_64 targets, FS/GS properties return NOT_SUPPORTED.
 #[test]
-#[ignore] // TODO: C++ test exercises wrfsbase CPU instruction + exception delivery (steps 1-3)
-          // which fails on zCore QEMU. Syscall-level check (step 4) works. Need exception
-          // channel infrastructure for wrfsbase #GP fault handling.
+// which fails on zCore QEMU. Syscall-level check (step 4) works. Need exception
+// channel infrastructure for wrfsbase #GP fault handling.
 fn register_fs_noncanonical() {
-    // TODO: Steps 1-3 of C++ TestNoncanonical(kFs):
-    // 1. Create Zircon thread, write_state with kInitialValue in FS
-    // 2. Thread executes rdfsbase (read FS), wrfsbase with kNoncanonicalValue (triggers #GP)
-    // 3. Exception handler catches #GP, verifies RIP at wrfsbase instruction, warps past it
-    // These steps require: Zircon Thread::start(), exception channels, x86 inline asm
-    todo!("wrfsbase CPU instruction test + exception delivery for FS — needs x86 bare-metal");
+    let ctx = TestContext::new();
+    let thread_h = ctx.proc.add_handle(Handle::new(
+        ctx.current.inner().clone(),
+        Rights::GET_PROPERTY | Rights::SET_PROPERTY,
+    ));
 
-    // Step 4 (syscall validation — works correctly):
-    // set_property(REGISTER_FS, kNoncanonicalValue) → INVALID_ARGS
-    // get_property(REGISTER_FS) → kInitialValue (old value preserved)
+    if cfg!(target_arch = "x86_64") {
+        // Step 4 of C++ TestNoncanonical(kFs): syscall validation.
+        // Set a known-good initial value first (C++: kInitialValue).
+        let initial: usize = 0xdead1;
+        let initial_bytes = initial.to_ne_bytes();
+        set_property(&ctx, thread_h, PROP_REGISTER_FS, &initial_bytes).unwrap();
+
+        // Attempt to set non-canonical value — must fail.
+        let val: usize = 0x1010_1010_1010_1010;
+        let val_bytes = val.to_ne_bytes();
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
+        assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+
+        // Old value must be preserved.
+        let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+        get_property(&ctx, thread_h, PROP_REGISTER_FS, &mut read_buf).unwrap();
+        let read_value = usize::from_ne_bytes(read_buf);
+        assert_eq!(
+            read_value, initial,
+            "old FS value must be preserved after rejected set"
+        );
+
+        // Steps 1-3 of C++ TestNoncanonical: thread executes wrfsbase
+        // with non-canonical value, triggers #GP, exception handler
+        // catches it and verifies RIP. This requires exception channel
+        // infrastructure that is not yet implemented — the C++ test
+        // also fails here on zCore QEMU (exception channel not readable).
+        // When exception channels work, add the wrfsbase thread test here.
+    } else {
+        let val: usize = 0x1010_1010_1010_1010;
+        let val_bytes = val.to_ne_bytes();
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_FS, &val_bytes).unwrap_err();
+        assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
 /// C++: TEST(Property, RegisterFsNonuser) → TestNonuser(kFs)
@@ -425,12 +454,38 @@ fn register_gs_non_thread() {
 ///
 /// On non-x86_64 targets, GS properties return NOT_SUPPORTED.
 #[test]
-#[ignore] // TODO: C++ test exercises wrgsbase CPU instruction + exception delivery
-          // which fails on zCore QEMU. Need exception channel infrastructure.
+// which fails on zCore QEMU. Need exception channel infrastructure.
 fn register_gs_noncanonical() {
-    // TODO: Steps 1-3 of C++ TestNoncanonical(kGs):
-    // Same as register_fs_noncanonical but for GS register.
-    todo!("wrgsbase CPU instruction test + exception delivery for GS — needs x86 bare-metal");
+    let ctx = TestContext::new();
+    let thread_h = ctx.proc.add_handle(Handle::new(
+        ctx.current.inner().clone(),
+        Rights::GET_PROPERTY | Rights::SET_PROPERTY,
+    ));
+
+    if cfg!(target_arch = "x86_64") {
+        // Step 4 of C++ TestNoncanonical(kGs): syscall validation.
+        let initial: usize = 0xdead1;
+        let initial_bytes = initial.to_ne_bytes();
+        set_property(&ctx, thread_h, PROP_REGISTER_GS, &initial_bytes).unwrap();
+
+        let val: usize = 0x1010_1010_1010_1010;
+        let val_bytes = val.to_ne_bytes();
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
+        assert_eq!(err, zircon_object::ZxError::INVALID_ARGS);
+
+        let mut read_buf = [0u8; core::mem::size_of::<usize>()];
+        get_property(&ctx, thread_h, PROP_REGISTER_GS, &mut read_buf).unwrap();
+        let read_value = usize::from_ne_bytes(read_buf);
+        assert_eq!(
+            read_value, initial,
+            "old GS value must be preserved after rejected set"
+        );
+    } else {
+        let val: usize = 0x1010_1010_1010_1010;
+        let val_bytes = val.to_ne_bytes();
+        let err = set_property(&ctx, thread_h, PROP_REGISTER_GS, &val_bytes).unwrap_err();
+        assert_eq!(err, zircon_object::ZxError::NOT_SUPPORTED);
+    }
 }
 
 /// C++: TEST(Property, RegisterGsNonuser) → TestNonuser(kGs)

@@ -351,7 +351,6 @@ fn mapping_update_nested_child_destroy() {
 /// but stale PTE entries cause them to still return old data.
 /// C++ test fails at vmo-reference.cc:791 EXPECT_EQ(0u, *buf).
 #[test]
-#[ignore] // TODO: needs PTE invalidation on decommit through reference — C++ fails on stale PTEs
 fn mapping_update_nested_root_destroy() {
     let _ctx = TestContext::new();
 
