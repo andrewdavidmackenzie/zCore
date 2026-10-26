@@ -24,12 +24,16 @@ use zircon_object::util::elf_loader::{ElfExt, VmarExt};
 const K_TEST_RO_DATA_VALUE: u32 = 42;
 
 /// Embedded test module ELF binary — architecture-specific.
+/// Module names match the C++ TEST_MODULE_LIST format:
+///   standalone-elf-load-test-module.$cpu.so
 #[cfg(target_arch = "x86_64")]
-const TEST_MODULE_BYTES: &[u8] =
-    include_bytes!("../../../../prebuilt/zircon-test/x86_64/standalone-elf-load-test-module.so");
+const TEST_MODULE_BYTES: &[u8] = include_bytes!(
+    "../../../../prebuilt/zircon-test/x86_64/standalone-elf-load-test-module.x86_64.so"
+);
 #[cfg(target_arch = "aarch64")]
-const TEST_MODULE_BYTES: &[u8] =
-    include_bytes!("../../../../prebuilt/zircon-test/aarch64/standalone-elf-load-test-module.so");
+const TEST_MODULE_BYTES: &[u8] = include_bytes!(
+    "../../../../prebuilt/zircon-test/aarch64/standalone-elf-load-test-module.arm64.so"
+);
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 const TEST_MODULE_BYTES: &[u8] = &[];
 
