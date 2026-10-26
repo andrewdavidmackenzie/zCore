@@ -9,6 +9,7 @@ use zircon_object::vm::PAGE_SIZE;
 /// C++: TEST(PageSize, NotZero)
 /// PAGE_SIZE should be non-zero.
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn page_size_not_zero() {
     let _ctx = TestContext::new();
     assert!(PAGE_SIZE > 0, "PAGE_SIZE should be non-zero");
@@ -17,6 +18,7 @@ fn page_size_not_zero() {
 /// C++: TEST(PageSize, Only4K)
 /// PAGE_SIZE should be at least 4096.
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn page_size_only_4k() {
     let _ctx = TestContext::new();
     assert!(PAGE_SIZE >= 4096, "PAGE_SIZE should be at least 4096");
