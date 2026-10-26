@@ -1963,3 +1963,46 @@ fn debug_range_op_commit_populated() {
     assert!(info.populated_bytes <= 2 * PAGE_SIZE as u64,
         "clone populated_bytes should be <= {} but is {}", 2 * PAGE_SIZE, info.populated_bytes);
 }
+
+/// Debug: detailed populated_bytes tracing
+#[test]
+fn debug_range_op_commit_detail() {
+    let _ctx = crate::helpers::TestContext::new();
+    let vmo = VmObject::new_paged(5);
+    
+    // Before clone: no frames
+    let info = vmo.get_info();
+    eprintln!("Step 1 (before clone): vmo populated={} committed={}", 
+        info.populated_bytes, info.committed_bytes);
+    
+    // Create SNAPSHOT clone
+    let clone = vmo.create_child(false, 0, 5 * PAGE_SIZE).unwrap();
+    let info = vmo.get_info();
+    eprintln!("Step 2 (after clone): vmo populated={} committed={}", 
+        info.populated_bytes, info.committed_bytes);
+    let info = clone.get_info();
+    eprintln!("Step 2 (after clone): clone populated={} committed={}", 
+        info.populated_bytes, info.committed_bytes);
+    
+    // Commit 2 pages in parent (pages 1-2)
+    vmo.commit(PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
+    let info = vmo.get_info();
+    eprintln!("Step 3 (after parent commit 1-2): vmo populated={} committed={}", 
+        info.populated_bytes, info.committed_bytes);
+    let info = clone.get_info();
+    eprintln!("Step 3 (after parent commit 1-2): clone populated={} committed={}", 
+        info.populated_bytes, info.committed_bytes);
+
+    // Commit 2 pages in clone (pages 2-3)
+    clone.commit(2 * PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
+    let info = vmo.get_info();
+    eprintln!("Step 4 (after clone commit 2-3): vmo populated={} committed={}", 
+        info.populated_bytes, info.committed_bytes);
+    let info = clone.get_info();
+    eprintln!("Step 4 (after clone commit 2-3): clone populated={} committed={}", 
+        info.populated_bytes, info.committed_bytes);
+
+    // Expected: both should have <= 2 pages populated
+    assert!(info.populated_bytes <= 2 * PAGE_SIZE as u64,
+        "clone populated should be <= {} but is {}", 2 * PAGE_SIZE, info.populated_bytes);
+}
