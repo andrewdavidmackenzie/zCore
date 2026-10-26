@@ -1671,9 +1671,12 @@ fn snapshot_at_least_on_write_slice_in_chain() {
     let k_new_data: u32 = 0xc0ffee;
     vmo_write(&clone1, k_new_data, 0);
 
-    // Clone2: SNAPSHOT_AT_LEAST_ON_WRITE of clone1. Since clone1 is not
-    // pager-backed, this creates a bidirectional COW snapshot.
-    let clone2 = clone1.create_child(false, 0, PAGE_SIZE).unwrap();
+    // Clone2: SNAPSHOT_AT_LEAST_ON_WRITE of clone1. Since clone1 is a
+    // unidirectional child of a pager-backed root, this creates another
+    // unidirectional child (no hidden node). Matches C++ test line 2209.
+    let clone2 = clone1
+        .create_child_unidirectional(0, PAGE_SIZE, false)
+        .unwrap();
     let k_newer_data: u32 = 0x1eaf;
     vmo_write(&clone2, k_newer_data, 0);
 
@@ -1681,8 +1684,11 @@ fn snapshot_at_least_on_write_slice_in_chain() {
     let slice = clone1.create_slice(0, PAGE_SIZE).unwrap();
 
     // Snapshot of the slice (SNAPSHOT_AT_LEAST_ON_WRITE).
-    // Creates a COW child of clone1 (since slice redirects to parent).
-    let snapshot = slice.create_child(false, 0, PAGE_SIZE).unwrap();
+    // Creates a unidirectional child of clone1 (since slice redirects
+    // to parent and can_unidirectional_clone is true). Matches C++ line 2221.
+    let snapshot = slice
+        .create_child_unidirectional(0, PAGE_SIZE, false)
+        .unwrap();
 
     // Verify all VMOs.
     vmo_check(&vmo, k_original_data, 0);

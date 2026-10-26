@@ -249,6 +249,16 @@ pub trait VMObjectTrait: Sync + Send {
 
     /// Mark as not contiguous
     fn unset_contiguous(&self) {}
+
+    /// Check whether this VMO's cow_pages can create a unidirectional
+    /// clone. Returns true if:
+    /// 1. The root of the tree is pager-backed (user pager)
+    /// 2. The cow_pages parent (if any) is not a hidden node
+    ///
+    /// Mirrors Fuchsia's `VmCowPages::can_unidirectional_clone_locked`.
+    fn can_unidirectional_clone(&self) -> bool {
+        false
+    }
 }
 
 /// Virtual memory containers
@@ -1528,10 +1538,12 @@ impl VmObject {
         len: usize,
         resizable: bool,
     ) -> ZxResult<Arc<Self>> {
-        // REFERENCE children: redirect to the underlying parent VMO.
-        // SNAPSHOT_AT_LEAST_ON_WRITE on a pager-backed reference creates
-        // a unidirectional child of the pager root.
-        if self.is_slice && self.trait_.is_reference() {
+        // SLICE and REFERENCE children: redirect to the underlying parent VMO.
+        // SNAPSHOT_AT_LEAST_ON_WRITE on a slice creates a unidirectional
+        // child of the parent VMO with offset adjusted by the slice offset.
+        // This matches Fuchsia where slices are transparent windows and
+        // clones are always created on the parent's cow_pages.
+        if self.is_slice {
             let parent = self
                 .inner
                 .lock()
@@ -1540,7 +1552,11 @@ impl VmObject {
                 .ok_or(ZxError::BAD_STATE)?;
             let slice_off = self.trait_.parent_offset();
             let adjusted = offset.checked_add(slice_off).ok_or(ZxError::OUT_OF_RANGE)?;
-            return parent.create_child_unidirectional(adjusted, len, resizable);
+            let child = parent.create_child_unidirectional(adjusted, len, resizable)?;
+            // Set the child's VmObject parent to the slice so that
+            // parent_koid points to the slice (matching Fuchsia).
+            child.set_parent_ref(self);
+            return Ok(child);
         }
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         base.set_name(&self.base.name());
@@ -2219,6 +2235,15 @@ impl VmObject {
     /// Offset into the parent VMO (for slices). Returns 0 for non-slices.
     pub fn parent_offset(&self) -> usize {
         self.trait_.parent_offset()
+    }
+
+    /// Check whether this VMO can create a unidirectional clone.
+    ///
+    /// Returns true if the cow_pages root is pager-backed and the
+    /// cow_pages parent (if any) is not a hidden node.
+    /// Mirrors Fuchsia's `VmCowPages::can_unidirectional_clone_locked`.
+    pub fn can_unidirectional_clone(&self) -> bool {
+        self.trait_.can_unidirectional_clone()
     }
 
     /// Get the parent VmObject (for REFERENCE or SLICE children).

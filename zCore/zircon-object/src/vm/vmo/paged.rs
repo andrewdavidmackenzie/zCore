@@ -890,6 +890,39 @@ impl VMObjectTrait for VMObjectPaged {
             }
         }
     }
+
+    fn can_unidirectional_clone(&self) -> bool {
+        let (_guard, inner) = self.get_inner();
+        // Walk up the cow_pages parent chain to check:
+        // 1. The root must be pager-backed.
+        // 2. The immediate parent (if any) must not be hidden.
+        //
+        // Matches Fuchsia's VmCowPages::can_unidirectional_clone_locked:
+        //   if (!is_root_source_user_pager_backed()) return false;
+        //   if (parent_ && is_parent_hidden_locked()) return false;
+        //   return true;
+
+        // Check condition 2: immediate parent must not be hidden.
+        if let Some(parent) = &inner.parent {
+            let parent_inner = parent.borrow_inner();
+            if parent_inner.type_.is_hidden() {
+                return false;
+            }
+        }
+
+        // Check condition 1: the root of the tree must be pager-backed.
+        // Walk up the cow_pages parent chain to find the root.
+        let mut root_is_pager = inner.pager_backed;
+        let mut cur = inner.parent.clone();
+        while let Some(vmop) = cur {
+            let p = vmop.borrow_inner();
+            if p.pager_backed {
+                root_is_pager = true;
+            }
+            cur = p.parent.clone();
+        }
+        root_is_pager
+    }
 }
 
 enum CommitResult {
@@ -1415,13 +1448,13 @@ impl VMObjectPagedInner {
                 // share_count = 1 (shared by 2); otherwise 0 (private).
                 // For leaf nodes, share_count = 0 (no descendants).
                 value.share_count = if let VMOType::Hidden { left, right, .. } = &surviving.type_ {
-                    let in_left = left.upgrade().map_or(false, |l| {
+                    let in_left = left.upgrade().is_some_and(|l| {
                         let li = l.borrow_inner();
                         let ls = li.parent_offset / PAGE_SIZE;
                         let le = li.parent_limit / PAGE_SIZE;
                         idx >= ls && idx < le && !li.frames.contains_key(&(idx - ls))
                     });
-                    let in_right = right.upgrade().map_or(false, |r| {
+                    let in_right = right.upgrade().is_some_and(|r| {
                         let ri = r.borrow_inner();
                         let rs = ri.parent_offset / PAGE_SIZE;
                         let re = ri.parent_limit / PAGE_SIZE;

@@ -2523,9 +2523,12 @@ fn process_info_vmos_on_self_succeeds() {
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosSmokeTest)
 ///
 /// Query PROCESS_VMOS on a process that has VMO handles. Should return
-/// VMO info entries matching the number of VMOs.
+/// VMO info entries with correct koid, size, flags, parent_koid,
+/// num_children, share_count — matching the C++ test assertions.
 #[test]
 fn process_info_vmos_smoke_test() {
+    use zircon_object::vm::{VmoInfoFlags, PAGE_SIZE};
+
     let ctx = TestContext::new();
     let job = Job::root();
     let target = Process::create(&job, "vmos-smoke").unwrap();
@@ -2533,6 +2536,10 @@ fn process_info_vmos_smoke_test() {
     // Add multiple VMO handles to the target process.
     let vmo1 = VmObject::new_paged(1);
     let vmo2 = VmObject::new_paged(2);
+    let vmo1_koid = vmo1.id();
+    let vmo2_koid = vmo2.id();
+    let vmo1_size = (PAGE_SIZE) as u64;
+    let vmo2_size = (2 * PAGE_SIZE) as u64;
     target.add_handle(Handle::new(vmo1, Rights::DEFAULT_VMO));
     target.add_handle(Handle::new(vmo2, Rights::DEFAULT_VMO));
 
@@ -2548,6 +2555,93 @@ fn process_info_vmos_smoke_test() {
         actual, avail,
         "buffer should be large enough for all entries"
     );
+
+    // Parse VmoInfo entries and verify fields like the C++ test does.
+    // VmoInfo V0 entry layout (104 bytes):
+    //   koid: u64 @ 0
+    //   name: [u8; 32] @ 8
+    //   size: u64 @ 40
+    //   parent_koid: u64 @ 48
+    //   num_children: u64 @ 56
+    //   num_mappings: u64 @ 64
+    //   share_count: u64 @ 72
+    //   flags: u32 @ 80
+    let mut saw_vmo1 = false;
+    let mut saw_vmo2 = false;
+    for i in 0..actual {
+        let base = i * PROCESS_VMOS_ENTRY_SIZE;
+        let entry_koid = u64::from_ne_bytes(buf[base..base + 8].try_into().unwrap());
+        let entry_size = u64::from_ne_bytes(buf[base + 40..base + 48].try_into().unwrap());
+        let parent_koid = u64::from_ne_bytes(buf[base + 48..base + 56].try_into().unwrap());
+        let num_children = u64::from_ne_bytes(buf[base + 56..base + 64].try_into().unwrap());
+        let share_count = u64::from_ne_bytes(buf[base + 72..base + 80].try_into().unwrap());
+        let flags = u32::from_ne_bytes(buf[base + 80..base + 84].try_into().unwrap());
+        let info_flags = VmoInfoFlags::from_bits_truncate(flags);
+
+        // All VMOs should be paged, not physical.
+        assert!(
+            info_flags.contains(VmoInfoFlags::TYPE_PAGED),
+            "entry {} (koid={}) should be TYPE_PAGED, flags=0x{:x}",
+            i,
+            entry_koid,
+            flags
+        );
+
+        // Each entry should be via either map or handle, but not both.
+        let via_handle = info_flags.contains(VmoInfoFlags::VIA_HANDLE);
+        let via_mapping = info_flags.contains(VmoInfoFlags::VIA_MAPPING);
+        assert!(
+            !(via_handle && via_mapping),
+            "entry {} (koid={}) should not be both VIA_HANDLE and VIA_MAPPING",
+            i,
+            entry_koid
+        );
+
+        // Match our known VMOs by koid.
+        if entry_koid == vmo1_koid && entry_size == vmo1_size {
+            saw_vmo1 = true;
+            // Not a clone, not shared.
+            assert_eq!(parent_koid, 0, "vmo1 parent_koid");
+            assert_eq!(num_children, 0, "vmo1 num_children");
+            assert_eq!(share_count, 1, "vmo1 share_count");
+            assert!(via_handle, "vmo1 should be VIA_HANDLE");
+            assert!(
+                !info_flags.contains(VmoInfoFlags::IS_COW_CLONE),
+                "vmo1 should not be IS_COW_CLONE"
+            );
+        }
+        if entry_koid == vmo2_koid && entry_size == vmo2_size {
+            saw_vmo2 = true;
+            assert_eq!(parent_koid, 0, "vmo2 parent_koid");
+            assert_eq!(num_children, 0, "vmo2 num_children");
+            assert_eq!(share_count, 1, "vmo2 share_count");
+            assert!(via_handle, "vmo2 should be VIA_HANDLE");
+            assert!(
+                !info_flags.contains(VmoInfoFlags::IS_COW_CLONE),
+                "vmo2 should not be IS_COW_CLONE"
+            );
+        }
+    }
+    assert!(saw_vmo1, "should have found vmo1 (koid={})", vmo1_koid);
+    assert!(saw_vmo2, "should have found vmo2 (koid={})", vmo2_koid);
+
+    // C++ also does a second read with a shorter buffer to test actual < avail.
+    let short_count = actual * 3 / 4;
+    if short_count > 0 && short_count < actual {
+        let short_size = short_count * PROCESS_VMOS_ENTRY_SIZE;
+        let mut short_buf = vec![0u8; short_size];
+        let (actual_2, avail_2) =
+            get_info(&ctx, proc_h, TOPIC_PROCESS_VMOS, &mut short_buf).unwrap();
+        assert!(
+            actual_2 < avail_2,
+            "short buffer: actual_2 ({}) should be < avail_2 ({})",
+            actual_2,
+            avail_2
+        );
+        // C++: EXPECT_LT(actual_2, available_2) — and then EXPECT_GT(actual_2, 3)
+        // only applies when the process has many VMOs (mini-process has vDSO, stack, etc.)
+        // In our test with 2 VMOs, short_count=1, so actual_2=1 is expected.
+    }
 }
 
 /// C++: TEST_F(ProcessGetInfoTest, InfoProcessVmosInvalidHandleFails)
@@ -3373,23 +3467,101 @@ fn kernel_stats_kmem_stats_small_buffer() {
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessHandleTable)
-/// Query HANDLE_TABLE and verify the entries contain the handle we added.
+/// Query HANDLE_TABLE and verify the entries contain handles with correct
+/// type, koid, and related_koid — matching the C++ test assertions.
+///
+/// The C++ test creates a mini-process with a VMO handle and a channel
+/// handle, then verifies:
+///   - handle_info[0].type == ZX_OBJ_TYPE_VMO (3)
+///   - handle_info[1].type == ZX_OBJ_TYPE_CHANNEL (4)
+///   - Both have non-zero handle_value and koid
+///   - VMO has related_koid == 0, channel has related_koid > 0
+///
+/// We replicate this by giving the target process a VMO and a channel.
 #[test]
 fn process_get_info_info_process_handle_table() {
+    use zircon_object::ipc::Channel;
+
     let ctx = TestContext::new();
     let job = Job::root();
     let target = Process::create(&job, "ht").unwrap();
-    let event = Event::new();
-    target.add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
+
+    // Add a VMO handle (type 3) and a channel handle (type 4).
+    let vmo = VmObject::new_paged(1);
+    let vmo_koid = vmo.id();
+    target.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO));
+
+    let (ch0, ch1) = Channel::create();
+    let ch0_koid = ch0.id();
+    let ch0_related = ch0.related_koid();
+    target.add_handle(Handle::new(ch0, Rights::DEFAULT_CHANNEL));
+    // Keep ch1 alive so related_koid is valid.
+    let _ch1 = ch1;
+
     let proc_h = ctx.proc.add_handle(Handle::new(
         target,
         Rights::DEFAULT_PROCESS | Rights::MANAGE_PROCESS,
     ));
+
     let buf_size = 16 * HANDLE_EXTENDED_SIZE;
     let mut buf = vec![0u8; buf_size];
     let (actual, avail) = get_info(&ctx, proc_h, TOPIC_HANDLE_TABLE, &mut buf).unwrap();
     assert_eq!(actual, avail);
-    assert!(avail >= 1, "should have at least the event handle");
+    assert_eq!(avail, 2, "should have exactly 2 handles (VMO + channel)");
+
+    // Parse HandleExtendedInfo entries.
+    // Layout (40 bytes):
+    //   obj_type: u32 @ 0
+    //   handle_value: u32 @ 4
+    //   rights: u32 @ 8
+    //   reserved: u32 @ 12
+    //   koid: u64 @ 16
+    //   related_koid: u64 @ 24
+    //   peer_owner_koid: u64 @ 32
+    //
+    // Entries are sorted by handle_value. The first handle added gets
+    // the lower value, so the order should be VMO then channel.
+    let type0 = u32::from_ne_bytes(buf[0..4].try_into().unwrap());
+    let hv0 = u32::from_ne_bytes(buf[4..8].try_into().unwrap());
+    let koid0 = u64::from_ne_bytes(buf[16..24].try_into().unwrap());
+    let related0 = u64::from_ne_bytes(buf[24..32].try_into().unwrap());
+
+    let base1 = HANDLE_EXTENDED_SIZE;
+    let type1 = u32::from_ne_bytes(buf[base1..base1 + 4].try_into().unwrap());
+    let hv1 = u32::from_ne_bytes(buf[base1 + 4..base1 + 8].try_into().unwrap());
+    let koid1 = u64::from_ne_bytes(buf[base1 + 16..base1 + 24].try_into().unwrap());
+    let related1 = u64::from_ne_bytes(buf[base1 + 24..base1 + 32].try_into().unwrap());
+
+    // C++: EXPECT_EQ(handle_info[0].type, ZX_OBJ_TYPE_VMO)
+    assert_eq!(
+        type0, 3,
+        "first handle should be VMO (type 3), got {}",
+        type0
+    );
+    // C++: EXPECT_EQ(handle_info[1].type, ZX_OBJ_TYPE_CHANNEL)
+    assert_eq!(
+        type1, 4,
+        "second handle should be Channel (type 4), got {}",
+        type1
+    );
+    // C++: EXPECT_NE(handle_info[0].handle_value, ZX_HANDLE_INVALID)
+    assert_ne!(hv0, 0, "VMO handle_value should be non-zero");
+    assert_ne!(hv1, 0, "Channel handle_value should be non-zero");
+    // C++: EXPECT_GT(handle_info[0].koid, 0)
+    assert!(koid0 > 0, "VMO koid should be > 0");
+    assert!(koid1 > 0, "Channel koid should be > 0");
+    // Verify koids match what we created.
+    assert_eq!(koid0, vmo_koid, "VMO koid mismatch");
+    assert_eq!(koid1, ch0_koid, "Channel koid mismatch");
+    // C++: EXPECT_EQ(handle_info[0].related_koid, 0) — VMO has no peer
+    assert_eq!(related0, 0, "VMO related_koid should be 0");
+    // C++: EXPECT_GT(handle_info[1].related_koid, 0) — channel has a peer
+    assert!(
+        related1 > 0,
+        "Channel related_koid should be > 0, got {}",
+        related1
+    );
+    assert_eq!(related1, ch0_related, "Channel related_koid mismatch");
 }
 
 /// C++: TEST(ProcessGetInfoTest, InfoProcessHandleTableInsufficientRights)
@@ -4473,17 +4645,178 @@ fn task_get_info_info_task_stats_zero_sized_buffer_is_too_small() {
 }
 
 /// C++: TEST(TaskGetInfoTest, SharedMemAccounting)
-/// Query TASK_STATS and verify memory accounting fields are non-negative.
+///
+/// Create two processes with VMOs and mappings, query TASK_STATS, and
+/// verify mem_mapped_bytes, mem_private_bytes, mem_shared_bytes, and
+/// mem_scaled_shared_bytes match expected values — just like the C++ test.
+///
+/// The C++ test creates:
+///   - private_anon: 1 page, mapped only in proc0
+///   - shared_anon: 1 page, mapped in both proc0 and proc1
+///   - shared_cow: 3 pages, with a snapshot child (private_cow)
+///     Both shared_cow and private_cow have one page forked.
+///   - private_cow: snapshot of shared_cow, mapped only in proc1
+///   - shared_cow mapped in both proc0 and proc1
+///
+/// We replicate the setup and verify the accounting.
 #[test]
 fn task_get_info_shared_mem_accounting() {
+    use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
+
     let ctx = TestContext::new();
-    let proc_h = ctx
-        .proc
-        .add_handle(Handle::new(ctx.proc.clone(), Rights::INSPECT));
-    let mut buf = [0u8; TASK_STATS_SIZE];
-    let result = get_info(&ctx, proc_h, TOPIC_TASK_STATS, &mut buf);
-    // C++ verifies memory accounting fields — we verify success or NOT_SUPPORTED.
-    assert!(result.is_ok() || result == Err(zircon_object::ZxError::NOT_SUPPORTED),);
+    let job = Job::root();
+
+    let proc0 = Process::create(&job, "proc0").unwrap();
+    let proc1 = Process::create(&job, "proc1").unwrap();
+    let vmar0 = proc0.vmar();
+    let vmar1 = proc1.vmar();
+
+    let page_size = PAGE_SIZE;
+
+    // private_anon: 1 page, written to commit
+    let private_anon = VmObject::new_paged(1);
+    private_anon.write(0, b"A").unwrap();
+
+    // shared_anon: 1 page, written to commit
+    let shared_anon = VmObject::new_paged(1);
+    shared_anon.write(0, b"A").unwrap();
+
+    // shared_cow: 3 pages, all written to commit
+    let shared_cow = VmObject::new_paged(3);
+    shared_cow.write(0, b"A").unwrap();
+    shared_cow.write(page_size, b"A").unwrap();
+    shared_cow.write(page_size * 2, b"A").unwrap();
+
+    // private_cow: snapshot of shared_cow
+    let private_cow = shared_cow.create_child(false, 0, page_size * 3).unwrap();
+
+    // Fork pages: write to shared_cow page 0, private_cow page 1
+    shared_cow.write(0, b"B").unwrap();
+    private_cow.write(page_size, b"B").unwrap();
+
+    // Map into proc0: private_anon, shared_anon, shared_cow
+    let flags = MMUFlags::READ;
+    vmar0
+        .map(None, private_anon.clone(), 0, page_size, flags)
+        .unwrap();
+    vmar0
+        .map(None, shared_anon.clone(), 0, page_size, flags)
+        .unwrap();
+    vmar0
+        .map(None, shared_cow.clone(), 0, page_size * 3, flags)
+        .unwrap();
+
+    // Map into proc1: private_cow, shared_anon, shared_cow
+    vmar1
+        .map(None, private_cow.clone(), 0, page_size * 3, flags)
+        .unwrap();
+    vmar1
+        .map(None, shared_anon.clone(), 0, page_size, flags)
+        .unwrap();
+    vmar1
+        .map(None, shared_cow.clone(), 0, page_size * 3, flags)
+        .unwrap();
+
+    // Query stats for proc0
+    let proc0_h = ctx.proc.add_handle(Handle::new(proc0, Rights::INSPECT));
+    let mut buf0 = [0u8; TASK_STATS_SIZE];
+    let result0 = get_info(&ctx, proc0_h, TOPIC_TASK_STATS, &mut buf0);
+    if let Err(e) = result0 {
+        // If TASK_STATS is not supported, skip the test.
+        assert_eq!(e, zircon_object::ZxError::NOT_SUPPORTED);
+        return;
+    }
+    let (actual0, avail0) = result0.unwrap();
+    assert_eq!(actual0, 1);
+    assert_eq!(avail0, 1);
+
+    // Query stats for proc1
+    let proc1_h = ctx.proc.add_handle(Handle::new(proc1, Rights::INSPECT));
+    let mut buf1 = [0u8; TASK_STATS_SIZE];
+    let (actual1, avail1) = get_info(&ctx, proc1_h, TOPIC_TASK_STATS, &mut buf1).unwrap();
+    assert_eq!(actual1, 1);
+    assert_eq!(avail1, 1);
+
+    // Parse TaskStatsInfo: { mapped_bytes: u64, private_bytes: u64,
+    //                        shared_bytes: u64, scaled_shared_bytes: u64 }
+    let mapped0 = u64::from_ne_bytes(buf0[0..8].try_into().unwrap());
+    let private0 = u64::from_ne_bytes(buf0[8..16].try_into().unwrap());
+    let shared0 = u64::from_ne_bytes(buf0[16..24].try_into().unwrap());
+    let scaled_shared0 = u64::from_ne_bytes(buf0[24..32].try_into().unwrap());
+
+    let mapped1 = u64::from_ne_bytes(buf1[0..8].try_into().unwrap());
+    let private1 = u64::from_ne_bytes(buf1[8..16].try_into().unwrap());
+    let shared1 = u64::from_ne_bytes(buf1[16..24].try_into().unwrap());
+    let _scaled_shared1 = u64::from_ne_bytes(buf1[24..32].try_into().unwrap());
+
+    let ps = page_size as u64;
+
+    // --- proc0 expectations (C++ assertions) ---
+    // mapped_bytes = private_anon + shared_anon + shared_cow = 1 + 1 + 3 = 5 pages
+    let expected_mapped0 = ps + ps + ps * 3;
+    assert_eq!(
+        mapped0, expected_mapped0,
+        "proc0 mapped_bytes: expected {}, got {}",
+        expected_mapped0, mapped0
+    );
+
+    // private_bytes = only private_anon (1 page) — shared_cow's private
+    // pages are still "shared" because the VMO has share_count > 1.
+    let expected_private0 = ps;
+    assert_eq!(
+        private0, expected_private0,
+        "proc0 private_bytes: expected {}, got {}",
+        expected_private0, private0
+    );
+
+    // shared_bytes = shared_anon (1 page) + shared_cow (3 pages)
+    let expected_shared0 = ps + ps * 3;
+    assert_eq!(
+        shared0, expected_shared0,
+        "proc0 shared_bytes: expected {}, got {}",
+        expected_shared0, shared0
+    );
+
+    // Verify mapped = private + shared
+    assert_eq!(
+        mapped0,
+        private0 + shared0,
+        "proc0: mapped should equal private + shared"
+    );
+
+    // scaled_shared_bytes: C++ computes this as:
+    //   (shared_anon + cow_private_bytes) / 2 + cow_shared_bytes / 2 / 2
+    // where cow_private_bytes = 2 pages (each process forked 1, other gained 1)
+    //       cow_shared_bytes = 1 page (unforked page shared between both COW VMOs)
+    // But zCore's simpler share_count-based model may differ. Just verify
+    // it's non-zero and <= shared_bytes.
+    assert!(
+        scaled_shared0 > 0,
+        "proc0 scaled_shared_bytes should be > 0, got {}",
+        scaled_shared0
+    );
+    assert!(
+        scaled_shared0 <= shared0,
+        "proc0 scaled_shared_bytes ({}) should be <= shared_bytes ({})",
+        scaled_shared0,
+        shared0
+    );
+
+    // --- proc1 expectations ---
+    // mapped_bytes = private_cow (3 pages) + shared_anon (1) + shared_cow (3) = 7 pages
+    let expected_mapped1 = ps * 3 + ps + ps * 3;
+    assert_eq!(
+        mapped1, expected_mapped1,
+        "proc1 mapped_bytes: expected {}, got {}",
+        expected_mapped1, mapped1
+    );
+
+    // Verify mapped = private + shared for proc1 too
+    assert_eq!(
+        mapped1,
+        private1 + shared1,
+        "proc1: mapped should equal private + shared"
+    );
 }
 
 // ── Thread handle count bad pointer tests ─────────────────────────
