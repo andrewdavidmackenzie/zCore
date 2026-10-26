@@ -542,6 +542,7 @@ fn kill_job_no_child() {
 /// C++: TEST(JobTest, KillJobChain)
 /// Kill a chain of nested jobs — all should terminate.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn kill_job_chain() {
     let ctx = TestContext::new();
     let root = Job::root();

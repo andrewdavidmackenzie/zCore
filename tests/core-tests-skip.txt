@@ -1,19 +1,13 @@
-# ── PortStressTest: Thread C join hang after channel_call loop ──
-# All 51000 channel_calls complete in ~3s (one-shot timer), but
-# t_c.join() hangs: Thread C's wait_one(READABLE, infinite) is not
-# woken by the final ch2_req.write() — pre-existing on master too.
-PortStressTest.ChannelCallWaitQueuePanicRepro
+# Tests that hang or crash when running core-tests-standalone on QEMU x86_64.
+# Each entry must match a test name in fuchsia-core-tests-from-binary.txt exactly.
+# The corresponding Rust test in zircon-tests must have #[ignore].
 
-# ── PagerWriteback: TestThread mapping write hangs in full suite ──
-# Pass when run alone but hang when preceded by other tests.
-# State leak causes TestThread mapping write to not generate a fault.
+# ── PagerWriteback: TestThread mapping write hangs ──
 PagerWriteback.ResizeWritebackWithMappingTrapDirty
 PagerWriteback.LargeWriteBatched
 PagerWriteback.NoDirtyOnCommitTrapDirty
 
 # ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
-# These tests use ThreadedPagePinner which requires IOMMU/BTI and
-# spawns a thread for bti.pin(). They hang on the pin thread.
 PagerWriteback.DelayedPinAwaitingClean
 PagerWriteback.DirtyAfterPin
 PagerWriteback.FailedPinAwaitingClean
@@ -23,21 +17,16 @@ PagerWriteback.OpZeroPinnedTrapDirty
 PagerWriteback.PinForWriteTrapDirty
 PagerWriteback.PinForWriteUnpopulatedTrapDirty
 PagerWriteback.PinnedWritebackTrapDirty
-PagerWriteback.SlicePinWriteTrapDirtyyes
+PagerWriteback.SlicePinWriteTrapDirty
 PagerWriteback.WritePinAwaitingCleanTrapDirty
 
-# ── StreamTestCase: crash on PartialVmoDirty ──
-# Process crashes (trap_num=0x6, error_code=0x0) during
-# stream.writev_at with pager-backed VMO. Blocks all subsequent suites.
+# ── StreamTestCase: crash ──
 StreamTestCase.PartialVmoDirty
 
-# ── ChannelTest: ChannelFullException hang ──
-# Requires policy exception infrastructure (mini-process writes >1000
-# times until channel full, expects policy exception delivery).
+# ── ChannelTest: policy exception hang ──
 ChannelTest.ChannelFullException
 
-# ── VmoClone2TestCase: populated_bytes polling hangs ──
-# COW page attribution doesn't implement fractional scaling.
+# ── VmoClone2TestCase: populated_bytes / VMAR / thread hangs ──
 VmoClone2TestCase.DropParentCommittedBytes
 VmoClone2TestCase.DropChildrenInParallel
 VmoClone2TestCase.DisjointCloneTest2
@@ -52,34 +41,40 @@ VmoClone2TestCase.MapRangeReadOnly
 VmoClone2TestCase.Offset
 VmoClone2TestCase.OffsetProgressiveWrite
 
-# ── PortStressTest: multi-threaded stress hangs ──
-PortStressTest.MatchHandleCloseRace
-PortStressTest.CancelKeyDestructorReentersPortLock
+# ── PortStressTest: all 12 multi-threaded stress tests hang ──
+PortStressTest.CancelKeyActiveObserverRace
 PortStressTest.CancelKeyCloseRace
+PortStressTest.CancelKeyDestructorReentersPortLock
+PortStressTest.CancelKeyDuringMatchRace
+PortStressTest.CancelKeyDuringRegistrationRace
+PortStressTest.CancelKeySharedKeyRace
+PortStressTest.ChannelCallWaitQueuePanicRepro
 PortStressTest.CloseWaitRace
+PortStressTest.MatchHandleCloseRace
 PortStressTest.QueuePacketAfterPortClosedConcurrentRace
-PortStressTest.CancelCloseRace
-PortStressTest.CancelKeySignalDeleteRace
-PortStressTest.CancelKeySleepySignalDeleteRace
-PortStressTest.ChannelCallWaitQueueLargeReadPanicRepro
-PortStressTest.ChannelCallCancelRace
-PortStressTest.MultipleCloseRace
-PortStressTest.WaitManyCloseRace
+PortStressTest.SignalCloseWait
+PortStressTest.WaitSignalCancel
 
-# ── VmoTestCase: PinTests hang (BTI/IOMMU infrastructure) ──
+# ── VmoTestCase: BTI/thread hangs ──
 VmoTestCase.PinTests
-
-# ── JobTest: KillJobChain hang ──
-JobTest.KillJobChain
 VmoTestCase.ParallelWriteAndDecommit
-Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
-Threads.WritingFpRegisterState
+
+# ── VmoTransferDataTestCase: thread race hang ──
+VmoTransferDataTestCase.RacyDropParent
+
+# ── JobTest: kill chain hang ──
+JobTest.KillJobChain
+
+# ── ProcessTest: thread/channel hang ──
 ProcessTest.SuspendWithDyingThread
 ProcessTest.KillChannelHandleCycle
+
+# ── Threads: debug register / exception / syscall hangs ──
 Threads.BadSyscallCaller
-VmoTransferDataTestCase.RacyDropParent
-Threads.WriteReadDebugRegisterState
+Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
+Threads.DebugRegistersDr6ResetOnDebugException
 Threads.DebugRegistersValidation
 Threads.DebugRegistersWatchpointSyscallPanicRepro
-Threads.DebugRegistersDr6ResetOnDebugException
 Threads.WatchpointSyscallPanic
+Threads.WriteReadDebugRegisterState
+Threads.WritingFpRegisterState

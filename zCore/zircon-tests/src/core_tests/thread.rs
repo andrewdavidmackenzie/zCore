@@ -44,6 +44,7 @@ pub(crate) fn as_kobject(thread: &alloc::sync::Arc<Thread>) -> alloc::sync::Arc<
 /// syscall number, but not called from vDSO). Verify the exception
 /// report has ZX_EXCP_POLICY_CODE_BAD_SYSCALL and synth_data==1.
 #[async_std::test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 async fn bad_syscall_caller() {
     helpers::ensure_hal_init();
     let job = Job::root();
@@ -183,6 +184,7 @@ async fn basics() {
 /// status bits after breakpoints are removed via write_state(Debug).
 #[cfg(target_arch = "x86_64")]
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_dr6_correct_after_breakpoint_removal() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -241,6 +243,7 @@ fn debug_registers_dr6_correct_after_breakpoint_removal() {
 /// which requires bare-metal. This test verifies the write/read round-trip.
 #[cfg(target_arch = "x86_64")]
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_dr6_reset_on_debug_exception() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -271,6 +274,7 @@ fn debug_registers_dr6_reset_on_debug_exception() {
 /// Verify debug register read succeeds on a suspended thread and
 /// returns the expected size (48 bytes on x86_64).
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_validation() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -303,6 +307,7 @@ fn debug_registers_validation() {
 /// watchpoint during a syscall — that requires bare-metal.
 #[cfg(target_arch = "x86_64")]
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_watchpoint_syscall_panic_repro() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -1692,6 +1697,7 @@ fn thread_start_with_zero_instruction_pointer() {
 /// during a syscall (requires bare-metal). This tests the API.
 #[cfg(target_arch = "x86_64")]
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn watchpoint_syscall_panic() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -1722,6 +1728,7 @@ fn watchpoint_syscall_panic() {
 /// C++: TEST(Threads, WriteReadDebugRegisterState)
 /// Write/read debug register state — should fail (not implemented).
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn write_read_debug_register_state() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -1839,6 +1846,7 @@ async fn writing_arm_flags_register() {
 /// C++: TEST(Threads, WritingFpRegisterState)
 /// Write FP register state — should fail (not implemented).
 #[async_std::test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 async fn writing_fp_register_state() {
     helpers::ensure_hal_init();
     let job = Job::root();

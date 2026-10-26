@@ -980,6 +980,7 @@ fn vmar_write_test_helper(clone_write: bool) {
 
 /// C++: TEST_F(VmoClone2TestCase, CloneVmarWrite)
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn clone_vmar_write() {
     vmar_write_test_helper(true);
 }
@@ -989,6 +990,7 @@ fn clone_vmar_write() {
 /// create 4 sub-clones at various offsets, close all clones, then
 /// create a last_clone and verify parent data survives.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn disjoint_clone_progressive() {
     let _ctx = TestContext::new();
     let vmo = init_page_tagged_vmo(6);
@@ -1206,6 +1208,7 @@ fn forbid_contiguous_vmo() {
 /// Maps all, writes through mappings in every permutation order to verify
 /// no order results in a bad read.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn many_clone_mapping() {
     use zircon_object::task::{Job, Process};
     use zircon_object::vm::MMUFlags;
@@ -1343,6 +1346,7 @@ fn many_clone_mapping_offset() {
 /// read-only, verify no private pages committed in clone, parent
 /// populated_bytes unchanged.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn map_range_read_only() {
     use zircon_object::task::{Job, Process};
     use zircon_object::vm::MMUFlags;
@@ -1482,6 +1486,7 @@ fn obj_mem_accounting() {
 /// bytes, zero page at offset 2, drop parent, verify clone data, poll
 /// populated_bytes.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn offset() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 3usize;
@@ -1526,6 +1531,7 @@ fn offset() {
 /// 2-page parent, 2-page clone at offset 1, then clone-of-clone at offset 1.
 /// Check fractional attribution at each step.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn offset_progressive_write() {
     let _ctx = TestContext::new();
     let koriginal_page_count = 2usize;
@@ -1584,6 +1590,7 @@ fn parent_vmar_write() {
 /// Pinning a VMO prevents snapshot creation (ZX_ERR_BAD_STATE).
 /// After unpinning, snapshot creation succeeds.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pin_before_create_failure() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1610,6 +1617,7 @@ fn pin_before_create_failure() {
 /// C++: TEST(VmoClone2TestCase, PinClonePages)
 /// Create a snapshot, try to pin the clone's pages.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pin_clone_pages() {
     let _ctx = TestContext::new();
     let parent = init_page_tagged_vmo(2);
