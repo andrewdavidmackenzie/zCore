@@ -81,3 +81,5 @@ VmoTransferDataTestCase.RacyDropParent
 Threads.WriteReadDebugRegisterState
 Threads.DebugRegistersValidation
 Threads.DebugRegistersWatchpointSyscallPanicRepro
+Threads.DebugRegistersDr6ResetOnDebugException
+Threads.WatchpointSyscallPanic
