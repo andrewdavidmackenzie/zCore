@@ -542,3 +542,6 @@ ThreadSampler.SamplerLifetime
 ThreadSampler.StartStop
 ThreadInitialStateTests.RegisterValues
 PthreadTls.PthreadTls
+
+# ── Resource: hangs on QEMU (interrupt vector pool) ──
+Resource.PcInterruptVectorPoolLeak
