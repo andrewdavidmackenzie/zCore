@@ -482,7 +482,24 @@ impl Syscall<'_> {
             // not the underlying parent (matching Fuchsia semantics).
             if vmo.is_reference() {
                 if let Some(parent) = vmo.parent() {
-                    let child = parent.create_child(resizable, offset, child_size)?;
+                    // For SNAPSHOT_AT_LEAST_ON_WRITE through a reference,
+                    // create a unidirectional child (no hidden node) so
+                    // parent writes remain visible to the child.
+                    // For SNAPSHOT (bidirectional), create a regular COW
+                    // child with a hidden node.
+                    // Ref: vm_cow_pages.cc:1894 — unidirectional path.
+                    let child = if options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
+                        && parent.can_unidirectional_clone()
+                    {
+                        parent.create_child_unidirectional(offset, child_size, resizable)?
+                    } else if options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
+                        && !parent.has_parent()
+                        && parent.can_unidirectional_clone()
+                    {
+                        parent.create_child_unidirectional(offset, child_size, resizable)?
+                    } else {
+                        parent.create_child(resizable, offset, child_size)?
+                    };
                     child.set_parent_ref(&vmo);
                     Ok(child)
                 } else {
