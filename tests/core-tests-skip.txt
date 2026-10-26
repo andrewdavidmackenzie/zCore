@@ -77,3 +77,4 @@ Threads.WritingFpRegisterState
 ProcessTest.SuspendWithDyingThread
 ProcessTest.KillChannelHandleCycle
 Threads.BadSyscallCaller
+VmoTransferDataTestCase.RacyDropParent
