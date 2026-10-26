@@ -488,12 +488,12 @@ impl Syscall<'_> {
                     // For SNAPSHOT (bidirectional), create a regular COW
                     // child with a hidden node.
                     // Ref: vm_cow_pages.cc:1894 — unidirectional path.
-                    let use_unidirectional =
-                        (options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
-                            && parent.can_unidirectional_clone())
-                            || (options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
-                                && !parent.has_parent()
-                                && parent.can_unidirectional_clone());
+                    let use_unidirectional = (options
+                        .contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
+                        && parent.can_unidirectional_clone())
+                        || (options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
+                            && !parent.has_parent()
+                            && parent.can_unidirectional_clone());
                     let child = if use_unidirectional {
                         parent.create_child_unidirectional(offset, child_size, resizable)?
                     } else {
