@@ -565,6 +565,15 @@ impl Syscall<'_> {
                 && !vmo.has_parent()
                 && vmo.has_pager()
             {
+                // SNAPSHOT_MODIFIED on a root pager VMO: unidirectional.
+                vmo.create_child_unidirectional(offset, child_size, resizable)
+            } else if options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
+                && vmo.can_unidirectional_clone()
+            {
+                // SNAPSHOT_AT_LEAST_ON_WRITE on a VMO that supports
+                // unidirectional cloning: create without hidden node.
+                // Ref: vm_cow_pages.cc:1894 — unidirectional path via
+                // FindParentAndRangeForCloneLocked + CloneChildLocked.
                 vmo.create_child_unidirectional(offset, child_size, resizable)
             } else {
                 vmo.create_child(resizable, offset, child_size)
