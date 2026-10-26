@@ -11,9 +11,24 @@ use zircon_object::ZxError;
 /// C++: TEST(VmoTestCase, ReadWriteBadLen)
 /// vmo/vmo.cc:63
 ///
-/// Faithful port: allocate a 4-page VMO, attempt read/write via syscall
-/// with near-SIZE_MAX lengths (offset + len wraps), expect OUT_OF_RANGE.
+/// C++ test uses near-SIZE_MAX lengths. On QEMU bare-metal, the kernel's
+/// user buffer validation returns INVALID_ARGS before the VMO bounds
+/// check returns OUT_OF_RANGE. In libos mode the bounds check runs first.
+/// TODO: fix bare-metal syscall dispatch to check VMO bounds before buffer.
 /// Then verify exact-size read/write succeeds.
+///
+/// C++ DIVERGENCE: On zCore QEMU (x86_64), the C++ test gets
+/// INVALID_ARGS (-10) instead of OUT_OF_RANGE (-14). The kernel's
+/// VMO bounds check correctly returns OUT_OF_RANGE when called
+/// directly via Rust, but on the bare-metal syscall dispatch path
+/// (through the vDSO → syscall instruction → register decode),
+/// the near-MAX buf_size interacts with user buffer validation
+/// in a way that produces INVALID_ARGS before the VMO bounds
+/// check fires. This is a syscall argument handling bug specific
+/// to the QEMU/bare-metal path and does not affect libos mode.
+///
+/// The Rust test verifies the CORRECT behavior (OUT_OF_RANGE).
+/// The C++ test documents the QEMU-path bug.
 #[test]
 fn vmo_read_write_bad_len() {
     use hal_impl::user::{UserInPtr, UserOutPtr};
@@ -28,6 +43,9 @@ fn vmo_read_write_bad_len() {
     // C++ uses SIZE_MAX - (page_size / i) for i=1,2. These lengths
     // are close to usize::MAX — offset 0 + near-MAX length would
     // overflow if the kernel doesn't check properly.
+    //
+    // On QEMU x86_64: C++ gets INVALID_ARGS (-10) — user buffer
+    // validation fires before VMO bounds check. See module doc.
     let mut buf = vec![0u8; len];
     for i in 1..=2usize {
         let bad_len = usize::MAX - (PAGE_SIZE / i);
@@ -40,14 +58,16 @@ fn vmo_read_write_bad_len() {
         assert_eq!(
             result,
             Err(ZxError::OUT_OF_RANGE),
-            "read with near-MAX len should return OUT_OF_RANGE (i={})",
+            "read with near-MAX len should return OUT_OF_RANGE (i={}) \
+             [C++ FAILS on QEMU: gets INVALID_ARGS (-10)]",
             i
         );
         let result = sc.sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, bad_len);
         assert_eq!(
             result,
             Err(ZxError::OUT_OF_RANGE),
-            "write with near-MAX len should return OUT_OF_RANGE (i={})",
+            "write with near-MAX len should return OUT_OF_RANGE (i={}) \
+             [C++ FAILS on QEMU: gets INVALID_ARGS (-10)]",
             i
         );
     }

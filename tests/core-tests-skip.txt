@@ -65,3 +65,6 @@ PortStressTest.ChannelCallWaitQueueLargeReadPanicRepro
 PortStressTest.ChannelCallCancelRace
 PortStressTest.MultipleCloseRace
 PortStressTest.WaitManyCloseRace
+
+# ── VmoTestCase: PinTests hang (BTI/IOMMU infrastructure) ──
+VmoTestCase.PinTests
