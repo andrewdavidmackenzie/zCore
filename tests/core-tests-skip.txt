@@ -74,3 +74,4 @@ JobTest.KillJobChain
 VmoTestCase.ParallelWriteAndDecommit
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.WritingFpRegisterState
+ProcessTest.SuspendWithDyingThread
