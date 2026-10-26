@@ -138,10 +138,23 @@ fn process_name() {
 
 // ── ZX_PROP_REGISTER_FS / ZX_PROP_REGISTER_GS (property 4 / 2) ────
 //
+// C++ source: property/fsgsbase.cc — entire file is `#ifdef __x86_64__`
+//
 // RegisterFs and RegisterGs are thread-only properties that set the
-// FS/GS base registers (x86 TLS). On non-x86, these return INVALID_ARGS
-// or NOT_SUPPORTED. In libos test mode, thread execution state is not
-// fully wired, so we exercise the syscall path and check error codes.
+// FS/GS base registers (x86 TLS). On non-x86, these return NOT_SUPPORTED.
+//
+// The C++ tests launch a separate bare thread (no TLS, no SafeStack),
+// set its FS/GS base via register state modification, then let it run
+// code that uses rdfsbase/wrfsbase instructions and fs:/gs: segment
+// loads. Exception channels catch #UD (no fsgsbase support) and #GP
+// (non-canonical values).
+//
+// GAP: In libos mode we cannot:
+//   - Execute rdfsbase/wrfsbase CPU instructions
+//   - Handle #UD/#GP hardware exceptions via exception channels
+//   - Create bare threads with modified register state
+//   - Load from FS/GS segment registers
+// We test only the syscall-level property get/set behavior.
 
 const PROP_REGISTER_FS: u32 = 4;
 const PROP_REGISTER_GS: u32 = 2;
@@ -213,8 +226,22 @@ fn register_fs_non_thread() {
 }
 
 /// C++: TEST(Property, RegisterFsNoncanonical) → TestNoncanonical(kFs)
-/// Setting FS to a non-canonical address must fail with INVALID_ARGS
-/// on x86_64, or NOT_SUPPORTED on other architectures.
+/// property/fsgsbase.cc:501 — entire file is `#ifdef __x86_64__`
+///
+/// The C++ test launches a separate thread that:
+///   1. Reads FS via `rdfsbase` (faults with #UD if CPU lacks fsgsbase)
+///   2. Writes non-canonical value via `wrfsbase` (faults with #GP)
+///   3. Reads FS via `zx_object_get_property` (should still be kInitialValue)
+///   4. Writes non-canonical value via `zx_object_set_property` (INVALID_ARGS)
+///   5. Loads from FS as pointer (faults at kInitialValue address)
+///
+/// GAP: The C++ test exercises CPU instructions (`wrfsbase`/`rdfsbase`)
+/// and exception handling for #GP/#UD faults. In libos mode we cannot
+/// execute these instructions or handle CPU exceptions. We test only
+/// the syscall-level validation: set_property rejects non-canonical
+/// values with INVALID_ARGS and preserves the old value.
+///
+/// On non-x86_64 targets, FS/GS properties return NOT_SUPPORTED.
 #[test]
 fn register_fs_noncanonical() {
     let ctx = TestContext::new();
@@ -386,8 +413,22 @@ fn register_gs_non_thread() {
 }
 
 /// C++: TEST(Property, RegisterGsNoncanonical) → TestNoncanonical(kGs)
-/// Setting GS to a non-canonical address must fail with INVALID_ARGS
-/// on x86_64, or NOT_SUPPORTED on other architectures.
+/// property/fsgsbase.cc:503 — entire file is `#ifdef __x86_64__`
+///
+/// The C++ test launches a separate thread that:
+///   1. Reads GS via `rdgsbase` (faults with #UD if CPU lacks fsgsbase)
+///   2. Writes non-canonical value via `wrgsbase` (faults with #GP)
+///   3. Reads GS via `zx_object_get_property` (should still be kInitialValue)
+///   4. Writes non-canonical value via `zx_object_set_property` (INVALID_ARGS)
+///   5. Loads from GS as pointer (faults at kInitialValue address)
+///
+/// GAP: The C++ test exercises CPU instructions (`wrgsbase`/`rdgsbase`)
+/// and exception handling for #GP/#UD faults. In libos mode we cannot
+/// execute these instructions or handle CPU exceptions. We test only
+/// the syscall-level validation: set_property rejects non-canonical
+/// values with INVALID_ARGS and preserves the old value.
+///
+/// On non-x86_64 targets, GS properties return NOT_SUPPORTED.
 #[test]
 fn register_gs_noncanonical() {
     let ctx = TestContext::new();
