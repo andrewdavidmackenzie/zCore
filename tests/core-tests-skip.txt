@@ -75,3 +75,4 @@ VmoTestCase.ParallelWriteAndDecommit
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.WritingFpRegisterState
 ProcessTest.SuspendWithDyingThread
+ProcessTest.KillChannelHandleCycle
