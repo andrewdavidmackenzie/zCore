@@ -516,10 +516,6 @@ impl Syscall<'_> {
                     return Err(ZxError::NOT_SUPPORTED);
                 }
                 let parent = vmo.parent().ok_or(ZxError::BAD_STATE)?;
-                error!(
-                    "vmo_create_child: slice path — parent.can_unidirectional_clone()={}",
-                    parent.can_unidirectional_clone()
-                );
                 let end = offset
                     .checked_add(child_size)
                     .ok_or(ZxError::OUT_OF_RANGE)?;
