@@ -1465,19 +1465,29 @@ impl VmObject {
         offset: usize,
         len: usize,
     ) -> ZxResult<Arc<Self>> {
-        // Slices are transparent windows into a parent VMO. Creating a
-        // COW snapshot of a slice redirects through the parent VMO with
-        // the slice's offset added, matching Fuchsia's behavior.
-        // Don't redirect pager-backed slices: pager VMOs don't support
-        // regular SNAPSHOT at the object level (only SNAPSHOT_AT_LEAST_ON_WRITE
-        // via the syscall layer).
-        if self.is_slice && !self.trait_.is_reference() {
+        // Slices and references are transparent windows into a parent VMO.
+        // Creating a COW child of a slice/reference redirects through
+        // the parent VMO with the slice's offset added.
+        if self.is_slice {
             let parent = self
                 .inner
                 .lock()
                 .parent
                 .upgrade()
                 .ok_or(ZxError::BAD_STATE)?;
+            if self.trait_.is_reference() {
+                // REFERENCE children: redirect to parent.
+                // SNAPSHOT (create_child) on pager-backed VMOs is NOT_SUPPORTED.
+                // Only SNAPSHOT_AT_LEAST_ON_WRITE (create_child_unidirectional)
+                // works for pager VMOs.
+                if parent.has_pager() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
+                let slice_off = self.trait_.parent_offset();
+                let adjusted = offset.checked_add(slice_off).ok_or(ZxError::OUT_OF_RANGE)?;
+                return parent.create_child(resizable, adjusted, len);
+            }
+            // Regular slices: redirect for non-pager parents.
             if parent.has_pager() {
                 return Err(ZxError::NOT_SUPPORTED);
             }
@@ -1518,6 +1528,20 @@ impl VmObject {
         len: usize,
         resizable: bool,
     ) -> ZxResult<Arc<Self>> {
+        // REFERENCE children: redirect to the underlying parent VMO.
+        // SNAPSHOT_AT_LEAST_ON_WRITE on a pager-backed reference creates
+        // a unidirectional child of the pager root.
+        if self.is_slice && self.trait_.is_reference() {
+            let parent = self
+                .inner
+                .lock()
+                .parent
+                .upgrade()
+                .ok_or(ZxError::BAD_STATE)?;
+            let slice_off = self.trait_.parent_offset();
+            let adjusted = offset.checked_add(slice_off).ok_or(ZxError::OUT_OF_RANGE)?;
+            return parent.create_child_unidirectional(adjusted, len, resizable);
+        }
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         base.set_name(&self.base.name());
         let trait_ = self.trait_.create_child_unidirectional(offset, len)?;

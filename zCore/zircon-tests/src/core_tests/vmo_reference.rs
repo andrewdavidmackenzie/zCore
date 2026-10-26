@@ -521,10 +521,12 @@ fn child_snapshot_at_least_on_write() {
     let reference = vmo.create_reference_slice(0, 0, false).unwrap();
 
     // Create a SNAPSHOT_AT_LEAST_ON_WRITE child of the reference.
-    // In Fuchsia, this creates a COW child that sees parent writes until
-    // the child itself writes. In zCore, create_child creates a SNAPSHOT
-    // (full COW). The child creation itself must succeed.
-    let child = reference.create_child(false, 0, PAGE_SIZE).unwrap();
+    // In Fuchsia, this creates a unidirectional COW child that sees
+    // parent writes until the child itself writes. The reference
+    // redirects to the pager root via create_child_unidirectional.
+    let child = reference
+        .create_child_unidirectional(0, PAGE_SIZE, false)
+        .unwrap();
 
     // C++ verifies parent_koid points to the reference.
     // parent_koid is a private field in zCore's VmoInfo, so we verify

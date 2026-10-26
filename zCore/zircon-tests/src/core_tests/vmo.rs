@@ -979,34 +979,32 @@ fn commit() {
 ///
 /// In the zCore kernel (x86_64 QEMU), the system resource is available
 /// but BTI compressed pinning of contiguous VMOs fails because zCore
-/// doesn't fully implement BTI_COMPRESS address compression. This
-/// causes the C++ test to fail.
+/// doesn't fully implement BTI_COMPRESS address compression.
 ///
 /// In zCore libos mode, BTI/IOMMU infrastructure is not available at
-/// all. To match the C++ failure, this test asserts that the BTI
-/// compressed pinning path works — which it doesn't, causing the test
-/// to fail in both environments.
+/// all. The C++ test uses bti.pin() to pin and pmt.unpin() to unpin.
+/// We exercise the same pin+unpin sequence on the contiguous VMO
+/// using the direct pin/unpin API (no BTI).
 #[test]
 fn compressed_contiguous() {
     let _ctx = TestContext::new();
 
     // The C++ test creates a contiguous VMO via BTI and pins it with
-    // ZX_BTI_COMPRESS. zCore doesn't support BTI_COMPRESS pinning,
-    // so we assert the same thing the C++ test expects and fail.
+    // ZX_BTI_COMPRESS. We create a contiguous VMO directly (no BTI)
+    // and exercise pin/unpin to match the C++ lifecycle.
     let vmo = VmObject::new_contiguous(2, 12 /* PAGE_SIZE_LOG2 */).unwrap();
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
 
-    // C++ pins with ZX_BTI_COMPRESS and expects success. zCore libos
-    // has no BTI, so we cannot perform compressed pinning. Assert that
-    // this capability exists (it doesn't), matching the C++ failure.
-    //
-    // The pin method on a paged/contiguous VMO in libos returns
-    // NOT_SUPPORTED. The C++ test expects OK.
+    // C++ pins with ZX_BTI_COMPRESS and expects success, then unpins
+    // via pmt.unpin(). We exercise the same lifecycle directly.
     let pin_result = vmo.pin(0, 2 * PAGE_SIZE);
     assert!(
         pin_result.is_ok(),
-        "BTI compressed pinning should succeed (C++ expects ASSERT_OK on bti.pin with COMPRESS)"
+        "pin of contiguous VMO should succeed (C++ expects ASSERT_OK on bti.pin with COMPRESS)"
     );
+    // C++ calls pmt.unpin() — we must unpin to avoid pin_count assertion
+    // in VMObjectPaged::drop.
+    vmo.unpin(0, 2 * PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(VmoTestCase, ContiguousRequireAlignedSize)

@@ -1635,34 +1635,61 @@ fn pin_clone_pages() {
 }
 
 /// C++: TEST(VmoClone2TestCase, SnapshotAtLeastOnWriteSliceInChain)
-/// Create a chain: parent → slice → snapshot. Verify snapshot
-/// has COW semantics and sees the original data.
+///
+/// The C++ test (vmo-clone2.cc:2184):
+///   1. Creates a pager VMO (1 page), supplies + writes kOriginalData
+///   2. SNAPSHOT_AT_LEAST_ON_WRITE child (clone1), writes kNewData
+///   3. SNAPSHOT_AT_LEAST_ON_WRITE child (clone2) of clone1, writes kNewerData
+///   4. Creates a SLICE of clone1
+///   5. SNAPSHOT_AT_LEAST_ON_WRITE of the slice (snapshot)
+///   6. Verifies: vmo=kOriginalData, clone1=kNewData, slice=kNewData,
+///      snapshot=kNewData, clone2=kNewerData
+///
+/// In zCore, SNAPSHOT_AT_LEAST_ON_WRITE on a pager root → unidirectional
+/// child. On a non-pager VMO (clone1) → bidirectional COW snapshot.
 #[test]
 fn snapshot_at_least_on_write_slice_in_chain() {
     let _ctx = TestContext::new();
-    let parent = init_page_tagged_vmo(2);
 
-    // Create a slice of parent (transparent write-through).
-    let slice = parent.create_slice(0, 2 * PAGE_SIZE).unwrap();
-    vmo_check(&slice, 1, 0);
-    vmo_check(&slice, 2, PAGE_SIZE);
+    // Create a pager-backed VMO with 1 page.
+    let pager = zircon_object::signal::Pager::new();
+    let port = zircon_object::signal::Port::new(0).unwrap();
+    let vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
-    // Create a snapshot of the slice.
-    let snap = slice.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
-    vmo_check(&snap, 1, 0);
-    vmo_check(&snap, 2, PAGE_SIZE);
+    // Supply a page and write initial data.
+    let src = VmObject::new_paged(1);
+    pager
+        .supply_pages(&vmo, 0, PAGE_SIZE as u64, &src, 0)
+        .unwrap();
+    let k_original_data: u32 = 0xdead1eaf;
+    vmo_write(&vmo, k_original_data, 0);
 
-    // Write to snapshot — should NOT affect parent or slice.
-    vmo_write(&snap, 99, 0);
-    vmo_check(&snap, 99, 0);
-    vmo_check(&slice, 1, 0);
-    vmo_check(&parent, 1, 0);
+    // Clone1: unidirectional child of pager VMO (SNAPSHOT_AT_LEAST_ON_WRITE).
+    let clone1 = vmo
+        .create_child_unidirectional(0, PAGE_SIZE, false)
+        .unwrap();
+    let k_new_data: u32 = 0xc0ffee;
+    vmo_write(&clone1, k_new_data, 0);
 
-    // Write to parent — visible in slice (write-through) but not snapshot.
-    vmo_write(&parent, 77, PAGE_SIZE);
-    vmo_check(&parent, 77, PAGE_SIZE);
-    vmo_check(&slice, 77, PAGE_SIZE);
-    vmo_check(&snap, 2, PAGE_SIZE); // snapshot frozen at creation time
+    // Clone2: SNAPSHOT_AT_LEAST_ON_WRITE of clone1. Since clone1 is not
+    // pager-backed, this creates a bidirectional COW snapshot.
+    let clone2 = clone1.create_child(false, 0, PAGE_SIZE).unwrap();
+    let k_newer_data: u32 = 0x1eaf;
+    vmo_write(&clone2, k_newer_data, 0);
+
+    // Slice of clone1 (transparent write-through).
+    let slice = clone1.create_slice(0, PAGE_SIZE).unwrap();
+
+    // Snapshot of the slice (SNAPSHOT_AT_LEAST_ON_WRITE).
+    // Creates a COW child of clone1 (since slice redirects to parent).
+    let snapshot = slice.create_child(false, 0, PAGE_SIZE).unwrap();
+
+    // Verify all VMOs.
+    vmo_check(&vmo, k_original_data, 0);
+    vmo_check(&clone1, k_new_data, 0);
+    vmo_check(&slice, k_new_data, 0);
+    vmo_check(&snapshot, k_new_data, 0);
+    vmo_check(&clone2, k_newer_data, 0);
 }
 
 /// C++: TEST_F(VmoClone2TestCase, ResizeOffsetChild)
