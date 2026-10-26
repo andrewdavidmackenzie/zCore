@@ -906,10 +906,7 @@ impl VMObjectTrait for VMObjectPaged {
         if let Some(parent) = &inner.parent {
             let parent_inner = parent.borrow_inner();
             if parent_inner.type_.is_hidden() {
-                error!(
-                    "can_unidirectional_clone: REJECTED — parent is hidden (type={:?})",
-                    parent_inner.type_
-                );
+                error!("can_unidirectional_clone: REJECTED — parent is hidden");
                 return false;
             }
         }
