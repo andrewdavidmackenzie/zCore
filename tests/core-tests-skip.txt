@@ -68,3 +68,6 @@ PortStressTest.WaitManyCloseRace
 
 # ── VmoTestCase: PinTests hang (BTI/IOMMU infrastructure) ──
 VmoTestCase.PinTests
+
+# ── JobTest: KillJobChain hang ──
+JobTest.KillJobChain
