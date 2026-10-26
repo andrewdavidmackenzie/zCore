@@ -10,6 +10,8 @@ use zircon_object::task::{
     policy_code, ExceptionObject, ExceptionType, Job, Process, Task, Thread, ThreadState,
     ThreadStateKind,
 };
+#[cfg(target_arch = "x86_64")]
+use zircon_object::ZxError;
 
 extern crate alloc;
 
