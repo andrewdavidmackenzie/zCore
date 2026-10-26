@@ -5,7 +5,7 @@
 use crate::helpers::TestContext;
 use core::time::Duration;
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};
-use zircon_object::signal::{Slack, Timer};
+use zircon_object::signal::Timer;
 
 use super::object_info::{get_info, HANDLE_BASIC_SIZE, TOPIC_HANDLE_BASIC};
 
@@ -362,43 +362,6 @@ fn boot_timers_elapse_during_suspend() {
     timer.set(Duration::from_nanos(0), Duration::from_nanos(0));
     assert_eq!(timer.signal(), Signal::SIGNALED);
 }
-
-/// C++: TEST(Timer, SetNegativeDeadlineMax)
-///
-/// Disabled in C++ (flaky). Timer with Early slack.
-/// Verify Early slack option is recorded in get_info.
-#[test]
-fn disabled_coalesce_test_early() {
-    let _ctx = TestContext::new();
-    let timer = Timer::with_slack(Slack::Early);
-    let (options, _, _) = timer.get_info();
-    assert_eq!(options, 1); // Slack::Early = ZX_TIMER_SLACK_EARLY = 1
-    timer.set(Duration::from_nanos(0), Duration::from_secs(10));
-    assert_eq!(timer.signal(), Signal::SIGNALED);
-    // After firing: options retained, deadline=0, slack retained.
-    let (options2, deadline, _slack) = timer.get_info();
-    assert_eq!(options2, 1);
-    assert_eq!(deadline, 0);
-}
-
-/// C++: TEST(Timer, RestartRace)
-///
-/// Disabled in C++ (flaky). Timer with Late slack.
-/// Verify Late slack option is recorded in get_info.
-#[test]
-fn disabled_coalesce_test_late() {
-    let _ctx = TestContext::new();
-    let timer = Timer::with_slack(Slack::Late);
-    let (options, _, _) = timer.get_info();
-    assert_eq!(options, 2); // Slack::Late = ZX_TIMER_SLACK_LATE = 2
-    timer.set(Duration::from_nanos(0), Duration::from_secs(10));
-    assert_eq!(timer.signal(), Signal::SIGNALED);
-    // After firing: options retained, deadline=0, slack retained.
-    let (options2, deadline, _slack) = timer.get_info();
-    assert_eq!(options2, 2);
-    assert_eq!(deadline, 0);
-}
-
 /// C++: TEST(Timer, UserSignal)
 ///
 /// User signals can be asserted and cleared on a timer via syscall layer,

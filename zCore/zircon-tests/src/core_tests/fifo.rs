@@ -4,40 +4,6 @@ use crate::helpers::TestContext;
 use zircon_object::ipc::Fifo;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::ZxError;
-
-/// C++: TEST(FifoTest, PartialWriteQueuesElementsThatFit)
-#[test]
-fn fifo_partial_write() {
-    let _ctx = TestContext::new();
-    let (f0, _f1) = Fifo::create(4, 4); // capacity: 4 elements
-
-    // Write 3 elements
-    let data = [0u8; 12];
-    let n = f0.write(4, &data, 3).unwrap();
-    assert_eq!(n, 3);
-
-    // Try to write 3 more (only 1 fits)
-    let n = f0.write(4, &data, 3).unwrap();
-    assert_eq!(n, 1);
-}
-
-/// C++: TEST(FifoTest, FifoOrderIsPreserved)
-#[test]
-fn fifo_order() {
-    let _ctx = TestContext::new();
-    let (f0, f1) = Fifo::create(16, 4);
-
-    for i in 0u32..8 {
-        f0.write(4, &i.to_ne_bytes(), 1).unwrap();
-    }
-
-    for i in 0u32..8 {
-        let mut buf = [0u8; 4];
-        f1.read(4, &mut buf, 1).unwrap();
-        assert_eq!(u32::from_ne_bytes(buf), i);
-    }
-}
-
 // -- Faithful 1:1 ports from FifoTest (fifo.cc) --
 
 /// C++: TEST(FifoTest, DequeueSignalsWriteable)

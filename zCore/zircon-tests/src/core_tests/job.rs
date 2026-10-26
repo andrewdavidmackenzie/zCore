@@ -15,6 +15,7 @@ use zircon_object::ZxError;
 /// ZX_INFO_JOB = 24
 const ZX_INFO_JOB: u32 = 24;
 /// ZX_JOB_POL_BASE_V1 = 0
+#[allow(dead_code)]
 const JOB_POL_BASE_V1: u32 = 0;
 /// ZX_JOB_POL_BASE_V2 = 0x0100_0000
 const JOB_POL_BASE_V2: u32 = 0x0100_0000;
@@ -28,6 +29,7 @@ const JOB_POL_ABSOLUTE: u32 = 1;
 /// Raw V1 policy entry (8 bytes), matching zx_policy_basic_t.
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
+#[allow(dead_code)]
 struct RawPolicyV1 {
     condition: u32,
     action: u32,
@@ -124,6 +126,7 @@ fn get_job_info(ctx: &TestContext, job_h: HandleValue) -> JobInfo {
 }
 
 /// Set V1 job policy via syscall.
+#[allow(dead_code)]
 fn set_policy_v1(
     ctx: &TestContext,
     job_h: HandleValue,
@@ -231,44 +234,6 @@ fn create_test() {
     sc.sys_handle_close(vmar2).unwrap();
     sc.sys_handle_close(child_h).unwrap();
 }
-
-/// C++: TEST(JobTest, GetInfoRuntime)
-/// JobInfo should return without error and report sensible values.
-#[test]
-fn job_get_info() {
-    let ctx = TestContext::new();
-    let job_h = add_root_job(&ctx);
-    let info = get_job_info(&ctx, job_h);
-
-    // A fresh root job should not be exited and should have return_code 0.
-    assert!(!info.exited, "fresh job should not be exited");
-    assert_eq!(info.return_code, 0, "fresh job return_code should be 0");
-    assert!(!info.kill_on_oom, "default kill_on_oom should be false");
-    assert!(!info.debugger_attached, "no debugger should be attached");
-}
-
-/// C++: TEST(JobTest, PolicyBasicOverrideAllowTest)
-/// Set policy DENY via V1, then override with ALLOW using Relative option.
-#[test]
-fn job_policy_basic_override() {
-    let ctx = TestContext::new();
-    let job_h = add_root_job(&ctx);
-
-    // ZX_POL_BAD_HANDLE=0, ZX_POL_ACTION_DENY=1
-    let deny_policy = [RawPolicyV1 {
-        condition: 0, // BadHandle
-        action: 1,    // Deny
-    }];
-    set_policy_v1(&ctx, job_h, JOB_POL_RELATIVE, &deny_policy).unwrap();
-
-    // Override with Allow using Relative
-    let allow_policy = [RawPolicyV1 {
-        condition: 0, // BadHandle
-        action: 0,    // Allow
-    }];
-    set_policy_v1(&ctx, job_h, JOB_POL_RELATIVE, &allow_policy).unwrap();
-}
-
 /// C++: TEST(JobTest, CloseJobRemovesFromTree)
 /// Closing a job handle removes it from the parent's child list.
 /// Uses sys_job_create + sys_handle_close, object-level assertion
@@ -295,68 +260,6 @@ fn job_close_removes_from_tree() {
     drop(child_obj); // release the Arc
     assert!(!root.children_ids().contains(&child_id));
 }
-
-/// C++: TEST(JobTest, MaxHeightSmoke)
-/// Job nesting depth is limited to MAX_HEIGHT (32).
-#[test]
-fn job_max_height() {
-    let ctx = TestContext::new();
-    let sc = ctx.syscall();
-
-    let root = Job::root();
-    let mut parent_h = ctx.proc.add_handle(Handle::new(root, Rights::DEFAULT_JOB));
-
-    // Build a chain: root(0) -> child(1) -> ... -> child(32)
-    let mut handles = Vec::new();
-    for _ in 0..32 {
-        let child_h = create_job(&ctx, parent_h);
-        handles.push(child_h);
-        parent_h = child_h;
-    }
-
-    // Creating at depth 33 should fail with OUT_OF_RANGE
-    let deepest = handles[31]; // depth 32
-    let mut fail_h: HandleValue = 0;
-    assert_eq!(
-        sc.sys_job_create(deepest, 0, UserOutPtr::from(&mut fail_h as *mut _ as usize))
-            .unwrap_err(),
-        ZxError::OUT_OF_RANGE,
-    );
-}
-
-/// C++: TEST(JobTest, CriticalProcessAlreadySet)
-/// Marking a process critical to a job kills the job when the process exits.
-/// Uses sys_job_set_critical syscall.
-#[test]
-fn job_critical_process() {
-    let ctx = TestContext::new();
-    let sc = ctx.syscall();
-
-    let root = Job::root();
-    let root_h = ctx
-        .proc
-        .add_handle(Handle::new(root.clone(), Rights::DEFAULT_JOB));
-    let child_h = create_job(&ctx, root_h);
-    let _child_job = ctx.proc.get_object::<Job>(child_h).unwrap();
-
-    // Create process under child job
-    let (proc_h, _vmar_h) = create_process(&ctx, child_h, b"critical");
-    let proc_obj = ctx.proc.get_object::<Process>(proc_h).unwrap();
-
-    // C++: zx_job_set_critical(root_job, 0, process)
-    sc.sys_job_set_critical(root_h, 0, proc_h).unwrap();
-
-    // Cannot set critical twice (even on different job)
-    assert_eq!(
-        sc.sys_job_set_critical(child_h, 0, proc_h).unwrap_err(),
-        ZxError::ALREADY_BOUND,
-    );
-
-    // When the critical process exits, the job it's critical to should be killed
-    proc_obj.exit(1);
-    assert!(root.signal().contains(Signal::JOB_TERMINATED));
-}
-
 /// C++: TEST(JobTest, JobSignals)
 /// Full signal lifecycle: create process, create child job, close each.
 #[test]

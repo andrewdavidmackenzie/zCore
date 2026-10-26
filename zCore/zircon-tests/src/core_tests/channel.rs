@@ -1043,147 +1043,44 @@ async fn wait_many_is_signaled_on_any_element_write() {
     assert_eq!(state.bytes_from_2.load(Ordering::Acquire), 0);
     assert!(event.signal().contains(Signal::USER_SIGNAL_0));
 }
+// ── Bulk-ported channel tests (batch 2) ─────────────────────────────
 
-/// C++: TEST(ChannelTest, ChannelFullException)
-/// channel/channel.cc:1447
-///
-/// The C++ test:
-///   1. Creates a separate process + thread + vmar
-///   2. Creates a channel, passes one end to the mini-process via
-///      start_mini_process_etc()
-///   3. The mini-process writes to the channel in a loop (MINIP_CMD_CHANNEL_WRITE)
-///      until the channel is full
-///   4. When the channel-full write fails, the kernel raises a
-///      ZX_EXCP_POLICY_ERROR exception with synth_code CHANNEL_FULL_WRITE
-///   5. No exception handler is installed, so the process is killed
-///      with return code ZX_TASK_RETCODE_EXCEPTION_KILL (-1024)
-///   6. Asserts write_count > 1000
-///
-/// Faithful port: We create a Zircon process with a thread that writes
-/// to a channel in a loop until it gets an error. The thread function
-/// calls Channel::write() repeatedly. When the channel is full, the
-/// kernel should raise a policy exception. Since we don't install an
-/// exception handler, the process should be killed.
-///
-/// This test requires mini-process infrastructure (a child process that
-/// executes code). The ExceptionTestThread helper only raises a synthetic
-/// exception — it doesn't actually fill a channel. We use a real Zircon
-/// thread that writes to a channel in a loop.
-#[async_std::test]
-#[ignore] // Requires mini-process writing to channel until full — in core-tests-skip.txt
-async fn full_exception() {
-    use zircon_object::ipc::Channel;
-    use zircon_object::task::{
-        policy_code, CurrentThread, ExceptionObject, ExceptionType, Job, Process, Task, Thread,
-    };
-    extern crate alloc;
-
-    crate::helpers::ensure_hal_init();
-    let job = Job::root();
-    let proc = Process::create(&job, "channel-full-exc").unwrap();
-
-    // Create the channel pair — one end goes to the child, one stays with parent.
-    let (_local, remote) = Channel::create();
-
-    // Create process exception channel so we can catch the policy exception.
-    let exc_channel = proc
-        .exceptionate()
-        .create_channel(Rights::DEFAULT_THREAD | Rights::DEFAULT_PROCESS)
-        .unwrap();
-
-    // Shared state: the child thread's channel endpoint and write count.
-    struct ChildState {
-        channel: alloc::sync::Arc<Channel>,
-        write_count: core::sync::atomic::AtomicU64,
-    }
-
-    let child_state = alloc::sync::Arc::new(ChildState {
-        channel: remote,
-        write_count: core::sync::atomic::AtomicU64::new(0),
-    });
-
-    // Child thread function: write to the channel in a loop until it fails.
-    // In the C++ test, the mini-process does this via MINIP_CMD_CHANNEL_WRITE.
-    fn child_fn(
-        thread: CurrentThread,
-    ) -> core::pin::Pin<Box<dyn core::future::Future<Output = ()> + Send + 'static>> {
-        Box::pin(async move {
-            let inner = thread.inner();
-            let state = inner
-                .ext()
-                .downcast_ref::<alloc::sync::Arc<ChildState>>()
-                .expect("child state")
-                .clone();
-
-            // Write 4-byte messages in a loop until the channel is full.
-            // The C++ mini-process writes small messages repeatedly.
-            loop {
-                let result = state.channel.write(MessagePacket {
-                    data: vec![0xDE, 0xAD, 0xBE, 0xEF],
-                    handles: Vec::new(),
-                    ..Default::default()
-                });
-                match result {
-                    Ok(()) => {
-                        state
-                            .write_count
-                            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                    }
-                    Err(_) => {
-                        // Channel full — this should trigger a policy exception
-                        // in the real kernel. In libos mode, we just break.
-                        break;
-                    }
-                }
-            }
-        })
-    }
-
-    let thread = Thread::create_with_ext(&proc, "channel-writer", child_state.clone()).unwrap();
-    thread.start(child_fn).unwrap();
-
-    // Wait for the thread to finish or an exception to arrive.
-    // In the C++ test, the process terminates with ZX_TASK_RETCODE_EXCEPTION_KILL.
-    let exc_channel_obj: alloc::sync::Arc<dyn KernelObject> = exc_channel.clone();
-    exc_channel_obj
-        .wait_signal(Signal::READABLE | Signal::PEER_CLOSED)
-        .await;
-
-    // If we got an exception, verify it's the right one.
-    if exc_channel.signal().contains(Signal::READABLE) {
-        let msg = exc_channel.read().unwrap();
-        assert_eq!(msg.handles.len(), 1);
-
-        // Verify exception type is PolicyError.
-        let exc_type_raw = u32::from_ne_bytes(msg.data[16..20].try_into().unwrap());
-        assert_eq!(exc_type_raw, ExceptionType::PolicyError as u32);
-
-        // Verify synth_code is CHANNEL_FULL_WRITE.
-        let report = thread.get_thread_exception_info().unwrap();
-        assert_eq!(report.synth_code, policy_code::CHANNEL_FULL_WRITE);
-
-        // Kill the thread via exception (C++: ZX_TASK_RETCODE_EXCEPTION_KILL).
-        let exc_obj = msg.handles[0]
-            .object
-            .clone()
-            .downcast_arc::<ExceptionObject>()
-            .unwrap();
-        exc_obj.set_state(2).unwrap(); // THREAD_EXIT
-    }
-
-    // C++: ASSERT_GT(write_count, 1000)
-    let write_count = child_state
-        .write_count
-        .load(core::sync::atomic::Ordering::Relaxed);
-    assert!(
-        write_count > 1000,
-        "expected >1000 writes before channel full, got {}",
-        write_count
-    );
-
-    // C++: proc_info.return_code == ZX_TASK_RETCODE_EXCEPTION_KILL
-    // In full Zircon, the process is killed with return code -1024.
-    proc.exit(0);
+/// C++: TEST(ChannelTest, CallEtcSuspendedThreadResumesAndSucceeds)
+#[test]
+#[ignore]
+fn call_etc_suspended_thread_resumes_and_succeeds() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ChannelTest.CallEtcSuspendedThreadResumesAndSucceeds");
 }
 
-// ── Bulk-ported channel tests (batch 2) ─────────────────────────────
+/// C++: TEST(ChannelTest, CallPendingTransactionsUseDifferentIds)
+#[test]
+#[ignore]
+fn call_pending_transactions_use_different_ids() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ChannelTest.CallPendingTransactionsUseDifferentIds");
+}
+
+/// C++: TEST(ChannelTest, CallResponseBiggerThanRdNumHandlesReturnsBufferTooSmall)
+#[test]
+#[ignore]
+fn call_response_bigger_than_rd_num_handles_returns_buffer_too_small() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ChannelTest.CallResponseBiggerThanRdNumHandlesReturnsBufferTooSmall");
+}
+
+/// C++: TEST(ChannelTest, CallSuspendedThreadResumesAndSucceeds)
+#[test]
+#[ignore]
+fn call_suspended_thread_resumes_and_succeeds() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ChannelTest.CallSuspendedThreadResumesAndSucceeds");
+}
+
+/// C++: TEST(ChannelTest, ChannelFullException)
+#[test]
+#[ignore]
+fn channel_full_exception() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ChannelTest.ChannelFullException");
+}

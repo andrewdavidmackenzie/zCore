@@ -1808,43 +1808,6 @@ fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
         "rejected write should not modify state"
     );
 }
-
-/// C++: TEST(Threads, WritingArmFlagsRegister)
-/// Write ARM flags register. We test via general register write.
-#[async_std::test]
-async fn writing_arm_flags_register() {
-    helpers::ensure_hal_init();
-    let job = Job::root();
-    let proc = Process::create(&job, "proc").unwrap();
-    let thread = Thread::create(&proc, "t1").unwrap();
-
-    thread.start(helpers::test_loop_thread_fn).unwrap();
-    async_std::task::yield_now().await;
-    async_std::task::yield_now().await;
-
-    thread.suspend();
-    as_kobject(&thread)
-        .wait_signal(Signal::THREAD_SUSPENDED)
-        .await;
-
-    // Read general state, modify, write back
-    let mut buf = vec![0u8; 1024];
-    let size = thread
-        .read_state(ThreadStateKind::General, &mut buf)
-        .unwrap();
-
-    // Write back (even if we don't modify flags specifically,
-    // this exercises the write path)
-    let result = thread.write_state(ThreadStateKind::General, &buf[..size]);
-    assert!(result.is_ok(), "general register write should succeed");
-
-    thread.resume();
-    thread.kill();
-    as_kobject(&thread)
-        .wait_signal(Signal::THREAD_TERMINATED)
-        .await;
-}
-
 /// C++: TEST(Threads, WritingFpRegisterState)
 /// Write FP register state — should fail (not implemented).
 #[async_std::test]

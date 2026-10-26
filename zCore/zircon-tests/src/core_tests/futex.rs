@@ -830,7 +830,3 @@ fn wait_timeout_elapsed() {
     // No dangling waiters
     assert_eq!(futex.wake(1), 0);
 }
-
-// NOTE: wake_during_registration_race was a zCore-specific regression test
-// not corresponding to any C++ core-test binary entry. Removed to keep the
-// test suite 1:1 with the Fuchsia core-tests-standalone binary.

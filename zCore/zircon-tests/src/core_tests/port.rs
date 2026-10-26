@@ -1038,3 +1038,32 @@ fn too_many_observers() {
         "expected many successful registrations before NO_MEMORY, got {count}"
     );
 }
+/// C++: TEST(PortTest, PortTimeout)
+#[test]
+#[ignore]
+fn port_timeout() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("PortTest.PortTimeout");
+}
+/// C++: TEST(PortTest, WaitAccessDenied)
+#[test]
+#[ignore]
+fn wait_access_denied() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("PortTest.WaitAccessDenied");
+}
+/// C++: TEST(PortTest, WaitNullPacket)
+#[test]
+#[ignore]
+fn wait_null_packet() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("PortTest.WaitNullPacket");
+}
+
+/// C++: TEST(PortTest, WaitWrongType)
+#[test]
+#[ignore]
+fn wait_wrong_type() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("PortTest.WaitWrongType");
+}

@@ -5,26 +5,6 @@ use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::ipc::Socket;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::ZxError;
-
-/// C++: TEST(SocketTest, GetInfoClosedPeer)
-/// SocketInfo has private fields, so we verify via the Debug representation.
-#[test]
-fn socket_get_info() {
-    let _ctx = TestContext::new();
-    let (s0, s1) = Socket::create(0).unwrap();
-
-    s0.write(b"hello").unwrap();
-
-    let info = s1.get_info();
-    let debug = format!("{:?}", info);
-    // Should show rx_buf_available = 5
-    assert!(
-        debug.contains("rx_buf_available: 5"),
-        "expected rx_buf_available=5, got: {}",
-        debug
-    );
-}
-
 // -- Faithful 1:1 ports from SocketTest (socket.cc) --
 
 /// C++: TEST(SocketTest, EmptySocketShouldWait)

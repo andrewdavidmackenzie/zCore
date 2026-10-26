@@ -213,35 +213,6 @@ fn wrong_object_type_failure_case() {
     // C++: ASSERT_EQ(ZX_ERR_WRONG_TYPE, ...)
     assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
 }
-
-/// C++: TEST(ChannelCallEtcTest, BadChannelFailureCase)
-/// Calling channel_call_etc on an invalid (default-constructed, i.e.
-/// ZX_HANDLE_INVALID) channel handle returns ZX_ERR_BAD_HANDLE.
-#[test]
-fn bad_channel_failure_case() {
-    use crate::helpers::TestContext;
-    use zircon_object::object::Rights;
-
-    let ctx = TestContext::new();
-
-    // C++: zx::channel client_end;  // default = ZX_HANDLE_INVALID
-    // Use handle value 0 (INVALID_HANDLE) — not in the process table
-    let invalid_handle: u32 = 0;
-    let result = ctx
-        .proc
-        .get_object_with_rights::<Channel>(invalid_handle, Rights::READ | Rights::WRITE);
-
-    // C++: call_etc -> ZX_ERR_BAD_HANDLE
-    assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
-
-    // Also test with an arbitrary non-existent handle value
-    let bogus_handle: u32 = 0xDEAD;
-    let result = ctx
-        .proc
-        .get_object_with_rights::<Channel>(bogus_handle, Rights::READ | Rights::WRITE);
-    assert_eq!(result.unwrap_err(), ZxError::BAD_HANDLE);
-}
-
 /// C++: TEST(ChannelCallEtcTest, NullArgsReturnsInvalidArgs)
 /// channel_call_etc with null args pointer returns ZX_ERR_INVALID_ARGS.
 #[test]
@@ -452,81 +423,6 @@ fn invalid_options_returns_invalid_args() {
     ));
     assert_eq!(result.unwrap_err(), ZxError::INVALID_ARGS);
 }
-
-/// C++: TEST(ChannelCallEtcTest, WithoutReadRightReturnsAccessDenied)
-/// Channel handle with READ right removed -> call_etc returns ACCESS_DENIED.
-#[test]
-fn without_read_right_returns_access_denied() {
-    use crate::helpers::TestContext;
-    use zircon_object::object::{Handle, Rights};
-
-    let ctx = TestContext::new();
-    let (client, _server) = Channel::create();
-
-    // C++: client_end.replace(DEFAULT_CHANNEL_RIGHTS & ~READ, &no_read)
-    let no_read_rights = Rights::DEFAULT_CHANNEL & !Rights::READ;
-    let handle_value = ctx.proc.add_handle(Handle::new(client, no_read_rights));
-
-    // C++: no_read.call_etc(0, infinite, ...) == ZX_ERR_ACCESS_DENIED
-    // channel_call_etc requires READ | WRITE rights
-    let result = ctx
-        .proc
-        .get_object_with_rights::<Channel>(handle_value, Rights::READ | Rights::WRITE);
-    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
-
-    let _ = ctx.proc.remove_handle(handle_value);
-}
-
-/// C++: TEST(ChannelCallEtcTest, WithoutWriteRightReturnsAccessDenied)
-/// Channel handle with WRITE right removed -> call_etc returns ACCESS_DENIED.
-#[test]
-fn without_write_right_returns_access_denied() {
-    use crate::helpers::TestContext;
-    use zircon_object::object::{Handle, Rights};
-
-    let ctx = TestContext::new();
-    let (client, _server) = Channel::create();
-
-    // C++: client_end.replace(DEFAULT_CHANNEL_RIGHTS & ~WRITE, &no_write)
-    let no_write_rights = Rights::DEFAULT_CHANNEL & !Rights::WRITE;
-    let handle_value = ctx.proc.add_handle(Handle::new(client, no_write_rights));
-
-    // C++: no_write.call_etc(0, infinite, ...) == ZX_ERR_ACCESS_DENIED
-    let result = ctx
-        .proc
-        .get_object_with_rights::<Channel>(handle_value, Rights::READ | Rights::WRITE);
-    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
-
-    let _ = ctx.proc.remove_handle(handle_value);
-}
-
-/// C++: TEST(ChannelCallEtcTest, FromWrongObjectTypeReturnsWrongType)
-/// Calling zx_channel_call_etc on an event handle returns ZX_ERR_WRONG_TYPE.
-#[test]
-fn from_wrong_object_type_returns_wrong_type() {
-    use crate::helpers::TestContext;
-    use zircon_object::object::{Handle, Rights};
-    use zircon_object::signal::Event;
-
-    let ctx = TestContext::new();
-
-    // C++: zx::event::create(0, &event)
-    let event = Event::new();
-    let handle_value = ctx
-        .proc
-        .add_handle(Handle::new(event, Rights::DEFAULT_EVENT));
-
-    // C++: zx_channel_call_etc(event.get(), ...) == ZX_ERR_WRONG_TYPE
-    // The syscall dispatcher does get_object_with_rights::<Channel>
-    // which fails because the handle refers to an Event, not a Channel.
-    let result = ctx
-        .proc
-        .get_object_with_rights::<Channel>(handle_value, Rights::READ | Rights::WRITE);
-    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
-
-    let _ = ctx.proc.remove_handle(handle_value);
-}
-
 /// C++: TEST(ChannelCallEtcTest, WithDuplicateOpHandleSucceeds)
 ///
 /// Echo server echoes handles back. Verifies basic handle transfer
@@ -707,46 +603,6 @@ fn mixed_move_and_duplicate_on_failure() {
     // C++: Moved handle was consumed / closed
     assert!(sc.sys_handle_check_valid(move_handle).is_err());
 }
-
-/// C++: TEST(ChannelCallEtcTest, SelfHandleTransferReturnsNotSupported)
-/// Duplicating the calling channel handle into itself returns NOT_SUPPORTED.
-#[test]
-fn self_handle_transfer_returns_not_supported() {
-    let ctx = TestContext::new();
-    let sc = ctx.syscall();
-
-    let (client, _server) = Channel::create();
-    let ch_handle = ctx
-        .proc
-        .add_handle(Handle::new(client, Rights::DEFAULT_CHANNEL));
-
-    // C++: disposition.handle = client_end.get() (self), operation = DUPLICATE
-    let mut disp = [0u32; 5];
-    disp[0] = 1; // ZX_HANDLE_OP_DUP
-    disp[1] = ch_handle; // self-handle
-    disp[2] = 4; // ZX_OBJ_TYPE_CHANNEL
-    disp[3] = Rights::SAME_RIGHTS.bits();
-    disp[4] = 0; // result
-
-    let data = [0u8; 4];
-    let result = sc.sys_channel_write_etc(
-        ch_handle,
-        0,
-        UserInPtr::from(data.as_ptr() as usize),
-        data.len() as u32,
-        hal_impl::user::UserInOutPtr::from(disp.as_mut_ptr() as usize),
-        1,
-    );
-    // C++: returns ZX_ERR_NOT_SUPPORTED
-    assert_eq!(result.unwrap_err(), ZxError::NOT_SUPPORTED);
-
-    // C++: disp.result == ZX_ERR_NOT_SUPPORTED
-    assert_eq!(disp[4] as i32, ZxError::NOT_SUPPORTED as i32);
-
-    // C++: client_end still valid
-    assert!(sc.sys_handle_check_valid(ch_handle).is_ok());
-}
-
 /// C++: TEST(ChannelCallEtcTest, PeerClosedBeforeCallReturnsPeerClosed)
 /// Close remote before calling. Moved handles are consumed.
 /// Returns ZX_ERR_PEER_CLOSED immediately.

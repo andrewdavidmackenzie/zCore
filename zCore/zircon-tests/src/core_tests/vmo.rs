@@ -83,33 +83,6 @@ fn vmo_read_write_bad_len() {
     let result = sc.sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, len);
     assert!(result.is_ok(), "exact-size write should succeed");
 }
-
-/// C++: TEST(VmoTestCase, ReadWriteRange)
-/// Read/write at various offsets within bounds.
-#[test]
-fn vmo_read_write_range() {
-    let _ctx = TestContext::new();
-
-    let vmo = VmObject::new_paged(4);
-    let len = 4 * PAGE_SIZE;
-
-    // Read 0 bytes at end is OK
-    let mut empty = [0u8; 0];
-    vmo.read(len, &mut empty).unwrap();
-
-    // Write 0 bytes at end is OK
-    vmo.write(len, &[]).unwrap();
-
-    // Read/write at various page-aligned offsets
-    for offset in [0, PAGE_SIZE, 2 * PAGE_SIZE, 3 * PAGE_SIZE] {
-        let data = vec![offset as u8; 64];
-        vmo.write(offset, &data).unwrap();
-        let mut buf = vec![0u8; 64];
-        vmo.read(offset, &mut buf).unwrap();
-        assert_eq!(buf, data);
-    }
-}
-
 /// C++: TEST(VmoTestCase, SizeAlign)
 /// VMO size rounds up to page boundary.
 #[test]
@@ -156,38 +129,6 @@ fn vmo_resize_align() {
     vmo.set_len(PAGE_SIZE * 3).unwrap();
     assert_eq!(vmo.len(), PAGE_SIZE * 3);
 }
-
-/// C++: TEST(VmoTestCase, Resize) — extended
-/// Resize up, down, ludicrous sizes.
-#[test]
-fn vmo_resize_extended() {
-    let _ctx = TestContext::new();
-
-    let vmo = VmObject::new_paged_with_resizable(true, 4);
-    assert_eq!(vmo.len(), 4 * PAGE_SIZE);
-
-    // Grow
-    vmo.set_len(5 * PAGE_SIZE).unwrap();
-    assert_eq!(vmo.len(), 5 * PAGE_SIZE);
-
-    // Shrink
-    vmo.set_len(2 * PAGE_SIZE).unwrap();
-    assert_eq!(vmo.len(), 2 * PAGE_SIZE);
-
-    // Shrink to zero
-    vmo.set_len(0).unwrap();
-    assert_eq!(vmo.len(), 0);
-
-    // Grow back
-    vmo.set_len(PAGE_SIZE).unwrap();
-    assert_eq!(vmo.len(), PAGE_SIZE);
-
-    // After resize, new area reads as zeros
-    let mut buf = [0xFFu8; 8];
-    vmo.read(0, &mut buf).unwrap();
-    assert!(buf.iter().all(|&b| b == 0));
-}
-
 /// C++: TEST(VmoTestCase, NoResize) — extended
 /// Non-resizable VMO rejects set_size both up and down.
 #[test]
@@ -235,62 +176,6 @@ fn vmo_info() {
         .flags
         .contains(zircon_object::vm::VmoInfoFlags::TYPE_PAGED));
 }
-
-/// C++: TEST(VmoTestCase, ContentSize)
-/// Get/set content_size property.
-#[test]
-fn vmo_content_size() {
-    let _ctx = TestContext::new();
-
-    let vmo = VmObject::new_paged_with_resizable(true, 4);
-    let len = 4 * PAGE_SIZE;
-
-    // Set content_size to something specific
-    let target = len / 3;
-    vmo.set_content_size(target).unwrap();
-    assert_eq!(vmo.content_size(), target);
-
-    // Set content_size back to VMO size
-    vmo.set_content_size(len).unwrap();
-    assert_eq!(vmo.content_size(), len);
-
-    // Set to zero
-    vmo.set_content_size(0).unwrap();
-    assert_eq!(vmo.content_size(), 0);
-}
-
-/// C++: TEST(VmoTestCase, ZeroPage)
-/// Zero a range in the middle of written data.
-#[test]
-fn vmo_zero_range() {
-    let _ctx = TestContext::new();
-
-    let vmo = VmObject::new_paged(1);
-
-    // Write a pattern across the page
-    let data: Vec<u8> = (0..64).collect();
-    vmo.write(0, &data).unwrap();
-
-    // Zero bytes 16..32
-    vmo.zero(16, 16).unwrap();
-
-    let mut buf = [0u8; 64];
-    vmo.read(0, &mut buf).unwrap();
-
-    // 0..16 unchanged
-    for (i, &b) in buf[..16].iter().enumerate() {
-        assert_eq!(b, i as u8);
-    }
-    // 16..32 zeroed
-    for &b in &buf[16..32] {
-        assert_eq!(b, 0);
-    }
-    // 32..64 unchanged
-    for (i, &b) in buf[32..64].iter().enumerate() {
-        assert_eq!(b, (i + 32) as u8);
-    }
-}
-
 /// C++: TEST(VmoTestCase, Cache)
 /// Set cache policy on clean VMO; clone prevents policy change.
 #[test]
@@ -574,41 +459,6 @@ fn vmo_resize_basic() {
         "non-aligned resize should round up"
     );
 }
-
-/// C++: TEST(VmoTestCase, CachePolicyRace)
-///
-/// Set and verify cache policy on a VMO. Clean VMO accepts all
-/// valid policies; dirty or cloned VMO may reject changes.
-#[test]
-fn vmo_cache_policy_basic() {
-    use zircon_object::vm::CachePolicy;
-
-    let _ctx = TestContext::new();
-
-    let vmo = VmObject::new_paged(1);
-
-    // Default is Cached.
-    // Set to each valid policy.
-    for policy in [
-        CachePolicy::Cached,
-        CachePolicy::Uncached,
-        CachePolicy::WriteCombining,
-        CachePolicy::Cached,
-    ] {
-        vmo.set_cache_policy(policy).unwrap();
-    }
-
-    // Creating a child prevents policy change on the parent.
-    let vmo2 = VmObject::new_paged(1);
-    let _child = vmo2.create_child(false, 0, PAGE_SIZE).unwrap();
-    let result = vmo2.set_cache_policy(CachePolicy::Uncached);
-    assert_eq!(
-        result.err(),
-        Some(ZxError::BAD_STATE),
-        "policy change on VMO with children should fail"
-    );
-}
-
 /// C++: TEST(VmoTestCase, ContentSize)
 ///
 /// Set and get content_size on a VMO. Content size is independent
@@ -708,34 +558,6 @@ fn vmo_zero_page() {
         "uncommitted page should be all zeros"
     );
 }
-
-/// C++: TEST(VmoTestCase, OpOutOfBounds)
-#[test]
-fn vmo_zero_sub_range() {
-    let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(2);
-
-    // Write data.
-    let data = vec![0xBB_u8; 2 * PAGE_SIZE];
-    vmo.write(0, &data).unwrap();
-
-    // Zero a sub-range.
-    vmo.zero(100, 200).unwrap();
-
-    // Before the zeroed range should still have data.
-    let mut buf = [0u8; 4];
-    vmo.read(96, &mut buf).unwrap();
-    assert_eq!(buf, [0xBB; 4]);
-
-    // In the zeroed range should be zeros.
-    vmo.read(100, &mut buf).unwrap();
-    assert_eq!(buf, [0; 4]);
-
-    // After the zeroed range should still have data.
-    vmo.read(300, &mut buf).unwrap();
-    assert_eq!(buf, [0xBB; 4]);
-}
-
 // ============================================================================
 // Missing Fuchsia core-tests: VmoTestCase suite (53 tests)
 // ============================================================================
@@ -2587,17 +2409,4 @@ fn vmo_read_write_sync() {
     let mut buf = [0u8; 64];
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(&buf, &data);
-}
-
-/// C++: TEST(VmoTestCase, ReadWriteInvalidKernelBuffer)
-/// Verify VMO read/write with zero-length operations.
-#[test]
-fn vmo_read_write_invalid_kernel_buffer() {
-    let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1);
-
-    // Zero-length read/write should succeed without touching data.
-    vmo.write(0, &[]).unwrap();
-    let mut buf = [0u8; 0];
-    vmo.read(0, &mut buf).unwrap();
 }

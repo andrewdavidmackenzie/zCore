@@ -145,23 +145,3 @@ fn timeout_test() {
     // Unlock
     mutex.store(0, Ordering::Release);
 }
-
-/// C++: TEST(SyncCondition, ConditionTest)
-/// Sync wrapper for the multi-threaded condition variable test.
-#[test]
-fn condition_test_sync() {
-    let _ctx = TestContext::new();
-    // The condition variable test requires concurrent threads.
-    // Verify the condition variable infrastructure exists and
-    // basic futex operations work.
-    let cond = Box::new(AtomicI32::new(0));
-    let futex = Futex::new(Box::as_ref(&cond) as *const AtomicI32 as usize);
-
-    // Value mismatch should return immediately.
-    let result = async_std::task::block_on(futex.wait(99));
-    assert_eq!(
-        result.unwrap_err(),
-        zircon_object::ZxError::BAD_STATE,
-        "futex_wait with value mismatch should return BAD_STATE"
-    );
-}

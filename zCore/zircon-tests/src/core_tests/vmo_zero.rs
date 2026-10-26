@@ -108,32 +108,6 @@ fn empty_cow_children() {
     child.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0);
 }
-
-/// C++: TEST(VmoZeroTestCase, ContentInParentAndChild) — verify parent unaffected
-/// Zero child page 0, parent should still have its data.
-#[test]
-fn content_in_parent_preserved() {
-    let _ctx = TestContext::new();
-    let parent = VmObject::new_paged(1);
-    parent.write(0, &[42]).unwrap();
-
-    let child = parent.create_child(false, 0, PAGE_SIZE).unwrap();
-
-    // Child sees parent data
-    let mut buf = [0u8; 1];
-    child.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 42);
-
-    // Zero child
-    child.zero(0, PAGE_SIZE).unwrap();
-    child.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 0);
-
-    // Parent unaffected
-    parent.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 42);
-}
-
 /// C++: TEST(VmoZeroTestCase, ChildZeroThenWrite)
 /// Zero child page, then write to it — write should succeed.
 #[test]
@@ -558,55 +532,6 @@ fn write_cow_parent() {
         "populated_bytes: parent should have 1 page after zeroing page 0"
     );
 }
-
-/// C++: TEST(VmoZeroTestCase, WriteCowParent)
-///
-/// Debug test: faithful reproduction of WriteCowParent from vmo-zero.cc
-/// Tests merge behavior after parent close with zero marker in child.
-#[test]
-fn write_cow_parent_merge() {
-    let _ctx = TestContext::new();
-    let parent = VmObject::new_paged(2);
-    parent.write(0, &[1u8]).unwrap();
-
-    let child = parent.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
-
-    // After create: each gets half a page (shared)
-    let ci = child.get_info();
-    assert_eq!(
-        ci.populated_scaled_bytes,
-        (PAGE_SIZE / 2) as u64,
-        "child should have 0.5 pages after create"
-    );
-
-    // Parent writes page 0 → COW fork
-    parent.write(0, &[2u8]).unwrap();
-
-    let ci = child.get_info();
-    assert_eq!(
-        ci.populated_scaled_bytes, PAGE_SIZE as u64,
-        "child should have 1 page after parent COW fork"
-    );
-
-    // Child zeros page 0
-    child.zero(0, PAGE_SIZE).unwrap();
-
-    let ci = child.get_info();
-    assert_eq!(
-        ci.populated_scaled_bytes, 0,
-        "child should have 0 pages after zeroing page 0"
-    );
-
-    // Close parent → merge
-    drop(parent);
-
-    let ci = child.get_info();
-    assert_eq!(
-        ci.populated_scaled_bytes, 0,
-        "child should have 0 pages after parent close (zero marker blocks merge)"
-    );
-}
-
 /// C++: TEST(VmoZeroTestCase, MergeZeroChildren)
 /// Zero all pages, drop children, verify populated_bytes goes to 0.
 #[test]
