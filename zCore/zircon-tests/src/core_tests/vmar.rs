@@ -1936,3 +1936,30 @@ fn write_read_only_memory() {
 
     vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
+
+/// Debug: reproduce Vmar.RangeOpCommit populated_bytes issue
+#[test]
+fn debug_range_op_commit_populated() {
+    let _ctx = crate::helpers::TestContext::new();
+    let vmo = VmObject::new_paged(5);
+    let clone = vmo.create_child(false, 0, 5 * PAGE_SIZE).unwrap();
+
+    let info = vmo.get_info();
+    eprintln!("Before commit: parent populated={}", info.populated_bytes);
+    let info = clone.get_info();
+    eprintln!("Before commit: clone populated={}", info.populated_bytes);
+
+    // Commit pages 1-2 in parent
+    vmo.commit(PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
+    let info = vmo.get_info();
+    eprintln!("After parent commit(1,2): parent populated={}", info.populated_bytes);
+    assert!(info.populated_bytes <= 2 * PAGE_SIZE as u64, 
+        "parent populated_bytes should be <= {} but is {}", 2 * PAGE_SIZE, info.populated_bytes);
+
+    // Commit pages 2-3 in clone
+    clone.commit(2 * PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
+    let info = clone.get_info();
+    eprintln!("After clone commit(2,3): clone populated={}", info.populated_bytes);
+    assert!(info.populated_bytes <= 2 * PAGE_SIZE as u64,
+        "clone populated_bytes should be <= {} but is {}", 2 * PAGE_SIZE, info.populated_bytes);
+}
