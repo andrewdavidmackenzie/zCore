@@ -79,3 +79,5 @@ ProcessTest.KillChannelHandleCycle
 Threads.BadSyscallCaller
 VmoTransferDataTestCase.RacyDropParent
 Threads.WriteReadDebugRegisterState
+Threads.DebugRegistersValidation
+Threads.DebugRegistersWatchpointSyscallPanicRepro
