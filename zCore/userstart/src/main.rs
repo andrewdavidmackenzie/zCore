@@ -25,8 +25,10 @@ const MAX_HANDLES: usize = 16;
 // vDSO data page offset (matches Fuchsia's ELF layout)
 const VDSO_DATA_OFFSET: usize = 0x7000;
 
-// Page size (4 KiB)
-const PAGE_SIZE: usize = 4096;
+/// Get the system page size at runtime via syscall.
+fn page_size() -> usize {
+    zircon_abi::syscall::zx_system_get_page_size()
+}
 
 /// Debug print helper.
 fn debug_print(msg: &[u8]) {
@@ -178,7 +180,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
 
     // Step 7: Create a stack for the init program
     let stack_pages = 8;
-    let stack_size = stack_pages * PAGE_SIZE;
+    let stack_size = stack_pages * page_size();
     let mut stack_vmo: HandleValue = ZX_HANDLE_INVALID;
     check("vmo_create(stack)", unsafe {
         zx_vmo_create(stack_size as u64, 0, &mut stack_vmo)
@@ -210,7 +212,7 @@ pub extern "C" fn _start(bootstrap_handle: HandleValue, _arg2: usize) -> ! {
             0,
             vdso_vmo,
             0,
-            VDSO_DATA_OFFSET + PAGE_SIZE, // code pages + data page
+            VDSO_DATA_OFFSET + page_size(), // code pages + data page
             &mut vdso_code_addr,
         )
     };
@@ -481,11 +483,11 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
         min_vaddr = 0;
     }
     // Page-align the base down.
-    let elf_base = min_vaddr & !(PAGE_SIZE - 1);
+    let elf_base = min_vaddr & !(page_size() - 1);
 
     let total_size = max_vaddr - elf_base;
-    let total_pages = total_size.div_ceil(PAGE_SIZE);
-    let vmo_size = total_pages * PAGE_SIZE;
+    let total_pages = total_size.div_ceil(page_size());
+    let vmo_size = total_pages * page_size();
 
     let mut code_vmo: HandleValue = ZX_HANDLE_INVALID;
     check("vmo_create(elf)", unsafe {
@@ -570,8 +572,8 @@ fn load_elf(data: &[u8], vmar: HandleValue) -> (usize, usize) {
 /// Fallback: load flat binary (no ELF headers).
 fn load_flat(data: &[u8], vmar: HandleValue) -> (usize, usize) {
     let code_size = data.len();
-    let code_pages = code_size.div_ceil(PAGE_SIZE);
-    let map_size = code_pages * PAGE_SIZE;
+    let code_pages = code_size.div_ceil(page_size());
+    let map_size = code_pages * page_size();
 
     let mut code_vmo: HandleValue = ZX_HANDLE_INVALID;
     check("vmo_create", unsafe {

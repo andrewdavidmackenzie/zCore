@@ -462,3 +462,4 @@ inline constexpr const char* kSyscallNames[] = {
 #define ZX_SYS_handle_check_valid 236
 #define ZX_SYS_utc_reference_swap 237
 #define ZX_SYS_utc_reference_get 238
+#define ZX_SYS_system_get_page_size 239

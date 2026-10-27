@@ -1608,3 +1608,15 @@ pub unsafe fn zx_task_create_exception_channel(
         out as u64,
     )
 }
+
+// ── System info (zCore extension) ──────────────────────────────────
+
+/// Get the system page size.
+///
+/// In Fuchsia this is a vDSO function, but petal binaries are
+/// statically linked and cannot call vDSO symbols.  zCore exposes
+/// this as a lightweight syscall so every userspace program can
+/// obtain the page size at runtime without hardcoding it.
+pub fn zx_system_get_page_size() -> usize {
+    unsafe { syscall0(crate::consts::SYS_SYSTEM_GET_PAGE_SIZE) as usize }
+}

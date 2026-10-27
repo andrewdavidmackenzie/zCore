@@ -7,6 +7,7 @@ use crate::helpers::TestContext;
 use zircon_object::ipc::{Channel, MessagePacket};
 use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::signal::Event;
+use zircon_object::vm::PAGE_SIZE;
 use zircon_object::ZxError;
 
 // -- ChannelTest --
@@ -200,9 +201,6 @@ fn read_and_write_with_multiple_sizes() {
     let (local, remote) = Channel::create();
 
     const MAX_MSG_BYTES: usize = 65536;
-    // Channel message step size (matches C++ zx_system_get_page_size(),
-    // which is always 4096 in Fuchsia regardless of host page size).
-    const ZX_PAGE_SIZE: usize = 4096;
 
     // Deterministic set of 100 sizes covering important boundaries
     // plus pseudo-random sizes spread across the range.
@@ -224,10 +222,10 @@ fn read_and_write_with_multiple_sizes() {
         128,
         255,
         256,
-        ZX_PAGE_SIZE - 1,
-        ZX_PAGE_SIZE,
-        ZX_PAGE_SIZE + 1,
-        ZX_PAGE_SIZE * 2,
+        PAGE_SIZE - 1,
+        PAGE_SIZE,
+        PAGE_SIZE + 1,
+        PAGE_SIZE * 2,
         MAX_MSG_BYTES - 1,
     ];
     // Fill remaining with pseudo-random sizes (simple LCG)

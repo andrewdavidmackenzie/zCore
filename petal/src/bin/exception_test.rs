@@ -13,11 +13,10 @@ extern crate alloc;
 extern crate petal;
 use zx::sys::{
     zx_channel_read, zx_clock_get, zx_handle_close, zx_nanosleep, zx_object_wait_one,
-    zx_process_create, zx_process_start, zx_task_create_exception_channel, zx_thread_create,
-    zx_vmar_map, zx_vmo_create, zx_vmo_replace_as_executable, zx_vmo_write, HandleValue,
+    zx_process_create, zx_process_start, zx_system_get_page_size, zx_task_create_exception_channel,
+    zx_thread_create, zx_vmar_map, zx_vmo_create, zx_vmo_replace_as_executable, zx_vmo_write,
+    HandleValue,
 };
-
-const PAGE_SIZE: usize = 4096;
 /// ZX_CHANNEL_READABLE signal
 const ZX_CHANNEL_READABLE: u32 = 1 << 0;
 /// ZX_CHANNEL_PEER_CLOSED signal
@@ -75,8 +74,9 @@ pub fn main() {
     zx::debug_write(b"exception_test: exception channel created\r\n");
 
     // Create a VMO with breakpoint code
+    let page_size = zx_system_get_page_size();
     let mut code_vmo: HandleValue = 0;
-    let status = unsafe { zx_vmo_create(PAGE_SIZE as u64, 0, &mut code_vmo) };
+    let status = unsafe { zx_vmo_create(page_size as u64, 0, &mut code_vmo) };
     check(status, b"vmo_create code");
 
     // Write breakpoint instruction to the VMO before making executable
@@ -104,13 +104,13 @@ pub fn main() {
     // ZX_VM_PERM_READ | ZX_VM_PERM_EXECUTE = 0x5
     let mut code_addr: usize = 0;
     let status =
-        unsafe { zx_vmar_map(vmar_handle, 0x5, 0, exec_vmo, 0, PAGE_SIZE, &mut code_addr) };
+        unsafe { zx_vmar_map(vmar_handle, 0x5, 0, exec_vmo, 0, page_size, &mut code_addr) };
     check(status, b"vmar_map code RX");
     zx::debug_write(b"exception_test: breakpoint code mapped\r\n");
 
     // Create a stack VMO and map it
     let mut stack_vmo: HandleValue = 0;
-    let status = unsafe { zx_vmo_create(PAGE_SIZE as u64, 0, &mut stack_vmo) };
+    let status = unsafe { zx_vmo_create(page_size as u64, 0, &mut stack_vmo) };
     check(status, b"vmo_create stack");
     let mut stack_addr: usize = 0;
     let status = unsafe {
@@ -120,12 +120,12 @@ pub fn main() {
             0,
             stack_vmo,
             0,
-            PAGE_SIZE,
+            page_size,
             &mut stack_addr,
         )
     };
     check(status, b"vmar_map stack");
-    let stack_top = stack_addr + PAGE_SIZE;
+    let stack_top = stack_addr + page_size;
 
     // Create thread in child process
     let mut thread_handle: HandleValue = 0;

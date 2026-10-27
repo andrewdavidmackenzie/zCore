@@ -13,10 +13,8 @@ extern crate petal;
 
 use zx::sys::{
     zx_handle_close, zx_process_create, zx_process_read_memory, zx_process_write_memory,
-    zx_vmar_map, zx_vmo_create, HandleValue,
+    zx_system_get_page_size, zx_vmar_map, zx_vmo_create, HandleValue,
 };
-
-const PAGE_SIZE: usize = 4096;
 
 fn check(status: i32, msg: &[u8]) {
     if status != 0 {
@@ -63,8 +61,9 @@ pub fn main() {
     zx::debug_write(b"process_mem_test: child process created\r\n");
 
     // Create a VMO and map it into the child's VMAR
+    let page_size = zx_system_get_page_size();
     let mut vmo_handle: HandleValue = 0;
-    let status = unsafe { zx_vmo_create(PAGE_SIZE as u64, 0, &mut vmo_handle) };
+    let status = unsafe { zx_vmo_create(page_size as u64, 0, &mut vmo_handle) };
     check(status, b"vmo_create");
 
     let mut mapped_addr: usize = 0;
@@ -76,7 +75,7 @@ pub fn main() {
             0,
             vmo_handle,
             0,
-            PAGE_SIZE,
+            page_size,
             &mut mapped_addr,
         )
     };

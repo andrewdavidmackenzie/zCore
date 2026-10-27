@@ -551,7 +551,7 @@ fn vmo_zero_page() {
     let vmo = VmObject::new_paged(1);
 
     // Reading an uncommitted page should return all zeros.
-    let mut buf = [0xFFu8; 4096];
+    let mut buf = vec![0xFFu8; PAGE_SIZE];
     vmo.read(0, &mut buf).unwrap();
     assert!(
         buf.iter().all(|&b| b == 0),

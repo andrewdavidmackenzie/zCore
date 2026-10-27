@@ -7,21 +7,23 @@
 
 extern crate petal;
 
+use zx::sys::zx_system_get_page_size;
 use zx::{Status, Vmo};
 
 #[no_mangle]
 pub fn main() {
     zx::debug_write(b"vmo_test: starting\n");
 
-    // Create a VMO
-    let vmo = Vmo::create(4096).expect_ok("vmo_create");
+    // Create a VMO of one page
+    let page_size = zx_system_get_page_size();
+    let vmo = Vmo::create(page_size as u64).expect_ok("vmo_create");
     zx::debug_write(b"vmo_test: VMO created\n");
 
     // Check size
-    let size = vmo.get_size().expect_ok("vmo_get_size");
+    let size = vmo.get_size().expect_ok("vmo_get_size") as usize;
 
-    if size == 4096 {
-        zx::debug_write(b"vmo_test: size verified (4096)\n");
+    if size == page_size {
+        zx::debug_write(b"vmo_test: size verified\n");
     } else {
         zx::debug_write(b"vmo_test: FAIL - unexpected size\n");
         zx::Process::exit(1);
