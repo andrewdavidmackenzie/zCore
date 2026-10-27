@@ -388,4 +388,3 @@ Bti.Resize
 
 # ── Resource: hangs on QEMU (interrupt vector pool) ──
 Resource.PcInterruptVectorPoolLeak
-Threads.SyscallSuspendedRegisterState
