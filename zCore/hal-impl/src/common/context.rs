@@ -253,6 +253,7 @@ impl UserContext {
                     UserContextField::StackPointer => &mut self.inner.general.rsp,
                     UserContextField::ThreadPointer => &mut self.inner.general.fsbase,
                     UserContextField::ReturnValue => &mut self.inner.general.rax,
+                    UserContextField::AbiReg => &mut self.inner.general.r15,
                 }
             } else if #[cfg(target_arch = "aarch64")] {
                 match which {
@@ -260,6 +261,7 @@ impl UserContext {
                     UserContextField::StackPointer => &mut self.inner.sp,
                     UserContextField::ThreadPointer => &mut self.inner.tpidr,
                     UserContextField::ReturnValue => &mut self.inner.general.x0,
+                    UserContextField::AbiReg => &mut self.inner.general.x18,
                 }
             } else if #[cfg(target_arch = "riscv64")] {
                 match which {
@@ -267,6 +269,8 @@ impl UserContext {
                     UserContextField::StackPointer => &mut self.inner.general.sp,
                     UserContextField::ThreadPointer => &mut self.inner.general.tp,
                     UserContextField::ReturnValue => &mut self.inner.general.a0,
+                    // riscv64 doesn't have an abi_reg equivalent; use s0 as placeholder
+                    UserContextField::AbiReg => &mut self.inner.general.s0,
                 }
             } else {
                 unimplemented!()

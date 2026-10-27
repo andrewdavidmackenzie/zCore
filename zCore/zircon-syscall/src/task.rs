@@ -247,7 +247,7 @@ impl Syscall<'_> {
         arg1: usize,
         arg2: usize,
         tp: usize,
-        _abi_reg: usize,
+        abi_reg: usize,
     ) -> ZxResult {
         info!(
             "thread.start_regs: handle={:#x?}, entry={:#x}, stack={:#x}, arg1={:#x}, arg2={:#x}, tp={:#x}",
@@ -267,11 +267,14 @@ impl Syscall<'_> {
                 return Err(ZxError::INVALID_ARGS);
             }
         }
-        // Set up entry, stack, and args, then set the thread pointer.
+        // Set up entry, stack, and args, then set the thread pointer and abi_reg.
         thread.with_context(|ctx| {
             ctx.setup_uspace(entry, stack, &[arg1, arg2, 0]);
             if tp != 0 {
                 ctx.set_field(UserContextField::ThreadPointer, tp);
+            }
+            if abi_reg != 0 {
+                ctx.set_field(UserContextField::AbiReg, abi_reg);
             }
         })?;
         thread.start(self.thread_fn)?;
