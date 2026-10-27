@@ -63,6 +63,7 @@ trapframe = "0.11"
 git-version = "0.3"
 drivers = { path = "../drivers", features = ["virtio"] }
 lock = { path = "../lock" }
+executor = { path = "../executor" }
 nix = { version = "0.23", optional = true }
 tempfile = { version = "3", optional = true }
 async-std = { version = "1.10", optional = true }
@@ -71,7 +72,6 @@ bitmap-allocator = { version = "0.4", optional = true }
 # Bare-metal mode
 [target.'cfg(target_os = "none")'.dependencies]
 naive-timer = "0.2.0"
-executor = { path = "../executor" }
 # Frame/heap allocators (moved from kernel)
 customizable-buddy = "0.0.3"
 bitmap-allocator = "0.4"
