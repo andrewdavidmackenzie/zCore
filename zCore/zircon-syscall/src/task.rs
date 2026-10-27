@@ -228,6 +228,11 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let thread = proc.get_object_with_rights::<Thread>(handle_value, Rights::MANAGE_THREAD)?;
+        // Mark process as Running before starting the thread.
+        // In Fuchsia, starting any thread transitions the process to Running,
+        // preventing subsequent zx_process_start calls (BAD_STATE).
+        // Done here (not in Thread::start) because we have a strong Arc<Process>.
+        thread.proc().ensure_running();
         thread.start_with_entry(entry, stack, arg1, arg2, self.thread_fn)?;
         Ok(())
     }
@@ -259,6 +264,7 @@ impl Syscall<'_> {
         }
         let proc = self.thread.proc();
         let thread = proc.get_object_with_rights::<Thread>(handle_value, Rights::MANAGE_THREAD)?;
+        thread.proc().ensure_running();
         // Validate thread pointer (tp) — reject non-canonical addresses on x86_64.
         #[cfg(target_arch = "x86_64")]
         {
