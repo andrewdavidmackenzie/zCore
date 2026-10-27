@@ -18,6 +18,7 @@ libos = [
   "async-std",
   "bitmap-allocator",
   "drivers/libos",
+  "executor/libos",
 ]
 board-c910light = []
 board-fu740 = []

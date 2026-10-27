@@ -8,6 +8,10 @@ edition = "2021"
 # For bare-metal testing, if kernel panic or the root process is finished,
 # shutdown the machine and exit QEMU.
 baremetal-test = []
+# LibOS mode: runs inside a host OS process. Uses simplified context
+# switch (no page table register), host-OS primitives for interrupts
+# and timers.
+libos = []
 
 [dependencies]
 slab = { version = "0.4", default-features = false }

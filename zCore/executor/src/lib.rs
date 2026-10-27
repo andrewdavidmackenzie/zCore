@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(feature = "libos"), no_std)]
 #![feature(allocator_api)]
 #![feature(get_mut_unchecked)]
 // some interfaces is still under developing
@@ -20,6 +20,7 @@ cfg_if::cfg_if! {
   }
 }
 
+#[cfg(not(feature = "libos"))]
 extern crate alloc;
 #[macro_use]
 extern crate log;
