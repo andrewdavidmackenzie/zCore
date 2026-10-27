@@ -877,14 +877,29 @@ async fn reading_fp_register_state() {
 
     // C++ on x86_64: fills FP regs with test values, suspends, reads
     // back and asserts every FP reg matches.
-    // C++ on aarch64: asserts NOT_SUPPORTED.
-    // zCore currently returns NOT_SUPPORTED on all platforms because
-    // FP state tracking (FXSAVE/FXRSTOR) is not implemented.
-    // Verify the specific error code, not just is_err().
+    // C++ on aarch64: asserts NOT_SUPPORTED (uses vector regs for FP).
+    #[cfg(target_arch = "x86_64")]
+    {
+        let size = result.expect("FP state read should succeed on x86_64");
+        // zx_x86_64_thread_state_fp_regs_t = 152 bytes
+        assert_eq!(size, 152, "FP state size should be 152 bytes");
+
+        // Verify fcw has a sane default (0x037F = all exceptions masked)
+        let fcw = u16::from_ne_bytes(buf[0..2].try_into().unwrap());
+        assert_eq!(fcw, 0x037F, "default FCW should be 0x037F");
+
+        // ST registers are at offset 24, each 16 bytes (low u64, high u64).
+        // In libos mode they're zero (no real FP instructions execute),
+        // but the read should succeed.
+        // On bare-metal/QEMU the C++ test fills st[0..6] with 0..6
+        // and st[7] with NaN, then verifies all match.
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
     assert_eq!(
         result,
         Err(ZxError::NOT_SUPPORTED),
-        "FP state read should return NOT_SUPPORTED (not yet implemented)"
+        "FP state read not supported on this arch (uses vector regs)"
     );
 
     thread.resume();
@@ -2160,7 +2175,9 @@ fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
     );
 }
 /// C++: TEST(Threads, WritingFpRegisterState)
-/// Write FP register state — should fail (not implemented).
+/// Write FP register state and verify round-trip.
+/// On x86_64: write st[0..6] with test values, read back, verify.
+/// On aarch64: NOT_SUPPORTED (FP uses vector regs).
 #[async_std::test]
 #[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 async fn writing_fp_register_state() {
@@ -2178,9 +2195,47 @@ async fn writing_fp_register_state() {
         .wait_signal(Signal::THREAD_SUSPENDED)
         .await;
 
-    let buf = vec![0u8; 2048];
-    let result = thread.write_state(ThreadStateKind::FloatPoint, &buf);
-    assert!(result.is_err(), "FP write should fail (not implemented)");
+    #[cfg(target_arch = "x86_64")]
+    {
+        // Read current FP state
+        let mut buf = vec![0u8; 256];
+        let size = thread
+            .read_state(ThreadStateKind::FloatPoint, &mut buf)
+            .expect("FP read should succeed");
+        assert_eq!(size, 152);
+
+        // Write test values to st[0..6] (at offset 24, each 16 bytes)
+        // C++ test: st[i].low = i for i in 0..7, st[7].low = NaN
+        for i in 0u64..7 {
+            let off = 24 + (i as usize) * 16;
+            buf[off..off + 8].copy_from_slice(&i.to_ne_bytes());
+        }
+        thread
+            .write_state(ThreadStateKind::FloatPoint, &buf[..size])
+            .expect("FP write should succeed on x86_64");
+
+        // Read back and verify
+        let mut readback = vec![0u8; 256];
+        thread
+            .read_state(ThreadStateKind::FloatPoint, &mut readback)
+            .expect("FP read-back should succeed");
+        for i in 0u64..7 {
+            let off = 24 + (i as usize) * 16;
+            let got = u64::from_ne_bytes(readback[off..off + 8].try_into().unwrap());
+            assert_eq!(got, i, "st[{}].low should round-trip", i);
+        }
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let buf = vec![0u8; 2048];
+        let result = thread.write_state(ThreadStateKind::FloatPoint, &buf);
+        assert_eq!(
+            result,
+            Err(ZxError::NOT_SUPPORTED),
+            "FP write not supported on this arch"
+        );
+    }
 
     thread.resume();
     thread.kill();

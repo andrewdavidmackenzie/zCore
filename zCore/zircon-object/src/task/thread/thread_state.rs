@@ -51,6 +51,39 @@ impl ContextAccessState for UserContext {
                 buf[mxcsr_off..mxcsr_off + 4].copy_from_slice(&vr.mxcsr.to_ne_bytes());
                 Ok(TOTAL_SIZE)
             }
+            #[cfg(target_arch = "x86_64")]
+            ThreadStateKind::FloatPoint => {
+                // zx_x86_64_thread_state_fp_regs_t layout:
+                //   fcw(2) + fsw(2) + ftw(1) + reserved(1) + fop(2) = 8
+                //   fip(8) + fdp(8) = 16
+                //   st[8] each { low: u64, high: u64 } = 128
+                //   Total = 152 bytes
+                const FP_SIZE: usize = 152;
+                if buf.len() < FP_SIZE {
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                buf[..FP_SIZE].fill(0);
+                let vr = &self.vector_regs;
+                buf[0..2].copy_from_slice(&vr.fcw.to_ne_bytes());
+                buf[2..4].copy_from_slice(&vr.fsw.to_ne_bytes());
+                buf[4] = vr.ftw;
+                // buf[5] = reserved (0)
+                buf[6..8].copy_from_slice(&vr.fop.to_ne_bytes());
+                // fip: FXSAVE stores as u32 fip + u16 fcs; extend to u64
+                let fip64 = vr.fip as u64 | ((vr.fcs as u64) << 32);
+                buf[8..16].copy_from_slice(&fip64.to_ne_bytes());
+                // fdp: FXSAVE stores as u32 fdp + u16 fds; extend to u64
+                let fdp64 = vr.fdp as u64 | ((vr.fds as u64) << 32);
+                buf[16..24].copy_from_slice(&fdp64.to_ne_bytes());
+                // st[0..7]: mm registers (ST0-ST7 in 80-bit x87 format)
+                // Each stored as { low: u64, high: u64 } at offset 24 + i*16
+                for (i, mm) in vr.mm.iter().enumerate() {
+                    let off = 24 + i * 16;
+                    buf[off..off + 8].copy_from_slice(&mm.0[0].to_ne_bytes());
+                    buf[off + 8..off + 16].copy_from_slice(&mm.0[1].to_ne_bytes());
+                }
+                Ok(FP_SIZE)
+            }
             ThreadStateKind::SingleStep => {
                 // zx_thread_state_single_step_t is a u32.
                 if buf.len() < 4 {
@@ -75,6 +108,7 @@ impl ContextAccessState for UserContext {
                 buf[40..48].copy_from_slice(&dr.dr7.to_ne_bytes());
                 Ok(DEBUG_SIZE)
             }
+            #[allow(unreachable_patterns)]
             _ => Err(ZxError::NOT_SUPPORTED),
         }
     }
@@ -133,6 +167,29 @@ impl ContextAccessState for UserContext {
                         u64::from_ne_bytes(buf[zmm_off + 8..zmm_off + 16].try_into().unwrap());
                 }
             }
+            #[cfg(target_arch = "x86_64")]
+            ThreadStateKind::FloatPoint => {
+                const FP_SIZE: usize = 152;
+                if buf.len() < FP_SIZE {
+                    return Err(ZxError::BUFFER_TOO_SMALL);
+                }
+                let vr = &mut self.vector_regs;
+                vr.fcw = u16::from_ne_bytes(buf[0..2].try_into().unwrap());
+                vr.fsw = u16::from_ne_bytes(buf[2..4].try_into().unwrap());
+                vr.ftw = buf[4];
+                vr.fop = u16::from_ne_bytes(buf[6..8].try_into().unwrap());
+                let fip64 = u64::from_ne_bytes(buf[8..16].try_into().unwrap());
+                vr.fip = fip64 as u32;
+                vr.fcs = (fip64 >> 32) as u16;
+                let fdp64 = u64::from_ne_bytes(buf[16..24].try_into().unwrap());
+                vr.fdp = fdp64 as u32;
+                vr.fds = (fdp64 >> 32) as u16;
+                for (i, mm) in vr.mm.iter_mut().enumerate() {
+                    let off = 24 + i * 16;
+                    mm.0[0] = u64::from_ne_bytes(buf[off..off + 8].try_into().unwrap());
+                    mm.0[1] = u64::from_ne_bytes(buf[off + 8..off + 16].try_into().unwrap());
+                }
+            }
             ThreadStateKind::SingleStep => {
                 // zx_thread_state_single_step_t is a u32. Only 0 and 1 are valid.
                 if buf.len() < 4 {
@@ -160,6 +217,7 @@ impl ContextAccessState for UserContext {
                 dr.dr6 = u64::from_ne_bytes(buf[32..40].try_into().unwrap());
                 dr.dr7 = u64::from_ne_bytes(buf[40..48].try_into().unwrap());
             }
+            #[allow(unreachable_patterns)]
             _ => return Err(ZxError::NOT_SUPPORTED),
         }
         Ok(())
