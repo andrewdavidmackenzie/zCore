@@ -83,14 +83,12 @@ Threads.ThreadLocal
 Threads.ChannelCallDoesntLeakMessage
 Threads.ExitBusy
 Threads.SuspendStoppedAndBlockedThread2
-Threads.WritingVectorRegisterState
 Threads.StartRegs
 Threads.ThreadStartInvalidEntry
 Threads.StartRegsSuspended
 Threads.ReadingGeneralRegisterState
 Threads.ProcessStartOnSecondThread
 Threads.InfoThreadStatsFails
-Threads.ReadingVectorRegisterState
 Threads.WritingArmFlagsRegister
 Pager.OverlapCommitSupplyTest
 Pager.BulkOddLengthSupplyTestVmar
@@ -416,14 +414,9 @@ Bti.PinContiguous
 Bti.PinTooManyAddresses
 Bti.QuarantineDisallowsPin
 Bti.Resize
-Threads.BadSyscallNumber
-Threads.Basics
 Threads.EmptyNameSucceeds
-Threads.GetAffinity
 Threads.GetInfoRuntime
-Threads.GetInfoRuntimeV1
 Threads.GetLastScheduledCpu
-Threads.InfoTaskStatsFails
 Threads.InvalidRights
 Threads.LongNameSucceeds
 Threads.NoncanonicalRipAddressIRETQ
@@ -434,17 +427,11 @@ Threads.ResumeSuspended
 Threads.StartRegsNoncanonicalTp
 Threads.SuspendAfterDeath
 Threads.SuspendInvalidTargets
-Threads.SuspendPortCall
 Threads.SuspendSingleWaitAsyncSignalDelivery
 Threads.SuspendStopsThread
-Threads.ThreadLocalRegisterState
 Threads.ThreadStartOnInitialThread
-Threads.ThreadStartWithZeroInstructionPointer
-Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
 Threads.WritingGeneralRegisterState
 Threads.WritingSingleStepState
-Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
-Threads.YieldWithNonZeroOptionIsInvalidArgs
 Threads.YieldWithZeroOptionIsOk
 
 # ── Resource: hangs on QEMU (interrupt vector pool) ──
