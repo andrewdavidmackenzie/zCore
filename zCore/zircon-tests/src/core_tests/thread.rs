@@ -293,7 +293,6 @@ fn debug_registers_dr6_reset_on_debug_exception() {
 /// Verify debug register read succeeds on a suspended thread and
 /// returns the expected size (48 bytes on x86_64).
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_validation() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -2069,7 +2068,6 @@ async fn thread_start_with_zero_instruction_pointer() {
 /// during a syscall (requires bare-metal). This tests the API.
 #[cfg(target_arch = "x86_64")]
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn watchpoint_syscall_panic() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -2100,7 +2098,6 @@ fn watchpoint_syscall_panic() {
 /// C++: TEST(Threads, WriteReadDebugRegisterState)
 /// Write/read debug register state — should fail (not implemented).
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn write_read_debug_register_state() {
     let _ctx = TestContext::new();
     let job = Job::root();
@@ -2183,7 +2180,6 @@ fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
 /// On x86_64: write st[0..6] with test values, read back, verify.
 /// On aarch64: NOT_SUPPORTED (FP uses vector regs).
 #[async_std::test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 async fn writing_fp_register_state() {
     helpers::ensure_hal_init();
     let job = Job::root();
