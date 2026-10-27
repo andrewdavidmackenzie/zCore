@@ -12,3 +12,4 @@ mod iob_shared_region;
 mod process_shared;
 mod restricted_mode;
 mod rseq;
+mod thread_extra;
