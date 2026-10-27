@@ -56,9 +56,10 @@ impl ContextAccessState for UserContext {
                 // zx_x86_64_thread_state_fp_regs_t layout:
                 //   fcw(2) + fsw(2) + ftw(1) + reserved(1) + fop(2) = 8
                 //   fip(8) + fdp(8) = 16
+                //   padding(8) = 8  (align st[0] to 16 bytes at offset 32)
                 //   st[8] each { low: u64, high: u64 } = 128
-                //   Total = 152 bytes
-                const FP_SIZE: usize = 152;
+                //   Total = 160 bytes
+                const FP_SIZE: usize = 160;
                 if buf.len() < FP_SIZE {
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
@@ -75,10 +76,11 @@ impl ContextAccessState for UserContext {
                 // fdp: FXSAVE stores as u32 fdp + u16 fds; extend to u64
                 let fdp64 = vr.fdp as u64 | ((vr.fds as u64) << 32);
                 buf[16..24].copy_from_slice(&fdp64.to_ne_bytes());
+                // buf[24..32] = padding (align st to 16 bytes)
                 // st[0..7]: mm registers (ST0-ST7 in 80-bit x87 format)
-                // Each stored as { low: u64, high: u64 } at offset 24 + i*16
+                // Each stored as { low: u64, high: u64 } at offset 32 + i*16
                 for (i, mm) in vr.mm.iter().enumerate() {
-                    let off = 24 + i * 16;
+                    let off = 32 + i * 16;
                     buf[off..off + 8].copy_from_slice(&mm.0[0].to_ne_bytes());
                     buf[off + 8..off + 16].copy_from_slice(&mm.0[1].to_ne_bytes());
                 }
@@ -169,7 +171,7 @@ impl ContextAccessState for UserContext {
             }
             #[cfg(target_arch = "x86_64")]
             ThreadStateKind::FloatPoint => {
-                const FP_SIZE: usize = 152;
+                const FP_SIZE: usize = 160;
                 if buf.len() < FP_SIZE {
                     return Err(ZxError::BUFFER_TOO_SMALL);
                 }
@@ -184,8 +186,10 @@ impl ContextAccessState for UserContext {
                 let fdp64 = u64::from_ne_bytes(buf[16..24].try_into().unwrap());
                 vr.fdp = fdp64 as u32;
                 vr.fds = (fdp64 >> 32) as u16;
+                // buf[24..32] = padding (skipped)
+                // st[0..7] at offset 32
                 for (i, mm) in vr.mm.iter_mut().enumerate() {
-                    let off = 24 + i * 16;
+                    let off = 32 + i * 16;
                     mm.0[0] = u64::from_ne_bytes(buf[off..off + 8].try_into().unwrap());
                     mm.0[1] = u64::from_ne_bytes(buf[off + 8..off + 16].try_into().unwrap());
                 }

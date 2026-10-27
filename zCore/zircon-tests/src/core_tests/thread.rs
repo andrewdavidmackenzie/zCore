@@ -886,7 +886,7 @@ async fn reading_fp_register_state() {
         Ok(size) => {
             #[cfg(target_arch = "x86_64")]
             {
-                assert_eq!(size, 152, "FP state size should be 152 bytes");
+                assert_eq!(size, 160, "FP state size should be 160 bytes");
                 let fcw = u16::from_ne_bytes(buf[0..2].try_into().unwrap());
                 assert_eq!(fcw, 0x037F, "default FCW should be 0x037F");
             }
@@ -2206,12 +2206,12 @@ async fn writing_fp_register_state() {
         let size = thread
             .read_state(ThreadStateKind::FloatPoint, &mut buf)
             .expect("FP read should succeed");
-        assert_eq!(size, 152);
+        assert_eq!(size, 160);
 
-        // Write test values to st[0..6] (at offset 24, each 16 bytes)
+        // Write test values to st[0..6] (at offset 32, each 16 bytes)
         // C++ test: st[i].low = i for i in 0..7, st[7].low = NaN
         for i in 0u64..7 {
-            let off = 24 + (i as usize) * 16;
+            let off = 32 + (i as usize) * 16;
             buf[off..off + 8].copy_from_slice(&i.to_ne_bytes());
         }
         thread
@@ -2224,7 +2224,7 @@ async fn writing_fp_register_state() {
             .read_state(ThreadStateKind::FloatPoint, &mut readback)
             .expect("FP read-back should succeed");
         for i in 0u64..7 {
-            let off = 24 + (i as usize) * 16;
+            let off = 32 + (i as usize) * 16;
             let got = u64::from_ne_bytes(readback[off..off + 8].try_into().unwrap());
             assert_eq!(got, i, "st[{}].low should round-trip", i);
         }
