@@ -62,14 +62,8 @@ Threads.WritingFpRegisterState
 Threads.X86AcFlagUserCopy
 Threads.SyscallSuspendedRegisterState
 Threads.SyscallDebuggerModifyResult
-Threads.SuspendChannelCall
-Threads.SuspendChannelCall
 Threads.ExitViaException
-Threads.StartSuspendedThread
-Threads.SuspendSleeping
-Threads.SuspendMultiple
 Threads.KillSuspendedThread
-Threads.StartSuspendedAndResumedThread
 Threads.SuspendSelf
 Threads.SuspendResumeFromMultipleThreads
 Threads.SuspendStoppedThread
@@ -84,11 +78,8 @@ Threads.ChannelCallDoesntLeakMessage
 Threads.ExitBusy
 Threads.SuspendStoppedAndBlockedThread2
 Threads.StartRegs
-Threads.ThreadStartInvalidEntry
 Threads.StartRegsSuspended
 Threads.ReadingGeneralRegisterState
-Threads.ProcessStartOnSecondThread
-Threads.InfoThreadStatsFails
 Threads.WritingArmFlagsRegister
 Pager.OverlapCommitSupplyTest
 Pager.BulkOddLengthSupplyTestVmar
@@ -414,25 +405,7 @@ Bti.PinContiguous
 Bti.PinTooManyAddresses
 Bti.QuarantineDisallowsPin
 Bti.Resize
-Threads.EmptyNameSucceeds
-Threads.GetInfoRuntime
-Threads.GetLastScheduledCpu
-Threads.InvalidRights
-Threads.LongNameSucceeds
-Threads.NoncanonicalRipAddressIRETQ
-Threads.NoncanonicalRipAddressSyscall
-Threads.NonstartedThread
 Threads.ReadingFpRegisterState
-Threads.ResumeSuspended
-Threads.StartRegsNoncanonicalTp
-Threads.SuspendAfterDeath
-Threads.SuspendInvalidTargets
-Threads.SuspendSingleWaitAsyncSignalDelivery
-Threads.SuspendStopsThread
-Threads.ThreadStartOnInitialThread
-Threads.WritingGeneralRegisterState
-Threads.WritingSingleStepState
-Threads.YieldWithZeroOptionIsOk
 
 # ── Resource: hangs on QEMU (interrupt vector pool) ──
 Resource.PcInterruptVectorPoolLeak
