@@ -91,9 +91,9 @@ impl UserContext {
                 self.inner.general.rdi = args[0];
                 self.inner.general.rsi = args[1];
                 self.inner.general.rdx = args[2];
-                // IOPL = 3, IF = 1
-                // FIXME: set IOPL = 0 when IO port bitmap is supporte
-                self.inner.general.rflags = 0x3000 | 0x200 | 0x2;
+                // IOPL = 0, IF = 1, reserved bit 1 = 1.
+                // Matches Fuchsia: user threads run at IOPL 0.
+                self.inner.general.rflags = 0x200 | 0x2;
             } else if #[cfg(target_arch = "aarch64")] {
                 self.inner.elr = pc;
                 self.inner.sp = sp;
