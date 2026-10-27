@@ -1,8 +1,25 @@
 //! Thread tests.
 //!
 //! Tests for thread creation, lifecycle, register state, and signals.
-//! Async tests use `test_loop_thread_fn` which simulates the real
-//! userspace execution loop for thread start/suspend/resume testing.
+//!
+//! ## Libos vs bare-metal register testing
+//!
+//! Libos mode uses a cooperative async executor (`test_loop_thread_fn`)
+//! rather than real CPU instruction execution. This means:
+//!
+//! - **API contract tests work fully**: error codes, buffer sizes,
+//!   state transitions, write/read round-trips, suspend/resume
+//!   semantics — all exercised correctly.
+//!
+//! - **Register *value* tests are limited**: `read_state(General)` returns
+//!   a valid struct but most fields are zero because no real instructions
+//!   execute. Tests verify the API (correct size, non-panic, round-trip
+//!   consistency) but cannot verify that hardware register save/restore
+//!   produces the right values.
+//!
+//! Register value fidelity is tested on QEMU via the C++ core-tests
+//! binary, which runs real userspace code and verifies every register
+//! against known test values set via inline assembly.
 
 use crate::helpers::{self, ExceptionTestThread, TestContext};
 use hal_impl::user::UserOutPtr;
