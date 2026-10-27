@@ -23,9 +23,6 @@ PagerWriteback.WritePinAwaitingCleanTrapDirty
 # ── StreamTestCase: crash ──
 StreamTestCase.PartialVmoDirty
 
-# ── ChannelTest: policy exception hang ──
-ChannelTest.ChannelFullException
-
 # ── VmoClone2TestCase: populated_bytes / VMAR / thread hangs ──
 VmoClone2TestCase.DropParentCommittedBytes
 VmoClone2TestCase.DropChildrenInParallel
@@ -55,19 +52,7 @@ PortStressTest.QueuePacketAfterPortClosedConcurrentRace
 PortStressTest.SignalCloseWait
 PortStressTest.WaitSignalCancel
 
-# ── VmoTestCase: BTI/thread hangs ──
-VmoTestCase.PinTests
-VmoTestCase.ParallelWriteAndDecommit
 
-# ── VmoTransferDataTestCase: thread race hang ──
-VmoTransferDataTestCase.RacyDropParent
-
-# ── JobTest: kill chain hang ──
-JobTest.KillJobChain
-
-# ── ProcessTest: thread/channel hang ──
-ProcessTest.SuspendWithDyingThread
-ProcessTest.KillChannelHandleCycle
 
 # ── Threads: debug register / exception / syscall hangs ──
 Threads.BadSyscallCaller

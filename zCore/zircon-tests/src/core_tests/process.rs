@@ -446,7 +446,6 @@ async fn process_not_killed_via_process_close() {
 /// Two processes holding handles to each other via channels.
 /// Kill the parent job to break the cycle.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn kill_channel_handle_cycle() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
@@ -877,7 +876,6 @@ async fn suspend_twice_before_creating_threads() {
 /// Ignored: hangs on slow ARM emulation (ubuntu-24.04-arm CI) due
 /// to async scheduling not giving threads a chance to run.
 #[async_std::test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 async fn suspend_with_dying_thread() {
     use crate::helpers;
     use zircon_object::task::Task;
