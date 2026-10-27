@@ -1131,7 +1131,7 @@ async fn call_pending_transactions_use_different_ids() {
 async fn call_response_bigger_than_rd_num_handles_returns_buffer_too_small() {
     use crate::helpers::TestContext;
 
-    let ctx = TestContext::new();
+    let _ctx = TestContext::new();
     let (client, server) = Channel::create();
 
     // Write request to server end
