@@ -60,11 +60,8 @@ Threads.WatchpointSyscallPanic
 Threads.WriteReadDebugRegisterState
 Threads.WritingFpRegisterState
 Threads.X86AcFlagUserCopy
-Threads.SyscallSuspendedRegisterState
 Threads.SyscallDebuggerModifyResult
 Threads.ExitViaException
-Threads.StartRegs
-Threads.StartRegsSuspended
 Threads.ReadingGeneralRegisterState
 Pager.OverlapCommitSupplyTest
 Pager.BulkOddLengthSupplyTestVmar
