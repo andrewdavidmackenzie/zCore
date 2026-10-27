@@ -229,6 +229,9 @@ pub struct AuditResult {
     pub rust_ignored: usize,
     pub rust_stubs: usize,
     pub cpp_skipped: usize,
+    // Skip/ignore correspondence
+    pub stubs: Vec<(String, String, String)>, // (file, fn_name, cpp_ref) — unimplemented!() tests
+    pub ignored_not_skipped: Vec<(String, String, String)>, // #[ignore] but NOT in skip list
 }
 
 /// Run the full audit. Returns `Ok(result)` or `Err(message)` if something
@@ -307,6 +310,34 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
     let rust_ignored = all_rust_tests.iter().filter(|t| t.is_ignored).count();
     let rust_stubs = all_rust_tests.iter().filter(|t| t.is_stub).count();
 
+    // Collect stubs (unimplemented! tests should not exist)
+    let stubs: Vec<(String, String, String)> = all_rust_tests
+        .iter()
+        .filter(|t| t.is_stub)
+        .map(|t| {
+            (
+                t.file.clone(),
+                t.fn_name.clone(),
+                t.cpp_ref.clone().unwrap_or_default(),
+            )
+        })
+        .collect();
+
+    // #[ignore] but NOT in skip list
+    let ignored_not_skipped: Vec<(String, String, String)> = all_rust_tests
+        .iter()
+        .filter(|t| {
+            t.is_ignored && !t.is_stub && t.cpp_ref.as_ref().is_some_and(|r| !skip_list.contains(r))
+        })
+        .map(|t| {
+            (
+                t.file.clone(),
+                t.fn_name.clone(),
+                t.cpp_ref.clone().unwrap_or_default(),
+            )
+        })
+        .collect();
+
     Ok(AuditResult {
         cpp_count: cpp_tests.len(),
         rust_count: all_rust_tests.len(),
@@ -318,6 +349,8 @@ pub fn audit(project_dir: &Path) -> Result<AuditResult, String> {
         rust_ignored,
         rust_stubs,
         cpp_skipped: skip_list.len(),
+        stubs,
+        ignored_not_skipped,
     })
 }
 
@@ -399,6 +432,31 @@ pub fn print_and_check(result: &AuditResult) -> bool {
         if result.undocumented.len() > 20 {
             println!("    ... and {} more", result.undocumented.len() - 20);
         }
+        ok = false;
+    }
+
+    // No stubs allowed — every test must have a real implementation
+    if !result.stubs.is_empty() {
+        println!(
+            "  FAIL: {} Rust tests contain unimplemented!() — stubs are not allowed:",
+            result.stubs.len()
+        );
+        for (file, fn_name, cpp_ref) in &result.stubs {
+            println!("    {file} fn {fn_name} -> {cpp_ref}");
+        }
+        ok = false;
+    }
+
+    // #[ignore] must correspond to skip list
+    if !result.ignored_not_skipped.is_empty() {
+        println!(
+            "  FAIL: {} Rust tests are #[ignore] but NOT in the C++ skip list:",
+            result.ignored_not_skipped.len()
+        );
+        for (file, fn_name, cpp_ref) in &result.ignored_not_skipped {
+            println!("    {file} fn {fn_name} -> {cpp_ref}");
+        }
+        println!("    (either un-ignore the Rust test or add to tests/core-tests-skip.txt)");
         ok = false;
     }
 
