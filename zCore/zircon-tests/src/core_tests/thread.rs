@@ -2183,7 +2183,6 @@ fn write_thread_state_with_invalid_mxcsr_is_invalid_args() {
 /// On x86_64: write st[0..6] with test values, read back, verify.
 /// On aarch64: NOT_SUPPORTED (FP uses vector regs).
 #[async_std::test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 async fn writing_fp_register_state() {
     helpers::ensure_hal_init();
     let job = Job::root();

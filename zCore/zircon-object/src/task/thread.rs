@@ -891,6 +891,16 @@ impl Task for Thread {
         let mut inner = self.inner.lock();
         inner.suspend_count += 1;
         let state = inner.state;
+        // When suspending a thread that is in a blocking syscall,
+        // set the return register to ZX_ERR_INTERNAL_INTR_RETRY (-6).
+        // This tells the debugger "the syscall was interrupted; if you
+        // resume without modifying rax, the kernel will retry it."
+        if inner.context.is_some() && state.is_blocked() {
+            if let Some(ref mut ctx) = inner.context {
+                use hal_impl::context::UserContextField;
+                ctx.set_field(UserContextField::ReturnValue, (-6i64) as usize);
+            }
+        }
         inner.change_state(state, &self.base);
         // Interrupt any suspendable blocking wait (e.g., pager wait).
         if let Some(sender) = inner.suspend_interrupt.take() {

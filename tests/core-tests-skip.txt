@@ -58,8 +58,6 @@ Threads.DebugRegistersValidation
 Threads.DebugRegistersWatchpointSyscallPanicRepro
 Threads.WatchpointSyscallPanic
 Threads.WriteReadDebugRegisterState
-Threads.WritingFpRegisterState
-Threads.X86AcFlagUserCopy
 Threads.SyscallDebuggerModifyResult
 Threads.ExitViaException
 Threads.ReadingGeneralRegisterState
@@ -387,7 +385,6 @@ Bti.PinContiguous
 Bti.PinTooManyAddresses
 Bti.QuarantineDisallowsPin
 Bti.Resize
-Threads.ReadingFpRegisterState
 
 # ── Resource: hangs on QEMU (interrupt vector pool) ──
 Resource.PcInterruptVectorPoolLeak
