@@ -46,15 +46,28 @@ fn content_in_parent_and_child() {
 }
 
 /// C++: TEST(VmoZeroTestCase, ZeroLengths)
-/// Zero-length zero operations succeed.
+/// Zero-length zero operations succeed and don't alter existing data.
 #[test]
 fn zero_lengths() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
 
+    // Write known data first.
+    let pattern = [0xBBu8; 16];
+    vmo.write(0, &pattern).unwrap();
+
+    // Zero-length zero ops at various offsets should all succeed.
     vmo.zero(0, 0).unwrap();
     vmo.zero(10, 0).unwrap();
     vmo.zero(PAGE_SIZE, 0).unwrap();
+
+    // Verify data was NOT altered by zero-length operations.
+    let mut buf = [0u8; 16];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(
+        buf, pattern,
+        "zero-length zero operations should not alter existing data"
+    );
 }
 
 /// C++: TEST(VmoZeroTestCase, EmptyCowChildren)
@@ -95,32 +108,6 @@ fn empty_cow_children() {
     child.read(0, &mut buf).unwrap();
     assert_eq!(buf[0], 0);
 }
-
-/// C++: TEST(VmoZeroTestCase, ContentInParentAndChild) — verify parent unaffected
-/// Zero child page 0, parent should still have its data.
-#[test]
-fn content_in_parent_preserved() {
-    let _ctx = TestContext::new();
-    let parent = VmObject::new_paged(1);
-    parent.write(0, &[42]).unwrap();
-
-    let child = parent.create_child(false, 0, PAGE_SIZE).unwrap();
-
-    // Child sees parent data
-    let mut buf = [0u8; 1];
-    child.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 42);
-
-    // Zero child
-    child.zero(0, PAGE_SIZE).unwrap();
-    child.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 0);
-
-    // Parent unaffected
-    parent.read(0, &mut buf).unwrap();
-    assert_eq!(buf[0], 42);
-}
-
 /// C++: TEST(VmoZeroTestCase, ChildZeroThenWrite)
 /// Zero child page, then write to it — write should succeed.
 #[test]
@@ -439,28 +426,45 @@ fn zero_frees_and_allocates() {
 }
 
 /// C++: TEST(VmoZeroTestcase, ZeroHiddenNoContent)
-/// A SNAPSHOT_MODIFIED child hierarchy should handle zero correctly when
-/// the hidden parent has no content to fall back to from its pager parent.
-/// In zCore, SNAPSHOT_MODIFIED is not implemented, so this test uses
-/// regular SNAPSHOT children to test the analogous zero-through-empty-parent
-/// scenario.
+/// vmo/vmo-zero.cc:545
+///
+/// Regression test for https://fxbug.dev/458734268.
+///
+/// Creates a pager-backed VMO (1 page), then a SNAPSHOT_MODIFIED child
+/// `a` (2 pages), then a SNAPSHOT_MODIFIED child `b` of `a` (2 pages).
+/// Zeroing `b` must handle traversal to a hidden parent that has no
+/// content and cannot fall back to its pager-backed parent.
+///
+/// The C++ test uses pager.create_vmo + ZX_VMO_CHILD_SNAPSHOT_MODIFIED.
+/// We faithfully reproduce this with Pager::create_vmo +
+/// create_child_unidirectional (the kernel-level equivalent of
+/// SNAPSHOT_MODIFIED).
 #[test]
-fn zero_hidden_no_content_snapshot() {
+fn zero_hidden_no_content() {
     let _ctx = TestContext::new();
 
-    let parent = VmObject::new_paged(2);
+    let pager = zircon_object::signal::Pager::new();
+    let port = zircon_object::signal::Port::new(0).unwrap();
 
-    // Create first child (analogous to SNAPSHOT_MODIFIED child).
-    let a = parent.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
+    // Create a pager-backed VMO with 1 page.
+    let pager_vmo = pager.create_vmo(0, &port, 0, PAGE_SIZE as u64).unwrap();
 
-    // Create second child from 'a' (another layer).
+    // Create SNAPSHOT_MODIFIED child `a` (2 pages) from the pager VMO.
+    let a = pager_vmo
+        .create_child_unidirectional(0, 2 * PAGE_SIZE, false)
+        .unwrap();
+
+    // Create SNAPSHOT_MODIFIED child `b` (2 pages) from `a`.
+    // In C++, `a` is not a pager root, so SNAPSHOT_MODIFIED creates a
+    // bidirectional clone (hidden node). In zCore, create_child is
+    // used for bidirectional clones.
     let b = a.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
 
-    // Zero the entire range of 'b'. This should succeed even when
+    // Zero the entire range of `b`. This should succeed even when
     // traversal reaches a hidden parent with no committed content.
     b.zero(0, 2 * PAGE_SIZE).unwrap();
 
-    // Verify 'b' is zeroed.
+    // Verify `b` reads zeros.
     let mut buf = [0xFFu8; 4];
     b.read(0, &mut buf).unwrap();
     assert_eq!(u32::from_ne_bytes(buf), 0, "b page 0 should be zero");
@@ -528,53 +532,6 @@ fn write_cow_parent() {
         "populated_bytes: parent should have 1 page after zeroing page 0"
     );
 }
-
-/// Debug test: faithful reproduction of WriteCowParent from vmo-zero.cc
-/// Tests merge behavior after parent close with zero marker in child.
-#[test]
-fn write_cow_parent_merge() {
-    let _ctx = TestContext::new();
-    let parent = VmObject::new_paged(2);
-    parent.write(0, &[1u8]).unwrap();
-
-    let child = parent.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
-
-    // After create: each gets half a page (shared)
-    let ci = child.get_info();
-    assert_eq!(
-        ci.populated_scaled_bytes,
-        (PAGE_SIZE / 2) as u64,
-        "child should have 0.5 pages after create"
-    );
-
-    // Parent writes page 0 → COW fork
-    parent.write(0, &[2u8]).unwrap();
-
-    let ci = child.get_info();
-    assert_eq!(
-        ci.populated_scaled_bytes, PAGE_SIZE as u64,
-        "child should have 1 page after parent COW fork"
-    );
-
-    // Child zeros page 0
-    child.zero(0, PAGE_SIZE).unwrap();
-
-    let ci = child.get_info();
-    assert_eq!(
-        ci.populated_scaled_bytes, 0,
-        "child should have 0 pages after zeroing page 0"
-    );
-
-    // Close parent → merge
-    drop(parent);
-
-    let ci = child.get_info();
-    assert_eq!(
-        ci.populated_scaled_bytes, 0,
-        "child should have 0 pages after parent close (zero marker blocks merge)"
-    );
-}
-
 /// C++: TEST(VmoZeroTestCase, MergeZeroChildren)
 /// Zero all pages, drop children, verify populated_bytes goes to 0.
 #[test]

@@ -482,76 +482,114 @@ impl Syscall<'_> {
             // not the underlying parent (matching Fuchsia semantics).
             if vmo.is_reference() {
                 if let Some(parent) = vmo.parent() {
-                    let child = parent.create_child(resizable, offset, child_size)?;
-                    child.set_parent_ref(&vmo);
-                    Ok(child)
-                } else {
-                    Err(ZxError::BAD_STATE)
-                }
-            } else if vmo.is_slice_vmo() {
-                // Fuchsia requires unidirectional clones for slices.
-                // For SNAPSHOT_MODIFIED: require_bidirectional = !!parent_
-                // (where parent_ is the slice's cow_pages parent). For
-                // root slices, the cow_pages parent is the root pager VMO
-                // which has no parent → require_bidirectional = false → OK.
-                // For non-root slices, the cow_pages parent HAS a parent
-                // (hidden node from SNAPSHOT_MODIFIED) → conflict → NOT_SUPPORTED.
-                //
-                // For SNAPSHOT_AT_LEAST_ON_WRITE: require_bidirectional = false,
-                // but can_unidirectional_clone returns false when the parent
-                // is hidden → falls to bidirectional → conflicts with slice.
-                if options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
-                    || options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
-                    || options.contains(VmoCloneFlags::SNAPSHOT)
-                {
-                    // Check if the slice's parent VMO has a parent in the
-                    // COW tree (i.e., is not the root pager VMO).
-                    if let Some(parent) = vmo.parent() {
-                        if parent.has_parent() {
-                            return Err(ZxError::NOT_SUPPORTED);
-                        }
-                    }
-                }
-                // SLICE VMOs: create the COW child on the slice's parent,
-                // adjusting the offset by the slice's parent_offset.
-                // This matches Fuchsia behavior where SNAPSHOT_AT_LEAST_ON_WRITE
-                // on a SLICE creates the child in the parent's COW tree.
-                if let Some(parent) = vmo.parent() {
-                    let end = offset
-                        .checked_add(child_size)
-                        .ok_or(ZxError::OUT_OF_RANGE)?;
-                    if end > vmo.len() {
-                        return Err(ZxError::OUT_OF_RANGE);
-                    }
-                    let adjusted_offset = offset
-                        .checked_add(vmo.parent_offset())
-                        .ok_or(ZxError::OUT_OF_RANGE)?;
-                    // For SNAPSHOT_MODIFIED on a root-slice (parent is
-                    // pager root with no parent), use unidirectional clone.
-                    // This matches Fuchsia's CreateCloneLocked where
-                    // require_bidirectional = !!parent_ and the root pager
-                    // VMO has no cow_pages parent.
-                    let child = if options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
-                        && !parent.has_parent()
-                        && parent.has_pager()
-                    {
-                        parent.create_child_unidirectional(
-                            adjusted_offset,
-                            child_size,
-                            resizable,
-                        )?
+                    // For SNAPSHOT_AT_LEAST_ON_WRITE through a reference,
+                    // create a unidirectional child (no hidden node) so
+                    // parent writes remain visible to the child.
+                    // For SNAPSHOT (bidirectional), create a regular COW
+                    // child with a hidden node.
+                    // Ref: vm_cow_pages.cc:1894 — unidirectional path.
+                    let use_unidirectional = (options
+                        .contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
+                        && parent.can_unidirectional_clone())
+                        || (options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
+                            && !parent.has_parent()
+                            && parent.can_unidirectional_clone());
+                    let child = if use_unidirectional {
+                        parent.create_child_unidirectional(offset, child_size, resizable)?
                     } else {
-                        parent.create_child(resizable, adjusted_offset, child_size)?
+                        parent.create_child(resizable, offset, child_size)?
                     };
                     child.set_parent_ref(&vmo);
                     Ok(child)
                 } else {
                     Err(ZxError::BAD_STATE)
                 }
+            } else if vmo.is_slice_vmo() {
+                // Fuchsia requires unidirectional clones for slices
+                // (see VmObjectPaged::CreateClone: require_unidirection = is_slice()).
+                //
+                // The logic mirrors Fuchsia's CreateCloneLocked:
+                //   require_bidirectional = (Full → true, Modified → !!parent_,
+                //                           OnWrite → false)
+                //   unidirectional = !require_bidirectional && can_unidirectional_clone_locked()
+                //   if require_bidirectional && require_unidirectional → NOT_SUPPORTED
+                //   if !unidirectional && require_unidirectional → NOT_SUPPORTED
+                //
+                // For SNAPSHOT (Full): require_bidirectional = true,
+                //   require_unidirectional = true → conflict → NOT_SUPPORTED.
+                //
+                // For SNAPSHOT_MODIFIED (Modified): require_bidirectional = !!parent_
+                //   (cow_pages parent). If parent has cow_pages parent →
+                //   require_bidirectional = true → conflict → NOT_SUPPORTED.
+                //   If no cow_pages parent → require_bidirectional = false →
+                //   check can_unidirectional_clone.
+                //
+                // For SNAPSHOT_AT_LEAST_ON_WRITE (OnWrite): require_bidirectional = false.
+                //   Check can_unidirectional_clone on the parent.
+                if options.contains(VmoCloneFlags::SNAPSHOT) {
+                    // Full snapshot requires bidirectional, but slices
+                    // require unidirectional → conflict.
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
+                let parent = vmo.parent().ok_or(ZxError::BAD_STATE)?;
+                let end = offset
+                    .checked_add(child_size)
+                    .ok_or(ZxError::OUT_OF_RANGE)?;
+                if end > vmo.len() {
+                    return Err(ZxError::OUT_OF_RANGE);
+                }
+                let adjusted_offset = offset
+                    .checked_add(vmo.parent_offset())
+                    .ok_or(ZxError::OUT_OF_RANGE)?;
+
+                if options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED) {
+                    // require_bidirectional = !!parent_ (cow_pages parent).
+                    // The parent's cow_pages parent exists if it has_parent()
+                    // at the VMObjectPaged level. Use has_parent() on the
+                    // VmObject as a proxy for whether the cow_pages parent
+                    // exists. If require_bidirectional → conflict with
+                    // require_unidirectional → NOT_SUPPORTED.
+                    if parent.has_parent() {
+                        return Err(ZxError::NOT_SUPPORTED);
+                    }
+                    // require_bidirectional = false, try unidirectional.
+                    if !parent.can_unidirectional_clone() {
+                        return Err(ZxError::NOT_SUPPORTED);
+                    }
+                    let child = parent.create_child_unidirectional(
+                        adjusted_offset,
+                        child_size,
+                        resizable,
+                    )?;
+                    child.set_parent_ref(&vmo);
+                    Ok(child)
+                } else {
+                    // SNAPSHOT_AT_LEAST_ON_WRITE: require_bidirectional = false.
+                    // Check can_unidirectional_clone on the parent.
+                    if !parent.can_unidirectional_clone() {
+                        return Err(ZxError::NOT_SUPPORTED);
+                    }
+                    let child = parent.create_child_unidirectional(
+                        adjusted_offset,
+                        child_size,
+                        resizable,
+                    )?;
+                    child.set_parent_ref(&vmo);
+                    Ok(child)
+                }
             } else if options.contains(VmoCloneFlags::SNAPSHOT_MODIFIED)
                 && !vmo.has_parent()
                 && vmo.has_pager()
             {
+                // SNAPSHOT_MODIFIED on a root pager VMO: unidirectional.
+                vmo.create_child_unidirectional(offset, child_size, resizable)
+            } else if options.contains(VmoCloneFlags::SNAPSHOT_AT_LEAST_ON_WRITE)
+                && vmo.can_unidirectional_clone()
+            {
+                // SNAPSHOT_AT_LEAST_ON_WRITE on a VMO that supports
+                // unidirectional cloning: create without hidden node.
+                // Ref: vm_cow_pages.cc:1894 — unidirectional path via
+                // FindParentAndRangeForCloneLocked + CloneChildLocked.
                 vmo.create_child_unidirectional(offset, child_size, resizable)
             } else {
                 vmo.create_child(resizable, offset, child_size)

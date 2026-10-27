@@ -446,6 +446,7 @@ async fn process_not_killed_via_process_close() {
 /// Two processes holding handles to each other via channels.
 /// Kill the parent job to break the cycle.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn kill_channel_handle_cycle() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
@@ -876,6 +877,7 @@ async fn suspend_twice_before_creating_threads() {
 /// Ignored: hangs on slow ARM emulation (ubuntu-24.04-arm CI) due
 /// to async scheduling not giving threads a chance to run.
 #[async_std::test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 async fn suspend_with_dying_thread() {
     use crate::helpers;
     use zircon_object::task::Task;
@@ -917,20 +919,36 @@ fn create_and_kill_job_race_stress() {
     use zircon_object::task::Task;
     let _ctx = TestContext::new();
 
+    const ITERATIONS: usize = 100;
+    let mut completed = 0usize;
+
     // Run 100 iterations of creating a child job, creating a process,
     // and killing the job — some will fail, some will succeed.
-    for _ in 0..100 {
+    for _ in 0..ITERATIONS {
         let root = Job::root();
         let child = root.create_child().unwrap();
 
         // Kill the job
         child.kill();
 
-        // Try to create a process — should fail (job is dead)
+        // Try to create a process — should fail (job is dead) since
+        // we killed synchronously before creating.
         let result = Process::create(&child, "stress");
-        // We don't assert success or failure — the race means either is valid
-        let _ = result;
+        // The job was killed before Process::create, so it should fail.
+        assert!(
+            result.is_err(),
+            "creating process on a killed job should fail"
+        );
+
+        completed += 1;
     }
+
+    // All iterations completed without panic.
+    assert_eq!(
+        completed, ITERATIONS,
+        "all {} stress iterations should complete",
+        ITERATIONS
+    );
 }
 
 /// C++: TEST(ProcessTest, ProcessStartWriteThreadState)

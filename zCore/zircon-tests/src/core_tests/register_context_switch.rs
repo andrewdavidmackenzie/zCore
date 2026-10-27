@@ -38,23 +38,63 @@ fn fpu_long_compute_loop() {
 }
 
 /// C++: TEST(RegisterContextSwitchTests, SegmentSelectorsZeroedOnInterrupt)
-/// Sets x86 segment selectors (ds, es, gs) to 1 and spins until an
-/// interrupt resets them to 0 via IRET. The C++ test is SKIP'd because
-/// non-KVM QEMU doesn't implement IRET fully.
 ///
-/// This test requires x86 hardware segment selector manipulation
-/// (inline asm with `wrmsr`/`rdmsr` or `wrgsbase`/`rdgsbase`), which
-/// is not available in libos user mode. Even in the C++ suite this
-/// test is disabled.
+/// ```cpp
+/// ZXTEST_SKIP() << "Disabled because some versions of non-KVM QEMU
+///                    don't implement IRET fully";
+/// set_ds(1); set_es(1); set_gs(1);
+/// while (get_gs() == 1) { __asm__("pause"); }
+/// EXPECT_EQ(get_ds(), 0);
+/// EXPECT_EQ(get_es(), 0);
+/// EXPECT_EQ(get_gs(), 0);
+/// ```
+///
+/// This test is SKIP'd in the C++ suite itself (ZXTEST_SKIP at the top).
+/// It requires x86 hardware segment selector manipulation via inline asm,
+/// which is not available in libos user mode. On bare-metal x86, IRET
+/// resets segment selectors when returning from kernel to userland.
+/// Faithfully skip here, matching C++ behavior.
 #[test]
-fn segment_selectors_zeroed_on_interrupt() {}
+fn segment_selectors_zeroed_on_interrupt() {
+    // C++: ZXTEST_SKIP() — this test is disabled even upstream.
+    // Requires x86 set_ds/set_es/set_gs inline asm and interrupt delivery.
+    // Not testable in libos mode (no ring-0 segment manipulation).
+}
 
 /// C++: TEST(RegisterContextSwitchTests, SegmentSelectorsZeroedOnContextSwitch)
-/// Sets x86 segment selectors and FS/GS base to 1, sleeps to trigger
-/// a context switch, verifies selectors are cleared but bases are preserved.
 ///
-/// This test requires x86 privilege-level-0 instructions to manipulate
-/// segment selectors (ds, es, fs, gs) and FS/GS base registers.
-/// Not available in libos user mode. Verified via QEMU core-tests.
+/// ```cpp
+/// auto result = TestBasesWithContextSwitches();
+/// ASSERT_OK(result);
+/// EXPECT_EQ(result->gs, 1);  // GS base preserved
+/// EXPECT_EQ(result->fs, 1);  // FS base preserved
+/// EXPECT_EQ(get_ds(), 0);    // DS cleared by context switch
+/// EXPECT_EQ(get_es(), 0);    // ES cleared
+/// EXPECT_EQ(get_fs(), 0);    // FS cleared
+/// EXPECT_EQ(get_gs(), 0);    // GS cleared
+/// ```
+///
+/// `TestBasesWithContextSwitches` sets ds/es/fs/gs selectors and FS/GS base
+/// to 1, then sleeps in a loop until ds is cleared (indicating a context
+/// switch occurred). It then reads back FS/GS base (should be preserved)
+/// and checks all selectors are cleared.
+///
+/// This requires x86 privilege-level-0 instructions (`wrgsbase`/`rdgsbase`,
+/// segment selector manipulation) and real context switches via
+/// `zx_nanosleep`. Not available in libos user mode where the host OS
+/// manages context switches and segment registers.
 #[test]
-fn segment_selectors_zeroed_on_context_switch() {}
+fn segment_selectors_zeroed_on_context_switch() {
+    // Requires x86 fsgsbase instructions and hardware segment selectors.
+    // In libos mode, the host kernel manages context switches and segment
+    // registers — we cannot set or read x86 segment selectors from
+    // userspace Rust code.
+    //
+    // The C++ assertions we cannot reproduce:
+    //   EXPECT_EQ(result->gs, 1);  // GS base preserved across ctx switch
+    //   EXPECT_EQ(result->fs, 1);  // FS base preserved across ctx switch
+    //   EXPECT_EQ(get_ds(), 0);    // DS selector cleared by IRET
+    //   EXPECT_EQ(get_es(), 0);    // ES selector cleared
+    //   EXPECT_EQ(get_fs(), 0);    // FS selector cleared
+    //   EXPECT_EQ(get_gs(), 0);    // GS selector cleared
+}

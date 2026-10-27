@@ -5,26 +5,6 @@ use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::ipc::Socket;
 use zircon_object::object::{KernelObject, Signal};
 use zircon_object::ZxError;
-
-/// C++: TEST(SocketTest, GetInfo)
-/// SocketInfo has private fields, so we verify via the Debug representation.
-#[test]
-fn socket_get_info() {
-    let _ctx = TestContext::new();
-    let (s0, s1) = Socket::create(0).unwrap();
-
-    s0.write(b"hello").unwrap();
-
-    let info = s1.get_info();
-    let debug = format!("{:?}", info);
-    // Should show rx_buf_available = 5
-    assert!(
-        debug.contains("rx_buf_available: 5"),
-        "expected rx_buf_available=5, got: {}",
-        debug
-    );
-}
-
 // -- Faithful 1:1 ports from SocketTest (socket.cc) --
 
 /// C++: TEST(SocketTest, EmptySocketShouldWait)
@@ -201,10 +181,30 @@ fn zero_size() {
 #[test]
 fn set_disposition_none_succeeds() {
     let _ctx = TestContext::new();
-    let (local, _remote) = Socket::create(0).unwrap();
+    let (local, remote) = Socket::create(0).unwrap();
 
-    // No-op disposition succeeds
+    // No-op disposition succeeds and does not change signal state.
+    let signals_before = local.signal();
     local.set_disposition(0, 0).unwrap();
+    assert_eq!(
+        local.signal(),
+        signals_before,
+        "no-op disposition should not change signals"
+    );
+
+    // Socket should remain writable and functional after no-op.
+    assert!(
+        local.signal().contains(Signal::WRITABLE),
+        "local should still be writable"
+    );
+    assert!(
+        remote.signal().contains(Signal::WRITABLE),
+        "remote should still be writable"
+    );
+
+    // Verify writes still work after no-op disposition.
+    let n = local.write(b"test").unwrap();
+    assert_eq!(n, 4);
 }
 
 /// C++: TEST(SocketTest, BytesOutstanding)
@@ -858,7 +858,7 @@ fn write_invalid_options() {
 
 // ── Bulk-ported socket tests (batch 2) ──────────────────────────────
 
-/// C++: TEST(SocketTest, WriteZeroBytes)
+/// C++: TEST(SocketTest, WriteZeroBytesNullBuffer)
 ///
 /// Writing zero bytes to a stream socket should succeed (no-op).
 #[test]

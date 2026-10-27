@@ -890,6 +890,40 @@ impl VMObjectTrait for VMObjectPaged {
             }
         }
     }
+
+    fn can_unidirectional_clone(&self) -> bool {
+        let (_guard, inner) = self.get_inner();
+        // Walk up the cow_pages parent chain to check:
+        // 1. The root must be pager-backed.
+        // 2. The immediate parent (if any) must not be hidden.
+        //
+        // Matches Fuchsia's VmCowPages::can_unidirectional_clone_locked:
+        //   if (!is_root_source_user_pager_backed()) return false;
+        //   if (parent_ && is_parent_hidden_locked()) return false;
+        //   return true;
+
+        // Check condition 2: immediate parent must not be hidden.
+        if let Some(parent) = &inner.parent {
+            let parent_inner = parent.borrow_inner();
+            if parent_inner.type_.is_hidden() {
+                return false;
+            }
+        }
+
+        // Check condition 1: the root of the tree must be pager-backed.
+        // Walk up the cow_pages parent chain to find the root.
+        let mut root_is_pager = inner.pager_backed;
+        let mut cur = inner.parent.clone();
+        while let Some(vmop) = cur {
+            let p = vmop.borrow_inner();
+            if p.pager_backed {
+                root_is_pager = true;
+            }
+            cur = p.parent.clone();
+        }
+
+        root_is_pager
+    }
 }
 
 enum CommitResult {
@@ -965,7 +999,14 @@ impl VMObjectPagedInner {
         let no_parent = self.parent.is_none();
         let no_frame = !self.frames.contains_key(&page_idx);
         let out_of_range = if self.type_.is_hidden() {
-            page_idx >= self.size / PAGE_SIZE
+            // For hidden nodes, check both size and parent_limit.
+            // A page beyond parent_limit has no parent backing — it
+            // should be treated as zero (not walked up to the parent).
+            let beyond_size = page_idx >= self.size / PAGE_SIZE;
+            let beyond_parent = self.parent.is_some()
+                && self.parent_limit > 0
+                && (self.parent_offset + page_idx * PAGE_SIZE) >= self.parent_limit;
+            beyond_size || beyond_parent
         } else if self.parent.is_none() {
             // For merged Snapshot VMOs (no parent but parent_limit
             // retained from merge), check against parent_limit too.
@@ -1401,11 +1442,33 @@ impl VMObjectPagedInner {
             }
             if !surviving.frames.contains_key(&idx) && value.tag != tag.negate() {
                 value.tag = PageStateTag::Owned;
-                // After merge, set share_count based on the surviving
-                // child's type. If it's a hidden node with 2 children,
-                // the page is shared by both → share_count = 1.
-                // If it's a leaf node, it's private → share_count = 0.
-                value.share_count = if surviving.type_.is_hidden() { 1 } else { 0 };
+                // After merge, set share_count based on whether the page
+                // is visible to multiple children of the surviving node.
+                // If the surviving node is a hidden node, check if both
+                // children's ranges include this page index. If so,
+                // share_count = 1 (shared by 2); otherwise 0 (private).
+                // For leaf nodes, share_count = 0 (no descendants).
+                value.share_count = if let VMOType::Hidden { left, right, .. } = &surviving.type_ {
+                    let in_left = left.upgrade().is_some_and(|l| {
+                        let li = l.borrow_inner();
+                        let ls = li.parent_offset / PAGE_SIZE;
+                        let le = li.parent_limit / PAGE_SIZE;
+                        idx >= ls && idx < le && !li.frames.contains_key(&(idx - ls))
+                    });
+                    let in_right = right.upgrade().is_some_and(|r| {
+                        let ri = r.borrow_inner();
+                        let rs = ri.parent_offset / PAGE_SIZE;
+                        let re = ri.parent_limit / PAGE_SIZE;
+                        idx >= rs && idx < re && !ri.frames.contains_key(&(idx - rs))
+                    });
+                    if in_left && in_right {
+                        1
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
                 surviving.frames.insert(idx, value);
             }
         }
@@ -1641,32 +1704,43 @@ impl VMObjectPagedInner {
                     page.share_count += 1;
                 }
             }
-            // Also walk up ancestors for pages not in the hidden node.
+            // Also walk up ancestors for pages NOT in the hidden node.
+            // For each page in the child's range that doesn't have a
+            // local frame in `h`, walk up the parent chain to find the
+            // ancestor that owns the page and increment its share_count
+            // there. This mirrors decrement_parent_share_counts.
+            //
             // Stop at non-hidden parents — they don't participate in
-            // bidirectional COW share_count tracking. This prevents
-            // unidirectional children's hidden nodes from inflating
-            // the root pager VMO's share_count.
-            if let Some(ref parent) = h.parent {
-                let mut cur = Some(parent.clone());
-                let mut cur_start = child_start + h.parent_offset / PAGE_SIZE;
-                let mut cur_end = child_end + h.parent_offset / PAGE_SIZE;
-                while let Some(vmop) = cur {
-                    let inner = vmop.borrow_inner_mut();
-                    if !inner.type_.is_hidden() {
-                        break;
+            // bidirectional COW share_count tracking.
+            if h.parent.is_some() {
+                let h_off = h.parent_offset / PAGE_SIZE;
+                for idx in child_start..child_end {
+                    // Skip pages with local frames in the hidden node —
+                    // those shadow any ancestor version.
+                    if h.frames.contains_key(&idx) {
+                        continue;
                     }
-                    for idx in cur_start..cur_end {
-                        if let Some(page) = inner.frames.get_mut(&idx) {
-                            page.share_count += 1;
+                    let mut cur = h.parent.clone();
+                    let mut cur_idx = idx + h_off;
+                    while let Some(vmop) = cur {
+                        let inner = vmop.borrow_inner_mut();
+                        if !inner.type_.is_hidden() {
+                            break;
                         }
+                        if let Some(page) = inner.frames.get_mut(&cur_idx) {
+                            page.share_count += 1;
+                            break;
+                        }
+                        if inner.parent_limit == 0 || inner.parent.is_none() {
+                            break;
+                        }
+                        let next = cur_idx + inner.parent_offset / PAGE_SIZE;
+                        if next * PAGE_SIZE >= inner.parent_limit {
+                            break;
+                        }
+                        cur_idx = next;
+                        cur = inner.parent.clone();
                     }
-                    if inner.parent_limit == 0 {
-                        break;
-                    }
-                    let off = inner.parent_offset / PAGE_SIZE;
-                    cur_start += off;
-                    cur_end += off;
-                    cur = inner.parent.clone();
                 }
             }
         }

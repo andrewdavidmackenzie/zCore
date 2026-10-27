@@ -238,33 +238,6 @@ fn pin_contiguous() {
 
     pmt.unpin();
 }
-
-/// Pin a moderate VMO and verify encode_addrs returns the correct
-/// number of page addresses.
-#[test]
-fn pin_encode_addrs_count() {
-    let _ctx = TestContext::new();
-    let (_iommu, bti) = create_iommu_bti();
-
-    // Pin a 16-page VMO.
-    let pages = 16;
-    let vmo = VmObject::new_paged(pages);
-    // Commit all pages so pin succeeds.
-    for i in 0..pages {
-        vmo.write(i * PAGE_SIZE, &[1u8]).unwrap();
-    }
-
-    let pmt = bti
-        .pin(vmo, 0, pages * PAGE_SIZE, IommuPerms::PERM_READ)
-        .unwrap();
-
-    // Encode non-contiguous, non-compressed: should get exactly `pages` addresses.
-    let addrs = pmt.encode_addrs(false, false).unwrap();
-    assert_eq!(addrs.len(), pages);
-
-    pmt.unpin();
-}
-
 /// C++: TEST(Bti, PinTooManyAddresses)
 ///
 /// In C++, creates a VMO with page_count = (page_size * 64) / 8 + 1

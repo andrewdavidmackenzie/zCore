@@ -184,36 +184,6 @@ fn clone_commit_via_mapping() {
     vmar.unmap(parent_addr, PAGE_SIZE).unwrap();
     vmar.unmap(child_addr, PAGE_SIZE).unwrap();
 }
-
-/// C++: TEST(VmoCloneTestCase, NoResize) — VMAR mapping portion
-/// Non-resizable clone mapped into VMAR — data accessible through mapping.
-#[test]
-fn clone_no_resize_with_mapping() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "clone-test").unwrap();
-    let vmar = proc.vmar();
-
-    let parent = VmObject::new_paged(2);
-    let data: u64 = 0x1234;
-    parent.write(0, &data.to_ne_bytes()).unwrap();
-
-    // Create non-resizable snapshot child.
-    let child = parent.create_child(false, 0, 2 * PAGE_SIZE).unwrap();
-
-    // set_len should fail (non-resizable).
-    assert_eq!(child.set_len(PAGE_SIZE), Err(ZxError::UNAVAILABLE));
-
-    // Map the child and verify data.
-    let flags = MMUFlags::READ;
-    let addr = vmar.map(None, child, 0, 2 * PAGE_SIZE, flags).unwrap();
-
-    let val = unsafe { core::ptr::read_volatile(addr as *const u64) };
-    assert_eq!(val, 0x1234, "mapped child should see parent data");
-
-    vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
-}
-
 /// C++: TEST(VmoCloneTestCase, NotImmutableMissingSnapshot)
 /// A SLICE child with NO_WRITE (set_immutable) is NOT marked immutable,
 /// because only SNAPSHOT + NO_WRITE produces an immutable child in Fuchsia.

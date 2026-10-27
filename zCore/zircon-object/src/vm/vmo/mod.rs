@@ -249,6 +249,16 @@ pub trait VMObjectTrait: Sync + Send {
 
     /// Mark as not contiguous
     fn unset_contiguous(&self) {}
+
+    /// Check whether this VMO's cow_pages can create a unidirectional
+    /// clone. Returns true if:
+    /// 1. The root of the tree is pager-backed (user pager)
+    /// 2. The cow_pages parent (if any) is not a hidden node
+    ///
+    /// Mirrors Fuchsia's `VmCowPages::can_unidirectional_clone_locked`.
+    fn can_unidirectional_clone(&self) -> bool {
+        false
+    }
 }
 
 /// Virtual memory containers
@@ -1465,19 +1475,29 @@ impl VmObject {
         offset: usize,
         len: usize,
     ) -> ZxResult<Arc<Self>> {
-        // Slices are transparent windows into a parent VMO. Creating a
-        // COW snapshot of a slice redirects through the parent VMO with
-        // the slice's offset added, matching Fuchsia's behavior.
-        // Don't redirect pager-backed slices: pager VMOs don't support
-        // regular SNAPSHOT at the object level (only SNAPSHOT_AT_LEAST_ON_WRITE
-        // via the syscall layer).
-        if self.is_slice && !self.trait_.is_reference() {
+        // Slices and references are transparent windows into a parent VMO.
+        // Creating a COW child of a slice/reference redirects through
+        // the parent VMO with the slice's offset added.
+        if self.is_slice {
             let parent = self
                 .inner
                 .lock()
                 .parent
                 .upgrade()
                 .ok_or(ZxError::BAD_STATE)?;
+            if self.trait_.is_reference() {
+                // REFERENCE children: redirect to parent.
+                // SNAPSHOT (create_child) on pager-backed VMOs is NOT_SUPPORTED.
+                // Only SNAPSHOT_AT_LEAST_ON_WRITE (create_child_unidirectional)
+                // works for pager VMOs.
+                if parent.has_pager() {
+                    return Err(ZxError::NOT_SUPPORTED);
+                }
+                let slice_off = self.trait_.parent_offset();
+                let adjusted = offset.checked_add(slice_off).ok_or(ZxError::OUT_OF_RANGE)?;
+                return parent.create_child(resizable, adjusted, len);
+            }
+            // Regular slices: redirect for non-pager parents.
             if parent.has_pager() {
                 return Err(ZxError::NOT_SUPPORTED);
             }
@@ -1518,6 +1538,26 @@ impl VmObject {
         len: usize,
         resizable: bool,
     ) -> ZxResult<Arc<Self>> {
+        // SLICE and REFERENCE children: redirect to the underlying parent VMO.
+        // SNAPSHOT_AT_LEAST_ON_WRITE on a slice creates a unidirectional
+        // child of the parent VMO with offset adjusted by the slice offset.
+        // This matches Fuchsia where slices are transparent windows and
+        // clones are always created on the parent's cow_pages.
+        if self.is_slice {
+            let parent = self
+                .inner
+                .lock()
+                .parent
+                .upgrade()
+                .ok_or(ZxError::BAD_STATE)?;
+            let slice_off = self.trait_.parent_offset();
+            let adjusted = offset.checked_add(slice_off).ok_or(ZxError::OUT_OF_RANGE)?;
+            let child = parent.create_child_unidirectional(adjusted, len, resizable)?;
+            // Set the child's VmObject parent to the slice so that
+            // parent_koid points to the slice (matching Fuchsia).
+            child.set_parent_ref(self);
+            return Ok(child);
+        }
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         base.set_name(&self.base.name());
         let trait_ = self.trait_.create_child_unidirectional(offset, len)?;
@@ -2195,6 +2235,15 @@ impl VmObject {
     /// Offset into the parent VMO (for slices). Returns 0 for non-slices.
     pub fn parent_offset(&self) -> usize {
         self.trait_.parent_offset()
+    }
+
+    /// Check whether this VMO can create a unidirectional clone.
+    ///
+    /// Returns true if the cow_pages root is pager-backed and the
+    /// cow_pages parent (if any) is not a hidden node.
+    /// Mirrors Fuchsia's `VmCowPages::can_unidirectional_clone_locked`.
+    pub fn can_unidirectional_clone(&self) -> bool {
+        self.trait_.can_unidirectional_clone()
     }
 
     /// Get the parent VmObject (for REFERENCE or SLICE children).

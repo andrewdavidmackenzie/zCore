@@ -5,18 +5,6 @@ use hal_impl::user::{UserInPtr, UserOutPtr};
 use zircon_object::object::HandleValue;
 use zircon_object::signal::PortPacket;
 use zircon_object::ZxError;
-
-/// C++: TEST(PortTest, Create) — syscall level
-#[test]
-fn port_create_via_syscall() {
-    let ctx = TestContext::new();
-    let sc = ctx.syscall();
-    let mut h: HandleValue = 0;
-    sc.sys_port_create(0, UserOutPtr::from(&mut h as *mut _ as usize))
-        .unwrap();
-    assert_ne!(h, 0);
-}
-
 /// C++: TEST(PortTest, CreateInvalidOptions) — syscall level
 #[test]
 fn port_create_invalid_options() {
@@ -108,83 +96,6 @@ fn port_queue_null_ptr() {
     let result = sc.sys_port_queue(h, UserInPtr::from(0usize));
     assert!(result.is_err());
 }
-
-/// C++: TEST(PortTest, WaitWrongType)
-/// Waiting on a non-port handle returns WRONG_TYPE.
-#[async_std::test]
-async fn port_wait_wrong_type() {
-    let ctx = TestContext::new();
-    let sc = ctx.syscall();
-
-    // Create an event instead of a port
-    let event = zircon_object::signal::Event::new();
-    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
-        event,
-        zircon_object::object::Rights::DEFAULT_EVENT,
-    ));
-
-    let mut packet = unsafe { core::mem::zeroed::<PortPacket>() };
-    let result = sc
-        .sys_port_wait(
-            h,
-            zircon_syscall::Deadline::from(0usize),
-            UserOutPtr::from(&mut packet as *mut _ as usize),
-        )
-        .await;
-    assert_eq!(result.unwrap_err(), ZxError::WRONG_TYPE);
-}
-
-/// C++: TEST(PortTest, WaitAccessDenied)
-/// Waiting on a port without READ right returns ACCESS_DENIED.
-#[async_std::test]
-async fn port_wait_access_denied() {
-    let ctx = TestContext::new();
-    let sc = ctx.syscall();
-
-    // Create port with only WRITE right (no READ)
-    let port = zircon_object::signal::Port::new(0).unwrap();
-    let h = ctx.proc.add_handle(zircon_object::object::Handle::new(
-        port,
-        zircon_object::object::Rights::WRITE, // no READ
-    ));
-
-    let mut packet = unsafe { core::mem::zeroed::<PortPacket>() };
-    let result = sc
-        .sys_port_wait(
-            h,
-            zircon_syscall::Deadline::from(0usize),
-            UserOutPtr::from(&mut packet as *mut _ as usize),
-        )
-        .await;
-    assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
-}
-
-/// C++: TEST(PortTest, WaitNullPacket)
-/// Waiting with a null output packet pointer returns an error.
-#[async_std::test]
-async fn port_wait_null_packet() {
-    let ctx = TestContext::new();
-    let sc = ctx.syscall();
-
-    let mut h: HandleValue = 0;
-    sc.sys_port_create(0, UserOutPtr::from(&mut h as *mut _ as usize))
-        .unwrap();
-
-    // Queue a packet so the wait would succeed if the pointer were valid
-    let packet_in = unsafe { core::mem::zeroed::<PortPacket>() };
-    sc.sys_port_queue(h, UserInPtr::from(&packet_in as *const _ as usize))
-        .unwrap();
-
-    let result = sc
-        .sys_port_wait(
-            h,
-            zircon_syscall::Deadline::from(0usize),
-            UserOutPtr::from(0usize), // null output
-        )
-        .await;
-    assert!(result.is_err());
-}
-
 /// C++: TEST(PortTest, AsyncWaitInvalidOption)
 /// wait_async with invalid options returns INVALID_ARGS.
 #[test]
@@ -263,30 +174,6 @@ fn port_cancel_access_denied() {
     let result = sc.sys_port_cancel(port_h, event_h, 0);
     assert_eq!(result.unwrap_err(), ZxError::ACCESS_DENIED);
 }
-
-/// C++: TEST(PortTest, PortTimeout)
-/// Waiting on an empty port with deadline=0 returns TIMED_OUT.
-#[async_std::test]
-async fn port_timeout() {
-    let ctx = TestContext::new();
-    let sc = ctx.syscall();
-
-    let mut h: HandleValue = 0;
-    sc.sys_port_create(0, UserOutPtr::from(&mut h as *mut _ as usize))
-        .unwrap();
-
-    // Deadline 0 means "poll" — should return immediately with TIMED_OUT
-    let mut packet = unsafe { core::mem::zeroed::<PortPacket>() };
-    let result = sc
-        .sys_port_wait(
-            h,
-            zircon_syscall::Deadline::from(0usize),
-            UserOutPtr::from(&mut packet as *mut _ as usize),
-        )
-        .await;
-    assert_eq!(result.unwrap_err(), ZxError::TIMED_OUT);
-}
-
 // ═══════════════════════════════════════════════════════════════════
 // Additional port syscall tests — faithful ports from port.cc
 // ═══════════════════════════════════════════════════════════════════

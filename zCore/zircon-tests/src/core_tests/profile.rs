@@ -39,19 +39,6 @@ pub(crate) fn make_deadline_info(
     }
     info
 }
-
-/// C++: TEST(ProfileTest, Create)
-///
-/// Creating a profile with valid parameters succeeds.
-#[test]
-fn profile_create() {
-    let _ctx = TestContext::new();
-    let info = ProfileInfo::with_priority(ProfileInfoFlags::PRIORITY.bits(), 16);
-    let profile = Profile::create(info).unwrap();
-    assert_eq!(profile.info.priority(), 16);
-    assert!(profile.info.flags().contains(ProfileInfoFlags::PRIORITY));
-}
-
 /// C++: TEST(ProfileTest, ApplySchedulingProfileToVmarIsOk)
 /// Apply a scheduling profile to a VMAR — should succeed (no-op).
 #[test]

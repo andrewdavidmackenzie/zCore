@@ -21,7 +21,7 @@ extern crate alloc;
 
 use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
-use zircon_object::signal::{Event, Port, PortPacketRepr};
+use zircon_object::signal::{Event, PayloadRepr, Port, PortPacketRepr};
 
 /// Constants matching the C++ test.
 const INTERRUPT_WAKE_SOURCE_COUNT: u32 = 4;
@@ -243,6 +243,10 @@ fn port_bound_discard() {
 /// C++: TEST_F(WakeReportTestsPortBound, DestructionNoAck)
 /// Trigger a source, don't ack it, then destroy it.
 /// Nothing should be reported afterward.
+///
+/// C++: TriggerWakeSource(0); DestroyWakeSource(0); VerifyNothingToReport();
+/// VerifyNothingToReport calls DoSuspend (which zCore doesn't implement),
+/// so we verify the port-level equivalent: no more packets are queued.
 #[test]
 fn port_bound_destruction_no_ack() {
     let _ctx = TestContext::new();
@@ -254,15 +258,34 @@ fn port_bound_destruction_no_ack() {
         .unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
 
-    let _pkt = async_std::task::block_on(port.wait());
+    let pkt = async_std::task::block_on(port.wait());
+    // The packet should have been delivered with the observed signals.
+    let repr = PortPacketRepr::from(&pkt);
+    if let PayloadRepr::Signal(sig) = repr.data {
+        assert!(
+            sig.observed.contains(Signal::USER_SIGNAL_0),
+            "packet observed signals should contain USER_SIGNAL_0"
+        );
+    } else {
+        panic!("expected signal packet, got {:?}", repr.data);
+    }
 
     // Destroy the wake source (drop event). No ack.
     drop(event);
     // Port should still function but have no more packets from this source.
+    // Verify no packet is queued: READABLE signal should not be set.
+    let port_obj = port.clone() as alloc::sync::Arc<dyn KernelObject>;
+    assert!(
+        !port_obj.signal().contains(Signal::READABLE),
+        "no more packets should be queued after source destruction"
+    );
 }
 
 /// C++: TEST_F(WakeReportTestsPortBound, DestructionYesAck)
 /// Trigger and ack a source, then destroy it.
+///
+/// C++: TriggerWakeSource(0); AckWakeSource(0); DestroyWakeSource(0);
+///      VerifyNothingToReport();
 #[test]
 fn port_bound_destruction_yes_ack() {
     let _ctx = TestContext::new();
@@ -274,10 +297,27 @@ fn port_bound_destruction_yes_ack() {
         .unwrap();
     event.signal_set(Signal::USER_SIGNAL_0);
 
-    let _pkt = async_std::task::block_on(port.wait());
+    let pkt = async_std::task::block_on(port.wait());
+    // The packet should have been delivered with the observed signals.
+    let repr = PortPacketRepr::from(&pkt);
+    if let PayloadRepr::Signal(sig) = repr.data {
+        assert!(
+            sig.observed.contains(Signal::USER_SIGNAL_0),
+            "packet observed signals should contain USER_SIGNAL_0"
+        );
+    } else {
+        panic!("expected signal packet, got {:?}", repr.data);
+    }
+
     event.signal_clear(Signal::USER_SIGNAL_0); // ack
 
     drop(event);
+    // Verify no packet is queued: READABLE signal should not be set.
+    let port_obj = port.clone() as alloc::sync::Arc<dyn KernelObject>;
+    assert!(
+        !port_obj.signal().contains(Signal::READABLE),
+        "no more packets should be queued after ack and source destruction"
+    );
 }
 
 /// C++: TEST_F(WakeReportTestsPortBound, AlreadyTimedOut)
@@ -495,7 +535,15 @@ fn thread_bound_destruction_no_ack() {
     let _ctx = TestContext::new();
     let event = Event::new();
     event.signal_set(Signal::USER_SIGNAL_0);
-    drop(event); // Destroy without acking.
+
+    // Verify the signal is asserted before destruction.
+    assert!(
+        event.signal().contains(Signal::USER_SIGNAL_0),
+        "signal should be set before destroy"
+    );
+
+    // Destroy without acking — should not panic or leak.
+    drop(event);
 }
 
 /// C++: TEST_F(WakeReportTestsThreadBound, DestructionYesAck)
@@ -504,7 +552,19 @@ fn thread_bound_destruction_yes_ack() {
     let _ctx = TestContext::new();
     let event = Event::new();
     event.signal_set(Signal::USER_SIGNAL_0);
+    assert!(
+        event.signal().contains(Signal::USER_SIGNAL_0),
+        "signal should be set before ack"
+    );
+
+    // Ack (clear the signal).
     event.signal_clear(Signal::USER_SIGNAL_0);
+    assert!(
+        !event.signal().contains(Signal::USER_SIGNAL_0),
+        "signal should be cleared after ack"
+    );
+
+    // Destroy after acking — should not panic or leak.
     drop(event);
 }
 

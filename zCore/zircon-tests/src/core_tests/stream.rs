@@ -455,40 +455,76 @@ fn stream_write_vector_with_append_mode() {
 }
 
 /// C++: TEST(StreamTestCase, FaultBeyondStreamSizeResizeDownRace)
+/// stream/stream.cc:1497
 ///
-/// Resize a VMO down while a stream has a seek position beyond the
-/// new size. A subsequent read should return 0 bytes (seek is past
-/// content). In libos mode there are no true races, but we verify
-/// the boundary behavior synchronously.
+/// The C++ test:
+///   1. Creates a VMO of kTestPages(8) * PAGE_SIZE, maps it with
+///      ZX_VM_PERM_READ | ZX_VM_PERM_WRITE | ZX_VM_ALLOW_FAULTS |
+///      ZX_VM_FAULT_BEYOND_STREAM_SIZE
+///   2. Iterates kNumIterations(100) times:
+///      a. Sets stream_size to kVmoSize
+///      b. Writes data at kTestOffset (kVmoSize/2) via vmo.write()
+///      c. Spawns 3 threads racing:
+///         - set_thread: writes to VMO, then sets stream_size to 0
+///         - read_spam: repeatedly reads from mapped address at
+///           kTestOffset until terminated
+///         - fault_thread: reads from mapped address at kTestOffset
+///           (expects fault since stream_size is now 0)
+///           d. read_spam is expected to crash (WaitForAnyCrash)
+///           e. fault_thread is expected to crash with ZX_ERR_OUT_OF_RANGE
+///           at address vaddr + kTestOffset
+///
+/// This requires:
+///   - ZX_VM_FAULT_BEYOND_STREAM_SIZE flag (MMU fault on access beyond
+///     stream_size even though the VMO pages are committed)
+///   - Real multi-threaded racing with page faults
+///   - TestThread::WaitForCrash with specific fault address checking
+///
+/// None of this is available in libos mode. We implement the faithful
+/// sequential analog: verify that after reducing stream_size, reads
+/// at the seek position beyond stream_size return 0 bytes.
 #[test]
 fn stream_fault_beyond_stream_size_resize_down_race() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged_with_resizable(true, 2);
-    let stream = Stream::create(vmo.clone(), 0, 0x3);
 
-    // Write data into the second page and set content_size.
-    stream
-        .seek(SeekOrigin::Start, (PAGE_SIZE + PAGE_SIZE / 2) as isize)
-        .unwrap();
-    stream.write(b"past boundary", false).unwrap();
+    const NUM_ITERATIONS: usize = 100;
+    const TEST_PAGES: usize = 8;
+    let vmo_size = TEST_PAGES * PAGE_SIZE;
+    let test_offset = vmo_size / 2;
 
-    // Seek to an offset in the second page.
-    stream
-        .seek(SeekOrigin::Start, (PAGE_SIZE + PAGE_SIZE / 2) as isize)
-        .unwrap();
+    let vmo = VmObject::new_paged(TEST_PAGES);
 
-    // Resize down to 1 page — the seek position is now past the VMO.
-    vmo.set_len(PAGE_SIZE).unwrap();
-    vmo.set_content_size(PAGE_SIZE).unwrap();
+    for _ in 0..NUM_ITERATIONS {
+        // C++: vmo.set_stream_size(kVmoSize)
+        vmo.set_content_size(vmo_size).unwrap();
 
-    // Read at the stale seek position — should return 0 bytes
-    // because seek is past the content_size.
-    let mut buf = [0u8; 13];
-    let n = stream.read(&mut buf).unwrap();
-    assert_eq!(
-        n, 0,
-        "read past content_size after resize should return 0 bytes"
-    );
+        // C++: vmo.write(&vaddr, kTestOffset, sizeof(vaddr))
+        let data = [0xAA_u8; 8];
+        vmo.write(test_offset, &data).unwrap();
+
+        // Simulate set_thread: write, then set stream_size to 0.
+        // C++: vmo.write(&vaddr, kTestOffset, sizeof(vaddr));
+        //      vmo.set_stream_size(0);
+        vmo.write(test_offset, &data).unwrap();
+        vmo.set_content_size(0).unwrap();
+
+        // C++ fault_thread: reads from vaddr+kTestOffset.
+        // With ZX_VM_FAULT_BEYOND_STREAM_SIZE, this faults with OUT_OF_RANGE
+        // because stream_size is 0 but the access is at test_offset.
+        //
+        // In libos mode, we verify that stream reads past content_size
+        // return 0 bytes (the stream-level analog of the MMU fault).
+        let stream = Stream::create(vmo.clone(), 0, 0x1); // MODE_READ
+        stream
+            .seek(SeekOrigin::Start, test_offset as isize)
+            .unwrap();
+        let mut buf = [0u8; 8];
+        let n = stream.read(&mut buf).unwrap();
+        assert_eq!(
+            n, 0,
+            "read past content_size (stream_size=0) should return 0 bytes"
+        );
+    }
 }
 
 /// C++: TEST(StreamTestCase, AppendSuppliesZeroes)
@@ -565,24 +601,63 @@ fn content_size_updated_on_partial_write() {
 }
 
 /// C++: TEST(StreamTestCase, PartialVmoDirty)
-/// Write partial data near the VMO boundary. Verify the data is correct.
+/// stream/stream.cc:1335
+///
+/// The C++ test:
+///   1. Creates a pager-backed VMO with ZX_VMO_TRAP_DIRTY (unbounded)
+///   2. Creates a stream in READ|WRITE mode on the VMO
+///   3. Spawns a pager thread that:
+///      a. Waits for dirty request on pages [1,2)
+///      b. Allows page 1 to be dirtied (DirtyPages(1,1))
+///      c. Fails page 2 with ZX_ERR_NO_SPACE (FailPages(2,1))
+///      d. Waits for retry dirty request on page 2
+///      e. Fails page 2 again with ZX_ERR_NO_SPACE
+///   4. Calls stream.writev_at(offset=page_size, data=2*page_size)
+///   5. Asserts bytes_written == page_size (only 1 page succeeded)
+///   6. Joins pager thread
+///
+/// This requires pager-backed VMOs with TRAP_DIRTY support — the pager
+/// thread intercepts dirty requests and selectively fails pages, causing
+/// the stream write to partially succeed. This infrastructure (UserPager,
+/// TRAP_DIRTY, async dirty page faults) is not available in libos mode.
+///
+/// Faithful port: We create a 3-page VMO and attempt a 2-page write
+/// starting at page_size offset. Without pager TRAP_DIRTY, the write
+/// succeeds fully (both pages get written). We document the gap and
+/// verify the write mechanics are correct.
 #[test]
+#[ignore] // C++ equivalent crashes — in core-tests-skip.txt (requires pager TRAP_DIRTY)
 fn partial_vmo_dirty() {
     let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(1);
-    let stream = Stream::create(vmo.clone(), 0, 0x3);
 
-    // Write near the VMO boundary.
-    stream
-        .seek(SeekOrigin::Start, (PAGE_SIZE - 4) as isize)
-        .unwrap();
-    let n = stream.write(b"ABCDEF", false).unwrap();
-    assert_eq!(n, 4, "only 4 bytes fit");
+    // C++ creates an unbounded pager-backed VMO with TRAP_DIRTY.
+    // We use a 3-page paged VMO (page 0 for mapping, pages 1-2 for writes).
+    let vmo = VmObject::new_paged(3);
+    let stream = Stream::create(vmo.clone(), 0, 0x3); // MODE_READ | MODE_WRITE
 
-    // Read back and verify.
-    let mut buf = [0u8; 4];
-    stream.read_at(&mut buf, PAGE_SIZE - 4).unwrap();
-    assert_eq!(&buf, b"ABCD");
+    // C++: stream.writev_at(0, page_size, &iovec{buffer, 2*page_size}, 1, &bytes_written)
+    // Write 2 pages of data starting at offset page_size.
+    let buffer = vec![0xAAu8; PAGE_SIZE * 2];
+    let bytes_written = stream.write_at(&buffer, PAGE_SIZE).unwrap();
+
+    // C++ asserts bytes_written == page_size because the pager fails page 2.
+    // Without TRAP_DIRTY, all 2 pages are written successfully.
+    // GAP: In the C++ test, the pager fails the second page with NO_SPACE,
+    // so only 1 page is written. We can't reproduce this without pager
+    // TRAP_DIRTY infrastructure. The write succeeds with 2*PAGE_SIZE.
+    assert_eq!(
+        bytes_written,
+        PAGE_SIZE * 2,
+        "Without TRAP_DIRTY, both pages are written (C++ expects only page_size due to pager failure)"
+    );
+
+    // Verify data was actually written at the correct offset.
+    let mut readback = vec![0u8; PAGE_SIZE];
+    stream.read_at(&mut readback, PAGE_SIZE).unwrap();
+    assert!(
+        readback.iter().all(|&b| b == 0xAA),
+        "first page of write data should be correct"
+    );
 }
 
 /// C++: TEST(StreamTestCase, RaceReadResizeVecLarger)

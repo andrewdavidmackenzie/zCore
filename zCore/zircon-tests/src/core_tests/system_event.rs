@@ -251,14 +251,6 @@ fn exactly_one_memory_event_signaled() {
     }
     assert_eq!(events_signaled, 1, "exactly one memory event signaled");
 }
-
-/// C++: TEST(SystemEvent, DISABLED_MemoryStallEvent)
-/// This test is disabled even in Fuchsia (see the DISABLED_ prefix).
-#[test]
-fn disabled_memory_stall_event() {
-    // Disabled in upstream Fuchsia. See https://fxbug.dev/513577268.
-}
-
 /// C++: TEST(SystemEvent, CannotSignalMemoryStallEventFromUserspace)
 #[test]
 fn cannot_signal_memory_stall_event_from_userspace() {

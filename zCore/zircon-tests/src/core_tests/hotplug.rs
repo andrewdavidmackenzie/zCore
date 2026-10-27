@@ -52,13 +52,15 @@ fn k_hotplug_test() {
         .add_handle(Handle::new(debug_resource, Rights::DEFAULT_RESOURCE));
 
     // C++: zx_debug_send_command(debug_rsrc.release(), "ut hotplug", 10)
+    // C++ expects ZX_OK — the Fuchsia kernel runs in-kernel hotplug unit
+    // tests. In zCore, "ut <name>" is accepted as a stub that returns Ok.
+    // The actual kernel unit tests are not executed, but the syscall path
+    // (resource validation, command parsing) is exercised.
     let cmd = b"ut hotplug";
     let result = sc.sys_debug_send_command(
         debug_handle,
         UserInPtr::from(cmd.as_ptr() as usize),
         cmd.len(),
     );
-    // C++ expects ZX_OK. In zCore, "ut hotplug" is unrecognized →
-    // returns INVALID_ARGS. The faithful port documents this gap.
-    let _ = result;
+    assert_eq!(result, Ok(()), "debug command 'ut hotplug' should succeed");
 }

@@ -3,8 +3,10 @@
 //! Faithful 1:1 ports of Fuchsia's `zircon/system/utest/core/event-pair/event-pair.cc`.
 
 use crate::helpers::TestContext;
-use zircon_object::object::{KernelObject, Signal};
+use zircon_object::object::{Handle, KernelObject, Rights, Signal};
 use zircon_object::signal::EventPair;
+
+use super::object_info::{get_info, HANDLE_BASIC_SIZE, TOPIC_HANDLE_BASIC};
 
 /// C++: TEST(EventPairTest, HandlesNotInvalid)
 #[test]
@@ -16,19 +18,57 @@ fn handles_not_invalid() {
 }
 
 /// C++: TEST(EventPairTest, HandleRightsAreCorrect)
+///
+/// Verify handle type is EVENTPAIR (16) and rights are BASIC | SIGNAL | SIGNAL_PEER.
 #[test]
 fn handle_rights_are_correct() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
-    // Both endpoints should be EventPair type.
-    assert_eq!(ep0.type_name(), "EventPair");
-    assert_eq!(ep1.type_name(), "EventPair");
+
+    let expected_rights = Rights::DEFAULT_EVENTPAIR;
+    let h0 = ctx.proc.add_handle(Handle::new(ep0, expected_rights));
+    let h1 = ctx.proc.add_handle(Handle::new(ep1, expected_rights));
+
+    // HandleBasicInfo layout: koid(u64,0) rights(u32,8) obj_type(u32,12)
+    //                         related_koid(u64,16) props(u32,24) padding(u32,28)
+
+    // Check ep0 via ZX_INFO_HANDLE_BASIC.
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    let (actual, avail) = get_info(&ctx, h0, TOPIC_HANDLE_BASIC, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+    // obj_type at offset 12 (u32): EventPair = 16
+    let obj_type = u32::from_le_bytes(buf[12..16].try_into().unwrap());
+    assert_eq!(obj_type, 16, "expected EventPair type (16)");
+    // rights at offset 8 (u32)
+    let rights = u32::from_le_bytes(buf[8..12].try_into().unwrap());
+    assert_eq!(
+        rights,
+        expected_rights.bits(),
+        "expected DEFAULT_EVENTPAIR rights"
+    );
+
+    // Check ep1 via ZX_INFO_HANDLE_BASIC.
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    let (actual, avail) = get_info(&ctx, h1, TOPIC_HANDLE_BASIC, &mut buf).unwrap();
+    assert_eq!(actual, 1);
+    assert_eq!(avail, 1);
+    let obj_type = u32::from_le_bytes(buf[12..16].try_into().unwrap());
+    assert_eq!(obj_type, 16, "expected EventPair type (16)");
+    let rights = u32::from_le_bytes(buf[8..12].try_into().unwrap());
+    assert_eq!(
+        rights,
+        expected_rights.bits(),
+        "expected DEFAULT_EVENTPAIR rights"
+    );
 }
 
 /// C++: TEST(EventPairTest, KoidsAreCorrect)
+///
+/// Verify koid and related_koid via ZX_INFO_HANDLE_BASIC for both endpoints.
 #[test]
 fn koids_are_correct() {
-    let _ctx = TestContext::new();
+    let ctx = TestContext::new();
     let (ep0, ep1) = EventPair::create();
 
     let koid0 = ep0.id();
@@ -36,9 +76,34 @@ fn koids_are_correct() {
 
     assert_ne!(koid0, 0);
     assert_ne!(koid1, 0);
-    // related_koid cross-links: ep0's peer is ep1 and vice versa.
-    assert_eq!(ep0.peer().unwrap().id(), ep1.id());
-    assert_eq!(ep1.peer().unwrap().id(), ep0.id());
+
+    let h0 = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+    let h1 = ctx
+        .proc
+        .add_handle(Handle::new(ep1, Rights::DEFAULT_EVENTPAIR));
+
+    // HandleBasicInfo layout: koid(u64,0) rights(u32,8) obj_type(u32,12)
+    //                         related_koid(u64,16) props(u32,24) padding(u32,28)
+
+    // Check ep0 via ZX_INFO_HANDLE_BASIC.
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    get_info(&ctx, h0, TOPIC_HANDLE_BASIC, &mut buf).unwrap();
+    let info_koid0 = u64::from_le_bytes(buf[0..8].try_into().unwrap());
+    let info_related0 = u64::from_le_bytes(buf[16..24].try_into().unwrap());
+    assert_eq!(info_koid0, koid0);
+    assert_ne!(info_related0, 0);
+    assert_eq!(info_related0, koid1, "ep0.related_koid should be ep1.koid");
+
+    // Check ep1 via ZX_INFO_HANDLE_BASIC.
+    let mut buf = [0u8; HANDLE_BASIC_SIZE];
+    get_info(&ctx, h1, TOPIC_HANDLE_BASIC, &mut buf).unwrap();
+    let info_koid1 = u64::from_le_bytes(buf[0..8].try_into().unwrap());
+    let info_related1 = u64::from_le_bytes(buf[16..24].try_into().unwrap());
+    assert_eq!(info_koid1, koid1);
+    assert_ne!(info_related1, 0);
+    assert_eq!(info_related1, koid0, "ep1.related_koid should be ep0.koid");
 }
 
 /// C++: TEST(EventPairTest, CheckNoFlagsSupported)
@@ -145,17 +210,23 @@ fn signal_peer_then_close_and_verify_signal_received() {
 
 /// C++: TEST(EventPairTest, SignalingClosedPeerReturnsPeerClosed)
 ///
-/// After peer is closed, signal_peer should return PEER_CLOSED.
+/// After peer is closed, signal_peer should return ZX_ERR_PEER_CLOSED.
 #[test]
 fn signaling_closed_peer_returns_peer_closed() {
-    let _ctx = TestContext::new();
-    let (ep0, ep1) = EventPair::create();
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
 
+    let (ep0, ep1) = EventPair::create();
+    let h0 = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+
+    // Close the peer.
     drop(ep1);
 
-    // Trying to signal the (now-closed) peer should fail.
-    // In zCore's object API, peer() returns Err when peer is closed.
-    assert!(ep0.peer().is_err());
+    // sys_object_signal_peer should return PEER_CLOSED.
+    let result = sc.sys_object_signal_peer(h0, 0, Signal::USER_SIGNAL_0.bits());
+    assert_eq!(result, Err(zircon_object::ZxError::PEER_CLOSED));
 }
 
 /// C++: TEST(EventPairTest, SignalAccessDeniedMissingSignalRight)
@@ -165,8 +236,6 @@ fn signaling_closed_peer_returns_peer_closed() {
 /// by verifying signal_change works with appropriate rights at syscall level.
 #[test]
 fn signal_access_denied_missing_signal_right() {
-    use zircon_object::object::{Handle, Rights};
-
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -185,8 +254,6 @@ fn signal_access_denied_missing_signal_right() {
 /// Duplicate handle without SIGNAL_PEER right, verify signal_peer returns ACCESS_DENIED.
 #[test]
 fn signal_peer_access_denied_missing_signal_peer_right() {
-    use zircon_object::object::{Handle, Rights};
-
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
@@ -206,7 +273,6 @@ fn signal_peer_access_denied_missing_signal_peer_right() {
 #[test]
 fn wait_access_denied_missing_wait_right() {
     use hal_impl::user::UserOutPtr;
-    use zircon_object::object::{Handle, Rights};
 
     let ctx = TestContext::new();
     let sc = ctx.syscall();
@@ -230,32 +296,60 @@ fn wait_access_denied_missing_wait_right() {
 
 /// C++: TEST(EventPairTest, DuplicateHandlesAndPeerClosed)
 ///
-/// Multiple handles to same endpoint: PEER_CLOSED fires only when all are dropped.
+/// Multiple handles to same endpoint via handle table: PEER_CLOSED fires
+/// only when all handles are closed.
 #[test]
 fn duplicate_handles_and_peer_closed() {
-    let _ctx = TestContext::new();
+    use hal_impl::user::UserOutPtr;
+    use zircon_object::object::HandleValue;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
     let (ep0, ep1) = EventPair::create();
+    let ep1_clone = ep1.clone();
 
-    // Create "duplicates" by cloning the Arc.
-    let dup_0a = ep0.clone();
-    let dup_0b = ep0.clone();
+    // Add ep0 and ep1 to handle table.
+    let h0 = ctx
+        .proc
+        .add_handle(Handle::new(ep0, Rights::DEFAULT_EVENTPAIR));
+    let h1 = ctx
+        .proc
+        .add_handle(Handle::new(ep1, Rights::DEFAULT_EVENTPAIR));
 
-    // Drop original — duplicates still alive, no PEER_CLOSED.
-    drop(ep0);
-    assert_eq!(ep1.signal() & Signal::PEER_CLOSED, Signal::empty());
+    // Duplicate h0 twice via sys_handle_duplicate.
+    let mut dup_h0a: HandleValue = 0;
+    let out_a = UserOutPtr::from(&mut dup_h0a as *mut _ as usize);
+    sc.sys_handle_duplicate(h0, Rights::SAME_RIGHTS.bits(), out_a)
+        .unwrap();
+    assert_ne!(dup_h0a, 0);
 
-    // Drop first duplicate — second still alive.
-    drop(dup_0a);
-    assert_eq!(ep1.signal() & Signal::PEER_CLOSED, Signal::empty());
+    let mut dup_h0b: HandleValue = 0;
+    let out_b = UserOutPtr::from(&mut dup_h0b as *mut _ as usize);
+    sc.sys_handle_duplicate(h0, Rights::SAME_RIGHTS.bits(), out_b)
+        .unwrap();
+    assert_ne!(dup_h0b, 0);
+
+    // Close original h0 — duplicates still alive, no PEER_CLOSED.
+    sc.sys_handle_close(h0).unwrap();
+    assert_eq!(ep1_clone.signal() & Signal::PEER_CLOSED, Signal::empty());
+
+    // Close first duplicate — second still alive.
+    sc.sys_handle_close(dup_h0a).unwrap();
+    assert_eq!(ep1_clone.signal() & Signal::PEER_CLOSED, Signal::empty());
 
     // Surviving duplicate can still signal peer.
-    dup_0b.peer().unwrap().signal_set(Signal::USER_SIGNAL_0);
-    assert!(ep1.signal().contains(Signal::USER_SIGNAL_0));
+    sc.sys_object_signal_peer(dup_h0b, 0, Signal::USER_SIGNAL_0.bits())
+        .unwrap();
+    assert!(ep1_clone.signal().contains(Signal::USER_SIGNAL_0));
 
-    // Drop last handle — PEER_CLOSED fires.
-    drop(dup_0b);
-    assert!(ep1.signal().contains(Signal::PEER_CLOSED));
-    assert!(ep1.signal().contains(Signal::USER_SIGNAL_0));
+    // Close last handle — PEER_CLOSED fires.
+    sc.sys_handle_close(dup_h0b).unwrap();
+    assert!(ep1_clone.signal().contains(Signal::PEER_CLOSED));
+    assert!(ep1_clone.signal().contains(Signal::USER_SIGNAL_0));
+
+    // Clean up h1.
+    let _ = ctx.proc.remove_handle(h1);
 }
 
 /// C++: TEST(EventPairTest, SignalSelfAfterPeerClosed)
@@ -282,20 +376,20 @@ fn signal_self_after_peer_closed() {
 ///
 /// PEER_CLOSED cannot be asserted/cleared by userspace.
 /// Non-allowed signal bits return INVALID_ARGS.
+/// SIGNALED is allowed via both signal and signal_peer.
 #[test]
 fn invalid_signal_bits() {
-    use zircon_object::object::{Handle, Rights};
-
     let ctx = TestContext::new();
     let sc = ctx.syscall();
 
     let (ep0, ep1) = EventPair::create();
+    let ep1_clone = ep1.clone();
     let h0 = ctx
         .proc
         .add_handle(Handle::new(ep0.clone(), Rights::DEFAULT_EVENTPAIR));
-    let _h1 = ctx
+    let h1 = ctx
         .proc
-        .add_handle(Handle::new(ep1.clone(), Rights::DEFAULT_EVENTPAIR));
+        .add_handle(Handle::new(ep1, Rights::DEFAULT_EVENTPAIR));
 
     // PEER_CLOSED cannot be asserted by userspace.
     assert_eq!(
@@ -315,7 +409,7 @@ fn invalid_signal_bits() {
         Err(zircon_object::ZxError::INVALID_ARGS)
     );
 
-    // Non-user signal bits return INVALID_ARGS.
+    // Non-user signal bits (bit 4) return INVALID_ARGS for both signal and signal_peer.
     assert_eq!(
         sc.sys_object_signal(h0, 0, 1 << 4),
         Err(zircon_object::ZxError::INVALID_ARGS)
@@ -325,11 +419,34 @@ fn invalid_signal_bits() {
         Err(zircon_object::ZxError::INVALID_ARGS)
     );
 
-    // SIGNALED (bit 3) is allowed on eventpairs.
+    // Non-user signal bit 23 also returns INVALID_ARGS.
+    assert_eq!(
+        sc.sys_object_signal(h0, 0, 1 << 23),
+        Err(zircon_object::ZxError::INVALID_ARGS)
+    );
+    assert_eq!(
+        sc.sys_object_signal_peer(h0, 0, 1 << 23),
+        Err(zircon_object::ZxError::INVALID_ARGS)
+    );
+
+    // SIGNALED (bit 3) is allowed on eventpairs via signal on self.
     assert!(sc.sys_object_signal(h0, 0, Signal::SIGNALED.bits()).is_ok());
     assert_eq!(ep0.signal(), Signal::SIGNALED);
     assert!(sc.sys_object_signal(h0, Signal::SIGNALED.bits(), 0).is_ok());
     assert_eq!(ep0.signal(), Signal::empty());
+
+    // SIGNALED is also allowed via signal_peer (set on ep1 from h0).
+    assert!(sc
+        .sys_object_signal_peer(h0, 0, Signal::SIGNALED.bits())
+        .is_ok());
+    assert!(ep1_clone.signal().contains(Signal::SIGNALED));
+    assert!(sc
+        .sys_object_signal_peer(h0, Signal::SIGNALED.bits(), 0)
+        .is_ok());
+    assert_eq!(ep1_clone.signal(), Signal::empty());
+
+    // Clean up.
+    let _ = ctx.proc.remove_handle(h1);
 }
 
 /// C++: TEST(EventPairTest, InvalidHandleAndWrongType)
@@ -338,7 +455,6 @@ fn invalid_signal_bits() {
 /// signal_peer on non-peered object (event) returns ACCESS_DENIED.
 #[test]
 fn invalid_handle_and_wrong_type() {
-    use zircon_object::object::{Handle, Rights};
     use zircon_object::signal::Event;
 
     let ctx = TestContext::new();

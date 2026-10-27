@@ -64,3 +64,81 @@ fn handle_wait_multiple_threads() {
     keys.sort();
     assert_eq!(keys, alloc::vec![0, 1, 2, 3]);
 }
+
+/// C++: TEST(ObjectWaitManyTest, InvalidHandle)
+#[test]
+#[ignore]
+fn invalid_handle() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ObjectWaitManyTest.InvalidHandle");
+}
+
+/// C++: TEST(ObjectWaitManyTest, TooManyObjects)
+#[test]
+#[ignore]
+fn too_many_objects() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ObjectWaitManyTest.TooManyObjects");
+}
+/// C++: TEST(ObjectWaitManyTest, WaitForEventsSignaled)
+#[test]
+#[ignore]
+fn wait_for_events_signaled() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ObjectWaitManyTest.WaitForEventsSignaled");
+}
+
+/// C++: TEST(ObjectWaitManyTest, WaitForEventsThenSignal)
+#[test]
+#[ignore]
+fn wait_for_events_then_signal() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ObjectWaitManyTest.WaitForEventsThenSignal");
+}
+
+/// C++: TEST(ObjectWaitManyTest, WaitOnZeroThings)
+#[test]
+#[ignore]
+fn wait_on_zero_things() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ObjectWaitManyTest.WaitOnZeroThings");
+}
+
+/// C++: TEST(ObjectWaitOneTest, EmptySignalSet)
+#[test]
+#[ignore]
+fn empty_signal_set() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ObjectWaitOneTest.EmptySignalSet");
+}
+/// C++: TEST(ObjectWaitOneTest, WaitForEventSignaled)
+#[test]
+#[ignore]
+fn wait_for_event_signaled() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ObjectWaitOneTest.WaitForEventSignaled");
+}
+
+/// C++: TEST(ObjectWaitOneTest, WaitForEventThenSignal)
+#[test]
+#[ignore]
+fn wait_for_event_then_signal() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ObjectWaitOneTest.WaitForEventThenSignal");
+}
+
+/// C++: TEST(ObjectWaitOneTest, WaitForEventTimeout)
+#[test]
+#[ignore]
+fn wait_for_event_timeout() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ObjectWaitOneTest.WaitForEventTimeout");
+}
+
+/// C++: TEST(ObjectWaitOneTest, WaitForEventTimeoutPreSignalClear)
+#[test]
+#[ignore]
+fn wait_for_event_timeout_pre_signal_clear() {
+    // TODO: Implement — stub for C++ 1:1 correspondence
+    unimplemented!("ObjectWaitOneTest.WaitForEventTimeoutPreSignalClear");
+}

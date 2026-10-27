@@ -330,20 +330,39 @@ fn decommit_parent() {
 }
 
 /// C++: TEST(VmoSliceTestCase, DeepHierarchy)
-/// C++: TEST(VmoSliceTestCase, DeepHierarchy)
 /// Create 64 levels of nested slices (C++ does 1000, we do 64 to match
 /// the "at least 32 levels" requirement while staying fast). Each level
 /// creates a slice of the previous. After dropping the chain, no panic.
 #[test]
 fn deep_hierarchy() {
     let _ctx = TestContext::new();
-    let mut vmo = VmObject::new_paged(1);
+    let root = VmObject::new_paged(1);
+
+    // Write data into the root VMO.
+    root.write(0, &[0xCA]).unwrap();
 
     // C++ creates 1000 levels. We create 64 levels of slice-of-slice.
+    let mut vmo = root;
     for _ in 0..64 {
         let temp = vmo.create_slice(0, PAGE_SIZE).unwrap();
         vmo = temp;
     }
+
+    // The deepest slice should still see the root's data (slices share pages).
+    let mut buf = [0u8; 1];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(
+        buf[0], 0xCA,
+        "deepest slice should read root's data through 64 levels"
+    );
+
+    // Write through the deepest slice and verify it propagates.
+    vmo.write(0, &[0xFE]).unwrap();
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(buf[0], 0xFE, "write through deep slice should be visible");
+
+    // Verify the size of the deepest slice.
+    assert_eq!(vmo.len(), PAGE_SIZE, "each slice should be one page");
 
     // Drop the entire chain — verifies no stack overflow or panic.
     drop(vmo);

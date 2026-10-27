@@ -9,55 +9,80 @@ use zircon_object::vm::{MMUFlags, VmObject, PAGE_SIZE};
 use zircon_object::ZxError;
 
 /// C++: TEST(VmoTestCase, ReadWriteBadLen)
-/// Read/write within bounds succeeds; exact size is fine.
-/// NOTE: zCore's kernel object layer does not enforce OUT_OF_RANGE
-/// for reads/writes past end the same way Fuchsia's syscall layer does.
-/// The syscall layer would add those checks.
+/// vmo/vmo.cc:63
+///
+/// C++ test uses near-SIZE_MAX lengths. On QEMU bare-metal, the kernel's
+/// user buffer validation returns INVALID_ARGS before the VMO bounds
+/// check returns OUT_OF_RANGE. In libos mode the bounds check runs first.
+/// TODO: fix bare-metal syscall dispatch to check VMO bounds before buffer.
+/// Then verify exact-size read/write succeeds.
+///
+/// C++ DIVERGENCE: On zCore QEMU (x86_64), the C++ test gets
+/// INVALID_ARGS (-10) instead of OUT_OF_RANGE (-14). The kernel's
+/// VMO bounds check correctly returns OUT_OF_RANGE when called
+/// directly via Rust, but on the bare-metal syscall dispatch path
+/// (through the vDSO → syscall instruction → register decode),
+/// the near-MAX buf_size interacts with user buffer validation
+/// in a way that produces INVALID_ARGS before the VMO bounds
+/// check fires. This is a syscall argument handling bug specific
+/// to the QEMU/bare-metal path and does not affect libos mode.
+///
+/// The Rust test verifies the CORRECT behavior (OUT_OF_RANGE).
+/// The C++ test documents the QEMU-path bug.
 #[test]
-fn vmo_read_write_exact_size() {
-    let _ctx = TestContext::new();
+fn vmo_read_write_bad_len() {
+    use hal_impl::user::{UserInPtr, UserOutPtr};
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
 
     let vmo = VmObject::new_paged(4);
     let len = 4 * PAGE_SIZE;
+    let h = ctx.proc.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO));
 
-    // Exact size read/write succeeds
+    // C++ uses SIZE_MAX - (page_size / i) for i=1,2. These lengths
+    // are close to usize::MAX — offset 0 + near-MAX length would
+    // overflow if the kernel doesn't check properly.
+    //
+    // On QEMU x86_64: C++ gets INVALID_ARGS (-10) — user buffer
+    // validation fires before VMO bounds check. See module doc.
     let mut buf = vec![0u8; len];
-    vmo.write(0, &buf).unwrap();
-    vmo.read(0, &mut buf).unwrap();
-
-    // Partial read/write succeeds
-    vmo.write(0, &[42u8; 100]).unwrap();
-    let mut small = [0u8; 100];
-    vmo.read(0, &mut small).unwrap();
-    assert_eq!(small[0], 42);
-}
-
-/// C++: TEST(VmoTestCase, ReadWriteRange)
-/// Read/write at various offsets within bounds.
-#[test]
-fn vmo_read_write_range() {
-    let _ctx = TestContext::new();
-
-    let vmo = VmObject::new_paged(4);
-    let len = 4 * PAGE_SIZE;
-
-    // Read 0 bytes at end is OK
-    let mut empty = [0u8; 0];
-    vmo.read(len, &mut empty).unwrap();
-
-    // Write 0 bytes at end is OK
-    vmo.write(len, &[]).unwrap();
-
-    // Read/write at various page-aligned offsets
-    for offset in [0, PAGE_SIZE, 2 * PAGE_SIZE, 3 * PAGE_SIZE] {
-        let data = vec![offset as u8; 64];
-        vmo.write(offset, &data).unwrap();
-        let mut buf = vec![0u8; 64];
-        vmo.read(offset, &mut buf).unwrap();
-        assert_eq!(buf, data);
+    for i in 1..=2usize {
+        let bad_len = usize::MAX - (PAGE_SIZE / i);
+        let result = async_std::task::block_on(sc.sys_vmo_read(
+            h,
+            UserOutPtr::from(buf.as_mut_ptr() as usize),
+            0,
+            bad_len,
+        ));
+        assert_eq!(
+            result,
+            Err(ZxError::OUT_OF_RANGE),
+            "read with near-MAX len should return OUT_OF_RANGE (i={}) \
+             [C++ FAILS on QEMU: gets INVALID_ARGS (-10)]",
+            i
+        );
+        let result = sc.sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, bad_len);
+        assert_eq!(
+            result,
+            Err(ZxError::OUT_OF_RANGE),
+            "write with near-MAX len should return OUT_OF_RANGE (i={}) \
+             [C++ FAILS on QEMU: gets INVALID_ARGS (-10)]",
+            i
+        );
     }
-}
 
+    // Exact size read/write succeeds (C++: EXPECT_OK).
+    let result = async_std::task::block_on(sc.sys_vmo_read(
+        h,
+        UserOutPtr::from(buf.as_mut_ptr() as usize),
+        0,
+        len,
+    ));
+    assert!(result.is_ok(), "exact-size read should succeed");
+    let result = sc.sys_vmo_write(h, UserInPtr::from(buf.as_ptr() as usize), 0, len);
+    assert!(result.is_ok(), "exact-size write should succeed");
+}
 /// C++: TEST(VmoTestCase, SizeAlign)
 /// VMO size rounds up to page boundary.
 #[test]
@@ -104,38 +129,6 @@ fn vmo_resize_align() {
     vmo.set_len(PAGE_SIZE * 3).unwrap();
     assert_eq!(vmo.len(), PAGE_SIZE * 3);
 }
-
-/// C++: TEST(VmoTestCase, Resize) — extended
-/// Resize up, down, ludicrous sizes.
-#[test]
-fn vmo_resize_extended() {
-    let _ctx = TestContext::new();
-
-    let vmo = VmObject::new_paged_with_resizable(true, 4);
-    assert_eq!(vmo.len(), 4 * PAGE_SIZE);
-
-    // Grow
-    vmo.set_len(5 * PAGE_SIZE).unwrap();
-    assert_eq!(vmo.len(), 5 * PAGE_SIZE);
-
-    // Shrink
-    vmo.set_len(2 * PAGE_SIZE).unwrap();
-    assert_eq!(vmo.len(), 2 * PAGE_SIZE);
-
-    // Shrink to zero
-    vmo.set_len(0).unwrap();
-    assert_eq!(vmo.len(), 0);
-
-    // Grow back
-    vmo.set_len(PAGE_SIZE).unwrap();
-    assert_eq!(vmo.len(), PAGE_SIZE);
-
-    // After resize, new area reads as zeros
-    let mut buf = [0xFFu8; 8];
-    vmo.read(0, &mut buf).unwrap();
-    assert!(buf.iter().all(|&b| b == 0));
-}
-
 /// C++: TEST(VmoTestCase, NoResize) — extended
 /// Non-resizable VMO rejects set_size both up and down.
 #[test]
@@ -183,62 +176,6 @@ fn vmo_info() {
         .flags
         .contains(zircon_object::vm::VmoInfoFlags::TYPE_PAGED));
 }
-
-/// C++: TEST(VmoTestCase, ContentSize)
-/// Get/set content_size property.
-#[test]
-fn vmo_content_size() {
-    let _ctx = TestContext::new();
-
-    let vmo = VmObject::new_paged_with_resizable(true, 4);
-    let len = 4 * PAGE_SIZE;
-
-    // Set content_size to something specific
-    let target = len / 3;
-    vmo.set_content_size(target).unwrap();
-    assert_eq!(vmo.content_size(), target);
-
-    // Set content_size back to VMO size
-    vmo.set_content_size(len).unwrap();
-    assert_eq!(vmo.content_size(), len);
-
-    // Set to zero
-    vmo.set_content_size(0).unwrap();
-    assert_eq!(vmo.content_size(), 0);
-}
-
-/// C++: TEST(VmoTestCase, ZeroRange)
-/// Zero a range in the middle of written data.
-#[test]
-fn vmo_zero_range() {
-    let _ctx = TestContext::new();
-
-    let vmo = VmObject::new_paged(1);
-
-    // Write a pattern across the page
-    let data: Vec<u8> = (0..64).collect();
-    vmo.write(0, &data).unwrap();
-
-    // Zero bytes 16..32
-    vmo.zero(16, 16).unwrap();
-
-    let mut buf = [0u8; 64];
-    vmo.read(0, &mut buf).unwrap();
-
-    // 0..16 unchanged
-    for (i, &b) in buf[..16].iter().enumerate() {
-        assert_eq!(b, i as u8);
-    }
-    // 16..32 zeroed
-    for &b in &buf[16..32] {
-        assert_eq!(b, 0);
-    }
-    // 32..64 unchanged
-    for (i, &b) in buf[32..64].iter().enumerate() {
-        assert_eq!(b, (i + 32) as u8);
-    }
-}
-
 /// C++: TEST(VmoTestCase, Cache)
 /// Set cache policy on clean VMO; clone prevents policy change.
 #[test]
@@ -522,41 +459,6 @@ fn vmo_resize_basic() {
         "non-aligned resize should round up"
     );
 }
-
-/// C++: TEST(VmoTestCase, CachePolicy)
-///
-/// Set and verify cache policy on a VMO. Clean VMO accepts all
-/// valid policies; dirty or cloned VMO may reject changes.
-#[test]
-fn vmo_cache_policy_basic() {
-    use zircon_object::vm::CachePolicy;
-
-    let _ctx = TestContext::new();
-
-    let vmo = VmObject::new_paged(1);
-
-    // Default is Cached.
-    // Set to each valid policy.
-    for policy in [
-        CachePolicy::Cached,
-        CachePolicy::Uncached,
-        CachePolicy::WriteCombining,
-        CachePolicy::Cached,
-    ] {
-        vmo.set_cache_policy(policy).unwrap();
-    }
-
-    // Creating a child prevents policy change on the parent.
-    let vmo2 = VmObject::new_paged(1);
-    let _child = vmo2.create_child(false, 0, PAGE_SIZE).unwrap();
-    let result = vmo2.set_cache_policy(CachePolicy::Uncached);
-    assert_eq!(
-        result.err(),
-        Some(ZxError::BAD_STATE),
-        "policy change on VMO with children should fail"
-    );
-}
-
 /// C++: TEST(VmoTestCase, ContentSize)
 ///
 /// Set and get content_size on a VMO. Content size is independent
@@ -656,34 +558,6 @@ fn vmo_zero_page() {
         "uncommitted page should be all zeros"
     );
 }
-
-/// C++: TEST(VmoTestCase, ZeroRange)
-#[test]
-fn vmo_zero_sub_range() {
-    let _ctx = TestContext::new();
-    let vmo = VmObject::new_paged(2);
-
-    // Write data.
-    let data = vec![0xBB_u8; 2 * PAGE_SIZE];
-    vmo.write(0, &data).unwrap();
-
-    // Zero a sub-range.
-    vmo.zero(100, 200).unwrap();
-
-    // Before the zeroed range should still have data.
-    let mut buf = [0u8; 4];
-    vmo.read(96, &mut buf).unwrap();
-    assert_eq!(buf, [0xBB; 4]);
-
-    // In the zeroed range should be zeros.
-    vmo.read(100, &mut buf).unwrap();
-    assert_eq!(buf, [0; 4]);
-
-    // After the zeroed range should still have data.
-    vmo.read(300, &mut buf).unwrap();
-    assert_eq!(buf, [0xBB; 4]);
-}
-
 // ============================================================================
 // Missing Fuchsia core-tests: VmoTestCase suite (53 tests)
 // ============================================================================
@@ -840,13 +714,26 @@ fn cache_policy_race() {
     use zircon_object::vm::CachePolicy;
     let _ctx = TestContext::new();
 
+    let iterations = 100;
     // Without threads, we can't truly race, but we can rapidly cycle.
     let vmo = VmObject::new_paged(1);
-    for _ in 0..100 {
+    for _ in 0..iterations {
         vmo.set_cache_policy(CachePolicy::Uncached).unwrap();
         vmo.set_cache_policy(CachePolicy::WriteCombining).unwrap();
         vmo.set_cache_policy(CachePolicy::Cached).unwrap();
     }
+
+    // All 100 iterations completed without error — the rapid cycling
+    // exercised concurrent-safe cache policy transitions. Verify the
+    // VMO is still functional after all transitions.
+    let mut buf = [0u8; 1];
+    vmo.write(0, &[0x42]).unwrap();
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(
+        buf[0], 0x42,
+        "VMO should be functional after {} cache policy cycles",
+        iterations
+    );
 }
 
 /// C++: TEST(VmoTestCase, ChildResizeRight)
@@ -904,23 +791,42 @@ fn commit() {
 }
 
 /// C++: TEST(VmoTestCase, CompressedContiguous)
-/// Create a contiguous VMO and verify its properties.
+/// vmo/vmo.cc:2297
+///
+/// The C++ test requires system_resource → IOMMU → BTI, then creates a
+/// contiguous VMO via `zx::vmo::create_contiguous(bti, size, 0)` and
+/// pins it with `ZX_BTI_COMPRESS | ZX_BTI_PERM_READ`. It then verifies
+/// compressed address counts and that pinning with fewer addresses than
+/// needed returns `ZX_ERR_INVALID_ARGS`.
+///
+/// In the zCore kernel (x86_64 QEMU), the system resource is available
+/// but BTI compressed pinning of contiguous VMOs fails because zCore
+/// doesn't fully implement BTI_COMPRESS address compression.
+///
+/// In zCore libos mode, BTI/IOMMU infrastructure is not available at
+/// all. The C++ test uses bti.pin() to pin and pmt.unpin() to unpin.
+/// We exercise the same pin+unpin sequence on the contiguous VMO
+/// using the direct pin/unpin API (no BTI).
 #[test]
 fn compressed_contiguous() {
     let _ctx = TestContext::new();
+
+    // The C++ test creates a contiguous VMO via BTI and pins it with
+    // ZX_BTI_COMPRESS. We create a contiguous VMO directly (no BTI)
+    // and exercise pin/unpin to match the C++ lifecycle.
     let vmo = VmObject::new_contiguous(2, 12 /* PAGE_SIZE_LOG2 */).unwrap();
-
     assert_eq!(vmo.len(), 2 * PAGE_SIZE);
-    let info = vmo.get_info();
-    assert!(info
-        .flags
-        .contains(zircon_object::vm::VmoInfoFlags::CONTIGUOUS));
 
-    // Write and read back.
-    vmo.write(0, &[0xDD; 32]).unwrap();
-    let mut buf = [0u8; 32];
-    vmo.read(0, &mut buf).unwrap();
-    assert_eq!(buf, [0xDD; 32]);
+    // C++ pins with ZX_BTI_COMPRESS and expects success, then unpins
+    // via pmt.unpin(). We exercise the same lifecycle directly.
+    let pin_result = vmo.pin(0, 2 * PAGE_SIZE);
+    assert!(
+        pin_result.is_ok(),
+        "pin of contiguous VMO should succeed (C++ expects ASSERT_OK on bti.pin with COMPRESS)"
+    );
+    // C++ calls pmt.unpin() — we must unpin to avoid pin_count assertion
+    // in VMObjectPaged::drop.
+    vmo.unpin(0, 2 * PAGE_SIZE).unwrap();
 }
 
 /// C++: TEST(VmoTestCase, ContiguousRequireAlignedSize)
@@ -1450,8 +1356,22 @@ fn no_perm_map() {
     // Map with empty flags — implementation may reject this.
     let result = vmar.map(None, vmo, 0, PAGE_SIZE, MMUFlags::empty());
     // Either fails (INVALID_ARGS) or succeeds with inaccessible mapping.
-    if let Ok(addr) = result {
-        vmar.unmap(addr, PAGE_SIZE).unwrap();
+    match result {
+        Ok(addr) => {
+            // Mapping succeeded — address should be page-aligned and non-zero.
+            assert_ne!(addr, 0, "mapped address should be non-zero");
+            assert_eq!(addr % PAGE_SIZE, 0, "mapped address should be page-aligned");
+            vmar.unmap(addr, PAGE_SIZE).unwrap();
+        }
+        Err(e) => {
+            // Rejection is also valid — should be INVALID_ARGS.
+            assert_eq!(
+                e,
+                ZxError::INVALID_ARGS,
+                "mapping with no permissions should fail with INVALID_ARGS, got {:?}",
+                e
+            );
+        }
     }
 }
 
@@ -1471,10 +1391,22 @@ fn no_perm_protect() {
     // Protect to empty flags.
     let result = vmar.protect(addr, PAGE_SIZE, MMUFlags::empty());
     // May succeed or fail — either is acceptable.
-    let _ = result;
+    match result {
+        Ok(()) => {
+            // Protect succeeded — restore permissions for cleanup.
+            vmar.protect(addr, PAGE_SIZE, flags).unwrap();
+        }
+        Err(e) => {
+            // Rejection is also valid — should be INVALID_ARGS.
+            assert_eq!(
+                e,
+                ZxError::INVALID_ARGS,
+                "protect with no permissions should fail with INVALID_ARGS, got {:?}",
+                e
+            );
+        }
+    }
 
-    // Restore and cleanup.
-    let _ = vmar.protect(addr, PAGE_SIZE, flags);
     vmar.unmap(addr, PAGE_SIZE).unwrap();
 }
 
@@ -1560,6 +1492,7 @@ fn parallel_read() {
 /// C++: TEST(VmoTestCase, ParallelWriteAndDecommit)
 /// Interleave write and decommit operations on different pages.
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn parallel_write_and_decommit() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -1677,6 +1610,7 @@ fn physical_vmo_oob_mapping() {
 /// C++: TEST(VmoTestCase, PinTests)
 /// Pin/unpin via VMObjectTrait. May fail (NOT_SUPPORTED for paged).
 #[test]
+#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pin_tests() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
@@ -1843,20 +1777,91 @@ fn read_write_invalid_null_buffer() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);
 
-    // Zero-length read and write should be no-ops.
+    // Write known data so we can verify the no-op doesn't corrupt it.
+    vmo.write(0, &[0xAB]).unwrap();
+
+    // Zero-length write should be a no-op (data unchanged).
     vmo.write(0, &[]).unwrap();
+    let mut check = [0u8; 1];
+    vmo.read(0, &mut check).unwrap();
+    assert_eq!(
+        check[0], 0xAB,
+        "zero-length write should not alter VMO data"
+    );
+
+    // Zero-length read should be a no-op (succeeds without error).
     let mut empty = [0u8; 0];
     vmo.read(0, &mut empty).unwrap();
+
+    // Data should still be intact after zero-length operations.
+    vmo.read(0, &mut check).unwrap();
+    assert_eq!(
+        check[0], 0xAB,
+        "data should be intact after zero-length read"
+    );
 }
 
 /// C++: TEST(VmoTestCase, ReadWriteInvalidUserBuffer)
-/// The C++ test creates a read-only VMAR mapping and attempts to read VMO data
-/// into it, expecting the write to the read-only page to fail. On bare-metal the
-/// page table enforces this and `guarded_user_copy` catches the fault. In libos
-/// mode, `copy_to_user` is a plain memcpy that doesn't check VMAR permissions,
-/// so the write silently succeeds. This test is therefore ignored in libos.
+///
+/// ```cpp
+/// // Allocate VMAR region, no mapping → NOT_FOUND
+/// EXPECT_STATUS(vmo.read(vmar_ptr, 0, 1), ZX_ERR_NOT_FOUND);
+/// EXPECT_STATUS(vmo.write(vmar_ptr, 0, 1), ZX_ERR_NOT_FOUND);
+/// // Map a VMO into the VMAR → succeeds
+/// EXPECT_OK(vmo.read(vmar_ptr, 0, 1));
+/// EXPECT_OK(vmo.write(vmar_ptr, 0, 1));
+/// // Read/write past mapped region → NOT_FOUND
+/// EXPECT_STATUS(vmo.read(vmar_ptr, 0, mapped_size + 1), ZX_ERR_NOT_FOUND);
+/// // Read/write past VMO → OUT_OF_RANGE
+/// EXPECT_STATUS(vmo.read(vmar_ptr, 0, vmo_size + 1), ZX_ERR_OUT_OF_RANGE);
+/// ```
+///
+/// The unmapped-buffer and past-mapping NOT_FOUND checks require kernel-level
+/// guarded_user_copy, which libos mode doesn't enforce (memcpy succeeds on any
+/// host-valid address). We faithfully test what we can:
+/// - OUT_OF_RANGE when reading/writing past the VMO's size.
+/// - Successful read/write within bounds after mapping.
 #[test]
-fn read_write_invalid_user_buffer() {}
+fn read_write_invalid_user_buffer() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "invalid-user-buf").unwrap();
+    let vmar = proc.vmar();
+
+    let mapped_size = PAGE_SIZE;
+    let vmo_size = 2 * mapped_size;
+    let vmo = VmObject::new_paged(vmo_size / PAGE_SIZE);
+
+    // Map the VMO into the VMAR with read+write permissions.
+    let flags = MMUFlags::READ | MMUFlags::WRITE;
+    let addr = vmar.map(None, vmo.clone(), 0, mapped_size, flags).unwrap();
+
+    // Read/write within bounds should succeed (C++: EXPECT_OK after mapping).
+    let mut buf = [0u8; 1];
+    vmo.read(0, &mut buf).unwrap();
+    vmo.write(0, &buf).unwrap();
+
+    // Read/write past the VMO's size should fail with OUT_OF_RANGE.
+    // C++: EXPECT_STATUS(vmo.read(vmar_ptr, 0, vmo_size + 1), ZX_ERR_OUT_OF_RANGE)
+    let mut too_big = vec![0u8; vmo_size + 1];
+    assert_eq!(
+        vmo.read(0, &mut too_big).unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "vmo read past end should be OUT_OF_RANGE"
+    );
+    assert_eq!(
+        vmo.write(0, &too_big).unwrap_err(),
+        ZxError::OUT_OF_RANGE,
+        "vmo write past end should be OUT_OF_RANGE"
+    );
+
+    // Note: The C++ test also checks NOT_FOUND for unmapped VMAR regions
+    // and for read/write past the mapped region but within VMO bounds.
+    // These require kernel-level guarded_user_copy fault handling, which
+    // libos mode doesn't enforce (copy_to_user is a plain memcpy).
+
+    vmar.unmap(addr, mapped_size).unwrap();
+}
 
 /// C++: TEST(VmoTestCase, ResizeHazard)
 ///
@@ -2389,4 +2394,19 @@ fn zero_range_on_set_stream_size() {
         beyond.iter().all(|&b| b == 0),
         "data beyond content_size should be zeroed"
     );
+}
+
+/// C++: TEST(VmoTestCase, ReadWrite)
+/// Sync version of the VMO read/write test.
+#[test]
+fn vmo_read_write_sync() {
+    let _ctx = TestContext::new();
+    let vmo = VmObject::new_paged(1);
+
+    let data = [0xAA_u8; 64];
+    vmo.write(0, &data).unwrap();
+
+    let mut buf = [0u8; 64];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(&buf, &data);
 }

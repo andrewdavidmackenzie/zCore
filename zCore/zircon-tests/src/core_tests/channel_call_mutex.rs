@@ -4,42 +4,7 @@
 //! mutexes held across channel_call work correctly.
 
 use crate::helpers::TestContext;
-use zircon_object::ipc::{Channel, MessagePacket};
-
-/// Simplified channel call chain: write/read round-trip without
-/// actual blocking channel_call or mutex contention.
-#[test]
-fn channel_call_chain_sequential() {
-    let _ctx = TestContext::new();
-    let (local, remote) = Channel::create();
-
-    // Simulate a "call" by writing a request and reading a response.
-    local
-        .write(MessagePacket {
-            data: vec![1, 2, 3],
-            handles: vec![],
-            ..Default::default()
-        })
-        .unwrap();
-
-    // Remote side reads the request.
-    let request = remote.read().unwrap();
-    assert_eq!(request.data, vec![1, 2, 3]);
-
-    // Remote side writes a response.
-    remote
-        .write(MessagePacket {
-            data: vec![4, 5, 6],
-            handles: vec![],
-            ..Default::default()
-        })
-        .unwrap();
-
-    // Local side reads the response.
-    let response = local.read().unwrap();
-    assert_eq!(response.data, vec![4, 5, 6]);
-}
-
+use zircon_object::ipc::MessagePacket;
 /// C++: TEST(ChannelCallMutexTest, MutexHeldAcrossCallChain)
 ///
 /// The real C++ test uses std::thread to hold a mutex across a
