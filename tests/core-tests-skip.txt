@@ -54,10 +54,7 @@ PortStressTest.WaitSignalCancel
 Threads.BadSyscallCaller
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.DebugRegistersDr6ResetOnDebugException
-Threads.DebugRegistersValidation
 Threads.DebugRegistersWatchpointSyscallPanicRepro
-Threads.WatchpointSyscallPanic
-Threads.WriteReadDebugRegisterState
 Threads.SyscallDebuggerModifyResult
 Threads.ExitViaException
 Threads.ReadingGeneralRegisterState

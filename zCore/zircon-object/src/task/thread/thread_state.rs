@@ -216,10 +216,29 @@ impl ContextAccessState for UserContext {
                 }
                 let dr = &mut self.debug_regs;
                 for i in 0..4 {
-                    dr.dr[i] = u64::from_ne_bytes(buf[i * 8..(i + 1) * 8].try_into().unwrap());
+                    let addr = u64::from_ne_bytes(buf[i * 8..(i + 1) * 8].try_into().unwrap());
+                    // DR0-DR3 must be user-space addresses (or zero).
+                    // Kernel-space and non-canonical addresses are rejected.
+                    if addr != 0 {
+                        let canonical = ((addr as i64) << 16 >> 16) as u64;
+                        if addr != canonical || addr >= 0x0000_8000_0000_0000 {
+                            return Err(ZxError::INVALID_ARGS);
+                        }
+                    }
+                    dr.dr[i] = addr;
                 }
-                dr.dr6 = u64::from_ne_bytes(buf[32..40].try_into().unwrap());
-                dr.dr7 = u64::from_ne_bytes(buf[40..48].try_into().unwrap());
+                // DR6: bits 4-11 are reserved (always 1), bit 12 is reserved
+                // (always 0). All other bits are user-writable.
+                // Fuchsia masks: OR 0xFFFF0FF0 (set reserved 1-bits),
+                // AND ~0x1000 (clear reserved 0-bit 12).
+                let user_dr6 = u64::from_ne_bytes(buf[32..40].try_into().unwrap());
+                // DR6 is a 32-bit register — mask to 32 bits, then apply
+                // reserved bit rules: bits 4-11 always 1, bit 12 always 0.
+                dr.dr6 = ((user_dr6 as u32 | 0xFFFF_0FF0) & !0x1000) as u64;
+                // DR7: Fuchsia sets LE and GE bits (8-10) and clears
+                // reserved bits 11-12. DR7 is a 32-bit register.
+                let user_dr7 = u64::from_ne_bytes(buf[40..48].try_into().unwrap());
+                dr.dr7 = ((user_dr7 as u32 | (0x7 << 8)) & !0xF800) as u64; // set 8-10, clear 11-15
             }
             #[allow(unreachable_patterns)]
             _ => return Err(ZxError::NOT_SUPPORTED),

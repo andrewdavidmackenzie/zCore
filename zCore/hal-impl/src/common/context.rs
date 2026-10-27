@@ -50,12 +50,26 @@ cfg_if! {
 /// x86_64 debug registers (DR0-DR3, DR6, DR7).
 /// Matches `zx_x86_64_thread_state_debug_regs_t`.
 #[cfg(target_arch = "x86_64")]
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct DebugRegs {
     pub dr: [u64; 4],
     pub dr6: u64,
     pub dr7: u64,
+}
+
+#[cfg(target_arch = "x86_64")]
+impl Default for DebugRegs {
+    fn default() -> Self {
+        Self {
+            dr: [0; 4],
+            // DR6 default: "no breakpoint event detected" — bits 0-3 clear,
+            // bits 4-11 reserved (set to 1), bits 12-15 clear (no events).
+            // Matches hardware reset value and Fuchsia's expected default.
+            dr6: 0xFFFF_0FF0,
+            dr7: 0,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
