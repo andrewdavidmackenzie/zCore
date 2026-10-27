@@ -382,11 +382,17 @@ fn thread_read_state_invalid_kind() {
     thread.suspend();
 
     let mut buf = vec![0u8; 512];
-    // FloatPoint is valid enum but not implemented — should return NOT_SUPPORTED.
+    // FloatPoint: implemented on x86_64, NOT_SUPPORTED on other arches.
     let result = thread.read_state(ThreadStateKind::FloatPoint, &mut buf);
+    #[cfg(target_arch = "x86_64")]
+    assert!(
+        result.is_ok(),
+        "read_state with FloatPoint should succeed on x86_64"
+    );
+    #[cfg(not(target_arch = "x86_64"))]
     assert!(
         result.is_err(),
-        "read_state with FloatPoint kind should fail"
+        "read_state with FloatPoint kind should fail on non-x86_64"
     );
 }
 
@@ -402,11 +408,18 @@ fn thread_write_state_invalid_kind() {
     // Suspend the thread so write_state doesn't fail with BAD_STATE.
     thread.suspend();
 
+    // FloatPoint write requires 160 bytes on x86_64.
     let buf = vec![0u8; 512];
     let result = thread.write_state(ThreadStateKind::FloatPoint, &buf);
+    #[cfg(target_arch = "x86_64")]
+    assert!(
+        result.is_ok(),
+        "write_state with FloatPoint should succeed on x86_64"
+    );
+    #[cfg(not(target_arch = "x86_64"))]
     assert!(
         result.is_err(),
-        "write_state with FloatPoint kind should fail"
+        "write_state with FloatPoint kind should fail on non-x86_64"
     );
 }
 
@@ -1491,8 +1504,12 @@ async fn thread_read_state_float_point() {
 
     let mut buf = vec![0u8; 1024];
     let result = thread.read_state(ThreadStateKind::FloatPoint, &mut buf);
-    // Should fail with NOT_SUPPORTED (FP state not implemented)
-    assert!(result.is_err(), "FloatPoint read should fail");
+    // On x86_64: FloatPoint is now implemented — should succeed.
+    // On aarch64: NOT_SUPPORTED (FP uses vector regs on ARM).
+    #[cfg(target_arch = "x86_64")]
+    assert!(result.is_ok(), "FloatPoint read should succeed on x86_64");
+    #[cfg(not(target_arch = "x86_64"))]
+    assert!(result.is_err(), "FloatPoint read should fail on non-x86_64");
 
     thread.resume();
     thread.kill();
