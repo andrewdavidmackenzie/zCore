@@ -530,6 +530,10 @@ impl Thread {
             inner.change_state(ThreadState::Running, &self.base);
             inner.priority
         };
+        // Mark the owning process as Running if it's still in Init.
+        // In Fuchsia, starting any thread transitions the process to Running,
+        // which prevents subsequent zx_process_start calls (BAD_STATE).
+        self.proc().ensure_running();
         let current = CurrentThread(self.clone());
         let future = thread_fn(current);
 
