@@ -222,11 +222,12 @@ impl Syscall<'_> {
             "thread.start: handle={:#x?}, entry={:#x}, stack={:#x}, arg1={:#x} arg2={:#x}",
             handle_value, entry, stack, arg1, arg2
         );
+        // Reject kernel-space and non-canonical entry/stack addresses.
+        if !is_user_address(entry) || !is_user_address(stack) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         let thread = proc.get_object_with_rights::<Thread>(handle_value, Rights::MANAGE_THREAD)?;
-        if thread.proc().status() != Status::Running {
-            return Err(ZxError::BAD_STATE);
-        }
         thread.start_with_entry(entry, stack, arg1, arg2, self.thread_fn)?;
         Ok(())
     }
@@ -252,11 +253,12 @@ impl Syscall<'_> {
             "thread.start_regs: handle={:#x?}, entry={:#x}, stack={:#x}, arg1={:#x}, arg2={:#x}, tp={:#x}",
             handle_value, entry, stack, arg1, arg2, tp
         );
+        // Reject kernel-space and non-canonical entry/stack addresses.
+        if !is_user_address(entry) || !is_user_address(stack) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         let thread = proc.get_object_with_rights::<Thread>(handle_value, Rights::MANAGE_THREAD)?;
-        if thread.proc().status() != Status::Running {
-            return Err(ZxError::BAD_STATE);
-        }
         // Validate thread pointer (tp) — reject non-canonical addresses on x86_64.
         #[cfg(target_arch = "x86_64")]
         {
