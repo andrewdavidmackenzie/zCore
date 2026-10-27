@@ -1492,7 +1492,6 @@ fn parallel_read() {
 /// C++: TEST(VmoTestCase, ParallelWriteAndDecommit)
 /// Interleave write and decommit operations on different pages.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn parallel_write_and_decommit() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(4);
@@ -1610,7 +1609,6 @@ fn physical_vmo_oob_mapping() {
 /// C++: TEST(VmoTestCase, PinTests)
 /// Pin/unpin via VMObjectTrait. May fail (NOT_SUPPORTED for paged).
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pin_tests() {
     let _ctx = TestContext::new();
     let vmo = VmObject::new_paged(1);

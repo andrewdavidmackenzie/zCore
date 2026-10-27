@@ -9,6 +9,8 @@ pub enum UserContextField {
     StackPointer,
     ThreadPointer,
     ReturnValue,
+    /// ABI-specific register: r15 on x86_64, x18 on aarch64 (shadow call stack).
+    AbiReg,
 }
 
 /// Reason of a trap from user space.

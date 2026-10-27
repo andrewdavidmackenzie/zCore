@@ -336,7 +336,6 @@ fn snapshot_child_dst() {
 /// create a snapshot child, drop the parent, then transfer from child.
 /// The child must survive parent deletion and produce correct data.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn racy_drop_parent() {
     let _ctx = TestContext::new();
 

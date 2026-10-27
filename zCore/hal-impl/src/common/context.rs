@@ -91,9 +91,9 @@ impl UserContext {
                 self.inner.general.rdi = args[0];
                 self.inner.general.rsi = args[1];
                 self.inner.general.rdx = args[2];
-                // IOPL = 3, IF = 1
-                // FIXME: set IOPL = 0 when IO port bitmap is supporte
-                self.inner.general.rflags = 0x3000 | 0x200 | 0x2;
+                // IOPL = 0, IF = 1, reserved bit 1 = 1.
+                // Matches Fuchsia: user threads run at IOPL 0.
+                self.inner.general.rflags = 0x200 | 0x2;
             } else if #[cfg(target_arch = "aarch64")] {
                 self.inner.elr = pc;
                 self.inner.sp = sp;
@@ -253,6 +253,7 @@ impl UserContext {
                     UserContextField::StackPointer => &mut self.inner.general.rsp,
                     UserContextField::ThreadPointer => &mut self.inner.general.fsbase,
                     UserContextField::ReturnValue => &mut self.inner.general.rax,
+                    UserContextField::AbiReg => &mut self.inner.general.r15,
                 }
             } else if #[cfg(target_arch = "aarch64")] {
                 match which {
@@ -260,6 +261,7 @@ impl UserContext {
                     UserContextField::StackPointer => &mut self.inner.sp,
                     UserContextField::ThreadPointer => &mut self.inner.tpidr,
                     UserContextField::ReturnValue => &mut self.inner.general.x0,
+                    UserContextField::AbiReg => &mut self.inner.general.x18,
                 }
             } else if #[cfg(target_arch = "riscv64")] {
                 match which {
@@ -267,6 +269,8 @@ impl UserContext {
                     UserContextField::StackPointer => &mut self.inner.general.sp,
                     UserContextField::ThreadPointer => &mut self.inner.general.tp,
                     UserContextField::ReturnValue => &mut self.inner.general.a0,
+                    // riscv64 doesn't have an abi_reg equivalent; use s0 as placeholder
+                    UserContextField::AbiReg => &mut self.inner.general.s0,
                 }
             } else {
                 unimplemented!()

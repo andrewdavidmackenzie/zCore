@@ -530,6 +530,7 @@ impl Thread {
             inner.change_state(ThreadState::Running, &self.base);
             inner.priority
         };
+
         let current = CurrentThread(self.clone());
         let future = thread_fn(current);
 
@@ -1360,6 +1361,25 @@ pub enum ThreadState {
     BlockedInterrupt = 0x803,
     /// Pager.
     BlockedPager = 0x903,
+}
+
+impl ThreadState {
+    /// Returns true if the thread is in any blocked syscall state.
+    pub fn is_blocked(self) -> bool {
+        matches!(
+            self,
+            ThreadState::Blocked
+                | ThreadState::BlockedException
+                | ThreadState::BlockedSleeping
+                | ThreadState::BlockedFutex
+                | ThreadState::BlockedPort
+                | ThreadState::BlockedChannel
+                | ThreadState::BlockedWaitOne
+                | ThreadState::BlockedWaitMany
+                | ThreadState::BlockedInterrupt
+                | ThreadState::BlockedPager
+        )
+    }
 }
 
 /// The thread information.

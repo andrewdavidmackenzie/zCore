@@ -498,6 +498,18 @@ impl Process {
         self.inner.lock().status = Status::Running;
     }
 
+    /// Transition from Init to Running if the process hasn't been started yet.
+    /// Called by Thread::start to ensure the process is marked as Running
+    /// when any thread begins execution (matching Fuchsia semantics where
+    /// zx_process_start fails with BAD_STATE after any thread has started).
+    pub fn ensure_running(&self) {
+        let mut inner = self.inner.lock();
+        if inner.status == Status::Init {
+            inner.status = Status::Running;
+            inner.start_time = hal_impl::timer::timer_now().as_nanos() as i64;
+        }
+    }
+
     /// Get process exit code if it exited, else returns `None`.
     pub fn exit_code(&self) -> Option<i64> {
         if let Status::Exited(code) = self.status() {

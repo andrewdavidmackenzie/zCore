@@ -1039,31 +1039,82 @@ fn too_many_observers() {
     );
 }
 /// C++: TEST(PortTest, PortTimeout)
+/// Wait on a port with a past deadline and no queued packets — TIMED_OUT.
 #[test]
-#[ignore]
 fn port_timeout() {
-    // TODO: Implement — stub for C++ 1:1 correspondence
-    unimplemented!("PortTest.PortTimeout");
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let port_h = create_port(&ctx);
+
+    let mut packet: zircon_object::signal::PortPacket = unsafe { core::mem::zeroed() };
+    let result = async_std::task::block_on(sc.sys_port_wait(
+        port_h,
+        zircon_syscall::Deadline::from(0usize), // past deadline
+        hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
+    ));
+    assert_eq!(result, Err(ZxError::TIMED_OUT));
 }
+
 /// C++: TEST(PortTest, WaitAccessDenied)
+/// Wait on a port handle without READ right — ACCESS_DENIED.
 #[test]
-#[ignore]
 fn wait_access_denied() {
-    // TODO: Implement — stub for C++ 1:1 correspondence
-    unimplemented!("PortTest.WaitAccessDenied");
+    use zircon_object::object::{Handle, Rights};
+    use zircon_object::signal::Port;
+
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+
+    // Create port with only WRITE rights (no READ)
+    let port = Port::new(0).unwrap();
+    let write_only_h = ctx
+        .proc
+        .add_handle(Handle::new(port, Rights::WRITE | Rights::TRANSFER));
+
+    let mut packet: zircon_object::signal::PortPacket = unsafe { core::mem::zeroed() };
+    let result = async_std::task::block_on(sc.sys_port_wait(
+        write_only_h,
+        zircon_syscall::Deadline::from(0usize),
+        hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
+    ));
+    assert_eq!(result, Err(ZxError::ACCESS_DENIED));
 }
+
 /// C++: TEST(PortTest, WaitNullPacket)
+/// Wait with a null/zero packet pointer — should return error (INVALID_ARGS).
 #[test]
-#[ignore]
 fn wait_null_packet() {
-    // TODO: Implement — stub for C++ 1:1 correspondence
-    unimplemented!("PortTest.WaitNullPacket");
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let port_h = create_port(&ctx);
+
+    // Queue a packet so the wait would succeed if the pointer were valid
+    let pkt = make_user_packet(0, 0, [0u8; 32]);
+    queue_packet(&ctx, port_h, &pkt);
+
+    // Null output pointer
+    let result = async_std::task::block_on(sc.sys_port_wait(
+        port_h,
+        zircon_syscall::Deadline::from(0usize),
+        hal_impl::user::UserOutPtr::from(0usize),
+    ));
+    // Should fail because we can't write to a null pointer
+    assert!(result.is_err());
 }
 
 /// C++: TEST(PortTest, WaitWrongType)
+/// Wait on a handle that is not a port (e.g. an event) — WRONG_TYPE.
 #[test]
-#[ignore]
 fn wait_wrong_type() {
-    // TODO: Implement — stub for C++ 1:1 correspondence
-    unimplemented!("PortTest.WaitWrongType");
+    let ctx = TestContext::new();
+    let sc = ctx.syscall();
+    let event_h = create_event(&ctx);
+
+    let mut packet: zircon_object::signal::PortPacket = unsafe { core::mem::zeroed() };
+    let result = async_std::task::block_on(sc.sys_port_wait(
+        event_h,
+        zircon_syscall::Deadline::from(0usize),
+        hal_impl::user::UserOutPtr::from(&mut packet as *mut _ as usize),
+    ));
+    assert_eq!(result, Err(ZxError::WRONG_TYPE));
 }

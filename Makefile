@@ -804,6 +804,10 @@ clippy-all:
 check:
 	cargo check-style
 
+# Audit 1:1 correspondence between Rust core_tests and C++ core-tests
+audit-tests:
+	cargo audit-tests
+
 # Check all feature combinations on host-buildable crates.
 # Requires: cargo install cargo-all-features
 check-all-features:

@@ -1,7 +1,3 @@
-# Tests that hang or crash when running core-tests-standalone on QEMU x86_64.
-# Each entry must match a test name in fuchsia-core-tests-from-binary.txt exactly.
-# The corresponding Rust test in zircon-tests must have #[ignore].
-
 # ── PagerWriteback: TestThread mapping write hangs ──
 PagerWriteback.ResizeWritebackWithMappingTrapDirty
 PagerWriteback.LargeWriteBatched
@@ -22,9 +18,6 @@ PagerWriteback.WritePinAwaitingCleanTrapDirty
 
 # ── StreamTestCase: crash ──
 StreamTestCase.PartialVmoDirty
-
-# ── ChannelTest: policy exception hang ──
-ChannelTest.ChannelFullException
 
 # ── VmoClone2TestCase: populated_bytes / VMAR / thread hangs ──
 VmoClone2TestCase.DropParentCommittedBytes
@@ -55,19 +48,7 @@ PortStressTest.QueuePacketAfterPortClosedConcurrentRace
 PortStressTest.SignalCloseWait
 PortStressTest.WaitSignalCancel
 
-# ── VmoTestCase: BTI/thread hangs ──
-VmoTestCase.PinTests
-VmoTestCase.ParallelWriteAndDecommit
 
-# ── VmoTransferDataTestCase: thread race hang ──
-VmoTransferDataTestCase.RacyDropParent
-
-# ── JobTest: kill chain hang ──
-JobTest.KillJobChain
-
-# ── ProcessTest: thread/channel hang ──
-ProcessTest.SuspendWithDyingThread
-ProcessTest.KillChannelHandleCycle
 
 # ── Threads: debug register / exception / syscall hangs ──
 Threads.BadSyscallCaller
@@ -79,44 +60,9 @@ Threads.WatchpointSyscallPanic
 Threads.WriteReadDebugRegisterState
 Threads.WritingFpRegisterState
 Threads.X86AcFlagUserCopy
-ProcessTest.CreateAndKillJobRaceStress
-Threads.SyscallSuspendedRegisterState
 Threads.SyscallDebuggerModifyResult
-Threads.SuspendChannelCall
-Threads.SuspendChannelCall
 Threads.ExitViaException
-Threads.StartSuspendedThread
-Threads.SuspendSleeping
-Threads.SuspendMultiple
-Threads.KillSuspendedThread
-Threads.StartSuspendedAndResumedThread
-Threads.SuspendSelf
-Threads.SuspendResumeFromMultipleThreads
-Threads.SuspendStoppedThread
-Threads.SuspendStoppedAndBlockedThread
-Threads.SuspendMultipleWaitAsync
-Threads.SuspendRunningThread
-Threads.KillWaitingThread
-Threads.KillSuspendedImmediately
-Threads.ThreadReadStateWhenStarting
-Threads.ThreadLocal
-Threads.ChannelCallDoesntLeakMessage
-Threads.ExitBusy
-ProcessTest.InfoRuntimeValid
-ProcessTest.GetInfoRuntime
-ProcessTest.GetInfoRuntimeV1
-ProcessTest.ProcessWaitAsyncCancelSelf
-ProcessTest.ProcessHwTraceContextIdProperty
-Threads.SuspendStoppedAndBlockedThread2
-Threads.WritingVectorRegisterState
-Threads.StartRegs
-Threads.ThreadStartInvalidEntry
-Threads.StartRegsSuspended
 Threads.ReadingGeneralRegisterState
-Threads.ProcessStartOnSecondThread
-Threads.InfoThreadStatsFails
-Threads.ReadingVectorRegisterState
-Threads.WritingArmFlagsRegister
 Pager.OverlapCommitSupplyTest
 Pager.BulkOddLengthSupplyTestVmar
 Pager.BulkOddLengthSupplyTestVmo
@@ -425,72 +371,9 @@ PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
 PagerWriteback.WritebackWithMapping
 PagerWriteback.WritePinAwaitingCleanNoTrapDirty
 Pager.ZeroHandlesRace
-Snapshot.AlowSlice
-Snapshot.AtLeastOnWriteAfterSnapshotModified
-Snapshot.CloneAfterSliceRoot
-Snapshot.CloneModifyChain
-Snapshot.CloneVmoWrite
-Snapshot.CloseClone
-Snapshot.CloseRoot
-Snapshot.CloseSnapshot
-Snapshot.CommitRangeInSnapshot
-Snapshot.DropVmos
-Snapshot.ObjMemAccounting
-Snapshot.Read
-Snapshot.ReleaseCowParentPagesLeft
-Snapshot.ReleaseCowParentPagesLeftAndRight
-Snapshot.ReleaseCowParentPagesRight
-Snapshot.ReleaseCowParentPagesRightInHiddenNode
-Snapshot.ResizeShrinkSnapshot
-Snapshot.ResizeShrinkSnapshotWithEmptyParent
-Snapshot.ResizeSnapshotRace
-Snapshot.RootVmoWrite
-Snapshot.Smoke
-Snapshot.SnapshotModifiedAfterAtLeastOnWrite
-Snapshot.SnapshotModifiedClone
-Snapshot.SnapshotReadOnlyVmo
-Snapshot.SnapshotSlice
-Snapshot.SnapshotSliceAtLeastOnWrite
-Snapshot.SnapshotVmoWithSlice
-Snapshot.SnapshotVmoWrite
-Snapshot.WriteAfterDropSibling
-Snapshot.ZeroRangeFromEndOfParent
 Snapshot.ZeroRangeLeftInSnapshotNoPagesInParent
 Snapshot.ZeroRangeLeftInSnapshotNoPagesInParentChain
-Snapshot.ZeroRangeLeftInSnapshotPageInClone
-Snapshot.ZeroRangeLeftInSnapshotPageInHiddenNode
-Snapshot.ZeroRangeLeftInSnapshotPageInParent
-Snapshot.ZeroRangeLeftInSnapshotPageInSnapshot
-Snapshot.ZeroRangeLeftInSnapshotPagesInParentChain
-ProcessTest.EmptyNameSucceeds
-ProcessTest.ForbidDestroyRootVmar
-ProcessTest.GetRuntimeNoPermission
-ProcessTest.InfoProcessNoProcessHandles
-ProcessTest.InfoReflectsProcessState
-ProcessTest.LongNameSucceeds
-ProcessTest.MiniProcessSanity
-ProcessTest.ProcessNotKilledViaProcessClose
-ProcessTest.ProcessNotKilledViaThreadClose
-ProcessTest.ProcessStartFail
-ProcessTest.ProcessStartNoHandle
-ProcessTest.ProcessStartNonUserspaceEntry
-ProcessTest.ProcessStartWriteThreadState
-ProcessTest.Suspend
-ProcessTest.SuspendBeforeCreatingThreads
-ProcessTest.SuspendBeforeStartingThreads
-ProcessTest.SuspendMultipleThreads
-ProcessTest.SuspendProcessThenThread
-ProcessTest.SuspendSelf
-ProcessTest.SuspendThreadAndProcessBeforeStartingProcess
 ProcessTest.SuspendThreadThenProcess
-ProcessTest.SuspendTwice
-ProcessTest.SuspendTwiceBeforeCreatingThreads
-ProcessDebugTest.ReadMemoryAtInvalidOffsetReturnsErrorNotFound
-ProcessDebugTest.ReadMemoryAtOffsetIsOk
-ProcessDebugTest.WriteAtInvalidOffsetReturnsErrorNotFound
-ProcessDebugTest.WriteMemoryAtOffsetIsOk
-ProcessDebugUtilsTest.XorShiftIsOk
-ProcessDebugVDSO.WriteToVdsoAddressReturnsAccessDenied
 Bti.Clone
 Bti.Create
 Bti.DecommitRace
@@ -504,44 +387,8 @@ Bti.PinContiguous
 Bti.PinTooManyAddresses
 Bti.QuarantineDisallowsPin
 Bti.Resize
-Threads.BadSyscallNumber
-Threads.Basics
-Threads.EmptyNameSucceeds
-Threads.GetAffinity
-Threads.GetInfoRuntime
-Threads.GetInfoRuntimeV1
-Threads.GetLastScheduledCpu
-Threads.InfoTaskStatsFails
-Threads.InvalidRights
-Threads.LongNameSucceeds
-Threads.NoncanonicalRipAddressIRETQ
-Threads.NoncanonicalRipAddressSyscall
-Threads.NonstartedThread
 Threads.ReadingFpRegisterState
-Threads.ResumeSuspended
-Threads.StartRegsNoncanonicalTp
-Threads.SuspendAfterDeath
-Threads.SuspendInvalidTargets
-Threads.SuspendPortCall
-Threads.SuspendSingleWaitAsyncSignalDelivery
-Threads.SuspendStopsThread
-Threads.ThreadLocalRegisterState
-Threads.ThreadStartOnInitialThread
-Threads.ThreadStartWithZeroInstructionPointer
-Threads.WriteThreadStateWithInvalidMxcsrIsInvalidArgs
-Threads.WritingGeneralRegisterState
-Threads.WritingSingleStepState
-Threads.WritingVectorRegisterStateUnsupportedFieldsIgnored
-Threads.YieldWithNonZeroOptionIsInvalidArgs
-Threads.YieldWithZeroOptionIsOk
-ThreadSampler.DroppedSampler
-ThreadSampler.HighFrequency
-ThreadSampler.InvalidOptions
-ThreadSampler.NonRunningThread
-ThreadSampler.SamplerLifetime
-ThreadSampler.StartStop
-ThreadInitialStateTests.RegisterValues
-PthreadTls.PthreadTls
 
 # ── Resource: hangs on QEMU (interrupt vector pool) ──
 Resource.PcInterruptVectorPoolLeak
+Threads.SyscallSuspendedRegisterState

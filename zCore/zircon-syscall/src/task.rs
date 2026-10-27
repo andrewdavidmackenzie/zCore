@@ -222,11 +222,17 @@ impl Syscall<'_> {
             "thread.start: handle={:#x?}, entry={:#x}, stack={:#x}, arg1={:#x} arg2={:#x}",
             handle_value, entry, stack, arg1, arg2
         );
+        // Reject kernel-space and non-canonical entry/stack addresses.
+        if !is_user_address(entry) || !is_user_address(stack) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         let thread = proc.get_object_with_rights::<Thread>(handle_value, Rights::MANAGE_THREAD)?;
-        if thread.proc().status() != Status::Running {
-            return Err(ZxError::BAD_STATE);
-        }
+        // Mark process as Running before starting the thread.
+        // In Fuchsia, starting any thread transitions the process to Running,
+        // preventing subsequent zx_process_start calls (BAD_STATE).
+        // Done here (not in Thread::start) because we have a strong Arc<Process>.
+        thread.proc().ensure_running();
         thread.start_with_entry(entry, stack, arg1, arg2, self.thread_fn)?;
         Ok(())
     }
@@ -246,17 +252,19 @@ impl Syscall<'_> {
         arg1: usize,
         arg2: usize,
         tp: usize,
-        _abi_reg: usize,
+        abi_reg: usize,
     ) -> ZxResult {
         info!(
             "thread.start_regs: handle={:#x?}, entry={:#x}, stack={:#x}, arg1={:#x}, arg2={:#x}, tp={:#x}",
             handle_value, entry, stack, arg1, arg2, tp
         );
+        // Reject kernel-space and non-canonical entry/stack addresses.
+        if !is_user_address(entry) || !is_user_address(stack) {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         let thread = proc.get_object_with_rights::<Thread>(handle_value, Rights::MANAGE_THREAD)?;
-        if thread.proc().status() != Status::Running {
-            return Err(ZxError::BAD_STATE);
-        }
+        thread.proc().ensure_running();
         // Validate thread pointer (tp) — reject non-canonical addresses on x86_64.
         #[cfg(target_arch = "x86_64")]
         {
@@ -265,11 +273,14 @@ impl Syscall<'_> {
                 return Err(ZxError::INVALID_ARGS);
             }
         }
-        // Set up entry, stack, and args, then set the thread pointer.
+        // Set up entry, stack, and args, then set the thread pointer and abi_reg.
         thread.with_context(|ctx| {
             ctx.setup_uspace(entry, stack, &[arg1, arg2, 0]);
             if tp != 0 {
                 ctx.set_field(UserContextField::ThreadPointer, tp);
+            }
+            if abi_reg != 0 {
+                ctx.set_field(UserContextField::AbiReg, abi_reg);
             }
         })?;
         thread.start(self.thread_fn)?;

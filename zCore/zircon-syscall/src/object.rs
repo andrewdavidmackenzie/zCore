@@ -790,6 +790,13 @@ impl Syscall<'_> {
             }
             Topic::ThreadStats => {
                 let thread = proc.get_object_with_rights::<Thread>(handle, Rights::INSPECT)?;
+                // Fuchsia returns BAD_STATE for dead/dying threads.
+                let state = thread.state();
+                if state == ThreadState::Dead || state == ThreadState::Dying {
+                    actual.write_if_not_null(0)?;
+                    avail.write_if_not_null(1)?;
+                    return Err(ZxError::BAD_STATE);
+                }
                 if buffer_size < core::mem::size_of::<ThreadStatsInfo>() {
                     actual.write_if_not_null(0)?;
                     avail.write_if_not_null(1)?;

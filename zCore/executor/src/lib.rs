@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(feature = "libos"), no_std)]
 #![feature(allocator_api)]
 #![feature(get_mut_unchecked)]
 // some interfaces is still under developing
@@ -20,6 +20,10 @@ cfg_if::cfg_if! {
   }
 }
 
+// In no_std mode, alloc is an explicit extern crate.
+// In std mode (libos), alloc is re-exported from std and
+// available implicitly, but `extern crate alloc` is still
+// valid and required for uniform `alloc::` paths.
 extern crate alloc;
 #[macro_use]
 extern crate log;
