@@ -35,9 +35,9 @@ pub(crate) static VMO_DISCARDABLE_UNLOCKED_PAGES: crate::util::kcounter::Counter
     crate::util::kcounter::Counter::new();
 
 /// Page dirty-tracking states.
-const PAGE_CLEAN: u8 = 0;
-const PAGE_DIRTY: u8 = 1;
-const PAGE_AWAITING_CLEAN: u8 = 2;
+pub const PAGE_CLEAN: u8 = 0;
+pub const PAGE_DIRTY: u8 = 1;
+pub const PAGE_AWAITING_CLEAN: u8 = 2;
 /// Zero page from resize — implicitly dirty (shows as IS_ZERO in
 /// query_dirty_ranges). For TRAP_DIRTY, writes still trap (not
 /// considered dirty for write-gating). Writeback transitions
@@ -680,6 +680,12 @@ impl VmObject {
             inner.dirty_pages[page_idx] = PAGE_DIRTY;
             inner.modified = true;
         }
+    }
+
+    /// Get the dirty tracking state of a page, or None if out of bounds.
+    pub fn get_page_dirty_state(&self, page_idx: usize) -> Option<u8> {
+        let inner = self.inner.lock();
+        inner.dirty_pages.get(page_idx).copied()
     }
 
     /// Check if a page is covered by an outstanding DIRTY pager request.

@@ -1089,6 +1089,8 @@ impl Syscall<'_> {
                 }
                 // OP_ZERO sets modified and marks pages dirty on the
                 // pager-backed VMO (which may be the parent of a slice).
+                // Skip pages that already had a zero marker and no
+                // committed frame — zeroing those was a no-op.
                 if result.is_ok() {
                     let pager_vmo = if vmo.has_pager() {
                         Some(vmo.clone())
@@ -1098,20 +1100,45 @@ impl Syscall<'_> {
                         None
                     };
                     if let Some(pv) = pager_vmo {
-                        pv.set_modified();
                         let parent_offset = offset + vmo.get_slice_offset();
                         let start_page = parent_offset / PAGE_SIZE;
                         let end_page = (parent_offset + len).div_ceil(PAGE_SIZE);
+                        let mut any_changed = false;
                         if !pv.is_trap_dirty() {
-                            // Non-TRAP_DIRTY: auto-mark dirty.
+                            // Non-TRAP_DIRTY: auto-mark dirty, but only
+                            // for pages where zeroing actually changed
+                            // something. A page that was already a clean
+                            // zero marker is unchanged by OP_ZERO.
                             for pg in start_page..end_page {
+                                if pv.has_zero_marker(pg)
+                                    && pv.committed_pages_in_range(pg, pg + 1) == 0
+                                    && pv.get_page_dirty_state(pg) == Some(PAGE_CLEAN)
+                                {
+                                    continue; // already zero, no-op
+                                }
                                 pv.auto_mark_dirty(pg);
+                                any_changed = true;
                             }
                         } else {
                             // TRAP_DIRTY: OP_ZERO doesn't generate a
                             // DIRTY request. Directly mark pages as
-                            // dirty-zero since they were zeroed.
-                            pv.mark_pages_zero_dirty(start_page, end_page);
+                            // dirty-zero since they were zeroed, but
+                            // skip pages that were already clean zero.
+                            for pg in start_page..end_page {
+                                if pv.has_zero_marker(pg)
+                                    && pv.committed_pages_in_range(pg, pg + 1) == 0
+                                    && pv.get_page_dirty_state(pg) == Some(PAGE_CLEAN)
+                                {
+                                    continue;
+                                }
+                                any_changed = true;
+                            }
+                            if any_changed {
+                                pv.mark_pages_zero_dirty(start_page, end_page);
+                            }
+                        }
+                        if any_changed {
+                            pv.set_modified();
                         }
                     }
                 }
