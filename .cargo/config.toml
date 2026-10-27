@@ -4,6 +4,7 @@ git-proxy = "xtask git-proxy"
 update-all = "xtask update-all"
 
 check-style = "xtask check-style"
+audit-tests = "xtask audit-tests"
 
 rootfs = "xtask rootfs"
 musl-libs = "xtask musl-libs"

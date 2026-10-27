@@ -7,6 +7,7 @@ extern crate clap;
 mod dump;
 
 mod arch;
+mod audit_tests;
 mod build;
 mod commands;
 mod config;
@@ -116,6 +117,20 @@ enum Commands {
     /// cargo check-style
     /// ```
     CheckStyle,
+
+    /// Audits the 1:1 correspondence between Rust core_tests
+    /// and C++ core-tests-standalone tests.
+    ///
+    /// Verifies that every C++ test has exactly one Rust test
+    /// with a matching `/// C++: TEST(Suite, Name)` doc comment,
+    /// and reports counts for ignored/stub/skipped tests.
+    ///
+    /// # Example
+    ///
+    /// ```bash
+    /// cargo audit-tests
+    /// ```
+    AuditTests,
 
     /// Dumps the kernel disassembly.
     ///
@@ -341,6 +356,7 @@ fn main() {
 
         UpdateAll => update_all(),
         CheckStyle => check_style(),
+        AuditTests => audit_tests::run(&PROJECT_DIR),
 
         Rootfs(arg) => arg.linux_rootfs().make(true),
         MuslLibs(arg) => {
@@ -554,6 +570,9 @@ fn check_style() {
         eprintln!("{}", String::from_utf8_lossy(&output.stderr));
         panic!("zircon-tests failed to compile");
     }
+
+    println!("==> Audit: core_tests ↔ C++ 1:1 correspondence...");
+    audit_tests::run(&PROJECT_DIR);
 }
 
 mod libos {
