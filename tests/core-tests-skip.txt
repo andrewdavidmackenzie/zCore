@@ -22,16 +22,6 @@ StreamTestCase.PartialVmoDirty
 # ── VmoClone2TestCase: populated_bytes / VMAR / thread hangs ──
 VmoClone2TestCase.DropParentCommittedBytes
 VmoClone2TestCase.DropChildrenInParallel
-VmoClone2TestCase.DisjointCloneTest2
-VmoClone2TestCase.ManyCloneMapping
-VmoClone2TestCase.ManyCloneMappingOffset
-VmoClone2TestCase.CloneVmarWrite
-VmoClone2TestCase.ParentVmarWrite
-VmoClone2TestCase.DisjointCloneProgressive
-VmoClone2TestCase.PinBeforeCreateFailure
-VmoClone2TestCase.PinClonePages
-VmoClone2TestCase.MapRangeReadOnly
-VmoClone2TestCase.Offset
 VmoClone2TestCase.OffsetProgressiveWrite
 
 # ── PortStressTest: all 12 multi-threaded stress tests hang ──
@@ -123,3 +113,4 @@ Bti.DecommitRace
 
 # ── Resource: hangs on QEMU (interrupt vector pool) ──
 Resource.PcInterruptVectorPoolLeak
+VmoClone2TestCase.ParentVmarWrite
