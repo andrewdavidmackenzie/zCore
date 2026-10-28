@@ -443,17 +443,12 @@ async fn handler_user_trap(
             thread.put_context(ctx);
             // Signal BAD_SYSCALL policy exception with the syscall
             // number as synth_data, matching Fuchsia.
-            thread.signal_policy_exception(
-                zircon_object::task::policy_code::BAD_SYSCALL,
-                num as u32,
-            );
+            thread
+                .signal_policy_exception(zircon_object::task::policy_code::BAD_SYSCALL, num as u32);
             thread.deliver_pending_policy_exception().await;
             thread
                 .with_context(|ctx| {
-                    ctx.set_field(
-                        UserContextField::ReturnValue,
-                        ZxError::BAD_SYSCALL as usize,
-                    )
+                    ctx.set_field(UserContextField::ReturnValue, ZxError::BAD_SYSCALL as usize)
                 })
                 .map_err(|_| ExceptionInfo {
                     type_: ExceptionType::ThreadExiting,
