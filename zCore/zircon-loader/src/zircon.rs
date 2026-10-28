@@ -448,7 +448,10 @@ async fn handler_user_trap(
         // priority threads get a turn. yield_now self-wakes immediately
         // so the task stays near the front (lower latency for threads
         // doing infrequent syscalls).
-        if hal_impl::thread::take_preempt_pending() || thread.quantum_exhausted() {
+        if hal_impl::thread::take_preempt_pending()
+            || thread.quantum_exhausted()
+            || thread.should_force_preempt_yield()
+        {
             thread.reset_quantum();
             hal_impl::thread::preempt_yield().await;
         } else {

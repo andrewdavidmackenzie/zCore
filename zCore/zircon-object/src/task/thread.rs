@@ -184,6 +184,10 @@ struct ThreadInner {
     /// CPU time accumulated since the last preemption yield (nanoseconds).
     /// Reset when the thread does a preempt_yield.
     time_slice_used_ns: u64,
+    /// Syscall count since last preemption yield. Used to force
+    /// preempt_yield after many fast syscalls (e.g., WaitForBlocked
+    /// polling loops) to avoid starving newly-spawned threads.
+    syscall_count_since_yield: u32,
     /// Deadline scheduling parameters, if this thread has a deadline
     /// profile applied. `None` for fair-scheduled threads.
     deadline_params: Option<super::profile::SchedDeadlineParams>,
@@ -733,7 +737,24 @@ impl Thread {
     /// Reset the time slice counter. Called after a preemption yield
     /// so the thread gets a fresh quantum on its next scheduling.
     pub fn reset_quantum(&self) {
-        self.inner.lock().time_slice_used_ns = 0;
+        let mut inner = self.inner.lock();
+        inner.time_slice_used_ns = 0;
+        inner.syscall_count_since_yield = 0;
+    }
+
+    /// Increment the syscall counter and return true if a preempt
+    /// yield should be forced. This prevents tight polling loops
+    /// (e.g., WaitForBlocked calling get_info repeatedly) from
+    /// starving newly-spawned threads that haven't reached their
+    /// first yield point yet.
+    pub fn should_force_preempt_yield(&self) -> bool {
+        let mut inner = self.inner.lock();
+        inner.syscall_count_since_yield += 1;
+        // Force yield every 8 fast syscalls. Aggressive threshold
+        // needed because WaitForBlocked polling (get_info in a loop)
+        // must yield quickly enough for newly-spawned threads to
+        // reach their pager wait point.
+        inner.syscall_count_since_yield >= 8
     }
 
     /// Add time spent in the ready queue (waiting to be scheduled).
