@@ -429,13 +429,17 @@ async fn handler_user_trap(
         // On x86_64, RCX holds the return address after `syscall`.
         // On aarch64, the return address is in ELR_EL1 (saved as RIP).
         let ret_addr = {
-            #[cfg(target_arch = "x86_64")]
-            {
-                ctx.general().rcx
-            }
-            #[cfg(not(target_arch = "x86_64"))]
-            {
-                ctx.general_ref().pc()
+            cfg_if! {
+                if #[cfg(target_arch = "x86_64")] {
+                    // On x86_64, RCX holds the return address after `syscall`.
+                    ctx.general().rcx
+                } else if #[cfg(target_arch = "aarch64")] {
+                    // On aarch64, the return address is in x30 (LR).
+                    ctx.general().x30
+                } else {
+                    // On riscv64, the return address is in ra.
+                    ctx.general().ra
+                }
             }
         };
         if thread.proc().is_syscall_from_outside_vdso(ret_addr) {
