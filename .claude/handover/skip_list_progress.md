@@ -1,14 +1,14 @@
 # Skip List Progress — Handover Document
 
-## Current State (after PRs #796, #797, #798)
+## Current State (after PR #800)
 
-### Skip list: 520 → 372 (148 removed, 28%)
+### Skip list: 372 → 88 (284 removed, 76%)
 
 ### Test counts
 - Rust core_tests: 1778 (1:1 with C++ binary)
-- Rust passing: 3053
-- Rust #[ignore]: 44
-- C++ skip list: 372
+- Rust passing: 3062
+- Rust #[ignore]: 32
+- C++ skip list: 88
 
 ### Audit checker
 `cargo audit-tests` (or `make audit-tests`) verifies:
@@ -17,75 +17,78 @@
 - Every `#[ignore]` test is in the skip list
 - Runs in CI via `cargo check-style`
 
-## Remaining skip list by suite
+## Kernel fixes made (PR #800)
 
-| Suite | Count | Root Cause | Issue |
-|-------|-------|-----------|-------|
-| PagerWriteback | 179 | Demand-paging pipeline | Needs page fault → pager request → supply → resume |
-| Pager | 135 | Demand-paging pipeline | Same as above |
-| Threads | 7 | Exception delivery, debug exceptions, INTR_RETRY | #799 |
-| VmoClone2 | 13 | populated_bytes / fractional page attribution | Kernel VMO accounting |
-| Bti | 13 | BTI pin crash (8/13 pass, 5 crash) | BTI implementation gaps |
-| PortStressTest | 12 | Multi-threaded stress races | Cooperative executor limitation |
-| PagerProcess | 8 | Demand-paging | Same as Pager |
-| Snapshot | 2 | Zero-range page tracking | Specific kernel fix |
-| Others | 3 | Individual issues | |
+1. **PAGE_SIZE consolidation** — 7 duplicate definitions → 1 in `hal/src/defs.rs`
+   - Added `system_get_page_size` syscall (239) for petal/userstart
+   - vDSO uses `hal::PAGE_SIZE` instead of hardcoded 4096
+   - Petal binaries call `zx_system_get_page_size()` at runtime
+   - Fixed hardcoded 4096 in vmo.rs, channel.rs tests
 
-## 7 Remaining Threads tests (Issue #799)
+2. **OP_ZERO dirty tracking** — 3 separate fixes:
+   - Clean zero markers not falsely dirtied (pre-zero snapshot)
+   - Freshly-zeroed pages correctly marked as modified
+   - COW clones insert zero marker without unnecessary COW fork
 
-All require real thread execution or exception delivery:
+3. **Pager rights checks** — `create_vmo` requires ATTACH_VMO,
+   `detach_vmo` requires ATTACH_VMO, `supply_pages` requires MANAGE_VMO
 
-| Test | Needs |
-|------|-------|
-| BadSyscallCaller | Exception channel delivery for invalid syscall |
-| ExitViaException | Exception channel delivery |
-| DebugRegistersDr6CorrectAfterBreakpointRemoval | Hardware breakpoint → debug exception |
-| DebugRegistersDr6ResetOnDebugException | Hardware debug exception |
-| DebugRegistersWatchpointSyscallPanicRepro | Watchpoint during syscall |
-| SyscallDebuggerModifyResult | Modify rax during suspend → honor on resume |
-| ReadingGeneralRegisterState | rflags RF bit (bit 16) |
+4. **set_stream_size modified flag** — pager VMOs marked modified on
+   stream size change regardless of UNBOUNDED flag
 
-### Blocked on: executor integration into libos (#799)
+5. **IPI wakeup on cross-CPU spawn** — newly spawned tasks on halted
+   CPUs start immediately via IPI instead of waiting for timer tick
 
-The bare-metal executor has libos support (`switch_libos.S` for x86_64 and aarch64, no privileged instructions). But wiring it into the test harness requires replacing `#[async_std::test]` because `run_until_idle()` uses `switch()` which must run on the same OS thread as the tasks.
+6. **Syscall-count forced preempt yield** — prevents tight polling
+   loops from starving newly-spawned threads
 
-## Kernel fixes made
+## Remaining skip list by suite (88 total)
 
-1. ZX_INFO_THREAD_STATS BAD_STATE for dead threads
-2. Entry/stack address validation in sys_thread_start
-3. Process marked Running on thread_start (via ensure_running in syscall layer)
-4. FloatPoint register state read/write on x86_64 (160 bytes, st[] at offset 32)
-5. abi_reg delivered via r15 (x86_64) / x18 (aarch64)
-6. IOPL=0 for user threads (was IOPL=3)
-7. INTR_RETRY (-6) set in return register when suspending blocked thread
-8. DR6 default 0xFFFF0FF0, masking (bits 4-11 always 1, bit 12 always 0, 32-bit)
-9. DR7 masking (set LE/GE bits 8-10, clear reserved 11-15, 32-bit)
-10. DR0-DR3 address validation (reject kernel-space/non-canonical)
-11. ThreadState::is_blocked() helper
+| Suite | Count | Root Cause |
+|-------|-------|-----------|
+| PagerWriteback | 28 | BTI/pin TrapDirty (14), concurrent TestThread (6), dirty range bugs (6), partial write (1), suspend (1) |
+| Pager | 23 | Clone lifecycle/crash exceptions (7), multi-thread overlap (4), EarlySupply spurious request (2), Suspend (3), other (7) |
+| PortStressTest | 12 | Multi-thread stress races in cooperative executor |
+| PagerProcess | 8 | Process + page fault infrastructure |
+| Threads | 7 | Debug registers / exception delivery |
+| VmoClone2TestCase | 4 | populated_bytes (2), progressive hang (1), 16K pages (1) |
+| Snapshot | 2 | Zero-range page tracking |
+| Other | 4 | Bti.DecommitRace, StreamTestCase, Resource, ProcessTest |
 
-## Next steps by priority
+## Infrastructure needed for remaining tests
 
-### 1. VmoClone2 (13 tests) — most tractable
-The `populated_bytes` / `populated_scaled_bytes` fields in VMO info need fractional page attribution for COW clones. The tests hang polling `populated_bytes` because zCore doesn't implement the attribution algorithm that Fuchsia uses for shared pages.
+### 1. WaitForCrash / exception delivery (unblocks ~7 Pager tests)
+Tests like `DecommitOnDetachTestVmar`, `CloneDetachTest` use
+`TestThread::WaitForCrash(addr, error)` which expects a fatal page
+fault exception with specific `synth_code` on the exception channel.
+zCore needs to deliver proper exceptions when pager VMO access fails
+(after detach/close).
 
-### 2. Bti (13 tests) — partial progress
-8/13 already pass. The 5 that crash have specific BTI pin/unpin issues. Run individually on QEMU to identify exact failures.
+### 2. Multi-thread overlap commit (unblocks ~4 Pager tests)
+`OverlapCommitSupplyTest`, `FailMultipleCommits` create multiple
+threads that commit overlapping ranges. The C++ `WaitForBlocked()`
+pattern works for single-thread tests but fails for overlap scenarios.
+Root cause: when a thread's commit falls within an existing outstanding
+request (overlap absorption), the thread blocks on the overlap waiter
+but may not reach `BlockedPager` state visible to polling.
 
-### 3. Snapshot (2 tests) — specific fix
-`ZeroRangeLeftInSnapshotNoPagesInParent` and `ZeroRangeLeftInSnapshotNoPagesInParentChain` — zero-range operations on snapshot VMOs when parent has no committed pages.
+### 3. Clone resize/write probe (unblocks ~4 Pager tests)
+`CloneResizeParentOK`, `CloneShrinkGrowParent` use `probe_for_read`/
+`probe_for_write` on mapped clones after parent resize. Need correct
+VMAR page fault handling + resize semantics for pager-backed clones.
 
-### 4. PortStressTest (12 tests) — cooperative executor limitation
-Multi-threaded stress tests that need real concurrent execution. May work with the executor integration (#799).
+### 4. PagerWriteback BTI/pin TrapDirty (14 tests)
+Use `ThreadedPagePinner` creating threads that pin pages via BTI.
+Need working BTI pin in concurrent thread context with TRAP_DIRTY.
 
-### 5. Pager/PagerWriteback (322 tests) — deep kernel work
-Requires the demand-paging page fault pipeline:
-1. User thread accesses unmapped pager-backed page
-2. #PF handler detects pager VMO, sends ZX_PAGER_VMO_READ packet to port
-3. Thread blocks in ThreadState::BlockedPager
-4. Pager thread calls supply_pages()
-5. Blocked thread is woken, page table updated, execution resumes
+### 5. PagerWriteback concurrent TestThread mapping writes (6 tests)
+Use TestThread with mapped VMAR writes triggering TRAP_DIRTY faults.
+Need VMAR dirty fault → pager DIRTY request path.
 
-The Rust pager tests bypass this by calling vmo.read() directly (no page faults). The C++ tests use real VMAR mappings + TestThread infrastructure.
+### 6. EarlySupply spurious page request (2 tests)
+`sys_vmo_read` generates a page request for already-supplied pages.
+Need investigation into why `committed_pages_in_range` returns 0
+for a page that was supplied via `supply_pages`.
 
 ## Testing commands
 
@@ -111,9 +114,10 @@ make pre-push-quick
 - Skip list: `tests/core-tests-skip.txt`
 - C++ test reference: `tests/fuchsia-core-tests-from-binary.txt`
 - Audit checker: `tools/xtask/src/audit_tests.rs`
-- Thread tests: `zCore/zircon-tests/src/core_tests/thread.rs`
-- Extra thread tests: `zCore/zircon-tests/src/extra_tests/thread_extra.rs`
-- Thread state read/write: `zCore/zircon-object/src/task/thread/thread_state.rs`
-- Context setup: `zCore/hal-impl/src/common/context.rs`
-- Syscall dispatch: `zCore/zircon-syscall/src/task.rs`
-- Executor libos: `zCore/executor/src/arch/*/switch_libos.S`
+- Pager tests: `zCore/zircon-tests/src/core_tests/pager.rs`
+- VMO dirty tracking: `zCore/zircon-object/src/vm/vmo/mod.rs`
+- Pager kernel object: `zCore/zircon-object/src/signal/pager.rs`
+- Pager syscalls: `zCore/zircon-syscall/src/pager.rs`
+- VMO op_range: `zCore/zircon-syscall/src/vmo.rs`
+- Executor runtime: `zCore/executor/src/runtime.rs`
+- Thread scheduling: `zCore/zircon-loader/src/zircon.rs`
