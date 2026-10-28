@@ -779,6 +779,12 @@ impl Syscall<'_> {
             if vmo.is_unbounded() {
                 vmo.update_stream_size_dirty_tracking(old_size, size);
             }
+            // Setting stream size on a pager-backed VMO modifies it.
+            // Fuchsia sets the modified flag whenever stream_size
+            // changes, regardless of the UNBOUNDED flag.
+            if vmo.is_pager_backed() || vmo.is_in_pager_tree() {
+                vmo.set_modified();
+            }
         }
         vmo.set_content_size(size)
     }
@@ -1069,6 +1075,33 @@ impl Syscall<'_> {
                 if !rights.contains(Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
+                // Resolve the pager VMO and page range before zeroing
+                // so we can snapshot which pages already had zero
+                // markers (those are true no-ops for dirty tracking).
+                let pager_vmo = if vmo.has_pager() {
+                    Some(vmo.clone())
+                } else if vmo.is_slice_vmo() {
+                    vmo.find_root_pager_vmo()
+                } else {
+                    None
+                };
+                let parent_offset = offset + vmo.get_slice_offset();
+                let start_page = parent_offset / PAGE_SIZE;
+                let end_page = (parent_offset + len).div_ceil(PAGE_SIZE);
+                // Snapshot which pages had zero markers BEFORE zero().
+                // Only these are true no-ops (already zero content).
+                let pre_zero_markers: alloc::vec::Vec<bool> = if let Some(pv) = &pager_vmo {
+                    (start_page..end_page)
+                        .map(|pg| {
+                            pv.has_zero_marker(pg)
+                                && pv.committed_pages_in_range(pg, pg + 1) == 0
+                                && pv.get_page_dirty_state(pg) == Some(PAGE_CLEAN)
+                        })
+                        .collect()
+                } else {
+                    alloc::vec::Vec::new()
+                };
+
                 let result = vmo.zero(offset, len);
                 // OP_ZERO on pager-backed VMOs with unsupplied pages
                 // inserts zero markers. Wake any threads blocked in
@@ -1083,52 +1116,27 @@ impl Syscall<'_> {
                         None
                     };
                     if let Some(wv) = &wake_vmo {
-                        let parent_offset = offset + vmo.get_slice_offset();
                         wv.complete_pager_requests(parent_offset, len);
                     }
                 }
                 // OP_ZERO sets modified and marks pages dirty on the
                 // pager-backed VMO (which may be the parent of a slice).
-                // Skip pages that already had a zero marker and no
-                // committed frame — zeroing those was a no-op.
+                // Only skip pages that had a clean zero marker BEFORE
+                // the zero operation — those were already zero content.
                 if result.is_ok() {
-                    let pager_vmo = if vmo.has_pager() {
-                        Some(vmo.clone())
-                    } else if vmo.is_slice_vmo() {
-                        vmo.find_root_pager_vmo()
-                    } else {
-                        None
-                    };
                     if let Some(pv) = pager_vmo {
-                        let parent_offset = offset + vmo.get_slice_offset();
-                        let start_page = parent_offset / PAGE_SIZE;
-                        let end_page = (parent_offset + len).div_ceil(PAGE_SIZE);
                         let mut any_changed = false;
                         if !pv.is_trap_dirty() {
-                            // Non-TRAP_DIRTY: auto-mark dirty, but only
-                            // for pages where zeroing actually changed
-                            // something. A page that was already a clean
-                            // zero marker is unchanged by OP_ZERO.
-                            for pg in start_page..end_page {
-                                if pv.has_zero_marker(pg)
-                                    && pv.committed_pages_in_range(pg, pg + 1) == 0
-                                    && pv.get_page_dirty_state(pg) == Some(PAGE_CLEAN)
-                                {
-                                    continue; // already zero, no-op
+                            for (i, pg) in (start_page..end_page).enumerate() {
+                                if i < pre_zero_markers.len() && pre_zero_markers[i] {
+                                    continue; // was already a clean zero — no-op
                                 }
                                 pv.auto_mark_dirty(pg);
                                 any_changed = true;
                             }
                         } else {
-                            // TRAP_DIRTY: OP_ZERO doesn't generate a
-                            // DIRTY request. Directly mark pages as
-                            // dirty-zero since they were zeroed, but
-                            // skip pages that were already clean zero.
-                            for pg in start_page..end_page {
-                                if pv.has_zero_marker(pg)
-                                    && pv.committed_pages_in_range(pg, pg + 1) == 0
-                                    && pv.get_page_dirty_state(pg) == Some(PAGE_CLEAN)
-                                {
+                            for (i, _pg) in (start_page..end_page).enumerate() {
+                                if i < pre_zero_markers.len() && pre_zero_markers[i] {
                                     continue;
                                 }
                                 any_changed = true;
