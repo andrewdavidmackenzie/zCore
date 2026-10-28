@@ -25,18 +25,7 @@ VmoClone2TestCase.DropChildrenInParallel
 VmoClone2TestCase.OffsetProgressiveWrite
 
 # ── PortStressTest: all 12 multi-threaded stress tests hang ──
-PortStressTest.CancelKeyActiveObserverRace
-PortStressTest.CancelKeyCloseRace
-PortStressTest.CancelKeyDestructorReentersPortLock
-PortStressTest.CancelKeyDuringMatchRace
-PortStressTest.CancelKeyDuringRegistrationRace
-PortStressTest.CancelKeySharedKeyRace
 PortStressTest.ChannelCallWaitQueuePanicRepro
-PortStressTest.CloseWaitRace
-PortStressTest.MatchHandleCloseRace
-PortStressTest.QueuePacketAfterPortClosedConcurrentRace
-PortStressTest.SignalCloseWait
-PortStressTest.WaitSignalCancel
 
 # ── Threads: debug register / exception / syscall hangs ──
 Threads.BadSyscallCaller

@@ -5,8 +5,7 @@
 //! multiple `std::thread`s that race port/event/channel operations
 //! against each other in tight loops.
 //!
-//! All tests are `#[ignore]` because they hang or crash in the
-//! current kernel (they're in core-tests-skip.txt).
+//! Most tests pass; ChannelCallWaitQueuePanicRepro still hangs.
 
 use crate::helpers::TestContext;
 use zircon_object::object::{KernelObject, Signal};
@@ -45,7 +44,6 @@ fn try_dequeue(port: &Arc<Port>) -> Option<PortPacket> {
 ///   key, then cancels by key, then drains any delivered packets.
 ///   2000 iterations.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn cancel_key_active_observer_race() {
     let _ctx = TestContext::new();
 
@@ -101,7 +99,6 @@ fn cancel_key_active_observer_race() {
 /// Verifies: race_event_packets == race_event_cancel_not_found,
 ///           race_event_canceled + race_event_cancel_not_found == kIters.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn cancel_key_during_match_race() {
     let _ctx = TestContext::new();
 
@@ -236,7 +233,6 @@ fn cancel_key_during_match_race() {
 /// the main thread cancels by key. Both OK and NOT_FOUND are acceptable.
 /// Must not crash or hang.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn cancel_key_shared_key_race() {
     let _ctx = TestContext::new();
 
@@ -287,7 +283,6 @@ fn cancel_key_shared_key_race() {
 /// both threads sync via barriers. match_thread signals the event
 /// while main thread drops the port.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn match_handle_close_race() {
     let _ctx = TestContext::new();
 
@@ -423,7 +418,6 @@ fn channel_call_wait_queue_panic_repro() {
 /// - signaler: toggles signal in a loop with variable-length sleeps.
 ///   20000 iterations.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn wait_signal_cancel() {
     let _ctx = TestContext::new();
     const STRESS_COUNT: u32 = 20000;
@@ -490,7 +484,6 @@ fn wait_signal_cancel() {
 /// with the port, randomly signal/close them. 4 drainer threads
 /// continuously dequeue packets. Runs for ~100ms.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn signal_close_wait() {
     let _ctx = TestContext::new();
     let port = Port::new(0).unwrap();
@@ -591,7 +584,6 @@ fn signal_close_wait() {
 /// while 4 waiter threads try to register async waits on the
 /// constantly-changing port. Runs for ~100ms.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn close_wait_race() {
     let _ctx = TestContext::new();
 
@@ -677,7 +669,6 @@ fn close_wait_race() {
 /// - Canceling thread: cancels by key in a loop.
 /// - Waiting thread: drains packets in a loop.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn cancel_key_during_registration_race() {
     let _ctx = TestContext::new();
 
@@ -739,7 +730,6 @@ fn cancel_key_during_registration_race() {
 /// 10 closer threads race to close the target event while the main
 /// thread cancels by key.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn cancel_key_close_race() {
     let _ctx = TestContext::new();
 
@@ -808,7 +798,6 @@ fn cancel_key_close_race() {
 /// closing the channel handles. 16 rounds of 64 units each, with
 /// 4 closer threads.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn cancel_key_destructor_reenters_port_lock() {
     let _ctx = TestContext::new();
 
@@ -899,7 +888,6 @@ fn cancel_key_destructor_reenters_port_lock() {
 /// events in a tight loop. Main thread closes the port. 500 iterations.
 /// Tests that signalling after port close doesn't crash.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn queue_packet_after_port_closed_concurrent_race() {
     let _ctx = TestContext::new();
 
