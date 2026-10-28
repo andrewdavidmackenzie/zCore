@@ -53,14 +53,6 @@ Pager.InvalidPagerDetachVmo
 Pager.InvalidPagerSupplyPages
 Pager.MappedSupplyPages
 Pager.Prefetch
-PagerProcess.KillAfterSuspendPageFault
-PagerProcess.KillAfterSuspendUsercopy
-PagerProcess.KillAfterSuspendUsercopyCapture
-PagerProcess.KillAfterSuspendVmoRead
-PagerProcess.KillBlockedUsercopy
-PagerProcess.KillBlockedUsercopyCaptureFaults
-PagerProcess.KillBlockedUserPageFault
-PagerProcess.KillBlockedUserVmoRead
 Pager.ResizeCommitTest
 Pager.SupplyAfterFail
 Pager.SuspendInKernelCaptureFaultsTest
