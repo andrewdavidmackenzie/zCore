@@ -58,13 +58,11 @@ Threads.ExitViaException
 Threads.ReadingGeneralRegisterState
 Pager.OverlapCommitSupplyTest
 Pager.CloneChainCommitTest
-Pager.CloneCommitTest
 Pager.CloneDetachTest
 Pager.CloneMightSeeIntermediateForks
 Pager.CloneResizeParentOK
 Pager.CloneSeesCorrectParentPages
 Pager.CloneShrinkGrowParent
-Pager.CommitRedundantSupplyTest
 Pager.ConcurrentMultipageAccessTestVmar
 Pager.ConcurrentMultipageAccessTestVmo
 Pager.ConcurrentOverlappingAccessTestVmar
@@ -81,9 +79,6 @@ Pager.InvalidPagerSupplyPages
 Pager.ManyRequestTestVmar
 Pager.ManyRequestTestVmo
 Pager.MappedSupplyPages
-Pager.MulticommitSupplyTest
-Pager.MultisupplyCommitTest
-Pager.OverlapCommitTest
 Pager.Prefetch
 PagerProcess.KillAfterSuspendPageFault
 PagerProcess.KillAfterSuspendUsercopy
@@ -99,8 +94,6 @@ Pager.ReadDetachInterruptEarlyTestVmar
 Pager.ReadDetachInterruptLateTestVmar
 Pager.ReadResizeTestVmar
 Pager.ResizeCommitTest
-Pager.SimpleCommitTest
-Pager.SplitCommitTest
 Pager.SupplyAfterFail
 Pager.SuspendInKernelCaptureFaultsTest
 Pager.SuspendInKernelTest
