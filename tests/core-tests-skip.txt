@@ -28,12 +28,10 @@ VmoClone2TestCase.OffsetProgressiveWrite
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
 # ── Threads: debug register / exception / syscall hangs ──
-Threads.BadSyscallCaller
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.DebugRegistersDr6ResetOnDebugException
 Threads.DebugRegistersWatchpointSyscallPanicRepro
 Threads.SyscallDebuggerModifyResult
-Threads.ExitViaException
 Threads.ReadingGeneralRegisterState
 Pager.OverlapCommitSupplyTest
 Pager.CloneChainCommitTest
