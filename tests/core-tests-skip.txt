@@ -53,10 +53,6 @@ Pager.CloneMightSeeIntermediateForks
 Pager.CloneResizeParentOK
 Pager.CloneSeesCorrectParentPages
 Pager.CloneShrinkGrowParent
-Pager.ConcurrentMultipageAccessTestVmar
-Pager.ConcurrentMultipageAccessTestVmo
-Pager.ConcurrentOverlappingAccessTestVmar
-Pager.ConcurrentOverlappingAccessTestVmo
 Pager.DecommitOnDetachTestVmar
 Pager.DetachNonMappingAccess
 Pager.EarlySupplyTestVmar
@@ -66,8 +62,6 @@ Pager.FailMultipleCommits
 Pager.InvalidPagerCreateVmo
 Pager.InvalidPagerDetachVmo
 Pager.InvalidPagerSupplyPages
-Pager.ManyRequestTestVmar
-Pager.ManyRequestTestVmo
 Pager.MappedSupplyPages
 Pager.Prefetch
 PagerProcess.KillAfterSuspendPageFault
@@ -78,11 +72,6 @@ PagerProcess.KillBlockedUsercopy
 PagerProcess.KillBlockedUsercopyCaptureFaults
 PagerProcess.KillBlockedUserPageFault
 PagerProcess.KillBlockedUserVmoRead
-Pager.ReadCloseInterruptEarlyTestVmar
-Pager.ReadCloseInterruptLateTestVmar
-Pager.ReadDetachInterruptEarlyTestVmar
-Pager.ReadDetachInterruptLateTestVmar
-Pager.ReadResizeTestVmar
 Pager.ResizeCommitTest
 Pager.SupplyAfterFail
 Pager.SuspendInKernelCaptureFaultsTest
