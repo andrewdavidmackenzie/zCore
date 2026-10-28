@@ -802,6 +802,10 @@ impl VMObjectTrait for VMObjectPaged {
         self.get_inner().1.pager_backed
     }
 
+    fn cow_parent_offset(&self) -> usize {
+        self.get_inner().1.parent_offset
+    }
+
     fn set_supplying(&self, v: bool) {
         self.get_inner_mut().1.supplying = v;
     }
