@@ -578,16 +578,19 @@ fn generate_vdso_elf(header: &std::path::Path, output: &std::path::Path, arch: A
         ("channel_call", VdsoFunc::Syscall("channel_call_noretry")),
         ("cprng_draw", VdsoFunc::Syscall("cprng_draw_once")),
         // Return constants
-        ("system_get_page_size", VdsoFunc::ReturnConst({
-            // Must match hal::PAGE_SIZE for the target architecture.
-            let target = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
-            let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-            if target == "aarch64" && target_os == "macos" {
-                16384
-            } else {
-                4096
-            }
-        })),
+        (
+            "system_get_page_size",
+            VdsoFunc::ReturnConst({
+                // Must match hal::PAGE_SIZE for the target architecture.
+                let target = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+                let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+                if target == "aarch64" && target_os == "macos" {
+                    16384
+                } else {
+                    4096
+                }
+            }),
+        ),
         (
             "system_get_num_cpus",
             VdsoFunc::ReturnConst({
