@@ -1,7 +1,6 @@
 # ── PagerWriteback: TestThread mapping write hangs ──
 PagerWriteback.ResizeWritebackWithMappingTrapDirty
 PagerWriteback.LargeWriteBatched
-PagerWriteback.NoDirtyOnCommitTrapDirty
 
 # ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
 PagerWriteback.DelayedPinAwaitingClean
@@ -39,7 +38,6 @@ Pager.Prefetch
 Pager.SuspendInKernelCaptureFaultsTest
 Pager.SuspendInKernelTest
 Pager.SuspendReadTestVmar
-PagerWriteback.CommitResizeRaceTrapDirty
 PagerWriteback.SuspendDirtyTestVmar
 Bti.DecommitRace
 

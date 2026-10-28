@@ -5040,7 +5040,6 @@ fn pager_wb_no_dirty_on_commit_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, NoDirtyOnCommitTrapDirty)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_no_dirty_on_commit_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();

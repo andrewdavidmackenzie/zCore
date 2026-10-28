@@ -994,11 +994,12 @@ impl Syscall<'_> {
                 // local frames. PREFETCH/ALWAYS_NEED only ensure pages
                 // are in the root — they don't create private copies.
                 if op == 1 {
-                    // For TRAP_DIRTY VMOs, zero-marker pages that are
-                    // about to be committed (materialized into real frames)
-                    // need a DIRTY request first. The zero→committed
-                    // transition is effectively a write operation.
-                    if pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
+                    // For TRAP_DIRTY VMOs with zero-marker pages:
+                    // COMMIT does NOT generate DIRTY requests. Zero
+                    // markers are already "committed" (they represent
+                    // a zero page). Only writes need DIRTY approval.
+                    // Skip the dirty request loop entirely for COMMIT.
+                    if false && pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
                         // Translate to root-VMO coordinates for slices.
                         let slice_off = if vmo.is_slice_vmo() {
                             vmo.get_slice_offset() / PAGE_SIZE
