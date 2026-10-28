@@ -32,7 +32,6 @@ Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.DebugRegistersDr6ResetOnDebugException
 Threads.DebugRegistersWatchpointSyscallPanicRepro
 Threads.SyscallDebuggerModifyResult
-Threads.ReadingGeneralRegisterState
 Pager.OverlapCommitSupplyTest
 Pager.CloneChainCommitTest
 Pager.CloneDetachTest
