@@ -2353,12 +2353,22 @@ impl VmMapping {
                 return Err(ZxError::OUT_OF_RANGE);
             }
         }
+        // For detached pager VMOs: pages that were decommitted on
+        // detach (clean pages with zero markers) should fault with
+        // BAD_STATE — the pager is gone and can't re-supply them.
+        // Dirty pages (still committed) are still readable.
+        let page_idx = vmo_offset / PAGE_SIZE;
+        if self.vmo.was_pager_backed()
+            && !self.vmo.has_pager()
+            && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
+        {
+            return Err(ZxError::BAD_STATE);
+        }
         // For pager-backed VMOs (or clones in a pager tree), check if
         // the page is committed or has a zero marker before attempting
         // commit_page. Zero markers mean the page is already logically
         // present (all zeros) and commit_page can handle them directly.
         // Only send a pager request for truly unsupplied pages.
-        let page_idx = vmo_offset / PAGE_SIZE;
         if self.vmo.is_pager_backed()
             && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
             && !self.vmo.has_zero_marker(page_idx)

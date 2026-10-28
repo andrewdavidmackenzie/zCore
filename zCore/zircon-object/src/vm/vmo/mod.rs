@@ -512,6 +512,7 @@ impl VmObject {
     pub fn decommit_clean_pages(&self) {
         let inner = self.inner.lock();
         let total_pages = self.len() / PAGE_SIZE;
+        let mut any_decommitted = false;
         for page_idx in 0..total_pages {
             let state = inner
                 .dirty_pages
@@ -523,6 +524,18 @@ impl VmObject {
                 // Insert a zero marker to prevent re-requesting from
                 // the (now-detached) pager.
                 self.trait_.decommit_page(page_idx);
+                any_decommitted = true;
+            }
+        }
+        // Invalidate all VMAR mappings for decommitted pages.
+        // Without this, stale page table entries let threads read
+        // zero data instead of faulting (which should deliver a
+        // FatalPageFault exception after pager detach).
+        if any_decommitted {
+            for mapping in inner.mappings.iter() {
+                if let Some(map) = mapping.upgrade() {
+                    map.range_change(0, total_pages, RangeChangeOp::Unmap);
+                }
             }
         }
     }
