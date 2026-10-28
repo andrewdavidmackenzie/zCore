@@ -80,9 +80,6 @@ PagerWriteback.ResizeWritebackRepeatedNoTrapDirty
 PagerWriteback.ResizeWritebackRepeatedTrapDirty
 PagerWriteback.SuspendDirtyTestVmar
 PagerWriteback.UntrackedAbsorbsIntervalSlots
-Snapshot.ZeroRangeLeftInSnapshotNoPagesInParent
-Snapshot.ZeroRangeLeftInSnapshotNoPagesInParentChain
-ProcessTest.SuspendThreadThenProcess
 Bti.DecommitRace
 
 # ── Resource: hangs on QEMU (interrupt vector pool) ──
