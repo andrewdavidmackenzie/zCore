@@ -119,19 +119,7 @@ PagerWriteback.UntrackedAbsorbsIntervalSlots
 Snapshot.ZeroRangeLeftInSnapshotNoPagesInParent
 Snapshot.ZeroRangeLeftInSnapshotNoPagesInParentChain
 ProcessTest.SuspendThreadThenProcess
-Bti.Clone
-Bti.Create
 Bti.DecommitRace
-Bti.GetInfoTest
-Bti.InvalidPinArgs
-Bti.NameSupport
-Bti.NoDelayedUnpin
-Bti.Pin
-Bti.PinContigFlag
-Bti.PinContiguous
-Bti.PinTooManyAddresses
-Bti.QuarantineDisallowsPin
-Bti.Resize
 
 # ── Resource: hangs on QEMU (interrupt vector pool) ──
 Resource.PcInterruptVectorPoolLeak
