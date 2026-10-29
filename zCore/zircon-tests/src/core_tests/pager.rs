@@ -4108,7 +4108,6 @@ fn pager_wb_delayed_dirty_zero_range() {
 
 /// C++: TEST(PagerWriteback, DelayedPinAwaitingClean)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_delayed_pin_awaiting_clean() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4258,7 +4257,6 @@ fn pager_wb_dirty_after_map_protect_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, DirtyAfterPin)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_dirty_after_pin() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -4641,7 +4639,6 @@ fn pager_wb_fail_dirty_requests_for_zero_pages() {
 
 /// C++: TEST(PagerWriteback, FailedPinAwaitingClean)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_failed_pin_awaiting_clean() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5040,7 +5037,6 @@ fn pager_wb_no_dirty_on_commit_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, NoDirtyOnCommitTrapDirty)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_no_dirty_on_commit_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5295,7 +5291,6 @@ fn pager_wb_not_modified_clone_write_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, NotModifiedFailedPinWrite)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_not_modified_failed_pin_write() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5501,7 +5496,6 @@ fn pager_wb_not_modified_on_vmo_read_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, NotModifiedPartialFailedPinWrite)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_not_modified_partial_failed_pin_write() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -5772,7 +5766,6 @@ fn pager_wb_op_zero_pinned_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, OpZeroPinnedTrapDirty)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_op_zero_pinned_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6166,7 +6159,6 @@ fn pager_wb_pin_for_write_no_trap_dirty() {
 /// TRAP_DIRTY variant: supply pages, OP_DIRTY, write, verify dirty
 /// ranges and content.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_pin_for_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6239,7 +6231,6 @@ fn pager_wb_pin_for_write_unpopulated_no_trap_dirty() {
 /// TRAP_DIRTY variant: supply only some pages, OP_DIRTY the supplied
 /// one, write to it, verify dirty ranges.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_pin_for_write_unpopulated_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -6307,7 +6298,6 @@ fn pager_wb_pinned_writeback_no_trap_dirty() {
 /// TRAP_DIRTY variant: supply pages, OP_DIRTY, write, writeback cycle,
 /// verify content preserved.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_pinned_writeback_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8312,7 +8302,6 @@ fn pager_wb_slice_pin_write_no_trap_dirty() {
 /// TRAP_DIRTY variant: create slice, OP_DIRTY on parent, write via slice,
 /// verify dirty ranges and content.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_slice_pin_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8570,7 +8559,6 @@ fn pager_wb_write_pin_awaiting_clean_no_trap_dirty() {
 /// TRAP_DIRTY variant: OP_DIRTY, write, begin writeback, OP_DIRTY again
 /// (re-dirty during writeback), write again, end writeback.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_write_pin_awaiting_clean_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();

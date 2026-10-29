@@ -266,6 +266,9 @@ pub fn spawn_process(
         config.vdso_code_size,
         vdso_flags,
     )?;
+    // Record the vDSO code range so the kernel can verify syscalls
+    // come from the vDSO (BAD_SYSCALL policy check).
+    proc.set_vdso_code_range(vdso_code_addr, config.vdso_code_size);
 
     let size = elf.load_segment_size();
     let min_offset = if elf.header.pt2.entry_point() < size as u64 {

@@ -9,6 +9,7 @@ description = "Zircon vDSO: syscall trampolines and system constant accessors"
 skip_package = true
 
 [dependencies]
+hal = { path = "../hal" }
 
 [lib]
 # Built as a static library; the vDSO ELF is assembled by xtask

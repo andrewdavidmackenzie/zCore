@@ -316,6 +316,11 @@ pub fn spawn_task(
     if enable {
         crate::arch::intr_on();
     }
+    // If the task was spawned on a different CPU, send an IPI to
+    // wake it from HLT/WFI so it sees the new task immediately.
+    // Without this, a halted CPU won't poll the task until its
+    // next timer interrupt (~10ms), causing WaitForBlocked timeouts.
+    crate::ipi_wakeup(actual_cpu);
     (key, actual_cpu)
 }
 

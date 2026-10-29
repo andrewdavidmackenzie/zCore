@@ -14,7 +14,7 @@ extern "C" {
     fn drivers_virt_to_phys(vaddr: VirtAddr) -> PhysAddr;
 }
 
-pub const PAGE_SIZE: usize = 4096;
+pub use hal::PAGE_SIZE;
 
 type VirtAddr = usize;
 type PhysAddr = usize;

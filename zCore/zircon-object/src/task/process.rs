@@ -162,6 +162,11 @@ struct ProcessInner {
     /// Number of active process-level suspensions. Threads added while
     /// this is non-zero inherit the suspension count.
     suspend_count: usize,
+    /// vDSO code mapping range [start, end). When non-zero, syscalls
+    /// whose return address falls outside this range are rejected with
+    /// a BAD_SYSCALL policy exception (they bypassed the vDSO).
+    /// Zero means no vDSO mapped (petal/userstart) — check is skipped.
+    vdso_code_range: (usize, usize),
 }
 
 /// Status of a process.
@@ -539,6 +544,32 @@ impl Process {
     /// Get the `VmAddressRegion` of the process.
     pub fn vmar(&self) -> Arc<VmAddressRegion> {
         self.vmar.clone()
+    }
+
+    /// Set the vDSO code address range. Called during process spawn
+    /// after the vDSO is mapped.
+    pub fn set_vdso_code_range(&self, start: usize, size: usize) {
+        self.inner.lock().vdso_code_range = (start, start + size);
+    }
+
+    /// Check if this process has any exception channel attached
+    /// (process-level or debugger). Used to guard the BAD_SYSCALL
+    /// check — only enforce it when someone is listening.
+    pub fn has_exception_channel(&self) -> bool {
+        self.exceptionate.has_channel() || self.debug_exceptionate.has_channel()
+    }
+
+    /// Check if a syscall return address should trigger BAD_SYSCALL.
+    /// Returns true if the process has a vDSO mapped AND the address
+    /// is NOT within the vDSO code range (i.e., the syscall bypassed
+    /// the vDSO). Returns false if no vDSO is mapped (petal/userstart).
+    pub fn is_syscall_from_outside_vdso(&self, ret_addr: usize) -> bool {
+        let (start, end) = self.inner.lock().vdso_code_range;
+        // No vDSO mapped — skip the check.
+        if start == 0 && end == 0 {
+            return false;
+        }
+        ret_addr < start || ret_addr >= end
     }
 
     /// Swap the UTC clock handle. Returns the old handle value.

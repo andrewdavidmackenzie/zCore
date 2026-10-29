@@ -12,9 +12,12 @@ impl Syscall<'_> {
         }
         let pager = Pager::new();
         let proc = self.thread.proc();
-        // ZX_DEFAULT_PAGER_RIGHTS = INSPECT | TRANSFER | ATTACH_VMO | MANAGE_VMO
-        let pager_rights =
-            Rights::INSPECT | Rights::TRANSFER | Rights::ATTACH_VMO | Rights::MANAGE_VMO;
+        // ZX_DEFAULT_PAGER_RIGHTS = INSPECT | TRANSFER | RESIZE | ATTACH_VMO | MANAGE_VMO
+        let pager_rights = Rights::INSPECT
+            | Rights::TRANSFER
+            | Rights::RESIZE
+            | Rights::ATTACH_VMO
+            | Rights::MANAGE_VMO;
         let handle = proc.add_handle(Handle::new(pager, pager_rights));
         out.write(handle)?;
         Ok(())
@@ -35,7 +38,7 @@ impl Syscall<'_> {
             pager_handle, options, port_handle, key, size
         );
         let proc = self.thread.proc();
-        let pager = proc.get_object::<Pager>(pager_handle)?;
+        let pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::ATTACH_VMO)?;
         let port = proc.get_object_with_rights::<Port>(port_handle, Rights::WRITE)?;
         let vmo = pager.create_vmo(options, &port, key, size)?;
         let mut vmo_rights = Rights::DEFAULT_VMO;
@@ -59,7 +62,7 @@ impl Syscall<'_> {
             pager_handle, vmo_handle
         );
         let proc = self.thread.proc();
-        let pager = proc.get_object::<Pager>(pager_handle)?;
+        let pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::ATTACH_VMO)?;
         // Fuchsia requires WRITE right on the VMO handle for detach.
         let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::WRITE)?;
         pager.detach_vmo(&vmo)
@@ -80,7 +83,7 @@ impl Syscall<'_> {
             pager_handle, vmo_handle, offset, length, aux_vmo_handle, aux_offset
         );
         let proc = self.thread.proc();
-        let pager = proc.get_object::<Pager>(pager_handle)?;
+        let pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::MANAGE_VMO)?;
         // Fuchsia requires WRITE right on the pager VMO handle for supply.
         let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::WRITE)?;
         // Validate VMO ownership before looking up aux_vmo handle.

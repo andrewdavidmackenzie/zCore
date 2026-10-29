@@ -28,6 +28,7 @@ numeric-enum-macro = "0.2"
 device_tree = { git = "https://github.com/rcore-os/device_tree-rs", rev = "2f2e55f" }
 bitmap-allocator = "0.4"
 virtio-drivers = { version = "0.7", optional = true }
+hal = { path = "../zCore/hal" }
 lock = { path = "../zCore/lock" }
 d1-pac = { version = "0.0.27", optional = true }
 volatile = "0.3"

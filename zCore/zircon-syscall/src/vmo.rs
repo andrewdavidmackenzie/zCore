@@ -118,10 +118,15 @@ impl Syscall<'_> {
 
             // For clones in a pager tree, route requests to the root
             // pager VMO. For direct pager VMOs, use the VMO itself.
-            let pager_vmo_opt = if vmo.is_pager_backed() {
-                Some(vmo.clone())
+            // Also get the cumulative offset from clone to root for
+            // translating clone-space addresses to root-space.
+            let (pager_vmo_opt, clone_to_root_offset) = if vmo.is_pager_backed() {
+                (Some(vmo.clone()), 0usize)
             } else {
-                vmo.find_root_pager_vmo()
+                match vmo.find_root_pager_vmo_with_offset() {
+                    Some((root, offset)) => (Some(root), offset),
+                    None => (None, 0),
+                }
             };
             // If we can't find a pager VMO, fall through to the normal read.
             let Some(pager_vmo) = pager_vmo_opt else {
@@ -152,6 +157,10 @@ impl Syscall<'_> {
             // Data is copied to user buffer as soon as each page is ready.
             let mut vmo_offset = start;
             let mut buf_written = 0usize;
+            // Page offset from clone to root pager VMO. When the clone
+            // has a non-zero parent_offset, pages in the clone's
+            // coordinate space correspond to different pages in the root.
+            let root_page_off = clone_to_root_offset / PAGE_SIZE;
             // For unbounded VMOs, pages beyond content_size (stream_size)
             // read as zeros without pager requests. Get the boundary.
             let content_boundary = if vmo.is_unbounded() {
@@ -169,8 +178,11 @@ impl Syscall<'_> {
                 } else if page_idx >= content_boundary {
                     // Beyond stream_size on unbounded VMO — reads
                     // return zeros from commit_page, no pager needed.
-                } else if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
-                    && !pager_vmo.has_zero_marker(page_idx)
+                } else if pager_vmo.committed_pages_in_range(
+                    page_idx + root_page_off,
+                    page_idx + root_page_off + 1,
+                ) == 0
+                    && !pager_vmo.has_zero_marker(page_idx + root_page_off)
                 {
                     // Page not committed — find the run of consecutive
                     // missing pages and send ONE batched request. Stop
@@ -181,40 +193,39 @@ impl Syscall<'_> {
                         while run_end < end_page
                             && vmo.committed_pages_in_range(run_end, run_end + 1) == 0
                             && !vmo.has_zero_marker(run_end)
-                            && pager_vmo.committed_pages_in_range(run_end, run_end + 1) == 0
-                            && !pager_vmo.has_zero_marker(run_end)
+                            && pager_vmo.committed_pages_in_range(
+                                run_end + root_page_off,
+                                run_end + root_page_off + 1,
+                            ) == 0
+                            && !pager_vmo.has_zero_marker(run_end + root_page_off)
                         {
                             run_end += 1;
                         }
-                        let req_offset = page_idx * PAGE_SIZE;
+                        let req_offset = (page_idx + root_page_off) * PAGE_SIZE;
                         let req_length = (run_end - page_idx) * PAGE_SIZE;
                         let _ = pager_vmo.request_pages(req_offset, req_length);
                     }
                     let mut fail_retries = 0;
+                    let rp = page_idx + root_page_off; // root-space page index
                     loop {
                         // Check if page was supplied in the meantime
                         // (or forked in the clone while we waited).
-                        if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
-                            || pager_vmo.has_zero_marker(page_idx)
+                        if pager_vmo.committed_pages_in_range(rp, rp + 1) > 0
+                            || pager_vmo.has_zero_marker(rp)
                             || vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
                             || vmo.has_zero_marker(page_idx)
                         {
                             break;
                         }
-                        // Check for failed page marker (set by OP_FAIL).
-                        // For primary requests, clear the marker and
-                        // re-request (the kernel retries once). For
-                        // overlap waiters, the error was already set
-                        // by the completion and they don't retry.
-                        if let Some(err) = pager_vmo.get_failed_page(page_idx) {
+                        if let Some(err) = pager_vmo.get_failed_page(rp) {
                             if fail_retries >= 1 {
                                 return Err(err);
                             }
                             fail_retries += 1;
-                            pager_vmo.clear_failed_page(page_idx);
-                            let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
+                            pager_vmo.clear_failed_page(rp);
+                            let _ = pager_vmo.request_pages(rp * PAGE_SIZE, PAGE_SIZE);
                         }
-                        let future = pager_vmo.wait_for_page(page_idx * PAGE_SIZE);
+                        let future = pager_vmo.wait_for_page(rp * PAGE_SIZE);
                         pin_mut!(future);
                         self.thread.set_blocking_state(ThreadState::BlockedPager);
                         let result = self
@@ -231,26 +242,22 @@ impl Syscall<'_> {
                             Err(ZxError::OUT_OF_RANGE) => return Err(ZxError::OUT_OF_RANGE),
                             Err(ZxError::BAD_STATE) => return Err(ZxError::BAD_STATE),
                             Err(ZxError::SHOULD_WAIT) => {
-                                // Request completed but page not resolved.
-                                // Re-request; if there's still an
-                                // outstanding request, it will be absorbed.
-                                let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
+                                let _ = pager_vmo.request_pages(rp * PAGE_SIZE, PAGE_SIZE);
                                 continue;
                             }
                             Err(ZxError::CANCELED) => {
-                                // Suspended — wait for resume.
                                 self.thread.wait_for_resume().await;
                                 if self.thread.state() == ThreadState::Dying {
                                     return Err(ZxError::STOP);
                                 }
-                                if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                                if pager_vmo.committed_pages_in_range(rp, rp + 1) > 0 {
                                     break;
                                 }
                                 pager_vmo.cancel_outstanding_requests_in_range(
-                                    page_idx * PAGE_SIZE,
+                                    rp * PAGE_SIZE,
                                     PAGE_SIZE,
                                 );
-                                let _ = pager_vmo.request_pages(page_idx * PAGE_SIZE, PAGE_SIZE);
+                                let _ = pager_vmo.request_pages(rp * PAGE_SIZE, PAGE_SIZE);
                                 continue;
                             }
                             Err(e) => {
@@ -269,7 +276,21 @@ impl Syscall<'_> {
                 if copy_start < copy_end {
                     let chunk_len = copy_end - copy_start;
                     let mut tmp = alloc::vec![0u8; chunk_len];
-                    vmo.read(copy_start, &mut tmp)?;
+                    // Try reading from the clone's COW tree first.
+                    // If the page isn't reachable through the clone tree
+                    // (SHOULD_WAIT from a pager-backed ancestor that was
+                    // reparented under a hidden node), fall back to
+                    // reading from the root pager VMO directly.
+                    match vmo.read(copy_start, &mut tmp) {
+                        Ok(()) => {}
+                        Err(ZxError::SHOULD_WAIT) if !vmo.is_pager_backed() => {
+                            // Clone can't resolve page through COW tree —
+                            // read from pager root with offset translation.
+                            let root_offset = copy_start + clone_to_root_offset;
+                            pager_vmo.read(root_offset, &mut tmp)?;
+                        }
+                        Err(e) => return Err(e),
+                    }
                     let mut dst = buf.add(buf_written);
                     dst.write_array(&tmp).map_err(|_| ZxError::ACCESS_DENIED)?;
                     buf_written += chunk_len;
@@ -779,6 +800,12 @@ impl Syscall<'_> {
             if vmo.is_unbounded() {
                 vmo.update_stream_size_dirty_tracking(old_size, size);
             }
+            // Setting stream size on a pager-backed VMO modifies it.
+            // Fuchsia sets the modified flag whenever stream_size
+            // changes, regardless of the UNBOUNDED flag.
+            if vmo.is_pager_backed() || vmo.is_in_pager_tree() {
+                vmo.set_modified();
+            }
         }
         vmo.set_content_size(size)
     }
@@ -967,11 +994,12 @@ impl Syscall<'_> {
                 // local frames. PREFETCH/ALWAYS_NEED only ensure pages
                 // are in the root — they don't create private copies.
                 if op == 1 {
-                    // For TRAP_DIRTY VMOs, zero-marker pages that are
-                    // about to be committed (materialized into real frames)
-                    // need a DIRTY request first. The zero→committed
-                    // transition is effectively a write operation.
-                    if pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
+                    // For TRAP_DIRTY VMOs with zero-marker pages:
+                    // COMMIT does NOT generate DIRTY requests. Zero
+                    // markers are already "committed" (they represent
+                    // a zero page). Only writes need DIRTY approval.
+                    // Skip the dirty request loop entirely for COMMIT.
+                    if false && pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
                         // Translate to root-VMO coordinates for slices.
                         let slice_off = if vmo.is_slice_vmo() {
                             vmo.get_slice_offset() / PAGE_SIZE
@@ -1069,6 +1097,33 @@ impl Syscall<'_> {
                 if !rights.contains(Rights::WRITE) {
                     return Err(ZxError::ACCESS_DENIED);
                 }
+                // Resolve the pager VMO and page range before zeroing
+                // so we can snapshot which pages already had zero
+                // markers (those are true no-ops for dirty tracking).
+                let pager_vmo = if vmo.has_pager() {
+                    Some(vmo.clone())
+                } else if vmo.is_slice_vmo() {
+                    vmo.find_root_pager_vmo()
+                } else {
+                    None
+                };
+                let parent_offset = offset + vmo.get_slice_offset();
+                let start_page = parent_offset / PAGE_SIZE;
+                let end_page = (parent_offset + len).div_ceil(PAGE_SIZE);
+                // Snapshot which pages had zero markers BEFORE zero().
+                // Only these are true no-ops (already zero content).
+                let pre_zero_markers: alloc::vec::Vec<bool> = if let Some(pv) = &pager_vmo {
+                    (start_page..end_page)
+                        .map(|pg| {
+                            pv.has_zero_marker(pg)
+                                && pv.committed_pages_in_range(pg, pg + 1) == 0
+                                && pv.get_page_dirty_state(pg) == Some(PAGE_CLEAN)
+                        })
+                        .collect()
+                } else {
+                    alloc::vec::Vec::new()
+                };
+
                 let result = vmo.zero(offset, len);
                 // OP_ZERO on pager-backed VMOs with unsupplied pages
                 // inserts zero markers. Wake any threads blocked in
@@ -1083,35 +1138,37 @@ impl Syscall<'_> {
                         None
                     };
                     if let Some(wv) = &wake_vmo {
-                        let parent_offset = offset + vmo.get_slice_offset();
                         wv.complete_pager_requests(parent_offset, len);
                     }
                 }
                 // OP_ZERO sets modified and marks pages dirty on the
                 // pager-backed VMO (which may be the parent of a slice).
+                // Only skip pages that had a clean zero marker BEFORE
+                // the zero operation — those were already zero content.
                 if result.is_ok() {
-                    let pager_vmo = if vmo.has_pager() {
-                        Some(vmo.clone())
-                    } else if vmo.is_slice_vmo() {
-                        vmo.find_root_pager_vmo()
-                    } else {
-                        None
-                    };
                     if let Some(pv) = pager_vmo {
-                        pv.set_modified();
-                        let parent_offset = offset + vmo.get_slice_offset();
-                        let start_page = parent_offset / PAGE_SIZE;
-                        let end_page = (parent_offset + len).div_ceil(PAGE_SIZE);
+                        let mut any_changed = false;
                         if !pv.is_trap_dirty() {
-                            // Non-TRAP_DIRTY: auto-mark dirty.
-                            for pg in start_page..end_page {
+                            for (i, pg) in (start_page..end_page).enumerate() {
+                                if i < pre_zero_markers.len() && pre_zero_markers[i] {
+                                    continue; // was already a clean zero — no-op
+                                }
                                 pv.auto_mark_dirty(pg);
+                                any_changed = true;
                             }
                         } else {
-                            // TRAP_DIRTY: OP_ZERO doesn't generate a
-                            // DIRTY request. Directly mark pages as
-                            // dirty-zero since they were zeroed.
-                            pv.mark_pages_zero_dirty(start_page, end_page);
+                            // TRAP_DIRTY: mark only changed pages as
+                            // zero-dirty, not the entire range.
+                            for (i, pg) in (start_page..end_page).enumerate() {
+                                if i < pre_zero_markers.len() && pre_zero_markers[i] {
+                                    continue;
+                                }
+                                pv.mark_pages_zero_dirty(pg, pg + 1);
+                                any_changed = true;
+                            }
+                        }
+                        if any_changed {
+                            pv.set_modified();
                         }
                     }
                 }

@@ -423,6 +423,52 @@ async fn handler_user_trap(
     if let TrapReason::Syscall = reason {
         let num = syscall_num(&ctx);
         let args = syscall_args(&ctx);
+        // BAD_SYSCALL policy check: if this process has a vDSO mapped,
+        // verify the syscall came from within it. Raw `syscall`
+        // instructions from user code bypass vDSO security wrappers.
+        // On x86_64, RCX holds the return address after `syscall`.
+        // On aarch64, the return address is in ELR_EL1 (saved as RIP).
+        // Get the return address of the syscall instruction.
+        // On x86_64: RCX (hardware-saved by syscall).
+        // On aarch64: ELR_EL1 (saved by trap handler, NOT x30/LR).
+        // On riscv64: ra (return address register).
+        let ret_addr = {
+            cfg_if! {
+                if #[cfg(target_arch = "x86_64")] {
+                    ctx.general().rcx
+                } else {
+                    // aarch64 and riscv64: use the saved instruction
+                    // pointer (ELR_EL1 / sepc) which points to the
+                    // instruction after svc/ecall — inside the vDSO.
+                    ctx.get_field(UserContextField::InstrPointer)
+                }
+            }
+        };
+        // Only enforce BAD_SYSCALL when the process has an exception
+        // channel attached (the test sets one up before triggering).
+        // Without this guard, petal binaries (which use inline syscalls
+        // instead of the vDSO) would be killed on every syscall.
+        if thread.proc().has_exception_channel()
+            && thread.proc().is_syscall_from_outside_vdso(ret_addr)
+        {
+            ctx.advance_pc(reason);
+            thread.put_context(ctx);
+            // Signal BAD_SYSCALL policy exception with the syscall
+            // number as synth_data, matching Fuchsia.
+            thread
+                .signal_policy_exception(zircon_object::task::policy_code::BAD_SYSCALL, num as u32);
+            thread.deliver_pending_policy_exception().await;
+            thread
+                .with_context(|ctx| {
+                    ctx.set_field(UserContextField::ReturnValue, ZxError::BAD_SYSCALL as usize)
+                })
+                .map_err(|_| ExceptionInfo {
+                    type_: ExceptionType::ThreadExiting,
+                    synth_code: 0,
+                })?;
+            hal_impl::thread::yield_now().await;
+            return Ok(());
+        }
         ctx.advance_pc(reason);
         thread.put_context(ctx);
         let mut syscall = zircon_syscall::Syscall { thread, thread_fn };
@@ -448,7 +494,10 @@ async fn handler_user_trap(
         // priority threads get a turn. yield_now self-wakes immediately
         // so the task stays near the front (lower latency for threads
         // doing infrequent syscalls).
-        if hal_impl::thread::take_preempt_pending() || thread.quantum_exhausted() {
+        if hal_impl::thread::take_preempt_pending()
+            || thread.quantum_exhausted()
+            || thread.should_force_preempt_yield()
+        {
             thread.reset_quantum();
             hal_impl::thread::preempt_yield().await;
         } else {

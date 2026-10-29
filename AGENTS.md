@@ -1,5 +1,41 @@
 # zCore Updated
 
+## Scheduler architecture (DEFINITIVE — do not re-investigate)
+
+zCore uses a **cooperative async executor** with **lazy preemption
+at kernel-user boundaries**. Each Zircon thread is a Rust Future
+polled by a per-CPU executor loop. **Tasks CANNOT be interrupted
+mid-poll().** The timer interrupt creates a new executor but the
+old one finishes its current poll before dying.
+
+**What works:**
+- User-mode lazy preemption: timer interrupt traps to kernel,
+  handler calls `preempt_yield().await`, task yields
+- Per-thread time quantum (10ms) checked at syscall return
+- Priority scheduler (32 levels, strict FIFO round-robin)
+- Weight-based time slices, deadline parameter storage
+- Priority inheritance, cross-CPU IPI wakeup, multi-CPU distribution
+
+**What is missing (see issue #801):**
+- True task-level preemption during kernel poll()
+- Fair scheduler (CFS/WFQ) with virtual timeline
+- Deadline scheduler (EDF) with earliest-deadline-first
+
+**Impact:** 33 tests hang because they need two threads to make
+concurrent progress through kernel operations. One thread blocks
+on pager/futex/BTI, the other must handle requests simultaneously.
+The cooperative executor cannot interleave their kernel-side futures.
+
+**Do NOT repeatedly investigate this.** The answer is: cooperative
+executor with lazy preemption. True preemption requires issue #801.
+
+**UPDATE (after PR #800 investigation):** Cross-CPU wakeup via IPI
+works correctly. The port signal → waker → IPI → executor wake
+chain was verified. Most remaining test hangs (24 total) are caused
+by missing kernel code paths (dirty request retries, unsupplied page
+handling, suspend/resume), NOT by fundamental executor limitations.
+Each test should be investigated individually for its specific bug.
+
 ## Default build command
 To build and run zCore the default command to use is:
 

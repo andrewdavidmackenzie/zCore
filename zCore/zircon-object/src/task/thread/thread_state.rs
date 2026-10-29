@@ -24,7 +24,20 @@ pub(super) trait ContextAccessState {
 impl ContextAccessState for UserContext {
     fn read_state(&self, kind: ThreadStateKind, buf: &mut [u8]) -> ZxResult<usize> {
         match kind {
-            ThreadStateKind::General => buf.write_struct(self.general()),
+            ThreadStateKind::General => {
+                #[cfg(target_arch = "x86_64")]
+                {
+                    let mut regs = *self.general();
+                    // Clear RF (Resume Flag, bit 16). RF is automatically
+                    // cleared by the CPU after one instruction — it cannot
+                    // survive a context switch. Fuchsia sanitizes it in
+                    // both read and write to ensure round-trip consistency.
+                    regs.rflags &= !(1 << 16);
+                    buf.write_struct(&regs)
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                buf.write_struct(self.general())
+            }
             #[cfg(target_arch = "x86_64")]
             ThreadStateKind::Vector => {
                 // Convert FXSAVE format (VectorRegs) to Zircon's
@@ -134,7 +147,16 @@ impl ContextAccessState for UserContext {
                         return Err(ZxError::INVALID_ARGS);
                     }
                 }
-                *self.general_mut() = regs;
+                #[cfg(target_arch = "x86_64")]
+                {
+                    let mut regs = regs;
+                    regs.rflags &= !(1 << 16); // clear RF
+                    *self.general_mut() = regs;
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                {
+                    *self.general_mut() = regs;
+                }
             }
             #[cfg(target_arch = "x86_64")]
             ThreadStateKind::Vector => {

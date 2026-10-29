@@ -63,7 +63,6 @@ pub(crate) fn as_kobject(thread: &alloc::sync::Arc<Thread>) -> alloc::sync::Arc<
 /// syscall number, but not called from vDSO). Verify the exception
 /// report has ZX_EXCP_POLICY_CODE_BAD_SYSCALL and synth_data==1.
 #[async_std::test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 async fn bad_syscall_caller() {
     helpers::ensure_hal_init();
     let job = Job::root();

@@ -22,7 +22,7 @@ impl Syscall<'_> {
         mut packet_res: UserOutPtr<PortPacket>,
     ) -> ZxResult {
         info!(
-            "port.wait: handle={}, deadline={:?}",
+            "port.wait: handle={:#x}, deadline={:?}",
             handle_value, deadline
         );
         assert_eq!(core::mem::size_of::<PortPacket>(), 48);

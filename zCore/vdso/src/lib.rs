@@ -91,10 +91,13 @@ pub extern "C" fn zx_system_get_num_cpus() -> u32 {
     data().map_or(0, |d| d.max_num_cpus)
 }
 
-/// Get the system page size. Always 4096 on all Zircon platforms.
+/// Get the system page size.
+///
+/// Returns the kernel's `PAGE_SIZE` from `hal::defs`, which varies
+/// by target architecture.
 #[no_mangle]
 pub extern "C" fn zx_system_get_page_size() -> u32 {
-    4096
+    hal::PAGE_SIZE as u32
 }
 
 /// Get the amount of physical memory in the system.

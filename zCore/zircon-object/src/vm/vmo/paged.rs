@@ -419,16 +419,38 @@ impl VMObjectTrait for VMObjectPaged {
         for block in iter {
             //let paddr = self.commit_page(block.block, MMUFlags::READ)?;
             if block.len() == PAGE_SIZE && !inner.is_contiguous() {
-                match inner.commit_page(block.block, MMUFlags::WRITE) {
-                    Ok(_) => {}
-                    Err(ZxError::SHOULD_WAIT) => {
-                        // Pager-backed VMO with unsupplied page — already
-                        // zero. Insert a zero marker so subsequent reads
-                        // return zeros without triggering a pager request.
-                        inner.zero_markers.insert(block.block);
-                        continue;
+                // For COW clones or pager-backed VMOs: if the page has
+                // no local frame and no zero marker, we can just insert
+                // a zero marker directly. This avoids an unnecessary
+                // COW fork (commit_page(WRITE)) that would allocate a
+                // frame in the parent's hidden node, inflate
+                // committed_bytes, and then immediately decommit.
+                // Fuchsia's zero path does the same: for full-page zeros
+                // on a clone, insert a zero marker without committing.
+                let has_local_frame = inner.frames.contains_key(&block.block);
+                if !has_local_frame && (inner.parent.is_some() || inner.pager_backed) {
+                    // No local frame: just insert zero marker.
+                    // This blocks parent look-through, so reads return zero.
+                    inner.zero_markers.insert(block.block);
+                    // Unmap so subsequent accesses see the zero marker.
+                    for map in inner.mappings.iter() {
+                        if let Some(map) = map.upgrade() {
+                            map.range_change(block.block, 1, RangeChangeOp::Unmap);
+                        }
                     }
-                    Err(e) => return Err(e),
+                    continue;
+                }
+                // Page has a local frame — need to handle it.
+                if !has_local_frame {
+                    // No parent and not pager-backed: commit a zero page.
+                    match inner.commit_page(block.block, MMUFlags::WRITE) {
+                        Ok(_) => {}
+                        Err(ZxError::SHOULD_WAIT) => {
+                            inner.zero_markers.insert(block.block);
+                            continue;
+                        }
+                        Err(e) => return Err(e),
+                    }
                 }
                 let pinned = inner
                     .frames
@@ -440,22 +462,12 @@ impl VMObjectTrait for VMObjectPaged {
                         hal_impl::mem::pmem_zero(frame.frame.paddr(), PAGE_SIZE);
                     }
                 } else {
-                    // Decommit the page.  Insert a zero marker if:
-                    // - This VMO has a parent (COW child) — the marker
-                    //   prevents a later merge from re-introducing a
-                    //   page that was zeroed.  Even if parent_has_page
-                    //   is false now (page was migrated), a merge can
-                    //   still bring pages from the hidden node.
-                    // - This is a pager-backed VMO — prevents commit_page
-                    //   from re-requesting from the pager.
+                    // Decommit the page and insert zero marker if needed.
                     if inner.parent.is_some() || inner.pager_backed {
                         inner.zero_markers.insert(block.block);
                     }
                     unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
                     inner.frames.remove(&block.block);
-                    // Unmap the page from all mappings so subsequent
-                    // accesses trigger a page fault (which will see the
-                    // zero marker and return a zero page).
                     for map in inner.mappings.iter() {
                         if let Some(map) = map.upgrade() {
                             map.range_change(block.block, 1, RangeChangeOp::Unmap);
@@ -788,6 +800,10 @@ impl VMObjectTrait for VMObjectPaged {
 
     fn is_pager_backed(&self) -> bool {
         self.get_inner().1.pager_backed
+    }
+
+    fn cow_parent_offset(&self) -> usize {
+        self.get_inner().1.parent_offset
     }
 
     fn set_supplying(&self, v: bool) {

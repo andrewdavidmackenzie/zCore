@@ -116,6 +116,10 @@ impl Syscall<'_> {
         // For pager-backed VMOs, demand-page the pages before pinning.
         // The pin needs committed pages, so we wait for the pager to
         // supply them. Use blocking_run so Thread::kill() can interrupt.
+        // For pager-backed VMOs, handle supply + dirty in 3 phases:
+        //   Phase 1: DIRTY for already-supplied clean pages
+        //   Phase 2: READ for unsupplied pages (pager supplies them)
+        //   Phase 3: DIRTY for newly-supplied pages from Phase 2
         if vmo.is_pager_backed() || vmo.is_in_pager_tree() {
             use zircon_object::task::ThreadState;
             let pager_vmo = if vmo.is_pager_backed() {
@@ -123,17 +127,76 @@ impl Syscall<'_> {
             } else {
                 vmo.find_root_pager_vmo().unwrap_or_else(|| vmo.clone())
             };
+            let is_write = options.contains(BtiOptions::PERM_WRITE);
+            let is_trap_dirty = is_write && pager_vmo.is_trap_dirty() && pager_vmo.has_pager();
             let start_page = offset / PAGE_SIZE;
             let end_page = offset
                 .checked_add(size)
                 .ok_or(ZxError::OUT_OF_RANGE)?
                 .div_ceil(PAGE_SIZE);
+
+            // Phase 1: DIRTY for supplied-but-clean pages.
+            if is_trap_dirty {
+                let mut first_clean = None;
+                let mut last_clean = start_page;
+                for pg in start_page..end_page {
+                    if pager_vmo.committed_pages_in_range(pg, pg + 1) > 0
+                        && !pager_vmo.is_page_dirty(pg)
+                    {
+                        if first_clean.is_none() {
+                            first_clean = Some(pg);
+                        }
+                        last_clean = pg + 1;
+                    }
+                }
+                if let Some(fc) = first_clean {
+                    let req_off = fc * PAGE_SIZE;
+                    let req_len = (last_clean - fc) * PAGE_SIZE;
+                    match pager_vmo.request_dirty(req_off, req_len) {
+                        Err(ZxError::SHOULD_WAIT) => {}
+                        Err(e) => return Err(e),
+                        Ok(()) => {}
+                    }
+                    for pg in fc..last_clean {
+                        if pager_vmo.is_page_dirty(pg) {
+                            continue;
+                        }
+                        let mut retries = 0;
+                        loop {
+                            let future = pager_vmo.wait_for_dirty(pg * PAGE_SIZE);
+                            futures::pin_mut!(future);
+                            self.thread.set_blocking_state(ThreadState::BlockedPager);
+                            match self
+                                .thread
+                                .blocking_run::<_, (), _>(
+                                    future,
+                                    ThreadState::BlockedPager,
+                                    core::time::Duration::from_nanos(u64::MAX),
+                                    None,
+                                )
+                                .await
+                            {
+                                Ok(()) => break,
+                                Err(e) => {
+                                    if retries >= 1 {
+                                        return Err(e);
+                                    }
+                                    retries += 1;
+                                    let _ = pager_vmo.request_dirty(pg * PAGE_SIZE, PAGE_SIZE);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Phase 2: READ for unsupplied pages.
             for page_idx in start_page..end_page {
-                if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0 {
+                if pager_vmo.committed_pages_in_range(page_idx, page_idx + 1) > 0
+                    || pager_vmo.has_zero_marker(page_idx)
+                {
                     continue;
                 }
-                // Check if page is beyond VMO size (resize may have
-                // shrunk it while we were waiting).
                 if page_idx * PAGE_SIZE >= vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
@@ -141,19 +204,62 @@ impl Syscall<'_> {
                 let future = pager_vmo.wait_for_page(page_idx * PAGE_SIZE);
                 futures::pin_mut!(future);
                 self.thread.set_blocking_state(ThreadState::BlockedPager);
-                let result = self
-                    .thread
+                self.thread
                     .blocking_run::<_, (), _>(
                         future,
                         ThreadState::BlockedPager,
                         core::time::Duration::from_nanos(u64::MAX),
                         None,
                     )
-                    .await;
-                match result {
-                    Ok(()) => {}
-                    Err(ZxError::OUT_OF_RANGE) => return Err(ZxError::OUT_OF_RANGE),
-                    Err(e) => return Err(e),
+                    .await?;
+            }
+        }
+        // Phase 3: DIRTY for pages supplied in Phase 2 (newly supplied).
+        if vmo.is_pager_backed() || vmo.is_in_pager_tree() {
+            let pager_vmo = if vmo.is_pager_backed() {
+                vmo.clone()
+            } else {
+                vmo.find_root_pager_vmo().unwrap_or_else(|| vmo.clone())
+            };
+            let is_write = options.contains(BtiOptions::PERM_WRITE);
+            if is_write && pager_vmo.is_trap_dirty() && pager_vmo.has_pager() {
+                use zircon_object::task::ThreadState;
+                let start_page = offset / PAGE_SIZE;
+                let end_page = (offset + size).div_ceil(PAGE_SIZE);
+                for pg in start_page..end_page {
+                    if pager_vmo.is_page_dirty(pg) {
+                        continue;
+                    }
+                    match pager_vmo.request_dirty(pg * PAGE_SIZE, PAGE_SIZE) {
+                        Err(ZxError::SHOULD_WAIT) => {}
+                        Err(e) => return Err(e),
+                        Ok(()) => continue,
+                    }
+                    let mut retries = 0;
+                    loop {
+                        let future = pager_vmo.wait_for_dirty(pg * PAGE_SIZE);
+                        futures::pin_mut!(future);
+                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                        match self
+                            .thread
+                            .blocking_run::<_, (), _>(
+                                future,
+                                ThreadState::BlockedPager,
+                                core::time::Duration::from_nanos(u64::MAX),
+                                None,
+                            )
+                            .await
+                        {
+                            Ok(()) => break,
+                            Err(e) => {
+                                if retries >= 1 {
+                                    return Err(e);
+                                }
+                                retries += 1;
+                                let _ = pager_vmo.request_dirty(pg * PAGE_SIZE, PAGE_SIZE);
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -35,9 +35,9 @@ pub(crate) static VMO_DISCARDABLE_UNLOCKED_PAGES: crate::util::kcounter::Counter
     crate::util::kcounter::Counter::new();
 
 /// Page dirty-tracking states.
-const PAGE_CLEAN: u8 = 0;
-const PAGE_DIRTY: u8 = 1;
-const PAGE_AWAITING_CLEAN: u8 = 2;
+pub const PAGE_CLEAN: u8 = 0;
+pub const PAGE_DIRTY: u8 = 1;
+pub const PAGE_AWAITING_CLEAN: u8 = 2;
 /// Zero page from resize — implicitly dirty (shows as IS_ZERO in
 /// query_dirty_ranges). For TRAP_DIRTY, writes still trap (not
 /// considered dirty for write-gating). Writeback transitions
@@ -169,6 +169,12 @@ pub trait VMObjectTrait: Sync + Send {
     }
     /// Offset into the parent VMO (for slices). 0 for non-slices.
     fn parent_offset(&self) -> usize {
+        0
+    }
+    /// Offset into the parent in the COW tree. For COW clones, this
+    /// is the offset specified at create_child time. For non-COW VMOs
+    /// this is 0.
+    fn cow_parent_offset(&self) -> usize {
         0
     }
 
@@ -316,6 +322,10 @@ struct VmObjectInner {
     pager_koid: u64,
     /// Whether this VMO traps writes for dirty-page notifications.
     trap_dirty: bool,
+    /// Weak reference to the root pager VMO in this clone tree.
+    /// Set during create_child on clones of pager VMOs so that
+    /// any descendant can route page requests to the pager.
+    pager_root: Weak<VmObject>,
     /// Whether this VMO is unbounded (ZX_VMO_UNBOUNDED). Unbounded VMOs
     /// have a large capacity but track content via stream_size
     /// (content_size). Pages beyond stream_size are PAGE_UNTRACKED.
@@ -512,6 +522,7 @@ impl VmObject {
     pub fn decommit_clean_pages(&self) {
         let inner = self.inner.lock();
         let total_pages = self.len() / PAGE_SIZE;
+        let mut any_decommitted = false;
         for page_idx in 0..total_pages {
             let state = inner
                 .dirty_pages
@@ -523,6 +534,18 @@ impl VmObject {
                 // Insert a zero marker to prevent re-requesting from
                 // the (now-detached) pager.
                 self.trait_.decommit_page(page_idx);
+                any_decommitted = true;
+            }
+        }
+        // Invalidate all VMAR mappings for decommitted pages.
+        // Without this, stale page table entries let threads read
+        // zero data instead of faulting (which should deliver a
+        // FatalPageFault exception after pager detach).
+        if any_decommitted {
+            for mapping in inner.mappings.iter() {
+                if let Some(map) = mapping.upgrade() {
+                    map.range_change(0, total_pages, RangeChangeOp::Unmap);
+                }
             }
         }
     }
@@ -535,6 +558,11 @@ impl VmObject {
     /// Check if the given page has a committed physical frame.
     pub fn has_committed_page(&self, page_idx: usize) -> bool {
         self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0
+    }
+
+    /// Check if the given page is pinned (has pin_count > 0).
+    pub fn is_page_pinned(&self, page_idx: usize) -> bool {
+        self.trait_.is_page_pinned(page_idx)
     }
 
     /// Check if a page is in the PAGE_ZERO_DIRTY state (from resize).
@@ -680,6 +708,12 @@ impl VmObject {
             inner.dirty_pages[page_idx] = PAGE_DIRTY;
             inner.modified = true;
         }
+    }
+
+    /// Get the dirty tracking state of a page, or None if out of bounds.
+    pub fn get_page_dirty_state(&self, page_idx: usize) -> Option<u8> {
+        let inner = self.inner.lock();
+        inner.dirty_pages.get(page_idx).copied()
     }
 
     /// Check if a page is covered by an outstanding DIRTY pager request.
@@ -932,12 +966,23 @@ impl VmObject {
         if self.has_pager() {
             return true;
         }
-        let mut cur = self.inner.lock().parent.upgrade();
+        let inner = self.inner.lock();
+        // Check the pager_root shortcut first (set during create_child).
+        if inner.pager_root.strong_count() > 0 {
+            return true;
+        }
+        // Fall back to walking the parent chain.
+        let mut cur = inner.parent.upgrade();
+        drop(inner);
         while let Some(parent) = cur {
             if parent.has_pager() {
                 return true;
             }
-            cur = parent.inner.lock().parent.upgrade();
+            let p_inner = parent.inner.lock();
+            if p_inner.pager_root.strong_count() > 0 {
+                return true;
+            }
+            cur = p_inner.parent.upgrade();
         }
         false
     }
@@ -957,15 +1002,26 @@ impl VmObject {
         if inner.pager_port.is_some() {
             return None; // this VMO IS the pager VMO
         }
-        let mut cumulative_offset = self.get_slice_offset();
+        // Accumulate both slice offsets and COW parent offsets.
+        let self_offset = self.get_slice_offset() + self.trait_.cow_parent_offset();
+        // First try the direct pager_root reference (set during clone).
+        if let Some(root) = inner.pager_root.upgrade() {
+            return Some((root, self_offset));
+        }
+        let mut cumulative_offset = self_offset;
         let mut cur = inner.parent.upgrade()?;
+        drop(inner);
         loop {
             let cur_inner = cur.inner.lock();
             if cur_inner.pager_port.is_some() {
                 drop(cur_inner);
                 return Some((cur, cumulative_offset));
             }
-            cumulative_offset += cur.get_slice_offset();
+            if let Some(root) = cur_inner.pager_root.upgrade() {
+                drop(cur_inner);
+                return Some((root, cumulative_offset));
+            }
+            cumulative_offset += cur.get_slice_offset() + cur.trait_.cow_parent_offset();
             let next = cur_inner.parent.upgrade();
             drop(cur_inner);
             cur = next?;
@@ -1508,11 +1564,23 @@ impl VmObject {
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         base.set_name(&self.base.name());
         let trait_ = self.trait_.create_child(offset, len)?;
+        // Determine the root pager VMO for this clone tree:
+        // - If the parent IS the pager VMO, use it
+        // - If the parent has a pager_root, inherit it
+        // - Otherwise, no pager in this tree
+        let pager_root = {
+            let parent_inner = self.inner.lock();
+            if parent_inner.pager_port.is_some() {
+                Arc::downgrade(self)
+            } else {
+                parent_inner.pager_root.clone()
+            }
+        };
         let child = Arc::new(VmObject {
             base,
             resizable,
             is_slice: false,
-            immutable: core::sync::atomic::AtomicBool::new(false), // Caller sets this after creation if needed
+            immutable: core::sync::atomic::AtomicBool::new(false),
             discardable: core::sync::atomic::AtomicBool::new(false),
             discarded: core::sync::atomic::AtomicBool::new(false),
             lock_count: core::sync::atomic::AtomicU32::new(0),
@@ -1521,6 +1589,7 @@ impl VmObject {
             trait_,
             inner: Mutex::new(VmObjectInner {
                 parent: Arc::downgrade(self),
+                pager_root,
                 ..VmObjectInner::default()
             }),
         });
@@ -1561,6 +1630,14 @@ impl VmObject {
         let base = KObjectBase::with_signal(Signal::VMO_ZERO_CHILDREN);
         base.set_name(&self.base.name());
         let trait_ = self.trait_.create_child_unidirectional(offset, len)?;
+        let pager_root = {
+            let parent_inner = self.inner.lock();
+            if parent_inner.pager_port.is_some() {
+                Arc::downgrade(self)
+            } else {
+                parent_inner.pager_root.clone()
+            }
+        };
         let child = Arc::new(VmObject {
             base,
             resizable,
@@ -1574,6 +1651,7 @@ impl VmObject {
             trait_,
             inner: Mutex::new(VmObjectInner {
                 parent: Arc::downgrade(self),
+                pager_root,
                 ..VmObjectInner::default()
             }),
         });
