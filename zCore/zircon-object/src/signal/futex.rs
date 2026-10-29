@@ -159,31 +159,35 @@ impl Futex {
                 }
                 // first time?
                 if inner.waker.is_none() {
-                    // Acquire the futex lock BEFORE the value check.
-                    // The value check and waiter registration must be
-                    // atomic with respect to futex_wake — if a wake
-                    // could occur between the check and the push, a
-                    // waiter would be orphaned (never woken). See
-                    // Fuchsia's futex_context.cc: "Those two steps must
-                    // together be atomic with respect to FutexWake()."
-                    let mut futex = inner.futex.inner.lock();
-                    // check value under the lock
-                    let value = inner.futex.load_user_value();
+                    // Clone the futex reference and waker before
+                    // releasing the inner lock. This avoids the borrow
+                    // checker issue where inner.futex (immutable) and
+                    // inner.waker (mutable) can't coexist.
+                    let futex_ref = inner.futex.clone();
+                    let waker = cx.waker().clone();
+                    // Store the waker FIRST so wake() always finds it.
+                    inner.waker.replace(waker);
+                    drop(inner);
+
+                    // Now lock the futex and do the value check +
+                    // waiter registration. The waker is already stored
+                    // so wake() can use it if it races here.
+                    let mut futex = futex_ref.inner.lock();
+                    let value = futex_ref.load_user_value();
                     if value != self.current_value {
+                        // Value changed — cancel the wait. Remove the
+                        // waker we just stored.
+                        let mut inner2 = self.waiter.inner.lock();
+                        inner2.waker.take();
                         return Poll::Ready(Err(ZxError::BAD_STATE));
                     }
-                    // check new owner
-                    if !futex.is_valid_new_owner(&self.new_owner, inner.futex.user_addr) {
+                    if !futex.is_valid_new_owner(&self.new_owner, futex_ref.user_addr) {
+                        let mut inner2 = self.waiter.inner.lock();
+                        inner2.waker.take();
                         return Poll::Ready(Err(ZxError::INVALID_ARGS));
                     }
-                    // Set the new owner immediately when the wait begins,
-                    // not when the waiter wakes. This matches Fuchsia's
-                    // behavior where get_owner reflects the owner set by
-                    // the most recent successful futex_wait.
                     futex.set_owner(self.new_owner.clone());
                     futex.waiter_queue.push_back(self.waiter.clone());
-                    // Priority inheritance: if the new waiter has
-                    // higher priority than the owner, boost the owner.
                     if let Some(ref owner) = futex.owner {
                         if let Some(ref waiter_thread) = self.waiter.thread {
                             let waiter_pri = waiter_thread.effective_priority();
@@ -192,14 +196,10 @@ impl Futex {
                             }
                         }
                     }
-                    // Track which futex this thread is blocking on,
-                    // so futex_requeue's owner validation can check
-                    // without scanning the waiter queue.
                     if let Some(ref thread) = self.waiter.thread {
-                        thread.set_blocking_futex(inner.futex.user_addr);
+                        thread.set_blocking_futex(futex_ref.user_addr);
                     }
                     drop(futex);
-                    inner.waker.replace(cx.waker().clone());
                 }
                 Poll::Pending
             }
@@ -456,7 +456,13 @@ impl Waiter {
     fn wake(&self) {
         let mut inner = self.inner.lock();
         inner.woken = true;
-        inner.waker.as_ref().unwrap().wake_by_ref();
+        // The waker may not be set yet if wake() races with the
+        // first poll of FutexFuture (between dropping the futex lock
+        // and storing the waker). In that case, woken=true is enough
+        // — the next poll will see it and return Ready.
+        if let Some(waker) = inner.waker.as_ref() {
+            waker.wake_by_ref();
+        }
     }
 
     /// Reset futex on requeue. Also updates the thread's
