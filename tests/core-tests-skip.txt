@@ -2,25 +2,30 @@
 PagerWriteback.ResizeWritebackWithMappingTrapDirty
 PagerWriteback.LargeWriteBatched
 
-# ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
-
-# ── StreamTestCase: crash ──
+# ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
 StreamTestCase.PartialVmoDirty
 
-# ── VmoClone2TestCase: populated_bytes / VMAR / thread hangs ──
+# ── VmoClone2TestCase: concurrent VMO drop race ──
 VmoClone2TestCase.DropChildrenInParallel
 
-# ── PortStressTest: all 12 multi-threaded stress tests hang ──
+# ── PortStressTest: multi-threaded channel_call stress ──
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
-# ── Threads: debug register / exception / syscall hangs ──
+# ── Threads: debug register exception delivery not implemented ──
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.DebugRegistersDr6ResetOnDebugException
+
+# ── Pager: multi-thread pager interactions hang ──
 Pager.OverlapCommitSupplyTest
 Pager.DetachNonMappingAccess
 Pager.SuspendReadTestVmar
 PagerWriteback.SuspendDirtyTestVmar
+
+# ── BTI: multi-thread pin/decommit race ──
 Bti.DecommitRace
 
-# ── Resource: hangs on QEMU (interrupt vector pool) ──
-VmoClone2TestCase.ParentVmarWrite
+# ── VmoTestCase: multi-thread write + decommit race ──
+VmoTestCase.ParallelWriteAndDecommit
+
+# ── ProcessTest: crash on destroyed VMAR during kill ──
+ProcessTest.KillChannelHandleCycle

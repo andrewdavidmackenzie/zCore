@@ -1092,7 +1092,7 @@ fn disjoint_clone_test2() {
 /// create parent + child, race destruction on two std::threads using
 /// an atomic barrier.
 #[test]
-#[ignore] // Kernel race in concurrent VMO drop — C++ equivalent in core-tests-skip.txt
+#[ignore] // Requires real Zircon threads — std::thread spin-loop livelocks in libos mode
 fn drop_children_in_parallel() {
     let _ctx = TestContext::new();
 
@@ -1100,7 +1100,8 @@ fn drop_children_in_parallel() {
         let vmo = VmObject::new_paged(1);
         let child = vmo.create_child(false, 0, PAGE_SIZE).unwrap();
 
-        // Use a three step ready protocol.
+        // Use a three step ready protocol to maximize concurrent
+        // destruction timing, matching the C++ test.
         let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
 
         let child_move = child;
@@ -1572,7 +1573,6 @@ fn offset_progressive_write() {
 
 /// C++: TEST_F(VmoClone2TestCase, ParentVmarWrite)
 #[test]
-#[ignore] // Fails on aarch64-macOS libos (16K pages) — passes on x86_64 QEMU
 fn parent_vmar_write() {
     vmar_write_test_helper(false);
 }

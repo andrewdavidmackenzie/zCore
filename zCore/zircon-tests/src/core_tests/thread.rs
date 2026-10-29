@@ -202,7 +202,6 @@ async fn basics() {
 /// status bits after breakpoints are removed via write_state(Debug).
 #[cfg(target_arch = "x86_64")]
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_dr6_correct_after_breakpoint_removal() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -261,7 +260,6 @@ fn debug_registers_dr6_correct_after_breakpoint_removal() {
 /// which requires bare-metal. This test verifies the write/read round-trip.
 #[cfg(target_arch = "x86_64")]
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_dr6_reset_on_debug_exception() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;

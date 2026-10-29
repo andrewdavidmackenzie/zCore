@@ -2600,8 +2600,9 @@ pub const KERNEL_ASPACE_SIZE: u64 = 0x0000_0080_0000_0000;
 // On aarch64 macOS (libos mode), mmap MAP_FIXED fails below 0x400000000
 // due to macOS ARM64 virtual address space restrictions. Use a higher base.
 cfg_if::cfg_if! {
-    if #[cfg(all(feature = "aspace-separate", target_arch = "aarch64", target_os = "macos"))] {
-        /// The base of user address space (raised on aarch64 macOS).
+    if #[cfg(all(target_arch = "aarch64", target_os = "macos"))] {
+        /// The base of user address space (raised on aarch64 macOS
+        /// because mmap MAP_FIXED fails below ~0x200000000).
         pub const USER_ASPACE_BASE: u64 = 0x4_0000_0000; // 16 GB
     } else {
         /// The base of user address space.

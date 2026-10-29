@@ -1002,13 +1002,11 @@ impl VmObject {
         if inner.pager_port.is_some() {
             return None; // this VMO IS the pager VMO
         }
-        // Accumulate both slice offsets and COW parent offsets.
-        let self_offset = self.get_slice_offset() + self.trait_.cow_parent_offset();
-        // First try the direct pager_root reference (set during clone).
-        if let Some(root) = inner.pager_root.upgrade() {
-            return Some((root, self_offset));
-        }
-        let mut cumulative_offset = self_offset;
+        // Walk the full parent chain to the root pager VMO, accumulating
+        // every clone offset along the way. We cannot use the pager_root
+        // shortcut for offset calculation because it skips intermediate
+        // ancestors whose offsets would be missed.
+        let mut cumulative_offset = self.get_slice_offset() + self.trait_.cow_parent_offset();
         let mut cur = inner.parent.upgrade()?;
         drop(inner);
         loop {
@@ -1016,10 +1014,6 @@ impl VmObject {
             if cur_inner.pager_port.is_some() {
                 drop(cur_inner);
                 return Some((cur, cumulative_offset));
-            }
-            if let Some(root) = cur_inner.pager_root.upgrade() {
-                drop(cur_inner);
-                return Some((root, cumulative_offset));
             }
             cumulative_offset += cur.get_slice_offset() + cur.trait_.cow_parent_offset();
             let next = cur_inner.parent.upgrade();
@@ -2414,16 +2408,35 @@ impl Drop for VmObject {
                 child.inner.lock().parent = Arc::downgrade(&parent);
             }
         }
+        // Save our children and koid, then drop our lock before
+        // acquiring parent's lock. This avoids self-deadlock when
+        // the parent's children list includes us: we'd try to
+        // re-lock ourselves when iterating the parent's children.
+        let self_koid = self.base.id;
+        let my_children: Vec<_> = core::mem::take(&mut inner.children);
+        drop(inner);
         let mut parent_inner = parent.inner.lock();
         let children = &mut parent_inner.children;
-        children.append(&mut inner.children);
-        children.retain(|c| c.strong_count() != 0);
+        // Move our children to the parent.
+        children.extend(my_children);
+        // Remove ourselves and dead entries from the parent's children list.
+        children.retain(|c| {
+            c.upgrade()
+                .is_some_and(|c| c.base.id != self_koid)
+        });
+        // Check remaining children for ZERO_CHILDREN signal.
         for child in children.iter() {
-            let child = child.upgrade().unwrap();
-            let mut inner = child.inner.lock();
-            inner.children.retain(|c| c.strong_count() != 0);
-            if inner.children.is_empty() {
-                child.base.signal_set(Signal::VMO_ZERO_CHILDREN);
+            if let Some(child) = child.upgrade() {
+                // Don't lock children that might be us (already filtered
+                // out above, but be safe). Skip locking the parent too.
+                if child.base.id == parent.base.id {
+                    continue;
+                }
+                let mut child_inner = child.inner.lock();
+                child_inner.children.retain(|c| c.strong_count() != 0);
+                if child_inner.children.is_empty() {
+                    child.base.signal_set(Signal::VMO_ZERO_CHILDREN);
+                }
             }
         }
         // Non-zero to zero?

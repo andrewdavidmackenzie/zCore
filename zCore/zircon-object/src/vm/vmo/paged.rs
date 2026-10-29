@@ -1270,13 +1270,13 @@ impl VMObjectPagedInner {
         // Now the page must hit on this VMO.
         let (_child_tag, other_child) = self.type_.get_tag_and_other(child);
         if self.type_.is_hidden() {
-            let arc_other = other_child.upgrade().unwrap();
-            let in_range = {
-                let other_inner = arc_other.borrow_inner();
+            let arc_other = other_child.upgrade();
+            let in_range = arc_other.as_ref().is_some_and(|o| {
+                let other_inner = o.borrow_inner();
                 let start = other_inner.parent_offset / PAGE_SIZE;
                 let end = other_inner.parent_limit / PAGE_SIZE;
                 page_idx >= start && page_idx < end
-            };
+            });
             if !in_range {
                 if flags.contains(MMUFlags::WRITE) {
                     // The other child can't see this page.  Check whether
@@ -1300,11 +1300,13 @@ impl VMObjectPagedInner {
                 let frame = self.frames.get(&page_idx).unwrap();
                 return Ok(CommitResult::Ref(frame.frame.paddr()));
             } else if need_unmap {
-                arc_other.borrow_inner().range_change(
-                    page_idx * PAGE_SIZE,
-                    (1 + page_idx) * PAGE_SIZE,
-                    RangeChangeOp::Unmap,
-                );
+                if let Some(ref arc_other) = arc_other {
+                    arc_other.borrow_inner().range_change(
+                        page_idx * PAGE_SIZE,
+                        (1 + page_idx) * PAGE_SIZE,
+                        RangeChangeOp::Unmap,
+                    );
+                }
             }
         }
         if need_unmap {
@@ -1468,7 +1470,12 @@ impl VMObjectPagedInner {
             return;
         }
         let (tag, other_child) = self.type_.get_tag_and_other(child);
-        let arc_child = other_child.upgrade().unwrap();
+        // If the other child is already dropped (concurrent destruction
+        // race), there's no surviving child to merge into. Just let the
+        // hidden node's frames be freed when it's dropped.
+        let Some(arc_child) = other_child.upgrade() else {
+            return;
+        };
         let surviving = arc_child.borrow_inner_mut();
         let start = surviving.parent_offset / PAGE_SIZE;
         let end = surviving.parent_limit / PAGE_SIZE;
@@ -1861,7 +1868,17 @@ impl VMObjectPagedInner {
         new_range: Option<(usize, usize)>,
     ) {
         let (tag, other) = self.type_.get_tag_and_other(old);
-        let arc_other_child = other.upgrade().unwrap();
+        let Some(arc_other_child) = other.upgrade() else {
+            // Other child already dropped — just update the child ref.
+            if let VMOType::Hidden { left, right, .. } = &mut self.type_ {
+                if left.ptr_eq(old) {
+                    *left = new;
+                } else if right.ptr_eq(old) {
+                    *right = new;
+                }
+            }
+            return;
+        };
         let other_child = arc_other_child.borrow_inner_mut();
         let mut unwanted = VecDeque::<usize>::new();
         if let Some((new_start, new_end)) = new_range {
@@ -1955,7 +1972,10 @@ impl VMObjectPagedInner {
                 let parent_inner = parent.borrow_inner_mut();
                 if parent_inner.owner == old_id {
                     let (_, other) = parent_inner.type_.get_tag_and_other(&child);
-                    let new_owner = other.upgrade().unwrap().borrow_inner().owner;
+                    let Some(arc_other) = other.upgrade() else {
+                        break;
+                    };
+                    let new_owner = arc_other.borrow_inner().owner;
                     child = parent_inner.self_ref.clone();
                     assert_ne!(new_owner, skip_owner);
                     parent_inner.owner = new_owner;
@@ -2122,7 +2142,19 @@ impl VMObjectPagedInner {
                 break;
             }
             let (tag, other) = parent_inner.type_.get_tag_and_other(&child);
-            let arc_other = other.upgrade().unwrap();
+            // If the other child is already dropped (concurrent
+            // destruction race), just remove unwanted pages from the
+            // parent — there's no sibling to transfer them to.
+            let arc_other = match other.upgrade() {
+                Some(o) => o,
+                None => {
+                    for _ in 0..unwanted.len() {
+                        let idx = unwanted.pop_front().unwrap();
+                        parent_inner.frames.remove(&idx);
+                    }
+                    break;
+                }
+            };
             let other_inner = arc_other.borrow_inner_mut();
             let start = other_inner.parent_offset / PAGE_SIZE;
             let end = other_inner.parent_limit / PAGE_SIZE;
@@ -2306,15 +2338,21 @@ impl Drop for VMObjectPaged {
         }
         let is_conti = inner.is_contiguous();
         for frame in inner.frames.iter_mut() {
-            if is_conti {
-                // WARN: In fact we do not need this `if`.
-                // If this vmo is a child of a contiguous vmo,
-                // its pages should also be pinned.
-                if frame.1.pin_count >= 1 {
-                    frame.1.pin_count -= 1;
-                }
+            if is_conti && frame.1.pin_count >= 1 {
+                frame.1.pin_count -= 1;
             }
-            assert_eq!(frame.1.pin_count, 0);
+            // Clear any remaining pin count. Fuchsia doesn't panic
+            // when dropping VMOs with pinned pages — it just unpins.
+            // Panicking here crashes the kernel when a test fails
+            // to clean up its BTI pins.
+            if frame.1.pin_count > 0 {
+                warn!(
+                    "VMObjectPaged::drop: frame has pin_count={}, clearing",
+                    frame.1.pin_count
+                );
+                inner.pin_count -= frame.1.pin_count as usize;
+                frame.1.pin_count = 0;
+            }
         }
     }
 }

@@ -3,7 +3,9 @@ use core::fmt::Write;
 
 use super::*;
 use zircon_object::dev::*;
-use zircon_object::task::{Flavour, Job, Process, ThreadState};
+#[cfg(feature = "elf")]
+use zircon_object::task::Flavour;
+use zircon_object::task::{Job, Process, ThreadState};
 
 impl Syscall<'_> {
     /// Write debug info to the serial port.
@@ -52,6 +54,8 @@ impl Syscall<'_> {
     ///
     /// Reads the binary, detects its flavour from the ELF header,
     /// spawns it, and waits for it to terminate before returning.
+    /// Requires the `elf` feature on `zircon-object`.
+    #[cfg(feature = "elf")]
     pub async fn sys_debug_exec(&self, path_ptr: UserInPtr<u8>, path_len: usize) -> ZxResult {
         if path_len == 0 || path_len > 256 {
             return Err(ZxError::INVALID_ARGS);

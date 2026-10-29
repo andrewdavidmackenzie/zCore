@@ -257,10 +257,13 @@ impl ContextAccessState for UserContext {
                 // DR6 is a 32-bit register — mask to 32 bits, then apply
                 // reserved bit rules: bits 4-11 always 1, bit 12 always 0.
                 dr.dr6 = ((user_dr6 as u32 | 0xFFFF_0FF0) & !0x1000) as u64;
-                // DR7: Fuchsia sets LE and GE bits (8-10) and clears
-                // reserved bits 11-12. DR7 is a 32-bit register.
+                // DR7: 32-bit register. Clear GD (General Detect, bit 13)
+                // to prevent recursive debug exceptions. All other bits
+                // are preserved as the user set them for round-trip
+                // consistency (LE/GE bits 8-9 are obsolete on modern
+                // CPUs but user-writable).
                 let user_dr7 = u64::from_ne_bytes(buf[40..48].try_into().unwrap());
-                dr.dr7 = ((user_dr7 as u32 | (0x7 << 8)) & !0xF800) as u64; // set 8-10, clear 11-15
+                dr.dr7 = (user_dr7 as u32 & !(1u32 << 13)) as u64;
             }
             #[allow(unreachable_patterns)]
             _ => return Err(ZxError::NOT_SUPPORTED),
