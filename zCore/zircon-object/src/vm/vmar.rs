@@ -2376,18 +2376,19 @@ impl VmMapping {
             return self.vmo.request_pages(vmo_offset, PAGE_SIZE);
         }
         // Clone of a pager VMO: the clone itself is not pager-backed,
-        // but its root ancestor has a pager. Route the request there.
+        // but its root ancestor has a pager. Route the request there
+        // with proper offset translation through the clone hierarchy.
         if !self.vmo.is_pager_backed()
             && self.vmo.is_in_pager_tree()
             && self.vmo.committed_pages_in_range(page_idx, page_idx + 1) == 0
             && !self.vmo.has_zero_marker(page_idx)
         {
-            if let Some(root) = self.vmo.find_root_pager_vmo() {
-                let root_offset = vmo_offset; // TODO: handle clone offsets
-                if root
-                    .committed_pages_in_range(root_offset / PAGE_SIZE, root_offset / PAGE_SIZE + 1)
-                    == 0
-                    && !root.has_zero_marker(root_offset / PAGE_SIZE)
+            if let Some((root, clone_offset)) = self.vmo.find_root_pager_vmo_with_offset() {
+                let root_offset = vmo_offset + clone_offset;
+                let root_page = root_offset / PAGE_SIZE;
+                if root_page < root.len() / PAGE_SIZE
+                    && root.committed_pages_in_range(root_page, root_page + 1) == 0
+                    && !root.has_zero_marker(root_page)
                 {
                     return root.request_pages(root_offset, PAGE_SIZE);
                 }

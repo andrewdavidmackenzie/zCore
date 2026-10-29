@@ -324,7 +324,6 @@ fn debug_registers_validation() {
 /// watchpoint during a syscall — that requires bare-metal.
 #[cfg(target_arch = "x86_64")]
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_watchpoint_syscall_panic_repro() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;

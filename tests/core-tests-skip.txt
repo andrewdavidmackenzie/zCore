@@ -8,9 +8,7 @@ PagerWriteback.LargeWriteBatched
 StreamTestCase.PartialVmoDirty
 
 # ── VmoClone2TestCase: populated_bytes / VMAR / thread hangs ──
-VmoClone2TestCase.DropParentCommittedBytes
 VmoClone2TestCase.DropChildrenInParallel
-VmoClone2TestCase.OffsetProgressiveWrite
 
 # ── PortStressTest: all 12 multi-threaded stress tests hang ──
 PortStressTest.ChannelCallWaitQueuePanicRepro
@@ -18,18 +16,11 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 # ── Threads: debug register / exception / syscall hangs ──
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.DebugRegistersDr6ResetOnDebugException
-Threads.DebugRegistersWatchpointSyscallPanicRepro
-Threads.SyscallDebuggerModifyResult
 Pager.OverlapCommitSupplyTest
-Pager.CloneDetachTest
 Pager.DetachNonMappingAccess
-Pager.Prefetch
-Pager.SuspendInKernelCaptureFaultsTest
-Pager.SuspendInKernelTest
 Pager.SuspendReadTestVmar
 PagerWriteback.SuspendDirtyTestVmar
 Bti.DecommitRace
 
 # ── Resource: hangs on QEMU (interrupt vector pool) ──
-Resource.PcInterruptVectorPoolLeak
 VmoClone2TestCase.ParentVmarWrite

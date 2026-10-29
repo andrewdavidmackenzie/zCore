@@ -115,6 +115,8 @@ struct VMObjectPagedInner {
     /// True if this VMO is backed by a pager. Pages must only be
     /// committed via `supply_pages`, not auto-allocated by `commit_page`.
     pager_backed: bool,
+    /// True if any ancestor in this COW tree is pager-backed.
+    in_pager_tree: bool,
     /// For unbounded VMOs: the content boundary in pages (stream_size
     /// rounded up). Pages at or beyond this index return zeros without
     /// pager requests on READ. Set to usize::MAX for regular VMOs.
@@ -257,6 +259,7 @@ impl VMObjectPaged {
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
                 pager_backed: false,
+                in_pager_tree: false,
                 content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
@@ -1168,6 +1171,34 @@ impl VMObjectPagedInner {
                                 None => Err(ZxError::NO_MEMORY),
                             };
                         }
+                        // For WRITE in a pager tree: if the sibling
+                        // (root pager VMO) has the page committed,
+                        // copy its data into the new frame before
+                        // storing. This ensures COW fork gets real
+                        // pager data instead of zeros for pages
+                        // supplied after clone creation.
+                        if self.in_pager_tree && parent.type_.is_hidden() {
+                            let (_, sibling_weak) = parent.type_.get_tag_and_other(&self.self_ref);
+                            if let Some(sibling_arc) = sibling_weak.upgrade() {
+                                let sib = sibling_arc.borrow_inner();
+                                if sib.pager_backed {
+                                    let sib_off = sib.parent_offset / PAGE_SIZE;
+                                    if parent_idx >= sib_off {
+                                        let sib_idx = parent_idx - sib_off;
+                                        if sib_idx < sib.size / PAGE_SIZE {
+                                            if let Some(sib_page) = sib.frames.get(&sib_idx) {
+                                                // Copy sibling's data to our new frame.
+                                                hal_impl::mem::pmem_copy(
+                                                    frame.paddr(),
+                                                    sib_page.frame.paddr(),
+                                                    PAGE_SIZE,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         self.frames.insert(page_idx, PageState::new(frame));
                     }
                     CommitResult::CopyOnWrite(frame, unmap) => {
@@ -1643,6 +1674,8 @@ impl VMObjectPagedInner {
                 return Err(ZxError::INVALID_ARGS);
             }
         }
+        // Track whether this clone tree is pager-backed.
+        let is_pager_tree = self.pager_backed || self.in_pager_tree;
         // create child VMO
         let child = VMObjectPaged::wrap(
             VMObjectPagedInner {
@@ -1658,6 +1691,7 @@ impl VMObjectPagedInner {
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
                 pager_backed: false,
+                in_pager_tree: is_pager_tree,
                 content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
@@ -1683,6 +1717,7 @@ impl VMObjectPagedInner {
                 cache_policy: CachePolicy::Cached,
                 contiguous: self.contiguous,
                 pager_backed: false,
+                in_pager_tree: is_pager_tree,
                 content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
@@ -1801,6 +1836,7 @@ impl VMObjectPagedInner {
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
                 pager_backed: false,
+                in_pager_tree: false,
                 content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
