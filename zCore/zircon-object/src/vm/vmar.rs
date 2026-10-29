@@ -921,8 +921,9 @@ impl VmAddressRegion {
         // remove from parent
         if let Some(parent) = &self.parent {
             let mut guard = parent.inner.lock();
-            let inner = guard.as_mut().unwrap();
-            inner.children.retain(|vmar| !Arc::ptr_eq(self, vmar));
+            if let Some(inner) = guard.as_mut() {
+                inner.children.retain(|vmar| !Arc::ptr_eq(self, vmar));
+            }
         }
         Ok(())
     }
@@ -984,7 +985,9 @@ impl VmAddressRegion {
     /// Get flags of vaddr
     pub fn get_vaddr_flags(&self, vaddr: usize) -> PagingResult<MMUFlags> {
         let guard = self.inner.lock();
-        let inner = guard.as_ref().unwrap();
+        let Some(inner) = guard.as_ref() else {
+            return Err(PagingError::NotMapped);
+        };
         if !self.contains(vaddr) {
             return Err(PagingError::NotMapped);
         }
@@ -1242,7 +1245,9 @@ impl VmAddressRegion {
     /// Dump all mappings recursively.
     pub fn dump(&self) {
         let mut guard = self.inner.lock();
-        let inner = guard.as_mut().unwrap();
+        let Some(inner) = guard.as_mut() else {
+            return;
+        };
         for map in inner.mappings.iter() {
             debug!("{:#x?}", map);
         }
@@ -1254,7 +1259,7 @@ impl VmAddressRegion {
     /// Get base address of vdso.
     pub fn vdso_base_addr(&self) -> Option<usize> {
         let guard = self.inner.lock();
-        let inner = guard.as_ref().unwrap();
+        let inner = guard.as_ref()?;
         for map in inner.mappings.iter() {
             if map.vmo.name().starts_with("vdso") && map.inner.lock().vmo_offset == 0 {
                 return Some(map.addr());
@@ -1277,7 +1282,13 @@ impl VmAddressRegion {
         // handler to avoid deadlocks when the COW copy triggers
         // range_change operations that re-enter the VMAR.
         let guard = self.inner.lock();
-        let inner = guard.as_ref().unwrap();
+        let inner = match guard.as_ref() {
+            Some(inner) => inner,
+            // VMAR destroyed (process killed/exited). Return BAD_STATE
+            // so the fault handler delivers a fatal page fault exception
+            // instead of crashing the kernel.
+            None => return Err(ZxError::BAD_STATE),
+        };
         if !self.contains(vaddr) {
             return Err(ZxError::NOT_FOUND);
         }
@@ -1383,7 +1394,9 @@ impl VmAddressRegion {
 
     fn for_each_mapping(&self, f: &mut impl FnMut(&Arc<VmMapping>)) {
         let guard = self.inner.lock();
-        let inner = guard.as_ref().unwrap();
+        let Some(inner) = guard.as_ref() else {
+            return;
+        };
         for map in inner.mappings.iter() {
             f(map);
         }
@@ -1395,7 +1408,9 @@ impl VmAddressRegion {
     /// Clone the entire address space and VMOs from source VMAR. (For Linux fork)
     pub fn fork_from(&self, src: &Arc<Self>) -> ZxResult {
         let mut guard = self.inner.lock();
-        let inner = guard.as_mut().unwrap();
+        let Some(inner) = guard.as_mut() else {
+            return Err(ZxError::BAD_STATE);
+        };
         inner.fork_from(src, &self.page_table)
     }
 
@@ -1679,7 +1694,7 @@ impl VmAddressRegion {
     /// Find mapping of vaddr
     pub fn find_mapping(&self, vaddr: usize) -> Option<Arc<VmMapping>> {
         let guard = self.inner.lock();
-        let inner = guard.as_ref().unwrap();
+        let inner = guard.as_ref()?;
         if let Some(mapping) = inner.mappings.iter().find(|map| map.contains(vaddr)) {
             return Some(mapping.clone());
         }
@@ -1692,14 +1707,14 @@ impl VmAddressRegion {
     #[cfg(test)]
     fn count(&self) -> usize {
         let mut guard = self.inner.lock();
-        let inner = guard.as_mut().unwrap();
+        let Some(inner) = guard.as_mut() else { return 0 };
         inner.mappings.len() + inner.children.len()
     }
 
     #[cfg(test)]
     fn used_size(&self) -> usize {
         let mut guard = self.inner.lock();
-        let inner = guard.as_mut().unwrap();
+        let Some(inner) = guard.as_mut() else { return 0 };
         let map_size: usize = inner.mappings.iter().map(|map| map.size()).sum();
         let vmar_size: usize = inner.children.iter().map(|vmar| vmar.size).sum();
         map_size + vmar_size
@@ -1714,7 +1729,9 @@ impl VmarInner {
         page_table: &Arc<Mutex<dyn GenericPageTable>>,
     ) -> ZxResult {
         let src_guard = src.inner.lock();
-        let src_inner = src_guard.as_ref().unwrap();
+        let Some(src_inner) = src_guard.as_ref() else {
+            return Err(ZxError::BAD_STATE);
+        };
         for child in src_inner.children.iter() {
             self.fork_from(child, page_table)?;
         }
