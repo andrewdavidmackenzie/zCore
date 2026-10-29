@@ -4,7 +4,6 @@ PagerWriteback.LargeWriteBatched
 
 # ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
 PagerWriteback.OpZeroPinnedTrapDirty
-PagerWriteback.PinForWriteUnpopulatedTrapDirty
 
 # ── StreamTestCase: crash ──
 StreamTestCase.PartialVmoDirty

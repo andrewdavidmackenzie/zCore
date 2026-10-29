@@ -6232,7 +6232,6 @@ fn pager_wb_pin_for_write_unpopulated_no_trap_dirty() {
 /// TRAP_DIRTY variant: supply only some pages, OP_DIRTY the supplied
 /// one, write to it, verify dirty ranges.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_pin_for_write_unpopulated_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
