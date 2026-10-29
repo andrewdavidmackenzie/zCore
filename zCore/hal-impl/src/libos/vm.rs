@@ -67,11 +67,7 @@ impl GenericPageTable for PageTable {
 
     fn unmap(&mut self, vaddr: VirtAddr) -> PagingResult<(PhysAddr, PageSize)> {
         self.unmap_cont(vaddr, PAGE_SIZE)?;
-        let paddr = self
-            .entries
-            .remove(&vaddr)
-            .map(|e| e.paddr)
-            .unwrap_or(0);
+        let paddr = self.entries.remove(&vaddr).map(|e| e.paddr).unwrap_or(0);
         Ok((paddr, PageSize::default_page()))
     }
 

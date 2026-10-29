@@ -1,4 +1,8 @@
-use alloc::{boxed::Box, sync::{Arc, Weak}, vec::Vec};
+use alloc::{
+    boxed::Box,
+    sync::{Arc, Weak},
+    vec::Vec,
+};
 use core::any::Any;
 
 use futures::channel::oneshot::{self, Receiver, Sender};
@@ -368,7 +372,9 @@ impl Process {
             // Remove unstarted threads — they can never call
             // remove_thread().  Started threads (now Dying) will
             // call remove_thread() when their CurrentThread drops.
-            inner.threads.retain(|t| t.upgrade().is_some_and(|t| !unstarted.contains(&t.id())));
+            inner
+                .threads
+                .retain(|t| t.upgrade().is_some_and(|t| !unstarted.contains(&t.id())));
             should_terminate = inner.threads.iter().all(|t| t.strong_count() == 0);
             zero_handles_objects = inner.clear_handles();
         }
@@ -381,7 +387,7 @@ impl Process {
     }
 
     /// The process finally terminates.
-     fn terminate(&self) {
+    fn terminate(&self) {
         let mut inner = self.inner.lock();
         let retcode = match inner.status {
             Status::Exited(retcode) => retcode,
@@ -922,7 +928,11 @@ impl Process {
         // Bail if the thread was already removed (e.g., Process::exit
         // removed unstarted threads, then CurrentThread::drop calls
         // terminate → remove_thread again with the same ID).
-        if !inner.threads.iter().any(|t| t.upgrade().is_some_and(|t| t.id() == tid)) {
+        if !inner
+            .threads
+            .iter()
+            .any(|t| t.upgrade().is_some_and(|t| t.id() == tid))
+        {
             return;
         }
         // Note: we cannot call thread.get_time() here because
@@ -932,7 +942,9 @@ impl Process {
         if inner.exited_cpu_time == 0 {
             inner.exited_cpu_time = 1;
         }
-        inner.threads.retain(|t| t.upgrade().is_some_and(|t| t.id() != tid));
+        inner
+            .threads
+            .retain(|t| t.upgrade().is_some_and(|t| t.id() != tid));
         if inner.threads.iter().all(|t| t.strong_count() == 0) {
             // If exit() hasn't been called yet, set the exit code
             // before running terminate(). Check the parent job's kill
@@ -1007,12 +1019,23 @@ impl Process {
 
     /// Get KoIDs of Threads.
     pub fn thread_ids(&self) -> Vec<KoID> {
-        self.inner.lock().threads.iter().filter_map(|t| t.upgrade()).map(|t| t.id()).collect()
+        self.inner
+            .lock()
+            .threads
+            .iter()
+            .filter_map(|t| t.upgrade())
+            .map(|t| t.id())
+            .collect()
     }
 
     /// Get all live threads in this process.
     pub fn threads(&self) -> Vec<Arc<Thread>> {
-        self.inner.lock().threads.iter().filter_map(|t| t.upgrade()).collect()
+        self.inner
+            .lock()
+            .threads
+            .iter()
+            .filter_map(|t| t.upgrade())
+            .collect()
     }
 
     /// Get total accumulated CPU time across all threads (nanoseconds).
@@ -1023,7 +1046,8 @@ impl Process {
         // CurrentThread::drop → remove_thread lock order).
         let (threads, exited_time, status) = {
             let inner = self.inner.lock();
-            let threads: Vec<Arc<Thread>> = inner.threads.iter().filter_map(|t| t.upgrade()).collect();
+            let threads: Vec<Arc<Thread>> =
+                inner.threads.iter().filter_map(|t| t.upgrade()).collect();
             (threads, inner.exited_cpu_time, inner.status)
         };
         let live_time: u64 = threads.iter().map(|t| t.get_time()).sum();
@@ -1041,7 +1065,8 @@ impl Process {
     pub fn total_queue_time(&self) -> u64 {
         let (threads, status) = {
             let inner = self.inner.lock();
-            let threads: Vec<Arc<Thread>> = inner.threads.iter().filter_map(|t| t.upgrade()).collect();
+            let threads: Vec<Arc<Thread>> =
+                inner.threads.iter().filter_map(|t| t.upgrade()).collect();
             (threads, inner.status)
         };
         let qt: u128 = threads.iter().map(|t| t.queue_time()).sum();
@@ -1117,7 +1142,9 @@ impl ProcessInner {
 
     /// Whether `thread` is in this process.
     fn contains_thread(&self, thread: &Arc<Thread>) -> bool {
-        self.threads.iter().any(|t| t.upgrade().is_some_and(|t| Arc::ptr_eq(&t, thread)))
+        self.threads
+            .iter()
+            .any(|t| t.upgrade().is_some_and(|t| Arc::ptr_eq(&t, thread)))
     }
 
     fn remove_handle(&mut self, handle_value: HandleValue) -> ZxResult<Handle> {

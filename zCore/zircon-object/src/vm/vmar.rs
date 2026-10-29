@@ -1707,14 +1707,18 @@ impl VmAddressRegion {
     #[cfg(test)]
     fn count(&self) -> usize {
         let mut guard = self.inner.lock();
-        let Some(inner) = guard.as_mut() else { return 0 };
+        let Some(inner) = guard.as_mut() else {
+            return 0;
+        };
         inner.mappings.len() + inner.children.len()
     }
 
     #[cfg(test)]
     fn used_size(&self) -> usize {
         let mut guard = self.inner.lock();
-        let Some(inner) = guard.as_mut() else { return 0 };
+        let Some(inner) = guard.as_mut() else {
+            return 0;
+        };
         let map_size: usize = inner.mappings.iter().map(|map| map.size()).sum();
         let vmar_size: usize = inner.children.iter().map(|vmar| vmar.size).sum();
         map_size + vmar_size

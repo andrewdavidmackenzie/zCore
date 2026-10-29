@@ -2420,10 +2420,7 @@ impl Drop for VmObject {
         // Move our children to the parent.
         children.extend(my_children);
         // Remove ourselves and dead entries from the parent's children list.
-        children.retain(|c| {
-            c.upgrade()
-                .is_some_and(|c| c.base.id != self_koid)
-        });
+        children.retain(|c| c.upgrade().is_some_and(|c| c.base.id != self_koid));
         // Check remaining children for ZERO_CHILDREN signal.
         for child in children.iter() {
             if let Some(child) = child.upgrade() {
