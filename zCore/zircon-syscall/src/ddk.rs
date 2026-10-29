@@ -172,28 +172,48 @@ impl Syscall<'_> {
             if let Some(pv) = pager_vmo_for_dirty {
                 if pv.is_trap_dirty() && pv.has_pager() {
                     use zircon_object::task::ThreadState;
+                    // Find the range of clean pages that need dirty
+                    // approval. Send ONE batched request for the whole
+                    // range (matching Fuchsia's batched dirty packets),
+                    // then wait for each page to be acknowledged.
                     let start_page = offset / PAGE_SIZE;
                     let end_page = (offset + size).div_ceil(PAGE_SIZE);
+                    // Find first and last clean page for batching.
+                    let mut first_clean = None;
+                    let mut last_clean = start_page;
                     for pg in start_page..end_page {
-                        if pv.is_page_dirty(pg) {
-                            continue;
+                        if !pv.is_page_dirty(pg) {
+                            if first_clean.is_none() {
+                                first_clean = Some(pg);
+                            }
+                            last_clean = pg + 1;
                         }
-                        match pv.request_dirty(pg * PAGE_SIZE, PAGE_SIZE) {
+                    }
+                    if let Some(fc) = first_clean {
+                        let req_off = fc * PAGE_SIZE;
+                        let req_len = (last_clean - fc) * PAGE_SIZE;
+                        match pv.request_dirty(req_off, req_len) {
                             Err(ZxError::SHOULD_WAIT) => {}
                             Err(e) => return Err(e),
-                            Ok(()) => continue,
+                            Ok(()) => {} // all pages already dirty
                         }
-                        let future = pv.wait_for_dirty(pg * PAGE_SIZE);
-                        futures::pin_mut!(future);
-                        self.thread.set_blocking_state(ThreadState::BlockedPager);
-                        self.thread
-                            .blocking_run::<_, (), _>(
-                                future,
-                                ThreadState::BlockedPager,
-                                core::time::Duration::from_nanos(u64::MAX),
-                                None,
-                            )
-                            .await?;
+                        // Wait for each clean page to be dirtied.
+                        for pg in fc..last_clean {
+                            if pv.is_page_dirty(pg) {
+                                continue;
+                            }
+                            let future = pv.wait_for_dirty(pg * PAGE_SIZE);
+                            futures::pin_mut!(future);
+                            self.thread.set_blocking_state(ThreadState::BlockedPager);
+                            self.thread
+                                .blocking_run::<_, (), _>(
+                                    future,
+                                    ThreadState::BlockedPager,
+                                    core::time::Duration::from_nanos(u64::MAX),
+                                    None,
+                                )
+                                .await?;
+                        }
                     }
                 }
             }
