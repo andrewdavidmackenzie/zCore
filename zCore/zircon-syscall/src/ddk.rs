@@ -157,6 +157,47 @@ impl Syscall<'_> {
                 }
             }
         }
+        // For TRAP_DIRTY pager VMOs, pin-for-write needs dirty approval.
+        // Each clean page must get a DIRTY request before it can be pinned.
+        if options.contains(BtiOptions::PERM_WRITE) {
+            let pager_vmo_for_dirty = if vmo.has_pager() {
+                Some(vmo.clone())
+            } else if vmo.is_slice_vmo() {
+                vmo.find_root_pager_vmo()
+            } else if vmo.is_in_pager_tree() {
+                vmo.find_root_pager_vmo()
+            } else {
+                None
+            };
+            if let Some(pv) = pager_vmo_for_dirty {
+                if pv.is_trap_dirty() && pv.has_pager() {
+                    use zircon_object::task::ThreadState;
+                    let start_page = offset / PAGE_SIZE;
+                    let end_page = (offset + size).div_ceil(PAGE_SIZE);
+                    for pg in start_page..end_page {
+                        if pv.is_page_dirty(pg) {
+                            continue;
+                        }
+                        match pv.request_dirty(pg * PAGE_SIZE, PAGE_SIZE) {
+                            Err(ZxError::SHOULD_WAIT) => {}
+                            Err(e) => return Err(e),
+                            Ok(()) => continue,
+                        }
+                        let future = pv.wait_for_dirty(pg * PAGE_SIZE);
+                        futures::pin_mut!(future);
+                        self.thread.set_blocking_state(ThreadState::BlockedPager);
+                        self.thread
+                            .blocking_run::<_, (), _>(
+                                future,
+                                ThreadState::BlockedPager,
+                                core::time::Duration::from_nanos(u64::MAX),
+                                None,
+                            )
+                            .await?;
+                    }
+                }
+            }
+        }
         let pmt = bti.pin(vmo.clone(), offset, size, options.to_iommu_perms())?;
         // Pin-for-write sets the modified flag and marks pages dirty
         // on pager-backed VMOs (pin with WRITE implies data change).
