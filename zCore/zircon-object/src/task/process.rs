@@ -552,6 +552,13 @@ impl Process {
         self.inner.lock().vdso_code_range = (start, start + size);
     }
 
+    /// Check if this process has any exception channel attached
+    /// (process-level or debugger). Used to guard the BAD_SYSCALL
+    /// check — only enforce it when someone is listening.
+    pub fn has_exception_channel(&self) -> bool {
+        self.exceptionate.has_channel() || self.debug_exceptionate.has_channel()
+    }
+
     /// Check if a syscall return address should trigger BAD_SYSCALL.
     /// Returns true if the process has a vDSO mapped AND the address
     /// is NOT within the vDSO code range (i.e., the syscall bypassed

@@ -444,7 +444,13 @@ async fn handler_user_trap(
                 }
             }
         };
-        if thread.proc().is_syscall_from_outside_vdso(ret_addr) {
+        // Only enforce BAD_SYSCALL when the process has an exception
+        // channel attached (the test sets one up before triggering).
+        // Without this guard, petal binaries (which use inline syscalls
+        // instead of the vDSO) would be killed on every syscall.
+        if thread.proc().has_exception_channel()
+            && thread.proc().is_syscall_from_outside_vdso(ret_addr)
+        {
             ctx.advance_pc(reason);
             thread.put_context(ctx);
             // Signal BAD_SYSCALL policy exception with the syscall
