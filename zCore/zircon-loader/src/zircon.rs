@@ -428,17 +428,19 @@ async fn handler_user_trap(
         // instructions from user code bypass vDSO security wrappers.
         // On x86_64, RCX holds the return address after `syscall`.
         // On aarch64, the return address is in ELR_EL1 (saved as RIP).
+        // Get the return address of the syscall instruction.
+        // On x86_64: RCX (hardware-saved by syscall).
+        // On aarch64: ELR_EL1 (saved by trap handler, NOT x30/LR).
+        // On riscv64: ra (return address register).
         let ret_addr = {
             cfg_if! {
                 if #[cfg(target_arch = "x86_64")] {
-                    // On x86_64, RCX holds the return address after `syscall`.
                     ctx.general().rcx
-                } else if #[cfg(target_arch = "aarch64")] {
-                    // On aarch64, the return address is in x30 (LR).
-                    ctx.general().x30
                 } else {
-                    // On riscv64, the return address is in ra.
-                    ctx.general().ra
+                    // aarch64 and riscv64: use the saved instruction
+                    // pointer (ELR_EL1 / sepc) which points to the
+                    // instruction after svc/ecall — inside the vDSO.
+                    ctx.get_field(UserContextField::InstrPointer)
                 }
             }
         };
