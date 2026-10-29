@@ -29,6 +29,13 @@ The cooperative executor cannot interleave their kernel-side futures.
 **Do NOT repeatedly investigate this.** The answer is: cooperative
 executor with lazy preemption. True preemption requires issue #801.
 
+**UPDATE (after PR #800 investigation):** Cross-CPU wakeup via IPI
+works correctly. The port signal → waker → IPI → executor wake
+chain was verified. Most remaining test hangs (24 total) are caused
+by missing kernel code paths (dirty request retries, unsupplied page
+handling, suspend/resume), NOT by fundamental executor limitations.
+Each test should be investigated individually for its specific bug.
+
 ## Default build command
 To build and run zCore the default command to use is:
 
