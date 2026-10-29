@@ -560,6 +560,11 @@ impl VmObject {
         self.trait_.committed_pages_in_range(page_idx, page_idx + 1) > 0
     }
 
+    /// Check if the given page is pinned (has pin_count > 0).
+    pub fn is_page_pinned(&self, page_idx: usize) -> bool {
+        self.trait_.is_page_pinned(page_idx)
+    }
+
     /// Check if a page is in the PAGE_ZERO_DIRTY state (from resize).
     pub fn is_page_zero_dirty(&self, page_idx: usize) -> bool {
         let inner = self.inner.lock();

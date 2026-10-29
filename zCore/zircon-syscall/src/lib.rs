@@ -322,32 +322,47 @@ impl Syscall<'_> {
             self.demand_page_single(&pager_vmo, pg).await?;
         }
 
-        // For TRAP_DIRTY: request dirty on partial pages.
+        // For TRAP_DIRTY: request dirty for pages being zeroed.
+        // Partial pages (already in pages_to_supply) always need dirty.
+        // Full pages only need dirty if PINNED (zeroed in-place).
+        // Non-pinned full pages are decommitted (no content change).
         if is_trap_dirty && pager_vmo.has_pager() {
-            for &pg in &pages_to_supply {
-                if !pager_vmo.is_page_dirty(pg) {
-                    let pg_offset = pg * PAGE_SIZE;
-                    match pager_vmo.request_dirty(pg_offset, PAGE_SIZE) {
-                        Err(zircon_object::ZxError::SHOULD_WAIT) => {}
-                        Err(zircon_object::ZxError::NOT_FOUND) => {
-                            return Err(zircon_object::ZxError::BAD_STATE);
-                        }
-                        Err(e) => return Err(e),
-                        Ok(()) => {}
-                    }
-                    let future = pager_vmo.wait_for_dirty(pg_offset);
-                    futures::pin_mut!(future);
-                    self.thread
-                        .set_blocking_state(zircon_object::task::ThreadState::BlockedPager);
-                    self.thread
-                        .blocking_run::<_, (), _>(
-                            future,
-                            zircon_object::task::ThreadState::BlockedPager,
-                            core::time::Duration::from_nanos(u64::MAX),
-                            None,
-                        )
-                        .await?;
+            let first_page = parent_offset / PAGE_SIZE;
+            let last_page_excl = end.div_ceil(PAGE_SIZE);
+            for pg in first_page..last_page_excl {
+                if pager_vmo.is_page_dirty(pg) {
+                    continue;
                 }
+                // Partial pages always need dirty.
+                let is_partial = pages_to_supply.contains(&pg);
+                // Full pages only need dirty if pinned.
+                let is_pinned_full = !is_partial
+                    && pager_vmo.committed_pages_in_range(pg, pg + 1) > 0
+                    && pager_vmo.is_page_pinned(pg);
+                if !is_partial && !is_pinned_full {
+                    continue;
+                }
+                let pg_offset = pg * PAGE_SIZE;
+                match pager_vmo.request_dirty(pg_offset, PAGE_SIZE) {
+                    Err(zircon_object::ZxError::SHOULD_WAIT) => {}
+                    Err(zircon_object::ZxError::NOT_FOUND) => {
+                        return Err(zircon_object::ZxError::BAD_STATE);
+                    }
+                    Err(e) => return Err(e),
+                    Ok(()) => continue,
+                }
+                let future = pager_vmo.wait_for_dirty(pg_offset);
+                futures::pin_mut!(future);
+                self.thread
+                    .set_blocking_state(zircon_object::task::ThreadState::BlockedPager);
+                self.thread
+                    .blocking_run::<_, (), _>(
+                        future,
+                        zircon_object::task::ThreadState::BlockedPager,
+                        core::time::Duration::from_nanos(u64::MAX),
+                        None,
+                    )
+                    .await?;
             }
         }
         Ok(())

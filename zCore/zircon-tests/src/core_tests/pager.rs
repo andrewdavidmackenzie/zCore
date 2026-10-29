@@ -5766,7 +5766,6 @@ fn pager_wb_op_zero_pinned_no_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, OpZeroPinnedTrapDirty)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_op_zero_pinned_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
