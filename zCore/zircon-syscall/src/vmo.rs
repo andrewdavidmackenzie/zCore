@@ -1157,14 +1157,14 @@ impl Syscall<'_> {
                                 any_changed = true;
                             }
                         } else {
-                            for (i, _pg) in (start_page..end_page).enumerate() {
+                            // TRAP_DIRTY: mark only changed pages as
+                            // zero-dirty, not the entire range.
+                            for (i, pg) in (start_page..end_page).enumerate() {
                                 if i < pre_zero_markers.len() && pre_zero_markers[i] {
                                     continue;
                                 }
+                                pv.mark_pages_zero_dirty(pg, pg + 1);
                                 any_changed = true;
-                            }
-                            if any_changed {
-                                pv.mark_pages_zero_dirty(start_page, end_page);
                             }
                         }
                         if any_changed {

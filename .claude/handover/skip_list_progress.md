@@ -106,7 +106,7 @@ make core-tests CORE_TESTS_FILTER='SuiteName.*' CORE_TESTS_TIMEOUT=60
 make core-tests CORE_TESTS_FILTER='SuiteName.TestName' CORE_TESTS_TIMEOUT=30
 
 # Full pre-push check
-make pre-push-quick
+make pre-push
 ```
 
 ## Key files
