@@ -42,18 +42,15 @@
 6. **Syscall-count forced preempt yield** — prevents tight polling
    loops from starving newly-spawned threads
 
-## Remaining skip list by suite (88 total)
+## Remaining skip list by suite (23 total)
 
 | Suite | Count | Root Cause |
 |-------|-------|-----------|
-| PagerWriteback | 28 | BTI/pin TrapDirty (14), concurrent TestThread (6), dirty range bugs (6), partial write (1), suspend (1) |
-| Pager | 23 | Clone lifecycle/crash exceptions (7), multi-thread overlap (4), EarlySupply spurious request (2), Suspend (3), other (7) |
-| PortStressTest | 12 | Multi-thread stress races in cooperative executor |
-| PagerProcess | 8 | Process + page fault infrastructure |
-| Threads | 7 | Debug registers / exception delivery |
+| Pager | 7 | Overlap commits, clone detach, suspend, prefetch |
+| PagerWriteback | 4 | TestThread mapping write, OP_ZERO pinned, suspend |
+| Threads | 4 | Debug register hardware exceptions |
 | VmoClone2TestCase | 4 | populated_bytes (2), progressive hang (1), 16K pages (1) |
-| Snapshot | 2 | Zero-range page tracking |
-| Other | 4 | Bti.DecommitRace, StreamTestCase, Resource, ProcessTest |
+| Other | 4 | PortStress.ChannelCall, Bti.DecommitRace, StreamTestCase, Resource |
 
 ## Infrastructure needed for remaining tests
 
