@@ -197,22 +197,40 @@ impl Syscall<'_> {
                             Err(e) => return Err(e),
                             Ok(()) => {} // all pages already dirty
                         }
-                        // Wait for each clean page to be dirtied.
+                        // Wait for each page to be dirtied or failed.
+                        // On failure, retry once (matching Fuchsia's
+                        // behavior where the pinner retries dirty
+                        // requests after OP_FAIL).
                         for pg in fc..last_clean {
                             if pv.is_page_dirty(pg) {
                                 continue;
                             }
-                            let future = pv.wait_for_dirty(pg * PAGE_SIZE);
-                            futures::pin_mut!(future);
-                            self.thread.set_blocking_state(ThreadState::BlockedPager);
-                            self.thread
-                                .blocking_run::<_, (), _>(
-                                    future,
-                                    ThreadState::BlockedPager,
-                                    core::time::Duration::from_nanos(u64::MAX),
-                                    None,
-                                )
-                                .await?;
+                            let mut retries = 0;
+                            loop {
+                                let future = pv.wait_for_dirty(pg * PAGE_SIZE);
+                                futures::pin_mut!(future);
+                                self.thread.set_blocking_state(ThreadState::BlockedPager);
+                                match self
+                                    .thread
+                                    .blocking_run::<_, (), _>(
+                                        future,
+                                        ThreadState::BlockedPager,
+                                        core::time::Duration::from_nanos(u64::MAX),
+                                        None,
+                                    )
+                                    .await
+                                {
+                                    Ok(()) => break,
+                                    Err(e) => {
+                                        if retries >= 1 {
+                                            return Err(e);
+                                        }
+                                        retries += 1;
+                                        // Re-request dirty for retry.
+                                        let _ = pv.request_dirty(pg * PAGE_SIZE, PAGE_SIZE);
+                                    }
+                                }
+                            }
                         }
                     }
                 }

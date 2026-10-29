@@ -3,10 +3,8 @@ PagerWriteback.ResizeWritebackWithMappingTrapDirty
 PagerWriteback.LargeWriteBatched
 
 # ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
-PagerWriteback.NotModifiedPartialFailedPinWrite
 PagerWriteback.OpZeroPinnedTrapDirty
 PagerWriteback.PinForWriteUnpopulatedTrapDirty
-PagerWriteback.SlicePinWriteTrapDirty
 
 # ── StreamTestCase: crash ──
 StreamTestCase.PartialVmoDirty

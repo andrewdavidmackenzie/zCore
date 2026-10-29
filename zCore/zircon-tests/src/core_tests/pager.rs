@@ -5496,7 +5496,6 @@ fn pager_wb_not_modified_on_vmo_read_trap_dirty() {
 
 /// C++: TEST(PagerWriteback, NotModifiedPartialFailedPinWrite)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_not_modified_partial_failed_pin_write() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -8305,7 +8304,6 @@ fn pager_wb_slice_pin_write_no_trap_dirty() {
 /// TRAP_DIRTY variant: create slice, OP_DIRTY on parent, write via slice,
 /// verify dirty ranges and content.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_slice_pin_write_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
