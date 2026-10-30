@@ -2413,6 +2413,12 @@ impl VmMapping {
                 {
                     return root.request_pages(root_offset, PAGE_SIZE);
                 }
+            } else {
+                // The clone is in a pager tree but the root pager VMO's
+                // pager has been detached (pager_port cleared). Unsupplied
+                // pages in detached clones should fail with BAD_STATE —
+                // the pager is gone and cannot supply them.
+                return Err(ZxError::BAD_STATE);
             }
         }
         let paddr = self.vmo.commit_page(page_idx, access_flags)?;

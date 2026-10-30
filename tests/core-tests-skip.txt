@@ -24,11 +24,7 @@ Pager.FailEarlyWake
 Pager.FailMultipleCommits
 Pager.ResizeCommitTest
 # Tests that hang for other reasons (under investigation):
-Pager.CloneDetachTest
 Pager.EarlyWakeCloneRace
-Pager.CloneChainCommitTest
-Pager.CloneMightSeeIntermediateForks
-Pager.CloneShrinkGrowParent
 Pager.EvictionHintsOpRange
 
 # ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
