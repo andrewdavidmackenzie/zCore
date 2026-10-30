@@ -604,6 +604,16 @@ impl VMObjectTrait for VMObjectPaged {
         for i in 0..page_count {
             inner.decommit(start_page + i);
         }
+        // Unmap decommitted pages from all mappings so stale PTEs
+        // don't return the old physical page data. The next access
+        // will page-fault and either re-commit or return zeros.
+        for i in 0..page_count {
+            for map in inner.mappings.iter() {
+                if let Some(map) = map.upgrade() {
+                    map.range_change(start_page + i, 1, RangeChangeOp::Unmap);
+                }
+            }
+        }
         Ok(())
     }
 
