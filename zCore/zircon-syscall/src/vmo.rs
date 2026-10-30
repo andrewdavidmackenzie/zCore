@@ -88,10 +88,10 @@ impl Syscall<'_> {
         // Check VMO bounds first — Fuchsia returns OUT_OF_RANGE for
         // reads beyond the VMO size, even if the buffer is also bad.
         if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
-            let _ = hal_impl::console::console_write_fmt(format_args!(
-                "[DIAG] sys_vmo_read OOR: off={:#x} sz={:#x} vmo={:#x}\n",
+            error!(
+                "sys_vmo_read OOR: off={:#x} sz={:#x} vmo={:#x}",
                 offset, buf_size, vmo.len()
-            ));
+            );
             return Err(ZxError::OUT_OF_RANGE);
         }
         // Fuchsia returns NOT_FOUND for null, kernel-space, or
