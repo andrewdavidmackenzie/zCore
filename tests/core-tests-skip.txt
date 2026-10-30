@@ -1,42 +1,22 @@
-# ── PagerWriteback: hangs (multi-thread pager interactions) ──
+# ── PagerWriteback: verified hangs (multi-thread TestThread interactions) ──
 PagerWriteback.ResizeWritebackWithMappingTrapDirty
 PagerWriteback.LargeWriteBatched
 PagerWriteback.SuspendDirtyTestVmar
-PagerWriteback.WritebackResizedRangeAfterDetachNoTrapDirty
-PagerWriteback.OpZeroPinnedTrapDirty
 PagerWriteback.CommitExtendedTailTrapDirty
 PagerWriteback.CommitResizeRaceNoTrapDirty
 PagerWriteback.CommitResizeRaceTrapDirty
-PagerWriteback.OpZeroWritebackNoTrapDirty
-PagerWriteback.OpZeroWritebackTrapDirty
 PagerWriteback.ResizeWritebackRepeatedTrapDirty
-PagerWriteback.UntrackedAbsorbsIntervalSlots
 PagerWriteback.FailedPinAwaitingClean
 PagerWriteback.NotModifiedFailedPinWrite
 PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
 
-# ── Pager: hangs (multi-thread pager interactions) ──
+# ── Pager: verified hangs (multi-thread TestThread interactions) ──
 Pager.OverlapCommitSupplyTest
 Pager.DetachNonMappingAccess
 Pager.SuspendReadTestVmar
 Pager.FailEarlyWake
 Pager.CloneDetachTest
 Pager.EarlyWakeCloneRace
-Pager.CloneChainCommitTest
-Pager.CloneMightSeeIntermediateForks
-Pager.CloneResizeParentOK
-Pager.CloneShrinkGrowParent
-Pager.DecommitOnDetachTestVmar
-Pager.EarlySupplyTestVmar
-Pager.EarlySupplyTestVmo
-Pager.EvictionHintsOpRange
-Pager.FailMultipleCommits
-Pager.InvalidPagerCreateVmo
-Pager.InvalidPagerDetachVmo
-Pager.InvalidPagerSupplyPages
-Pager.MappedSupplyPages
-Pager.ResizeCommitTest
-Pager.SupplyAfterFail
 
 # ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
 StreamTestCase.PartialVmoDirty
@@ -62,5 +42,5 @@ Resource.Ioports
 SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
 RegisterContextSwitchTests.SegmentSelectorsZeroedOnInterrupt
 
-# ── ProcessTest: crash on destroyed VMAR during kill ──
+# ── ProcessTest: page fault on destroyed VMAR during kill ──
 ProcessTest.KillChannelHandleCycle
