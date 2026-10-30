@@ -151,6 +151,7 @@ impl Pager {
         {
             let pv = inner.vmos.remove(pos);
             // Send COMPLETE packet to notify the pager.
+            info!("pager: sending COMPLETE for detached VMO key={:#x}", pv.key);
             pv.port.push(PortPacketRepr {
                 key: pv.key,
                 status: ZxError::OK,

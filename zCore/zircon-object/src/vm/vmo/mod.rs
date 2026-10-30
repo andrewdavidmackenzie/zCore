@@ -1193,7 +1193,8 @@ impl VmObject {
     /// `wait_for_page` to block until the page is supplied.
     pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
         let mut inner = self.inner.lock();
-        if let Some(port) = &inner.pager_port {
+        if let Some(port) = inner.pager_port.clone() {
+            let pager_key = inner.pager_key;
             let start_page = offset / PAGE_SIZE;
             let end_page = (offset + length).div_ceil(PAGE_SIZE);
             // Check if ALL pages are already committed.
@@ -1211,8 +1212,16 @@ impl VmObject {
                 .iter()
                 .any(|req| start_page >= req.start_page && start_page < req.end_page);
             if !is_absorbed {
+                // Clear any previous OP_FAIL markers in the requested
+                // range. A new request supersedes a prior failure —
+                // the pager will either supply or fail again. Without
+                // this, wait_for_page would immediately return the
+                // stale error and the retry would never reach the pager.
+                for pg in start_page..end_page {
+                    inner.pager_failed_pages.remove(&pg);
+                }
                 port.push(PortPacketRepr {
-                    key: inner.pager_key,
+                    key: pager_key,
                     status: ZxError::OK,
                     data: PayloadRepr::PageRequest(PacketPageRequest {
                         command: ZX_PAGER_VMO_READ,

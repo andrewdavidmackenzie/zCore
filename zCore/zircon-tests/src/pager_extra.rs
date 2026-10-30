@@ -3498,3 +3498,130 @@ async fn user_pager_helper_detach() {
     // committed_bytes should be 0 after detach.
     assert_eq!(vmo.committed_pages_in_range(0, 1), 0);
 }
+
+/// Unidirectional child of a pager VMO reads parent's supplied pages.
+/// This is the kernel-level equivalent of C++ Pager.CloneDetachTest:
+/// SNAPSHOT_AT_LEAST_ON_WRITE creates unidirectional children, and
+/// reading through them should see the pager-supplied data.
+#[test]
+fn unidirectional_child_reads_pager_data() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+
+    // Create a 2-page pager-backed VMO.
+    let pager_vmo = pager
+        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+        .unwrap();
+
+    // Supply pages with known data.
+    let src = VmObject::new_paged(2);
+    let pattern = vec![0xABu8; PAGE_SIZE];
+    src.write(0, &pattern).unwrap();
+    let pattern2 = vec![0xCDu8; PAGE_SIZE];
+    src.write(PAGE_SIZE, &pattern2).unwrap();
+    pager
+        .supply_pages(&pager_vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+        .unwrap();
+
+    // Create a unidirectional child (SNAPSHOT_AT_LEAST_ON_WRITE).
+    let clone = pager_vmo
+        .create_child_unidirectional(0, 2 * PAGE_SIZE, false)
+        .unwrap();
+
+    // Verify clone reads pager data (not zeros).
+    let mut buf = vec![0u8; PAGE_SIZE];
+    clone.read(0, &mut buf).unwrap();
+    assert_eq!(
+        buf, pattern,
+        "unidirectional child page 0 should read parent's supplied data"
+    );
+
+    clone.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(
+        buf, pattern2,
+        "unidirectional child page 1 should read parent's supplied data"
+    );
+
+    // committed_pages_in_range walks the parent chain, so it returns 2
+    // (the parent has 2 committed pages visible to the clone).
+    // But the clone should have no LOCAL frames — reads go through the parent.
+    assert_eq!(clone.committed_pages_in_range(0, 2), 2);
+
+    // Write to clone page 0 — should COW-fork.
+    let write_data = vec![0xEFu8; PAGE_SIZE];
+    clone.write(0, &write_data).unwrap();
+
+    // Clone now has: local page 0 (COW copy) + parent page 1 = 2 visible.
+    assert_eq!(clone.committed_pages_in_range(0, 2), 2);
+
+    // Clone page 0 has new data.
+    clone.read(0, &mut buf).unwrap();
+    assert_eq!(buf, write_data, "COW page should have new data");
+
+    // Clone page 1 still reads parent data.
+    clone.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(buf, pattern2, "non-COW page should still read parent data");
+
+    // Parent page 0 is unchanged.
+    let mut parent_buf = vec![0u8; PAGE_SIZE];
+    pager_vmo.read(0, &mut parent_buf).unwrap();
+    assert_eq!(
+        parent_buf, pattern,
+        "parent page 0 should be unchanged after clone write"
+    );
+}
+
+/// C++ analog: Pager.SupplyAfterFail
+/// After OP_FAIL, a new request_pages should supersede the failure
+/// and allow supply_pages to succeed.
+#[test]
+fn supply_after_fail_clears_failed_markers() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+
+    let vmo = pager
+        .create_vmo(0, &port, 0, (2 * PAGE_SIZE) as u64)
+        .unwrap();
+
+    // Send a page request.
+    let result = vmo.request_pages(0, 2 * PAGE_SIZE);
+    assert_eq!(result, Err(ZxError::SHOULD_WAIT));
+
+    // Fail the request.
+    vmo.fail_pager_requests_range(0, 2 * PAGE_SIZE, ZxError::IO);
+
+    // wait_for_page should see the failure immediately.
+    // But first, let's verify get_failed_page works.
+    assert_eq!(vmo.get_failed_page(0), Some(ZxError::IO));
+    assert_eq!(vmo.get_failed_page(1), Some(ZxError::IO));
+
+    // Now send a NEW request — this should clear the failure markers.
+    let result2 = vmo.request_pages(0, 2 * PAGE_SIZE);
+    assert_eq!(result2, Err(ZxError::SHOULD_WAIT));
+
+    // The failed markers should now be cleared.
+    assert_eq!(
+        vmo.get_failed_page(0),
+        None,
+        "failed page marker should be cleared after new request"
+    );
+    assert_eq!(
+        vmo.get_failed_page(1),
+        None,
+        "failed page marker should be cleared after new request"
+    );
+
+    // Supply pages — should succeed and wake any waiters.
+    let src = VmObject::new_paged(2);
+    let data = vec![0xAAu8; PAGE_SIZE];
+    src.write(0, &data).unwrap();
+    src.write(PAGE_SIZE, &data).unwrap();
+    pager
+        .supply_pages(&vmo, 0, (2 * PAGE_SIZE) as u64, &src, 0)
+        .unwrap();
+
+    // Read back — should have the supplied data.
+    let mut buf = vec![0u8; PAGE_SIZE];
+    vmo.read(0, &mut buf).unwrap();
+    assert_eq!(buf, data, "page should have supplied data after retry");
+}

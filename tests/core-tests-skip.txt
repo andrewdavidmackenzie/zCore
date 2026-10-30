@@ -36,7 +36,6 @@ Pager.InvalidPagerDetachVmo
 Pager.InvalidPagerSupplyPages
 Pager.MappedSupplyPages
 Pager.ResizeCommitTest
-Pager.SupplyAfterFail
 
 # ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
 StreamTestCase.PartialVmoDirty

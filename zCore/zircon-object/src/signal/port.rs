@@ -318,13 +318,22 @@ impl Port {
                 }
             }
             if let Some(qp) = inner.queue.pop_front() {
+                let remaining = inner.queue.len();
                 if inner.queue.is_empty()
                     && (inner.interrupt_queue.is_empty() || !self.can_bind_to_interrupt())
                 {
                     self.base.signal_clear(Signal::READABLE);
                 }
+                trace!(
+                    "port.wait: dequeued type={:#x} key={:#x} rem={} data={:?}",
+                    qp.packet.type_ as u32,
+                    qp.packet.key as u64,
+                    remaining,
+                    PortPacketRepr::from(&qp.packet).data
+                );
                 return qp.packet;
             }
+            trace!("port.wait: READABLE signaled but queue empty, retrying");
         }
     }
 
