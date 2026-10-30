@@ -15,7 +15,7 @@ pub(super) struct YieldFuture {
 impl Future for YieldFuture {
     type Output = ();
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Self::Output> {
         if self.flag {
             Poll::Ready(())
         } else {
@@ -32,7 +32,7 @@ impl Future for YieldFuture {
             // In libos mode, async_std handles scheduling — self-wake
             // is fine because OS threads provide true concurrency.
             #[cfg(feature = "libos")]
-            cx.waker().wake_by_ref();
+            _cx.waker().wake_by_ref();
             Poll::Pending
         }
     }
