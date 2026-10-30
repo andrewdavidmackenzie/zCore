@@ -21,6 +21,7 @@ Pager.DetachNonMappingAccess
 Pager.SuspendReadTestVmar
 Pager.FailEarlyWake
 Pager.CloneDetachTest
+Pager.EarlyWakeCloneRace
 PagerWriteback.SuspendDirtyTestVmar
 
 # ── BTI: multi-thread pin/decommit race ──
