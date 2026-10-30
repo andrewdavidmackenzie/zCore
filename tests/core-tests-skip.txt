@@ -1,6 +1,39 @@
-# ── PagerWriteback: TestThread mapping write hangs ──
+# ── PagerWriteback: hangs (multi-thread pager interactions) ──
 PagerWriteback.ResizeWritebackWithMappingTrapDirty
 PagerWriteback.LargeWriteBatched
+PagerWriteback.SuspendDirtyTestVmar
+PagerWriteback.WritebackResizedRangeAfterDetachNoTrapDirty
+PagerWriteback.OpZeroPinnedTrapDirty
+PagerWriteback.CommitExtendedTailTrapDirty
+PagerWriteback.CommitResizeRaceNoTrapDirty
+PagerWriteback.CommitResizeRaceTrapDirty
+PagerWriteback.OpZeroWritebackNoTrapDirty
+PagerWriteback.OpZeroWritebackTrapDirty
+PagerWriteback.ResizeWritebackRepeatedTrapDirty
+PagerWriteback.UntrackedAbsorbsIntervalSlots
+
+# ── Pager: hangs (multi-thread pager interactions) ──
+Pager.OverlapCommitSupplyTest
+Pager.DetachNonMappingAccess
+Pager.SuspendReadTestVmar
+Pager.FailEarlyWake
+Pager.CloneDetachTest
+Pager.EarlyWakeCloneRace
+Pager.CloneChainCommitTest
+Pager.CloneMightSeeIntermediateForks
+Pager.CloneResizeParentOK
+Pager.CloneShrinkGrowParent
+Pager.DecommitOnDetachTestVmar
+Pager.EarlySupplyTestVmar
+Pager.EarlySupplyTestVmo
+Pager.EvictionHintsOpRange
+Pager.FailMultipleCommits
+Pager.InvalidPagerCreateVmo
+Pager.InvalidPagerDetachVmo
+Pager.InvalidPagerSupplyPages
+Pager.MappedSupplyPages
+Pager.ResizeCommitTest
+Pager.SupplyAfterFail
 
 # ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
 StreamTestCase.PartialVmoDirty
@@ -14,17 +47,6 @@ PortStressTest.ChannelCallWaitQueuePanicRepro
 # ── Threads: debug register exception delivery not implemented ──
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.DebugRegistersDr6ResetOnDebugException
-
-# ── Pager: multi-thread pager interactions hang ──
-Pager.OverlapCommitSupplyTest
-Pager.DetachNonMappingAccess
-Pager.SuspendReadTestVmar
-Pager.FailEarlyWake
-Pager.CloneDetachTest
-Pager.EarlyWakeCloneRace
-PagerWriteback.SuspendDirtyTestVmar
-PagerWriteback.WritebackResizedRangeAfterDetachNoTrapDirty
-PagerWriteback.OpZeroPinnedTrapDirty
 
 # ── BTI: multi-thread pin/decommit race ──
 Bti.DecommitRace
