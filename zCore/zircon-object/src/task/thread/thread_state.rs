@@ -119,8 +119,14 @@ impl ContextAccessState for UserContext {
                 for (i, &val) in dr.dr.iter().enumerate() {
                     buf[i * 8..(i + 1) * 8].copy_from_slice(&val.to_ne_bytes());
                 }
-                buf[32..40].copy_from_slice(&dr.dr6.to_ne_bytes());
-                buf[40..48].copy_from_slice(&dr.dr7.to_ne_bytes());
+                // DR6: bits 4-11 are always 1, bit 12 is always 0.
+                let dr6_out = ((dr.dr6 as u32 | 0xFFFF_0FF0) & !0x1000) as u64;
+                buf[32..40].copy_from_slice(&dr6_out.to_ne_bytes());
+                // DR7: bits 8-9 (LE/GE) and bit 10 (reserved) are
+                // always read as 1. Matches Fuchsia's DR7_ZERO_MASK
+                // (0x700) and Intel SDM requirements.
+                let dr7_out = dr.dr7 | 0x700;
+                buf[40..48].copy_from_slice(&dr7_out.to_ne_bytes());
                 Ok(DEBUG_SIZE)
             }
             #[allow(unreachable_patterns)]
