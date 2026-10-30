@@ -205,6 +205,11 @@ impl Pager {
         if !(aux_offset as usize).is_multiple_of(PAGE_SIZE) {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Reject physical/contiguous VMOs as the aux source.
+        // Fuchsia requires paged VMOs for supply_pages.
+        if aux_vmo.is_contiguous() || aux_vmo.is_physical() {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
         let mut buf = alloc::vec![0u8; PAGE_SIZE];
         let mut src_off = aux_offset as usize;
         let mut dst_off = offset as usize;
