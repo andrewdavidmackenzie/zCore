@@ -99,6 +99,11 @@ fn generate_x86_64(syscalls: &[(String, u32)]) -> String {
     for (name, num) in syscalls {
         let zx_name = format!("zx_{}", name);
         let _zx_name = format!("_zx_{}", name);
+        // The x86_64 `syscall` instruction clobbers rcx (saves RIP)
+        // and r11 (saves RFLAGS). The 4th C ABI argument arrives in
+        // rcx, so we must move it to r10 before `syscall` — matching
+        // the Fuchsia vDSO convention. Without this, all syscalls
+        // with 4+ arguments receive garbage in their 4th parameter.
         asm.push_str(&format!(
             ".globl {zx_name}\n\
              .globl {_zx_name}\n\
@@ -106,6 +111,7 @@ fn generate_x86_64(syscalls: &[(String, u32)]) -> String {
              .type {_zx_name}, @function\n\
              {zx_name}:\n\
              {_zx_name}:\n\
+             \tmov %rcx, %r10\n\
              \tmov ${num}, %eax\n\
              \tsyscall\n\
              \tret\n\n"
