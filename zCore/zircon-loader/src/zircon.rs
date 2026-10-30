@@ -488,32 +488,17 @@ async fn handler_user_trap(
         // as invalid syscall numbers instead of being truncated to
         // a valid 32-bit syscall number.
         let ret = syscall.syscall(num, args).await as usize;
-        // Diagnostic: log VMO_READ return value to track return-value
-        // corruption (kernel returns OUT_OF_RANGE but user sees
-        // INVALID_ARGS). Log the isize value and the rax that will
-        // be written to the context.
+        // Diagnostic: log VMO_READ return value using console_write_fmt
+        // (survives LTO unlike warn! which gets stripped).
         if num == 198 && (ret as isize) < 0 {
-            warn!(
-                "VMO_READ ret={} ({:#x}) rax_will_be={:#x}",
-                ret as isize,
-                ret,
-                ret
-            );
+            use core::fmt::Write;
+            let _ = hal_impl::console::console_write_fmt(format_args!(
+                "[DIAG] VMO_READ ret={} ({:#x})\n",
+                ret as isize, ret
+            ));
         }
         thread
-            .with_context(|ctx| {
-                ctx.set_field(UserContextField::ReturnValue, ret);
-                // Verify the write took effect.
-                if num == 198 && (ret as isize) < 0 {
-                    let readback = ctx.get_field(UserContextField::ReturnValue);
-                    if readback != ret {
-                        warn!(
-                            "VMO_READ rax MISMATCH: wrote {:#x}, readback {:#x}",
-                            ret, readback
-                        );
-                    }
-                }
-            })
+            .with_context(|ctx| ctx.set_field(UserContextField::ReturnValue, ret))
             .map_err(|_| ExceptionInfo {
                 type_: ExceptionType::ThreadExiting,
                 synth_code: 0,
