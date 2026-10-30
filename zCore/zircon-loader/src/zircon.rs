@@ -368,6 +368,17 @@ async fn run_user(thread: CurrentThread) {
         // The code will enter a magic zone from here.
         // `enter_uspace` will be executed into a wrapped library where context switching takes place.
         // The details are available in the `trapframe` crate on crates.io.
+        // Diagnostic: check rax before entering userspace.
+        #[cfg(target_arch = "x86_64")]
+        {
+            let rax = ctx.general().rax;
+            if (rax as isize) < 0 && (rax as isize) > -100 {
+                warn!(
+                    "enter_uspace: rax={:#x} ({})",
+                    rax, rax as isize
+                );
+            }
+        }
         ctx.enter_uspace();
 
         // Back from the userspace
@@ -477,8 +488,32 @@ async fn handler_user_trap(
         // as invalid syscall numbers instead of being truncated to
         // a valid 32-bit syscall number.
         let ret = syscall.syscall(num, args).await as usize;
+        // Diagnostic: log VMO_READ return value to track return-value
+        // corruption (kernel returns OUT_OF_RANGE but user sees
+        // INVALID_ARGS). Log the isize value and the rax that will
+        // be written to the context.
+        if num == 198 && (ret as isize) < 0 {
+            warn!(
+                "VMO_READ ret={} ({:#x}) rax_will_be={:#x}",
+                ret as isize,
+                ret,
+                ret
+            );
+        }
         thread
-            .with_context(|ctx| ctx.set_field(UserContextField::ReturnValue, ret))
+            .with_context(|ctx| {
+                ctx.set_field(UserContextField::ReturnValue, ret);
+                // Verify the write took effect.
+                if num == 198 && (ret as isize) < 0 {
+                    let readback = ctx.get_field(UserContextField::ReturnValue);
+                    if readback != ret {
+                        warn!(
+                            "VMO_READ rax MISMATCH: wrote {:#x}, readback {:#x}",
+                            ret, readback
+                        );
+                    }
+                }
+            })
             .map_err(|_| ExceptionInfo {
                 type_: ExceptionType::ThreadExiting,
                 synth_code: 0,
