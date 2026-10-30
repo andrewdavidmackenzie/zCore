@@ -896,6 +896,15 @@ impl VMObjectTrait for VMObjectPaged {
         inner.supplying = false;
     }
 
+    fn unmap_mappings(&self, start_page: usize, page_count: usize) {
+        let (_guard, inner) = self.get_inner();
+        for map in inner.mappings.iter() {
+            if let Some(map) = map.upgrade() {
+                map.range_change(start_page, page_count, RangeChangeOp::Unmap);
+            }
+        }
+    }
+
     fn set_content_boundary(&self, pages: usize) {
         let (_guard, inner) = self.get_inner_mut();
         inner.content_boundary_pages = pages;

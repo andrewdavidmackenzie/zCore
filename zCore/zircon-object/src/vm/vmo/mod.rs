@@ -248,6 +248,11 @@ pub trait VMObjectTrait: Sync + Send {
     /// Set the content boundary for unbounded VMOs (stream_size in pages).
     fn set_content_boundary(&self, _pages: usize) {}
 
+    /// Unmap page table entries for the given page range across all
+    /// VMAR mappings of this VMO. Used to invalidate stale PTEs when
+    /// a parent decommits pages that children referenced via Ref.
+    fn unmap_mappings(&self, _start_page: usize, _page_count: usize) {}
+
     /// If contiguous, transmute vmo to a mutable buffer
     fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
         Err(ZxError::NOT_SUPPORTED)
@@ -547,7 +552,23 @@ impl VmObject {
                     map.range_change(0, total_pages, RangeChangeOp::Unmap);
                 }
             }
+            // Also unmap from children's page tables. Unidirectional
+            // children (and slices) may have PTEs that reference the
+            // now-decommitted physical frames via CommitResult::Ref.
+            // Without this, stale PTEs let clone reads succeed when
+            // they should fault with BAD_STATE.
+            for child_weak in inner.children.iter() {
+                if let Some(child) = child_weak.upgrade() {
+                    child.unmap_all_mappings(0, total_pages);
+                }
+            }
         }
+    }
+
+    /// Unmap all page table entries for the given page range across
+    /// all VMAR mappings of this VMO.
+    pub fn unmap_all_mappings(&self, start_page: usize, page_count: usize) {
+        self.trait_.unmap_mappings(start_page, page_count);
     }
 
     /// Get the offset of this VMO within its parent (for slices).
