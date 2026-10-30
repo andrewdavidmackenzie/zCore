@@ -488,14 +488,16 @@ async fn handler_user_trap(
         // as invalid syscall numbers instead of being truncated to
         // a valid 32-bit syscall number.
         let ret = syscall.syscall(num, args).await as usize;
-        // Diagnostic: log VMO_READ return value using console_write_fmt
-        // (survives LTO unlike warn! which gets stripped).
-        if num == 198 && (ret as isize) < 0 {
-            use core::fmt::Write;
-            let _ = hal_impl::console::console_write_fmt(format_args!(
-                "[DIAG] VMO_READ ret={} ({:#x})\n",
-                ret as isize, ret
-            ));
+        // Diagnostic: use volatile to prevent LTO from stripping.
+        {
+            let ret_v = unsafe { core::ptr::read_volatile(&ret) };
+            let num_v = unsafe { core::ptr::read_volatile(&num) };
+            if num_v == 198 && (ret_v as isize) < 0 {
+                let _ = hal_impl::console::console_write_fmt(format_args!(
+                    "[DIAG] VMO_READ ret={} ({:#x})\n",
+                    ret_v as isize, ret_v
+                ));
+            }
         }
         thread
             .with_context(|ctx| ctx.set_field(UserContextField::ReturnValue, ret))
