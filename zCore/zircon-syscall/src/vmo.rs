@@ -71,6 +71,7 @@ impl Syscall<'_> {
     /// For pager-backed VMOs, this will demand-page any missing pages
     /// by sending `ZX_PAGER_VMO_READ` requests to the pager's port
     /// and waiting for the pager to supply the pages.
+    #[inline(never)]
     pub async fn sys_vmo_read(
         &self,
         handle_value: HandleValue,
