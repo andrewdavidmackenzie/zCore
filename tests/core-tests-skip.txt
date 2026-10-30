@@ -19,6 +19,7 @@ Threads.DebugRegistersDr6ResetOnDebugException
 Pager.OverlapCommitSupplyTest
 Pager.DetachNonMappingAccess
 Pager.SuspendReadTestVmar
+Pager.FailEarlyWake
 PagerWriteback.SuspendDirtyTestVmar
 
 # ── BTI: multi-thread pin/decommit race ──
