@@ -71,7 +71,6 @@ impl Syscall<'_> {
     /// For pager-backed VMOs, this will demand-page any missing pages
     /// by sending `ZX_PAGER_VMO_READ` requests to the pager's port
     /// and waiting for the pager to supply the pages.
-    #[inline(never)]
     pub async fn sys_vmo_read(
         &self,
         handle_value: HandleValue,
@@ -88,17 +87,6 @@ impl Syscall<'_> {
         // Check VMO bounds first — Fuchsia returns OUT_OF_RANGE for
         // reads beyond the VMO size, even if the buffer is also bad.
         if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
-            // Diagnostic: write args to a known memory location to survive LTO.
-            #[cfg(target_arch = "x86_64")]
-            unsafe {
-                // Use port I/O to output diagnostic bytes that appear in QEMU serial.
-                // Port 0x3F8 = COM1.
-                core::arch::asm!(
-                    "out 0xe9, al", // QEMU debug port: outputs a byte to debug console
-                    in("al") 0x4Fu8, // 'O' for OOR
-                    options(nomem, nostack),
-                );
-            }
             return Err(ZxError::OUT_OF_RANGE);
         }
         // Fuchsia returns NOT_FOUND for null, kernel-space, or

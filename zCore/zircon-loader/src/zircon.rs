@@ -368,17 +368,6 @@ async fn run_user(thread: CurrentThread) {
         // The code will enter a magic zone from here.
         // `enter_uspace` will be executed into a wrapped library where context switching takes place.
         // The details are available in the `trapframe` crate on crates.io.
-        // Diagnostic: check rax before entering userspace.
-        #[cfg(target_arch = "x86_64")]
-        {
-            let rax = ctx.general().rax;
-            if (rax as isize) < 0 && (rax as isize) > -100 {
-                warn!(
-                    "enter_uspace: rax={:#x} ({})",
-                    rax, rax as isize
-                );
-            }
-        }
         ctx.enter_uspace();
 
         // Back from the userspace
@@ -488,17 +477,6 @@ async fn handler_user_trap(
         // as invalid syscall numbers instead of being truncated to
         // a valid 32-bit syscall number.
         let ret = syscall.syscall(num, args).await as usize;
-        // Diagnostic: use volatile to prevent LTO from stripping.
-        {
-            let ret_v = unsafe { core::ptr::read_volatile(&ret) };
-            let num_v = unsafe { core::ptr::read_volatile(&num) };
-            if num_v == 198 && (ret_v as isize) < 0 {
-                let _ = hal_impl::console::console_write_fmt(format_args!(
-                    "[DIAG] VMO_READ ret={} ({:#x})\n",
-                    ret_v as isize, ret_v
-                ));
-            }
-        }
         thread
             .with_context(|ctx| ctx.set_field(UserContextField::ReturnValue, ret))
             .map_err(|_| ExceptionInfo {
