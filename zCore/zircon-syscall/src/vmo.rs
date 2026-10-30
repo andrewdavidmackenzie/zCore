@@ -87,6 +87,10 @@ impl Syscall<'_> {
         // Check VMO bounds first — Fuchsia returns OUT_OF_RANGE for
         // reads beyond the VMO size, even if the buffer is also bad.
         if offset as usize > vmo.len() || buf_size > vmo.len() - (offset as usize) {
+            warn!(
+                "vmo.read: OUT_OF_RANGE offset={:#x} buf_size={:#x} vmo_len={:#x}",
+                offset, buf_size, vmo.len()
+            );
             return Err(ZxError::OUT_OF_RANGE);
         }
         // Fuchsia returns NOT_FOUND for null, kernel-space, or
