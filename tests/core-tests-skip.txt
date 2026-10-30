@@ -20,6 +20,7 @@ Pager.OverlapCommitSupplyTest
 Pager.DetachNonMappingAccess
 Pager.SuspendReadTestVmar
 Pager.FailEarlyWake
+Pager.CloneDetachTest
 PagerWriteback.SuspendDirtyTestVmar
 
 # ── BTI: multi-thread pin/decommit race ──
