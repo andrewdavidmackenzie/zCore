@@ -57,5 +57,9 @@ Bti.DecommitRace
 # ── VmoTestCase: multi-thread write + decommit race ──
 VmoTestCase.ParallelWriteAndDecommit
 
+# ── Resource / Scheduler: hangs ──
+Resource.Ioports
+SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
+
 # ── ProcessTest: crash on destroyed VMAR during kill ──
 ProcessTest.KillChannelHandleCycle
