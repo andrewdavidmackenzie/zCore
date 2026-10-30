@@ -50,8 +50,7 @@ Bti.DecommitRace
 # ── VmoTestCase: multi-thread write + decommit race ──
 VmoTestCase.ParallelWriteAndDecommit
 
-# ── Resource / Scheduler / Register: hangs ──
+# ── Resource / Scheduler: hangs ──
 Resource.Ioports
 SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
-RegisterContextSwitchTests.SegmentSelectorsZeroedOnInterrupt
 
