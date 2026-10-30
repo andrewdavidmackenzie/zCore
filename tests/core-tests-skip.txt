@@ -12,6 +12,7 @@ PagerWriteback.OpZeroWritebackTrapDirty
 PagerWriteback.ResizeWritebackRepeatedTrapDirty
 PagerWriteback.UntrackedAbsorbsIntervalSlots
 PagerWriteback.FailedPinAwaitingClean
+PagerWriteback.NotModifiedFailedPinWrite
 
 # ── Pager: hangs (multi-thread pager interactions) ──
 Pager.OverlapCommitSupplyTest
