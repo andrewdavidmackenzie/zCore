@@ -15,24 +15,12 @@ pub(super) struct YieldFuture {
 impl Future for YieldFuture {
     type Output = ();
 
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         if self.flag {
             Poll::Ready(())
         } else {
             self.flag = true;
-            // On bare-metal, use the deferred re-queue mechanism so
-            // other same-priority tasks in the ready queue get a turn
-            // before this task runs again. Without this, the self-wake
-            // causes the task to be re-polled immediately, starving
-            // other tasks (e.g., pager tests where the main thread's
-            // WaitForBlocked polling loop prevents TestThreads from
-            // reaching BlockedPager state).
-            #[cfg(not(feature = "libos"))]
-            executor::set_yield_pending();
-            // In libos mode, async_std handles scheduling — self-wake
-            // is fine because OS threads provide true concurrency.
-            #[cfg(feature = "libos")]
-            _cx.waker().wake_by_ref();
+            cx.waker().wake_by_ref();
             Poll::Pending
         }
     }
