@@ -23,6 +23,7 @@ Pager.FailEarlyWake
 Pager.CloneDetachTest
 Pager.EarlyWakeCloneRace
 PagerWriteback.SuspendDirtyTestVmar
+PagerWriteback.WritebackResizedRangeAfterDetachNoTrapDirty
 
 # ── BTI: multi-thread pin/decommit race ──
 Bti.DecommitRace
