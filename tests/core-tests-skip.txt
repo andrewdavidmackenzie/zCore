@@ -55,5 +55,3 @@ Resource.Ioports
 SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
 RegisterContextSwitchTests.SegmentSelectorsZeroedOnInterrupt
 
-# ── ProcessTest: page fault on destroyed VMAR during kill ──
-ProcessTest.KillChannelHandleCycle
