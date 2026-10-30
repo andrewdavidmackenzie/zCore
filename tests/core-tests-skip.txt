@@ -16,26 +16,20 @@ PagerWriteback.NotModifiedFailedPinWrite
 PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
 
 # ── Pager: hangs (multi-thread pager interactions) ──
+# Tests using WaitForBlocked polling (verified hangs):
 Pager.OverlapCommitSupplyTest
 Pager.DetachNonMappingAccess
 Pager.SuspendReadTestVmar
 Pager.FailEarlyWake
+Pager.FailMultipleCommits
+Pager.ResizeCommitTest
+# Tests that hang for other reasons (under investigation):
 Pager.CloneDetachTest
 Pager.EarlyWakeCloneRace
 Pager.CloneChainCommitTest
 Pager.CloneMightSeeIntermediateForks
-Pager.CloneResizeParentOK
 Pager.CloneShrinkGrowParent
-Pager.DecommitOnDetachTestVmar
-Pager.EarlySupplyTestVmar
-Pager.EarlySupplyTestVmo
 Pager.EvictionHintsOpRange
-Pager.FailMultipleCommits
-Pager.InvalidPagerCreateVmo
-Pager.InvalidPagerDetachVmo
-Pager.InvalidPagerSupplyPages
-Pager.MappedSupplyPages
-Pager.ResizeCommitTest
 
 # ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
 StreamTestCase.PartialVmoDirty
