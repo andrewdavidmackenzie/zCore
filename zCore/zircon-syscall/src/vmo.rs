@@ -140,7 +140,7 @@ impl Syscall<'_> {
                 })
                 .map_err(|e| {
                     if e == ZxError::INVALID_ARGS {
-                        ZxError::NOT_FOUND
+                        ZxError::ACCESS_DENIED
                     } else {
                         e
                     }
@@ -308,11 +308,8 @@ impl Syscall<'_> {
             Ok(n)
         })
         .map_err(|e| {
-            // User buffer copy faults (INVALID_ARGS from guarded_user_copy)
-            // should be reported as NOT_FOUND, matching Fuchsia's behavior
-            // for vmo_read/vmo_write to unmapped user addresses.
             if e == ZxError::INVALID_ARGS {
-                ZxError::NOT_FOUND
+                ZxError::ACCESS_DENIED
             } else {
                 e
             }
