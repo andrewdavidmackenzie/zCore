@@ -282,7 +282,13 @@ fn debug_registers_dr6_reset_on_debug_exception() {
         .read_state(ThreadStateKind::Debug, &mut read_buf)
         .unwrap();
     let got_dr6 = u64::from_ne_bytes(read_buf[32..40].try_into().unwrap());
-    assert_eq!(got_dr6, 0, "DR6 should be cleared");
+    // DR6 reserved bits 4-11 are always 1, bit 12 always 0.
+    // Writing 0 then reading back gives the reserved mask: 0xFFFF0FF0.
+    let dr6_zero_mask: u64 = 0xFFFF_0FF0;
+    assert_eq!(
+        got_dr6, dr6_zero_mask,
+        "DR6 should be cleared (reserved bits remain)"
+    );
 }
 
 /// C++: TEST(Threads, DebugRegistersValidation)
@@ -346,7 +352,10 @@ fn debug_registers_watchpoint_syscall_panic_repro() {
     let got_dr0 = u64::from_ne_bytes(read_buf[0..8].try_into().unwrap());
     let got_dr7 = u64::from_ne_bytes(read_buf[40..48].try_into().unwrap());
     assert_eq!(got_dr0, watch_addr);
-    assert_eq!(got_dr7, dr7);
+    // DR7 read-back includes always-1 bits 8-10 (0x700).
+    // Write mask clears bits 11-15, so 0x000D_0001 becomes
+    // 0x000D_0001 & 0xFFFF_07FF | 0x700 = 0x000D_0701.
+    assert_eq!(got_dr7, (dr7 & 0xFFFF_07FF) | 0x700);
 }
 
 /// C++: TEST(Threads, EmptyNameSucceeds)

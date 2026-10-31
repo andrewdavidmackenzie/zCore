@@ -387,10 +387,7 @@ impl Syscall<'_> {
         if vmar.has_children_in_range(addr as usize, size as usize) {
             if matches!(
                 op,
-                VmarOpType::Commit
-                    | VmarOpType::Decommit
-                    | VmarOpType::Zero
-                    | VmarOpType::Prefetch
+                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero | VmarOpType::Prefetch
             ) {
                 return Err(ZxError::INVALID_ARGS);
             }

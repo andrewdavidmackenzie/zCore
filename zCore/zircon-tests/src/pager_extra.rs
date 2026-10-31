@@ -3646,13 +3646,7 @@ fn clone_chain_commit_attribution() {
         src.write(i * PAGE_SIZE, &[(i + 1) as u8; 1]).unwrap();
     }
     pager
-        .supply_pages(
-            &pager_vmo,
-            0,
-            (num_pages * PAGE_SIZE) as u64,
-            &src,
-            0,
-        )
+        .supply_pages(&pager_vmo, 0, (num_pages * PAGE_SIZE) as u64, &src, 0)
         .unwrap();
 
     // Create intermediate (unidirectional child of pager root).

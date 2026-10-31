@@ -353,20 +353,21 @@ impl Syscall<'_> {
         // allocation for the entire write.
         let mut vmo_offset = offset as usize;
         let mut any_written = false;
-        let result = buf.for_each_chunk::<ZxError>(buf_size, |chunk| {
-            vmo.write(vmo_offset, chunk)?;
-            any_written = true;
-            let n = chunk.len();
-            vmo_offset += n;
-            Ok(n)
-        })
-        .map_err(|e| {
-            if e == ZxError::INVALID_ARGS {
-                ZxError::NOT_FOUND
-            } else {
-                e
-            }
-        });
+        let result = buf
+            .for_each_chunk::<ZxError>(buf_size, |chunk| {
+                vmo.write(vmo_offset, chunk)?;
+                any_written = true;
+                let n = chunk.len();
+                vmo_offset += n;
+                Ok(n)
+            })
+            .map_err(|e| {
+                if e == ZxError::INVALID_ARGS {
+                    ZxError::NOT_FOUND
+                } else {
+                    e
+                }
+            });
         // Set modified flag for pager-backed VMOs even on partial write.
         // A partial write still modifies at least one page.
         if any_written && (vmo.is_pager_backed() || vmo.was_pager_backed()) {

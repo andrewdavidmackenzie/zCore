@@ -206,9 +206,7 @@ impl Pager {
             return Err(ZxError::INVALID_ARGS);
         }
         // Validate: destination range must be within the VMO.
-        let end = offset
-            .checked_add(length)
-            .ok_or(ZxError::OUT_OF_RANGE)?;
+        let end = offset.checked_add(length).ok_or(ZxError::OUT_OF_RANGE)?;
         if end as usize > vmo.len() {
             return Err(ZxError::OUT_OF_RANGE);
         }
