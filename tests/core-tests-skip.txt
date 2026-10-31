@@ -49,5 +49,6 @@ VmoTestCase.ParallelWriteAndDecommit
 
 # ── Resource / Scheduler: hangs ──
 Resource.Ioports
+Resource.PcInterruptVectorPoolLeak
 SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
 
