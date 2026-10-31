@@ -537,22 +537,11 @@ impl Syscall<'_> {
 
                 // A page needs a DIRTY request if:
                 // - It's clean (!is_page_dirty), OR
-                // - It has a zero marker AND is CLEAN (writeback completed
-                //   but zero marker remains — needs new DIRTY approval
-                //   before materializing a real frame).
-                // PAGE_ZERO_DIRTY pages already have pager approval and
-                // must NOT trigger a new DIRTY request.
+                // - It has a zero marker (PAGE_ZERO_DIRTY pages need
+                //   DIRTY approval before materializing a real frame,
+                //   even though is_page_dirty returns true for them).
                 let needs_dirty = |pg: usize| -> bool {
-                    if pager_vmo.has_zero_marker(pg) {
-                        // Zero-marker page: only needs DIRTY if it has
-                        // been cleaned by writeback (state is CLEAN).
-                        matches!(
-                            pager_vmo.get_page_dirty_state(pg),
-                            Some(zircon_object::vm::PAGE_CLEAN)
-                        )
-                    } else {
-                        !pager_vmo.is_page_dirty(pg)
-                    }
+                    !pager_vmo.is_page_dirty(pg) || pager_vmo.has_zero_marker(pg)
                 };
                 if is_trap_dirty && pager_vmo.has_pager() && needs_dirty(cursor) {
                     // Supplied but needs-dirty page: find run, request DIRTY, wait.
