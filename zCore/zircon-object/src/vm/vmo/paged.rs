@@ -435,10 +435,10 @@ impl VMObjectTrait for VMObjectPaged {
                     // No local frame: just insert zero marker.
                     // This blocks parent look-through, so reads return zero.
                     inner.zero_markers.insert(block.block);
-                    // Tell the parent we no longer need this page.
-                    // This decrements share_count in the hidden node so
-                    // attribution reflects the reduced sharing.
-                    unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
+                    // Decrement share_count on the parent's page to
+                    // reflect that this VMO no longer references it.
+                    // Walk up to find the hidden node that owns the page.
+                    inner.decrement_parent_share_counts(block.block, block.block + 1);
                     // Unmap so subsequent accesses see the zero marker.
                     for map in inner.mappings.iter() {
                         if let Some(map) = map.upgrade() {
