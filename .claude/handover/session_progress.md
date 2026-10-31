@@ -3,122 +3,121 @@
 ## Current State
 
 ### Branch: `preemptive_thread_scheduling_801` (PR #802)
-### Commit: `a0bdfc0d` (cleanup: remove all diagnostic code)
+### Latest Commit: `81dd2577` (fix: CI failures — fmt, Rust test assertions)
 
 ### Test Results
-- **Rust zircon-tests**: 3093 pass, 0 fail, 1 ignored
-- **Rust zircon-object**: 126 pass, 0 fail, 8 ignored
-- **Rust hal-impl**: 5 pass, 0 fail
-- **C++ core-tests (x86_64 QEMU)**: 1692 pass, 36 fail, 45 skip
-- Full C++ suite runs to completion (no hangs/crashes with skip list)
-- CI: all green except Unit Test (ubuntu-latest) — pre-existing flaky test
+- **Rust zircon-tests**: 3096 pass, 0 fail, 1 ignored
+- **C++ core-tests (x86_64 QEMU, ThinkPad)**: 1721 pass, 21 fail, 28 skip
+- **CI**: Clippy fmt + Unit Test (ubuntu) failures fixed in latest commit, awaiting re-run
 
-## Kernel Fixes Made This Session
+### Session Delta
+- **Started**: 1694 pass, 48 fail, 45 skip
+- **Ended**: 1721 pass, 21 fail, 28 skip
+- **Net**: +27 passes, -27 failures, -17 skips
 
-1. **DR7 sanitization** (thread_state.rs) — only clear GD bit for round-trip consistency
-2. **find_root_pager_vmo_with_offset** (vmo/mod.rs) — walk full parent chain
-3. **VmObject::drop self-deadlock** (vmo/mod.rs) — drop own lock before iterating parent's children
-4. **VMObjectPaged concurrent drop safety** (vmo/paged.rs) — handle upgrade() returning None at all 4 sites
-5. **VMObjectPaged::drop pin_count** (vmo/paged.rs) — warn+clear instead of panic
-6. **PageTable user VA tracking** (hal-impl/libos/vm.rs) — software mapping table for COW RemoveWrite
-7. **ThreadSwitchFuture cfg guard** (thread.rs) — `#[cfg(target_os = "none")]` not feature-gated
-8. **USER_ASPACE_BASE** (vmar.rs) — always high on aarch64-macOS
-9. **Thread→Process ownership** (thread.rs, process.rs) — Thread holds Arc<Process>, Process holds Weak<Thread>
-10. **Destroyed VMAR safety** (vmar.rs) — all unwrap() replaced with graceful errors
-11. **Process exit/terminate race** (process.rs) — remove_thread checks job kill state
-12. **Job::is_killed/return_code** (job.rs) — new public accessors
-13. **x86_64 vDSO mov %rcx, %r10** (vdso/build.rs) — our generated vDSO was missing this
-14. **sys_debug_exec feature gate** (debug.rs) — behind `#[cfg(feature = "elf")]`
-15. **hal-impl map_unmap test** (vm.rs) — use PAGE_SIZE-aligned addresses
+## Kernel Fixes Made This Session (31 commits)
 
-## 45 Skipped C++ Tests — Root Cause Analysis
+### Pager infrastructure
+1. **pager_failed_pages cleared on new request** — request_pages now clears stale OP_FAIL markers so retries reach the pager
+2. **BAD_STATE for detached pager clones** — unsupplied pages in clones of detached pagers return BAD_STATE instead of infinite SHOULD_WAIT loop
+3. **supply_pages rejects physical/pager-backed/pinned VMOs** — validates aux VMO type and pinned state
+4. **supply_pages bounds check** — validates destination and source ranges are within VMO bounds
+5. **supply_pages decommits aux VMO** — transfers page ownership by decommitting source pages after copy
+6. **Drain resolved page requests from port** — Port::remove_page_read_packets selectively removes resolved READ packets
+7. **Pager detach requires ATTACH_VMO + MANAGE_VMO** — both rights checked, not just ATTACH_VMO
+8. **set_modified on vmo_write** — pager-backed VMOs get modified flag set even on partial writes
 
-### 36 Pager/PagerWriteback (biggest group)
+### COW / VMO attribution
+9. **share_count decrement on zero** — zero marker insertion uses decrement_parent_share_counts (not release_unwanted which moves pages)
+10. **Don't COW-fork in intermediate unidirectional nodes** — when a child walks through an intermediate unidirectional node, pass Ref through without forking
+11. **Decommit unmap from page tables** — range_change(Unmap) on all mappings after decommitting pages
+12. **Propagate decommit unmap to children** — VmObject children notified to invalidate PTEs on decommit_clean_pages
+13. **Update children's parent_limit on parent resize** — unidirectional children see zeros for truncated pages instead of OUT_OF_RANGE
 
-Categorized by mechanism:
+### Rights / ABI
+14. **MANAGE_VMO right bit 24 (was 25)** — matched Fuchsia's ZX_RIGHT_MANAGE_VMO
+15. **consts.rs rights alignment** — OP_CHILDREN, RESIZE, ATTACH_VMO, MANAGE_VMO all fixed
 
-**Single-threaded (7 tests — likely DON'T actually hang):**
-- InvalidPagerCreateVmo, InvalidPagerDetachVmo, InvalidPagerSupplyPages
-- MappedSupplyPages, CloneResizeParentOK
-- These were unreachable in sequential runs because an earlier test hung.
-  Individually verified to pass/fail (not hang) when tested alone.
+### Debug registers (x86_64)
+16. **DR7 always-1 bits on read** — OR 0x700 (bits 8-10) matching Intel SDM
+17. **DR6 reserved bits on read** — bits 4-11 always 1, bit 12 always 0
+18. **DR7 write mask** — clear reserved bits 11-15 (0xFFFF_07FF mask)
 
-**TestThread + WaitForBlocked (5 tests — verified hangs):**
-- OverlapCommitSupplyTest, DetachNonMappingAccess, FailEarlyWake,
-  FailMultipleCommits, ResizeCommitTest
-- WaitForBlocked polls get_info+nanosleep in a tight loop. If the
-  TestThread hasn't reached BlockedPager state yet, the poll loop
-  monopolizes the executor.
+### x86_64 context switch
+19. **Zero FS/GS/DS/ES segment selectors** — zero all four data segment selectors before entering user mode, using swapgs to preserve kernel GS base
 
-**TestThread without WaitForBlocked (6 tests):**
-- CloneDetachTest, EarlyWakeCloneRace, CloneChainCommitTest,
-  EvictionHintsOpRange, SupplyAfterFail
-- These use port_wait (blocking) so the executor should interleave.
-  Hang cause needs investigation — possibly clone page fault routing
-  to parent pager port.
+### VMAR operations
+20. **op_range alignment validation** — reject unaligned address/size and zero size
+21. **op_range child VMAR scoping** — COMMIT/DECOMMIT/ZERO/PREFETCH cannot traverse child VMARs
 
-**Background pager thread (2 tests):**
-- CloneMightSeeIntermediateForks, CloneShrinkGrowParent
-- Use StartTaggedPageFaultHandler which runs a background port_wait loop.
+### BTI / IOMMU
+22. **IOMMU map_contiguous page index** — fixed byte offset vs page index in commit_page call
+23. **IOMMU bounds check error code** — OUT_OF_RANGE instead of INVALID_ARGS
+24. **PMT cleanup on addrs_count mismatch** — unpin and release PMT when encoded addresses don't match caller's count
+25. **release_pmt made public** — needed for PMT cleanup from syscall layer
 
-**Not found in pager.cc (4 tests — VMO_VMAR_TEST macro generated):**
-- SuspendReadTestVmar, DecommitOnDetachTestVmar, EarlySupplyTestVmar,
-  EarlySupplyTestVmo
+### Handle table
+26. **Sort handle entries by KOID** — approximates insertion order for ZX_INFO_HANDLE_TABLE
 
-**PagerWriteback tests (15 — most are multi-thread TRAP_DIRTY interactions):**
-- ResizeWritebackWithMappingTrapDirty, LargeWriteBatched,
-  SuspendDirtyTestVmar, CommitExtendedTailTrapDirty, etc.
-- These involve TestThread doing VMO write/commit that triggers
-  TRAP_DIRTY pager request while main thread handles it.
+### Error handling
+27. **Restore INVALID_ARGS→ACCESS_DENIED in vmo_read** — guarded_user_copy faults on permission-denied pages report ACCESS_DENIED
 
-### Other 9 skipped tests
+### Skip list / test infrastructure
+28-31. Skip list removals (45→28): removed 9 non-hanging pager tests, ProcessTest.KillChannelHandleCycle, RegisterContextSwitchTests (self-skips)
 
-- **Threads.DebugRegisters* (2)**: Need hardware debug exception delivery (ZX_EXCP_HW_BREAKPOINT)
-- **ProcessTest.KillChannelHandleCycle (1)**: Page fault on destroyed VMAR — fixed by destroyed VMAR safety, but needs verification
-- **VmoClone2TestCase.DropChildrenInParallel (1)**: std::thread spin-loop livelocks in test protocol
-- **PortStressTest.ChannelCallWaitQueuePanicRepro (1)**: 3-thread channel_call stress — needs concurrent kernel progress
-- **Bti.DecommitRace (1)**: Two threads racing pin/decommit
-- **VmoTestCase.ParallelWriteAndDecommit (1)**: Two threads racing write/decommit
-- **StreamTestCase.PartialVmoDirty (1)**: Pager TRAP_DIRTY + partial stream write
-- **Resource.Ioports (1)**: IO port access — likely hardware feature
-- **SchedulerProfileTest.DeadlinePiUtilizationPanicRepro (1)**: Deadline scheduler not implemented
-- **RegisterContextSwitchTests.SegmentSelectorsZeroedOnInterrupt (1)**: x86 segment selector handling
+## 28 Skipped C++ Tests
 
-## 36 Failed C++ Tests — Categorized
+### PagerWriteback (15) — TRAP_DIRTY multi-thread
+All require multi-threaded TRAP_DIRTY pager interactions that hang.
 
-- **VmoZeroTestCase (6)**: populated_bytes fractional COW attribution
-- **Vmar (5)**: alignment, prefetch, range ops
-- **ProcessGetInfo (4)**: VMO info reporting
-- **Threads (4)**: debug register validation
-- **PagerWriteback (3)**: dirty tracking edge cases
-- **VmoTestCase (4)**: pin, read/write error codes, contiguous
-- **Property (2)**: FS/GS segment register non-canonical
-- **Others (8)**: DefaultExceptionHandler, MemoryPriorityProfile,
-  StandaloneElfLoad, RegisterContextSwitch, TaskGetInfo, VmoReference
+### Pager (8) — multi-thread hangs
+- 6 WaitForBlocked polling tests (verified hangs)
+- 2 other hangs (EarlyWakeCloneRace, EvictionHintsOpRange)
 
-## Investigation: ReadWriteBadLen
+### Other (5)
+- Threads.DebugRegistersDr6* (2) — hardware debug exception delivery
+- VmoClone2TestCase.DropChildrenInParallel — concurrent VMO drop race
+- PortStressTest.ChannelCallWaitQueuePanicRepro — 3-thread stress
+- Bti.DecommitRace — multi-thread pin/decommit race
 
-Kernel returns OUT_OF_RANGE (-14) but C++ test sees INVALID_ARGS (-10).
-- LTO proves the bounds check in sys_vmo_read is dead code
-- Diagnostics (warn!, error!, console_write_fmt, inline asm) all stripped by LTO
-- Even #[inline(never)] doesn't survive LTO
-- Build system doesn't reliably detect source changes for kernel rebuild
-- Need GDB on ThinkPad to trace at assembly level
-- Could be return value corruption in trap return path or miscompilation
+### Removed from skip list (no longer hang)
+- VmoTestCase.ParallelWriteAndDecommit
+- StreamTestCase.PartialVmoDirty
+- Resource.Ioports
+- SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
 
-## Key Architectural Findings
+## 21 Remaining C++ Test Failures — Root Cause Analysis
 
-1. **The vDSO in use is prebuilt Fuchsia vDSO** (prebuilt/zircon-test/x86_64/libzircon-vdso.so),
-   not our generated one from zCore/vdso/. The generated one is only used for aarch64/riscv64.
-   Our vDSO fix (mov %rcx, %r10) is correct but doesn't affect x86_64 core-tests.
+### COW attribution / populated_bytes (3)
+- **VmoZeroTestCase.AllocateAfterMergeMultipleChildren**: multi-child share_count after merge — complex 3+ child attribution
+- **Vmar.RangeOpCommit**: populated_bytes walks parent chain, reports too many pages for unidirectional children
+- **TaskGetInfoTest.SharedMemAccounting**: fractional COW for unidirectional children — share_count not incremented
 
-2. **LTO aggressively strips code** including error!, warn!, console_write_fmt, and inline asm
-   inside conditional branches. Only the error! in lib.rs:1558 (the catch-all error logger)
-   survives because it's in a hot path the optimizer can't prove is dead.
+### Pager clone data visibility (1)
+- **Pager.CloneMightSeeIntermediateForks**: multi-level clone chain with StartTaggedPageFaultHandler — COW fork visibility through hidden nodes
 
-3. **Make build system caching**: `make core-tests-kernel` doesn't always detect source changes
-   in dependent crates. Need to `rm -f target/qemu-x86_64/release/kernel` to force rebuild.
-   Even then, the xtask build wrapper may use different env vars than direct cargo build.
+### PagerWriteback dirty tracking (3)
+- **DelayedDirtyZeroRange**: spurious DIRTY request in port after zero
+- **ModifiedOnPartialVmoWriteTrapDirty**: TRAP_DIRTY vmo_write doesn't generate dirty requests (needs syscall-level dirty handling)
+- **ResizeWritebackRepeatedNoTrapDirty**: dirty ranges after resize+writeback
+
+### ProcessGetInfo VMO enumeration (4)
+- **InfoProcessVmosSmokeTest, V1, V2, V3**: mini-process has 3 VMOs, test expects 4+ (missing vDSO/TLS VMOs)
+
+### x86 exception handling (4)
+- **Property.RegisterFsNoncanonical, RegisterGsNoncanonical**: exception RIP doesn't match faulting instruction address
+- **Threads.DebugRegistersWatchpointSyscallPanicRepro**: needs ZX_EXCP_HW_BREAKPOINT exception type (we deliver General)
+- **Threads.SyscallDebuggerModifyResult**: debugger exception handling for modifying syscall return
+
+### Feature gaps (4)
+- **DefaultExceptionHandlerTest.UnhandledPolicyException**: policy exception kill not implemented
+- **MemoryPriorityProfile.ApplyProfile**: vmo_reclaim_disabled_bytes tracking not implemented
+- **StandaloneElfLoadTests.Load**: missing cross-arch test modules (arm64, riscv64 .so files)
+- **VmoTestCase.ReadWriteInvalidUserBuffer**: guarded_user_copy returns INVALID_ARGS for both unmapped and permission-denied faults — need to distinguish at fault handler level
+
+### Architecture / allocator (2)
+- **Vmar.AlignmentVmarMapTest**: 8GB VMAR allocation with 512MB alignment — address space too small
+- **VmoTestCase.ReadWriteBadLen**: return value corruption (-14 becomes -10) through trap return path — likely LTO miscompilation
 
 ## Testing Commands
 
@@ -134,18 +133,12 @@ P=$(grep -ac '\[       OK \]' /tmp/qemu-core-tests.log)
 F=$(grep -ac '\[  FAILED  \]' /tmp/qemu-core-tests.log)
 echo "Passed: $P  Failed: $F"
 
-# Individual test (override filter after rootfs build)
-echo '--gtest_filter=TestName' > target/rootfs/zircon/x86_64/etc/extra-args
-rm -f target/qemu-x86_64/release/x86_64-zircon.img target/qemu-x86_64/release/boot.img
-make core-tests-bootimg
-make core-tests CORE_TESTS_TIMEOUT=30 'CORE_TESTS_FILTER=TestName'
-
 # Local Rust tests
 cargo test -p zircon-tests --lib -- --test-threads=1
 cargo test -p zircon-object -p hal-impl --lib -- --test-threads=1
 
-# Clippy
-cargo clippy -p zircon-object -p hal-impl -p zircon-tests -p zircon-syscall
+# Individual C++ test (local QEMU)
+make core-tests CORE_TESTS_TIMEOUT=15 'CORE_TESTS_FILTER=TestName'
 
 # Full style check
 cargo check-style
