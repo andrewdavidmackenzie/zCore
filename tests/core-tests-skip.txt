@@ -1,4 +1,5 @@
 # ── PagerWriteback: hangs (multi-thread pager interactions) ──
+PagerWriteback.ResizeWritebackInterleavedWriteWithMappingTrapDirty
 PagerWriteback.ResizeWritebackWithMappingTrapDirty
 PagerWriteback.LargeWriteBatched
 PagerWriteback.SuspendDirtyTestVmar
