@@ -205,6 +205,20 @@ impl Pager {
         if !(aux_offset as usize).is_multiple_of(PAGE_SIZE) {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Validate: destination range must be within the VMO.
+        let end = offset
+            .checked_add(length)
+            .ok_or(ZxError::OUT_OF_RANGE)?;
+        if end as usize > vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        // Validate: source range must be within the aux VMO.
+        let aux_end = aux_offset
+            .checked_add(length)
+            .ok_or(ZxError::OUT_OF_RANGE)?;
+        if aux_end as usize > aux_vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
         // Reject physical, contiguous, or pager-backed VMOs as the aux source.
         // Fuchsia requires non-pager paged VMOs for supply_pages.
         if aux_vmo.is_contiguous() || aux_vmo.is_physical() || aux_vmo.is_pager_backed() {

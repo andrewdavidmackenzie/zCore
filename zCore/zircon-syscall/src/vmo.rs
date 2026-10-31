@@ -355,8 +355,10 @@ impl Syscall<'_> {
         // write each chunk to the VMO, avoiding a single huge kernel
         // allocation for the entire write.
         let mut vmo_offset = offset as usize;
-        buf.for_each_chunk::<ZxError>(buf_size, |chunk| {
+        let mut any_written = false;
+        let result = buf.for_each_chunk::<ZxError>(buf_size, |chunk| {
             vmo.write(vmo_offset, chunk)?;
+            any_written = true;
             let n = chunk.len();
             vmo_offset += n;
             Ok(n)
@@ -367,7 +369,13 @@ impl Syscall<'_> {
             } else {
                 e
             }
-        })?;
+        });
+        // Set modified flag for pager-backed VMOs even on partial write.
+        // A partial write still modifies at least one page.
+        if any_written && (vmo.is_pager_backed() || vmo.was_pager_backed()) {
+            vmo.set_modified();
+        }
+        result?;
         Ok(())
     }
 
