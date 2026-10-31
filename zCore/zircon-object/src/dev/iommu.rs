@@ -45,7 +45,7 @@ impl Iommu {
             return Err(ZxError::INVALID_ARGS);
         }
         if offset + size > vmo.len() {
-            return Err(ZxError::INVALID_ARGS);
+            return Err(ZxError::OUT_OF_RANGE);
         }
         let mut flags = MMUFlags::empty();
         if perms.contains(IommuPerms::PERM_READ) {
@@ -79,9 +79,9 @@ impl Iommu {
             return Err(ZxError::INVALID_ARGS);
         }
         if offset + size > vmo.len() {
-            return Err(ZxError::INVALID_ARGS);
+            return Err(ZxError::OUT_OF_RANGE);
         }
-        let p_addr = vmo.commit_page(offset, MMUFlags::empty())?;
+        let p_addr = vmo.commit_page(offset / PAGE_SIZE, MMUFlags::empty())?;
         if vmo.is_paged() {
             Ok((p_addr, PAGE_SIZE))
         } else {

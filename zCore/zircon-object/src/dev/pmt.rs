@@ -41,8 +41,14 @@ impl PinnedMemoryToken {
         size: usize,
     ) -> ZxResult<Arc<Self>> {
         if vmo.is_paged() {
-            vmo.commit(offset, size)?;
-            vmo.pin(offset, size)?;
+            if let Err(e) = vmo.commit(offset, size) {
+                warn!("PMT: commit({:#x}, {:#x}) failed on vmo len={:#x}: {:?}", offset, size, vmo.len(), e);
+                return Err(e);
+            }
+            if let Err(e) = vmo.pin(offset, size) {
+                warn!("PMT: pin({:#x}, {:#x}) failed on vmo len={:#x}: {:?}", offset, size, vmo.len(), e);
+                return Err(e);
+            }
         }
         let mapped_addrs = Self::map_into_iommu(&bti.iommu(), vmo.clone(), offset, size, perms)?;
         Ok(Arc::new(PinnedMemoryToken {
