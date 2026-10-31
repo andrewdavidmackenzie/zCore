@@ -1274,10 +1274,24 @@ impl VMObjectPagedInner {
                         self.frames.insert(page_idx, new_frame);
                     }
                     CommitResult::Ref(paddr)
+                        if self.type_.is_unidirectional()
+                            && flags.contains(MMUFlags::WRITE)
+                            && child.strong_count() > 0 =>
+                    {
+                        // A child is walking through this unidirectional
+                        // node to reach the root. Don't fork here — pass
+                        // the Ref through so the requesting leaf does the
+                        // COW fork. Without this, every intermediate
+                        // unidirectional node in the chain would fork a
+                        // local copy, inflating populated_bytes.
+                        return Ok(CommitResult::Ref(paddr));
+                    }
+                    CommitResult::Ref(paddr)
                         if self.type_.is_unidirectional() && flags.contains(MMUFlags::WRITE) =>
                     {
                         // Unidirectional child writing to a parent page:
-                        // COW-fork into a local copy.
+                        // COW-fork into a local copy. This is the leaf
+                        // node (child is Weak::new from commit_page).
                         let new_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
                         hal_impl::mem::pmem_copy(new_frame.paddr(), paddr, PAGE_SIZE);
                         self.frames.insert(page_idx, PageState::new(new_frame));

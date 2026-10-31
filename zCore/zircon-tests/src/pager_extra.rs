@@ -3625,3 +3625,65 @@ fn supply_after_fail_clears_failed_markers() {
     vmo.read(0, &mut buf).unwrap();
     assert_eq!(buf, data, "page should have supplied data after retry");
 }
+
+/// C++ analog: Pager.CloneChainCommitTest
+/// Create pager VMO → intermediate clone → final clone.
+/// Commit all pages in the final clone. The intermediate should have
+/// populated_bytes = 0 (all pages belong to the clone, not intermediate).
+#[test]
+fn clone_chain_commit_attribution() {
+    let _ctx = TestContext::new();
+    let (pager, port) = create_pager_and_port();
+
+    let num_pages = 4; // smaller than C++ test's 32 for speed
+    let pager_vmo = pager
+        .create_vmo(0, &port, 0, (num_pages * PAGE_SIZE) as u64)
+        .unwrap();
+
+    // Supply all pages.
+    let src = VmObject::new_paged(num_pages);
+    for i in 0..num_pages {
+        src.write(i * PAGE_SIZE, &[(i + 1) as u8; 1]).unwrap();
+    }
+    pager
+        .supply_pages(
+            &pager_vmo,
+            0,
+            (num_pages * PAGE_SIZE) as u64,
+            &src,
+            0,
+        )
+        .unwrap();
+
+    // Create intermediate (unidirectional child of pager root).
+    let intermediate = pager_vmo
+        .create_child_unidirectional(0, num_pages * PAGE_SIZE, false)
+        .unwrap();
+
+    // Create clone via intermediate — same path as C++ test's
+    // intermediate->Clone(). This routes through the intermediate's
+    // parent (pager root) and sets the clone's VmObject parent to
+    // the intermediate.
+    let clone = intermediate
+        .create_child_unidirectional(0, num_pages * PAGE_SIZE, false)
+        .unwrap();
+
+    // Commit all pages in the clone (simulates WRITE faults).
+    clone.commit(0, num_pages * PAGE_SIZE).unwrap();
+
+    // Clone should have all pages committed locally.
+    let clone_info = clone.get_info();
+    assert_eq!(
+        clone_info.vmo_populated_bytes() as usize,
+        num_pages * PAGE_SIZE,
+        "clone should have all pages committed"
+    );
+
+    // Intermediate should have 0 populated bytes — it has no local frames.
+    let inter_info = intermediate.get_info();
+    assert_eq!(
+        inter_info.vmo_populated_bytes(),
+        0,
+        "intermediate should have 0 populated bytes (no local frames)"
+    );
+}
