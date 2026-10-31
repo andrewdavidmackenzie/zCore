@@ -1049,7 +1049,7 @@ impl Syscall<'_> {
                     let proc = self.thread.proc();
                     if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
                         let vmo_len = vmo.len();
-                        if a2 >= vmo_len || a3 > vmo_len - a2 {
+                        if a2 > vmo_len || a3 > vmo_len - a2 {
                             return ZxError::OUT_OF_RANGE as isize;
                         }
                     }
