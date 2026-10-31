@@ -435,6 +435,10 @@ impl VMObjectTrait for VMObjectPaged {
                     // No local frame: just insert zero marker.
                     // This blocks parent look-through, so reads return zero.
                     inner.zero_markers.insert(block.block);
+                    // Tell the parent we no longer need this page.
+                    // This decrements share_count in the hidden node so
+                    // attribution reflects the reduced sharing.
+                    unwanted.push_back(block.block + inner.parent_offset / PAGE_SIZE);
                     // Unmap so subsequent accesses see the zero marker.
                     for map in inner.mappings.iter() {
                         if let Some(map) = map.upgrade() {
@@ -2211,6 +2215,8 @@ impl VMObjectPagedInner {
                             {
                                 to_insert.pin_count -= 1;
                             }
+                            // One fewer viewer — decrement share_count.
+                            to_insert.share_count = to_insert.share_count.saturating_sub(1);
                             if to_insert.tag != tag.negate() {
                                 to_insert.tag = PageStateTag::Owned;
                                 other_inner.frames.insert(new_key, to_insert);
