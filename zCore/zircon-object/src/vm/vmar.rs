@@ -386,10 +386,13 @@ impl VmAddressRegion {
             map_range,
             fault_beyond_stream_size,
             None,
+            PAGE_SIZE,
         )
     }
 
-    /// Map the `vmo` into this VMAR with an optional upper limit.
+    /// Map the `vmo` into this VMAR with an optional upper limit and
+    /// alignment.  `align` must be a power of 2 and at least
+    /// `PAGE_SIZE`; the returned address will be a multiple of `align`.
     #[allow(clippy::too_many_arguments)]
     pub fn map_ext_with_limit(
         &self,
@@ -403,6 +406,7 @@ impl VmAddressRegion {
         map_range: bool,
         fault_beyond_stream_size: bool,
         upper_limit: Option<usize>,
+        align: usize,
     ) -> ZxResult<VirtAddr> {
         if !page_aligned(vmo_offset) || !page_aligned(len) {
             return Err(ZxError::INVALID_ARGS);
@@ -445,7 +449,7 @@ impl VmAddressRegion {
         let offset = if overwrite {
             // SPECIFIC_OVERWRITE: skip test_map, overlaps will be unmapped below
             match vmar_offset {
-                Some(off) if check_aligned(off, PAGE_SIZE) => off,
+                Some(off) if check_aligned(off, align) => off,
                 Some(_) => return Err(ZxError::INVALID_ARGS),
                 None => return Err(ZxError::INVALID_ARGS),
             }
@@ -458,18 +462,16 @@ impl VmAddressRegion {
                 }
             }
             if let Some(limit) = upper_limit {
-                self.determine_offset_with_limit(inner, len, PAGE_SIZE, limit)
+                self.determine_offset_with_limit(inner, len, align, limit)
             } else {
-                self.determine_offset(inner, vmar_offset, len, PAGE_SIZE)
+                self.determine_offset(inner, vmar_offset, len, align)
             }
             .map_err(|e| {
                 // For SPECIFIC maps (offset is Some), convert overlap errors
                 // to ALREADY_EXISTS per Fuchsia's zx_vmar_map semantics.
                 if e == ZxError::INVALID_ARGS && vmar_offset.is_some() {
                     if let Some(off) = vmar_offset {
-                        if check_aligned(off, PAGE_SIZE)
-                            && !self.test_map(inner, off, len, PAGE_SIZE)
-                        {
+                        if check_aligned(off, align) && !self.test_map(inner, off, len, align) {
                             return ZxError::ALREADY_EXISTS;
                         }
                     }

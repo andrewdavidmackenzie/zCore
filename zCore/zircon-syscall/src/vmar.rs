@@ -123,9 +123,9 @@ impl Syscall<'_> {
         len: usize,
         mut mapped_addr: UserOutPtr<VirtAddr>,
     ) -> ZxResult {
-        // vmar_map does not use alignment bits — reject any unknown
-        // bits (Fuchsia returns INVALID_ARGS for reserved bits).
-        let options = VmOptions::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
+        // Extract alignment from bits 24-31 before parsing the rest.
+        let align = amount_of_alignments(options)?;
+        let options = VmOptions::from_bits(options & 0x00FF_FFFF).ok_or(ZxError::INVALID_ARGS)?;
         let proc = self.thread.proc();
         let (vmar, vmar_rights) = proc.get_object_and_rights::<VmAddressRegion>(vmar_handle)?;
         let (vmo, vmo_rights) = proc.get_object_and_rights::<VmObject>(vmo_handle)?;
@@ -277,6 +277,7 @@ impl Syscall<'_> {
             map_range,
             fault_beyond,
             upper_limit,
+            align,
         )?;
         mapped_addr.write(vaddr)?;
         Ok(())
