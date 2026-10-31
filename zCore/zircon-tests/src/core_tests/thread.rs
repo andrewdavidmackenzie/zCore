@@ -202,7 +202,6 @@ async fn basics() {
 /// status bits after breakpoints are removed via write_state(Debug).
 #[cfg(target_arch = "x86_64")]
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_dr6_correct_after_breakpoint_removal() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -261,7 +260,6 @@ fn debug_registers_dr6_correct_after_breakpoint_removal() {
 /// which requires bare-metal. This test verifies the write/read round-trip.
 #[cfg(target_arch = "x86_64")]
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_dr6_reset_on_debug_exception() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -284,7 +282,13 @@ fn debug_registers_dr6_reset_on_debug_exception() {
         .read_state(ThreadStateKind::Debug, &mut read_buf)
         .unwrap();
     let got_dr6 = u64::from_ne_bytes(read_buf[32..40].try_into().unwrap());
-    assert_eq!(got_dr6, 0, "DR6 should be cleared");
+    // DR6 reserved bits 4-11 are always 1, bit 12 always 0.
+    // Writing 0 then reading back gives the reserved mask: 0xFFFF0FF0.
+    let dr6_zero_mask: u64 = 0xFFFF_0FF0;
+    assert_eq!(
+        got_dr6, dr6_zero_mask,
+        "DR6 should be cleared (reserved bits remain)"
+    );
 }
 
 /// C++: TEST(Threads, DebugRegistersValidation)
@@ -324,7 +328,6 @@ fn debug_registers_validation() {
 /// watchpoint during a syscall — that requires bare-metal.
 #[cfg(target_arch = "x86_64")]
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn debug_registers_watchpoint_syscall_panic_repro() {
     let ctx = TestContext::new();
     let proc = &ctx.proc;
@@ -349,7 +352,10 @@ fn debug_registers_watchpoint_syscall_panic_repro() {
     let got_dr0 = u64::from_ne_bytes(read_buf[0..8].try_into().unwrap());
     let got_dr7 = u64::from_ne_bytes(read_buf[40..48].try_into().unwrap());
     assert_eq!(got_dr0, watch_addr);
-    assert_eq!(got_dr7, dr7);
+    // DR7 sanitization matches Fuchsia's x86_validate_debug_state:
+    // stored = 0x700 | (input & 0xFFFF_00FF). Readback ORs 0x700 (no-op).
+    // 0x000D_0001 & 0xFFFF_00FF = 0x000D_0001, | 0x700 = 0x000D_0701.
+    assert_eq!(got_dr7, 0x700 | (dr7 & 0xFFFF_00FF));
 }
 
 /// C++: TEST(Threads, EmptyNameSucceeds)

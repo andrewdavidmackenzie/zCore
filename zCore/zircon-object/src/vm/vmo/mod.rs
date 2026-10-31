@@ -248,6 +248,14 @@ pub trait VMObjectTrait: Sync + Send {
     /// Set the content boundary for unbounded VMOs (stream_size in pages).
     fn set_content_boundary(&self, _pages: usize) {}
 
+    /// Unmap page table entries for the given page range across all
+    /// VMAR mappings of this VMO. Used to invalidate stale PTEs when
+    /// a parent decommits pages that children referenced via Ref.
+    fn unmap_mappings(&self, _start_page: usize, _page_count: usize) {}
+
+    /// Shrink parent_limit when the parent VMO resizes down.
+    fn shrink_parent_limit(&self, _new_parent_size: usize) {}
+
     /// If contiguous, transmute vmo to a mutable buffer
     fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
         Err(ZxError::NOT_SUPPORTED)
@@ -547,7 +555,31 @@ impl VmObject {
                     map.range_change(0, total_pages, RangeChangeOp::Unmap);
                 }
             }
+            // Also unmap from children's page tables. Unidirectional
+            // children (and slices) may have PTEs that reference the
+            // now-decommitted physical frames via CommitResult::Ref.
+            // Without this, stale PTEs let clone reads succeed when
+            // they should fault with BAD_STATE.
+            for child_weak in inner.children.iter() {
+                if let Some(child) = child_weak.upgrade() {
+                    child.unmap_all_mappings(0, total_pages);
+                }
+            }
         }
+    }
+
+    /// Unmap all page table entries for the given page range across
+    /// all VMAR mappings of this VMO.
+    pub fn unmap_all_mappings(&self, start_page: usize, page_count: usize) {
+        self.trait_.unmap_mappings(start_page, page_count);
+    }
+
+    /// Shrink this VMO's parent_limit when the parent resizes down.
+    /// Pages beyond the new parent_limit will return zeros (via the
+    /// out-of-range zero page path) instead of walking up to the
+    /// parent and getting OUT_OF_RANGE.
+    pub fn shrink_parent_limit(&self, new_parent_size: usize) {
+        self.trait_.shrink_parent_limit(new_parent_size);
     }
 
     /// Get the offset of this VMO within its parent (for slices).
@@ -994,21 +1026,28 @@ impl VmObject {
     }
 
     /// Walk up the parent chain to find the root pager-backed VMO,
-    /// accumulating slice offsets along the way.  Returns `None` if
+    /// accumulating clone offsets along the way.  Returns `None` if
     /// this VMO itself is the pager VMO (has its own pager_port) or
     /// if no ancestor has a pager_port.
+    ///
+    /// Offset accounting: when a COW child (unidirectional/snapshot) is
+    /// created through a slice, `create_child_unidirectional` pre-adjusts
+    /// the child's `cow_parent_offset` by the slice offset (see the
+    /// `self.is_slice` path at line 1659). The child's VmObject parent
+    /// is then set to the slice via `set_parent_ref`. To avoid
+    /// double-counting, we skip the slice offset when the previous
+    /// (child) node was a non-slice paged VMO whose parent is a slice
+    /// — its cow_parent_offset already includes the slice offset.
     pub fn find_root_pager_vmo_with_offset(&self) -> Option<(Arc<VmObject>, usize)> {
         let inner = self.inner.lock();
         if inner.pager_port.is_some() {
             return None; // this VMO IS the pager VMO
         }
-        // Accumulate both slice offsets and COW parent offsets.
-        let self_offset = self.get_slice_offset() + self.trait_.cow_parent_offset();
-        // First try the direct pager_root reference (set during clone).
-        if let Some(root) = inner.pager_root.upgrade() {
-            return Some((root, self_offset));
-        }
-        let mut cumulative_offset = self_offset;
+        let mut cumulative_offset = self.get_slice_offset() + self.trait_.cow_parent_offset();
+        // A non-slice child whose parent is a slice was created through
+        // the redirect path — its cow_parent_offset already includes the
+        // slice's offset.
+        let mut child_is_redirected_cow = !self.is_slice;
         let mut cur = inner.parent.upgrade()?;
         drop(inner);
         loop {
@@ -1017,11 +1056,14 @@ impl VmObject {
                 drop(cur_inner);
                 return Some((cur, cumulative_offset));
             }
-            if let Some(root) = cur_inner.pager_root.upgrade() {
-                drop(cur_inner);
-                return Some((root, cumulative_offset));
+            if cur.is_slice && child_is_redirected_cow {
+                // Skip — the child's cow_parent_offset already includes
+                // this slice's offset from the redirect in
+                // create_child_unidirectional.
+            } else {
+                cumulative_offset += cur.get_slice_offset() + cur.trait_.cow_parent_offset();
             }
-            cumulative_offset += cur.get_slice_offset() + cur.trait_.cow_parent_offset();
+            child_is_redirected_cow = !cur.is_slice;
             let next = cur_inner.parent.upgrade();
             drop(cur_inner);
             cur = next?;
@@ -1199,7 +1241,8 @@ impl VmObject {
     /// `wait_for_page` to block until the page is supplied.
     pub fn request_pages(&self, offset: usize, length: usize) -> ZxResult {
         let mut inner = self.inner.lock();
-        if let Some(port) = &inner.pager_port {
+        if let Some(port) = inner.pager_port.clone() {
+            let pager_key = inner.pager_key;
             let start_page = offset / PAGE_SIZE;
             let end_page = (offset + length).div_ceil(PAGE_SIZE);
             // Check if ALL pages are already committed.
@@ -1217,8 +1260,16 @@ impl VmObject {
                 .iter()
                 .any(|req| start_page >= req.start_page && start_page < req.end_page);
             if !is_absorbed {
+                // Clear any previous OP_FAIL markers in the requested
+                // range. A new request supersedes a prior failure —
+                // the pager will either supply or fail again. Without
+                // this, wait_for_page would immediately return the
+                // stale error and the retry would never reach the pager.
+                for pg in start_page..end_page {
+                    inner.pager_failed_pages.remove(&pg);
+                }
                 port.push(PortPacketRepr {
-                    key: inner.pager_key,
+                    key: pager_key,
                     status: ZxError::OK,
                     data: PayloadRepr::PageRequest(PacketPageRequest {
                         command: ZX_PAGER_VMO_READ,
@@ -1443,6 +1494,15 @@ impl VmObject {
                 }
             }
             req_idx += 1;
+        }
+        // Remove resolved READ packets from the port queue so the
+        // pager doesn't see stale requests for already-supplied pages.
+        // This matches Fuchsia's behavior where supply_pages drains
+        // resolved requests from the port.
+        if let Some(port) = inner.pager_port.clone() {
+            let key = inner.pager_key;
+            drop(inner); // release lock before port operation
+            port.remove_page_read_packets(key, start_page, end_page);
         }
     }
 
@@ -1785,9 +1845,24 @@ impl VmObject {
         let old_pages = old_size / PAGE_SIZE;
         self.trait_.set_len(size)?;
         let new_pages = size / PAGE_SIZE;
-        // When shrinking a pager-backed VMO, wake any waiters for
-        // pages in the truncated range with OUT_OF_RANGE.
+        // When shrinking, invalidate children's page table entries for
+        // the truncated range. Children may have PTEs that reference the
+        // parent's now-decommitted physical frames via CommitResult::Ref.
         if size < old_size {
+            let inner = self.inner.lock();
+            for child_weak in inner.children.iter() {
+                if let Some(child) = child_weak.upgrade() {
+                    // Invalidate children's PTEs for the truncated range
+                    // so stale references to decommitted pages fault.
+                    child.unmap_all_mappings(0, old_pages);
+                    // Update the child's parent_limit so it sees zeros
+                    // for pages beyond the parent's new size instead of
+                    // walking up to the parent and getting OUT_OF_RANGE.
+                    child.shrink_parent_limit(size);
+                }
+            }
+            drop(inner);
+            // Wake any waiters for pages in the truncated range with OUT_OF_RANGE.
             self.fail_pager_requests_range(size, old_size - size, ZxError::OUT_OF_RANGE);
         }
         // Update dirty page tracking for pager-backed VMOs on resize.
@@ -2414,16 +2489,32 @@ impl Drop for VmObject {
                 child.inner.lock().parent = Arc::downgrade(&parent);
             }
         }
+        // Save our children and koid, then drop our lock before
+        // acquiring parent's lock. This avoids self-deadlock when
+        // the parent's children list includes us: we'd try to
+        // re-lock ourselves when iterating the parent's children.
+        let self_koid = self.base.id;
+        let my_children: Vec<_> = core::mem::take(&mut inner.children);
+        drop(inner);
         let mut parent_inner = parent.inner.lock();
         let children = &mut parent_inner.children;
-        children.append(&mut inner.children);
-        children.retain(|c| c.strong_count() != 0);
+        // Move our children to the parent.
+        children.extend(my_children);
+        // Remove ourselves and dead entries from the parent's children list.
+        children.retain(|c| c.upgrade().is_some_and(|c| c.base.id != self_koid));
+        // Check remaining children for ZERO_CHILDREN signal.
         for child in children.iter() {
-            let child = child.upgrade().unwrap();
-            let mut inner = child.inner.lock();
-            inner.children.retain(|c| c.strong_count() != 0);
-            if inner.children.is_empty() {
-                child.base.signal_set(Signal::VMO_ZERO_CHILDREN);
+            if let Some(child) = child.upgrade() {
+                // Don't lock children that might be us (already filtered
+                // out above, but be safe). Skip locking the parent too.
+                if child.base.id == parent.base.id {
+                    continue;
+                }
+                let mut child_inner = child.inner.lock();
+                child_inner.children.retain(|c| c.strong_count() != 0);
+                if child_inner.children.is_empty() {
+                    child.base.signal_set(Signal::VMO_ZERO_CHILDREN);
+                }
             }
         }
         // Non-zero to zero?

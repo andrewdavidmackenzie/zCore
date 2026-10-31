@@ -2,7 +2,7 @@ mod thread_state;
 
 pub use self::thread_state::ThreadStateKind;
 
-use alloc::{boxed::Box, sync::Arc, sync::Weak};
+use alloc::{boxed::Box, sync::Arc};
 use core::task::{Context, Poll, Waker};
 use core::time::Duration;
 use core::{any::Any, future::Future, pin::Pin};
@@ -85,14 +85,11 @@ use crate::{define_count_helper, impl_kobject, ZxError, ZxResult};
 pub struct Thread {
     base: KObjectBase,
     _counter: CountHelper,
-    /// Weak reference to the owning process.
-    ///
-    /// Using `Weak` instead of `Arc` breaks the reference cycle between
-    /// `Process::inner.threads` (`Vec<Arc<Thread>>`) and this field.
-    /// Without this, Process and Thread prevent each other from being
-    /// dropped, leaking VMAR address space IDs and eventually exhausting
-    /// the host OS virtual address space.
-    proc: Weak<Process>,
+    /// Strong reference to the owning process. Matches Fuchsia where
+    /// ThreadDispatcher holds fbl::RefPtr<ProcessDispatcher>. The
+    /// process stays alive as long as any thread exists. The reverse
+    /// link (Process → Thread) is Weak to avoid a reference cycle.
+    proc: Arc<Process>,
     ext: Box<dyn Any + Send + Sync>,
     inner: Mutex<ThreadInner>,
     exceptionate: Arc<Exceptionate>,
@@ -100,7 +97,7 @@ pub struct Thread {
 
 impl_kobject!(Thread
     fn related_koid(&self) -> KoID {
-        self.proc.upgrade().map_or(0, |p| p.id())
+        self.proc.id()
     }
 );
 define_count_helper!(Thread);
@@ -333,7 +330,7 @@ impl Thread {
         let thread = Arc::new(Thread {
             base: KObjectBase::with_name(name),
             _counter: CountHelper::new(),
-            proc: Arc::downgrade(proc),
+            proc: proc.clone(),
             ext: Box::new(ext),
             exceptionate: Exceptionate::new(ExceptionChannelType::Thread),
             inner: Mutex::new(ThreadInner {
@@ -361,18 +358,16 @@ impl Thread {
     /// holds a strong `Arc<Thread>` and the process only drops after all
     /// threads are removed.
     pub fn proc(&self) -> Arc<Process> {
-        self.proc
-            .upgrade()
-            .expect("Thread::proc(): owning process has been dropped")
+        self.proc.clone()
     }
 
     /// Get the process, returning `None` if it has already been dropped.
     ///
     /// This is the non-panicking variant of [`proc()`](Self::proc).
-    /// Useful in contexts where the thread may outlive its process
-    /// (e.g., permission checks during teardown).
+    /// Returns the process reference. With the thread holding a strong
+    /// `Arc<Process>`, the process is always alive while the thread exists.
     pub fn proc_try(&self) -> Option<Arc<Process>> {
-        self.proc.upgrade()
+        Some(self.proc.clone())
     }
 
     /// Get the extension info.
@@ -895,11 +890,7 @@ impl Thread {
         // address a reused executor slab slot.
         inner.task_sched = None;
         inner.change_state(ThreadState::Dead, &self.base);
-        // If the process has already been dropped (Weak upgrade fails),
-        // there is nothing to remove from — the cycle was already broken.
-        if let Some(proc) = self.proc.upgrade() {
-            proc.remove_thread(self.base.id);
-        }
+        self.proc.remove_thread(self.base.id);
     }
 }
 
@@ -1278,7 +1269,8 @@ impl CurrentThread {
 
     async fn handle_exception_dispatch(&self, type_: ExceptionType, exception: Arc<Exception>) {
         if type_ == ExceptionType::ThreadExiting {
-            if let Some(proc) = self.0.proc.upgrade() {
+            {
+                let proc = &self.0.proc;
                 let handled = proc.debug_exceptionate().send_exception(&exception);
                 if let Ok(future) = handled {
                     self.dying_run(future).await.ok();
@@ -1438,18 +1430,13 @@ impl ThreadSwitchFuture {
 impl Future for ThreadSwitchFuture {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // If the owning process has been dropped (Weak upgrade fails),
-        // the thread should stop running immediately.
-        let proc = match self.thread.proc.upgrade() {
-            Some(p) => p,
-            None => return Poll::Ready(()),
-        };
+        let proc = self.thread.proc.clone();
 
         let table_phys = proc.vmar().table_phys();
         // On bare-metal, a zero page table means the address space was
-        // torn down — stop polling. In libos mode there are no real
-        // page tables, so table_phys is always 0; skip the check.
-        #[cfg(not(feature = "libos"))]
+        // torn down — stop polling. In libos mode (hosted OS) there are
+        // no real page tables, so table_phys is always 0; skip the check.
+        #[cfg(target_os = "none")]
         if table_phys == 0 {
             return Poll::Ready(());
         }

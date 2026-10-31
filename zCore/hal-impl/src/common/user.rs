@@ -223,9 +223,13 @@ unsafe fn guarded_user_copy(dst: *mut u8, src: *const u8, len: usize) -> Result<
     }
 
     smap_deny();
-    let fault_addr = user_copy_leave();
+    let (fault_addr, is_perm) = user_copy_leave();
     if fault_addr != 0 {
-        Err(Error::InvalidPointer)
+        if is_perm {
+            Err(Error::PermissionDenied)
+        } else {
+            Err(Error::InvalidPointer)
+        }
     } else {
         Ok(())
     }
@@ -384,6 +388,8 @@ pub type UserInOutPtr<T> = UserPtr<T, InOut>;
 pub enum Error {
     InvalidUtf8,
     InvalidPointer,
+    /// The user pointer is mapped but with insufficient permissions.
+    PermissionDenied,
     BufferTooSmall,
     InvalidLength,
     InvalidVectorAddress,

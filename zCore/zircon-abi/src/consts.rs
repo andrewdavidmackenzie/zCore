@@ -47,10 +47,10 @@ pub const ZX_RIGHT_MANAGE_PROCESS: ZxRights = 1 << 17;
 pub const ZX_RIGHT_MANAGE_THREAD: ZxRights = 1 << 18;
 pub const ZX_RIGHT_APPLY_PROFILE: ZxRights = 1 << 19;
 pub const ZX_RIGHT_MANAGE_SOCKET: ZxRights = 1 << 20;
-pub const ZX_RIGHT_OP_CHILDREN: ZxRights = 1 << 22;
-pub const ZX_RIGHT_RESIZE: ZxRights = 1 << 23;
-pub const ZX_RIGHT_ATTACH_VMO: ZxRights = 1 << 24;
-pub const ZX_RIGHT_MANAGE_VMO: ZxRights = 1 << 25;
+pub const ZX_RIGHT_OP_CHILDREN: ZxRights = 1 << 21;
+pub const ZX_RIGHT_RESIZE: ZxRights = 1 << 22;
+pub const ZX_RIGHT_ATTACH_VMO: ZxRights = 1 << 23;
+pub const ZX_RIGHT_MANAGE_VMO: ZxRights = 1 << 24;
 pub const ZX_RIGHT_SAME_RIGHTS: ZxRights = 1 << 31;
 
 /// Default rights for most objects.

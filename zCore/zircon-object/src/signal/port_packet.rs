@@ -40,7 +40,7 @@ pub union Payload {
     guest_io: PacketGuestIo,
     guest_vcpu: PacketGuestVcpu,
     interrupt: PacketInterrupt,
-    page_request: PacketPageRequest,
+    pub(crate) page_request: PacketPageRequest,
 }
 
 pub type PacketUser = [u8; 32];

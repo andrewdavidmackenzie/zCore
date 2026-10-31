@@ -330,7 +330,6 @@ fn match_handle_close_race() {
 /// Thread C: reads from ch2 in a loop.
 /// 1000 iterations of the A+B pair.
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn channel_call_wait_queue_panic_repro() {
     let _ctx = TestContext::new();
 

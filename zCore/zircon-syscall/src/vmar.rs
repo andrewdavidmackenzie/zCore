@@ -364,6 +364,10 @@ impl Syscall<'_> {
         if buffer_size != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        // Address and size must be page-aligned, and size must be non-zero.
+        if !page_aligned(addr as usize) || !page_aligned(size as usize) || size == 0 {
+            return Err(ZxError::INVALID_ARGS);
+        }
         let proc = self.thread.proc();
         let required_rights = match op {
             VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero => Rights::WRITE,
@@ -375,11 +379,32 @@ impl Syscall<'_> {
         if !vmar_rights.contains(required_rights) {
             return Err(ZxError::ACCESS_DENIED);
         }
-        // Operations on ranges that span child VMARs require OP_CHILDREN.
-        if vmar.has_children_in_range(addr as usize, size as usize)
-            && !vmar_rights.contains(Rights::OP_CHILDREN)
-        {
-            return Err(ZxError::INVALID_ARGS);
+        // Range boundary check — must be within the VMAR. Check this
+        // early so oversized ranges return OUT_OF_RANGE before any
+        // children-overlap check could return INVALID_ARGS.
+        let addr_usize = addr as usize;
+        let size_usize = size as usize;
+        let end = addr_usize
+            .checked_add(size_usize)
+            .ok_or(ZxError::OUT_OF_RANGE)?;
+        if addr_usize < vmar.addr() || end > vmar.addr() + vmar.get_info().len {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        // COMMIT, DECOMMIT, ZERO, and PREFETCH cannot operate across
+        // child VMARs — the range must be fully covered by direct
+        // mappings in the specified VMAR.
+        // MAP_RANGE, DONT_NEED, ALWAYS_NEED can traverse children
+        // but require OP_CHILDREN right.
+        if vmar.has_children_in_range(addr_usize, size_usize) {
+            if matches!(
+                op,
+                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero | VmarOpType::Prefetch
+            ) {
+                return Err(ZxError::INVALID_ARGS);
+            }
+            if !vmar_rights.contains(Rights::OP_CHILDREN) {
+                return Err(ZxError::INVALID_ARGS);
+            }
         }
         // For pager-backed VMOs, Commit/AlwaysNeed/Prefetch need async
         // demand-paging. Find all pager-backed mappings in the range and

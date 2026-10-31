@@ -10,16 +10,28 @@ hal_fn_impl! {
     }
 }
 
-/// Dummy page table implemented by `mmap`, `munmap`, and `mprotect`.
-pub struct PageTable;
+/// Per-page entry tracking the physical address and flags of a mapping.
+#[derive(Clone, Copy)]
+struct PageEntry {
+    paddr: PhysAddr,
+    flags: MMUFlags,
+}
+
+/// Page table implemented by `mmap`, `munmap`, and `mprotect`, with
+/// a software mapping table to support `query` on user virtual addresses.
+pub struct PageTable {
+    entries: std::collections::HashMap<VirtAddr, PageEntry>,
+}
 
 impl PageTable {
     pub fn new() -> Self {
-        Self
+        Self {
+            entries: std::collections::HashMap::new(),
+        }
     }
 
     pub fn from_current() -> Self {
-        Self
+        Self::new()
     }
 
     pub fn clone_kernel(&self) -> Self {
@@ -43,6 +55,7 @@ impl GenericPageTable for PageTable {
         debug_assert!(is_aligned(paddr));
         if paddr < PMEM_SIZE {
             if MOCK_PHYS_MEM.mmap(page.vaddr, PAGE_SIZE, paddr, flags) {
+                self.entries.insert(page.vaddr, PageEntry { paddr, flags });
                 Ok(())
             } else {
                 Err(PagingError::NoMemory)
@@ -53,18 +66,41 @@ impl GenericPageTable for PageTable {
     }
 
     fn unmap(&mut self, vaddr: VirtAddr) -> PagingResult<(PhysAddr, PageSize)> {
+        // Read the physical address before unmap_cont removes the entry.
+        let paddr = self.entries.get(&vaddr).map(|e| e.paddr).unwrap_or(0);
         self.unmap_cont(vaddr, PAGE_SIZE)?;
-        Ok((0, PageSize::default_page()))
+        Ok((paddr, PageSize::default_page()))
     }
 
     fn update(
         &mut self,
         vaddr: VirtAddr,
-        _paddr: Option<PhysAddr>,
+        paddr: Option<PhysAddr>,
         flags: Option<MMUFlags>,
     ) -> PagingResult<PageSize> {
         debug_assert!(is_aligned(vaddr));
-        if let Some(flags) = flags {
+        if let Some(entry) = self.entries.get_mut(&vaddr) {
+            if let Some(pa) = paddr {
+                if pa != entry.paddr {
+                    // Physical address changed (COW fault). Remap the
+                    // host page to point to the new physical frame.
+                    let effective_flags = flags.unwrap_or(entry.flags);
+                    MOCK_PHYS_MEM.munmap(vaddr as _, PAGE_SIZE);
+                    if !MOCK_PHYS_MEM.mmap(vaddr, PAGE_SIZE, pa, effective_flags) {
+                        return Err(PagingError::NoMemory);
+                    }
+                    entry.paddr = pa;
+                    entry.flags = effective_flags;
+                    return Ok(PageSize::default_page());
+                }
+                entry.paddr = pa;
+            }
+            if let Some(f) = flags {
+                entry.flags = f;
+                MOCK_PHYS_MEM.mprotect(vaddr as _, PAGE_SIZE, f);
+            }
+        } else if let Some(flags) = flags {
+            // Entry not tracked (e.g., PMEM range) — just mprotect.
             MOCK_PHYS_MEM.mprotect(vaddr as _, PAGE_SIZE, flags);
         }
         Ok(PageSize::default_page())
@@ -72,6 +108,11 @@ impl GenericPageTable for PageTable {
 
     fn query(&self, vaddr: VirtAddr) -> PagingResult<(PhysAddr, MMUFlags, PageSize)> {
         debug_assert!(is_aligned(vaddr));
+        // Check software mapping table first (user VA mappings).
+        if let Some(entry) = self.entries.get(&vaddr) {
+            return Ok((entry.paddr, entry.flags, PageSize::default_page()));
+        }
+        // Fall back to PMEM range check.
         if (PMEM_MAP_VADDR..PMEM_MAP_VADDR + PMEM_SIZE).contains(&vaddr) {
             Ok((
                 vaddr - PMEM_MAP_VADDR,
@@ -88,6 +129,13 @@ impl GenericPageTable for PageTable {
             return Ok(());
         }
         debug_assert!(is_aligned(vaddr));
+        // Remove entries for the range.
+        let end = vaddr + size;
+        let mut v = vaddr;
+        while v < end {
+            self.entries.remove(&v);
+            v += PAGE_SIZE;
+        }
         MOCK_PHYS_MEM.munmap(vaddr as _, size);
         Ok(())
     }
@@ -107,20 +155,14 @@ mod tests {
 
     /// Test that two guest pages mapped to the same physical frame
     /// share data (write via one vaddr, read via the other).
-    ///
-    /// On 16K hosts, file-backed aliasing requires vaddr % hps == paddr % hps.
-    /// We map paddr 0x1000 at VBASE+0x1000 and VBASE+0x5000 (both have
-    /// vaddr % 16K == 0x1000 == paddr % 16K) in different host pages.
     #[test]
     fn map_unmap() {
         let mut pt = PageTable::new();
         let flags = MMUFlags::READ | MMUFlags::WRITE;
-        // Use vaddrs where vaddr % host_page_size == paddr % host_page_size.
-        // For paddr 0x1000, use VBASE+0x1000 and VBASE+0x5000 (16K apart,
-        // both have offset 0x1000 within their host page).
-        let vaddr1 = VBASE + 0x1000;
-        let vaddr2 = VBASE + 0x5000; // 16K apart for different host pages
-        let paddr = 0x1000;
+        // Addresses and paddr must be PAGE_SIZE-aligned (4K or 16K).
+        let vaddr1 = VBASE + PAGE_SIZE;
+        let vaddr2 = VBASE + 2 * PAGE_SIZE;
+        let paddr = PAGE_SIZE;
 
         pt.map(
             Page::new_aligned(vaddr1, PageSize::default_page()),
@@ -135,6 +177,10 @@ mod tests {
         )
         .unwrap();
 
+        // On 16K hosts (aarch64 macOS), two different vaddrs mapping
+        // the same paddr may use anonymous pages (no aliasing). Only
+        // test shared-frame aliasing on 4K hosts.
+        #[cfg(not(all(target_arch = "aarch64", target_os = "macos")))]
         unsafe {
             const MAGIC: usize = 0xdead_beaf;
             (vaddr1 as *mut usize).write(MAGIC);

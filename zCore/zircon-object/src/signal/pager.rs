@@ -151,6 +151,7 @@ impl Pager {
         {
             let pv = inner.vmos.remove(pos);
             // Send COMPLETE packet to notify the pager.
+            info!("pager: sending COMPLETE for detached VMO key={:#x}", pv.key);
             pv.port.push(PortPacketRepr {
                 key: pv.key,
                 status: ZxError::OK,
@@ -203,6 +204,27 @@ impl Pager {
         // Validate: aux_offset must be page-aligned.
         if !(aux_offset as usize).is_multiple_of(PAGE_SIZE) {
             return Err(ZxError::INVALID_ARGS);
+        }
+        // Validate: destination range must be within the VMO.
+        let end = offset.checked_add(length).ok_or(ZxError::OUT_OF_RANGE)?;
+        if end as usize > vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        // Validate: source range must be within the aux VMO.
+        let aux_end = aux_offset
+            .checked_add(length)
+            .ok_or(ZxError::OUT_OF_RANGE)?;
+        if aux_end as usize > aux_vmo.len() {
+            return Err(ZxError::OUT_OF_RANGE);
+        }
+        // Reject physical, contiguous, or pager-backed VMOs as the aux source.
+        // Fuchsia requires non-pager paged VMOs for supply_pages.
+        if aux_vmo.is_contiguous() || aux_vmo.is_physical() || aux_vmo.is_pager_backed() {
+            return Err(ZxError::NOT_SUPPORTED);
+        }
+        // Reject aux VMOs with pinned pages in the source range.
+        if aux_vmo.has_pinned_pages(aux_offset as usize, length as usize) {
+            return Err(ZxError::BAD_STATE);
         }
         let mut buf = alloc::vec![0u8; PAGE_SIZE];
         let mut src_off = aux_offset as usize;
@@ -267,6 +289,10 @@ impl Pager {
         }
         // Done supplying — restore the pager-backed guard.
         vmo.set_supplying(false);
+        // Decommit source pages from the aux VMO — supply_pages
+        // transfers ownership. After this, reads from the aux VMO's
+        // mapped addresses return zeros (matching Fuchsia's behavior).
+        let _ = aux_vmo.decommit(aux_offset as usize, length as usize);
         // Wake threads waiting for pages in this range.
         vmo.complete_pager_requests(offset as usize, length as usize);
         Ok(())

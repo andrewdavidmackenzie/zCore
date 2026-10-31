@@ -387,6 +387,17 @@ impl Job {
         self.inner.lock().is_empty()
     }
 
+    /// Returns true if this job has been killed.
+    pub fn is_killed(&self) -> bool {
+        self.inner.lock().killed
+    }
+
+    /// Returns the return code set when this job was killed.
+    /// Only meaningful when `is_killed()` is true.
+    pub fn return_code(&self) -> i64 {
+        self.inner.lock().return_code
+    }
+
     /// Get total accumulated CPU time across all processes and child jobs (nanoseconds).
     /// Includes time from exited processes/jobs that have been removed.
     pub fn total_cpu_time(&self) -> u64 {

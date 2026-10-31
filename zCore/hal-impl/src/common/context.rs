@@ -185,12 +185,32 @@ impl UserContext {
                 // TODO: patch trapframe to zero fs/gs selectors after
                 // wrfsbase/wrgsbase, before iret/sysret.
                 unsafe {
+                    // Zero DS, ES, FS, GS segment selectors before entering
+                    // user mode. Fuchsia zeroes all four on every context
+                    // switch to prevent leaking kernel selector values.
+                    //
+                    // For FS: wrfsbase (used by trapframe) sets the base
+                    // independently of the selector, so zeroing the selector
+                    // first is safe — wrfsbase will restore the user's base.
+                    //
+                    // For GS: we must save and restore the kernel GS base
+                    // because `mov gs, 0` zeroes the current GS base (which
+                    // is the kernel's per-CPU pointer). We save it to
+                    // MSR_KERNEL_GS_BASE via swapgs, zero the selector,
+                    // then swapgs back. The trapframe's run() will do its
+                    // own swapgs to enter user mode.
                     core::arch::asm!(
                         "xor eax, eax",
                         "mov ds, ax",
                         "mov es, ax",
+                        "mov fs, ax",
+                        // Save kernel GS base: swapgs puts it in KERNEL_GS_BASE MSR
+                        "swapgs",
+                        "mov gs, ax",
+                        // Restore: swapgs puts kernel GS base back in GS_BASE
+                        "swapgs",
                         out("eax") _,
-                        options(nostack, nomem),
+                        options(nostack),
                     );
                 }
                 self.inner.run();

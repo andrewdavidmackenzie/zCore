@@ -140,7 +140,7 @@ impl Syscall<'_> {
                 })
                 .map_err(|e| {
                     if e == ZxError::INVALID_ARGS {
-                        ZxError::ACCESS_DENIED
+                        ZxError::NOT_FOUND
                     } else {
                         e
                     }
@@ -308,8 +308,12 @@ impl Syscall<'_> {
             Ok(n)
         })
         .map_err(|e| {
+            // InvalidPointer (unmapped) → NOT_FOUND
+            // PermissionDenied (mapped, wrong perms) → ACCESS_DENIED
+            // Both arrive as their ZxError equivalents from the
+            // Error → ZxError conversion.
             if e == ZxError::INVALID_ARGS {
-                ZxError::ACCESS_DENIED
+                ZxError::NOT_FOUND
             } else {
                 e
             }
@@ -352,19 +356,28 @@ impl Syscall<'_> {
         // write each chunk to the VMO, avoiding a single huge kernel
         // allocation for the entire write.
         let mut vmo_offset = offset as usize;
-        buf.for_each_chunk::<ZxError>(buf_size, |chunk| {
-            vmo.write(vmo_offset, chunk)?;
-            let n = chunk.len();
-            vmo_offset += n;
-            Ok(n)
-        })
-        .map_err(|e| {
-            if e == ZxError::INVALID_ARGS {
-                ZxError::NOT_FOUND
-            } else {
-                e
-            }
-        })?;
+        let mut any_written = false;
+        let result = buf
+            .for_each_chunk::<ZxError>(buf_size, |chunk| {
+                vmo.write(vmo_offset, chunk)?;
+                any_written = true;
+                let n = chunk.len();
+                vmo_offset += n;
+                Ok(n)
+            })
+            .map_err(|e| {
+                if e == ZxError::INVALID_ARGS {
+                    ZxError::NOT_FOUND
+                } else {
+                    e
+                }
+            });
+        // Set modified flag for pager-backed VMOs even on partial write.
+        // A partial write still modifies at least one page.
+        if any_written && (vmo.is_pager_backed() || vmo.was_pager_backed()) {
+            vmo.set_modified();
+        }
+        result?;
         Ok(())
     }
 
@@ -855,12 +868,17 @@ impl Syscall<'_> {
                 if offset.checked_add(len).is_none() || offset + len > vmo.len() {
                     return Err(ZxError::OUT_OF_RANGE);
                 }
-                // For clones, route requests to the root pager VMO.
-                let pager_vmo = if vmo.is_pager_backed() {
-                    vmo.clone()
+                // For clones, route requests to the root pager VMO
+                // with proper offset translation.
+                let (pager_vmo, clone_to_root_off) = if vmo.is_pager_backed() {
+                    (vmo.clone(), 0usize)
                 } else {
-                    vmo.find_root_pager_vmo().unwrap_or_else(|| vmo.clone())
+                    match vmo.find_root_pager_vmo_with_offset() {
+                        Some((root, off)) => (root, off),
+                        None => (vmo.clone(), 0),
+                    }
                 };
+                let root_page_off = clone_to_root_off / PAGE_SIZE;
                 let start = offset & !(PAGE_SIZE - 1);
                 let end = (offset + len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
                 let start_page = start / PAGE_SIZE;
@@ -874,44 +892,46 @@ impl Syscall<'_> {
                     let mut commit_retries = 0;
                     let mut any_page_committed = false;
                     while p < end_page {
-                        if p >= pager_vmo.len() / PAGE_SIZE {
+                        let rp = p + root_page_off;
+                        if rp >= pager_vmo.len() / PAGE_SIZE {
                             break;
                         }
                         // Skip committed pages, zero-marker pages, and
                         // pages with pending waiters.
-                        if pager_vmo.committed_pages_in_range(p, p + 1) > 0
-                            || pager_vmo.has_zero_marker(p)
-                            || pager_vmo.has_page_waiter(p)
+                        if pager_vmo.committed_pages_in_range(rp, rp + 1) > 0
+                            || pager_vmo.has_zero_marker(rp)
+                            || pager_vmo.has_page_waiter(rp)
                         {
                             p += 1;
                             continue;
                         }
                         let run_start = p;
-                        while p < end_page
-                            && p < pager_vmo.len() / PAGE_SIZE
-                            && pager_vmo.committed_pages_in_range(p, p + 1) == 0
-                            && !pager_vmo.has_zero_marker(p)
-                            && !pager_vmo.has_page_waiter(p)
-                        {
+                        while p < end_page {
+                            let rp2 = p + root_page_off;
+                            if rp2 >= pager_vmo.len() / PAGE_SIZE
+                                || pager_vmo.committed_pages_in_range(rp2, rp2 + 1) > 0
+                                || pager_vmo.has_zero_marker(rp2)
+                                || pager_vmo.has_page_waiter(rp2)
+                            {
+                                break;
+                            }
                             p += 1;
                         }
-                        let req_off = run_start * PAGE_SIZE;
+                        let req_off = (run_start + root_page_off) * PAGE_SIZE;
                         let req_len = (p - run_start) * PAGE_SIZE;
                         match pager_vmo.request_pages(req_off, req_len) {
                             Err(ZxError::SHOULD_WAIT) => {
                                 for pg in run_start..p {
-                                    if pg >= pager_vmo.len() / PAGE_SIZE {
+                                    let rpg = pg + root_page_off;
+                                    if rpg >= pager_vmo.len() / PAGE_SIZE {
                                         break;
                                     }
-                                    // Same retry loop as sys_vmo_read:
-                                    // handles failed pages, SHOULD_WAIT
-                                    // re-requests, and suspend/resume.
                                     loop {
-                                        if pager_vmo.committed_pages_in_range(pg, pg + 1) > 0 {
+                                        if pager_vmo.committed_pages_in_range(rpg, rpg + 1) > 0 {
                                             any_page_committed = true;
                                             break;
                                         }
-                                        if let Some(err) = pager_vmo.get_failed_page(pg) {
+                                        if let Some(err) = pager_vmo.get_failed_page(rpg) {
                                             // Failed page marker found.
                                             // Only retry if at least one
                                             // prior page was committed
@@ -921,11 +941,11 @@ impl Syscall<'_> {
                                                 return Err(err);
                                             }
                                             commit_retries += 1;
-                                            pager_vmo.clear_failed_page(pg);
+                                            pager_vmo.clear_failed_page(rpg);
                                             p = pg;
                                             break;
                                         }
-                                        let future = pager_vmo.wait_for_page(pg * PAGE_SIZE);
+                                        let future = pager_vmo.wait_for_page(rpg * PAGE_SIZE);
                                         pin_mut!(future);
                                         self.thread.set_blocking_state(ThreadState::BlockedPager);
                                         match self
@@ -948,7 +968,7 @@ impl Syscall<'_> {
                                             }
                                             Err(ZxError::SHOULD_WAIT) => {
                                                 let _ = pager_vmo
-                                                    .request_pages(pg * PAGE_SIZE, PAGE_SIZE);
+                                                    .request_pages(rpg * PAGE_SIZE, PAGE_SIZE);
                                                 continue;
                                             }
                                             Err(ZxError::CANCELED) => {
@@ -956,28 +976,25 @@ impl Syscall<'_> {
                                                 if self.thread.state() == ThreadState::Dying {
                                                     return Err(ZxError::STOP);
                                                 }
-                                                if pager_vmo.committed_pages_in_range(pg, pg + 1)
+                                                if pager_vmo.committed_pages_in_range(rpg, rpg + 1)
                                                     > 0
                                                 {
                                                     break;
                                                 }
                                                 pager_vmo.cancel_outstanding_requests_in_range(
-                                                    pg * PAGE_SIZE,
+                                                    rpg * PAGE_SIZE,
                                                     PAGE_SIZE,
                                                 );
                                                 let _ = pager_vmo
-                                                    .request_pages(pg * PAGE_SIZE, PAGE_SIZE);
+                                                    .request_pages(rpg * PAGE_SIZE, PAGE_SIZE);
                                                 continue;
                                             }
                                             Err(e) => {
-                                                // Pager error from per-waiter
-                                                // completion. Only retry if
-                                                // we had partial success.
                                                 if !any_page_committed || commit_retries >= 1 {
                                                     return Err(e);
                                                 }
                                                 commit_retries += 1;
-                                                pager_vmo.clear_failed_page(pg);
+                                                pager_vmo.clear_failed_page(rpg);
                                                 p = pg; // reset to failing page
                                                 break;
                                             }

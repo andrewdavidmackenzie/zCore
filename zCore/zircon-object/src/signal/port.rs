@@ -318,13 +318,49 @@ impl Port {
                 }
             }
             if let Some(qp) = inner.queue.pop_front() {
+                let remaining = inner.queue.len();
                 if inner.queue.is_empty()
                     && (inner.interrupt_queue.is_empty() || !self.can_bind_to_interrupt())
                 {
                     self.base.signal_clear(Signal::READABLE);
                 }
+                trace!(
+                    "port.wait: dequeued type={:#x} key={:#x} rem={} data={:?}",
+                    qp.packet.type_ as u32,
+                    qp.packet.key,
+                    remaining,
+                    PortPacketRepr::from(&qp.packet).data
+                );
                 return qp.packet;
             }
+            trace!("port.wait: READABLE signaled but queue empty, retrying");
+        }
+    }
+
+    /// Remove queued page request (READ) packets matching the given
+    /// key and page range. Called by `complete_pager_requests` to
+    /// drain resolved requests from the port so they don't confuse
+    /// the pager's `WaitForPageRead`.
+    #[allow(unsafe_code)]
+    pub fn remove_page_read_packets(&self, key: u64, start_page: usize, end_page: usize) {
+        use crate::vm::PAGE_SIZE;
+        let mut inner = self.inner.lock();
+        inner.queue.retain(|qp| {
+            if qp.packet.type_ as u32 != PacketType::PageRequest as u32 || qp.packet.key != key {
+                return true;
+            }
+            // Safe: we checked type_ == PageRequest above.
+            let req = unsafe { &qp.packet.data.page_request };
+            if req.command != ZX_PAGER_VMO_READ {
+                return true;
+            }
+            let pkt_start = req.offset as usize / PAGE_SIZE;
+            let pkt_end = pkt_start + (req.length as usize).max(PAGE_SIZE) / PAGE_SIZE;
+            // Remove if the packet's range overlaps the resolved range.
+            !(pkt_start >= start_page && pkt_end <= end_page)
+        });
+        if inner.queue.is_empty() && inner.interrupt_queue.is_empty() {
+            self.base.signal_clear(Signal::READABLE);
         }
     }
 

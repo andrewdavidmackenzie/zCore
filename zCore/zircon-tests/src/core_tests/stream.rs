@@ -626,7 +626,6 @@ fn content_size_updated_on_partial_write() {
 /// succeeds fully (both pages get written). We document the gap and
 /// verify the write mechanics are correct.
 #[test]
-#[ignore] // C++ equivalent crashes — in core-tests-skip.txt (requires pager TRAP_DIRTY)
 fn partial_vmo_dirty() {
     let _ctx = TestContext::new();
 

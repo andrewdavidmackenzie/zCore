@@ -1,35 +1,52 @@
-# ── PagerWriteback: TestThread mapping write hangs ──
+# ── PagerWriteback: hangs (multi-thread pager interactions) ──
 PagerWriteback.ResizeWritebackWithMappingTrapDirty
 PagerWriteback.LargeWriteBatched
+PagerWriteback.SuspendDirtyTestVmar
+PagerWriteback.WritebackResizedRangeAfterDetachNoTrapDirty
+PagerWriteback.OpZeroPinnedTrapDirty
+PagerWriteback.CommitExtendedTailTrapDirty
+PagerWriteback.CommitResizeRaceNoTrapDirty
+PagerWriteback.CommitResizeRaceTrapDirty
+PagerWriteback.OpZeroWritebackNoTrapDirty
+PagerWriteback.OpZeroWritebackTrapDirty
+PagerWriteback.ResizeWritebackRepeatedTrapDirty
+PagerWriteback.UntrackedAbsorbsIntervalSlots
+PagerWriteback.FailedPinAwaitingClean
+PagerWriteback.NotModifiedFailedPinWrite
+PagerWriteback.WritebackResizedRangeAfterDetachTrapDirty
 
-# ── PagerWriteback: ThreadedPagePinner/BTI hangs ──
+# ── Pager: hangs (multi-thread pager interactions) ──
+# Tests using WaitForBlocked polling (verified hangs):
+Pager.OverlapCommitSupplyTest
+Pager.DetachNonMappingAccess
+Pager.SuspendReadTestVmar
+Pager.FailEarlyWake
+Pager.FailMultipleCommits
+Pager.ResizeCommitTest
+# Tests that hang for other reasons (under investigation):
+Pager.EarlyWakeCloneRace
+Pager.EvictionHintsOpRange
 
-# ── StreamTestCase: crash ──
+# ── StreamTestCase: hang (pager TRAP_DIRTY + partial stream write) ──
 StreamTestCase.PartialVmoDirty
 
-# ── VmoClone2TestCase: populated_bytes / VMAR / thread hangs ──
-VmoClone2TestCase.DropParentCommittedBytes
+# ── VmoClone2TestCase: concurrent VMO drop race ──
 VmoClone2TestCase.DropChildrenInParallel
-VmoClone2TestCase.OffsetProgressiveWrite
 
-# ── PortStressTest: all 12 multi-threaded stress tests hang ──
+# ── PortStressTest: multi-threaded channel_call stress ──
 PortStressTest.ChannelCallWaitQueuePanicRepro
 
-# ── Threads: debug register / exception / syscall hangs ──
+# ── Threads: debug register exception delivery not implemented ──
 Threads.DebugRegistersDr6CorrectAfterBreakpointRemoval
 Threads.DebugRegistersDr6ResetOnDebugException
-Threads.DebugRegistersWatchpointSyscallPanicRepro
-Threads.SyscallDebuggerModifyResult
-Pager.OverlapCommitSupplyTest
-Pager.CloneDetachTest
-Pager.DetachNonMappingAccess
-Pager.Prefetch
-Pager.SuspendInKernelCaptureFaultsTest
-Pager.SuspendInKernelTest
-Pager.SuspendReadTestVmar
-PagerWriteback.SuspendDirtyTestVmar
+
+# ── BTI: multi-thread pin/decommit race ──
 Bti.DecommitRace
 
-# ── Resource: hangs on QEMU (interrupt vector pool) ──
-Resource.PcInterruptVectorPoolLeak
-VmoClone2TestCase.ParentVmarWrite
+# ── VmoTestCase: multi-thread write + decommit race ──
+VmoTestCase.ParallelWriteAndDecommit
+
+# ── Resource / Scheduler: hangs ──
+Resource.Ioports
+SchedulerProfileTest.DeadlinePiUtilizationPanicRepro
+

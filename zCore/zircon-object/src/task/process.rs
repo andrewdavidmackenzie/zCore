@@ -1,4 +1,8 @@
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::{
+    boxed::Box,
+    sync::{Arc, Weak},
+    vec::Vec,
+};
 use core::any::Any;
 
 use futures::channel::oneshot::{self, Receiver, Sender};
@@ -95,8 +99,8 @@ pub struct Process {
 impl_kobject!(Process
     fn get_child(&self, id: KoID) -> ZxResult<Arc<dyn KernelObject>> {
         let inner = self.inner.lock();
-        let thread = inner.threads.iter().find(|o| o.id() == id).ok_or(ZxError::NOT_FOUND)?;
-        Ok(thread.clone())
+        let thread = inner.threads.iter().filter_map(|t| t.upgrade()).find(|o| o.id() == id).ok_or(ZxError::NOT_FOUND)?;
+        Ok(thread)
     }
     fn related_koid(&self) -> KoID {
         self.job.id()
@@ -143,7 +147,11 @@ struct ProcessInner {
     max_handle_id: u32,
     handles: HashMap<HandleValue, (Handle, Vec<Sender<()>>)>,
     futexes: HashMap<usize, Arc<Futex>>,
-    threads: Vec<Arc<Thread>>,
+    /// Weak references to child threads. The thread holds a strong
+    /// `Arc<Process>` back to us (matching Fuchsia's ThreadDispatcher
+    /// → ProcessDispatcher ref). The process stays alive as long as
+    /// any thread exists. Using Weak here avoids a reference cycle.
+    threads: Vec<Weak<Thread>>,
 
     // special info
     debug_addr: usize,
@@ -167,6 +175,11 @@ struct ProcessInner {
     /// a BAD_SYSCALL policy exception (they bypassed the vDSO).
     /// Zero means no vDSO mapped (petal/userstart) — check is skipped.
     vdso_code_range: (usize, usize),
+    /// Set to `true` by `terminate()` after `PROCESS_TERMINATED` has
+    /// been signaled. Once set, the exit code is frozen and `kill()`
+    /// cannot overwrite it. Matches Fuchsia's DEAD state distinction:
+    /// `Kill()` is a no-op when `state_ == State::DEAD`.
+    terminated: bool,
 }
 
 /// Status of a process.
@@ -323,8 +336,24 @@ impl Process {
         let should_terminate;
         {
             let mut inner = self.inner.lock();
-            if let Status::Exited(_) = inner.status {
-                return;
+            match inner.status {
+                Status::Exited(existing) if existing == retcode => return,
+                Status::Exited(_) => {
+                    // Already exited with a different code. If terminate()
+                    // has completed (PROCESS_TERMINATED signaled), the
+                    // return code is frozen — a late kill() must not
+                    // overwrite it. Matches Fuchsia where Kill() is a
+                    // no-op when state_ == DEAD.
+                    if inner.terminated {
+                        return;
+                    }
+                    // Still dying (threads shutting down). Update the
+                    // retcode so kill's code takes precedence over
+                    // terminate's default of 0.
+                    inner.status = Status::Exited(retcode);
+                    return;
+                }
+                _ => {}
             }
             inner.status = Status::Exited(retcode);
             if inner.threads.is_empty() {
@@ -343,17 +372,22 @@ impl Process {
             let unstarted: alloc::vec::Vec<KoID> = inner
                 .threads
                 .iter()
+                .filter_map(|t| t.upgrade())
                 .filter(|t| t.state() == ThreadState::New)
                 .map(|t| t.id())
                 .collect();
             for thread in inner.threads.iter() {
-                thread.kill();
+                if let Some(t) = thread.upgrade() {
+                    t.kill();
+                }
             }
             // Remove unstarted threads — they can never call
             // remove_thread().  Started threads (now Dying) will
             // call remove_thread() when their CurrentThread drops.
-            inner.threads.retain(|t| !unstarted.contains(&t.id()));
-            should_terminate = inner.threads.is_empty();
+            inner
+                .threads
+                .retain(|t| t.upgrade().is_some_and(|t| !unstarted.contains(&t.id())));
+            should_terminate = inner.threads.iter().all(|t| t.strong_count() == 0);
             zero_handles_objects = inner.clear_handles();
         }
         for obj in &zero_handles_objects {
@@ -365,15 +399,44 @@ impl Process {
     }
 
     /// The process finally terminates.
+    ///
+    /// Matches Fuchsia's `FinishDeadTransition`: signals
+    /// `PROCESS_TERMINATED`, destroys the address space, and clears
+    /// the handle table to break the `Process → Thread → Process`
+    /// strong reference cycle (a process may hold handles to its
+    /// own threads while `Thread.proc` holds the process).
     fn terminate(&self) {
         let mut inner = self.inner.lock();
         let retcode = match inner.status {
             Status::Exited(retcode) => retcode,
             _ => {
+                // Should not happen — exit() or remove_thread() should
+                // always set the status before calling terminate().
+                // Fall back to 0 if it does.
                 inner.status = Status::Exited(0);
                 0
             }
         };
+        // Freeze the return code — no subsequent kill() may overwrite it.
+        // Matches Fuchsia's DYING → DEAD transition.
+        inner.terminated = true;
+        // Clear the handle table to break reference cycles.
+        // exit() may have already cleared handles; clear_handles on
+        // an empty table is a harmless no-op.
+        let zero_handles_objects = inner.clear_handles();
+
+        // Propagate accumulated CPU/queue time to the parent job so
+        // job.total_cpu_time()/total_queue_time() include exited
+        // processes.  Use at least 1ns for started processes.
+        let proc_cpu_time = inner.exited_cpu_time.max(1);
+        let critical = inner.critical_to_job.clone();
+        drop(inner);
+
+        // Fire zero-handle callbacks outside the lock to avoid deadlock.
+        for obj in &zero_handles_objects {
+            obj.on_zero_handles();
+        }
+
         self.base.signal_set(Signal::PROCESS_TERMINATED);
         self.exceptionate.shutdown();
         self.debug_exceptionate.shutdown();
@@ -382,13 +445,9 @@ impl Process {
         // (get_info returns BAD_STATE), matching Fuchsia behavior.
         let _ = self.vmar.destroy();
 
-        // Propagate accumulated CPU/queue time to the parent job so
-        // job.total_cpu_time()/total_queue_time() include exited
-        // processes.  Use at least 1ns for started processes.
-        let proc_cpu_time = inner.exited_cpu_time.max(1);
         self.job.remove_process(self.base.id, proc_cpu_time);
         // If we are critical to a job, we need to take action.
-        if let Some((job, retcode_nonzero)) = &inner.critical_to_job {
+        if let Some((job, retcode_nonzero)) = &critical {
             if !retcode_nonzero || retcode != 0 {
                 job.kill_with_code(super::TASK_RETCODE_CRITICAL_PROCESS_KILL);
             }
@@ -891,7 +950,7 @@ impl Process {
         for _ in 0..inner.suspend_count {
             thread.suspend();
         }
-        inner.threads.push(thread);
+        inner.threads.push(Arc::downgrade(&thread));
         Ok(())
     }
 
@@ -903,7 +962,11 @@ impl Process {
         // Bail if the thread was already removed (e.g., Process::exit
         // removed unstarted threads, then CurrentThread::drop calls
         // terminate → remove_thread again with the same ID).
-        if !inner.threads.iter().any(|t| t.id() == tid) {
+        if !inner
+            .threads
+            .iter()
+            .any(|t| t.upgrade().is_some_and(|t| t.id() == tid))
+        {
             return;
         }
         // Note: we cannot call thread.get_time() here because
@@ -913,8 +976,22 @@ impl Process {
         if inner.exited_cpu_time == 0 {
             inner.exited_cpu_time = 1;
         }
-        inner.threads.retain(|t| t.id() != tid);
-        if inner.threads.is_empty() {
+        inner
+            .threads
+            .retain(|t| t.upgrade().is_some_and(|t| t.id() != tid));
+        if inner.threads.iter().all(|t| t.strong_count() == 0) {
+            // If exit() hasn't been called yet, set the exit code
+            // before running terminate(). Check the parent job's kill
+            // state to propagate the kill code when the last thread
+            // dies due to a job kill racing with thread termination.
+            if !matches!(inner.status, Status::Exited(_)) {
+                let code = if self.job.is_killed() {
+                    self.job.return_code()
+                } else {
+                    0
+                };
+                inner.status = Status::Exited(code);
+            }
             drop(inner);
             self.terminate();
         }
@@ -976,12 +1053,23 @@ impl Process {
 
     /// Get KoIDs of Threads.
     pub fn thread_ids(&self) -> Vec<KoID> {
-        self.inner.lock().threads.iter().map(|t| t.id()).collect()
+        self.inner
+            .lock()
+            .threads
+            .iter()
+            .filter_map(|t| t.upgrade())
+            .map(|t| t.id())
+            .collect()
     }
 
     /// Get all live threads in this process.
     pub fn threads(&self) -> Vec<Arc<Thread>> {
-        self.inner.lock().threads.clone()
+        self.inner
+            .lock()
+            .threads
+            .iter()
+            .filter_map(|t| t.upgrade())
+            .collect()
     }
 
     /// Get total accumulated CPU time across all threads (nanoseconds).
@@ -992,7 +1080,9 @@ impl Process {
         // CurrentThread::drop → remove_thread lock order).
         let (threads, exited_time, status) = {
             let inner = self.inner.lock();
-            (inner.threads.clone(), inner.exited_cpu_time, inner.status)
+            let threads: Vec<Arc<Thread>> =
+                inner.threads.iter().filter_map(|t| t.upgrade()).collect();
+            (threads, inner.exited_cpu_time, inner.status)
         };
         let live_time: u64 = threads.iter().map(|t| t.get_time()).sum();
         let total = live_time + exited_time;
@@ -1009,7 +1099,9 @@ impl Process {
     pub fn total_queue_time(&self) -> u64 {
         let (threads, status) = {
             let inner = self.inner.lock();
-            (inner.threads.clone(), inner.status)
+            let threads: Vec<Arc<Thread>> =
+                inner.threads.iter().filter_map(|t| t.upgrade()).collect();
+            (threads, inner.status)
         };
         let qt: u128 = threads.iter().map(|t| t.queue_time()).sum();
         let total = qt as u64;
@@ -1044,7 +1136,9 @@ impl Task for Process {
         let mut inner = self.inner.lock();
         inner.suspend_count += 1;
         for thread in inner.threads.iter() {
-            thread.suspend();
+            if let Some(t) = thread.upgrade() {
+                t.suspend();
+            }
         }
     }
 
@@ -1053,7 +1147,9 @@ impl Task for Process {
         assert_ne!(inner.suspend_count, 0, "resume without matching suspend");
         inner.suspend_count -= 1;
         for thread in inner.threads.iter() {
-            thread.resume();
+            if let Some(t) = thread.upgrade() {
+                t.resume();
+            }
         }
     }
 
@@ -1080,7 +1176,9 @@ impl ProcessInner {
 
     /// Whether `thread` is in this process.
     fn contains_thread(&self, thread: &Arc<Thread>) -> bool {
-        self.threads.iter().any(|t| Arc::ptr_eq(t, thread))
+        self.threads
+            .iter()
+            .any(|t| t.upgrade().is_some_and(|t| Arc::ptr_eq(&t, thread)))
     }
 
     fn remove_handle(&mut self, handle_value: HandleValue) -> ZxResult<Handle> {

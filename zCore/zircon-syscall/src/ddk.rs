@@ -291,11 +291,10 @@ impl Syscall<'_> {
         }
         let encoded_addrs = pmt.encode_addrs(compress_results, contiguous)?;
         if encoded_addrs.len() != addrs_count {
-            warn!(
-                "bti.pin addrs_count = {}, but encoded_addrs.len = {}",
-                addrs_count,
-                encoded_addrs.len()
-            );
+            // Unpin and remove the PMT — we can't return it to user
+            // space with the wrong address count.
+            bti.release_pmt(pmt.id());
+            pmt.unpin();
             return Err(ZxError::INVALID_ARGS);
         }
         addrs.write_array(&encoded_addrs)?;

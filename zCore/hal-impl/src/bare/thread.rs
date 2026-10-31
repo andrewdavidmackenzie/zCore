@@ -36,6 +36,11 @@ static USER_COPY_RECOVERY_PC: [PerCpuCell<usize>; MAX_CORE_NUM] = [DEFAULT_USIZE
 /// a user-copy fault occurs. Zero means no fault.
 static USER_COPY_FAULT_ADDR: [PerCpuCell<usize>; MAX_CORE_NUM] = [DEFAULT_USIZE; MAX_CORE_NUM];
 
+/// Whether the user-copy fault was a permission violation (true) or
+/// an unmapped page (false). Set by the trap handler alongside
+/// USER_COPY_FAULT_ADDR.
+static USER_COPY_FAULT_IS_PERM: [PerCpuCell<bool>; MAX_CORE_NUM] = [DEFAULT_BOOL; MAX_CORE_NUM];
+
 /// Enter a user-copy critical section. Sets the recovery PC so that
 /// a page fault during the copy jumps there instead of panicking.
 ///
@@ -52,13 +57,17 @@ pub unsafe fn user_copy_enter(recovery_pc: usize) {
     *USER_COPY_ACTIVE[idx].get_mut() = true;
 }
 
-/// Leave a user-copy critical section. Returns the faulting address
-/// if a fault was caught (non-zero), or 0 if the copy succeeded.
-pub fn user_copy_leave() -> usize {
+/// Leave a user-copy critical section. Returns `(fault_addr, is_permission_fault)`.
+/// `fault_addr` is 0 if the copy succeeded.
+/// `is_permission_fault` is true if the fault was a protection violation
+/// (page present but wrong permissions), false if unmapped.
+pub fn user_copy_leave() -> (usize, bool) {
     let idx = super::cpu::cpu_index();
     *USER_COPY_ACTIVE[idx].get_mut() = false;
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-    *USER_COPY_FAULT_ADDR[idx].get_mut()
+    let addr = *USER_COPY_FAULT_ADDR[idx].get_mut();
+    let is_perm = *USER_COPY_FAULT_IS_PERM[idx].get_mut();
+    (addr, is_perm)
 }
 
 /// Called by the page fault handler. If a user-copy is active,
@@ -69,9 +78,19 @@ pub fn user_copy_leave() -> usize {
 /// paged), the caller must call `user_copy_rearm` to re-enable the
 /// guard for subsequent faults in the same multi-page copy.
 pub fn user_copy_check_fault(fault_vaddr: usize) -> Option<usize> {
+    user_copy_check_fault_with_perm(fault_vaddr, false)
+}
+
+/// Like `user_copy_check_fault` but also records whether the fault
+/// was a permission violation (page present, wrong permissions).
+pub fn user_copy_check_fault_with_perm(
+    fault_vaddr: usize,
+    is_permission_fault: bool,
+) -> Option<usize> {
     let idx = super::cpu::cpu_index();
     if *USER_COPY_ACTIVE[idx].get() {
         *USER_COPY_FAULT_ADDR[idx].get_mut() = fault_vaddr;
+        *USER_COPY_FAULT_IS_PERM[idx].get_mut() = is_permission_fault;
         *USER_COPY_ACTIVE[idx].get_mut() = false;
         Some(*USER_COPY_RECOVERY_PC[idx].get())
     } else {

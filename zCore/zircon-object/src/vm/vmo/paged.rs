@@ -115,6 +115,8 @@ struct VMObjectPagedInner {
     /// True if this VMO is backed by a pager. Pages must only be
     /// committed via `supply_pages`, not auto-allocated by `commit_page`.
     pager_backed: bool,
+    /// True if any ancestor in this COW tree is pager-backed.
+    in_pager_tree: bool,
     /// For unbounded VMOs: the content boundary in pages (stream_size
     /// rounded up). Pages at or beyond this index return zeros without
     /// pager requests on READ. Set to usize::MAX for regular VMOs.
@@ -257,6 +259,7 @@ impl VMObjectPaged {
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
                 pager_backed: false,
+                in_pager_tree: false,
                 content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
@@ -432,6 +435,10 @@ impl VMObjectTrait for VMObjectPaged {
                     // No local frame: just insert zero marker.
                     // This blocks parent look-through, so reads return zero.
                     inner.zero_markers.insert(block.block);
+                    // Decrement share_count on the parent's page to
+                    // reflect that this VMO no longer references it.
+                    // Walk up to find the hidden node that owns the page.
+                    inner.decrement_parent_share_counts(block.block, block.block + 1);
                     // Unmap so subsequent accesses see the zero marker.
                     for map in inner.mappings.iter() {
                         if let Some(map) = map.upgrade() {
@@ -600,6 +607,16 @@ impl VMObjectTrait for VMObjectPaged {
         let page_count = len / PAGE_SIZE;
         for i in 0..page_count {
             inner.decommit(start_page + i);
+        }
+        // Unmap decommitted pages from all mappings so stale PTEs
+        // don't return the old physical page data. The next access
+        // will page-fault and either re-commit or return zeros.
+        for i in 0..page_count {
+            for map in inner.mappings.iter() {
+                if let Some(map) = map.upgrade() {
+                    map.range_change(start_page + i, 1, RangeChangeOp::Unmap);
+                }
+            }
         }
         Ok(())
     }
@@ -881,6 +898,29 @@ impl VMObjectTrait for VMObjectPaged {
         // Also clear the supplying flag.
         let (_guard, inner) = self.get_inner_mut();
         inner.supplying = false;
+    }
+
+    fn unmap_mappings(&self, start_page: usize, page_count: usize) {
+        let (_guard, inner) = self.get_inner();
+        for map in inner.mappings.iter() {
+            if let Some(map) = map.upgrade() {
+                map.range_change(start_page, page_count, RangeChangeOp::Unmap);
+            }
+        }
+    }
+
+    fn shrink_parent_limit(&self, new_parent_size: usize) {
+        let (_guard, inner) = self.get_inner_mut();
+        // Only update parent_limit for unidirectional children.
+        // Bidirectional (SNAPSHOT) children go through a hidden node
+        // which manages page ownership independently.
+        if !inner.type_.is_unidirectional() {
+            return;
+        }
+        let new_limit = inner.parent_offset.saturating_add(new_parent_size);
+        if new_limit < inner.parent_limit {
+            inner.parent_limit = new_limit;
+        }
     }
 
     fn set_content_boundary(&self, pages: usize) {
@@ -1168,6 +1208,34 @@ impl VMObjectPagedInner {
                                 None => Err(ZxError::NO_MEMORY),
                             };
                         }
+                        // For WRITE in a pager tree: if the sibling
+                        // (root pager VMO) has the page committed,
+                        // copy its data into the new frame before
+                        // storing. This ensures COW fork gets real
+                        // pager data instead of zeros for pages
+                        // supplied after clone creation.
+                        if self.in_pager_tree && parent.type_.is_hidden() {
+                            let (_, sibling_weak) = parent.type_.get_tag_and_other(&self.self_ref);
+                            if let Some(sibling_arc) = sibling_weak.upgrade() {
+                                let sib = sibling_arc.borrow_inner();
+                                if sib.pager_backed {
+                                    let sib_off = sib.parent_offset / PAGE_SIZE;
+                                    if parent_idx >= sib_off {
+                                        let sib_idx = parent_idx - sib_off;
+                                        if sib_idx < sib.size / PAGE_SIZE {
+                                            if let Some(sib_page) = sib.frames.get(&sib_idx) {
+                                                // Copy sibling's data to our new frame.
+                                                hal_impl::mem::pmem_copy(
+                                                    frame.paddr(),
+                                                    sib_page.frame.paddr(),
+                                                    PAGE_SIZE,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         self.frames.insert(page_idx, PageState::new(frame));
                     }
                     CommitResult::CopyOnWrite(frame, unmap) => {
@@ -1206,10 +1274,24 @@ impl VMObjectPagedInner {
                         self.frames.insert(page_idx, new_frame);
                     }
                     CommitResult::Ref(paddr)
+                        if self.type_.is_unidirectional()
+                            && flags.contains(MMUFlags::WRITE)
+                            && child.strong_count() > 0 =>
+                    {
+                        // A child is walking through this unidirectional
+                        // node to reach the root. Don't fork here — pass
+                        // the Ref through so the requesting leaf does the
+                        // COW fork. Without this, every intermediate
+                        // unidirectional node in the chain would fork a
+                        // local copy, inflating populated_bytes.
+                        return Ok(CommitResult::Ref(paddr));
+                    }
+                    CommitResult::Ref(paddr)
                         if self.type_.is_unidirectional() && flags.contains(MMUFlags::WRITE) =>
                     {
                         // Unidirectional child writing to a parent page:
-                        // COW-fork into a local copy.
+                        // COW-fork into a local copy. This is the leaf
+                        // node (child is Weak::new from commit_page).
                         let new_frame = PhysFrame::new().ok_or(ZxError::NO_MEMORY)?;
                         hal_impl::mem::pmem_copy(new_frame.paddr(), paddr, PAGE_SIZE);
                         self.frames.insert(page_idx, PageState::new(new_frame));
@@ -1239,13 +1321,13 @@ impl VMObjectPagedInner {
         // Now the page must hit on this VMO.
         let (_child_tag, other_child) = self.type_.get_tag_and_other(child);
         if self.type_.is_hidden() {
-            let arc_other = other_child.upgrade().unwrap();
-            let in_range = {
-                let other_inner = arc_other.borrow_inner();
+            let arc_other = other_child.upgrade();
+            let in_range = arc_other.as_ref().is_some_and(|o| {
+                let other_inner = o.borrow_inner();
                 let start = other_inner.parent_offset / PAGE_SIZE;
                 let end = other_inner.parent_limit / PAGE_SIZE;
                 page_idx >= start && page_idx < end
-            };
+            });
             if !in_range {
                 if flags.contains(MMUFlags::WRITE) {
                     // The other child can't see this page.  Check whether
@@ -1269,11 +1351,13 @@ impl VMObjectPagedInner {
                 let frame = self.frames.get(&page_idx).unwrap();
                 return Ok(CommitResult::Ref(frame.frame.paddr()));
             } else if need_unmap {
-                arc_other.borrow_inner().range_change(
-                    page_idx * PAGE_SIZE,
-                    (1 + page_idx) * PAGE_SIZE,
-                    RangeChangeOp::Unmap,
-                );
+                if let Some(ref arc_other) = arc_other {
+                    arc_other.borrow_inner().range_change(
+                        page_idx * PAGE_SIZE,
+                        (1 + page_idx) * PAGE_SIZE,
+                        RangeChangeOp::Unmap,
+                    );
+                }
             }
         }
         if need_unmap {
@@ -1437,7 +1521,12 @@ impl VMObjectPagedInner {
             return;
         }
         let (tag, other_child) = self.type_.get_tag_and_other(child);
-        let arc_child = other_child.upgrade().unwrap();
+        // If the other child is already dropped (concurrent destruction
+        // race), there's no surviving child to merge into. Just let the
+        // hidden node's frames be freed when it's dropped.
+        let Some(arc_child) = other_child.upgrade() else {
+            return;
+        };
         let surviving = arc_child.borrow_inner_mut();
         let start = surviving.parent_offset / PAGE_SIZE;
         let end = surviving.parent_limit / PAGE_SIZE;
@@ -1643,6 +1732,8 @@ impl VMObjectPagedInner {
                 return Err(ZxError::INVALID_ARGS);
             }
         }
+        // Track whether this clone tree is pager-backed.
+        let is_pager_tree = self.pager_backed || self.in_pager_tree;
         // create child VMO
         let child = VMObjectPaged::wrap(
             VMObjectPagedInner {
@@ -1658,6 +1749,7 @@ impl VMObjectPagedInner {
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
                 pager_backed: false,
+                in_pager_tree: is_pager_tree,
                 content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
@@ -1683,6 +1775,7 @@ impl VMObjectPagedInner {
                 cache_policy: CachePolicy::Cached,
                 contiguous: self.contiguous,
                 pager_backed: false,
+                in_pager_tree: is_pager_tree,
                 content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
@@ -1801,6 +1894,7 @@ impl VMObjectPagedInner {
                 cache_policy: CachePolicy::Cached,
                 contiguous: false,
                 pager_backed: false,
+                in_pager_tree: false,
                 content_boundary_pages: usize::MAX,
                 supplying: false,
                 self_ref: Default::default(),
@@ -1825,7 +1919,17 @@ impl VMObjectPagedInner {
         new_range: Option<(usize, usize)>,
     ) {
         let (tag, other) = self.type_.get_tag_and_other(old);
-        let arc_other_child = other.upgrade().unwrap();
+        let Some(arc_other_child) = other.upgrade() else {
+            // Other child already dropped — just update the child ref.
+            if let VMOType::Hidden { left, right, .. } = &mut self.type_ {
+                if left.ptr_eq(old) {
+                    *left = new;
+                } else if right.ptr_eq(old) {
+                    *right = new;
+                }
+            }
+            return;
+        };
         let other_child = arc_other_child.borrow_inner_mut();
         let mut unwanted = VecDeque::<usize>::new();
         if let Some((new_start, new_end)) = new_range {
@@ -1919,7 +2023,10 @@ impl VMObjectPagedInner {
                 let parent_inner = parent.borrow_inner_mut();
                 if parent_inner.owner == old_id {
                     let (_, other) = parent_inner.type_.get_tag_and_other(&child);
-                    let new_owner = other.upgrade().unwrap().borrow_inner().owner;
+                    let Some(arc_other) = other.upgrade() else {
+                        break;
+                    };
+                    let new_owner = arc_other.borrow_inner().owner;
                     child = parent_inner.self_ref.clone();
                     assert_ne!(new_owner, skip_owner);
                     parent_inner.owner = new_owner;
@@ -2086,7 +2193,19 @@ impl VMObjectPagedInner {
                 break;
             }
             let (tag, other) = parent_inner.type_.get_tag_and_other(&child);
-            let arc_other = other.upgrade().unwrap();
+            // If the other child is already dropped (concurrent
+            // destruction race), just remove unwanted pages from the
+            // parent — there's no sibling to transfer them to.
+            let arc_other = match other.upgrade() {
+                Some(o) => o,
+                None => {
+                    for _ in 0..unwanted.len() {
+                        let idx = unwanted.pop_front().unwrap();
+                        parent_inner.frames.remove(&idx);
+                    }
+                    break;
+                }
+            };
             let other_inner = arc_other.borrow_inner_mut();
             let start = other_inner.parent_offset / PAGE_SIZE;
             let end = other_inner.parent_limit / PAGE_SIZE;
@@ -2110,6 +2229,8 @@ impl VMObjectPagedInner {
                             {
                                 to_insert.pin_count -= 1;
                             }
+                            // One fewer viewer — decrement share_count.
+                            to_insert.share_count = to_insert.share_count.saturating_sub(1);
                             if to_insert.tag != tag.negate() {
                                 to_insert.tag = PageStateTag::Owned;
                                 other_inner.frames.insert(new_key, to_insert);
@@ -2270,15 +2391,21 @@ impl Drop for VMObjectPaged {
         }
         let is_conti = inner.is_contiguous();
         for frame in inner.frames.iter_mut() {
-            if is_conti {
-                // WARN: In fact we do not need this `if`.
-                // If this vmo is a child of a contiguous vmo,
-                // its pages should also be pinned.
-                if frame.1.pin_count >= 1 {
-                    frame.1.pin_count -= 1;
-                }
+            if is_conti && frame.1.pin_count >= 1 {
+                frame.1.pin_count -= 1;
             }
-            assert_eq!(frame.1.pin_count, 0);
+            // Clear any remaining pin count. Fuchsia doesn't panic
+            // when dropping VMOs with pinned pages — it just unpins.
+            // Panicking here crashes the kernel when a test fails
+            // to clean up its BTI pins.
+            if frame.1.pin_count > 0 {
+                warn!(
+                    "VMObjectPaged::drop: frame has pin_count={}, clearing",
+                    frame.1.pin_count
+                );
+                inner.pin_count -= frame.1.pin_count as usize;
+                frame.1.pin_count = 0;
+            }
         }
     }
 }

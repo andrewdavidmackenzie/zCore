@@ -4701,7 +4701,6 @@ fn pager_wb_invalid_query() {
 
 /// C++: TEST(PagerWriteback, LargeWriteBatched)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_large_write_batched() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();
@@ -7875,7 +7874,6 @@ fn pager_wb_resize_writeback_with_mapping_no_trap_dirty() {
 /// TRAP_DIRTY VMO: OP_DIRTY page 0, write to it, writeback cycle,
 /// verify content. (Mapping part requires VMAR — we use VMO write.)
 #[test]
-#[ignore] // C++ equivalent hangs — in core-tests-skip.txt
 fn pager_wb_resize_writeback_with_mapping_trap_dirty() {
     let _ctx = TestContext::new();
     let mut pager_helper = UserPagerHelper::new();

@@ -119,8 +119,14 @@ impl ContextAccessState for UserContext {
                 for (i, &val) in dr.dr.iter().enumerate() {
                     buf[i * 8..(i + 1) * 8].copy_from_slice(&val.to_ne_bytes());
                 }
-                buf[32..40].copy_from_slice(&dr.dr6.to_ne_bytes());
-                buf[40..48].copy_from_slice(&dr.dr7.to_ne_bytes());
+                // DR6: bits 4-11 are always 1, bit 12 is always 0.
+                let dr6_out = ((dr.dr6 as u32 | 0xFFFF_0FF0) & !0x1000) as u64;
+                buf[32..40].copy_from_slice(&dr6_out.to_ne_bytes());
+                // DR7: bits 8-9 (LE/GE) and bit 10 (reserved) are
+                // always read as 1. Matches Fuchsia's DR7_ZERO_MASK
+                // (0x700) and Intel SDM requirements.
+                let dr7_out = dr.dr7 | 0x700;
+                buf[40..48].copy_from_slice(&dr7_out.to_ne_bytes());
                 Ok(DEBUG_SIZE)
             }
             #[allow(unreachable_patterns)]
@@ -257,10 +263,14 @@ impl ContextAccessState for UserContext {
                 // DR6 is a 32-bit register — mask to 32 bits, then apply
                 // reserved bit rules: bits 4-11 always 1, bit 12 always 0.
                 dr.dr6 = ((user_dr6 as u32 | 0xFFFF_0FF0) & !0x1000) as u64;
-                // DR7: Fuchsia sets LE and GE bits (8-10) and clears
-                // reserved bits 11-12. DR7 is a 32-bit register.
+                // DR7: 32-bit register. Sanitize per Intel SDM and
+                // Fuchsia's x86_validate_debug_state():
+                //   stored = X86_DR7_MASK | (input & X86_DR7_USER_MASK)
+                // X86_DR7_MASK = 0x700 (bits 8-10: LE, GE, reserved — always 1)
+                // X86_DR7_USER_MASK = 0xFFFF_00FF (bits 0-7, 16-31 user-writable)
+                // Bits 11-12 reserved (0), bit 13 GD disabled, bits 14-15 reserved (0).
                 let user_dr7 = u64::from_ne_bytes(buf[40..48].try_into().unwrap());
-                dr.dr7 = ((user_dr7 as u32 | (0x7 << 8)) & !0xF800) as u64; // set 8-10, clear 11-15
+                dr.dr7 = (0x0000_0700u32 | (user_dr7 as u32 & 0xFFFF_00FF)) as u64;
             }
             #[allow(unreachable_patterns)]
             _ => return Err(ZxError::NOT_SUPPORTED),

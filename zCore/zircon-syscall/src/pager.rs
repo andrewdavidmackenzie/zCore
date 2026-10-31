@@ -62,7 +62,11 @@ impl Syscall<'_> {
             pager_handle, vmo_handle
         );
         let proc = self.thread.proc();
-        let pager = proc.get_object_with_rights::<Pager>(pager_handle, Rights::ATTACH_VMO)?;
+        // Fuchsia requires both ATTACH_VMO and MANAGE_VMO on the pager handle.
+        let pager = proc.get_object_with_rights::<Pager>(
+            pager_handle,
+            Rights::ATTACH_VMO | Rights::MANAGE_VMO,
+        )?;
         // Fuchsia requires WRITE right on the VMO handle for detach.
         let vmo = proc.get_object_with_rights::<VmObject>(vmo_handle, Rights::WRITE)?;
         pager.detach_vmo(&vmo)
