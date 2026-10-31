@@ -1040,6 +1040,20 @@ impl Syscall<'_> {
                     .await
             }
             Sys::VMO_WRITE => {
+                // Early VMO bounds check: when the length is near
+                // SIZE_MAX, prefault_user_buffer would overflow and
+                // return INVALID_ARGS before sys_vmo_write can return
+                // the correct OUT_OF_RANGE. Match Fuchsia's validation
+                // order: VMO bounds first, then user buffer.
+                {
+                    let proc = self.thread.proc();
+                    if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
+                        let vmo_len = vmo.len();
+                        if a2 >= vmo_len || a3 > vmo_len - a2 {
+                            return ZxError::OUT_OF_RANGE as isize;
+                        }
+                    }
+                }
                 // Pager pre-flight FIRST: mark destination pages dirty
                 // before prefaulting the source buffer. Matches Fuchsia's
                 // ReadWriteInternal where RequirePage (which marks dirty)
