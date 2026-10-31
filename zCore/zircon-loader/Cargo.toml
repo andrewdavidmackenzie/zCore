@@ -12,7 +12,7 @@ futures = { version = "0.3", default-features = false, features = ["alloc", "asy
 xmas-elf = "0.7"
 hal-impl = { path = "../hal-impl", default-features = false }
 zircon-object = { path = "../zircon-object", features = ["elf"] }
-zircon-syscall = { path = "../zircon-syscall" }
+zircon-syscall = { path = "../zircon-syscall", features = ["elf"] }
 zircon-abi = { path = "../zircon-abi", default-features = false, features = ["alloc"] }
 
 zcore-fs = { path = "../vfs/zcore-fs" }

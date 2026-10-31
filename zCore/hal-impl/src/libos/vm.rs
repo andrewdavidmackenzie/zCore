@@ -66,8 +66,9 @@ impl GenericPageTable for PageTable {
     }
 
     fn unmap(&mut self, vaddr: VirtAddr) -> PagingResult<(PhysAddr, PageSize)> {
+        // Read the physical address before unmap_cont removes the entry.
+        let paddr = self.entries.get(&vaddr).map(|e| e.paddr).unwrap_or(0);
         self.unmap_cont(vaddr, PAGE_SIZE)?;
-        let paddr = self.entries.remove(&vaddr).map(|e| e.paddr).unwrap_or(0);
         Ok((paddr, PageSize::default_page()))
     }
 
@@ -80,6 +81,18 @@ impl GenericPageTable for PageTable {
         debug_assert!(is_aligned(vaddr));
         if let Some(entry) = self.entries.get_mut(&vaddr) {
             if let Some(pa) = paddr {
+                if pa != entry.paddr {
+                    // Physical address changed (COW fault). Remap the
+                    // host page to point to the new physical frame.
+                    let effective_flags = flags.unwrap_or(entry.flags);
+                    MOCK_PHYS_MEM.munmap(vaddr as _, PAGE_SIZE);
+                    if !MOCK_PHYS_MEM.mmap(vaddr, PAGE_SIZE, pa, effective_flags) {
+                        return Err(PagingError::NoMemory);
+                    }
+                    entry.paddr = pa;
+                    entry.flags = effective_flags;
+                    return Ok(PageSize::default_page());
+                }
                 entry.paddr = pa;
             }
             if let Some(f) = flags {

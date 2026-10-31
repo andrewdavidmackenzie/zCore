@@ -175,6 +175,11 @@ struct ProcessInner {
     /// a BAD_SYSCALL policy exception (they bypassed the vDSO).
     /// Zero means no vDSO mapped (petal/userstart) — check is skipped.
     vdso_code_range: (usize, usize),
+    /// Set to `true` by `terminate()` after `PROCESS_TERMINATED` has
+    /// been signaled. Once set, the exit code is frozen and `kill()`
+    /// cannot overwrite it. Matches Fuchsia's DEAD state distinction:
+    /// `Kill()` is a no-op when `state_ == State::DEAD`.
+    terminated: bool,
 }
 
 /// Status of a process.
@@ -334,8 +339,15 @@ impl Process {
             match inner.status {
                 Status::Exited(existing) if existing == retcode => return,
                 Status::Exited(_) => {
-                    // Already exited with a different code. This happens
-                    // when terminate() raced ahead of kill(). Update the
+                    // Already exited with a different code. If terminate()
+                    // has completed (PROCESS_TERMINATED signaled), the
+                    // return code is frozen — a late kill() must not
+                    // overwrite it. Matches Fuchsia where Kill() is a
+                    // no-op when state_ == DEAD.
+                    if inner.terminated {
+                        return;
+                    }
+                    // Still dying (threads shutting down). Update the
                     // retcode so kill's code takes precedence over
                     // terminate's default of 0.
                     inner.status = Status::Exited(retcode);
@@ -387,6 +399,12 @@ impl Process {
     }
 
     /// The process finally terminates.
+    ///
+    /// Matches Fuchsia's `FinishDeadTransition`: signals
+    /// `PROCESS_TERMINATED`, destroys the address space, and clears
+    /// the handle table to break the `Process → Thread → Process`
+    /// strong reference cycle (a process may hold handles to its
+    /// own threads while `Thread.proc` holds the process).
     fn terminate(&self) {
         let mut inner = self.inner.lock();
         let retcode = match inner.status {
@@ -399,6 +417,26 @@ impl Process {
                 0
             }
         };
+        // Freeze the return code — no subsequent kill() may overwrite it.
+        // Matches Fuchsia's DYING → DEAD transition.
+        inner.terminated = true;
+        // Clear the handle table to break reference cycles.
+        // exit() may have already cleared handles; clear_handles on
+        // an empty table is a harmless no-op.
+        let zero_handles_objects = inner.clear_handles();
+
+        // Propagate accumulated CPU/queue time to the parent job so
+        // job.total_cpu_time()/total_queue_time() include exited
+        // processes.  Use at least 1ns for started processes.
+        let proc_cpu_time = inner.exited_cpu_time.max(1);
+        let critical = inner.critical_to_job.clone();
+        drop(inner);
+
+        // Fire zero-handle callbacks outside the lock to avoid deadlock.
+        for obj in &zero_handles_objects {
+            obj.on_zero_handles();
+        }
+
         self.base.signal_set(Signal::PROCESS_TERMINATED);
         self.exceptionate.shutdown();
         self.debug_exceptionate.shutdown();
@@ -407,13 +445,9 @@ impl Process {
         // (get_info returns BAD_STATE), matching Fuchsia behavior.
         let _ = self.vmar.destroy();
 
-        // Propagate accumulated CPU/queue time to the parent job so
-        // job.total_cpu_time()/total_queue_time() include exited
-        // processes.  Use at least 1ns for started processes.
-        let proc_cpu_time = inner.exited_cpu_time.max(1);
         self.job.remove_process(self.base.id, proc_cpu_time);
         // If we are critical to a job, we need to take action.
-        if let Some((job, retcode_nonzero)) = &inner.critical_to_job {
+        if let Some((job, retcode_nonzero)) = &critical {
             if !retcode_nonzero || retcode != 0 {
                 job.kill_with_code(super::TASK_RETCODE_CRITICAL_PROCESS_KILL);
             }

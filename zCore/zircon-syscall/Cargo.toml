@@ -10,6 +10,7 @@ description = "Zircon syscalls implementation"
 [features]
 # hypervisor = ["zircon-object/hypervisor"]
 deny-page-fault = []
+elf = ["zircon-object/elf"]
 libos = []
 
 [package.metadata.cargo-all-features]

@@ -1026,19 +1026,28 @@ impl VmObject {
     }
 
     /// Walk up the parent chain to find the root pager-backed VMO,
-    /// accumulating slice offsets along the way.  Returns `None` if
+    /// accumulating clone offsets along the way.  Returns `None` if
     /// this VMO itself is the pager VMO (has its own pager_port) or
     /// if no ancestor has a pager_port.
+    ///
+    /// Offset accounting: when a COW child (unidirectional/snapshot) is
+    /// created through a slice, `create_child_unidirectional` pre-adjusts
+    /// the child's `cow_parent_offset` by the slice offset (see the
+    /// `self.is_slice` path at line 1659). The child's VmObject parent
+    /// is then set to the slice via `set_parent_ref`. To avoid
+    /// double-counting, we skip the slice offset when the previous
+    /// (child) node was a non-slice paged VMO whose parent is a slice
+    /// — its cow_parent_offset already includes the slice offset.
     pub fn find_root_pager_vmo_with_offset(&self) -> Option<(Arc<VmObject>, usize)> {
         let inner = self.inner.lock();
         if inner.pager_port.is_some() {
             return None; // this VMO IS the pager VMO
         }
-        // Walk the full parent chain to the root pager VMO, accumulating
-        // every clone offset along the way. We cannot use the pager_root
-        // shortcut for offset calculation because it skips intermediate
-        // ancestors whose offsets would be missed.
         let mut cumulative_offset = self.get_slice_offset() + self.trait_.cow_parent_offset();
+        // A non-slice child whose parent is a slice was created through
+        // the redirect path — its cow_parent_offset already includes the
+        // slice's offset.
+        let mut child_is_redirected_cow = !self.is_slice;
         let mut cur = inner.parent.upgrade()?;
         drop(inner);
         loop {
@@ -1047,7 +1056,14 @@ impl VmObject {
                 drop(cur_inner);
                 return Some((cur, cumulative_offset));
             }
-            cumulative_offset += cur.get_slice_offset() + cur.trait_.cow_parent_offset();
+            if cur.is_slice && child_is_redirected_cow {
+                // Skip — the child's cow_parent_offset already includes
+                // this slice's offset from the redirect in
+                // create_child_unidirectional.
+            } else {
+                cumulative_offset += cur.get_slice_offset() + cur.trait_.cow_parent_offset();
+            }
+            child_is_redirected_cow = !cur.is_slice;
             let next = cur_inner.parent.upgrade();
             drop(cur_inner);
             cur = next?;

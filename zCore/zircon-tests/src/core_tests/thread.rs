@@ -352,10 +352,10 @@ fn debug_registers_watchpoint_syscall_panic_repro() {
     let got_dr0 = u64::from_ne_bytes(read_buf[0..8].try_into().unwrap());
     let got_dr7 = u64::from_ne_bytes(read_buf[40..48].try_into().unwrap());
     assert_eq!(got_dr0, watch_addr);
-    // DR7 read-back includes always-1 bits 8-10 (0x700).
-    // Write mask clears bits 11-15, so 0x000D_0001 becomes
-    // 0x000D_0001 & 0xFFFF_07FF | 0x700 = 0x000D_0701.
-    assert_eq!(got_dr7, (dr7 & 0xFFFF_07FF) | 0x700);
+    // DR7 sanitization matches Fuchsia's x86_validate_debug_state:
+    // stored = 0x700 | (input & 0xFFFF_00FF). Readback ORs 0x700 (no-op).
+    // 0x000D_0001 & 0xFFFF_00FF = 0x000D_0001, | 0x700 = 0x000D_0701.
+    assert_eq!(got_dr7, 0x700 | (dr7 & 0xFFFF_00FF));
 }
 
 /// C++: TEST(Threads, EmptyNameSucceeds)
