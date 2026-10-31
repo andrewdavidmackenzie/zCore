@@ -8,6 +8,18 @@ use {
     },
 };
 
+/// Convert a user buffer write error to the Zircon ABI error code.
+/// Permission faults (read-only mapping) and invalid pointers are
+/// INVALID_ARGS per the Fuchsia channel ABI, not ACCESS_DENIED.
+fn user_buffer_write_error(e: hal_impl::user::Error) -> ZxError {
+    match e {
+        hal_impl::user::Error::PermissionDenied | hal_impl::user::Error::InvalidPointer => {
+            ZxError::INVALID_ARGS
+        }
+        other => other.into(),
+    }
+}
+
 impl Syscall<'_> {
     #[allow(clippy::too_many_arguments)]
     /// Read/Receive a message from a channel.
@@ -80,7 +92,9 @@ impl Syscall<'_> {
                 for &v in &values {
                     let _ = proc.remove_handle(v);
                 }
-                return Err(e.into());
+                // User buffer write failure (e.g., read-only mapping)
+                // is INVALID_ARGS per Fuchsia ABI, not ACCESS_DENIED.
+                return Err(user_buffer_write_error(e));
             }
         } else {
             let values = proc.add_handles_for_transfer(msg.handles);
@@ -89,7 +103,7 @@ impl Syscall<'_> {
                 for &v in &values {
                     let _ = proc.remove_handle(v);
                 }
-                return Err(e.into());
+                return Err(user_buffer_write_error(e));
             }
         }
         Ok(())
@@ -347,7 +361,9 @@ impl Syscall<'_> {
                 }
             }
         }
-        user_handles.write_array(&dispositions)?;
+        user_handles
+            .write_array(&dispositions)
+            .map_err(user_buffer_write_error)?;
         // Check options after processing dispositions.
         if options != 0 && !use_iovec {
             return Err(ZxError::INVALID_ARGS);
