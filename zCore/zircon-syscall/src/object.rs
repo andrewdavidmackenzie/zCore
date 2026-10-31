@@ -577,8 +577,10 @@ impl Syscall<'_> {
                         },
                     )
                     .collect();
-                // Sort by handle value to match Fuchsia's handle table ordering.
-                entries.sort_by_key(|e| e.handle_value);
+                // Fuchsia returns handles in the order they were added.
+                // KOIDs are assigned in creation order, so sorting by
+                // KOID approximates insertion order.
+                entries.sort_by_key(|e| e.koid);
                 let entry_size = core::mem::size_of::<HandleExtendedInfo>();
                 let count = (buffer_size / entry_size).min(entries.len());
                 if count > 0 {
