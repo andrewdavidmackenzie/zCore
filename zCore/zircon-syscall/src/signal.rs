@@ -23,8 +23,8 @@ impl Syscall<'_> {
         if clock_id > 1 {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.enforce_basic_policy(PolicyCondition::NewTimer)?;
         let proc = self.thread.proc();
-        proc.check_policy(PolicyCondition::NewTimer)?;
         let slack = match options {
             0 => Slack::Center,
             1 => Slack::Early,
@@ -42,8 +42,8 @@ impl Syscall<'_> {
         if options != 0 {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.enforce_basic_policy(PolicyCondition::NewEvent)?;
         let proc = self.thread.proc();
-        proc.check_policy(PolicyCondition::NewEvent)?;
         let handle = Handle::new(Event::new(), Rights::DEFAULT_EVENT);
         out.write(proc.add_handle(handle))?;
         Ok(())
@@ -60,8 +60,8 @@ impl Syscall<'_> {
         if options != 0 {
             return Err(ZxError::NOT_SUPPORTED);
         }
+        self.enforce_basic_policy(PolicyCondition::NewEvent)?;
         let proc = self.thread.proc();
-        proc.check_policy(PolicyCondition::NewEvent)?;
         let (event0, event1) = EventPair::create();
         let handle0 = Handle::new(event0, Rights::DEFAULT_EVENTPAIR);
         let handle1 = Handle::new(event1, Rights::DEFAULT_EVENTPAIR);

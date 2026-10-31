@@ -124,16 +124,23 @@ impl Syscall<'_> {
     /// Enforce a job basic policy, delivering a policy exception if the
     /// action requires it.
     ///
-    /// This is the async wrapper around `Process::check_policy`.  When
-    /// the policy action is `AllowException` or `DenyException`, this
-    /// method delivers a `ZX_EXCP_POLICY_ERROR` exception on the current
-    /// thread (matching Fuchsia's `SignalPolicyException` + deferred
-    /// delivery in `ProcessPendingSignals`).
-    #[allow(dead_code)]
-    async fn enforce_policy(&self, condition: PolicyCondition) -> ZxResult {
+    /// Enforce a basic job policy, matching Fuchsia's
+    /// `ProcessDispatcher::EnforceBasicPolicy`.
+    ///
+    /// For `Allow`/`Deny`/`Kill`, this is equivalent to the old
+    /// `Process::check_policy`.  For `AllowException`/`DenyException`,
+    /// it signals a pending policy exception on the current thread
+    /// via `signal_policy_exception`.  The exception is delivered
+    /// **after** the syscall returns, during the dispatch epilogue's
+    /// `deliver_pending_policy_exception().await` — matching Fuchsia's
+    /// `ProcessPendingSignals` at the kernel-to-user transition.
+    ///
+    /// This must be called from the syscall layer (not from
+    /// `Process`) because it needs access to the current thread.
+    fn enforce_basic_policy(&self, condition: PolicyCondition) -> ZxResult {
         let (result, synth_code) = self.thread.proc().check_policy_with_exception(condition);
         if let Some(code) = synth_code {
-            self.thread.handle_exception_policy(code, 0).await;
+            self.thread.signal_policy_exception(code, condition as u32);
         }
         result
     }

@@ -403,7 +403,7 @@ impl Syscall<'_> {
                 .map_err(|_| ZxError::OUT_OF_RANGE)?;
             }
         } else {
-            proc.check_policy(PolicyCondition::AmbientMarkVMOExec)?;
+            self.enforce_basic_policy(PolicyCondition::AmbientMarkVMOExec)?;
         }
         let _ = proc.get_object_and_rights::<VmObject>(handle)?;
         // Replace: create new handle with EXECUTE, remove old handle.
@@ -673,8 +673,8 @@ impl Syscall<'_> {
             "vmo.create_physical: handle={:#x?}, paddr={:#x?}, size={:#x}, out={:#x?}",
             resource, paddr, size, out
         );
+        self.enforce_basic_policy(PolicyCondition::NewVMO)?;
         let proc = self.thread.proc();
-        proc.check_policy(PolicyCondition::NewVMO)?;
         let rsrc = proc.get_resource(resource)?;
         // Validate kind (MMIO) — ROOT bypasses this check.
         rsrc.validate(ResourceKind::MMIO)
@@ -731,8 +731,8 @@ impl Syscall<'_> {
         if align_log2 < PAGE_SIZE_LOG2 || align_log2 >= 8 * core::mem::size_of::<usize>() {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.enforce_basic_policy(PolicyCondition::NewVMO)?;
         let proc = self.thread.proc();
-        proc.check_policy(PolicyCondition::NewVMO)?;
         let _bti = proc.get_object_with_rights::<BusTransactionInitiator>(bti, Rights::MAP)?;
         let vmo = VmObject::new_contiguous(pages(size), align_log2)?;
         let handle_value = proc.add_handle(Handle::new(vmo, Rights::DEFAULT_VMO));
