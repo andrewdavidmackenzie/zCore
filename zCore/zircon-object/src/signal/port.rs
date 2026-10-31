@@ -327,7 +327,7 @@ impl Port {
                 trace!(
                     "port.wait: dequeued type={:#x} key={:#x} rem={} data={:?}",
                     qp.packet.type_ as u32,
-                    qp.packet.key as u64,
+                    qp.packet.key,
                     remaining,
                     PortPacketRepr::from(&qp.packet).data
                 );
