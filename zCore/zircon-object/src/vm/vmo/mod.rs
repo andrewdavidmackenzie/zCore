@@ -733,10 +733,14 @@ impl VmObject {
 
     /// Mark a page as dirty (for non-TRAP_DIRTY auto-dirty tracking).
     /// Called when a page is written in a pager-backed VMO without
-    /// TRAP_DIRTY enabled.
+    /// TRAP_DIRTY enabled.  Extends the dirty tracking vector if the
+    /// page index exceeds its current length (can happen after resize).
     pub fn auto_mark_dirty(&self, page_idx: usize) {
         let mut inner = self.inner.lock();
-        if !inner.trap_dirty && page_idx < inner.dirty_pages.len() {
+        if !inner.trap_dirty {
+            if page_idx >= inner.dirty_pages.len() {
+                inner.dirty_pages.resize(page_idx + 1, PAGE_CLEAN);
+            }
             inner.dirty_pages[page_idx] = PAGE_DIRTY;
             inner.modified = true;
         }
@@ -761,11 +765,13 @@ impl VmObject {
     /// Used by pager_preflight_write to set dirty state during page
     /// lookup (before data copy), matching Fuchsia's RequirePage which
     /// marks dirty but defers modified to after the copy succeeds.
+    /// Extends the dirty tracking vector if needed (after resize).
     pub fn mark_page_dirty_only(&self, page_idx: usize) {
         let mut inner = self.inner.lock();
-        if page_idx < inner.dirty_pages.len() {
-            inner.dirty_pages[page_idx] = PAGE_DIRTY;
+        if page_idx >= inner.dirty_pages.len() {
+            inner.dirty_pages.resize(page_idx + 1, PAGE_CLEAN);
         }
+        inner.dirty_pages[page_idx] = PAGE_DIRTY;
     }
 
     /// Check if this VMO has dirty-page trapping enabled.
