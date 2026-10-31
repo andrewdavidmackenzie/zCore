@@ -905,6 +905,20 @@ impl VMObjectTrait for VMObjectPaged {
         }
     }
 
+    fn shrink_parent_limit(&self, new_parent_size: usize) {
+        let (_guard, inner) = self.get_inner_mut();
+        // Only update parent_limit for unidirectional children.
+        // Bidirectional (SNAPSHOT) children go through a hidden node
+        // which manages page ownership independently.
+        if !inner.type_.is_unidirectional() {
+            return;
+        }
+        let new_limit = inner.parent_offset.saturating_add(new_parent_size);
+        if new_limit < inner.parent_limit {
+            inner.parent_limit = new_limit;
+        }
+    }
+
     fn set_content_boundary(&self, pages: usize) {
         let (_guard, inner) = self.get_inner_mut();
         inner.content_boundary_pages = pages;

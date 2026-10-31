@@ -253,6 +253,9 @@ pub trait VMObjectTrait: Sync + Send {
     /// a parent decommits pages that children referenced via Ref.
     fn unmap_mappings(&self, _start_page: usize, _page_count: usize) {}
 
+    /// Shrink parent_limit when the parent VMO resizes down.
+    fn shrink_parent_limit(&self, _new_parent_size: usize) {}
+
     /// If contiguous, transmute vmo to a mutable buffer
     fn as_mut_buf(&self) -> ZxResult<(MutexGuard<'_, ()>, &mut [u8])> {
         Err(ZxError::NOT_SUPPORTED)
@@ -569,6 +572,14 @@ impl VmObject {
     /// all VMAR mappings of this VMO.
     pub fn unmap_all_mappings(&self, start_page: usize, page_count: usize) {
         self.trait_.unmap_mappings(start_page, page_count);
+    }
+
+    /// Shrink this VMO's parent_limit when the parent resizes down.
+    /// Pages beyond the new parent_limit will return zeros (via the
+    /// out-of-range zero page path) instead of walking up to the
+    /// parent and getting OUT_OF_RANGE.
+    pub fn shrink_parent_limit(&self, new_parent_size: usize) {
+        self.trait_.shrink_parent_limit(new_parent_size);
     }
 
     /// Get the offset of this VMO within its parent (for slices).
@@ -1809,9 +1820,24 @@ impl VmObject {
         let old_pages = old_size / PAGE_SIZE;
         self.trait_.set_len(size)?;
         let new_pages = size / PAGE_SIZE;
-        // When shrinking a pager-backed VMO, wake any waiters for
-        // pages in the truncated range with OUT_OF_RANGE.
+        // When shrinking, invalidate children's page table entries for
+        // the truncated range. Children may have PTEs that reference the
+        // parent's now-decommitted physical frames via CommitResult::Ref.
         if size < old_size {
+            let inner = self.inner.lock();
+            for child_weak in inner.children.iter() {
+                if let Some(child) = child_weak.upgrade() {
+                    // Invalidate children's PTEs for the truncated range
+                    // so stale references to decommitted pages fault.
+                    child.unmap_all_mappings(0, old_pages);
+                    // Update the child's parent_limit so it sees zeros
+                    // for pages beyond the parent's new size instead of
+                    // walking up to the parent and getting OUT_OF_RANGE.
+                    child.shrink_parent_limit(size);
+                }
+            }
+            drop(inner);
+            // Wake any waiters for pages in the truncated range with OUT_OF_RANGE.
             self.fail_pager_requests_range(size, old_size - size, ZxError::OUT_OF_RANGE);
         }
         // Update dirty page tracking for pager-backed VMOs on resize.
