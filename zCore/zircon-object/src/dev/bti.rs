@@ -79,7 +79,7 @@ impl BusTransactionInitiator {
     }
 
     /// Release a PMT by KoID.
-    pub(super) fn release_pmt(&self, id: KoID) {
+    pub fn release_pmt(&self, id: KoID) {
         let mut inner = self.inner.lock();
         inner.pmts.retain(|pmt| pmt.id() != id);
     }
