@@ -1,40 +1,51 @@
 # zCore Updated
 
-## Scheduler architecture (DEFINITIVE — do not re-investigate)
+## Scheduler architecture
 
-zCore uses a **cooperative async executor** with **lazy preemption
-at kernel-user boundaries**. Each Zircon thread is a Rust Future
-polled by a per-CPU executor loop. **Tasks CANNOT be interrupted
-mid-poll().** The timer interrupt creates a new executor but the
-old one finishes its current poll before dying.
+zCore uses an **async executor** with **lazy preemption at
+kernel-user boundaries**. Each Zircon thread is a Rust Future
+polled by a per-CPU executor loop.
 
-**What works:**
-- User-mode lazy preemption: timer interrupt traps to kernel,
-  handler calls `preempt_yield().await`, task yields
-- Per-thread time quantum (10ms) checked at syscall return
+**How preemption works:**
+- Each thread has a time quantum (10ms default, weight-based per
+  priority). The syscall return path checks `quantum_exhausted()`
+  and calls `preempt_yield()` to re-queue the task.
+- Timer interrupts set a `preempt_pending` flag. The syscall
+  return path also checks this and yields.
+- User-mode code is preempted at every kernel entry point (syscall,
+  page fault, interrupt). Two user threads make concurrent progress
+  because each yields at syscall boundaries.
+- **Limitation:** kernel-side Future poll() cannot be interrupted
+  mid-execution. A thread blocked in a long kernel operation (e.g.,
+  walking a COW chain) won't yield until that poll completes.
+
+**What works today:**
+- Per-thread time quantum checked at syscall return
 - Priority scheduler (32 levels, strict FIFO round-robin)
-- Weight-based time slices, deadline parameter storage
-- Priority inheritance, cross-CPU IPI wakeup, multi-CPU distribution
+- Weight-based time slices via priority-to-weight conversion
+- Cross-CPU IPI wakeup (port signal → waker → IPI → executor)
+- Multi-CPU task distribution on x86_64
+- Deadline parameter storage (maps to priority 31)
 
-**What is missing (see issue #801):**
-- True task-level preemption during kernel poll()
-- Fair scheduler (CFS/WFQ) with virtual timeline
-- Deadline scheduler (EDF) with earliest-deadline-first
+**What is NOT implemented (see issue #783):**
+- Fair scheduler (CFS/WFQ) with virtual timeline (Phase 3)
+- Deadline scheduler (EDF) with earliest-deadline-first (Phase 4)
+- Priority inheritance (Phase 5)
+- SMP work stealing re-enablement (Phase 6, blocked on #680)
 
-**Impact:** 33 tests hang because they need two threads to make
-concurrent progress through kernel operations. One thread blocks
-on pager/futex/BTI, the other must handle requests simultaneously.
-The cooperative executor cannot interleave their kernel-side futures.
+**What is NOT implemented (see issue #799):**
+- Libos-mode preemptive executor (real coroutine context switch)
+- Hardware exception delivery (breakpoints, #GP, #DB)
+- These block 7 Threads tests and 2 Property tests
 
-**Do NOT repeatedly investigate this.** The answer is: cooperative
-executor with lazy preemption. True preemption requires issue #801.
-
-**UPDATE (after PR #800 investigation):** Cross-CPU wakeup via IPI
-works correctly. The port signal → waker → IPI → executor wake
-chain was verified. Most remaining test hangs (24 total) are caused
-by missing kernel code paths (dirty request retries, unsupplied page
-handling, suspend/resume), NOT by fundamental executor limitations.
-Each test should be investigated individually for its specific bug.
+**Impact on test failures:**
+- Most remaining test hangs are caused by missing kernel code paths
+  (dirty request handling, writeback generation tracking, policy
+  exceptions), NOT by the executor architecture.
+- The ~30 skipped tests (Pager/PagerWriteback/PortStress) hang
+  because of multi-threaded C++ test patterns (std::thread +
+  WaitForBlocked polling) that require specific kernel features,
+  not because threads can't make concurrent progress.
 
 ## Default build command
 To build and run zCore the default command to use is:
