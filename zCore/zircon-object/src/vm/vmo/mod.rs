@@ -1479,6 +1479,15 @@ impl VmObject {
             }
             req_idx += 1;
         }
+        // Remove resolved READ packets from the port queue so the
+        // pager doesn't see stale requests for already-supplied pages.
+        // This matches Fuchsia's behavior where supply_pages drains
+        // resolved requests from the port.
+        if let Some(port) = inner.pager_port.clone() {
+            let key = inner.pager_key;
+            drop(inner); // release lock before port operation
+            port.remove_page_read_packets(key, start_page, end_page);
+        }
     }
 
     /// Wake all pager waiters with an error (called on detach/destroy).

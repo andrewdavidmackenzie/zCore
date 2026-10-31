@@ -277,6 +277,10 @@ impl Pager {
         }
         // Done supplying — restore the pager-backed guard.
         vmo.set_supplying(false);
+        // Decommit source pages from the aux VMO — supply_pages
+        // transfers ownership. After this, reads from the aux VMO's
+        // mapped addresses return zeros (matching Fuchsia's behavior).
+        let _ = aux_vmo.decommit(aux_offset as usize, length as usize);
         // Wake threads waiting for pages in this range.
         vmo.complete_pager_requests(offset as usize, length as usize);
         Ok(())
