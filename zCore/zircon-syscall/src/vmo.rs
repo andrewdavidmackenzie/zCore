@@ -140,7 +140,7 @@ impl Syscall<'_> {
                 })
                 .map_err(|e| {
                     if e == ZxError::INVALID_ARGS {
-                        ZxError::ACCESS_DENIED
+                        ZxError::NOT_FOUND
                     } else {
                         e
                     }
@@ -308,8 +308,12 @@ impl Syscall<'_> {
             Ok(n)
         })
         .map_err(|e| {
+            // InvalidPointer (unmapped) → NOT_FOUND
+            // PermissionDenied (mapped, wrong perms) → ACCESS_DENIED
+            // Both arrive as their ZxError equivalents from the
+            // Error → ZxError conversion.
             if e == ZxError::INVALID_ARGS {
-                ZxError::ACCESS_DENIED
+                ZxError::NOT_FOUND
             } else {
                 e
             }

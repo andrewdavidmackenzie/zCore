@@ -89,7 +89,13 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
     match trap_reason_from(tf.trap_num, tf.error_code) {
         TrapReason::HardwareBreakpoint | TrapReason::SoftwareBreakpoint => breakpoint(),
         TrapReason::PageFault(vaddr, flags) => {
-            if let Some(recovery_pc) = crate::thread::user_copy_check_fault(vaddr) {
+            // On x86, the PRESENT bit in the error code distinguishes
+            // unmapped pages (bit 0 = 0) from permission violations
+            // (bit 0 = 1). Pass this to the user-copy fault handler.
+            let is_permission_fault = (tf.error_code & 1) != 0;
+            if let Some(recovery_pc) =
+                crate::thread::user_copy_check_fault_with_perm(vaddr, is_permission_fault)
+            {
                 // Inside a guarded user-copy. Try to resolve the fault
                 // first (e.g., demand-page the user data). Only redirect
                 // to recovery if the page fault handler fails.

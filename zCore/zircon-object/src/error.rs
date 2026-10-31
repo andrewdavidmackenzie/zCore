@@ -236,6 +236,7 @@ impl From<Error> for ZxError {
         match e {
             Error::InvalidUtf8 => ZxError::INVALID_ARGS,
             Error::InvalidPointer => ZxError::INVALID_ARGS,
+            Error::PermissionDenied => ZxError::ACCESS_DENIED,
             Error::BufferTooSmall => ZxError::BUFFER_TOO_SMALL,
             Error::InvalidLength => ZxError::INVALID_ARGS,
             Error::InvalidVectorAddress => ZxError::NOT_FOUND,
