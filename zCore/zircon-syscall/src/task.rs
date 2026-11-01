@@ -589,12 +589,18 @@ impl Syscall<'_> {
                 }
             }
             Err(ZxError::WRONG_TYPE) => {
-                // Not a thread — try VMAR (any profile type accepted,
-                // scheduling profiles are a no-op on VMARs).
-                // A handle with ZX_RIGHT_NONE (0) is rejected.
-                let (_vmar, rights) = proc.get_object_and_rights::<VmAddressRegion>(target)?;
-                if rights.is_empty() {
+                // Not a thread — try VMAR for memory priority profile.
+                let (vmar, rights) = proc.get_object_and_rights::<VmAddressRegion>(target)?;
+                if !rights.contains(Rights::OP_CHILDREN) {
                     return Err(ZxError::ACCESS_DENIED);
+                }
+                // Apply memory priority: HIGH disables reclamation,
+                // DEFAULT re-enables it. Scheduling profiles are a
+                // no-op on VMARs.
+                if flags.contains(ProfileInfoFlags::MEMORY_PRIORITY) {
+                    let priority = info.priority();
+                    // ZX_PRIORITY_HIGH = 24, ZX_PRIORITY_DEFAULT = 16
+                    vmar.set_memory_priority(priority > 16);
                 }
             }
             Err(e) => return Err(e), // Propagate ACCESS_DENIED etc.

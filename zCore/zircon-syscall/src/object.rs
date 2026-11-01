@@ -776,6 +776,10 @@ impl Syscall<'_> {
                 let vmo_bytes = vmo_page_bytes() as u64;
                 let total_bytes = vmo_bytes.max(128 * 1024 * 1024) + 64 * 1024 * 1024;
                 let free_bytes = total_bytes.saturating_sub(vmo_bytes);
+                // Count pager-backed pages in high-priority VMARs
+                // (reclaim disabled). Walk the calling process's VMAR.
+                let reclaim_disabled =
+                    proc.vmar().reclaim_disabled_page_count() as u64 * PAGE_SIZE as u64;
                 info_ptr.write(KmemStatsExtendedInfo {
                     total_bytes,
                     free_bytes,
@@ -791,6 +795,7 @@ impl Syscall<'_> {
                     mmu_overhead_bytes: 2 * 1024 * 1024,
                     ipc_bytes: 256 * 1024,
                     other_bytes: 1024 * 1024,
+                    vmo_reclaim_disabled_bytes: reclaim_disabled,
                     ..Default::default()
                 })?;
                 actual.write_if_not_null(1)?;
