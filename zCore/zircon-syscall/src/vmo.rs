@@ -434,9 +434,9 @@ impl Syscall<'_> {
         mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
         let mut options = VmoCloneFlags::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
-        info!(
-            "vmo_create_child: handle={:#x}, options={:?}, offset={:#x}, size={:#x}",
-            handle_value, options, offset, size
+        warn!(
+            "vmo_create_child: handle={:#x}, options={:?}, offset={:#x}, size={:#x}, proc={:?}",
+            handle_value, options, offset, size, self.thread.proc().name()
         );
         // check options given
         let no_write = options.contains(VmoCloneFlags::NO_WRITE);

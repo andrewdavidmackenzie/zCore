@@ -642,6 +642,7 @@ impl Syscall<'_> {
                 }
                 // Phase 2: VMOs accessible via VMAR mappings.
                 let mapped_vmos = target.vmar().collect_mapped_vmos();
+                let num_mapped = mapped_vmos.len();
                 for (vmo, _num_mappings) in mapped_vmos {
                     let koid = vmo.id();
                     if let Some(existing) = vmo_infos.iter_mut().find(|i| i.koid() == koid) {
@@ -655,6 +656,11 @@ impl Syscall<'_> {
                         vmo_infos.push(info);
                     }
                 }
+                let handle_vmo_count = inner_handles.iter().filter(|h| h.0 == 3).count();
+                warn!(
+                    "ProcessVmos: {} handle VMOs + {} mapped VMOs = {} total for {:?}",
+                    handle_vmo_count, num_mapped, vmo_infos.len(), target.name()
+                );
 
                 let full_size = core::mem::size_of::<VmoInfo>();
                 // Versioned VmoInfo entry sizes:
