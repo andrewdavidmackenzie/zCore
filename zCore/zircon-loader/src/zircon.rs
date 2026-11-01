@@ -1090,8 +1090,16 @@ fn patch_vdso_elf_headers(vmo: &Arc<VmObject>) {
         vmo.write(ph1, &ph1_buf).unwrap();
     }
 
-    // Replace GNU_STACK [5] with RW LOAD for data pages.
+    // elfldltl requires LOAD segments in ascending vaddr order.
+    // Original: [1]=R(0x0) [2]=RX(0xc000) [5]=GNU_STACK
+    // Target:   [1]=R(0x0) [2]=RW(0x7000) [5]=RX(0xc000)
+    // Save the RX entry [2], write RW at [2], write RX at [5].
+    let ph2 = e_phoff + 2 * e_phentsize;
     let ph5 = e_phoff + 5 * e_phentsize;
+    let mut rx_buf = [0u8; 56];
+    vmo.read(ph2, &mut rx_buf).unwrap();
+
+    // Write RW LOAD at [2] (vaddr 0x7000).
     let mut rw_load = [0u8; 56];
     rw_load[0..4].copy_from_slice(&1u32.to_le_bytes()); // PT_LOAD
     rw_load[4..8].copy_from_slice(&0x6u32.to_le_bytes()); // PF_R | PF_W
@@ -1101,7 +1109,10 @@ fn patch_vdso_elf_headers(vmo: &Arc<VmObject>) {
     rw_load[32..40].copy_from_slice(&0x2000u64.to_le_bytes()); // p_filesz
     rw_load[40..48].copy_from_slice(&0x2000u64.to_le_bytes()); // p_memsz
     rw_load[48..56].copy_from_slice(&0x1000u64.to_le_bytes()); // p_align
-    vmo.write(ph5, &rw_load).unwrap();
+    vmo.write(ph2, &rw_load).unwrap();
+
+    // Move RX LOAD to [5] (was at [2]).
+    vmo.write(ph5, &rx_buf).unwrap();
 
     info!("vDSO: patched ELF headers — added RW LOAD for data pages 0x7000-0x8FFF");
 }
