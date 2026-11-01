@@ -882,13 +882,13 @@ impl VmAddressRegion {
                 VmarOpType::Commit => {
                     // COMMIT requires the mapping to have WRITE permission,
                     // matching Fuchsia's vmar_op_range_commit behaviour.
-                    if !map.permissions().contains(MMUFlags::WRITE) {
+                    if !map.is_valid_mapping_flags(MMUFlags::WRITE) {
                         return Err(ZxError::ACCESS_DENIED);
                     }
                     map.vmo.commit(vmo_offset, op_len)?;
                 }
                 VmarOpType::Decommit => {
-                    if !map.permissions().contains(MMUFlags::WRITE) {
+                    if !map.is_valid_mapping_flags(MMUFlags::WRITE) {
                         return Err(ZxError::ACCESS_DENIED);
                     }
                     map.vmo.decommit(vmo_offset, op_len)?;
@@ -900,7 +900,7 @@ impl VmAddressRegion {
                     map.vmo.commit(vmo_offset, op_len)?;
                 }
                 VmarOpType::Zero => {
-                    if !map.permissions().contains(MMUFlags::WRITE) {
+                    if !map.is_valid_mapping_flags(MMUFlags::WRITE) {
                         return Err(ZxError::ACCESS_DENIED);
                     }
                     map.vmo.zero(vmo_offset, op_len)?;

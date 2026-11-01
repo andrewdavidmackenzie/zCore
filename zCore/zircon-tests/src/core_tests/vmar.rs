@@ -6,7 +6,8 @@
 
 use crate::helpers::TestContext;
 use zircon_object::task::{Job, Process};
-use zircon_object::vm::{MMUFlags, VmObject, VmarFlags, PAGE_SIZE};
+use zircon_object::vm::{MMUFlags, VmAddressRegion, VmObject, VmarFlags, VmarOpType, PAGE_SIZE};
+use zircon_object::ZxError;
 
 // ============================================================
 // Ported from Fuchsia's zircon/system/utest/core/vmar/vmar.cc
@@ -1306,103 +1307,178 @@ fn protect_test() {
 }
 
 /// C++: TEST(Vmar, RangeOpCommit)
-/// Map VMO, commit the VMO pages, verify through mapping.
+/// Faithful port of Fuchsia's vmar.cc RangeOpCommit test.
+/// Creates sub-VMARs with gaps, maps VMO + SNAPSHOT clone,
+/// commits pages via op_range, checks populated_bytes, and
+/// verifies ACCESS_DENIED, OUT_OF_RANGE, and BAD_STATE errors.
 #[test]
 fn range_op_commit() {
     let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "range-commit").unwrap();
-    let vmar = proc.vmar();
+    // Create a temporary VMAR to work with.
+    let root_vmar = VmAddressRegion::new_root();
+    let vmar_size = 20 * PAGE_SIZE;
+    let sub_vmar_size = 8 * PAGE_SIZE;
 
-    let vmo = VmObject::new_paged(2);
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr = vmar
-        .map(None, vmo.clone(), 0, 2 * PAGE_SIZE, flags)
+    let vmar = root_vmar
+        .allocate_at(
+            0,
+            vmar_size,
+            VmarFlags::CAN_MAP_SPECIFIC | VmarFlags::CAN_MAP_READ | VmarFlags::CAN_MAP_WRITE,
+            PAGE_SIZE,
+        )
         .unwrap();
+    let base_addr = vmar.addr();
 
-    // Commit via VMO API.
-    vmo.commit(0, 2 * PAGE_SIZE).unwrap();
-    assert_eq!(vmo.get_info().committed_bytes as usize, 2 * PAGE_SIZE);
+    // Create two sub-VMARs to hold the mappings.
+    // Layout: [gap(1)] [sub1(8)] [gap(1)] [sub2(8)] [gap(2)]
+    let sub_vmar1 = vmar
+        .allocate_at(
+            PAGE_SIZE,
+            sub_vmar_size,
+            VmarFlags::CAN_MAP_SPECIFIC | VmarFlags::CAN_MAP_READ | VmarFlags::CAN_MAP_WRITE,
+            PAGE_SIZE,
+        )
+        .unwrap();
+    let base_addr1 = sub_vmar1.addr();
+    assert_eq!(base_addr1, base_addr + PAGE_SIZE);
 
-    // Read through mapping — should be zeros.
-    let ptr = addr as *const u64;
-    assert_eq!(unsafe { core::ptr::read_volatile(ptr) }, 0);
+    let sub_vmar2 = vmar
+        .allocate_at(
+            sub_vmar_size + 2 * PAGE_SIZE,
+            sub_vmar_size,
+            VmarFlags::CAN_MAP_SPECIFIC | VmarFlags::CAN_MAP_READ | VmarFlags::CAN_MAP_WRITE,
+            PAGE_SIZE,
+        )
+        .unwrap();
+    let base_addr2 = sub_vmar2.addr();
+    assert_eq!(base_addr2, base_addr1 + sub_vmar_size + PAGE_SIZE);
 
-    vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
-}
-
-/// C++: TEST(Vmar, RangeOpCommit) — populated_bytes checks
-/// Create VMO + SNAPSHOT clone, commit pages, verify populated_bytes.
-#[test]
-fn range_op_commit_populated_bytes() {
-    let _ctx = TestContext::new();
-    let job = Job::root();
-    let proc = Process::create(&job, "commit-pop").unwrap();
-    let vmar = proc.vmar();
-
-    let vmo_pages = 5;
-    let vmo_size = vmo_pages * PAGE_SIZE;
-    let vmo = VmObject::new_paged(vmo_pages);
-
-    // Create SNAPSHOT clone
+    // Create a VMO and clone it.
+    let vmo_size = 5 * PAGE_SIZE;
+    let vmo = VmObject::new_paged(5);
     let clone = vmo.create_child(false, 0, vmo_size).unwrap();
 
-    // Map both into VMAR
-    let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr1 = vmar.map(None, vmo.clone(), 0, vmo_size, flags).unwrap();
-    let addr2 = vmar.map(None, clone.clone(), 0, vmo_size, flags).unwrap();
+    // Map the VMO and its clone into sub-VMARs.
+    let rw = MMUFlags::READ | MMUFlags::WRITE;
+    let addr1 = sub_vmar1
+        .map(Some(0), vmo.clone(), 0, vmo_size, rw)
+        .unwrap();
+    assert_eq!(base_addr1, addr1);
+    let addr2 = sub_vmar2
+        .map(Some(0), clone.clone(), 0, vmo_size, rw)
+        .unwrap();
+    assert_eq!(base_addr2, addr2);
 
-    // Mapping should not eagerly commit pages in COW children.
-    assert_eq!(vmo.get_info().populated_bytes, 0);
-    assert_eq!(clone.get_info().populated_bytes, 0);
+    // Commit pages 1 and 2 in the parent.
+    sub_vmar1
+        .op_range(VmarOpType::Commit, addr1 + PAGE_SIZE, 2 * PAGE_SIZE)
+        .unwrap();
+    // Commit pages 2 and 3 in the clone.
+    sub_vmar2
+        .op_range(VmarOpType::Commit, addr2 + 2 * PAGE_SIZE, 2 * PAGE_SIZE)
+        .unwrap();
 
-    // Commit pages 1-2 in parent via VMO API
-    vmo.commit(PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
-
-    // Commit pages 2-3 in clone via VMO API
-    clone.commit(2 * PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
-
-    // Check: parent should have at most 2 pages
-    let parent_info = vmo.get_info();
+    // The VMOs should have at most two pages committed. They might
+    // have less since it's possible for reclamation to have happened.
+    let info = vmo.get_info();
     assert!(
-        parent_info.populated_bytes <= 2 * PAGE_SIZE as u64,
+        info.populated_bytes <= 2 * PAGE_SIZE as u64,
         "parent populated_bytes = {} (expected <= {})",
-        parent_info.populated_bytes,
+        info.populated_bytes,
         2 * PAGE_SIZE
     );
-
-    // Check: clone should have at most 2 pages
-    let clone_info = clone.get_info();
+    let info = clone.get_info();
     assert!(
-        clone_info.populated_bytes <= 2 * PAGE_SIZE as u64,
+        info.populated_bytes <= 2 * PAGE_SIZE as u64,
         "clone populated_bytes = {} (expected <= {})",
-        clone_info.populated_bytes,
+        info.populated_bytes,
         2 * PAGE_SIZE
     );
 
-    // Full commit on clone: all 5 pages
-    clone.commit(0, vmo_size).unwrap();
+    // Commit all pages in the clone.
+    sub_vmar2
+        .op_range(VmarOpType::Commit, addr2, vmo_size)
+        .unwrap();
 
-    // Parent still <= 2 pages
-    let parent_info2 = vmo.get_info();
+    // The clone now might have all its pages committed, but the parent
+    // should still be capped at 2.
+    let info = vmo.get_info();
     assert!(
-        parent_info2.populated_bytes <= 2 * PAGE_SIZE as u64,
+        info.populated_bytes <= 2 * PAGE_SIZE as u64,
         "parent populated_bytes after clone full commit = {} (expected <= {})",
-        parent_info2.populated_bytes,
+        info.populated_bytes,
         2 * PAGE_SIZE
     );
-
-    // Clone may have up to all 5 pages now
-    let clone_info2 = clone.get_info();
+    let info = clone.get_info();
     assert!(
-        clone_info2.populated_bytes <= vmo_size as u64,
+        info.populated_bytes <= vmo_size as u64,
         "clone populated_bytes after full commit = {} (expected <= {})",
-        clone_info2.populated_bytes,
+        info.populated_bytes,
         vmo_size
     );
 
-    vmar.unmap(addr1, vmo_size).unwrap();
-    vmar.unmap(addr2, vmo_size).unwrap();
+    // Map a single page as read-only and try to commit it.
+    // C++ test duplicates the VMO handle with only READ + MAP rights,
+    // which restricts the mapping's max permissions. Here we use
+    // map_ext with permissions=READ to achieve the same effect.
+    let ro_addr = vmar
+        .map_ext(
+            Some(vmar_size - PAGE_SIZE),
+            vmo.clone(),
+            0,
+            PAGE_SIZE,
+            MMUFlags::READ,
+            MMUFlags::READ,
+            false,
+            true,
+            false,
+        )
+        .unwrap();
+    assert_eq!(base_addr + vmar_size - PAGE_SIZE, ro_addr);
+    assert_eq!(
+        vmar.op_range(VmarOpType::Commit, ro_addr, PAGE_SIZE),
+        Err(ZxError::ACCESS_DENIED)
+    );
+
+    // The commit counts should not have changed (modulo reclamation).
+    let info = vmo.get_info();
+    assert!(
+        info.populated_bytes <= 2 * PAGE_SIZE as u64,
+        "parent populated_bytes after denied commit = {}",
+        info.populated_bytes
+    );
+    let info = clone.get_info();
+    assert!(
+        info.populated_bytes <= vmo_size as u64,
+        "clone populated_bytes after denied commit = {}",
+        info.populated_bytes
+    );
+
+    // Some trivial failure cases.
+    // Out of range.
+    assert_eq!(
+        vmar.op_range(VmarOpType::Commit, base_addr, 2 * vmar_size),
+        Err(ZxError::OUT_OF_RANGE)
+    );
+    assert_eq!(
+        vmar.op_range(VmarOpType::Commit, 0, vmar_size),
+        Err(ZxError::OUT_OF_RANGE)
+    );
+    // Various combinations of gaps.
+    assert_eq!(
+        vmar.op_range(VmarOpType::Commit, base_addr, vmar_size),
+        Err(ZxError::BAD_STATE)
+    );
+    assert_eq!(
+        vmar.op_range(
+            VmarOpType::Commit,
+            base_addr,
+            base_addr1 + sub_vmar_size - base_addr
+        ),
+        Err(ZxError::BAD_STATE)
+    );
+
+    vmar.destroy().unwrap();
 }
 
 /// C++: TEST(Vmar, RangeOpCommitVmoPages)
