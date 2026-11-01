@@ -170,15 +170,15 @@ impl PageStateTag {
 /// Tracks both raw bytes (full PAGE_SIZE per page) and scaled bytes
 /// (PAGE_SIZE / share_count), matching Fuchsia's `AttributionCounts`.
 #[derive(Default)]
-struct Attribution {
+pub struct Attribution {
     /// Total raw bytes (PAGE_SIZE per owned page, regardless of sharing).
-    total_bytes: u64,
+    pub total_bytes: u64,
     /// Private bytes (PAGE_SIZE only for pages with share_count==0).
-    private_bytes: u64,
+    pub private_bytes: u64,
     /// Sum of `PAGE_SIZE / sharing_count` for each page (integer part).
-    scaled_bytes: u64,
+    pub scaled_bytes: u64,
     /// 63-bit fixed-point fractional remainder from the division.
-    fractional_scaled_bytes: u64,
+    pub fractional_scaled_bytes: u64,
 }
 
 impl Attribution {
@@ -810,6 +810,11 @@ impl VMObjectTrait for VMObjectPaged {
     fn has_cow_parent(&self) -> bool {
         let (_guard, inner) = self.get_inner();
         inner.parent.is_some()
+    }
+
+    fn get_attribution(&self, start_idx: usize, end_idx: usize) -> Attribution {
+        let (_guard, inner) = self.get_inner();
+        inner.compute_attribution(start_idx, end_idx)
     }
 
     fn page_is_shared(&self, page_idx: usize) -> bool {
@@ -1832,6 +1837,14 @@ impl VMObjectPagedInner {
                     // Skip pages with local frames in the hidden node —
                     // those shadow any ancestor version.
                     if h.frames.contains_key(&idx) {
+                        continue;
+                    }
+                    // Skip pages blocked by zero markers. Zero markers
+                    // from `self` were moved into the hidden node `h`
+                    // via core::mem::take. A zero marker means neither
+                    // `self` nor the new child can see the ancestor page,
+                    // so no additional viewer is added.
+                    if h.zero_markers.contains(&idx) {
                         continue;
                     }
                     let mut cur = h.parent.clone();

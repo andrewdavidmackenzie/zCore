@@ -475,34 +475,98 @@ fn zero_hidden_no_content() {
 /// C++: TEST(VmoZeroTestCase, AllocateAfterMergeMultipleChildren)
 /// vmo/vmo-zero.cc
 ///
-/// Tests multi-child COW with page forking and parent/child data
-/// integrity after child drop. populated_bytes attribution is
-/// known to be imprecise (fractional scaling not implemented).
+/// Tests multi-child COW zero + merge with fractional attribution.
+/// Creates parent (3 pages), child1 (SNAPSHOT), zeroes parent page 0,
+/// creates child2 (SNAPSHOT), zeroes child1 page 1, closes child1,
+/// writes to parent and child2, verifies populated_bytes at each step.
 #[test]
 fn allocate_after_merge_multiple_children() {
     let _ctx = TestContext::new();
+    let p = PAGE_SIZE as u64;
+
+    // Create parent VMO with 3 tagged pages.
     let parent = VmObject::new_paged(3);
     parent.write(0, &1u32.to_ne_bytes()).unwrap();
     parent.write(PAGE_SIZE, &2u32.to_ne_bytes()).unwrap();
     parent.write(2 * PAGE_SIZE, &3u32.to_ne_bytes()).unwrap();
 
-    let c1 = parent.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
-    let c2 = parent.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
+    // Create child1 (SNAPSHOT). All 3 pages shared by 2 VMOs.
+    // Expected: each gets 3*PAGE/2.
+    let child1 = parent.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
+    assert_eq!(3 * p / 2, parent.get_info().vmo_populated_bytes());
+    assert_eq!(3 * p / 2, child1.get_info().vmo_populated_bytes());
 
-    c1.write(0, &10u32.to_ne_bytes()).unwrap();
-    c2.write(PAGE_SIZE, &20u32.to_ne_bytes()).unwrap();
+    // Zero page 0 in parent. Page migrates to child1.
+    // Expected: parent=PAGE (pages 1,2 shared /2), child1=2*PAGE (page0 private + pages 1,2 /2).
+    parent.zero(0, PAGE_SIZE).unwrap();
+    assert_eq!(p, parent.get_info().vmo_populated_bytes());
+    assert_eq!(2 * p, child1.get_info().vmo_populated_bytes());
 
-    drop(c1);
+    // Create child2 (SNAPSHOT). Pages 1,2 now shared by 3 VMOs.
+    // Expected: parent=2*PAGE/3, child1=5*PAGE/3, child2=2*PAGE/3.
+    let child2 = parent.create_child(false, 0, 3 * PAGE_SIZE).unwrap();
+    assert_eq!(2 * p / 3, parent.get_info().vmo_populated_bytes());
+    assert_eq!(5 * p / 3, child1.get_info().vmo_populated_bytes());
+    assert_eq!(2 * p / 3, child2.get_info().vmo_populated_bytes());
 
+    // Zero page 1 in child1. Now child1 doesn't share page 1.
+    // Expected: parent=5*PAGE/6, child1=4*PAGE/3, child2=5*PAGE/6.
+    child1.zero(PAGE_SIZE, PAGE_SIZE).unwrap();
+    assert_eq!(5 * p / 6, parent.get_info().vmo_populated_bytes());
+    assert_eq!(4 * p / 3, child1.get_info().vmo_populated_bytes());
+    assert_eq!(5 * p / 6, child2.get_info().vmo_populated_bytes());
+
+    // Validate page data.
     let mut buf = [0u8; 4];
     parent.read(0, &mut buf).unwrap();
-    assert_eq!(u32::from_ne_bytes(buf), 1, "parent page 0 unchanged");
+    assert_eq!(u32::from_ne_bytes(buf), 0, "parent page 0 zeroed");
+    parent.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 2, "parent page 1");
+    parent.read(2 * PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 3, "parent page 2");
+    child1.read(0, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 1, "child1 page 0 migrated");
+    child1.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 0, "child1 page 1 zeroed");
+    child1.read(2 * PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 3, "child1 page 2");
+    child2.read(0, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 0, "child2 page 0 zero");
+    child2.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 2, "child2 page 1");
+    child2.read(2 * PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 3, "child2 page 2");
 
-    c2.read(PAGE_SIZE, &mut buf).unwrap();
-    assert_eq!(u32::from_ne_bytes(buf), 20, "c2 page 1 has written data");
+    // Close child1. Parent and child2 should be unaffected.
+    // Expected: parent=PAGE, child2=PAGE.
+    drop(child1);
+    assert_eq!(p, parent.get_info().vmo_populated_bytes());
+    assert_eq!(p, child2.get_info().vmo_populated_bytes());
 
-    let info = parent.get_info();
-    assert!(info.populated_bytes <= 3 * PAGE_SIZE as u64);
+    // Write to parent page 0 (was zeroed). Should allocate fresh page.
+    // Expected: parent=2*PAGE, child2=PAGE.
+    parent.write(64, &1u32.to_ne_bytes()).unwrap();
+    let mut buf0 = [0u8; 4];
+    parent.read(0, &mut buf0).unwrap();
+    assert_eq!(
+        u32::from_ne_bytes(buf0),
+        0,
+        "parent page 0 byte 0 still zero"
+    );
+    assert_eq!(2 * p, parent.get_info().vmo_populated_bytes());
+    assert_eq!(p, child2.get_info().vmo_populated_bytes());
+
+    // Fork child2 page 1 by writing. Both get unique copies.
+    // Expected: parent=5*PAGE/2, child2=3*PAGE/2.
+    child2.write(PAGE_SIZE + 64, &5u32.to_ne_bytes()).unwrap();
+    child2.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 2, "child2 page 1 byte 0");
+    parent.read(PAGE_SIZE + 64, &mut buf0).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf0), 0, "parent page 1 byte 64");
+    parent.read(PAGE_SIZE, &mut buf).unwrap();
+    assert_eq!(u32::from_ne_bytes(buf), 2, "parent page 1 byte 0");
+    assert_eq!(5 * p / 2, parent.get_info().vmo_populated_bytes());
+    assert_eq!(3 * p / 2, child2.get_info().vmo_populated_bytes());
 }
 
 /// C++: TEST(VmoZeroTestCase, WriteCowParent)
