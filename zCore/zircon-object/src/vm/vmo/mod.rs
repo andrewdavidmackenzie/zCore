@@ -20,6 +20,8 @@ mod paged;
 mod physical;
 mod slice;
 
+pub use paged::Attribution;
+
 kcounter!(VMO_PAGE_ALLOC, "vmo.page_alloc");
 kcounter!(VMO_PAGE_DEALLOC, "vmo.page_dealloc");
 // Public counters for kernel memory statistics (KmemStatsExtended).
@@ -141,6 +143,20 @@ pub trait VMObjectTrait: Sync + Send {
 
     /// Count committed pages of the VMO.
     fn committed_pages_in_range(&self, start_idx: usize, end_idx: usize) -> usize;
+
+    /// Get per-page attribution for a range of the VMO.
+    /// Returns total, private, and scaled bytes with COW share_count.
+    fn get_attribution(&self, start_idx: usize, end_idx: usize) -> Attribution {
+        // Default: treat all committed pages as private.
+        let committed = self.committed_pages_in_range(start_idx, end_idx);
+        let bytes = (committed * PAGE_SIZE) as u64;
+        Attribution {
+            total_bytes: bytes,
+            private_bytes: bytes,
+            scaled_bytes: bytes,
+            fractional_scaled_bytes: 0,
+        }
+    }
 
     /// Pin the given range of the VMO.
     fn pin(&self, _offset: usize, _len: usize) -> ZxResult {

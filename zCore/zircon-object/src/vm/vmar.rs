@@ -2033,19 +2033,31 @@ impl VmMapping {
     }
 
     fn fill_in_task_status(&self, task_stats: &mut TaskStatsInfo) {
-        let (start_idx, end_idx) = {
+        let (start_idx, end_idx, map_size) = {
             let inner = self.inner.lock();
             let start_idx = inner.vmo_offset / PAGE_SIZE;
-            (start_idx, start_idx + inner.size / PAGE_SIZE)
+            (start_idx, start_idx + inner.size / PAGE_SIZE, inner.size)
         };
-        task_stats.mapped_bytes += self.vmo.len() as u64;
-        let committed_pages = self.vmo.committed_pages_in_range(start_idx, end_idx);
+        task_stats.mapped_bytes += map_size as u64;
+        // Use per-VMO attribution which respects COW share_count.
+        // This gives us total_bytes (raw committed), private_bytes
+        // (COW-private), and scaled_bytes (fractional attribution).
+        // Matches Fuchsia's VmCounter::OnVmMapping in diagnostics.cc.
+        let counts = self.vmo.get_attribution(start_idx, end_idx);
         let share_count = self.vmo.share_count();
-        if share_count == 1 {
-            task_stats.private_bytes += (committed_pages * PAGE_SIZE) as u64;
+        if share_count <= 1 {
+            // VMO mapped in one aspace: COW-private pages are process-private,
+            // COW-shared pages are process-shared.
+            task_stats.private_bytes += counts.private_bytes;
+            task_stats.shared_bytes += counts.total_bytes - counts.private_bytes;
+            // Scaled: subtract private (already counted as private_bytes),
+            // then divide by aspace share_count.
+            let shared_scaled = counts.scaled_bytes.saturating_sub(counts.private_bytes);
+            task_stats.scaled_shared_bytes += shared_scaled;
         } else {
-            task_stats.shared_bytes += (committed_pages * PAGE_SIZE) as u64;
-            task_stats.scaled_shared_bytes += (committed_pages * PAGE_SIZE / share_count) as u64;
+            // VMO mapped in multiple aspaces: all pages are process-shared.
+            task_stats.shared_bytes += counts.total_bytes;
+            task_stats.scaled_shared_bytes += counts.scaled_bytes / share_count as u64;
         }
     }
 
