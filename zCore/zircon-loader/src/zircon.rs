@@ -247,10 +247,20 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
     let (user_channel, kernel_channel) = Channel::create();
     let handle = Handle::new(user_channel, Rights::DEFAULT_CHANNEL);
 
+    // Create a child clone of the vDSO VMO with patched ELF headers.
+    // The child has an RW LOAD segment for the data pages so that
+    // elfldltl creates SNAPSHOT children when loading into child
+    // processes. The parent's own mapping uses the original VMO.
+    let vdso_child = vdso_vmo
+        .create_child_unidirectional(0, vdso_vmo.len(), false)
+        .unwrap();
+    vdso_child.set_name("vdso/full");
+    patch_vdso_elf_headers(&vdso_child);
+
     // vDSO child clones for test vDSOs
-    let vdso_test1 = vdso_vmo.create_child(false, 0, vdso_vmo.len()).unwrap();
+    let vdso_test1 = vdso_child.create_child(false, 0, vdso_child.len()).unwrap();
     vdso_test1.set_name("vdso/test1");
-    let vdso_test2 = vdso_vmo.create_child(false, 0, vdso_vmo.len()).unwrap();
+    let vdso_test2 = vdso_child.create_child(false, 0, vdso_child.len()).unwrap();
     vdso_test2.set_name("vdso/test2");
 
     let crash_log_vmo = VmObject::new_paged(1);
@@ -270,7 +280,7 @@ pub fn run_userstart(zbi: impl AsRef<[u8]>, cmdline: &str) -> Arc<Process> {
         Handle::new(job, Rights::DEFAULT_JOB),              // PA_JOB_DEFAULT
         Handle::new(resource, Rights::DEFAULT_RESOURCE),    // PA_RESOURCE
         Handle::new(zbi_vmo, Rights::DEFAULT_VMO),          // PA_VMO_BOOTDATA,0
-        Handle::new(vdso_vmo, Rights::DEFAULT_VMO | Rights::EXECUTE), // PA_VMO_VDSO,0
+        Handle::new(vdso_child, Rights::DEFAULT_VMO | Rights::EXECUTE), // PA_VMO_VDSO,0
         Handle::new(vdso_test1, Rights::DEFAULT_VMO | Rights::EXECUTE), // PA_VMO_VDSO,1
         Handle::new(vdso_test2, Rights::DEFAULT_VMO | Rights::EXECUTE), // PA_VMO_VDSO,2
         Handle::new(crash_log_vmo, Rights::DEFAULT_VMO),    // PA_VMO_BOOTDATA,1
@@ -1044,4 +1054,52 @@ fn create_vdso_vmo() -> Arc<VmObject> {
     }
 
     vdso_vmo
+}
+
+/// Patch the ELF program headers in a vDSO VMO clone to expose
+/// data pages (0x7000-0x8FFF) as an RW LOAD segment.
+fn patch_vdso_elf_headers(vmo: &Arc<VmObject>) {
+    let mut ehdr = [0u8; 64];
+    if vmo.read(0, &mut ehdr).is_err() || &ehdr[0..4] != b"\x7fELF" {
+        return;
+    }
+    let e_phoff = u64::from_le_bytes(ehdr[32..40].try_into().unwrap()) as usize;
+    let e_phentsize = u16::from_le_bytes(ehdr[54..56].try_into().unwrap()) as usize;
+    let e_phnum = u16::from_le_bytes(ehdr[56..58].try_into().unwrap()) as usize;
+    if e_phnum < 6 || e_phentsize != 56 {
+        return;
+    }
+
+    // Shrink R LOAD [1] to end before data pages (0x7000).
+    let ph1 = e_phoff + e_phentsize;
+    let mut ph1_buf = [0u8; 56];
+    if vmo.read(ph1, &mut ph1_buf).is_ok()
+        && u32::from_le_bytes(ph1_buf[0..4].try_into().unwrap()) == 1
+    {
+        ph1_buf[32..40].copy_from_slice(&0x7000u64.to_le_bytes());
+        ph1_buf[40..48].copy_from_slice(&0x7000u64.to_le_bytes());
+        vmo.write(ph1, &ph1_buf).unwrap();
+    }
+
+    // elfldltl requires LOAD segments in ascending vaddr order.
+    // Save RX entry [2], write RW at [2], move RX to [5].
+    let ph2 = e_phoff + 2 * e_phentsize;
+    let ph5 = e_phoff + 5 * e_phentsize;
+    let mut rx_buf = [0u8; 56];
+    vmo.read(ph2, &mut rx_buf).unwrap();
+
+    // Write RW LOAD at [2] (vaddr 0x7000).
+    let mut rw_load = [0u8; 56];
+    rw_load[0..4].copy_from_slice(&1u32.to_le_bytes()); // PT_LOAD
+    rw_load[4..8].copy_from_slice(&0x6u32.to_le_bytes()); // PF_R | PF_W
+    rw_load[8..16].copy_from_slice(&0x7000u64.to_le_bytes()); // p_offset
+    rw_load[16..24].copy_from_slice(&0x7000u64.to_le_bytes()); // p_vaddr
+    rw_load[24..32].copy_from_slice(&0x7000u64.to_le_bytes()); // p_paddr
+    rw_load[32..40].copy_from_slice(&0x2000u64.to_le_bytes()); // p_filesz
+    rw_load[40..48].copy_from_slice(&0x2000u64.to_le_bytes()); // p_memsz
+    rw_load[48..56].copy_from_slice(&0x1000u64.to_le_bytes()); // p_align
+    vmo.write(ph2, &rw_load).unwrap();
+
+    // Move RX LOAD to [5].
+    vmo.write(ph5, &rx_buf).unwrap();
 }
