@@ -1834,6 +1834,14 @@ impl VMObjectPagedInner {
                     if h.frames.contains_key(&idx) {
                         continue;
                     }
+                    // Skip pages blocked by zero markers. Zero markers
+                    // from `self` were moved into the hidden node `h`
+                    // via core::mem::take. A zero marker means neither
+                    // `self` nor the new child can see the ancestor page,
+                    // so no additional viewer is added.
+                    if h.zero_markers.contains(&idx) {
+                        continue;
+                    }
                     let mut cur = h.parent.clone();
                     let mut cur_idx = idx + h_off;
                     while let Some(vmop) = cur {
