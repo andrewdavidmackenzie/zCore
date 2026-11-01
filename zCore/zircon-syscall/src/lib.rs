@@ -140,7 +140,7 @@ impl Syscall<'_> {
     fn enforce_basic_policy(&self, condition: PolicyCondition) -> ZxResult {
         let (result, synth_code) = self.thread.proc().check_policy_with_exception(condition);
         if let Some(code) = synth_code {
-            self.thread.signal_policy_exception(code, condition as u32);
+            self.thread.signal_policy_exception(code, 0);
         }
         result
     }
@@ -1081,13 +1081,12 @@ impl Syscall<'_> {
                                 let end_page = (a2 + a3).div_ceil(hal::PAGE_SIZE);
                                 let mut dirty_end = start_page;
                                 for pg in start_page..end_page {
-                                    if !vmo.is_page_dirty(pg) {
+                                    if !vmo.is_page_dirty(pg) || vmo.has_zero_marker(pg) {
                                         break;
                                     }
                                     dirty_end = pg + 1;
                                 }
-                                let dirty_bytes =
-                                    dirty_end.saturating_sub(start_page) * hal::PAGE_SIZE;
+                                let dirty_bytes = (dirty_end * hal::PAGE_SIZE).saturating_sub(a2);
                                 if dirty_bytes > 0 && dirty_bytes < a3 {
                                     // Partial: write only the dirty prefix.
                                     write_len = dirty_bytes.min(a3);
