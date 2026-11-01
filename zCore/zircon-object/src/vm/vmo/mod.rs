@@ -188,6 +188,15 @@ pub trait VMObjectTrait: Sync + Send {
         false
     }
 
+    /// Whether this VMO has an inner COW tree parent (hidden node or
+    /// pager root). This is different from `has_parent()` which checks
+    /// the outer Zircon object parent. After `create_child(SNAPSHOT)`,
+    /// the original VMO has an inner COW parent (hidden node) even
+    /// though it has no outer parent.
+    fn has_cow_parent(&self) -> bool {
+        false
+    }
+
     /// Whether the page at the given index is shared with the parent VMO.
     fn page_is_shared(&self, _page_idx: usize) -> bool {
         false
@@ -2363,6 +2372,14 @@ impl VmObject {
         self.inner.lock().parent.strong_count() > 0
     }
 
+    /// Whether this VMO has an inner COW tree parent (hidden node or
+    /// pager root). This includes the original VMO after
+    /// `create_child(SNAPSHOT)`, which gets reparented under a hidden
+    /// node in the COW tree even though it has no outer Zircon parent.
+    pub fn has_cow_parent(&self) -> bool {
+        self.trait_.has_cow_parent()
+    }
+
     /// Whether this VMO is a COW (copy-on-write) child.
     /// True for SNAPSHOT and SNAPSHOT_AT_LEAST_ON_WRITE children.
     pub fn is_cow_child(&self) -> bool {
@@ -2558,7 +2575,7 @@ impl Drop for VmObject {
 
 /// Describes a VMO. Matches Fuchsia's `zx_info_vmo_t` layout (168 bytes).
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct VmoInfo {
     /// The koid of this VMO.
     koid: KoID,

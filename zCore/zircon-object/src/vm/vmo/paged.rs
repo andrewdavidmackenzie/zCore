@@ -807,6 +807,11 @@ impl VMObjectTrait for VMObjectPaged {
         matches!(inner.type_, VMOType::Snapshot)
     }
 
+    fn has_cow_parent(&self) -> bool {
+        let (_guard, inner) = self.get_inner();
+        inner.parent.is_some()
+    }
+
     fn page_is_shared(&self, page_idx: usize) -> bool {
         let (_guard, inner) = self.get_inner();
         // A page is shared if the child doesn't have its own copy.

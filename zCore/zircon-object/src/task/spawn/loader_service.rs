@@ -95,6 +95,7 @@ pub(crate) fn spawn_loader_service(channel: Arc<Channel>) {
                             file_data.len()
                         );
                         let vmo = VmObject::new_paged(crate::vm::pages(file_data.len()));
+                        let _ = vmo.set_content_size(file_data.len());
                         if let Err(e) = vmo.write(0, &file_data) {
                             warn!("loader_service: VMO write failed: {:?}", e);
                             // ZX_ERR_NO_MEMORY (-4)
@@ -105,7 +106,13 @@ pub(crate) fn spawn_loader_service(channel: Arc<Channel>) {
                                 txid,
                                 ordinal,
                                 0i32, // ZX_OK
-                                vec![Handle::new(vmo, Rights::DEFAULT_VMO | Rights::EXECUTE)],
+                                vec![Handle::new(
+                                    vmo,
+                                    Rights::DEFAULT_VMO
+                                        | Rights::READ
+                                        | Rights::WRITE
+                                        | Rights::EXECUTE,
+                                )],
                             )
                         }
                     } else {

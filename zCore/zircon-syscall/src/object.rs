@@ -625,12 +625,18 @@ impl Syscall<'_> {
             Topic::ProcessVmos => {
                 let target = proc.get_object_with_rights::<Process>(handle, Rights::INSPECT)?;
                 let mut vmo_infos: Vec<VmoInfo> = Vec::new();
+                // Cache get_info() results by KoID to avoid redundant VMO
+                // page walks when the same VMO appears in multiple mappings.
+                let mut info_cache: alloc::collections::BTreeMap<KoID, VmoInfo> =
+                    alloc::collections::BTreeMap::new();
                 // Phase 1: VMOs accessible via handles.
                 let inner_handles = target.get_handle_table_entries();
                 for &(obj_type, hv, rights_bits, _koid, _related) in &inner_handles {
                     if obj_type == 3 {
                         if let Ok(vmo) = target.get_object::<VmObject>(hv) {
-                            let mut info = vmo.get_info();
+                            let koid = vmo.id();
+                            let mut info =
+                                *info_cache.entry(koid).or_insert_with(|| vmo.get_info());
                             info.flags |= VmoInfoFlags::VIA_HANDLE;
                             info.rights |= Rights::from_bits_truncate(rights_bits);
                             if info.share_count == 0 {
@@ -641,19 +647,19 @@ impl Syscall<'_> {
                     }
                 }
                 // Phase 2: VMOs accessible via VMAR mappings.
-                let mapped_vmos = target.vmar().collect_mapped_vmos();
-                for (vmo, _num_mappings) in mapped_vmos {
+                // Fuchsia's GetVmAspaceVmos (diagnostics.cc) adds one entry
+                // per VmMapping without deduplication. A VMO mapped twice
+                // (e.g., vDSO R + RX segments) produces two separate
+                // entries, each with VIA_MAPPING.
+                let mapped_vmos = target.vmar().collect_all_mapped_vmos();
+                for vmo in mapped_vmos {
                     let koid = vmo.id();
-                    if let Some(existing) = vmo_infos.iter_mut().find(|i| i.koid() == koid) {
-                        existing.flags |= VmoInfoFlags::VIA_MAPPING;
-                    } else {
-                        let mut info = vmo.get_info();
-                        info.flags |= VmoInfoFlags::VIA_MAPPING;
-                        if info.share_count == 0 {
-                            info.share_count = 1;
-                        }
-                        vmo_infos.push(info);
+                    let mut info = *info_cache.entry(koid).or_insert_with(|| vmo.get_info());
+                    info.flags |= VmoInfoFlags::VIA_MAPPING;
+                    if info.share_count == 0 {
+                        info.share_count = 1;
                     }
+                    vmo_infos.push(info);
                 }
                 let full_size = core::mem::size_of::<VmoInfo>();
                 // Versioned VmoInfo entry sizes:

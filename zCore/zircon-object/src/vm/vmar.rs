@@ -803,14 +803,6 @@ impl VmAddressRegion {
             .iter()
             .any(|child| child.end_addr() > addr && child.addr() < end_addr);
 
-        // COMMIT and DECOMMIT cannot span child VMARs — return INVALID_ARGS.
-        // ZERO cannot span child VMARs (Fuchsia returns INVALID_ARGS).
-        // COMMIT/DECOMMIT/PREFETCH recurse into children — the coverage
-        // check below catches gaps (returning BAD_STATE).
-        if children_overlap && matches!(op, VmarOpType::Zero) {
-            return Err(ZxError::INVALID_ARGS);
-        }
-
         // Calculate coverage from mappings at this VMAR level.
         let mapping_coverage: usize = inner
             .mappings
@@ -837,8 +829,27 @@ impl VmAddressRegion {
             })
             .sum();
 
+        // Gap detection: the entire range must be covered by mappings
+        // and/or child VMARs. Any unmapped hole is BAD_STATE.
+        // This check fires BEFORE the sub-VMAR check below, matching
+        // Fuchsia where gaps take priority over INVALID_ARGS.
         if mapping_coverage + child_coverage != len {
             return Err(ZxError::BAD_STATE);
+        }
+
+        // COMMIT, DECOMMIT, ZERO, and PREFETCH cannot operate through
+        // sub-VMARs — the mappings must be directly owned by this VMAR.
+        // Fuchsia checks `mapping->parent_locked() != this` per-mapping
+        // and returns INVALID_ARGS. Since we've already verified full
+        // coverage above, any child_coverage > 0 means the range spans
+        // sub-VMARs.
+        if children_overlap
+            && matches!(
+                op,
+                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero | VmarOpType::Prefetch
+            )
+        {
+            return Err(ZxError::INVALID_ARGS);
         }
 
         // Apply the operation to each overlapping mapping's VMO
@@ -871,13 +882,13 @@ impl VmAddressRegion {
                 VmarOpType::Commit => {
                     // COMMIT requires the mapping to have WRITE permission,
                     // matching Fuchsia's vmar_op_range_commit behaviour.
-                    if !map.permissions().contains(MMUFlags::WRITE) {
+                    if !map.is_valid_mapping_flags(MMUFlags::WRITE) {
                         return Err(ZxError::ACCESS_DENIED);
                     }
                     map.vmo.commit(vmo_offset, op_len)?;
                 }
                 VmarOpType::Decommit => {
-                    if !map.permissions().contains(MMUFlags::WRITE) {
+                    if !map.is_valid_mapping_flags(MMUFlags::WRITE) {
                         return Err(ZxError::ACCESS_DENIED);
                     }
                     map.vmo.decommit(vmo_offset, op_len)?;
@@ -889,7 +900,7 @@ impl VmAddressRegion {
                     map.vmo.commit(vmo_offset, op_len)?;
                 }
                 VmarOpType::Zero => {
-                    if !map.permissions().contains(MMUFlags::WRITE) {
+                    if !map.is_valid_mapping_flags(MMUFlags::WRITE) {
                         return Err(ZxError::ACCESS_DENIED);
                     }
                     map.vmo.zero(vmo_offset, op_len)?;
@@ -1206,6 +1217,28 @@ impl VmAddressRegion {
         let mut vmo_map: BTreeMap<KoID, (Arc<VmObject>, usize)> = BTreeMap::new();
         self.collect_mapped_vmos_inner(&mut vmo_map);
         vmo_map.into_values().collect()
+    }
+
+    /// Collect ALL mapped VMOs, one per mapping (no deduplication).
+    /// Matches Fuchsia's AspaceVmoEnumerator which calls OnVmMapping
+    /// once per VmMapping, producing duplicate entries for VMOs
+    /// mapped at multiple locations.
+    pub fn collect_all_mapped_vmos(&self) -> alloc::vec::Vec<Arc<VmObject>> {
+        let mut vmos = alloc::vec::Vec::new();
+        self.collect_all_mapped_vmos_inner(&mut vmos);
+        vmos
+    }
+
+    fn collect_all_mapped_vmos_inner(&self, vmos: &mut alloc::vec::Vec<Arc<VmObject>>) {
+        let guard = self.inner.lock();
+        if let Some(inner) = guard.as_ref() {
+            for mapping in &inner.mappings {
+                vmos.push(mapping.vmo.clone());
+            }
+            for child in &inner.children {
+                child.collect_all_mapped_vmos_inner(vmos);
+            }
+        }
     }
 
     fn collect_mapped_vmos_inner(
@@ -1919,11 +1952,21 @@ impl VmMapping {
             let inner = self.inner.lock();
             (inner.size / PAGE_SIZE, inner.vmo_offset / PAGE_SIZE)
         };
-        // On bare-metal with COW VMOs, only map already-committed pages
-        // (uncommitted pages will be demand-faulted). This prevents
-        // eagerly creating private copies of all parent pages.
-        // For non-COW VMOs and in libos mode, eagerly commit all pages.
-        let skip_uncommitted = cfg!(target_os = "none") && self.vmo.has_parent();
+        // On bare-metal, COW VMOs skip uncommitted pages during map —
+        // they will be demand-faulted on first access. This matches
+        // Fuchsia's MapRange(commit=false) which only installs PTEs
+        // for existing pages and never allocates. Without this,
+        // eagerly committing all pages creates private zero-fill
+        // copies that inflate populated_bytes.
+        //
+        // In libos (hosted) mode, keep eager commit because the host
+        // process cannot demand-fault into Zircon's page-fault path.
+        //
+        // Uses has_cow_parent() (inner COW tree parent) rather than
+        // has_parent() (outer Zircon object parent) because after
+        // create_child(SNAPSHOT) the original VMO is reparented under
+        // a hidden node but has no outer parent.
+        let skip_uncommitted = cfg!(target_os = "none") && self.vmo.has_cow_parent();
         let mut is_committed =
             alloc::vec![true; page_num.min(vmo_pages.saturating_sub(vmo_offset))];
         if skip_uncommitted {
@@ -1934,7 +1977,7 @@ impl VmMapping {
                     > 0;
             }
         }
-        let is_cow = self.vmo.parent().is_some();
+        let is_cow = self.vmo.has_cow_parent();
         self.vmo.commit_pages_with(&mut |commit| {
             let inner = self.inner.lock();
             let mut page_table = self.page_table.lock();
