@@ -409,10 +409,21 @@ impl Syscall<'_> {
         // For pager-backed VMOs, Commit/AlwaysNeed/Prefetch need async
         // demand-paging. Find all pager-backed mappings in the range and
         // demand-page each one before the sync op_range.
-        if matches!(
-            op,
-            VmarOpType::Commit | VmarOpType::AlwaysNeed | VmarOpType::Prefetch
-        ) {
+        // Skip this when children overlap and the op would be rejected —
+        // otherwise an unresponsive pager could hang before op_range
+        // returns INVALID_ARGS.
+        let has_children = vmar.has_children_in_range(addr_usize, size_usize);
+        let skip_pager_wait = has_children
+            && matches!(
+                op,
+                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero | VmarOpType::Prefetch
+            );
+        if !skip_pager_wait
+            && matches!(
+                op,
+                VmarOpType::Commit | VmarOpType::AlwaysNeed | VmarOpType::Prefetch
+            )
+        {
             use zircon_object::task::ThreadState;
             use zircon_object::vm::PAGE_SIZE;
             let pager_vmos = vmar.find_pager_vmos_in_range(addr as usize, size as usize);

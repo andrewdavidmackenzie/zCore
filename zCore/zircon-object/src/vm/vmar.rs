@@ -1952,18 +1952,21 @@ impl VmMapping {
             let inner = self.inner.lock();
             (inner.size / PAGE_SIZE, inner.vmo_offset / PAGE_SIZE)
         };
-        // For COW VMOs (has inner COW parent), only map already-committed
-        // pages. Uncommitted pages will be demand-faulted on first access.
-        // This matches Fuchsia's MapRange(commit=false) which only
-        // installs PTEs for existing pages — it never allocates.
-        // Without this, eagerly committing all pages in a COW child
-        // creates private zero-fill copies that inflate populated_bytes.
+        // On bare-metal, COW VMOs skip uncommitted pages during map —
+        // they will be demand-faulted on first access. This matches
+        // Fuchsia's MapRange(commit=false) which only installs PTEs
+        // for existing pages and never allocates. Without this,
+        // eagerly committing all pages creates private zero-fill
+        // copies that inflate populated_bytes.
+        //
+        // In libos (hosted) mode, keep eager commit because the host
+        // process cannot demand-fault into Zircon's page-fault path.
         //
         // Uses has_cow_parent() (inner COW tree parent) rather than
         // has_parent() (outer Zircon object parent) because after
         // create_child(SNAPSHOT) the original VMO is reparented under
         // a hidden node but has no outer parent.
-        let skip_uncommitted = self.vmo.has_cow_parent();
+        let skip_uncommitted = cfg!(target_os = "none") && self.vmo.has_cow_parent();
         let mut is_committed =
             alloc::vec![true; page_num.min(vmo_pages.saturating_sub(vmo_offset))];
         if skip_uncommitted {
