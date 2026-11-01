@@ -648,12 +648,24 @@ impl Thread {
             && matches!(kind, ThreadStateKind::General)
         {
             // Mark that the debugger modified the return value register,
-            // but ONLY if the thread was in a blocking syscall (has a
-            // killer channel, meaning blocking_run is active). Without
-            // this guard, write_state during thread start (before any
-            // syscall) would incorrectly set the flag.
+            // but ONLY if:
+            // 1. The thread is in a blocking SYSCALL (not a pager
+            //    fault in blocking_run_suspendable). We check that the
+            //    thread state was a syscall-blocking state before
+            //    suspend, stored as the blocking_run's state parameter.
+            // 2. The return register was actually changed from
+            //    INTR_RETRY to a different value. If the debugger only
+            //    changed RIP without touching rax, the syscall should
+            //    still return its own result.
             if inner.killer.is_some() {
-                inner.debugger_return_override = true;
+                if let Some(ctx) = inner.context.as_mut() {
+                    use hal_impl::context::UserContextField;
+                    let rax = ctx.get_field(UserContextField::ReturnValue);
+                    if rax != (-6i64 as usize) {
+                        // Return register was changed from INTR_RETRY
+                        inner.debugger_return_override = true;
+                    }
+                }
             }
             if let Some(killer) = inner.killer.take() {
                 let _ = killer.send(());
@@ -1198,6 +1210,10 @@ impl CurrentThread {
         let mut inner = self.inner.lock();
         inner.killer = None;
         inner.suspend_interrupt = None;
+        // Clear any stale debugger return override set during this
+        // non-syscall wait (e.g., pager fault). Without this, the
+        // flag would persist and be consumed by the next syscall.
+        inner.debugger_return_override = false;
         if inner.state() == ThreadState::Dying {
             return ret;
         }
