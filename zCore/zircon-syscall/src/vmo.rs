@@ -433,11 +433,12 @@ impl Syscall<'_> {
         size: usize,
         mut out: UserOutPtr<HandleValue>,
     ) -> ZxResult {
-        let mut options = VmoCloneFlags::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
-        info!(
-            "vmo_create_child: handle={:#x}, options={:?}, offset={:#x}, size={:#x}",
+        // Use console directly to survive LTO stripping of log macros.
+        hal_impl::console::console_write_fmt(format_args!(
+            "vmo_create_child: h={:#x} opts={:#x} off={:#x} sz={:#x}\n",
             handle_value, options, offset, size
-        );
+        ));
+        let mut options = VmoCloneFlags::from_bits(options).ok_or(ZxError::INVALID_ARGS)?;
         // check options given
         let no_write = options.contains(VmoCloneFlags::NO_WRITE);
         if no_write {
