@@ -641,19 +641,18 @@ impl Syscall<'_> {
                     }
                 }
                 // Phase 2: VMOs accessible via VMAR mappings.
-                let mapped_vmos = target.vmar().collect_mapped_vmos();
-                for (vmo, _num_mappings) in mapped_vmos {
-                    let koid = vmo.id();
-                    if let Some(existing) = vmo_infos.iter_mut().find(|i| i.koid() == koid) {
-                        existing.flags |= VmoInfoFlags::VIA_MAPPING;
-                    } else {
-                        let mut info = vmo.get_info();
-                        info.flags |= VmoInfoFlags::VIA_MAPPING;
-                        if info.share_count == 0 {
-                            info.share_count = 1;
-                        }
-                        vmo_infos.push(info);
+                // Fuchsia's GetVmAspaceVmos (diagnostics.cc) adds one entry
+                // per VmMapping without deduplication. A VMO mapped twice
+                // (e.g., vDSO R + RX segments) produces two separate
+                // entries, each with VIA_MAPPING.
+                let mapped_vmos = target.vmar().collect_all_mapped_vmos();
+                for vmo in mapped_vmos {
+                    let mut info = vmo.get_info();
+                    info.flags |= VmoInfoFlags::VIA_MAPPING;
+                    if info.share_count == 0 {
+                        info.share_count = 1;
                     }
+                    vmo_infos.push(info);
                 }
                 let full_size = core::mem::size_of::<VmoInfo>();
                 // Versioned VmoInfo entry sizes:

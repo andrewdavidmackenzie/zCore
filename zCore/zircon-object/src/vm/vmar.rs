@@ -1208,6 +1208,28 @@ impl VmAddressRegion {
         vmo_map.into_values().collect()
     }
 
+    /// Collect ALL mapped VMOs, one per mapping (no deduplication).
+    /// Matches Fuchsia's AspaceVmoEnumerator which calls OnVmMapping
+    /// once per VmMapping, producing duplicate entries for VMOs
+    /// mapped at multiple locations.
+    pub fn collect_all_mapped_vmos(&self) -> alloc::vec::Vec<Arc<VmObject>> {
+        let mut vmos = alloc::vec::Vec::new();
+        self.collect_all_mapped_vmos_inner(&mut vmos);
+        vmos
+    }
+
+    fn collect_all_mapped_vmos_inner(&self, vmos: &mut alloc::vec::Vec<Arc<VmObject>>) {
+        let guard = self.inner.lock();
+        if let Some(inner) = guard.as_ref() {
+            for mapping in &inner.mappings {
+                vmos.push(mapping.vmo.clone());
+            }
+            for child in &inner.children {
+                child.collect_all_mapped_vmos_inner(vmos);
+            }
+        }
+    }
+
     fn collect_mapped_vmos_inner(
         &self,
         vmo_map: &mut alloc::collections::BTreeMap<KoID, (Arc<VmObject>, usize)>,
