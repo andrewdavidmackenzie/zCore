@@ -391,19 +391,18 @@ impl Syscall<'_> {
         if addr_usize < vmar.addr() || end > vmar.addr() + vmar.get_info().len {
             return Err(ZxError::OUT_OF_RANGE);
         }
-        // COMMIT, DECOMMIT, ZERO, and PREFETCH cannot operate across
-        // child VMARs — the range must be fully covered by direct
-        // mappings in the specified VMAR.
         // MAP_RANGE, DONT_NEED, ALWAYS_NEED can traverse children
-        // but require OP_CHILDREN right.
+        // but require OP_CHILDREN right. Check this up front.
+        // COMMIT, DECOMMIT, ZERO, and PREFETCH cannot operate through
+        // sub-VMARs — but this is checked INSIDE op_range() after gap
+        // detection, matching Fuchsia where BAD_STATE (gap) takes
+        // priority over INVALID_ARGS (sub-VMAR).
         if vmar.has_children_in_range(addr_usize, size_usize) {
             if matches!(
                 op,
-                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero | VmarOpType::Prefetch
-            ) {
-                return Err(ZxError::INVALID_ARGS);
-            }
-            if !vmar_rights.contains(Rights::OP_CHILDREN) {
+                VmarOpType::MapRange | VmarOpType::DontNeed | VmarOpType::AlwaysNeed
+            ) && !vmar_rights.contains(Rights::OP_CHILDREN)
+            {
                 return Err(ZxError::INVALID_ARGS);
             }
         }

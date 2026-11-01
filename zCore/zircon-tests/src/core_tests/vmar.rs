@@ -1331,6 +1331,84 @@ fn range_op_commit() {
     vmar.unmap(addr, 2 * PAGE_SIZE).unwrap();
 }
 
+/// C++: TEST(Vmar, RangeOpCommit) — populated_bytes checks
+/// Create VMO + SNAPSHOT clone, commit pages, verify populated_bytes.
+#[test]
+fn range_op_commit_populated_bytes() {
+    let _ctx = TestContext::new();
+    let job = Job::root();
+    let proc = Process::create(&job, "commit-pop").unwrap();
+    let vmar = proc.vmar();
+
+    let vmo_pages = 5;
+    let vmo_size = vmo_pages * PAGE_SIZE;
+    let vmo = VmObject::new_paged(vmo_pages);
+
+    // Create SNAPSHOT clone
+    let clone = vmo.create_child(false, 0, vmo_size).unwrap();
+
+    // Map both into VMAR
+    let flags = MMUFlags::READ | MMUFlags::WRITE;
+    let addr1 = vmar
+        .map(None, vmo.clone(), 0, vmo_size, flags)
+        .unwrap();
+    let addr2 = vmar
+        .map(None, clone.clone(), 0, vmo_size, flags)
+        .unwrap();
+
+    // Mapping should not eagerly commit pages in COW children.
+    assert_eq!(vmo.get_info().populated_bytes, 0);
+    assert_eq!(clone.get_info().populated_bytes, 0);
+
+    // Commit pages 1-2 in parent via VMO API
+    vmo.commit(PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
+
+    // Commit pages 2-3 in clone via VMO API
+    clone.commit(2 * PAGE_SIZE, 2 * PAGE_SIZE).unwrap();
+
+    // Check: parent should have at most 2 pages
+    let parent_info = vmo.get_info();
+    assert!(
+        parent_info.populated_bytes <= 2 * PAGE_SIZE as u64,
+        "parent populated_bytes = {} (expected <= {})",
+        parent_info.populated_bytes,
+        2 * PAGE_SIZE
+    );
+
+    // Check: clone should have at most 2 pages
+    let clone_info = clone.get_info();
+    assert!(
+        clone_info.populated_bytes <= 2 * PAGE_SIZE as u64,
+        "clone populated_bytes = {} (expected <= {})",
+        clone_info.populated_bytes,
+        2 * PAGE_SIZE
+    );
+
+    // Full commit on clone: all 5 pages
+    clone.commit(0, vmo_size).unwrap();
+
+    // Parent still <= 2 pages
+    let parent_info2 = vmo.get_info();
+    assert!(
+        parent_info2.populated_bytes <= 2 * PAGE_SIZE as u64,
+        "parent populated_bytes after clone full commit = {} (expected <= {})",
+        parent_info2.populated_bytes,
+        2 * PAGE_SIZE
+    );
+
+    // Clone may have up to all 5 pages now
+    let clone_info2 = clone.get_info();
+    assert!(
+        clone_info2.populated_bytes <= vmo_size as u64,
+        "clone populated_bytes after full commit = {} (expected <= {})",
+        clone_info2.populated_bytes,
+        vmo_size
+    );
+
+    vmar.unmap(addr1, vmo_size).unwrap();
+    vmar.unmap(addr2, vmo_size).unwrap();
+}
+
 /// C++: TEST(Vmar, RangeOpCommitVmoPages)
 /// Commit VMO pages, write data, map and verify.
 #[test]
