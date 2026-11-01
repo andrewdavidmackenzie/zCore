@@ -162,6 +162,11 @@ struct ThreadInner {
     /// signalled but not yet delivered, matching Fuchsia's
     /// `THREAD_SIGNAL_POLICY_EXCEPTION` deferred delivery model.
     pending_policy_exception: Option<(u32, u32)>,
+    /// Set when a debugger modifies the return value register via
+    /// write_state while the thread is suspended in a blocking syscall.
+    /// The syscall return path checks this flag and uses the modified
+    /// register value instead of the syscall's result.
+    debugger_return_override: bool,
     /// The user-space address of the futex this thread is currently
     /// blocked on, or 0 if not blocking on any futex. Matches Fuchsia's
     /// `blocking_futex_id_`. Set when entering `futex_wait`, cleared
@@ -490,6 +495,17 @@ impl Thread {
         self.inner.lock().pending_policy_exception.take()
     }
 
+    /// Check and clear the debugger return override flag.
+    /// Returns `true` if a debugger modified the return value register
+    /// via write_state during a suspend, meaning the syscall should
+    /// return the modified value instead of its own result.
+    pub fn take_debugger_return_override(&self) -> bool {
+        let mut inner = self.inner.lock();
+        let flag = inner.debugger_return_override;
+        inner.debugger_return_override = false;
+        flag
+    }
+
     /// Returns a copy of saved context of current thread, or `Err(ZxError::BAD_STATE)`
     /// if the thread is running.
     pub fn context_cloned(&self) -> ZxResult<UserContext> {
@@ -631,6 +647,26 @@ impl Thread {
             && state == ThreadState::Suspended
             && matches!(kind, ThreadStateKind::General)
         {
+            // Mark that the debugger modified the return value register,
+            // but ONLY if:
+            // 1. The thread is in a blocking SYSCALL (not a pager
+            //    fault in blocking_run_suspendable). We check that the
+            //    thread state was a syscall-blocking state before
+            //    suspend, stored as the blocking_run's state parameter.
+            // 2. The return register was actually changed from
+            //    INTR_RETRY to a different value. If the debugger only
+            //    changed RIP without touching rax, the syscall should
+            //    still return its own result.
+            if inner.killer.is_some() {
+                if let Some(ctx) = inner.context.as_mut() {
+                    use hal_impl::context::UserContextField;
+                    let rax = ctx.get_field(UserContextField::ReturnValue);
+                    if rax != (-6i64 as usize) {
+                        // Return register was changed from INTR_RETRY
+                        inner.debugger_return_override = true;
+                    }
+                }
+            }
             if let Some(killer) = inner.killer.take() {
                 let _ = killer.send(());
             }
@@ -1174,6 +1210,10 @@ impl CurrentThread {
         let mut inner = self.inner.lock();
         inner.killer = None;
         inner.suspend_interrupt = None;
+        // Clear any stale debugger return override set during this
+        // non-syscall wait (e.g., pager fault). Without this, the
+        // flag would persist and be consumed by the next syscall.
+        inner.debugger_return_override = false;
         if inner.state() == ThreadState::Dying {
             return ret;
         }

@@ -2,145 +2,156 @@
 
 ## Current State
 
-### Branch: `preemptive_thread_scheduling_801` (PR #802)
-### Latest Commit: `b19766e1` (fix: distinguish unmapped vs permission-denied in guarded_user_copy)
+### Branch: `fix/process-vmos-count` (NOT pushed yet — awaiting approval)
+### Base: master at `b0a9c943`
+
+### Commits on branch (3):
+1. `098520eb` — ProcessVmos per-mapping enumeration (fixes 4 tests)
+2. `c2847a93` — Loader service VMO content_size + rights + x64 module
+3. `21ff54a5` — Cross-arch ELF test modules (arm, arm64, riscv64)
 
 ### Test Results
 - **Rust zircon-tests**: 3096 pass, 0 fail, 1 ignored
-- **C++ core-tests (x86_64 QEMU, ThinkPad)**: 1722 pass, 20 fail, 28 skip (estimated — last full ThinkPad run was 1721/21/28 before ReadWriteInvalidUserBuffer fix)
-- **CI**: All green except Unit Test (macos-latest) — pre-existing flaky `cancel_key_during_match_race` test
+- **ThinkPad x86_64 (verified)**: 1729 pass, 11 fail, 32 skip
+- **CI**: not yet run (branch not pushed)
 
 ### Session Delta
-- **Started**: 1694 pass, 48 fail, 45 skip
-- **Ended**: ~1722 pass, ~20 fail, 28 skip
-- **Net**: +28 passes, -28 failures, -17 skips
+- **Started**: 1720 pass, 22 fail, 32 skip (after PR #802)
+- **Current**: 1729 pass, 11 fail, 34 skip (2 new skips for hangs)
+- **Net**: +9 passes, -11 failures
 
-## Kernel Fixes Made This Session (33 commits total)
+## PRs Merged This Session
 
-### Pager infrastructure (8 fixes)
-1. **pager_failed_pages cleared on new request** — request_pages clears stale OP_FAIL markers
-2. **BAD_STATE for detached pager clones** — unsupplied pages in clones of detached pagers return BAD_STATE
-3. **supply_pages rejects physical/pager-backed/pinned VMOs** — validates aux VMO type
-4. **supply_pages bounds check** — validates destination and source ranges
-5. **supply_pages decommits aux VMO** — transfers page ownership by decommitting source
-6. **Drain resolved page requests from port** — Port::remove_page_read_packets selectively removes resolved READ packets
-7. **Pager detach requires ATTACH_VMO + MANAGE_VMO** — both rights checked
-8. **set_modified on vmo_write** — pager-backed VMOs get modified flag on partial writes
+### PR #802 (squash merged)
+- COW clone pager page resolution
+- 6 CodeRabbit review fixes (DR7, elf feature, process exit code, libos COW remap, pager offset, handle cycle)
 
-### COW / VMO attribution (5 fixes)
-9. **share_count decrement on zero** — uses decrement_parent_share_counts (not release_unwanted which moves pages)
-10. **Don't COW-fork in intermediate unidirectional nodes** — when a child walks through an intermediate, pass Ref through without forking
-11. **Decommit unmap from page tables** — range_change(Unmap) on all mappings after decommitting
-12. **Propagate decommit unmap to children** — VmObject children notified to invalidate PTEs
-13. **Update children's parent_limit on parent resize** — unidirectional children see zeros for truncated pages
+### PR #803 (squash merged)
+- VMAR map alignment options (bits 24-31)
+- VMO write bounds check ordering (OUT_OF_RANGE before prefault)
 
-### Rights / ABI (2 fixes)
-14. **MANAGE_VMO right bit 24** (was 25) — matched Fuchsia's ZX_RIGHT_MANAGE_VMO
-15. **consts.rs rights alignment** — OP_CHILDREN, RESIZE, ATTACH_VMO, MANAGE_VMO fixed
+### PR #804 (squash merged)
+- PagerWaiterKind (READ vs DIRTY distinction)
+- Policy exception delivery (enforce_basic_policy + NewAny expansion)
+- Partial VMO write sets modified for TRAP_DIRTY
+- AGENTS.md scheduler architecture clarification
 
-### Debug registers x86_64 (3 fixes)
-16. **DR7 always-1 bits on read** — OR 0x700 (bits 8-10)
-17. **DR6 reserved bits on read** — bits 4-11 always 1, bit 12 always 0
-18. **DR7 write mask** — clear reserved bits 11-15 (0xFFFF_07FF mask)
+## Tests Fixed This Session (11 total)
 
-### x86_64 context switch (1 fix)
-19. **Zero FS/GS/DS/ES segment selectors** — zero all four before entering user mode, using swapgs to preserve kernel GS base
+1. `ChannelTest.WriteEtcReadOnlyHandleDispositionReturnsInvalidArgs` (PR #802)
+2. `ChannelTest.ReadEtcReadOnlyHandlesPointerReturnsInvalidArgsAndDoesNotLeakHandles` (PR #802)
+3. `Vmar.AlignmentVmarMapTest` (PR #803)
+4. `VmoTestCase.ReadWriteBadLen` (PR #803)
+5. `PagerWriteback.DelayedDirtyZeroRange` (PR #804)
+6. `DefaultExceptionHandlerTest.UnhandledPolicyException` (PR #804)
+7. `PagerWriteback.ModifiedOnPartialVmoWriteTrapDirty` (PR #804)
+8. `ProcessGetInfoTest.InfoProcessVmosSmokeTest` (pending PR #806)
+9. `ProcessGetInfoTest.InfoProcessVmosSmokeTestV1` (pending PR #806)
+10. `ProcessGetInfoTest.InfoProcessVmosSmokeTestV2` (pending PR #806)
+11. `ProcessGetInfoTest.InfoProcessVmosSmokeTestV3` (pending PR #806)
 
-### VMAR operations (2 fixes)
-20. **op_range alignment validation** — reject unaligned address/size and zero size
-21. **op_range child VMAR scoping** — COMMIT/DECOMMIT/ZERO/PREFETCH cannot traverse child VMARs
+Plus `StandaloneElfLoadTests.Load` partially fixed (x64 module works, all 4 arch modules now available).
 
-### BTI / IOMMU (4 fixes)
-22. **IOMMU map_contiguous page index** — fixed byte offset vs page index in commit_page
-23. **IOMMU bounds check error code** — OUT_OF_RANGE instead of INVALID_ARGS
-24. **PMT cleanup on addrs_count mismatch** — unpin and release PMT on failure
-25. **release_pmt made public** — needed for PMT cleanup from syscall layer
+## Tests Added to Skip List (2)
+- `PagerWriteback.ResizeWritebackInterleavedWriteWithMappingTrapDirty` — newly hanging after PagerWaiterKind fix
+- `Resource.PcInterruptVectorPoolLeak` — hangs on interrupt create
 
-### Handle table (1 fix)
-26. **Sort handle entries by KOID** — approximates insertion order for ZX_INFO_HANDLE_TABLE
+## Remaining 11 Failures — Root Cause Analysis
 
-### Fault handling (1 fix)
-27. **Distinguish unmapped vs permission-denied in guarded_user_copy** — new Error::PermissionDenied variant, x86 PRESENT bit detection. Unmapped → NOT_FOUND, permission-denied → ACCESS_DENIED
+### Vmar.RangeOpCommit (INVESTIGATED)
+**Root cause**: bare-metal eager page commit during `zx_vmar_map` commits
+ALL pages in COW children, inflating `populated_bytes`. Fuchsia uses
+demand-paging — only explicitly committed pages count. The test creates
+a 5-page VMO + SNAPSHOT clone, commits 2 pages each, expects
+`populated_bytes ≤ 2 pages` but gets 5 pages (all eagerly committed).
 
-### Skip list (4 commits)
-28-31. Skip list reductions (45→28)
+Also: COMMIT on unmapped gap returns INVALID_ARGS instead of BAD_STATE
+(the test has gaps between sub-VMARs; COMMIT on a gap should be BAD_STATE).
 
-### CI fixes (2 commits)
-32. **Rust test assertions** for DR6/DR7 reserved bits
-33. **Clippy unnecessary_cast** in port.rs
+**Fix direction**: skip eager commit for COW children (has parent) during
+map. Page faults already handle COW via `handle_page_fault`. Need to
+verify this doesn't break other tests.
 
-## 28 Skipped C++ Tests
+### VmoZeroTestCase.AllocateAfterMergeMultipleChildren
+COW merge multi-child page reclamation. Related to populated_bytes
+attribution in multi-child COW trees.
 
-### PagerWriteback (15) — TRAP_DIRTY multi-thread hangs
-### Pager (8) — multi-thread hangs (6 WaitForBlocked + 2 other)
-### Other (5) — debug register exceptions, concurrent VMO drop, port stress, BTI race
+### TaskGetInfoTest.SharedMemAccounting
+COW-aware task stats (share_count). Related to populated_bytes.
 
-## 20 Remaining C++ Test Failures — Root Cause Analysis
+### PagerWriteback.ResizeWritebackRepeatedNoTrapDirty
+Needs Fuchsia's AwaitingCleanLength writeback generation tracking.
+Investigated in detail — requires interval-based writeback state machine.
 
-### COW attribution / populated_bytes (3)
-- **VmoZeroTestCase.AllocateAfterMergeMultipleChildren**: 3+ child share_count after merge
-- **Vmar.RangeOpCommit**: populated_bytes walks parent chain for unidirectional children
-- **TaskGetInfoTest.SharedMemAccounting**: fractional COW for unidirectional children
+### Pager.CloneMightSeeIntermediateForks
+Multi-level hidden node COW tag visibility.
 
-### Pager clone data visibility (1)
-- **Pager.CloneMightSeeIntermediateForks**: multi-level clone with StartTaggedPageFaultHandler
+### Property.RegisterFsNoncanonical, Property.RegisterGsNoncanonical (2)
+Hardware #GP → exception channel delivery. Blocked on issue #799.
 
-### PagerWriteback dirty tracking (3)
-- **DelayedDirtyZeroRange**: spurious DIRTY request after zero
-- **ModifiedOnPartialVmoWriteTrapDirty**: TRAP_DIRTY vmo_write needs syscall-level dirty handling
-- **ResizeWritebackRepeatedNoTrapDirty**: dirty ranges after resize+writeback
+### Threads.DebugRegistersWatchpointSyscallPanicRepro, Threads.SyscallDebuggerModifyResult (2)
+Debug/syscall exception handling. Blocked on issue #799.
 
-### ProcessGetInfo VMO enumeration (4)
-- **InfoProcessVmosSmokeTest, V1, V2, V3**: mini-process has 3 VMOs, test expects 4+
+### MemoryPriorityProfile.ApplyProfile
+Memory reclaim infrastructure doesn't exist.
 
-### x86 exception handling (4)
-- **Property.RegisterFsNoncanonical, RegisterGsNoncanonical**: exception RIP mismatch
-- **Threads.DebugRegistersWatchpointSyscallPanicRepro**: needs ZX_EXCP_HW_BREAKPOINT
-- **Threads.SyscallDebuggerModifyResult**: debugger exception handling
+### StandaloneElfLoadTests.Load
+Now passes with all 4 arch modules (pending push). The loader service
+needed content_size set on VMOs and READ/WRITE rights on handles.
 
-### Feature gaps (3)
-- **DefaultExceptionHandlerTest.UnhandledPolicyException**: policy exception kill
-- **MemoryPriorityProfile.ApplyProfile**: vmo_reclaim_disabled_bytes tracking
-- **StandaloneElfLoadTests.Load**: missing cross-arch test modules
+## Key Architectural Fixes
 
-### Architecture / compiler (2)
-- **Vmar.AlignmentVmarMapTest**: 8GB VMAR allocation — address space layout
-- **VmoTestCase.ReadWriteBadLen**: return value corruption through trap path (LTO)
+### PagerWaiterKind (PR #804)
+Added `PagerWaiterKind` enum (Read/Dirty) to `pager_waiters` list.
+`complete_pager_requests` only wakes Read waiters. `mark_pages_dirty`
+only wakes Dirty waiters. Prevents OP_ZERO from spuriously waking
+DIRTY waiters in TRAP_DIRTY VMOs.
 
-## Key Architectural Knowledge
+### enforce_basic_policy (PR #804)
+Replaced all `proc.check_policy()` calls with `self.enforce_basic_policy()`.
+Signals pending policy exception on the thread; dispatch epilogue
+delivers it after syscall returns. Matches Fuchsia's deferred signal model.
 
-### guarded_user_copy fault distinction
-The `guarded_user_copy` now distinguishes unmapped (InvalidPointer → INVALID_ARGS → NOT_FOUND) from permission-denied (PermissionDenied → ACCESS_DENIED) faults. On x86, this uses the PRESENT bit (bit 0) of the page fault error code. The `user_copy_check_fault_with_perm` function passes this through per-CPU state to `user_copy_leave()` which returns `(fault_addr, is_permission_fault)`.
+### NewAny expansion (PR #804)
+`ZX_POL_NEW_ANY` now expands to all `New*` conditions in `apply`/`apply_v2`,
+matching Fuchsia's `add_basic_policy` which iterates `NEW_OBJECT_POLICIES`.
 
-### Unidirectional child COW chain
-When a unidirectional child B is created from another unidirectional child A (via `A.Clone()` → `parent.create_child_unidirectional()`), B's VMObjectPaged parent is A (not the root). When B does commit_page(WRITE), it walks A → root. If A is also unidirectional and sees WRITE + Ref, it must NOT fork locally — only the leaf (B) should fork. The `child.strong_count() > 0` check in `commit_page_internal` handles this.
+### ProcessVmos per-mapping (pending PR #806)
+Fuchsia's `GetVmAspaceVmos` adds one entry per VmMapping without
+deduplication. Added `collect_all_mapped_vmos()` matching this behavior.
 
-### Segment selector zeroing
-Before entering user mode on x86_64, we zero DS/ES/FS/GS selectors. FS and GS zeroing must preserve the kernel GS base via swapgs: `swapgs; mov gs,0; swapgs`. The trapframe's `wrfsbase`/`wrgsbase` then set the correct user bases.
-
-### Port packet cleanup after supply
-When `supply_pages` resolves outstanding page requests, resolved `ZX_PAGER_VMO_READ` packets are removed from the port queue via `Port::remove_page_read_packets`. This prevents stale requests from confusing the pager's `WaitForPageRead`.
+### Loader service content_size + rights (pending PR #806)
+VMOs returned by LoadObject now have content_size set and
+READ/WRITE/EXECUTE rights, matching Fuchsia's loader service.
 
 ## Testing Commands
 
 ```bash
-# Pre-push checks (ALWAYS run before pushing)
+# Pre-push checks
 cargo check-style
 
-# Full C++ suite on ThinkPad
-ssh thinkpad
-cd ~/RustroverProjects/zCore
-rm -f target/qemu-x86_64/release/kernel
-make core-tests CORE_TESTS_TIMEOUT=600
+# Full C++ suite on ThinkPad (use 900s timeout)
+ssh thinkpad 'cd ~/RustroverProjects/zCore && make core-tests CORE_TESTS_TIMEOUT=900'
 
-# Check results
-P=$(grep -ac '\[       OK \]' /tmp/qemu-core-tests.log)
-F=$(grep -ac '\[  FAILED  \]' /tmp/qemu-core-tests.log)
-echo "Passed: $P  Failed: $F"
+# Targeted test
+ssh thinkpad 'cd ~/RustroverProjects/zCore && make core-tests CORE_TESTS_TIMEOUT=30 CORE_TESTS_FILTER="TestName"'
 
 # Local Rust tests
 cargo test -p zircon-tests --lib -- --test-threads=1
 
-# Individual C++ test (local QEMU)
-make core-tests CORE_TESTS_TIMEOUT=15 'CORE_TESTS_FILTER=TestName'
+# Rsync changes to ThinkPad (per file)
+rsync -az zCore/path/to/file.rs thinkpad:~/RustroverProjects/zCore/zCore/path/to/file.rs
 ```
+
+## Key Files Modified
+
+- `zCore/zircon-object/src/vm/vmo/mod.rs` — PagerWaiterKind, dirty tracking
+- `zCore/zircon-object/src/vm/vmar.rs` — collect_all_mapped_vmos, alignment
+- `zCore/zircon-object/src/task/process.rs` — terminated flag, handle cycle
+- `zCore/zircon-object/src/task/job_policy.rs` — NewAny expansion
+- `zCore/zircon-syscall/src/lib.rs` — enforce_basic_policy, partial write
+- `zCore/zircon-syscall/src/object.rs` — ProcessVmos per-mapping
+- `zCore/zircon-syscall/src/channel.rs` — user_buffer_write_error
+- `zCore/zircon-syscall/src/vmar.rs` — alignment, bounds check
+- `zCore/zircon-object/src/task/spawn/loader_service.rs` — content_size, rights
+- `prebuilt/zircon-test/x86_64/standalone-elf-load-test-module.*.so` — test modules

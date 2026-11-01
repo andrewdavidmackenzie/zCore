@@ -477,6 +477,24 @@ async fn handler_user_trap(
         // as invalid syscall numbers instead of being truncated to
         // a valid 32-bit syscall number.
         let ret = syscall.syscall(num, args).await as usize;
+        // When a blocked syscall is interrupted by suspend + debugger
+        // write_state, the debugger may have modified rax (the return
+        // value register). Check if the return value register in the
+        // saved context differs from what the syscall returned. If a
+        // debugger modified rax via write_state, use the debugger's
+        // value instead of the syscall's result. This matches Fuchsia's
+        // INTR_RETRY mechanism where the kernel returns the debugger-
+        // modified rax directly after resume.
+        // When a debugger modifies the return value register during a
+        // suspend (via write_state after rax was set to INTR_RETRY),
+        // use the modified value instead of the syscall's result.
+        let ret = if thread.take_debugger_return_override() {
+            thread
+                .with_context(|ctx| ctx.get_field(UserContextField::ReturnValue))
+                .unwrap_or(ret)
+        } else {
+            ret
+        };
         thread
             .with_context(|ctx| ctx.set_field(UserContextField::ReturnValue, ret))
             .map_err(|_| ExceptionInfo {
