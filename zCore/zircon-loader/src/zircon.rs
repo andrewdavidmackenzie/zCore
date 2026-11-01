@@ -1075,7 +1075,12 @@ fn patch_vdso_elf_headers(vmo: &Arc<VmObject>) {
     let e_phoff = u64::from_le_bytes(ehdr[32..40].try_into().unwrap()) as usize;
     let e_phentsize = u16::from_le_bytes(ehdr[54..56].try_into().unwrap()) as usize;
     let e_phnum = u16::from_le_bytes(ehdr[56..58].try_into().unwrap()) as usize;
+    warn!(
+        "patch_vdso_elf_headers: e_phoff={:#x} e_phentsize={} e_phnum={}",
+        e_phoff, e_phentsize, e_phnum
+    );
     if e_phnum < 6 || e_phentsize != 56 {
+        warn!("patch_vdso_elf_headers: skipping (phnum<6 or phentsize!=56)");
         return;
     }
 
@@ -1114,5 +1119,5 @@ fn patch_vdso_elf_headers(vmo: &Arc<VmObject>) {
     // Move RX LOAD to [5] (was at [2]).
     vmo.write(ph5, &rx_buf).unwrap();
 
-    info!("vDSO: patched ELF headers — added RW LOAD for data pages 0x7000-0x8FFF");
+    warn!("vDSO: patched ELF headers — R(0-0x7000) RW(0x7000-0x9000) RX(0xc000-0xe000)");
 }
