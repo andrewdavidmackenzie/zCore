@@ -213,7 +213,55 @@ impl UserContext {
                         options(nostack),
                     );
                 }
+                // Load user debug registers (DR0-DR3, DR6, DR7) into
+                // hardware if any breakpoints are enabled. Matches
+                // Fuchsia's x86_debug_context_switch: only load when
+                // track_debug_state is set (dr7 has enable bits).
+                let debug_active = self.debug_regs.dr7 & 0xFF != 0;
+                if debug_active {
+                    unsafe {
+                        let dr = &self.debug_regs;
+                        core::arch::asm!(
+                            "mov dr0, {0}",
+                            "mov dr1, {1}",
+                            "mov dr2, {2}",
+                            "mov dr3, {3}",
+                            "mov dr6, {4}",
+                            "mov dr7, {5}",
+                            in(reg) dr.dr[0],
+                            in(reg) dr.dr[1],
+                            in(reg) dr.dr[2],
+                            in(reg) dr.dr[3],
+                            in(reg) dr.dr6,
+                            in(reg) dr.dr7,
+                            options(nostack),
+                        );
+                    }
+                }
                 self.inner.run();
+                // Save user debug status register (DR6) after returning
+                // from user mode. DR6 is updated by the CPU on #DB
+                // exceptions to indicate which breakpoint fired.
+                // DR0-DR3 and DR7 are not modified by hardware.
+                if debug_active {
+                    unsafe {
+                        let dr6: u64;
+                        core::arch::asm!(
+                            "mov {0}, dr6",
+                            out(reg) dr6,
+                            options(nostack),
+                        );
+                        self.debug_regs.dr6 = dr6;
+                        // Disable debug breakpoints to prevent kernel
+                        // code from triggering them.
+                        core::arch::asm!(
+                            "xor {0:e}, {0:e}",
+                            "mov dr7, {0}",
+                            out(reg) _,
+                            options(nostack),
+                        );
+                    }
+                }
                 // Save user FPU/SSE state after returning from user mode
                 unsafe {
                     core::arch::asm!(
