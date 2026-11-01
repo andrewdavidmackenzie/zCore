@@ -1349,12 +1349,8 @@ fn range_op_commit_populated_bytes() {
 
     // Map both into VMAR
     let flags = MMUFlags::READ | MMUFlags::WRITE;
-    let addr1 = vmar
-        .map(None, vmo.clone(), 0, vmo_size, flags)
-        .unwrap();
-    let addr2 = vmar
-        .map(None, clone.clone(), 0, vmo_size, flags)
-        .unwrap();
+    let addr1 = vmar.map(None, vmo.clone(), 0, vmo_size, flags).unwrap();
+    let addr2 = vmar.map(None, clone.clone(), 0, vmo_size, flags).unwrap();
 
     // Mapping should not eagerly commit pages in COW children.
     assert_eq!(vmo.get_info().populated_bytes, 0);

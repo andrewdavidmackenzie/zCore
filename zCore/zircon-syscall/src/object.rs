@@ -654,8 +654,7 @@ impl Syscall<'_> {
                 let mapped_vmos = target.vmar().collect_all_mapped_vmos();
                 for vmo in mapped_vmos {
                     let koid = vmo.id();
-                    let mut info =
-                        *info_cache.entry(koid).or_insert_with(|| vmo.get_info());
+                    let mut info = *info_cache.entry(koid).or_insert_with(|| vmo.get_info());
                     info.flags |= VmoInfoFlags::VIA_MAPPING;
                     if info.share_count == 0 {
                         info.share_count = 1;

@@ -846,10 +846,7 @@ impl VmAddressRegion {
         if children_overlap
             && matches!(
                 op,
-                VmarOpType::Commit
-                    | VmarOpType::Decommit
-                    | VmarOpType::Zero
-                    | VmarOpType::Prefetch
+                VmarOpType::Commit | VmarOpType::Decommit | VmarOpType::Zero | VmarOpType::Prefetch
             )
         {
             return Err(ZxError::INVALID_ARGS);
