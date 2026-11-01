@@ -397,14 +397,14 @@ impl Syscall<'_> {
         // sub-VMARs — but this is checked INSIDE op_range() after gap
         // detection, matching Fuchsia where BAD_STATE (gap) takes
         // priority over INVALID_ARGS (sub-VMAR).
-        if vmar.has_children_in_range(addr_usize, size_usize) {
-            if matches!(
+        if vmar.has_children_in_range(addr_usize, size_usize)
+            && matches!(
                 op,
                 VmarOpType::MapRange | VmarOpType::DontNeed | VmarOpType::AlwaysNeed
-            ) && !vmar_rights.contains(Rights::OP_CHILDREN)
-            {
-                return Err(ZxError::INVALID_ARGS);
-            }
+            )
+            && !vmar_rights.contains(Rights::OP_CHILDREN)
+        {
+            return Err(ZxError::INVALID_ARGS);
         }
         // For pager-backed VMOs, Commit/AlwaysNeed/Prefetch need async
         // demand-paging. Find all pager-backed mappings in the range and
