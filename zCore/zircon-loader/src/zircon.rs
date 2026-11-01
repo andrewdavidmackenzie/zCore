@@ -1043,5 +1043,62 @@ fn create_vdso_vmo() -> Arc<VmObject> {
         vdso_vmo.write(data_offset, constants_bytes).unwrap();
     }
 
+    // Patch the vDSO ELF program headers so elfldltl sees an RW LOAD
+    // segment for the data pages (time values + constants at 0x7000-0x8FFF).
+    // This causes elfldltl's RemoteVmarLoader to create a
+    // SNAPSHOT_AT_LEAST_ON_WRITE child VMO for the data segment, matching
+    // real Fuchsia where the kernel's vDSO data pages produce extra VMOs
+    // in the child process.
+    //
+    // Without this patch, the vDSO ELF has only R and RX LOAD segments.
+    // elfldltl maps them directly without child VMOs, so the child process
+    // has fewer VMOs than Fuchsia expects (4 instead of 6+), causing
+    // ProcessGetInfoTest.InfoProcessVmosSmokeTest to fail.
+    //
+    // Patch: shrink R LOAD [1] to end before data pages, replace
+    // GNU_STACK [5] with RW LOAD for data pages.
+    if vdso_memsize > 0x8000 && VDSO_ELF.len() >= 64 {
+        let e_phoff = u64::from_le_bytes(VDSO_ELF[32..40].try_into().unwrap()) as usize;
+        let e_phentsize = u16::from_le_bytes(VDSO_ELF[54..56].try_into().unwrap()) as usize;
+        let e_phnum = u16::from_le_bytes(VDSO_ELF[56..58].try_into().unwrap()) as usize;
+
+        if e_phnum >= 6 && e_phentsize == 56 {
+            // Shrink R LOAD [1]: set filesz and memsz to 0x7000.
+            let ph1 = e_phoff + e_phentsize;
+            let mut ph1_buf = [0u8; 56];
+            vdso_vmo.read(ph1, &mut ph1_buf).unwrap();
+            let p_type = u32::from_le_bytes(ph1_buf[0..4].try_into().unwrap());
+            if p_type == 1 {
+                // PT_LOAD — patch filesz [32..40] and memsz [40..48]
+                ph1_buf[32..40].copy_from_slice(&0x7000u64.to_le_bytes());
+                ph1_buf[40..48].copy_from_slice(&0x7000u64.to_le_bytes());
+                vdso_vmo.write(ph1, &ph1_buf).unwrap();
+            }
+
+            // Replace GNU_STACK [5] with RW LOAD for data pages.
+            let ph5 = e_phoff + 5 * e_phentsize;
+            let mut rw_load = [0u8; 56];
+            // p_type = PT_LOAD (1)
+            rw_load[0..4].copy_from_slice(&1u32.to_le_bytes());
+            // p_flags = PF_R | PF_W (0x6)
+            rw_load[4..8].copy_from_slice(&0x6u32.to_le_bytes());
+            // p_offset = 0x7000
+            rw_load[8..16].copy_from_slice(&0x7000u64.to_le_bytes());
+            // p_vaddr = 0x7000
+            rw_load[16..24].copy_from_slice(&0x7000u64.to_le_bytes());
+            // p_paddr = 0x7000
+            rw_load[24..32].copy_from_slice(&0x7000u64.to_le_bytes());
+            // p_filesz = 0x2000 (2 pages: time_values + constants)
+            rw_load[32..40].copy_from_slice(&0x2000u64.to_le_bytes());
+            // p_memsz = 0x2000
+            rw_load[40..48].copy_from_slice(&0x2000u64.to_le_bytes());
+            // p_align = 0x1000
+            rw_load[48..56].copy_from_slice(&0x1000u64.to_le_bytes());
+            vdso_vmo.write(ph5, &rw_load).unwrap();
+
+            info!("vDSO: patched ELF headers — added RW LOAD for data pages 0x7000-0x8FFF");
+        }
+    }
+
     vdso_vmo
 }

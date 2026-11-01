@@ -655,6 +655,7 @@ impl Syscall<'_> {
                         vmo_infos.push(info);
                     }
                 }
+
                 let full_size = core::mem::size_of::<VmoInfo>();
                 // Versioned VmoInfo entry sizes:
                 // V0: 104 bytes (original without attribution)
