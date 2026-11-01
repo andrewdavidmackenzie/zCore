@@ -345,10 +345,15 @@ struct VmObjectInner {
     /// Whether the VMO has been modified since last stats query.
     modified: bool,
     /// Threads waiting for pager to supply/dirty pages. Each entry is a
-    /// (page_index, sender) pair. Waiters for both READ and DIRTY
-    /// requests share this list — they're woken by supply_pages or
-    /// op_range(DIRTY) respectively.
-    pager_waiters: Vec<(usize, futures::channel::oneshot::Sender<ZxResult>)>,
+    /// (page_index, kind, sender) triple. READ waiters are woken by
+    /// supply_pages / complete_pager_requests. DIRTY waiters are woken
+    /// by OP_DIRTY / mark_pages_dirty. This distinction prevents
+    /// OP_ZERO from spuriously waking DIRTY waiters.
+    pager_waiters: Vec<(
+        usize,
+        PagerWaiterKind,
+        futures::channel::oneshot::Sender<ZxResult>,
+    )>,
     /// Pages that have been failed by OP_FAIL. Maps page_idx → error.
     /// When wait_for_page registers a waiter for a failed page, it
     /// returns the error immediately instead of blocking.
@@ -381,6 +386,18 @@ struct OutstandingPageRequest {
     /// - oneshot sender to wake the waiter
     /// - per-waiter error status (set by FailPages, used at completion)
     overlap_waiters: Vec<OverlapWaiter>,
+}
+
+/// Distinguishes READ vs DIRTY pager waiters in the `pager_waiters`
+/// list.  `complete_pager_requests` (supply_pages, OP_ZERO) only
+/// wakes `Read` waiters; `mark_pages_dirty` (OP_DIRTY) only wakes
+/// `Dirty` waiters.  Drain/fail/cancel operations wake both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PagerWaiterKind {
+    /// Waiting for page data (supply_pages).
+    Read,
+    /// Waiting for dirty approval (OP_DIRTY).
+    Dirty,
 }
 
 /// An individual overlap waiter within an outstanding request.
@@ -852,7 +869,7 @@ impl VmObject {
                         if inner.pager_waiters[i].0 >= start_page
                             && inner.pager_waiters[i].0 < end_page
                         {
-                            let (_, tx) = inner.pager_waiters.swap_remove(i);
+                            let (_, _, tx) = inner.pager_waiters.swap_remove(i);
                             let _ = tx.send(Err(ZxError::NOT_FOUND));
                         } else {
                             i += 1;
@@ -898,11 +915,14 @@ impl VmObject {
         }
         // Note: OP_DIRTY does NOT set the modified flag. Only actual
         // writes to the VMO (vmo_write, mapping write) set modified.
-        // Wake waiters for these pages (shared waiter list with read waiters).
+        // Wake only DIRTY waiters — READ waiters are woken by supply_pages.
         let mut i = 0;
         while i < inner.pager_waiters.len() {
-            if inner.pager_waiters[i].0 >= start_page && inner.pager_waiters[i].0 < end_page {
-                let (_, tx) = inner.pager_waiters.swap_remove(i);
+            if inner.pager_waiters[i].0 >= start_page
+                && inner.pager_waiters[i].0 < end_page
+                && inner.pager_waiters[i].1 == PagerWaiterKind::Dirty
+            {
+                let (_, _, tx) = inner.pager_waiters.swap_remove(i);
                 let _ = tx.send(Ok(()));
             } else {
                 i += 1;
@@ -1334,7 +1354,10 @@ impl VmObject {
     /// Check if a page has a pending waiter (another thread waiting for supply).
     pub fn has_page_waiter(&self, page_idx: usize) -> bool {
         let inner = self.inner.lock();
-        inner.pager_waiters.iter().any(|(idx, _)| *idx == page_idx)
+        inner
+            .pager_waiters
+            .iter()
+            .any(|(idx, _, _)| *idx == page_idx)
             || inner
                 .outstanding_requests
                 .iter()
@@ -1392,7 +1415,9 @@ impl VmObject {
                     error: None,
                 });
             } else {
-                inner.pager_waiters.push((page_idx, tx));
+                inner
+                    .pager_waiters
+                    .push((page_idx, PagerWaiterKind::Read, tx));
             }
             rx
         };
@@ -1417,7 +1442,9 @@ impl VmObject {
                 return Err(err);
             }
             let (tx, rx) = futures::channel::oneshot::channel();
-            inner.pager_waiters.push((page_idx, tx));
+            inner
+                .pager_waiters
+                .push((page_idx, PagerWaiterKind::Dirty, tx));
             rx
         };
         match rx.await {
@@ -1437,11 +1464,16 @@ impl VmObject {
         for page_idx in start_page..end_page {
             inner.pager_failed_pages.remove(&page_idx);
         }
-        // Drain general waiters whose page index falls in range.
+        // Drain READ waiters whose page index falls in range.
+        // DIRTY waiters are NOT woken — supply_pages / OP_ZERO provide
+        // page data but do not grant dirty permission.
         let mut i = 0;
         while i < inner.pager_waiters.len() {
-            if inner.pager_waiters[i].0 >= start_page && inner.pager_waiters[i].0 < end_page {
-                let (_, tx) = inner.pager_waiters.swap_remove(i);
+            if inner.pager_waiters[i].0 >= start_page
+                && inner.pager_waiters[i].0 < end_page
+                && inner.pager_waiters[i].1 == PagerWaiterKind::Read
+            {
+                let (_, _, tx) = inner.pager_waiters.swap_remove(i);
                 let _ = tx.send(Ok(()));
             } else {
                 i += 1;
@@ -1509,7 +1541,7 @@ impl VmObject {
     /// Wake all pager waiters with an error (called on detach/destroy).
     pub fn fail_pager_requests(&self, err: ZxError) {
         let mut inner = self.inner.lock();
-        for (_, tx) in inner.pager_waiters.drain(..) {
+        for (_, _, tx) in inner.pager_waiters.drain(..) {
             let _ = tx.send(Err(err));
         }
         // Also fail all outstanding request overlap waiters.
@@ -1536,7 +1568,7 @@ impl VmObject {
         let mut i = 0;
         while i < inner.pager_waiters.len() {
             if inner.pager_waiters[i].0 >= start_page && inner.pager_waiters[i].0 < end_page {
-                let (_, tx) = inner.pager_waiters.swap_remove(i);
+                let (_, _, tx) = inner.pager_waiters.swap_remove(i);
                 let _ = tx.send(Err(err));
             } else {
                 i += 1;

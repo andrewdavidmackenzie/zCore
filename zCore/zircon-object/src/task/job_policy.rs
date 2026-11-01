@@ -27,15 +27,43 @@ impl JobPolicy {
     }
 
     /// Apply a basic V1 policy (override defaults to deny).
+    /// `NewAny` expands to set all `New*` conditions, matching Fuchsia.
     pub fn apply(&mut self, policy: BasicPolicy) {
-        self.action[policy.condition as usize] = Some(policy.action);
+        for idx in Self::expand_condition(policy.condition) {
+            self.action[idx] = Some(policy.action);
+        }
     }
 
     /// Apply a basic V2 policy with override flag.
+    /// `NewAny` expands to set all `New*` conditions, matching Fuchsia.
     pub fn apply_v2(&mut self, policy: BasicPolicyV2) {
-        let idx = policy.condition as usize;
-        self.action[idx] = Some(policy.action);
-        self.override_allow[idx] = policy.flags == POL_OVERRIDE_ALLOW;
+        for idx in Self::expand_condition(policy.condition) {
+            self.action[idx] = Some(policy.action);
+            self.override_allow[idx] = policy.flags == POL_OVERRIDE_ALLOW;
+        }
+    }
+
+    /// Expand a policy condition into the concrete indices it covers.
+    /// `NewAny` expands to all `New*` conditions (VMO, Channel, Event,
+    /// EventPair, Port, Socket, FIFO, Timer, Process, Profile).
+    /// All other conditions expand to just themselves.
+    fn expand_condition(condition: PolicyCondition) -> alloc::vec::Vec<usize> {
+        if condition == PolicyCondition::NewAny {
+            alloc::vec![
+                PolicyCondition::NewVMO as usize,
+                PolicyCondition::NewChannel as usize,
+                PolicyCondition::NewEvent as usize,
+                PolicyCondition::NewEventPair as usize,
+                PolicyCondition::NewPort as usize,
+                PolicyCondition::NewSocket as usize,
+                PolicyCondition::NewFIFO as usize,
+                PolicyCondition::NewTimer as usize,
+                PolicyCondition::NewProcess as usize,
+                PolicyCondition::NewProfile as usize,
+            ]
+        } else {
+            alloc::vec![condition as usize]
+        }
     }
 
     /// Merge the policy with `parent`'s.
@@ -122,7 +150,7 @@ impl BasicPolicyV2Raw {
 
 /// The condition when a policy is applied.
 #[repr(u32)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PolicyCondition {
     /// A process under this job is attempting to issue a syscall with an invalid handle.
     /// In this case, `PolicyAction::Allow` and `PolicyAction::Deny` are equivalent:

@@ -124,16 +124,23 @@ impl Syscall<'_> {
     /// Enforce a job basic policy, delivering a policy exception if the
     /// action requires it.
     ///
-    /// This is the async wrapper around `Process::check_policy`.  When
-    /// the policy action is `AllowException` or `DenyException`, this
-    /// method delivers a `ZX_EXCP_POLICY_ERROR` exception on the current
-    /// thread (matching Fuchsia's `SignalPolicyException` + deferred
-    /// delivery in `ProcessPendingSignals`).
-    #[allow(dead_code)]
-    async fn enforce_policy(&self, condition: PolicyCondition) -> ZxResult {
+    /// Enforce a basic job policy, matching Fuchsia's
+    /// `ProcessDispatcher::EnforceBasicPolicy`.
+    ///
+    /// For `Allow`/`Deny`/`Kill`, this is equivalent to the old
+    /// `Process::check_policy`.  For `AllowException`/`DenyException`,
+    /// it signals a pending policy exception on the current thread
+    /// via `signal_policy_exception`.  The exception is delivered
+    /// **after** the syscall returns, during the dispatch epilogue's
+    /// `deliver_pending_policy_exception().await` — matching Fuchsia's
+    /// `ProcessPendingSignals` at the kernel-to-user transition.
+    ///
+    /// This must be called from the syscall layer (not from
+    /// `Process`) because it needs access to the current thread.
+    fn enforce_basic_policy(&self, condition: PolicyCondition) -> ZxResult {
         let (result, synth_code) = self.thread.proc().check_policy_with_exception(condition);
         if let Some(code) = synth_code {
-            self.thread.handle_exception_policy(code, 0).await;
+            self.thread.signal_policy_exception(code, 0);
         }
         result
     }
@@ -1054,35 +1061,58 @@ impl Syscall<'_> {
                         }
                     }
                 }
-                // Pager pre-flight FIRST: mark destination pages dirty
-                // before prefaulting the source buffer. Matches Fuchsia's
-                // ReadWriteInternal where RequirePage (which marks dirty)
-                // runs before the copy attempt. If the source prefault
-                // fails, pages are still correctly marked dirty.
-                let proc = self.thread.proc();
-                if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
-                    if let Err(e) = self.pager_preflight_write(&vmo, a2, a3).await {
-                        return e as isize;
+                // Pager pre-flight: mark destination pages dirty before
+                // copying data. When preflight fails partway (e.g., a
+                // DIRTY request for page N is rejected by the pager),
+                // write the pages that were already dirty [0..N) so
+                // partial writes set modified. This matches Fuchsia's
+                // ReadWriteInternal which processes pages one at a time.
+                let mut preflight_err = None;
+                let mut write_len = a3;
+                {
+                    let proc = self.thread.proc();
+                    if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
+                        if let Err(e) = self.pager_preflight_write(&vmo, a2, a3).await {
+                            // Preflight failed. Find how many leading
+                            // pages from the start are already dirty
+                            // (don't need preflight) and write only those.
+                            if vmo.is_trap_dirty() {
+                                let start_page = a2 / hal::PAGE_SIZE;
+                                let end_page = (a2 + a3).div_ceil(hal::PAGE_SIZE);
+                                let mut dirty_end = start_page;
+                                for pg in start_page..end_page {
+                                    if !vmo.is_page_dirty(pg) || vmo.has_zero_marker(pg) {
+                                        break;
+                                    }
+                                    dirty_end = pg + 1;
+                                }
+                                let dirty_bytes = (dirty_end * hal::PAGE_SIZE).saturating_sub(a2);
+                                if dirty_bytes > 0 && dirty_bytes < a3 {
+                                    // Partial: write only the dirty prefix.
+                                    write_len = dirty_bytes.min(a3);
+                                    preflight_err = Some(e);
+                                } else {
+                                    return e as isize;
+                                }
+                            } else {
+                                return e as isize;
+                            }
+                        }
                     }
                 }
-                drop(proc);
-                // Pre-fault pager pages in user buffer (a1=buf, a3=size).
-                if let Err(e) = self.prefault_user_buffer(a1, a3).await {
+                // Pre-fault pager pages in user buffer.
+                if let Err(e) = self.prefault_user_buffer(a1, write_len).await {
                     return e as isize;
                 }
                 let proc = self.thread.proc();
-                let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, a3 as _);
+                let result = self.sys_vmo_write(a0 as _, a1.into(), a2 as _, write_len as _);
                 // After a successful write to a pager-backed VMO (or a slice
                 // of one), set modified and mark pages dirty on the parent.
-                // Note: for partial failures (some chunks succeed, later chunk
-                // fails), result is Err and we skip dirty/modified tracking.
-                // This matches the C++ tests where partial write failures
-                // (e.g., unmappable source buffer) expect modified=false.
+                // Note: for partial SOURCE failures (unmappable source buffer),
+                // result is Err and we skip dirty/modified tracking — the C++
+                // tests expect modified=false when the source buffer is bad.
                 if result.is_ok() {
                     if let Ok(vmo) = proc.get_object::<zircon_object::vm::VmObject>(a0 as _) {
-                        // Find the pager-backed VMO: either this VMO or its
-                        // parent (for slices/references only — COW clones
-                        // write to their own pages, not the parent's).
                         let pager_vmo = if vmo.has_pager() {
                             Some(vmo.clone())
                         } else if vmo.is_slice_vmo() {
@@ -1091,12 +1121,11 @@ impl Syscall<'_> {
                             None
                         };
                         if let Some(pv) = pager_vmo {
-                            // Compute parent-relative offsets for slices.
                             let parent_offset = a2 + vmo.get_slice_offset();
 
                             if !pv.is_trap_dirty() {
                                 let start_page = parent_offset / hal::PAGE_SIZE;
-                                let end_page = (parent_offset + a3).div_ceil(hal::PAGE_SIZE);
+                                let end_page = (parent_offset + write_len).div_ceil(hal::PAGE_SIZE);
                                 for pg in start_page..end_page {
                                     pv.auto_mark_dirty(pg);
                                 }
@@ -1106,7 +1135,19 @@ impl Syscall<'_> {
                         }
                     }
                 }
-                result
+                // If preflight partially failed but the dirty prefix
+                // was written successfully, return the preflight error
+                // (the write succeeded for some pages, modified is set,
+                // but the overall operation failed).
+                if let Some(e) = preflight_err {
+                    if result.is_ok() {
+                        Err(e)
+                    } else {
+                        result
+                    }
+                } else {
+                    result
+                }
             }
             Sys::VMO_GET_SIZE => self.sys_vmo_get_size(a0 as _, a1.into()),
             Sys::VMO_SET_SIZE => self.sys_vmo_set_size(a0 as _, a1 as _),

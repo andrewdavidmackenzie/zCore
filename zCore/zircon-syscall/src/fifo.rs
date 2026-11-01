@@ -23,8 +23,8 @@ impl Syscall<'_> {
         if elem_count == 0 || elem_size == 0 || total_bytes > 4096 {
             return Err(ZxError::OUT_OF_RANGE);
         }
+        self.enforce_basic_policy(PolicyCondition::NewFIFO)?;
         let proc = self.thread.proc();
-        proc.check_policy(PolicyCondition::NewFIFO)?;
         let (end0, end1) = Fifo::create(elem_count, elem_size);
         let handle0 = proc.add_handle(Handle::new(end0, Rights::DEFAULT_FIFO));
         let handle1 = proc.add_handle(Handle::new(end1, Rights::DEFAULT_FIFO));

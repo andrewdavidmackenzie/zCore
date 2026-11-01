@@ -37,7 +37,7 @@ impl Syscall<'_> {
         let job = proc
             .get_object_with_rights::<Job>(job, Rights::MANAGE_PROCESS)
             .or_else(|_| proc.get_object_with_rights::<Job>(job, Rights::WRITE))?;
-        proc.check_policy(PolicyCondition::NewProcess)?;
+        self.enforce_basic_policy(PolicyCondition::NewProcess)?;
         let new_proc = Process::create(&job, &name)?;
         let new_vmar = new_proc.vmar();
         let proc_handle_value = proc.add_handle(Handle::new(new_proc, Rights::DEFAULT_PROCESS));
@@ -535,7 +535,7 @@ impl Syscall<'_> {
             .map_err(|_| ZxError::ACCESS_DENIED)?;
         }
         // Check job policy
-        proc.check_policy(PolicyCondition::NewProfile)?;
+        self.enforce_basic_policy(PolicyCondition::NewProfile)?;
         // Read and validate profile info
         let info = profile_info.read()?;
         let profile = Profile::create(info)?;

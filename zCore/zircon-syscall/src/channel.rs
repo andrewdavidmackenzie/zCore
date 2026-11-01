@@ -190,8 +190,8 @@ impl Syscall<'_> {
         if options != 0u32 {
             return Err(ZxError::INVALID_ARGS);
         }
+        self.enforce_basic_policy(PolicyCondition::NewChannel)?;
         let proc = self.thread.proc();
-        proc.check_policy(PolicyCondition::NewChannel)?;
         let (end0, end1) = Channel::create();
         let handle0 = proc.add_handle(Handle::new(end0, Rights::DEFAULT_CHANNEL));
         let handle1 = proc.add_handle(Handle::new(end1, Rights::DEFAULT_CHANNEL));
