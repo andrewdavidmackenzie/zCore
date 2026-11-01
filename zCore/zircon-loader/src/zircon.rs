@@ -1063,19 +1063,10 @@ fn create_vdso_vmo() -> Arc<VmObject> {
         let e_phnum = u16::from_le_bytes(VDSO_ELF[56..58].try_into().unwrap()) as usize;
 
         if e_phnum >= 6 && e_phentsize == 56 {
-            // Shrink R LOAD [1]: set filesz and memsz to 0x7000.
-            let ph1 = e_phoff + e_phentsize;
-            let mut ph1_buf = [0u8; 56];
-            vdso_vmo.read(ph1, &mut ph1_buf).unwrap();
-            let p_type = u32::from_le_bytes(ph1_buf[0..4].try_into().unwrap());
-            if p_type == 1 {
-                // PT_LOAD — patch filesz [32..40] and memsz [40..48]
-                ph1_buf[32..40].copy_from_slice(&0x7000u64.to_le_bytes());
-                ph1_buf[40..48].copy_from_slice(&0x7000u64.to_le_bytes());
-                vdso_vmo.write(ph1, &ph1_buf).unwrap();
-            }
-
             // Replace GNU_STACK [5] with RW LOAD for data pages.
+            // elfldltl handles LOAD segments that overlap the R segment:
+            // the writable segment takes precedence for the overlapping
+            // pages, causing a SNAPSHOT_AT_LEAST_ON_WRITE child VMO.
             let ph5 = e_phoff + 5 * e_phentsize;
             let mut rw_load = [0u8; 56];
             // p_type = PT_LOAD (1)
