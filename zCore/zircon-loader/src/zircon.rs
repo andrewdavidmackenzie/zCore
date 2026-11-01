@@ -1075,12 +1075,7 @@ fn patch_vdso_elf_headers(vmo: &Arc<VmObject>) {
     let e_phoff = u64::from_le_bytes(ehdr[32..40].try_into().unwrap()) as usize;
     let e_phentsize = u16::from_le_bytes(ehdr[54..56].try_into().unwrap()) as usize;
     let e_phnum = u16::from_le_bytes(ehdr[56..58].try_into().unwrap()) as usize;
-    warn!(
-        "patch_vdso_elf_headers: e_phoff={:#x} e_phentsize={} e_phnum={}",
-        e_phoff, e_phentsize, e_phnum
-    );
     if e_phnum < 6 || e_phentsize != 56 {
-        warn!("patch_vdso_elf_headers: skipping (phnum<6 or phentsize!=56)");
         return;
     }
 
@@ -1119,5 +1114,13 @@ fn patch_vdso_elf_headers(vmo: &Arc<VmObject>) {
     // Move RX LOAD to [5] (was at [2]).
     vmo.write(ph5, &rx_buf).unwrap();
 
-    warn!("vDSO: patched ELF headers — R(0-0x7000) RW(0x7000-0x9000) RX(0xc000-0xe000)");
+    // Verify the patch worked by reading back and checking.
+    let mut verify = [0u8; 56];
+    vmo.read(e_phoff + 2 * e_phentsize, &mut verify).unwrap();
+    let v_type = u32::from_le_bytes(verify[0..4].try_into().unwrap());
+    let v_flags = u32::from_le_bytes(verify[4..8].try_into().unwrap());
+    let v_vaddr = u64::from_le_bytes(verify[16..24].try_into().unwrap());
+    assert_eq!(v_type, 1, "patched [2] should be PT_LOAD");
+    assert_eq!(v_flags, 6, "patched [2] should be RW");
+    assert_eq!(v_vaddr, 0x7000, "patched [2] vaddr should be 0x7000");
 }
