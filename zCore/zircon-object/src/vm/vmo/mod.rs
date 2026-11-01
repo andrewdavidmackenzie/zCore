@@ -2558,7 +2558,7 @@ impl Drop for VmObject {
 
 /// Describes a VMO. Matches Fuchsia's `zx_info_vmo_t` layout (168 bytes).
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct VmoInfo {
     /// The koid of this VMO.
     koid: KoID,
